@@ -1,0 +1,65 @@
+name: Build X5 Crop Desktop Apps
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'x5-crop-v*'
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos:
+    name: macOS app bundle
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: 'pip'
+
+      - name: Build macOS app
+        shell: bash
+        run: |
+          chmod +x tools/build_macos_app.sh
+          ./tools/build_macos_app.sh
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: X5_Crop_macOS
+          path: |
+            release/X5_Crop_macOS_app.zip
+            release/X5_Crop_macOS.dmg
+          if-no-files-found: error
+          retention-days: 14
+
+  build-windows:
+    name: Windows app folder
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: 'pip'
+
+      - name: Build Windows app
+        shell: pwsh
+        run: .\tools\build_windows_app.ps1
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: X5_Crop_Windows
+          path: release/X5_Crop_Windows_app.zip
+          if-no-files-found: error
+          retention-days: 14
