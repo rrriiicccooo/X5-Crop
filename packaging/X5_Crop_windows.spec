@@ -1,6 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 # PyInstaller spec for Windows onedir build.
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_submodules, collect_dynamic_libs, collect_data_files
+
+ROOT = Path(__file__).resolve().parents[1]
 
 hiddenimports = []
 for pkg in ("imagecodecs", "tifffile", "PIL"):
@@ -13,15 +17,15 @@ datas = []
 for pkg in ("imagecodecs", "tifffile"):
     datas += collect_data_files(pkg)
 datas += [
-    ("resources/icon_1024.png", "resources"),
-    ("resources/icon.ico", "resources"),
-    ("tools/cleanup_x5_crop_windows.ps1", "tools"),
+    (str(ROOT / "resources/icon_1024.png"), "resources"),
+    (str(ROOT / "resources/icon.ico"), "resources"),
+    (str(ROOT / "tools/cleanup_x5_crop_windows.ps1"), "tools"),
 ]
 
 
 a = Analysis(
-    ["X5_Crop.py"],
-    pathex=[],
+    [str(ROOT / "X5_Crop.py")],
+    pathex=[str(ROOT)],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
@@ -43,7 +47,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
-    icon="resources/icon.ico",
+    icon=str(ROOT / "resources/icon.ico"),
 )
 coll = COLLECT(
     exe,

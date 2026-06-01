@@ -1,6 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 # PyInstaller spec for macOS .app bundle.
+from pathlib import Path
+
 from PyInstaller.utils.hooks import collect_submodules, collect_dynamic_libs, collect_data_files
+
+ROOT = Path(__file__).resolve().parents[1]
 
 hiddenimports = []
 for pkg in ("imagecodecs", "tifffile", "PIL"):
@@ -13,14 +17,14 @@ datas = []
 for pkg in ("imagecodecs", "tifffile"):
     datas += collect_data_files(pkg)
 datas += [
-    ("resources/icon_1024.png", "resources"),
-    ("tools/cleanup_x5_crop_macos.command", "tools"),
+    (str(ROOT / "resources/icon_1024.png"), "resources"),
+    (str(ROOT / "tools/cleanup_x5_crop_macos.command"), "tools"),
 ]
 
 
 a = Analysis(
-    ["X5_Crop.py"],
-    pathex=[],
+    [str(ROOT / "X5_Crop.py")],
+    pathex=[str(ROOT)],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
@@ -56,7 +60,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name="X5 Crop.app",
-    icon="resources/icon.icns",
+    icon=str(ROOT / "resources/icon.icns"),
     bundle_identifier="com.x5crop.X5-Crop",
     info_plist={
         "CFBundleName": "X5 Crop",
