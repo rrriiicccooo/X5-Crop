@@ -42,7 +42,7 @@ from typing import Any, Optional
 import numpy as np
 import tifffile
 
-VERSION = "17.0-core-for-X5-Crop-v1"
+VERSION = "17.0-speed-balanced-x5-crop"
 SCRIPT_NAME = "X5 Crop Core"
 TRACEBACK_ENV = "X5_SPLIT_TRACEBACK"
 TIFF_SUFFIXES = {".tif", ".tiff"}

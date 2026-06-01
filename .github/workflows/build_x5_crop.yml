@@ -3,6 +3,8 @@ name: Build X5 Crop Desktop Apps
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'x5-crop-v*'
 
