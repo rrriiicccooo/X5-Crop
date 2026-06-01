@@ -4,6 +4,17 @@ X5 Crop is a PySide6 desktop app for splitting horizontal 135 TIFF film-strip sc
 
 This package contains the full source code plus macOS and Windows packaging scripts. The app uses the current X5 Split v17 core logic: deskew auto, analysis-enhance auto with fast skip, outer-refine, grid-fit, frame-size-fit, TIFF metadata validation, and default 10 px bleed.
 
+## Original v17 script archive
+
+The original standalone script is intentionally kept in the project root:
+
+```text
+X5_Split_v17.py
+README_X5_Split_v17.md
+```
+
+The desktop app imports the packaged core from `x5crop/core/x5_split_engine.py`, but the original v17 script remains part of the repository as a reference and fallback.
+
 ## Important packaging note
 
 PyInstaller is not a cross-compiler. Build the macOS app on macOS, and build the Windows app on Windows.
