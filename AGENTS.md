@@ -14,6 +14,7 @@ git status --short
 
 3. Do not delete or revert untracked user files such as `Test/`, `downloaded_apps/`, or local build outputs.
 4. Keep `X5_Split_v17.py` and `README_X5_Split_v17.md` in the repository. They are the preserved original v17 reference.
+5. This working folder may be synchronized by NAS in both directions. Treat GitHub as authoritative for code and docs; treat NAS as a local-file transport layer.
 
 ## Project Intent
 
@@ -49,6 +50,8 @@ Important difficult cases:
 ## Git Rules
 
 - Commit only intentional source/docs/config changes.
+- If the working tree is NAS-synced, check `git status --short` before and after edits because another computer may have synchronized changes into the folder.
+- Do not run two Codex sessions against the same NAS-synced working tree at the same time unless they are only reading.
 - Do not commit local generated folders:
   - `.venv/`
   - `.venv-build/`
@@ -64,4 +67,3 @@ Important difficult cases:
 ## Handoff Rule
 
 When stopping work, update or create a short handoff note using the template in `docs/CODEX_SYNC.md`.
-

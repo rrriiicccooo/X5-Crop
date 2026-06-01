@@ -8,6 +8,13 @@ Use this file as the shared operating agreement.
 
 GitHub is the source of truth for code, docs, packaging scripts, and release workflow changes.
 
+Repository:
+
+```text
+git@github.com:rrriiicccooo/X5-Crop.git
+https://github.com/rrriiicccooo/X5-Crop
+```
+
 Local machines may also contain:
 
 - large TIFF test scans
@@ -17,6 +24,49 @@ Local machines may also contain:
 - packaged app outputs
 
 Those local files are useful, but they are not automatically part of the shared project state.
+
+Some working folders may also be synchronized through NAS. Treat NAS sync as a way to move local files between machines, not as a replacement for Git history. Before editing source files in a NAS-synced folder, check whether the folder is a real Git clone and whether another machine has uncommitted work.
+
+## NAS Two-Way Sync Rules
+
+This project may exist in a folder that is synchronized through NAS in both directions.
+
+That has two important consequences:
+
+- GitHub remains the source of truth for source code, docs, workflows, and packaging scripts.
+- NAS is a convenience layer for local files such as TIFF samples, downloaded apps, and generated outputs.
+
+Do not rely on NAS sync as the only history for code changes. Always commit and push source/docs changes through Git before expecting another Codex session to continue safely.
+
+Before editing on either computer:
+
+```bash
+git status --short
+git branch --show-current
+```
+
+Then wait for NAS sync to finish if the file manager or NAS client still shows active syncing. A half-synced Git working tree can make files appear modified, missing, or stale.
+
+Avoid simultaneous edits:
+
+- Do not let two Codex sessions edit the same repository files at the same time in a two-way synced folder.
+- If one computer is actively building or running tests, the other computer should avoid touching the same working tree until that task finishes.
+- If both computers need to work at once, use separate Git branches and separate local clones instead of one shared NAS-synced working folder.
+
+Do not synchronize or commit generated state as project truth:
+
+- `.git/index.lock`
+- `.venv/`
+- `.venv-build/`
+- `build/`
+- `dist/`
+- `release/`
+- `__pycache__/`
+- `.DS_Store`
+- `downloaded_apps/`
+- generated `split_output/` folders
+
+If the NAS tool creates conflict files, pause and inspect before continuing. Do not delete conflict files blindly if they may contain source or docs edits from the other computer.
 
 ## Before Starting on Any Computer
 
@@ -174,6 +224,7 @@ Branch: integrate-web-app
 
 Changed:
 - Added collaboration and setup docs for multi-computer Codex work.
+- Added explicit rules for two-way NAS synchronization.
 
 Verified:
 - Homebrew Git and Git LFS are installed and active on the primary macOS machine.
@@ -185,6 +236,8 @@ Known local-only files:
 - `__pycache__/`
 - `.DS_Store`
 
-Next recommended step:
-- Commit and push these docs so the second computer can pull the same workflow notes.
+NAS note:
+- This project folder may be mirrored through two-way NAS sync. Git remains authoritative for source/docs changes; NAS is for local samples and artifacts.
 
+Next recommended step:
+- On the second computer, pull `integrate-web-app`, read `README.md`, `AGENTS.md`, and this sync guide before editing.
