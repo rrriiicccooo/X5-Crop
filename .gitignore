@@ -1,0 +1,35 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+.venv-build/
+venv/
+
+# Build and release outputs
+build/
+dist/
+release/
+*.spec.bak
+
+# Local app/test artifacts
+downloaded_apps/
+split_output/
+**/split_output/
+*_debug.jpg
+*_analysis.jpg
+
+# Large local scan samples are kept outside Git unless explicitly promoted.
+Test/
+
+# Local editor state
+.vscode/
+.idea/
+
