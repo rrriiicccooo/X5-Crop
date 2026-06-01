@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules, collect_dynamic_libs, collect_data_files
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(SPECPATH).resolve().parent
 
 hiddenimports = []
 for pkg in ("imagecodecs", "tifffile", "PIL"):
