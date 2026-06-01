@@ -17,7 +17,7 @@ jobs:
     runs-on: macos-14
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -26,6 +26,11 @@ jobs:
           cache: 'pip'
           cache-dependency-path: requirements_X5_Crop_v1_1.txt
 
+      - name: Show build environment
+        run: |
+          python --version
+          python -m pip --version
+
       - name: Build macOS app
         shell: bash
         run: |
@@ -33,7 +38,7 @@ jobs:
           ./tools/build_macos_app.sh
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: X5_Crop_macOS
           path: |
@@ -47,7 +52,7 @@ jobs:
     runs-on: windows-2022
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -56,12 +61,18 @@ jobs:
           cache: 'pip'
           cache-dependency-path: requirements_X5_Crop_v1_1.txt
 
+      - name: Show build environment
+        shell: pwsh
+        run: |
+          python --version
+          python -m pip --version
+
       - name: Build Windows app
         shell: pwsh
         run: .\tools\build_windows_app.ps1
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: X5_Crop_Windows
           path: release/X5_Crop_Windows_app.zip
