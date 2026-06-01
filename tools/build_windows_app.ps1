@@ -4,7 +4,7 @@ Set-Location (Join-Path $PSScriptRoot "..")
 $AppName = "X5 Crop"
 $ReleaseZip = "X5_Crop_Windows_app.zip"
 
-py -3 -m venv .venv-build
+python -m venv .venv-build
 . .\.venv-build\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements_X5_Crop_v1_1.txt

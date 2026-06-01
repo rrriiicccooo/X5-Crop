@@ -121,17 +121,17 @@ To use it:
 macOS:
 
 ```bash
-python3 -m venv .venv
+python -m venv .venv
 source .venv/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements_X5_Crop_v1_1.txt
-python3 X5_Crop.py
+python -m pip install --upgrade pip
+python -m pip install -r requirements_X5_Crop_v1_1.txt
+python X5_Crop.py
 ```
 
 Windows PowerShell:
 
 ```powershell
-py -3 -m venv .venv
+python -m venv .venv
 . .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements_X5_Crop_v1_1.txt

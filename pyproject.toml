@@ -2,7 +2,7 @@
 name = "x5-crop"
 version = "1.1.0"
 description = "Desktop GUI for splitting 135 TIFF film strips."
-requires-python = ">=3.14,<3.15"
+requires-python = ">=3.13,<3.14"
 dependencies = [
   "PySide6>=6.11.1,<6.12",
   "numpy",

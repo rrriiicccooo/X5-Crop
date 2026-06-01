@@ -8,4 +8,4 @@ Changes from v1 MVP:
 - Added Windows build script that creates a runnable app folder and release zip.
 - Added GitHub Actions workflow for building both macOS and Windows artifacts.
 - Cleaned pycache from the release source package.
-- Updated requirements for Python 3.14 and current PySide6 / PyInstaller packaging.
+- Updated requirements for Python 3.13 and current PySide6 / PyInstaller packaging.
