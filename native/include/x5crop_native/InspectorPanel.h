@@ -26,6 +26,7 @@ signals:
     void reanalyzeSelectedRequested();
     void exportApprovedRequested();
     void exportSelectedRequested();
+    void approveRequested();
 
 private:
     QWidget* buildPlanTab();
@@ -34,12 +35,16 @@ private:
     QWidget* buildExportTab();
 
     QLabel* m_statusValue = nullptr;
+    QLabel* m_statusPill = nullptr;
     QLabel* m_confidenceLabel = nullptr;
     QLabel* m_confidenceValue = nullptr;
     QProgressBar* m_confidenceBar = nullptr;
     QLabel* m_warningValue = nullptr;
     QLabel* m_metadataValue = nullptr;
     QLabel* m_methodValue = nullptr;
+    QLabel* m_frameCountValue = nullptr;
+    QLabel* m_bleedValue = nullptr;
+    QLabel* m_deskewValue = nullptr;
     QLineEdit* m_outputFolder = nullptr;
     QComboBox* m_preset = nullptr;
     QSpinBox* m_frameCount = nullptr;

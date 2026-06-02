@@ -229,6 +229,7 @@ Changed:
 - Added `native/`, a C++20 / Qt 6 native app shell implementing the first review-workspace UI pass.
 - Installed Homebrew `cmake` and `qt` on the primary macOS machine to verify the native build.
 - Updated the native shell to follow the revised macOS HIG-oriented light UI rules: native toolbar, sidebar and inspector toggles, light material palette, confidence percent row with progress bar, and unified filmstrip status markers.
+- Aligned the actual native Qt UI more closely with `docs/assets/ui_redesign_mockup.svg`: toolbar title/actions, SOURCE/BATCH/QUEUE sidebar, review canvas header/note, inspector status/warning/crop-plan layout, filmstrip thumbnails, and queue thumbnails.
 
 Verified:
 - Read `README.md`, `docs/CODEX_SYNC.md`, `docs/PROJECT_CONTEXT.md`, current `x5crop/app.py`, `x5crop/core_bridge.py`, and the roadmap before writing the UI plan.
@@ -238,6 +239,7 @@ Verified:
 - Launched the app and verified the main window renders the dark three-panel review workspace with bottom filmstrip and inspector.
 - Rebuilt after the light macOS UI update with `./native/scripts/build_macos.sh`.
 - Launched the rebuilt app and verified the toolbar, light panes, inspector, canvas, and filmstrip render.
+- Rebuilt after the SVG mockup alignment with `./native/scripts/build_macos.sh`.
 
 Not verified:
 - Did not run the PySide6 app during native shell work.

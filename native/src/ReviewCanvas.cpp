@@ -62,18 +62,37 @@ void ReviewCanvas::paintEvent(QPaintEvent*)
         return;
     }
 
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor("#ffffff"));
+    painter.drawRoundedRect(QRectF(24, 24, width() - 48, 48), 10, 10);
+
+    painter.setPen(QColor("#1f2937"));
+    painter.setFont(QFont(".AppleSystemUIFont", 16, QFont::DemiBold));
+    painter.drawText(QRectF(46, 32, 260, 32), Qt::AlignLeft | Qt::AlignVCenter, m_scan->displayName);
+
+    painter.setPen(QColor("#667085"));
+    painter.setFont(QFont(".AppleSystemUIFont", 12));
+    painter.drawText(QRectF(width() - 350, 32, 320, 32), Qt::AlignRight | Qt::AlignVCenter,
+                     "Fit   100%   Pan   Crop   Grid   Analysis");
+
     const QRectF film = filmRect();
     drawFilmMock(painter, film);
     drawOverlays(painter, film);
 
-    painter.setPen(QColor("#1f2937"));
-    painter.setFont(QFont(".AppleSystemUIFont", 13, QFont::DemiBold));
-    painter.drawText(QRectF(28, 18, width() - 56, 28), Qt::AlignLeft | Qt::AlignVCenter, m_scan->displayName);
-
+    const QRectF note(width() / 2.0 - 315, film.bottom() + 48, 630, 92);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor("#ffffff"));
+    painter.drawRoundedRect(note, 12, 12);
     painter.setPen(QColor("#667085"));
-    painter.setFont(QFont(".AppleSystemUIFont", 10));
-    painter.drawText(QRectF(28, 44, width() - 56, 22), Qt::AlignLeft | Qt::AlignVCenter,
-                     QString("%1 | %2% zoom").arg(statusLabel(m_scan->plan.status)).arg(m_zoomPercent));
+    painter.setFont(QFont(".AppleSystemUIFont", 10, QFont::DemiBold));
+    painter.drawText(note.adjusted(24, 16, -24, -58), Qt::AlignLeft | Qt::AlignVCenter, "REVIEW NOTE");
+    painter.setFont(QFont(".AppleSystemUIFont", 12));
+    painter.drawText(note.adjusted(24, 38, -24, -34), Qt::AlignLeft | Qt::AlignVCenter,
+                     QString("Confidence: %1%. %2")
+                         .arg(m_scan->plan.confidencePercent)
+                         .arg(m_scan->plan.warnings.isEmpty() ? "Ready for review." : m_scan->plan.warnings.first()));
+    painter.drawText(note.adjusted(24, 60, -24, -12), Qt::AlignLeft | Qt::AlignVCenter,
+                     "Drag the red line, or approve if the crop looks right.");
 }
 
 void ReviewCanvas::wheelEvent(QWheelEvent* event)
@@ -84,13 +103,13 @@ void ReviewCanvas::wheelEvent(QWheelEvent* event)
 
 QRectF ReviewCanvas::filmRect() const
 {
-    const qreal marginX = 42.0;
+    const qreal marginX = 72.0;
     const qreal availableW = width() - marginX * 2.0;
-    const qreal baseW = availableW * (m_zoomPercent / 100.0);
-    const qreal filmW = std::max<qreal>(420.0, baseW);
-    const qreal filmH = std::min<qreal>(height() * 0.48, filmW / 5.8);
+    const qreal baseW = std::min<qreal>(760.0, availableW) * (m_zoomPercent / 100.0);
+    const qreal filmW = std::max<qreal>(520.0, baseW);
+    const qreal filmH = std::min<qreal>(height() * 0.42, filmW / 2.4);
     const qreal x = (width() - filmW) / 2.0;
-    const qreal y = (height() - filmH) / 2.0 + 18.0;
+    const qreal y = std::max<qreal>(104.0, (height() - filmH) / 2.0 - 38.0);
     return QRectF(x, y, filmW, filmH);
 }
 
@@ -119,9 +138,14 @@ void ReviewCanvas::drawFilmMock(QPainter& painter, const QRectF& rect)
 
     const QRectF inner = rect.adjusted(18, 18, -18, -18);
     QLinearGradient gradient(inner.topLeft(), inner.bottomRight());
-    gradient.setColorAt(0.0, QColor("#fefefe"));
-    gradient.setColorAt(0.45, QColor("#eef2f7"));
-    gradient.setColorAt(1.0, QColor("#d9e0ea"));
+    gradient.setColorAt(0.0, QColor("#d6dde7"));
+    gradient.setColorAt(0.11, QColor("#94a3b8"));
+    gradient.setColorAt(0.23, QColor("#edf1f6"));
+    gradient.setColorAt(0.38, QColor("#9aa7b8"));
+    gradient.setColorAt(0.52, QColor("#f4f6f9"));
+    gradient.setColorAt(0.66, QColor("#8798ad"));
+    gradient.setColorAt(0.82, QColor("#e8edf4"));
+    gradient.setColorAt(1.0, QColor("#a4afbf"));
     painter.setPen(Qt::NoPen);
     painter.setBrush(gradient);
     painter.drawRoundedRect(inner, 4.0, 4.0);

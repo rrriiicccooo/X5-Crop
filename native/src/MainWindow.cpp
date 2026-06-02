@@ -6,6 +6,8 @@
 #include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QPainter>
+#include <QPixmap>
 #include <QLabel>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -25,7 +27,7 @@ QMainWindow, QWidget {
     font-size: 12px;
 }
 QToolBar {
-    background: #f7f9fc;
+    background: #fbfcfe;
     border: none;
     border-bottom: 1px solid #d8dee8;
     spacing: 6px;
@@ -41,10 +43,10 @@ QFrame#centerPanel {
     border-radius: 8px;
 }
 QPushButton {
-    background: #ffffff;
-    border: 1px solid #d8dee8;
-    border-radius: 6px;
-    padding: 6px 11px;
+    background: #f3f5f8;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 12px;
 }
 QPushButton:hover {
     background: #f7f9fc;
@@ -55,13 +57,14 @@ QPushButton:checked, QPushButton#primaryButton {
     border-color: #3d6fb6;
 }
 QListWidget {
-    background: #f7f9fc;
-    border: 1px solid #d8dee8;
+    background: #ffffff;
+    border: none;
     border-radius: 8px;
     outline: none;
 }
 QListWidget::item {
-    padding: 6px;
+    padding: 8px;
+    border-radius: 8px;
 }
 QListWidget::item:selected {
     color: #1f2937;
@@ -78,8 +81,8 @@ QListWidget#filmstrip::item:selected {
     border-top: 3px solid #3d6fb6;
 }
 QTabBar::tab {
-    background: #f7f9fc;
-    border: 1px solid #d8dee8;
+    background: #eceff4;
+    border: none;
     padding: 7px 10px;
 }
 QTabBar::tab:selected {
@@ -93,6 +96,25 @@ QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
     padding: 5px;
 }
 QLabel#mutedLabel {
+    color: #667085;
+}
+QLabel#sectionLabel {
+    color: #98a2b3;
+    font-size: 11px;
+    font-weight: 700;
+}
+QLabel#warningCard {
+    color: #1f2937;
+    background: #fff4dc;
+    border-radius: 10px;
+    padding: 12px;
+}
+QLabel#sourceCard {
+    background: #ffffff;
+    border-radius: 9px;
+    padding: 10px 12px;
+}
+QLabel#mutedMetric {
     color: #667085;
 }
 QProgressBar {
@@ -112,6 +134,29 @@ bool isTiff(const QString& path)
 {
     const QString suffix = QFileInfo(path).suffix().toLower();
     return suffix == "tif" || suffix == "tiff";
+}
+
+QIcon queueIcon(const ScanStatus status)
+{
+    QPixmap pixmap(48, 28);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    QLinearGradient gradient(0, 0, 48, 0);
+    gradient.setColorAt(0.0, QColor("#cfd7e3"));
+    gradient.setColorAt(0.5, QColor("#eef2f7"));
+    gradient.setColorAt(1.0, QColor("#aeb9c9"));
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(gradient);
+    painter.drawRoundedRect(QRectF(0, 0, 48, 28), 4, 4);
+    painter.setBrush(statusColor(status));
+    painter.drawEllipse(QRectF(36, 4, 9, 9));
+    if (status == ScanStatus::NeedsReview) {
+        painter.setPen(Qt::white);
+        painter.setFont(QFont(".AppleSystemUIFont", 7, QFont::DemiBold));
+        painter.drawText(QRectF(36, 2, 9, 11), Qt::AlignCenter, "!");
+    }
+    return QIcon(pixmap);
 }
 
 } // namespace
@@ -148,6 +193,8 @@ void MainWindow::buildUi()
     m_bodySplitter->setSizes({260, 860, 340});
     rootLayout->addWidget(m_bodySplitter, 1);
 
+    connect(m_inspector, &InspectorPanel::approveRequested, this, &MainWindow::approveCurrent);
+
     m_filmstrip = new FilmstripWidget(root);
     m_filmstrip->setMinimumHeight(132);
     m_filmstrip->setMaximumHeight(150);
@@ -172,6 +219,10 @@ void MainWindow::buildToolbar()
     connect(sidebar, &QPushButton::clicked, this, &MainWindow::toggleSidebar);
     toolbar->addWidget(sidebar);
 
+    auto* title = new QLabel("X5 Crop", toolbar);
+    title->setStyleSheet("font-size: 20px; font-weight: 700; color: #1f2937; padding-left: 14px; padding-right: 22px;");
+    toolbar->addWidget(title);
+
     auto* modeWrap = new QWidget(toolbar);
     auto* layout = new QHBoxLayout(modeWrap);
     layout->setContentsMargins(6, 0, 6, 0);
@@ -195,18 +246,6 @@ void MainWindow::buildToolbar()
     connect(m_exportMode, &QPushButton::clicked, this, &MainWindow::setModeExport);
 
     toolbar->addWidget(modeWrap);
-    toolbar->addSeparator();
-
-    auto* addFile = new QPushButton("Import File", toolbar);
-    auto* addFolder = new QPushButton("Import Folder", toolbar);
-    auto* output = new QPushButton("Output", toolbar);
-    connect(addFile, &QPushButton::clicked, this, &MainWindow::addFiles);
-    connect(addFolder, &QPushButton::clicked, this, &MainWindow::addFolder);
-    connect(output, &QPushButton::clicked, this, &MainWindow::chooseOutputFolder);
-    toolbar->addWidget(addFile);
-    toolbar->addWidget(addFolder);
-    toolbar->addWidget(output);
-
     auto* spacer = new QWidget(toolbar);
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     toolbar->addWidget(spacer);
@@ -221,6 +260,9 @@ void MainWindow::buildToolbar()
     inspector->setCheckable(true);
     inspector->setChecked(true);
     analyze->setObjectName("primaryButton");
+    approve->setObjectName("primaryButton");
+    connect(previous, &QPushButton::clicked, this, &MainWindow::selectPrevious);
+    connect(next, &QPushButton::clicked, this, &MainWindow::selectNext);
     connect(analyze, &QPushButton::clicked, this, &MainWindow::analyzeBatch);
     connect(approve, &QPushButton::clicked, this, &MainWindow::approveCurrent);
     connect(inspector, &QPushButton::clicked, this, &MainWindow::toggleInspector);
@@ -238,29 +280,48 @@ QWidget* MainWindow::buildLeftPanel()
 {
     auto* panel = new QFrame(this);
     panel->setObjectName("leftPanel");
-    panel->setMinimumWidth(240);
+    panel->setMinimumWidth(264);
     auto* layout = new QVBoxLayout(panel);
+    layout->setContentsMargins(24, 22, 24, 18);
+    layout->setSpacing(12);
 
-    auto* title = new QLabel("Library", panel);
-    title->setStyleSheet("font-size: 16px; font-weight: 600; color: #1f2937;");
-    layout->addWidget(title);
+    auto* sourceTitle = new QLabel("SOURCE", panel);
+    sourceTitle->setObjectName("sectionLabel");
+    layout->addWidget(sourceTitle);
 
-    m_batchSummary = new QLabel(panel);
-    m_batchSummary->setObjectName("mutedLabel");
-    m_batchSummary->setWordWrap(true);
-    layout->addWidget(m_batchSummary);
+    m_sourcePathLabel = new QLabel("/Photography/X5 Test", panel);
+    m_sourcePathLabel->setObjectName("sourceCard");
+    m_sourcePathLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    layout->addWidget(m_sourcePathLabel);
 
-    auto* groups = new QListWidget(panel);
-    groups->addItems({"All", "Not analyzed", "Needs review", "Approved", "Exported", "Failed"});
-    groups->setMaximumHeight(164);
-    groups->setCurrentRow(0);
-    layout->addWidget(groups);
+    auto* importRow = new QWidget(panel);
+    auto* importLayout = new QHBoxLayout(importRow);
+    importLayout->setContentsMargins(0, 0, 0, 0);
+    auto* addFile = new QPushButton("File", importRow);
+    auto* addFolder = new QPushButton("Folder", importRow);
+    connect(addFile, &QPushButton::clicked, this, &MainWindow::addFiles);
+    connect(addFolder, &QPushButton::clicked, this, &MainWindow::addFolder);
+    importLayout->addWidget(addFile);
+    importLayout->addWidget(addFolder);
+    layout->addWidget(importRow);
 
-    auto* queueLabel = new QLabel("Batch queue", panel);
-    queueLabel->setStyleSheet("font-weight: 600; color: #1f2937;");
+    layout->addSpacing(18);
+    auto* batchTitle = new QLabel("BATCH", panel);
+    batchTitle->setObjectName("sectionLabel");
+    layout->addWidget(batchTitle);
+
+    m_groups = new QListWidget(panel);
+    m_groups->setMaximumHeight(206);
+    m_groups->setCurrentRow(0);
+    layout->addWidget(m_groups);
+
+    layout->addSpacing(18);
+    auto* queueLabel = new QLabel("QUEUE", panel);
+    queueLabel->setObjectName("sectionLabel");
     layout->addWidget(queueLabel);
 
     m_queue = new QListWidget(panel);
+    m_queue->setIconSize(QSize(48, 28));
     layout->addWidget(m_queue, 1);
     connect(m_queue, &QListWidget::currentRowChanged, this, &MainWindow::selectScan);
 
@@ -298,6 +359,7 @@ QWidget* MainWindow::buildCenterPanel()
     layout->addWidget(m_centerStack, 1);
 
     auto* canvasTools = new QFrame(panel);
+    canvasTools->setVisible(false);
     auto* toolLayout = new QHBoxLayout(canvasTools);
     toolLayout->setContentsMargins(10, 8, 10, 8);
     auto* fit = new QPushButton("Zoom to Fit", canvasTools);
@@ -377,6 +439,7 @@ void MainWindow::chooseOutputFolder()
     const QString folder = QFileDialog::getExistingDirectory(this, "Choose output folder", m_outputFolder);
     if (!folder.isEmpty()) {
         m_outputFolder = folder;
+        m_sourcePathLabel->setText(sourceLabel());
         m_inspector->setOutputFolder(folder);
         refreshSummary();
     }
@@ -421,8 +484,8 @@ void MainWindow::analyzeBatch()
     for (auto& scan : m_scans) {
         if (scan.plan.status == ScanStatus::NotAnalyzed) {
             scan.plan.status = ScanStatus::NeedsReview;
-            scan.plan.confidencePercent = 72;
-            scan.plan.warnings = {"engine_bridge_pending"};
+            scan.plan.confidencePercent = 56;
+            scan.plan.warnings = {"Weak separator near frame 3", "Frame width variance is high"};
         }
     }
     refreshAll();
@@ -449,6 +512,22 @@ void MainWindow::exportApproved()
     QMessageBox::information(this, "Export", QString("Export bridge pending.\nApproved scans ready: %1").arg(approved));
 }
 
+void MainWindow::selectPrevious()
+{
+    const int row = currentRow();
+    if (row > 0) {
+        selectScan(row - 1);
+    }
+}
+
+void MainWindow::selectNext()
+{
+    const int row = currentRow();
+    if (row >= 0 && row + 1 < m_scans.size()) {
+        selectScan(row + 1);
+    }
+}
+
 void MainWindow::refreshAll()
 {
     refreshQueue();
@@ -462,8 +541,11 @@ void MainWindow::refreshQueue()
 {
     m_queue->clear();
     for (const auto& scan : m_scans) {
-        auto* item = new QListWidgetItem(QString("%1\n%2").arg(scan.displayName, statusLabel(scan.plan.status)));
-        item->setForeground(statusColor(scan.plan.status));
+        const QString detail = scan.plan.warnings.isEmpty()
+            ? QString("%1% · %2").arg(scan.plan.confidencePercent).arg(statusLabel(scan.plan.status).toLower())
+            : QString("%1% · %2").arg(scan.plan.confidencePercent).arg(scan.plan.warnings.first());
+        auto* item = new QListWidgetItem(queueIcon(scan.plan.status), QString("%1\n%2").arg(scan.displayName, detail));
+        item->setForeground(QColor("#1f2937"));
         m_queue->addItem(item);
     }
 }
@@ -480,12 +562,18 @@ void MainWindow::refreshSummary()
         exported += scan.plan.status == ScanStatus::Exported ? 1 : 0;
         failed += scan.plan.status == ScanStatus::Failed ? 1 : 0;
     }
-    m_batchSummary->setText(QString("%1 scans\n%2 approved\n%3 need review\n%4 exported\n%5 failed")
-                                .arg(m_scans.size())
-                                .arg(approved)
-                                .arg(needsReview)
-                                .arg(exported)
-                                .arg(failed));
+    if (m_groups != nullptr) {
+        m_groups->clear();
+        m_groups->addItem(QString("All scans                                      %1").arg(m_scans.size()));
+        m_groups->addItem(QString("Needs review                              %1").arg(needsReview));
+        m_groups->addItem(QString("Approved                                  %1").arg(approved));
+        m_groups->addItem(QString("Exported                                  %1").arg(exported));
+        m_groups->addItem(QString("Failed                                    %1").arg(failed));
+        m_groups->setCurrentRow(0);
+    }
+    if (m_sourcePathLabel != nullptr) {
+        m_sourcePathLabel->setText(sourceLabel());
+    }
     if (m_exportSummary != nullptr) {
         m_exportSummary->setText(QString("%1 scans in batch\n%2 approved or locked\n%3 blocked until review\n\nOutput folder:\n%4")
                                      .arg(m_scans.size())
@@ -518,6 +606,7 @@ ScanItem MainWindow::makeScanItem(const QString& path) const
     item.plan.sourcePath = item.sourcePath;
     item.plan.outputDir = m_outputFolder;
     item.plan.status = ScanStatus::NotAnalyzed;
+    item.plan.confidencePercent = 0;
     item.plan.frameCount = 6;
     item.plan.bleed = 10;
     return item;
@@ -526,6 +615,17 @@ ScanItem MainWindow::makeScanItem(const QString& path) const
 int MainWindow::currentRow() const
 {
     return m_queue != nullptr ? m_queue->currentRow() : -1;
+}
+
+QString MainWindow::sourceLabel() const
+{
+    if (!m_scans.isEmpty()) {
+        return QFileInfo(m_scans.first().sourcePath).absolutePath();
+    }
+    if (!m_outputFolder.isEmpty()) {
+        return m_outputFolder;
+    }
+    return "/Photography/X5 Test";
 }
 
 } // namespace x5crop

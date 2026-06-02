@@ -14,8 +14,8 @@ FilmstripWidget::FilmstripWidget(QWidget* parent)
     setResizeMode(QListView::Adjust);
     setMovement(QListView::Static);
     setWrapping(false);
-    setIconSize(QSize(112, 68));
-    setGridSize(QSize(142, 118));
+    setIconSize(QSize(92, 48));
+    setGridSize(QSize(110, 72));
     setSpacing(6);
     setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -45,33 +45,29 @@ void FilmstripWidget::setCurrentScan(const int row)
 
 QIcon FilmstripWidget::statusIcon(const ScanStatus status) const
 {
-    QPixmap pixmap(112, 68);
+    QPixmap pixmap(92, 48);
     pixmap.fill(Qt::transparent);
 
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setPen(QPen(QColor("#d8dee8"), 1.0));
     painter.setBrush(QColor("#ffffff"));
-    painter.drawRoundedRect(QRectF(1, 5, 110, 58), 8, 8);
+    painter.drawRoundedRect(QRectF(0, 0, 92, 48), 8, 8);
 
     painter.setPen(Qt::NoPen);
     painter.setBrush(statusColor(status));
-    painter.drawEllipse(QRectF(10, 10, 12, 12));
+    painter.drawEllipse(QRectF(74, 7, 14, 14));
     if (status == ScanStatus::NeedsReview) {
         painter.setPen(QColor("#ffffff"));
         painter.setFont(QFont(".AppleSystemUIFont", 8, QFont::DemiBold));
-        painter.drawText(QRectF(10, 8, 12, 14), Qt::AlignCenter, "!");
+        painter.drawText(QRectF(74, 6, 14, 16), Qt::AlignCenter, "!");
     }
 
     painter.setPen(QPen(QColor("#d8dee8"), 1.0));
     for (int i = 1; i < 6; ++i) {
-        const int x = 8 + i * 17;
-        painter.drawLine(x, 28, x, 54);
+        const int x = 10 + i * 14;
+        painter.drawLine(x, 10, x, 40);
     }
-
-    painter.setPen(QColor("#667085"));
-    painter.setFont(QFont(".AppleSystemUIFont", 8));
-    painter.drawText(QRectF(8, 42, 96, 16), Qt::AlignCenter, statusLabel(status));
 
     return QIcon(pixmap);
 }

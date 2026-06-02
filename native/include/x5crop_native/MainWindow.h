@@ -8,6 +8,7 @@
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QToolBar>
+#include <QToolButton>
 
 #include "x5crop_native/FilmstripWidget.h"
 #include "x5crop_native/InspectorPanel.h"
@@ -36,6 +37,8 @@ private slots:
     void analyzeBatch();
     void approveCurrent();
     void exportApproved();
+    void selectPrevious();
+    void selectNext();
 
 private:
     void buildUi();
@@ -49,6 +52,7 @@ private:
     void addScanPath(const QString& path);
     ScanItem makeScanItem(const QString& path) const;
     int currentRow() const;
+    QString sourceLabel() const;
 
     QList<ScanItem> m_scans;
     QString m_outputFolder;
@@ -56,6 +60,8 @@ private:
     QSplitter* m_bodySplitter = nullptr;
     QWidget* m_leftPanel = nullptr;
     QListWidget* m_queue = nullptr;
+    QListWidget* m_groups = nullptr;
+    QLabel* m_sourcePathLabel = nullptr;
     FilmstripWidget* m_filmstrip = nullptr;
     ReviewCanvas* m_canvas = nullptr;
     InspectorPanel* m_inspector = nullptr;

@@ -22,20 +22,31 @@ void InspectorPanel::setScan(const ScanItem* item)
 {
     if (item == nullptr) {
         m_statusValue->setText("No scan selected");
+        m_statusPill->setText("No scan");
+        m_statusPill->setStyleSheet("background: #edf2f7; color: #667085; border-radius: 15px; padding: 6px 14px;");
         m_confidenceValue->setText("-");
         m_confidenceBar->setValue(0);
         m_warningValue->setText("-");
         m_metadataValue->setText("-");
         m_methodValue->setText("-");
+        m_frameCountValue->setText("-");
+        m_bleedValue->setText("-");
+        m_deskewValue->setText("-");
         return;
     }
 
     m_statusValue->setText(statusLabel(item->plan.status));
+    m_statusPill->setText(statusLabel(item->plan.status));
+    m_statusPill->setStyleSheet(QString("background: %1; color: #ffffff; border-radius: 15px; padding: 6px 14px;")
+                                     .arg(statusColor(item->plan.status).name()));
     m_confidenceValue->setText(QString("%1%").arg(item->plan.confidencePercent));
     m_confidenceBar->setValue(item->plan.confidencePercent);
     m_warningValue->setText(item->plan.warnings.isEmpty() ? "None" : item->plan.warnings.join(", "));
     m_metadataValue->setText(QString("Frames: %1\nBleed: %2 px").arg(item->plan.frameCount).arg(item->plan.bleed));
     m_methodValue->setText("Native UI shell; Python engine bridge pending");
+    m_frameCountValue->setText(QString::number(item->plan.frameCount));
+    m_bleedValue->setText(QString("%1 px").arg(item->plan.bleed));
+    m_deskewValue->setText(QString::number(item->plan.deskewAngle, 'f', 2) + " deg");
     m_frameCount->setValue(item->plan.frameCount);
     m_bleed->setValue(item->plan.bleed);
 }
@@ -48,10 +59,13 @@ void InspectorPanel::setOutputFolder(const QString& path)
 QWidget* InspectorPanel::buildPlanTab()
 {
     auto* page = new QWidget(this);
-    auto* form = new QFormLayout(page);
-    form->setLabelAlignment(Qt::AlignLeft);
+    auto* layout = new QVBoxLayout(page);
+    layout->setSpacing(14);
 
     m_statusValue = new QLabel("No scan selected", page);
+    m_statusPill = new QLabel("No scan", page);
+    m_statusPill->setAlignment(Qt::AlignCenter);
+    m_statusPill->setMinimumHeight(30);
     m_confidenceLabel = new QLabel("CONFIDENCE", page);
     m_confidenceValue = new QLabel("-", page);
     m_confidenceValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -64,19 +78,67 @@ QWidget* InspectorPanel::buildPlanTab()
     m_metadataValue->setWordWrap(true);
     m_methodValue = new QLabel("-", page);
     m_methodValue->setWordWrap(true);
+    m_frameCountValue = new QLabel("-", page);
+    m_bleedValue = new QLabel("-", page);
+    m_deskewValue = new QLabel("-", page);
 
-    form->addRow("Status", m_statusValue);
+    auto* statusTitle = new QLabel("STATUS", page);
+    statusTitle->setObjectName("sectionLabel");
+    layout->addWidget(statusTitle);
+    layout->addWidget(m_statusPill);
+
     auto* confidenceRow = new QWidget(page);
     auto* confidenceLayout = new QHBoxLayout(confidenceRow);
     confidenceLayout->setContentsMargins(0, 0, 0, 0);
     confidenceLayout->addWidget(m_confidenceLabel);
     confidenceLayout->addStretch(1);
     confidenceLayout->addWidget(m_confidenceValue);
-    form->addRow(confidenceRow);
-    form->addRow(m_confidenceBar);
-    form->addRow("Warnings", m_warningValue);
-    form->addRow("Metadata", m_metadataValue);
-    form->addRow("Detection", m_methodValue);
+    layout->addWidget(confidenceRow);
+    layout->addWidget(m_confidenceBar);
+
+    auto* warningsTitle = new QLabel("WARNINGS", page);
+    warningsTitle->setObjectName("sectionLabel");
+    layout->addWidget(warningsTitle);
+    auto* warningCard = new QLabel("-", page);
+    warningCard->setObjectName("warningCard");
+    warningCard->setWordWrap(true);
+    m_warningValue = warningCard;
+    layout->addWidget(warningCard);
+
+    auto* planTitle = new QLabel("CROP PLAN", page);
+    planTitle->setObjectName("sectionLabel");
+    layout->addWidget(planTitle);
+
+    auto addMetric = [layout, page](const QString& label, QLabel* value) {
+        auto* row = new QWidget(page);
+        auto* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->addWidget(new QLabel(label, row));
+        rowLayout->addStretch(1);
+        value->setObjectName("mutedMetric");
+        rowLayout->addWidget(value);
+        layout->addWidget(row);
+    };
+    addMetric("Frame count", m_frameCountValue);
+    addMetric("Bleed", m_bleedValue);
+    addMetric("Deskew", m_deskewValue);
+
+    auto* methodTitle = new QLabel("DETECTION", page);
+    methodTitle->setObjectName("sectionLabel");
+    layout->addWidget(methodTitle);
+    layout->addWidget(m_methodValue);
+
+    layout->addStretch(1);
+    auto* actions = new QWidget(page);
+    auto* actionsLayout = new QHBoxLayout(actions);
+    actionsLayout->setContentsMargins(0, 0, 0, 0);
+    auto* reset = new QPushButton("Reset", actions);
+    auto* approve = new QPushButton("Approve", actions);
+    approve->setObjectName("primaryButton");
+    connect(approve, &QPushButton::clicked, this, &InspectorPanel::approveRequested);
+    actionsLayout->addWidget(reset);
+    actionsLayout->addWidget(approve);
+    layout->addWidget(actions);
     return page;
 }
 

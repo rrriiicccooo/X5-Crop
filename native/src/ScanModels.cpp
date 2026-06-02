@@ -31,13 +31,13 @@ QColor statusColor(const ScanStatus status)
     case ScanStatus::Analyzing:
         return QColor("#4ea1ff");
     case ScanStatus::NeedsReview:
-        return QColor("#d29922");
+        return QColor("#d89b18");
     case ScanStatus::Approved:
         return QColor("#3fb950");
     case ScanStatus::Locked:
         return QColor("#bc8cff");
     case ScanStatus::Exported:
-        return QColor("#58a6ff");
+        return QColor("#3d8bfd");
     case ScanStatus::Failed:
         return QColor("#f85149");
     }
@@ -45,4 +45,3 @@ QColor statusColor(const ScanStatus status)
 }
 
 } // namespace x5crop
-
