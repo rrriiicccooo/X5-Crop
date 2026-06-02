@@ -218,17 +218,27 @@ Next recommended step:
 
 ## Current Handoff
 
-Date: 2026-06-01
+Date: 2026-06-02
 Computer: primary macOS machine
 Branch: integrate-web-app
+Last commit: 0925665 Document NAS sync workflow
 
 Changed:
-- Added collaboration and setup docs for multi-computer Codex work.
-- Added explicit rules for two-way NAS synchronization.
+- Added `docs/UI_REDESIGN_CAPTURE_ONE_LIGHTROOM.md` with a Capture One / Lightroom inspired review-workspace UI proposal.
+- The proposal covers the three-panel layout, bottom filmstrip, review/export modes, visual style, shortcuts, CropPlan data needs, and a phased implementation plan.
+- Added `native/`, a C++20 / Qt 6 native app shell implementing the first review-workspace UI pass.
+- Installed Homebrew `cmake` and `qt` on the primary macOS machine to verify the native build.
 
 Verified:
-- Homebrew Git and Git LFS are installed and active on the primary macOS machine.
-- GitHub CLI is authenticated as `rrriiicccooo` with SSH protocol.
+- Read `README.md`, `docs/CODEX_SYNC.md`, `docs/PROJECT_CONTEXT.md`, current `x5crop/app.py`, `x5crop/core_bridge.py`, and the roadmap before writing the UI plan.
+- Confirmed branch is `integrate-web-app`.
+- Configured native CMake build with Qt 6.
+- Built `native/build-arm64/X5 Crop.app` successfully on Apple Silicon.
+- Launched the app and verified the main window renders the dark three-panel review workspace with bottom filmstrip and inspector.
+
+Not verified:
+- Did not run the PySide6 app during native shell work.
+- Did not build Windows or Intel macOS yet.
 
 Known local-only files:
 - `Test/`
@@ -240,4 +250,4 @@ NAS note:
 - This project folder may be mirrored through two-way NAS sync. Git remains authoritative for source/docs changes; NAS is for local samples and artifacts.
 
 Next recommended step:
-- On the second computer, pull `integrate-web-app`, read `README.md`, `AGENTS.md`, and this sync guide before editing.
+- Implement the native Python-engine bridge or CropPlan JSON persistence next.

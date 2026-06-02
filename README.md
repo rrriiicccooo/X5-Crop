@@ -75,9 +75,34 @@ GitHub Actions workflow:
 .github/workflows/build_x5_crop.yml
 ```
 
+## Native Rewrite
+
+The C++20 / Qt 6 rewrite shell lives in:
+
+```text
+native/
+```
+
+It currently implements the professional review-workspace UI shell from
+`docs/UI_REDESIGN_CAPTURE_ONE_LIGHTROOM.md` while keeping the Python app and
+v17 engine intact.
+
+Build the native shell on macOS:
+
+```bash
+chmod +x native/scripts/build_macos.sh
+./native/scripts/build_macos.sh
+open "native/build-$(uname -m)/X5 Crop.app"
+```
+
+Build the native shell on Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\native\scripts\build_windows.ps1
+```
+
 ## Repository Hygiene
 
 The app source, packaging scripts, docs, and original v17 script belong in Git.
 
 Large local test TIFFs, generated debug images, downloaded app artifacts, virtual environments, build outputs, and `__pycache__` folders are local working files unless explicitly promoted into tracked fixtures.
-

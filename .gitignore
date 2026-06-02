@@ -18,6 +18,7 @@ build/
 dist/
 release/
 *.spec.bak
+native/build*/
 
 # Local app/test artifacts
 downloaded_apps/
@@ -32,4 +33,3 @@ Test/
 # Local editor state
 .vscode/
 .idea/
-

@@ -93,6 +93,30 @@ Original preserved script:
 X5_Split_v17.py
 ```
 
+Native rewrite shell:
+
+```text
+native/
+```
+
+The native shell is a C++20 / Qt 6 project. It currently implements the
+professional review workspace UI and is intended to grow into the higher
+performance version of X5 Crop while the Python app remains available.
+
+macOS native build:
+
+```bash
+chmod +x native/scripts/build_macos.sh
+./native/scripts/build_macos.sh
+open "native/build-$(uname -m)/X5 Crop.app"
+```
+
+Windows native build:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\native\scripts\build_windows.ps1
+```
+
 ## Local App Data
 
 macOS:
@@ -136,4 +160,3 @@ On the primary macOS machine, Git and Git LFS should resolve to Homebrew paths:
 ```
 
 The macOS system Git at `/usr/bin/git` may still exist. Do not remove it.
-

@@ -8,6 +8,9 @@ PyInstaller is not a cross-compiler:
 - build Windows apps on Windows
 - or use GitHub Actions for both
 
+The native C++/Qt rewrite shell is under `native/`. It is not yet the production
+release path, but it already has a separate CMake build for macOS and Windows.
+
 ## GitHub Actions
 
 Workflow:
@@ -108,3 +111,30 @@ Before tagging or sharing an app:
 9. Confirm the artifact names match this document.
 10. Add release notes if behavior changed.
 
+## Native Build Preview
+
+macOS:
+
+```bash
+chmod +x native/scripts/build_macos.sh
+./native/scripts/build_macos.sh
+open "native/build-$(uname -m)/X5 Crop.app"
+```
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\native\scripts\build_windows.ps1
+```
+
+Current native scope:
+
+- professional review-workspace shell
+- TIFF file/folder queue
+- placeholder review canvas overlays
+- inspector tabs
+- filmstrip status badges
+
+The native build does not yet replace the Python release app because the engine
+bridge, real TIFF previews, CropPlan persistence, and final export are still in
+progress.

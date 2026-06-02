@@ -1,0 +1,226 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">X5 Crop review workspace mockup</title>
+  <desc id="desc">A dark professional crop review UI inspired by Capture One and Lightroom.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#000000" flood-opacity="0.32"/>
+    </filter>
+    <linearGradient id="scanGradient" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#151515"/>
+      <stop offset="0.08" stop-color="#2c2c2c"/>
+      <stop offset="0.18" stop-color="#101010"/>
+      <stop offset="0.31" stop-color="#353535"/>
+      <stop offset="0.48" stop-color="#181818"/>
+      <stop offset="0.64" stop-color="#404040"/>
+      <stop offset="0.82" stop-color="#161616"/>
+      <stop offset="1" stop-color="#2a2a2a"/>
+    </linearGradient>
+    <linearGradient id="thumbGradient" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#242424"/>
+      <stop offset="0.5" stop-color="#111111"/>
+      <stop offset="1" stop-color="#3a3a3a"/>
+    </linearGradient>
+    <style>
+      .app { fill: #171717; }
+      .top { fill: #202020; }
+      .panel { fill: #202020; }
+      .panel2 { fill: #1b1b1b; }
+      .canvas { fill: #0f0f0f; }
+      .border { stroke: #343434; stroke-width: 1; }
+      .text { fill: #f1f1f1; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .muted { fill: #a7a7a7; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .dim { fill: #737373; font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .tiny { font-size: 12px; }
+      .small { font-size: 14px; }
+      .body { font-size: 16px; }
+      .label { font-size: 13px; font-weight: 600; letter-spacing: 0; }
+      .title { font-size: 20px; font-weight: 650; letter-spacing: 0; }
+      .button { fill: #2b2b2b; stroke: #444444; stroke-width: 1; }
+      .buttonPrimary { fill: #2563a9; stroke: #4ea1ff; stroke-width: 1; }
+      .badgeGreen { fill: #2f7d3d; }
+      .badgeAmber { fill: #8a6416; }
+      .badgeRed { fill: #88342f; }
+      .badgeBlue { fill: #235d9f; }
+      .cropBlue { stroke: #58a6ff; stroke-width: 2; fill: rgba(88,166,255,0.08); }
+      .outerGreen { stroke: #56d364; stroke-width: 2; fill: none; }
+      .splitRed { stroke: #ff6b6b; stroke-width: 2; }
+      .gridPurple { stroke: #bc8cff; stroke-width: 1.5; stroke-dasharray: 6 6; opacity: 0.72; }
+      .guideYellow { stroke: #d29922; stroke-width: 1.5; stroke-dasharray: 5 5; opacity: 0.78; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" class="app"/>
+
+  <rect x="28" y="24" width="1384" height="852" rx="10" fill="#101010" filter="url(#shadow)"/>
+  <rect x="28" y="24" width="1384" height="852" rx="10" class="app border"/>
+
+  <rect x="28" y="24" width="1384" height="62" rx="10" class="top"/>
+  <path d="M28 76H1412" class="border"/>
+  <text x="52" y="62" class="text title">X5 Crop</text>
+  <text x="160" y="62" class="muted small">Library</text>
+  <text x="226" y="62" class="text small">Review</text>
+  <text x="286" y="62" class="muted small">Export</text>
+
+  <rect x="965" y="39" width="96" height="32" rx="6" class="button"/>
+  <text x="988" y="60" class="text small">Analyze</text>
+  <rect x="1072" y="39" width="104" height="32" rx="6" class="button"/>
+  <text x="1093" y="60" class="text small">Reanalyze</text>
+  <rect x="1188" y="39" width="94" height="32" rx="6" class="buttonPrimary"/>
+  <text x="1210" y="60" class="text small">Approve</text>
+  <rect x="1294" y="39" width="82" height="32" rx="6" class="button"/>
+  <text x="1318" y="60" class="text small">Export</text>
+
+  <rect x="28" y="86" width="260" height="716" class="panel border"/>
+  <text x="52" y="124" class="text label">SOURCE</text>
+  <rect x="52" y="144" width="196" height="34" rx="6" class="button"/>
+  <text x="72" y="166" class="text small">Add Folder</text>
+  <rect x="52" y="188" width="196" height="34" rx="6" class="button"/>
+  <text x="72" y="210" class="text small">Add File</text>
+
+  <text x="52" y="268" class="text label">BATCH</text>
+  <rect x="52" y="286" width="196" height="34" rx="6" fill="#272727"/>
+  <text x="72" y="308" class="text small">All scans</text>
+  <text x="220" y="308" class="muted small" text-anchor="end">24</text>
+  <rect x="52" y="328" width="196" height="34" rx="6" fill="#1c1c1c"/>
+  <circle cx="72" cy="345" r="5" class="badgeAmber"/>
+  <text x="88" y="350" class="text small">Needs review</text>
+  <text x="220" y="350" class="muted small" text-anchor="end">5</text>
+  <rect x="52" y="370" width="196" height="34" rx="6" fill="#1c1c1c"/>
+  <circle cx="72" cy="387" r="5" class="badgeGreen"/>
+  <text x="88" y="392" class="text small">Approved</text>
+  <text x="220" y="392" class="muted small" text-anchor="end">18</text>
+  <rect x="52" y="412" width="196" height="34" rx="6" fill="#1c1c1c"/>
+  <circle cx="72" cy="429" r="5" class="badgeRed"/>
+  <text x="88" y="434" class="text small">Failed</text>
+  <text x="220" y="434" class="muted small" text-anchor="end">1</text>
+
+  <text x="52" y="506" class="text label">QUEUE</text>
+  <g>
+    <rect x="44" y="524" width="216" height="50" rx="6" fill="#2b2b2b" stroke="#4ea1ff"/>
+    <rect x="58" y="537" width="42" height="24" rx="3" fill="url(#thumbGradient)"/>
+    <text x="112" y="546" class="text small">X5 022.tif</text>
+    <text x="112" y="564" class="muted tiny">weak gap 3</text>
+    <rect x="213" y="538" width="34" height="18" rx="9" class="badgeAmber"/>
+    <text x="230" y="552" class="text tiny" text-anchor="middle">5</text>
+  </g>
+  <g opacity="0.88">
+    <rect x="44" y="584" width="216" height="50" rx="6" fill="#1c1c1c"/>
+    <rect x="58" y="597" width="42" height="24" rx="3" fill="url(#thumbGradient)"/>
+    <text x="112" y="606" class="text small">X5 023.tif</text>
+    <text x="112" y="624" class="muted tiny">approved</text>
+    <circle cx="230" cy="609" r="7" class="badgeGreen"/>
+  </g>
+  <g opacity="0.88">
+    <rect x="44" y="644" width="216" height="50" rx="6" fill="#1c1c1c"/>
+    <rect x="58" y="657" width="42" height="24" rx="3" fill="url(#thumbGradient)"/>
+    <text x="112" y="666" class="text small">X5 024.tif</text>
+    <text x="112" y="684" class="muted tiny">exported</text>
+    <circle cx="230" cy="669" r="7" class="badgeBlue"/>
+  </g>
+
+  <rect x="288" y="86" width="812" height="716" class="canvas border"/>
+  <rect x="312" y="110" width="764" height="44" rx="6" fill="#181818" stroke="#303030"/>
+  <text x="332" y="138" class="text small">X5 022.tif</text>
+  <text x="984" y="138" class="muted small" text-anchor="end">Fit  100%  Pan  Crop  Grid  Analysis</text>
+
+  <rect x="342" y="272" width="686" height="278" rx="5" fill="#070707"/>
+  <rect x="362" y="292" width="646" height="238" rx="4" fill="url(#scanGradient)"/>
+  <rect x="384" y="314" width="602" height="194" class="outerGreen"/>
+  <line x1="484" y1="314" x2="484" y2="508" class="splitRed"/>
+  <line x1="584" y1="314" x2="584" y2="508" class="splitRed"/>
+  <line x1="684" y1="314" x2="684" y2="508" class="splitRed"/>
+  <line x1="784" y1="314" x2="784" y2="508" class="splitRed"/>
+  <line x1="884" y1="314" x2="884" y2="508" class="splitRed"/>
+  <line x1="434" y1="314" x2="434" y2="508" class="gridPurple"/>
+  <line x1="534" y1="314" x2="534" y2="508" class="gridPurple"/>
+  <line x1="634" y1="314" x2="634" y2="508" class="gridPurple"/>
+  <line x1="734" y1="314" x2="734" y2="508" class="gridPurple"/>
+  <line x1="834" y1="314" x2="834" y2="508" class="gridPurple"/>
+  <line x1="384" y1="336" x2="986" y2="326" class="guideYellow"/>
+  <line x1="384" y1="488" x2="986" y2="496" class="guideYellow"/>
+
+  <rect x="392" y="322" width="92" height="186" class="cropBlue"/>
+  <rect x="492" y="322" width="92" height="186" class="cropBlue"/>
+  <rect x="592" y="322" width="92" height="186" class="cropBlue"/>
+  <rect x="692" y="322" width="92" height="186" class="cropBlue"/>
+  <rect x="792" y="322" width="92" height="186" class="cropBlue"/>
+  <rect x="892" y="322" width="92" height="186" class="cropBlue"/>
+  <text x="438" y="428" class="text title" text-anchor="middle" opacity="0.8">1</text>
+  <text x="538" y="428" class="text title" text-anchor="middle" opacity="0.8">2</text>
+  <text x="638" y="428" class="text title" text-anchor="middle" opacity="0.8">3</text>
+  <text x="738" y="428" class="text title" text-anchor="middle" opacity="0.8">4</text>
+  <text x="838" y="428" class="text title" text-anchor="middle" opacity="0.8">5</text>
+  <text x="938" y="428" class="text title" text-anchor="middle" opacity="0.8">6</text>
+
+  <rect x="388" y="594" width="630" height="94" rx="6" fill="#171717" stroke="#303030"/>
+  <text x="412" y="626" class="text label">REVIEW NOTES</text>
+  <text x="412" y="654" class="muted small">Low confidence file: weak separator around frame 3. Drag red split line or approve if preview is correct.</text>
+
+  <rect x="1100" y="86" width="312" height="716" class="panel border"/>
+  <text x="1124" y="124" class="text label">INSPECTOR</text>
+  <rect x="1124" y="144" width="264" height="34" rx="6" fill="#2a2a2a"/>
+  <text x="1142" y="166" class="text small">Plan</text>
+  <text x="1196" y="166" class="muted small">Adjust</text>
+  <text x="1266" y="166" class="muted small">Analyze</text>
+  <text x="1336" y="166" class="muted small">Export</text>
+
+  <text x="1124" y="224" class="muted tiny">STATUS</text>
+  <rect x="1124" y="238" width="128" height="28" rx="14" class="badgeAmber"/>
+  <text x="1188" y="257" class="text small" text-anchor="middle">Needs review</text>
+  <text x="1124" y="304" class="muted tiny">CONFIDENCE</text>
+  <rect x="1124" y="320" width="236" height="8" rx="4" fill="#333333"/>
+  <rect x="1124" y="320" width="132" height="8" rx="4" fill="#d29922"/>
+  <text x="1370" y="330" class="text small" text-anchor="end">56%</text>
+
+  <text x="1124" y="380" class="muted tiny">WARNINGS</text>
+  <rect x="1124" y="398" width="264" height="44" rx="6" fill="#261f14" stroke="#4b3a1a"/>
+  <text x="1142" y="424" class="text small">Weak separator near frame 3</text>
+  <rect x="1124" y="452" width="264" height="44" rx="6" fill="#261f14" stroke="#4b3a1a"/>
+  <text x="1142" y="478" class="text small">Frame width variance is high</text>
+
+  <text x="1124" y="546" class="muted tiny">CROP PLAN</text>
+  <text x="1124" y="574" class="text small">Frame count</text>
+  <text x="1370" y="574" class="muted small" text-anchor="end">6</text>
+  <text x="1124" y="606" class="text small">Bleed</text>
+  <text x="1370" y="606" class="muted small" text-anchor="end">10 px</text>
+  <text x="1124" y="638" class="text small">Deskew</text>
+  <text x="1370" y="638" class="muted small" text-anchor="end">-0.18 deg</text>
+
+  <rect x="1124" y="698" width="124" height="34" rx="6" class="button"/>
+  <text x="1186" y="720" class="text small" text-anchor="middle">Reset</text>
+  <rect x="1260" y="698" width="128" height="34" rx="6" class="buttonPrimary"/>
+  <text x="1324" y="720" class="text small" text-anchor="middle">Approve</text>
+
+  <rect x="28" y="802" width="1384" height="74" class="panel2 border"/>
+  <text x="52" y="846" class="muted small">Filmstrip</text>
+  <g transform="translate(136 816)">
+    <rect x="0" y="0" width="92" height="48" rx="5" fill="url(#thumbGradient)" stroke="#4ea1ff"/>
+    <rect x="8" y="34" width="36" height="12" rx="6" class="badgeAmber"/>
+    <text x="26" y="44" class="text tiny" text-anchor="middle">review</text>
+  </g>
+  <g transform="translate(246 816)" opacity="0.9">
+    <rect x="0" y="0" width="92" height="48" rx="5" fill="url(#thumbGradient)" stroke="#333333"/>
+    <circle cx="78" cy="12" r="7" class="badgeGreen"/>
+  </g>
+  <g transform="translate(356 816)" opacity="0.9">
+    <rect x="0" y="0" width="92" height="48" rx="5" fill="url(#thumbGradient)" stroke="#333333"/>
+    <circle cx="78" cy="12" r="7" class="badgeBlue"/>
+  </g>
+  <g transform="translate(466 816)" opacity="0.9">
+    <rect x="0" y="0" width="92" height="48" rx="5" fill="url(#thumbGradient)" stroke="#333333"/>
+    <circle cx="78" cy="12" r="7" class="badgeGreen"/>
+  </g>
+  <g transform="translate(576 816)" opacity="0.9">
+    <rect x="0" y="0" width="92" height="48" rx="5" fill="url(#thumbGradient)" stroke="#333333"/>
+    <rect x="8" y="34" width="36" height="12" rx="6" class="badgeAmber"/>
+  </g>
+  <g transform="translate(686 816)" opacity="0.9">
+    <rect x="0" y="0" width="92" height="48" rx="5" fill="url(#thumbGradient)" stroke="#333333"/>
+    <circle cx="78" cy="12" r="7" class="badgeGreen"/>
+  </g>
+  <g transform="translate(796 816)" opacity="0.9">
+    <rect x="0" y="0" width="92" height="48" rx="5" fill="url(#thumbGradient)" stroke="#333333"/>
+    <circle cx="78" cy="12" r="7" class="badgeRed"/>
+  </g>
+  <text x="1368" y="846" class="muted small" text-anchor="end">24 analyzed   18 approved   5 need review   1 failed</text>
+</svg>
