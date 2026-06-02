@@ -16,8 +16,9 @@ approve crop plans
 export approved TIFFs
 ```
 
-The visual reference is Capture One / Lightroom, adapted for long film-strip
-scan splitting rather than photo color editing.
+The workflow reference is Capture One / Lightroom, adapted for long film-strip
+scan splitting rather than photo color editing. The interface style should
+follow Apple Human Interface Guidelines for a macOS productivity app.
 
 ## Product Principles
 
@@ -32,11 +33,12 @@ scan splitting rather than photo color editing.
 
 ## Proposed Main Layout
 
-Use a dark, three-panel desktop layout with a bottom filmstrip:
+Use a macOS split-view layout with a toolbar, sidebar, central content view,
+inspector, and bottom filmstrip:
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ Top bar: Library | Review | Export     Analyze  Reanalyze  Approve  Export │
+│ macOS toolbar: sidebar toggle  Library | Review | Export  analyze/approve │
 ├───────────────┬──────────────────────────────────────────────┬───────────────┤
 │ Left panel    │ Main preview canvas                          │ Right panel   │
 │               │                                              │               │
@@ -51,12 +53,74 @@ Use a dark, three-panel desktop layout with a bottom filmstrip:
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Default panel widths:
+Default pane widths:
 
 - Left library / queue: 260 px
 - Center canvas: flexible
 - Right inspector: 340 px
 - Bottom filmstrip: 128-160 px height
+
+## Apple HIG Alignment
+
+Design decisions should be guided by Apple Human Interface Guidelines:
+
+- Use platform conventions first: native window frame, toolbar, sidebar,
+  split view, inspector, menus, system font, and system colors.
+- Preserve visual hierarchy: navigation on the leading side, selected scan in
+  the center, current-scan details in the trailing inspector, and batch context
+  in supporting panes.
+- Treat the toolbar as the place for actions that affect the current view:
+  Analyze, Reanalyze, Approve, and Export belong in the toolbar.
+- Treat the sidebar as navigation, not a dense settings form. It should contain
+  source locations, smart groups, and the scan queue.
+- Treat the inspector as contextual detail for the selected scan. It should be
+  hideable, and advanced controls should be grouped into disclosure sections or
+  tabs.
+- Avoid putting critical controls only at the bottom of the window. The
+  filmstrip can stay at the bottom because it is secondary navigation, but
+  primary actions must also be available in the toolbar and menus.
+- Prefer system-provided SF Symbols-style icons, standard control sizes,
+  native selection colors, and accessible contrast.
+- Avoid hard divider lines for major panes. Use macOS-style material changes,
+  scroll backgrounds, spacing, and subtle shadows to separate the sidebar,
+  content, inspector, and filmstrip.
+- Keep toolbar icons semantically consistent with SF Symbols: analyze should
+  read as inspect/search, approve as a checked circle, inspector as a split
+  panel, and export as an arrow leaving a tray.
+- Keep command controls visually consistent. Sidebar import actions should use
+  the same native control treatment as other secondary buttons: icon plus label,
+  clear hit area, no floating text-only affordances.
+- Display inspector metrics as label, value, then control. For confidence, put
+  the percentage value beside the `CONFIDENCE` label and keep the progress bar
+  on its own row so the text never overlaps the bar.
+- Use one status-marker language in the filmstrip: a selected item gets a small
+  accent bar, review items get an amber dot with an exclamation mark, approved
+  items get green dots, exported items get blue dots, and failed items get red
+  dots. Avoid mixing text pills with dots.
+- Treat the filmstrip as a bottom pane inside the main content area, not as a
+  floating overlay above the window. It should share the central content
+  coordinate system and be separated by material contrast and spacing.
+- Design for resizing: keep the central preview stable, collapse or hide the
+  inspector first, then compact the sidebar if the window becomes narrow.
+
+Official references used:
+
+- Apple Human Interface Guidelines overview:
+  `https://developer.apple.com/design/human-interface-guidelines/`
+- Designing for macOS:
+  `https://developer.apple.com/design/human-interface-guidelines/designing-for-macos`
+- Toolbars:
+  `https://developer.apple.com/design/human-interface-guidelines/toolbars`
+- Sidebars:
+  `https://developer.apple.com/design/human-interface-guidelines/sidebars`
+- Panels:
+  `https://developer.apple.com/design/human-interface-guidelines/panels`
+- Layout:
+  `https://developer.apple.com/design/human-interface-guidelines/layout`
+- Materials:
+  `https://developer.apple.com/design/human-interface-guidelines/materials`
+- Apple Design Resources:
+  `https://developer.apple.com/design/resources/`
 
 ## Modes
 
@@ -124,7 +188,7 @@ Right inspector tabs:
 
 1. Plan
    - Review status: Needs review / Approved / Locked
-   - Confidence score
+   - Confidence percent
    - Warning list
    - Source metadata summary
    - Detection method summary
@@ -191,37 +255,49 @@ Right:
 
 ## Visual Style
 
-Use a restrained professional dark theme:
+Use a light, precise macOS workspace rather than a heavy darkroom UI. The
+existing app icon is dark with blue-gray crop geometry, so the interface should
+reuse that blue-gray as a restrained brand accent while relying mostly on
+system-like neutrals.
 
-- App background: `#171717`
-- Panel background: `#202020`
-- Canvas background: `#101010`
-- Border: `#343434`
-- Primary text: `#f2f2f2`
-- Secondary text: `#a8a8a8`
-- Muted text: `#737373`
-- Accent blue: `#4ea1ff`
-- Approved green: `#3fb950`
-- Review amber: `#d29922`
-- Failed red: `#f85149`
-- Crop blue: `#58a6ff`
-- Outer green: `#56d364`
-- Split red: `#ff6b6b`
-- Grid purple: `#bc8cff`
+- App background: `#eef2f7`
+- Panel background: `#ffffff`
+- Secondary panel background: `#f7f9fc`
+- Canvas background: `#f4f6f9`
+- Border: `#d8dee8`
+- Primary text: `#1f2937`
+- Secondary text: `#667085`
+- Muted text: `#98a2b3`
+- Brand blue-gray: `#7f93b6`
+- Primary action: `#3d6fb6`
+- Approved green: `#2f9e62`
+- Review amber: `#d89b18`
+- Failed red: `#d94a42`
+- Crop blue: `#3d8bfd`
+- Outer green: `#22a06b`
+- Split red: `#e85d5d`
+- Grid violet: `#8b6fd6`
 
-Keep controls compact. This should feel like a utility for repeated work, not a
-marketing page.
+Keep controls compact, but give panes more breathing room than the current
+form-heavy UI. The tone should be calm and lightweight: closer to a native
+macOS production tool than a dark photo editor clone.
+
+For the mockup and future implementation, avoid drawing explicit borders around
+every pane or button. Prefer native-looking fills, materials, grouped controls,
+and selection backgrounds; reserve strong lines for crop overlays because those
+are part of the image editing task.
 
 ## Main Actions
 
-Top bar actions:
+Toolbar actions:
 
+- Sidebar toggle
+- Library / Review / Export segmented mode picker
+- Previous / Next
 - Analyze
 - Reanalyze
 - Approve
-- Lock
-- Previous
-- Next
+- Inspector toggle
 - Export
 
 Canvas toolbar:
@@ -285,6 +361,9 @@ Minimum useful `CropPlan`:
   "analysis_version": "1.1.0"
 }
 ```
+
+`confidence_percent` is an integer from 0 to 100. The UI should always display
+confidence as a percentage, for example `56%`, never as a normalized 0-1 value.
 
 Recommended statuses:
 

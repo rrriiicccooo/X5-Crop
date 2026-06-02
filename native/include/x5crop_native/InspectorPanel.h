@@ -4,6 +4,7 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QProgressBar>
 #include <QSpinBox>
 #include <QTabWidget>
 
@@ -33,7 +34,9 @@ private:
     QWidget* buildExportTab();
 
     QLabel* m_statusValue = nullptr;
+    QLabel* m_confidenceLabel = nullptr;
     QLabel* m_confidenceValue = nullptr;
+    QProgressBar* m_confidenceBar = nullptr;
     QLabel* m_warningValue = nullptr;
     QLabel* m_metadataValue = nullptr;
     QLabel* m_methodValue = nullptr;
@@ -44,4 +47,3 @@ private:
 };
 
 } // namespace x5crop
-

@@ -5,7 +5,9 @@
 #include <QListWidget>
 #include <QMainWindow>
 #include <QPushButton>
+#include <QSplitter>
 #include <QStackedWidget>
+#include <QToolBar>
 
 #include "x5crop_native/FilmstripWidget.h"
 #include "x5crop_native/InspectorPanel.h"
@@ -25,6 +27,8 @@ private slots:
     void addFolder();
     void removeSelected();
     void chooseOutputFolder();
+    void toggleSidebar();
+    void toggleInspector();
     void setModeLibrary();
     void setModeReview();
     void setModeExport();
@@ -35,7 +39,7 @@ private slots:
 
 private:
     void buildUi();
-    void buildTopBar(QWidget* parent);
+    void buildToolbar();
     QWidget* buildLeftPanel();
     QWidget* buildCenterPanel();
     QWidget* buildExportSummary();
@@ -49,6 +53,8 @@ private:
     QList<ScanItem> m_scans;
     QString m_outputFolder;
 
+    QSplitter* m_bodySplitter = nullptr;
+    QWidget* m_leftPanel = nullptr;
     QListWidget* m_queue = nullptr;
     FilmstripWidget* m_filmstrip = nullptr;
     ReviewCanvas* m_canvas = nullptr;
@@ -62,4 +68,3 @@ private:
 };
 
 } // namespace x5crop
-

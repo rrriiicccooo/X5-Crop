@@ -7,10 +7,11 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMenuBar>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QSplitter>
 #include <QStatusBar>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 namespace x5crop {
@@ -19,55 +20,91 @@ namespace {
 
 constexpr auto kStyleSheet = R"(
 QMainWindow, QWidget {
-    background: #171717;
-    color: #f2f2f2;
+    background: #eef2f7;
+    color: #1f2937;
     font-size: 12px;
 }
-QFrame#topBar, QFrame#leftPanel, QFrame#centerPanel, QFrame#exportPage, QTabWidget::pane {
-    background: #202020;
-    border: 1px solid #343434;
+QToolBar {
+    background: #f7f9fc;
+    border: none;
+    border-bottom: 1px solid #d8dee8;
+    spacing: 6px;
+}
+QFrame#leftPanel, QFrame#exportPage, QTabWidget::pane {
+    background: #ffffff;
+    border: 1px solid #d8dee8;
+    border-radius: 8px;
+}
+QFrame#centerPanel {
+    background: #ffffff;
+    border: none;
+    border-radius: 8px;
 }
 QPushButton {
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    border-radius: 5px;
-    padding: 6px 10px;
+    background: #ffffff;
+    border: 1px solid #d8dee8;
+    border-radius: 6px;
+    padding: 6px 11px;
 }
 QPushButton:hover {
-    background: #333333;
+    background: #f7f9fc;
 }
 QPushButton:checked, QPushButton#primaryButton {
-    background: #1f5f99;
-    border-color: #4ea1ff;
+    color: #ffffff;
+    background: #3d6fb6;
+    border-color: #3d6fb6;
 }
 QListWidget {
-    background: #1c1c1c;
-    border: 1px solid #343434;
+    background: #f7f9fc;
+    border: 1px solid #d8dee8;
+    border-radius: 8px;
     outline: none;
 }
 QListWidget::item {
     padding: 6px;
 }
 QListWidget::item:selected {
-    background: #26384c;
+    color: #1f2937;
+    background: #dbe8fb;
+}
+QListWidget#filmstrip {
+    background: #f7f9fc;
+    border: none;
+    border-top: 1px solid #d8dee8;
+    border-radius: 0;
+}
+QListWidget#filmstrip::item:selected {
+    background: #ffffff;
+    border-top: 3px solid #3d6fb6;
 }
 QTabBar::tab {
-    background: #242424;
-    border: 1px solid #343434;
+    background: #f7f9fc;
+    border: 1px solid #d8dee8;
     padding: 7px 10px;
 }
 QTabBar::tab:selected {
-    background: #303030;
-    border-bottom-color: #4ea1ff;
+    background: #ffffff;
+    border-bottom-color: #3d6fb6;
 }
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-    background: #111111;
-    border: 1px solid #343434;
+    background: #ffffff;
+    border: 1px solid #d8dee8;
     border-radius: 4px;
     padding: 5px;
 }
 QLabel#mutedLabel {
-    color: #a8a8a8;
+    color: #667085;
+}
+QProgressBar {
+    background: #eef2f7;
+    border: none;
+    border-radius: 4px;
+    min-height: 8px;
+    max-height: 8px;
+}
+QProgressBar::chunk {
+    background: #7f93b6;
+    border-radius: 4px;
 }
 )";
 
@@ -85,6 +122,7 @@ MainWindow::MainWindow(QWidget* parent)
     setWindowTitle("X5 Crop Native Review Workspace");
     resize(1440, 920);
     qApp->setStyleSheet(kStyleSheet);
+    setUnifiedTitleAndToolBarOnMac(true);
     buildUi();
     refreshAll();
 }
@@ -97,18 +135,18 @@ void MainWindow::buildUi()
     rootLayout->setSpacing(8);
     setCentralWidget(root);
 
-    buildTopBar(root);
-    rootLayout->addWidget(root->findChild<QFrame*>("topBar"));
+    buildToolbar();
 
-    auto* body = new QSplitter(Qt::Horizontal, root);
-    body->setChildrenCollapsible(false);
-    body->addWidget(buildLeftPanel());
-    body->addWidget(buildCenterPanel());
-    m_inspector = new InspectorPanel(body);
+    m_bodySplitter = new QSplitter(Qt::Horizontal, root);
+    m_bodySplitter->setChildrenCollapsible(false);
+    m_leftPanel = buildLeftPanel();
+    m_bodySplitter->addWidget(m_leftPanel);
+    m_bodySplitter->addWidget(buildCenterPanel());
+    m_inspector = new InspectorPanel(m_bodySplitter);
     m_inspector->setMinimumWidth(320);
-    body->addWidget(m_inspector);
-    body->setSizes({260, 860, 340});
-    rootLayout->addWidget(body, 1);
+    m_bodySplitter->addWidget(m_inspector);
+    m_bodySplitter->setSizes({260, 860, 340});
+    rootLayout->addWidget(m_bodySplitter, 1);
 
     m_filmstrip = new FilmstripWidget(root);
     m_filmstrip->setMinimumHeight(132);
@@ -121,20 +159,30 @@ void MainWindow::buildUi()
     statusBar()->showMessage("Ready");
 }
 
-void MainWindow::buildTopBar(QWidget* parent)
+void MainWindow::buildToolbar()
 {
-    auto* bar = new QFrame(parent);
-    bar->setObjectName("topBar");
-    auto* layout = new QHBoxLayout(bar);
-    layout->setContentsMargins(10, 8, 10, 8);
-    layout->setSpacing(8);
+    auto* toolbar = new QToolBar("Main Toolbar", this);
+    toolbar->setMovable(false);
+    toolbar->setIconSize(QSize(18, 18));
+    addToolBar(Qt::TopToolBarArea, toolbar);
 
-    auto* modes = new QButtonGroup(bar);
+    auto* sidebar = new QPushButton("Sidebar", toolbar);
+    sidebar->setCheckable(true);
+    sidebar->setChecked(true);
+    connect(sidebar, &QPushButton::clicked, this, &MainWindow::toggleSidebar);
+    toolbar->addWidget(sidebar);
+
+    auto* modeWrap = new QWidget(toolbar);
+    auto* layout = new QHBoxLayout(modeWrap);
+    layout->setContentsMargins(6, 0, 6, 0);
+    layout->setSpacing(4);
+
+    auto* modes = new QButtonGroup(modeWrap);
     modes->setExclusive(true);
 
-    m_libraryMode = new QPushButton("Library", bar);
-    m_reviewMode = new QPushButton("Review", bar);
-    m_exportMode = new QPushButton("Export", bar);
+    m_libraryMode = new QPushButton("Library", modeWrap);
+    m_reviewMode = new QPushButton("Review", modeWrap);
+    m_exportMode = new QPushButton("Export", modeWrap);
     for (auto* button : {m_libraryMode, m_reviewMode, m_exportMode}) {
         button->setCheckable(true);
         modes->addButton(button);
@@ -146,31 +194,44 @@ void MainWindow::buildTopBar(QWidget* parent)
     connect(m_reviewMode, &QPushButton::clicked, this, &MainWindow::setModeReview);
     connect(m_exportMode, &QPushButton::clicked, this, &MainWindow::setModeExport);
 
-    layout->addSpacing(18);
-    auto* addFile = new QPushButton("Add File", bar);
-    auto* addFolder = new QPushButton("Add Folder", bar);
-    auto* output = new QPushButton("Output Folder", bar);
+    toolbar->addWidget(modeWrap);
+    toolbar->addSeparator();
+
+    auto* addFile = new QPushButton("Import File", toolbar);
+    auto* addFolder = new QPushButton("Import Folder", toolbar);
+    auto* output = new QPushButton("Output", toolbar);
     connect(addFile, &QPushButton::clicked, this, &MainWindow::addFiles);
     connect(addFolder, &QPushButton::clicked, this, &MainWindow::addFolder);
     connect(output, &QPushButton::clicked, this, &MainWindow::chooseOutputFolder);
-    layout->addWidget(addFile);
-    layout->addWidget(addFolder);
-    layout->addWidget(output);
+    toolbar->addWidget(addFile);
+    toolbar->addWidget(addFolder);
+    toolbar->addWidget(output);
 
-    layout->addStretch(1);
+    auto* spacer = new QWidget(toolbar);
+    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    toolbar->addWidget(spacer);
 
-    auto* analyze = new QPushButton("Analyze", bar);
-    auto* reanalyze = new QPushButton("Reanalyze", bar);
-    auto* approve = new QPushButton("Approve", bar);
-    auto* exportButton = new QPushButton("Export", bar);
+    auto* previous = new QPushButton("Previous", toolbar);
+    auto* next = new QPushButton("Next", toolbar);
+    auto* analyze = new QPushButton("Analyze", toolbar);
+    auto* reanalyze = new QPushButton("Reanalyze", toolbar);
+    auto* approve = new QPushButton("Approve", toolbar);
+    auto* inspector = new QPushButton("Inspector", toolbar);
+    auto* exportButton = new QPushButton("Export", toolbar);
+    inspector->setCheckable(true);
+    inspector->setChecked(true);
     analyze->setObjectName("primaryButton");
     connect(analyze, &QPushButton::clicked, this, &MainWindow::analyzeBatch);
     connect(approve, &QPushButton::clicked, this, &MainWindow::approveCurrent);
+    connect(inspector, &QPushButton::clicked, this, &MainWindow::toggleInspector);
     connect(exportButton, &QPushButton::clicked, this, &MainWindow::exportApproved);
-    layout->addWidget(analyze);
-    layout->addWidget(reanalyze);
-    layout->addWidget(approve);
-    layout->addWidget(exportButton);
+    toolbar->addWidget(previous);
+    toolbar->addWidget(next);
+    toolbar->addWidget(analyze);
+    toolbar->addWidget(reanalyze);
+    toolbar->addWidget(approve);
+    toolbar->addWidget(inspector);
+    toolbar->addWidget(exportButton);
 }
 
 QWidget* MainWindow::buildLeftPanel()
@@ -181,7 +242,7 @@ QWidget* MainWindow::buildLeftPanel()
     auto* layout = new QVBoxLayout(panel);
 
     auto* title = new QLabel("Library", panel);
-    title->setStyleSheet("font-size: 16px; font-weight: 600;");
+    title->setStyleSheet("font-size: 16px; font-weight: 600; color: #1f2937;");
     layout->addWidget(title);
 
     m_batchSummary = new QLabel(panel);
@@ -196,7 +257,7 @@ QWidget* MainWindow::buildLeftPanel()
     layout->addWidget(groups);
 
     auto* queueLabel = new QLabel("Batch queue", panel);
-    queueLabel->setStyleSheet("font-weight: 600;");
+    queueLabel->setStyleSheet("font-weight: 600; color: #1f2937;");
     layout->addWidget(queueLabel);
 
     m_queue = new QListWidget(panel);
@@ -207,6 +268,20 @@ QWidget* MainWindow::buildLeftPanel()
     connect(remove, &QPushButton::clicked, this, &MainWindow::removeSelected);
     layout->addWidget(remove);
     return panel;
+}
+
+void MainWindow::toggleSidebar()
+{
+    if (m_leftPanel != nullptr) {
+        m_leftPanel->setVisible(!m_leftPanel->isVisible());
+    }
+}
+
+void MainWindow::toggleInspector()
+{
+    if (m_inspector != nullptr) {
+        m_inspector->setVisible(!m_inspector->isVisible());
+    }
 }
 
 QWidget* MainWindow::buildCenterPanel()

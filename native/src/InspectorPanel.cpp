@@ -23,6 +23,7 @@ void InspectorPanel::setScan(const ScanItem* item)
     if (item == nullptr) {
         m_statusValue->setText("No scan selected");
         m_confidenceValue->setText("-");
+        m_confidenceBar->setValue(0);
         m_warningValue->setText("-");
         m_metadataValue->setText("-");
         m_methodValue->setText("-");
@@ -31,6 +32,7 @@ void InspectorPanel::setScan(const ScanItem* item)
 
     m_statusValue->setText(statusLabel(item->plan.status));
     m_confidenceValue->setText(QString("%1%").arg(item->plan.confidencePercent));
+    m_confidenceBar->setValue(item->plan.confidencePercent);
     m_warningValue->setText(item->plan.warnings.isEmpty() ? "None" : item->plan.warnings.join(", "));
     m_metadataValue->setText(QString("Frames: %1\nBleed: %2 px").arg(item->plan.frameCount).arg(item->plan.bleed));
     m_methodValue->setText("Native UI shell; Python engine bridge pending");
@@ -50,7 +52,12 @@ QWidget* InspectorPanel::buildPlanTab()
     form->setLabelAlignment(Qt::AlignLeft);
 
     m_statusValue = new QLabel("No scan selected", page);
+    m_confidenceLabel = new QLabel("CONFIDENCE", page);
     m_confidenceValue = new QLabel("-", page);
+    m_confidenceValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    m_confidenceBar = new QProgressBar(page);
+    m_confidenceBar->setRange(0, 100);
+    m_confidenceBar->setTextVisible(false);
     m_warningValue = new QLabel("-", page);
     m_warningValue->setWordWrap(true);
     m_metadataValue = new QLabel("-", page);
@@ -59,7 +66,14 @@ QWidget* InspectorPanel::buildPlanTab()
     m_methodValue->setWordWrap(true);
 
     form->addRow("Status", m_statusValue);
-    form->addRow("Confidence", m_confidenceValue);
+    auto* confidenceRow = new QWidget(page);
+    auto* confidenceLayout = new QHBoxLayout(confidenceRow);
+    confidenceLayout->setContentsMargins(0, 0, 0, 0);
+    confidenceLayout->addWidget(m_confidenceLabel);
+    confidenceLayout->addStretch(1);
+    confidenceLayout->addWidget(m_confidenceValue);
+    form->addRow(confidenceRow);
+    form->addRow(m_confidenceBar);
     form->addRow("Warnings", m_warningValue);
     form->addRow("Metadata", m_metadataValue);
     form->addRow("Detection", m_methodValue);
@@ -174,4 +188,3 @@ QWidget* InspectorPanel::buildExportTab()
 }
 
 } // namespace x5crop
-

@@ -55,7 +55,7 @@ void ReviewCanvas::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.fillRect(rect(), QColor("#101010"));
+    painter.fillRect(rect(), QColor("#f4f6f9"));
 
     if (m_scan == nullptr) {
         drawEmptyState(painter);
@@ -66,12 +66,12 @@ void ReviewCanvas::paintEvent(QPaintEvent*)
     drawFilmMock(painter, film);
     drawOverlays(painter, film);
 
-    painter.setPen(QColor("#f2f2f2"));
-    painter.setFont(QFont("Arial", 13, QFont::DemiBold));
+    painter.setPen(QColor("#1f2937"));
+    painter.setFont(QFont(".AppleSystemUIFont", 13, QFont::DemiBold));
     painter.drawText(QRectF(28, 18, width() - 56, 28), Qt::AlignLeft | Qt::AlignVCenter, m_scan->displayName);
 
-    painter.setPen(QColor("#a8a8a8"));
-    painter.setFont(QFont("Arial", 10));
+    painter.setPen(QColor("#667085"));
+    painter.setFont(QFont(".AppleSystemUIFont", 10));
     painter.drawText(QRectF(28, 44, width() - 56, 22), Qt::AlignLeft | Qt::AlignVCenter,
                      QString("%1 | %2% zoom").arg(statusLabel(m_scan->plan.status)).arg(m_zoomPercent));
 }
@@ -97,36 +97,36 @@ QRectF ReviewCanvas::filmRect() const
 void ReviewCanvas::drawEmptyState(QPainter& painter)
 {
     const QRectF box(width() / 2.0 - 230.0, height() / 2.0 - 90.0, 460.0, 180.0);
-    painter.setPen(QPen(QColor("#343434"), 1.0));
-    painter.setBrush(QColor("#171717"));
+    painter.setPen(QPen(QColor("#d8dee8"), 1.0));
+    painter.setBrush(QColor("#ffffff"));
     painter.drawRoundedRect(box, 8.0, 8.0);
 
-    painter.setPen(QColor("#f2f2f2"));
-    painter.setFont(QFont("Arial", 16, QFont::DemiBold));
+    painter.setPen(QColor("#1f2937"));
+    painter.setFont(QFont(".AppleSystemUIFont", 16, QFont::DemiBold));
     painter.drawText(box.adjusted(24, 28, -24, -92), Qt::AlignCenter, "Drop TIFF scans here");
 
-    painter.setPen(QColor("#a8a8a8"));
-    painter.setFont(QFont("Arial", 11));
+    painter.setPen(QColor("#667085"));
+    painter.setFont(QFont(".AppleSystemUIFont", 11));
     painter.drawText(box.adjusted(38, 86, -38, -28), Qt::AlignCenter | Qt::TextWordWrap,
                      "Add files or folders to start a review batch. Automatic detection will create crop plans for approval.");
 }
 
 void ReviewCanvas::drawFilmMock(QPainter& painter, const QRectF& rect)
 {
-    painter.setPen(QPen(QColor("#343434"), 1.0));
-    painter.setBrush(QColor("#1a1a1a"));
+    painter.setPen(QPen(QColor("#d8dee8"), 1.0));
+    painter.setBrush(QColor("#ffffff"));
     painter.drawRoundedRect(rect, 6.0, 6.0);
 
     const QRectF inner = rect.adjusted(18, 18, -18, -18);
     QLinearGradient gradient(inner.topLeft(), inner.bottomRight());
-    gradient.setColorAt(0.0, QColor("#222222"));
-    gradient.setColorAt(0.45, QColor("#2c2c2c"));
-    gradient.setColorAt(1.0, QColor("#111111"));
+    gradient.setColorAt(0.0, QColor("#fefefe"));
+    gradient.setColorAt(0.45, QColor("#eef2f7"));
+    gradient.setColorAt(1.0, QColor("#d9e0ea"));
     painter.setPen(Qt::NoPen);
     painter.setBrush(gradient);
     painter.drawRoundedRect(inner, 4.0, 4.0);
 
-    painter.setPen(QPen(QColor(255, 255, 255, 20), 1.0));
+    painter.setPen(QPen(QColor(127, 147, 182, 36), 1.0));
     for (int i = 0; i < 12; ++i) {
         const qreal y = inner.top() + (i + 1) * inner.height() / 13.0;
         painter.drawLine(QPointF(inner.left(), y), QPointF(inner.right(), y));
@@ -138,14 +138,14 @@ void ReviewCanvas::drawOverlays(QPainter& painter, const QRectF& rect)
     const QRectF outer = rect.adjusted(32, 30, -32, -30);
 
     painter.setBrush(Qt::NoBrush);
-    painter.setPen(QPen(QColor("#56d364"), 2.0));
+    painter.setPen(QPen(QColor("#22a06b"), 2.0));
     painter.drawRect(outer);
 
     const int frames = m_scan != nullptr ? std::max(1, m_scan->plan.frameCount) : 6;
     const qreal frameW = outer.width() / frames;
 
     if (m_showGrid) {
-        painter.setPen(QPen(QColor("#bc8cff"), 1.0, Qt::DashLine));
+        painter.setPen(QPen(QColor("#8b6fd6"), 1.0, Qt::DashLine));
         for (int i = 1; i < frames; ++i) {
             const qreal x = outer.left() + i * frameW;
             painter.drawLine(QPointF(x, outer.top()), QPointF(x, outer.bottom()));
@@ -153,20 +153,20 @@ void ReviewCanvas::drawOverlays(QPainter& painter, const QRectF& rect)
     }
 
     if (m_showCropBoxes) {
-        painter.setPen(QPen(QColor("#58a6ff"), 1.7));
+        painter.setPen(QPen(QColor("#3d8bfd"), 1.7));
         for (int i = 0; i < frames; ++i) {
             const QRectF crop(outer.left() + i * frameW + 4, outer.top() + 6, frameW - 8, outer.height() - 12);
             painter.drawRect(crop);
-            painter.setPen(QColor("#58a6ff"));
-            painter.setFont(QFont("Arial", 10, QFont::DemiBold));
+            painter.setPen(QColor("#3d8bfd"));
+            painter.setFont(QFont(".AppleSystemUIFont", 10, QFont::DemiBold));
             painter.drawText(crop.adjusted(8, 8, -8, -8), Qt::AlignTop | Qt::AlignLeft, QString::number(i + 1));
-            painter.setPen(QPen(QColor("#58a6ff"), 1.7));
+            painter.setPen(QPen(QColor("#3d8bfd"), 1.7));
         }
     }
 
     if (m_showSplitLines) {
-        painter.setPen(QPen(QColor("#ff6b6b"), 2.0));
-        painter.setBrush(QColor("#ff6b6b"));
+        painter.setPen(QPen(QColor("#e85d5d"), 2.0));
+        painter.setBrush(QColor("#e85d5d"));
         for (int i = 1; i < frames; ++i) {
             const qreal x = outer.left() + i * frameW;
             painter.drawLine(QPointF(x, outer.top() - 12), QPointF(x, outer.bottom() + 12));
@@ -176,4 +176,3 @@ void ReviewCanvas::drawOverlays(QPainter& painter, const QRectF& rect)
 }
 
 } // namespace x5crop
-

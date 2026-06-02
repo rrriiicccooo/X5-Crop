@@ -8,6 +8,7 @@ namespace x5crop {
 FilmstripWidget::FilmstripWidget(QWidget* parent)
     : QListWidget(parent)
 {
+    setObjectName("filmstrip");
     setViewMode(QListView::IconMode);
     setFlow(QListView::LeftToRight);
     setResizeMode(QListView::Adjust);
@@ -45,30 +46,34 @@ void FilmstripWidget::setCurrentScan(const int row)
 QIcon FilmstripWidget::statusIcon(const ScanStatus status) const
 {
     QPixmap pixmap(112, 68);
-    pixmap.fill(QColor("#151515"));
+    pixmap.fill(Qt::transparent);
 
     QPainter painter(&pixmap);
     painter.setRenderHint(QPainter::Antialiasing, true);
-    painter.setPen(QPen(QColor("#343434"), 1.0));
-    painter.setBrush(QColor("#222222"));
-    painter.drawRoundedRect(QRectF(1, 1, 110, 66), 5, 5);
+    painter.setPen(QPen(QColor("#d8dee8"), 1.0));
+    painter.setBrush(QColor("#ffffff"));
+    painter.drawRoundedRect(QRectF(1, 5, 110, 58), 8, 8);
 
     painter.setPen(Qt::NoPen);
     painter.setBrush(statusColor(status));
-    painter.drawRoundedRect(QRectF(8, 8, 34, 12), 4, 4);
-
-    painter.setPen(QPen(QColor("#444444"), 1.0));
-    for (int i = 1; i < 6; ++i) {
-        const int x = 8 + i * 17;
-        painter.drawLine(x, 28, x, 58);
+    painter.drawEllipse(QRectF(10, 10, 12, 12));
+    if (status == ScanStatus::NeedsReview) {
+        painter.setPen(QColor("#ffffff"));
+        painter.setFont(QFont(".AppleSystemUIFont", 8, QFont::DemiBold));
+        painter.drawText(QRectF(10, 8, 12, 14), Qt::AlignCenter, "!");
     }
 
-    painter.setPen(QColor("#a8a8a8"));
-    painter.setFont(QFont("Arial", 8));
+    painter.setPen(QPen(QColor("#d8dee8"), 1.0));
+    for (int i = 1; i < 6; ++i) {
+        const int x = 8 + i * 17;
+        painter.drawLine(x, 28, x, 54);
+    }
+
+    painter.setPen(QColor("#667085"));
+    painter.setFont(QFont(".AppleSystemUIFont", 8));
     painter.drawText(QRectF(8, 42, 96, 16), Qt::AlignCenter, statusLabel(status));
 
     return QIcon(pixmap);
 }
 
 } // namespace x5crop
-
