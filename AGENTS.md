@@ -107,6 +107,13 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Added per-image V2 analysis caching so `gray_work` and content evidence are
+  computed once per image/layout and reused by content candidates and candidate
+  calibration.
+- Added a V2 full-strip shortcut: when a full-strip separator candidate passes
+  the hard evidence and content-validation auto gate, same-format partial
+  candidates are skipped. This keeps easy full strips fast without weakening
+  difficult-image review behavior.
 - Promoted the active script to X5 Crop V2 (`VERSION = "2.0"`).
 - Reworked final detection into a multi-candidate scorer: V2 now generates
   separator and content candidates across plausible format/count/strip models,
@@ -185,6 +192,20 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- Profiled V2 before optimization: `Test/135/X5_00019.tif` took about 23 seconds
+  under `cProfile`, dominated by repeated content evidence generation.
+- After content caching, `Test/135/X5_00019.tif` dropped to about 12.6 seconds
+  and `Test/120/X5_test_43.tif` / `X5_test_58.tif` were about 10.3 seconds.
+- After the full-strip shortcut, `Test/135/X5_00019.tif` ran in about 6.2
+  seconds, `Test/135/X5_00025.tif` in about 6.0 seconds, `Test/120/X5_test_43.tif`
+  in about 9.9 seconds, and `Test/120/X5_test_58.tif` in about 9.6 seconds.
+- Confirmed `Test/135/X5_00019.tif` and `X5_00025.tif` still remain
+  `approved_auto` 6-frame `135` results after the speed changes.
+- Confirmed `Test/120/X5_test_43.tif` and `X5_test_58.tif` still remain
+  `needs_review` after the speed changes.
+- Generated DebugAnalysis for `Test/120/X5_test_43.tif` after the speed changes;
+  ordinary detection stayed under 10 seconds, while DebugAnalysis took about
+  10.3 seconds because it also writes the combined JPG.
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 2.0`.
 - Confirmed `Test/135/X5_00019.tif` remains `approved_auto` as a 6-frame `135`
   model after the V2 scorer. Runtime was about 25 seconds on this machine.
@@ -321,9 +342,20 @@ Known local-only files:
 - `/private/tmp/x5crop_v2_58b`
 - `/private/tmp/x5crop_v2_58c`
 - `/private/tmp/x5crop_v2_58d`
+- `/private/tmp/x5crop_profile_19`
+- `/private/tmp/x5crop_profile_43`
+- `/private/tmp/x5crop_profile_19_cached`
+- `/private/tmp/x5crop_profile_43_cached`
+- `/private/tmp/x5crop_speed_19a`
+- `/private/tmp/x5crop_speed_19b`
+- `/private/tmp/x5crop_speed_25b`
+- `/private/tmp/x5crop_speed_43a`
+- `/private/tmp/x5crop_speed_43b`
+- `/private/tmp/x5crop_speed_43_debug`
+- `/private/tmp/x5crop_speed_58a`
+- `/private/tmp/x5crop_speed_58b`
 
 Next recommended step:
 - Run V2 over a broader Test batch and use `v2_competition` to identify which
-  candidate families are still too aggressive. The next speed improvement should
-  cache content evidence per image/layout instead of recomputing it for each
-  content candidate.
+  candidate families are still too aggressive. If more speed is needed, the next
+  likely target is caching separator outer candidates/profiles per image/layout.

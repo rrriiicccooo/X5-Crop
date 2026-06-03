@@ -245,6 +245,14 @@ class Config:
     debug_errors: bool
 
 
+@dataclass
+class AnalysisCache:
+    layout: str
+    gray_work: np.ndarray
+    content_evidence_work: np.ndarray
+    content_evidence_float_work: np.ndarray
+
+
 def json_safe(value: Any) -> Any:
     if isinstance(value, np.generic):
         return value.item()
@@ -427,7 +435,10 @@ def expected_content_aspect(format_name: str, layout: str) -> Optional[float]:
     return aspect
 
 
-def content_evidence_detail(gray: np.ndarray, detection: Detection) -> dict[str, Any]:
+def content_evidence_detail(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> dict[str, Any]:
+    if cache is not None and cache.layout == detection.layout:
+        return content_evidence_detail_from_cache(gray, detection, cache)
+
     outer = detection.outer.clamp(gray.shape[1], gray.shape[0])
     if not outer.valid():
         return {"used": False, "reason": "invalid_outer"}
@@ -507,6 +518,87 @@ def content_evidence_detail(gray: np.ndarray, detection: Detection) -> dict[str,
     }
 
 
+def content_evidence_detail_from_cache(gray: np.ndarray, detection: Detection, cache: AnalysisCache) -> dict[str, Any]:
+    source_h, source_w = gray.shape
+    work_h, work_w = cache.gray_work.shape
+    outer = original_box_to_work(detection.outer, detection.layout, source_w, source_h).clamp(work_w, work_h)
+    if not outer.valid():
+        return {"used": False, "reason": "invalid_outer"}
+
+    evidence = cache.content_evidence_float_work[outer.top:outer.bottom, outer.left:outer.right]
+    if evidence.size == 0:
+        return {"used": False, "reason": "empty_outer"}
+
+    outer_p70 = float(sampled_percentile(evidence, [70.0])[0])
+    threshold = max(0.08, min(0.45, outer_p70 * 0.70))
+    frame_scores: list[dict[str, Any]] = []
+    means: list[float] = []
+    coverages: list[float] = []
+    aspect_errors: list[float] = []
+    expected_aspect = CONTENT_ASPECTS_HORIZONTAL.get(detection.film_format)
+
+    for index, frame in enumerate(detection.frames, start=1):
+        absolute_box = original_box_to_work(frame, detection.layout, source_w, source_h).clamp(work_w, work_h)
+        box = Box(
+            max(0, absolute_box.left - outer.left),
+            max(0, absolute_box.top - outer.top),
+            min(outer.width, absolute_box.right - outer.left),
+            min(outer.height, absolute_box.bottom - outer.top),
+        )
+        if not box.valid():
+            continue
+        crop = evidence[box.top:box.bottom, box.left:box.right]
+        if crop.size == 0:
+            continue
+        mean = float(crop.mean())
+        coverage = float((crop >= threshold).mean())
+        means.append(mean)
+        coverages.append(coverage)
+        actual_aspect = float(absolute_box.width) / max(1.0, float(absolute_box.height))
+        aspect_error: Optional[float] = None
+        if expected_aspect is not None and expected_aspect > 0:
+            aspect_error = abs(actual_aspect - expected_aspect) / expected_aspect
+            aspect_errors.append(float(aspect_error))
+        frame_scores.append(
+            {
+                "index": index,
+                "mean": mean,
+                "coverage": coverage,
+                "actual_aspect": actual_aspect,
+                "expected_aspect": expected_aspect,
+                "aspect_error": aspect_error,
+            }
+        )
+
+    if not frame_scores:
+        return {"used": False, "reason": "no_valid_frames"}
+
+    median_mean = float(np.median(np.array(means, dtype=np.float32))) if means else 0.0
+    min_mean = float(min(means)) if means else 0.0
+    median_coverage = float(np.median(np.array(coverages, dtype=np.float32))) if coverages else 0.0
+    max_aspect_error = float(max(aspect_errors)) if aspect_errors else None
+    aspect_ok = max_aspect_error is None or max_aspect_error <= 0.22
+    content_present = median_mean >= 0.075 or median_coverage >= 0.18
+    support = "ok" if content_present and aspect_ok else "weak"
+    if not aspect_ok:
+        support = "aspect_conflict"
+    elif not content_present:
+        support = "low_content"
+
+    return {
+        "used": True,
+        "support": support,
+        "composite": "cached_gradient+neighbor_texture+local_contrast+tonal_presence",
+        "threshold": threshold,
+        "median_mean": median_mean,
+        "min_mean": min_mean,
+        "median_coverage": median_coverage,
+        "expected_aspect": expected_aspect,
+        "max_aspect_error": max_aspect_error,
+        "frame_scores": frame_scores,
+    }
+
+
 def content_profile_runs(evidence: np.ndarray, outer: Box, count: int) -> tuple[list[tuple[int, int]], dict[str, Any]]:
     crop = evidence[outer.top:outer.bottom, outer.left:outer.right].astype(np.float32) / 255.0
     if crop.size == 0:
@@ -546,11 +638,16 @@ def content_detection_for_count(
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,
+    cache: Optional[AnalysisCache] = None,
 ) -> Optional[Detection]:
-    gray_work = work_gray(gray, config.layout)
+    gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     wh, ww = gray_work.shape
-    evidence = make_content_evidence_gray(gray_work)
-    evidence_float = evidence.astype(np.float32) / 255.0
+    if cache is not None and cache.layout == config.layout:
+        evidence = cache.content_evidence_work
+        evidence_float = cache.content_evidence_float_work
+    else:
+        evidence = make_content_evidence_gray(gray_work)
+        evidence_float = evidence.astype(np.float32) / 255.0
     p55, p75, p92 = sampled_percentile(evidence_float, [55, 75, 92])
     mask_threshold = max(0.045, min(0.45, float(p55 + (p92 - p55) * 0.34), float(p75) * 0.78))
     mask = evidence_float >= mask_threshold
@@ -739,10 +836,27 @@ def work_gray(gray: np.ndarray, layout: str) -> np.ndarray:
     return gray if layout == "horizontal" else np.ascontiguousarray(gray.T)
 
 
+def make_analysis_cache(gray: np.ndarray, layout: str) -> AnalysisCache:
+    gray_work = work_gray(gray, layout)
+    content_evidence = make_content_evidence_gray(gray_work)
+    return AnalysisCache(
+        layout=layout,
+        gray_work=gray_work,
+        content_evidence_work=content_evidence,
+        content_evidence_float_work=content_evidence.astype(np.float32) / 255.0,
+    )
+
+
 def map_work_box(box: Box, layout: str, width: int, height: int) -> Box:
     if layout == "horizontal":
         return box.clamp(width, height)
     return Box(box.top, box.left, box.bottom, box.right).clamp(width, height)
+
+
+def original_box_to_work(box: Box, layout: str, width: int, height: int) -> Box:
+    if layout == "horizontal":
+        return box.clamp(width, height)
+    return Box(box.top, box.left, box.bottom, box.right).clamp(height, width)
 
 
 def smooth_1d(values: np.ndarray, window: int) -> np.ndarray:
@@ -1852,13 +1966,14 @@ def calibrate_v2_candidate(
     config: Config,
     fmt: FilmFormat,
     source: str,
+    cache: Optional[AnalysisCache] = None,
 ) -> Detection:
     candidate = replace(
         detection,
         review_reasons=list(detection.review_reasons),
         detail=dict(detection.detail),
     )
-    content_detail = content_evidence_detail(gray, candidate)
+    content_detail = content_evidence_detail(gray, candidate, cache)
     hard_ok, hard_detail = separator_hard_evidence_ok(candidate, config.confidence_threshold)
     content_score = content_support_score(content_detail)
     geometry_score = geometry_support_score(candidate, content_detail)
@@ -1925,17 +2040,44 @@ def v2_candidate_rank(detection: Detection, threshold: float) -> tuple[int, floa
 
 def choose_detection_v2(gray: np.ndarray, config: Config, inferred: FilmFormat) -> Detection:
     candidates: list[Detection] = []
+    cache = make_analysis_cache(gray, config.layout)
     format_candidates = v2_format_candidates(config, inferred)
     for fmt in format_candidates:
-        for count, strip_mode, offsets in candidate_counts_for_format(config, fmt):
+        count_specs = candidate_counts_for_format(config, fmt)
+        if config.strip_mode == "auto":
+            count_specs = sorted(count_specs, key=lambda spec: 0 if spec[1] == "full" else 1)
+        for count, strip_mode, offsets in count_specs:
             if count not in fmt.allowed_counts:
                 continue
             for offset in offsets:
                 separator = detect_for_count(gray, config, fmt, count, strip_mode, offset)
-                candidates.append(calibrate_v2_candidate(gray, separator, config, fmt, "separator"))
-                content = content_detection_for_count(gray, config, fmt, count, strip_mode, offset)
+                separator_candidate = calibrate_v2_candidate(gray, separator, config, fmt, "separator", cache)
+                candidates.append(separator_candidate)
+                content = content_detection_for_count(gray, config, fmt, count, strip_mode, offset, cache)
                 if content is not None:
-                    candidates.append(calibrate_v2_candidate(gray, content, config, fmt, "content"))
+                    candidates.append(calibrate_v2_candidate(gray, content, config, fmt, "content", cache))
+            if (
+                config.strip_mode == "auto"
+                and strip_mode == "full"
+                and count == fmt.default_count
+                and candidates[-1].film_format == fmt.name
+            ):
+                full_candidates = [
+                    candidate for candidate in candidates
+                    if candidate.film_format == fmt.name
+                    and candidate.strip_mode == "full"
+                    and candidate.count == fmt.default_count
+                ]
+                best_full = max(full_candidates, key=lambda d: v2_candidate_rank(d, config.confidence_threshold))
+                v2_detail = best_full.detail.get("v2_candidate", {})
+                if (
+                    best_full.confidence >= config.confidence_threshold
+                    and isinstance(v2_detail, dict)
+                    and bool(v2_detail.get("auto_gate", False))
+                    and v2_detail.get("source") == "separator"
+                ):
+                    best_full.detail.setdefault("v2_shortcuts", []).append("skip_partial_after_full_auto_gate")
+                    break
 
     if not candidates:
         return choose_detection_with_analysis(gray, config, inferred)
