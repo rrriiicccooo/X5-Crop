@@ -1680,7 +1680,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
                 raise
             output_files.append(str(out_path))
 
-    if config.debug:
+    if config.debug and not config.debug_analysis:
         debug_path = output_dir / "_debug" / f"{input_file.stem}_debug.jpg"
         write_debug_preview(gray, detection, debug_path)
         warnings.append(f"debug preview: {debug_path}")

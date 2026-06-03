@@ -124,7 +124,7 @@ python3 X5_Split_v18.py . --report --debug --dry-run
 输出检测分析图：
 
 ```bash
-python3 X5_Split_v18.py . --report --debug --debug-analysis --dry-run
+python3 X5_Split_v18.py . --report --debug-analysis --dry-run
 ```
 
 普通自动裁切：
@@ -186,7 +186,7 @@ split_output/
 - `split_report.jsonl`：完整机器可读报告。
 - `split_summary.csv`：更方便人工浏览的表格。
 - `_debug/*.jpg`：带外框、画幅框和分隔线的检测预览。
-- `_debug_analysis/*_debug_analysis.jpg`：三联图。横向长图会按上下三排显示；竖向长图会按左右三列显示，尽量利用屏幕空间。
+- `_debug_analysis/*_debug_analysis.jpg`：三联图，已经包含带框 debug 图。运行 `--debug-analysis` 时不会再重复生成 `_debug/` 文件夹和单独 debug JPG。
 - `needs_review/`：低置信 `needs_review` 原 TIFF 会默认复制到这里，方便人工集中处理。
 
 普通启动器不会覆盖已有输出 TIFF。已有同名裁切文件时，脚本会报错并停止该文件；命令行可用 `--overwrite` 覆盖。

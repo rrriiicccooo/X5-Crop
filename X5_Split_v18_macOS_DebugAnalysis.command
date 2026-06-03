@@ -44,12 +44,11 @@ echo "Folder: $(pwd)"
 echo
 echo "This will analyze TIFF files in this folder and write one adaptive debug-analysis JPG."
 echo "Output: split_output"
-echo "Debug: split_output/_debug"
 echo "Debug analysis: split_output/_debug_analysis"
 echo "Dry run: no cropped TIFF files will be written."
 echo
 
-$PYTHON "$SCRIPT" "." --report --debug --debug-analysis --dry-run
+$PYTHON "$SCRIPT" "." --report --debug-analysis --dry-run
 EXITCODE=$?
 
 echo

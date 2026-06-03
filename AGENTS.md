@@ -102,32 +102,37 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Renamed v18 launchers to remove the noisy `DoubleClick` suffix.
-- New launcher names are `X5_Split_v18_macOS.command`,
-  `X5_Split_v18_macOS_Debug.command`,
-  `X5_Split_v18_macOS_DebugAnalysis.command`, and the matching Windows `.bat`
-  names.
-- Updated launcher console text and the Chinese `README.md` to use the cleaner
-  names.
+- Changed DebugAnalysis mode so it no longer creates a separate `_debug/`
+  folder or standalone `*_debug.jpg`.
+- DebugAnalysis launchers now pass only `--debug-analysis`, not `--debug`.
+- Script-level behavior now suppresses standalone debug preview output whenever
+  `--debug-analysis` is enabled, even if both flags are passed manually.
+- Updated `README.md` to explain that the DebugAnalysis JPG already includes the
+  debug boxes panel.
 
 Verified:
 - `bash -n X5_Split_v18_macOS.command X5_Split_v18_macOS_Debug.command
   X5_Split_v18_macOS_DebugAnalysis.command`
 - `python3 -m py_compile X5_Split_v18.py`
-- Searched for `DoubleClick`, `double-click`, and old launcher names; no active
-  references remain.
-- Created a synthetic TIFF in `/private/tmp/x5crop_v18_renamed_launcher_test`.
-- Copied `X5_Split_v18.py` and `X5_Split_v18_macOS_DebugAnalysis.command` into
-  that folder, then ran the launcher with `bash`; confirmed it completed and
-  wrote `_debug` plus `_debug_analysis` outputs.
+- Ran `--debug-analysis --dry-run` on a synthetic TIFF in
+  `/private/tmp/x5crop_v18_analysis_only_test`; confirmed only
+  `_debug_analysis/*_debug_analysis.jpg` was written and `_debug/` was not
+  created.
+- Ran `--debug --dry-run` on a synthetic TIFF in
+  `/private/tmp/x5crop_v18_debug_only_test`; confirmed `_debug/*_debug.jpg` was
+  still written and `_debug_analysis/` was not created.
+- Searched README and launchers for stale `--debug --debug-analysis` and
+  duplicate `_debug` messaging in DebugAnalysis mode.
 
 Not verified:
 - Did not run against real local `Test/` TIFF samples.
-- Did not run Windows `.bat` launchers after the rename.
+- Did not run Windows `.bat` launchers after this behavior change.
 
 Known local-only files:
 - `Test/`
-- `/private/tmp/x5crop_v18_renamed_launcher_test`
+- `/private/tmp/x5crop_v18_analysis_only_test`
+- `/private/tmp/x5crop_v18_debug_only_test`
 
 Next recommended step:
-- Use the cleaner launcher names in local TIFF folders going forward.
+- Run the DebugAnalysis launcher on a real difficult TIFF and confirm only the
+  combined JPG is produced.
