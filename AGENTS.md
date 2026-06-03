@@ -107,6 +107,9 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Fixed Windows blank format default using the safer `set /p` pattern:
+  `FORMAT_INPUT` is prefilled with `135` before prompting, so pressing Enter
+  keeps the default value.
 - Cleaned launcher prompt text: use lowercase prompts and labels, and changed
   `Format [135]:` to `format:` while still treating blank input as `135`.
 - Replaced the local virtual environment setup with a relative dependency
@@ -120,8 +123,8 @@ Changed:
   then Debug Analysis dry run.
 - Simplified launchers again: aside from first-time install launchers, macOS now
   keeps only `X5_Crop_Mac.command` and Windows keeps only `X5_Crop_win.bat`.
-  Each main launcher asks whether to enable partial mode, whether to enable
-  Debug Analysis dry run, and then asks for format.
+  Each main launcher asks for format, whether to enable partial mode, and
+  whether to enable Debug Analysis dry run.
 - Removed helper launchers `_X5_Crop_Mac_run.command` and
   `_X5_Crop_win_run.bat`. Their format prompt, count mapping, dependency-path
   setup, and run logic are now inlined into the visible macOS and Windows
@@ -131,9 +134,9 @@ Changed:
 - Fixed launcher count behavior after separating partial mode: normal/full
   launchers now pass explicit counts (`135` 6, `half` 12, `xpan` 3, `120-645` 4,
   `120-66` 3, `120-67` 3), while partial launchers keep count auto.
-- Fixed Windows format prompt defaulting: Windows launchers now clear
-  `FORMAT_INPUT` before `set /p`, because Windows keeps the previous variable
-  value when the user presses Enter on an empty prompt.
+- Fixed Windows format prompt defaulting: Windows launchers prefill
+  `FORMAT_INPUT=135` before `set /p`, because Windows keeps the previous
+  variable value when the user presses Enter on an empty prompt.
 - Added first-time setup launchers: `install/X5_Crop_Mac_install.command` and
   `install/X5_Crop_win_install.bat`.
 - Setup launchers create a local `.x5crop_deps/pyXY/` dependency folder and
