@@ -60,37 +60,22 @@ echo Python:
 %PYTHON_BASE% --version
 echo.
 
-if not exist ".venv-x5crop" (
-    echo Creating local environment: .venv-x5crop
-    %PYTHON_BASE% -m venv .venv-x5crop
+for /f %%P in ('%PYTHON_BASE% -c "import sys; print('py{}{}'.format(sys.version_info[0], sys.version_info[1]))"') do set "PY_TAG=%%P"
+set "DEPS_DIR=%cd%\.x5crop_deps\%PY_TAG%"
+if not exist "%DEPS_DIR%" (
+    mkdir "%DEPS_DIR%"
     if errorlevel 1 (
-        echo Could not create the local Python environment.
+        echo Could not create dependency folder.
         echo.
         pause
         exit /b 1
     )
-) else (
-    echo Using existing local environment: .venv-x5crop
-)
-
-set "PYTHON=%cd%\.venv-x5crop\Scripts\python.exe"
-if not exist "%PYTHON%" (
-    echo Local Python was not created correctly.
-    echo.
-    pause
-    exit /b 1
 )
 
 echo.
-echo Installing dependencies...
-"%PYTHON%" -m pip install --upgrade pip
-if errorlevel 1 (
-    echo Failed to upgrade pip.
-    echo.
-    pause
-    exit /b 1
-)
-"%PYTHON%" -m pip install -U numpy tifffile imagecodecs Pillow
+echo Installing dependencies into: %DEPS_DIR%
+%PYTHON_BASE% -m ensurepip --upgrade >nul 2>nul
+%PYTHON_BASE% -m pip install -U --target "%DEPS_DIR%" numpy tifffile imagecodecs Pillow
 if errorlevel 1 (
     echo Failed to install dependencies.
     echo.
@@ -100,7 +85,8 @@ if errorlevel 1 (
 
 echo.
 echo Verifying dependencies...
-"%PYTHON%" -c "import numpy, tifffile, imagecodecs; from PIL import Image; print('Dependencies OK')"
+set "PYTHONPATH=%DEPS_DIR%;%PYTHONPATH%"
+%PYTHON_BASE% -c "import numpy, tifffile, imagecodecs; from PIL import Image; print('Dependencies OK')"
 if errorlevel 1 (
     echo Dependency verification failed.
     echo.

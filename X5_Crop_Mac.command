@@ -54,9 +54,7 @@ if [ ! -f "$SCRIPT" ]; then
     finish 1
 fi
 
-if [ -x "./.venv-x5crop/bin/python" ]; then
-    PYTHON="./.venv-x5crop/bin/python"
-elif command -v python3 >/dev/null 2>&1; then
+if command -v python3 >/dev/null 2>&1; then
     PYTHON="python3"
 elif command -v python >/dev/null 2>&1; then
     PYTHON="python"
@@ -64,6 +62,16 @@ else
     echo "Python was not found."
     echo "Run install/X5_Crop_Mac_install.command first, then try again."
     finish 1
+fi
+
+PY_TAG="$($PYTHON - <<'PY'
+import sys
+print(f"py{sys.version_info[0]}{sys.version_info[1]}")
+PY
+)"
+DEPS_DIR="./.x5crop_deps/$PY_TAG"
+if [ -d "$DEPS_DIR" ]; then
+    export PYTHONPATH="$DEPS_DIR${PYTHONPATH:+:$PYTHONPATH}"
 fi
 
 echo "X5 Crop V2 launcher"

@@ -55,27 +55,22 @@ echo "Python:"
 $PYTHON_BASE --version
 echo
 
-if [ ! -d ".venv-x5crop" ]; then
-    echo "Creating local environment: .venv-x5crop"
-    $PYTHON_BASE -m venv .venv-x5crop || finish 1
-else
-    echo "Using existing local environment: .venv-x5crop"
-fi
-
-PYTHON="./.venv-x5crop/bin/python"
-if [ ! -x "$PYTHON" ]; then
-    echo "Local Python was not created correctly."
-    finish 1
-fi
+PY_TAG="$($PYTHON_BASE - <<'PY'
+import sys
+print(f"py{sys.version_info[0]}{sys.version_info[1]}")
+PY
+)"
+DEPS_DIR="./.x5crop_deps/$PY_TAG"
+mkdir -p "$DEPS_DIR" || finish 1
 
 echo
-echo "Installing dependencies..."
-$PYTHON -m pip install --upgrade pip || finish 1
-$PYTHON -m pip install -U numpy tifffile imagecodecs Pillow || finish 1
+echo "Installing dependencies into: $DEPS_DIR"
+$PYTHON_BASE -m ensurepip --upgrade >/dev/null 2>&1 || true
+$PYTHON_BASE -m pip install -U --target "$DEPS_DIR" numpy tifffile imagecodecs Pillow || finish 1
 
 echo
 echo "Verifying dependencies..."
-if ! $PYTHON - <<'PY'
+if ! PYTHONPATH="$DEPS_DIR${PYTHONPATH:+:$PYTHONPATH}" $PYTHON_BASE - <<'PY'
 import numpy
 import tifffile
 import imagecodecs

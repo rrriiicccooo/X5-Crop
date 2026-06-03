@@ -107,8 +107,12 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Replaced the local virtual environment setup with a relative dependency
+  target. Install launchers now install packages into `.x5crop_deps/pyXY/`, and
+  run launchers add that folder to `PYTHONPATH`. The old `.venv-x5crop/` path is
+  ignored by current launchers so the script folder stays easier to move.
 - Moved first-time install launchers into `install/` and adjusted them to run
-  from the project root so `.venv-x5crop/` is still created next to
+  from the project root so `.x5crop_deps/` is still created next to
   `X5_Crop.py`.
 - Reordered main launcher prompts to ask for format first, then partial mode,
   then Debug Analysis dry run.
@@ -117,8 +121,8 @@ Changed:
   Each main launcher asks whether to enable partial mode, whether to enable
   Debug Analysis dry run, and then asks for format.
 - Removed helper launchers `_X5_Crop_Mac_run.command` and
-  `_X5_Crop_win_run.bat`. Their format prompt, count mapping, `.venv-x5crop`
-  preference, and run logic are now inlined into the visible macOS and Windows
+  `_X5_Crop_win_run.bat`. Their format prompt, count mapping, dependency-path
+  setup, and run logic are now inlined into the visible macOS and Windows
   launchers.
 - Current user-facing launchers are `X5_Crop_Mac.command`,
   `X5_Crop_win.bat`, and first-time install launchers under `install/`.
@@ -130,12 +134,13 @@ Changed:
   value when the user presses Enter on an empty prompt.
 - Added first-time setup launchers: `install/X5_Crop_Mac_install.command` and
   `install/X5_Crop_win_install.bat`.
-- Setup launchers create a local `.venv-x5crop/` environment and install
-  `numpy`, `tifffile`, `imagecodecs`, and `Pillow` there. If Python is missing,
+- Setup launchers create a local `.x5crop_deps/pyXY/` dependency folder and
+  install `numpy`, `tifffile`, `imagecodecs`, and `Pillow` there. If Python is missing,
   macOS uses Homebrew when available or opens python.org; Windows tries `winget`
   before opening python.org.
-- Updated macOS and Windows launchers to prefer `.venv-x5crop` Python when it
-  exists, so friend/new-machine installs do not depend on global pip state.
+- Updated macOS and Windows launchers to add `.x5crop_deps/pyXY/` to
+  `PYTHONPATH`, so friend/new-machine installs do not depend on global pip
+  state and are less tied to absolute folder paths.
 - Updated `README.md` with the first-time setup workflow and required setup
   launcher files.
 - Disabled default format guessing in the active CLI: `--format` is now required
@@ -235,6 +240,14 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `bash -n install/X5_Crop_Mac_install.command X5_Crop_Mac.command`
+- Confirmed `X5_Crop_Mac.command` no longer prefers `.venv-x5crop`; it computes
+  `pyXY` and adds `.x5crop_deps/pyXY/` to `PYTHONPATH` when present.
+- Confirmed install launchers target `.x5crop_deps/pyXY/` instead of creating a
+  virtual environment.
+- Prompt smoke test on `X5_Crop_Mac.command` still reaches format-first flow and
+  blank answers select `135`, full mode, debug off. The repository root has no
+  TIFF files, so the test intentionally stopped after `No TIFF files found`.
 - `bash -n install/X5_Crop_Mac_install.command X5_Crop_Mac.command`
 - Prompt smoke tests on `X5_Crop_Mac.command` confirmed the prompt order is
   format first, then partial mode, then Debug Analysis dry run. Blank answers
@@ -360,7 +373,7 @@ Verified:
 
 Not verified:
 - Did not run the new install launchers end-to-end, because that would create
-  `.venv-x5crop` and download/install dependencies on this machine.
+  `.x5crop_deps` and download/install dependencies on this machine.
 - Did not run `install/X5_Crop_win_install.bat` on Windows.
 - Did not run Windows `.bat` launchers on Windows.
 - Did not run a non-dry-run TIFF export after creating X5 Crop V2.

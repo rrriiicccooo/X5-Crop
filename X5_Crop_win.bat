@@ -12,9 +12,6 @@ if not exist "%SCRIPT%" (
     exit /b 1
 )
 
-if exist "%~dp0.venv-x5crop\Scripts\python.exe" (
-    set "PYTHON=%~dp0.venv-x5crop\Scripts\python.exe"
-) else (
 where py >nul 2>nul
 if %errorlevel%==0 (
     set "PYTHON=py -3"
@@ -30,6 +27,11 @@ if %errorlevel%==0 (
         exit /b 1
     )
 )
+
+for /f %%P in ('%PYTHON% -c "import sys; print('py{}{}'.format(sys.version_info[0], sys.version_info[1]))"') do set "PY_TAG=%%P"
+set "DEPS_DIR=%~dp0.x5crop_deps\%PY_TAG%"
+if exist "%DEPS_DIR%" (
+    set "PYTHONPATH=%DEPS_DIR%;%PYTHONPATH%"
 )
 
 echo X5 Crop V2 launcher

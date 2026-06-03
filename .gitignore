@@ -11,6 +11,8 @@ __pycache__/
 # Virtual environments
 .venv/
 .venv-build/
+.venv-x5crop/
+.x5crop_deps/
 venv/
 
 # Build and release outputs

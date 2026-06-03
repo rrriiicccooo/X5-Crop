@@ -65,13 +65,15 @@ Windows:
 install/X5_Crop_win_install.bat
 ```
 
-安装启动器会优先使用机器上已有的 Python 3，在项目文件夹里创建本地环境：
+安装启动器会优先使用机器上已有的 Python 3，在项目文件夹里创建本地依赖目录：
 
 ```text
-.venv-x5crop/
+.x5crop_deps/
 ```
 
-然后把 `numpy`、`tifffile`、`imagecodecs`、`Pillow` 安装到这个本地环境。后续普通裁切启动器会自动优先使用 `.venv-x5crop`，这样不会污染系统 Python。
+然后把 `numpy`、`tifffile`、`imagecodecs`、`Pillow` 安装到这个相对路径依赖目录。后续普通裁切启动器会自动把 `.x5crop_deps/` 加入 Python 搜索路径。这样不依赖虚拟环境的绝对路径，也不会污染系统 Python。
+
+移动整个项目文件夹后，启动器仍会按新位置寻找 `.x5crop_deps/`。如果换了电脑、换了 Python 版本，或依赖失效，重新运行一次安装启动器即可。旧版曾使用的 `.venv-x5crop/` 现在不会再被启动器使用。
 
 如果机器没有 Python：
 
