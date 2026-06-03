@@ -1351,15 +1351,25 @@ def make_debug_analysis_panel(gray: np.ndarray, detection: Detection) -> np.ndar
     enhanced_rgb, _ = preview_gray(make_analysis_gray(gray))
     enhanced_rgb = add_panel_label(enhanced_rgb, "Enhanced gray")
     panels = [debug_rgb, base_rgb, enhanced_rgb]
-    max_h = max(panel.shape[0] for panel in panels)
     gap = 12
-    total_w = sum(panel.shape[1] for panel in panels) + gap * (len(panels) - 1)
-    canvas = np.full((max_h, total_w, 3), 32, dtype=np.uint8)
-    x = 0
-    for panel in panels:
-        h, w = panel.shape[:2]
-        canvas[:h, x:x + w] = panel
-        x += w + gap
+    if gray.shape[1] >= gray.shape[0]:
+        max_w = max(panel.shape[1] for panel in panels)
+        total_h = sum(panel.shape[0] for panel in panels) + gap * (len(panels) - 1)
+        canvas = np.full((total_h, max_w, 3), 32, dtype=np.uint8)
+        y = 0
+        for panel in panels:
+            h, w = panel.shape[:2]
+            canvas[y:y + h, :w] = panel
+            y += h + gap
+    else:
+        max_h = max(panel.shape[0] for panel in panels)
+        total_w = sum(panel.shape[1] for panel in panels) + gap * (len(panels) - 1)
+        canvas = np.full((max_h, total_w, 3), 32, dtype=np.uint8)
+        x = 0
+        for panel in panels:
+            h, w = panel.shape[:2]
+            canvas[:h, x:x + w] = panel
+            x += w + gap
     return canvas
 
 

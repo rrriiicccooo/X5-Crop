@@ -186,14 +186,14 @@ split_output/
 - `split_report.jsonl`：完整机器可读报告。
 - `split_summary.csv`：更方便人工浏览的表格。
 - `_debug/*.jpg`：带外框、画幅框和分隔线的检测预览。
-- `_debug_analysis/*_debug_analysis.jpg`：三联图，左侧是带框 debug 图，中间是原始灰度图，右侧是增强后灰度图。
+- `_debug_analysis/*_debug_analysis.jpg`：三联图。横向长图会按上下三排显示；竖向长图会按左右三列显示，尽量利用屏幕空间。
 - `needs_review/`：低置信 `needs_review` 原 TIFF 会默认复制到这里，方便人工集中处理。
 
 普通启动器不会覆盖已有输出 TIFF。已有同名裁切文件时，脚本会报错并停止该文件；命令行可用 `--overwrite` 覆盖。
 
 ## 如何看 debug 图
 
-`_debug/*.jpg` 和 `_debug_analysis/*_debug_analysis.jpg` 左侧的带框图使用这些颜色：
+`_debug/*.jpg` 和 `_debug_analysis/*_debug_analysis.jpg` 里的带框 debug 图使用这些颜色：
 
 | 颜色 | 含义 |
 |---|---|
@@ -212,9 +212,11 @@ split_output/
 
 Debug Analysis 三联图的用途：
 
-- 左侧“Debug boxes”：同 `_debug` 预览，用来看裁切计划。
-- 中间“Original gray”：原始检测灰度图，用来看源扫描本身的明暗和分隔可见度。
-- 右侧“Enhanced gray”：增强后的检测灰度图，用来看脚本是否借助增强图找到了弱分隔。增强图只用于检测坐标，不会写进最终 TIFF。
+- “Debug boxes”：同 `_debug` 预览，用来看裁切计划。
+- “Original gray”：原始检测灰度图，用来看源扫描本身的明暗和分隔可见度。
+- “Enhanced gray”：增强后的检测灰度图，用来看脚本是否借助增强图找到了弱分隔。增强图只用于检测坐标，不会写进最终 TIFF。
+
+横向胶片长图的三联图顺序是从上到下：`Debug boxes`、`Original gray`、`Enhanced gray`。竖向胶片长图的三联图顺序是从左到右：`Debug boxes`、`Original gray`、`Enhanced gray`。
 
 ## 自动通过与待复核
 

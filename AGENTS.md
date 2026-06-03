@@ -102,27 +102,21 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Changed v18 so low-confidence `needs_review` files are copied to
-  `split_output/needs_review/` by default.
-- Added `--no-copy-review-files` to disable that default copy behavior.
-- Changed repeated review-copy runs to reuse an existing same-name review file
-  instead of creating `_02`, `_03`, etc. duplicates.
-- Changed `--debug-analysis` output to one combined JPG containing debug boxes,
-  original gray, and enhanced gray panels.
-- Updated the Chinese `README.md` with review-copy behavior, debug color
-  meaning, and DebugAnalysis panel interpretation.
+- Updated v18 DebugAnalysis panel layout to adapt to scan orientation.
+- Horizontal scans now stack the three panels vertically: Debug boxes, Original
+  gray, Enhanced gray.
+- Vertical scans keep the three panels side-by-side in columns.
+- Updated the Chinese `README.md` to describe the adaptive panel layout.
 
 Verified:
 - `python3 -m py_compile X5_Split_v18.py`
-- Ran v18 on a synthetic TIFF with `--confidence-threshold 1.0 --debug
-  --debug-analysis --dry-run`; confirmed status `needs_review`, default review
-  copy, `_debug/*.jpg`, and one `_debug_analysis/*_debug_analysis.jpg`.
-- Re-ran the same command and confirmed no `_02` duplicate review copy was
-  created.
-- Ran v18 on a second synthetic TIFF with `--no-copy-review-files`; confirmed no
-  `needs_review/` folder was created.
-- Confirmed generated debug-analysis JPG dimensions with `file`/Pillow and
-  visually inspected the combined panel.
+- Created synthetic horizontal and vertical TIFF strips in
+  `/private/tmp/x5crop_v18_adaptive_panel_test`.
+- Ran v18 with `--debug-analysis --dry-run --confidence-threshold 1.0` on both
+  files.
+- Confirmed horizontal output size is `1650x666`, showing vertical stacking.
+- Confirmed vertical output size is `564x1684`, showing side-by-side columns.
+- Visually inspected both generated DebugAnalysis JPGs.
 
 Not verified:
 - Did not run against real local `Test/` TIFF samples.
@@ -130,9 +124,8 @@ Not verified:
 
 Known local-only files:
 - `Test/`
-- `/private/tmp/x5crop_v18_review_panel_test`
-- `/private/tmp/x5crop_v18_no_review_copy_test`
+- `/private/tmp/x5crop_v18_adaptive_panel_test`
 
 Next recommended step:
 - Run a real difficult TIFF through `--debug --debug-analysis --dry-run` and
-  inspect the new combined JPG plus `needs_review/` copy.
+  inspect the adaptive combined JPG plus `needs_review/` copy.
