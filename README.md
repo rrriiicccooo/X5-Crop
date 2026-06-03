@@ -59,4 +59,4 @@ git branch --show-current
 git fetch origin
 ```
 
-See `docs/CODEX_SYNC.md` for the handoff template and sync notes.
+See `AGENTS.md` for Codex rules, sync notes, and the current handoff.

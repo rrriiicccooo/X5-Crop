@@ -1,13 +1,12 @@
 # Codex Agent Rules
 
-This is the short, binding rulebook for Codex agents in this repository. Keep
-cross-machine history and handoff notes in `docs/CODEX_SYNC.md`; do not repeat
-that log here.
+This is the single Codex coordination file for this repository. Keep standing
+rules, sync notes, and the current handoff here.
 
 ## First Moves
 
-1. Read `README.md`, `docs/PROJECT_CONTEXT.md`, and the current handoff in
-   `docs/CODEX_SYNC.md`.
+1. Read `README.md`, `docs/PROJECT_CONTEXT.md`, and the current handoff at the
+   bottom of this file.
 2. Check the current branch and dirty state before editing:
 
 ```bash
@@ -18,6 +17,13 @@ git status --short
 3. If the folder is NAS-synced or the branch is ahead/behind, inspect the
    situation before editing. GitHub is authoritative for source and docs; NAS is
    only a local-file transport layer.
+
+Repository:
+
+```text
+git@github.com:rrriiicccooo/X5-Crop.git
+https://github.com/rrriiicccooo/X5-Crop
+```
 
 ## Current Scope
 
@@ -63,5 +69,57 @@ preserved v17 reference.
 
 ## Handoff Rule
 
-When stopping work after source/docs changes, update the current handoff in
-`docs/CODEX_SYNC.md` using its template.
+When stopping work after source/docs changes, update the current handoff below.
+
+Template:
+
+```text
+Date:
+Computer:
+Branch:
+Last commit:
+
+Changed:
+- 
+
+Verified:
+- 
+
+Not verified:
+- 
+
+Known local-only files:
+- 
+
+Next recommended step:
+- 
+```
+
+## Current Handoff
+
+Date: 2026-06-03
+Computer: primary macOS machine
+Branch: integrate-web-app
+Last commit: see `git log -1` after this handoff commit
+
+Changed:
+- Consolidated Codex coordination into this single `AGENTS.md` file.
+- Moved the remaining sync repository info and handoff template here.
+- Removed `docs/CODEX_SYNC.md` so future sessions do not have two competing
+  Codex coordination files.
+- Updated README references to point to `AGENTS.md`.
+
+Verified:
+- Read the previous `AGENTS.md` and `docs/CODEX_SYNC.md` before merging.
+- Searched for `CODEX_SYNC` references and updated the active README/agent
+  references.
+
+Not verified:
+- No image-processing tests were run because this change only reorganizes
+  coordination documentation.
+
+Known local-only files:
+- `Test/`
+
+Next recommended step:
+- Use this file as the only Codex coordination and handoff file going forward.
