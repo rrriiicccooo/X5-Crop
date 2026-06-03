@@ -29,15 +29,17 @@ if %errorlevel%==0 (
     )
 )
 
-echo X5 Split v18 double-click launcher
+echo X5 Split v18 DEBUG ANALYSIS launcher
 echo Folder: %cd%
 echo.
-echo This will process TIFF files in this folder.
+echo This will analyze TIFF files in this folder and write one adaptive debug-analysis JPG.
 echo Output: split_output
-echo Existing output files will not be overwritten.
+echo Debug: split_output\_debug
+echo Debug analysis: split_output\_debug_analysis
+echo Dry run: no cropped TIFF files will be written.
 echo.
 
-%PYTHON% "%SCRIPT%" "." --report
+%PYTHON% "%SCRIPT%" "." --report --debug --debug-analysis --dry-run
 set "EXITCODE=%errorlevel%"
 
 echo.

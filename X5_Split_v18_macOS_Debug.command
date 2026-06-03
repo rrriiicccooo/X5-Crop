@@ -39,17 +39,16 @@ else
     finish 1
 fi
 
-echo "X5 Split v18 DEBUG ANALYSIS double-click launcher"
+echo "X5 Split v18 DEBUG launcher"
 echo "Folder: $(pwd)"
 echo
-echo "This will analyze TIFF files in this folder and write debug crop previews plus base/enhanced analysis previews."
+echo "This will analyze TIFF files in this folder and write debug crop previews."
 echo "Output: split_output"
 echo "Debug: split_output/_debug"
-echo "Debug analysis: split_output/_debug_analysis"
 echo "Dry run: no cropped TIFF files will be written."
 echo
 
-$PYTHON "$SCRIPT" "." --report --debug --debug-analysis --dry-run
+$PYTHON "$SCRIPT" "." --report --debug --dry-run
 EXITCODE=$?
 
 echo

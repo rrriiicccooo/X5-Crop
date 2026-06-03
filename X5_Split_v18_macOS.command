@@ -39,7 +39,7 @@ else
     finish 1
 fi
 
-echo "X5 Split v18 double-click launcher"
+echo "X5 Split v18 launcher"
 echo "Folder: $(pwd)"
 echo
 echo "This will process TIFF files in this folder."

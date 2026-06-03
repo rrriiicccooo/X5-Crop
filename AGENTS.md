@@ -102,30 +102,32 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Updated v18 DebugAnalysis panel layout to adapt to scan orientation.
-- Horizontal scans now stack the three panels vertically: Debug boxes, Original
-  gray, Enhanced gray.
-- Vertical scans keep the three panels side-by-side in columns.
-- Updated the Chinese `README.md` to describe the adaptive panel layout.
+- Renamed v18 launchers to remove the noisy `DoubleClick` suffix.
+- New launcher names are `X5_Split_v18_macOS.command`,
+  `X5_Split_v18_macOS_Debug.command`,
+  `X5_Split_v18_macOS_DebugAnalysis.command`, and the matching Windows `.bat`
+  names.
+- Updated launcher console text and the Chinese `README.md` to use the cleaner
+  names.
 
 Verified:
+- `bash -n X5_Split_v18_macOS.command X5_Split_v18_macOS_Debug.command
+  X5_Split_v18_macOS_DebugAnalysis.command`
 - `python3 -m py_compile X5_Split_v18.py`
-- Created synthetic horizontal and vertical TIFF strips in
-  `/private/tmp/x5crop_v18_adaptive_panel_test`.
-- Ran v18 with `--debug-analysis --dry-run --confidence-threshold 1.0` on both
-  files.
-- Confirmed horizontal output size is `1650x666`, showing vertical stacking.
-- Confirmed vertical output size is `564x1684`, showing side-by-side columns.
-- Visually inspected both generated DebugAnalysis JPGs.
+- Searched for `DoubleClick`, `double-click`, and old launcher names; no active
+  references remain.
+- Created a synthetic TIFF in `/private/tmp/x5crop_v18_renamed_launcher_test`.
+- Copied `X5_Split_v18.py` and `X5_Split_v18_macOS_DebugAnalysis.command` into
+  that folder, then ran the launcher with `bash`; confirmed it completed and
+  wrote `_debug` plus `_debug_analysis` outputs.
 
 Not verified:
 - Did not run against real local `Test/` TIFF samples.
-- Did not run macOS/Windows double-click launchers after this script change.
+- Did not run Windows `.bat` launchers after the rename.
 
 Known local-only files:
 - `Test/`
-- `/private/tmp/x5crop_v18_adaptive_panel_test`
+- `/private/tmp/x5crop_v18_renamed_launcher_test`
 
 Next recommended step:
-- Run a real difficult TIFF through `--debug --debug-analysis --dry-run` and
-  inspect the adaptive combined JPG plus `needs_review/` copy.
+- Use the cleaner launcher names in local TIFF folders going forward.

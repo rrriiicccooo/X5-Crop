@@ -49,24 +49,24 @@ py -3 -m pip install -U numpy tifffile imagecodecs Pillow
 
 ## 文件摆放
 
-双击启动器要求脚本、启动器和要裁切的 TIFF 长图在同一个文件夹。
+启动器要求脚本、启动器和要裁切的 TIFF 长图在同一个文件夹。
 
 macOS 常用文件：
 
 ```text
 X5_Split_v18.py
-X5_Split_v18_macOS_DoubleClick.command
-X5_Split_v18_macOS_Debug_DoubleClick.command
-X5_Split_v18_macOS_DebugAnalysis_DoubleClick.command
+X5_Split_v18_macOS.command
+X5_Split_v18_macOS_Debug.command
+X5_Split_v18_macOS_DebugAnalysis.command
 ```
 
 Windows 常用文件：
 
 ```text
 X5_Split_v18.py
-X5_Split_v18_Windows_DoubleClick.bat
-X5_Split_v18_Windows_Debug_DoubleClick.bat
-X5_Split_v18_Windows_DebugAnalysis_DoubleClick.bat
+X5_Split_v18_Windows.bat
+X5_Split_v18_Windows_Debug.bat
+X5_Split_v18_Windows_DebugAnalysis.bat
 ```
 
 不支持“只把启动器放进 TIFF 文件夹、脚本留在仓库里”的模式。
@@ -74,17 +74,17 @@ X5_Split_v18_Windows_DebugAnalysis_DoubleClick.bat
 如果 macOS 提示 `.command` 不能打开，先在 Terminal 里运行一次：
 
 ```bash
-chmod +x X5_Split_v18_macOS_DoubleClick.command
-chmod +x X5_Split_v18_macOS_Debug_DoubleClick.command
-chmod +x X5_Split_v18_macOS_DebugAnalysis_DoubleClick.command
+chmod +x X5_Split_v18_macOS.command
+chmod +x X5_Split_v18_macOS_Debug.command
+chmod +x X5_Split_v18_macOS_DebugAnalysis.command
 ```
 
-## 双击启动器
+## 启动器
 
 普通裁切：
 
 ```text
-X5_Split_v18_macOS_DoubleClick.command
+X5_Split_v18_macOS.command
 ```
 
 会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。
@@ -92,7 +92,7 @@ X5_Split_v18_macOS_DoubleClick.command
 Debug：
 
 ```text
-X5_Split_v18_macOS_Debug_DoubleClick.command
+X5_Split_v18_macOS_Debug.command
 ```
 
 只做 dry run，不输出裁切 TIFF。它会写报告和裁切预览 JPG，适合先检查检测结果。
@@ -100,10 +100,10 @@ X5_Split_v18_macOS_Debug_DoubleClick.command
 Debug Analysis：
 
 ```text
-X5_Split_v18_macOS_DebugAnalysis_DoubleClick.command
+X5_Split_v18_macOS_DebugAnalysis.command
 ```
 
-也是 dry run。它会在一张 JPG 里并排生成三块内容：带框 debug 图、原始灰度图、增强后灰度图，适合看欠曝、弱分隔、片头片尾等问题。
+也是 dry run。它会在一张 JPG 里生成三块内容：带框 debug 图、原始灰度图、增强后灰度图；横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾等问题。
 
 macOS 启动器运行结束后会显示：
 

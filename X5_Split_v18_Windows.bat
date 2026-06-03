@@ -29,16 +29,15 @@ if %errorlevel%==0 (
     )
 )
 
-echo X5 Split v18 DEBUG double-click launcher
+echo X5 Split v18 launcher
 echo Folder: %cd%
 echo.
-echo This will analyze TIFF files in this folder and write debug crop previews.
+echo This will process TIFF files in this folder.
 echo Output: split_output
-echo Debug: split_output\_debug
-echo Dry run: no cropped TIFF files will be written.
+echo Existing output files will not be overwritten.
 echo.
 
-%PYTHON% "%SCRIPT%" "." --report --debug --dry-run
+%PYTHON% "%SCRIPT%" "." --report
 set "EXITCODE=%errorlevel%"
 
 echo.
