@@ -68,21 +68,27 @@ FORMAT_INPUT="$(printf '%s' "$FORMAT_INPUT" | tr '[:upper:]' '[:lower:]' | tr -d
 case "$FORMAT_INPUT" in
     ""|135)
         FORMAT="135"
+        COUNT="6"
         ;;
     xpan)
         FORMAT="xpan"
+        COUNT="3"
         ;;
     half)
         FORMAT="half"
+        COUNT="12"
         ;;
     645|120645|120-645)
         FORMAT="120-645"
+        COUNT="4"
         ;;
     66|12066|120-66)
         FORMAT="120-66"
+        COUNT="3"
         ;;
     67|12067|120-67)
         FORMAT="120-67"
+        COUNT="3"
         ;;
     *)
         echo "Unknown format: $FORMAT_INPUT"
@@ -91,9 +97,17 @@ case "$FORMAT_INPUT" in
         ;;
 esac
 echo "Selected format: $FORMAT"
+if [ "$STRIP" = "full" ]; then
+    echo "Fixed full-strip count: $COUNT"
+else
+    echo "Partial mode: count auto"
+fi
 echo
 
 ARGS=("$SCRIPT" "." --format "$FORMAT" --strip "$STRIP" --report)
+if [ "$STRIP" = "full" ]; then
+    ARGS+=(--count "$COUNT")
+fi
 if [ "$MODE" = "debug" ]; then
     ARGS+=(--debug-analysis --dry-run)
 fi

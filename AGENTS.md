@@ -107,6 +107,9 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Fixed launcher count behavior after separating partial mode: normal/full
+  launchers now pass explicit counts (`135` 6, `half` 12, `xpan` 3, `120-645` 4,
+  `120-66` 3, `120-67` 3), while partial launchers keep count auto.
 - Fixed Windows format prompt defaulting: `_X5_Crop_win_run.bat` now clears
   `FORMAT_INPUT` before `set /p`, because Windows keeps the previous variable
   value when the user presses Enter on an empty prompt.
@@ -222,6 +225,13 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- Prompt smoke tests on `_X5_Crop_Mac_run.command` confirmed full mode prints
+  fixed counts (`135` -> 6, `645` -> 4) and partial mode prints `count auto`.
+- Confirmed `Test/135/X5_00019.tif` with `--format 135 --strip full --count 6`
+  prints `count: 6` and remains `approved_auto`; runtime was about 5.9 seconds.
+- Confirmed `Test/135/X5_00038.tif` with `--format 135 --strip partial` still
+  prints `count: auto` and remains `needs_review`; runtime was about 20.9
+  seconds.
 - `bash -n X5_Crop_Mac_install.command _X5_Crop_Mac_run.command
   X5_Crop_Mac.command X5_Crop_Mac_debug.command X5_Crop_Mac_partial.command
   X5_Crop_Mac_partial_debug.command`
@@ -354,6 +364,8 @@ Not verified:
 
 Known local-only files:
 - `Test/`
+- `/private/tmp/x5crop_fixed_count_19`
+- `/private/tmp/x5crop_partial_count_auto_38`
 - `/private/tmp/x5crop_explicit_full_19`
 - `/private/tmp/x5crop_explicit_head_38`
 - `/private/tmp/x5crop_explicit_debug_19`

@@ -63,28 +63,40 @@ set "FORMAT_INPUT=%FORMAT_INPUT: =%"
 if "%FORMAT_INPUT%"=="" set "FORMAT_INPUT=135"
 if /i "%FORMAT_INPUT%"=="135" (
     set "FORMAT=135"
+    set "COUNT=6"
 ) else if /i "%FORMAT_INPUT%"=="xpan" (
     set "FORMAT=xpan"
+    set "COUNT=3"
 ) else if /i "%FORMAT_INPUT%"=="half" (
     set "FORMAT=half"
+    set "COUNT=12"
 ) else if /i "%FORMAT_INPUT%"=="645" (
     set "FORMAT=120-645"
+    set "COUNT=4"
 ) else if /i "%FORMAT_INPUT%"=="120645" (
     set "FORMAT=120-645"
+    set "COUNT=4"
 ) else if /i "%FORMAT_INPUT%"=="120-645" (
     set "FORMAT=120-645"
+    set "COUNT=4"
 ) else if /i "%FORMAT_INPUT%"=="66" (
     set "FORMAT=120-66"
+    set "COUNT=3"
 ) else if /i "%FORMAT_INPUT%"=="12066" (
     set "FORMAT=120-66"
+    set "COUNT=3"
 ) else if /i "%FORMAT_INPUT%"=="120-66" (
     set "FORMAT=120-66"
+    set "COUNT=3"
 ) else if /i "%FORMAT_INPUT%"=="67" (
     set "FORMAT=120-67"
+    set "COUNT=3"
 ) else if /i "%FORMAT_INPUT%"=="12067" (
     set "FORMAT=120-67"
+    set "COUNT=3"
 ) else if /i "%FORMAT_INPUT%"=="120-67" (
     set "FORMAT=120-67"
+    set "COUNT=3"
 ) else (
     echo Unknown format: %FORMAT_INPUT%
     echo Use Enter/135, xpan, half, 645, 66, or 67.
@@ -93,12 +105,25 @@ if /i "%FORMAT_INPUT%"=="135" (
     exit /b 1
 )
 echo Selected format: %FORMAT%
+if /i "%STRIP%"=="full" (
+    echo Fixed full-strip count: %COUNT%
+) else (
+    echo Partial mode: count auto
+)
 echo.
 
 if /i "%MODE%"=="debug" (
-    %PYTHON% "%SCRIPT%" "." --format "%FORMAT%" --strip "%STRIP%" --report --debug-analysis --dry-run
+    if /i "%STRIP%"=="full" (
+        %PYTHON% "%SCRIPT%" "." --format "%FORMAT%" --strip "%STRIP%" --count "%COUNT%" --report --debug-analysis --dry-run
+    ) else (
+        %PYTHON% "%SCRIPT%" "." --format "%FORMAT%" --strip "%STRIP%" --report --debug-analysis --dry-run
+    )
 ) else (
-    %PYTHON% "%SCRIPT%" "." --format "%FORMAT%" --strip "%STRIP%" --report
+    if /i "%STRIP%"=="full" (
+        %PYTHON% "%SCRIPT%" "." --format "%FORMAT%" --strip "%STRIP%" --count "%COUNT%" --report
+    ) else (
+        %PYTHON% "%SCRIPT%" "." --format "%FORMAT%" --strip "%STRIP%" --report
+    )
 )
 set "EXITCODE=%errorlevel%"
 
