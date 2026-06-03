@@ -107,6 +107,19 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Analyzed all 79 top-level TIFF samples under `Test/` as downsampled evidence
+  material for the current detector.
+- Confirmed raw content-run count is unstable on real samples: internal scene
+  texture can split one frame into several content peaks, while low-texture or
+  dark frames can merge several frames into one weak content run.
+- Kept content evidence as the primary direction, but made the selector more
+  explicitly joint: a separator candidate can win when it passes threshold, is
+  supported by content evidence, and the content-primary candidate is ambiguous,
+  below threshold, or smaller.
+- Added a conservative auto-mode safeguard so a high-scoring partial candidate
+  cannot automatically steal the result from a still-plausible full-strip
+  candidate. In that case the full-strip model is returned for review with
+  `partial_competes_with_plausible_full_strip`.
 - Created active `X5_Crop.py` V1 from the latest v18 baseline.
 - Added a conservative content-evidence layer using a composite score from local
   gradient, neighbor texture, local contrast, and tonal presence.
@@ -147,6 +160,23 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop V1.
 
 Verified:
+- Built a Test contact sheet at `/private/tmp/x5crop_test_contact_sheet.jpg` for
+  representative samples including `X5_test_1.tif`, `2.tif`, `3.tif`, `5.tif`,
+  `9.tif`, `11.tif`, `19.tif`, `20.tif`, `22.tif`, `25.tif`, `43.tif`,
+  `44.tif`, `48.tif`, `53.tif`, `72.tif`, `73.tif`, `74.tif`, `75.tif`,
+  `77.tif`, and `79.tif`.
+- Wrote the all-Test downsampled content summary to
+  `/private/tmp/x5crop_test_content_run_summary.json`.
+- Confirmed `Test/X5_test_43.tif` now returns `needs_review` for a 3-frame
+  `120-66` model instead of falsely passing a 2-frame partial model.
+- Confirmed `Test/X5_test_44.tif` now returns `needs_review` for a 3-frame
+  `120-66` model instead of falsely passing a 2-frame partial model.
+- Confirmed `Test/X5_test_19.tif` remains `approved_auto` as a 6-frame `135`
+  model after joint separator/content selection.
+- Confirmed `Test/X5_test_25.tif` remains `approved_auto` as a 6-frame `135`
+  model after joint separator/content selection.
+- Confirmed narrow/difficult `Test/X5_test_72.tif` and `X5_test_74.tif` remain
+  `needs_review` rather than being promoted by content evidence.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n X5_Crop_Mac.command X5_Crop_Mac_debug.command`
 - `python3 X5_Crop.py --version`
@@ -184,6 +214,8 @@ Verified:
 Not verified:
 - Did not run Windows `.bat` launchers on Windows.
 - Did not run a non-dry-run TIFF export after creating X5 Crop V1.
+- Did not create hand-labeled ground-truth fixtures for all `Test/` images; this
+  pass used visual inspection plus representative dry-runs.
 
 Known local-only files:
 - `Test/`
@@ -206,7 +238,16 @@ Known local-only files:
 - `/private/tmp/x5crop_joint_score_19b`
 - `/private/tmp/x5crop_joint_score_20b`
 - `/private/tmp/x5crop_joint_score_25c`
+- `/private/tmp/x5crop_test_contact_sheet.jpg`
+- `/private/tmp/x5crop_test_content_run_summary.json`
+- `/private/tmp/x5crop_joint_model_19b`
+- `/private/tmp/x5crop_joint_model_25b`
+- `/private/tmp/x5crop_joint_model_43c_debug`
+- `/private/tmp/x5crop_joint_model_44b`
+- `/private/tmp/x5crop_joint_model_72b`
+- `/private/tmp/x5crop_joint_model_74b`
 
 Next recommended step:
-- Run DebugAnalysis on difficult weak-separator and partial-strip samples and
-  confirm the content evidence panel is useful without loosening auto-export.
+- Continue turning visually reviewed Test samples into a small hand-labeled
+  regression fixture set, especially vertical 120 and narrow 135/xpan-like
+  strips, so future detector changes can be measured against expected counts.

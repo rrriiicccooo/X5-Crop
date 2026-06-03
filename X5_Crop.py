@@ -85,6 +85,7 @@ CONTENT_ASPECTS_HORIZONTAL = {
     "120-645": 3.0 / 4.0,
     "120-67": 4.0 / 5.0,
 }
+PARTIAL_FULL_COMPETE_MIN_CONFIDENCE = 0.78
 
 
 @dataclass(frozen=True)
@@ -1717,7 +1718,25 @@ def choose_content_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) 
         if detection is not None
     ]
     candidates = [d for d in [full, *partials] if d is not None]
-    return max(candidates, key=lambda d: content_detection_rank(d, config.confidence_threshold)) if candidates else None
+    if not candidates:
+        return None
+    best = max(candidates, key=lambda d: content_detection_rank(d, config.confidence_threshold))
+    if (
+        full is not None
+        and best.strip_mode == "partial"
+        and best.count < fmt.default_count
+        and best.confidence >= config.confidence_threshold
+        and full.confidence >= PARTIAL_FULL_COMPETE_MIN_CONFIDENCE
+    ):
+        full.review_reasons.append("partial_competes_with_plausible_full_strip")
+        full.detail["partial_best"] = {
+            "count": best.count,
+            "confidence": float(best.confidence),
+            "review_reasons": list(best.review_reasons),
+            "content_primary": best.detail.get("content_primary", {}),
+        }
+        return full
+    return best
 
 
 def choose_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detection:
@@ -1757,7 +1776,26 @@ def choose_detection_with_analysis(gray: np.ndarray, config: Config, fmt: FilmFo
     content = choose_content_detection(gray, config, fmt)
     if content is None:
         separator.detail["content_primary"] = {"used": False, "reason": "no_valid_content_candidate"}
+        separator.detail["joint_decision"] = {
+            "selected": "separator_fallback",
+            "reason": "no_valid_content_candidate",
+        }
         return separator
+
+    separator_content = content_evidence_detail(gray, separator)
+    content_primary = content.detail.get("content_primary", {})
+    content_reasons = set(content.review_reasons)
+    separator_content_ok = (
+        bool(separator_content.get("used", False))
+        and str(separator_content.get("support", "")) == "ok"
+    )
+    separator_pass = separator.confidence >= config.confidence_threshold
+    content_pass = content.confidence >= config.confidence_threshold
+    content_ambiguous = (
+        "content_run_count_mismatch" in content_reasons
+        or "content_grid_fallback" in content_reasons
+        or "content_runs_incomplete" in content_reasons
+    )
 
     content.detail["separator_assist"] = {
         "confidence": float(separator.confidence),
@@ -1768,8 +1806,39 @@ def choose_detection_with_analysis(gray: np.ndarray, config: Config, fmt: FilmFo
         "outer_box": asdict(separator.outer),
         "frame_boxes": [asdict(box) for box in separator.frames],
     }
+    content.detail["separator_candidate_content_evidence"] = separator_content
     if separator.confidence >= config.confidence_threshold and content.confidence < config.confidence_threshold:
         content.review_reasons.append("separator_assist_passed_but_content_primary_review")
+
+    if separator_pass and separator_content_ok and (
+        content_ambiguous
+        or not content_pass
+        or content.count < separator.count
+    ):
+        separator.detail["content_primary_candidate"] = {
+            "confidence": float(content.confidence),
+            "count": int(content.count),
+            "strip_mode": content.strip_mode,
+            "review_reasons": list(content.review_reasons),
+            "content_primary": content_primary,
+        }
+        separator.detail["content_evidence"] = separator_content
+        separator.detail["joint_decision"] = {
+            "selected": "separator_supported_by_content",
+            "reason": "separator_passed_and_content_candidate_ambiguous_or_smaller",
+            "separator_content_support": separator_content.get("support"),
+            "content_candidate_confidence": float(content.confidence),
+            "content_candidate_count": int(content.count),
+        }
+        return separator
+
+    content.detail["joint_decision"] = {
+        "selected": "content_primary",
+        "reason": "content_candidate_preferred",
+        "separator_confidence": float(separator.confidence),
+        "separator_count": int(separator.count),
+        "separator_content_support": separator_content.get("support"),
+    }
     return content
 
 
