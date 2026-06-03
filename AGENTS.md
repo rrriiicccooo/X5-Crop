@@ -102,34 +102,43 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Removed PASS/REVIEW from the DebugAnalysis `Debug boxes` panel title; the
-  complete status now appears only in the top status bar.
-- Made the top status bar easier to scan by rendering PASS/REVIEW larger and in
-  distinct colors before the confidence details.
-- Updated `README.md` to describe the more prominent status text.
+- Reworked v18 analysis so enhanced imagery no longer reruns full detection or
+  replaces the base result.
+- Analysis now keeps the base outer box fixed and only uses separator evidence
+  inside that outer box to supplement weak gap candidates.
+- Added `enhanced-detected` gap accounting and orange debug marks for separator
+  evidence accepted from the fixed-outer analysis layer.
+- DebugAnalysis now shows `Separator evidence` instead of `Enhanced gray`.
+- Updated CLI help and `README.md` to describe separator evidence behavior.
 
 Verified:
 - `python3 -m py_compile X5_Split_v18.py`
-- Ran `--debug-analysis --dry-run --format 135 --no-copy-review-files` on
-  `Test/135负片/正常/001.tif`; visually confirmed the panel title is just
-  `Debug boxes` and REVIEW is only in the red top status bar.
-- Ran standalone `--debug --dry-run --format 135 --no-copy-review-files` on
-  `Test/135负片/正常/11.tif`; visually confirmed PASS renders in green with
-  larger status text.
+- Ran dry-run reports on `Test/135负片/正常/001.tif`, `11.tif`, and
+  `X5 022.tif`.
+- Confirmed `001.tif` remains `needs_review` with base/enhanced/grid/equal
+  counts `1/0/0/4`; no separator evidence was accepted.
+- Confirmed `11.tif` remains `approved_auto` with counts `2/0/3/0`.
+- Confirmed `X5 022.tif` remains `needs_review` with counts `0/0/0/5`; no
+  separator evidence was accepted.
+- Generated DebugAnalysis for `001.tif` and visually confirmed the third panel
+  is labeled `Separator evidence`.
 
 Not verified:
-- Did not change or retest enhanced-analysis selection behavior.
-- Did not run Windows `.bat` launchers after this debug visualization change.
-- Did not run a non-dry-run export after this visualization-only change.
+- Did not find a sample in this pass where separator evidence was accepted, so
+  the orange `enhanced-detected` overlay path is code-reviewed but not visually
+  exercised on a real accepted case.
+- Did not run Windows `.bat` launchers after this analysis-layer change.
+- Did not run a non-dry-run export after this analysis-layer change.
 
 Known local-only files:
 - `Test/`
-- `/private/tmp/x5crop_status_bar_review`
-- `/private/tmp/x5crop_status_bar_pass`
+- `/private/tmp/x5crop_separator_evidence_sample`
+- `/private/tmp/x5crop_separator_evidence_sample2`
+- `/private/tmp/x5crop_separator_evidence_debug`
 
 Next recommended step:
 - Copy the updated root `X5_Split_v18.py` into any standalone test folder before
   rerunning launchers there; `Test/135负片/正常` currently contains its own script
   copy.
-- Revisit enhanced-analysis auto-selection separately; this change intentionally
-  only touched debug visualization.
+- Run DebugAnalysis on known weak-separator samples to see whether any orange
+  `enhanced-detected` evidence is accepted and whether its visual mark is useful.

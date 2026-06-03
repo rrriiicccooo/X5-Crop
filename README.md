@@ -103,7 +103,7 @@ Debug Analysis：
 X5_Split_v18_macOS_DebugAnalysis.command
 ```
 
-也是 dry run。它会在一张 JPG 里生成三块内容：带框 debug 图、原始灰度图、增强后灰度图；横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾等问题。
+也是 dry run。它会在一张 JPG 里生成三块内容：带框 debug 图、原始灰度图、分隔证据图；横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾等问题。
 
 macOS 启动器运行结束后会显示：
 
@@ -206,6 +206,7 @@ split_output/
 | 绿色外框 | 脚本认为整条胶片有效区域的外框 |
 | 蓝色框 | 每一张将要输出的裁切框，包含默认 10px bleed |
 | 红色框 / 红色线 | 从图像证据中检测到的真实分隔区域。黑条有宽有窄时会画成区域框，而不是只画单线 |
+| 橙色框 / 橙色线 | v18 新增：在固定外框内由分隔证据层补充检测到的分隔区域 |
 | 黄色短 tick | v18 新增：由全局片距 / grid 模型推算出的切线，不代表一定看到了真实黑条 |
 | 紫色短 tick | v18 新增：证据不足时使用的等分或宽区域 fallback 切线 |
 | 白色短 tick | v18 新增：其它未分类的切线来源 |
@@ -230,9 +231,9 @@ Debug Analysis 三联图的用途：
 
 - “Debug boxes”：同 `_debug` 预览，用来看裁切计划。
 - “Original gray”：原始检测灰度图，用来看源扫描本身的明暗和分隔可见度。
-- “Enhanced gray”：增强后的检测灰度图，用来看脚本是否借助增强图找到了弱分隔。增强图只用于检测坐标，不会写进最终 TIFF。
+- “Separator evidence”：只在已确认的外框内部生成的分隔证据图，用来看弱分隔是否被辅助证据层捕捉到。它只补充分隔候选，不会重新决定外框，也不会写进最终 TIFF。
 
-横向胶片长图的三联图顺序是从上到下：`Debug boxes`、`Original gray`、`Enhanced gray`。竖向胶片长图的三联图顺序是从左到右：`Debug boxes`、`Original gray`、`Enhanced gray`。
+横向胶片长图的三联图顺序是从上到下：`Debug boxes`、`Original gray`、`Separator evidence`。竖向胶片长图的三联图顺序是从左到右：`Debug boxes`、`Original gray`、`Separator evidence`。
 
 ## 自动通过与待复核
 
