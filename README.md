@@ -56,16 +56,16 @@ macOS 常用文件：
 
 ```text
 X5_Crop.py
-X5_Crop_macOS.command
-X5_Crop_macOS_DebugAnalysis.command
+X5_Crop_Mac.command
+X5_Crop_Mac_debug.command
 ```
 
 Windows 常用文件：
 
 ```text
 X5_Crop.py
-X5_Crop_Windows.bat
-X5_Crop_Windows_DebugAnalysis.bat
+X5_Crop_win.bat
+X5_Crop_win_debug.bat
 ```
 
 不支持“只把启动器放进 TIFF 文件夹、脚本留在仓库里”的模式。
@@ -73,8 +73,8 @@ X5_Crop_Windows_DebugAnalysis.bat
 如果 macOS 提示 `.command` 不能打开，先在 Terminal 里运行一次：
 
 ```bash
-chmod +x X5_Crop_macOS.command
-chmod +x X5_Crop_macOS_DebugAnalysis.command
+chmod +x X5_Crop_Mac.command
+chmod +x X5_Crop_Mac_debug.command
 ```
 
 ## 启动器
@@ -82,7 +82,7 @@ chmod +x X5_Crop_macOS_DebugAnalysis.command
 普通裁切：
 
 ```text
-X5_Crop_macOS.command
+X5_Crop_Mac.command
 ```
 
 会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。
@@ -90,7 +90,7 @@ X5_Crop_macOS.command
 Debug Analysis：
 
 ```text
-X5_Crop_macOS_DebugAnalysis.command
+X5_Crop_Mac_debug.command
 ```
 
 也是 dry run。它会在一张 JPG 里生成四块内容：带框 debug 图、原始灰度图、分隔证据图、内容证据图。横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾和未铺满整条片夹的情况。

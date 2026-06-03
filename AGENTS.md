@@ -119,6 +119,9 @@ Changed:
 - Debug boxes now use different semi-transparent fills for each crop area instead
   of blue outlines.
 - Moved v17/v18 reference scripts into `archive/`.
+- Simplified launcher names to `X5_Crop_Mac.command`,
+  `X5_Crop_Mac_debug.command`, `X5_Crop_win.bat`, and
+  `X5_Crop_win_debug.bat`.
 - Default bleed is now 15px left/right and 10px top/bottom.
 - Content evidence is written into reports and can conservatively downgrade
   clear content/aspect conflicts, but it does not raise difficult files into
@@ -129,7 +132,7 @@ Changed:
 
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
-- `bash -n X5_Crop_macOS.command X5_Crop_macOS_DebugAnalysis.command`
+- `bash -n X5_Crop_Mac.command X5_Crop_Mac_debug.command`
 - `python3 X5_Crop.py --version`
 - `python3 X5_Crop.py --help`
 - Ran DebugAnalysis dry-runs on `Test/135负片/正常/001.tif`, `11.tif`, and
