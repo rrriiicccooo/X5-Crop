@@ -2,9 +2,6 @@
 
 cd "$(dirname "$0")" || exit 1
 
-STRIP="full"
-MODE="normal"
-
 close_terminal_window() {
     case "${TERM_PROGRAM:-}" in
         Apple_Terminal)
@@ -22,6 +19,32 @@ finish() {
     read -r -p "Press Return to close..."
     close_terminal_window
     exit "$EXITCODE"
+}
+
+ask_yes_no() {
+    PROMPT="$1"
+    DEFAULT="$2"
+    while true; do
+        read -r -p "$PROMPT" ANSWER
+        ANSWER="$(printf '%s' "$ANSWER" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+        case "$ANSWER" in
+            "")
+                printf '%s\n' "$DEFAULT"
+                return 0
+                ;;
+            y|yes)
+                printf '%s\n' "yes"
+                return 0
+                ;;
+            n|no)
+                printf '%s\n' "no"
+                return 0
+                ;;
+            *)
+                echo "Use yes/no, y/n, or press Return for no."
+                ;;
+        esac
+    done
 }
 
 SCRIPT="./X5_Crop.py"
@@ -43,7 +66,7 @@ else
     finish 1
 fi
 
-echo "X5 Crop V2 ${STRIP} launcher"
+echo "X5 Crop V2 launcher"
 echo "Folder: $(pwd)"
 echo
 echo "This will process TIFF files in this folder."
@@ -51,6 +74,21 @@ echo "Output: split_output"
 echo "Existing output files will not be overwritten."
 echo
 
+PARTIAL_ANSWER="$(ask_yes_no "Enable partial mode? [y/N]: " "no")"
+if [ "$PARTIAL_ANSWER" = "yes" ]; then
+    STRIP="partial"
+else
+    STRIP="full"
+fi
+
+DEBUG_ANSWER="$(ask_yes_no "Enable Debug Analysis dry run? [y/N]: " "no")"
+if [ "$DEBUG_ANSWER" = "yes" ]; then
+    DEBUG="yes"
+else
+    DEBUG="no"
+fi
+
+echo
 echo "Choose film format:"
 echo "  [Return] or 135 = 135"
 echo "  xpan = XPAN"
@@ -92,11 +130,33 @@ case "$FORMAT_INPUT" in
         finish 1
         ;;
 esac
+
+echo
 echo "Selected format: $FORMAT"
-echo "Fixed full-strip count: $COUNT"
+if [ "$STRIP" = "full" ]; then
+    echo "Strip mode: full"
+    echo "Fixed full-strip count: $COUNT"
+else
+    echo "Strip mode: partial"
+    echo "Partial mode: count auto"
+fi
+if [ "$DEBUG" = "yes" ]; then
+    echo "Debug analysis: enabled"
+    echo "Dry run: no cropped TIFF files will be written."
+else
+    echo "Debug analysis: off"
+fi
 echo
 
-$PYTHON "$SCRIPT" "." --format "$FORMAT" --strip "$STRIP" --count "$COUNT" --report
+ARGS=("$SCRIPT" "." --format "$FORMAT" --strip "$STRIP" --report)
+if [ "$STRIP" = "full" ]; then
+    ARGS+=(--count "$COUNT")
+fi
+if [ "$DEBUG" = "yes" ]; then
+    ARGS+=(--debug-analysis --dry-run)
+fi
+
+$PYTHON "${ARGS[@]}"
 EXITCODE=$?
 
 echo

@@ -107,14 +107,16 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Simplified launchers again: aside from first-time install launchers, macOS now
+  keeps only `X5_Crop_Mac.command` and Windows keeps only `X5_Crop_win.bat`.
+  Each main launcher asks whether to enable partial mode, whether to enable
+  Debug Analysis dry run, and then asks for format.
 - Removed helper launchers `_X5_Crop_Mac_run.command` and
   `_X5_Crop_win_run.bat`. Their format prompt, count mapping, `.venv-x5crop`
   preference, and run logic are now inlined into the visible macOS and Windows
   launchers.
 - Current user-facing launchers are `X5_Crop_Mac.command`,
-  `X5_Crop_Mac_debug.command`, `X5_Crop_Mac_partial.command`,
-  `X5_Crop_Mac_partial_debug.command`, plus the corresponding Windows `.bat`
-  files and first-time install launchers.
+  `X5_Crop_win.bat`, and first-time install launchers.
 - Fixed launcher count behavior after separating partial mode: normal/full
   launchers now pass explicit counts (`135` 6, `half` 12, `xpan` 3, `120-645` 4,
   `120-66` 3, `120-67` 3), while partial launchers keep count auto.
@@ -140,9 +142,8 @@ Changed:
 - Replaced the large set of format-specific macOS and Windows launchers with
   compact prompt-based launchers. The launcher asks for format at runtime:
   blank/`135`, `xpan`, `half`, `645`, `66`, or `67`.
-- Kept partial/head handling as a separate launcher family:
-  `X5_Crop_Mac_partial.command` / `X5_Crop_win_partial.bat`; debug variants add
-  `--debug-analysis --dry-run`.
+- Partial/head and Debug Analysis are now prompt choices inside the single main
+  launcher for each platform.
 - Updated `README.md` to describe the new choose-format-first workflow and
   explain that the goal is fewer false high-confidence results, not easier PASS.
 - Added per-image V2 analysis caching so `gray_work` and content evidence are
@@ -205,10 +206,8 @@ Changed:
 - Debug boxes now use different semi-transparent fills for each crop area instead
   of blue outlines.
 - Moved v17/v18 reference scripts into `archive/`.
-- Launcher surface is now intentionally small: `X5_Crop_Mac.command`,
-  `X5_Crop_Mac_debug.command`, `X5_Crop_Mac_partial.command`,
-  `X5_Crop_Mac_partial_debug.command`, plus the corresponding Windows `.bat`
-  files.
+- Launcher surface is now intentionally small: `X5_Crop_Mac.command` and
+  `X5_Crop_win.bat`, plus install launchers.
 - Default bleed is now long-axis 15px and short-axis 10px: horizontal strips are
   left/right 15px and top/bottom 10px; vertical strips are top/bottom 15px and
   left/right 10px.
@@ -231,18 +230,15 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
-- Confirmed current launcher list has no `_X5_Crop_*` helper files; visible
-  launchers are self-contained.
-- Prompt smoke tests on `X5_Crop_Mac.command` confirmed blank input selects
-  `135` with fixed count 6, `645` maps to `120-645` with fixed count 4, and
-  `X5_Crop_Mac_partial.command` keeps `count auto`. The repository root has no
-  TIFF files, so these tests intentionally stopped after `No TIFF files found`.
-- `bash -n X5_Crop_Mac_install.command X5_Crop_Mac.command
-  X5_Crop_Mac_debug.command X5_Crop_Mac_partial.command
-  X5_Crop_Mac_partial_debug.command`
-- Prompt smoke tests on the visible macOS launchers confirmed full mode prints
-  fixed counts, partial mode prints `count auto`, and no `_X5_Crop_*_run`
-  helper is required.
+- Confirmed current launcher list has only `X5_Crop_Mac.command`,
+  `X5_Crop_Mac_install.command`, `X5_Crop_win.bat`, and
+  `X5_Crop_win_install.bat` besides `X5_Crop.py`.
+- Prompt smoke tests on `X5_Crop_Mac.command` confirmed blank answers for
+  partial/debug default to no, blank format selects `135` with fixed count 6,
+  `645` maps to `120-645` with fixed count 4, and partial mode keeps
+  `count auto`. The repository root has no TIFF files, so these tests
+  intentionally stopped after `No TIFF files found`.
+- `bash -n X5_Crop_Mac_install.command X5_Crop_Mac.command`
 - Confirmed `Test/135/X5_00019.tif` with `--format 135 --strip full --count 6`
   prints `count: 6` and remains `approved_auto`; runtime was about 5.9 seconds.
 - Confirmed `Test/135/X5_00038.tif` with `--format 135 --strip partial` still

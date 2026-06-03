@@ -21,13 +21,13 @@ debug：快速可见
 最终导出：只基于高置信检测结果
 ```
 
-它只处理单条横向或竖向扫描，不恢复双条 135 自动裁切。当前推荐流程不再自动猜胶片格式，也不再默认寻找片头 / 局部片条：启动器会让你输入格式，普通启动器按完整片条处理，partial 启动器按片头 / 局部片条处理。
+它只处理单条横向或竖向扫描，不恢复双条 135 自动裁切。当前推荐流程不再自动猜胶片格式，也不再默认寻找片头 / 局部片条：启动器会让你输入格式，并询问是否开启 partial 模式。不开启 partial 时按完整片条处理；开启 partial 时按片头 / 局部片条处理。
 
 V2 检测方向是候选竞争：脚本会在你指定的格式和片条模式内，为可能张数和不同证据来源生成多组候选裁切方案，再用几何、分隔、内容三类证据评分。最终输出的是得分最高且通过自动裁切闸门的候选；如果候选之间竞争接近，或者证据互相冲突，脚本会倾向于 `REVIEW`。
 
 Test 样本复盘后，当前算法不把“内容 run 数量”当作单一真相。真实照片内部的树枝、人物、墙面、窗框和高反差纹理会把一张照片切成多个内容峰；低纹理、欠曝或大面积平滑画面也会把多张照片合并成一个内容峰。
 
-因此脚本会把内容矩形、目标画幅比例、完整/局部片条模型和分隔证据放在一起做联合判断。局部片条可以通过，但必须由 partial 启动器或命令行 `--strip partial` 明确启用，避免普通完整片条流程被片头模型干扰。
+因此脚本会把内容矩形、目标画幅比例、完整/局部片条模型和分隔证据放在一起做联合判断。局部片条可以通过，但必须由启动器里的 partial 模式或命令行 `--strip partial` 明确启用，避免普通完整片条流程被片头模型干扰。
 
 当前联合判断关系：
 
@@ -102,9 +102,6 @@ macOS 常用文件：
 X5_Crop.py
 X5_Crop_Mac_install.command
 X5_Crop_Mac.command
-X5_Crop_Mac_debug.command
-X5_Crop_Mac_partial.command
-X5_Crop_Mac_partial_debug.command
 ```
 
 Windows 常用文件：
@@ -113,9 +110,6 @@ Windows 常用文件：
 X5_Crop.py
 X5_Crop_win_install.bat
 X5_Crop_win.bat
-X5_Crop_win_debug.bat
-X5_Crop_win_partial.bat
-X5_Crop_win_partial_debug.bat
 ```
 
 不支持“只把启动器放进 TIFF 文件夹、脚本留在仓库里”的模式。
@@ -128,36 +122,20 @@ chmod +x X5_Crop_Mac*.command
 
 ## 启动器
 
-普通完整片条：
+主启动器：
 
 ```text
 X5_Crop_Mac.command
 ```
 
-会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。
+会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。它会先问是否开启 partial 模式，再问是否开启 Debug Analysis dry run。两个问题都可以输入 `yes` / `no` / `y` / `n`，直接回车等于 `no`。
 
-片头、片尾、没有铺满整条片夹，或明确知道是局部片条时，用 partial 启动器：
-
-```text
-X5_Crop_Mac_partial.command
-```
-
-Debug Analysis：
-
-```text
-X5_Crop_Mac_debug.command
-X5_Crop_Mac_partial_debug.command
-```
-
-`_debug` 启动器都是 dry run，不会写裁切 TIFF。它会在一张 JPG 里生成四块内容：带框 debug 图、原始灰度图、分隔证据图、内容证据图。横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾和未铺满整条片夹的情况。
+如果开启 Debug Analysis，它不会写裁切 TIFF。它会在一张 JPG 里生成四块内容：带框 debug 图、原始灰度图、分隔证据图、内容证据图。横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾和未铺满整条片夹的情况。
 
 Windows 对应把 `Mac` 换成 `win`，后缀是 `.bat`：
 
 ```text
 X5_Crop_win.bat
-X5_Crop_win_debug.bat
-X5_Crop_win_partial.bat
-X5_Crop_win_partial_debug.bat
 ```
 
 启动器运行后会让你输入格式：
@@ -171,7 +149,7 @@ X5_Crop_win_partial_debug.bat
 | `66` | `120-66` |
 | `67` | `120-67` |
 
-这个启动器方式的目的不是让困难图片更容易 `PASS`，而是减少脚本在错误格式、错误片头模型之间自由竞争的机会。普通完整片条用完整片条模型；片头和局部片条由 partial 启动器单独进入。
+这个启动器方式的目的不是让困难图片更容易 `PASS`，而是减少脚本在错误格式、错误片头模型之间自由竞争的机会。普通完整片条用完整片条模型；片头和局部片条由 partial 模式单独进入。
 
 普通完整片条启动器会固定张数，不再使用 count auto：
 
@@ -184,7 +162,7 @@ X5_Crop_win_partial_debug.bat
 | `120-66` | 3 |
 | `120-67` | 3 |
 
-partial 启动器才会让 count 保持 auto，用来处理片头、片尾或局部片条。
+只有开启 partial 模式时，count 才会保持 auto，用来处理片头、片尾或局部片条。
 
 macOS 启动器运行结束后会显示：
 
