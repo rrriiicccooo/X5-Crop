@@ -134,6 +134,15 @@ X5_Crop_Mac.command
 
 如果开启 Debug Analysis，它不会写裁切 TIFF。它会在一张 JPG 里生成四块内容：带框 debug 图、原始灰度图、分隔证据图、内容证据图。横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾和未铺满整条片夹的情况。
 
+如果同一批 TIFF 已经先运行过 Debug Analysis dry run，之后再用普通裁切运行同样的 format、partial/count、bleed、deskew 和阈值参数时，脚本会优先复用 `split_report.jsonl` 里的分析结果：
+
+- 已经是 `approved_auto` 的文件会跳过重新检测，直接按报告里的裁切框输出 TIFF。
+- 已经是 `needs_review` 的文件会直接跳过，不会第二次重新检测后碰运气裁切。
+- 如果原 TIFF 的文件大小、修改时间、页码、图像形状、脚本版本或关键参数不匹配，脚本会放弃复用并重新检测。
+- 如果 Debug Analysis 那次实际做过 deskew，复用时会按报告中记录的同一个角度重新旋转后再裁切，保证裁切框和当时分析图一致。
+
+命令行可以加 `--no-reuse-analysis` 强制重新检测。
+
 Windows 对应把 `Mac` 换成 `win`，后缀是 `.bat`：
 
 ```text

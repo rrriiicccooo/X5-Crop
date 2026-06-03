@@ -243,6 +243,7 @@ class Config:
     overwrite: bool
     report: bool
     debug_errors: bool
+    reuse_analysis: bool
 
 
 @dataclass
@@ -2996,6 +2997,171 @@ def copy_for_review(input_file: Path, review_dir: Path) -> Path:
     return target
 
 
+def source_cache_signature(input_file: Path, profile: ImageProfile, page_index: int) -> dict[str, Any]:
+    stat = input_file.stat()
+    return {
+        "name": input_file.name,
+        "size": int(stat.st_size),
+        "mtime_ns": int(stat.st_mtime_ns),
+        "page": int(page_index),
+        "shape": list(profile.shape),
+        "dtype": profile.dtype,
+        "axes": profile.axes,
+        "photometric": profile.photometric,
+    }
+
+
+def config_cache_signature(config: Config) -> dict[str, Any]:
+    return {
+        "film_format": config.film_format,
+        "layout": config.layout,
+        "strip_mode": config.strip_mode,
+        "count": int(config.count),
+        "count_override": config.count_override,
+        "page": int(config.page),
+        "bleed_x": int(config.bleed_x),
+        "bleed_y": int(config.bleed_y),
+        "deskew": config.deskew,
+        "analysis": config.analysis,
+        "deskew_min_angle": float(config.deskew_min_angle),
+        "deskew_max_angle": float(config.deskew_max_angle),
+        "confidence_threshold": float(config.confidence_threshold),
+    }
+
+
+def make_analysis_cache_metadata(input_file: Path, profile: ImageProfile, config: Config) -> dict[str, Any]:
+    return {
+        "script": SCRIPT_NAME,
+        "version": VERSION,
+        "source": source_cache_signature(input_file, profile, config.page),
+        "config": config_cache_signature(config),
+    }
+
+
+def box_from_dict(value: dict[str, Any]) -> Box:
+    return Box(int(value["left"]), int(value["top"]), int(value["right"]), int(value["bottom"]))
+
+
+def gap_from_dict(value: dict[str, Any]) -> Gap:
+    return Gap(
+        index=int(value.get("index", 0)),
+        center=float(value.get("center", 0.0)),
+        score=float(value.get("score", 0.0)),
+        method=str(value.get("method", "cached")),
+        start=(None if value.get("start") is None else float(value.get("start"))),
+        end=(None if value.get("end") is None else float(value.get("end"))),
+    )
+
+
+def cached_record_matches(record: dict[str, Any], input_file: Path, profile: ImageProfile, config: Config) -> bool:
+    detail = record.get("detail")
+    if not isinstance(detail, dict):
+        return False
+    cache = detail.get("analysis_cache")
+    if not isinstance(cache, dict):
+        return False
+    if cache.get("script") != SCRIPT_NAME or cache.get("version") != VERSION:
+        return False
+    expected_source = source_cache_signature(input_file, profile, config.page)
+    expected_config = config_cache_signature(config)
+    if cache.get("source") != expected_source:
+        return False
+    if cache.get("config") != expected_config:
+        return False
+    return str(record.get("status", "")) in {"approved_auto", "needs_review"}
+
+
+def find_reusable_analysis(input_file: Path, output_dir: Path, profile: ImageProfile, config: Config) -> Optional[dict[str, Any]]:
+    report_path = output_dir / "split_report.jsonl"
+    if not report_path.exists():
+        return None
+    try:
+        lines = report_path.read_text(encoding="utf-8").splitlines()
+    except UnicodeDecodeError:
+        return None
+    for line in reversed(lines):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if Path(str(record.get("source", ""))).name != input_file.name:
+            continue
+        if cached_record_matches(record, input_file, profile, config):
+            return record
+    return None
+
+
+def detection_from_record(record: dict[str, Any]) -> Detection:
+    return Detection(
+        film_format=str(record["film_format"]),
+        layout=str(record["layout"]),
+        strip_mode=str(record["strip_mode"]),
+        count=int(record["count"]),
+        outer=box_from_dict(record["outer_box"]),
+        frames=[box_from_dict(box) for box in record.get("frame_boxes", [])],
+        gaps=[gap_from_dict(gap) for gap in record.get("gaps", [])],
+        confidence=float(record["confidence"]),
+        review_reasons=list(record.get("review_reasons", [])),
+        detail=dict(record.get("detail", {})),
+    )
+
+
+def apply_cached_deskew(
+    arr: np.ndarray,
+    gray: np.ndarray,
+    axes: str,
+    photometric: str,
+    detail: dict[str, Any],
+    warnings: list[str],
+) -> tuple[np.ndarray, np.ndarray, bool]:
+    deskew_detail = detail.get("deskew")
+    if not isinstance(deskew_detail, dict) or not bool(deskew_detail.get("applied", False)):
+        return arr, gray, False
+    angle = float(deskew_detail.get("angle", 0.0))
+    arr = rotate_array_expand(arr, -angle, axes)
+    gray = make_gray_u8(arr, axes, photometric)
+    warnings.append(f"reused deskew: {-angle:.4f} degrees")
+    return arr, gray, True
+
+
+def write_crops(
+    input_file: Path,
+    arr: np.ndarray,
+    source_arr: np.ndarray,
+    profile: ImageProfile,
+    page: Any,
+    detection: Detection,
+    config: Config,
+    deskew_applied: bool,
+    output_dir: Path,
+) -> list[str]:
+    output_files: list[str] = []
+    for i, box in enumerate(detection.frames, 1):
+        if not box.valid():
+            raise RuntimeError(f"Invalid crop box for frame {i}: {box}")
+        out_path = output_dir / f"{input_file.stem}_{i:02d}.tif"
+        if out_path.exists() and not config.overwrite:
+            raise RuntimeError(f"Output exists: {out_path}; use --overwrite")
+        cropped = np.ascontiguousarray(crop_array(arr, profile.axes, box))
+        if not deskew_applied:
+            validate_source_crop_pixels(source_arr, profile.axes, box, cropped)
+        tmp = out_path.with_name(f".{out_path.stem}.tmp{out_path.suffix}")
+        if tmp.exists():
+            tmp.unlink()
+        try:
+            tifffile.imwrite(tmp, cropped, **tiff_write_kwargs(profile, page, config))
+            validate_written_tiff(tmp, cropped, profile, config)
+            os.replace(tmp, out_path)
+        except Exception:
+            if tmp.exists():
+                tmp.unlink()
+            raise
+        output_files.append(str(out_path))
+    return output_files
+
+
 def write_jsonl(path: Path, result: ProcessResult) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
@@ -3049,6 +3215,81 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         raise ValueError(f"--format {fmt.name} allows --count values: {allowed}")
     layout = infer_layout(w, h) if config.layout_auto else config.layout
     config = replace(config, film_format=film_format, layout=layout, count=count)
+
+    if config.reuse_analysis and not config.dry_run and not config.debug_analysis:
+        cached_record = find_reusable_analysis(input_file, output_dir, profile, config)
+        if cached_record is not None:
+            status = str(cached_record["status"])
+            warnings.append("reused analysis report: split_report.jsonl")
+            if status == "needs_review":
+                warnings.append("cached status is needs_review; skipped export")
+                result = ProcessResult(
+                    source=str(input_file),
+                    status=status,
+                    confidence=float(cached_record["confidence"]),
+                    film_format=str(cached_record["film_format"]),
+                    layout=str(cached_record["layout"]),
+                    strip_mode=str(cached_record["strip_mode"]),
+                    count=int(cached_record["count"]),
+                    review_reasons=list(cached_record.get("review_reasons", [])),
+                    output_files=[],
+                    review_copy=cached_record.get("review_copy"),
+                    outer_box=dict(cached_record.get("outer_box", {})),
+                    frame_boxes=list(cached_record.get("frame_boxes", [])),
+                    gaps=list(cached_record.get("gaps", [])),
+                    detail={**dict(cached_record.get("detail", {})), "reused_analysis": True},
+                    profile=json_safe(asdict(profile)),
+                    warnings=warnings,
+                )
+                if config.report:
+                    write_jsonl(output_dir / "split_report.jsonl", result)
+                    write_summary(output_dir / "split_summary.csv", result)
+                return result
+
+            detection = detection_from_record(cached_record)
+            arr, gray, deskew_applied = apply_cached_deskew(
+                arr,
+                gray,
+                profile.axes,
+                profile.photometric,
+                detection.detail,
+                warnings,
+            )
+            output_files = write_crops(
+                input_file,
+                arr,
+                source_arr,
+                profile,
+                page,
+                detection,
+                config,
+                deskew_applied,
+                output_dir,
+            )
+            detail = dict(detection.detail)
+            detail["reused_analysis"] = True
+            result = ProcessResult(
+                source=str(input_file),
+                status=status,
+                confidence=float(detection.confidence),
+                film_format=detection.film_format,
+                layout=detection.layout,
+                strip_mode=detection.strip_mode,
+                count=int(detection.count),
+                review_reasons=list(detection.review_reasons),
+                output_files=output_files,
+                review_copy=cached_record.get("review_copy"),
+                outer_box=asdict(detection.outer),
+                frame_boxes=[asdict(box) for box in detection.frames],
+                gaps=[asdict(gap) for gap in detection.gaps],
+                detail=json_safe(detail),
+                profile=json_safe(asdict(profile)),
+                warnings=warnings,
+            )
+            if config.report:
+                write_jsonl(output_dir / "split_report.jsonl", result)
+                write_summary(output_dir / "split_summary.csv", result)
+            return result
 
     deskew_detail: dict[str, Any] = {"applied": False}
     if config.deskew != "off":
@@ -3106,27 +3347,17 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         should_export = False
 
     if should_export:
-        for i, box in enumerate(detection.frames, 1):
-            if not box.valid():
-                raise RuntimeError(f"Invalid crop box for frame {i}: {box}")
-            out_path = output_dir / f"{input_file.stem}_{i:02d}.tif"
-            if out_path.exists() and not config.overwrite:
-                raise RuntimeError(f"Output exists: {out_path}; use --overwrite")
-            cropped = np.ascontiguousarray(crop_array(arr, profile.axes, box))
-            if not deskew_detail["applied"]:
-                validate_source_crop_pixels(source_arr, profile.axes, box, cropped)
-            tmp = out_path.with_name(f".{out_path.stem}.tmp{out_path.suffix}")
-            if tmp.exists():
-                tmp.unlink()
-            try:
-                tifffile.imwrite(tmp, cropped, **tiff_write_kwargs(profile, page, config))
-                validate_written_tiff(tmp, cropped, profile, config)
-                os.replace(tmp, out_path)
-            except Exception:
-                if tmp.exists():
-                    tmp.unlink()
-                raise
-            output_files.append(str(out_path))
+        output_files = write_crops(
+            input_file,
+            arr,
+            source_arr,
+            profile,
+            page,
+            detection,
+            config,
+            bool(deskew_detail["applied"]),
+            output_dir,
+        )
 
     if config.debug and not config.debug_analysis:
         debug_path = output_dir / "_debug" / f"{input_file.stem}_debug.jpg"
@@ -3138,6 +3369,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
 
     detail = dict(detection.detail)
     detail["deskew"] = deskew_detail
+    detail["analysis_cache"] = make_analysis_cache_metadata(input_file, profile, config)
     result = ProcessResult(
         source=str(input_file),
         status=status,
@@ -3199,6 +3431,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--report", action="store_true", help="Write split_report.jsonl and split_summary.csv.")
     parser.add_argument("--debug", action="store_true", help="Write lightweight JPG previews with detected outer/frame boxes.")
     parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with debug boxes, original gray, separator evidence, and content evidence.")
+    parser.add_argument("--no-reuse-analysis", dest="reuse_analysis", action="store_false", default=True, help="Do not reuse matching Debug Analysis report data for non-dry-run export.")
     parser.add_argument("--debug-errors", action="store_true", help="Print tracebacks on errors.")
     parser.add_argument("--version", action="version", version=f"{SCRIPT_NAME} {VERSION}")
     return parser
@@ -3261,6 +3494,7 @@ def config_from_args(args: argparse.Namespace) -> Config:
         overwrite=bool(args.overwrite),
         report=bool(args.report),
         debug_errors=bool(args.debug_errors),
+        reuse_analysis=bool(args.reuse_analysis),
     )
 
 

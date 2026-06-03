@@ -107,6 +107,20 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Added safe reuse of Debug Analysis report data for later normal export:
+  non-dry-run crop passes now look for a matching `split_report.jsonl` entry
+  before running detection again.
+- Analysis reuse is guarded by script version, source file stat/profile data,
+  page, format, layout, strip/count, bleed, deskew, analysis mode, deskew angle
+  limits, and confidence threshold.
+- Cached `approved_auto` entries export directly from cached frame boxes, while
+  cached `needs_review` entries skip export instead of rerunning detection and
+  possibly changing status.
+- Cached deskewed entries reapply the recorded deskew angle before cropping so
+  cached frame boxes are used on the same rotated pixel geometry as the original
+  Debug Analysis run.
+- Added `--no-reuse-analysis` to force a fresh detection pass.
+- Updated README with the Debug Analysis reuse behavior and safety conditions.
 - Fixed Windows blank format default using the safer `set /p` pattern:
   `FORMAT_INPUT` is prefilled with `135` before prompting, so pressing Enter
   keeps the default value.
@@ -244,6 +258,16 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `python3 -m py_compile X5_Crop.py`
+- Generated Debug Analysis dry-run report for `Test/135/X5_00019.tif`, then ran
+  normal export against the same output folder and confirmed it reused
+  `split_report.jsonl` and wrote six TIFFs without rerunning detection.
+- Generated Debug Analysis dry-run report for `Test/120/X5_test_43.tif`, then
+  ran normal export against the same output folder and confirmed cached
+  `needs_review` skipped export.
+- Forced a deskew-applied Debug Analysis run for `Test/135/X5_00025.tif` with
+  `--deskew-min-angle 0.001`, then confirmed normal export reused the analysis,
+  reapplied the recorded deskew angle, and wrote six TIFFs.
 - Prompt smoke tests on `X5_Crop_Mac.command` confirmed the launcher output now
   uses lowercase prompt text, `format:` without `[135]`, and lowercase summary
   labels.
