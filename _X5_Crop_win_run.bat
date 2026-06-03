@@ -57,6 +57,7 @@ echo   645 = 120-645
 echo   66 = 120-66
 echo   67 = 120-67
 echo.
+set "FORMAT_INPUT="
 set /p "FORMAT_INPUT=Format [135]: "
 set "FORMAT_INPUT=%FORMAT_INPUT: =%"
 if "%FORMAT_INPUT%"=="" set "FORMAT_INPUT=135"

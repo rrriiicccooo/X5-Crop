@@ -107,6 +107,9 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Fixed Windows format prompt defaulting: `_X5_Crop_win_run.bat` now clears
+  `FORMAT_INPUT` before `set /p`, because Windows keeps the previous variable
+  value when the user presses Enter on an empty prompt.
 - Added first-time setup launchers: `X5_Crop_Mac_install.command` and
   `X5_Crop_win_install.bat`.
 - Setup launchers create a local `.venv-x5crop/` environment and install
