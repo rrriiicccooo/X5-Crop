@@ -5,8 +5,7 @@ rules, sync notes, and the current handoff here.
 
 ## First Moves
 
-1. Read `README.md`, `docs/PROJECT_CONTEXT.md`, and the current handoff at the
-   bottom of this file.
+1. Read `README.md` and the current handoff at the bottom of this file.
 2. Check the current branch and dirty state before editing:
 
 ```bash
@@ -35,8 +34,8 @@ X5_Split_v17.py
 X5_Split_v18.py
 ```
 
-Keep `X5_Split_v17.py` and `README_X5_Split_v17.md` in the repository as the
-preserved v17 reference.
+Keep `X5_Split_v17.py` in the repository as the preserved v17 reference. Keep
+user-facing project documentation consolidated in `README.md`.
 
 ## Coding Rules
 
@@ -108,18 +107,22 @@ Changed:
 - Removed `docs/CODEX_SYNC.md` so future sessions do not have two competing
   Codex coordination files.
 - Updated README references to point to `AGENTS.md`.
+- Consolidated user-facing README documents into the root Chinese `README.md`.
+- Removed the `docs/` folder and extra README files.
 
 Verified:
 - Read the previous `AGENTS.md` and `docs/CODEX_SYNC.md` before merging.
 - Searched for `CODEX_SYNC` references and updated the active README/agent
   references.
+- Searched README/docs references before deleting extra documentation.
 
 Not verified:
 - No image-processing tests were run because this change only reorganizes
-  coordination documentation.
+  coordination and README documentation.
 
 Known local-only files:
 - `Test/`
 
 Next recommended step:
-- Use this file as the only Codex coordination and handoff file going forward.
+- Use `README.md` as the only user-facing README and this file as the only
+  Codex coordination/handoff file.
