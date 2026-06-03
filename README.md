@@ -210,7 +210,7 @@ split_output/
 | 紫色短 tick | v18 新增：证据不足时使用的等分或宽区域 fallback 切线 |
 | 白色短 tick | v18 新增：其它未分类的切线来源 |
 
-debug 图顶部会在图片外显示状态栏，说明是否通过当前置信度阈值：
+debug 图顶部会在图片外显示状态栏，说明是否通过当前置信度阈值。`PASS` / `REVIEW` 会用不同颜色和更醒目的字号显示：
 
 ```text
 PASS confidence 0.987 >= threshold 0.850

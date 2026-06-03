@@ -102,21 +102,20 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Moved PASS/REVIEW confidence text out of the image area into a top status bar
-  for both Debug and DebugAnalysis JPGs.
-- Reduced debug overlay clutter: real detected separator regions still draw as
-  red marks, while grid/equal/fallback separators draw only short edge ticks.
-- Suppressed inferred separator ticks that overlap a real detected separator.
-- Updated `README.md` to describe the external status bar and short tick marks.
+- Removed PASS/REVIEW from the DebugAnalysis `Debug boxes` panel title; the
+  complete status now appears only in the top status bar.
+- Made the top status bar easier to scan by rendering PASS/REVIEW larger and in
+  distinct colors before the confidence details.
+- Updated `README.md` to describe the more prominent status text.
 
 Verified:
 - `python3 -m py_compile X5_Split_v18.py`
+- Ran `--debug-analysis --dry-run --format 135 --no-copy-review-files` on
+  `Test/135负片/正常/001.tif`; visually confirmed the panel title is just
+  `Debug boxes` and REVIEW is only in the red top status bar.
 - Ran standalone `--debug --dry-run --format 135 --no-copy-review-files` on
-  `Test/135负片/正常/001.tif`; visually confirmed the REVIEW status bar is
-  outside the image and inferred separator marks are shorter edge ticks.
-- Ran `--debug-analysis --dry-run --format 135 --no-copy-review-files` on the
-  same sample; visually confirmed the combined JPG uses a top status bar and a
-  short `Debug boxes | REVIEW` panel label.
+  `Test/135负片/正常/11.tif`; visually confirmed PASS renders in green with
+  larger status text.
 
 Not verified:
 - Did not change or retest enhanced-analysis selection behavior.
@@ -125,9 +124,8 @@ Not verified:
 
 Known local-only files:
 - `Test/`
-- `/private/tmp/x5crop_debug_layout_fix`
-- `/private/tmp/x5crop_debug_analysis_layout_fix`
-- `/private/tmp/x5crop_debug_analysis_layout_fix2`
+- `/private/tmp/x5crop_status_bar_review`
+- `/private/tmp/x5crop_status_bar_pass`
 
 Next recommended step:
 - Copy the updated root `X5_Split_v18.py` into any standalone test folder before
