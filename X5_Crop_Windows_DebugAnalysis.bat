@@ -3,10 +3,10 @@ setlocal
 
 cd /d "%~dp0"
 
-set "SCRIPT=%~dp0X5_Split_v18.py"
+set "SCRIPT=%~dp0X5_Crop.py"
 if not exist "%SCRIPT%" (
-    echo X5_Split_v18.py was not found in this folder.
-    echo Put this launcher in the same folder as X5_Split_v18.py and your TIFF scans.
+    echo X5_Crop.py was not found in this folder.
+    echo Put this launcher in the same folder as X5_Crop.py and your TIFF scans.
     echo.
     pause
     exit /b 1
@@ -29,16 +29,16 @@ if %errorlevel%==0 (
     )
 )
 
-echo X5 Split v18 DEBUG launcher
+echo X5 Crop V1 DEBUG ANALYSIS launcher
 echo Folder: %cd%
 echo.
-echo This will analyze TIFF files in this folder and write debug crop previews.
+echo This will analyze TIFF files in this folder and write one adaptive debug-analysis JPG.
 echo Output: split_output
-echo Debug: split_output\_debug
+echo Debug analysis: split_output\_debug_analysis
 echo Dry run: no cropped TIFF files will be written.
 echo.
 
-%PYTHON% "%SCRIPT%" "." --report --debug --dry-run
+%PYTHON% "%SCRIPT%" "." --report --debug-analysis --dry-run
 set "EXITCODE=%errorlevel%"
 
 echo.

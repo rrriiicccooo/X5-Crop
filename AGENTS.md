@@ -30,12 +30,14 @@ The app/native packaging direction is paused. Keep active work focused on the
 standalone script workflow unless the user explicitly resumes the app direction:
 
 ```text
+X5_Crop.py
 X5_Split_v17.py
 X5_Split_v18.py
 ```
 
-Keep `X5_Split_v17.py` in the repository as the preserved v17 reference. Keep
-user-facing project documentation consolidated in `README.md`.
+Keep `X5_Crop.py` as the active script. Keep `X5_Split_v17.py` and
+`X5_Split_v18.py` in the repository as preserved references. Keep user-facing
+project documentation consolidated in `README.md`.
 
 ## Coding Rules
 
@@ -102,43 +104,43 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Added a conservative v17-style `edge-pair` refinement path for 135 full strips.
-  It only replaces a gap when the base image has a strong pair of vertical edges
-  around a narrow background-like separator region.
-- Added conservative same-frame-size fitting for 135 full strips. It requires at
-  least two trusted edge samples and only changes output boxes; confidence is
-  still scored from the pre-fit boxes to avoid false PASS decisions.
-- Debug red separator marks now include `edge-pair` regions.
-- Updated `README.md` to explain red `edge-pair` evidence and same-frame-size
-  fitting.
+- Created active `X5_Crop.py` V1 from the latest v18 baseline.
+- Added a conservative content-evidence layer using a composite score from local
+  gradient, neighbor texture, local contrast, and tonal presence.
+- DebugAnalysis is now a four-panel JPG: debug boxes, original gray, separator
+  evidence, and content evidence.
+- Content evidence is written into reports and can conservatively downgrade
+  clear content/aspect conflicts, but it does not raise difficult files into
+  automatic export.
+- Removed v18 launchers and added cleaner `X5_Crop_*` macOS and Windows
+  launchers.
+- Rewrote `README.md` as the current Chinese user guide for X5 Crop V1.
 
 Verified:
-- `python3 -m py_compile X5_Split_v18.py`
-- Ran dry-run reports on `Test/135负片/正常/001.tif`, `11.tif`, `15.tif`, and
+- `python3 -m py_compile X5_Crop.py X5_Split_v17.py X5_Split_v18.py`
+- `bash -n X5_Crop_macOS.command X5_Crop_macOS_Debug.command X5_Crop_macOS_DebugAnalysis.command`
+- `python3 X5_Crop.py --version`
+- `python3 X5_Crop.py --help`
+- Ran DebugAnalysis dry-runs on `Test/135负片/正常/001.tif`, `11.tif`, and
   `X5 022.tif`.
-- Confirmed weak samples still do not auto-pass: `001.tif` stays
-  `needs_review` with methods `equal/equal/equal/edge-pair/equal`; `X5 022.tif`
-  stays `needs_review` with methods `equal/equal/equal/equal/edge-pair`.
-- Confirmed normal samples still auto-pass: `11.tif` and `15.tif` both use five
-  `edge-pair` separators and same-frame-size fitting.
-- Generated DebugAnalysis for `X5 022.tif` and visually confirmed the REVIEW
-  status and red edge-pair separator region.
+- Confirmed `001.tif` remains `needs_review` at confidence `0.676` and produces
+  a four-panel DebugAnalysis JPG.
+- Confirmed `11.tif` remains `approved_auto` at confidence `0.963`.
+- Confirmed `X5 022.tif` remains `needs_review` at confidence `0.679`.
+- Inspected the generated `001.tif` DebugAnalysis JPG and confirmed the fourth
+  `Content evidence` panel is present.
 
 Not verified:
-- Did not run Windows `.bat` launchers after this detection change.
-- Did not run a non-dry-run export after this detection change.
-- Did not run the full `Test/135负片/正常` directory after this change.
+- Did not run Windows `.bat` launchers on Windows.
+- Did not run a non-dry-run TIFF export after creating X5 Crop V1.
 
 Known local-only files:
 - `Test/`
-- `/private/tmp/x5crop_edge_frame_fit_sample`
-- `/private/tmp/x5crop_edge_frame_fit_debug`
-- `/private/tmp/x5crop_edge_frame_fit_debug2`
+- `/private/tmp/x5crop_v1_debug_001`
+- `/private/tmp/x5crop_v1_debug_11`
+- `/private/tmp/x5crop_v1_debug_11b`
+- `/private/tmp/x5crop_v1_debug_x5022`
 
 Next recommended step:
-- Copy the updated root `X5_Split_v18.py` into any standalone test folder before
-  rerunning launchers there; `Test/135负片/正常` currently contains its own script
-  copy.
-- Run DebugAnalysis on additional difficult weak-separator samples and confirm
-  new `edge-pair` evidence does not push questionable files over the confidence
-  threshold.
+- Run DebugAnalysis on difficult weak-separator and partial-strip samples and
+  confirm the content evidence panel is useful without loosening auto-export.

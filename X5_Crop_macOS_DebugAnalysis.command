@@ -21,10 +21,10 @@ finish() {
     exit "$EXITCODE"
 }
 
-SCRIPT="./X5_Split_v18.py"
+SCRIPT="./X5_Crop.py"
 if [ ! -f "$SCRIPT" ]; then
-    echo "X5_Split_v18.py was not found in this folder."
-    echo "Put this launcher in the same folder as X5_Split_v18.py and your TIFF scans."
+    echo "X5_Crop.py was not found in this folder."
+    echo "Put this launcher in the same folder as X5_Crop.py and your TIFF scans."
     finish 1
 fi
 
@@ -39,15 +39,16 @@ else
     finish 1
 fi
 
-echo "X5 Split v18 launcher"
+echo "X5 Crop V1 DEBUG ANALYSIS launcher"
 echo "Folder: $(pwd)"
 echo
-echo "This will process TIFF files in this folder."
+echo "This will analyze TIFF files in this folder and write one adaptive debug-analysis JPG."
 echo "Output: split_output"
-echo "Existing output files will not be overwritten."
+echo "Debug analysis: split_output/_debug_analysis"
+echo "Dry run: no cropped TIFF files will be written."
 echo
 
-$PYTHON "$SCRIPT" "." --report
+$PYTHON "$SCRIPT" "." --report --debug-analysis --dry-run
 EXITCODE=$?
 
 echo

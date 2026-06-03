@@ -3,10 +3,10 @@ setlocal
 
 cd /d "%~dp0"
 
-set "SCRIPT=%~dp0X5_Split_v18.py"
+set "SCRIPT=%~dp0X5_Crop.py"
 if not exist "%SCRIPT%" (
-    echo X5_Split_v18.py was not found in this folder.
-    echo Put this launcher in the same folder as X5_Split_v18.py and your TIFF scans.
+    echo X5_Crop.py was not found in this folder.
+    echo Put this launcher in the same folder as X5_Crop.py and your TIFF scans.
     echo.
     pause
     exit /b 1
@@ -29,7 +29,7 @@ if %errorlevel%==0 (
     )
 )
 
-echo X5 Split v18 launcher
+echo X5 Crop V1 launcher
 echo Folder: %cd%
 echo.
 echo This will process TIFF files in this folder.

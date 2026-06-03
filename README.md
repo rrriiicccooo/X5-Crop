@@ -1,6 +1,6 @@
 # X5 Crop 脚本工作区
 
-这个仓库现在收敛为一个干净的脚本工作区，用于把 Hasselblad / Imacon X5 片夹扫描得到的 TIFF 胶片长图裁切成单张 TIFF。
+这个仓库用于把 Hasselblad / Imacon X5 片夹扫描得到的 TIFF 胶片长图裁切成单张 TIFF。
 
 桌面 App、PySide6 GUI、Qt native UI、PyInstaller 打包和发布工作流目前都暂停。除非明确恢复 App 方向，否则后续工作聚焦在独立 Python 脚本。
 
@@ -9,10 +9,10 @@
 当前主用脚本是：
 
 ```text
-X5_Split_v18.py
+X5_Crop.py
 ```
 
-v18 的目标是：
+当前版本从 V1 开始。目标仍然是：
 
 ```text
 容易样片：自动裁切
@@ -29,9 +29,10 @@ debug：快速可见
 
 ```text
 X5_Split_v17.py
+X5_Split_v18.py
 ```
 
-v17 是上一版参考实现，用于对照检测逻辑和回归行为。日常新工作优先放在 v18；不要删除 v17，除非明确决定不再需要这个参考。
+v17 是上一版参考实现，用于对照检测逻辑和回归行为。v18 是 X5_Crop V1 的直接前身，用于回看旧分隔证据逻辑。日常新工作优先放在 `X5_Crop.py`。
 
 ## 安装依赖
 
@@ -54,19 +55,19 @@ py -3 -m pip install -U numpy tifffile imagecodecs Pillow
 macOS 常用文件：
 
 ```text
-X5_Split_v18.py
-X5_Split_v18_macOS.command
-X5_Split_v18_macOS_Debug.command
-X5_Split_v18_macOS_DebugAnalysis.command
+X5_Crop.py
+X5_Crop_macOS.command
+X5_Crop_macOS_Debug.command
+X5_Crop_macOS_DebugAnalysis.command
 ```
 
 Windows 常用文件：
 
 ```text
-X5_Split_v18.py
-X5_Split_v18_Windows.bat
-X5_Split_v18_Windows_Debug.bat
-X5_Split_v18_Windows_DebugAnalysis.bat
+X5_Crop.py
+X5_Crop_Windows.bat
+X5_Crop_Windows_Debug.bat
+X5_Crop_Windows_DebugAnalysis.bat
 ```
 
 不支持“只把启动器放进 TIFF 文件夹、脚本留在仓库里”的模式。
@@ -74,9 +75,9 @@ X5_Split_v18_Windows_DebugAnalysis.bat
 如果 macOS 提示 `.command` 不能打开，先在 Terminal 里运行一次：
 
 ```bash
-chmod +x X5_Split_v18_macOS.command
-chmod +x X5_Split_v18_macOS_Debug.command
-chmod +x X5_Split_v18_macOS_DebugAnalysis.command
+chmod +x X5_Crop_macOS.command
+chmod +x X5_Crop_macOS_Debug.command
+chmod +x X5_Crop_macOS_DebugAnalysis.command
 ```
 
 ## 启动器
@@ -84,7 +85,7 @@ chmod +x X5_Split_v18_macOS_DebugAnalysis.command
 普通裁切：
 
 ```text
-X5_Split_v18_macOS.command
+X5_Crop_macOS.command
 ```
 
 会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。
@@ -92,7 +93,7 @@ X5_Split_v18_macOS.command
 Debug：
 
 ```text
-X5_Split_v18_macOS_Debug.command
+X5_Crop_macOS_Debug.command
 ```
 
 只做 dry run，不输出裁切 TIFF。它会写报告和裁切预览 JPG，适合先检查检测结果。
@@ -100,10 +101,10 @@ X5_Split_v18_macOS_Debug.command
 Debug Analysis：
 
 ```text
-X5_Split_v18_macOS_DebugAnalysis.command
+X5_Crop_macOS_DebugAnalysis.command
 ```
 
-也是 dry run。它会在一张 JPG 里生成三块内容：带框 debug 图、原始灰度图、分隔证据图；横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾等问题。
+也是 dry run。它会在一张 JPG 里生成四块内容：带框 debug 图、原始灰度图、分隔证据图、内容证据图。横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾和未铺满整条片夹的情况。
 
 macOS 启动器运行结束后会显示：
 
@@ -111,56 +112,56 @@ macOS 启动器运行结束后会显示：
 Press Return to close...
 ```
 
-按回车后脚本会退出，并尝试关闭由 Finder 打开的 Terminal 或 iTerm2 窗口。
+按回车后脚本会退出，并尝试关闭由 Finder 打开的 Terminal 或 iTerm2 窗口。Finder 双击 `.command` 默认由 macOS 的 Terminal 打开，这是系统文件关联行为；脚本本身会兼容 Terminal 和 iTerm2 的窗口关闭。
 
 ## 命令行常用法
 
 先做 debug dry run：
 
 ```bash
-python3 X5_Split_v18.py . --report --debug --dry-run
+python3 X5_Crop.py . --report --debug --dry-run
 ```
 
 输出检测分析图：
 
 ```bash
-python3 X5_Split_v18.py . --report --debug-analysis --dry-run
+python3 X5_Crop.py . --report --debug-analysis --dry-run
 ```
 
 普通自动裁切：
 
 ```bash
-python3 X5_Split_v18.py . --report
+python3 X5_Crop.py . --report
 ```
 
 默认导出的裁切 TIFF 会像 v17 一样在每张四周保留 10px bleed。可用 `--bleed`、`--bleed-x`、`--bleed-y` 调整，例如：
 
 ```bash
-python3 X5_Split_v18.py . --report --bleed 10
+python3 X5_Crop.py . --report --bleed 10
 ```
 
 关闭自动校斜：
 
 ```bash
-python3 X5_Split_v18.py . --deskew off --report --debug --dry-run
+python3 X5_Crop.py . --deskew off --report --debug --dry-run
 ```
 
 把低置信原图复制到复核目录：
 
 ```bash
-python3 X5_Split_v18.py . --report --debug --dry-run --copy-review-files
+python3 X5_Crop.py . --report --debug --dry-run --copy-review-files
 ```
 
 默认已经会复制低置信原图；上面这个参数只是显式写出行为。如果只想写报告、不复制原 TIFF：
 
 ```bash
-python3 X5_Split_v18.py . --report --debug --dry-run --no-copy-review-files
+python3 X5_Crop.py . --report --debug --dry-run --no-copy-review-files
 ```
 
 低置信结果也强制导出：
 
 ```bash
-python3 X5_Split_v18.py . --report --export-review
+python3 X5_Crop.py . --report --export-review
 ```
 
 ## 输出目录
@@ -192,7 +193,7 @@ split_output/
 - `split_report.jsonl`：完整机器可读报告。
 - `split_summary.csv`：更方便人工浏览的表格。
 - `_debug/*.jpg`：带外框、画幅框和分隔线的检测预览。
-- `_debug_analysis/*_debug_analysis.jpg`：三联图，已经包含带框 debug 图。运行 `--debug-analysis` 时不会再重复生成 `_debug/` 文件夹和单独 debug JPG。
+- `_debug_analysis/*_debug_analysis.jpg`：四联图，已经包含带框 debug 图。运行 `--debug-analysis` 时不会再重复生成 `_debug/` 文件夹和单独 debug JPG。
 - `needs_review/`：低置信 `needs_review` 原 TIFF 会默认复制到这里，方便人工集中处理。
 
 普通启动器不会覆盖已有输出 TIFF。已有同名裁切文件时，脚本会报错并停止该文件；命令行可用 `--overwrite` 覆盖。
@@ -206,10 +207,10 @@ split_output/
 | 绿色外框 | 脚本认为整条胶片有效区域的外框 |
 | 蓝色框 | 每一张将要输出的裁切框，包含默认 10px bleed |
 | 红色框 / 红色线 | 从原图证据中检测到的真实分隔区域，包括黑条区域和可信双边缘 `edge-pair`。黑条有宽有窄时会画成区域框，而不是只画单线 |
-| 橙色框 / 橙色线 | v18 新增：在固定外框内由分隔证据层补充检测到的分隔区域 |
-| 黄色短 tick | v18 新增：由全局片距 / grid 模型推算出的切线，不代表一定看到了真实黑条 |
-| 紫色短 tick | v18 新增：证据不足时使用的等分或宽区域 fallback 切线 |
-| 白色短 tick | v18 新增：其它未分类的切线来源 |
+| 橙色框 / 橙色线 | 在固定外框内由分隔证据层补充检测到的分隔区域 |
+| 黄色短 tick | 由全局片距 / grid 模型推算出的切线，不代表一定看到了真实黑条 |
+| 紫色短 tick | 证据不足时使用的等分或宽区域 fallback 切线 |
+| 白色短 tick | 其它未分类的切线来源 |
 
 debug 图顶部会在图片外显示状态栏，说明是否通过当前置信度阈值。`PASS` / `REVIEW` 会用不同颜色和更醒目的字号显示：
 
@@ -220,26 +221,40 @@ REVIEW confidence 0.676 < threshold 0.850
 
 `PASS` 表示会按默认规则自动输出裁切；`REVIEW` 表示不会自动输出裁切，并会进入复核流程。
 
-v18 会在 135 整条胶片中保守使用同画幅尺寸校正：只有已有多个可信分隔边缘样本时，才会用“同一条胶片的单张画幅尺寸应接近一致”这个先验微调输出框。这个校正只用于改善裁切框位置，不会单独放宽置信度审核。
-
-看图时优先检查三件事：
+看图时优先检查四件事：
 
 - 绿色外框有没有吃掉片头、片尾或画面边缘。
 - 蓝色裁切框是否覆盖每张照片，并在四周留出合理 bleed。
 - 红色检测区域是否覆盖真实黑条；如果没有红色、只有黄色或紫色，说明这部分更依赖推断，应该更谨慎。
 - 黄色/紫色短 tick 是否落在真实片间空隙，而不是落进画面内容。
 
-Debug Analysis 三联图的用途：
+## 如何看 Debug Analysis 四联图
 
-- “Debug boxes”：同 `_debug` 预览，用来看裁切计划。
-- “Original gray”：原始检测灰度图，用来看源扫描本身的明暗和分隔可见度。
-- “Separator evidence”：只在已确认的外框内部生成的分隔证据图，用来看弱分隔是否被辅助证据层捕捉到。它只补充分隔候选，不会重新决定外框，也不会写进最终 TIFF。
+Debug Analysis 的四块内容：
 
-横向胶片长图的三联图顺序是从上到下：`Debug boxes`、`Original gray`、`Separator evidence`。竖向胶片长图的三联图顺序是从左到右：`Debug boxes`、`Original gray`、`Separator evidence`。
+- `Debug boxes`：同 `_debug` 预览，用来看裁切计划。
+- `Original gray`：原始检测灰度图，用来看源扫描本身的明暗和分隔可见度。
+- `Separator evidence`：只在已确认的外框内部生成的分隔证据图，用来看弱分隔是否被辅助证据层捕捉到。它只补充分隔候选，不会重新决定外框，也不会写进最终 TIFF。
+- `Content evidence`：内容证据图，用综合分显示哪里更像真实照片信息。综合分由局部梯度、四邻域纹理、局部对比和少量调性存在感组成，不依赖单一亮度或单一梯度。
+
+横向胶片长图的四联图顺序是从上到下：`Debug boxes`、`Original gray`、`Separator evidence`、`Content evidence`。竖向胶片长图的四联图顺序是从左到右：`Debug boxes`、`Original gray`、`Separator evidence`、`Content evidence`。
+
+内容证据用于检查“有信息的照片矩形”是否支持当前裁切框。横向长图下，脚本使用这些常见画幅比例作为参考：
+
+| 格式 | 横向长图里的单张照片比例 |
+|---|---|
+| `135` | `3:2` |
+| `half` | `2:3` |
+| `xpan` | `65:24` |
+| `120-66` | `1:1` |
+| `120-645` | `3:4` |
+| `120-67` | `4:5` |
+
+如果是竖向长图，上表比例会自动反过来。内容证据当前主要用于 debug 和保守降级：当内容矩形和画幅比例明显冲突，或内容覆盖明显不足时，脚本会倾向于 `REVIEW`；它不会单独把困难图片提升为自动通过。
 
 ## 自动通过与待复核
 
-v18 会给每个文件一个状态：
+脚本会给每个文件一个状态：
 
 ```text
 approved_auto
@@ -256,110 +271,5 @@ needs_review
 - 分隔线弱或缺失
 - 画幅间距不稳定
 - 外框候选分歧较大
+- 内容矩形和预期画幅比例冲突
 - 自动格式判断不够确定
-
-如果不想复制待复核原文件，可以加：
-
-```bash
---no-copy-review-files
-```
-
-## 支持的格式
-
-格式参数：
-
-```text
---format auto
---format 135
---format half
---format xpan
---format 120-645
---format 120-66
---format 120-67
-```
-
-默认 `auto` 会自动区分普通 135 和 120 家族。`half` 和 `xpan` 不参与自动识别，需要手动指定。
-
-| 格式 | 默认张数 | 说明 |
-|---|---:|---|
-| `135` | 6 | 普通 35mm |
-| `half` | 12 | 半格，需要手动指定 |
-| `xpan` | 3 | XPAN，需要手动指定 |
-| `120-645` | 4 | 120 645 |
-| `120-66` | 3 | 120 6x6 |
-| `120-67` | 3 | 120 6x7 |
-
-可用 `--count` 覆盖张数，例如：
-
-```bash
-python3 X5_Split_v18.py . --format 135 --count 4 --report --debug --dry-run
-```
-
-布局参数：
-
-```text
---layout auto
---layout horizontal
---layout vertical
-```
-
-条带完整性参数：
-
-```text
---strip auto
---strip full
---strip partial
-```
-
-`auto` 会先尝试完整条，高置信失败后再尝试 partial 候选。
-
-## TIFF 与元数据
-
-v18 的输出目标是尽量保留 TIFF 像素和关键元数据：
-
-- 不做调色、反差、锐化等后期处理。
-- 默认 `--compression same`，只保留已知无损压缩；未知或非无损压缩会拒绝保留。
-- 写出后会重新读取输出 TIFF，验证像素、形状、位深、Photometric、PlanarConfiguration、Resolution、ICC 等关键项。
-
-Debug JPG 只是预览图，不参与最终 TIFF 输出。
-
-## iTerm2 与 Terminal
-
-双击 `.command` 文件时，Finder 使用的是该文件类型的“打开方式”关联。macOS 默认通常是 Terminal.app。iTerm2 里设置“默认终端 app”不一定会改变 Finder 双击 `.command` 的关联。
-
-如果希望双击 `.command` 用 iTerm2，可以在 Finder 里选中一个 `.command` 文件：
-
-```text
-显示简介 -> 打开方式 -> 选择 iTerm2 -> 全部更改
-```
-
-继续用 Terminal.app 也可以。现在启动器在运行结束后按回车会尝试关闭 Terminal 或 iTerm2 窗口。
-
-## 本地文件与协作
-
-这些本地文件和输出目录默认不提交：
-
-```text
-Test/
-downloaded_apps/
-split_output/
-__pycache__/
-.venv/
-build/
-dist/
-release/
-```
-
-大 TIFF 样片只有在明确决定作为正式 fixture，并配置 Git LFS 后才提交。
-
-这个文件夹可能通过 NAS 在多台电脑之间同步。GitHub 是源码和文档的准确信源，NAS 只作为本地文件传输层。
-
-跨电脑或跨 Codex 会话继续工作前：
-
-```bash
-git status --short
-git branch --show-current
-git fetch origin
-```
-
-Codex 规则和 handoff 记录见 `AGENTS.md`。
