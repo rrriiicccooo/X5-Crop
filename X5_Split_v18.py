@@ -1306,11 +1306,11 @@ def write_debug_preview(gray: np.ndarray, detection: Detection, output_path: Pat
 
 def make_debug_preview_rgb(gray: np.ndarray, detection: Detection) -> np.ndarray:
     rgb, scale = preview_gray(gray)
-    draw_preview_rect(rgb, detection.outer, scale, (0, 255, 80), 3)
+    draw_preview_rect(rgb, detection.outer, scale, (0, 255, 0), 3)
     for box in detection.frames:
-        draw_preview_rect(rgb, box, scale, (255, 70, 40), 2)
+        draw_preview_rect(rgb, box, scale, (0, 128, 255), 2)
     gap_colors = {
-        "detected": (40, 140, 255),
+        "detected": (255, 0, 0),
         "grid": (255, 220, 30),
         "equal": (190, 80, 255),
         "equal-broad-region": (190, 80, 255),

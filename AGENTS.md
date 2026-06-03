@@ -102,37 +102,33 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Changed DebugAnalysis mode so it no longer creates a separate `_debug/`
-  folder or standalone `*_debug.jpg`.
-- DebugAnalysis launchers now pass only `--debug-analysis`, not `--debug`.
-- Script-level behavior now suppresses standalone debug preview output whenever
-  `--debug-analysis` is enabled, even if both flags are passed manually.
-- Updated `README.md` to explain that the DebugAnalysis JPG already includes the
-  debug boxes panel.
+- Aligned the v18 debug overlay base colors with v17: green outer strip frame,
+  blue output crop boxes, and red image-detected separator lines.
+- Kept v18-only separator colors for newer inference methods: yellow for grid
+  spacing, purple for equal/fallback spacing, and white for unknown/other
+  sources.
+- Updated `README.md` to document the debug colors and to state that default
+  exported TIFF crops keep the v17-style 10px bleed.
 
 Verified:
-- `bash -n X5_Split_v18_macOS.command X5_Split_v18_macOS_Debug.command
-  X5_Split_v18_macOS_DebugAnalysis.command`
 - `python3 -m py_compile X5_Split_v18.py`
-- Ran `--debug-analysis --dry-run` on a synthetic TIFF in
-  `/private/tmp/x5crop_v18_analysis_only_test`; confirmed only
-  `_debug_analysis/*_debug_analysis.jpg` was written and `_debug/` was not
-  created.
-- Ran `--debug --dry-run` on a synthetic TIFF in
-  `/private/tmp/x5crop_v18_debug_only_test`; confirmed `_debug/*_debug.jpg` was
-  still written and `_debug_analysis/` was not created.
-- Searched README and launchers for stale `--debug --debug-analysis` and
-  duplicate `_debug` messaging in DebugAnalysis mode.
+- Ran report dry-runs on a synthetic TIFF with default bleed and with
+  `--bleed 0`; confirmed default frame boxes expand by 10px on each side, with
+  clamping at image boundaries where needed.
+- Ran `--debug --dry-run` on the synthetic TIFF and confirmed the JPG contains
+  green outer-frame and blue crop-box pixels. The synthetic case did not produce
+  image-detected separators, so red-line rendering was verified by code path.
 
 Not verified:
 - Did not run against real local `Test/` TIFF samples.
-- Did not run Windows `.bat` launchers after this behavior change.
+- Did not run Windows `.bat` launchers after this color/doc change.
+- Did not complete a real export on the synthetic TIFF because its generated
+  metadata trips the script's strict `ResolutionUnit` preservation check.
 
 Known local-only files:
 - `Test/`
-- `/private/tmp/x5crop_v18_analysis_only_test`
-- `/private/tmp/x5crop_v18_debug_only_test`
+- `/private/tmp/x5crop_v18_bleed_color_test`
 
 Next recommended step:
-- Run the DebugAnalysis launcher on a real difficult TIFF and confirm only the
-  combined JPG is produced.
+- Run the normal and Debug launchers on a real difficult TIFF to visually confirm
+  crop bleed and separator colors on production-like input.
