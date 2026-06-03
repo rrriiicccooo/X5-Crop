@@ -131,6 +131,12 @@ Changed:
 - Detection is now content-primary: content evidence builds the crop candidate
   first, while the older separator-based detector is retained as
   `separator_assist` report data and fallback.
+- Content candidate ranking now prefers more complete frame models when
+  candidates are above threshold, so a tiny high-scoring partial does not steal
+  the result from a plausible larger sequence.
+- Partial strips are no longer capped below the auto-export threshold just for
+  being partial; they can pass when content, aspect, and supporting evidence are
+  strong enough.
 - Content-primary candidates with mismatched content run counts are capped below
   the auto-export threshold and marked for review.
 - Content evidence is written into reports and can conservatively downgrade
@@ -155,6 +161,10 @@ Verified:
 - Confirmed `X5_test_25.tif` is forced to `needs_review` when content detects 7
   usable runs for a 6-frame target (`content_run_count_mismatch`), even though
   separator assist passes.
+- After removing the partial-strip cap and adding content-specific ranking,
+  confirmed `X5_test_19.tif` selects 3 frames and passes, `X5_test_20.tif`
+  selects 5 frames and passes, while `X5_test_25.tif` remains review for run
+  count mismatch.
 - Ran DebugAnalysis dry-runs on `Test/135负片/正常/001.tif`, `11.tif`, and
   `X5 022.tif`.
 - Confirmed `001.tif` remains `needs_review` at confidence `0.676` and produces
@@ -190,6 +200,12 @@ Known local-only files:
 - `/private/tmp/x5crop_content_primary_19b`
 - `/private/tmp/x5crop_content_primary_25b`
 - `/private/tmp/x5crop_content_primary_batch`
+- `/private/tmp/x5crop_joint_score_19`
+- `/private/tmp/x5crop_joint_score_20`
+- `/private/tmp/x5crop_joint_score_25`
+- `/private/tmp/x5crop_joint_score_19b`
+- `/private/tmp/x5crop_joint_score_20b`
+- `/private/tmp/x5crop_joint_score_25c`
 
 Next recommended step:
 - Run DebugAnalysis on difficult weak-separator and partial-strip samples and

@@ -616,7 +616,6 @@ def content_detection_for_count(
         confidence = min(confidence, 0.82)
         reasons.append("content_aspect_uncertain")
     if strip_mode == "partial":
-        confidence = min(confidence, 0.84)
         reasons.append("partial_strip_count_candidate")
     if confidence < config.confidence_threshold and not reasons:
         reasons.append("content_confidence_low")
@@ -1685,6 +1684,17 @@ def partial_edge_hint(profile: np.ndarray, origin: float, pitch: float, count: i
     }
 
 
+def content_detection_rank(detection: Detection, threshold: float) -> tuple[int, int, float, float]:
+    content = detection.detail.get("content_primary", {})
+    run_conf = float(content.get("run_conf", 0.0)) if isinstance(content, dict) else 0.0
+    return (
+        1 if detection.confidence >= threshold else 0,
+        int(detection.count),
+        float(detection.confidence),
+        run_conf,
+    )
+
+
 def choose_content_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Optional[Detection]:
     if config.strip_mode == "full":
         return content_detection_for_count(gray, config, fmt, config.count, "full")
@@ -1696,7 +1706,7 @@ def choose_content_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) 
             for detection in [content_detection_for_count(gray, config, fmt, c, "partial", offset)]
             if detection is not None
         ]
-        return max(detections, key=lambda d: detection_rank(d, config.confidence_threshold)) if detections else None
+        return max(detections, key=lambda d: content_detection_rank(d, config.confidence_threshold)) if detections else None
 
     full = content_detection_for_count(gray, config, fmt, config.count, "full")
     partials = [
@@ -1707,7 +1717,7 @@ def choose_content_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) 
         if detection is not None
     ]
     candidates = [d for d in [full, *partials] if d is not None]
-    return max(candidates, key=lambda d: detection_rank(d, config.confidence_threshold)) if candidates else None
+    return max(candidates, key=lambda d: content_detection_rank(d, config.confidence_threshold)) if candidates else None
 
 
 def choose_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detection:
