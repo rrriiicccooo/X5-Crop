@@ -103,7 +103,7 @@ Debug Analysis：
 X5_Split_v18_macOS_DebugAnalysis_DoubleClick.command
 ```
 
-也是 dry run。除了裁切预览 JPG，还会写 base / enhanced 两张检测灰度分析图，适合看欠曝、弱分隔、片头片尾等问题。
+也是 dry run。它会在一张 JPG 里并排生成三块内容：带框 debug 图、原始灰度图、增强后灰度图，适合看欠曝、弱分隔、片头片尾等问题。
 
 macOS 启动器运行结束后会显示：
 
@@ -145,6 +145,12 @@ python3 X5_Split_v18.py . --deskew off --report --debug --dry-run
 python3 X5_Split_v18.py . --report --debug --dry-run --copy-review-files
 ```
 
+默认已经会复制低置信原图；上面这个参数只是显式写出行为。如果只想写报告、不复制原 TIFF：
+
+```bash
+python3 X5_Split_v18.py . --report --debug --dry-run --no-copy-review-files
+```
+
 低置信结果也强制导出：
 
 ```bash
@@ -171,8 +177,7 @@ split_output/
   _debug/
     *_debug.jpg
   _debug_analysis/
-    *_base.jpg
-    *_enhanced.jpg
+    *_debug_analysis.jpg
   needs_review/
 ```
 
@@ -181,10 +186,35 @@ split_output/
 - `split_report.jsonl`：完整机器可读报告。
 - `split_summary.csv`：更方便人工浏览的表格。
 - `_debug/*.jpg`：带外框、画幅框和分隔线的检测预览。
-- `_debug_analysis/*.jpg`：检测用灰度分析图，不改变原 TIFF 像素。
-- `needs_review/`：只有使用 `--copy-review-files` 时才复制低置信原图。
+- `_debug_analysis/*_debug_analysis.jpg`：三联图，左侧是带框 debug 图，中间是原始灰度图，右侧是增强后灰度图。
+- `needs_review/`：低置信 `needs_review` 原 TIFF 会默认复制到这里，方便人工集中处理。
 
 普通启动器不会覆盖已有输出 TIFF。已有同名裁切文件时，脚本会报错并停止该文件；命令行可用 `--overwrite` 覆盖。
+
+## 如何看 debug 图
+
+`_debug/*.jpg` 和 `_debug_analysis/*_debug_analysis.jpg` 左侧的带框图使用这些颜色：
+
+| 颜色 | 含义 |
+|---|---|
+| 绿色外框 | 脚本认为整条胶片有效区域的外框 |
+| 红色框 | 每一张将要裁切的画幅框 |
+| 蓝色线 | 从图像证据中检测到的分隔线 |
+| 黄色线 | 由全局片距 / grid 模型推算出的分隔线 |
+| 紫色线 | 证据不足时使用的等分或宽区域 fallback 分隔线 |
+| 白色线 | 其它未分类的分隔线来源 |
+
+看图时优先检查三件事：
+
+- 绿色外框有没有吃掉片头、片尾或画面边缘。
+- 红色画幅框是否覆盖每张照片，是否明显偏左、偏右或重叠。
+- 蓝色/黄色/紫色分隔线是否落在真实片间空隙，而不是落进画面内容。
+
+Debug Analysis 三联图的用途：
+
+- 左侧“Debug boxes”：同 `_debug` 预览，用来看裁切计划。
+- 中间“Original gray”：原始检测灰度图，用来看源扫描本身的明暗和分隔可见度。
+- 右侧“Enhanced gray”：增强后的检测灰度图，用来看脚本是否借助增强图找到了弱分隔。增强图只用于检测坐标，不会写进最终 TIFF。
 
 ## 自动通过与待复核
 
@@ -195,7 +225,7 @@ approved_auto
 needs_review
 ```
 
-默认置信度阈值是 `0.85`。低于阈值时，默认只写报告和 debug 信息，不输出裁切 TIFF。
+默认置信度阈值是 `0.85`。低于阈值时，默认只写报告和 debug 信息，不输出裁切 TIFF，并把原 TIFF 复制到 `split_output/needs_review/` 方便人工复核。重复运行时，如果同名文件已经在复核目录里，脚本会复用已有文件，不再连续生成 `_02`、`_03` 副本。
 
 典型待复核原因：
 
@@ -206,6 +236,12 @@ needs_review
 - 画幅间距不稳定
 - 外框候选分歧较大
 - 自动格式判断不够确定
+
+如果不想复制待复核原文件，可以加：
+
+```bash
+--no-copy-review-files
+```
 
 ## 支持的格式
 

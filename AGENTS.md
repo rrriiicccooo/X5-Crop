@@ -98,31 +98,41 @@ Next recommended step:
 
 Date: 2026-06-03
 Computer: primary macOS machine
-Branch: integrate-web-app
+Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Consolidated Codex coordination into this single `AGENTS.md` file.
-- Moved the remaining sync repository info and handoff template here.
-- Removed `docs/CODEX_SYNC.md` so future sessions do not have two competing
-  Codex coordination files.
-- Updated README references to point to `AGENTS.md`.
-- Consolidated user-facing README documents into the root Chinese `README.md`.
-- Removed the `docs/` folder and extra README files.
+- Changed v18 so low-confidence `needs_review` files are copied to
+  `split_output/needs_review/` by default.
+- Added `--no-copy-review-files` to disable that default copy behavior.
+- Changed repeated review-copy runs to reuse an existing same-name review file
+  instead of creating `_02`, `_03`, etc. duplicates.
+- Changed `--debug-analysis` output to one combined JPG containing debug boxes,
+  original gray, and enhanced gray panels.
+- Updated the Chinese `README.md` with review-copy behavior, debug color
+  meaning, and DebugAnalysis panel interpretation.
 
 Verified:
-- Read the previous `AGENTS.md` and `docs/CODEX_SYNC.md` before merging.
-- Searched for `CODEX_SYNC` references and updated the active README/agent
-  references.
-- Searched README/docs references before deleting extra documentation.
+- `python3 -m py_compile X5_Split_v18.py`
+- Ran v18 on a synthetic TIFF with `--confidence-threshold 1.0 --debug
+  --debug-analysis --dry-run`; confirmed status `needs_review`, default review
+  copy, `_debug/*.jpg`, and one `_debug_analysis/*_debug_analysis.jpg`.
+- Re-ran the same command and confirmed no `_02` duplicate review copy was
+  created.
+- Ran v18 on a second synthetic TIFF with `--no-copy-review-files`; confirmed no
+  `needs_review/` folder was created.
+- Confirmed generated debug-analysis JPG dimensions with `file`/Pillow and
+  visually inspected the combined panel.
 
 Not verified:
-- No image-processing tests were run because this change only reorganizes
-  coordination and README documentation.
+- Did not run against real local `Test/` TIFF samples.
+- Did not run macOS/Windows double-click launchers after this script change.
 
 Known local-only files:
 - `Test/`
+- `/private/tmp/x5crop_v18_review_panel_test`
+- `/private/tmp/x5crop_v18_no_review_copy_test`
 
 Next recommended step:
-- Use `README.md` as the only user-facing README and this file as the only
-  Codex coordination/handoff file.
+- Run a real difficult TIFF through `--debug --debug-analysis --dry-run` and
+  inspect the new combined JPG plus `needs_review/` copy.

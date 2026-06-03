@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 import tifffile
 
 
@@ -1300,6 +1300,11 @@ def gap_line_box(detection: Detection, gap: Gap) -> Optional[Box]:
 
 
 def write_debug_preview(gray: np.ndarray, detection: Detection, output_path: Path) -> None:
+    rgb = make_debug_preview_rgb(gray, detection)
+    write_rgb_jpeg(rgb, output_path)
+
+
+def make_debug_preview_rgb(gray: np.ndarray, detection: Detection) -> np.ndarray:
     rgb, scale = preview_gray(gray)
     draw_preview_rect(rgb, detection.outer, scale, (0, 255, 80), 3)
     for box in detection.frames:
@@ -1314,7 +1319,7 @@ def write_debug_preview(gray: np.ndarray, detection: Detection, output_path: Pat
         line = gap_line_box(detection, gap)
         if line is not None:
             draw_preview_line(rgb, line, scale, gap_colors.get(gap.method, (255, 255, 255)), 2)
-    write_rgb_jpeg(rgb, output_path)
+    return rgb
 
 
 def write_rgb_jpeg(rgb: np.ndarray, output_path: Path) -> None:
@@ -1328,13 +1333,41 @@ def write_gray_preview_jpeg(gray: np.ndarray, output_path: Path) -> None:
     write_rgb_jpeg(rgb, output_path)
 
 
-def write_debug_analysis(gray: np.ndarray, output_dir: Path, stem: str) -> list[str]:
+def add_panel_label(rgb: np.ndarray, label: str) -> np.ndarray:
+    label_h = 34
+    h, w = rgb.shape[:2]
+    panel = np.full((h + label_h, w, 3), 18, dtype=np.uint8)
+    panel[label_h:, :, :] = rgb
+    image = Image.fromarray(panel, mode="RGB")
+    draw = ImageDraw.Draw(image)
+    draw.text((12, 9), label, fill=(245, 245, 245))
+    return np.asarray(image)
+
+
+def make_debug_analysis_panel(gray: np.ndarray, detection: Detection) -> np.ndarray:
+    debug_rgb = add_panel_label(make_debug_preview_rgb(gray, detection), "Debug boxes")
+    base_rgb, _ = preview_gray(gray)
+    base_rgb = add_panel_label(base_rgb, "Original gray")
+    enhanced_rgb, _ = preview_gray(make_analysis_gray(gray))
+    enhanced_rgb = add_panel_label(enhanced_rgb, "Enhanced gray")
+    panels = [debug_rgb, base_rgb, enhanced_rgb]
+    max_h = max(panel.shape[0] for panel in panels)
+    gap = 12
+    total_w = sum(panel.shape[1] for panel in panels) + gap * (len(panels) - 1)
+    canvas = np.full((max_h, total_w, 3), 32, dtype=np.uint8)
+    x = 0
+    for panel in panels:
+        h, w = panel.shape[:2]
+        canvas[:h, x:x + w] = panel
+        x += w + gap
+    return canvas
+
+
+def write_debug_analysis(gray: np.ndarray, detection: Detection, output_dir: Path, stem: str) -> list[str]:
     analysis_dir = output_dir / "_debug_analysis"
-    base_path = analysis_dir / f"{stem}_base.jpg"
-    enhanced_path = analysis_dir / f"{stem}_enhanced.jpg"
-    write_gray_preview_jpeg(gray, base_path)
-    write_gray_preview_jpeg(make_analysis_gray(gray), enhanced_path)
-    return [str(base_path), str(enhanced_path)]
+    panel_path = analysis_dir / f"{stem}_debug_analysis.jpg"
+    write_rgb_jpeg(make_debug_analysis_panel(gray, detection), panel_path)
+    return [str(panel_path)]
 
 
 LOSSLESS_COMPRESSIONS = {"NONE", "LZW", "ADOBE_DEFLATE", "DEFLATE", "ZSTD"}
@@ -1508,15 +1541,10 @@ def review_directory_for(output_dir: Path, config: Config) -> Path:
 def copy_for_review(input_file: Path, review_dir: Path) -> Path:
     review_dir.mkdir(parents=True, exist_ok=True)
     target = review_dir / input_file.name
-    if not target.exists():
-        shutil.copy2(input_file, target)
+    if target.exists():
         return target
-    for i in range(2, 10000):
-        target = review_dir / f"{input_file.stem}_{i:02d}{input_file.suffix}"
-        if not target.exists():
-            shutil.copy2(input_file, target)
-            return target
-    raise RuntimeError(f"Could not create unique review filename for {input_file.name}")
+    shutil.copy2(input_file, target)
+    return target
 
 
 def write_jsonl(path: Path, result: ProcessResult) -> None:
@@ -1613,6 +1641,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         )
         if config.copy_review_files:
             review_copy = str(copy_for_review(input_file, review_directory_for(output_dir, config)))
+            warnings.append(f"review copy: {review_copy}")
 
     should_export = status == "approved_auto" or config.export_review
     if config.dry_run:
@@ -1646,7 +1675,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         write_debug_preview(gray, detection, debug_path)
         warnings.append(f"debug preview: {debug_path}")
     if config.debug_analysis:
-        for analysis_path in write_debug_analysis(gray, output_dir, input_file.stem):
+        for analysis_path in write_debug_analysis(gray, detection, output_dir, input_file.stem):
             warnings.append(f"debug analysis: {analysis_path}")
 
     detail = dict(detection.detail)
@@ -1703,14 +1732,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--deskew-min-angle", type=float, default=0.03, help="Minimum absolute deskew angle in degrees.")
     parser.add_argument("--deskew-max-angle", type=float, default=2.0, help="Maximum absolute deskew angle in degrees.")
     parser.add_argument("--confidence-threshold", type=float, default=0.85, help="Minimum confidence for automatic export.")
-    parser.add_argument("--copy-review-files", action="store_true", help="Copy low-confidence source TIFFs to review folder.")
+    parser.add_argument("--copy-review-files", dest="copy_review_files", action="store_true", default=True, help="Copy low-confidence source TIFFs to review folder; default on.")
+    parser.add_argument("--no-copy-review-files", dest="copy_review_files", action="store_false", help="Do not copy low-confidence source TIFFs to review folder.")
     parser.add_argument("--review-dir", default=None, help="Review folder; default output/needs_review.")
     parser.add_argument("--export-review", action="store_true", help="Export crops even when confidence is below threshold.")
     parser.add_argument("--dry-run", action="store_true", help="Detect only; do not write cropped TIFFs.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing outputs.")
     parser.add_argument("--report", action="store_true", help="Write split_report.jsonl and split_summary.csv.")
     parser.add_argument("--debug", action="store_true", help="Write lightweight JPG previews with detected outer/frame boxes.")
-    parser.add_argument("--debug-analysis", action="store_true", help="Write base/enhanced detection grayscale JPG previews.")
+    parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with debug boxes, original gray, and enhanced gray.")
     parser.add_argument("--debug-errors", action="store_true", help="Print tracebacks on errors.")
     parser.add_argument("--version", action="version", version=f"{SCRIPT_NAME} {VERSION}")
     return parser
