@@ -107,6 +107,8 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Cleaned launcher prompt text: use lowercase prompts and labels, and changed
+  `Format [135]:` to `format:` while still treating blank input as `135`.
 - Replaced the local virtual environment setup with a relative dependency
   target. Install launchers now install packages into `.x5crop_deps/pyXY/`, and
   run launchers add that folder to `PYTHONPATH`. The old `.venv-x5crop/` path is
@@ -240,6 +242,9 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- Prompt smoke tests on `X5_Crop_Mac.command` confirmed the launcher output now
+  uses lowercase prompt text, `format:` without `[135]`, and lowercase summary
+  labels.
 - `bash -n install/X5_Crop_Mac_install.command X5_Crop_Mac.command`
 - Confirmed `X5_Crop_Mac.command` no longer prefers `.venv-x5crop`; it computes
   `pyXY` and adds `.x5crop_deps/pyXY/` to `PYTHONPATH` when present.

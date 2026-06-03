@@ -130,7 +130,7 @@ chmod +x X5_Crop_Mac.command install/X5_Crop_Mac_install.command
 X5_Crop_Mac.command
 ```
 
-会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。它会先问格式，再问是否开启 partial 模式，最后问是否开启 Debug Analysis dry run。后两个问题都可以输入 `yes` / `no` / `y` / `n`，直接回车等于 `no`。
+会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。它会先问 `format:`，再问 `partial mode? [y/n]:`，最后问 `debug analysis? [y/n]:`。后两个问题都可以输入 `yes` / `no` / `y` / `n`，直接回车等于 `no`。
 
 如果开启 Debug Analysis，它不会写裁切 TIFF。它会在一张 JPG 里生成四块内容：带框 debug 图、原始灰度图、分隔证据图、内容证据图。横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾和未铺满整条片夹的情况。
 

@@ -41,7 +41,7 @@ ask_yes_no() {
                 return 0
                 ;;
             *)
-                echo "Use yes/no, y/n, or press Return for no." >&2
+                echo "use yes/no, y/n, or press return for no." >&2
                 ;;
         esac
     done
@@ -82,15 +82,15 @@ echo "Output: split_output"
 echo "Existing output files will not be overwritten."
 echo
 
-echo "Choose film format:"
-echo "  [Return] or 135 = 135"
-echo "  xpan = XPAN"
+echo "choose film format:"
+echo "  return or 135 = 135"
+echo "  xpan = xpan"
 echo "  half = half-frame"
 echo "  645 = 120-645"
 echo "  66 = 120-66"
 echo "  67 = 120-67"
 echo
-read -r -p "Format [135]: " FORMAT_INPUT
+read -r -p "format: " FORMAT_INPUT
 FORMAT_INPUT="$(printf '%s' "$FORMAT_INPUT" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
 case "$FORMAT_INPUT" in
     ""|135)
@@ -118,20 +118,20 @@ case "$FORMAT_INPUT" in
         COUNT="3"
         ;;
     *)
-        echo "Unknown format: $FORMAT_INPUT"
-        echo "Use Return/135, xpan, half, 645, 66, or 67."
+        echo "unknown format: $FORMAT_INPUT"
+        echo "use return/135, xpan, half, 645, 66, or 67."
         finish 1
         ;;
 esac
 
-PARTIAL_ANSWER="$(ask_yes_no "Enable partial mode? [y/N]: " "no")"
+PARTIAL_ANSWER="$(ask_yes_no "partial mode? [y/n]: " "no")"
 if [ "$PARTIAL_ANSWER" = "yes" ]; then
     STRIP="partial"
 else
     STRIP="full"
 fi
 
-DEBUG_ANSWER="$(ask_yes_no "Enable Debug Analysis dry run? [y/N]: " "no")"
+DEBUG_ANSWER="$(ask_yes_no "debug analysis? [y/n]: " "no")"
 if [ "$DEBUG_ANSWER" = "yes" ]; then
     DEBUG="yes"
 else
@@ -139,19 +139,19 @@ else
 fi
 
 echo
-echo "Selected format: $FORMAT"
+echo "format: $FORMAT"
 if [ "$STRIP" = "full" ]; then
-    echo "Strip mode: full"
-    echo "Fixed full-strip count: $COUNT"
+    echo "strip mode: full"
+    echo "fixed full-strip count: $COUNT"
 else
-    echo "Strip mode: partial"
-    echo "Partial mode: count auto"
+    echo "strip mode: partial"
+    echo "partial mode: count auto"
 fi
 if [ "$DEBUG" = "yes" ]; then
-    echo "Debug analysis: enabled"
-    echo "Dry run: no cropped TIFF files will be written."
+    echo "debug analysis: enabled"
+    echo "dry run: no cropped TIFF files will be written."
 else
-    echo "Debug analysis: off"
+    echo "debug analysis: off"
 fi
 echo
 

@@ -42,16 +42,16 @@ echo Output: split_output
 echo Existing output files will not be overwritten.
 echo.
 
-echo Choose film format:
-echo   [Enter] or 135 = 135
-echo   xpan = XPAN
+echo choose film format:
+echo   return or 135 = 135
+echo   xpan = xpan
 echo   half = half-frame
 echo   645 = 120-645
 echo   66 = 120-66
 echo   67 = 120-67
 echo.
 set "FORMAT_INPUT="
-set /p "FORMAT_INPUT=Format [135]: "
+set /p "FORMAT_INPUT=format: "
 set "FORMAT_INPUT=%FORMAT_INPUT: =%"
 if "%FORMAT_INPUT%"=="" set "FORMAT_INPUT=135"
 if /i "%FORMAT_INPUT%"=="135" (
@@ -91,8 +91,8 @@ if /i "%FORMAT_INPUT%"=="135" (
     set "FORMAT=120-67"
     set "COUNT=3"
 ) else (
-    echo Unknown format: %FORMAT_INPUT%
-    echo Use Enter/135, xpan, half, 645, 66, or 67.
+    echo unknown format: %FORMAT_INPUT%
+    echo use return/135, xpan, half, 645, 66, or 67.
     echo.
     pause
     exit /b 1
@@ -100,7 +100,7 @@ if /i "%FORMAT_INPUT%"=="135" (
 
 :ask_partial
 set "PARTIAL_INPUT="
-set /p "PARTIAL_INPUT=Enable partial mode? [y/N]: "
+set /p "PARTIAL_INPUT=partial mode? [y/n]: "
 set "PARTIAL_INPUT=%PARTIAL_INPUT: =%"
 if "%PARTIAL_INPUT%"=="" (
     set "STRIP=full"
@@ -113,13 +113,13 @@ if "%PARTIAL_INPUT%"=="" (
 ) else if /i "%PARTIAL_INPUT%"=="yes" (
     set "STRIP=partial"
 ) else (
-    echo Use yes/no, y/n, or press Enter for no.
+    echo use yes/no, y/n, or press enter for no.
     goto ask_partial
 )
 
 :ask_debug
 set "DEBUG_INPUT="
-set /p "DEBUG_INPUT=Enable Debug Analysis dry run? [y/N]: "
+set /p "DEBUG_INPUT=debug analysis? [y/n]: "
 set "DEBUG_INPUT=%DEBUG_INPUT: =%"
 if "%DEBUG_INPUT%"=="" (
     set "DEBUG=no"
@@ -132,24 +132,24 @@ if "%DEBUG_INPUT%"=="" (
 ) else if /i "%DEBUG_INPUT%"=="yes" (
     set "DEBUG=yes"
 ) else (
-    echo Use yes/no, y/n, or press Enter for no.
+    echo use yes/no, y/n, or press enter for no.
     goto ask_debug
 )
 
 echo.
-echo Selected format: %FORMAT%
+echo format: %FORMAT%
 if /i "%STRIP%"=="full" (
-    echo Strip mode: full
-    echo Fixed full-strip count: %COUNT%
+    echo strip mode: full
+    echo fixed full-strip count: %COUNT%
 ) else (
-    echo Strip mode: partial
-    echo Partial mode: count auto
+    echo strip mode: partial
+    echo partial mode: count auto
 )
 if /i "%DEBUG%"=="yes" (
-    echo Debug analysis: enabled
-    echo Dry run: no cropped TIFF files will be written.
+    echo debug analysis: enabled
+    echo dry run: no cropped TIFF files will be written.
 ) else (
-    echo Debug analysis: off
+    echo debug analysis: off
 )
 echo.
 
