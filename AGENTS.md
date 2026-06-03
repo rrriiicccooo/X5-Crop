@@ -109,6 +109,12 @@ Changed:
   gradient, neighbor texture, local contrast, and tonal presence.
 - DebugAnalysis is now a four-panel JPG: debug boxes, original gray, separator
   evidence, and content evidence.
+- Removed standalone Debug launchers; keep normal launchers and DebugAnalysis
+  launchers only.
+- Plain debug previews now show only the status bar, green outer box, and blue
+  crop boxes. Colored separator marks are drawn in the DebugAnalysis Separator
+  evidence panel.
+- Default bleed is now 15px left/right and 10px top/bottom.
 - Content evidence is written into reports and can conservatively downgrade
   clear content/aspect conflicts, but it does not raise difficult files into
   automatic export.
@@ -118,13 +124,17 @@ Changed:
 
 Verified:
 - `python3 -m py_compile X5_Crop.py X5_Split_v17.py X5_Split_v18.py`
-- `bash -n X5_Crop_macOS.command X5_Crop_macOS_Debug.command X5_Crop_macOS_DebugAnalysis.command`
+- `bash -n X5_Crop_macOS.command X5_Crop_macOS_DebugAnalysis.command`
 - `python3 X5_Crop.py --version`
 - `python3 X5_Crop.py --help`
 - Ran DebugAnalysis dry-runs on `Test/135负片/正常/001.tif`, `11.tif`, and
   `X5 022.tif`.
 - Confirmed `001.tif` remains `needs_review` at confidence `0.676` and produces
   a four-panel DebugAnalysis JPG.
+- Re-ran DebugAnalysis for `001.tif` and visually confirmed colored separator
+  marks moved to the Separator evidence panel while Debug boxes stayed clean.
+- Ran `--debug` on `001.tif` and visually confirmed the standalone debug JPG now
+  only shows the status bar, outer box, and crop boxes.
 - Confirmed `11.tif` remains `approved_auto` at confidence `0.963`.
 - Confirmed `X5 022.tif` remains `needs_review` at confidence `0.679`.
 - Inspected the generated `001.tif` DebugAnalysis JPG and confirmed the fourth
@@ -140,6 +150,8 @@ Known local-only files:
 - `/private/tmp/x5crop_v1_debug_11`
 - `/private/tmp/x5crop_v1_debug_11b`
 - `/private/tmp/x5crop_v1_debug_x5022`
+- `/private/tmp/x5crop_debuganalysis_only_001`
+- `/private/tmp/x5crop_clean_debug_001`
 
 Next recommended step:
 - Run DebugAnalysis on difficult weak-separator and partial-strip samples and

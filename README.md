@@ -57,7 +57,6 @@ macOS 常用文件：
 ```text
 X5_Crop.py
 X5_Crop_macOS.command
-X5_Crop_macOS_Debug.command
 X5_Crop_macOS_DebugAnalysis.command
 ```
 
@@ -66,7 +65,6 @@ Windows 常用文件：
 ```text
 X5_Crop.py
 X5_Crop_Windows.bat
-X5_Crop_Windows_Debug.bat
 X5_Crop_Windows_DebugAnalysis.bat
 ```
 
@@ -76,7 +74,6 @@ X5_Crop_Windows_DebugAnalysis.bat
 
 ```bash
 chmod +x X5_Crop_macOS.command
-chmod +x X5_Crop_macOS_Debug.command
 chmod +x X5_Crop_macOS_DebugAnalysis.command
 ```
 
@@ -89,14 +86,6 @@ X5_Crop_macOS.command
 ```
 
 会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。
-
-Debug：
-
-```text
-X5_Crop_macOS_Debug.command
-```
-
-只做 dry run，不输出裁切 TIFF。它会写报告和裁切预览 JPG，适合先检查检测结果。
 
 Debug Analysis：
 
@@ -116,12 +105,6 @@ Press Return to close...
 
 ## 命令行常用法
 
-先做 debug dry run：
-
-```bash
-python3 X5_Crop.py . --report --debug --dry-run
-```
-
 输出检测分析图：
 
 ```bash
@@ -134,28 +117,28 @@ python3 X5_Crop.py . --report --debug-analysis --dry-run
 python3 X5_Crop.py . --report
 ```
 
-默认导出的裁切 TIFF 会像 v17 一样在每张四周保留 10px bleed。可用 `--bleed`、`--bleed-x`、`--bleed-y` 调整，例如：
+默认导出的裁切 TIFF 会像 v17 一样保留 bleed，现在默认是左右各 15px、上下各 10px。可用 `--bleed`、`--bleed-x`、`--bleed-y` 调整，例如：
 
 ```bash
-python3 X5_Crop.py . --report --bleed 10
+python3 X5_Crop.py . --report --bleed-x 15 --bleed-y 10
 ```
 
 关闭自动校斜：
 
 ```bash
-python3 X5_Crop.py . --deskew off --report --debug --dry-run
+python3 X5_Crop.py . --deskew off --report --debug-analysis --dry-run
 ```
 
 把低置信原图复制到复核目录：
 
 ```bash
-python3 X5_Crop.py . --report --debug --dry-run --copy-review-files
+python3 X5_Crop.py . --report --debug-analysis --dry-run --copy-review-files
 ```
 
 默认已经会复制低置信原图；上面这个参数只是显式写出行为。如果只想写报告、不复制原 TIFF：
 
 ```bash
-python3 X5_Crop.py . --report --debug --dry-run --no-copy-review-files
+python3 X5_Crop.py . --report --debug-analysis --dry-run --no-copy-review-files
 ```
 
 低置信结果也强制导出：
@@ -181,8 +164,6 @@ split_output/
   *_01.tif
   *_02.tif
   ...
-  _debug/
-    *_debug.jpg
   _debug_analysis/
     *_debug_analysis.jpg
   needs_review/
@@ -192,27 +173,21 @@ split_output/
 
 - `split_report.jsonl`：完整机器可读报告。
 - `split_summary.csv`：更方便人工浏览的表格。
-- `_debug/*.jpg`：带外框、画幅框和分隔线的检测预览。
 - `_debug_analysis/*_debug_analysis.jpg`：四联图，已经包含带框 debug 图。运行 `--debug-analysis` 时不会再重复生成 `_debug/` 文件夹和单独 debug JPG。
 - `needs_review/`：低置信 `needs_review` 原 TIFF 会默认复制到这里，方便人工集中处理。
 
 普通启动器不会覆盖已有输出 TIFF。已有同名裁切文件时，脚本会报错并停止该文件；命令行可用 `--overwrite` 覆盖。
 
-## 如何看 debug 图
+## 如何看 Debug Analysis
 
-`_debug/*.jpg` 和 `_debug_analysis/*_debug_analysis.jpg` 里的带框 debug 图使用这些颜色：
+`_debug_analysis/*_debug_analysis.jpg` 里的 `Debug boxes` 面板只显示：
 
 | 颜色 | 含义 |
 |---|---|
 | 绿色外框 | 脚本认为整条胶片有效区域的外框 |
-| 蓝色框 | 每一张将要输出的裁切框，包含默认 10px bleed |
-| 红色框 / 红色线 | 从原图证据中检测到的真实分隔区域，包括黑条区域和可信双边缘 `edge-pair`。黑条有宽有窄时会画成区域框，而不是只画单线 |
-| 橙色框 / 橙色线 | 在固定外框内由分隔证据层补充检测到的分隔区域 |
-| 黄色短 tick | 由全局片距 / grid 模型推算出的切线，不代表一定看到了真实黑条 |
-| 紫色短 tick | 证据不足时使用的等分或宽区域 fallback 切线 |
-| 白色短 tick | 其它未分类的切线来源 |
+| 蓝色框 | 每一张将要输出的裁切框，包含默认左右 15px、上下 10px bleed |
 
-debug 图顶部会在图片外显示状态栏，说明是否通过当前置信度阈值。`PASS` / `REVIEW` 会用不同颜色和更醒目的字号显示：
+四联图顶部会在图片外显示状态栏，说明是否通过当前置信度阈值。`PASS` / `REVIEW` 会用不同颜色和更醒目的字号显示：
 
 ```text
 PASS confidence 0.987 >= threshold 0.850
@@ -221,20 +196,30 @@ REVIEW confidence 0.676 < threshold 0.850
 
 `PASS` 表示会按默认规则自动输出裁切；`REVIEW` 表示不会自动输出裁切，并会进入复核流程。
 
+`Separator evidence` 面板负责显示分隔证据和彩色标记：
+
+| 颜色 | 含义 |
+|---|---|
+| 红色框 / 红色线 | 从原图证据中检测到的真实分隔区域，包括黑条区域和可信双边缘 `edge-pair`。黑条有宽有窄时会画成区域框，而不是只画单线 |
+| 橙色框 / 橙色线 | 在固定外框内由分隔证据层补充检测到的分隔区域 |
+| 黄色短 tick | 由全局片距 / grid 模型推算出的切线，不代表一定看到了真实黑条 |
+| 紫色短 tick | 证据不足时使用的等分或宽区域 fallback 切线 |
+| 白色短 tick | 其它未分类的切线来源 |
+
 看图时优先检查四件事：
 
 - 绿色外框有没有吃掉片头、片尾或画面边缘。
 - 蓝色裁切框是否覆盖每张照片，并在四周留出合理 bleed。
-- 红色检测区域是否覆盖真实黑条；如果没有红色、只有黄色或紫色，说明这部分更依赖推断，应该更谨慎。
-- 黄色/紫色短 tick 是否落在真实片间空隙，而不是落进画面内容。
+- Separator evidence 里的红色检测区域是否覆盖真实黑条；如果没有红色、只有黄色或紫色，说明这部分更依赖推断，应该更谨慎。
+- Separator evidence 里的黄色/紫色短 tick 是否落在真实片间空隙，而不是落进画面内容。
 
 ## 如何看 Debug Analysis 四联图
 
 Debug Analysis 的四块内容：
 
-- `Debug boxes`：同 `_debug` 预览，用来看裁切计划。
+- `Debug boxes`：只显示绿色外框和蓝色裁切框，用来看裁切计划。
 - `Original gray`：原始检测灰度图，用来看源扫描本身的明暗和分隔可见度。
-- `Separator evidence`：只在已确认的外框内部生成的分隔证据图，用来看弱分隔是否被辅助证据层捕捉到。它只补充分隔候选，不会重新决定外框，也不会写进最终 TIFF。
+- `Separator evidence`：只在已确认的外框内部生成的分隔证据图，并集中绘制红色、橙色、黄色、紫色、白色分隔标记。它只补充分隔候选，不会重新决定外框，也不会写进最终 TIFF。
 - `Content evidence`：内容证据图，用综合分显示哪里更像真实照片信息。综合分由局部梯度、四邻域纹理、局部对比和少量调性存在感组成，不依赖单一亮度或单一梯度。
 
 横向胶片长图的四联图顺序是从上到下：`Debug boxes`、`Original gray`、`Separator evidence`、`Content evidence`。竖向胶片长图的四联图顺序是从左到右：`Debug boxes`、`Original gray`、`Separator evidence`、`Content evidence`。

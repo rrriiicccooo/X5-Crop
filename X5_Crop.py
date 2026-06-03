@@ -1920,6 +1920,10 @@ def make_debug_preview_rgb(gray: np.ndarray, detection: Detection) -> np.ndarray
     draw_preview_rect(rgb, detection.outer, scale, (0, 255, 0), 3)
     for box in detection.frames:
         draw_preview_rect(rgb, box, scale, (0, 128, 255), 2)
+    return rgb
+
+
+def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> None:
     gap_colors = {
         "detected": (255, 0, 0),
         "edge-pair": (255, 0, 0),
@@ -1948,7 +1952,6 @@ def make_debug_preview_rgb(gray: np.ndarray, detection: Detection) -> np.ndarray
                 draw_preview_line(rgb, tick, scale, color, 2)
             else:
                 draw_preview_hline(rgb, tick, scale, color, 2)
-    return rgb
 
 
 def make_separator_evidence_debug_gray(gray: np.ndarray, detection: Detection) -> np.ndarray:
@@ -1961,6 +1964,12 @@ def make_separator_evidence_debug_gray(gray: np.ndarray, detection: Detection) -
         return out
     out[box.top:box.bottom, box.left:box.right] = make_separator_evidence_gray(crop)
     return out
+
+
+def make_separator_evidence_debug_rgb(gray: np.ndarray, detection: Detection) -> np.ndarray:
+    rgb, scale = preview_gray(make_separator_evidence_debug_gray(gray, detection))
+    draw_gap_overlay(rgb, detection, scale)
+    return rgb
 
 
 def make_content_evidence_debug_gray(gray: np.ndarray, detection: Detection) -> np.ndarray:
@@ -2001,7 +2010,7 @@ def make_debug_analysis_panel(gray: np.ndarray, detection: Detection, threshold:
     debug_rgb = add_panel_label(make_debug_preview_rgb(gray, detection), "Debug boxes")
     base_rgb, _ = preview_gray(gray)
     base_rgb = add_panel_label(base_rgb, "Original gray")
-    evidence_rgb, _ = preview_gray(make_separator_evidence_debug_gray(gray, detection))
+    evidence_rgb = make_separator_evidence_debug_rgb(gray, detection)
     evidence_rgb = add_panel_label(evidence_rgb, "Separator evidence")
     content_rgb, _ = preview_gray(make_content_evidence_debug_gray(gray, detection))
     content_rgb = add_panel_label(content_rgb, "Content evidence")
@@ -2399,9 +2408,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--strip", choices=STRIP_CHOICES, default="auto", help="full, partial, or auto full-then-partial.")
     parser.add_argument("-n", "--count", type=int, default=None, help="Override frame count.")
     parser.add_argument("--page", type=int, default=0, help="TIFF page index; default 0.")
-    parser.add_argument("--bleed", type=int, default=10, help="Bleed in pixels on all sides; default 10.")
-    parser.add_argument("--bleed-x", type=int, default=None, help="Horizontal bleed override.")
-    parser.add_argument("--bleed-y", type=int, default=None, help="Vertical bleed override.")
+    parser.add_argument("--bleed", type=int, default=None, help="Bleed in pixels on all sides; overrides default 15px left/right and 10px top/bottom.")
+    parser.add_argument("--bleed-x", type=int, default=None, help="Horizontal bleed override; default 15.")
+    parser.add_argument("--bleed-y", type=int, default=None, help="Vertical bleed override; default 10.")
     parser.add_argument("--deskew", choices=DESKEW_CHOICES, default="auto", help="Deskew strip before detection/export.")
     parser.add_argument("--analysis", choices=ANALYSIS_CHOICES, default="auto", help="Separator evidence assist: off disables it; auto/always use fixed outer-box separator evidence.")
     parser.add_argument("--compression", choices=COMPRESSION_CHOICES, default="same", help="TIFF output compression: same for known lossless source compression, or none.")
@@ -2441,8 +2450,10 @@ def config_from_args(args: argparse.Namespace) -> Config:
         raise ValueError(f"--format {fmt.name} allows --count values: {allowed}")
     layout_auto = str(args.layout) == "auto"
     layout = infer_layout(width, height) if layout_auto else str(args.layout)
-    bleed_x = int(args.bleed if args.bleed_x is None else args.bleed_x)
-    bleed_y = int(args.bleed if args.bleed_y is None else args.bleed_y)
+    bleed_x_default = 15 if args.bleed is None else int(args.bleed)
+    bleed_y_default = 10 if args.bleed is None else int(args.bleed)
+    bleed_x = int(bleed_x_default if args.bleed_x is None else args.bleed_x)
+    bleed_y = int(bleed_y_default if args.bleed_y is None else args.bleed_y)
     if bleed_x < 0 or bleed_y < 0:
         raise ValueError("Bleed cannot be negative")
     if not (0.0 <= float(args.confidence_threshold) <= 1.0):
