@@ -102,43 +102,43 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Reworked v18 analysis so enhanced imagery no longer reruns full detection or
-  replaces the base result.
-- Analysis now keeps the base outer box fixed and only uses separator evidence
-  inside that outer box to supplement weak gap candidates.
-- Added `enhanced-detected` gap accounting and orange debug marks for separator
-  evidence accepted from the fixed-outer analysis layer.
-- DebugAnalysis now shows `Separator evidence` instead of `Enhanced gray`.
-- Updated CLI help and `README.md` to describe separator evidence behavior.
+- Added a conservative v17-style `edge-pair` refinement path for 135 full strips.
+  It only replaces a gap when the base image has a strong pair of vertical edges
+  around a narrow background-like separator region.
+- Added conservative same-frame-size fitting for 135 full strips. It requires at
+  least two trusted edge samples and only changes output boxes; confidence is
+  still scored from the pre-fit boxes to avoid false PASS decisions.
+- Debug red separator marks now include `edge-pair` regions.
+- Updated `README.md` to explain red `edge-pair` evidence and same-frame-size
+  fitting.
 
 Verified:
 - `python3 -m py_compile X5_Split_v18.py`
-- Ran dry-run reports on `Test/135负片/正常/001.tif`, `11.tif`, and
+- Ran dry-run reports on `Test/135负片/正常/001.tif`, `11.tif`, `15.tif`, and
   `X5 022.tif`.
-- Confirmed `001.tif` remains `needs_review` with base/enhanced/grid/equal
-  counts `1/0/0/4`; no separator evidence was accepted.
-- Confirmed `11.tif` remains `approved_auto` with counts `2/0/3/0`.
-- Confirmed `X5 022.tif` remains `needs_review` with counts `0/0/0/5`; no
-  separator evidence was accepted.
-- Generated DebugAnalysis for `001.tif` and visually confirmed the third panel
-  is labeled `Separator evidence`.
+- Confirmed weak samples still do not auto-pass: `001.tif` stays
+  `needs_review` with methods `equal/equal/equal/edge-pair/equal`; `X5 022.tif`
+  stays `needs_review` with methods `equal/equal/equal/equal/edge-pair`.
+- Confirmed normal samples still auto-pass: `11.tif` and `15.tif` both use five
+  `edge-pair` separators and same-frame-size fitting.
+- Generated DebugAnalysis for `X5 022.tif` and visually confirmed the REVIEW
+  status and red edge-pair separator region.
 
 Not verified:
-- Did not find a sample in this pass where separator evidence was accepted, so
-  the orange `enhanced-detected` overlay path is code-reviewed but not visually
-  exercised on a real accepted case.
-- Did not run Windows `.bat` launchers after this analysis-layer change.
-- Did not run a non-dry-run export after this analysis-layer change.
+- Did not run Windows `.bat` launchers after this detection change.
+- Did not run a non-dry-run export after this detection change.
+- Did not run the full `Test/135负片/正常` directory after this change.
 
 Known local-only files:
 - `Test/`
-- `/private/tmp/x5crop_separator_evidence_sample`
-- `/private/tmp/x5crop_separator_evidence_sample2`
-- `/private/tmp/x5crop_separator_evidence_debug`
+- `/private/tmp/x5crop_edge_frame_fit_sample`
+- `/private/tmp/x5crop_edge_frame_fit_debug`
+- `/private/tmp/x5crop_edge_frame_fit_debug2`
 
 Next recommended step:
 - Copy the updated root `X5_Split_v18.py` into any standalone test folder before
   rerunning launchers there; `Test/135负片/正常` currently contains its own script
   copy.
-- Run DebugAnalysis on known weak-separator samples to see whether any orange
-  `enhanced-detected` evidence is accepted and whether its visual mark is useful.
+- Run DebugAnalysis on additional difficult weak-separator samples and confirm
+  new `edge-pair` evidence does not push questionable files over the confidence
+  threshold.
