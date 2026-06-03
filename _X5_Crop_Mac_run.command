@@ -2,6 +2,10 @@
 
 cd "$(dirname "$0")" || exit 1
 
+FORMAT="${1:-}"
+STRIP="${2:-full}"
+MODE="${3:-normal}"
+
 close_terminal_window() {
     case "${TERM_PROGRAM:-}" in
         Apple_Terminal)
@@ -22,6 +26,10 @@ finish() {
 }
 
 SCRIPT="./X5_Crop.py"
+if [ -z "$FORMAT" ]; then
+    echo "Missing format."
+    finish 1
+fi
 if [ ! -f "$SCRIPT" ]; then
     echo "X5_Crop.py was not found in this folder."
     echo "Put this launcher in the same folder as X5_Crop.py and your TIFF scans."
@@ -39,15 +47,24 @@ else
     finish 1
 fi
 
-echo "X5 Crop V2 launcher"
+echo "X5 Crop V2 ${FORMAT} ${STRIP} launcher"
 echo "Folder: $(pwd)"
 echo
 echo "This will process TIFF files in this folder."
 echo "Output: split_output"
 echo "Existing output files will not be overwritten."
+if [ "$MODE" = "debug" ]; then
+    echo "Debug analysis: split_output/_debug_analysis"
+    echo "Dry run: no cropped TIFF files will be written."
+fi
 echo
 
-$PYTHON "$SCRIPT" "." --report
+ARGS=("$SCRIPT" "." --format "$FORMAT" --strip "$STRIP" --report)
+if [ "$MODE" = "debug" ]; then
+    ARGS+=(--debug-analysis --dry-run)
+fi
+
+$PYTHON "${ARGS[@]}"
 EXITCODE=$?
 
 echo

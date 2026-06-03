@@ -107,6 +107,19 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Disabled default format guessing in the active CLI: `--format` is now required
+  and only accepts explicit formats (`135`, `half`, `xpan`, `120-645`,
+  `120-66`, `120-67`).
+- Disabled launcher-driven strip guessing: `--strip` now accepts only `full` or
+  `partial`, defaults to `full`, and partial/head handling must be explicitly
+  selected.
+- Replaced the old generic macOS and Windows launchers with format-specific
+  launchers. Normal launchers pass `--strip full`; `_head` launchers pass
+  `--strip partial`; `_debug` launchers add `--debug-analysis --dry-run`.
+- Added shared helper launchers `_X5_Crop_Mac_run.command` and
+  `_X5_Crop_win_run.bat` so each format wrapper stays small and parameter-only.
+- Updated `README.md` to describe the new choose-format-first workflow and
+  explain that the goal is fewer false high-confidence results, not easier PASS.
 - Added per-image V2 analysis caching so `gray_work` and content evidence are
   computed once per image/layout and reused by content candidates and candidate
   calibration.
@@ -167,9 +180,10 @@ Changed:
 - Debug boxes now use different semi-transparent fills for each crop area instead
   of blue outlines.
 - Moved v17/v18 reference scripts into `archive/`.
-- Simplified launcher names to `X5_Crop_Mac.command`,
-  `X5_Crop_Mac_debug.command`, `X5_Crop_win.bat`, and
-  `X5_Crop_win_debug.bat`.
+- Earlier simple generic launchers have been removed in favor of explicit
+  format/head/debug launchers such as `X5_Crop_Mac_135.command`,
+  `X5_Crop_Mac_135_head.command`, `X5_Crop_win_135.bat`, and
+  `X5_Crop_win_135_head_debug.bat`.
 - Default bleed is now long-axis 15px and short-axis 10px: horizontal strips are
   left/right 15px and top/bottom 10px; vertical strips are top/bottom 15px and
   left/right 10px.
@@ -192,6 +206,24 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
+- `bash -n _X5_Crop_Mac_run.command X5_Crop_Mac_*.command`
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 2.0`.
+- `python3 X5_Crop.py --help` shows `--format` as required and `--strip` choices
+  as only `full,partial`.
+- Confirmed running without `--format` fails with argparse error:
+  `the following arguments are required: --format`.
+- Confirmed `Test/135/X5_00019.tif` with `--format 135 --strip full --report
+  --dry-run --no-copy-review-files` remains `approved_auto` as a 6-frame `135`
+  result; runtime was about 6.3 seconds.
+- Confirmed `Test/135/X5_00019.tif` DebugAnalysis with explicit full 135 mode
+  writes `/private/tmp/x5crop_explicit_debug_19/_debug_analysis/X5_00019_debug_analysis.jpg`;
+  runtime was about 6.9 seconds.
+- Confirmed `Test/135/X5_00038.tif` with `--format 135 --strip partial --report
+  --dry-run --no-copy-review-files` stays `needs_review`, not auto-exported,
+  despite strong content candidates; runtime was about 21.0 seconds.
+- Confirmed reports for explicit full/head runs show `v2_competition.formats`
+  as only `['135']`, proving the selector is no longer competing across formats.
 - Profiled V2 before optimization: `Test/135/X5_00019.tif` took about 23 seconds
   under `cProfile`, dominated by repeated content evidence generation.
 - After content caching, `Test/135/X5_00019.tif` dropped to about 12.6 seconds
@@ -248,7 +280,7 @@ Verified:
 - Confirmed narrow/difficult `Test/X5_test_72.tif` and `X5_test_74.tif` remain
   `needs_review` rather than being promoted by content evidence.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
-- `bash -n X5_Crop_Mac.command X5_Crop_Mac_debug.command`
+- `bash -n _X5_Crop_Mac_run.command X5_Crop_Mac_*.command`
 - `python3 X5_Crop.py --version`
 - `python3 X5_Crop.py --help`
 - Verified vertical bleed mapping with `Box.expand(15, 10, ...)` plus
@@ -291,6 +323,9 @@ Not verified:
 
 Known local-only files:
 - `Test/`
+- `/private/tmp/x5crop_explicit_full_19`
+- `/private/tmp/x5crop_explicit_head_38`
+- `/private/tmp/x5crop_explicit_debug_19`
 - `/private/tmp/x5crop_v1_debug_001`
 - `/private/tmp/x5crop_v1_debug_11`
 - `/private/tmp/x5crop_v1_debug_11b`

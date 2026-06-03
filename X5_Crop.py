@@ -71,9 +71,9 @@ FORMATS: dict[str, FilmFormat] = {
 }
 
 
-FORMAT_CHOICES = ("auto", *FORMATS.keys())
+FORMAT_CHOICES = tuple(FORMATS.keys())
 LAYOUT_CHOICES = ("auto", "horizontal", "vertical")
-STRIP_CHOICES = ("auto", "full", "partial")
+STRIP_CHOICES = ("full", "partial")
 DESKEW_CHOICES = ("off", "auto")
 ANALYSIS_CHOICES = ("off", "auto", "always")
 COMPRESSION_CHOICES = ("none", "same")
@@ -3081,8 +3081,6 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
             detection.review_reasons.append("content_evidence_weak")
 
     if detection.confidence < config.confidence_threshold:
-        if config.format_auto:
-            detection.review_reasons.append("format_auto_low_confidence")
         if detection.detail.get("partial_best"):
             detection.review_reasons.append("likely_partial_strip")
         if float(detection.detail.get("outer_area_spread_ratio", 0.0)) >= 0.20:
@@ -3178,9 +3176,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="X5 Crop V2 candidate-scored single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
-    parser.add_argument("--format", choices=FORMAT_CHOICES, default="auto", help="auto detects 135 vs 120 family. half/xpan require explicit selection.")
+    parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")
     parser.add_argument("--layout", choices=LAYOUT_CHOICES, default="auto", help="auto/horizontal/vertical single-strip layout.")
-    parser.add_argument("--strip", choices=STRIP_CHOICES, default="auto", help="full, partial, or auto full-then-partial.")
+    parser.add_argument("--strip", choices=STRIP_CHOICES, default="full", help="full strip or partial/head mode.")
     parser.add_argument("-n", "--count", type=int, default=None, help="Override frame count.")
     parser.add_argument("--page", type=int, default=0, help="TIFF page index; default 0.")
     parser.add_argument("--bleed", type=int, default=None, help="Bleed in pixels on all sides; overrides layout-aware defaults.")
@@ -3216,11 +3214,11 @@ def config_from_args(args: argparse.Namespace) -> Config:
         shape = tif.pages[int(args.page)].shape
     height, width = int(shape[0]), int(shape[1])
 
-    format_auto = str(args.format) == "auto"
-    film_format = infer_format_from_holder(width, height) if format_auto else str(args.format)
+    format_auto = False
+    film_format = str(args.format)
     fmt = FORMATS[film_format]
     count = int(fmt.default_count if args.count is None else args.count)
-    if not format_auto and count not in fmt.allowed_counts:
+    if count not in fmt.allowed_counts:
         allowed = ", ".join(str(x) for x in fmt.allowed_counts)
         raise ValueError(f"--format {fmt.name} allows --count values: {allowed}")
     layout_auto = str(args.layout) == "auto"
