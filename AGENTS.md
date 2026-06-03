@@ -113,11 +113,14 @@ Changed:
 - Disabled launcher-driven strip guessing: `--strip` now accepts only `full` or
   `partial`, defaults to `full`, and partial/head handling must be explicitly
   selected.
-- Replaced the old generic macOS and Windows launchers with format-specific
-  launchers. Normal launchers pass `--strip full`; `_head` launchers pass
-  `--strip partial`; `_debug` launchers add `--debug-analysis --dry-run`.
+- Replaced the large set of format-specific macOS and Windows launchers with
+  compact prompt-based launchers. The launcher asks for format at runtime:
+  blank/`135`, `xpan`, `half`, `645`, `66`, or `67`.
+- Kept partial/head handling as a separate launcher family:
+  `X5_Crop_Mac_partial.command` / `X5_Crop_win_partial.bat`; debug variants add
+  `--debug-analysis --dry-run`.
 - Added shared helper launchers `_X5_Crop_Mac_run.command` and
-  `_X5_Crop_win_run.bat` so each format wrapper stays small and parameter-only.
+  `_X5_Crop_win_run.bat` so format mapping and prompt behavior are centralized.
 - Updated `README.md` to describe the new choose-format-first workflow and
   explain that the goal is fewer false high-confidence results, not easier PASS.
 - Added per-image V2 analysis caching so `gray_work` and content evidence are
@@ -180,10 +183,10 @@ Changed:
 - Debug boxes now use different semi-transparent fills for each crop area instead
   of blue outlines.
 - Moved v17/v18 reference scripts into `archive/`.
-- Earlier simple generic launchers have been removed in favor of explicit
-  format/head/debug launchers such as `X5_Crop_Mac_135.command`,
-  `X5_Crop_Mac_135_head.command`, `X5_Crop_win_135.bat`, and
-  `X5_Crop_win_135_head_debug.bat`.
+- Launcher surface is now intentionally small: `X5_Crop_Mac.command`,
+  `X5_Crop_Mac_debug.command`, `X5_Crop_Mac_partial.command`,
+  `X5_Crop_Mac_partial_debug.command`, plus the corresponding Windows `.bat`
+  files.
 - Default bleed is now long-axis 15px and short-axis 10px: horizontal strips are
   left/right 15px and top/bottom 10px; vertical strips are top/bottom 15px and
   left/right 10px.
@@ -206,6 +209,13 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `bash -n _X5_Crop_Mac_run.command X5_Crop_Mac.command
+  X5_Crop_Mac_debug.command X5_Crop_Mac_partial.command
+  X5_Crop_Mac_partial_debug.command`
+- Prompt smoke tests on `_X5_Crop_Mac_run.command` confirmed blank input selects
+  `135`, `645` maps to `120-645`, and `xpan` maps to `xpan`. The repository root
+  has no TIFF files, so these mapping tests intentionally stopped after
+  `No TIFF files found`.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n _X5_Crop_Mac_run.command X5_Crop_Mac_*.command`
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 2.0`.

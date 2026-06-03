@@ -2,9 +2,8 @@
 
 cd "$(dirname "$0")" || exit 1
 
-FORMAT="${1:-}"
-STRIP="${2:-full}"
-MODE="${3:-normal}"
+STRIP="${1:-full}"
+MODE="${2:-normal}"
 
 close_terminal_window() {
     case "${TERM_PROGRAM:-}" in
@@ -26,10 +25,6 @@ finish() {
 }
 
 SCRIPT="./X5_Crop.py"
-if [ -z "$FORMAT" ]; then
-    echo "Missing format."
-    finish 1
-fi
 if [ ! -f "$SCRIPT" ]; then
     echo "X5_Crop.py was not found in this folder."
     echo "Put this launcher in the same folder as X5_Crop.py and your TIFF scans."
@@ -47,7 +42,7 @@ else
     finish 1
 fi
 
-echo "X5 Crop V2 ${FORMAT} ${STRIP} launcher"
+echo "X5 Crop V2 ${STRIP} launcher"
 echo "Folder: $(pwd)"
 echo
 echo "This will process TIFF files in this folder."
@@ -57,6 +52,44 @@ if [ "$MODE" = "debug" ]; then
     echo "Debug analysis: split_output/_debug_analysis"
     echo "Dry run: no cropped TIFF files will be written."
 fi
+echo
+
+echo "Choose film format:"
+echo "  [Return] or 135 = 135"
+echo "  xpan = XPAN"
+echo "  half = half-frame"
+echo "  645 = 120-645"
+echo "  66 = 120-66"
+echo "  67 = 120-67"
+echo
+read -r -p "Format [135]: " FORMAT_INPUT
+FORMAT_INPUT="$(printf '%s' "$FORMAT_INPUT" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+case "$FORMAT_INPUT" in
+    ""|135)
+        FORMAT="135"
+        ;;
+    xpan)
+        FORMAT="xpan"
+        ;;
+    half)
+        FORMAT="half"
+        ;;
+    645|120645|120-645)
+        FORMAT="120-645"
+        ;;
+    66|12066|120-66)
+        FORMAT="120-66"
+        ;;
+    67|12067|120-67)
+        FORMAT="120-67"
+        ;;
+    *)
+        echo "Unknown format: $FORMAT_INPUT"
+        echo "Use Return/135, xpan, half, 645, 66, or 67."
+        finish 1
+        ;;
+esac
+echo "Selected format: $FORMAT"
 echo
 
 ARGS=("$SCRIPT" "." --format "$FORMAT" --strip "$STRIP" --report)

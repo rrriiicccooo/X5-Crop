@@ -3,18 +3,10 @@ setlocal
 
 cd /d "%~dp0"
 
-set "FORMAT=%~1"
-set "STRIP=%~2"
-set "MODE=%~3"
+set "STRIP=%~1"
+set "MODE=%~2"
 if "%STRIP%"=="" set "STRIP=full"
 if "%MODE%"=="" set "MODE=normal"
-
-if "%FORMAT%"=="" (
-    echo Missing format.
-    echo.
-    pause
-    exit /b 1
-)
 
 set "SCRIPT=%~dp0X5_Crop.py"
 if not exist "%SCRIPT%" (
@@ -42,7 +34,7 @@ if %errorlevel%==0 (
     )
 )
 
-echo X5 Crop V2 %FORMAT% %STRIP% launcher
+echo X5 Crop V2 %STRIP% launcher
 echo Folder: %cd%
 echo.
 echo This will process TIFF files in this folder.
@@ -52,6 +44,51 @@ if /i "%MODE%"=="debug" (
     echo Debug analysis: split_output\_debug_analysis
     echo Dry run: no cropped TIFF files will be written.
 )
+echo.
+
+echo Choose film format:
+echo   [Enter] or 135 = 135
+echo   xpan = XPAN
+echo   half = half-frame
+echo   645 = 120-645
+echo   66 = 120-66
+echo   67 = 120-67
+echo.
+set /p "FORMAT_INPUT=Format [135]: "
+set "FORMAT_INPUT=%FORMAT_INPUT: =%"
+if "%FORMAT_INPUT%"=="" set "FORMAT_INPUT=135"
+if /i "%FORMAT_INPUT%"=="135" (
+    set "FORMAT=135"
+) else if /i "%FORMAT_INPUT%"=="xpan" (
+    set "FORMAT=xpan"
+) else if /i "%FORMAT_INPUT%"=="half" (
+    set "FORMAT=half"
+) else if /i "%FORMAT_INPUT%"=="645" (
+    set "FORMAT=120-645"
+) else if /i "%FORMAT_INPUT%"=="120645" (
+    set "FORMAT=120-645"
+) else if /i "%FORMAT_INPUT%"=="120-645" (
+    set "FORMAT=120-645"
+) else if /i "%FORMAT_INPUT%"=="66" (
+    set "FORMAT=120-66"
+) else if /i "%FORMAT_INPUT%"=="12066" (
+    set "FORMAT=120-66"
+) else if /i "%FORMAT_INPUT%"=="120-66" (
+    set "FORMAT=120-66"
+) else if /i "%FORMAT_INPUT%"=="67" (
+    set "FORMAT=120-67"
+) else if /i "%FORMAT_INPUT%"=="12067" (
+    set "FORMAT=120-67"
+) else if /i "%FORMAT_INPUT%"=="120-67" (
+    set "FORMAT=120-67"
+) else (
+    echo Unknown format: %FORMAT_INPUT%
+    echo Use Enter/135, xpan, half, 645, 66, or 67.
+    echo.
+    pause
+    exit /b 1
+)
+echo Selected format: %FORMAT%
 echo.
 
 if /i "%MODE%"=="debug" (
