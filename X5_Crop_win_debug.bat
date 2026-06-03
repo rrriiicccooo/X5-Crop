@@ -29,7 +29,7 @@ if %errorlevel%==0 (
     )
 )
 
-echo X5 Crop V1 DEBUG ANALYSIS launcher
+echo X5 Crop V2 DEBUG ANALYSIS launcher
 echo Folder: %cd%
 echo.
 echo This will analyze TIFF files in this folder and write one adaptive debug-analysis JPG.

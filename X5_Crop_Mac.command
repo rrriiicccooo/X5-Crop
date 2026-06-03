@@ -39,7 +39,7 @@ else
     finish 1
 fi
 
-echo "X5 Crop V1 launcher"
+echo "X5 Crop V2 launcher"
 echo "Folder: $(pwd)"
 echo
 echo "This will process TIFF files in this folder."

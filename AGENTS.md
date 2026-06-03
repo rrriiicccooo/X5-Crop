@@ -107,6 +107,18 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Promoted the active script to X5 Crop V2 (`VERSION = "2.0"`).
+- Reworked final detection into a multi-candidate scorer: V2 now generates
+  separator and content candidates across plausible format/count/strip models,
+  scores each candidate with geometry, separator, and content evidence, and
+  records the top candidates under `v2_competition`.
+- Added explicit `selected_candidate` and `selection_override` report fields so
+  reports can show when a high-scoring partial content candidate lost to a
+  plausible full-strip candidate.
+- Limited auto-mode V2 partial candidates to useful counts and reduced partial
+  offset probing to keep runtime closer to practical launcher use. Explicit
+  `--strip partial` still keeps the fuller partial search.
+- Updated README and launcher labels from V1 to V2.
 - Tightened the final detector relationship into a joint evidence gate:
   separator evidence owns hard crop-line confirmation, content evidence validates
   the proposed photos, and format geometry constrains plausible frame shape and
@@ -170,9 +182,20 @@ Changed:
   automatic export.
 - Removed v18 launchers and added cleaner `X5_Crop_*` macOS and Windows
   launchers.
-- Rewrote `README.md` as the current Chinese user guide for X5 Crop V1.
+- Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 2.0`.
+- Confirmed `Test/135/X5_00019.tif` remains `approved_auto` as a 6-frame `135`
+  model after the V2 scorer. Runtime was about 25 seconds on this machine.
+- Confirmed `Test/135/X5_00025.tif` remains `approved_auto` as a 6-frame `135`
+  model after the V2 scorer.
+- Confirmed `Test/120/X5_test_43.tif` remains `needs_review` as a 3-frame
+  `120-66` model, even though 2-frame content partial candidates score highly.
+- Confirmed `Test/120/X5_test_58.tif` remains `needs_review` because content is
+  plausible but hard separator support is weak.
+- Generated DebugAnalysis for `Test/120/X5_test_43.tif` and visually confirmed
+  the final 3-frame review result still renders correctly.
 - Confirmed `Test/135/X5_00019.tif` remains `approved_auto` as a 6-frame `135`
   model, with joint decision `separator_hard_evidence_passed_and_content_validated`.
 - Confirmed `Test/135/X5_00025.tif` remains `approved_auto` as a 6-frame `135`
@@ -239,9 +262,11 @@ Verified:
 
 Not verified:
 - Did not run Windows `.bat` launchers on Windows.
-- Did not run a non-dry-run TIFF export after creating X5 Crop V1.
+- Did not run a non-dry-run TIFF export after creating X5 Crop V2.
 - Did not create hand-labeled ground-truth fixtures for all `Test/` images; this
   pass used visual inspection plus representative dry-runs.
+- Did not run the V2 scorer across all 79 Test TIFFs yet. Current V2 runtime is
+  slower than V1 because it scores multiple candidates per file.
 
 Known local-only files:
 - `Test/`
@@ -280,8 +305,25 @@ Known local-only files:
 - `/private/tmp/x5crop_joint_gate_58`
 - `/private/tmp/x5crop_joint_gate_60`
 - `/private/tmp/x5crop_joint_gate_63`
+- `/private/tmp/x5crop_v2_19`
+- `/private/tmp/x5crop_v2_19b`
+- `/private/tmp/x5crop_v2_19c`
+- `/private/tmp/x5crop_v2_19d`
+- `/private/tmp/x5crop_v2_25`
+- `/private/tmp/x5crop_v2_25b`
+- `/private/tmp/x5crop_v2_25c`
+- `/private/tmp/x5crop_v2_25d`
+- `/private/tmp/x5crop_v2_43`
+- `/private/tmp/x5crop_v2_43b`
+- `/private/tmp/x5crop_v2_43c`
+- `/private/tmp/x5crop_v2_43d`
+- `/private/tmp/x5crop_v2_43_debug`
+- `/private/tmp/x5crop_v2_58b`
+- `/private/tmp/x5crop_v2_58c`
+- `/private/tmp/x5crop_v2_58d`
 
 Next recommended step:
-- Continue turning visually reviewed Test samples into a small hand-labeled
-  regression fixture set, especially vertical 120 and narrow 135/xpan-like
-  strips, so future detector changes can be measured against expected counts.
+- Run V2 over a broader Test batch and use `v2_competition` to identify which
+  candidate families are still too aggressive. The next speed improvement should
+  cache content evidence per image/layout instead of recomputing it for each
+  content candidate.

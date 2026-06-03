@@ -29,7 +29,7 @@ if %errorlevel%==0 (
     )
 )
 
-echo X5 Crop V1 launcher
+echo X5 Crop V2 launcher
 echo Folder: %cd%
 echo.
 echo This will process TIFF files in this folder.

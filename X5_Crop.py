@@ -33,7 +33,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "1.0"
+VERSION = "2.0"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 
@@ -95,6 +95,15 @@ CONTENT_AMBIGUITY_REASONS = {
     "content_runs_incomplete",
     "content_aspect_uncertain",
     "content_coverage_weak",
+}
+
+HARD_REVIEW_REASONS = {
+    "content_aspect_conflict",
+    "content_aspect_uncertain",
+    "content_coverage_weak",
+    "outer_box_too_large",
+    "outer_box_uncertain",
+    "unstable_frame_width",
 }
 
 
@@ -1750,12 +1759,258 @@ def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[
 
 
 def content_only_partial_can_pass(detection: Detection, threshold: float, fmt: FilmFormat) -> bool:
+    min_partial_count = 3 if fmt.default_count >= 6 else 2
     return (
         detection.strip_mode == "partial"
         and detection.count < fmt.default_count
+        and detection.count >= min_partial_count
         and detection.confidence >= max(threshold, CONTENT_ONLY_PARTIAL_PASS_MIN_CONFIDENCE)
         and not content_is_ambiguous(detection)
     )
+
+
+def content_support_score(detail: dict[str, Any]) -> float:
+    if not bool(detail.get("used", False)):
+        return 0.0
+    mean_score = min(1.0, float(detail.get("median_mean", 0.0)) / 0.16)
+    coverage_score = min(1.0, float(detail.get("median_coverage", 0.0)) / 0.22)
+    aspect_error = detail.get("max_aspect_error")
+    aspect_score = 0.75 if aspect_error is None else max(0.0, min(1.0, 1.0 - float(aspect_error) / 0.22))
+    support = str(detail.get("support", ""))
+    support_gate = {"ok": 1.0, "weak": 0.72, "low_content": 0.58, "aspect_conflict": 0.35}.get(support, 0.50)
+    return max(0.0, min(1.0, (0.42 * coverage_score + 0.40 * mean_score + 0.18 * aspect_score) * support_gate))
+
+
+def geometry_support_score(detection: Detection, content_detail: dict[str, Any]) -> float:
+    width_cv = float(detection.detail.get("width_cv", 0.0))
+    if width_cv <= 0.0:
+        widths = np.array([box.width for box in detection.frames if box.valid()], dtype=np.float64)
+        width_cv = float(widths.std() / max(1.0, widths.mean())) if widths.size else 1.0
+    width_score = max(0.0, min(1.0, 1.0 - width_cv / 0.040))
+    outer_area = float(detection.detail.get("outer_area_ratio", 0.70))
+    outer_score = 1.0 if 0.35 <= outer_area <= 0.94 else 0.55
+    aspect_error = content_detail.get("max_aspect_error")
+    aspect_score = 0.80 if aspect_error is None else max(0.0, min(1.0, 1.0 - float(aspect_error) / 0.22))
+    count_score = 1.0 if len(detection.frames) == detection.count else 0.0
+    return max(0.0, min(1.0, 0.34 * width_score + 0.24 * outer_score + 0.26 * aspect_score + 0.16 * count_score))
+
+
+def separator_support_score(detection: Detection, hard_detail: dict[str, Any]) -> float:
+    expected = max(0, int(hard_detail.get("expected_gaps", 0)))
+    if expected == 0:
+        return 1.0 if detection.confidence >= 0.85 else min(0.75, detection.confidence)
+    hard = int(hard_detail.get("hard_gaps", 0))
+    grid = int(hard_detail.get("grid_gaps", 0))
+    equal = int(hard_detail.get("equal_gaps", 0))
+    hard_ratio = min(1.0, hard / float(max(1, expected)))
+    model_ratio = min(1.0, (hard + 0.35 * grid + 0.12 * equal) / float(max(1, expected)))
+    return max(0.0, min(1.0, 0.78 * hard_ratio + 0.22 * model_ratio))
+
+
+def candidate_counts_for_format(config: Config, fmt: FilmFormat) -> list[tuple[int, str, tuple[float, ...]]]:
+    def v2_offsets(count: int) -> tuple[float, ...]:
+        offsets = partial_offsets(fmt, count)
+        if config.strip_mode == "partial" or len(offsets) <= 3:
+            return offsets
+        return (0.0, 0.5, 1.0)
+
+    if config.strip_mode == "full":
+        return [(config.count, "full", (0.0,))]
+    if config.strip_mode == "partial":
+        return [
+            (count, "partial", v2_offsets(count))
+            for count in partial_candidates(fmt, None)
+            if count < fmt.default_count
+        ] or [(1, "partial", partial_offsets(fmt, 1))]
+    counts: list[tuple[int, str, tuple[float, ...]]] = [(fmt.default_count, "full", (0.0,))]
+    min_partial_count = 3 if fmt.default_count >= 6 else 2
+    for count in partial_candidates(fmt, None):
+        if min_partial_count <= count < fmt.default_count:
+            counts.append((count, "partial", v2_offsets(count)))
+    seen: set[tuple[int, str]] = set()
+    out: list[tuple[int, str, tuple[float, ...]]] = []
+    for count, strip_mode, offsets in counts:
+        key = (count, strip_mode)
+        if key in seen or count not in fmt.allowed_counts:
+            continue
+        seen.add(key)
+        out.append((count, strip_mode, offsets))
+    return out
+
+
+def v2_format_candidates(config: Config, inferred: FilmFormat) -> list[FilmFormat]:
+    if not config.format_auto:
+        return [inferred]
+    if inferred.family == "35mm":
+        return [FORMATS["135"]]
+    return [FORMATS["120-66"], FORMATS["120-645"], FORMATS["120-67"]]
+
+
+def calibrate_v2_candidate(
+    gray: np.ndarray,
+    detection: Detection,
+    config: Config,
+    fmt: FilmFormat,
+    source: str,
+) -> Detection:
+    candidate = replace(
+        detection,
+        review_reasons=list(detection.review_reasons),
+        detail=dict(detection.detail),
+    )
+    content_detail = content_evidence_detail(gray, candidate)
+    hard_ok, hard_detail = separator_hard_evidence_ok(candidate, config.confidence_threshold)
+    content_score = content_support_score(content_detail)
+    geometry_score = geometry_support_score(candidate, content_detail)
+    separator_score = separator_support_score(candidate, hard_detail) if source == "separator" else 0.0
+    source_bias = 0.03 if source == "separator" else 0.0
+    joint_score = 0.34 * geometry_score + 0.33 * content_score + 0.33 * separator_score + source_bias
+    joint_score = max(0.0, min(1.0, joint_score))
+    support = str(content_detail.get("support", ""))
+    reasons = list(candidate.review_reasons)
+
+    if source == "separator" and not hard_ok:
+        reasons.append("separator_hard_evidence_weak")
+    if support == "aspect_conflict":
+        reasons.append("content_aspect_conflict")
+    elif support == "low_content":
+        reasons.append("content_evidence_weak")
+    elif support == "weak":
+        reasons.append("content_evidence_weak")
+    if source == "content" and not content_only_partial_can_pass(candidate, config.confidence_threshold, fmt):
+        reasons.append("content_only_not_enough_for_auto")
+
+    confidence = max(float(candidate.confidence), joint_score)
+    hard_reasons = HARD_REVIEW_REASONS.intersection(reasons)
+    auto_gate = False
+    if source == "separator":
+        auto_gate = hard_ok and support == "ok" and not hard_reasons
+    elif source == "content":
+        auto_gate = content_only_partial_can_pass(candidate, config.confidence_threshold, fmt)
+
+    if not auto_gate:
+        cap = 0.82 if candidate.strip_mode == "partial" else 0.84
+        confidence = min(confidence, cap)
+        reasons.append("v2_auto_gate_not_satisfied")
+    else:
+        confidence = max(confidence, config.confidence_threshold + min(0.10, joint_score * 0.08))
+
+    candidate.confidence = float(max(0.0, min(1.0, confidence)))
+    candidate.review_reasons = sorted(set(reasons))
+    candidate.detail["analysis_source"] = f"v2_{source}_candidate"
+    candidate.detail["content_evidence"] = content_detail
+    candidate.detail["v2_candidate"] = {
+        "source": source,
+        "joint_score": float(joint_score),
+        "auto_gate": bool(auto_gate),
+        "geometry_score": float(geometry_score),
+        "separator_score": float(separator_score),
+        "content_score": float(content_score),
+        "content_support": support,
+        "separator_hard_evidence": hard_detail,
+    }
+    return candidate
+
+
+def v2_candidate_rank(detection: Detection, threshold: float) -> tuple[int, float, int, float]:
+    candidate = detection.detail.get("v2_candidate", {})
+    joint = float(candidate.get("joint_score", 0.0)) if isinstance(candidate, dict) else 0.0
+    return (
+        1 if detection.confidence >= threshold else 0,
+        float(detection.confidence),
+        int(detection.count),
+        joint,
+    )
+
+
+def choose_detection_v2(gray: np.ndarray, config: Config, inferred: FilmFormat) -> Detection:
+    candidates: list[Detection] = []
+    format_candidates = v2_format_candidates(config, inferred)
+    for fmt in format_candidates:
+        for count, strip_mode, offsets in candidate_counts_for_format(config, fmt):
+            if count not in fmt.allowed_counts:
+                continue
+            for offset in offsets:
+                separator = detect_for_count(gray, config, fmt, count, strip_mode, offset)
+                candidates.append(calibrate_v2_candidate(gray, separator, config, fmt, "separator"))
+                content = content_detection_for_count(gray, config, fmt, count, strip_mode, offset)
+                if content is not None:
+                    candidates.append(calibrate_v2_candidate(gray, content, config, fmt, "content"))
+
+    if not candidates:
+        return choose_detection_with_analysis(gray, config, inferred)
+
+    candidates = sorted(candidates, key=lambda d: v2_candidate_rank(d, config.confidence_threshold), reverse=True)
+    best = candidates[0]
+    selected_by_full_guard = False
+    if best.strip_mode == "partial":
+        best_full = next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate.film_format == best.film_format
+                and candidate.strip_mode == "full"
+                and candidate.count == FORMATS[candidate.film_format].default_count
+                and candidate.confidence >= PARTIAL_FULL_COMPETE_MIN_CONFIDENCE
+            ),
+            None,
+        )
+        if best_full is not None:
+            best_full.review_reasons.append("partial_competes_with_plausible_full_strip")
+            best_full.review_reasons = sorted(set(best_full.review_reasons))
+            best_full.detail["partial_best"] = {
+                "count": int(best.count),
+                "confidence": float(best.confidence),
+                "review_reasons": list(best.review_reasons),
+                "v2_candidate": best.detail.get("v2_candidate", {}),
+            }
+            best = best_full
+            selected_by_full_guard = True
+    second = next((candidate for candidate in candidates if candidate is not best), None)
+    competition = [
+        {
+            "rank": index,
+            "selected": candidate is best,
+            "format": candidate.film_format,
+            "count": int(candidate.count),
+            "strip_mode": candidate.strip_mode,
+            "confidence": float(candidate.confidence),
+            "review_reasons": list(candidate.review_reasons),
+            "v2_candidate": candidate.detail.get("v2_candidate", {}),
+        }
+        for index, candidate in enumerate(candidates[:8], start=1)
+    ]
+    best.detail["v2_competition"] = {
+        "candidate_count": len(candidates),
+        "formats": [fmt.name for fmt in format_candidates],
+        "selected_candidate": {
+            "format": best.film_format,
+            "count": int(best.count),
+            "strip_mode": best.strip_mode,
+            "confidence": float(best.confidence),
+            "review_reasons": list(best.review_reasons),
+            "v2_candidate": best.detail.get("v2_candidate", {}),
+        },
+        "selection_override": "partial_competes_with_plausible_full_strip" if selected_by_full_guard else None,
+        "top_candidates": competition,
+    }
+    if second is not None:
+        margin = float(best.confidence) - float(second.confidence)
+        best.detail["v2_competition"]["margin_to_second"] = margin
+        second_close = margin < 0.04
+        partial_full_conflict = (
+            best.strip_mode != second.strip_mode
+            and min(best.confidence, second.confidence) >= config.confidence_threshold
+        )
+        if (
+            best.confidence >= config.confidence_threshold
+            and not selected_by_full_guard
+            and (second_close or partial_full_conflict)
+        ):
+            best.confidence = min(best.confidence, 0.84)
+            best.review_reasons.append("v2_candidate_competition_uncertain")
+            best.review_reasons = sorted(set(best.review_reasons))
+    return best
 
 
 def choose_content_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Optional[Detection]:
@@ -2671,7 +2926,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         else:
             deskew_detail["skipped"] = "angle_out_of_range"
 
-    detection = choose_detection_with_analysis(gray, config, fmt)
+    detection = choose_detection_v2(gray, config, fmt)
     content_detail = content_evidence_detail(gray, detection)
     detection.detail["content_evidence"] = content_detail
     if bool(content_detail.get("used", False)):
@@ -2778,7 +3033,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V1 single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V2 candidate-scored single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, default="auto", help="auto detects 135 vs 120 family. half/xpan require explicit selection.")
