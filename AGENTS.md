@@ -128,6 +128,11 @@ Changed:
 - Default bleed is now long-axis 15px and short-axis 10px: horizontal strips are
   left/right 15px and top/bottom 10px; vertical strips are top/bottom 15px and
   left/right 10px.
+- Detection is now content-primary: content evidence builds the crop candidate
+  first, while the older separator-based detector is retained as
+  `separator_assist` report data and fallback.
+- Content-primary candidates with mismatched content run counts are capped below
+  the auto-export threshold and marked for review.
 - Content evidence is written into reports and can conservatively downgrade
   clear content/aspect conflicts, but it does not raise difficult files into
   automatic export.
@@ -143,6 +148,13 @@ Verified:
 - Verified vertical bleed mapping with `Box.expand(15, 10, ...)` plus
   `map_work_box(..., "vertical", ...)`: long-axis bleed maps to original
   top/bottom, short-axis bleed maps to original left/right.
+- Ran content-primary dry-runs on `Test/X5_test_19.tif`, `25.tif`, `31.tif`,
+  `20.tif`, `22.tif`, `23.tif`, and `30.tif`; reports show
+  `analysis_source=content_primary` with separator data under
+  `separator_assist`.
+- Confirmed `X5_test_25.tif` is forced to `needs_review` when content detects 7
+  usable runs for a 6-frame target (`content_run_count_mismatch`), even though
+  separator assist passes.
 - Ran DebugAnalysis dry-runs on `Test/135负片/正常/001.tif`, `11.tif`, and
   `X5 022.tif`.
 - Confirmed `001.tif` remains `needs_review` at confidence `0.676` and produces
@@ -172,6 +184,12 @@ Known local-only files:
 - `/private/tmp/x5crop_debuganalysis_only_001`
 - `/private/tmp/x5crop_clean_debug_001`
 - `/private/tmp/x5crop_reordered_panels_001`
+- `/private/tmp/x5crop_content_primary_19`
+- `/private/tmp/x5crop_content_primary_25`
+- `/private/tmp/x5crop_content_primary_31`
+- `/private/tmp/x5crop_content_primary_19b`
+- `/private/tmp/x5crop_content_primary_25b`
+- `/private/tmp/x5crop_content_primary_batch`
 
 Next recommended step:
 - Run DebugAnalysis on difficult weak-separator and partial-strip samples and

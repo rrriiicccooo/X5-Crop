@@ -487,6 +487,169 @@ def content_evidence_detail(gray: np.ndarray, detection: Detection) -> dict[str,
     }
 
 
+def content_profile_runs(evidence: np.ndarray, outer: Box, count: int) -> tuple[list[tuple[int, int]], dict[str, Any]]:
+    crop = evidence[outer.top:outer.bottom, outer.left:outer.right].astype(np.float32) / 255.0
+    if crop.size == 0:
+        return [], {"reason": "empty_content_outer"}
+    profile = crop.mean(axis=0)
+    smooth_window = max(5, int(round(max(1, outer.width) * 0.010)))
+    smoothed = smooth_1d(profile.astype(np.float32), smooth_window)
+    p35, p65, p90 = sampled_percentile(smoothed, [35, 65, 90])
+    threshold = max(0.035, min(0.40, float(p35 + (p90 - p35) * 0.38), float(p65) * 0.82))
+    runs = runs_from_mask(smoothed >= threshold)
+    min_width = max(6, int(round(outer.width / max(1, count) * 0.20)))
+    filtered: list[tuple[int, int]] = []
+    for start, end in runs:
+        if end - start >= min_width:
+            filtered.append((outer.left + start, outer.left + end))
+    return filtered, {
+        "profile_threshold": threshold,
+        "profile_smooth_window": smooth_window,
+        "profile_percentiles": {"p35": float(p35), "p65": float(p65), "p90": float(p90)},
+        "raw_run_count": len(runs),
+        "usable_run_count": len(filtered),
+        "min_run_width": min_width,
+    }
+
+
+def select_content_runs(runs: list[tuple[int, int]], count: int) -> list[tuple[int, int]]:
+    if len(runs) <= count:
+        return runs
+    ordered = sorted(runs, key=lambda run: run[1] - run[0], reverse=True)[:count]
+    return sorted(ordered)
+
+
+def content_detection_for_count(
+    gray: np.ndarray,
+    config: Config,
+    fmt: FilmFormat,
+    count: int,
+    strip_mode: str,
+    offset_fraction: float = 0.0,
+) -> Optional[Detection]:
+    gray_work = work_gray(gray, config.layout)
+    wh, ww = gray_work.shape
+    evidence = make_content_evidence_gray(gray_work)
+    evidence_float = evidence.astype(np.float32) / 255.0
+    p55, p75, p92 = sampled_percentile(evidence_float, [55, 75, 92])
+    mask_threshold = max(0.045, min(0.45, float(p55 + (p92 - p55) * 0.34), float(p75) * 0.78))
+    mask = evidence_float >= mask_threshold
+    outer = bbox_from_mask(mask, min_row_fraction=0.008, min_col_fraction=0.008)
+    if outer is None or outer.width < max(60, int(ww * 0.08)) or outer.height < max(30, int(wh * 0.08)):
+        return None
+    outer = outer.expand(max(2, int(round(ww * 0.002))), max(2, int(round(wh * 0.002))), ww, wh)
+
+    expected_aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
+    if expected_aspect is None or expected_aspect <= 0:
+        return None
+    runs, run_detail = content_profile_runs(evidence, outer, count)
+    selected_runs = select_content_runs(runs, count)
+
+    frame_h = max(1.0, float(outer.height))
+    expected_w = max(8.0, frame_h * expected_aspect)
+    raw_boxes: list[Box] = []
+    placement = "content_runs" if len(selected_runs) >= count else "content_grid_fallback"
+    if placement == "content_runs":
+        for start, end in selected_runs[:count]:
+            center = (float(start) + float(end)) * 0.5
+            left = int(round(center - expected_w * 0.5))
+            right = int(round(center + expected_w * 0.5))
+            raw_boxes.append(Box(left, outer.top, right, outer.bottom).clamp(ww, wh))
+    else:
+        if strip_mode == "partial" and count < fmt.default_count:
+            pitch = max(expected_w, outer.width / float(max(1, fmt.default_count)))
+            total_width = pitch * count
+            origin = max(0.0, min(float(outer.width) - total_width, (float(outer.width) - total_width) * offset_fraction))
+            start_x = outer.left + origin
+        else:
+            pitch = max(expected_w, outer.width / float(max(1, count)))
+            total_width = pitch * count
+            start_x = outer.left + max(0.0, (outer.width - total_width) * 0.5)
+        for i in range(count):
+            center = start_x + pitch * (i + 0.5)
+            raw_boxes.append(Box(int(round(center - expected_w * 0.5)), outer.top, int(round(center + expected_w * 0.5)), outer.bottom).clamp(ww, wh))
+
+    raw_boxes = [box for box in raw_boxes if box.valid()]
+    if len(raw_boxes) != count:
+        return None
+
+    boxes_work = [box.expand(config.bleed_x, config.bleed_y, ww, wh) for box in raw_boxes]
+    boxes = [map_work_box(box, config.layout, gray.shape[1], gray.shape[0]) for box in boxes_work]
+    outer_original = map_work_box(outer, config.layout, gray.shape[1], gray.shape[0])
+    gaps: list[Gap] = []
+    for index in range(1, count):
+        left_box = raw_boxes[index - 1]
+        right_box = raw_boxes[index]
+        center = (float(left_box.right) + float(right_box.left)) * 0.5 - float(outer.left)
+        gaps.append(Gap(index, center, 0.0, "content", float(left_box.right - outer.left), float(right_box.left - outer.left)))
+
+    means: list[float] = []
+    coverages: list[float] = []
+    for box in raw_boxes:
+        crop = evidence_float[box.top:box.bottom, box.left:box.right]
+        if crop.size:
+            means.append(float(crop.mean()))
+            coverages.append(float((crop >= mask_threshold).mean()))
+    median_mean = float(np.median(np.array(means, dtype=np.float32))) if means else 0.0
+    median_coverage = float(np.median(np.array(coverages, dtype=np.float32))) if coverages else 0.0
+    run_conf = min(1.0, len(selected_runs) / float(max(1, count)))
+    coverage_conf = min(1.0, median_coverage / 0.22)
+    mean_conf = min(1.0, median_mean / 0.16)
+    aspect_errors = [abs((box.width / max(1.0, float(box.height))) - expected_aspect) / expected_aspect for box in raw_boxes]
+    max_aspect_error = float(max(aspect_errors)) if aspect_errors else 1.0
+    aspect_conf = max(0.0, min(1.0, 1.0 - max_aspect_error / 0.18))
+    confidence = 0.38 * coverage_conf + 0.30 * mean_conf + 0.22 * run_conf + 0.10 * aspect_conf
+    reasons: list[str] = []
+    if placement != "content_runs":
+        confidence = min(confidence, 0.82)
+        reasons.append("content_grid_fallback")
+    if len(runs) != count:
+        confidence = min(confidence, 0.84)
+        reasons.append("content_run_count_mismatch")
+    if run_conf < 1.0:
+        confidence = min(confidence, 0.84)
+        reasons.append("content_runs_incomplete")
+    if median_coverage < 0.14:
+        confidence = min(confidence, 0.82)
+        reasons.append("content_coverage_weak")
+    if max_aspect_error > 0.18:
+        confidence = min(confidence, 0.82)
+        reasons.append("content_aspect_uncertain")
+    if strip_mode == "partial":
+        confidence = min(confidence, 0.84)
+        reasons.append("partial_strip_count_candidate")
+    if confidence < config.confidence_threshold and not reasons:
+        reasons.append("content_confidence_low")
+
+    detail = {
+        "analysis_source": "content_primary",
+        "candidate_count": count,
+        "offset_fraction": float(offset_fraction),
+        "layout": config.layout,
+        "outer_candidate": "content_evidence",
+        "work_outer": asdict(outer),
+        "content_primary": {
+            "used": True,
+            "placement": placement,
+            "mask_threshold": mask_threshold,
+            "expected_frame_aspect": expected_aspect,
+            "expected_frame_width": expected_w,
+            "median_mean": median_mean,
+            "median_coverage": median_coverage,
+            "run_conf": run_conf,
+            "coverage_conf": coverage_conf,
+            "mean_conf": mean_conf,
+            "max_aspect_error": max_aspect_error,
+            "raw_boxes": [asdict(box) for box in raw_boxes],
+            **run_detail,
+        },
+        "gap_centers": [gap.center for gap in gaps],
+        "gap_scores": [gap.score for gap in gaps],
+        "gap_methods": [gap.method for gap in gaps],
+    }
+    return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, float(max(0.0, min(1.0, confidence))), sorted(set(reasons)), detail)
+
+
 def read_tiff(path: Path, page_index: int) -> tuple[np.ndarray, np.ndarray, ImageProfile, list[str], Any]:
     warnings: list[str] = []
     with tifffile.TiffFile(path) as tif:
@@ -1522,6 +1685,31 @@ def partial_edge_hint(profile: np.ndarray, origin: float, pitch: float, count: i
     }
 
 
+def choose_content_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Optional[Detection]:
+    if config.strip_mode == "full":
+        return content_detection_for_count(gray, config, fmt, config.count, "full")
+    if config.strip_mode == "partial":
+        detections = [
+            detection
+            for c in partial_candidates(fmt, None)
+            for offset in partial_offsets(fmt, c)
+            for detection in [content_detection_for_count(gray, config, fmt, c, "partial", offset)]
+            if detection is not None
+        ]
+        return max(detections, key=lambda d: detection_rank(d, config.confidence_threshold)) if detections else None
+
+    full = content_detection_for_count(gray, config, fmt, config.count, "full")
+    partials = [
+        detection
+        for c in partial_candidates(fmt, full)
+        for offset in partial_offsets(fmt, c)
+        for detection in [content_detection_for_count(gray, config, fmt, c, "partial", offset)]
+        if detection is not None
+    ]
+    candidates = [d for d in [full, *partials] if d is not None]
+    return max(candidates, key=lambda d: detection_rank(d, config.confidence_threshold)) if candidates else None
+
+
 def choose_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detection:
     if config.strip_mode == "full":
         return detect_for_count(gray, config, fmt, config.count, "full")
@@ -1554,9 +1742,25 @@ def choose_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detec
 
 
 def choose_detection_with_analysis(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detection:
-    base = choose_detection(gray, config, fmt)
-    base.detail["analysis_source"] = "base_outer_separator_evidence" if config.analysis != "off" else "base"
-    return base
+    separator = choose_detection(gray, config, fmt)
+    separator.detail["analysis_source"] = "separator_assist" if config.analysis != "off" else "separator_assist_no_analysis"
+    content = choose_content_detection(gray, config, fmt)
+    if content is None:
+        separator.detail["content_primary"] = {"used": False, "reason": "no_valid_content_candidate"}
+        return separator
+
+    content.detail["separator_assist"] = {
+        "confidence": float(separator.confidence),
+        "count": int(separator.count),
+        "strip_mode": separator.strip_mode,
+        "review_reasons": list(separator.review_reasons),
+        "gap_methods": list(separator.detail.get("gap_methods", [])),
+        "outer_box": asdict(separator.outer),
+        "frame_boxes": [asdict(box) for box in separator.frames],
+    }
+    if separator.confidence >= config.confidence_threshold and content.confidence < config.confidence_threshold:
+        content.review_reasons.append("separator_assist_passed_but_content_primary_review")
+    return content
 
 
 def fit_line(points: list[tuple[float, float]]) -> Optional[dict[str, Any]]:
