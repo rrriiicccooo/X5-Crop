@@ -102,33 +102,50 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Aligned the v18 debug overlay base colors with v17: green outer strip frame,
-  blue output crop boxes, and red image-detected separator lines.
-- Kept v18-only separator colors for newer inference methods: yellow for grid
-  spacing, purple for equal/fallback spacing, and white for unknown/other
-  sources.
-- Updated `README.md` to document the debug colors and to state that default
-  exported TIFF crops keep the v17-style 10px bleed.
+- Tightened v18 outer-candidate selection so near-full-canvas boxes are ignored
+  when smaller valid strip candidates exist.
+- Tightened 135 confidence scoring so very even geometry no longer auto-passes
+  when too many separators are equal/fallback splits or too few real separators
+  were detected.
+- Debug and DebugAnalysis JPGs now show a PASS/REVIEW confidence badge in the
+  image itself.
+- Detected separator marks now preserve and draw the detected separator band
+  width where available, instead of always drawing a single line.
+- Updated `README.md` to explain PASS/REVIEW badges and the difference between
+  red detected separator regions and yellow/purple inferred cut lines.
 
 Verified:
 - `python3 -m py_compile X5_Split_v18.py`
-- Ran report dry-runs on a synthetic TIFF with default bleed and with
-  `--bleed 0`; confirmed default frame boxes expand by 10px on each side, with
-  clamping at image boundaries where needed.
-- Ran `--debug --dry-run` on the synthetic TIFF and confirmed the JPG contains
-  green outer-frame and blue crop-box pixels. The synthetic case did not produce
-  image-detected separators, so red-line rendering was verified by code path.
+- Ran `--debug-analysis --dry-run --format 135 --no-copy-review-files` against
+  samples from `Test/135负片/正常`: `001.tif`, `11.tif`, `15.tif`, and
+  `X5 022.tif`.
+- Confirmed `001.tif` changed from previous approved behavior to
+  `needs_review` with `mostly_equal_split` and
+  `too_few_detected_separators`.
+- Confirmed `X5 022.tif` becomes `needs_review` when all five separators are
+  equal/fallback splits.
+- Confirmed `11.tif` and `15.tif` still pass with smaller non-full outer boxes
+  and two real detected separators plus grid-derived separators.
+- Visually inspected generated DebugAnalysis JPGs for `001.tif` and `11.tif`;
+  PASS/REVIEW badges are visible and red detected separators are drawn as
+  regions where width data exists.
+- Ran standalone `--debug --dry-run` on `001.tif` and confirmed the `_debug`
+  JPG also includes the REVIEW badge.
 
 Not verified:
-- Did not run against real local `Test/` TIFF samples.
 - Did not run Windows `.bat` launchers after this color/doc change.
-- Did not complete a real export on the synthetic TIFF because its generated
-  metadata trips the script's strict `ResolutionUnit` preservation check.
+- Did not complete a full-directory run over all `Test/135负片/正常` samples;
+  the first full run was stopped because it was taking too long.
+- Did not run a non-dry-run export after this confidence change.
 
 Known local-only files:
 - `Test/`
-- `/private/tmp/x5crop_v18_bleed_color_test`
+- `/private/tmp/x5crop_sample_v18_fix`
+- `/private/tmp/x5crop_sample_v18_debug_fix`
 
 Next recommended step:
-- Run the normal and Debug launchers on a real difficult TIFF to visually confirm
-  crop bleed and separator colors on production-like input.
+- Copy the updated root `X5_Split_v18.py` into any standalone test folder before
+  rerunning launchers there; `Test/135负片/正常` currently contains its own script
+  copy.
+- Run a focused real export on known-good samples after reviewing DebugAnalysis
+  output.

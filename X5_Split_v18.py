@@ -119,6 +119,8 @@ class Gap:
     center: float
     score: float
     method: str
+    start: Optional[float] = None
+    end: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -497,7 +499,7 @@ def detect_outer_candidates(gray: np.ndarray) -> list[OuterCandidate]:
     h, w = gray.shape
     bw = detect_outer(gray)
     white_x = detect_outer_white_x(gray)
-    candidates = [OuterCandidate("bw", bw), OuterCandidate("full_canvas", Box(0, 0, w, h))]
+    candidates = [OuterCandidate("bw", bw)]
     if white_x.valid():
         max_reasonable = max(float(bw.width) * 1.80, float(bw.width) + w * 0.06)
         if white_x.width >= bw.width and white_x.width <= max_reasonable:
@@ -514,7 +516,15 @@ def detect_outer_candidates(gray: np.ndarray) -> list[OuterCandidate]:
         if box.width < max(20, w * 0.10) or box.height < max(20, h * 0.10):
             continue
         candidates.append(OuterCandidate(name, box.expand(max(2, int(w * 0.002)), max(2, int(h * 0.002)), w, h)))
-    return unique_outer_candidates(candidates)
+    unique = unique_outer_candidates(candidates)
+    canvas_area = float(w * h)
+    non_full = [
+        candidate for candidate in unique
+        if (candidate.box.width * candidate.box.height) / max(1.0, canvas_area) <= 0.94
+    ]
+    if non_full:
+        return non_full
+    return unique or [OuterCandidate("full_canvas", Box(0, 0, w, h))]
 
 
 def separator_profile(crop: np.ndarray) -> np.ndarray:
@@ -613,13 +623,15 @@ def find_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> 
             continue
 
         center = float(lo + (band_start + band_end - 1) / 2.0)
+        start = float(lo + band_start)
+        end = float(lo + band_end)
         distance = abs(center - expected) / max(1.0, pitch)
         quality = mean_score + 0.8 * prominence
-        candidates.append((distance, -quality, -mean_score, center))
+        candidates.append((distance, -quality, -mean_score, center, start, end))
 
     if candidates:
-        _, neg_quality, _, center = sorted(candidates)[0]
-        return Gap(index, center, float(-neg_quality), "detected")
+        _, neg_quality, _, center, start, end = sorted(candidates)[0]
+        return Gap(index, center, float(-neg_quality), "detected", start, end)
 
     method = "equal-broad-region" if rejected_broad else "equal"
     return Gap(index, float(expected), local_max, method)
@@ -631,7 +643,13 @@ def constrain_gap_to_geometry(gap: Gap, expected: float, pitch: float, strip_mod
     max_shift = pitch * (0.045 if strip_mode == "full" else 0.12)
     shift = max(-max_shift, min(max_shift, gap.center - expected))
     method = "detected" if abs(shift) >= 1.0 else "grid"
-    return Gap(gap.index, float(expected + shift), gap.score, method)
+    if gap.start is not None and gap.end is not None:
+        start = float(gap.start + shift)
+        end = float(gap.end + shift)
+    else:
+        start = None
+        end = None
+    return Gap(gap.index, float(expected + shift), gap.score, method, start, end)
 
 
 def apply_robust_grid(gaps: list[Gap], origin: float, pitch: float, strip_mode: str) -> tuple[list[Gap], dict[str, Any]]:
@@ -750,6 +768,11 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
     width_conf = max(0.0, min(1.0, 1.0 - width_cv / 0.030))
     outer_conf = 1.0 if 0.35 <= outer_area <= 0.995 else 0.45
     contrast_conf = 1.0 if contrast >= 35 else max(0.35, contrast / 35.0)
+    enough_135_separator_evidence = (
+        fmt.name != "135"
+        or expected_gaps <= 1
+        or (actual_detected >= 2 and equal <= max(2, expected_gaps // 2))
+    )
 
     confidence = 0.40 * gap_conf + 0.30 * width_conf + 0.20 * outer_conf + 0.10 * contrast_conf
 
@@ -762,6 +785,8 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
             or (fmt.name == "135" and detected == expected_gaps)
         )
         and 0.40 <= outer_area <= 0.995
+        and outer_area <= 0.94
+        and enough_135_separator_evidence
         and (fmt.name in {"135", "half"} or (reliable >= expected_gaps and equal == 0))
     )
     if full_geometry_ok:
@@ -771,12 +796,16 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
     reasons: list[str] = []
     if expected_gaps and detected < max(1, expected_gaps // 2) and not full_geometry_ok:
         reasons.append("weak_separators")
-    if equal >= max(2, expected_gaps - 1) and not full_geometry_ok:
+    if equal >= max(2, expected_gaps // 2 + 1) and not full_geometry_ok:
         reasons.append("mostly_equal_split")
+    if fmt.name == "135" and expected_gaps >= 3 and actual_detected < 2:
+        reasons.append("too_few_detected_separators")
     if width_cv > 0.030:
         reasons.append("unstable_frame_width")
     if not (0.35 <= outer_area <= 0.995):
         reasons.append("outer_box_uncertain")
+    if outer_area > 0.94:
+        reasons.append("outer_box_too_large")
     if fmt.family == "120" and detected < expected_gaps:
         reasons.append("120_separator_uncertain")
     if contrast < 35:
@@ -796,6 +825,14 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
         else:
             confidence = min(confidence, 0.84)
         reasons.append("partial_strip_count_candidate")
+
+    if fmt.name == "135" and expected_gaps >= 3:
+        if actual_detected < 2:
+            confidence = min(confidence, 0.82)
+        elif equal >= max(2, expected_gaps // 2 + 1):
+            confidence = min(confidence, 0.84)
+    if outer_area > 0.94:
+        confidence = min(confidence, 0.82)
 
     detail = {
         "detected_gaps": detected,
@@ -1280,7 +1317,14 @@ def draw_preview_line(rgb: np.ndarray, box: Box, scale: float, color: tuple[int,
     rgb[top:bottom, max(0, x - t // 2):min(w, x + (t + 1) // 2)] = color
 
 
-def gap_line_box(detection: Detection, gap: Gap) -> Optional[Box]:
+def draw_preview_mark(rgb: np.ndarray, box: Box, scale: float, color: tuple[int, int, int], thickness: int = 2) -> None:
+    if box.width > 1 or box.height > 1:
+        draw_preview_rect(rgb, box, scale, color, thickness)
+    else:
+        draw_preview_line(rgb, box, scale, color, thickness)
+
+
+def gap_mark_box(detection: Detection, gap: Gap) -> Optional[Box]:
     work_outer_raw = detection.detail.get("work_outer")
     if not isinstance(work_outer_raw, dict):
         return None
@@ -1293,18 +1337,59 @@ def gap_line_box(detection: Detection, gap: Gap) -> Optional[Box]:
         )
     except Exception:
         return None
+    if gap.method == "detected" and gap.start is not None and gap.end is not None:
+        start = int(round(work_outer.left + min(gap.start, gap.end)))
+        end = int(round(work_outer.left + max(gap.start, gap.end)))
+        if end <= start:
+            end = start + 1
+        if detection.layout == "horizontal":
+            return Box(start, work_outer.top, end, work_outer.bottom)
+        return Box(work_outer.top, start, work_outer.bottom, end)
+
     x = int(round(work_outer.left + gap.center))
     if detection.layout == "horizontal":
         return Box(x, work_outer.top, x + 1, work_outer.bottom)
     return Box(work_outer.top, x, work_outer.bottom, x + 1)
 
 
-def write_debug_preview(gray: np.ndarray, detection: Detection, output_path: Path) -> None:
-    rgb = make_debug_preview_rgb(gray, detection)
+def debug_status_label(detection: Detection, threshold: float) -> tuple[str, tuple[int, int, int]]:
+    passed = detection.confidence >= threshold
+    status = "PASS" if passed else "REVIEW"
+    op = ">=" if passed else "<"
+    label = f"{status} confidence {detection.confidence:.3f} {op} threshold {threshold:.3f}"
+    if detection.review_reasons:
+        label += " | " + ",".join(detection.review_reasons[:3])
+    color = (40, 180, 90) if passed else (230, 80, 70)
+    return label, color
+
+
+def add_status_badge(rgb: np.ndarray, detection: Detection, threshold: float) -> np.ndarray:
+    label, color = debug_status_label(detection, threshold)
+    image = Image.fromarray(np.ascontiguousarray(rgb), mode="RGB")
+    draw = ImageDraw.Draw(image)
+    try:
+        bbox = draw.textbbox((0, 0), label)
+        text_w = bbox[2] - bbox[0]
+        text_h = bbox[3] - bbox[1]
+    except Exception:
+        text_w = max(180, len(label) * 7)
+        text_h = 12
+    pad_x = 10
+    pad_y = 7
+    x0, y0 = 10, 10
+    x1 = min(image.width - 1, x0 + text_w + pad_x * 2)
+    y1 = min(image.height - 1, y0 + text_h + pad_y * 2)
+    draw.rectangle((x0, y0, x1, y1), fill=(18, 18, 18), outline=color, width=2)
+    draw.text((x0 + pad_x, y0 + pad_y), label, fill=(245, 245, 245))
+    return np.asarray(image)
+
+
+def write_debug_preview(gray: np.ndarray, detection: Detection, output_path: Path, threshold: float) -> None:
+    rgb = make_debug_preview_rgb(gray, detection, threshold)
     write_rgb_jpeg(rgb, output_path)
 
 
-def make_debug_preview_rgb(gray: np.ndarray, detection: Detection) -> np.ndarray:
+def make_debug_preview_rgb(gray: np.ndarray, detection: Detection, threshold: Optional[float] = None) -> np.ndarray:
     rgb, scale = preview_gray(gray)
     draw_preview_rect(rgb, detection.outer, scale, (0, 255, 0), 3)
     for box in detection.frames:
@@ -1316,9 +1401,11 @@ def make_debug_preview_rgb(gray: np.ndarray, detection: Detection) -> np.ndarray
         "equal-broad-region": (190, 80, 255),
     }
     for gap in detection.gaps:
-        line = gap_line_box(detection, gap)
-        if line is not None:
-            draw_preview_line(rgb, line, scale, gap_colors.get(gap.method, (255, 255, 255)), 2)
+        mark = gap_mark_box(detection, gap)
+        if mark is not None:
+            draw_preview_mark(rgb, mark, scale, gap_colors.get(gap.method, (255, 255, 255)), 2)
+    if threshold is not None:
+        rgb = add_status_badge(rgb, detection, threshold)
     return rgb
 
 
@@ -1344,8 +1431,9 @@ def add_panel_label(rgb: np.ndarray, label: str) -> np.ndarray:
     return np.asarray(image)
 
 
-def make_debug_analysis_panel(gray: np.ndarray, detection: Detection) -> np.ndarray:
-    debug_rgb = add_panel_label(make_debug_preview_rgb(gray, detection), "Debug boxes")
+def make_debug_analysis_panel(gray: np.ndarray, detection: Detection, threshold: float) -> np.ndarray:
+    status, _ = debug_status_label(detection, threshold)
+    debug_rgb = add_panel_label(make_debug_preview_rgb(gray, detection, threshold), f"Debug boxes | {status}")
     base_rgb, _ = preview_gray(gray)
     base_rgb = add_panel_label(base_rgb, "Original gray")
     enhanced_rgb, _ = preview_gray(make_analysis_gray(gray))
@@ -1373,10 +1461,10 @@ def make_debug_analysis_panel(gray: np.ndarray, detection: Detection) -> np.ndar
     return canvas
 
 
-def write_debug_analysis(gray: np.ndarray, detection: Detection, output_dir: Path, stem: str) -> list[str]:
+def write_debug_analysis(gray: np.ndarray, detection: Detection, output_dir: Path, stem: str, threshold: float) -> list[str]:
     analysis_dir = output_dir / "_debug_analysis"
     panel_path = analysis_dir / f"{stem}_debug_analysis.jpg"
-    write_rgb_jpeg(make_debug_analysis_panel(gray, detection), panel_path)
+    write_rgb_jpeg(make_debug_analysis_panel(gray, detection, threshold), panel_path)
     return [str(panel_path)]
 
 
@@ -1682,10 +1770,10 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
 
     if config.debug and not config.debug_analysis:
         debug_path = output_dir / "_debug" / f"{input_file.stem}_debug.jpg"
-        write_debug_preview(gray, detection, debug_path)
+        write_debug_preview(gray, detection, debug_path, config.confidence_threshold)
         warnings.append(f"debug preview: {debug_path}")
     if config.debug_analysis:
-        for analysis_path in write_debug_analysis(gray, detection, output_dir, input_file.stem):
+        for analysis_path in write_debug_analysis(gray, detection, output_dir, input_file.stem, config.confidence_threshold):
             warnings.append(f"debug analysis: {analysis_path}")
 
     detail = dict(detection.detail)
