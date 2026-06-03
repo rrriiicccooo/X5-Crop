@@ -1,0 +1,51 @@
+@echo off
+setlocal
+
+cd /d "%~dp0"
+
+set "SCRIPT=%~dp0X5_Split_v18.py"
+if not exist "%SCRIPT%" (
+    echo X5_Split_v18.py was not found in this folder.
+    echo Put this launcher in the same folder as X5_Split_v18.py and your TIFF scans.
+    echo.
+    pause
+    exit /b 1
+)
+
+where py >nul 2>nul
+if %errorlevel%==0 (
+    set "PYTHON=py -3"
+) else (
+    where python >nul 2>nul
+    if %errorlevel%==0 (
+        set "PYTHON=python"
+    ) else (
+        echo Python was not found.
+        echo Install Python 3, then install dependencies:
+        echo   py -3 -m pip install -U numpy tifffile imagecodecs Pillow
+        echo.
+        pause
+        exit /b 1
+    )
+)
+
+echo X5 Split v18 double-click launcher
+echo Folder: %cd%
+echo.
+echo This will process TIFF files in this folder.
+echo Output: split_output
+echo Existing output files will not be overwritten.
+echo.
+
+%PYTHON% "%SCRIPT%" "." --report
+set "EXITCODE=%errorlevel%"
+
+echo.
+if not "%EXITCODE%"=="0" (
+    echo Finished with errors. Read the messages above.
+) else (
+    echo Finished successfully.
+)
+echo.
+pause
+exit /b %EXITCODE%

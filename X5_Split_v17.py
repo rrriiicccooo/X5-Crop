@@ -29,9 +29,11 @@ Windows 常用命令：
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import math
 import os
+import shutil
 import sys
 import traceback
 from dataclasses import asdict, dataclass, replace
@@ -46,6 +48,21 @@ VERSION = "17.0-speed-balanced"
 SCRIPT_NAME = "X5_Split_v17.py"
 TRACEBACK_ENV = "X5_SPLIT_TRACEBACK"
 TIFF_SUFFIXES = {".tif", ".tiff"}
+
+
+def configure_text_output() -> None:
+    """Avoid UnicodeEncodeError on ASCII or legacy-codepage terminals."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
+configure_text_output()
 
 # Tags that are either invalid after cropping or are written by tifffile parameters.
 # They are intentionally not blindly copied through extra_tags.
@@ -250,9 +267,40 @@ class FrameSizeModel:
     mode: str
 
 
+@dataclass(frozen=True)
+class FilmFormatProfile:
+    name: str
+    frame_aspect: float
+    default_count: int
+    allowed_counts: tuple[int, ...]
+    family: str
+
+
+FILM_FORMATS: dict[str, FilmFormatProfile] = {
+    "135": FilmFormatProfile("135", 3.0 / 2.0, 6, tuple(range(1, 7)), "35mm"),
+    "half": FilmFormatProfile("half", 3.0 / 4.0, 12, tuple(range(1, 13)), "35mm"),
+    "xpan": FilmFormatProfile("xpan", 65.0 / 24.0, 3, (1, 2, 3), "35mm"),
+    "120-645": FilmFormatProfile("120-645", 4.0 / 3.0, 4, (1, 2, 3, 4), "120"),
+    "120-66": FilmFormatProfile("120-66", 1.0, 3, (1, 2, 3), "120"),
+    "120-67": FilmFormatProfile("120-67", 4.0 / 5.0, 3, (1, 2, 3), "120"),
+}
+
+FORMAT_CHOICES = ("auto", *FILM_FORMATS.keys())
+LAYOUT_CHOICES = ("auto", "single-horizontal", "single-vertical")
+
+
 @dataclass
 class ProcessResult:
     source: str
+    film_format: str
+    layout: str
+    strip_completeness: str
+    lane_count: int
+    frames_per_lane: int
+    status: str
+    confidence: float
+    review_reasons: list[str]
+    review_copy: Optional[str]
     output_files: list[str]
     outer_box: dict[str, int]
     frame_boxes: list[dict[str, int]]
@@ -261,6 +309,7 @@ class ProcessResult:
     deskew_model: Optional[dict[str, Any]]
     frame_size_model: Optional[dict[str, Any]]
     analysis_candidate: Optional[dict[str, Any]]
+    detection_detail: dict[str, Any]
     profile: dict[str, Any]
     warnings: list[str]
 
@@ -284,6 +333,10 @@ class DetectionRun:
 class SplitConfig:
     input_path: Path
     output: Optional[Path]
+    film_format: str
+    format_auto: bool
+    layout: str
+    strip_completeness: str
     count: int
     page: int
 
@@ -381,10 +434,33 @@ class SplitConfig:
     copy_description: str
     preserve_tiling: bool
 
+    confidence_threshold: float
+    review_dir: Optional[Path]
+    copy_review_files: bool
+    export_low_confidence: bool
+
     debug: bool
     dry_run: bool
     overwrite: bool
     report: bool
+
+
+@dataclass
+class LayoutDetection:
+    film_format: str
+    layout: str
+    lane_count: int
+    frames_per_lane: int
+    outer: Box
+    boxes: list[Box]
+    gaps: list[Gap]
+    outer_refine_model: Optional[OuterRefineModel]
+    frame_size_model: Optional[FrameSizeModel]
+    analysis_candidate: dict[str, Any]
+    warnings: list[str]
+    confidence: float
+    review_reasons: list[str]
+    detection_detail: dict[str, Any]
 
 
 # -----------------------------------------------------------------------------
@@ -777,6 +853,48 @@ def choose_deskew_model_from_analysis(
             f"analysis={analysis_model.angle_degrees:.4f}°。"
         )
     return base_model, warnings, "base"
+
+
+def vertical_deskew_model_from_transposed(model: Optional[DeskewModel], original_width: int, original_height: int) -> Optional[DeskewModel]:
+    if model is None:
+        return None
+    angle_degrees = -float(model.angle_degrees)
+    out_w, out_h, *_ = rotated_output_geometry(original_width, original_height, angle_degrees)
+    return replace(
+        model,
+        mode=f"{model.mode}-vertical",
+        angle_degrees=float(angle_degrees),
+        slope=-float(model.slope),
+        top_slope=-float(model.top_slope),
+        bottom_slope=-float(model.bottom_slope),
+        input_width=int(original_width),
+        input_height=int(original_height),
+        output_width=int(out_w),
+        output_height=int(out_h),
+    )
+
+
+def choose_deskew_model_for_layout(
+    base_gray: np.ndarray,
+    analysis_gray: np.ndarray,
+    config: SplitConfig,
+) -> tuple[Optional[DeskewModel], list[str], str, str]:
+    """Choose a deskew model whose target orientation matches the strip layout."""
+    if config.layout == "single-vertical":
+        work_config = config_for_split_axis(config, "y")
+        work_base = np.ascontiguousarray(base_gray.T)
+        work_analysis = np.ascontiguousarray(analysis_gray.T)
+        model, warnings, source = choose_deskew_model_from_analysis(work_base, work_analysis, work_config)
+        vertical_model = vertical_deskew_model_from_transposed(model, base_gray.shape[1], base_gray.shape[0])
+        if vertical_model is not None:
+            warnings.append(
+                "deskew 竖向布局：在转置检测图上估计倾斜，并将反向角度应用到原图，使胶片条对齐垂直方向。"
+            )
+        return vertical_model, warnings, f"{source}-vertical", "垂直"
+
+    model, warnings, source = choose_deskew_model_from_analysis(base_gray, analysis_gray, config)
+    return model, warnings, source, "水平"
+
 
 def moving_average(x: np.ndarray, window: int) -> np.ndarray:
     window = max(1, int(window))
@@ -3436,6 +3554,41 @@ def write_report(report_path: Path, result: ProcessResult) -> None:
         f.write(json.dumps(json_safe(asdict(result)), ensure_ascii=False) + "\n")
 
 
+def write_summary_report(summary_path: Path, result: ProcessResult) -> None:
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = [
+        "source",
+        "status",
+        "confidence",
+        "film_format",
+        "layout",
+        "strip_completeness",
+        "lane_count",
+        "frames_per_lane",
+        "review_reasons",
+        "output_count",
+    ]
+    exists = summary_path.exists()
+    with summary_path.open("a", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        if not exists:
+            writer.writeheader()
+        writer.writerow(
+            {
+                "source": result.source,
+                "status": result.status,
+                "confidence": f"{result.confidence:.3f}",
+                "film_format": result.film_format,
+                "layout": result.layout,
+                "strip_completeness": result.strip_completeness,
+                "lane_count": int(result.lane_count),
+                "frames_per_lane": int(result.frames_per_lane),
+                "review_reasons": ";".join(result.review_reasons),
+                "output_count": len(result.output_files),
+            }
+        )
+
+
 def warning_for_gap_methods(gaps: list[Gap]) -> list[str]:
     warnings: list[str] = []
     for index, gap in enumerate(gaps, 1):
@@ -3451,6 +3604,531 @@ def warning_for_gap_methods(gaps: list[Gap]) -> list[str]:
 
 def output_directory_for(input_file: Path, config: SplitConfig) -> Path:
     return config.output.resolve() if config.output else input_file.parent / "split_output"
+
+
+def clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def image_quality_detail(gray: np.ndarray) -> dict[str, float]:
+    sample = gray
+    if sample.size > 1_500_000:
+        step = max(1, int(math.sqrt(sample.size / 1_500_000)))
+        sample = sample[::step, ::step]
+    p01, p05, p50, p95, p99 = np.percentile(sample, [1, 5, 50, 95, 99])
+    return {
+        "p01": float(p01),
+        "p05": float(p05),
+        "p50": float(p50),
+        "p95": float(p95),
+        "p99": float(p99),
+        "range_1_99": float(p99 - p01),
+    }
+
+
+def assess_auto_confidence(run: DetectionRun, gray: np.ndarray, config: SplitConfig) -> tuple[float, list[str], dict[str, Any]]:
+    detail = dict(run.score_detail)
+    expected_gaps = max(0, int(config.count) - 1)
+    reliable = int(detail.get("reliable_gaps", 0))
+    detected = int(detail.get("detected_gaps", 0))
+    equal = int(detail.get("equal_gaps", 0))
+    peak = int(detail.get("peak_fallback_gaps", 0))
+    width_cv = float(detail.get("width_cv", 1.0))
+    outer_area = float(detail.get("outer_area_ratio", 0.0))
+    median_width = float(detail.get("median_frame_width_without_bleed", 0.0))
+    residual = detail.get("grid_residual", None)
+
+    if expected_gaps <= 0:
+        gap_conf = 1.0
+        reliable_ratio = 1.0
+        equal_ratio = 0.0
+    else:
+        reliable_ratio = clamp01(reliable / float(expected_gaps))
+        equal_ratio = clamp01(equal / float(expected_gaps))
+        detected_ratio = clamp01(detected / float(expected_gaps))
+        gap_conf = clamp01(0.70 * reliable_ratio + 0.20 * detected_ratio + 0.10 * (1.0 - equal_ratio))
+
+    if residual is None:
+        grid_conf = 0.78 if width_cv <= 0.004 and equal >= max(1, expected_gaps - 1) else 0.35
+    else:
+        grid_conf = clamp01(1.0 - float(residual) / max(2.0, median_width * 0.035))
+
+    width_conf = clamp01(1.0 - width_cv / 0.025)
+    if 0.45 <= outer_area <= 0.995:
+        outer_conf = 1.0
+    elif 0.35 <= outer_area < 0.45:
+        outer_conf = clamp01((outer_area - 0.35) / 0.10)
+    elif 0.995 < outer_area <= 1.0:
+        outer_conf = 0.85
+    else:
+        outer_conf = 0.30
+
+    quality = image_quality_detail(gray)
+    quality_conf = 1.0
+    if quality["range_1_99"] < 24:
+        quality_conf = 0.55
+    elif quality["range_1_99"] < 40:
+        quality_conf = 0.78
+    if quality["p95"] < 36 or quality["p05"] > 220:
+        quality_conf = min(quality_conf, 0.70)
+
+    confidence = (
+        0.42 * gap_conf
+        + 0.24 * grid_conf
+        + 0.18 * width_conf
+        + 0.10 * outer_conf
+        + 0.06 * quality_conf
+    )
+    if peak > 0:
+        confidence -= 0.22
+    if len(run.boxes) != int(config.count):
+        confidence -= 0.35
+    confidence = clamp01(confidence)
+
+    reasons: list[str] = []
+    if expected_gaps > 0 and reliable < max(2, expected_gaps - 1):
+        reasons.append("weak_separators")
+    if expected_gaps > 0 and equal >= max(2, expected_gaps - 2):
+        reasons.append("equal_split_fallback")
+    if peak > 0:
+        reasons.append("peak_fallback_used")
+    if residual is None:
+        reasons.append("grid_model_missing")
+    elif median_width > 0 and float(residual) > max(2.0, median_width * 0.035):
+        reasons.append("unstable_spacing")
+    if width_cv > 0.025:
+        reasons.append("unstable_frame_width")
+    if not (0.40 <= outer_area <= 0.995):
+        reasons.append("outer_box_uncertain")
+    if quality["range_1_99"] < 40:
+        reasons.append("low_contrast")
+    if quality["p95"] < 36:
+        reasons.append("low_exposure")
+    if quality["p05"] > 220:
+        reasons.append("mostly_bright_scan")
+    if len(run.boxes) != int(config.count):
+        reasons.append("frame_count_mismatch")
+
+    profile = FILM_FORMATS.get(config.film_format)
+    full_geometry_width_limit = {
+        "135": 0.008,
+        "half": 0.006,
+        "xpan": 0.010,
+        "120-645": 0.010,
+        "120-66": 0.010,
+        "120-67": 0.010,
+    }.get(config.film_format, 0.008)
+    full_geometry_separator_ok = (
+        config.film_format in {"135", "half"}
+        or expected_gaps <= 0
+        or reliable >= max(1, expected_gaps // 2)
+    )
+    full_strip_geometry = (
+        profile is not None
+        and config.strip_completeness == "full"
+        and int(config.count) == int(profile.default_count)
+        and len(run.boxes) == int(config.count)
+        and width_cv <= full_geometry_width_limit
+        and 0.45 <= outer_area <= 0.995
+        and full_geometry_separator_ok
+    )
+    if full_strip_geometry:
+        confidence = max(confidence, 0.88)
+        reasons = [
+            reason for reason in reasons
+            if reason not in {"weak_separators", "equal_split_fallback", "grid_model_missing", "low_confidence"}
+        ]
+        detail["full_strip_geometry_confident"] = True
+
+    if profile is not None and config.strip_completeness == "partial" and int(config.count) < int(profile.default_count):
+        if int(config.count) <= 1:
+            confidence = min(confidence, 0.78)
+            if "partial_too_ambiguous" not in reasons:
+                reasons.append("partial_too_ambiguous")
+        elif int(config.count) <= 2 and int(profile.default_count) >= 6:
+            confidence = min(confidence, 0.82)
+            if "partial_too_ambiguous" not in reasons:
+                reasons.append("partial_too_ambiguous")
+        else:
+            confidence = min(confidence, 0.84)
+        if "partial_strip_count_candidate" not in reasons:
+            reasons.append("partial_strip_count_candidate")
+
+    if confidence < float(config.confidence_threshold) and not reasons:
+        reasons.append("low_confidence")
+
+    review_detail = {
+        **detail,
+        "confidence": float(confidence),
+        "confidence_threshold": float(config.confidence_threshold),
+        "confidence_parts": {
+            "gap": float(gap_conf),
+            "grid": float(grid_conf),
+            "width": float(width_conf),
+            "outer": float(outer_conf),
+            "quality": float(quality_conf),
+        },
+        "image_quality": quality,
+    }
+    return confidence, reasons, review_detail
+
+
+def review_directory_for(output_dir: Path, config: SplitConfig) -> Path:
+    return config.review_dir.resolve() if config.review_dir else output_dir / "needs_review"
+
+
+def unique_review_copy_path(input_file: Path, review_dir: Path) -> Path:
+    candidate = review_dir / input_file.name
+    if not candidate.exists():
+        return candidate
+    for index in range(2, 10_000):
+        candidate = review_dir / f"{input_file.stem}_{index:02d}{input_file.suffix}"
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError(f"无法为 review 文件生成不冲突的文件名：{input_file.name}")
+
+
+def copy_file_for_review(input_file: Path, review_dir: Path) -> Path:
+    review_dir.mkdir(parents=True, exist_ok=True)
+    destination = unique_review_copy_path(input_file, review_dir)
+    shutil.copy2(input_file, destination)
+    return destination
+
+
+def shift_box(box: Box, dx: int, dy: int) -> Box:
+    return Box(box.left + dx, box.top + dy, box.right + dx, box.bottom + dy)
+
+
+def union_box(boxes: list[Box], image_width: int, image_height: int) -> Box:
+    valid = [box for box in boxes if box.valid()]
+    if not valid:
+        return Box(0, 0, image_width, image_height)
+    return Box(
+        min(box.left for box in valid),
+        min(box.top for box in valid),
+        max(box.right for box in valid),
+        max(box.bottom for box in valid),
+    ).clamp(image_width, image_height)
+
+
+def box_from_work_axis(box: Box, split_axis: str, dx: int = 0, dy: int = 0) -> Box:
+    if split_axis == "x":
+        return shift_box(box, dx, dy)
+    return Box(
+        left=box.top + dx,
+        top=box.left + dy,
+        right=box.bottom + dx,
+        bottom=box.right + dy,
+    )
+
+
+def config_for_split_axis(config: SplitConfig, split_axis: str) -> SplitConfig:
+    if split_axis == "x":
+        return config
+    return replace(config, bleed_x=config.bleed_y, bleed_y=config.bleed_x)
+
+
+def work_gray_for_axis(gray: np.ndarray, split_axis: str) -> np.ndarray:
+    return gray if split_axis == "x" else np.ascontiguousarray(gray.T)
+
+
+def detect_single_strip_layout(
+    gray: np.ndarray,
+    analysis_gray: np.ndarray,
+    image_width: int,
+    image_height: int,
+    config: SplitConfig,
+    split_axis: str,
+    label_prefix: str,
+    offset_x: int = 0,
+    offset_y: int = 0,
+) -> LayoutDetection:
+    work_config = config_for_split_axis(config, split_axis)
+    work_gray = work_gray_for_axis(gray, split_axis)
+    work_analysis_gray = work_gray_for_axis(analysis_gray, split_axis)
+    work_height, work_width = work_gray.shape
+
+    warnings: list[str] = []
+    base_run = run_detection_pipeline(work_gray, work_width, work_height, work_config, f"{label_prefix}-base")
+    analysis_run: Optional[DetectionRun] = None
+    extra_runs: list[DetectionRun] = []
+    if work_config.analysis_enhance != "off":
+        if work_analysis_gray is work_gray or np.shares_memory(work_analysis_gray, work_gray):
+            warnings.append("analysis-enhance 已开启，但增强分析图与 base 灰度图一致，跳过增强候选。")
+        elif detection_run_is_confident_for_fast_skip(base_run, work_config):
+            warnings.append(
+                "analysis-enhance auto：base 候选已经足够稳定，跳过增强候选检测管线以提速；"
+                "如需强制评估增强候选，使用 --analysis-no-fast-skip 或 --analysis-enhance strict。"
+            )
+        else:
+            analysis_run = run_detection_pipeline(work_analysis_gray, work_width, work_height, work_config, f"{label_prefix}-analysis-enhanced")
+            if not work_config.edge_refine and should_run_analysis_edge_candidate(base_run, analysis_run, work_config):
+                edge_config = replace(work_config, edge_refine=True, edge_refine_single="learned")
+                extra_runs.append(run_detection_pipeline(work_analysis_gray, work_width, work_height, edge_config, f"{label_prefix}-analysis-enhanced-edge"))
+
+    selected_run, analysis_candidate, selection_warnings = choose_detection_run(base_run, analysis_run, work_config, extra_runs)
+    warnings.extend(selection_warnings)
+    warnings.extend(selected_run.warnings)
+
+    confidence, review_reasons, detection_detail = assess_auto_confidence(selected_run, work_gray, work_config)
+    boxes = [box_from_work_axis(box, split_axis, offset_x, offset_y).clamp(image_width, image_height) for box in selected_run.boxes]
+    outer = box_from_work_axis(selected_run.outer, split_axis, offset_x, offset_y).clamp(image_width, image_height)
+    gaps = selected_run.gaps if split_axis == "x" and offset_x == 0 and offset_y == 0 else []
+    detection_detail["split_axis"] = split_axis
+    detection_detail["offset"] = {"x": int(offset_x), "y": int(offset_y)}
+
+    return LayoutDetection(
+        film_format=config.film_format,
+        layout=("single-horizontal" if split_axis == "x" else "single-vertical"),
+        lane_count=1,
+        frames_per_lane=int(config.count),
+        outer=outer,
+        boxes=boxes,
+        gaps=gaps,
+        outer_refine_model=selected_run.outer_refine_model,
+        frame_size_model=selected_run.frame_size_model,
+        analysis_candidate=json_safe(analysis_candidate),
+        warnings=warnings,
+        confidence=float(confidence),
+        review_reasons=review_reasons,
+        detection_detail=json_safe(detection_detail),
+    )
+
+
+def detect_layout(
+    gray: np.ndarray,
+    analysis_gray: np.ndarray,
+    image_width: int,
+    image_height: int,
+    config: SplitConfig,
+) -> LayoutDetection:
+    layout = str(config.layout)
+    if layout == "single-horizontal":
+        return detect_single_strip_layout(gray, analysis_gray, image_width, image_height, config, "x", "single-horizontal")
+    if layout == "single-vertical":
+        return detect_single_strip_layout(gray, analysis_gray, image_width, image_height, config, "y", "single-vertical")
+
+    raise RuntimeError(f"内部错误：未知 layout={layout}")
+
+
+def rank_layout_detection(detection: LayoutDetection, config: SplitConfig) -> tuple[int, float, int]:
+    approved = 1 if detection.confidence >= float(config.confidence_threshold) else 0
+    return approved, float(detection.confidence), int(detection.frames_per_lane)
+
+
+def partial_count_candidates(config: SplitConfig, seed_detection: Optional[LayoutDetection] = None) -> tuple[int, ...]:
+    profile = FILM_FORMATS[config.film_format]
+    allowed = tuple(int(x) for x in profile.allowed_counts if int(x) <= int(profile.default_count))
+    default = int(profile.default_count)
+    candidates: set[int] = {default}
+
+    # Try counts close to a normal full strip first; leader/tail cases often miss
+    # only one or two frames.
+    for count in (default - 1, default - 2):
+        if count >= 1:
+            candidates.add(count)
+
+    # Use the already-computed full pass as a cheap hint. If it saw roughly N
+    # separators, N+1 frames is worth checking before running every allowed count.
+    if seed_detection is not None:
+        detail = seed_detection.detection_detail
+        for key in ("reliable_gaps", "detected_gaps"):
+            seen = int(detail.get(key, 0))
+            for count in (seen + 1, seen, seen + 2):
+                if count >= 1:
+                    candidates.add(count)
+
+    # Keep a few low-count tail/leader candidates, but do not let them explode
+    # into a full sweep for half-frame strips.
+    candidates.add(1)
+    if default >= 3:
+        candidates.add(2)
+    if default >= 6:
+        candidates.add(max(1, default // 2))
+
+    filtered = [count for count in candidates if count in allowed]
+    return tuple(sorted(set(filtered), reverse=True))
+
+
+def detect_partial_layout(
+    gray: np.ndarray,
+    analysis_gray: np.ndarray,
+    image_width: int,
+    image_height: int,
+    config: SplitConfig,
+    seed_detection: Optional[LayoutDetection] = None,
+) -> LayoutDetection:
+    candidates: list[LayoutDetection] = []
+    for count in partial_count_candidates(config, seed_detection):
+        if seed_detection is not None and int(count) == int(seed_detection.frames_per_lane):
+            detection = replace(
+                seed_detection,
+                detection_detail=dict(seed_detection.detection_detail),
+                review_reasons=list(seed_detection.review_reasons),
+                warnings=list(seed_detection.warnings),
+            )
+        else:
+            candidate_config = replace(config, count=int(count), strip_completeness="partial")
+            try:
+                detection = detect_layout(gray, analysis_gray, image_width, image_height, candidate_config)
+            except Exception as exc:
+                continue
+        detection.detection_detail["strip_completeness"] = "partial"
+        detection.detection_detail["count_candidate"] = int(count)
+        candidates.append(detection)
+
+    if not candidates:
+        raise RuntimeError("partial-strip 未找到可用候选。")
+
+    best = max(candidates, key=lambda item: rank_layout_detection(item, config))
+    best.analysis_candidate = {
+        "selected": best.analysis_candidate,
+        "strip_completeness": "partial",
+        "count_candidates": [
+            {
+                "count": int(item.frames_per_lane),
+                "confidence": float(item.confidence),
+                "reasons": list(item.review_reasons),
+            }
+            for item in candidates
+        ],
+    }
+    if "partial_strip_candidate" not in best.review_reasons and best.confidence < float(config.confidence_threshold):
+        best.review_reasons.append("partial_strip_candidate")
+    return best
+
+
+def detect_layout_with_completeness(
+    gray: np.ndarray,
+    analysis_gray: np.ndarray,
+    image_width: int,
+    image_height: int,
+    config: SplitConfig,
+) -> LayoutDetection:
+    if config.strip_completeness == "full":
+        detection = detect_layout(gray, analysis_gray, image_width, image_height, replace(config, strip_completeness="full"))
+        detection.detection_detail["strip_completeness"] = "full"
+        return detection
+
+    if config.strip_completeness == "partial":
+        return detect_partial_layout(gray, analysis_gray, image_width, image_height, config)
+
+    full_config = replace(config, strip_completeness="full")
+    full_detection = detect_layout(gray, analysis_gray, image_width, image_height, full_config)
+    full_detection.detection_detail["strip_completeness"] = "full"
+    if full_detection.confidence >= float(config.confidence_threshold):
+        return full_detection
+
+    try:
+        partial_detection = detect_partial_layout(gray, analysis_gray, image_width, image_height, config, full_detection)
+    except Exception as exc:
+        full_detection.warnings.append(f"strip-completeness auto：full 未达阈值，partial 候选失败：{exc}")
+        return full_detection
+
+    if rank_layout_detection(partial_detection, config) > rank_layout_detection(full_detection, config):
+        partial_detection.warnings.append(
+            f"strip-completeness auto：full confidence={full_detection.confidence:.3f} 未达阈值，"
+            f"采用 partial count={partial_detection.frames_per_lane} 候选。"
+        )
+        return partial_detection
+
+    full_detection.analysis_candidate = {
+        "selected": full_detection.analysis_candidate,
+        "strip_completeness": "auto-full-kept",
+        "partial_candidate": {
+            "count": int(partial_detection.frames_per_lane),
+            "confidence": float(partial_detection.confidence),
+            "reasons": list(partial_detection.review_reasons),
+        },
+    }
+    full_detection.warnings.append(
+        f"strip-completeness auto：full confidence={full_detection.confidence:.3f} 未达阈值；"
+        f"partial 最佳候选 count={partial_detection.frames_per_lane}, confidence={partial_detection.confidence:.3f}，未替换 full。"
+    )
+    return full_detection
+
+
+def format_competition_candidates(config: SplitConfig) -> tuple[str, ...]:
+    current = FILM_FORMATS[config.film_format]
+    if current.family == "35mm":
+        return ("135",)
+    return ("120-645", "120-66", "120-67")
+
+
+def format_switch_has_separator_evidence(format_name: str, detection: LayoutDetection) -> bool:
+    profile = FILM_FORMATS[format_name]
+    expected_gaps = max(0, int(profile.default_count) - 1)
+    if expected_gaps <= 0:
+        return True
+    detail = detection.detection_detail
+    reliable = int(detail.get("reliable_gaps", 0))
+    equal = int(detail.get("equal_gaps", 0))
+    required = max(1, min(expected_gaps, int(math.ceil(expected_gaps * 0.45))))
+    return reliable >= required and equal <= max(1, expected_gaps - required)
+
+
+def choose_auto_format_config(
+    gray: np.ndarray,
+    image_width: int,
+    image_height: int,
+    input_file: Path,
+    config: SplitConfig,
+) -> tuple[SplitConfig, list[str]]:
+    if not bool(config.format_auto):
+        return config, []
+    if FILM_FORMATS[config.film_format].family == "35mm":
+        return config, []
+
+    candidates: list[tuple[str, str, float, LayoutDetection]] = []
+    for format_name in format_competition_candidates(config):
+        profile = FILM_FORMATS[format_name]
+        try:
+            layout = auto_layout_for_format(profile, input_file)
+            candidate_config = replace(
+                config,
+                film_format=format_name,
+                layout=layout,
+                count=int(profile.default_count),
+                strip_completeness="full",
+                analysis_enhance="off",
+                debug_analysis=False,
+            )
+            detection = detect_layout(gray, gray, image_width, image_height, candidate_config)
+        except Exception:
+            continue
+        candidates.append((format_name, layout, float(detection.confidence), detection))
+
+    if not candidates:
+        return config, []
+
+    current_item = next((item for item in candidates if item[0] == config.film_format), None)
+    best = max(candidates, key=lambda item: (item[2], item[3].frames_per_lane))
+    if current_item is None:
+        current_confidence = 0.0
+    else:
+        current_confidence = float(current_item[2])
+
+    best_name, best_layout, best_confidence, _best_detection = best
+    if best_name == config.film_format:
+        return config, []
+    if not format_switch_has_separator_evidence(best_name, _best_detection):
+        return config, []
+
+    confidence_gain = best_confidence - current_confidence
+    strong_best = best_confidence >= float(config.confidence_threshold)
+    current_weak = current_confidence < float(config.confidence_threshold)
+    if not (confidence_gain >= 0.12 and (strong_best or current_weak)):
+        return config, []
+
+    profile = FILM_FORMATS[best_name]
+    new_config = replace(
+        config,
+        film_format=best_name,
+        layout=best_layout,
+        count=int(profile.default_count),
+    )
+    summary = ", ".join(f"{name}/{layout}={confidence:.3f}" for name, layout, confidence, _ in candidates)
+    return new_config, [f"format auto：根据同家族 full 几何竞争，从 {config.film_format} 切换为 {best_name}；候选置信度：{summary}。"]
 
 
 def process_one(input_file: Path, config: SplitConfig) -> ProcessResult:
@@ -3483,14 +4161,16 @@ def process_one(input_file: Path, config: SplitConfig) -> ProcessResult:
             raise RuntimeError(f"检测灰度图尺寸 {gray.shape} 与 TIFF 空间尺寸 {(height, width)} 不一致。")
 
         analysis_gray = make_analysis_gray(gray, config)
+        config, format_warnings = choose_auto_format_config(gray, width, height, input_file, config)
+        warnings.extend(format_warnings)
 
         deskew_model: Optional[DeskewModel] = None
         if config.deskew != "off":
-            estimated_model, deskew_warnings, deskew_source = choose_deskew_model_from_analysis(gray, analysis_gray, config)
+            estimated_model, deskew_warnings, deskew_source, deskew_target = choose_deskew_model_for_layout(gray, analysis_gray, config)
             warnings.extend(deskew_warnings)
             if estimated_model is not None:
                 warnings.append(
-                    f"deskew 已启用：使用 {deskew_source} 检测图，将源图旋转 {estimated_model.angle_degrees:.4f}° 至水平，"
+                    f"deskew 已启用：使用 {deskew_source} 检测图，将源图旋转 {estimated_model.angle_degrees:.4f}° 至{deskew_target}，"
                     "再执行外框、分隔线、片距和同画幅尺寸检测。"
                 )
                 arr = rotate_array_yx_same_axes(
@@ -3509,39 +4189,30 @@ def process_one(input_file: Path, config: SplitConfig) -> ProcessResult:
             elif config.deskew == "strict":
                 warnings.append("deskew strict 未找到可信倾斜模型，本文件按不旋转流程处理。")
 
-        base_run = run_detection_pipeline(gray, width, height, config, "base")
-        analysis_run: Optional[DetectionRun] = None
-        extra_runs: list[DetectionRun] = []
-        if config.analysis_enhance != "off":
-            if analysis_gray is gray or np.shares_memory(analysis_gray, gray):
-                warnings.append("analysis-enhance 已开启，但增强分析图与 base 灰度图一致，跳过增强候选。")
-            elif detection_run_is_confident_for_fast_skip(base_run, config):
-                warnings.append(
-                    "analysis-enhance auto：base 候选已经足够稳定，跳过增强候选检测管线以提速；"
-                    "如需强制评估增强候选，使用 --analysis-no-fast-skip 或 --analysis-enhance strict。"
-                )
-            else:
-                analysis_run = run_detection_pipeline(analysis_gray, width, height, config, "analysis-enhanced")
+        layout_detection = detect_layout_with_completeness(gray, analysis_gray, width, height, config)
+        warnings.extend(layout_detection.warnings)
 
-                # v17 performance change: the enhanced-edge candidate is useful
-                # for a small subset of very dark strips, but it is another full
-                # pipeline pass. Run it only when the cheaper base/enhanced
-                # candidates still look weak, unless the user explicitly asks
-                # for --analysis-edge-candidate always or --analysis-enhance strict.
-                if not config.edge_refine and should_run_analysis_edge_candidate(base_run, analysis_run, config):
-                    edge_config = replace(config, edge_refine=True, edge_refine_single="learned")
-                    extra_runs.append(run_detection_pipeline(analysis_gray, width, height, edge_config, "analysis-enhanced-edge"))
+        outer = layout_detection.outer
+        gaps = layout_detection.gaps
+        boxes = layout_detection.boxes
+        outer_refine_model = layout_detection.outer_refine_model
+        frame_size_model = layout_detection.frame_size_model
+        analysis_candidate = layout_detection.analysis_candidate
 
-        selected_run, analysis_candidate, selection_warnings = choose_detection_run(base_run, analysis_run, config, extra_runs)
-        warnings.extend(selection_warnings)
-        warnings.extend(selected_run.warnings)
-
-        outer = selected_run.outer
-        gaps = selected_run.gaps
-        boxes = selected_run.boxes
-        outer_refine_model = selected_run.outer_refine_model
-        frame_size_model = selected_run.frame_size_model
-
+        confidence = float(layout_detection.confidence)
+        review_reasons = list(layout_detection.review_reasons)
+        detection_detail = layout_detection.detection_detail
+        status = "approved_auto" if confidence >= float(config.confidence_threshold) else "needs_review"
+        review_copy: Optional[str] = None
+        if status == "needs_review":
+            warnings.append(
+                f"低置信度：confidence={confidence:.3f} < threshold={config.confidence_threshold:.3f}；"
+                f"reasons={','.join(review_reasons)}。"
+            )
+            if config.copy_review_files:
+                copied = copy_file_for_review(input_file, review_directory_for(output_dir, config))
+                review_copy = str(copied)
+                warnings.append(f"已复制原文件到 review 文件夹：{copied}")
 
         if config.debug:
             debug_path = output_dir / "_debug" / f"{input_file.stem}_debug.jpg"
@@ -3555,7 +4226,14 @@ def process_one(input_file: Path, config: SplitConfig) -> ProcessResult:
         output_files: list[str] = []
         if config.dry_run:
             print("  dry-run: 不写出裁切 TIFF。")
+        elif status == "needs_review" and not config.export_low_confidence:
+            print(
+                f"  needs-review: confidence={confidence:.3f} < {config.confidence_threshold:.3f}；"
+                "跳过自动裁切。"
+            )
         else:
+            if status == "needs_review":
+                print("  export-low-confidence: 已按用户要求输出低置信裁切结果。")
             for index, box in enumerate(boxes, 1):
                 if not box.valid():
                     raise RuntimeError(f"第 {index} 张裁切框无效：{box}")
@@ -3590,6 +4268,15 @@ def process_one(input_file: Path, config: SplitConfig) -> ProcessResult:
 
     result = ProcessResult(
         source=str(input_file),
+        film_format=str(config.film_format),
+        layout=str(config.layout),
+        strip_completeness=str(layout_detection.detection_detail.get("strip_completeness", config.strip_completeness)),
+        lane_count=int(layout_detection.lane_count),
+        frames_per_lane=int(layout_detection.frames_per_lane),
+        status=status,
+        confidence=float(confidence),
+        review_reasons=review_reasons,
+        review_copy=review_copy,
         output_files=output_files,
         outer_box=asdict(outer),
         frame_boxes=[asdict(box) for box in boxes],
@@ -3598,12 +4285,14 @@ def process_one(input_file: Path, config: SplitConfig) -> ProcessResult:
         deskew_model=(json_safe(asdict(deskew_model)) if deskew_model is not None else None),
         frame_size_model=(json_safe(asdict(frame_size_model)) if frame_size_model is not None else None),
         analysis_candidate=json_safe(analysis_candidate) if analysis_candidate is not None else None,
+        detection_detail=json_safe(detection_detail),
         profile=json_safe(asdict(profile)),
         warnings=warnings,
     )
 
     if config.report:
         write_report(output_dir / "split_report.jsonl", result)
+        write_summary_report(output_dir / "split_summary.csv", result)
     return result
 
 
@@ -3624,14 +4313,17 @@ def iter_input_files(path: Path) -> list[Path]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "安全切分横向 135 胶片长条 TIFF。默认 deskew=auto：高置信检测到倾斜时先几何校平，"
+            "安全切分 X5 胶片长条 TIFF。默认 deskew=auto：高置信检测到倾斜时先几何校平，"
             "再执行稳定裁切；默认保位深/关键 TIFF 标签，不做色彩、反差、锐化等后期处理，"
             "并给每张四周保留 10px bleed。"
         )
     )
     parser.add_argument("input", nargs="?", default=".", help="输入 TIFF 文件或目录；默认当前目录。")
     parser.add_argument("-o", "--output", default=None, help="输出目录；默认 input 所在目录/split_output。")
-    parser.add_argument("-n", "--count", type=int, default=6, help="一条胶片中的张数，默认 6。")
+    parser.add_argument("--format", choices=FORMAT_CHOICES, default="auto", help="胶片格式：135 / half / xpan / 120-645 / 120-66 / 120-67。默认 auto 只自动区分普通 135 和 120 家族；half/xpan 需手动指定。")
+    parser.add_argument("--layout", choices=LAYOUT_CHOICES, default="auto", help="扫描布局：single-horizontal / single-vertical。默认 auto。")
+    parser.add_argument("--strip-completeness", choices=("auto", "full", "partial"), default="auto", help="条带完整性：full=完整条按默认张数优先等距；partial=片头片尾/不满片夹，尝试允许张数候选；auto=先 full，高置信失败再 partial。默认 auto。")
+    parser.add_argument("-n", "--count", type=int, default=None, help="每条胶片中的张数；默认按 --format 推导，例如 135=6、half=12、xpan=3、66=3、67=3、645=4。")
     parser.add_argument("--page", type=int, default=0, help="多页 TIFF 时处理第几页，从 0 开始；默认 0。")
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
 
@@ -3702,7 +4394,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--edge-refine", action="store_true", help="可选：用真实画幅竖向边缘微调切线。默认关闭，以避免影响常规片。")
     parser.add_argument("--edge-refine-single", choices=("none", "learned"), default="none", help="edge-refine 后是否用已学到的片间距修正单边可见的画幅边缘；默认 none。")
-    parser.add_argument("--leader-mode", action="store_true", help="罕见片头/片尾/空白帧模式：等同于 --edge-refine --edge-refine-single learned。")
+    parser.add_argument("--leader-mode", action="store_true", help="兼容旧参数：等同于 --strip-completeness partial，并启用 --edge-refine --edge-refine-single learned。")
     # Compatibility no-op switches from X5_Split_v14-v16. They are accepted so old
     # command lines do not fail, but v17 intentionally removes these slow multi-pass
     # refiners from the default code path.
@@ -3749,6 +4441,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--copy-description", choices=("auto", "yes", "no"), default="auto", help="是否复制 ImageDescription。auto 会跳过 OME/ImageJ 等含尺寸信息的描述。默认 auto。")
     parser.add_argument("--preserve-tiling", action="store_true", help="源 TIFF 为 tiled 时尝试保留 tile 尺寸。默认改用 strip 写出，更兼容。")
 
+    parser.add_argument("--confidence-threshold", type=float, default=0.85, help="自动裁切最低置信度阈值，低于该值默认只标记为 needs_review，不写裁切 TIFF。默认 0.85。")
+    parser.add_argument("--review-dir", default=None, help="低置信原文件复制目录；默认输出目录/needs_review。仅配合 --copy-review-files 使用。")
+    parser.add_argument("--copy-review-files", action="store_true", help="低置信文件复制到 review 目录，方便后续人工或专用脚本处理。默认不复制，避免批量复制大 TIFF。")
+    parser.add_argument("--export-low-confidence", action="store_true", help="即使检测低于置信度阈值也继续导出裁切 TIFF。默认低置信只写 debug/report。")
+
     parser.add_argument("--debug", action="store_true", help="输出绿色外框、蓝色输出框、红色分隔线 debug JPG 到 split_output/_debug。")
     parser.add_argument("--debug-analysis", action="store_true", help="额外输出 base / enhanced 检测分析图，便于检查欠曝图增强效果。")
     parser.add_argument("--dry-run", action="store_true", help="只检测并生成 debug/report，不写裁切 TIFF。")
@@ -3757,10 +4454,74 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def tiff_spatial_size_for_path(input_path: Path) -> tuple[int, int]:
+    try:
+        with tifffile.TiffFile(input_path) as tif:
+            page = tif.pages[0]
+            shape = tuple(page.shape)
+            if len(shape) < 2:
+                return 1, 1
+            height, width = int(shape[0]), int(shape[1])
+    except Exception:
+        return 1, 1
+    return width, height
+
+
+def holder_long_short_ratio(width: int, height: int) -> float:
+    return float(max(width, height)) / max(1.0, float(min(width, height)))
+
+
+def infer_format_from_holder(width: int, height: int) -> FilmFormatProfile:
+    ratio = holder_long_short_ratio(width, height)
+
+    # X5 holder geometry is the most stable signal here. 35mm holders are much
+    # narrower/longer than 120 holders; DPI changes scale both axes together.
+    if ratio >= 6.0:
+        return FILM_FORMATS["135"]
+
+    # 120 holders are wider/shorter. These thresholds are intentionally broad
+    # because holder margins and partial strips shift the ideal frame math.
+    if ratio >= 4.45:
+        return FILM_FORMATS["120-645"]
+    if ratio >= 3.70:
+        return FILM_FORMATS["120-67"]
+    return FILM_FORMATS["120-66"]
+
+
+def resolve_film_format(format_name: str, input_path: Path) -> FilmFormatProfile:
+    if format_name == "auto":
+        width, height = tiff_spatial_size_for_path(input_path)
+        return infer_format_from_holder(width, height)
+    return FILM_FORMATS[str(format_name)]
+
+
+def auto_layout_for_format(profile: FilmFormatProfile, input_path: Path) -> str:
+    width, height = tiff_spatial_size_for_path(input_path)
+    aspect = float(width) / max(1.0, float(height))
+    return "single-horizontal" if aspect >= 1.0 else "single-vertical"
+
+
+def resolve_layout(layout: str, profile: FilmFormatProfile, input_path: Path) -> str:
+    return auto_layout_for_format(profile, input_path) if layout == "auto" else str(layout)
+
+
+def resolve_strip_completeness(strip_completeness: str, profile: FilmFormatProfile, leader_mode: bool) -> str:
+    if leader_mode:
+        return "partial"
+    return str(strip_completeness)
+
+
 def config_from_args(args: argparse.Namespace) -> SplitConfig:
-    count = int(args.count)
+    input_path = Path(args.input).expanduser().resolve()
+    profile = resolve_film_format(str(args.format), input_path)
+    strip_completeness = resolve_strip_completeness(str(args.strip_completeness), profile, bool(args.leader_mode))
+    count = int(profile.default_count if args.count is None else args.count)
     if count < 1:
         raise ValueError("--count 必须大于等于 1。")
+    if count not in profile.allowed_counts:
+        allowed = ", ".join(str(x) for x in profile.allowed_counts)
+        raise ValueError(f"--format {profile.name} 允许的 --count 为：{allowed}。")
+    layout = resolve_layout(str(args.layout), profile, input_path)
 
     bleed_x = int(args.bleed if args.bleed_x is None else args.bleed_x)
     bleed_y = int(args.bleed if args.bleed_y is None else args.bleed_y)
@@ -3865,10 +4626,16 @@ def config_from_args(args: argparse.Namespace) -> SplitConfig:
         raise ValueError("必须满足 0 < --frame-size-min-ratio < --frame-size-max-ratio。")
     if args.frame_size_base_weight < 0:
         raise ValueError("--frame-size-base-weight 不能为负数。")
+    if not (0.0 <= float(args.confidence_threshold) <= 1.0):
+        raise ValueError("--confidence-threshold 必须在 0~1 之间。")
 
     return SplitConfig(
-        input_path=Path(args.input).expanduser().resolve(),
+        input_path=input_path,
         output=Path(args.output).expanduser().resolve() if args.output else None,
+        film_format=str(profile.name),
+        format_auto=(str(args.format) == "auto"),
+        layout=layout,
+        strip_completeness=strip_completeness,
         count=count,
         page=int(args.page),
         deskew=str(args.deskew),
@@ -3955,6 +4722,10 @@ def config_from_args(args: argparse.Namespace) -> SplitConfig:
         extra_tags=str(args.extra_tags),
         copy_description=str(args.copy_description),
         preserve_tiling=bool(args.preserve_tiling),
+        confidence_threshold=float(args.confidence_threshold),
+        review_dir=Path(args.review_dir).expanduser().resolve() if args.review_dir else None,
+        copy_review_files=bool(args.copy_review_files),
+        export_low_confidence=bool(args.export_low_confidence),
         debug=bool(args.debug),
         dry_run=bool(args.dry_run),
         overwrite=bool(args.overwrite),
@@ -3981,6 +4752,7 @@ def main() -> int:
     print(f"文件数：{len(files)}")
     print(f"输出：{default_output}")
     print(f"依赖：tifffile={getattr(tifffile, '__version__', 'unknown')}  imagecodecs={'yes' if has_imagecodecs() else 'no'}")
+    print(f"格式：{config.film_format}；布局：{config.layout}；完整性：{config.strip_completeness}；每条张数：{config.count}")
     print(f"安全 bleed：左右 {config.bleed_x}px，上下 {config.bleed_y}px")
     print(f"deskew：{config.deskew}；默认 auto，高置信倾斜时会先几何校平；可用 --deskew off 关闭")
     print(f"检测增强 analysis-enhance：{config.analysis_enhance}；hybrid_gutter={config.analysis_preserve_gutter}；geometry_select={config.analysis_geometry_select}")
@@ -3988,17 +4760,25 @@ def main() -> int:
     print(f"横向外框校正：{config.outer_refine}；min_inliers={config.outer_refine_min_inliers}；iterations={config.outer_refine_iterations}")
     print(f"全局片距校正：{config.grid_fit}；min_inliers={config.grid_min_inliers}；tolerance={config.grid_tolerance_ratio}")
     print(f"同画幅尺寸校正：{config.frame_size_fit}；min_samples={config.frame_size_min_samples}；tolerance={config.frame_size_tolerance_ratio}")
+    print(f"自动裁切置信度阈值：{config.confidence_threshold:.2f}；低置信默认标记 needs_review 并跳过导出")
     if config.edge_refine:
         print(f"edge-refine：开启；single={config.edge_refine_single}；适合片头/片尾/空白帧特殊场景")
 
     ok = 0
     fail = 0
+    approved = 0
+    review = 0
     for file in files:
         print(f"\n[{file.name}]")
         try:
             result = process_one(file, config)
+            print(f"  status: {result.status}  confidence={result.confidence:.3f}")
             for warning in result.warnings:
                 print(f"  警告：{warning}")
+            if result.status == "approved_auto":
+                approved += 1
+            elif result.status == "needs_review":
+                review += 1
             ok += 1
         except Exception as exc:
             fail += 1
@@ -4007,6 +4787,7 @@ def main() -> int:
                 traceback.print_exc()
 
     print(f"\n完成：成功 {ok}，失败 {fail}")
+    print(f"自动通过：{approved}，待复核：{review}")
     print(f"输出目录：{default_output}")
     return 0 if fail == 0 else 1
 
