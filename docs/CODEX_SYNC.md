@@ -389,3 +389,40 @@ Known local-only files:
 
 Next recommended step:
 - Commit/push this cleanup, then run the v18 debug/debug-analysis launchers from Finder on a real TIFF folder when convenient.
+
+---
+
+Date: 2026-06-03
+Computer: primary macOS machine
+Branch: integrate-web-app
+Last commit: fd982df Remove macOS launcher path fallback
+
+Changed:
+- Added `README_X5_Split_v18.md`, a Chinese user-facing README for the v18 standalone script.
+- Added a link from `README_X5_Split_v18_DoubleClick.md` to the Chinese README.
+- Updated the three macOS v18 `.command` launchers so `Press Return to close...` exits through a shared finish function.
+- After Return, the macOS launchers now try to close the Finder-opened Terminal.app or iTerm2 window while preserving the script exit code.
+- Documented in the Chinese README why Finder double-clicking `.command` may still open Terminal.app even if iTerm2 is configured as the default terminal.
+
+Verified:
+- `python3 -m py_compile X5_Split_v18.py`
+- `bash -n X5_Split_v18_macOS_DoubleClick.command X5_Split_v18_macOS_Debug_DoubleClick.command X5_Split_v18_macOS_DebugAnalysis_DoubleClick.command`
+- Confirmed no `REPO_SCRIPT` fallback was reintroduced.
+- Created a synthetic TIFF in `/private/tmp/x5crop_v18_close_test`.
+- Copied `X5_Split_v18.py` and `X5_Split_v18_macOS_Debug_DoubleClick.command` into the same temporary TIFF folder.
+- Ran `printf '\n' | bash /private/tmp/x5crop_v18_close_test/X5_Split_v18_macOS_Debug_DoubleClick.command`; confirmed it completed with `dry_run=True`.
+- Confirmed the temporary test output contained reports and a debug JPG but no cropped frame TIFFs.
+- Confirmed debug JPG output with `file`.
+
+Not verified:
+- Did not double-click from Finder, so the AppleScript window-close behavior was syntax-checked but not visually verified in Terminal.app/iTerm2.
+- Did not run Windows `.bat` launchers after this macOS-only change.
+- Did not run against real local `Test/` TIFF samples.
+
+Known local-only files:
+- `/private/tmp/x5crop_v18_close_test`
+- `Test/`
+- `downloaded_apps/`
+
+Next recommended step:
+- Double-click a macOS v18 launcher from Finder on a real TIFF folder to visually confirm the Return-to-close behavior, then adjust the AppleScript if Terminal.app or iTerm2 behaves differently on this machine.

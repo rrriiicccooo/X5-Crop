@@ -1,5 +1,11 @@
 # X5 Split v18 Double-Click Use
 
+中文完整说明见：
+
+```text
+README_X5_Split_v18.md
+```
+
 Put these files in the folder that contains the TIFF scans you want to crop:
 
 - `X5_Split_v18.py`
