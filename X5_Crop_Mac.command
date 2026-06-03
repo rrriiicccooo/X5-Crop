@@ -64,16 +64,6 @@ else
     finish 1
 fi
 
-PY_TAG="$($PYTHON - <<'PY'
-import sys
-print(f"py{sys.version_info[0]}{sys.version_info[1]}")
-PY
-)"
-DEPS_DIR="./.x5crop_deps/$PY_TAG"
-if [ -d "$DEPS_DIR" ]; then
-    export PYTHONPATH="$DEPS_DIR${PYTHONPATH:+:$PYTHONPATH}"
-fi
-
 echo "X5 Crop V2 launcher"
 echo "Folder: $(pwd)"
 echo
@@ -124,14 +114,14 @@ case "$FORMAT_INPUT" in
         ;;
 esac
 
-PARTIAL_ANSWER="$(ask_yes_no "partial mode? [y/n]: " "no")"
+PARTIAL_ANSWER="$(ask_yes_no "partial mode? [y/n, return=no]: " "no")"
 if [ "$PARTIAL_ANSWER" = "yes" ]; then
     STRIP="partial"
 else
     STRIP="full"
 fi
 
-DEBUG_ANSWER="$(ask_yes_no "debug analysis? [y/n]: " "no")"
+DEBUG_ANSWER="$(ask_yes_no "debug analysis? [y/n, return=no]: " "no")"
 if [ "$DEBUG_ANSWER" = "yes" ]; then
     DEBUG="yes"
 else

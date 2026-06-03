@@ -28,12 +28,6 @@ if %errorlevel%==0 (
     )
 )
 
-for /f %%P in ('%PYTHON% -c "import sys; print('py{}{}'.format(sys.version_info[0], sys.version_info[1]))"') do set "PY_TAG=%%P"
-set "DEPS_DIR=%~dp0.x5crop_deps\%PY_TAG%"
-if exist "%DEPS_DIR%" (
-    set "PYTHONPATH=%DEPS_DIR%;%PYTHONPATH%"
-)
-
 echo X5 Crop V2 launcher
 echo Folder: %cd%
 echo.
@@ -98,12 +92,10 @@ if /i "%FORMAT_INPUT%"=="135" (
 )
 
 :ask_partial
-set "PARTIAL_INPUT="
-set /p "PARTIAL_INPUT=partial mode? [y/n]: "
+set "PARTIAL_INPUT=no"
+set /p "PARTIAL_INPUT=partial mode? [y/n, return=no]: "
 set "PARTIAL_INPUT=%PARTIAL_INPUT: =%"
-if "%PARTIAL_INPUT%"=="" (
-    set "STRIP=full"
-) else if /i "%PARTIAL_INPUT%"=="n" (
+if /i "%PARTIAL_INPUT%"=="n" (
     set "STRIP=full"
 ) else if /i "%PARTIAL_INPUT%"=="no" (
     set "STRIP=full"
@@ -117,12 +109,10 @@ if "%PARTIAL_INPUT%"=="" (
 )
 
 :ask_debug
-set "DEBUG_INPUT="
-set /p "DEBUG_INPUT=debug analysis? [y/n]: "
+set "DEBUG_INPUT=no"
+set /p "DEBUG_INPUT=debug analysis? [y/n, return=no]: "
 set "DEBUG_INPUT=%DEBUG_INPUT: =%"
-if "%DEBUG_INPUT%"=="" (
-    set "DEBUG=no"
-) else if /i "%DEBUG_INPUT%"=="n" (
+if /i "%DEBUG_INPUT%"=="n" (
     set "DEBUG=no"
 ) else if /i "%DEBUG_INPUT%"=="no" (
     set "DEBUG=no"

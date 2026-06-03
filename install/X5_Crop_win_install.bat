@@ -60,22 +60,10 @@ echo Python:
 %PYTHON_BASE% --version
 echo.
 
-for /f %%P in ('%PYTHON_BASE% -c "import sys; print('py{}{}'.format(sys.version_info[0], sys.version_info[1]))"') do set "PY_TAG=%%P"
-set "DEPS_DIR=%cd%\.x5crop_deps\%PY_TAG%"
-if not exist "%DEPS_DIR%" (
-    mkdir "%DEPS_DIR%"
-    if errorlevel 1 (
-        echo Could not create dependency folder.
-        echo.
-        pause
-        exit /b 1
-    )
-)
-
 echo.
-echo Installing dependencies into: %DEPS_DIR%
+echo Installing dependencies for this user...
 %PYTHON_BASE% -m ensurepip --upgrade >nul 2>nul
-%PYTHON_BASE% -m pip install -U --target "%DEPS_DIR%" numpy tifffile imagecodecs Pillow
+%PYTHON_BASE% -m pip install --user -U numpy tifffile imagecodecs Pillow
 if errorlevel 1 (
     echo Failed to install dependencies.
     echo.
@@ -85,7 +73,6 @@ if errorlevel 1 (
 
 echo.
 echo Verifying dependencies...
-set "PYTHONPATH=%DEPS_DIR%;%PYTHONPATH%"
 %PYTHON_BASE% -c "import numpy, tifffile, imagecodecs; from PIL import Image; print('Dependencies OK')"
 if errorlevel 1 (
     echo Dependency verification failed.

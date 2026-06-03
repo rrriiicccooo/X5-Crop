@@ -112,13 +112,12 @@ Changed:
   keeps the default value.
 - Cleaned launcher prompt text: use lowercase prompts and labels, and changed
   `Format [135]:` to `format:` while still treating blank input as `135`.
-- Replaced the local virtual environment setup with a relative dependency
-  target. Install launchers now install packages into `.x5crop_deps/pyXY/`, and
-  run launchers add that folder to `PYTHONPATH`. The old `.venv-x5crop/` path is
-  ignored by current launchers so the script folder stays easier to move.
+- Replaced the project-local dependency target with user-level dependency
+  installation. Install launchers now run `pip install --user -U ...`; macOS
+  falls back to prompting for `--break-system-packages --user` if normal user
+  install is blocked by externally-managed Python protection.
 - Moved first-time install launchers into `install/` and adjusted them to run
-  from the project root so `.x5crop_deps/` is still created next to
-  `X5_Crop.py`.
+  from the project root before running user-level dependency installation.
 - Reordered main launcher prompts to ask for format first, then partial mode,
   then Debug Analysis dry run.
 - Simplified launchers again: aside from first-time install launchers, macOS now
@@ -139,13 +138,13 @@ Changed:
   variable value when the user presses Enter on an empty prompt.
 - Added first-time setup launchers: `install/X5_Crop_Mac_install.command` and
   `install/X5_Crop_win_install.bat`.
-- Setup launchers create a local `.x5crop_deps/pyXY/` dependency folder and
-  install `numpy`, `tifffile`, `imagecodecs`, and `Pillow` there. If Python is missing,
+- Setup launchers install `numpy`, `tifffile`, `imagecodecs`, and `Pillow` for
+  the current user. If Python is missing,
   macOS uses Homebrew when available or opens python.org; Windows tries `winget`
   before opening python.org.
-- Updated macOS and Windows launchers to add `.x5crop_deps/pyXY/` to
-  `PYTHONPATH`, so friend/new-machine installs do not depend on global pip
-  state and are less tied to absolute folder paths.
+- Updated macOS and Windows launchers to use the normal Python on PATH rather
+  than a project-local venv/dependency folder, so the script and launchers can
+  move more freely after dependencies are installed for the user.
 - Updated `README.md` with the first-time setup workflow and required setup
   launcher files.
 - Disabled default format guessing in the active CLI: `--format` is now required
@@ -249,10 +248,10 @@ Verified:
   uses lowercase prompt text, `format:` without `[135]`, and lowercase summary
   labels.
 - `bash -n install/X5_Crop_Mac_install.command X5_Crop_Mac.command`
-- Confirmed `X5_Crop_Mac.command` no longer prefers `.venv-x5crop`; it computes
-  `pyXY` and adds `.x5crop_deps/pyXY/` to `PYTHONPATH` when present.
-- Confirmed install launchers target `.x5crop_deps/pyXY/` instead of creating a
-  virtual environment.
+- Confirmed `X5_Crop_Mac.command` no longer prefers `.venv-x5crop` and no
+  longer adds `.x5crop_deps` to `PYTHONPATH`.
+- Confirmed install launchers use user-level pip install instead of creating a
+  virtual environment or project-local dependency target.
 - Prompt smoke test on `X5_Crop_Mac.command` still reaches format-first flow and
   blank answers select `135`, full mode, debug off. The repository root has no
   TIFF files, so the test intentionally stopped after `No TIFF files found`.
@@ -381,7 +380,7 @@ Verified:
 
 Not verified:
 - Did not run the new install launchers end-to-end, because that would create
-  `.x5crop_deps` and download/install dependencies on this machine.
+  or update user-level Python packages on this machine.
 - Did not run `install/X5_Crop_win_install.bat` on Windows.
 - Did not run Windows `.bat` launchers on Windows.
 - Did not run a non-dry-run TIFF export after creating X5 Crop V2.

@@ -55,22 +55,27 @@ echo "Python:"
 $PYTHON_BASE --version
 echo
 
-PY_TAG="$($PYTHON_BASE - <<'PY'
-import sys
-print(f"py{sys.version_info[0]}{sys.version_info[1]}")
-PY
-)"
-DEPS_DIR="./.x5crop_deps/$PY_TAG"
-mkdir -p "$DEPS_DIR" || finish 1
-
 echo
-echo "Installing dependencies into: $DEPS_DIR"
+echo "Installing dependencies for this user..."
 $PYTHON_BASE -m ensurepip --upgrade >/dev/null 2>&1 || true
-$PYTHON_BASE -m pip install -U --target "$DEPS_DIR" numpy tifffile imagecodecs Pillow || finish 1
+if ! $PYTHON_BASE -m pip install --user -U numpy tifffile imagecodecs Pillow; then
+    echo
+    echo "Standard user install failed."
+    echo "On newer macOS/Homebrew Python this can be caused by externally-managed Python protection."
+    read -r -p "Retry with --break-system-packages --user? [y/N] " ANSWER
+    case "$ANSWER" in
+        y|Y|yes|YES)
+            $PYTHON_BASE -m pip install --user --break-system-packages -U numpy tifffile imagecodecs Pillow || finish 1
+            ;;
+        *)
+            finish 1
+            ;;
+    esac
+fi
 
 echo
 echo "Verifying dependencies..."
-if ! PYTHONPATH="$DEPS_DIR${PYTHONPATH:+:$PYTHONPATH}" $PYTHON_BASE - <<'PY'
+if ! $PYTHON_BASE - <<'PY'
 import numpy
 import tifffile
 import imagecodecs

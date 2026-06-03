@@ -65,15 +65,15 @@ Windows:
 install/X5_Crop_win_install.bat
 ```
 
-安装启动器会优先使用机器上已有的 Python 3，在项目文件夹里创建本地依赖目录：
+安装启动器会优先使用机器上已有的 Python 3，并用用户级安装方式安装依赖：
 
-```text
-.x5crop_deps/
+```bash
+python3 -m pip install --user -U numpy tifffile imagecodecs Pillow
 ```
 
-然后把 `numpy`、`tifffile`、`imagecodecs`、`Pillow` 安装到这个相对路径依赖目录。后续普通裁切启动器会自动把 `.x5crop_deps/` 加入 Python 搜索路径。这样不依赖虚拟环境的绝对路径，也不会污染系统 Python。
+这样脚本和启动器可以自由移动；依赖跟着当前用户的 Python 走，不绑在项目文件夹路径上。
 
-移动整个项目文件夹后，启动器仍会按新位置寻找 `.x5crop_deps/`。如果换了电脑、换了 Python 版本，或依赖失效，重新运行一次安装启动器即可。旧版曾使用的 `.venv-x5crop/` 现在不会再被启动器使用。
+macOS 上如果遇到新版 Python / Homebrew 的 externally-managed 限制，安装器会提示是否用 `--break-system-packages --user` 重试。这里仍然是用户级安装，不是写入系统目录。
 
 如果机器没有 Python：
 
@@ -130,7 +130,7 @@ chmod +x X5_Crop_Mac.command install/X5_Crop_Mac_install.command
 X5_Crop_Mac.command
 ```
 
-会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。它会先问 `format:`，再问 `partial mode? [y/n]:`，最后问 `debug analysis? [y/n]:`。后两个问题都可以输入 `yes` / `no` / `y` / `n`，直接回车等于 `no`。
+会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。它会先问 `format:`，再问 `partial mode? [y/n, return=no]:`，最后问 `debug analysis? [y/n, return=no]:`。后两个问题都可以输入 `yes` / `no` / `y` / `n`，直接回车等于 `no`。
 
 如果开启 Debug Analysis，它不会写裁切 TIFF。它会在一张 JPG 里生成四块内容：带框 debug 图、原始灰度图、分隔证据图、内容证据图。横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾和未铺满整条片夹的情况。
 
