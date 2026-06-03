@@ -102,50 +102,36 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Tightened v18 outer-candidate selection so near-full-canvas boxes are ignored
-  when smaller valid strip candidates exist.
-- Tightened 135 confidence scoring so very even geometry no longer auto-passes
-  when too many separators are equal/fallback splits or too few real separators
-  were detected.
-- Debug and DebugAnalysis JPGs now show a PASS/REVIEW confidence badge in the
-  image itself.
-- Detected separator marks now preserve and draw the detected separator band
-  width where available, instead of always drawing a single line.
-- Updated `README.md` to explain PASS/REVIEW badges and the difference between
-  red detected separator regions and yellow/purple inferred cut lines.
+- Moved PASS/REVIEW confidence text out of the image area into a top status bar
+  for both Debug and DebugAnalysis JPGs.
+- Reduced debug overlay clutter: real detected separator regions still draw as
+  red marks, while grid/equal/fallback separators draw only short edge ticks.
+- Suppressed inferred separator ticks that overlap a real detected separator.
+- Updated `README.md` to describe the external status bar and short tick marks.
 
 Verified:
 - `python3 -m py_compile X5_Split_v18.py`
-- Ran `--debug-analysis --dry-run --format 135 --no-copy-review-files` against
-  samples from `Test/135负片/正常`: `001.tif`, `11.tif`, `15.tif`, and
-  `X5 022.tif`.
-- Confirmed `001.tif` changed from previous approved behavior to
-  `needs_review` with `mostly_equal_split` and
-  `too_few_detected_separators`.
-- Confirmed `X5 022.tif` becomes `needs_review` when all five separators are
-  equal/fallback splits.
-- Confirmed `11.tif` and `15.tif` still pass with smaller non-full outer boxes
-  and two real detected separators plus grid-derived separators.
-- Visually inspected generated DebugAnalysis JPGs for `001.tif` and `11.tif`;
-  PASS/REVIEW badges are visible and red detected separators are drawn as
-  regions where width data exists.
-- Ran standalone `--debug --dry-run` on `001.tif` and confirmed the `_debug`
-  JPG also includes the REVIEW badge.
+- Ran standalone `--debug --dry-run --format 135 --no-copy-review-files` on
+  `Test/135负片/正常/001.tif`; visually confirmed the REVIEW status bar is
+  outside the image and inferred separator marks are shorter edge ticks.
+- Ran `--debug-analysis --dry-run --format 135 --no-copy-review-files` on the
+  same sample; visually confirmed the combined JPG uses a top status bar and a
+  short `Debug boxes | REVIEW` panel label.
 
 Not verified:
-- Did not run Windows `.bat` launchers after this color/doc change.
-- Did not complete a full-directory run over all `Test/135负片/正常` samples;
-  the first full run was stopped because it was taking too long.
-- Did not run a non-dry-run export after this confidence change.
+- Did not change or retest enhanced-analysis selection behavior.
+- Did not run Windows `.bat` launchers after this debug visualization change.
+- Did not run a non-dry-run export after this visualization-only change.
 
 Known local-only files:
 - `Test/`
-- `/private/tmp/x5crop_sample_v18_fix`
-- `/private/tmp/x5crop_sample_v18_debug_fix`
+- `/private/tmp/x5crop_debug_layout_fix`
+- `/private/tmp/x5crop_debug_analysis_layout_fix`
+- `/private/tmp/x5crop_debug_analysis_layout_fix2`
 
 Next recommended step:
 - Copy the updated root `X5_Split_v18.py` into any standalone test folder before
   rerunning launchers there; `Test/135负片/正常` currently contains its own script
   copy.
-- Run a focused real export on known-good samples after reviewing DebugAnalysis
-  output.
+- Revisit enhanced-analysis auto-selection separately; this change intentionally
+  only touched debug visualization.

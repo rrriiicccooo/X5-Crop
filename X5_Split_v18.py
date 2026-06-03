@@ -1317,6 +1317,17 @@ def draw_preview_line(rgb: np.ndarray, box: Box, scale: float, color: tuple[int,
     rgb[top:bottom, max(0, x - t // 2):min(w, x + (t + 1) // 2)] = color
 
 
+def draw_preview_hline(rgb: np.ndarray, box: Box, scale: float, color: tuple[int, int, int], thickness: int = 2) -> None:
+    h, w = rgb.shape[:2]
+    y = max(0, min(h - 1, int(round(box.top * scale))))
+    left = max(0, min(w - 1, int(round(box.left * scale))))
+    right = max(0, min(w, int(round(box.right * scale))))
+    if right <= left:
+        return
+    t = max(1, int(thickness))
+    rgb[max(0, y - t // 2):min(h, y + (t + 1) // 2), left:right] = color
+
+
 def draw_preview_mark(rgb: np.ndarray, box: Box, scale: float, color: tuple[int, int, int], thickness: int = 2) -> None:
     if box.width > 1 or box.height > 1:
         draw_preview_rect(rgb, box, scale, color, thickness)
@@ -1352,6 +1363,33 @@ def gap_mark_box(detection: Detection, gap: Gap) -> Optional[Box]:
     return Box(work_outer.top, x, work_outer.bottom, x + 1)
 
 
+def gap_tick_boxes(detection: Detection, gap: Gap) -> list[Box]:
+    work_outer_raw = detection.detail.get("work_outer")
+    if not isinstance(work_outer_raw, dict):
+        return []
+    try:
+        work_outer = Box(
+            int(work_outer_raw["left"]),
+            int(work_outer_raw["top"]),
+            int(work_outer_raw["right"]),
+            int(work_outer_raw["bottom"]),
+        )
+    except Exception:
+        return []
+    tick = max(20, int(round((work_outer.height if detection.layout == "horizontal" else work_outer.width) * 0.12)))
+    if detection.layout == "horizontal":
+        x = int(round(work_outer.left + gap.center))
+        return [
+            Box(x, work_outer.top, x + 1, min(work_outer.bottom, work_outer.top + tick)),
+            Box(x, max(work_outer.top, work_outer.bottom - tick), x + 1, work_outer.bottom),
+        ]
+    y = int(round(work_outer.left + gap.center))
+    return [
+        Box(work_outer.top, y, min(work_outer.bottom, work_outer.top + tick), y + 1),
+        Box(max(work_outer.top, work_outer.bottom - tick), y, work_outer.bottom, y + 1),
+    ]
+
+
 def debug_status_label(detection: Detection, threshold: float) -> tuple[str, tuple[int, int, int]]:
     passed = detection.confidence >= threshold
     status = "PASS" if passed else "REVIEW"
@@ -1363,33 +1401,25 @@ def debug_status_label(detection: Detection, threshold: float) -> tuple[str, tup
     return label, color
 
 
-def add_status_badge(rgb: np.ndarray, detection: Detection, threshold: float) -> np.ndarray:
+def add_status_bar(rgb: np.ndarray, detection: Detection, threshold: float) -> np.ndarray:
     label, color = debug_status_label(detection, threshold)
-    image = Image.fromarray(np.ascontiguousarray(rgb), mode="RGB")
+    bar_h = 40
+    h, w = rgb.shape[:2]
+    panel = np.full((h + bar_h, w, 3), 18, dtype=np.uint8)
+    panel[bar_h:, :, :] = rgb
+    image = Image.fromarray(panel, mode="RGB")
     draw = ImageDraw.Draw(image)
-    try:
-        bbox = draw.textbbox((0, 0), label)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-    except Exception:
-        text_w = max(180, len(label) * 7)
-        text_h = 12
-    pad_x = 10
-    pad_y = 7
-    x0, y0 = 10, 10
-    x1 = min(image.width - 1, x0 + text_w + pad_x * 2)
-    y1 = min(image.height - 1, y0 + text_h + pad_y * 2)
-    draw.rectangle((x0, y0, x1, y1), fill=(18, 18, 18), outline=color, width=2)
-    draw.text((x0 + pad_x, y0 + pad_y), label, fill=(245, 245, 245))
+    draw.rectangle((0, 0, w - 1, bar_h - 1), outline=color, width=2)
+    draw.text((12, 12), label, fill=(245, 245, 245))
     return np.asarray(image)
 
 
 def write_debug_preview(gray: np.ndarray, detection: Detection, output_path: Path, threshold: float) -> None:
-    rgb = make_debug_preview_rgb(gray, detection, threshold)
+    rgb = add_status_bar(make_debug_preview_rgb(gray, detection), detection, threshold)
     write_rgb_jpeg(rgb, output_path)
 
 
-def make_debug_preview_rgb(gray: np.ndarray, detection: Detection, threshold: Optional[float] = None) -> np.ndarray:
+def make_debug_preview_rgb(gray: np.ndarray, detection: Detection) -> np.ndarray:
     rgb, scale = preview_gray(gray)
     draw_preview_rect(rgb, detection.outer, scale, (0, 255, 0), 3)
     for box in detection.frames:
@@ -1400,12 +1430,26 @@ def make_debug_preview_rgb(gray: np.ndarray, detection: Detection, threshold: Op
         "equal": (190, 80, 255),
         "equal-broad-region": (190, 80, 255),
     }
+    pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
+    detected_centers = [gap.center for gap in detection.gaps if gap.method == "detected"]
+    overlap_tolerance = max(4.0, pitch * 0.012)
     for gap in detection.gaps:
+        if gap.method != "detected":
+            continue
         mark = gap_mark_box(detection, gap)
         if mark is not None:
             draw_preview_mark(rgb, mark, scale, gap_colors.get(gap.method, (255, 255, 255)), 2)
-    if threshold is not None:
-        rgb = add_status_badge(rgb, detection, threshold)
+    for gap in detection.gaps:
+        if gap.method == "detected":
+            continue
+        if any(abs(gap.center - center) <= overlap_tolerance for center in detected_centers):
+            continue
+        color = gap_colors.get(gap.method, (255, 255, 255))
+        for tick in gap_tick_boxes(detection, gap):
+            if detection.layout == "horizontal":
+                draw_preview_line(rgb, tick, scale, color, 2)
+            else:
+                draw_preview_hline(rgb, tick, scale, color, 2)
     return rgb
 
 
@@ -1433,7 +1477,7 @@ def add_panel_label(rgb: np.ndarray, label: str) -> np.ndarray:
 
 def make_debug_analysis_panel(gray: np.ndarray, detection: Detection, threshold: float) -> np.ndarray:
     status, _ = debug_status_label(detection, threshold)
-    debug_rgb = add_panel_label(make_debug_preview_rgb(gray, detection, threshold), f"Debug boxes | {status}")
+    debug_rgb = add_panel_label(make_debug_preview_rgb(gray, detection), f"Debug boxes | {status.split()[0]}")
     base_rgb, _ = preview_gray(gray)
     base_rgb = add_panel_label(base_rgb, "Original gray")
     enhanced_rgb, _ = preview_gray(make_analysis_gray(gray))
@@ -1458,7 +1502,7 @@ def make_debug_analysis_panel(gray: np.ndarray, detection: Detection, threshold:
             h, w = panel.shape[:2]
             canvas[:h, x:x + w] = panel
             x += w + gap
-    return canvas
+    return add_status_bar(canvas, detection, threshold)
 
 
 def write_debug_analysis(gray: np.ndarray, detection: Detection, output_dir: Path, stem: str, threshold: float) -> list[str]:
