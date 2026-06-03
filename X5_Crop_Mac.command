@@ -41,7 +41,7 @@ ask_yes_no() {
                 return 0
                 ;;
             *)
-                echo "Use yes/no, y/n, or press Return for no."
+                echo "Use yes/no, y/n, or press Return for no." >&2
                 ;;
         esac
     done
@@ -62,7 +62,7 @@ elif command -v python >/dev/null 2>&1; then
     PYTHON="python"
 else
     echo "Python was not found."
-    echo "Run X5_Crop_Mac_install.command first, then try again."
+    echo "Run install/X5_Crop_Mac_install.command first, then try again."
     finish 1
 fi
 
@@ -74,21 +74,6 @@ echo "Output: split_output"
 echo "Existing output files will not be overwritten."
 echo
 
-PARTIAL_ANSWER="$(ask_yes_no "Enable partial mode? [y/N]: " "no")"
-if [ "$PARTIAL_ANSWER" = "yes" ]; then
-    STRIP="partial"
-else
-    STRIP="full"
-fi
-
-DEBUG_ANSWER="$(ask_yes_no "Enable Debug Analysis dry run? [y/N]: " "no")"
-if [ "$DEBUG_ANSWER" = "yes" ]; then
-    DEBUG="yes"
-else
-    DEBUG="no"
-fi
-
-echo
 echo "Choose film format:"
 echo "  [Return] or 135 = 135"
 echo "  xpan = XPAN"
@@ -130,6 +115,20 @@ case "$FORMAT_INPUT" in
         finish 1
         ;;
 esac
+
+PARTIAL_ANSWER="$(ask_yes_no "Enable partial mode? [y/N]: " "no")"
+if [ "$PARTIAL_ANSWER" = "yes" ]; then
+    STRIP="partial"
+else
+    STRIP="full"
+fi
+
+DEBUG_ANSWER="$(ask_yes_no "Enable Debug Analysis dry run? [y/N]: " "no")"
+if [ "$DEBUG_ANSWER" = "yes" ]; then
+    DEBUG="yes"
+else
+    DEBUG="no"
+fi
 
 echo
 echo "Selected format: $FORMAT"

@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo X5 Crop first-time setup for Windows
 echo Folder: %cd%
@@ -73,7 +73,7 @@ if not exist ".venv-x5crop" (
     echo Using existing local environment: .venv-x5crop
 )
 
-set "PYTHON=%~dp0.venv-x5crop\Scripts\python.exe"
+set "PYTHON=%cd%\.venv-x5crop\Scripts\python.exe"
 if not exist "%PYTHON%" (
     echo Local Python was not created correctly.
     echo.
@@ -110,7 +110,7 @@ if errorlevel 1 (
 
 echo.
 echo Setup finished successfully.
-echo You can now use X5_Crop_win.bat or X5_Crop_win_debug.bat.
+echo You can now use X5_Crop_win.bat.
 echo.
 pause
 exit /b 0

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cd "$(dirname "$0")" || exit 1
+cd "$(dirname "$0")/.." || exit 1
 
 close_terminal_window() {
     case "${TERM_PROGRAM:-}" in
@@ -88,5 +88,5 @@ fi
 
 echo
 echo "Setup finished successfully."
-echo "You can now use X5_Crop_Mac.command or X5_Crop_Mac_debug.command."
+echo "You can now use X5_Crop_Mac.command."
 finish 0

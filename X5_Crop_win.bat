@@ -24,7 +24,7 @@ if %errorlevel%==0 (
         set "PYTHON=python"
     ) else (
         echo Python was not found.
-        echo Run X5_Crop_win_install.bat first, then try again.
+        echo Run install\X5_Crop_win_install.bat first, then try again.
         echo.
         pause
         exit /b 1
@@ -40,45 +40,6 @@ echo Output: split_output
 echo Existing output files will not be overwritten.
 echo.
 
-:ask_partial
-set "PARTIAL_INPUT="
-set /p "PARTIAL_INPUT=Enable partial mode? [y/N]: "
-set "PARTIAL_INPUT=%PARTIAL_INPUT: =%"
-if "%PARTIAL_INPUT%"=="" (
-    set "STRIP=full"
-) else if /i "%PARTIAL_INPUT%"=="n" (
-    set "STRIP=full"
-) else if /i "%PARTIAL_INPUT%"=="no" (
-    set "STRIP=full"
-) else if /i "%PARTIAL_INPUT%"=="y" (
-    set "STRIP=partial"
-) else if /i "%PARTIAL_INPUT%"=="yes" (
-    set "STRIP=partial"
-) else (
-    echo Use yes/no, y/n, or press Enter for no.
-    goto ask_partial
-)
-
-:ask_debug
-set "DEBUG_INPUT="
-set /p "DEBUG_INPUT=Enable Debug Analysis dry run? [y/N]: "
-set "DEBUG_INPUT=%DEBUG_INPUT: =%"
-if "%DEBUG_INPUT%"=="" (
-    set "DEBUG=no"
-) else if /i "%DEBUG_INPUT%"=="n" (
-    set "DEBUG=no"
-) else if /i "%DEBUG_INPUT%"=="no" (
-    set "DEBUG=no"
-) else if /i "%DEBUG_INPUT%"=="y" (
-    set "DEBUG=yes"
-) else if /i "%DEBUG_INPUT%"=="yes" (
-    set "DEBUG=yes"
-) else (
-    echo Use yes/no, y/n, or press Enter for no.
-    goto ask_debug
-)
-
-echo.
 echo Choose film format:
 echo   [Enter] or 135 = 135
 echo   xpan = XPAN
@@ -133,6 +94,44 @@ if /i "%FORMAT_INPUT%"=="135" (
     echo.
     pause
     exit /b 1
+)
+
+:ask_partial
+set "PARTIAL_INPUT="
+set /p "PARTIAL_INPUT=Enable partial mode? [y/N]: "
+set "PARTIAL_INPUT=%PARTIAL_INPUT: =%"
+if "%PARTIAL_INPUT%"=="" (
+    set "STRIP=full"
+) else if /i "%PARTIAL_INPUT%"=="n" (
+    set "STRIP=full"
+) else if /i "%PARTIAL_INPUT%"=="no" (
+    set "STRIP=full"
+) else if /i "%PARTIAL_INPUT%"=="y" (
+    set "STRIP=partial"
+) else if /i "%PARTIAL_INPUT%"=="yes" (
+    set "STRIP=partial"
+) else (
+    echo Use yes/no, y/n, or press Enter for no.
+    goto ask_partial
+)
+
+:ask_debug
+set "DEBUG_INPUT="
+set /p "DEBUG_INPUT=Enable Debug Analysis dry run? [y/N]: "
+set "DEBUG_INPUT=%DEBUG_INPUT: =%"
+if "%DEBUG_INPUT%"=="" (
+    set "DEBUG=no"
+) else if /i "%DEBUG_INPUT%"=="n" (
+    set "DEBUG=no"
+) else if /i "%DEBUG_INPUT%"=="no" (
+    set "DEBUG=no"
+) else if /i "%DEBUG_INPUT%"=="y" (
+    set "DEBUG=yes"
+) else if /i "%DEBUG_INPUT%"=="yes" (
+    set "DEBUG=yes"
+) else (
+    echo Use yes/no, y/n, or press Enter for no.
+    goto ask_debug
 )
 
 echo.

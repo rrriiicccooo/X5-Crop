@@ -56,13 +56,13 @@ v17 是上一版参考实现，用于对照检测逻辑和回归行为。v18 是
 macOS:
 
 ```text
-X5_Crop_Mac_install.command
+install/X5_Crop_Mac_install.command
 ```
 
 Windows:
 
 ```text
-X5_Crop_win_install.bat
+install/X5_Crop_win_install.bat
 ```
 
 安装启动器会优先使用机器上已有的 Python 3，在项目文件夹里创建本地环境：
@@ -100,16 +100,16 @@ macOS 常用文件：
 
 ```text
 X5_Crop.py
-X5_Crop_Mac_install.command
 X5_Crop_Mac.command
+install/X5_Crop_Mac_install.command
 ```
 
 Windows 常用文件：
 
 ```text
 X5_Crop.py
-X5_Crop_win_install.bat
 X5_Crop_win.bat
+install/X5_Crop_win_install.bat
 ```
 
 不支持“只把启动器放进 TIFF 文件夹、脚本留在仓库里”的模式。
@@ -117,7 +117,7 @@ X5_Crop_win.bat
 如果 macOS 提示 `.command` 不能打开，先在 Terminal 里运行一次：
 
 ```bash
-chmod +x X5_Crop_Mac*.command
+chmod +x X5_Crop_Mac.command install/X5_Crop_Mac_install.command
 ```
 
 ## 启动器
@@ -128,7 +128,7 @@ chmod +x X5_Crop_Mac*.command
 X5_Crop_Mac.command
 ```
 
-会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。它会先问是否开启 partial 模式，再问是否开启 Debug Analysis dry run。两个问题都可以输入 `yes` / `no` / `y` / `n`，直接回车等于 `no`。
+会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。它会先问格式，再问是否开启 partial 模式，最后问是否开启 Debug Analysis dry run。后两个问题都可以输入 `yes` / `no` / `y` / `n`，直接回车等于 `no`。
 
 如果开启 Debug Analysis，它不会写裁切 TIFF。它会在一张 JPG 里生成四块内容：带框 debug 图、原始灰度图、分隔证据图、内容证据图。横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾和未铺满整条片夹的情况。
 

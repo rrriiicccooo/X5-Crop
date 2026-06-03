@@ -107,6 +107,11 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Moved first-time install launchers into `install/` and adjusted them to run
+  from the project root so `.venv-x5crop/` is still created next to
+  `X5_Crop.py`.
+- Reordered main launcher prompts to ask for format first, then partial mode,
+  then Debug Analysis dry run.
 - Simplified launchers again: aside from first-time install launchers, macOS now
   keeps only `X5_Crop_Mac.command` and Windows keeps only `X5_Crop_win.bat`.
   Each main launcher asks whether to enable partial mode, whether to enable
@@ -116,15 +121,15 @@ Changed:
   preference, and run logic are now inlined into the visible macOS and Windows
   launchers.
 - Current user-facing launchers are `X5_Crop_Mac.command`,
-  `X5_Crop_win.bat`, and first-time install launchers.
+  `X5_Crop_win.bat`, and first-time install launchers under `install/`.
 - Fixed launcher count behavior after separating partial mode: normal/full
   launchers now pass explicit counts (`135` 6, `half` 12, `xpan` 3, `120-645` 4,
   `120-66` 3, `120-67` 3), while partial launchers keep count auto.
 - Fixed Windows format prompt defaulting: Windows launchers now clear
   `FORMAT_INPUT` before `set /p`, because Windows keeps the previous variable
   value when the user presses Enter on an empty prompt.
-- Added first-time setup launchers: `X5_Crop_Mac_install.command` and
-  `X5_Crop_win_install.bat`.
+- Added first-time setup launchers: `install/X5_Crop_Mac_install.command` and
+  `install/X5_Crop_win_install.bat`.
 - Setup launchers create a local `.venv-x5crop/` environment and install
   `numpy`, `tifffile`, `imagecodecs`, and `Pillow` there. If Python is missing,
   macOS uses Homebrew when available or opens python.org; Windows tries `winget`
@@ -230,22 +235,24 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `bash -n install/X5_Crop_Mac_install.command X5_Crop_Mac.command`
+- Prompt smoke tests on `X5_Crop_Mac.command` confirmed the prompt order is
+  format first, then partial mode, then Debug Analysis dry run. Blank answers
+  select `135`, full mode, debug off; `645` + `y` + `y` selects `120-645`,
+  partial mode, debug on.
+- Confirmed launcher file list now contains only `X5_Crop_Mac.command`,
+  `X5_Crop_win.bat`, and install launchers under `install/`.
 - Confirmed current launcher list has only `X5_Crop_Mac.command`,
-  `X5_Crop_Mac_install.command`, `X5_Crop_win.bat`, and
-  `X5_Crop_win_install.bat` besides `X5_Crop.py`.
-- Prompt smoke tests on `X5_Crop_Mac.command` confirmed blank answers for
-  partial/debug default to no, blank format selects `135` with fixed count 6,
-  `645` maps to `120-645` with fixed count 4, and partial mode keeps
-  `count auto`. The repository root has no TIFF files, so these tests
-  intentionally stopped after `No TIFF files found`.
-- `bash -n X5_Crop_Mac_install.command X5_Crop_Mac.command`
+  `install/X5_Crop_Mac_install.command`, `X5_Crop_win.bat`, and
+  `install/X5_Crop_win_install.bat` besides `X5_Crop.py`.
+- `bash -n install/X5_Crop_Mac_install.command X5_Crop_Mac.command`
 - Confirmed `Test/135/X5_00019.tif` with `--format 135 --strip full --count 6`
   prints `count: 6` and remains `approved_auto`; runtime was about 5.9 seconds.
 - Confirmed `Test/135/X5_00038.tif` with `--format 135 --strip partial` still
   prints `count: auto` and remains `needs_review`; runtime was about 20.9
   seconds.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
-- `bash -n X5_Crop_Mac_install.command X5_Crop_Mac*.command`
+- `bash -n install/X5_Crop_Mac_install.command X5_Crop_Mac.command`
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 2.0`.
 - `python3 X5_Crop.py --help` shows `--format` as required and `--strip` choices
   as only `full,partial`.
@@ -318,7 +325,7 @@ Verified:
 - Confirmed narrow/difficult `Test/X5_test_72.tif` and `X5_test_74.tif` remain
   `needs_review` rather than being promoted by content evidence.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
-- `bash -n X5_Crop_Mac_install.command X5_Crop_Mac*.command`
+- `bash -n install/X5_Crop_Mac_install.command X5_Crop_Mac.command`
 - `python3 X5_Crop.py --version`
 - `python3 X5_Crop.py --help`
 - Verified vertical bleed mapping with `Box.expand(15, 10, ...)` plus
@@ -354,7 +361,7 @@ Verified:
 Not verified:
 - Did not run the new install launchers end-to-end, because that would create
   `.venv-x5crop` and download/install dependencies on this machine.
-- Did not run `X5_Crop_win_install.bat` on Windows.
+- Did not run `install/X5_Crop_win_install.bat` on Windows.
 - Did not run Windows `.bat` launchers on Windows.
 - Did not run a non-dry-run TIFF export after creating X5 Crop V2.
 - Did not create hand-labeled ground-truth fixtures for all `Test/` images; this
