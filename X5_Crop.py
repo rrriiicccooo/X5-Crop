@@ -1786,6 +1786,31 @@ def draw_preview_rect(rgb: np.ndarray, box: Box, scale: float, color: tuple[int,
     rgb[top:bottom, max(left, right - t):right] = color
 
 
+FRAME_FILL_COLORS = (
+    (30, 144, 255),
+    (255, 120, 40),
+    (80, 200, 120),
+    (210, 90, 255),
+    (255, 210, 40),
+    (40, 210, 220),
+    (255, 90, 120),
+    (150, 170, 255),
+)
+
+
+def fill_preview_rect(rgb: np.ndarray, box: Box, scale: float, color: tuple[int, int, int], alpha: float = 0.24) -> None:
+    h, w = rgb.shape[:2]
+    left = max(0, min(w - 1, int(round(box.left * scale))))
+    right = max(0, min(w, int(round(box.right * scale))))
+    top = max(0, min(h - 1, int(round(box.top * scale))))
+    bottom = max(0, min(h, int(round(box.bottom * scale))))
+    if right <= left or bottom <= top:
+        return
+    overlay = np.array(color, dtype=np.float32)
+    region = rgb[top:bottom, left:right].astype(np.float32, copy=False)
+    rgb[top:bottom, left:right] = np.clip(region * (1.0 - alpha) + overlay * alpha, 0, 255).astype(np.uint8)
+
+
 def draw_preview_line(rgb: np.ndarray, box: Box, scale: float, color: tuple[int, int, int], thickness: int = 2) -> None:
     h, w = rgb.shape[:2]
     x = max(0, min(w - 1, int(round(box.left * scale))))
@@ -1917,9 +1942,11 @@ def write_debug_preview(gray: np.ndarray, detection: Detection, output_path: Pat
 
 def make_debug_preview_rgb(gray: np.ndarray, detection: Detection) -> np.ndarray:
     rgb, scale = preview_gray(gray)
+    for index, box in enumerate(detection.frames):
+        color = FRAME_FILL_COLORS[index % len(FRAME_FILL_COLORS)]
+        fill_preview_rect(rgb, box, scale, color, 0.26)
+        draw_preview_rect(rgb, box, scale, color, 1)
     draw_preview_rect(rgb, detection.outer, scale, (0, 255, 0), 3)
-    for box in detection.frames:
-        draw_preview_rect(rgb, box, scale, (0, 128, 255), 2)
     return rgb
 
 
@@ -2007,14 +2034,14 @@ def add_panel_label(rgb: np.ndarray, label: str) -> np.ndarray:
 
 
 def make_debug_analysis_panel(gray: np.ndarray, detection: Detection, threshold: float) -> np.ndarray:
-    debug_rgb = add_panel_label(make_debug_preview_rgb(gray, detection), "Debug boxes")
     base_rgb, _ = preview_gray(gray)
     base_rgb = add_panel_label(base_rgb, "Original gray")
+    debug_rgb = add_panel_label(make_debug_preview_rgb(gray, detection), "Debug boxes")
     evidence_rgb = make_separator_evidence_debug_rgb(gray, detection)
     evidence_rgb = add_panel_label(evidence_rgb, "Separator evidence")
     content_rgb, _ = preview_gray(make_content_evidence_debug_gray(gray, detection))
     content_rgb = add_panel_label(content_rgb, "Content evidence")
-    panels = [debug_rgb, base_rgb, evidence_rgb, content_rgb]
+    panels = [base_rgb, debug_rgb, evidence_rgb, content_rgb]
     gap = 12
     if gray.shape[1] >= gray.shape[0]:
         max_w = max(panel.shape[1] for panel in panels)

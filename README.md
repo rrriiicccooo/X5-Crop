@@ -28,11 +28,11 @@ debug：快速可见
 仓库仍保留：
 
 ```text
-X5_Split_v17.py
-X5_Split_v18.py
+archive/X5_Split_v17.py
+archive/X5_Split_v18.py
 ```
 
-v17 是上一版参考实现，用于对照检测逻辑和回归行为。v18 是 X5_Crop V1 的直接前身，用于回看旧分隔证据逻辑。日常新工作优先放在 `X5_Crop.py`。
+v17 是上一版参考实现，用于对照检测逻辑和回归行为。v18 是 X5_Crop V1 的直接前身，用于回看旧分隔证据逻辑。它们已经归档到 `archive/`，日常新工作优先放在 `X5_Crop.py`。
 
 ## 安装依赖
 
@@ -185,7 +185,7 @@ split_output/
 | 颜色 | 含义 |
 |---|---|
 | 绿色外框 | 脚本认为整条胶片有效区域的外框 |
-| 蓝色框 | 每一张将要输出的裁切框，包含默认左右 15px、上下 10px bleed |
+| 不同半透明色块 | 每一张将要输出的裁切范围，包含默认左右 15px、上下 10px bleed |
 
 四联图顶部会在图片外显示状态栏，说明是否通过当前置信度阈值。`PASS` / `REVIEW` 会用不同颜色和更醒目的字号显示：
 
@@ -209,7 +209,7 @@ REVIEW confidence 0.676 < threshold 0.850
 看图时优先检查四件事：
 
 - 绿色外框有没有吃掉片头、片尾或画面边缘。
-- 蓝色裁切框是否覆盖每张照片，并在四周留出合理 bleed。
+- 每个半透明裁切色块是否覆盖对应照片，并在四周留出合理 bleed。
 - Separator evidence 里的红色检测区域是否覆盖真实黑条；如果没有红色、只有黄色或紫色，说明这部分更依赖推断，应该更谨慎。
 - Separator evidence 里的黄色/紫色短 tick 是否落在真实片间空隙，而不是落进画面内容。
 
@@ -217,12 +217,12 @@ REVIEW confidence 0.676 < threshold 0.850
 
 Debug Analysis 的四块内容：
 
-- `Debug boxes`：只显示绿色外框和蓝色裁切框，用来看裁切计划。
 - `Original gray`：原始检测灰度图，用来看源扫描本身的明暗和分隔可见度。
+- `Debug boxes`：显示绿色外框和不同半透明色块，用来看裁切计划。
 - `Separator evidence`：只在已确认的外框内部生成的分隔证据图，并集中绘制红色、橙色、黄色、紫色、白色分隔标记。它只补充分隔候选，不会重新决定外框，也不会写进最终 TIFF。
 - `Content evidence`：内容证据图，用综合分显示哪里更像真实照片信息。综合分由局部梯度、四邻域纹理、局部对比和少量调性存在感组成，不依赖单一亮度或单一梯度。
 
-横向胶片长图的四联图顺序是从上到下：`Debug boxes`、`Original gray`、`Separator evidence`、`Content evidence`。竖向胶片长图的四联图顺序是从左到右：`Debug boxes`、`Original gray`、`Separator evidence`、`Content evidence`。
+横向胶片长图的四联图顺序是从上到下：`Original gray`、`Debug boxes`、`Separator evidence`、`Content evidence`。竖向胶片长图的四联图顺序是从左到右：`Original gray`、`Debug boxes`、`Separator evidence`、`Content evidence`。
 
 内容证据用于检查“有信息的照片矩形”是否支持当前裁切框。横向长图下，脚本使用这些常见画幅比例作为参考：
 

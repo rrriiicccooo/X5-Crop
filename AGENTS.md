@@ -31,12 +31,12 @@ standalone script workflow unless the user explicitly resumes the app direction:
 
 ```text
 X5_Crop.py
-X5_Split_v17.py
-X5_Split_v18.py
+archive/X5_Split_v17.py
+archive/X5_Split_v18.py
 ```
 
 Keep `X5_Crop.py` as the active script. Keep `X5_Split_v17.py` and
-`X5_Split_v18.py` in the repository as preserved references. Keep user-facing
+`X5_Split_v18.py` in `archive/` as preserved references. Keep user-facing
 project documentation consolidated in `README.md`.
 
 ## Coding Rules
@@ -111,9 +111,14 @@ Changed:
   evidence, and content evidence.
 - Removed standalone Debug launchers; keep normal launchers and DebugAnalysis
   launchers only.
-- Plain debug previews now show only the status bar, green outer box, and blue
-  crop boxes. Colored separator marks are drawn in the DebugAnalysis Separator
-  evidence panel.
+- Plain debug previews now show only the status bar, green outer box, and
+  semi-transparent crop-area fills. Colored separator marks are drawn in the
+  DebugAnalysis Separator evidence panel.
+- DebugAnalysis order is now Original gray, Debug boxes, Separator evidence,
+  Content evidence.
+- Debug boxes now use different semi-transparent fills for each crop area instead
+  of blue outlines.
+- Moved v17/v18 reference scripts into `archive/`.
 - Default bleed is now 15px left/right and 10px top/bottom.
 - Content evidence is written into reports and can conservatively downgrade
   clear content/aspect conflicts, but it does not raise difficult files into
@@ -123,7 +128,7 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop V1.
 
 Verified:
-- `python3 -m py_compile X5_Crop.py X5_Split_v17.py X5_Split_v18.py`
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n X5_Crop_macOS.command X5_Crop_macOS_DebugAnalysis.command`
 - `python3 X5_Crop.py --version`
 - `python3 X5_Crop.py --help`
@@ -133,6 +138,9 @@ Verified:
   a four-panel DebugAnalysis JPG.
 - Re-ran DebugAnalysis for `001.tif` and visually confirmed colored separator
   marks moved to the Separator evidence panel while Debug boxes stayed clean.
+- Re-ran DebugAnalysis for `001.tif` after panel reordering and visually
+  confirmed the order is Original gray, Debug boxes, Separator evidence, Content
+  evidence, with semi-transparent crop fills in Debug boxes.
 - Ran `--debug` on `001.tif` and visually confirmed the standalone debug JPG now
   only shows the status bar, outer box, and crop boxes.
 - Confirmed `11.tif` remains `approved_auto` at confidence `0.963`.
@@ -152,6 +160,7 @@ Known local-only files:
 - `/private/tmp/x5crop_v1_debug_x5022`
 - `/private/tmp/x5crop_debuganalysis_only_001`
 - `/private/tmp/x5crop_clean_debug_001`
+- `/private/tmp/x5crop_reordered_panels_001`
 
 Next recommended step:
 - Run DebugAnalysis on difficult weak-separator and partial-strip samples and
