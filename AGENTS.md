@@ -107,10 +107,18 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Removed helper launchers `_X5_Crop_Mac_run.command` and
+  `_X5_Crop_win_run.bat`. Their format prompt, count mapping, `.venv-x5crop`
+  preference, and run logic are now inlined into the visible macOS and Windows
+  launchers.
+- Current user-facing launchers are `X5_Crop_Mac.command`,
+  `X5_Crop_Mac_debug.command`, `X5_Crop_Mac_partial.command`,
+  `X5_Crop_Mac_partial_debug.command`, plus the corresponding Windows `.bat`
+  files and first-time install launchers.
 - Fixed launcher count behavior after separating partial mode: normal/full
   launchers now pass explicit counts (`135` 6, `half` 12, `xpan` 3, `120-645` 4,
   `120-66` 3, `120-67` 3), while partial launchers keep count auto.
-- Fixed Windows format prompt defaulting: `_X5_Crop_win_run.bat` now clears
+- Fixed Windows format prompt defaulting: Windows launchers now clear
   `FORMAT_INPUT` before `set /p`, because Windows keeps the previous variable
   value when the user presses Enter on an empty prompt.
 - Added first-time setup launchers: `X5_Crop_Mac_install.command` and
@@ -119,7 +127,7 @@ Changed:
   `numpy`, `tifffile`, `imagecodecs`, and `Pillow` there. If Python is missing,
   macOS uses Homebrew when available or opens python.org; Windows tries `winget`
   before opening python.org.
-- Updated macOS and Windows run helpers to prefer `.venv-x5crop` Python when it
+- Updated macOS and Windows launchers to prefer `.venv-x5crop` Python when it
   exists, so friend/new-machine installs do not depend on global pip state.
 - Updated `README.md` with the first-time setup workflow and required setup
   launcher files.
@@ -135,8 +143,6 @@ Changed:
 - Kept partial/head handling as a separate launcher family:
   `X5_Crop_Mac_partial.command` / `X5_Crop_win_partial.bat`; debug variants add
   `--debug-analysis --dry-run`.
-- Added shared helper launchers `_X5_Crop_Mac_run.command` and
-  `_X5_Crop_win_run.bat` so format mapping and prompt behavior are centralized.
 - Updated `README.md` to describe the new choose-format-first workflow and
   explain that the goal is fewer false high-confidence results, not easier PASS.
 - Added per-image V2 analysis caching so `gray_work` and content evidence are
@@ -225,27 +231,25 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
-- Prompt smoke tests on `_X5_Crop_Mac_run.command` confirmed full mode prints
-  fixed counts (`135` -> 6, `645` -> 4) and partial mode prints `count auto`.
+- Confirmed current launcher list has no `_X5_Crop_*` helper files; visible
+  launchers are self-contained.
+- Prompt smoke tests on `X5_Crop_Mac.command` confirmed blank input selects
+  `135` with fixed count 6, `645` maps to `120-645` with fixed count 4, and
+  `X5_Crop_Mac_partial.command` keeps `count auto`. The repository root has no
+  TIFF files, so these tests intentionally stopped after `No TIFF files found`.
+- `bash -n X5_Crop_Mac_install.command X5_Crop_Mac.command
+  X5_Crop_Mac_debug.command X5_Crop_Mac_partial.command
+  X5_Crop_Mac_partial_debug.command`
+- Prompt smoke tests on the visible macOS launchers confirmed full mode prints
+  fixed counts, partial mode prints `count auto`, and no `_X5_Crop_*_run`
+  helper is required.
 - Confirmed `Test/135/X5_00019.tif` with `--format 135 --strip full --count 6`
   prints `count: 6` and remains `approved_auto`; runtime was about 5.9 seconds.
 - Confirmed `Test/135/X5_00038.tif` with `--format 135 --strip partial` still
   prints `count: auto` and remains `needs_review`; runtime was about 20.9
   seconds.
-- `bash -n X5_Crop_Mac_install.command _X5_Crop_Mac_run.command
-  X5_Crop_Mac.command X5_Crop_Mac_debug.command X5_Crop_Mac_partial.command
-  X5_Crop_Mac_partial_debug.command`
-- Confirmed run helpers reference `.venv-x5crop` before falling back to global
-  Python.
-- `bash -n _X5_Crop_Mac_run.command X5_Crop_Mac.command
-  X5_Crop_Mac_debug.command X5_Crop_Mac_partial.command
-  X5_Crop_Mac_partial_debug.command`
-- Prompt smoke tests on `_X5_Crop_Mac_run.command` confirmed blank input selects
-  `135`, `645` maps to `120-645`, and `xpan` maps to `xpan`. The repository root
-  has no TIFF files, so these mapping tests intentionally stopped after
-  `No TIFF files found`.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
-- `bash -n _X5_Crop_Mac_run.command X5_Crop_Mac_*.command`
+- `bash -n X5_Crop_Mac_install.command X5_Crop_Mac*.command`
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 2.0`.
 - `python3 X5_Crop.py --help` shows `--format` as required and `--strip` choices
   as only `full,partial`.
@@ -318,7 +322,7 @@ Verified:
 - Confirmed narrow/difficult `Test/X5_test_72.tif` and `X5_test_74.tif` remain
   `needs_review` rather than being promoted by content evidence.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
-- `bash -n _X5_Crop_Mac_run.command X5_Crop_Mac_*.command`
+- `bash -n X5_Crop_Mac_install.command X5_Crop_Mac*.command`
 - `python3 X5_Crop.py --version`
 - `python3 X5_Crop.py --help`
 - Verified vertical bleed mapping with `Box.expand(15, 10, ...)` plus

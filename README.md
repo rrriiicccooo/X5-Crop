@@ -101,7 +101,6 @@ macOS 常用文件：
 ```text
 X5_Crop.py
 X5_Crop_Mac_install.command
-_X5_Crop_Mac_run.command
 X5_Crop_Mac.command
 X5_Crop_Mac_debug.command
 X5_Crop_Mac_partial.command
@@ -113,7 +112,6 @@ Windows 常用文件：
 ```text
 X5_Crop.py
 X5_Crop_win_install.bat
-_X5_Crop_win_run.bat
 X5_Crop_win.bat
 X5_Crop_win_debug.bat
 X5_Crop_win_partial.bat
@@ -125,7 +123,7 @@ X5_Crop_win_partial_debug.bat
 如果 macOS 提示 `.command` 不能打开，先在 Terminal 里运行一次：
 
 ```bash
-chmod +x _X5_Crop_Mac_run.command X5_Crop_Mac_*.command
+chmod +x X5_Crop_Mac*.command
 ```
 
 ## 启动器
