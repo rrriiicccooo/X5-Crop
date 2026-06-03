@@ -1,31 +1,12 @@
 # X5 Split v18 Double-Click Use
 
-Recommended macOS portable setup:
-
-- Keep `X5_Split_v18.py` in this repository folder.
-- Copy only the macOS `.command` launcher you need into the folder that contains
-  the TIFF scans.
-- Double-click the launcher from that TIFF folder.
-
-The macOS launchers first look for `X5_Split_v18.py` beside the launcher. If it
-is not there, they use the repository copy at:
-
-```text
-/Users/zhyoung/Pictures/Photography/X5-Crop/X5_Split_v18.py
-```
-
-If this repository lives somewhere else on another Mac, edit `REPO_SCRIPT`
-inside the `.command` launcher or copy `X5_Split_v18.py` into the TIFF folder
-too.
-
-Classic self-contained setup:
+Put these files in the folder that contains the TIFF scans you want to crop:
 
 - `X5_Split_v18.py`
 - Windows: `X5_Split_v18_Windows_DoubleClick.bat`
 - macOS: `X5_Split_v18_macOS_DoubleClick.command`
 
-Put these files in the folder that contains the TIFF scans, then double-click
-the launcher for your system.
+Then double-click the launcher for your system.
 
 Optional diagnostic launchers:
 

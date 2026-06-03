@@ -333,15 +333,13 @@ Changed:
   - `_debug_analysis/*_enhanced.jpg`
 - Updated debug and debug-analysis double-click launchers to run with `--dry-run`, so they write reports/debug JPGs but do not export cropped TIFF frames.
 - Updated macOS `.command` launchers to be executable.
-- Updated macOS launchers to look for `X5_Split_v18.py` beside the launcher first, then fall back to the repository script path. This supports copying only the `.command` launcher into a TIFF folder on this macOS machine.
-- Updated `README_X5_Split_v18_DoubleClick.md` with the launcher-only workflow, dry-run debug behavior, JPG debug output, and Pillow dependency.
+- Updated `README_X5_Split_v18_DoubleClick.md` with dry-run debug behavior, JPG debug output, and Pillow dependency.
 
 Verified:
 - `python3 -m py_compile X5_Split_v18.py`
 - `bash -n X5_Split_v18_macOS_DoubleClick.command X5_Split_v18_macOS_Debug_DoubleClick.command X5_Split_v18_macOS_DebugAnalysis_DoubleClick.command`
 - Created a synthetic TIFF in `/private/tmp/x5crop_v18_launcher_test`.
 - Ran `python3 X5_Split_v18.py /private/tmp/x5crop_v18_launcher_test --report --debug --debug-analysis --dry-run`; confirmed `dry_run=True` and JPG debug outputs.
-- Copied only `X5_Split_v18_macOS_Debug_DoubleClick.command` into the synthetic TIFF folder and ran it with `bash`; confirmed it used the repository script path, ran as dry run, and succeeded.
 - Confirmed the temporary test output contained reports and debug JPGs but no cropped frame TIFFs.
 - Confirmed JPG outputs with `file`.
 
@@ -357,3 +355,37 @@ Known local-only files:
 
 Next recommended step:
 - Run the v18 debug/debug-analysis launchers from Finder on a real TIFF folder, then run a broader real-sample report before deciding whether v18 replaces the current app engine path.
+
+---
+
+Date: 2026-06-03
+Computer: primary macOS machine
+Branch: integrate-web-app
+Last commit: d343ef4 Add v18 standalone cropper launchers
+
+Changed:
+- Removed the macOS launcher-only repository-path fallback at the user's request.
+- macOS launchers now require `X5_Split_v18.py` to be in the same folder as the launcher and TIFF scans, matching the Windows launchers and the README.
+- Removed the launcher-only workflow from `README_X5_Split_v18_DoubleClick.md`.
+
+Verified:
+- `python3 -m py_compile X5_Split_v18.py`
+- `bash -n X5_Split_v18_macOS_DoubleClick.command X5_Split_v18_macOS_Debug_DoubleClick.command X5_Split_v18_macOS_DebugAnalysis_DoubleClick.command`
+- Confirmed no `REPO_SCRIPT`, repository-copy fallback, or launcher-only workflow remains in v18 launchers or README.
+- Created a synthetic TIFF in `/private/tmp/x5crop_v18_same_folder_test`.
+- Copied `X5_Split_v18.py` and `X5_Split_v18_macOS_DebugAnalysis_DoubleClick.command` into the same temporary TIFF folder, then ran the launcher with `bash`.
+- Confirmed the launcher succeeded with `dry_run=True`, produced debug JPGs and reports, and did not write cropped frame TIFFs.
+- Confirmed JPG outputs with `file`.
+
+Not verified:
+- Did not double-click from Finder; verified the `.command` behavior through `bash`.
+- Did not run Windows `.bat` launchers after this cleanup.
+- Did not run against real local `Test/` TIFF samples.
+
+Known local-only files:
+- `/private/tmp/x5crop_v18_same_folder_test`
+- `Test/`
+- `downloaded_apps/`
+
+Next recommended step:
+- Commit/push this cleanup, then run the v18 debug/debug-analysis launchers from Finder on a real TIFF folder when convenient.

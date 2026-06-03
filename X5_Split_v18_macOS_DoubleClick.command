@@ -3,13 +3,9 @@
 cd "$(dirname "$0")" || exit 1
 
 SCRIPT="./X5_Split_v18.py"
-REPO_SCRIPT="/Users/zhyoung/Pictures/Photography/X5-Crop/X5_Split_v18.py"
-if [ ! -f "$SCRIPT" ] && [ -f "$REPO_SCRIPT" ]; then
-    SCRIPT="$REPO_SCRIPT"
-fi
 if [ ! -f "$SCRIPT" ]; then
     echo "X5_Split_v18.py was not found in this folder."
-    echo "Put X5_Split_v18.py in this folder, or update REPO_SCRIPT inside this launcher."
+    echo "Put this launcher in the same folder as X5_Split_v18.py and your TIFF scans."
     echo
     read -r -p "Press Return to close..."
     exit 1
