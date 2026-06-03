@@ -1,108 +1,62 @@
-# X5 Crop
+# X5 Crop Script Workspace
 
-X5 Crop is a PySide6 desktop app for splitting TIFF film-strip scans from Hasselblad/Imacon X5 style long scans into individual TIFF frames.
+This repository is currently kept as a clean script workspace for splitting
+Hasselblad/Imacon X5 style long TIFF film scans into individual frames.
 
-The project keeps the original standalone script as an archive while continuing development in the packaged app:
+The desktop app and native packaging branch is paused for now. App-specific
+source, packaging files, build workflows, and generated app outputs should stay
+out of this working tree unless that direction is resumed later.
+
+## Files To Keep
+
+The original v17 script is preserved as the reference implementation:
 
 ```text
 X5_Split_v17.py
 README_X5_Split_v17.md
-x5crop/
 ```
 
-The current app is intentionally more than a thin GUI wrapper. The product direction is a review-oriented workflow for difficult scans:
+The current standalone script workflow is:
 
 ```text
-analyze quickly
-score confidence
-review uncertain files
-manually correct crop plans
-export approved TIFFs
+X5_Split_v18.py
+README_X5_Split_v18.md
+README_X5_Split_v18_DoubleClick.md
+X5_Split_v18_macOS_DoubleClick.command
+X5_Split_v18_macOS_Debug_DoubleClick.command
+X5_Split_v18_macOS_DebugAnalysis_DoubleClick.command
+X5_Split_v18_Windows_DoubleClick.bat
+X5_Split_v18_Windows_Debug_DoubleClick.bat
+X5_Split_v18_Windows_DebugAnalysis_DoubleClick.bat
 ```
 
-Start here when moving between computers or Codex sessions:
+## Local Files
 
-- [Codex sync guide](docs/CODEX_SYNC.md)
-- [Development setup](docs/DEVELOPMENT.md)
-- [Testing guide](docs/TESTING.md)
-- [Release and packaging guide](docs/RELEASE_BUILD.md)
-- [Project context and roadmap](docs/PROJECT_CONTEXT.md)
-
-The earlier roadmap from the ChatGPT web discussion is preserved in [PROJECT_P_ROADMAP.md](PROJECT_P_ROADMAP.md).
-
-## Quick Start
-
-macOS:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements_X5_Crop_v1_1.txt
-python X5_Crop.py
-```
-
-Windows PowerShell:
-
-```powershell
-python -m venv .venv
-. .\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements_X5_Crop_v1_1.txt
-python X5_Crop.py
-```
-
-## Build Apps
-
-PyInstaller is not a cross-compiler. Build macOS on macOS and Windows on Windows, or use GitHub Actions.
-
-macOS:
-
-```bash
-chmod +x tools/build_macos_app.sh
-./tools/build_macos_app.sh
-```
-
-Windows PowerShell:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\build_windows_app.ps1
-```
-
-GitHub Actions workflow:
+Local TIFF samples and output folders are useful for testing, but they are not
+committed by default:
 
 ```text
-.github/workflows/build_x5_crop.yml
+Test/
+downloaded_apps/
+split_output/
+__pycache__/
 ```
 
-## Native Rewrite
+Large TIFF fixtures should only be added after an explicit decision and Git LFS
+tracking is configured.
 
-The C++20 / Qt 6 rewrite shell lives in:
+## Coordination
 
-```text
-native/
-```
+This folder may be synchronized by NAS between computers. Use GitHub as the
+source of truth for source files and documentation, and treat NAS as a local
+file transport layer.
 
-It currently implements the professional review-workspace UI shell from
-`docs/UI_REDESIGN_CAPTURE_ONE_LIGHTROOM.md` while keeping the Python app and
-v17 engine intact.
-
-Build the native shell on macOS:
+Before editing from another Codex session or computer:
 
 ```bash
-chmod +x native/scripts/build_macos.sh
-./native/scripts/build_macos.sh
-open "native/build-$(uname -m)/X5 Crop.app"
+git status --short
+git branch --show-current
+git fetch origin
 ```
 
-Build the native shell on Windows:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\native\scripts\build_windows.ps1
-```
-
-## Repository Hygiene
-
-The app source, packaging scripts, docs, and original v17 script belong in Git.
-
-Large local test TIFFs, generated debug images, downloaded app artifacts, virtual environments, build outputs, and `__pycache__` folders are local working files unless explicitly promoted into tracked fixtures.
+See `docs/CODEX_SYNC.md` for the handoff template and sync notes.
