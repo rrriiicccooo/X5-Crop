@@ -117,7 +117,14 @@ python3 X5_Crop.py . --report --debug-analysis --dry-run
 python3 X5_Crop.py . --report
 ```
 
-默认导出的裁切 TIFF 会像 v17 一样保留 bleed，现在默认是左右各 15px、上下各 10px。可用 `--bleed`、`--bleed-x`、`--bleed-y` 调整，例如：
+默认导出的裁切 TIFF 会像 v17 一样保留 bleed。默认值按长图方向理解：
+
+- 横向长图：左右各 15px，上下各 10px。
+- 纵向长图：上下各 15px，左右各 10px。
+
+之后文档和设计讨论里如果只写“左右 / 上下”，默认都是指横向长图；纵向长图会按方向旋转对应过去。
+
+可用 `--bleed`、`--bleed-x`、`--bleed-y` 调整。其中 `--bleed-x` 是长轴 bleed，`--bleed-y` 是短轴 bleed。例如：
 
 ```bash
 python3 X5_Crop.py . --report --bleed-x 15 --bleed-y 10
@@ -185,7 +192,7 @@ split_output/
 | 颜色 | 含义 |
 |---|---|
 | 绿色外框 | 脚本认为整条胶片有效区域的外框 |
-| 不同半透明色块 | 每一张将要输出的裁切范围，包含默认左右 15px、上下 10px bleed |
+| 不同半透明色块 | 每一张将要输出的裁切范围，包含默认长轴 15px、短轴 10px bleed |
 
 四联图顶部会在图片外显示状态栏，说明是否通过当前置信度阈值。`PASS` / `REVIEW` 会用不同颜色和更醒目的字号显示：
 

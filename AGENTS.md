@@ -45,6 +45,9 @@ project documentation consolidated in `README.md`.
 - Keep detection changes close to the script logic.
 - Avoid broad refactors while solving a narrow detection or workflow task.
 - Add or update docs when script usage, setup, or testing behavior changes.
+- When the user describes directional behavior with left/right or top/bottom,
+  treat that as the horizontal-strip baseline unless they say otherwise, and
+  add the rotated vertical-strip behavior too.
 
 ## Git Rules
 
@@ -122,7 +125,9 @@ Changed:
 - Simplified launcher names to `X5_Crop_Mac.command`,
   `X5_Crop_Mac_debug.command`, `X5_Crop_win.bat`, and
   `X5_Crop_win_debug.bat`.
-- Default bleed is now 15px left/right and 10px top/bottom.
+- Default bleed is now long-axis 15px and short-axis 10px: horizontal strips are
+  left/right 15px and top/bottom 10px; vertical strips are top/bottom 15px and
+  left/right 10px.
 - Content evidence is written into reports and can conservatively downgrade
   clear content/aspect conflicts, but it does not raise difficult files into
   automatic export.
@@ -135,6 +140,9 @@ Verified:
 - `bash -n X5_Crop_Mac.command X5_Crop_Mac_debug.command`
 - `python3 X5_Crop.py --version`
 - `python3 X5_Crop.py --help`
+- Verified vertical bleed mapping with `Box.expand(15, 10, ...)` plus
+  `map_work_box(..., "vertical", ...)`: long-axis bleed maps to original
+  top/bottom, short-axis bleed maps to original left/right.
 - Ran DebugAnalysis dry-runs on `Test/135负片/正常/001.tif`, `11.tif`, and
   `X5 022.tif`.
 - Confirmed `001.tif` remains `needs_review` at confidence `0.676` and produces
