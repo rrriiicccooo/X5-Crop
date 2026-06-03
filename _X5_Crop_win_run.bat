@@ -17,6 +17,9 @@ if not exist "%SCRIPT%" (
     exit /b 1
 )
 
+if exist "%~dp0.venv-x5crop\Scripts\python.exe" (
+    set "PYTHON=%~dp0.venv-x5crop\Scripts\python.exe"
+) else (
 where py >nul 2>nul
 if %errorlevel%==0 (
     set "PYTHON=py -3"
@@ -26,12 +29,12 @@ if %errorlevel%==0 (
         set "PYTHON=python"
     ) else (
         echo Python was not found.
-        echo Install Python 3, then install dependencies:
-        echo   py -3 -m pip install -U numpy tifffile imagecodecs Pillow
+        echo Run X5_Crop_win_install.bat first, then try again.
         echo.
         pause
         exit /b 1
     )
+)
 )
 
 echo X5 Crop V2 %STRIP% launcher

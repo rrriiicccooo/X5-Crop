@@ -107,6 +107,16 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Added first-time setup launchers: `X5_Crop_Mac_install.command` and
+  `X5_Crop_win_install.bat`.
+- Setup launchers create a local `.venv-x5crop/` environment and install
+  `numpy`, `tifffile`, `imagecodecs`, and `Pillow` there. If Python is missing,
+  macOS uses Homebrew when available or opens python.org; Windows tries `winget`
+  before opening python.org.
+- Updated macOS and Windows run helpers to prefer `.venv-x5crop` Python when it
+  exists, so friend/new-machine installs do not depend on global pip state.
+- Updated `README.md` with the first-time setup workflow and required setup
+  launcher files.
 - Disabled default format guessing in the active CLI: `--format` is now required
   and only accepts explicit formats (`135`, `half`, `xpan`, `120-645`,
   `120-66`, `120-67`).
@@ -209,6 +219,11 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `bash -n X5_Crop_Mac_install.command _X5_Crop_Mac_run.command
+  X5_Crop_Mac.command X5_Crop_Mac_debug.command X5_Crop_Mac_partial.command
+  X5_Crop_Mac_partial_debug.command`
+- Confirmed run helpers reference `.venv-x5crop` before falling back to global
+  Python.
 - `bash -n _X5_Crop_Mac_run.command X5_Crop_Mac.command
   X5_Crop_Mac_debug.command X5_Crop_Mac_partial.command
   X5_Crop_Mac_partial_debug.command`
@@ -324,6 +339,9 @@ Verified:
   `Content evidence` panel is present.
 
 Not verified:
+- Did not run the new install launchers end-to-end, because that would create
+  `.venv-x5crop` and download/install dependencies on this machine.
+- Did not run `X5_Crop_win_install.bat` on Windows.
 - Did not run Windows `.bat` launchers on Windows.
 - Did not run a non-dry-run TIFF export after creating X5 Crop V2.
 - Did not create hand-labeled ground-truth fixtures for all `Test/` images; this

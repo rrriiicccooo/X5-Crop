@@ -31,14 +31,15 @@ if [ ! -f "$SCRIPT" ]; then
     finish 1
 fi
 
-if command -v python3 >/dev/null 2>&1; then
+if [ -x "./.venv-x5crop/bin/python" ]; then
+    PYTHON="./.venv-x5crop/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
     PYTHON="python3"
 elif command -v python >/dev/null 2>&1; then
     PYTHON="python"
 else
     echo "Python was not found."
-    echo "Install Python 3, then install dependencies:"
-    echo "  python3 -m pip install -U numpy tifffile imagecodecs Pillow"
+    echo "Run X5_Crop_Mac_install.command first, then try again."
     finish 1
 fi
 

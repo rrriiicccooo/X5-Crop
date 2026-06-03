@@ -51,6 +51,35 @@ v17 是上一版参考实现，用于对照检测逻辑和回归行为。v18 是
 
 ## 安装依赖
 
+第一次在新机器上使用时，推荐先运行安装启动器：
+
+macOS:
+
+```text
+X5_Crop_Mac_install.command
+```
+
+Windows:
+
+```text
+X5_Crop_win_install.bat
+```
+
+安装启动器会优先使用机器上已有的 Python 3，在项目文件夹里创建本地环境：
+
+```text
+.venv-x5crop/
+```
+
+然后把 `numpy`、`tifffile`、`imagecodecs`、`Pillow` 安装到这个本地环境。后续普通裁切启动器会自动优先使用 `.venv-x5crop`，这样不会污染系统 Python。
+
+如果机器没有 Python：
+
+- macOS：如果有 Homebrew，安装器可以用 Homebrew 安装 Python；否则会打开 Python 官网下载页，安装 Python 后再运行一次安装器。
+- Windows：如果有 `winget`，安装器会尝试安装 Python 3.12；否则会打开 Python 官网下载页，安装 Python 后再运行一次安装器。
+
+也可以手动安装依赖。
+
 macOS:
 
 ```bash
@@ -71,6 +100,7 @@ macOS 常用文件：
 
 ```text
 X5_Crop.py
+X5_Crop_Mac_install.command
 _X5_Crop_Mac_run.command
 X5_Crop_Mac.command
 X5_Crop_Mac_debug.command
@@ -82,6 +112,7 @@ Windows 常用文件：
 
 ```text
 X5_Crop.py
+X5_Crop_win_install.bat
 _X5_Crop_win_run.bat
 X5_Crop_win.bat
 X5_Crop_win_debug.bat
