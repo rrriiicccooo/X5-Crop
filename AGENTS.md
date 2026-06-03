@@ -1,40 +1,36 @@
-# Codex Working Notes
+# Codex Agent Rules
 
-These instructions are for Codex agents working on this repository from any
-machine.
+This is the short, binding rulebook for Codex agents in this repository. Keep
+cross-machine history and handoff notes in `docs/CODEX_SYNC.md`; do not repeat
+that log here.
 
 ## First Moves
 
-1. Read `README.md` and `docs/CODEX_SYNC.md`.
-2. Check the current branch and dirty state:
+1. Read `README.md`, `docs/PROJECT_CONTEXT.md`, and the current handoff in
+   `docs/CODEX_SYNC.md`.
+2. Check the current branch and dirty state before editing:
 
 ```bash
 git branch --show-current
 git status --short
 ```
 
-3. Do not delete or revert untracked user files such as `Test/`,
-   `downloaded_apps/`, local build outputs, or generated scan results.
-4. Keep `X5_Split_v17.py` and `README_X5_Split_v17.md` in the repository. They
-   are the preserved original v17 reference.
-5. This working folder may be synchronized by NAS in both directions. Treat
-   GitHub as authoritative for source/docs, and NAS as a local-file transport
-   layer.
+3. If the folder is NAS-synced or the branch is ahead/behind, inspect the
+   situation before editing. GitHub is authoritative for source and docs; NAS is
+   only a local-file transport layer.
 
-## Current Direction
+## Current Scope
 
-The desktop app and native packaging branch is paused for now.
-
-Keep the repository focused on the standalone Python scripts:
+The app/native packaging direction is paused. Keep active work focused on the
+standalone script workflow unless the user explicitly resumes the app direction:
 
 ```text
 X5_Split_v17.py
 X5_Split_v18.py
 ```
 
-Do not reintroduce app packaging, PySide6 GUI, Qt native UI, PyInstaller,
-GitHub Actions release workflows, or generated app artifacts unless the user
-explicitly resumes that direction.
+Keep `X5_Split_v17.py` and `README_X5_Split_v17.md` in the repository as the
+preserved v17 reference.
 
 ## Coding Rules
 
@@ -51,7 +47,7 @@ explicitly resumes that direction.
   folder.
 - Do not run two Codex sessions against the same NAS-synced working tree at the
   same time unless they are only reading.
-- Do not commit local generated folders:
+- Do not commit local generated files or folders such as:
   - `.venv/`
   - `.venv-build/`
   - `build/`
@@ -60,11 +56,12 @@ explicitly resumes that direction.
   - `__pycache__/`
   - `.DS_Store`
   - `downloaded_apps/`
+  - `Test/`
   - generated `split_output/` folders
 - Do not commit large TIFF samples unless the user explicitly decides they are
   official fixtures and Git LFS tracking is configured for them.
 
 ## Handoff Rule
 
-When stopping work, update or create a short handoff note using the template in
-`docs/CODEX_SYNC.md`.
+When stopping work after source/docs changes, update the current handoff in
+`docs/CODEX_SYNC.md` using its template.

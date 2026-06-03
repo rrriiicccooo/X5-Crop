@@ -1,11 +1,14 @@
 # Codex Sync Guide
 
-This repository may be edited and tested from more than one computer and more
-than one Codex session.
+This file is the cross-machine sync and handoff log. The standing rules for
+Codex agents live in `AGENTS.md`; keep them there instead of duplicating them
+here.
 
 ## Source Of Truth
 
-GitHub is the source of truth for scripts, launchers, and documentation.
+GitHub is the source of truth for scripts, launchers, and documentation. NAS
+sync may move local files between computers, but it is not a replacement for Git
+history.
 
 Repository:
 
@@ -14,23 +17,7 @@ git@github.com:rrriiicccooo/X5-Crop.git
 https://github.com/rrriiicccooo/X5-Crop
 ```
 
-NAS sync may move local files between computers, but it is not a replacement
-for Git history.
-
-## Current Scope
-
-The app packaging branch is paused. Keep the working tree focused on the
-standalone script workflow:
-
-```text
-X5_Split_v17.py
-X5_Split_v18.py
-```
-
-Do not resume app packaging, native UI work, or release workflow changes unless
-the user explicitly asks for that again.
-
-## Before Editing
+## Sync Protocol
 
 Run:
 
@@ -42,25 +29,7 @@ git fetch origin
 
 If there are local uncommitted changes or the branch is ahead/behind, inspect
 before editing. Avoid simultaneous writes from two Codex sessions in the same
-NAS-synced folder.
-
-## Usually Do Not Commit
-
-```text
-.DS_Store
-__pycache__/
-.venv/
-.venv-build/
-build/
-dist/
-release/
-downloaded_apps/
-split_output/
-Test/
-```
-
-Large TIFF samples should only be committed after an explicit decision and Git
-LFS tracking is configured.
+NAS-synced folder. Follow `AGENTS.md` for commit exclusions and coding scope.
 
 ## Handoff Template
 
@@ -93,25 +62,27 @@ Next recommended step:
 Date: 2026-06-03
 Computer: primary macOS machine
 Branch: integrate-web-app
-Last commit: a79907d Document v18 script in Chinese
+Last commit: e7131c0 Pause app branch and clean workspace
 
 Changed:
-- Paused the app/native packaging direction.
-- Kept v17 as the preserved reference script.
-- Kept v18 as the current standalone script workflow.
-- Cleaned project documentation so future Codex sessions do not continue the
-  app branch by default.
+- Reduced overlap between `AGENTS.md` and `docs/CODEX_SYNC.md`.
+- Made `AGENTS.md` the short standing rulebook for Codex agents.
+- Made `docs/CODEX_SYNC.md` the cross-machine sync protocol and handoff log.
+- Kept the current scope in `AGENTS.md`: app/native packaging paused, v17/v18
+  standalone script workflow active.
 
 Verified:
-- Confirmed the local branch was one commit ahead of origin, and the ahead
-  commit documents the v18 standalone script workflow.
+- Read `AGENTS.md` and `docs/CODEX_SYNC.md` before editing.
+- Confirmed the branch is `integrate-web-app` and the worktree was clean before
+  this documentation cleanup.
 
 Not verified:
-- No image-processing tests were run during this cleanup.
+- No image-processing tests were run because this change only reorganizes agent
+  documentation.
 
 Known local-only files:
 - `Test/`
 
 Next recommended step:
-- Use the v18 script workflow for further detection improvements unless the app
-  direction is explicitly resumed later.
+- Continue using `AGENTS.md` for rules and update this file only for sync state
+  and handoff notes.
