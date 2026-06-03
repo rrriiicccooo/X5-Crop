@@ -86,6 +86,16 @@ CONTENT_ASPECTS_HORIZONTAL = {
     "120-67": 4.0 / 5.0,
 }
 PARTIAL_FULL_COMPETE_MIN_CONFIDENCE = 0.78
+CONTENT_ONLY_PARTIAL_PASS_MIN_CONFIDENCE = 0.92
+
+
+CONTENT_AMBIGUITY_REASONS = {
+    "content_run_count_mismatch",
+    "content_grid_fallback",
+    "content_runs_incomplete",
+    "content_aspect_uncertain",
+    "content_coverage_weak",
+}
 
 
 @dataclass(frozen=True)
@@ -1696,6 +1706,58 @@ def content_detection_rank(detection: Detection, threshold: float) -> tuple[int,
     )
 
 
+def content_is_ambiguous(detection: Detection) -> bool:
+    return bool(CONTENT_AMBIGUITY_REASONS.intersection(detection.review_reasons))
+
+
+def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[bool, dict[str, Any]]:
+    expected = max(0, int(detection.count) - 1)
+    actual = int(detection.detail.get("actual_detected_gaps", 0))
+    enhanced = int(detection.detail.get("enhanced_detected_gaps", 0))
+    grid = int(detection.detail.get("grid_gaps", 0))
+    equal = int(detection.detail.get("equal_gaps", 0))
+    hard = actual + enhanced
+
+    if expected == 0:
+        ok = detection.confidence >= threshold
+        reason = "single_frame_no_separator_needed" if ok else "single_frame_low_confidence"
+    elif detection.confidence < threshold:
+        ok = False
+        reason = "separator_below_threshold"
+    elif detection.film_format == "135":
+        needed = min(expected, 2)
+        ok = hard >= needed and equal <= max(2, expected // 2)
+        reason = "135_hard_separator_support" if ok else "135_separator_support_weak"
+    elif detection.film_format == "half":
+        ok = detection.confidence >= threshold and equal <= expected
+        reason = "half_geometry_support" if ok else "half_separator_support_weak"
+    else:
+        needed = max(1, expected)
+        ok = hard >= needed
+        reason = "120_hard_separator_support" if ok else "120_separator_support_weak"
+
+    return ok, {
+        "ok": ok,
+        "reason": reason,
+        "expected_gaps": expected,
+        "hard_gaps": hard,
+        "actual_detected_gaps": actual,
+        "enhanced_detected_gaps": enhanced,
+        "grid_gaps": grid,
+        "equal_gaps": equal,
+        "separator_confidence": float(detection.confidence),
+    }
+
+
+def content_only_partial_can_pass(detection: Detection, threshold: float, fmt: FilmFormat) -> bool:
+    return (
+        detection.strip_mode == "partial"
+        and detection.count < fmt.default_count
+        and detection.confidence >= max(threshold, CONTENT_ONLY_PARTIAL_PASS_MIN_CONFIDENCE)
+        and not content_is_ambiguous(detection)
+    )
+
+
 def choose_content_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Optional[Detection]:
     if config.strip_mode == "full":
         return content_detection_for_count(gray, config, fmt, config.count, "full")
@@ -1784,18 +1846,14 @@ def choose_detection_with_analysis(gray: np.ndarray, config: Config, fmt: FilmFo
 
     separator_content = content_evidence_detail(gray, separator)
     content_primary = content.detail.get("content_primary", {})
-    content_reasons = set(content.review_reasons)
     separator_content_ok = (
         bool(separator_content.get("used", False))
         and str(separator_content.get("support", "")) == "ok"
     )
+    separator_hard_ok, separator_hard_detail = separator_hard_evidence_ok(separator, config.confidence_threshold)
     separator_pass = separator.confidence >= config.confidence_threshold
     content_pass = content.confidence >= config.confidence_threshold
-    content_ambiguous = (
-        "content_run_count_mismatch" in content_reasons
-        or "content_grid_fallback" in content_reasons
-        or "content_runs_incomplete" in content_reasons
-    )
+    content_ambiguous = content_is_ambiguous(content)
 
     content.detail["separator_assist"] = {
         "confidence": float(separator.confidence),
@@ -1805,12 +1863,13 @@ def choose_detection_with_analysis(gray: np.ndarray, config: Config, fmt: FilmFo
         "gap_methods": list(separator.detail.get("gap_methods", [])),
         "outer_box": asdict(separator.outer),
         "frame_boxes": [asdict(box) for box in separator.frames],
+        "hard_evidence": separator_hard_detail,
     }
     content.detail["separator_candidate_content_evidence"] = separator_content
     if separator.confidence >= config.confidence_threshold and content.confidence < config.confidence_threshold:
         content.review_reasons.append("separator_assist_passed_but_content_primary_review")
 
-    if separator_pass and separator_content_ok and (
+    if separator_pass and separator_content_ok and separator_hard_ok and (
         content_ambiguous
         or not content_pass
         or content.count < separator.count
@@ -1825,20 +1884,29 @@ def choose_detection_with_analysis(gray: np.ndarray, config: Config, fmt: FilmFo
         separator.detail["content_evidence"] = separator_content
         separator.detail["joint_decision"] = {
             "selected": "separator_supported_by_content",
-            "reason": "separator_passed_and_content_candidate_ambiguous_or_smaller",
+            "reason": "separator_hard_evidence_passed_and_content_validated",
             "separator_content_support": separator_content.get("support"),
+            "separator_hard_evidence": separator_hard_detail,
             "content_candidate_confidence": float(content.confidence),
             "content_candidate_count": int(content.count),
         }
         return separator
 
+    if content_pass and not separator_hard_ok and not content_only_partial_can_pass(content, config.confidence_threshold, fmt):
+        content.confidence = min(content.confidence, 0.84)
+        content.review_reasons.append("joint_separator_not_confirmed")
+    elif content_pass and content_only_partial_can_pass(content, config.confidence_threshold, fmt):
+        content.review_reasons.append("content_only_partial_strong")
+
     content.detail["joint_decision"] = {
         "selected": "content_primary",
-        "reason": "content_candidate_preferred",
+        "reason": "content_candidate_preferred_with_joint_gate",
         "separator_confidence": float(separator.confidence),
         "separator_count": int(separator.count),
         "separator_content_support": separator_content.get("support"),
+        "separator_hard_evidence": separator_hard_detail,
     }
+    content.review_reasons = sorted(set(content.review_reasons))
     return content
 
 

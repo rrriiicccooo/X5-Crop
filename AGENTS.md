@@ -107,8 +107,21 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Analyzed all 79 top-level TIFF samples under `Test/` as downsampled evidence
-  material for the current detector.
+- Tightened the final detector relationship into a joint evidence gate:
+  separator evidence owns hard crop-line confirmation, content evidence validates
+  the proposed photos, and format geometry constrains plausible frame shape and
+  count.
+- Added `separator_hard_evidence_ok(...)` so real detected, edge-pair, and
+  enhanced separator marks can support auto-export, while grid/equal marks stay
+  model evidence rather than hard separator evidence.
+- Added a conservative content-only partial pass rule: partial strips may still
+  auto-pass, but only when content confidence is very strong and there are no
+  content run, coverage, or aspect ambiguity reasons.
+- Added `joint_separator_not_confirmed` downgrading so a full-strip content
+  candidate without hard separator confirmation falls back to `REVIEW` instead
+  of auto-exporting from content alone.
+- Analyzed all 79 TIFF samples under `Test/` as downsampled evidence material
+  for the current detector.
 - Confirmed raw content-run count is unstable on real samples: internal scene
   texture can split one frame into several content peaks, while low-texture or
   dark frames can merge several frames into one weak content run.
@@ -160,6 +173,19 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop V1.
 
 Verified:
+- Confirmed `Test/135/X5_00019.tif` remains `approved_auto` as a 6-frame `135`
+  model, with joint decision `separator_hard_evidence_passed_and_content_validated`.
+- Confirmed `Test/135/X5_00025.tif` remains `approved_auto` as a 6-frame `135`
+  model, with hard separator evidence plus content validation.
+- Confirmed `Test/120/X5_test_43.tif` and `X5_test_44.tif` remain
+  `needs_review` as 3-frame `120-66` models instead of false 2-frame partial
+  auto-passes.
+- Confirmed `Test/120/X5_test_58.tif` is downgraded to `needs_review` with
+  `joint_separator_not_confirmed` when content is plausible but hard separator
+  evidence is not strong enough.
+- Confirmed `Test/135/X5_00060.tif`, `X5_00063.tif`, and
+  `Test/120/X5_test_48.tif` remain `needs_review` because content evidence is
+  ambiguous or incomplete.
 - Built a Test contact sheet at `/private/tmp/x5crop_test_contact_sheet.jpg` for
   representative samples including `X5_test_1.tif`, `2.tif`, `3.tif`, `5.tif`,
   `9.tif`, `11.tif`, `19.tif`, `20.tif`, `22.tif`, `25.tif`, `43.tif`,
@@ -246,6 +272,14 @@ Known local-only files:
 - `/private/tmp/x5crop_joint_model_44b`
 - `/private/tmp/x5crop_joint_model_72b`
 - `/private/tmp/x5crop_joint_model_74b`
+- `/private/tmp/x5crop_joint_gate_19`
+- `/private/tmp/x5crop_joint_gate_25`
+- `/private/tmp/x5crop_joint_gate_43`
+- `/private/tmp/x5crop_joint_gate_44`
+- `/private/tmp/x5crop_joint_gate_48`
+- `/private/tmp/x5crop_joint_gate_58`
+- `/private/tmp/x5crop_joint_gate_60`
+- `/private/tmp/x5crop_joint_gate_63`
 
 Next recommended step:
 - Continue turning visually reviewed Test samples into a small hand-labeled
