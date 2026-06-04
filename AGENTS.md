@@ -107,6 +107,14 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Added an outer-content alignment gate so final high-confidence decisions must
+  also prove the detected outer box is close to the real content bounding box.
+  The report now includes `detail.outer_content_alignment` with content bbox,
+  long/short-axis slack, content-to-outer ratios, and border dark fractions.
+- Outer boxes that include too much long-axis or short-axis white border are
+  capped below the auto-export threshold with `outer_content_bbox_mismatch`.
+  This specifically targets cases like `Test/135/X5_00002.tif`, where a too-wide
+  outer box made the 6-frame geometry look falsely perfect.
 - Expanded the per-image V2 analysis cache so candidate scoring reuses
   `gray_work`, content evidence, separator profiles, enhanced separator
   profiles, and edge-refine profiles instead of regenerating the same expensive
@@ -273,6 +281,15 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `Test/135/X5_00002.tif` explicit full 135 Debug Analysis now downgrades to
+  `needs_review` with `outer_content_bbox_mismatch`; report shows right-side
+  long-axis slack of 224 px, about 0.067 frame pitch.
+- `Test/135/X5_00019.tif` and `Test/135/X5_00025.tif` explicit full 135 dry-runs
+  remain `approved_auto`; their outer-content alignment stays within the new
+  slack gate.
+- `Test/120/X5_test_43.tif` explicit full `120-66` remains `needs_review`.
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
+- `git diff --check`
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `git diff --check`
 - After cache expansion, `Test/135/X5_00019.tif` explicit full 135 dry-run

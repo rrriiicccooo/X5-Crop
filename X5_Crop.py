@@ -603,6 +603,81 @@ def content_evidence_detail_from_cache(gray: np.ndarray, detection: Detection, c
     }
 
 
+def outer_content_alignment_detail(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> dict[str, Any]:
+    gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
+    work_h, work_w = gray_work.shape
+    source_h, source_w = gray.shape
+    outer = original_box_to_work(detection.outer, detection.layout, source_w, source_h).clamp(work_w, work_h)
+    if not outer.valid():
+        return {"used": False, "reason": "invalid_outer"}
+
+    candidates: list[tuple[str, Box]] = []
+    for threshold in (225, 210, 190):
+        box = bbox_from_mask(gray_work < threshold, min_row_fraction=0.015, min_col_fraction=0.015)
+        if box is not None and box.valid():
+            candidates.append((f"gray_lt_{threshold}", box))
+    if not candidates:
+        return {"used": False, "reason": "no_content_bbox"}
+
+    source, content_box = candidates[0]
+    pitch = float(outer.width) / float(max(1, detection.count))
+    long_slack_left = max(0, content_box.left - outer.left)
+    long_slack_right = max(0, outer.right - content_box.right)
+    short_slack_top = max(0, content_box.top - outer.top)
+    short_slack_bottom = max(0, outer.bottom - content_box.bottom)
+    max_long_slack = max(long_slack_left, long_slack_right)
+    max_short_slack = max(short_slack_top, short_slack_bottom)
+    long_slack_ratio = float(max_long_slack) / max(1.0, pitch)
+    short_slack_ratio = float(max_short_slack) / max(1.0, float(outer.height))
+    content_width_ratio = float(content_box.width) / max(1.0, float(outer.width))
+    content_height_ratio = float(content_box.height) / max(1.0, float(outer.height))
+
+    edge_band = max(4, min(80, int(round(min(outer.width, outer.height) * 0.018))))
+    outer_crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
+    if outer_crop.size:
+        left_band = outer_crop[:, :min(edge_band, outer_crop.shape[1])]
+        right_band = outer_crop[:, max(0, outer_crop.shape[1] - edge_band):]
+        top_band = outer_crop[:min(edge_band, outer_crop.shape[0]), :]
+        bottom_band = outer_crop[max(0, outer_crop.shape[0] - edge_band):, :]
+        border_dark_fraction = {
+            "left": float((left_band < 245).mean()) if left_band.size else 0.0,
+            "right": float((right_band < 245).mean()) if right_band.size else 0.0,
+            "top": float((top_band < 245).mean()) if top_band.size else 0.0,
+            "bottom": float((bottom_band < 245).mean()) if bottom_band.size else 0.0,
+        }
+    else:
+        border_dark_fraction = {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0}
+
+    excess_long = long_slack_ratio > 0.050 or (max_long_slack >= 160 and long_slack_ratio > 0.035)
+    excess_short = short_slack_ratio > 0.035 and max_short_slack >= 28
+    ok = not (excess_long or excess_short)
+    reason = "ok"
+    if excess_long:
+        reason = "outer_long_axis_excess"
+    elif excess_short:
+        reason = "outer_short_axis_excess"
+
+    return {
+        "used": True,
+        "ok": ok,
+        "reason": reason,
+        "content_bbox_source": source,
+        "outer_work_box": asdict(outer),
+        "content_work_box": asdict(content_box),
+        "long_slack_left": int(long_slack_left),
+        "long_slack_right": int(long_slack_right),
+        "short_slack_top": int(short_slack_top),
+        "short_slack_bottom": int(short_slack_bottom),
+        "max_long_slack": int(max_long_slack),
+        "max_short_slack": int(max_short_slack),
+        "long_slack_ratio": long_slack_ratio,
+        "short_slack_ratio": short_slack_ratio,
+        "content_width_ratio": content_width_ratio,
+        "content_height_ratio": content_height_ratio,
+        "border_dark_fraction": border_dark_fraction,
+    }
+
+
 def content_profile_runs(evidence: np.ndarray, outer: Box, count: int) -> tuple[list[tuple[int, int]], dict[str, Any]]:
     crop = evidence[outer.top:outer.bottom, outer.left:outer.right].astype(np.float32) / 255.0
     if crop.size == 0:
@@ -3308,6 +3383,8 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     detection = choose_detection_v2(gray, config, fmt, analysis_cache)
     content_detail = content_evidence_detail(gray, detection, analysis_cache)
     detection.detail["content_evidence"] = content_detail
+    outer_alignment = outer_content_alignment_detail(gray, detection, analysis_cache)
+    detection.detail["outer_content_alignment"] = outer_alignment
     if bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
         if support == "aspect_conflict":
@@ -3316,6 +3393,9 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         elif support == "low_content" and detection.confidence >= config.confidence_threshold:
             detection.confidence = min(detection.confidence, 0.84)
             detection.review_reasons.append("content_evidence_weak")
+    if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
+        detection.confidence = min(detection.confidence, 0.84)
+        detection.review_reasons.append("outer_content_bbox_mismatch")
 
     if detection.confidence < config.confidence_threshold:
         if detection.detail.get("partial_best"):
