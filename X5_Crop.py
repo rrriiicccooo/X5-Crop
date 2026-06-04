@@ -36,6 +36,7 @@ import tifffile
 VERSION = "2.0"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
+REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
 
 
 def configure_text_output() -> None:
@@ -58,13 +59,12 @@ class FilmFormat:
     default_count: int
     allowed_counts: tuple[int, ...]
     family: str
-    manual_only: bool = False
 
 
 FORMATS: dict[str, FilmFormat] = {
     "135": FilmFormat("135", 6, tuple(range(1, 7)), "35mm"),
-    "half": FilmFormat("half", 12, tuple(range(1, 13)), "35mm", manual_only=True),
-    "xpan": FilmFormat("xpan", 3, (1, 2, 3), "35mm", manual_only=True),
+    "half": FilmFormat("half", 12, tuple(range(1, 13)), "35mm"),
+    "xpan": FilmFormat("xpan", 3, (1, 2, 3), "35mm"),
     "120-645": FilmFormat("120-645", 4, (1, 2, 3, 4), "120"),
     "120-66": FilmFormat("120-66", 3, (1, 2, 3), "120"),
     "120-67": FilmFormat("120-67", 3, (1, 2, 3), "120"),
@@ -219,7 +219,6 @@ class Config:
     input_path: Path
     output_dir: Optional[Path]
     film_format: str
-    format_auto: bool
     layout_auto: bool
     layout: str
     strip_mode: str
@@ -305,6 +304,23 @@ def infer_axes(arr: np.ndarray) -> str:
     if arr.ndim == 3 and arr.shape[0] in (3, 4):
         return "SYX"
     raise ValueError(f"Unsupported TIFF array shape: {arr.shape}")
+
+
+def infer_axes_from_shape(shape: tuple[int, ...]) -> str:
+    if len(shape) == 2:
+        return "YX"
+    if len(shape) == 3 and shape[-1] in (3, 4):
+        return "YXS"
+    if len(shape) == 3 and shape[0] in (3, 4):
+        return "SYX"
+    raise ValueError(f"Unsupported TIFF array shape: {shape}")
+
+
+def spatial_shape_from_shape(shape: tuple[int, ...]) -> tuple[int, int]:
+    axes = infer_axes_from_shape(shape)
+    if axes == "SYX":
+        return int(shape[1]), int(shape[2])
+    return int(shape[0]), int(shape[1])
 
 
 def sampled_values_for_percentile(values: np.ndarray, max_samples: int = 1_000_000) -> np.ndarray:
@@ -923,6 +939,59 @@ def content_detection_for_count(
     return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, float(max(0.0, min(1.0, confidence))), sorted(set(reasons)), detail)
 
 
+def profile_from_page(page: Any, shape: tuple[int, ...], dtype: np.dtype, axes: str) -> ImageProfile:
+    photometric = enum_name(getattr(page, "photometric", None), "UNKNOWN")
+    compression = enum_name(getattr(page, "compression", None), "NONE")
+    sample_format = page.tags.get("SampleFormat")
+    bits_tag = page.tags.get("BitsPerSample")
+    samples_tag = page.tags.get("SamplesPerPixel")
+    planar = page.tags.get("PlanarConfiguration")
+    xres = page.tags.get("XResolution")
+    yres = page.tags.get("YResolution")
+    unit = page.tags.get("ResolutionUnit")
+    icc = page.tags.get(34675)
+    profile = ImageProfile(
+        shape=tuple(int(x) for x in shape),
+        dtype=str(np.dtype(dtype)),
+        axes=axes,
+        photometric=photometric,
+        compression=compression,
+        sample_format=(sample_format.value if sample_format else normalize_tag_value(getattr(page, "sampleformat", None))),
+        bits_per_sample=(bits_tag.value if bits_tag else None),
+        samples_per_pixel=(int(samples_tag.value) if samples_tag else (shape[-1] if axes == "YXS" else shape[0] if axes == "SYX" else 1)),
+        planar_config=planar_config_name(getattr(page, "planarconfig", None) or (planar.value if planar else None)),
+        resolution=((xres.value if xres else None), (yres.value if yres else None)) if xres or yres else None,
+        resolution_unit=(unit.value if unit else None),
+        icc_profile=(bytes(icc.value) if icc is not None else None),
+    )
+    expected_bits = expected_bits_for_dtype(profile.dtype, int(profile.samples_per_pixel or 1))
+    if profile.bits_per_sample is not None and normalize_tag_value(profile.bits_per_sample) != normalize_tag_value(expected_bits):
+        raise ValueError(
+            f"Packed or unusual bit depth is not supported safely: "
+            f"BitsPerSample={profile.bits_per_sample}, dtype={profile.dtype}. "
+            "Refusing to continue to protect output bit depth."
+        )
+    return profile
+
+
+def read_tiff_profile(path: Path, page_index: int) -> tuple[ImageProfile, list[str]]:
+    warnings: list[str] = []
+    with tifffile.TiffFile(path) as tif:
+        if not tif.pages:
+            raise ValueError("TIFF has no pages")
+        if page_index < 0 or page_index >= len(tif.pages):
+            raise ValueError(f"--page {page_index} is out of range; TIFF has {len(tif.pages)} pages")
+        if len(tif.pages) > 1 and page_index == 0:
+            warnings.append(f"TIFF has {len(tif.pages)} pages; processing page 0")
+        page = tif.pages[page_index]
+        shape = tuple(int(x) for x in page.shape)
+        axes = str(getattr(page, "axes", "") or "")
+        if axes not in {"YX", "YXS", "SYX"}:
+            axes = infer_axes_from_shape(shape)
+        profile = profile_from_page(page, shape, np.dtype(page.dtype), axes)
+    return profile, warnings
+
+
 def read_tiff(path: Path, page_index: int) -> tuple[np.ndarray, np.ndarray, ImageProfile, list[str], Any]:
     warnings: list[str] = []
     with tifffile.TiffFile(path) as tif:
@@ -935,54 +1004,9 @@ def read_tiff(path: Path, page_index: int) -> tuple[np.ndarray, np.ndarray, Imag
         page = tif.pages[page_index]
         arr = page.asarray()
         axes = infer_axes(arr)
-        photometric = enum_name(getattr(page, "photometric", None), "UNKNOWN")
-        compression = enum_name(getattr(page, "compression", None), "NONE")
-        sample_format = page.tags.get("SampleFormat")
-        bits_tag = page.tags.get("BitsPerSample")
-        samples_tag = page.tags.get("SamplesPerPixel")
-        planar = page.tags.get("PlanarConfiguration")
-        xres = page.tags.get("XResolution")
-        yres = page.tags.get("YResolution")
-        unit = page.tags.get("ResolutionUnit")
-        icc = page.tags.get(34675)
-        profile = ImageProfile(
-            shape=tuple(int(x) for x in arr.shape),
-            dtype=str(arr.dtype),
-            axes=axes,
-            photometric=photometric,
-            compression=compression,
-            sample_format=(sample_format.value if sample_format else normalize_tag_value(getattr(page, "sampleformat", None))),
-            bits_per_sample=(bits_tag.value if bits_tag else None),
-            samples_per_pixel=(int(samples_tag.value) if samples_tag else (arr.shape[-1] if axes == "YXS" else arr.shape[0] if axes == "SYX" else 1)),
-            planar_config=planar_config_name(getattr(page, "planarconfig", None) or (planar.value if planar else None)),
-            resolution=((xres.value if xres else None), (yres.value if yres else None)) if xres or yres else None,
-            resolution_unit=(unit.value if unit else None),
-            icc_profile=(bytes(icc.value) if icc is not None else None),
-        )
-        expected_bits = expected_bits_for_dtype(str(arr.dtype), int(profile.samples_per_pixel or 1))
-        if profile.bits_per_sample is not None and normalize_tag_value(profile.bits_per_sample) != normalize_tag_value(expected_bits):
-            raise ValueError(
-                f"Packed or unusual bit depth is not supported safely: "
-                f"BitsPerSample={profile.bits_per_sample}, dtype={arr.dtype}. "
-                "Refusing to continue to protect output bit depth."
-            )
+        profile = profile_from_page(page, tuple(int(x) for x in arr.shape), arr.dtype, axes)
     gray = make_gray_u8(arr, axes, profile.photometric)
     return arr, gray, profile, warnings, page
-
-
-def holder_ratio(width: int, height: int) -> float:
-    return float(max(width, height)) / max(1.0, float(min(width, height)))
-
-
-def infer_format_from_holder(width: int, height: int) -> str:
-    ratio = holder_ratio(width, height)
-    if ratio >= 6.0:
-        return "135"
-    if ratio >= 4.45:
-        return "120-645"
-    if ratio >= 3.70:
-        return "120-67"
-    return "120-66"
 
 
 def infer_layout(width: int, height: int) -> str:
@@ -1578,6 +1602,20 @@ def merge_enhanced_separator_gaps(
     }
 
 
+def should_run_enhanced_separator_analysis(analysis: str, gaps: list[Gap], count: int) -> bool:
+    if analysis == "off":
+        return False
+    if analysis == "always":
+        return True
+    expected = max(0, count - 1)
+    if expected <= 0:
+        return False
+    hard = [gap for gap in gaps if gap.method in {"detected", "edge-pair", "enhanced-detected"}]
+    model_only = [gap for gap in gaps if gap.method in {"equal", "equal-broad-region", "grid"}]
+    low_score_hard = any(gap.score < 0.34 for gap in hard)
+    return len(hard) < expected or bool(model_only) or low_score_hard
+
+
 def frame_boxes_from_gaps(
     outer: Box,
     gaps: list[Gap],
@@ -1927,8 +1965,12 @@ def build_detection_for_outer(
             gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
             grid_detail["outer_refined"] = True
     separator_analysis_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
-    if allow_separator_analysis and config.analysis != "off" and strip_mode == "full" and fmt.name != "half":
-        gaps, separator_analysis_detail = merge_enhanced_separator_gaps(gray_work, outer, gaps, origin, pitch, strip_mode, cache)
+    separator_analysis_allowed = allow_separator_analysis and strip_mode == "full" and fmt.name != "half"
+    if separator_analysis_allowed:
+        if should_run_enhanced_separator_analysis(config.analysis, gaps, count):
+            gaps, separator_analysis_detail = merge_enhanced_separator_gaps(gray_work, outer, gaps, origin, pitch, strip_mode, cache)
+        elif config.analysis == "auto":
+            separator_analysis_detail = {"used": False, "reason": "auto_not_needed"}
     boxes_work_for_score = frame_boxes_from_gaps(outer, gaps, count, ww, wh, config.bleed_x, config.bleed_y, origin=origin, pitch=pitch)
     frame_size_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     fitted_boxes_work: Optional[list[Box]] = None
@@ -1937,7 +1979,7 @@ def build_detection_for_outer(
     boxes_work = fitted_boxes_work if fitted_boxes_work is not None else boxes_work_for_score
     boxes = [map_work_box(box, config.layout, w, h) for box in boxes_work]
     outer_original = map_work_box(outer, config.layout, w, h)
-    confidence, reasons, detail = score_detection(gray_work, outer, gaps, boxes_work_for_score, count, fmt, strip_mode)
+    confidence, reasons, detail = score_detection(gray_work, outer, gaps, boxes_work, count, fmt, strip_mode)
     detail.update(
         {
             "candidate_count": count,
@@ -2152,14 +2194,6 @@ def candidate_counts_for_format(config: Config, fmt: FilmFormat) -> list[tuple[i
     raise ValueError(f"Unsupported strip mode: {config.strip_mode}")
 
 
-def v2_format_candidates(config: Config, inferred: FilmFormat) -> list[FilmFormat]:
-    if not config.format_auto:
-        return [inferred]
-    if inferred.family == "35mm":
-        return [FORMATS["135"]]
-    return [FORMATS["120-66"], FORMATS["120-645"], FORMATS["120-67"]]
-
-
 def calibrate_v2_candidate(
     gray: np.ndarray,
     detection: Detection,
@@ -2238,10 +2272,10 @@ def v2_candidate_rank(detection: Detection, threshold: float) -> tuple[int, floa
     )
 
 
-def choose_detection_v2(gray: np.ndarray, config: Config, inferred: FilmFormat, cache: Optional[AnalysisCache] = None) -> Detection:
+def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache: Optional[AnalysisCache] = None) -> Detection:
     candidates: list[Detection] = []
     cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
-    format_candidates = v2_format_candidates(config, inferred)
+    format_candidates = [fmt]
     for fmt in format_candidates:
         count_specs = candidate_counts_for_format(config, fmt)
         for count, strip_mode, offsets in count_specs:
@@ -2256,7 +2290,7 @@ def choose_detection_v2(gray: np.ndarray, config: Config, inferred: FilmFormat, 
                     candidates.append(calibrate_v2_candidate(gray, content, config, fmt, "content", cache))
 
     if not candidates:
-        return choose_detection_with_analysis(gray, config, inferred, cache)
+        return choose_detection_with_analysis(gray, config, fmt, cache)
 
     candidates = sorted(candidates, key=lambda d: v2_candidate_rank(d, config.confidence_threshold), reverse=True)
     best = candidates[0]
@@ -2908,11 +2942,6 @@ def write_rgb_jpeg(rgb: np.ndarray, output_path: Path) -> None:
     image.save(output_path, format="JPEG", quality=92, optimize=True)
 
 
-def write_gray_preview_jpeg(gray: np.ndarray, output_path: Path) -> None:
-    rgb, _ = preview_gray(gray)
-    write_rgb_jpeg(rgb, output_path)
-
-
 def add_panel_label(rgb: np.ndarray, label: str) -> np.ndarray:
     label_h = 34
     h, w = rgb.shape[:2]
@@ -3220,14 +3249,20 @@ def cached_record_matches(record: dict[str, Any], input_file: Path, profile: Ima
     return str(record.get("status", "")) in {"approved_auto", "needs_review"}
 
 
-def find_reusable_analysis(input_file: Path, output_dir: Path, profile: ImageProfile, config: Config) -> Optional[dict[str, Any]]:
-    report_path = output_dir / "split_report.jsonl"
-    if not report_path.exists():
-        return None
+def load_report_records(report_path: Path) -> list[dict[str, Any]]:
+    try:
+        stat = report_path.stat()
+    except FileNotFoundError:
+        return []
+    cached = REPORT_RECORD_CACHE.get(report_path)
+    signature = (int(stat.st_size), int(stat.st_mtime_ns))
+    if cached is not None and cached[0] == signature[0] and cached[1] == signature[1]:
+        return cached[2]
     try:
         lines = report_path.read_text(encoding="utf-8").splitlines()
     except UnicodeDecodeError:
-        return None
+        return []
+    records: list[dict[str, Any]] = []
     for line in reversed(lines):
         if not line.strip():
             continue
@@ -3235,11 +3270,31 @@ def find_reusable_analysis(input_file: Path, output_dir: Path, profile: ImagePro
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if isinstance(record, dict):
+            records.append(record)
+    REPORT_RECORD_CACHE[report_path] = (signature[0], signature[1], records)
+    return records
+
+
+def find_reusable_analysis(input_file: Path, output_dir: Path, profile: ImageProfile, config: Config) -> Optional[dict[str, Any]]:
+    report_path = output_dir / "split_report.jsonl"
+    for record in load_report_records(report_path):
         if Path(str(record.get("source", ""))).name != input_file.name:
             continue
         if cached_record_matches(record, input_file, profile, config):
             return record
     return None
+
+
+def config_for_profile(config: Config, profile: ImageProfile) -> Config:
+    h, w = spatial_shape_from_shape(profile.shape)
+    fmt = FORMATS[config.film_format]
+    count = int(fmt.default_count if config.count_override is None else config.count_override)
+    if count not in fmt.allowed_counts:
+        allowed = ", ".join(str(x) for x in fmt.allowed_counts)
+        raise ValueError(f"--format {fmt.name} allows --count values: {allowed}")
+    layout = infer_layout(w, h) if config.layout_auto else config.layout
+    return replace(config, layout=layout, count=count)
 
 
 def detection_from_record(record: dict[str, Any]) -> Detection:
@@ -3353,17 +3408,9 @@ def write_summary(path: Path, result: ProcessResult) -> None:
 def process_one(input_file: Path, config: Config) -> ProcessResult:
     output_dir = output_directory_for(input_file, config)
     output_dir.mkdir(parents=True, exist_ok=True)
-    arr, gray, profile, warnings, page = read_tiff(input_file, config.page)
-    source_arr = arr
-    h, w = spatial_shape(arr)
-    film_format = infer_format_from_holder(w, h) if config.format_auto else config.film_format
-    fmt = FORMATS[film_format]
-    count = int(fmt.default_count if config.count_override is None else config.count_override)
-    if count not in fmt.allowed_counts:
-        allowed = ", ".join(str(x) for x in fmt.allowed_counts)
-        raise ValueError(f"--format {fmt.name} allows --count values: {allowed}")
-    layout = infer_layout(w, h) if config.layout_auto else config.layout
-    config = replace(config, film_format=film_format, layout=layout, count=count)
+    profile, warnings = read_tiff_profile(input_file, config.page)
+    config = config_for_profile(config, profile)
+    fmt = FORMATS[config.film_format]
 
     if config.reuse_analysis and not config.dry_run and not config.debug_analysis:
         cached_record = find_reusable_analysis(input_file, output_dir, profile, config)
@@ -3395,6 +3442,9 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
                     write_summary(output_dir / "split_summary.csv", result)
                 return result
 
+            arr, gray, profile, page_warnings, page = read_tiff(input_file, config.page)
+            warnings.extend(w for w in page_warnings if w not in warnings)
+            source_arr = arr
             detection = detection_from_record(cached_record)
             arr, gray, deskew_applied = apply_cached_deskew(
                 arr,
@@ -3439,6 +3489,12 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
                 write_jsonl(output_dir / "split_report.jsonl", result)
                 write_summary(output_dir / "split_summary.csv", result)
             return result
+
+    arr, gray, profile, page_warnings, page = read_tiff(input_file, config.page)
+    warnings.extend(w for w in page_warnings if w not in warnings)
+    source_arr = arr
+    config = config_for_profile(config, profile)
+    fmt = FORMATS[config.film_format]
 
     deskew_detail: dict[str, Any] = {"applied": False}
     if config.deskew != "off":
@@ -3585,7 +3641,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bleed-x", type=int, default=None, help="Long-axis bleed override; default 15. Horizontal scans: left/right. Vertical scans: top/bottom.")
     parser.add_argument("--bleed-y", type=int, default=None, help="Short-axis bleed override; default 10. Horizontal scans: top/bottom. Vertical scans: left/right.")
     parser.add_argument("--deskew", choices=DESKEW_CHOICES, default="auto", help="Deskew strip before detection/export.")
-    parser.add_argument("--analysis", choices=ANALYSIS_CHOICES, default="auto", help="Separator evidence assist: off disables it; auto/always use fixed outer-box separator evidence.")
+    parser.add_argument("--analysis", choices=ANALYSIS_CHOICES, default="auto", help="Enhanced separator assist: auto only runs on weak separator evidence; always runs every full-strip pass; off disables it.")
     parser.add_argument("--compression", choices=COMPRESSION_CHOICES, default="same", help="TIFF output compression: same for known lossless source compression, or none.")
     parser.add_argument("--deskew-min-angle", type=float, default=0.03, help="Minimum absolute deskew angle in degrees.")
     parser.add_argument("--deskew-max-angle", type=float, default=2.0, help="Maximum absolute deskew angle in degrees.")
@@ -3612,10 +3668,9 @@ def config_from_args(args: argparse.Namespace) -> Config:
     if first_file is None:
         raise ValueError(f"No TIFF files found: {input_path}")
     with tifffile.TiffFile(first_file) as tif:
-        shape = tif.pages[int(args.page)].shape
-    height, width = int(shape[0]), int(shape[1])
+        shape = tuple(int(x) for x in tif.pages[int(args.page)].shape)
+    height, width = spatial_shape_from_shape(shape)
 
-    format_auto = False
     film_format = str(args.format)
     fmt = FORMATS[film_format]
     count = int(fmt.default_count if args.count is None else args.count)
@@ -3638,7 +3693,6 @@ def config_from_args(args: argparse.Namespace) -> Config:
         input_path=input_path,
         output_dir=Path(args.output).expanduser().resolve() if args.output else None,
         film_format=film_format,
-        format_auto=format_auto,
         layout_auto=layout_auto,
         layout=layout,
         strip_mode=str(args.strip),
@@ -3678,10 +3732,9 @@ def main() -> int:
     print(f"{SCRIPT_NAME} {VERSION}")
     print(f"input: {config.input_path}")
     print(f"files: {len(files)}")
-    format_label = f"auto(probe={config.film_format})" if config.format_auto else config.film_format
     layout_label = f"auto(probe={config.layout})" if config.layout_auto else config.layout
     count_label = "auto" if config.count_override is None else str(config.count_override)
-    print(f"format: {format_label}; layout: {layout_label}; strip: {config.strip_mode}; count: {count_label}")
+    print(f"format: {config.film_format}; layout: {layout_label}; strip: {config.strip_mode}; count: {count_label}")
     print(f"threshold: {config.confidence_threshold:.2f}; analysis={config.analysis}; dry_run={config.dry_run}")
 
     ok = 0

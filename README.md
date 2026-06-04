@@ -132,7 +132,7 @@ X5_Crop_Mac.command
 
 会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。它会先问 `format:`，再问 `partial mode? [y/n, return=no]:`，最后问 `debug analysis? [y/n, return=no]:`。后两个问题都可以输入 `yes` / `no` / `y` / `n`，直接回车等于 `no`。
 
-如果开启 Debug Analysis，它不会写裁切 TIFF。它会在一张 JPG 里生成四块内容：带框 debug 图、原始灰度图、分隔证据图、内容证据图。横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾和未铺满整条片夹的情况。
+如果开启 Debug Analysis，它不会写裁切 TIFF。它会在一张 JPG 里生成四块内容：原始灰度图、带框 debug 图、分隔证据图、内容证据图。横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾和未铺满整条片夹的情况。
 
 如果同一批 TIFF 已经先运行过 Debug Analysis dry run，之后再用普通裁切运行同样的 format、partial/count、bleed、deskew 和阈值参数时，脚本会优先复用 `split_report.jsonl` 里的分析结果：
 
@@ -221,6 +221,8 @@ python3 X5_Crop.py . --format 135 --strip full --report --bleed-x 15 --bleed-y 1
 ```bash
 python3 X5_Crop.py . --format 135 --strip full --deskew off --report --debug-analysis --dry-run
 ```
+
+分隔增强层默认是 `--analysis auto`：只有在分隔证据偏弱、出现 grid/equal 推断线，或硬分隔分数偏低时才启用增强检测。`--analysis always` 会每次启用增强检测；`--analysis off` 会完全关闭增强分隔层。
 
 把低置信原图复制到复核目录：
 

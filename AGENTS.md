@@ -107,6 +107,21 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Made `--analysis auto` selective: enhanced separator analysis now runs only
+  when separator evidence is weak, model-only/grid/equal gaps remain, or hard
+  separator scores are low. `--analysis always` still forces the enhanced pass.
+- Scoring now uses the final output frame boxes after any same-frame-size fit,
+  so confidence is computed against the boxes that will actually be exported.
+- Fixed layout probing for planar RGB TIFF shapes by deriving spatial dimensions
+  from TIFF axes/shape instead of assuming `shape[0], shape[1]`.
+- Added lightweight TIFF profile reading and a cached `split_report.jsonl`
+  parser so reusable Debug Analysis records can be checked before full TIFF
+  pixel decoding. Cached `needs_review` records now skip faster.
+- Removed obsolete format-auto leftovers (`format_auto`, format guessing helper,
+  and `manual_only`) now that CLI/launchers require an explicit format.
+- Removed unused `write_gray_preview_jpeg`.
+- Updated README to document the real Debug Analysis panel order and the new
+  `--analysis auto` / `always` / `off` behavior.
 - Fixed a broad-separator regression in `find_gap`: high-scoring separator
   cores inside visually broad black/white separator bands are now evaluated
   before the broad region is marked suspicious, so a clean wide separator is
@@ -297,6 +312,24 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
+- `python3 X5_Crop.py --help`
+- `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
+- `git diff --check`
+- `Test/135/X5_00002.tif` Debug Analysis dry-run remains `approved_auto`.
+- `Test/135/X5_00019.tif` explicit full 135 dry-run remains `approved_auto`.
+- `Test/135/X5_00038.tif` explicit partial 135 dry-run remains `needs_review`.
+- `Test/120/X5_test_43.tif` explicit full `120-66` dry-run remains
+  `needs_review`.
+- Confirmed `--analysis auto` reports `auto_not_needed` on easy
+  `Test/135/X5_00019.tif`, while `--analysis always` forces the enhanced
+  separator pass.
+- Confirmed reusable `approved_auto` Debug Analysis data for
+  `Test/135/X5_00019.tif` exports crops without rerunning detection.
+- Confirmed reusable `needs_review` Debug Analysis data for
+  `Test/120/X5_test_43.tif` skips export.
+- Confirmed `spatial_shape_from_shape((3, 100, 200))` and
+  `spatial_shape_from_shape((100, 200, 3))` both return `(100, 200)`.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `Test/135/X5_00002.tif` Debug Analysis dry-run remains `approved_auto`; gap 5
   is now `detected` at center `16473.5` with start/end `16400..16548` instead
