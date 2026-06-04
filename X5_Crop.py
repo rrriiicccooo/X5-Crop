@@ -2076,17 +2076,6 @@ def partial_edge_hint(profile: np.ndarray, origin: float, pitch: float, count: i
     }
 
 
-def content_detection_rank(detection: Detection, threshold: float) -> tuple[int, int, float, float]:
-    content = detection.detail.get("content_primary", {})
-    run_conf = float(content.get("run_conf", 0.0)) if isinstance(content, dict) else 0.0
-    return (
-        1 if detection.confidence >= threshold else 0,
-        int(detection.count),
-        float(detection.confidence),
-        run_conf,
-    )
-
-
 def content_is_ambiguous(detection: Detection) -> bool:
     return bool(CONTENT_AMBIGUITY_REASONS.intersection(detection.review_reasons))
 
@@ -2272,6 +2261,57 @@ def v2_candidate_rank(detection: Detection, threshold: float) -> tuple[int, floa
     )
 
 
+def hard_fallback_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detection:
+    gray_work = work_gray(gray, config.layout)
+    wh, ww = gray_work.shape
+    count = max(1, int(config.count))
+    outer = Box(0, 0, ww, wh)
+    if count > 1:
+        pitch = ww / float(count)
+        gaps = [Gap(i, pitch * i, 0.0, "equal") for i in range(1, count)]
+    else:
+        pitch = float(ww)
+        gaps = []
+    boxes_work = frame_boxes_from_gaps(outer, gaps, count, ww, wh, config.bleed_x, config.bleed_y, origin=0.0, pitch=pitch)
+    source_h, source_w = gray.shape
+    boxes = [map_work_box(box, config.layout, source_w, source_h) for box in boxes_work]
+    outer_original = map_work_box(outer, config.layout, source_w, source_h)
+    return Detection(
+        fmt.name,
+        config.layout,
+        config.strip_mode,
+        count,
+        outer_original,
+        boxes,
+        gaps,
+        0.0,
+        ["hard_fallback_no_v2_candidates", "needs_manual_review"],
+        {
+            "analysis_source": "hard_fallback",
+            "candidate_count": count,
+            "layout": config.layout,
+            "work_outer": asdict(outer),
+            "pitch": float(pitch),
+            "gap_centers": [gap.center for gap in gaps],
+            "gap_scores": [gap.score for gap in gaps],
+            "gap_methods": [gap.method for gap in gaps],
+            "v2_competition": {
+                "candidate_count": 0,
+                "formats": [fmt.name],
+                "selected_candidate": {
+                    "format": fmt.name,
+                    "count": count,
+                    "strip_mode": config.strip_mode,
+                    "confidence": 0.0,
+                    "review_reasons": ["hard_fallback_no_v2_candidates", "needs_manual_review"],
+                },
+                "selection_override": "hard_fallback_no_v2_candidates",
+                "top_candidates": [],
+            },
+        },
+    )
+
+
 def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache: Optional[AnalysisCache] = None) -> Detection:
     candidates: list[Detection] = []
     cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
@@ -2290,7 +2330,7 @@ def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache
                     candidates.append(calibrate_v2_candidate(gray, content, config, fmt, "content", cache))
 
     if not candidates:
-        return choose_detection_with_analysis(gray, config, fmt, cache)
+        return hard_fallback_detection(gray, config, fmt)
 
     candidates = sorted(candidates, key=lambda d: v2_candidate_rank(d, config.confidence_threshold), reverse=True)
     best = candidates[0]
@@ -2363,113 +2403,6 @@ def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache
             best.review_reasons.append("v2_candidate_competition_uncertain")
             best.review_reasons = sorted(set(best.review_reasons))
     return best
-
-
-def choose_content_detection(gray: np.ndarray, config: Config, fmt: FilmFormat, cache: Optional[AnalysisCache] = None) -> Optional[Detection]:
-    if config.strip_mode == "full":
-        return content_detection_for_count(gray, config, fmt, config.count, "full", cache=cache)
-    if config.strip_mode == "partial":
-        detections = [
-            detection
-            for c in partial_candidates(fmt, None)
-            for offset in partial_offsets(fmt, c)
-            for detection in [content_detection_for_count(gray, config, fmt, c, "partial", offset, cache=cache)]
-            if detection is not None
-        ]
-        return max(detections, key=lambda d: content_detection_rank(d, config.confidence_threshold)) if detections else None
-    raise ValueError(f"Unsupported strip mode: {config.strip_mode}")
-
-
-def choose_detection(gray: np.ndarray, config: Config, fmt: FilmFormat, cache: Optional[AnalysisCache] = None) -> Detection:
-    if config.strip_mode == "full":
-        return detect_for_count(gray, config, fmt, config.count, "full", cache=cache)
-    if config.strip_mode == "partial":
-        detections = [
-            detect_for_count(gray, config, fmt, c, "partial", offset, cache=cache)
-            for c in partial_candidates(fmt, None)
-            for offset in partial_offsets(fmt, c)
-        ]
-        return max(detections, key=lambda d: detection_rank(d, config.confidence_threshold))
-    raise ValueError(f"Unsupported strip mode: {config.strip_mode}")
-
-
-def choose_detection_with_analysis(gray: np.ndarray, config: Config, fmt: FilmFormat, cache: Optional[AnalysisCache] = None) -> Detection:
-    cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
-    separator = choose_detection(gray, config, fmt, cache)
-    separator.detail["analysis_source"] = "separator_assist" if config.analysis != "off" else "separator_assist_no_analysis"
-    content = choose_content_detection(gray, config, fmt, cache)
-    if content is None:
-        separator.detail["content_primary"] = {"used": False, "reason": "no_valid_content_candidate"}
-        separator.detail["joint_decision"] = {
-            "selected": "separator_fallback",
-            "reason": "no_valid_content_candidate",
-        }
-        return separator
-
-    separator_content = content_evidence_detail(gray, separator, cache)
-    content_primary = content.detail.get("content_primary", {})
-    separator_content_ok = (
-        bool(separator_content.get("used", False))
-        and str(separator_content.get("support", "")) == "ok"
-    )
-    separator_hard_ok, separator_hard_detail = separator_hard_evidence_ok(separator, config.confidence_threshold)
-    separator_pass = separator.confidence >= config.confidence_threshold
-    content_pass = content.confidence >= config.confidence_threshold
-    content_ambiguous = content_is_ambiguous(content)
-
-    content.detail["separator_assist"] = {
-        "confidence": float(separator.confidence),
-        "count": int(separator.count),
-        "strip_mode": separator.strip_mode,
-        "review_reasons": list(separator.review_reasons),
-        "gap_methods": list(separator.detail.get("gap_methods", [])),
-        "outer_box": asdict(separator.outer),
-        "frame_boxes": [asdict(box) for box in separator.frames],
-        "hard_evidence": separator_hard_detail,
-    }
-    content.detail["separator_candidate_content_evidence"] = separator_content
-    if separator.confidence >= config.confidence_threshold and content.confidence < config.confidence_threshold:
-        content.review_reasons.append("separator_assist_passed_but_content_primary_review")
-
-    if separator_pass and separator_content_ok and separator_hard_ok and (
-        content_ambiguous
-        or not content_pass
-        or content.count < separator.count
-    ):
-        separator.detail["content_primary_candidate"] = {
-            "confidence": float(content.confidence),
-            "count": int(content.count),
-            "strip_mode": content.strip_mode,
-            "review_reasons": list(content.review_reasons),
-            "content_primary": content_primary,
-        }
-        separator.detail["content_evidence"] = separator_content
-        separator.detail["joint_decision"] = {
-            "selected": "separator_supported_by_content",
-            "reason": "separator_hard_evidence_passed_and_content_validated",
-            "separator_content_support": separator_content.get("support"),
-            "separator_hard_evidence": separator_hard_detail,
-            "content_candidate_confidence": float(content.confidence),
-            "content_candidate_count": int(content.count),
-        }
-        return separator
-
-    if content_pass and not separator_hard_ok and not content_only_partial_can_pass(content, config.confidence_threshold, fmt):
-        content.confidence = min(content.confidence, 0.84)
-        content.review_reasons.append("joint_separator_not_confirmed")
-    elif content_pass and content_only_partial_can_pass(content, config.confidence_threshold, fmt):
-        content.review_reasons.append("content_only_partial_strong")
-
-    content.detail["joint_decision"] = {
-        "selected": "content_primary",
-        "reason": "content_candidate_preferred_with_joint_gate",
-        "separator_confidence": float(separator.confidence),
-        "separator_count": int(separator.count),
-        "separator_content_support": separator_content.get("support"),
-        "separator_hard_evidence": separator_hard_detail,
-    }
-    content.review_reasons = sorted(set(content.review_reasons))
-    return content
 
 
 def fit_line(points: list[tuple[float, float]]) -> Optional[dict[str, Any]]:

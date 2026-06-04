@@ -107,6 +107,13 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Replaced the old V2 empty-candidate fallback chain with a small hard fallback:
+  if V2 ever produces no candidates, the script now returns a low-confidence
+  equal-split `needs_review` detection instead of re-entering the older
+  separator/content selector.
+- Removed the old fallback-only functions `choose_detection_with_analysis`,
+  `choose_detection`, `choose_content_detection`, and `content_detection_rank`
+  to avoid maintaining two competing detector selection paths.
 - Made `--analysis auto` selective: enhanced separator analysis now runs only
   when separator evidence is weak, model-only/grid/equal gaps remain, or hard
   separator scores are low. `--analysis always` still forces the enhanced pass.
@@ -312,6 +319,17 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
+- `Test/135/X5_00002.tif`, `Test/135/X5_00019.tif`,
+  `Test/135/X5_00038.tif`, and `Test/120/X5_test_43.tif` Debug Analysis
+  dry-runs kept their expected approved/review statuses after the hard fallback
+  cleanup.
+- Debug Analysis performance check: 8 representative 135 files took `53.53s`
+  wall time, about `6.69s/file`.
+- Debug Analysis performance check: 4 representative vertical `120-66` files
+  took `38.98s` wall time, about `9.75s/file`.
+- Combined measured Debug Analysis average across those 12 files was about
+  `7.71s/file`.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `python3 X5_Crop.py --help`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
