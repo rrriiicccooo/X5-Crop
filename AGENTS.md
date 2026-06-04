@@ -107,6 +107,15 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Simplified terminal output for launcher and command-line runs: no repeated
+  format display, no fixed full-strip count display, default output path is
+  hidden unless `--output` is explicitly set, and informational messages now use
+  `info:` instead of `warning:`.
+- Added lightweight per-file progress output as `[current/total] filename`.
+- Updated macOS and Windows launchers to remove repeated `Output: split_output`,
+  selected format, and fixed full-strip count lines while keeping partial
+  `count: auto` visible.
+- Updated README with the simplified terminal-output behavior.
 - Marked the current stable baseline with git tag `v3`; active script version is
   now `VERSION = "3.1"` for the next optimization line.
 - Added V3.1 outer-content overflow handling: when content evidence extends
@@ -367,6 +376,12 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
+- `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
+- `git diff --check`
+- `Test/135/X5_00036.tif` fresh dry-run with explicit `--output` showed the new
+  concise terminal output: no format/fixed-count line, `info:` messages, and
+  `[1/1]` progress.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 3.1`.

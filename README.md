@@ -191,6 +191,13 @@ Press Return to close...
 
 按回车后脚本会退出，并尝试关闭由 Finder 打开的 Terminal 或 iTerm2 窗口。Finder 双击 `.command` 默认由 macOS 的 Terminal 打开，这是系统文件关联行为；脚本本身会兼容 Terminal 和 iTerm2 的窗口关闭。
 
+终端输出会尽量保持简洁：
+
+- 处理进度显示为 `[当前/总数] 文件名`。
+- 普通提示使用 `info:`，避免把说明性信息误看成警告。
+- 不重复显示启动器里已经选择过的 format，也不显示固定张数 count；只有 partial 模式的自动张数会显示 `count: auto`。
+- 默认输出到 `split_output/` 时不显示输出路径；只有命令行显式传入 `--output` 时才显示。
+
 ## 命令行常用法
 
 输出检测分析图：

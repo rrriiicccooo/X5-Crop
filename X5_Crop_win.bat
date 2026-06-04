@@ -32,7 +32,6 @@ echo X5 Crop V3.1 launcher
 echo Folder: %cd%
 echo.
 echo This will process TIFF files in this folder.
-echo Output: split_output
 echo Existing output files will not be overwritten.
 echo.
 
@@ -136,13 +135,11 @@ if /i "%DEBUG_INPUT%"=="n" (
 )
 
 echo.
-echo format: %FORMAT%
 if /i "%STRIP%"=="full" (
     echo strip mode: full
-    echo fixed full-strip count: %COUNT%
 ) else (
     echo strip mode: partial
-    echo partial mode: count auto
+    echo count: auto
 )
 if /i "%DEBUG%"=="yes" (
     echo debug analysis: enabled

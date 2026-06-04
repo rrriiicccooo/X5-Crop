@@ -4010,26 +4010,38 @@ def main() -> int:
     print(f"input: {config.input_path}")
     print(f"files: {len(files)}")
     layout_label = f"auto(probe={config.layout})" if config.layout_auto else config.layout
-    count_label = "auto" if config.strip_mode == "partial" and config.count_override is None else str(config.count)
-    print(f"format: {config.film_format}; layout: {layout_label}; strip: {config.strip_mode}; count: {count_label}")
-    print(f"threshold: {config.confidence_threshold:.2f}; analysis={config.analysis}; dry_run={config.dry_run}")
+    mode_parts = [f"layout: {layout_label}", f"strip: {config.strip_mode}"]
+    if config.strip_mode == "partial" and config.count_override is None:
+        mode_parts.append("count: auto")
+    if config.debug_analysis:
+        mode_parts.append("debug analysis")
+    if config.dry_run:
+        mode_parts.append("dry run")
+    print("; ".join(mode_parts))
+    print(f"threshold: {config.confidence_threshold:.2f}; analysis: {config.analysis}")
+    if config.output_dir is not None:
+        print(f"output: {config.output_dir}")
 
     ok = 0
     failed = 0
     approved = 0
     review = 0
-    for path in files:
-        print(f"\n[{path.name}]")
+    total = len(files)
+    for index, path in enumerate(files, start=1):
+        print(f"\n[{index}/{total}] {path.name}")
         try:
             result = process_one(path, config)
             ok += 1
             approved += int(result.status == "approved_auto")
             review += int(result.status == "needs_review")
-            print(f"  status={result.status} confidence={result.confidence:.3f} format={result.film_format} count={result.count}")
+            print(f"  status={result.status} confidence={result.confidence:.3f}")
             for warning in result.warnings:
-                print(f"  warning: {warning}")
-            for out in result.output_files:
-                print(f"  wrote: {Path(out).name}")
+                print(f"  info: {warning}")
+            if result.output_files:
+                print(f"  wrote: {len(result.output_files)} TIFF files")
+                if config.output_dir is not None:
+                    for out in result.output_files:
+                        print(f"    {Path(out).name}")
         except Exception as exc:
             failed += 1
             print(f"  error: {exc}", file=sys.stderr)
