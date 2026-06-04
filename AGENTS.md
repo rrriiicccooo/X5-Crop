@@ -107,29 +107,15 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
-- Simplified terminal output for launcher and command-line runs: no repeated
-  format display, no fixed full-strip count display, default output path is
-  hidden unless `--output` is explicitly set, and informational messages now use
-  `info:` instead of `warning:`.
-- Added lightweight per-file progress output as `[current/total] filename`.
-- Updated macOS and Windows launchers to remove repeated `Output: split_output`,
-  selected format, and fixed full-strip count lines while keeping partial
-  `count: auto` visible.
-- Updated README with the simplified terminal-output behavior.
-- Marked the current stable baseline with git tag `v3`; active script version is
-  now `VERSION = "3.1"` for the next optimization line.
-- Added V3.1 outer-content overflow handling: when content evidence extends
-  beyond the detected green outer box, the script can expand to a
-  `content_aligned_outer` and rerun detection instead of only treating outer
-  mismatch as excess border.
-- Tightened 135 `edge-pair` refinement so it behaves as a small separator
-  adjustment and no longer freely replaces an existing detected/broad separator
-  with a nearby stronger internal edge.
-- Added a narrow 135 full-strip model-risk gate for severe bad-strip cases:
-  hard separators must not be only two adjacent marks with three grid fills,
-  no accepted enhanced separator support, and weak rejected separator evidence.
-- Updated README and launcher labels from V2 to V3.1 while keeping the
-  `v2_competition` report field name for compatibility with existing reports.
+- Rolled back the active detection logic from V3.1 to the `v3` stable baseline
+  after V3.1 reduced accuracy and moved previously accurate PASS images into
+  review.
+- Kept the simplified terminal output on top of the V3 baseline: no repeated
+  format display, no fixed full-strip count display, default output path hidden
+  unless `--output` is explicitly set, `info:` instead of `warning:`, and
+  `[current/total] filename` progress.
+- Updated visible version text to V3 / `VERSION = "3.0"` so future reports are
+  distinguishable from the reverted V3.1 run.
 - Refined `135-dual` after review: each internal 135 lane now gets its own
   content evidence and outer-content alignment checks before the two lanes are
   combined into the final 12-frame result.
@@ -378,22 +364,16 @@ Changed:
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
-- `git diff --check`
-- `Test/135/X5_00036.tif` fresh dry-run with explicit `--output` showed the new
-  concise terminal output: no format/fixed-count line, `info:` messages, and
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.0`.
+- Confirmed no V3.1-specific detection strings remain in active script/docs:
+  `outer_long_axis_content_overflow`, `model_supported_high_risk`, and
+  `max_detected_shift` are absent.
+- Fresh 135 dry-runs with `--no-reuse-analysis` returned V3-style
+  `approved_auto` for `Test/135/X5_00036.tif`, `X5_00052.tif`, `X5_00032.tif`,
+  `X5_00019.tif`, and `X5_00025.tif`.
+- `Test/135/X5_00036.tif` fresh dry-run with explicit `--output` showed the
+  concise terminal output: no format/fixed-count line, `info:` message, and
   `[1/1]` progress.
-- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
-- `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.1`.
-- `git diff --check`
-- Fresh 135 Debug Analysis dry-runs with `--no-reuse-analysis` kept
-  `Test/135/X5_00052.tif`, `X5_00051.tif`, `X5_00038.tif`, `X5_00032.tif`,
-  `X5_00022.tif`, `X5_00007.tif`, `X5_00019.tif`, `X5_00025.tif`, and
-  `X5_00002.tif` as `approved_auto`.
-- Fresh 135 Debug Analysis dry-run moved `Test/135/X5_00036.tif` to
-  `needs_review`.
-- Fresh non-Debug dry-runs over the same 10-file 135 focus set produced the
-  same status pattern; total wall time was about `184.57s`.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
 - `git diff --check`
