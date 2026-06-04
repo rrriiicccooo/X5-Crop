@@ -2108,15 +2108,66 @@ def detect_dual_135_lane(
         candidates.append(calibrated)
     if not candidates:
         return None
-    return max(candidates, key=lambda d: v2_candidate_rank(d, config.confidence_threshold))
+    best = max(candidates, key=lambda d: v2_candidate_rank(d, config.confidence_threshold))
+    content_detail = content_evidence_detail(gray, best, cache)
+    outer_alignment = outer_content_alignment_detail(gray, best, cache)
+    best.detail["content_evidence"] = content_detail
+    best.detail["outer_content_alignment"] = outer_alignment
+    if bool(content_detail.get("used", False)):
+        support = str(content_detail.get("support", ""))
+        if support == "aspect_conflict":
+            best.confidence = min(best.confidence, 0.82)
+            best.review_reasons.append("content_aspect_conflict")
+        elif support in {"low_content", "weak"} and best.confidence >= config.confidence_threshold:
+            best.confidence = min(best.confidence, 0.84)
+            best.review_reasons.append("content_evidence_weak")
+    if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
+        best.confidence = min(best.confidence, 0.84)
+        best.review_reasons.append("outer_content_bbox_mismatch")
+    best.review_reasons = sorted(set(best.review_reasons))
+    return best
+
+
+def unsupported_dual_135_partial_detection(gray: np.ndarray, config: Config) -> Detection:
+    gray_work = work_gray(gray, config.layout)
+    wh, ww = gray_work.shape
+    outer = Box(0, 0, ww, wh)
+    source_h, source_w = gray.shape
+    return Detection(
+        "135-dual",
+        config.layout,
+        config.strip_mode,
+        12,
+        map_work_box(outer, config.layout, source_w, source_h),
+        [],
+        [],
+        0.0,
+        ["135_dual_partial_not_supported", "needs_manual_review"],
+        {
+            "analysis_source": "unsupported_mode",
+            "candidate_count": 0,
+            "layout": config.layout,
+            "work_outer": asdict(outer),
+            "v2_competition": {
+                "candidate_count": 0,
+                "formats": ["135-dual"],
+                "selected_candidate": {
+                    "format": "135-dual",
+                    "count": 12,
+                    "strip_mode": config.strip_mode,
+                    "confidence": 0.0,
+                    "review_reasons": ["135_dual_partial_not_supported", "needs_manual_review"],
+                },
+                "selection_override": "unsupported_135_dual_partial",
+                "top_candidates": [],
+            },
+        },
+    )
 
 
 def choose_detection_135_dual(gray: np.ndarray, config: Config, cache: AnalysisCache) -> Detection:
     if config.strip_mode != "full":
-        detection = hard_fallback_detection(gray, config, FORMATS["135-dual"])
-        detection.review_reasons.append("135_dual_partial_not_supported")
-        detection.review_reasons = sorted(set(detection.review_reasons))
-        return detection
+        return unsupported_dual_135_partial_detection(gray, config)
 
     gray_work = cache.gray_work
     source_h, source_w = gray.shape
@@ -2179,9 +2230,15 @@ def choose_detection_135_dual(gray: np.ndarray, config: Config, cache: AnalysisC
     lane_summaries = [
         {
             "lane": index,
+            "lane_format": "135",
+            "lane_count": 6,
+            "total_format": "135-dual",
+            "total_count": 12,
             "confidence": float(detection.confidence),
             "review_reasons": list(detection.review_reasons),
             "work_outer": detection.detail.get("work_outer"),
+            "content_evidence": detection.detail.get("content_evidence", {}),
+            "outer_content_alignment": detection.detail.get("outer_content_alignment", {}),
             "v2_candidate": detection.detail.get("v2_candidate", {}),
         }
         for index, detection in enumerate(confirmed_lanes, start=1)
@@ -2360,6 +2417,8 @@ def candidate_counts_for_format(config: Config, fmt: FilmFormat) -> list[tuple[i
     if config.strip_mode == "full":
         return [(config.count, "full", (0.0,))]
     if config.strip_mode == "partial":
+        if config.count_override is not None:
+            return [(config.count, "partial", v2_offsets(config.count))]
         return [
             (count, "partial", v2_offsets(count))
             for count in partial_candidates(fmt, None)
@@ -3655,6 +3714,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     detection.detail["content_evidence"] = content_detail
     outer_alignment = outer_content_alignment_detail(gray, detection, analysis_cache)
     detection.detail["outer_content_alignment"] = outer_alignment
+    unsupported_mode = detection.detail.get("analysis_source") == "unsupported_mode"
 
     allow_outer_retry = detection.detail.get("analysis_source") != "hard_fallback" and detection.film_format != "135-dual"
     if allow_outer_retry and bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
@@ -3669,7 +3729,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
                 "reason": "no_valid_content_aligned_outer_retry",
             }
 
-    if bool(content_detail.get("used", False)):
+    if not unsupported_mode and bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
         if support == "aspect_conflict":
             detection.confidence = min(detection.confidence, 0.82)
@@ -3677,7 +3737,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         elif support == "low_content" and detection.confidence >= config.confidence_threshold:
             detection.confidence = min(detection.confidence, 0.84)
             detection.review_reasons.append("content_evidence_weak")
-    if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
+    if not unsupported_mode and bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
         detection.confidence = min(detection.confidence, 0.84)
         detection.review_reasons.append("outer_content_bbox_mismatch")
 

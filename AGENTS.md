@@ -107,6 +107,20 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Refined `135-dual` after review: each internal 135 lane now gets its own
+  content evidence and outer-content alignment checks before the two lanes are
+  combined into the final 12-frame result.
+- Expanded `dual_lane_detections` report data with explicit `lane_format=135`,
+  `lane_count=6`, `total_format=135-dual`, and `total_count=12` so lane-level
+  evidence is not confused with the final 12-frame output.
+- Changed `135-dual --strip partial` from a hard fallback with 12 equal frame
+  boxes to an explicit unsupported-mode review result with no frame boxes.
+- Kept unsupported-mode review reasons focused on
+  `135_dual_partial_not_supported` and `needs_manual_review`, avoiding unrelated
+  single-strip content/outer mismatch reasons.
+- Fixed explicit partial count semantics: `--strip partial --count N` now
+  evaluates only count `N`; partial count auto is used only when no count
+  override is supplied.
 - Added `135-dual` as an explicit format. Horizontal scans are handled as two
   parallel 135 lanes stacked top/bottom; vertical scans are handled as two
   parallel 135 lanes left/right after the existing work-orientation transform.
@@ -339,6 +353,17 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
+- `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
+- `git diff --check`
+- Temporary horizontal `135-dual` fixture remains `approved_auto` with
+  top-level `count=12` and `len(frame_boxes)=12`; each lane report now states
+  `lane_count=6` and `total_count=12`.
+- `135-dual --strip partial` now returns `needs_review` with no frame boxes and
+  review reasons limited to `135_dual_partial_not_supported` and
+  `needs_manual_review`.
+- `Test/135/X5_00038.tif --format 135 --strip partial --count 3` now evaluates
+  only 3-frame partial candidates; all reported top candidates have `count=3`.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
 - `python3 X5_Crop.py --help` shows `--format {135,135-dual,half,xpan,120-645,120-66,120-67}`.
@@ -584,6 +609,9 @@ Not verified:
 
 Known local-only files:
 - `Test/`
+- `/private/tmp/x5crop_apply_dual_full`
+- `/private/tmp/x5crop_apply_dual_partial`
+- `/private/tmp/x5crop_apply_partial_count`
 - `/private/tmp/x5crop_dual_135_fixture.tif`
 - `/private/tmp/x5crop_dual_135_fixture_res.tif`
 - `/private/tmp/x5crop_dual_135_vertical_fixture.tif`
