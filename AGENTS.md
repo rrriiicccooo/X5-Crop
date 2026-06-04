@@ -107,6 +107,20 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Marked the current stable baseline with git tag `v3`; active script version is
+  now `VERSION = "3.1"` for the next optimization line.
+- Added V3.1 outer-content overflow handling: when content evidence extends
+  beyond the detected green outer box, the script can expand to a
+  `content_aligned_outer` and rerun detection instead of only treating outer
+  mismatch as excess border.
+- Tightened 135 `edge-pair` refinement so it behaves as a small separator
+  adjustment and no longer freely replaces an existing detected/broad separator
+  with a nearby stronger internal edge.
+- Added a narrow 135 full-strip model-risk gate for severe bad-strip cases:
+  hard separators must not be only two adjacent marks with three grid fills,
+  no accepted enhanced separator support, and weak rejected separator evidence.
+- Updated README and launcher labels from V2 to V3.1 while keeping the
+  `v2_competition` report field name for compatibility with existing reports.
 - Refined `135-dual` after review: each internal 135 lane now gets its own
   content evidence and outer-content alignment checks before the two lanes are
   combined into the final 12-frame result.
@@ -353,6 +367,18 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
+- `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.1`.
+- `git diff --check`
+- Fresh 135 Debug Analysis dry-runs with `--no-reuse-analysis` kept
+  `Test/135/X5_00052.tif`, `X5_00051.tif`, `X5_00038.tif`, `X5_00032.tif`,
+  `X5_00022.tif`, `X5_00007.tif`, `X5_00019.tif`, `X5_00025.tif`, and
+  `X5_00002.tif` as `approved_auto`.
+- Fresh 135 Debug Analysis dry-run moved `Test/135/X5_00036.tif` to
+  `needs_review`.
+- Fresh non-Debug dry-runs over the same 10-file 135 focus set produced the
+  same status pattern; total wall time was about `184.57s`.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
 - `git diff --check`

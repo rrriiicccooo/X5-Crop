@@ -33,7 +33,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "2.0"
+VERSION = "3.1"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -645,10 +645,18 @@ def outer_content_alignment_detail(gray: np.ndarray, detection: Detection, cache
     long_slack_right = max(0, outer.right - content_box.right)
     short_slack_top = max(0, content_box.top - outer.top)
     short_slack_bottom = max(0, outer.bottom - content_box.bottom)
+    long_overflow_left = max(0, outer.left - content_box.left)
+    long_overflow_right = max(0, content_box.right - outer.right)
+    short_overflow_top = max(0, outer.top - content_box.top)
+    short_overflow_bottom = max(0, content_box.bottom - outer.bottom)
     max_long_slack = max(long_slack_left, long_slack_right)
     max_short_slack = max(short_slack_top, short_slack_bottom)
+    max_long_overflow = max(long_overflow_left, long_overflow_right)
+    max_short_overflow = max(short_overflow_top, short_overflow_bottom)
     long_slack_ratio = float(max_long_slack) / max(1.0, pitch)
     short_slack_ratio = float(max_short_slack) / max(1.0, float(outer.height))
+    long_overflow_ratio = float(max_long_overflow) / max(1.0, pitch)
+    short_overflow_ratio = float(max_short_overflow) / max(1.0, float(outer.height))
     content_width_ratio = float(content_box.width) / max(1.0, float(outer.width))
     content_height_ratio = float(content_box.height) / max(1.0, float(outer.height))
 
@@ -670,28 +678,44 @@ def outer_content_alignment_detail(gray: np.ndarray, detection: Detection, cache
 
     excess_long = long_slack_ratio > 0.050 or (max_long_slack >= 160 and long_slack_ratio > 0.035)
     excess_short = short_slack_ratio > 0.035 and max_short_slack >= 28
-    ok = not (excess_long or excess_short)
+    content_overflow_long = max_long_overflow >= max(24, int(round(pitch * 0.022)))
+    content_overflow_short = max_short_overflow >= max(14, int(round(float(outer.height) * 0.012)))
+    ok = not (excess_long or excess_short or content_overflow_long or content_overflow_short)
     reason = "ok"
     if excess_long:
         reason = "outer_long_axis_excess"
     elif excess_short:
         reason = "outer_short_axis_excess"
+    elif content_overflow_long:
+        reason = "outer_long_axis_content_overflow"
+    elif content_overflow_short:
+        reason = "outer_short_axis_content_overflow"
 
     return {
         "used": True,
         "ok": ok,
         "reason": reason,
         "content_bbox_source": source,
+        "work_width": int(work_w),
+        "work_height": int(work_h),
         "outer_work_box": asdict(outer),
         "content_work_box": asdict(content_box),
         "long_slack_left": int(long_slack_left),
         "long_slack_right": int(long_slack_right),
         "short_slack_top": int(short_slack_top),
         "short_slack_bottom": int(short_slack_bottom),
+        "long_overflow_left": int(long_overflow_left),
+        "long_overflow_right": int(long_overflow_right),
+        "short_overflow_top": int(short_overflow_top),
+        "short_overflow_bottom": int(short_overflow_bottom),
         "max_long_slack": int(max_long_slack),
         "max_short_slack": int(max_short_slack),
+        "max_long_overflow": int(max_long_overflow),
+        "max_short_overflow": int(max_short_overflow),
         "long_slack_ratio": long_slack_ratio,
         "short_slack_ratio": short_slack_ratio,
+        "long_overflow_ratio": long_overflow_ratio,
+        "short_overflow_ratio": short_overflow_ratio,
         "content_width_ratio": content_width_ratio,
         "content_height_ratio": content_height_ratio,
         "border_dark_fraction": border_dark_fraction,
@@ -722,8 +746,18 @@ def corrected_outer_from_alignment(alignment: dict[str, Any], config: Config, co
         top = max(outer.top, content.top - short_margin)
     if int(alignment.get("short_slack_bottom", 0)) > 0 and str(alignment.get("reason", "")) == "outer_short_axis_excess":
         bottom = min(outer.bottom, content.bottom + short_margin)
+    if int(alignment.get("long_overflow_left", 0)) > 0:
+        left = max(0, content.left - long_margin)
+    if int(alignment.get("long_overflow_right", 0)) > 0:
+        right = content.right + long_margin
+    if int(alignment.get("short_overflow_top", 0)) > 0:
+        top = max(0, content.top - short_margin)
+    if int(alignment.get("short_overflow_bottom", 0)) > 0:
+        bottom = content.bottom + short_margin
 
-    corrected = Box(left, top, right, bottom)
+    work_w = int(alignment.get("work_width", max(outer.right, content.right)))
+    work_h = int(alignment.get("work_height", max(outer.bottom, content.bottom)))
+    corrected = Box(left, top, right, bottom).clamp(work_w, work_h)
     if not corrected.valid():
         return None
     if corrected.width < max(80, int(round(outer.width * 0.80))) or corrected.height < max(40, int(round(outer.height * 0.80))):
@@ -1392,7 +1426,14 @@ def refine_gaps_by_edge_pairs(
         _distance, neg_quality, _neg_bg, a, b = sorted(candidates)[0]
         center = (a + b) / 2.0
         edge_gap = Gap(gap.index, float(center), float(-neg_quality), "edge-pair", float(a), float(b + 1))
-        if gap.method in {"detected", "enhanced-detected"} and abs(edge_gap.center - gap.center) > max(4.0, edge_gap.width):
+        shift = abs(edge_gap.center - gap.center)
+        if gap.method in {"detected", "enhanced-detected"}:
+            max_detected_shift = max(6.0, min(edge_gap.width * 0.45, pitch * 0.018))
+            if shift > max_detected_shift:
+                refined.append(gap)
+                rejected += 1
+                continue
+        if gap.method == "equal-broad-region" and shift > max(8.0, pitch * 0.030):
             refined.append(gap)
             rejected += 1
             continue
@@ -2330,12 +2371,47 @@ def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[
     equal = int(detection.detail.get("equal_gaps", 0))
     hard = actual + enhanced
 
+    hard_gap_indexes = [
+        int(gap.index)
+        for gap in detection.gaps
+        if gap.method in {"detected", "edge-pair", "enhanced-detected"}
+    ]
+    separator_analysis = detection.detail.get("separator_analysis", {})
+    accepted_enhanced = 0
+    max_rejected_separator_score = 0.0
+    if isinstance(separator_analysis, dict):
+        accepted_enhanced = int(separator_analysis.get("accepted_count", 0) or 0)
+        rejected = separator_analysis.get("rejected", [])
+        if isinstance(rejected, list) and rejected:
+            scores = [
+                float(item.get("score", 0.0))
+                for item in rejected
+                if isinstance(item, dict)
+            ]
+            max_rejected_separator_score = max(scores) if scores else 0.0
+
+    hard_span = (max(hard_gap_indexes) - min(hard_gap_indexes)) if hard_gap_indexes else None
+    model_supported_high_risk = (
+        detection.film_format == "135"
+        and detection.strip_mode == "full"
+        and expected >= 5
+        and hard <= 2
+        and grid >= 3
+        and accepted_enhanced == 0
+        and hard_span is not None
+        and hard_span <= 1
+        and max_rejected_separator_score < 0.30
+    )
+
     if expected == 0:
         ok = detection.confidence >= threshold
         reason = "single_frame_no_separator_needed" if ok else "single_frame_low_confidence"
     elif detection.confidence < threshold:
         ok = False
         reason = "separator_below_threshold"
+    elif model_supported_high_risk:
+        ok = False
+        reason = "135_model_supported_separator_risk"
     elif detection.film_format == "135":
         needed = min(expected, 2)
         ok = hard >= needed and equal <= max(2, expected // 2)
@@ -2357,6 +2433,11 @@ def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[
         "enhanced_detected_gaps": enhanced,
         "grid_gaps": grid,
         "equal_gaps": equal,
+        "hard_gap_indexes": hard_gap_indexes,
+        "hard_gap_span": hard_span,
+        "accepted_enhanced_separator_gaps": accepted_enhanced,
+        "max_rejected_separator_score": float(max_rejected_separator_score),
+        "model_supported_high_risk": bool(model_supported_high_risk),
         "separator_confidence": float(detection.confidence),
     }
 
@@ -3825,7 +3906,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V2 candidate-scored single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V3.1 candidate-scored single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")
