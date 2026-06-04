@@ -80,43 +80,51 @@ echo "  645 = 120-645"
 echo "  66 = 120-66"
 echo "  67 = 120-67"
 echo
-read -r -p "format: " FORMAT_INPUT
-FORMAT_INPUT="$(printf '%s' "$FORMAT_INPUT" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-case "$FORMAT_INPUT" in
-    ""|135)
-        FORMAT="135"
-        COUNT="6"
-        ;;
-    dual|135dual|135-dual)
-        FORMAT="135-dual"
-        COUNT="12"
-        ;;
-    xpan)
-        FORMAT="xpan"
-        COUNT="3"
-        ;;
-    half)
-        FORMAT="half"
-        COUNT="12"
-        ;;
-    645|120645|120-645)
-        FORMAT="120-645"
-        COUNT="4"
-        ;;
-    66|12066|120-66)
-        FORMAT="120-66"
-        COUNT="3"
-        ;;
-    67|12067|120-67)
-        FORMAT="120-67"
-        COUNT="3"
-        ;;
-    *)
-        echo "unknown format: $FORMAT_INPUT"
-        echo "use return/135, dual, xpan, half, 645, 66, or 67."
-        finish 1
-        ;;
-esac
+while true; do
+    read -r -p "format: " FORMAT_INPUT
+    FORMAT_INPUT="$(printf '%s' "$FORMAT_INPUT" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+    case "$FORMAT_INPUT" in
+        ""|135)
+            FORMAT="135"
+            COUNT="6"
+            break
+            ;;
+        dual|135dual|135-dual)
+            FORMAT="135-dual"
+            COUNT="12"
+            break
+            ;;
+        xpan)
+            FORMAT="xpan"
+            COUNT="3"
+            break
+            ;;
+        half)
+            FORMAT="half"
+            COUNT="12"
+            break
+            ;;
+        645|120645|120-645)
+            FORMAT="120-645"
+            COUNT="4"
+            break
+            ;;
+        66|12066|120-66)
+            FORMAT="120-66"
+            COUNT="3"
+            break
+            ;;
+        67|12067|120-67)
+            FORMAT="120-67"
+            COUNT="3"
+            break
+            ;;
+        *)
+            echo "unknown format: $FORMAT_INPUT"
+            echo "use return/135, dual, xpan, half, 645, 66, or 67."
+            ;;
+    esac
+done
 
 PARTIAL_ANSWER="$(ask_yes_no "partial mode? [y/n, return=no]: " "no")"
 if [ "$PARTIAL_ANSWER" = "yes" ]; then

@@ -44,6 +44,7 @@ echo   645 = 120-645
 echo   66 = 120-66
 echo   67 = 120-67
 echo.
+:ask_format
 set "FORMAT_INPUT=135"
 set /p "FORMAT_INPUT=format: "
 set "FORMAT_INPUT=%FORMAT_INPUT: =%"
@@ -96,8 +97,7 @@ if /i "%FORMAT_INPUT%"=="135" (
     echo unknown format: %FORMAT_INPUT%
     echo use return/135, dual, xpan, half, 645, 66, or 67.
     echo.
-    pause
-    exit /b 1
+    goto ask_format
 )
 
 :ask_partial

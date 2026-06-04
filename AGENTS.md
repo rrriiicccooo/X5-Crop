@@ -124,6 +124,8 @@ Changed:
   has already checked content support.
 - README now has one consolidated Chinese Debug Analysis section instead of two
   overlapping sections.
+- macOS and Windows launchers now re-prompt after an unknown format instead of
+  exiting immediately.
 
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
@@ -137,11 +139,15 @@ Verified:
   `X5_00036` as the only `needs_review`.
 - The focused reports show full-strip candidates that pass the separator auto
   gate record `content_candidate_skipped=separator_auto_gate_passed`.
+- `printf 'abc\n135\nn\nn\n\n' | ./X5_Crop_Mac.command` confirmed an invalid
+  format is rejected and the next valid input continues the launcher flow; the
+  run then stopped at the expected no-TIFF message in the repository root.
 
 Not verified:
 - A fresh full Test/135 batch after this cleanup has not been run yet; only the
   focused regression set above was run.
-- Windows launcher was inspected but not executed on Windows in this turn.
+- Windows launcher format retry was edited but not executed on Windows in this
+  turn.
 
 Known local-only files:
 - `Test/`
