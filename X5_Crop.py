@@ -1924,10 +1924,7 @@ def separator_support_score(detection: Detection, hard_detail: dict[str, Any]) -
 
 def candidate_counts_for_format(config: Config, fmt: FilmFormat) -> list[tuple[int, str, tuple[float, ...]]]:
     def v2_offsets(count: int) -> tuple[float, ...]:
-        offsets = partial_offsets(fmt, count)
-        if config.strip_mode == "partial" or len(offsets) <= 3:
-            return offsets
-        return (0.0, 0.5, 1.0)
+        return partial_offsets(fmt, count)
 
     if config.strip_mode == "full":
         return [(config.count, "full", (0.0,))]
@@ -1937,20 +1934,7 @@ def candidate_counts_for_format(config: Config, fmt: FilmFormat) -> list[tuple[i
             for count in partial_candidates(fmt, None)
             if count < fmt.default_count
         ] or [(1, "partial", partial_offsets(fmt, 1))]
-    counts: list[tuple[int, str, tuple[float, ...]]] = [(fmt.default_count, "full", (0.0,))]
-    min_partial_count = 3 if fmt.default_count >= 6 else 2
-    for count in partial_candidates(fmt, None):
-        if min_partial_count <= count < fmt.default_count:
-            counts.append((count, "partial", v2_offsets(count)))
-    seen: set[tuple[int, str]] = set()
-    out: list[tuple[int, str, tuple[float, ...]]] = []
-    for count, strip_mode, offsets in counts:
-        key = (count, strip_mode)
-        if key in seen or count not in fmt.allowed_counts:
-            continue
-        seen.add(key)
-        out.append((count, strip_mode, offsets))
-    return out
+    raise ValueError(f"Unsupported strip mode: {config.strip_mode}")
 
 
 def v2_format_candidates(config: Config, inferred: FilmFormat) -> list[FilmFormat]:
@@ -2045,8 +2029,6 @@ def choose_detection_v2(gray: np.ndarray, config: Config, inferred: FilmFormat) 
     format_candidates = v2_format_candidates(config, inferred)
     for fmt in format_candidates:
         count_specs = candidate_counts_for_format(config, fmt)
-        if config.strip_mode == "auto":
-            count_specs = sorted(count_specs, key=lambda spec: 0 if spec[1] == "full" else 1)
         for count, strip_mode, offsets in count_specs:
             if count not in fmt.allowed_counts:
                 continue
@@ -2057,28 +2039,6 @@ def choose_detection_v2(gray: np.ndarray, config: Config, inferred: FilmFormat) 
                 content = content_detection_for_count(gray, config, fmt, count, strip_mode, offset, cache)
                 if content is not None:
                     candidates.append(calibrate_v2_candidate(gray, content, config, fmt, "content", cache))
-            if (
-                config.strip_mode == "auto"
-                and strip_mode == "full"
-                and count == fmt.default_count
-                and candidates[-1].film_format == fmt.name
-            ):
-                full_candidates = [
-                    candidate for candidate in candidates
-                    if candidate.film_format == fmt.name
-                    and candidate.strip_mode == "full"
-                    and candidate.count == fmt.default_count
-                ]
-                best_full = max(full_candidates, key=lambda d: v2_candidate_rank(d, config.confidence_threshold))
-                v2_detail = best_full.detail.get("v2_candidate", {})
-                if (
-                    best_full.confidence >= config.confidence_threshold
-                    and isinstance(v2_detail, dict)
-                    and bool(v2_detail.get("auto_gate", False))
-                    and v2_detail.get("source") == "separator"
-                ):
-                    best_full.detail.setdefault("v2_shortcuts", []).append("skip_partial_after_full_auto_gate")
-                    break
 
     if not candidates:
         return choose_detection_with_analysis(gray, config, inferred)
@@ -2168,35 +2128,7 @@ def choose_content_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) 
             if detection is not None
         ]
         return max(detections, key=lambda d: content_detection_rank(d, config.confidence_threshold)) if detections else None
-
-    full = content_detection_for_count(gray, config, fmt, config.count, "full")
-    partials = [
-        detection
-        for c in partial_candidates(fmt, full)
-        for offset in partial_offsets(fmt, c)
-        for detection in [content_detection_for_count(gray, config, fmt, c, "partial", offset)]
-        if detection is not None
-    ]
-    candidates = [d for d in [full, *partials] if d is not None]
-    if not candidates:
-        return None
-    best = max(candidates, key=lambda d: content_detection_rank(d, config.confidence_threshold))
-    if (
-        full is not None
-        and best.strip_mode == "partial"
-        and best.count < fmt.default_count
-        and best.confidence >= config.confidence_threshold
-        and full.confidence >= PARTIAL_FULL_COMPETE_MIN_CONFIDENCE
-    ):
-        full.review_reasons.append("partial_competes_with_plausible_full_strip")
-        full.detail["partial_best"] = {
-            "count": best.count,
-            "confidence": float(best.confidence),
-            "review_reasons": list(best.review_reasons),
-            "content_primary": best.detail.get("content_primary", {}),
-        }
-        return full
-    return best
+    raise ValueError(f"Unsupported strip mode: {config.strip_mode}")
 
 
 def choose_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detection:
@@ -2209,25 +2141,7 @@ def choose_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detec
             for offset in partial_offsets(fmt, c)
         ]
         return max(detections, key=lambda d: detection_rank(d, config.confidence_threshold))
-
-    full = detect_for_count(gray, config, fmt, config.count, "full")
-    if full.confidence >= config.confidence_threshold:
-        return full
-    partials = [
-        detect_for_count(gray, config, fmt, c, "partial", offset)
-        for c in partial_candidates(fmt, full)
-        for offset in partial_offsets(fmt, c)
-    ]
-    best_partial = max(partials, key=lambda d: detection_rank(d, config.confidence_threshold))
-    if best_partial.confidence >= config.confidence_threshold:
-        best_partial.detail["auto_full_confidence"] = full.confidence
-        return best_partial
-    full.detail["partial_best"] = {
-        "count": best_partial.count,
-        "confidence": best_partial.confidence,
-        "reasons": best_partial.review_reasons,
-    }
-    return full
+    raise ValueError(f"Unsupported strip mode: {config.strip_mode}")
 
 
 def choose_detection_with_analysis(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detection:

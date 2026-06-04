@@ -107,6 +107,12 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Removed obsolete `strip_mode == "auto"` branches from the active script now
+  that the CLI and launchers only support explicit `full` or `partial` strip
+  modes.
+- Simplified V2 candidate-count selection and legacy fallback selectors so
+  unsupported strip modes fail directly instead of silently entering old
+  full-vs-partial auto competition.
 - Added safe reuse of Debug Analysis report data for later normal export:
   non-dry-run crop passes now look for a matching `split_report.jsonl` entry
   before running detection again.
@@ -258,6 +264,13 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- Confirmed no `strip_mode == "auto"` / `auto_full_confidence` /
+  `skip_partial_after_full_auto_gate` references remain.
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
+- `python3 X5_Crop.py --help` still shows only `--strip {full,partial}`.
+- `Test/135/X5_00019.tif` with explicit full 135 mode remains `approved_auto`.
+- `Test/135/X5_00038.tif` with explicit partial 135 mode remains
+  `needs_review`.
 - `python3 -m py_compile X5_Crop.py`
 - Generated Debug Analysis dry-run report for `Test/135/X5_00019.tif`, then ran
   normal export against the same output folder and confirmed it reused
