@@ -33,7 +33,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "3.0"
+VERSION = "3.1.1"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -2028,6 +2028,79 @@ def detection_rank(detection: Detection, threshold: float) -> tuple[int, float, 
     )
 
 
+def separator_derived_outer_candidate(
+    detection: Detection,
+    work_w: int,
+    work_h: int,
+    fmt: FilmFormat,
+    count: int,
+) -> Optional[OuterCandidate]:
+    if detection.strip_mode != "full" or count <= 1:
+        return None
+    if fmt.name not in {"135", "xpan", "120-645", "120-66", "120-67"}:
+        return None
+    try:
+        outer = box_from_dict(detection.detail["work_outer"])
+    except Exception:
+        return None
+    if not outer.valid() or outer.width <= 1 or outer.height <= 1:
+        return None
+
+    grid = detection.detail.get("grid", {})
+    model_pitch: Optional[float] = None
+    model_origin: Optional[float] = None
+    if isinstance(grid, dict) and bool(grid.get("grid_used", False)):
+        model_pitch = float(grid.get("grid_pitch", 0.0))
+        model_origin = float(grid.get("grid_origin", 0.0))
+    else:
+        hard = [
+            gap for gap in detection.gaps
+            if gap.method in {"detected", "edge-pair", "enhanced-detected"}
+        ]
+        if len(hard) < 2:
+            return None
+        pitches: list[float] = []
+        origins: list[float] = []
+        for i, a in enumerate(hard):
+            for b in hard[i + 1:]:
+                dk = b.index - a.index
+                if dk <= 0:
+                    continue
+                pitch = (float(b.center) - float(a.center)) / float(dk)
+                nominal = outer.width / float(count)
+                if nominal * 0.75 <= pitch <= nominal * 1.25:
+                    pitches.append(pitch)
+                    origins.append(float(a.center) - pitch * a.index)
+        if not pitches:
+            return None
+        model_pitch = float(np.median(np.array(pitches, dtype=np.float64)))
+        model_origin = float(np.median(np.array(origins, dtype=np.float64)))
+
+    if model_pitch is None or model_origin is None or model_pitch <= 1:
+        return None
+    proposed_left = int(round(outer.left + model_origin))
+    proposed_right = int(round(outer.left + model_origin + model_pitch * count))
+    if proposed_right <= proposed_left:
+        return None
+    proposed = Box(proposed_left, outer.top, proposed_right, outer.bottom).clamp(work_w, work_h)
+    if not proposed.valid():
+        return None
+
+    canvas_area = float(work_w * work_h)
+    area_ratio = float(proposed.width * proposed.height) / max(1.0, canvas_area)
+    if area_ratio > 0.94:
+        return None
+    width_change = abs(proposed.width - outer.width) / max(1.0, float(outer.width))
+    if width_change > 0.22:
+        return None
+    max_side_shift = max(12, int(round((outer.width / float(count)) * 0.22)))
+    if abs(proposed.left - outer.left) > max_side_shift or abs(proposed.right - outer.right) > max_side_shift:
+        return None
+    if proposed == outer:
+        return None
+    return OuterCandidate("separator_derived_outer", proposed)
+
+
 def detect_for_count(
     gray: np.ndarray,
     config: Config,
@@ -2043,14 +2116,50 @@ def detect_for_count(
         build_detection_for_outer(gray, config, fmt, count, strip_mode, candidate.box, offset_fraction, candidate.name, cache=cache)
         for candidate in outer_candidates
     ]
+    initial_best = max(candidates, key=lambda d: detection_rank(d, config.confidence_threshold))
+    if strip_mode == "full":
+        derived_candidates: list[OuterCandidate] = []
+        derived = separator_derived_outer_candidate(
+            initial_best,
+            gray_work.shape[1],
+            gray_work.shape[0],
+            fmt,
+            count,
+        )
+        if derived is not None:
+            derived_candidates.append(derived)
+        for candidate in unique_outer_candidates(derived_candidates):
+            candidates.append(
+                build_detection_for_outer(
+                    gray,
+                    config,
+                    fmt,
+                    count,
+                    strip_mode,
+                    candidate.box,
+                    offset_fraction,
+                    candidate.name,
+                    cache=cache,
+                    allow_outer_refine=False,
+                )
+            )
     best = max(candidates, key=lambda d: detection_rank(d, config.confidence_threshold))
-    areas = [candidate.box.width * candidate.box.height for candidate in outer_candidates if candidate.box.valid()]
+    derived_report_candidates = [
+        OuterCandidate(
+            str(d.detail.get("outer_candidate", "unknown")),
+            original_box_to_work(d.outer, config.layout, gray.shape[1], gray.shape[0]),
+        )
+        for d in candidates
+        if str(d.detail.get("outer_candidate", "")).startswith("separator_derived")
+    ]
+    all_outer_candidates = outer_candidates + derived_report_candidates
+    areas = [candidate.box.width * candidate.box.height for candidate in all_outer_candidates if candidate.box.valid()]
     if areas:
-        best.detail["outer_candidate_count"] = len(outer_candidates)
+        best.detail["outer_candidate_count"] = len(all_outer_candidates)
         best.detail["outer_area_spread_ratio"] = (max(areas) - min(areas)) / max(1.0, float(max(areas)))
         best.detail["outer_candidates"] = [
             {"name": candidate.name, "box": asdict(candidate.box)}
-            for candidate in outer_candidates
+            for candidate in all_outer_candidates
         ]
     return best
 
@@ -2329,6 +2438,39 @@ def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[
     grid = int(detection.detail.get("grid_gaps", 0))
     equal = int(detection.detail.get("equal_gaps", 0))
     hard = actual + enhanced
+    hard_indexes = [
+        int(gap.index)
+        for gap in detection.gaps
+        if gap.method in {"detected", "edge-pair", "enhanced-detected"}
+    ]
+    leading_grid_scores: list[float] = []
+    for gap in detection.gaps:
+        if gap.method != "grid":
+            break
+        leading_grid_scores.append(float(gap.score))
+    separator_analysis = detection.detail.get("separator_analysis", {})
+    enhanced_accepted = (
+        int(separator_analysis.get("accepted_count", 0) or 0)
+        if isinstance(separator_analysis, dict)
+        else 0
+    )
+    hard_adjacent_late = False
+    if hard_indexes:
+        expected_sequence = list(
+            range(max(hard_indexes) - len(hard_indexes) + 1, max(hard_indexes) + 1)
+        )
+        hard_adjacent_late = hard_indexes == expected_sequence and min(hard_indexes) >= 4
+    leading_grid_failure = (
+        detection.film_format == "135"
+        and detection.strip_mode == "full"
+        and expected >= 5
+        and len(leading_grid_scores) >= 3
+        and all(score < 0.35 for score in leading_grid_scores[:3])
+        and sum(1 for score in leading_grid_scores[:3] if score < 0.12) >= 2
+        and enhanced_accepted == 0
+        and len(hard_indexes) <= 2
+        and hard_adjacent_late
+    )
 
     if expected == 0:
         ok = detection.confidence >= threshold
@@ -2336,6 +2478,9 @@ def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[
     elif detection.confidence < threshold:
         ok = False
         reason = "separator_below_threshold"
+    elif leading_grid_failure:
+        ok = False
+        reason = "135_leading_grid_separator_failure"
     elif detection.film_format == "135":
         needed = min(expected, 2)
         ok = hard >= needed and equal <= max(2, expected // 2)
@@ -2357,6 +2502,10 @@ def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[
         "enhanced_detected_gaps": enhanced,
         "grid_gaps": grid,
         "equal_gaps": equal,
+        "hard_gap_indexes": hard_indexes,
+        "leading_grid_scores": leading_grid_scores,
+        "enhanced_separator_accepted_count": enhanced_accepted,
+        "leading_grid_separator_failure": bool(leading_grid_failure),
         "separator_confidence": float(detection.confidence),
     }
 
@@ -3825,7 +3974,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V3 candidate-scored single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V3.1.1 candidate-scored single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")

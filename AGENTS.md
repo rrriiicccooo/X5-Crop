@@ -101,12 +101,24 @@ Next recommended step:
 
 ## Current Handoff
 
-Date: 2026-06-04
+Date: 2026-06-05
 Computer: primary macOS machine
 Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Released V3.1.1 from the recovered V3 baseline, not from the reverted V3.1
+  logic.
+- Added `separator_derived_outer` as a conservative extra outer candidate:
+  it is derived only from the initial best V3-style outer, uses internal
+  separator/grid pitch to infer long-axis bounds, cannot expand to full canvas,
+  cannot shift sides too far, and competes with normal outer candidates instead
+  of replacing them directly.
+- Added a narrow 135 full-strip review gate for the `X5_00036` failure shape:
+  three leading low-score grid separators, no accepted enhanced separator,
+  and only adjacent late hard separators. The report records
+  `135_leading_grid_separator_failure`.
+- Updated visible version text and launcher labels to V3.1.1.
 - Rolled back the active detection logic from V3.1 to the `v3` stable baseline
   after V3.1 reduced accuracy and moved previously accurate PASS images into
   review.
@@ -362,6 +374,20 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
+- `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.1.1`.
+- Focus fresh dry-runs kept `X5_00007`, `X5_00022`, `X5_00032`, `X5_00038`,
+  `X5_00051`, `X5_00052`, `X5_00023`, `X5_00034`, and `X5_00044` through
+  `X5_00050` as `approved_auto`, while `X5_00036` became `needs_review` with
+  `135_leading_grid_separator_failure`.
+- Full fresh 48-file `Test/135` dry-run wrote `/private/tmp/x5_v311_135_full2`
+  and produced 43 `approved_auto` / 5 `needs_review`; compared with V3, only
+  `X5_00036` changed to review. V3.1 false-review files `X5_00023`,
+  `X5_00034`, and `X5_00044` through `X5_00050` are approved again.
+- In the full run, `separator_derived_outer` won only for
+  `X5_00002`, `X5_00015`, `X5_00026`, `X5_00027`, `X5_00034`, `X5_00035`,
+  `X5_00041`, and `X5_00052`.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 3.0`.
