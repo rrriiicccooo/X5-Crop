@@ -678,6 +678,84 @@ def outer_content_alignment_detail(gray: np.ndarray, detection: Detection, cache
     }
 
 
+def corrected_outer_from_alignment(alignment: dict[str, Any], config: Config, count: int) -> Optional[Box]:
+    if not bool(alignment.get("used", False)) or bool(alignment.get("ok", True)):
+        return None
+    try:
+        outer = box_from_dict(alignment["outer_work_box"])
+        content = box_from_dict(alignment["content_work_box"])
+    except Exception:
+        return None
+    if not outer.valid() or not content.valid():
+        return None
+
+    pitch = float(outer.width) / float(max(1, count))
+    long_margin = max(int(config.bleed_x), min(80, int(round(pitch * 0.012))))
+    short_margin = max(int(config.bleed_y), min(40, int(round(float(outer.height) * 0.010))))
+    left, top, right, bottom = outer.left, outer.top, outer.right, outer.bottom
+
+    if int(alignment.get("long_slack_left", 0)) > 0:
+        left = max(outer.left, content.left - long_margin)
+    if int(alignment.get("long_slack_right", 0)) > 0:
+        right = min(outer.right, content.right + long_margin)
+    if int(alignment.get("short_slack_top", 0)) > 0 and str(alignment.get("reason", "")) == "outer_short_axis_excess":
+        top = max(outer.top, content.top - short_margin)
+    if int(alignment.get("short_slack_bottom", 0)) > 0 and str(alignment.get("reason", "")) == "outer_short_axis_excess":
+        bottom = min(outer.bottom, content.bottom + short_margin)
+
+    corrected = Box(left, top, right, bottom)
+    if not corrected.valid():
+        return None
+    if corrected.width < max(80, int(round(outer.width * 0.80))) or corrected.height < max(40, int(round(outer.height * 0.80))):
+        return None
+    if corrected == outer:
+        return None
+    return corrected
+
+
+def retry_with_content_aligned_outer(
+    gray: np.ndarray,
+    config: Config,
+    fmt: FilmFormat,
+    detection: Detection,
+    alignment: dict[str, Any],
+    cache: AnalysisCache,
+) -> Optional[Detection]:
+    if detection.strip_mode != "full":
+        return None
+    corrected_outer = corrected_outer_from_alignment(alignment, config, detection.count)
+    if corrected_outer is None:
+        return None
+
+    retried = build_detection_for_outer(
+        gray,
+        config,
+        fmt,
+        detection.count,
+        detection.strip_mode,
+        corrected_outer,
+        float(detection.detail.get("offset_fraction", 0.0)),
+        "content_aligned_outer",
+        cache=cache,
+        allow_outer_refine=False,
+    )
+    retried = calibrate_v2_candidate(gray, retried, config, fmt, "separator", cache)
+    retry_alignment = outer_content_alignment_detail(gray, retried, cache)
+    retry_content = content_evidence_detail(gray, retried, cache)
+    retried.detail["outer_content_alignment"] = retry_alignment
+    retried.detail["content_evidence"] = retry_content
+    retried.detail["outer_correction"] = {
+        "used": True,
+        "source_reason": alignment.get("reason"),
+        "original_outer_work_box": alignment.get("outer_work_box"),
+        "content_work_box": alignment.get("content_work_box"),
+        "corrected_outer_work_box": asdict(corrected_outer),
+        "retry_alignment": retry_alignment,
+        "retry_content_support": retry_content.get("support"),
+    }
+    return retried
+
+
 def content_profile_runs(evidence: np.ndarray, outer: Box, count: int) -> tuple[list[tuple[int, int]], dict[str, Any]]:
     crop = evidence[outer.top:outer.bottom, outer.left:outer.right].astype(np.float32) / 255.0
     if crop.size == 0:
@@ -1367,14 +1445,16 @@ def constrain_gap_to_geometry(gap: Gap, expected: float, pitch: float, strip_mod
         return Gap(gap.index, float(expected), gap.score, "equal")
     max_shift = pitch * (0.045 if strip_mode == "full" else 0.12)
     shift = max(-max_shift, min(max_shift, gap.center - expected))
+    center = float(expected + shift)
     method = gap.method
     if gap.start is not None and gap.end is not None:
-        start = float(gap.start + shift)
-        end = float(gap.end + shift)
+        delta = center - float(gap.center)
+        start = float(gap.start + delta)
+        end = float(gap.end + delta)
     else:
         start = None
         end = None
-    return Gap(gap.index, float(expected + shift), gap.score, method, start, end)
+    return Gap(gap.index, center, gap.score, method, start, end)
 
 
 def apply_robust_grid(gaps: list[Gap], origin: float, pitch: float, strip_mode: str) -> tuple[list[Gap], dict[str, Any]]:
@@ -1797,6 +1877,7 @@ def build_detection_for_outer(
     outer_candidate_name: str = "unknown",
     allow_separator_analysis: bool = True,
     cache: Optional[AnalysisCache] = None,
+    allow_outer_refine: bool = True,
 ) -> Detection:
     h, w = gray.shape
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
@@ -1823,7 +1904,7 @@ def build_detection_for_outer(
     if strip_mode == "full" and fmt.name == "135" and count > 1:
         gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, cache, outer)
     gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
-    if strip_mode == "full" and bool(grid_detail.get("grid_used", False)):
+    if allow_outer_refine and strip_mode == "full" and bool(grid_detail.get("grid_used", False)):
         model_origin = float(grid_detail.get("grid_origin", 0.0))
         model_pitch = float(grid_detail.get("grid_pitch", pitch))
         proposed_left = int(round(outer.left + model_origin))
@@ -3385,6 +3466,19 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     detection.detail["content_evidence"] = content_detail
     outer_alignment = outer_content_alignment_detail(gray, detection, analysis_cache)
     detection.detail["outer_content_alignment"] = outer_alignment
+
+    if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
+        retried_detection = retry_with_content_aligned_outer(gray, config, fmt, detection, outer_alignment, analysis_cache)
+        if retried_detection is not None:
+            detection = retried_detection
+            content_detail = dict(detection.detail.get("content_evidence", {}))
+            outer_alignment = dict(detection.detail.get("outer_content_alignment", {}))
+        else:
+            detection.detail["outer_correction"] = {
+                "used": False,
+                "reason": "no_valid_content_aligned_outer_retry",
+            }
+
     if bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
         if support == "aspect_conflict":

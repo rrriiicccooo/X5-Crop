@@ -107,14 +107,23 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Changed the outer-content alignment behavior from pure downgrade to repair
+  first: when a full-strip candidate's outer box includes too much long/short
+  axis border, the script now builds a `content_aligned_outer`, reruns separator
+  detection on that corrected outer, and uses the retried result if it passes.
+- Disabled grid-driven outer expansion during the content-aligned retry so the
+  corrected outer cannot be immediately stretched back to the previous
+  over-wide box.
+- Fixed constrained gap marker metadata: when geometry constraints move a gap
+  center, `start`/`end` are now shifted by the actual center delta so Debug
+  Analysis red separator boxes stay centered on the final gap location.
 - Added an outer-content alignment gate so final high-confidence decisions must
   also prove the detected outer box is close to the real content bounding box.
   The report now includes `detail.outer_content_alignment` with content bbox,
   long/short-axis slack, content-to-outer ratios, and border dark fractions.
-- Outer boxes that include too much long-axis or short-axis white border are
-  capped below the auto-export threshold with `outer_content_bbox_mismatch`.
-  This specifically targets cases like `Test/135/X5_00002.tif`, where a too-wide
-  outer box made the 6-frame geometry look falsely perfect.
+- If content-aligned retry cannot produce an aligned passing result, outer boxes
+  that include too much long-axis or short-axis white border are still capped
+  below the auto-export threshold with `outer_content_bbox_mismatch`.
 - Expanded the per-image V2 analysis cache so candidate scoring reuses
   `gray_work`, content evidence, separator profiles, enhanced separator
   profiles, and edge-refine profiles instead of regenerating the same expensive
@@ -281,9 +290,15 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
-- `Test/135/X5_00002.tif` explicit full 135 Debug Analysis now downgrades to
-  `needs_review` with `outer_content_bbox_mismatch`; report shows right-side
-  long-axis slack of 224 px, about 0.067 frame pitch.
+- `Test/135/X5_00002.tif` explicit full 135 Debug Analysis now repairs the
+  over-wide outer from work box `83..20069` to `114..19885`, stays
+  `approved_auto`, and reports `outer_correction.used=true`.
+- Confirmed `Test/135/X5_00002.tif` gap marker `start`/`end` midpoints now align
+  with final gap centers after geometry constraints.
+- `Test/135/X5_00019.tif` and `Test/135/X5_00025.tif` explicit full 135 dry-runs
+  remain `approved_auto`.
+- `Test/120/X5_test_43.tif` explicit full `120-66` remains `needs_review`.
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `Test/135/X5_00019.tif` and `Test/135/X5_00025.tif` explicit full 135 dry-runs
   remain `approved_auto`; their outer-content alignment stays within the new
   slack gate.
