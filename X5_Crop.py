@@ -773,6 +773,8 @@ def retry_with_content_aligned_outer(
         "retry_alignment": retry_alignment,
         "retry_content_support": retry_content.get("support"),
     }
+    if "separator_derived_outer_gate" in detection.detail:
+        retried.detail["separator_derived_outer_gate"] = detection.detail["separator_derived_outer_gate"]
     return retried
 
 
@@ -2028,6 +2030,46 @@ def detection_rank(detection: Detection, threshold: float) -> tuple[int, float, 
     )
 
 
+def should_try_separator_derived_outer(
+    gray: np.ndarray,
+    config: Config,
+    detection: Detection,
+    outer_candidates: list[OuterCandidate],
+    cache: Optional[AnalysisCache],
+) -> tuple[bool, dict[str, Any]]:
+    names = [candidate.name for candidate in outer_candidates]
+    areas = [candidate.box.width * candidate.box.height for candidate in outer_candidates if candidate.box.valid()]
+    spread = (max(areas) - min(areas)) / max(1.0, float(max(areas))) if areas else 0.0
+    alignment = outer_content_alignment_detail(gray, detection, cache)
+    alignment_ok = bool(alignment.get("ok", True)) if bool(alignment.get("used", False)) else True
+    gap_methods = [str(method) for method in detection.detail.get("gap_methods", [])]
+    model_gap_count = sum(1 for method in gap_methods if method in {"grid", "equal", "equal-broad-region"})
+    initial_outer = str(detection.detail.get("outer_candidate", ""))
+    grid_used = bool(detection.detail.get("grid_used", False))
+    no_white_outer = "white_x" not in names
+    outer_disagreement = spread >= 0.08
+    model_supported_outer = grid_used and model_gap_count >= 2 and initial_outer != "white_x"
+    allowed = no_white_outer or outer_disagreement or not alignment_ok or model_supported_outer
+    reason = "allowed"
+    if not allowed:
+        reason = "ordinary_outer_candidates_are_stable"
+    detail = {
+        "allowed": bool(allowed),
+        "reason": reason,
+        "outer_candidate_names": names,
+        "outer_area_spread_ratio": float(spread),
+        "initial_outer_candidate": initial_outer,
+        "no_white_outer": bool(no_white_outer),
+        "outer_disagreement": bool(outer_disagreement),
+        "alignment_ok": bool(alignment_ok),
+        "alignment_reason": alignment.get("reason"),
+        "grid_used": bool(grid_used),
+        "model_gap_count": int(model_gap_count),
+        "model_supported_outer": bool(model_supported_outer),
+    }
+    return allowed, detail
+
+
 def separator_derived_outer_candidate(
     detection: Detection,
     work_w: int,
@@ -2119,15 +2161,18 @@ def detect_for_count(
     initial_best = max(candidates, key=lambda d: detection_rank(d, config.confidence_threshold))
     if strip_mode == "full":
         derived_candidates: list[OuterCandidate] = []
-        derived = separator_derived_outer_candidate(
-            initial_best,
-            gray_work.shape[1],
-            gray_work.shape[0],
-            fmt,
-            count,
-        )
-        if derived is not None:
-            derived_candidates.append(derived)
+        allow_derived, derived_gate = should_try_separator_derived_outer(gray, config, initial_best, outer_candidates, cache)
+        initial_best.detail["separator_derived_outer_gate"] = derived_gate
+        if allow_derived:
+            derived = separator_derived_outer_candidate(
+                initial_best,
+                gray_work.shape[1],
+                gray_work.shape[0],
+                fmt,
+                count,
+            )
+            if derived is not None:
+                derived_candidates.append(derived)
         for candidate in unique_outer_candidates(derived_candidates):
             candidates.append(
                 build_detection_for_outer(
@@ -2144,6 +2189,8 @@ def detect_for_count(
                 )
             )
     best = max(candidates, key=lambda d: detection_rank(d, config.confidence_threshold))
+    if strip_mode == "full" and "separator_derived_outer_gate" not in best.detail:
+        best.detail["separator_derived_outer_gate"] = initial_best.detail.get("separator_derived_outer_gate", {})
     derived_report_candidates = [
         OuterCandidate(
             str(d.detail.get("outer_candidate", "unknown")),
@@ -2720,6 +2767,12 @@ def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache
                 separator = detect_for_count(gray, config, fmt, count, strip_mode, offset, cache)
                 separator_candidate = calibrate_v2_candidate(gray, separator, config, fmt, "separator", cache)
                 candidates.append(separator_candidate)
+                separator_auto_gate = bool(
+                    separator_candidate.detail.get("v2_candidate", {}).get("auto_gate", False)
+                )
+                if strip_mode == "full" and separator_auto_gate and separator_candidate.confidence >= config.confidence_threshold:
+                    separator_candidate.detail["content_candidate_skipped"] = "separator_auto_gate_passed"
+                    continue
                 content = content_detection_for_count(gray, config, fmt, count, strip_mode, offset, cache)
                 if content is not None:
                     candidates.append(calibrate_v2_candidate(gray, content, config, fmt, "content", cache))
