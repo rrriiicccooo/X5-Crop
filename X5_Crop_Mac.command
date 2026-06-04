@@ -74,6 +74,7 @@ echo
 
 echo "choose film format:"
 echo "  return or 135 = 135"
+echo "  dual = 135 dual"
 echo "  xpan = xpan"
 echo "  half = half-frame"
 echo "  645 = 120-645"
@@ -86,6 +87,10 @@ case "$FORMAT_INPUT" in
     ""|135)
         FORMAT="135"
         COUNT="6"
+        ;;
+    dual|135dual|135-dual)
+        FORMAT="135-dual"
+        COUNT="12"
         ;;
     xpan)
         FORMAT="xpan"
@@ -109,7 +114,7 @@ case "$FORMAT_INPUT" in
         ;;
     *)
         echo "unknown format: $FORMAT_INPUT"
-        echo "use return/135, xpan, half, 645, 66, or 67."
+        echo "use return/135, dual, xpan, half, 645, 66, or 67."
         finish 1
         ;;
 esac

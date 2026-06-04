@@ -107,6 +107,26 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Added `135-dual` as an explicit format. Horizontal scans are handled as two
+  parallel 135 lanes stacked top/bottom; vertical scans are handled as two
+  parallel 135 lanes left/right after the existing work-orientation transform.
+- `135-dual` full mode combines two conservative 6-frame 135 detections into one
+  12-frame result. `135-dual` partial mode is intentionally review-only for now.
+- Updated macOS and Windows launchers so `dual`, `135dual`, and `135-dual`
+  select `--format 135-dual --count 12`.
+- Updated README with `135-dual` usage, fixed count, layout behavior, and the
+  partial-mode limitation.
+- Prevented the small hard fallback from being re-promoted by the later
+  content-aligned outer retry path.
+- Made deskew's enhanced-gray pass selective in `--analysis auto`: if the base
+  edge fit is already strong, enhanced deskew is skipped.
+- Made report reuse treat default full-strip count and an equivalent explicit
+  `--count` as the same cache configuration by removing `count_override` from
+  the reuse signature.
+- Fixed the CLI count display so full mode prints the effective fixed count;
+  only partial mode without `--count` prints `count: auto`.
+- Cached Separator evidence crops for Debug Analysis so that panel no longer
+  recomputes the same evidence crop when the analysis cache is available.
 - Replaced the old V2 empty-candidate fallback chain with a small hard fallback:
   if V2 ever produces no candidates, the script now returns a low-confidence
   equal-split `needs_review` detection instead of re-entering the older
@@ -319,6 +339,24 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
+- `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
+- `python3 X5_Crop.py --help` shows `--format {135,135-dual,half,xpan,120-645,120-66,120-67}`.
+- `git diff --check`
+- `Test/135/X5_00019.tif` full 135 Debug Analysis dry-run remains
+  `approved_auto` and now prints `count: 6` even without an explicit `--count`.
+- A temporary horizontal `135-dual` TIFF fixture under `/private/tmp` runs as
+  `approved_auto` with `count=12` and writes a readable four-panel Debug
+  Analysis JPG.
+- The same temporary fixture transposed into a vertical layout runs as
+  `approved_auto` with `layout=vertical` and `count=12`.
+- `135-dual --strip partial` on the temporary fixture stays `needs_review` with
+  `135_dual_partial_not_supported`.
+- A temporary `135-dual` fixture with explicit TIFF resolution metadata exported
+  12 cropped TIFFs successfully.
+- Confirmed Debug Analysis report reuse now works across equivalent default and
+  explicit full-count runs: a Debug Analysis run without `--count` was reused by
+  a normal crop run with `--count 6`.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `Test/135/X5_00002.tif`, `Test/135/X5_00019.tif`,
   `Test/135/X5_00038.tif`, and `Test/120/X5_test_43.tif` Debug Analysis
@@ -546,6 +584,15 @@ Not verified:
 
 Known local-only files:
 - `Test/`
+- `/private/tmp/x5crop_dual_135_fixture.tif`
+- `/private/tmp/x5crop_dual_135_fixture_res.tif`
+- `/private/tmp/x5crop_dual_135_vertical_fixture.tif`
+- `/private/tmp/x5crop_verify_dual_135`
+- `/private/tmp/x5crop_verify_dual_135_export`
+- `/private/tmp/x5crop_verify_dual_135_vertical`
+- `/private/tmp/x5crop_verify_dual_partial`
+- `/private/tmp/x5crop_verify_reuse_equiv`
+- `/private/tmp/x5crop_verify_single_135`
 - `/private/tmp/x5crop_fixed_count_19`
 - `/private/tmp/x5crop_partial_count_auto_38`
 - `/private/tmp/x5crop_explicit_full_19`
@@ -618,4 +665,6 @@ Known local-only files:
 Next recommended step:
 - Run V2 over a broader Test batch and use `v2_competition` to identify which
   candidate families are still too aggressive. If more speed is needed, the next
-  likely target is caching separator outer candidates/profiles per image/layout.
+  likely target is delaying 135 edge-pair refinement until after cheap outer
+  candidate filtering, because this review intentionally did not apply that
+  larger performance change.

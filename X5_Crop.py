@@ -63,6 +63,7 @@ class FilmFormat:
 
 FORMATS: dict[str, FilmFormat] = {
     "135": FilmFormat("135", 6, tuple(range(1, 7)), "35mm"),
+    "135-dual": FilmFormat("135-dual", 12, (12,), "35mm"),
     "half": FilmFormat("half", 12, tuple(range(1, 13)), "35mm"),
     "xpan": FilmFormat("xpan", 3, (1, 2, 3), "35mm"),
     "120-645": FilmFormat("120-645", 4, (1, 2, 3, 4), "120"),
@@ -79,6 +80,7 @@ ANALYSIS_CHOICES = ("off", "auto", "always")
 COMPRESSION_CHOICES = ("none", "same")
 CONTENT_ASPECTS_HORIZONTAL = {
     "135": 3.0 / 2.0,
+    "135-dual": 3.0 / 2.0,
     "half": 2.0 / 3.0,
     "xpan": 65.0 / 24.0,
     "120-66": 1.0,
@@ -150,6 +152,7 @@ class Gap:
     method: str
     start: Optional[float] = None
     end: Optional[float] = None
+    lane_box: Optional[dict[str, int]] = None
 
     @property
     def width(self) -> float:
@@ -253,6 +256,7 @@ class AnalysisCache:
     content_evidence_float_work: np.ndarray
     separator_profiles: dict[tuple[int, int, int, int], np.ndarray] = field(default_factory=dict)
     enhanced_separator_profiles: dict[tuple[int, int, int, int], np.ndarray] = field(default_factory=dict)
+    separator_evidence_crops: dict[tuple[int, int, int, int], np.ndarray] = field(default_factory=dict)
     edge_refine_profiles: dict[tuple[int, int, int, int], tuple[np.ndarray, np.ndarray, np.ndarray]] = field(default_factory=dict)
 
 
@@ -1061,6 +1065,17 @@ def cached_enhanced_separator_profile(cache: Optional[AnalysisCache], gray_work:
         profile = separator_profile(make_separator_evidence_gray(crop))
         cache.enhanced_separator_profiles[key] = profile
     return profile
+
+
+def cached_separator_evidence_crop(cache: Optional[AnalysisCache], gray_work: np.ndarray, outer: Box) -> np.ndarray:
+    if cache is None:
+        return make_separator_evidence_gray(crop_work_outer(gray_work, outer))
+    key = box_cache_key(outer)
+    evidence = cache.separator_evidence_crops.get(key)
+    if evidence is None:
+        evidence = make_separator_evidence_gray(crop_work_outer(cache.gray_work, outer))
+        cache.separator_evidence_crops[key] = evidence
+    return evidence
 
 
 def cached_edge_refine_profiles(
@@ -2040,6 +2055,176 @@ def detect_for_count(
     return best
 
 
+def translate_box(box: Box, dx: int, dy: int) -> Box:
+    return Box(box.left + dx, box.top + dy, box.right + dx, box.bottom + dy)
+
+
+def split_dual_135_lanes(gray_work: np.ndarray) -> list[Box]:
+    h, w = gray_work.shape
+    content = bbox_from_mask(gray_work < 246, min_row_fraction=0.010, min_col_fraction=0.010)
+    if content is None or not content.valid():
+        content = Box(0, 0, w, h)
+    split_y = int(round((content.top + content.bottom) / 2.0))
+    guard = max(2, min(80, int(round(content.height * 0.006))))
+    lanes = [
+        Box(content.left, content.top, content.right, max(content.top + 1, split_y - guard)).clamp(w, h),
+        Box(content.left, min(content.bottom - 1, split_y + guard), content.right, content.bottom).clamp(w, h),
+    ]
+    if any(not lane.valid() or lane.height < max(20, h * 0.10) for lane in lanes):
+        split_y = h // 2
+        lanes = [Box(0, 0, w, split_y), Box(0, split_y, w, h)]
+    return lanes
+
+
+def detect_dual_135_lane(
+    gray: np.ndarray,
+    config: Config,
+    lane: Box,
+    lane_index: int,
+    cache: AnalysisCache,
+) -> Optional[Detection]:
+    lane_crop = cache.gray_work[lane.top:lane.bottom, lane.left:lane.right]
+    if lane_crop.size == 0:
+        return None
+    fmt_135 = FORMATS["135"]
+    lane_config = replace(config, film_format="135", count=fmt_135.default_count, count_override=fmt_135.default_count)
+    candidates: list[Detection] = []
+    for outer_candidate in detect_outer_candidates(lane_crop):
+        lane_outer = translate_box(outer_candidate.box, lane.left, lane.top)
+        raw = build_detection_for_outer(
+            gray,
+            lane_config,
+            fmt_135,
+            fmt_135.default_count,
+            "full",
+            lane_outer,
+            0.0,
+            f"135_dual_lane_{lane_index}_{outer_candidate.name}",
+            cache=cache,
+        )
+        calibrated = calibrate_v2_candidate(gray, raw, lane_config, fmt_135, "separator", cache)
+        calibrated.detail["dual_lane_index"] = lane_index
+        calibrated.detail["dual_lane_work_box"] = asdict(lane)
+        candidates.append(calibrated)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda d: v2_candidate_rank(d, config.confidence_threshold))
+
+
+def choose_detection_135_dual(gray: np.ndarray, config: Config, cache: AnalysisCache) -> Detection:
+    if config.strip_mode != "full":
+        detection = hard_fallback_detection(gray, config, FORMATS["135-dual"])
+        detection.review_reasons.append("135_dual_partial_not_supported")
+        detection.review_reasons = sorted(set(detection.review_reasons))
+        return detection
+
+    gray_work = cache.gray_work
+    source_h, source_w = gray.shape
+    lanes = split_dual_135_lanes(gray_work)
+    lane_detections = [
+        detect_dual_135_lane(gray, config, lane, index, cache)
+        for index, lane in enumerate(lanes, start=1)
+    ]
+    if any(detection is None for detection in lane_detections):
+        detection = hard_fallback_detection(gray, config, FORMATS["135-dual"])
+        detection.review_reasons.append("135_dual_lane_detection_failed")
+        detection.review_reasons = sorted(set(detection.review_reasons))
+        return detection
+
+    confirmed_lanes = [detection for detection in lane_detections if detection is not None]
+    lane_work_outers = [
+        box_from_dict(detection.detail["work_outer"])
+        for detection in confirmed_lanes
+        if isinstance(detection.detail.get("work_outer"), dict)
+    ]
+    if len(lane_work_outers) != 2:
+        detection = hard_fallback_detection(gray, config, FORMATS["135-dual"])
+        detection.review_reasons.append("135_dual_outer_detection_failed")
+        detection.review_reasons = sorted(set(detection.review_reasons))
+        return detection
+
+    combined_work_outer = Box(
+        min(box.left for box in lane_work_outers),
+        min(box.top for box in lane_work_outers),
+        max(box.right for box in lane_work_outers),
+        max(box.bottom for box in lane_work_outers),
+    )
+    frames = [box for detection in confirmed_lanes for box in detection.frames]
+    gaps: list[Gap] = []
+    for lane_number, detection in enumerate(confirmed_lanes, start=1):
+        lane_work_outer = box_from_dict(detection.detail["work_outer"])
+        for gap in detection.gaps:
+            gaps.append(
+                Gap(
+                    index=(lane_number - 1) * 6 + int(gap.index),
+                    center=float(gap.center),
+                    score=float(gap.score),
+                    method=gap.method,
+                    start=gap.start,
+                    end=gap.end,
+                    lane_box=asdict(lane_work_outer),
+                )
+            )
+
+    lane_confidences = [float(detection.confidence) for detection in confirmed_lanes]
+    confidence = min(lane_confidences)
+    review_reasons = sorted(set(reason for detection in confirmed_lanes for reason in detection.review_reasons))
+    if any(conf < config.confidence_threshold for conf in lane_confidences):
+        confidence = min(confidence, 0.84)
+        review_reasons.append("135_dual_lane_below_threshold")
+    if len(frames) != 12:
+        confidence = min(confidence, 0.82)
+        review_reasons.append("frame_count_mismatch")
+
+    lane_summaries = [
+        {
+            "lane": index,
+            "confidence": float(detection.confidence),
+            "review_reasons": list(detection.review_reasons),
+            "work_outer": detection.detail.get("work_outer"),
+            "v2_candidate": detection.detail.get("v2_candidate", {}),
+        }
+        for index, detection in enumerate(confirmed_lanes, start=1)
+    ]
+    detail = {
+        "analysis_source": "135_dual_parallel_lanes",
+        "layout": config.layout,
+        "candidate_count": 12,
+        "work_outer": asdict(combined_work_outer),
+        "dual_lane_work_boxes": [asdict(lane) for lane in lanes],
+        "dual_lane_detections": lane_summaries,
+        "gap_centers": [gap.center for gap in gaps],
+        "gap_scores": [gap.score for gap in gaps],
+        "gap_methods": [gap.method for gap in gaps],
+        "v2_competition": {
+            "candidate_count": 2,
+            "formats": ["135-dual"],
+            "selected_candidate": {
+                "format": "135-dual",
+                "count": 12,
+                "strip_mode": "full",
+                "confidence": float(confidence),
+                "review_reasons": sorted(set(review_reasons)),
+            },
+            "selection_override": None,
+            "top_candidates": lane_summaries,
+        },
+    }
+    outer_original = map_work_box(combined_work_outer, config.layout, source_w, source_h)
+    return Detection(
+        "135-dual",
+        config.layout,
+        "full",
+        12,
+        outer_original,
+        frames,
+        gaps,
+        float(max(0.0, min(1.0, confidence))),
+        sorted(set(review_reasons)),
+        detail,
+    )
+
+
 def partial_candidates(fmt: FilmFormat, seed: Optional[Detection]) -> tuple[int, ...]:
     default = fmt.default_count
     candidates: set[int] = {default, max(1, default - 1), max(1, default - 2), 1}
@@ -2315,6 +2500,8 @@ def hard_fallback_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -
 def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache: Optional[AnalysisCache] = None) -> Detection:
     candidates: list[Detection] = []
     cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
+    if fmt.name == "135-dual":
+        return choose_detection_135_dual(gray, config, cache)
     format_candidates = [fmt]
     for fmt in format_candidates:
         count_specs = candidate_counts_for_format(config, fmt)
@@ -2492,6 +2679,9 @@ def choose_deskew_angle(gray: np.ndarray, layout: str, analysis: str) -> tuple[f
     base_angle, base_detail = fit_edge_angle(gray, layout)
     base_detail["source"] = "base"
     if analysis == "off":
+        return base_angle, base_detail
+    if analysis == "auto" and deskew_quality(base_detail) >= 8.0:
+        base_detail["enhanced_candidate"] = {"skipped": "auto_base_quality_ok"}
         return base_angle, base_detail
     enhanced_gray = make_analysis_gray(gray)
     enhanced_angle, enhanced_detail = fit_edge_angle(enhanced_gray, layout)
@@ -2687,7 +2877,7 @@ def draw_preview_mark(rgb: np.ndarray, box: Box, scale: float, color: tuple[int,
 
 
 def gap_mark_box(detection: Detection, gap: Gap) -> Optional[Box]:
-    work_outer_raw = detection.detail.get("work_outer")
+    work_outer_raw = gap.lane_box if isinstance(gap.lane_box, dict) else detection.detail.get("work_outer")
     if not isinstance(work_outer_raw, dict):
         return None
     try:
@@ -2715,7 +2905,7 @@ def gap_mark_box(detection: Detection, gap: Gap) -> Optional[Box]:
 
 
 def gap_tick_boxes(detection: Detection, gap: Gap) -> list[Box]:
-    work_outer_raw = detection.detail.get("work_outer")
+    work_outer_raw = gap.lane_box if isinstance(gap.lane_box, dict) else detection.detail.get("work_outer")
     if not isinstance(work_outer_raw, dict):
         return []
     try:
@@ -2832,6 +3022,18 @@ def make_separator_evidence_debug_gray(gray: np.ndarray, detection: Detection, c
     box = detection.outer.clamp(gray.shape[1], gray.shape[0])
     if not box.valid():
         return make_separator_evidence_gray(gray)
+    if cache is not None and cache.layout == detection.layout:
+        work_box = original_box_to_work(box, detection.layout, gray.shape[1], gray.shape[0]).clamp(
+            cache.gray_work.shape[1],
+            cache.gray_work.shape[0],
+        )
+        evidence_crop = cached_separator_evidence_crop(cache, cache.gray_work, work_box)
+        if evidence_crop.size:
+            patch = evidence_crop if detection.layout == "horizontal" else evidence_crop.T
+            ph = min(box.height, patch.shape[0])
+            pw = min(box.width, patch.shape[1])
+            out[box.top:box.top + ph, box.left:box.left + pw] = patch[:ph, :pw]
+            return out
     crop = gray[box.top:box.bottom, box.left:box.right]
     if crop.size == 0:
         return out
@@ -3128,7 +3330,6 @@ def config_cache_signature(config: Config) -> dict[str, Any]:
         "layout": config.layout,
         "strip_mode": config.strip_mode,
         "count": int(config.count),
-        "count_override": config.count_override,
         "page": int(config.page),
         "bleed_x": int(config.bleed_x),
         "bleed_y": int(config.bleed_y),
@@ -3161,6 +3362,7 @@ def gap_from_dict(value: dict[str, Any]) -> Gap:
         method=str(value.get("method", "cached")),
         start=(None if value.get("start") is None else float(value.get("start"))),
         end=(None if value.get("end") is None else float(value.get("end"))),
+        lane_box=(dict(value["lane_box"]) if isinstance(value.get("lane_box"), dict) else None),
     )
 
 
@@ -3454,7 +3656,8 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     outer_alignment = outer_content_alignment_detail(gray, detection, analysis_cache)
     detection.detail["outer_content_alignment"] = outer_alignment
 
-    if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
+    allow_outer_retry = detection.detail.get("analysis_source") != "hard_fallback" and detection.film_format != "135-dual"
+    if allow_outer_retry and bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
         retried_detection = retry_with_content_aligned_outer(gray, config, fmt, detection, outer_alignment, analysis_cache)
         if retried_detection is not None:
             detection = retried_detection
@@ -3666,7 +3869,7 @@ def main() -> int:
     print(f"input: {config.input_path}")
     print(f"files: {len(files)}")
     layout_label = f"auto(probe={config.layout})" if config.layout_auto else config.layout
-    count_label = "auto" if config.count_override is None else str(config.count_override)
+    count_label = "auto" if config.strip_mode == "partial" and config.count_override is None else str(config.count)
     print(f"format: {config.film_format}; layout: {layout_label}; strip: {config.strip_mode}; count: {count_label}")
     print(f"threshold: {config.confidence_threshold:.2f}; analysis={config.analysis}; dry_run={config.dry_run}")
 

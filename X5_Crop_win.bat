@@ -38,6 +38,7 @@ echo.
 
 echo choose film format:
 echo   return or 135 = 135
+echo   dual = 135 dual
 echo   xpan = xpan
 echo   half = half-frame
 echo   645 = 120-645
@@ -50,6 +51,15 @@ set "FORMAT_INPUT=%FORMAT_INPUT: =%"
 if /i "%FORMAT_INPUT%"=="135" (
     set "FORMAT=135"
     set "COUNT=6"
+) else if /i "%FORMAT_INPUT%"=="dual" (
+    set "FORMAT=135-dual"
+    set "COUNT=12"
+) else if /i "%FORMAT_INPUT%"=="135dual" (
+    set "FORMAT=135-dual"
+    set "COUNT=12"
+) else if /i "%FORMAT_INPUT%"=="135-dual" (
+    set "FORMAT=135-dual"
+    set "COUNT=12"
 ) else if /i "%FORMAT_INPUT%"=="xpan" (
     set "FORMAT=xpan"
     set "COUNT=3"
@@ -85,7 +95,7 @@ if /i "%FORMAT_INPUT%"=="135" (
     set "COUNT=3"
 ) else (
     echo unknown format: %FORMAT_INPUT%
-    echo use return/135, xpan, half, 645, 66, or 67.
+    echo use return/135, dual, xpan, half, 645, 66, or 67.
     echo.
     pause
     exit /b 1
