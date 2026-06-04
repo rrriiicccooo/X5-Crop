@@ -101,12 +101,19 @@ Next recommended step:
 
 ## Current Handoff
 
-Date: 2026-06-03
+Date: 2026-06-04
 Computer: primary macOS machine
 Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Fixed a broad-separator regression in `find_gap`: high-scoring separator
+  cores inside visually broad black/white separator bands are now evaluated
+  before the broad region is marked suspicious, so a clean wide separator is
+  not discarded and then overwritten by a nearby narrow `edge-pair`.
+- Confirmed the `Test/135/X5_00002.tif` fifth separator now stays on the broad
+  detected separator near the geometric boundary instead of moving right to the
+  misleading `edge-pair`.
 - Changed the outer-content alignment behavior from pure downgrade to repair
   first: when a full-strip candidate's outer box includes too much long/short
   axis border, the script now builds a `content_aligned_outer`, reruns separator
@@ -290,6 +297,14 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
+- `Test/135/X5_00002.tif` Debug Analysis dry-run remains `approved_auto`; gap 5
+  is now `detected` at center `16473.5` with start/end `16400..16548` instead
+  of the previously shifted `edge-pair` near `16624`.
+- `Test/135/X5_00019.tif` explicit full 135 dry-run remains `approved_auto`.
+- `Test/135/X5_00038.tif` explicit partial 135 dry-run remains `needs_review`.
+- `Test/120/X5_test_43.tif` explicit full `120-66` dry-run remains
+  `needs_review`.
 - `Test/135/X5_00002.tif` explicit full 135 Debug Analysis now repairs the
   over-wide outer from work box `83..20069` to `114..19885`, stays
   `approved_auto`, and reports `outer_correction.used=true`.

@@ -1397,17 +1397,15 @@ def find_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> 
             region_start -= 1
         while region_end < len(local) and local[region_end] >= broad_threshold:
             region_end += 1
-        region_width = region_end - region_start
-        touches_edge = region_start == 0 or region_end == len(local)
-        if region_width > max_gap_w * 1.5 or (touches_edge and region_width > max_gap_w * 0.9):
-            rejected_broad = True
-            continue
-
         band_start, band_end = run_start, run_end
         while band_start > 0 and local[band_start - 1] >= band_threshold and (band_end - (band_start - 1)) <= max_gap_w:
             band_start -= 1
         while band_end < len(local) and local[band_end] >= band_threshold and ((band_end + 1) - band_start) <= max_gap_w:
             band_end += 1
+        region_width = region_end - region_start
+        touches_edge = region_start == 0 or region_end == len(local)
+        if region_width > max_gap_w * 1.5 or (touches_edge and region_width > max_gap_w * 0.9):
+            rejected_broad = True
         band_width = band_end - band_start
         if band_width < min_gap_w or band_width > max_gap_w:
             rejected_broad = True
