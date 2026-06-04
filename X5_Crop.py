@@ -24,7 +24,7 @@ import os
 import shutil
 import sys
 import traceback
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -252,6 +252,9 @@ class AnalysisCache:
     gray_work: np.ndarray
     content_evidence_work: np.ndarray
     content_evidence_float_work: np.ndarray
+    separator_profiles: dict[tuple[int, int, int, int], np.ndarray] = field(default_factory=dict)
+    enhanced_separator_profiles: dict[tuple[int, int, int, int], np.ndarray] = field(default_factory=dict)
+    edge_refine_profiles: dict[tuple[int, int, int, int], tuple[np.ndarray, np.ndarray, np.ndarray]] = field(default_factory=dict)
 
 
 def json_safe(value: Any) -> Any:
@@ -848,6 +851,56 @@ def make_analysis_cache(gray: np.ndarray, layout: str) -> AnalysisCache:
     )
 
 
+def box_cache_key(box: Box) -> tuple[int, int, int, int]:
+    return (int(box.left), int(box.top), int(box.right), int(box.bottom))
+
+
+def crop_work_outer(gray_work: np.ndarray, outer: Box) -> np.ndarray:
+    if not outer.valid():
+        return gray_work
+    crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
+    return crop if crop.size else gray_work
+
+
+def cached_separator_profile(cache: Optional[AnalysisCache], gray_work: np.ndarray, outer: Box) -> np.ndarray:
+    if cache is None:
+        return separator_profile(crop_work_outer(gray_work, outer))
+    key = box_cache_key(outer)
+    profile = cache.separator_profiles.get(key)
+    if profile is None:
+        profile = separator_profile(crop_work_outer(cache.gray_work, outer))
+        cache.separator_profiles[key] = profile
+    return profile
+
+
+def cached_enhanced_separator_profile(cache: Optional[AnalysisCache], gray_work: np.ndarray, outer: Box) -> np.ndarray:
+    if cache is None:
+        crop = crop_work_outer(gray_work, outer)
+        return separator_profile(make_separator_evidence_gray(crop))
+    key = box_cache_key(outer)
+    profile = cache.enhanced_separator_profiles.get(key)
+    if profile is None:
+        crop = crop_work_outer(cache.gray_work, outer)
+        profile = separator_profile(make_separator_evidence_gray(crop))
+        cache.enhanced_separator_profiles[key] = profile
+    return profile
+
+
+def cached_edge_refine_profiles(
+    cache: Optional[AnalysisCache],
+    crop: np.ndarray,
+    outer: Box,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    if cache is None:
+        return edge_refine_profiles(crop)
+    key = box_cache_key(outer)
+    profiles = cache.edge_refine_profiles.get(key)
+    if profiles is None:
+        profiles = edge_refine_profiles(crop_work_outer(cache.gray_work, outer))
+        cache.edge_refine_profiles[key] = profiles
+    return profiles
+
+
 def map_work_box(box: Box, layout: str, width: int, height: int) -> Box:
     if layout == "horizontal":
         return box.clamp(width, height)
@@ -1099,11 +1152,17 @@ def interval_mean(profile: np.ndarray, start: int, end: int) -> float:
     return float(profile[start:end].mean())
 
 
-def refine_gaps_by_edge_pairs(crop: np.ndarray, gaps: list[Gap], count: int) -> tuple[list[Gap], dict[str, Any]]:
+def refine_gaps_by_edge_pairs(
+    crop: np.ndarray,
+    gaps: list[Gap],
+    count: int,
+    cache: Optional[AnalysisCache] = None,
+    outer: Optional[Box] = None,
+) -> tuple[list[Gap], dict[str, Any]]:
     h, w = crop.shape
     if count <= 1 or w <= 1 or not gaps:
         return gaps, {"used": False, "reason": "empty"}
-    edge, background, _activity = edge_refine_profiles(crop)
+    edge, background, _activity = cached_edge_refine_profiles(cache, crop, outer) if outer is not None else edge_refine_profiles(crop)
     pitch = w / float(max(1, count))
     window = max(8, int(round(pitch * 0.08)))
     min_gutter = max(2, int(round(pitch * 0.004)))
@@ -1317,12 +1376,12 @@ def merge_enhanced_separator_gaps(
     origin: float,
     pitch: float,
     strip_mode: str,
+    cache: Optional[AnalysisCache] = None,
 ) -> tuple[list[Gap], dict[str, Any]]:
     crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
     if crop.size == 0 or outer.width <= 0 or outer.height <= 0:
         return gaps, {"used": False, "reason": "empty_outer"}
-    evidence_crop = make_separator_evidence_gray(crop)
-    profile = separator_profile(evidence_crop)
+    profile = cached_enhanced_separator_profile(cache, gray_work, outer)
     merged: list[Gap] = []
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
@@ -1662,15 +1721,16 @@ def build_detection_for_outer(
     offset_fraction: float = 0.0,
     outer_candidate_name: str = "unknown",
     allow_separator_analysis: bool = True,
+    cache: Optional[AnalysisCache] = None,
 ) -> Detection:
     h, w = gray.shape
-    gray_work = work_gray(gray, config.layout)
+    gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     wh, ww = gray_work.shape
     crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
     if crop.size == 0 or outer.width <= 0:
         outer = Box(0, 0, ww, wh)
         crop = gray_work
-    profile = separator_profile(crop)
+    profile = cached_separator_profile(cache, gray_work, outer)
     if strip_mode == "partial" and count < fmt.default_count:
         pitch = outer.width / float(max(1, fmt.default_count))
         total_width = pitch * count
@@ -1686,7 +1746,7 @@ def build_detection_for_outer(
         ]
     edge_refine_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     if strip_mode == "full" and fmt.name == "135" and count > 1:
-        gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count)
+        gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, cache, outer)
     gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
     if strip_mode == "full" and bool(grid_detail.get("grid_used", False)):
         model_origin = float(grid_detail.get("grid_origin", 0.0))
@@ -1704,17 +1764,17 @@ def build_detection_for_outer(
         ):
             outer = Box(proposed_left, outer.top, proposed_right, outer.bottom)
             crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-            profile = separator_profile(crop)
+            profile = cached_separator_profile(cache, gray_work, outer)
             pitch = outer.width / float(max(1, count))
             origin = 0.0
             gaps = [find_gap(profile, pitch * i, pitch, i) for i in range(1, count)]
             if strip_mode == "full" and fmt.name == "135" and count > 1:
-                gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count)
+                gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, cache, outer)
             gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
             grid_detail["outer_refined"] = True
     separator_analysis_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     if allow_separator_analysis and config.analysis != "off" and strip_mode == "full" and fmt.name != "half":
-        gaps, separator_analysis_detail = merge_enhanced_separator_gaps(gray_work, outer, gaps, origin, pitch, strip_mode)
+        gaps, separator_analysis_detail = merge_enhanced_separator_gaps(gray_work, outer, gaps, origin, pitch, strip_mode, cache)
     boxes_work_for_score = frame_boxes_from_gaps(outer, gaps, count, ww, wh, config.bleed_x, config.bleed_y, origin=origin, pitch=pitch)
     frame_size_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     fitted_boxes_work: Optional[list[Box]] = None
@@ -1764,11 +1824,12 @@ def detect_for_count(
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,
+    cache: Optional[AnalysisCache] = None,
 ) -> Detection:
-    gray_work = work_gray(gray, config.layout)
+    gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     outer_candidates = detect_outer_candidates(gray_work)
     candidates = [
-        build_detection_for_outer(gray, config, fmt, count, strip_mode, candidate.box, offset_fraction, candidate.name)
+        build_detection_for_outer(gray, config, fmt, count, strip_mode, candidate.box, offset_fraction, candidate.name, cache=cache)
         for candidate in outer_candidates
     ]
     best = max(candidates, key=lambda d: detection_rank(d, config.confidence_threshold))
@@ -2023,9 +2084,9 @@ def v2_candidate_rank(detection: Detection, threshold: float) -> tuple[int, floa
     )
 
 
-def choose_detection_v2(gray: np.ndarray, config: Config, inferred: FilmFormat) -> Detection:
+def choose_detection_v2(gray: np.ndarray, config: Config, inferred: FilmFormat, cache: Optional[AnalysisCache] = None) -> Detection:
     candidates: list[Detection] = []
-    cache = make_analysis_cache(gray, config.layout)
+    cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
     format_candidates = v2_format_candidates(config, inferred)
     for fmt in format_candidates:
         count_specs = candidate_counts_for_format(config, fmt)
@@ -2033,7 +2094,7 @@ def choose_detection_v2(gray: np.ndarray, config: Config, inferred: FilmFormat) 
             if count not in fmt.allowed_counts:
                 continue
             for offset in offsets:
-                separator = detect_for_count(gray, config, fmt, count, strip_mode, offset)
+                separator = detect_for_count(gray, config, fmt, count, strip_mode, offset, cache)
                 separator_candidate = calibrate_v2_candidate(gray, separator, config, fmt, "separator", cache)
                 candidates.append(separator_candidate)
                 content = content_detection_for_count(gray, config, fmt, count, strip_mode, offset, cache)
@@ -2041,7 +2102,7 @@ def choose_detection_v2(gray: np.ndarray, config: Config, inferred: FilmFormat) 
                     candidates.append(calibrate_v2_candidate(gray, content, config, fmt, "content", cache))
 
     if not candidates:
-        return choose_detection_with_analysis(gray, config, inferred)
+        return choose_detection_with_analysis(gray, config, inferred, cache)
 
     candidates = sorted(candidates, key=lambda d: v2_candidate_rank(d, config.confidence_threshold), reverse=True)
     best = candidates[0]
@@ -2116,27 +2177,27 @@ def choose_detection_v2(gray: np.ndarray, config: Config, inferred: FilmFormat) 
     return best
 
 
-def choose_content_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Optional[Detection]:
+def choose_content_detection(gray: np.ndarray, config: Config, fmt: FilmFormat, cache: Optional[AnalysisCache] = None) -> Optional[Detection]:
     if config.strip_mode == "full":
-        return content_detection_for_count(gray, config, fmt, config.count, "full")
+        return content_detection_for_count(gray, config, fmt, config.count, "full", cache=cache)
     if config.strip_mode == "partial":
         detections = [
             detection
             for c in partial_candidates(fmt, None)
             for offset in partial_offsets(fmt, c)
-            for detection in [content_detection_for_count(gray, config, fmt, c, "partial", offset)]
+            for detection in [content_detection_for_count(gray, config, fmt, c, "partial", offset, cache=cache)]
             if detection is not None
         ]
         return max(detections, key=lambda d: content_detection_rank(d, config.confidence_threshold)) if detections else None
     raise ValueError(f"Unsupported strip mode: {config.strip_mode}")
 
 
-def choose_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detection:
+def choose_detection(gray: np.ndarray, config: Config, fmt: FilmFormat, cache: Optional[AnalysisCache] = None) -> Detection:
     if config.strip_mode == "full":
-        return detect_for_count(gray, config, fmt, config.count, "full")
+        return detect_for_count(gray, config, fmt, config.count, "full", cache=cache)
     if config.strip_mode == "partial":
         detections = [
-            detect_for_count(gray, config, fmt, c, "partial", offset)
+            detect_for_count(gray, config, fmt, c, "partial", offset, cache=cache)
             for c in partial_candidates(fmt, None)
             for offset in partial_offsets(fmt, c)
         ]
@@ -2144,10 +2205,11 @@ def choose_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detec
     raise ValueError(f"Unsupported strip mode: {config.strip_mode}")
 
 
-def choose_detection_with_analysis(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detection:
-    separator = choose_detection(gray, config, fmt)
+def choose_detection_with_analysis(gray: np.ndarray, config: Config, fmt: FilmFormat, cache: Optional[AnalysisCache] = None) -> Detection:
+    cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
+    separator = choose_detection(gray, config, fmt, cache)
     separator.detail["analysis_source"] = "separator_assist" if config.analysis != "off" else "separator_assist_no_analysis"
-    content = choose_content_detection(gray, config, fmt)
+    content = choose_content_detection(gray, config, fmt, cache)
     if content is None:
         separator.detail["content_primary"] = {"used": False, "reason": "no_valid_content_candidate"}
         separator.detail["joint_decision"] = {
@@ -2156,7 +2218,7 @@ def choose_detection_with_analysis(gray: np.ndarray, config: Config, fmt: FilmFo
         }
         return separator
 
-    separator_content = content_evidence_detail(gray, separator)
+    separator_content = content_evidence_detail(gray, separator, cache)
     content_primary = content.detail.get("content_primary", {})
     separator_content_ok = (
         bool(separator_content.get("used", False))
@@ -2644,7 +2706,7 @@ def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> Non
                 draw_preview_hline(rgb, tick, scale, color, 2)
 
 
-def make_separator_evidence_debug_gray(gray: np.ndarray, detection: Detection) -> np.ndarray:
+def make_separator_evidence_debug_gray(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> np.ndarray:
     out = np.full(gray.shape, 235, dtype=np.uint8)
     box = detection.outer.clamp(gray.shape[1], gray.shape[0])
     if not box.valid():
@@ -2656,17 +2718,29 @@ def make_separator_evidence_debug_gray(gray: np.ndarray, detection: Detection) -
     return out
 
 
-def make_separator_evidence_debug_rgb(gray: np.ndarray, detection: Detection) -> np.ndarray:
-    rgb, scale = preview_gray(make_separator_evidence_debug_gray(gray, detection))
+def make_separator_evidence_debug_rgb(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> np.ndarray:
+    rgb, scale = preview_gray(make_separator_evidence_debug_gray(gray, detection, cache))
     draw_gap_overlay(rgb, detection, scale)
     return rgb
 
 
-def make_content_evidence_debug_gray(gray: np.ndarray, detection: Detection) -> np.ndarray:
+def make_content_evidence_debug_gray(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> np.ndarray:
     out = np.full(gray.shape, 235, dtype=np.uint8)
     box = detection.outer.clamp(gray.shape[1], gray.shape[0])
     if not box.valid():
         return make_content_evidence_gray(gray)
+    if cache is not None and cache.layout == detection.layout:
+        work_box = original_box_to_work(box, detection.layout, gray.shape[1], gray.shape[0]).clamp(
+            cache.content_evidence_work.shape[1],
+            cache.content_evidence_work.shape[0],
+        )
+        evidence_crop = cache.content_evidence_work[work_box.top:work_box.bottom, work_box.left:work_box.right]
+        if evidence_crop.size:
+            patch = evidence_crop if detection.layout == "horizontal" else evidence_crop.T
+            ph = min(box.height, patch.shape[0])
+            pw = min(box.width, patch.shape[1])
+            out[box.top:box.top + ph, box.left:box.left + pw] = patch[:ph, :pw]
+            return out
     crop = gray[box.top:box.bottom, box.left:box.right]
     if crop.size == 0:
         return out
@@ -2696,13 +2770,13 @@ def add_panel_label(rgb: np.ndarray, label: str) -> np.ndarray:
     return np.asarray(image)
 
 
-def make_debug_analysis_panel(gray: np.ndarray, detection: Detection, threshold: float) -> np.ndarray:
+def make_debug_analysis_panel(gray: np.ndarray, detection: Detection, threshold: float, cache: Optional[AnalysisCache] = None) -> np.ndarray:
     base_rgb, _ = preview_gray(gray)
     base_rgb = add_panel_label(base_rgb, "Original gray")
     debug_rgb = add_panel_label(make_debug_preview_rgb(gray, detection), "Debug boxes")
-    evidence_rgb = make_separator_evidence_debug_rgb(gray, detection)
+    evidence_rgb = make_separator_evidence_debug_rgb(gray, detection, cache)
     evidence_rgb = add_panel_label(evidence_rgb, "Separator evidence")
-    content_rgb, _ = preview_gray(make_content_evidence_debug_gray(gray, detection))
+    content_rgb, _ = preview_gray(make_content_evidence_debug_gray(gray, detection, cache))
     content_rgb = add_panel_label(content_rgb, "Content evidence")
     panels = [base_rgb, debug_rgb, evidence_rgb, content_rgb]
     gap = 12
@@ -2727,10 +2801,17 @@ def make_debug_analysis_panel(gray: np.ndarray, detection: Detection, threshold:
     return add_status_bar(canvas, detection, threshold)
 
 
-def write_debug_analysis(gray: np.ndarray, detection: Detection, output_dir: Path, stem: str, threshold: float) -> list[str]:
+def write_debug_analysis(
+    gray: np.ndarray,
+    detection: Detection,
+    output_dir: Path,
+    stem: str,
+    threshold: float,
+    cache: Optional[AnalysisCache] = None,
+) -> list[str]:
     analysis_dir = output_dir / "_debug_analysis"
     panel_path = analysis_dir / f"{stem}_debug_analysis.jpg"
-    write_rgb_jpeg(make_debug_analysis_panel(gray, detection, threshold), panel_path)
+    write_rgb_jpeg(make_debug_analysis_panel(gray, detection, threshold, cache), panel_path)
     return [str(panel_path)]
 
 
@@ -3223,8 +3304,9 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         else:
             deskew_detail["skipped"] = "angle_out_of_range"
 
-    detection = choose_detection_v2(gray, config, fmt)
-    content_detail = content_evidence_detail(gray, detection)
+    analysis_cache = make_analysis_cache(gray, config.layout)
+    detection = choose_detection_v2(gray, config, fmt, analysis_cache)
+    content_detail = content_evidence_detail(gray, detection, analysis_cache)
     detection.detail["content_evidence"] = content_detail
     if bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
@@ -3278,7 +3360,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         write_debug_preview(gray, detection, debug_path, config.confidence_threshold)
         warnings.append(f"debug preview: {debug_path}")
     if config.debug_analysis:
-        for analysis_path in write_debug_analysis(gray, detection, output_dir, input_file.stem, config.confidence_threshold):
+        for analysis_path in write_debug_analysis(gray, detection, output_dir, input_file.stem, config.confidence_threshold, analysis_cache):
             warnings.append(f"debug analysis: {analysis_path}")
 
     detail = dict(detection.detail)

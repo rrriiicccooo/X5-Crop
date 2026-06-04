@@ -107,6 +107,15 @@ Branch: main
 Last commit: see `git log -1` after this handoff commit
 
 Changed:
+- Expanded the per-image V2 analysis cache so candidate scoring reuses
+  `gray_work`, content evidence, separator profiles, enhanced separator
+  profiles, and edge-refine profiles instead of regenerating the same expensive
+  evidence for repeated candidates.
+- Wired the shared cache through V2 separator candidates, content candidates,
+  fallback analysis paths, final content evidence, and Debug Analysis content
+  evidence rendering.
+- Kept cache lazy for separator/enhanced/edge profiles: profiles are computed
+  only for outer boxes that are actually evaluated.
 - Removed obsolete `strip_mode == "auto"` branches from the active script now
   that the CLI and launchers only support explicit `full` or `partial` strip
   modes.
@@ -264,6 +273,17 @@ Changed:
 - Rewrote `README.md` as the current Chinese user guide for X5 Crop.
 
 Verified:
+- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
+- `git diff --check`
+- After cache expansion, `Test/135/X5_00019.tif` explicit full 135 dry-run
+  stayed `approved_auto` and ran in about 5.6 seconds without cProfile and
+  about 5.4 seconds under cProfile.
+- After cache expansion, `Test/120/X5_test_43.tif` explicit full `120-66`
+  dry-run stayed `needs_review` and ran in about 4.8 seconds.
+- Debug Analysis dry-run for `Test/135/X5_00019.tif` stayed `approved_auto` and
+  wrote the combined JPG in about 5.8 seconds.
+- Explicit partial 135 dry-run for `Test/135/X5_00038.tif` stayed
+  `needs_review`.
 - Confirmed no `strip_mode == "auto"` / `auto_full_confidence` /
   `skip_partial_after_full_auto_gate` references remain.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
