@@ -126,6 +126,12 @@ Changed:
   overlapping sections.
 - macOS and Windows launchers now re-prompt after an unknown format instead of
   exiting immediately.
+- Folder runs now process TIFF files in parallel with `--jobs 2` by default.
+  Reports are still written by the main process after each file completes, so
+  `split_report.jsonl` and `split_summary.csv` are not appended by multiple
+  workers at the same time. Values above 2 are capped to 2.
+- If process workers are unavailable in a restricted environment, the script
+  falls back to 2 thread workers instead of failing.
 
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
@@ -142,6 +148,12 @@ Verified:
 - `printf 'abc\n135\nn\nn\n\n' | ./X5_Crop_Mac.command` confirmed an invalid
   format is rejected and the next valid input continues the launcher flow; the
   run then stopped at the expected no-TIFF message in the repository root.
+- Parallel smoke test on 3 linked Test/135 files produced 2 `approved_auto` and
+  1 `needs_review`; in this sandbox, process workers were unavailable and the
+  thread fallback completed successfully. `split_report.jsonl` had 3 rows and
+  `split_summary.csv` had header + 3 rows.
+- `--jobs 1` single-file smoke test on `X5_00019.tif` remained
+  `approved_auto`.
 
 Not verified:
 - A fresh full Test/135 batch after this cleanup has not been run yet; only the

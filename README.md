@@ -193,6 +193,7 @@ Press Return to close...
 终端输出会尽量保持简洁：
 
 - 处理进度显示为 `[当前/总数] 文件名`。
+- 文件夹里有多张 TIFF 时默认最多同时处理 2 张。为了让报告文件稳定，`split_report.jsonl` 和 `split_summary.csv` 仍由主进程按完成顺序写入；终端里的文件顺序可能和文件名顺序不同。如果运行环境不允许进程 worker，脚本会自动退到线程 worker，功能不变但提速可能较小。
 - 普通提示使用 `info:`，避免把说明性信息误看成警告。
 - 不重复显示启动器里已经选择过的 format，也不显示固定张数 count；只有 partial 模式的自动张数会显示 `count: auto`。
 - 默认输出到 `split_output/` 时不显示输出路径；只有命令行显式传入 `--output` 时才显示。
@@ -209,6 +210,12 @@ python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-r
 
 ```bash
 python3 X5_Crop.py . --format 135 --strip full --report
+```
+
+如果想关闭并行、一次只处理 1 张：
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report --jobs 1
 ```
 
 片头 / 局部片条：

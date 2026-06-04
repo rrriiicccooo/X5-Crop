@@ -17,6 +17,7 @@ Design goals:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import csv
 import json
 import math
@@ -246,6 +247,7 @@ class Config:
     report: bool
     debug_errors: bool
     reuse_analysis: bool
+    jobs: int
 
 
 @dataclass
@@ -3801,6 +3803,18 @@ def write_summary(path: Path, result: ProcessResult) -> None:
         )
 
 
+def write_reports_for_result(result: ProcessResult, config: Config) -> None:
+    if not config.report:
+        return
+    output_dir = output_directory_for(Path(result.source), config)
+    write_jsonl(output_dir / "split_report.jsonl", result)
+    write_summary(output_dir / "split_summary.csv", result)
+
+
+def process_one_worker(input_file: Path, config: Config) -> ProcessResult:
+    return process_one(input_file, replace(config, report=False))
+
+
 def process_one(input_file: Path, config: Config) -> ProcessResult:
     output_dir = output_directory_for(input_file, config)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -4054,6 +4068,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--debug", action="store_true", help="Write lightweight JPG previews with detected outer/frame boxes.")
     parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with debug boxes, original gray, separator evidence, and content evidence.")
     parser.add_argument("--no-reuse-analysis", dest="reuse_analysis", action="store_false", default=True, help="Do not reuse matching Debug Analysis report data for non-dry-run export.")
+    parser.add_argument("--jobs", type=int, default=2, help="Parallel TIFF workers. Default 2; values above 2 are capped to protect memory.")
     parser.add_argument("--debug-errors", action="store_true", help="Print tracebacks on errors.")
     parser.add_argument("--version", action="version", version=f"{SCRIPT_NAME} {VERSION}")
     return parser
@@ -4087,6 +4102,7 @@ def config_from_args(args: argparse.Namespace) -> Config:
         raise ValueError("--confidence-threshold must be between 0 and 1")
     if float(args.deskew_min_angle) < 0 or float(args.deskew_max_angle) <= 0:
         raise ValueError("Deskew angle limits are invalid")
+    jobs = max(1, min(2, int(args.jobs)))
     return Config(
         input_path=input_path,
         output_dir=Path(args.output).expanduser().resolve() if args.output else None,
@@ -4115,7 +4131,57 @@ def config_from_args(args: argparse.Namespace) -> Config:
         report=bool(args.report),
         debug_errors=bool(args.debug_errors),
         reuse_analysis=bool(args.reuse_analysis),
+        jobs=jobs,
     )
+
+
+def print_process_result(result: ProcessResult, config: Config) -> None:
+    print(f"  status={result.status} confidence={result.confidence:.3f}")
+    for warning in result.warnings:
+        print(f"  info: {warning}")
+    if result.output_files:
+        print(f"  wrote: {len(result.output_files)} TIFF files")
+        if config.output_dir is not None:
+            for out in result.output_files:
+                print(f"    {Path(out).name}")
+
+
+def process_parallel_files(
+    files: list[Path],
+    config: Config,
+    worker_config: Config,
+) -> tuple[int, int, int, int]:
+    ok = 0
+    failed = 0
+    approved = 0
+    review = 0
+    total = len(files)
+    try:
+        executor_context = concurrent.futures.ProcessPoolExecutor(max_workers=config.jobs)
+    except (OSError, PermissionError) as exc:
+        print(f"info: process workers unavailable ({exc}); using thread workers")
+        executor_context = concurrent.futures.ThreadPoolExecutor(max_workers=config.jobs)
+    with executor_context as executor:
+        future_to_path = {
+            executor.submit(process_one_worker, path, worker_config): path
+            for path in files
+        }
+        for index, future in enumerate(concurrent.futures.as_completed(future_to_path), start=1):
+            path = future_to_path[future]
+            print(f"\n[{index}/{total}] {path.name}")
+            try:
+                result = future.result()
+                ok += 1
+                approved += int(result.status == "approved_auto")
+                review += int(result.status == "needs_review")
+                write_reports_for_result(result, config)
+                print_process_result(result, config)
+            except Exception as exc:
+                failed += 1
+                print(f"  error: {exc}", file=sys.stderr)
+                if config.debug_errors:
+                    traceback.print_exc()
+    return ok, failed, approved, review
 
 
 def main() -> int:
@@ -4140,6 +4206,8 @@ def main() -> int:
         mode_parts.append("dry run")
     print("; ".join(mode_parts))
     print(f"threshold: {config.confidence_threshold:.2f}; analysis: {config.analysis}")
+    if len(files) > 1 and config.jobs > 1:
+        print(f"parallel: {config.jobs} workers")
     if config.output_dir is not None:
         print(f"output: {config.output_dir}")
 
@@ -4148,26 +4216,24 @@ def main() -> int:
     approved = 0
     review = 0
     total = len(files)
-    for index, path in enumerate(files, start=1):
-        print(f"\n[{index}/{total}] {path.name}")
-        try:
-            result = process_one(path, config)
-            ok += 1
-            approved += int(result.status == "approved_auto")
-            review += int(result.status == "needs_review")
-            print(f"  status={result.status} confidence={result.confidence:.3f}")
-            for warning in result.warnings:
-                print(f"  info: {warning}")
-            if result.output_files:
-                print(f"  wrote: {len(result.output_files)} TIFF files")
-                if config.output_dir is not None:
-                    for out in result.output_files:
-                        print(f"    {Path(out).name}")
-        except Exception as exc:
-            failed += 1
-            print(f"  error: {exc}", file=sys.stderr)
-            if config.debug_errors:
-                traceback.print_exc()
+    worker_config = replace(config, report=False)
+    if total > 1 and config.jobs > 1:
+        ok, failed, approved, review = process_parallel_files(files, config, worker_config)
+    else:
+        for index, path in enumerate(files, start=1):
+            print(f"\n[{index}/{total}] {path.name}")
+            try:
+                result = process_one_worker(path, worker_config)
+                ok += 1
+                approved += int(result.status == "approved_auto")
+                review += int(result.status == "needs_review")
+                write_reports_for_result(result, config)
+                print_process_result(result, config)
+            except Exception as exc:
+                failed += 1
+                print(f"  error: {exc}", file=sys.stderr)
+                if config.debug_errors:
+                    traceback.print_exc()
 
     print(f"\ndone: ok={ok} failed={failed} approved={approved} review={review}")
     return 0 if failed == 0 else 1
