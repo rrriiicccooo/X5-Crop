@@ -116,15 +116,16 @@ Changed:
   suspected overlap-like gaps are marked with `overlap_like=true` and are not
   used as strong same-frame-size anchors. This does not increase confidence or
   alter PASS/REVIEW gates.
-- V3.3.2 no longer performs short-axis geometry polish/tightening. PASS-only
-  geometry polish may still make a small evidence-limited long-axis expansion,
-  but top/bottom (or rotated short-axis) output bounds now stay with the
-  detected outer plus output bleed.
+- PASS-only geometry polish is limited to small evidence-limited long-axis
+  expansion.
 - README has been rewritten as a bilingual Chinese/English user guide for
   V3.3.x, covering install, launchers, Debug Analysis, reuse, command line
   usage, outputs, archived versions, and license.
 - GitHub Release `v3.3.1` was created with
   `release/X5-Crop-v3.3.1.zip` uploaded as the user-facing package.
+- GitHub Release `v3.3.1` asset was replaced after removing the short-axis
+  polish code from the V3.3.1 archive/package. The uploaded asset digest is
+  `sha256:a230f9825f4caabb2a49dc7bdf6d9707ed472fd0458521ac7e236fd044b6d5db`.
 - V3.3.1 keeps the V3/V3.2 ordinary outer/gap/candidate selection chain and
   the V3.3 output-only bleed separation.
 - Default output bleed is long-axis 20px and short-axis 10px. Detection now
@@ -168,6 +169,8 @@ Verified:
   snapshots; the zip listing was checked.
 - GitHub Release URL:
   `https://github.com/rrriiicccooo/X5-Crop/releases/tag/v3.3.1`
+- Verified the updated GitHub Release asset `X5-Crop-v3.3.1.zip` reports
+  digest `sha256:a230f9825f4caabb2a49dc7bdf6d9707ed472fd0458521ac7e236fd044b6d5db`.
 - Archived `X5_Crop_v3*.py` snapshots report internal versions 3.0, 3.1,
   3.1.1, 3.1.2, 3.2, 3.3, and 3.3.1.
 - Full fresh `Test/135` dry-run with `--format 135 --strip full --count 6
@@ -196,22 +199,19 @@ Verified:
   JPG filename instead of the full default `split_output/_debug_analysis/...`
   path. Explicit `--output` runs still print the full output path.
 - V3.3.1 added a PASS-only geometry polish step after status is decided and
-  before output bleed is applied. In current V3.3.2, only the small
-  evidence-limited long-axis expansion remains active; short-axis tightening has
-  been removed. This does not change confidence or PASS/REVIEW.
+  before output bleed is applied; current behavior keeps this limited to small
+  evidence-limited long-axis expansion. This does not change confidence or
+  PASS/REVIEW.
 - Focus V3.3.1 smoke dry-run on `X5_00007`, `X5_00009`, `X5_00036`, and
-  `X5_00052` confirmed: `X5_00052` left outer expanded by 59px, `X5_00007`
-  and `X5_00009` only received the now-removed short-axis tightening, and
+  `X5_00052` confirmed: `X5_00052` left outer expanded by 59px and
   `X5_00036` stayed `needs_review`.
 - Focus V3.3.2 smoke dry-run on `X5_00007`, `X5_00009`, and `X5_00036`
   confirmed: `X5_00007` and `X5_00009` stayed `approved_auto`, `X5_00036`
   stayed `needs_review`, `X5_00007` marked one overlap-like grid gap, and
   `X5_00009` skipped global same-frame-size fitting with
   `clustered_late_edge_samples_with_leading_model_gaps`.
-- After removing short-axis tightening from V3.3.2, focus dry-run on
-  `X5_00007`, `X5_00009`, `X5_00014`, and `X5_00036` confirmed `7/9/14`
-  stayed `approved_auto`, `36` stayed `needs_review`, and `geometry_polish`
-  did not contain `short_axis_tighten`.
+- Focus dry-run on `X5_00007`, `X5_00009`, `X5_00014`, and `X5_00036`
+  confirmed `7/9/14` stayed `approved_auto` and `36` stayed `needs_review`.
 - `X5_00009` and `X5_00044` now report/output first and last frame margins at
   long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
 - `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15
