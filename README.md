@@ -27,7 +27,7 @@ V3.3.2 的新增逻辑很窄：
 
 - 检测阶段不使用 bleed；bleed 只在最终输出和 Debug Analysis 色块里应用。
 - 默认输出 bleed 为长轴 20px、短轴 10px。横向长图是左右各 20px、上下各 10px；竖向长图会自动对应旋转。
-- 对已经 `approved_auto` 且没有复核原因的结果，会做一个很小的输出几何 polish：长轴最多向外微扩，短轴最多轻微向内收紧。这一步不改变 PASS/REVIEW 和置信度。
+- 对已经 `approved_auto` 且没有复核原因的结果，会做一个很小的输出几何 polish：长轴最多向外微扩，短轴不再自动向内收紧。这一步不改变 PASS/REVIEW 和置信度。
 - 对 7、9 这类近似叠片 / 片距局部不稳定的 135 完整片条，会标记 `overlap_like` gap。这个标记不提高置信度，也不改变 PASS/REVIEW，只让统一张宽拟合不要被疑似叠片边界过度拉扯。
 - 对类似 `X5_00036` 那种前半段几乎全靠 grid 猜测的 135 完整片条，会保守进入复核。
 
@@ -333,9 +333,9 @@ V3.3.2 keeps bleed outside detection:
 - Output bleed defaults to 20px on the long axis and 10px on the short axis.
 - Horizontal strips use 20px left/right and 10px top/bottom. Vertical strips are
   rotated accordingly.
-- A small PASS-only geometry polish may slightly expand long-axis output edges
-  or tighten short-axis output edges. It does not change confidence or
-  PASS/REVIEW.
+- A small PASS-only geometry polish may slightly expand long-axis output edges.
+  It no longer tightens short-axis output edges, and it does not change
+  confidence or PASS/REVIEW.
 - For overlap-like 135 full-strip gaps, V3.3.2 may mark `overlap_like` so
   same-frame-size fitting does not over-anchor on a likely overlap boundary.
   This does not raise confidence or change PASS/REVIEW.

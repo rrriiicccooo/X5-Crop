@@ -116,6 +116,10 @@ Changed:
   suspected overlap-like gaps are marked with `overlap_like=true` and are not
   used as strong same-frame-size anchors. This does not increase confidence or
   alter PASS/REVIEW gates.
+- V3.3.2 no longer performs short-axis geometry polish/tightening. PASS-only
+  geometry polish may still make a small evidence-limited long-axis expansion,
+  but top/bottom (or rotated short-axis) output bounds now stay with the
+  detected outer plus output bleed.
 - README has been rewritten as a bilingual Chinese/English user guide for
   V3.3.x, covering install, launchers, Debug Analysis, reuse, command line
   usage, outputs, archived versions, and license.
@@ -191,19 +195,23 @@ Verified:
 - Default-output Debug Analysis terminal messages now print only the generated
   JPG filename instead of the full default `split_output/_debug_analysis/...`
   path. Explicit `--output` runs still print the full output path.
-- V3.3.1 adds a PASS-only geometry polish step after status is decided and
-  before output bleed is applied: long-axis outer/frame edges may expand by a
-  small 20-60px evidence-limited amount, while the short axis may only tighten
-  inward by up to 40px. This does not change confidence or PASS/REVIEW.
+- V3.3.1 added a PASS-only geometry polish step after status is decided and
+  before output bleed is applied. In current V3.3.2, only the small
+  evidence-limited long-axis expansion remains active; short-axis tightening has
+  been removed. This does not change confidence or PASS/REVIEW.
 - Focus V3.3.1 smoke dry-run on `X5_00007`, `X5_00009`, `X5_00036`, and
   `X5_00052` confirmed: `X5_00052` left outer expanded by 59px, `X5_00007`
-  and `X5_00009` only received short-axis tightening, and `X5_00036` stayed
-  `needs_review`.
+  and `X5_00009` only received the now-removed short-axis tightening, and
+  `X5_00036` stayed `needs_review`.
 - Focus V3.3.2 smoke dry-run on `X5_00007`, `X5_00009`, and `X5_00036`
   confirmed: `X5_00007` and `X5_00009` stayed `approved_auto`, `X5_00036`
   stayed `needs_review`, `X5_00007` marked one overlap-like grid gap, and
   `X5_00009` skipped global same-frame-size fitting with
   `clustered_late_edge_samples_with_leading_model_gaps`.
+- After removing short-axis tightening from V3.3.2, focus dry-run on
+  `X5_00007`, `X5_00009`, `X5_00014`, and `X5_00036` confirmed `7/9/14`
+  stayed `approved_auto`, `36` stayed `needs_review`, and `geometry_polish`
+  did not contain `short_axis_tighten`.
 - `X5_00009` and `X5_00044` now report/output first and last frame margins at
   long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
 - `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15

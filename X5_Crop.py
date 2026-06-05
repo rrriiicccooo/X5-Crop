@@ -1237,24 +1237,6 @@ def apply_approved_geometry_polish(detection: Detection, gray: np.ndarray, confi
             "minimum": int(min_long_ext),
         }
 
-    short_limit = 40
-    crop = gray_work[original_outer.top:original_outer.bottom, original_outer.left:original_outer.right]
-    if crop.size:
-        row_content = (crop < 242).mean(axis=1)
-        threshold = 0.035
-        active_rows = np.where(row_content > threshold)[0]
-        top_shrink = 0
-        bottom_shrink = 0
-        if active_rows.size:
-            top_shrink = min(short_limit, max(0, int(active_rows[0]) - 2))
-            bottom_shrink = min(short_limit, max(0, int(crop.shape[0] - int(active_rows[-1]) - 3)))
-        if top_shrink or bottom_shrink:
-            new_top = min(outer.bottom - 1, outer.top + top_shrink)
-            new_bottom = max(new_top + 1, outer.bottom - bottom_shrink)
-            outer = Box(outer.left, new_top, outer.right, new_bottom)
-            frames = [Box(frame.left, new_top, frame.right, new_bottom) for frame in frames]
-            changes["short_axis_tighten"] = {"top": int(top_shrink), "bottom": int(bottom_shrink), "limit": int(short_limit)}
-
     if not changes or not outer.valid() or any(not frame.valid() for frame in frames):
         return
     detection.detail["geometry_polish"] = {
