@@ -32,7 +32,9 @@ X5 Crop 会处理同一个文件夹里的 `.tif` / `.tiff` 长图，并把高置
 
 ### 下载和文件摆放
 
-推荐从 GitHub Release 下载最新的 `X5-Crop-v3.3.x.zip`。解压后，常用文件是：
+普通使用推荐从 GitHub Releases 下载最新的稳定版压缩包。Release 是面向用户的稳定更新；仓库里的 `main` 分支可能包含正在验证中的开发进度，适合参与测试或查看最新改动。
+
+解压后，常用文件是：
 
 ```text
 X5_Crop.py
@@ -320,8 +322,12 @@ V3.4.1 keeps bleed outside detection:
 
 ### Download And Layout
 
-Download the latest `X5-Crop-v3.3.x.zip` from GitHub Releases. After unzipping, the common
-files are:
+For normal use, download the latest stable zip package from GitHub Releases.
+Releases are the user-facing stable updates. The repository `main` branch may
+contain in-progress development changes that are useful for testing or reviewing
+the latest work.
+
+After unzipping, the common files are:
 
 ```text
 X5_Crop.py

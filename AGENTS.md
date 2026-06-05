@@ -133,6 +133,9 @@ Changed:
 - User-facing README no longer mentions internal test filenames, regression
   samples, archived scripts, rollback history, or previous-version detection
   details.
+- User-facing README now states that GitHub Releases are the stable user-facing
+  downloads, while the repository `main` branch may contain in-progress
+  development changes.
 - GitHub Release `v3.3.1` was created with
   `release/X5-Crop-v3.3.1.zip` uploaded as the user-facing package.
 - GitHub Release `v3.3.1` asset was replaced after cleaning the user-facing
