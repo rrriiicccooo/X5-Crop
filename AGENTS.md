@@ -122,6 +122,9 @@ Changed:
 - Debug JPG and Debug Analysis JPG status bars now include the generating
   script name and version, for example `X5_Crop.py 3.4.1`, so future visual
   regression checks can identify which script produced an image.
+- The same Debug Analysis version-label change has been applied to every
+  archived X5 Crop V3 snapshot from V3.0 through V3.5, so rolling back to an
+  archived version preserves version labeling in generated JPGs.
 - V3.4 is a detection simplification pass: separator enhanced detection was
   removed entirely, `equal-broad-region` was folded into ordinary `equal`, full
   strips now use content only as validation rather than generating separate
@@ -213,6 +216,10 @@ Verified:
 - Generated local comparison JPGs for `Test/135/X5_00007.tif` using V3.3.1,
   V3.3.2, and current V3.4.1 with `--deskew off`; the comparison files are
   ignored local artifacts under `Test/135/version_compare/`.
+- Generated new vertical Debug Analysis comparison JPGs for `Test/135/X5_00007.tif`:
+  a V3.3.1/V3.3.2/V3.4.1 comparison and an all-V3 snapshot comparison from
+  V3.0 through V3.5. These are ignored local artifacts under
+  `Test/135/version_compare/`.
 - `release/X5-Crop-v3.3.1.zip` was generated locally from the current
   V3.3.1 script, launchers, install scripts, README, LICENSE, and archive
   snapshots; the zip listing was checked.
