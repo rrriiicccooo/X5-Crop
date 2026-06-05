@@ -131,13 +131,21 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.6.5.
+- Active script is `X5_Crop.py` V3.6.6.
 - Current stable GitHub Release is `v3.6.2`, published from commit
   `5321d74560dcd97d54d150bd5e7aff73e997bd67` with asset
   `X5-Crop-v3.6.2.zip`. Release notes explicitly warn that overlap,
   near-overlap, locally irregular spacing, missing separators, or continuous
   image content can still be misdetected and should be reviewed with Debug
   Analysis.
+- V3.6.6 adds hard-gap trust diagnostics and a limited correction rule:
+  `strong_separator` hard gaps can resist grid override only when the robust
+  grid model residual is high. It also records nearby stronger separator
+  candidates within `±4% pitch`, marks suspicious hard gaps in Debug Analysis,
+  and adds `single_anchor_pass_risk` for locally lucky PASS cases.
+- V3.6.6 target truth notes from the user: `X5_00026` leftmost red gap is
+  wrong; `X5_00032` red gaps 1, 4, and 5 are wrong; `X5_00041` only the
+  leftmost red gap is correct, while the other separators are not reliable.
 - V3.6.5 does not change detection logic. It only changes worker caps so
   normal runs still cap at 2 workers, while explicit `--diagnostics` runs can
   use up to 4 workers. The local-only diagnostics launcher under `Test/135/`
@@ -202,14 +210,14 @@ Changed:
   strips now use content only as validation rather than generating separate
   content candidates, and 135 full strips no longer run the simple cuts-based
   frame-size fit before the explicit edge-sample fit.
-- V3.0 through V3.6.5 active-script snapshots are preserved in `archive/`:
+- V3.0 through V3.6.6 active-script snapshots are preserved in `archive/`:
   `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
   `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
   `X5_Crop_v3.3.1.py`, `X5_Crop_v3.3.2.py`, `X5_Crop_v3.4.py`,
   `X5_Crop_v3.4.1.py`, `X5_Crop_v3.4.2.py`, `X5_Crop_v3.5.py`,
   `X5_Crop_v3.6.py`, `X5_Crop_v3.6.1.py`, `X5_Crop_v3.6.2.py`, and
-  `X5_Crop_v3.6.3.py`, `X5_Crop_v3.6.4.py`, and
-  `X5_Crop_v3.6.5.py`.
+  `X5_Crop_v3.6.3.py`, `X5_Crop_v3.6.4.py`,
+  `X5_Crop_v3.6.5.py`, and `X5_Crop_v3.6.6.py`.
 - Future named development versions, including experiments that are later
   paused or rolled back, should also be saved as archive snapshots.
 - V3.3.2 adds conservative overlap-aware gap handling for 135 full strips:
@@ -434,6 +442,19 @@ Verified:
   `X5_00036`, and `X5_00052` printed `parallel: 4 workers`, completed in
   about 29 seconds in the sandbox thread fallback, and produced 3 approved /
   1 review with `X5_00036` still `needs_review`.
+- Current V3.6.6 verification: `python3 X5_Crop.py --version` prints
+  `X5_Crop.py 3.6.6`; `python3 -m py_compile X5_Crop.py` passed. Focus
+  diagnostics dry-run on `X5_00014`, `X5_00026`, `X5_00032`, and `X5_00041`
+  confirmed: `X5_00014` keeps the corrected outer and restores the rightmost
+  hard separator as `edge-pair`; `X5_00026` marks left gap 1 as
+  `nearby_separator_conflict`; `X5_00032` marks gaps 1 and 5 as
+  `geometry_conflict` and gap 4 as `nearby_separator_conflict`; `X5_00041`
+  marks gap 4 as `suspect_internal_edge` and summary
+  `single_anchor_pass_risk=true`.
+- Full V3.6.6 dry-run report against the local V3.6.4 report kept PASS/REVIEW
+  counts at 43 / 5. Geometry changed only on `X5_00014` and `X5_00026`.
+  Earlier broad protection also changed `X5_00004` and `X5_00040`, but was
+  narrowed by requiring high robust-grid residual before hard-gap protection.
 - Full V3.6 `Test/135` dry-run with `--format 135 --strip full --count 6
   --dry-run --report --no-copy-review-files --jobs 2 --no-reuse-analysis`
   produced 43 `approved_auto` / 5 `needs_review`. Compared against the
