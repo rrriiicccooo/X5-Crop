@@ -107,7 +107,12 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.4.2.
+- Active script is `X5_Crop.py` V3.5.
+- V3.5 adds lightweight hard-gap semantic validation after edge-pair refinement
+  and before robust grid fitting. It labels accepted red hard gaps as strong or
+  suspect, and only demotes a very narrow, content-continuous internal-edge-like
+  hard gap to a model gap. The validation reuses cached content and edge
+  profiles and records details in `hard_gap_validation`.
 - V3.4.2 adds conservative local grid segments for irregular 135 full-strip
   spacing. Model-only `grid` / `equal` gaps can be repositioned between two
   strong hard separator anchors using a local pitch; hard separators are not
@@ -185,7 +190,7 @@ Changed:
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py archive/X5_Crop_v3.0.py archive/X5_Crop_v3.1.py archive/X5_Crop_v3.1.1.py archive/X5_Crop_v3.1.2.py archive/X5_Crop_v3.2.py archive/X5_Crop_v3.3.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.4.2`.
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.5`.
 - `release/X5-Crop-v3.3.1.zip` was generated locally from the current
   V3.3.1 script, launchers, install scripts, README, LICENSE, and archive
   snapshots; the zip listing was checked.
@@ -248,6 +253,12 @@ Verified:
   `needs_review`. Local grid adjusted leading model gaps on `X5_00009` and
   bounded model gaps on `X5_00014`; `X5_00007` and `X5_00036` recorded
   `local_grid.used=false`.
+- Focus V3.5 dry-run with `--deskew off` on `X5_00001`, `X5_00004`,
+  `X5_00007`, `X5_00009`, `X5_00014`, `X5_00025`, `X5_00026`, and
+  `X5_00036` confirmed `1/4/7/9/14/25/26` stayed `approved_auto` and `36`
+  stayed `needs_review`. `X5_00026` recorded one `suspect_internal_edge`
+  demotion in `hard_gap_validation`; `X5_00001`, `X5_00004`, and
+  `X5_00025` recorded no suspect hard gaps.
 - `X5_00009` and `X5_00044` now report/output first and last frame margins at
   long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
 - `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15

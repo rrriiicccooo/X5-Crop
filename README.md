@@ -3,11 +3,11 @@
 X5 Crop is a standalone Python script for splitting long TIFF film-strip scans
 from Hasselblad / Imacon X5 holders into individual TIFF frames.
 
-当前最新开发版本：V3.4.2
+当前最新开发版本：V3.5
 
 当前稳定发布版本：v3.3.1（GitHub Releases）
 
-Current development version: V3.4.2
+Current development version: V3.5
 
 Current stable release: v3.3.1 (GitHub Releases)
 
@@ -32,6 +32,7 @@ X5 Crop 会处理同一个文件夹里的 `.tif` / `.tiff` 长图，并把高置
 - 检测阶段不使用 bleed；bleed 只在最终输出和 Debug Analysis 色块里应用。
 - 默认输出 bleed 为长轴 20px、短轴 10px。横向长图是左右各 20px、上下各 10px；竖向长图会自动对应旋转。
 - 对已经 `approved_auto` 且没有复核原因的结果，会做一个很小的输出几何 polish：只允许长轴最多向外微扩。这一步不改变 PASS/REVIEW 和置信度。
+- 对检测到的红色 hard separator 会做轻量可信度验证；明显像画面内部竖边的窄红框会降为模型 gap，由 grid 辅助处理。
 - 对近似叠片、片距局部不稳定、分隔证据不足或内容证据冲突的长图，会保持保守判断，不会为了自动导出而放宽置信规则。
 
 ### 下载和文件摆放
@@ -311,7 +312,7 @@ using outer-frame geometry, separator evidence, content evidence, and expected
 aspect ratios together. Only high-confidence results are exported
 automatically. Weak, conflicting, or unusual cases are sent to review.
 
-V3.4.2 keeps bleed outside detection:
+V3.5 keeps bleed outside detection:
 
 - Detection uses no bleed when scoring outer boxes, gaps, confidence, or
   PASS/REVIEW.
@@ -320,6 +321,9 @@ V3.4.2 keeps bleed outside detection:
   rotated accordingly.
 - A small PASS-only geometry polish may slightly expand long-axis output edges.
   It does not change confidence or PASS/REVIEW.
+- Detected red hard separators receive a lightweight semantic check. Very
+  narrow red boxes that look like internal image edges can be demoted to model
+  gaps and handled by grid support.
 - Overlapped frames, irregular frame spacing, weak separators, or conflicting
   content evidence are handled conservatively. The script should not loosen
   confidence rules just to export automatically.
