@@ -107,14 +107,14 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.2.
-- V3.2 restores the V3 detection main chain for ordinary outer/gap/candidate
-  selection while keeping the simplified terminal output and current workflow
-  improvements.
-- Default output bleed is long-axis 20px and short-axis 10px. Detection still
-  uses the V3 internal geometry bleed scale of long-axis 15px and short-axis
-  10px, so the larger output bleed protects crop edges without changing
-  candidate scoring or making hard images easier to auto-pass.
+- Active script is `X5_Crop.py` V3.3.
+- V3.3 keeps the V3/V3.2 ordinary outer/gap/candidate selection chain while
+  testing a stricter separation between detection geometry and output safety
+  margin.
+- Default output bleed is long-axis 20px and short-axis 10px. Detection now
+  uses 0px bleed internally, so bleed is applied only to final output/report/
+  Debug Analysis frame boxes and does not participate in outer, gap,
+  confidence, or PASS/REVIEW scoring.
 - Added final edge bleed protection after PASS/REVIEW status is decided: if
   same-frame-size fitting leaves the first or last frame too far inside an
   otherwise stable outer box, the output/report/debug frame is extended back to
@@ -146,7 +146,7 @@ Changed:
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.2`.
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.3`.
 - Full fresh `Test/135` dry-run with `--format 135 --strip full --count 6
   --dry-run --report --no-copy-review-files --jobs 2 --no-reuse-analysis`
   produced 43 `approved_auto` / 5 `needs_review`, matching the V3.1.1 reference
@@ -160,6 +160,15 @@ Verified:
   restored the V3-style outer/gap/frame-fit behavior for `7`, `19`, and `52`;
   `X5_00036` stayed `needs_review` with
   `separator_hard_evidence_weak` / `v2_auto_gate_not_satisfied`.
+- V3.3 was intentionally not full-regression tested in this turn at the user's
+  request. Only syntax/launcher checks and a small focus smoke test were run;
+  the user plans to run the full export and place the named output folder under
+  `Test/135`.
+- Focus V3.3 smoke dry-run on `X5_00007`, `X5_00019`, `X5_00036`, and
+  `X5_00052` confirmed report `output_bleed` records
+  `detection_long_axis_bleed=0`, `detection_short_axis_bleed=0`,
+  `output_long_axis_bleed=20`, and `output_short_axis_bleed=10`; `X5_00036`
+  stayed `needs_review`.
 - `X5_00009` and `X5_00044` now report/output first and last frame margins at
   long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
 - `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15

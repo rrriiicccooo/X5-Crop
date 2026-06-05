@@ -34,7 +34,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "3.2"
+VERSION = "3.3"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -1147,8 +1147,8 @@ def apply_edge_bleed_protection(detection: Detection, config: Config, image_w: i
 def detection_geometry_config(config: Config) -> Config:
     return replace(
         config,
-        bleed_x=min(int(config.bleed_x), 15),
-        bleed_y=min(int(config.bleed_y), 10),
+        bleed_x=0,
+        bleed_y=0,
     )
 
 
@@ -3960,7 +3960,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V3.2 candidate-scored single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V3.3 candidate-scored single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")
