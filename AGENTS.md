@@ -169,6 +169,9 @@ Verified:
   `detection_long_axis_bleed=0`, `detection_short_axis_bleed=0`,
   `output_long_axis_bleed=20`, and `output_short_axis_bleed=10`; `X5_00036`
   stayed `needs_review`.
+- Default-output Debug Analysis terminal messages now print only the generated
+  JPG filename instead of the full default `split_output/_debug_analysis/...`
+  path. Explicit `--output` runs still print the full output path.
 - `X5_00009` and `X5_00044` now report/output first and last frame margins at
   long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
 - `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15

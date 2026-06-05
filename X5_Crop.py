@@ -3480,6 +3480,13 @@ def review_directory_for(output_dir: Path, config: Config) -> Path:
     return config.review_dir if config.review_dir is not None else output_dir / "needs_review"
 
 
+def display_generated_path(path: Path | str, config: Config) -> str:
+    path = Path(path)
+    if config.output_dir is None:
+        return path.name
+    return str(path)
+
+
 def copy_for_review(input_file: Path, review_dir: Path) -> Path:
     review_dir.mkdir(parents=True, exist_ok=True)
     target = review_dir / input_file.name
@@ -3917,10 +3924,10 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     if config.debug and not config.debug_analysis:
         debug_path = output_dir / "_debug" / f"{input_file.stem}_debug.jpg"
         write_debug_preview(gray, detection, debug_path, config.confidence_threshold)
-        warnings.append(f"debug preview: {debug_path}")
+        warnings.append(f"debug preview: {display_generated_path(debug_path, config)}")
     if config.debug_analysis:
         for analysis_path in write_debug_analysis(gray, detection, output_dir, input_file.stem, config.confidence_threshold, analysis_cache):
-            warnings.append(f"debug analysis: {analysis_path}")
+            warnings.append(f"debug analysis: {display_generated_path(analysis_path, config)}")
 
     detail = dict(detection.detail)
     detail["deskew"] = deskew_detail
