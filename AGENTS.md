@@ -78,7 +78,9 @@ project documentation consolidated in `README.md`.
 
 - `.gitignore` and `.github/` are hidden dot paths by name. Treat them as
   project configuration, keep them in sync for other Codex sessions, and do not
-  rename them to non-hidden paths.
+  rename them to non-hidden paths. On macOS they may also have the Finder
+  hidden flag; on Windows, if the user wants them hidden in Explorer, use the
+  Windows hidden attribute while keeping the same Git path names.
 - Do not commit local generated files or folders such as:
   - `.venv/`
   - `.venv-build/`
@@ -137,6 +139,9 @@ Changed:
 - Sparse checkout should keep `.gitignore` visible and should also keep
   `.github/` visible if that directory is added later. Local-only hidden dot
   files remain hidden by name, but should be treated as real project config.
+  The other Codex workspace may be on Windows, so do not assume Finder hidden
+  flags exist there; use Windows hidden attributes only when local UI hiding is
+  requested.
 - `Test/135/X5_Crop.py`, `Test/135/X5_Crop_Mac.command`, and
   `Test/135/X5_Crop_win.bat` should be synced after active script / launcher
   changes; this was done for V3.6.2.
