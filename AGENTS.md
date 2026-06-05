@@ -148,12 +148,17 @@ Changed:
   development changes.
 - User-facing README header now lists both the current development version and
   the current stable GitHub Release version.
+- User-facing README now includes a bilingual changelog describing detection
+  and workflow changes from V3.0 through the current development version.
 - GitHub Release `v3.3.1` was created with
   `release/X5-Crop-v3.3.1.zip` uploaded as the user-facing package.
 - GitHub Release `v3.3.1` asset was replaced after cleaning the user-facing
   README and removing the short-axis polish code from the V3.3.1
   archive/package. The uploaded asset digest is
   `sha256:cec114dedd61a8cad8540676bf485e6589d078c2eb994255456bacb88137dd3d`.
+- GitHub Release `v3.3.1` body now describes the stable release policy and
+  summarizes major changes compared with the previous `v3` tag in Chinese and
+  English.
 - V3.3.1 keeps the V3/V3.2 ordinary outer/gap/candidate selection chain and
   the V3.3 output-only bleed separation.
 - Default output bleed is long-axis 20px and short-axis 10px. Detection now
@@ -198,6 +203,9 @@ Verified:
   `https://github.com/rrriiicccooo/X5-Crop/releases/tag/v3.3.1`
 - Verified the updated GitHub Release asset `X5-Crop-v3.3.1.zip` reports
   digest `sha256:cec114dedd61a8cad8540676bf485e6589d078c2eb994255456bacb88137dd3d`.
+- Verified GitHub Release `v3.3.1` body via `gh release view v3.3.1 --json
+  body,name,tagName,assets`; it now includes Chinese/English changes compared
+  with `v3`.
 - Archived `X5_Crop_v3*.py` snapshots report internal versions 3.0, 3.1,
   3.1.1, 3.1.2, 3.2, 3.3, and 3.3.1.
 - Full fresh `Test/135` dry-run with `--format 135 --strip full --count 6

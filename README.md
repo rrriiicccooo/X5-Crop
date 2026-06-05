@@ -35,6 +35,23 @@ X5 Crop 会处理同一个文件夹里的 `.tif` / `.tiff` 长图，并把高置
 - 对检测到的红色 hard separator 会做轻量可信度验证；明显像画面内部竖边的窄红框会降为模型 gap，由 grid 辅助处理。
 - 对近似叠片、片距局部不稳定、分隔证据不足或内容证据冲突的长图，会保持保守判断，不会为了自动导出而放宽置信规则。
 
+### 更新日志
+
+Release 是面向普通用户的稳定版；`main` 分支里的开发版本会继续验证新的检测逻辑。
+
+| 版本 | 状态 | 检测逻辑 / 工作流变化 |
+|---|---|---|
+| V3.5 | 当前开发版 | 新增红色 hard separator 轻量可信度验证。非常窄、内容连续、像画面内部竖边的红框会降为模型 gap，再由 grid 辅助处理；这一步复用已有缓存，不放宽 PASS/REVIEW。 |
+| V3.4.2 | 开发版 | 新增保守的局部 grid。片距不稳定时，模型 gap 可以在强 hard separator 锚点之间或附近用局部 pitch 微调；hard separator 不被移动，置信度不因此提高。 |
+| V3.4.1 | 开发版 | 强 hard separator 与 robust grid 冲突时优先保留红色证据，并把冲突记录到报告里，避免 grid 把可靠红框改写掉。 |
+| V3.4 | 开发版 | 简化检测层：移除增强分隔层，合并宽分隔 fallback 到普通 equal，完整片条只把内容检测作为验证，不再生成单独 content candidate。 |
+| V3.3.2 | 开发版 | 加入更保守的 overlap-like gap 标记，疑似叠片/连续内容的模型 gap 不再作为强 same-frame-size 锚点。 |
+| V3.3.1 | 稳定 Release | 保留 V3 系列较稳定的 outer/gap/candidate 主链路；bleed 只在最终输出、报告和 Debug Analysis 中应用，不参与检测评分；打包为可下载稳定版。 |
+| V3.3 | 开发版 | 将检测用 bleed 与输出用 bleed 分离，默认输出 bleed 为长轴 20px、短轴 10px。 |
+| V3.2 | 开发版 | 回到 V3 风格的主检测链路，同时保留明显弱证据图进入复核的安全闸门。 |
+| V3.1.x | 实验版 | 尝试更积极的外框/分隔修正、局部救援和外扩策略；部分场景有帮助，但可能影响稳定样片，因此没有作为稳定发布。 |
+| V3.0 | 基线版 | 建立 X5 Crop 主脚本、格式选择、固定张数 full strip、partial 模式、Debug Analysis 和高置信自动裁切 / 低置信复核的基本框架。 |
+
 ### 下载和文件摆放
 
 普通使用推荐从 GitHub Releases 下载最新的稳定版压缩包。Release 是面向用户的稳定更新；仓库里的 `main` 分支可能包含正在验证中的开发进度，适合参与测试或查看最新改动。
@@ -327,6 +344,24 @@ V3.5 keeps bleed outside detection:
 - Overlapped frames, irregular frame spacing, weak separators, or conflicting
   content evidence are handled conservatively. The script should not loosen
   confidence rules just to export automatically.
+
+### Changelog
+
+Releases are stable packages for normal use. The `main` branch may contain
+development versions that are still being validated.
+
+| Version | Status | Detection / Workflow Changes |
+|---|---|---|
+| V3.5 | Current development | Adds lightweight semantic validation for red hard separators. Very narrow, content-continuous red boxes that look like internal image edges can be demoted to model gaps and handled by grid support. This reuses cached profiles and does not loosen PASS/REVIEW. |
+| V3.4.2 | Development | Adds conservative local grid segments. With irregular spacing, model gaps can be adjusted between or near strong hard-separator anchors using local pitch. Hard separators are not moved and confidence is not increased by this step. |
+| V3.4.1 | Development | Keeps strong hard separators authoritative when they conflict with robust grid, and records the conflict in the report instead of rewriting reliable red evidence as grid. |
+| V3.4 | Development | Simplifies detection: removes the enhanced separator layer, folds broad-region fallback into ordinary equal gaps, and uses content detection only as validation for full strips. |
+| V3.3.2 | Development | Adds conservative overlap-like gap marking so suspected overlap/continuous-content model gaps are not used as strong same-frame-size anchors. |
+| V3.3.1 | Stable Release | Keeps the stable V3-style outer/gap/candidate chain. Bleed is applied only to final output, reports, and Debug Analysis, not detection scoring. Packaged as the stable downloadable release. |
+| V3.3 | Development | Separates detection bleed from output bleed. Default output bleed is 20px on the long axis and 10px on the short axis. |
+| V3.2 | Development | Returns to the V3-style main detection chain while keeping safety gates that send clearly weak-evidence scans to review. |
+| V3.1.x | Experimental | Tried more aggressive outer/gap correction, local rescue, and expansion strategies. Some cases improved, but stability on already-good scans could be affected, so these were not promoted as stable. |
+| V3.0 | Baseline | Establishes the main X5 Crop script, format selection, fixed-count full-strip mode, partial mode, Debug Analysis, and high-confidence auto-crop / low-confidence review workflow. |
 
 ### Download And Layout
 
