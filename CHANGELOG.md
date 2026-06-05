@@ -403,5 +403,7 @@ Release policy / 发布策略：
 - GitHub Release 是面向用户的稳定下载。
 - The repository `main` branch may contain active development, experiments, or rollback work.
 - 仓库 `main` 分支可能包含 active 开发、实验或回滚工作。
+- Every named development version should be preserved as an `archive/X5_Crop_v*.py` snapshot before moving on, including experiments that are later paused or rolled back.
+- 每一个命名开发版本都应该在继续往后开发前保存为 `archive/X5_Crop_v*.py` 快照，包括之后被暂停或回滚的实验版本。
 - When a development version becomes stable enough for users, create a new GitHub Release and update `README.md`, `CHANGELOG.md`, and `AGENTS.md` together.
 - 当某个开发版本足够稳定适合用户使用时，创建新的 GitHub Release，并同步更新 `README.md`、`CHANGELOG.md`、`AGENTS.md`。

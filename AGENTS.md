@@ -36,7 +36,9 @@ archive/X5_Split_v18.py
 ```
 
 Keep `X5_Crop.py` as the active script. Keep `X5_Split_v17.py` and
-`X5_Split_v18.py` in `archive/` as preserved references. Keep user-facing
+`X5_Split_v18.py` in `archive/` as preserved references. Keep every named X5
+Crop development version snapshot in `archive/` before moving past it, including
+experimental versions that are later paused or rolled back. Keep user-facing
 project documentation consolidated in `README.md`.
 
 ## Coding Rules
@@ -122,10 +124,13 @@ Changed:
   strips now use content only as validation rather than generating separate
   content candidates, and 135 full strips no longer run the simple cuts-based
   frame-size fit before the explicit edge-sample fit.
-- V3.0 through V3.3 active-script snapshots are preserved in `archive/`:
+- V3.0 through V3.5 active-script snapshots are preserved in `archive/`:
   `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
   `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
-  `X5_Crop_v3.3.1.py`.
+  `X5_Crop_v3.3.1.py`, `X5_Crop_v3.3.2.py`, `X5_Crop_v3.4.py`,
+  `X5_Crop_v3.4.1.py`, `X5_Crop_v3.4.2.py`, and `X5_Crop_v3.5.py`.
+- Future named development versions, including experiments that are later
+  paused or rolled back, should also be saved as archive snapshots.
 - V3.3.2 adds conservative overlap-aware gap handling for 135 full strips:
   suspected overlap-like gaps are marked with `overlap_like=true` and are not
   used as strong same-frame-size anchors. This does not increase confidence or
