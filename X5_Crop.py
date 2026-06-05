@@ -1621,6 +1621,103 @@ def apply_robust_grid(gaps: list[Gap], origin: float, pitch: float, strip_mode: 
     }
 
 
+def find_local_separator_rescue_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> Gap:
+    width = len(profile)
+    if width <= 2:
+        return Gap(index, float(expected), 0.0, "equal")
+    radius = max(8, int(round(pitch * 0.055)))
+    center_i = int(round(expected))
+    lo = max(1, center_i - radius)
+    hi = min(width - 1, center_i + radius + 1)
+    if hi <= lo:
+        return Gap(index, float(expected), 0.0, "equal")
+    local = profile[lo:hi]
+    if local.size == 0:
+        return Gap(index, float(expected), 0.0, "equal")
+    local_max = float(local.max())
+    if local_max < 0.38:
+        return Gap(index, float(expected), local_max, "equal")
+
+    narrow_max_w = max(2, int(round(pitch * 0.040)))
+    broad_max_w = max(narrow_max_w + 1, int(round(pitch * 0.075)))
+    threshold = max(0.30, local_max * 0.62)
+    guard_w = max(5, int(round(pitch * 0.030)))
+    candidates: list[tuple[float, float, float, float, float]] = []
+    for run_start, run_end in runs_from_mask(local >= threshold):
+        if run_end <= run_start:
+            continue
+        band_start, band_end = run_start, run_end
+        while band_start > 0 and local[band_start - 1] >= threshold * 0.80 and (band_end - (band_start - 1)) <= broad_max_w:
+            band_start -= 1
+        while band_end < len(local) and local[band_end] >= threshold * 0.80 and ((band_end + 1) - band_start) <= broad_max_w:
+            band_end += 1
+        band_w = band_end - band_start
+        if band_w < 1 or band_w > broad_max_w:
+            continue
+        start = float(lo + band_start)
+        end = float(lo + band_end)
+        center = float((start + end - 1.0) / 2.0)
+        if abs(center - expected) > radius:
+            continue
+        left_guard = local[max(0, band_start - guard_w):band_start]
+        right_guard = local[band_end:min(len(local), band_end + guard_w)]
+        if left_guard.size == 0 or right_guard.size == 0:
+            continue
+        band_mean = float(local[band_start:band_end].mean())
+        side_mean = max(float(left_guard.mean()), float(right_guard.mean()))
+        prominence = band_mean - side_mean
+        if band_w <= narrow_max_w:
+            if band_mean < 0.42 or prominence < 0.06:
+                continue
+            method_score = band_mean + prominence
+        else:
+            if band_mean < 0.48 or prominence < 0.10:
+                continue
+            method_score = band_mean + 0.7 * prominence
+        distance = abs(center - expected) / max(1.0, pitch)
+        candidates.append((distance, -method_score, -band_mean, start, end))
+    if not candidates:
+        return Gap(index, float(expected), local_max, "equal")
+    _distance, neg_score, _neg_mean, start, end = sorted(candidates)[0]
+    return Gap(index, float((start + end - 1.0) / 2.0), float(-neg_score), "detected", start, end)
+
+
+def rescue_model_gaps_with_local_separators(profile: np.ndarray, gaps: list[Gap], origin: float, pitch: float, strip_mode: str) -> tuple[list[Gap], dict[str, Any]]:
+    if not gaps:
+        return gaps, {"used": False, "reason": "empty"}
+    rescued: list[Gap] = []
+    accepted: list[dict[str, Any]] = []
+    rejected = 0
+    for gap in gaps:
+        if gap.method not in {"grid", "equal", "equal-broad-region"}:
+            rescued.append(gap)
+            continue
+        expected = origin + pitch * gap.index
+        local_gap = find_local_separator_rescue_gap(profile, expected, pitch, gap.index)
+        if local_gap.method == "detected":
+            constrained = constrain_gap_to_geometry(local_gap, expected, pitch, strip_mode)
+            if constrained.method == "detected" and constrained.score >= 0.42:
+                rescued.append(constrained)
+                accepted.append(
+                    {
+                        "index": int(gap.index),
+                        "center": float(constrained.center),
+                        "score": float(constrained.score),
+                        "width": float(constrained.width),
+                        "replaced_method": gap.method,
+                    }
+                )
+                continue
+        rescued.append(gap)
+        rejected += 1
+    return rescued, {
+        "used": True,
+        "accepted": accepted,
+        "accepted_count": len(accepted),
+        "rejected_count": rejected,
+    }
+
+
 def find_enhanced_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> Gap:
     gap = find_gap(profile, expected, pitch, index)
     if gap.method != "detected":
@@ -2031,6 +2128,7 @@ def build_detection_for_outer(
     if strip_mode == "full" and fmt.name == "135" and count > 1:
         gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, cache, outer)
     gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
+    local_separator_detail: dict[str, Any] = {"used": False, "reason": "not_applicable"}
     if allow_outer_refine and strip_mode == "full" and bool(grid_detail.get("grid_used", False)):
         model_origin = float(grid_detail.get("grid_origin", 0.0))
         model_pitch = float(grid_detail.get("grid_pitch", pitch))
@@ -2055,6 +2153,8 @@ def build_detection_for_outer(
                 gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, cache, outer)
             gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
             grid_detail["outer_refined"] = True
+    if strip_mode == "full" and fmt.name == "135" and count > 1:
+        gaps, local_separator_detail = rescue_model_gaps_with_local_separators(profile, gaps, origin, pitch, strip_mode)
     separator_analysis_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     separator_analysis_allowed = allow_separator_analysis and strip_mode == "full" and fmt.name != "half"
     if separator_analysis_allowed:
@@ -2084,6 +2184,7 @@ def build_detection_for_outer(
             "grid_residual": grid_detail.get("grid_residual"),
             "grid_used": bool(grid_detail.get("grid_used", False)),
             "edge_refine": edge_refine_detail,
+            "local_separator_rescue": local_separator_detail,
             "frame_size_fit": frame_size_detail,
             "separator_analysis": separator_analysis_detail,
             "partial_edge_hint": partial_edge_hint(profile, origin, pitch, count) if strip_mode == "partial" else {},
