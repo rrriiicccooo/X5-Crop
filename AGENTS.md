@@ -119,6 +119,9 @@ Changed:
   fills missing/model gaps. If a strong `detected` or `edge-pair` gap conflicts
   with the equal-spacing grid, the hard gap is preserved and the conflict is
   recorded in `grid.hard_conflicts` instead of being rewritten as `grid`.
+- Debug JPG and Debug Analysis JPG status bars now include the generating
+  script name and version, for example `X5_Crop.py 3.4.1`, so future visual
+  regression checks can identify which script produced an image.
 - V3.4 is a detection simplification pass: separator enhanced detection was
   removed entirely, `equal-broad-region` was folded into ordinary `equal`, full
   strips now use content only as validation rather than generating separate
@@ -205,6 +208,11 @@ Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py archive/X5_Crop_v3.0.py archive/X5_Crop_v3.1.py archive/X5_Crop_v3.1.1.py archive/X5_Crop_v3.1.2.py archive/X5_Crop_v3.2.py archive/X5_Crop_v3.3.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 3.4.1`.
+- `python3 -m py_compile X5_Crop.py` passed after adding the version label to
+  Debug JPG and Debug Analysis JPG status bars.
+- Generated local comparison JPGs for `Test/135/X5_00007.tif` using V3.3.1,
+  V3.3.2, and current V3.4.1 with `--deskew off`; the comparison files are
+  ignored local artifacts under `Test/135/version_compare/`.
 - `release/X5-Crop-v3.3.1.zip` was generated locally from the current
   V3.3.1 script, launchers, install scripts, README, LICENSE, and archive
   snapshots; the zip listing was checked.

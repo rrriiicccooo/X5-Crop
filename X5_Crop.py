@@ -3242,6 +3242,7 @@ def draw_large_status(draw: ImageDraw.ImageDraw, xy: tuple[int, int], text: str,
 
 def add_status_bar(rgb: np.ndarray, detection: Detection, threshold: float) -> np.ndarray:
     status, detail, color = debug_status_parts(detection, threshold)
+    detail = f"{SCRIPT_NAME} {VERSION} | {detail}"
     bar_h = 48
     h, w = rgb.shape[:2]
     panel = np.full((h + bar_h, w, 3), 18, dtype=np.uint8)
