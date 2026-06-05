@@ -118,6 +118,8 @@ X5 Crop 会处理同一个文件夹里的 `.tif` / `.tiff` 长图，并把高置
 
 Release 是面向普通用户的稳定版；`main` 分支里的开发版本会继续验证新的检测逻辑。
 
+更详细的本地开发记录见 `CHANGELOG.md`。
+
 | 版本 | 状态 | 检测逻辑 / 工作流变化 |
 |---|---|---|
 | V3.5 | 已暂停 / 已回滚的开发尝试 | 尝试新增红色 hard separator 轻量可信度验证。实测会影响原本准确的样片，因此当前 active 脚本已暂时回滚到 V3.4.1。 |
@@ -425,6 +427,8 @@ V3.4.1 keeps bleed outside detection:
 
 Releases are stable packages for normal use. The `main` branch may contain
 development versions that are still being validated.
+
+For the more detailed local development record, see `CHANGELOG.md`.
 
 | Version | Status | Detection / Workflow Changes |
 |---|---|---|

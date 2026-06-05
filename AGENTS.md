@@ -145,6 +145,8 @@ Changed:
   the current stable GitHub Release version.
 - User-facing README now includes a bilingual changelog describing detection
   and workflow changes from V3.0 through the current development version.
+- Added root `CHANGELOG.md` as a more detailed local development changelog for
+  detection logic, rollback context, and future testing notes.
 - User-facing README now starts with a Chinese quick-start usage section before
   the longer Chinese/English guide.
 - User-facing README and GitHub Release `v3.3.1` now both put bilingual
