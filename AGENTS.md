@@ -107,7 +107,12 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.3.2.
+- Active script is `X5_Crop.py` V3.4.
+- V3.4 is a detection simplification pass: separator enhanced detection was
+  removed entirely, `equal-broad-region` was folded into ordinary `equal`, full
+  strips now use content only as validation rather than generating separate
+  content candidates, and 135 full strips no longer run the simple cuts-based
+  frame-size fit before the explicit edge-sample fit.
 - V3.0 through V3.3 active-script snapshots are preserved in `archive/`:
   `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
   `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
@@ -149,10 +154,9 @@ Changed:
   `X5_00052` now follow the V3-style ordinary outer/gap path again.
 - The `X5_00036` failure shape is guarded by
   `135_leading_grid_separator_failure`: three leading low-score grid separators,
-  no accepted enhanced separator, and only adjacent late hard separators.
-- Full-strip separator candidates that already pass the V2 auto gate now skip
-  generating an extra content-only candidate, because the separator calibration
-  has already checked content support.
+  too few hard separators, and only adjacent late hard separators.
+- Full-strip detection no longer generates separate content candidates; content
+  is used as validation after separator/geometric candidates are built.
 - README now has one consolidated Chinese Debug Analysis section instead of two
   overlapping sections.
 - macOS and Windows launchers now re-prompt after an unknown format instead of
@@ -167,7 +171,7 @@ Changed:
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py archive/X5_Crop_v3.0.py archive/X5_Crop_v3.1.py archive/X5_Crop_v3.1.1.py archive/X5_Crop_v3.1.2.py archive/X5_Crop_v3.2.py archive/X5_Crop_v3.3.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.3.2`.
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.4`.
 - `release/X5-Crop-v3.3.1.zip` was generated locally from the current
   V3.3.1 script, launchers, install scripts, README, LICENSE, and archive
   snapshots; the zip listing was checked.
@@ -216,12 +220,16 @@ Verified:
   `clustered_late_edge_samples_with_leading_model_gaps`.
 - Focus dry-run on `X5_00007`, `X5_00009`, `X5_00014`, and `X5_00036`
   confirmed `7/9/14` stayed `approved_auto` and `36` stayed `needs_review`.
+- Focus V3.4 dry-run on `X5_00002`, `X5_00007`, `X5_00009`, `X5_00014`,
+  and `X5_00036` confirmed `2/7/9/14` stayed `approved_auto`, `36` stayed
+  `needs_review`, and gap methods no longer include `enhanced-detected` or
+  `equal-broad-region`.
 - `X5_00009` and `X5_00044` now report/output first and last frame margins at
   long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
 - `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15
   only because the requested 20px bleed reaches the TIFF image boundary.
-- The focused reports show full-strip candidates that pass the separator auto
-  gate record `content_candidate_skipped=separator_auto_gate_passed`.
+- V3.4 focused reports show full-strip candidates record
+  `content_candidate_skipped` and use content validation only.
 - `printf 'abc\n135\nn\nn\n\n' | ./X5_Crop_Mac.command` confirmed an invalid
   format is rejected and the next valid input continues the launcher flow; the
   run then stopped at the expected no-TIFF message in the repository root.
@@ -246,5 +254,4 @@ Next recommended step:
   change: `X5_00007`, `X5_00022`, `X5_00032`, `X5_00036`, `X5_00038`,
   `X5_00051`, and `X5_00052`.
 - For speed work, the largest current cost is full-resolution deskew rotation,
-  followed by 135 edge-pair refinement and enhanced separator profiles across
-  multiple outer candidates.
+  followed by 135 edge-pair refinement across multiple outer candidates.
