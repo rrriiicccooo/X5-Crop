@@ -114,6 +114,8 @@ Changed:
 - README has been rewritten as a bilingual Chinese/English user guide for
   V3.3.1, covering install, launchers, Debug Analysis, reuse, command line
   usage, outputs, archived versions, and license.
+- GitHub Release `v3.3.1` was created with
+  `release/X5-Crop-v3.3.1.zip` uploaded as the user-facing package.
 - V3.3.1 keeps the V3/V3.2 ordinary outer/gap/candidate selection chain and
   the V3.3 output-only bleed separation.
 - Default output bleed is long-axis 20px and short-axis 10px. Detection now
@@ -155,6 +157,8 @@ Verified:
 - `release/X5-Crop-v3.3.1.zip` was generated locally from the current
   V3.3.1 script, launchers, install scripts, README, LICENSE, and archive
   snapshots; the zip listing was checked.
+- GitHub Release URL:
+  `https://github.com/rrriiicccooo/X5-Crop/releases/tag/v3.3.1`
 - Archived `X5_Crop_v3*.py` snapshots report internal versions 3.0, 3.1,
   3.1.1, 3.1.2, 3.2, and 3.3.
 - Full fresh `Test/135` dry-run with `--format 135 --strip full --count 6
