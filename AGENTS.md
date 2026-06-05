@@ -47,6 +47,9 @@ project documentation consolidated in `README.md`.
 - Keep detection changes close to the script logic.
 - Avoid broad refactors while solving a narrow detection or workflow task.
 - Add or update docs when script usage, setup, or testing behavior changes.
+- After changing the active script or launchers, sync the local ignored Test
+  copies too, especially `Test/135/X5_Crop.py`,
+  `Test/135/X5_Crop_Mac.command`, and `Test/135/X5_Crop_win.bat`.
 - When the user describes directional behavior with left/right or top/bottom,
   treat that as the horizontal-strip baseline unless they say otherwise, and
   add the rotated vertical-strip behavior too.
