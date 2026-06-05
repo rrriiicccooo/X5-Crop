@@ -112,7 +112,14 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.6.1.
+- Active script is `X5_Crop.py` V3.6.2.
+- V3.6.2 is a small cleanup step after V3.6.1 diagnostics: it folds
+  `equal-broad-region` into ordinary `equal` and keeps `hard_fallback_detection`
+  as a smaller review-only equal split fallback. It must not make fallback an
+  auto-pass path or loosen PASS/REVIEW.
+- `Test/135/X5_Crop.py`, `Test/135/X5_Crop_Mac.command`, and
+  `Test/135/X5_Crop_win.bat` should be synced after active script / launcher
+  changes; this was done for V3.6.2.
 - V3.6.1 keeps the V3.3.1 output baseline and the V3.6 diagnostic direction,
   but diagnostics now run only when `--diagnostics` is explicitly passed.
   Normal macOS / Windows launchers do not enable diagnostics.
@@ -151,12 +158,12 @@ Changed:
   strips now use content only as validation rather than generating separate
   content candidates, and 135 full strips no longer run the simple cuts-based
   frame-size fit before the explicit edge-sample fit.
-- V3.0 through V3.6.1 active-script snapshots are preserved in `archive/`:
+- V3.0 through V3.6.2 active-script snapshots are preserved in `archive/`:
   `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
   `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
   `X5_Crop_v3.3.1.py`, `X5_Crop_v3.3.2.py`, `X5_Crop_v3.4.py`,
   `X5_Crop_v3.4.1.py`, `X5_Crop_v3.4.2.py`, `X5_Crop_v3.5.py`,
-  `X5_Crop_v3.6.py`, and `X5_Crop_v3.6.1.py`.
+  `X5_Crop_v3.6.py`, `X5_Crop_v3.6.1.py`, and `X5_Crop_v3.6.2.py`.
 - Future named development versions, including experiments that are later
   paused or rolled back, should also be saved as archive snapshots.
 - V3.3.2 adds conservative overlap-aware gap handling for 135 full strips:
@@ -335,6 +342,13 @@ Verified:
   --deskew off` on `X5_00007` produced `approved_auto confidence=1.000`
   without `diagnostics_v3_6`; the same run with `--diagnostics` wrote
   `diagnostics_v3_6` version `3.6.1` and `changes_output=false`.
+- Current V3.6.2 verification: `python3 X5_Crop.py --version` prints
+  `X5_Crop.py 3.6.2`; `python3 -m py_compile X5_Crop.py` and
+  `archive/X5_Crop_v3.6.2.py` passed; a focused `--debug-analysis
+  --diagnostics --dry-run` smoke test on `X5_00014`, `X5_00032`,
+  `X5_00036`, and `X5_00052` produced `14/32/52` as `approved_auto` and
+  `36` as `needs_review`; report gap methods no longer include
+  `equal-broad-region`.
 - Full V3.6 `Test/135` dry-run with `--format 135 --strip full --count 6
   --dry-run --report --no-copy-review-files --jobs 2 --no-reuse-analysis`
   produced 43 `approved_auto` / 5 `needs_review`. Compared against the
