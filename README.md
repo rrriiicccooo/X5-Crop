@@ -11,6 +11,34 @@ Current development version: V3.5
 
 Current stable release: v3.3.1 (GitHub Releases)
 
+## 快速使用
+
+普通使用请优先下载 GitHub Releases 里的稳定版压缩包。仓库 `main`
+分支是开发进度，可能比 Release 新，但不一定是稳定发布版。
+
+第一次在新机器上使用：
+
+1. 解压 Release 压缩包。
+2. 运行安装启动器：
+   - macOS: `install/X5_Crop_Mac_install.command`
+   - Windows: `install/X5_Crop_win_install.bat`
+3. 把下面这些文件和要裁切的 TIFF 长图放在同一个文件夹里：
+   - `X5_Crop.py`
+   - macOS 用 `X5_Crop_Mac.command`
+   - Windows 用 `X5_Crop_win.bat`
+4. 双击对应系统的启动器。
+5. 先选择胶片格式，再选择是否开启 partial mode 和 Debug Analysis。
+
+常用选择：
+
+- 直接回车或输入 `135`：普通 135，一条 6 张。
+- 输入 `dual` 或 `135 dual`：双条 135，一共 12 张。
+- 输入 `xpan` / `half` / `645` / `66` / `67`：对应其它格式。
+- `partial mode` 直接回车是 `no`，只在片头、片尾或不完整片条时开启。
+- `debug analysis` 直接回车是 `no`；输入 `y` 会只生成分析 JPG 和报告，不正式裁切。
+
+高置信结果会自动裁切；低置信结果会进入 `needs_review/`，方便人工复核。
+
 ## 中文说明
 
 ### 这个工具做什么

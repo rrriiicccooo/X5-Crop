@@ -150,6 +150,8 @@ Changed:
   the current stable GitHub Release version.
 - User-facing README now includes a bilingual changelog describing detection
   and workflow changes from V3.0 through the current development version.
+- User-facing README now starts with a Chinese quick-start usage section before
+  the longer Chinese/English guide.
 - GitHub Release `v3.3.1` was created with
   `release/X5-Crop-v3.3.1.zip` uploaded as the user-facing package.
 - GitHub Release `v3.3.1` asset was replaced after cleaning the user-facing
