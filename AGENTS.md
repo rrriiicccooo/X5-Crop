@@ -62,6 +62,23 @@ project documentation consolidated in `README.md`.
   folder.
 - Do not run two Codex sessions against the same NAS-synced working tree at the
   same time unless they are only reading.
+- Current local sparse-checkout policy keeps root-level source/docs/config files
+  visible and hides bulky or release-only paths locally. Keep `.gitignore`
+  visible. If `.github/` appears later, keep it visible too because it contains
+  GitHub repository automation/configuration.
+- The intended sparse-checkout rules are:
+
+```text
+/*
+!/archive/
+!/install/
+!/LICENSE
+!/release/
+```
+
+- `.gitignore` and `.github/` are hidden dot paths by name. Treat them as
+  project configuration, keep them in sync for other Codex sessions, and do not
+  rename them to non-hidden paths.
 - Do not commit local generated files or folders such as:
   - `.venv/`
   - `.venv-build/`
@@ -117,6 +134,9 @@ Changed:
   `equal-broad-region` into ordinary `equal` and keeps `hard_fallback_detection`
   as a smaller review-only equal split fallback. It must not make fallback an
   auto-pass path or loosen PASS/REVIEW.
+- Sparse checkout should keep `.gitignore` visible and should also keep
+  `.github/` visible if that directory is added later. Local-only hidden dot
+  files remain hidden by name, but should be treated as real project config.
 - `Test/135/X5_Crop.py`, `Test/135/X5_Crop_Mac.command`, and
   `Test/135/X5_Crop_win.bat` should be synced after active script / launcher
   changes; this was done for V3.6.2.
