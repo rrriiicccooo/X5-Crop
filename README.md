@@ -1,64 +1,57 @@
-# X5 Crop 脚本工作区
+# X5 Crop
 
-这个仓库用于把 Hasselblad / Imacon X5 片夹扫描得到的 TIFF 胶片长图裁切成单张 TIFF。
+X5 Crop is a standalone Python script for splitting long TIFF film-strip scans
+from Hasselblad / Imacon X5 holders into individual TIFF frames.
 
-桌面 App、PySide6 GUI、Qt native UI、PyInstaller 打包和发布工作流目前都暂停。除非明确恢复 App 方向，否则后续工作聚焦在独立 Python 脚本。
+当前版本：V3.3.1
 
-## 当前推荐脚本
+Current version: V3.3.1
 
-当前主用脚本是：
+## 中文说明
+
+### 这个工具做什么
+
+X5 Crop 会处理同一个文件夹里的 `.tif` / `.tiff` 长图，并把高置信结果自动裁切成单张 TIFF。低置信结果不会自动裁切，会写入报告并复制原 TIFF 到 `needs_review/`，方便人工复核。
+
+核心原则：
+
+- 容易样片自动裁切。
+- 困难样片进入复核。
+- 只有高置信检测结果才自动导出。
+- 不为了让困难图片通过而放宽置信规则。
+- 最终裁切 TIFF 尽量保持原 TIFF 的画质和元数据属性。
+
+V3.3.1 沿用 V3/V3.3 的稳定检测主链路：在指定胶片格式和指定片条模式内，综合外框、分隔、内容和画幅几何证据评分。V3.3.1 不使用 V3.1 的激进外框外扩，也不使用 V3.1.1 的 `separator_derived_outer` 外框竞争或 V3.1.2 的局部分隔救援。
+
+V3.3.1 的新增输出逻辑很窄：
+
+- 检测阶段不使用 bleed；bleed 只在最终输出和 Debug Analysis 色块里应用。
+- 默认输出 bleed 为长轴 20px、短轴 10px。横向长图是左右各 20px、上下各 10px；竖向长图会自动对应旋转。
+- 对已经 `approved_auto` 且没有复核原因的结果，会做一个很小的输出几何 polish：长轴最多向外微扩，短轴最多轻微向内收紧。这一步不改变 PASS/REVIEW 和置信度。
+- 对类似 `X5_00036` 那种前半段几乎全靠 grid 猜测的 135 完整片条，会保守进入复核。
+
+### 下载和文件摆放
+
+推荐从 GitHub Release 下载 `X5-Crop-v3.3.1.zip`。解压后，常用文件是：
 
 ```text
 X5_Crop.py
+X5_Crop_Mac.command
+X5_Crop_win.bat
+install/
+  X5_Crop_Mac_install.command
+  X5_Crop_win_install.bat
+README.md
+LICENSE
 ```
 
-当前版本是 V3.3.1。目标仍然是：
+把 `X5_Crop.py`、对应系统的启动器和要裁切的 TIFF 长图放在同一个文件夹里，然后双击启动器运行。
 
-```text
-容易样片：自动裁切
-困难样片：标记复核
-debug：快速可见
-最终导出：只基于高置信检测结果
-```
+不支持“只把启动器放进 TIFF 文件夹、脚本留在别处”的模式。
 
-它主要处理单条横向或竖向扫描，也支持双条 135：横向长图里按上下两条平行 135 处理，竖向长图里按左右两条平行 135 处理。当前推荐流程不再自动猜胶片格式，也不再默认寻找片头 / 局部片条：启动器会让你输入格式，并询问是否开启 partial 模式。不开启 partial 时按完整片条处理；开启 partial 时按片头 / 局部片条处理。
+### 第一次安装依赖
 
-V3.3.1 检测方向沿用 V3.3 的稳定检测主链路：脚本会在你指定的格式和片条模式内，为可能张数和普通外框候选生成裁切方案，再用几何、分隔、内容三类证据评分。最终输出的是得分最高且通过自动裁切闸门的候选；如果候选之间竞争接近，或者证据互相冲突，脚本会倾向于 `REVIEW`。
-
-V3.3.1 不继承 V3.1 的激进外框外扩，也不使用 V3.1.1 的 `separator_derived_outer` 外框竞争或 V3.1.2 的局部分隔救援。当前新增逻辑很窄：
-
-- 对 135 完整片条，只有出现“前 3 条分隔都是低分 grid、增强分隔没有接受项、仅有的 hard separator 集中在后半段相邻位置”时，才会触发 `135_leading_grid_separator_failure` 并进入复核。这是为了拦截严重靠模型猜测的样本，而不是因为 grid 多就复核。
-- 默认输出 bleed 是“长轴更保护、短轴仍然收紧”：横向长图左右各 20px、上下各 10px；纵向长图上下各 20px、左右各 10px。V3.3.1 检测内部不使用 bleed，也就是检测阶段按 0px bleed 计算 outer、gap、confidence 和 PASS/REVIEW，最终输出和 debug 色块才加上指定 bleed。
-- 当 `same_frame_size_fit` 为了统一张宽而把首尾照片往外框内部缩得太多时，V3.3.1 只在 PASS/REVIEW 判定之后把输出裁切范围贴回外框边缘，避免外框本来正确但第一张或最后一张被少裁一点。
-- 对已经 `approved_auto` 且没有 review reasons 的结果，V3.3.1 会做一个很小的输出几何 polish：长轴最多向外微扩 20-60px，短轴只允许向内收紧最多 40px。这一步不改变 confidence 或 PASS/REVIEW，只影响报告、Debug Analysis 和最终裁切框。
-
-Test 样本复盘后，当前算法不把“内容 run 数量”当作单一真相。真实照片内部的树枝、人物、墙面、窗框和高反差纹理会把一张照片切成多个内容峰；低纹理、欠曝或大面积平滑画面也会把多张照片合并成一个内容峰。
-
-因此脚本会把内容矩形、目标画幅比例、完整/局部片条模型和分隔证据放在一起做联合判断。局部片条可以通过，但必须由启动器里的 partial 模式或命令行 `--strip partial` 明确启用，避免普通完整片条流程被片头模型干扰。
-
-当前联合判断关系：
-
-- 分隔条检测负责切线硬证据。真实黑条、可信双边缘和增强分隔证据可以支持自动裁切；grid / equal 只算模型推断，不单独代表看到了真实分隔。
-- 内容检测负责验证裁出来的区域是不是照片。它会检查内容覆盖、综合内容强度、内容 run 和画幅比例，但不会因为自己分数高就无条件自动通过。
-- 画幅模型负责约束结果是否像对应格式。`135`、`135-dual`、`half`、`xpan`、`120-66`、`120-645`、`120-67` 会按横向/竖向长图自动旋转比例。
-- 自动通过需要证据互相担保。常规完整片条最好是“分隔硬证据通过 + 内容验证通过”；内容-only 的 partial 也可以通过，但必须非常强，并且不能有 run、覆盖或比例疑点。
-- 如果分隔和内容互相冲突，或者只有 grid / equal 在支撑切线，脚本会优先进入 `REVIEW`。
-- 报告里的 `v2_competition` 会记录前几名候选，方便复盘“第一名为什么赢、第二名为什么没赢”。现在这些候选来自指定格式和指定片条模式，不再跨所有 format 自动猜。
-
-## 保留参考脚本
-
-仓库仍保留：
-
-```text
-archive/X5_Split_v17.py
-archive/X5_Split_v18.py
-```
-
-v17 是上一版参考实现，用于对照检测逻辑和回归行为。v18 是 X5_Crop 的早期直接前身，用于回看旧分隔证据逻辑。它们已经归档到 `archive/`，日常新工作优先放在 `X5_Crop.py`。
-
-## 安装依赖
-
-第一次在新机器上使用时，推荐先运行安装启动器：
+第一次在新机器上使用时，先运行安装启动器。
 
 macOS:
 
@@ -72,107 +65,69 @@ Windows:
 install/X5_Crop_win_install.bat
 ```
 
-安装启动器会优先使用机器上已有的 Python 3，并用用户级安装方式安装依赖：
+安装器会使用用户级安装方式安装依赖：
 
 ```bash
 python3 -m pip install --user -U numpy tifffile imagecodecs Pillow
 ```
 
-这样脚本和启动器可以自由移动；依赖跟着当前用户的 Python 走，不绑在项目文件夹路径上。
+这样脚本文件夹可以自由移动，依赖跟随当前用户的 Python，不绑在项目路径上。
 
-macOS 上如果遇到新版 Python / Homebrew 的 externally-managed 限制，安装器会提示是否用 `--break-system-packages --user` 重试。这里仍然是用户级安装，不是写入系统目录。
+macOS 如果遇到新版 Python / Homebrew 的 externally-managed 限制，安装器会提示是否用 `--break-system-packages --user` 重试。这里仍然是用户级安装。
 
 如果机器没有 Python：
 
-- macOS：如果有 Homebrew，安装器可以用 Homebrew 安装 Python；否则会打开 Python 官网下载页，安装 Python 后再运行一次安装器。
-- Windows：如果有 `winget`，安装器会尝试安装 Python 3.12；否则会打开 Python 官网下载页，安装 Python 后再运行一次安装器。
+- macOS：安装器会优先使用 Homebrew 安装 Python；如果没有 Homebrew，会打开 Python 官网。
+- Windows：安装器会优先使用 `winget` 安装 Python 3.12；如果没有 `winget`，会打开 Python 官网。
 
-也可以手动安装依赖。
+### 启动器怎么用
 
 macOS:
 
-```bash
-python3 -m pip install -U numpy tifffile imagecodecs Pillow
-```
-
-Windows PowerShell:
-
-```powershell
-py -3 -m pip install -U numpy tifffile imagecodecs Pillow
-```
-
-## 文件摆放
-
-启动器要求脚本、启动器和要裁切的 TIFF 长图在同一个文件夹。
-
-macOS 常用文件：
-
-```text
-X5_Crop.py
-X5_Crop_Mac.command
-install/X5_Crop_Mac_install.command
-```
-
-Windows 常用文件：
-
-```text
-X5_Crop.py
-X5_Crop_win.bat
-install/X5_Crop_win_install.bat
-```
-
-不支持“只把启动器放进 TIFF 文件夹、脚本留在仓库里”的模式。
-
-如果 macOS 提示 `.command` 不能打开，先在 Terminal 里运行一次：
-
-```bash
-chmod +x X5_Crop_Mac.command install/X5_Crop_Mac_install.command
-```
-
-## 启动器
-
-主启动器：
-
 ```text
 X5_Crop_Mac.command
 ```
 
-会处理同目录下所有 `.tif` / `.tiff` 文件，自动通过的文件会输出裁切 TIFF。它会先问 `format:`，再问 `partial mode? [y/n, return=no]:`，最后问 `debug analysis? [y/n, return=no]:`。后两个问题都可以输入 `yes` / `no` / `y` / `n`，直接回车等于 `no`。
-
-如果开启 Debug Analysis，它不会写裁切 TIFF。它会在一张 JPG 里生成四块内容：原始灰度图、带框 debug 图、分隔证据图、内容证据图。横向长图上下排列，竖向长图左右排列，适合看欠曝、弱分隔、片头片尾和未铺满整条片夹的情况。
-
-如果同一批 TIFF 已经先运行过 Debug Analysis dry run，之后再用普通裁切运行同样的 format、partial/count、bleed、deskew 和阈值参数时，脚本会优先复用 `split_report.jsonl` 里的分析结果：
-
-- 已经是 `approved_auto` 的文件会跳过重新检测，直接按报告里的裁切框输出 TIFF。
-- 已经是 `needs_review` 的文件会直接跳过，不会第二次重新检测后碰运气裁切。
-- 如果原 TIFF 的文件大小、修改时间、页码、图像形状、脚本版本或关键参数不匹配，脚本会放弃复用并重新检测。
-- 如果 Debug Analysis 那次实际做过 deskew，复用时会按报告中记录的同一个角度重新旋转后再裁切，保证裁切框和当时分析图一致。
-
-命令行可以加 `--no-reuse-analysis` 强制重新检测。
-
-Windows 对应把 `Mac` 换成 `win`，后缀是 `.bat`：
+Windows:
 
 ```text
 X5_Crop_win.bat
 ```
 
-启动器运行后会让你输入格式：
+启动器会依次询问：
+
+```text
+choose film format:
+  return or 135 = 135
+  dual or 135 dual = 135-dual
+  xpan = xpan
+  half = half-frame
+  645 = 120-645
+  66 = 120-66
+  67 = 120-67
+
+format:
+partial mode? [y/n, return=no]:
+debug analysis? [y/n, return=no]:
+```
+
+格式输入：
 
 | 输入 | 格式 |
 |---|---|
 | 直接回车 / `135` | `135` |
-| `dual` / `135 dual` / `135-dual` | `135-dual` 双条 135 |
-| `xpan` | `xpan` |
-| `half` | `half` 半格 |
-| `645` | `120-645` |
-| `66` | `120-66` |
-| `67` | `120-67` |
+| `dual` / `135 dual` / `135-dual` | 双条 135 |
+| `xpan` | XPAN |
+| `half` | 半格 |
+| `645` | 120-645 |
+| `66` | 120-66 |
+| `67` | 120-67 |
 
-这个启动器方式的目的不是让困难图片更容易 `PASS`，而是减少脚本在错误格式、错误片头模型之间自由竞争的机会。普通完整片条用完整片条模型；片头和局部片条由 partial 模式单独进入。
+如果输错格式，启动器会重新让你输入。`partial mode` 和 `debug analysis` 可以输入 `yes` / `no` / `y` / `n`，直接回车等于 `no`。
 
-普通完整片条启动器会固定张数，不再使用 count auto：
+不开启 partial 时，脚本按完整片条处理，并固定张数：
 
-| 格式 | 固定张数 |
+| 格式 | 张数 |
 |---|---:|
 | `135` | 6 |
 | `135-dual` | 12 |
@@ -182,90 +137,70 @@ X5_Crop_win.bat
 | `120-66` | 3 |
 | `120-67` | 3 |
 
-只有开启 partial 模式时，count 才会保持 auto，用来处理片头、片尾或局部片条。`135-dual` 目前只建议用于完整双条 135；如果开启 partial，脚本会保守进入复核，不会自动裁切。
+开启 partial 时，张数使用 auto，适合片头、片尾、局部片条或没有铺满整条片夹的扫描。`135-dual` 目前只建议用于完整双条 135；partial 下会保守复核。
 
-macOS 启动器运行结束后会显示：
+### Debug Analysis
+
+如果开启 Debug Analysis，脚本只生成分析 JPG 和报告，不输出裁切 TIFF。输出位置：
 
 ```text
-Press Return to close...
+split_output/_debug_analysis/
 ```
 
-按回车后脚本会退出，并尝试关闭由 Finder 打开的 Terminal 或 iTerm2 窗口。Finder 双击 `.command` 默认由 macOS 的 Terminal 打开，这是系统文件关联行为；脚本本身会兼容 Terminal 和 iTerm2 的窗口关闭。
+每张 Debug Analysis JPG 是四联图：
 
-终端输出会尽量保持简洁：
+- `Original gray`：原始灰度图。
+- `Debug boxes`：外框和最终输出裁切范围。
+- `Separator evidence`：分隔证据。
+- `Content evidence`：内容证据。
 
-- 处理进度显示为 `[当前/总数] 文件名`。
-- 文件夹里有多张 TIFF 时默认最多同时处理 2 张。为了让报告文件稳定，`split_report.jsonl` 和 `split_summary.csv` 仍由主进程按完成顺序写入；终端里的文件顺序可能和文件名顺序不同。如果运行环境不允许进程 worker，脚本会自动退到线程 worker，功能不变但提速可能较小。
-- 普通提示使用 `info:`，避免把说明性信息误看成警告。
-- 不重复显示启动器里已经选择过的 format，也不显示固定张数 count；只有 partial 模式的自动张数会显示 `count: auto`。
-- 默认输出到 `split_output/` 时不显示输出路径；只有命令行显式传入 `--output` 时才显示。
+横向长图会把四联图上下排列；竖向长图会横向排列，方便最大化利用屏幕空间。
 
-## 命令行常用法
+顶部状态栏会显示：
 
-输出检测分析图：
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run
+```text
+PASS confidence 0.987 >= threshold 0.850
+REVIEW confidence 0.676 < threshold 0.850
 ```
 
-普通自动裁切：
+`PASS` 表示会自动裁切；`REVIEW` 表示不会自动裁切，需要人工复核。
 
-```bash
-python3 X5_Crop.py . --format 135 --strip full --report
-```
+`Debug boxes` 颜色：
 
-如果想关闭并行、一次只处理 1 张：
+| 颜色 | 含义 |
+|---|---|
+| 绿色外框 | 脚本认为整条胶片有效区域的外框 |
+| 不同半透明色块 | 每一张最终输出裁切范围，包含输出 bleed |
 
-```bash
-python3 X5_Crop.py . --format 135 --strip full --report --jobs 1
-```
+`Separator evidence` 颜色：
 
-片头 / 局部片条：
+| 颜色 | 含义 |
+|---|---|
+| 红色框 / 红色线 | 原图中检测到的真实分隔区域，包括黑条和可信双边缘 |
+| 橙色框 / 橙色线 | 增强分隔证据层补充检测到的分隔区域 |
+| 黄色短 tick | grid / 全局片距模型推算出的切线，不代表一定看到真实黑条 |
+| 紫色短 tick | 证据不足时的等分或 fallback 切线 |
+| 白色短 tick | 其它未分类切线来源 |
 
-```bash
-python3 X5_Crop.py . --format 135 --strip partial --report
-```
+看 Debug Analysis 时建议优先检查：
 
-默认导出的裁切 TIFF 会像 v17 一样保留 bleed。默认值按长图方向理解：
+- 绿色外框有没有吃进画面或把白边留太多。
+- 半透明裁切色块有没有覆盖照片并留出合理 bleed。
+- 红色分隔证据是否落在真实黑条或真实片间空隙。
+- 黄色 / 紫色 tick 是否只是模型猜测。
 
-- 横向长图：左右各 20px，上下各 10px。
-- 纵向长图：上下各 20px，左右各 10px。
+### 复用 Debug Analysis 结果裁切
 
-之后文档和设计讨论里如果只写“左右 / 上下”，默认都是指横向长图；纵向长图会按方向旋转对应过去。
+如果已经对同一批 TIFF 跑过 Debug Analysis dry run，之后普通裁切时脚本会优先复用 `split_report.jsonl`：
 
-可用 `--bleed`、`--bleed-x`、`--bleed-y` 调整。其中 `--bleed-x` 是长轴 bleed，`--bleed-y` 是短轴 bleed。例如：
+- `approved_auto` 会跳过重新检测，直接按报告里的裁切框导出 TIFF。
+- `needs_review` 会直接跳过，不会重新检测后碰运气裁切。
+- 如果原 TIFF 的文件大小、修改时间、页码、图像形状、脚本版本或关键参数不匹配，会自动重新检测。
+- 如果 Debug Analysis 那次做过 deskew，复用时会按同一角度重新旋转后再裁切，避免裁切框偏移。
 
-```bash
-python3 X5_Crop.py . --format 135 --strip full --report --bleed-x 20 --bleed-y 10
-```
+命令行可用 `--no-reuse-analysis` 强制重新检测。
 
-关闭自动校斜：
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --deskew off --report --debug-analysis --dry-run
-```
-
-分隔增强层默认是 `--analysis auto`：只有在分隔证据偏弱、出现 grid/equal 推断线，或硬分隔分数偏低时才启用增强检测。`--analysis always` 会每次启用增强检测；`--analysis off` 会完全关闭增强分隔层。
-
-把低置信原图复制到复核目录：
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run --copy-review-files
-```
-
-默认已经会复制低置信原图；上面这个参数只是显式写出行为。如果只想写报告、不复制原 TIFF：
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run --no-copy-review-files
-```
-
-低置信结果也强制导出：
-
-```bash
-python3 X5_Crop.py . --format 135 --strip full --report --export-review
-```
-
-## 输出目录
+### 输出目录
 
 默认输出在 TIFF 文件夹内：
 
@@ -290,95 +225,334 @@ split_output/
 说明：
 
 - `split_report.jsonl`：完整机器可读报告。
-- `split_summary.csv`：更方便人工浏览的表格。
-- `_debug_analysis/*_debug_analysis.jpg`：四联图，已经包含带框 debug 图。运行 `--debug-analysis` 时不会再重复生成 `_debug/` 文件夹和单独 debug JPG。
-- `needs_review/`：低置信 `needs_review` 原 TIFF 会默认复制到这里，方便人工集中处理。
+- `split_summary.csv`：方便人工浏览的表格。
+- `_debug_analysis/*_debug_analysis.jpg`：四联 Debug Analysis 图。
+- `needs_review/`：低置信原 TIFF 复核目录。
 
-普通启动器不会覆盖已有输出 TIFF。已有同名裁切文件时，脚本会报错并停止该文件；命令行可用 `--overwrite` 覆盖。
+普通启动器不会覆盖已有裁切 TIFF。命令行可用 `--overwrite` 覆盖。
 
-## 如何看 Debug Analysis
+### 命令行
 
-`_debug_analysis/*_debug_analysis.jpg` 是一张四联图。横向胶片长图的四联图顺序是从上到下：`Original gray`、`Debug boxes`、`Separator evidence`、`Content evidence`。竖向胶片长图的四联图顺序是从左到右：`Original gray`、`Debug boxes`、`Separator evidence`、`Content evidence`。
+Debug Analysis dry run:
 
-四块内容：
-
-- `Original gray`：原始检测灰度图，用来看源扫描本身的明暗和分隔可见度。
-- `Debug boxes`：显示绿色外框和不同半透明色块，用来看裁切计划。
-- `Separator evidence`：只在已确认的外框内部生成的分隔证据图，并集中绘制红色、橙色、黄色、紫色、白色分隔标记。它只补充分隔候选，不会重新决定外框，也不会写进最终 TIFF。
-- `Content evidence`：内容证据图，用综合分显示哪里更像真实照片信息。综合分由局部梯度、四邻域纹理、局部对比和少量调性存在感组成，不依赖单一亮度或单一梯度。
-
-四联图顶部会在图片外显示状态栏，说明是否通过当前置信度阈值。`PASS` / `REVIEW` 会用不同颜色和更醒目的字号显示：
-
-```text
-PASS confidence 0.987 >= threshold 0.850
-REVIEW confidence 0.676 < threshold 0.850
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run
 ```
 
-`PASS` 表示会按默认规则自动输出裁切；`REVIEW` 表示不会自动输出裁切，并会进入复核流程。
+普通自动裁切：
 
-`Debug boxes` 面板里的颜色：
-
-| 颜色 | 含义 |
-|---|---|
-| 绿色外框 | 脚本认为整条胶片有效区域的外框 |
-| 不同半透明色块 | 每一张将要输出的裁切范围，包含默认长轴 20px、短轴 10px bleed |
-
-`Separator evidence` 面板里的颜色：
-
-| 颜色 | 含义 |
-|---|---|
-| 红色框 / 红色线 | 从原图证据中检测到的真实分隔区域，包括黑条区域和可信双边缘 `edge-pair`。黑条有宽有窄时会画成区域框，而不是只画单线 |
-| 橙色框 / 橙色线 | 在固定外框内由分隔证据层补充检测到的分隔区域 |
-| 黄色短 tick | 由全局片距 / grid 模型推算出的切线，不代表一定看到了真实黑条 |
-| 紫色短 tick | 证据不足时使用的等分或宽区域 fallback 切线 |
-| 白色短 tick | 其它未分类的切线来源 |
-
-看图时优先检查四件事：
-
-- 绿色外框有没有吃掉片头、片尾或画面边缘。
-- 每个半透明裁切色块是否覆盖对应照片，并在四周留出合理 bleed。
-- Separator evidence 里的红色检测区域是否覆盖真实黑条；如果没有红色、只有黄色或紫色，说明这部分更依赖推断，应该更谨慎。
-- Separator evidence 里的黄色/紫色短 tick 是否落在真实片间空隙，而不是落进画面内容。
-
-内容证据用于检查“有信息的照片矩形”是否支持当前裁切框。横向长图下，脚本使用这些常见画幅比例作为参考：
-
-| 格式 | 横向长图里的单张照片比例 |
-|---|---|
-| `135` | `3:2` |
-| `135-dual` | `3:2`，上下两条各按 6 张 135 处理 |
-| `half` | `2:3` |
-| `xpan` | `65:24` |
-| `120-66` | `1:1` |
-| `120-645` | `3:4` |
-| `120-67` | `4:5` |
-
-如果是竖向长图，上表比例会自动反过来。内容证据当前主要用于 debug 和保守降级：当内容矩形和画幅比例明显冲突，或内容覆盖明显不足时，脚本会倾向于 `REVIEW`；它不会单独把困难图片提升为自动通过。
-
-## 自动通过与待复核
-
-脚本会给每个文件一个状态：
-
-```text
-approved_auto
-needs_review
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report
 ```
 
-默认置信度阈值是 `0.85`。低于阈值时，默认只写报告和 debug 信息，不输出裁切 TIFF，并把原 TIFF 复制到 `split_output/needs_review/` 方便人工复核。重复运行时，如果同名文件已经在复核目录里，脚本会复用已有文件，不再连续生成 `_02`、`_03` 副本。
+片头 / 局部片条：
 
-如果脚本发现绿色外框明显吃进长轴或短轴白边，会先根据内容边界生成一个更贴近照片的 `content_aligned_outer`，并在修正后的外框内重新判断分隔和裁切。只有修正后仍无法通过置信规则时，才会因为 `outer_content_bbox_mismatch` 进入复核。
+```bash
+python3 X5_Crop.py . --format 135 --strip partial --report
+```
 
-典型待复核原因：
+关闭并行：
 
-- 欠曝或低反差
-- 片头/片尾不完整
-- 少于默认张数
-- 分隔线弱或缺失
-- 画幅间距不稳定
-- 外框候选分歧较大
-- 内容 run 数量和目标张数不一致
-- 内容矩形和预期画幅比例冲突
-- 指定格式或指定完整 / 片头模式和实际扫描不一致
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report --jobs 1
+```
 
-## License
+默认并行最多处理 2 张 TIFF。报告仍由主进程写入，避免多个 worker 同时写报告文件。
+
+调整输出 bleed：
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report --bleed-x 20 --bleed-y 10
+```
+
+`--bleed-x` 是长轴 bleed，`--bleed-y` 是短轴 bleed。
+
+关闭自动校斜：
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --deskew off --report --debug-analysis --dry-run
+```
+
+低置信结果也强制导出：
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report --export-review
+```
+
+### 历史版本
+
+`archive/` 里保留参考脚本：
+
+```text
+X5_Split_v17.py
+X5_Split_v18.py
+X5_Crop_v3.0.py
+X5_Crop_v3.1.py
+X5_Crop_v3.1.1.py
+X5_Crop_v3.1.2.py
+X5_Crop_v3.2.py
+X5_Crop_v3.3.py
+```
+
+日常使用请运行根目录的 `X5_Crop.py`。
+
+### License
 
 本项目以 MIT License 开源，详见 `LICENSE`。
+
+## English Guide
+
+### What This Tool Does
+
+X5 Crop processes `.tif` / `.tiff` long film-strip scans in the same folder and
+exports individual TIFF frames only when the detection confidence is high.
+Low-confidence files are reported as `needs_review` and the original TIFF is
+copied to `needs_review/` for manual inspection.
+
+Core rules:
+
+- Easy scans are cropped automatically.
+- Difficult scans are sent to review.
+- Only high-confidence detections are exported automatically.
+- Fallbacks must not make difficult images pass by accident.
+- Output TIFF quality and metadata behavior should stay as close to the source
+  TIFF as possible.
+
+V3.3.1 uses the stable V3/V3.3 detection chain. It scores candidates inside the
+film format and strip mode you choose, using outer-frame geometry, separator
+evidence, content evidence, and expected aspect ratios together. It does not use
+the aggressive V3.1 outer expansion, the V3.1.1 `separator_derived_outer`
+competition, or the V3.1.2 local separator rescue.
+
+V3.3.1 keeps bleed outside detection:
+
+- Detection uses no bleed when scoring outer boxes, gaps, confidence, or
+  PASS/REVIEW.
+- Output bleed defaults to 20px on the long axis and 10px on the short axis.
+- Horizontal strips use 20px left/right and 10px top/bottom. Vertical strips are
+  rotated accordingly.
+- A small PASS-only geometry polish may slightly expand long-axis output edges
+  or tighten short-axis output edges. It does not change confidence or
+  PASS/REVIEW.
+
+### Download And Layout
+
+Download `X5-Crop-v3.3.1.zip` from GitHub Releases. After unzipping, the common
+files are:
+
+```text
+X5_Crop.py
+X5_Crop_Mac.command
+X5_Crop_win.bat
+install/
+  X5_Crop_Mac_install.command
+  X5_Crop_win_install.bat
+README.md
+LICENSE
+```
+
+Put `X5_Crop.py`, the launcher for your system, and the TIFF scans in the same
+folder. Then double-click the launcher.
+
+The launcher-only workflow is not supported. The launcher and `X5_Crop.py` must
+travel together.
+
+### Install Dependencies
+
+On a new machine, run the installer first.
+
+macOS:
+
+```text
+install/X5_Crop_Mac_install.command
+```
+
+Windows:
+
+```text
+install/X5_Crop_win_install.bat
+```
+
+The installer uses user-level Python packages:
+
+```bash
+python3 -m pip install --user -U numpy tifffile imagecodecs Pillow
+```
+
+This keeps the project folder movable. Dependencies belong to the current
+user's Python installation, not to this folder.
+
+### Launcher Flow
+
+macOS:
+
+```text
+X5_Crop_Mac.command
+```
+
+Windows:
+
+```text
+X5_Crop_win.bat
+```
+
+The launcher asks:
+
+```text
+format:
+partial mode? [y/n, return=no]:
+debug analysis? [y/n, return=no]:
+```
+
+Format choices:
+
+| Input | Format |
+|---|---|
+| Return / `135` | `135` |
+| `dual` / `135 dual` / `135-dual` | dual-strip 135 |
+| `xpan` | XPAN |
+| `half` | half-frame |
+| `645` | 120-645 |
+| `66` | 120-66 |
+| `67` | 120-67 |
+
+Unknown formats are rejected and the launcher asks again. For `partial mode` and
+`debug analysis`, use `yes` / `no` / `y` / `n`; Return means `no`.
+
+Full-strip mode uses fixed frame counts:
+
+| Format | Count |
+|---|---:|
+| `135` | 6 |
+| `135-dual` | 12 |
+| `half` | 12 |
+| `xpan` | 3 |
+| `120-645` | 4 |
+| `120-66` | 3 |
+| `120-67` | 3 |
+
+Partial mode uses auto count and is intended for leader, tail, partial strips,
+or scans that do not fill the whole holder.
+
+### Debug Analysis
+
+Debug Analysis is a dry run. It writes analysis JPGs and reports, but no cropped
+TIFFs.
+
+Each Debug Analysis JPG has four panels:
+
+- `Original gray`: original grayscale detection image.
+- `Debug boxes`: outer box and final output crop boxes.
+- `Separator evidence`: separator evidence.
+- `Content evidence`: content evidence.
+
+Horizontal strips are stacked vertically; vertical strips are laid out
+horizontally.
+
+The top status line shows either `PASS` or `REVIEW`. `PASS` means the file would
+be cropped automatically. `REVIEW` means it will not be auto-exported.
+
+`Debug boxes` colors:
+
+| Color | Meaning |
+|---|---|
+| Green outer box | Detected usable film-strip area |
+| Semi-transparent color blocks | Final output crop boxes, including output bleed |
+
+`Separator evidence` colors:
+
+| Color | Meaning |
+|---|---|
+| Red box / line | Real separator evidence detected from the original image |
+| Orange box / line | Separator evidence added by the enhanced separator layer |
+| Yellow tick | Grid / pitch-model cut line, not necessarily a visible separator |
+| Purple tick | Equal/fallback cut line with weak evidence |
+| White tick | Other separator source |
+
+### Reusing Debug Analysis For Export
+
+If you run Debug Analysis first and then run normal export with the same key
+settings, X5 Crop reuses `split_report.jsonl`:
+
+- `approved_auto` files are cropped from the cached crop boxes.
+- `needs_review` files are skipped.
+- Changed TIFF size, modification time, page shape, script version, or key
+  parameters will force a fresh detection.
+- If Debug Analysis used deskew, export reuses the same angle before cropping.
+
+Use `--no-reuse-analysis` to force a fresh detection.
+
+### Command Line
+
+Debug Analysis dry run:
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run
+```
+
+Normal auto export:
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report
+```
+
+Partial strip:
+
+```bash
+python3 X5_Crop.py . --format 135 --strip partial --report
+```
+
+Disable parallel processing:
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report --jobs 1
+```
+
+Set output bleed:
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report --bleed-x 20 --bleed-y 10
+```
+
+Disable deskew:
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --deskew off --report --debug-analysis --dry-run
+```
+
+Force export of review files:
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --report --export-review
+```
+
+### Output Folder
+
+Default output:
+
+```text
+split_output/
+```
+
+Common contents:
+
+```text
+split_output/
+  split_report.jsonl
+  split_summary.csv
+  *_01.tif
+  *_02.tif
+  ...
+  _debug_analysis/
+    *_debug_analysis.jpg
+  needs_review/
+```
+
+### Archived Versions
+
+Historical scripts are kept in `archive/` for comparison and rollback. Use the
+root `X5_Crop.py` for normal work.
+
+### License
+
+This project is open source under the MIT License. See `LICENSE`.
