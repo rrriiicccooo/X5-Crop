@@ -132,6 +132,12 @@ Last commit: see `git log -1`
 
 Changed:
 - Active script is `X5_Crop.py` V3.6.3.
+- Current stable GitHub Release is `v3.6.2`, published from commit
+  `5321d74560dcd97d54d150bd5e7aff73e997bd67` with asset
+  `X5-Crop-v3.6.2.zip`. Release notes explicitly warn that overlap,
+  near-overlap, locally irregular spacing, missing separators, or continuous
+  image content can still be misdetected and should be reviewed with Debug
+  Analysis.
 - V3.6.3 promotes the overlap / near-overlap diagnostic into a conservative
   REVIEW gate for 135 full strips: strong overlap risk on a model gap
   (`grid`, `equal`, or `content`) caps confidence below threshold and adds
@@ -239,6 +245,12 @@ Changed:
 - GitHub Release `v3.3.1` body now describes the stable release policy and
   summarizes major changes compared with the previous `v3` tag in Chinese and
   English.
+- GitHub Release `v3.6.2` was created as the current stable user-facing release
+  with `X5-Crop-v3.6.2.zip`, digest
+  `sha256:981cb501b63b59f3ea116bcf0030668cd18df42b6ef064ad847b45c792e61e2b`.
+  The release body includes bilingual quick start and warns that overlap,
+  near-overlap, irregular local spacing, missing separators, and continuous
+  image content may still require manual Debug Analysis review.
 - V3.3.1 keeps the V3/V3.2 ordinary outer/gap/candidate selection chain and
   the V3.3 output-only bleed separation.
 - Default output bleed is long-axis 20px and short-axis 10px. Detection now
@@ -296,6 +308,11 @@ Verified:
 - Verified GitHub Release `v3.3.1` body via `gh release view v3.3.1 --json
   body,name,tagName,assets`; it now includes Chinese/English changes compared
   with `v3`.
+- Verified GitHub Release `v3.6.2` via `gh release view v3.6.2 --json
+  tagName,name,url,targetCommitish,assets,body`; it targets
+  `5321d74560dcd97d54d150bd5e7aff73e997bd67` and asset
+  `X5-Crop-v3.6.2.zip` reports digest
+  `sha256:981cb501b63b59f3ea116bcf0030668cd18df42b6ef064ad847b45c792e61e2b`.
 - Archived `X5_Crop_v3*.py` snapshots report internal versions 3.0, 3.1,
   3.1.1, 3.1.2, 3.2, 3.3, and 3.3.1.
 - Full fresh `Test/135` dry-run with `--format 135 --strip full --count 6
