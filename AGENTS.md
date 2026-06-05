@@ -277,5 +277,8 @@ Next recommended step:
 - Run a focused fresh dry-run on `Test/135` target files after any detection
   change: `X5_00007`, `X5_00022`, `X5_00032`, `X5_00036`, `X5_00038`,
   `X5_00051`, and `X5_00052`.
+- Future development/regression dry-runs should pass `--deskew off` by default
+  to keep iteration fast. Enable deskew only when testing deskew itself,
+  deskewed output quality, or reuse of deskew angles.
 - For speed work, the largest current cost is full-resolution deskew rotation,
   followed by 135 edge-pair refinement across multiple outer candidates.
