@@ -131,20 +131,22 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.6.3.
+- Active script is `X5_Crop.py` V3.6.4.
 - Current stable GitHub Release is `v3.6.2`, published from commit
   `5321d74560dcd97d54d150bd5e7aff73e997bd67` with asset
   `X5-Crop-v3.6.2.zip`. Release notes explicitly warn that overlap,
   near-overlap, locally irregular spacing, missing separators, or continuous
   image content can still be misdetected and should be reviewed with Debug
   Analysis.
-- V3.6.3 promotes the overlap / near-overlap diagnostic into a conservative
-  REVIEW gate for 135 full strips: strong overlap risk on a model gap
-  (`grid`, `equal`, or `content`) caps confidence below threshold and adds
-  `overlap_or_near_overlap_review`. It must not move gaps, outer boxes, or
-  frame boxes.
-- This is an intentional policy shift: overlap / near-overlap scans are treated
-  as difficult images that need review, not as candidates to auto-crop.
+- V3.6.4 rolls the active script back to the V3.6.2 detection baseline and
+  pauses the V3.6.3 overlap REVIEW gate. It adds a narrow long-axis white-edge
+  outer correction: only when both end gaps are hard separators, the content
+  box nearly fills the outer, short-axis slack is small, and one long-axis edge
+  is almost entirely white can `outer_content_alignment` trigger the existing
+  `content_aligned_outer` retry.
+- V3.6.3 is preserved as a paused reference direction. It promoted strong
+  overlap risk on model gaps to REVIEW for 135 full strips, but the user wants
+  that idea held aside while narrower diagnostics/corrections are developed.
 - V3.6.2 is a small cleanup step after V3.6.1 diagnostics: it folds
   `equal-broad-region` into ordinary `equal` and keeps `hard_fallback_detection`
   as a smaller review-only equal split fallback. It must not make fallback an
@@ -157,7 +159,7 @@ Changed:
   requested.
 - `Test/135/X5_Crop.py`, `Test/135/X5_Crop_Mac.command`, and
   `Test/135/X5_Crop_win.bat` should be synced after active script / launcher
-  changes; this was done for V3.6.2.
+  changes; this was done for V3.6.4 after the active script change.
 - V3.6.1 keeps the V3.3.1 output baseline and the V3.6 diagnostic direction,
   but diagnostics now run only when `--diagnostics` is explicitly passed.
   Normal macOS / Windows launchers do not enable diagnostics.
@@ -196,13 +198,13 @@ Changed:
   strips now use content only as validation rather than generating separate
   content candidates, and 135 full strips no longer run the simple cuts-based
   frame-size fit before the explicit edge-sample fit.
-- V3.0 through V3.6.3 active-script snapshots are preserved in `archive/`:
+- V3.0 through V3.6.4 active-script snapshots are preserved in `archive/`:
   `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
   `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
   `X5_Crop_v3.3.1.py`, `X5_Crop_v3.3.2.py`, `X5_Crop_v3.4.py`,
   `X5_Crop_v3.4.1.py`, `X5_Crop_v3.4.2.py`, `X5_Crop_v3.5.py`,
   `X5_Crop_v3.6.py`, `X5_Crop_v3.6.1.py`, `X5_Crop_v3.6.2.py`, and
-  `X5_Crop_v3.6.3.py`.
+  `X5_Crop_v3.6.3.py`, and `X5_Crop_v3.6.4.py`.
 - Future named development versions, including experiments that are later
   paused or rolled back, should also be saved as archive snapshots.
 - V3.3.2 adds conservative overlap-aware gap handling for 135 full strips:
@@ -410,6 +412,16 @@ Verified:
   a full V3.6.3 run is expected to newly review previously approved
   `2/7/9/22/26/38/40/41/51`; `36/37/39/43` were already review and also have
   strong overlap-risk model gaps.
+- Current V3.6.4 verification: `python3 X5_Crop.py --version` prints
+  `X5_Crop.py 3.6.4`; `python3 -m py_compile X5_Crop.py` passed; focused
+  `--debug-analysis --dry-run --no-reuse-analysis` tests on
+  `X5_00007`, `X5_00009`, `X5_00014`, `X5_00022`, `X5_00038`, and
+  `X5_00051` kept all six as `approved_auto`. `X5_00014` triggered
+  `outer_correction` from the new white-edge rule, moving the work outer from
+  `186..17254` to `203..17173`. Guard tests on `X5_00001`, `X5_00004`,
+  `X5_00025`, `X5_00026`, `X5_00032`, `X5_00036`, `X5_00044`, and
+  `X5_00052` kept prior PASS/REVIEW status, with `X5_00036` still
+  `needs_review`.
 - Full V3.6 `Test/135` dry-run with `--format 135 --strip full --count 6
   --dry-run --report --no-copy-review-files --jobs 2 --no-reuse-analysis`
   produced 43 `approved_auto` / 5 `needs_review`. Compared against the
@@ -443,8 +455,8 @@ Known local-only files:
 
 Next recommended step:
 - Run a focused fresh dry-run on `Test/135` target files after any detection
-  change: `X5_00007`, `X5_00022`, `X5_00032`, `X5_00036`, `X5_00038`,
-  `X5_00051`, and `X5_00052`.
+  change: `X5_00007`, `X5_00009`, `X5_00014`, `X5_00022`, `X5_00032`,
+  `X5_00036`, `X5_00038`, `X5_00051`, and `X5_00052`.
 - Fast development/regression dry-runs may still pass `--deskew off` when the
   goal is raw detector comparison. The local diagnostic launcher uses the
   default `deskew auto` to better match real diagnostic output.
