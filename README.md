@@ -21,15 +21,14 @@ X5 Crop 会处理同一个文件夹里的 `.tif` / `.tiff` 长图，并把高置
 - 不为了让困难图片通过而放宽置信规则。
 - 最终裁切 TIFF 尽量保持原 TIFF 的画质和元数据属性。
 
-V3.3.2 沿用 V3/V3.3 的稳定检测主链路：在指定胶片格式和指定片条模式内，综合外框、分隔、内容和画幅几何证据评分。V3.3.2 不使用 V3.1 的激进外框外扩，也不使用 V3.1.1 的 `separator_derived_outer` 外框竞争或 V3.1.2 的局部分隔救援。
+脚本会在你指定的胶片格式和片条模式内，综合外框、分隔、内容和画幅几何证据评分。最终只有高置信结果会自动导出；证据不足、证据互相冲突或画幅状态异常时会进入复核。
 
-V3.3.2 的新增逻辑很窄：
+当前默认行为：
 
 - 检测阶段不使用 bleed；bleed 只在最终输出和 Debug Analysis 色块里应用。
 - 默认输出 bleed 为长轴 20px、短轴 10px。横向长图是左右各 20px、上下各 10px；竖向长图会自动对应旋转。
 - 对已经 `approved_auto` 且没有复核原因的结果，会做一个很小的输出几何 polish：只允许长轴最多向外微扩。这一步不改变 PASS/REVIEW 和置信度。
-- 对 7、9 这类近似叠片 / 片距局部不稳定的 135 完整片条，会标记 `overlap_like` gap。这个标记不提高置信度，也不改变 PASS/REVIEW，只让统一张宽拟合不要被疑似叠片边界过度拉扯。
-- 对类似 `X5_00036` 那种前半段几乎全靠 grid 猜测的 135 完整片条，会保守进入复核。
+- 对近似叠片、片距局部不稳定、分隔证据不足或内容证据冲突的长图，会保持保守判断，不会为了自动导出而放宽置信规则。
 
 ### 下载和文件摆放
 
@@ -280,24 +279,6 @@ python3 X5_Crop.py . --format 135 --strip full --deskew off --report --debug-ana
 python3 X5_Crop.py . --format 135 --strip full --report --export-review
 ```
 
-### 历史版本
-
-`archive/` 里保留参考脚本：
-
-```text
-X5_Split_v17.py
-X5_Split_v18.py
-X5_Crop_v3.0.py
-X5_Crop_v3.1.py
-X5_Crop_v3.1.1.py
-X5_Crop_v3.1.2.py
-X5_Crop_v3.2.py
-X5_Crop_v3.3.py
-X5_Crop_v3.3.1.py
-```
-
-日常使用请运行根目录的 `X5_Crop.py`。
-
 ### License
 
 本项目以 MIT License 开源，详见 `LICENSE`。
@@ -320,11 +301,10 @@ Core rules:
 - Output TIFF quality and metadata behavior should stay as close to the source
   TIFF as possible.
 
-V3.3.2 uses the stable V3/V3.3 detection chain. It scores candidates inside the
-film format and strip mode you choose, using outer-frame geometry, separator
-evidence, content evidence, and expected aspect ratios together. It does not use
-the aggressive V3.1 outer expansion, the V3.1.1 `separator_derived_outer`
-competition, or the V3.1.2 local separator rescue.
+X5 Crop scores candidates inside the film format and strip mode you choose,
+using outer-frame geometry, separator evidence, content evidence, and expected
+aspect ratios together. Only high-confidence results are exported
+automatically. Weak, conflicting, or unusual cases are sent to review.
 
 V3.3.2 keeps bleed outside detection:
 
@@ -335,9 +315,9 @@ V3.3.2 keeps bleed outside detection:
   rotated accordingly.
 - A small PASS-only geometry polish may slightly expand long-axis output edges.
   It does not change confidence or PASS/REVIEW.
-- For overlap-like 135 full-strip gaps, V3.3.2 may mark `overlap_like` so
-  same-frame-size fitting does not over-anchor on a likely overlap boundary.
-  This does not raise confidence or change PASS/REVIEW.
+- Overlapped frames, irregular frame spacing, weak separators, or conflicting
+  content evidence are handled conservatively. The script should not loosen
+  confidence rules just to export automatically.
 
 ### Download And Layout
 
@@ -551,11 +531,6 @@ split_output/
     *_debug_analysis.jpg
   needs_review/
 ```
-
-### Archived Versions
-
-Historical scripts are kept in `archive/` for comparison and rollback. Use the
-root `X5_Crop.py` for normal work.
 
 ### License
 

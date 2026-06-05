@@ -120,12 +120,16 @@ Changed:
   expansion.
 - README has been rewritten as a bilingual Chinese/English user guide for
   V3.3.x, covering install, launchers, Debug Analysis, reuse, command line
-  usage, outputs, archived versions, and license.
+  usage, outputs, and license.
+- User-facing README no longer mentions internal test filenames, regression
+  samples, archived scripts, rollback history, or previous-version detection
+  details.
 - GitHub Release `v3.3.1` was created with
   `release/X5-Crop-v3.3.1.zip` uploaded as the user-facing package.
-- GitHub Release `v3.3.1` asset was replaced after removing the short-axis
-  polish code from the V3.3.1 archive/package. The uploaded asset digest is
-  `sha256:a230f9825f4caabb2a49dc7bdf6d9707ed472fd0458521ac7e236fd044b6d5db`.
+- GitHub Release `v3.3.1` asset was replaced after cleaning the user-facing
+  README and removing the short-axis polish code from the V3.3.1
+  archive/package. The uploaded asset digest is
+  `sha256:cec114dedd61a8cad8540676bf485e6589d078c2eb994255456bacb88137dd3d`.
 - V3.3.1 keeps the V3/V3.2 ordinary outer/gap/candidate selection chain and
   the V3.3 output-only bleed separation.
 - Default output bleed is long-axis 20px and short-axis 10px. Detection now
@@ -170,7 +174,7 @@ Verified:
 - GitHub Release URL:
   `https://github.com/rrriiicccooo/X5-Crop/releases/tag/v3.3.1`
 - Verified the updated GitHub Release asset `X5-Crop-v3.3.1.zip` reports
-  digest `sha256:a230f9825f4caabb2a49dc7bdf6d9707ed472fd0458521ac7e236fd044b6d5db`.
+  digest `sha256:cec114dedd61a8cad8540676bf485e6589d078c2eb994255456bacb88137dd3d`.
 - Archived `X5_Crop_v3*.py` snapshots report internal versions 3.0, 3.1,
   3.1.1, 3.1.2, 3.2, 3.3, and 3.3.1.
 - Full fresh `Test/135` dry-run with `--format 135 --strip full --count 6
