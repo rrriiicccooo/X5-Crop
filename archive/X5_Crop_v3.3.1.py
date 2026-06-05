@@ -34,7 +34,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "3.3.2"
+VERSION = "3.3.1"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -154,7 +154,6 @@ class Gap:
     start: Optional[float] = None
     end: Optional[float] = None
     lane_box: Optional[dict[str, int]] = None
-    overlap_like: bool = False
 
     @property
     def width(self) -> float:
@@ -1793,103 +1792,6 @@ def should_run_enhanced_separator_analysis(analysis: str, gaps: list[Gap], count
     return len(hard) < expected or bool(model_only) or low_score_hard
 
 
-def mark_overlap_like_gaps(
-    gray_work: np.ndarray,
-    outer: Box,
-    gaps: list[Gap],
-    pitch: float,
-    fmt: FilmFormat,
-    strip_mode: str,
-    count: int,
-    cache: Optional[AnalysisCache] = None,
-) -> tuple[list[Gap], dict[str, Any]]:
-    if fmt.name != "135" or strip_mode != "full" or count != fmt.default_count or not gaps:
-        return gaps, {"used": False, "reason": "not_applicable"}
-    if outer.width <= 1 or outer.height <= 1:
-        return gaps, {"used": False, "reason": "invalid_outer"}
-
-    if cache is not None:
-        content = cache.content_evidence_float_work[outer.top:outer.bottom, outer.left:outer.right]
-    else:
-        crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-        content = make_content_evidence_gray(crop).astype(np.float32) / 255.0 if crop.size else np.zeros((0, 0), dtype=np.float32)
-    if content.size == 0:
-        return gaps, {"used": False, "reason": "empty_outer"}
-
-    separator = cached_separator_profile(cache, gray_work, outer)
-    if separator.size == 0:
-        return gaps, {"used": False, "reason": "empty_separator_profile"}
-
-    marked: list[Gap] = []
-    records: list[dict[str, Any]] = []
-    gap_half = max(3, int(round(pitch * 0.012)))
-    side_half = max(gap_half + 2, int(round(pitch * 0.050)))
-    search_half = max(gap_half + 2, int(round(pitch * 0.030)))
-    content_profile = content.mean(axis=0).astype(np.float32)
-    if content_profile.size != outer.width:
-        return gaps, {"used": False, "reason": "content_profile_shape_mismatch"}
-
-    for gap in gaps:
-        x = int(round(gap.center))
-        gap_lo = max(0, x - gap_half)
-        gap_hi = min(outer.width, x + gap_half + 1)
-        left_lo = max(0, x - side_half)
-        left_hi = max(left_lo, x - gap_half)
-        right_lo = min(outer.width, x + gap_half + 1)
-        right_hi = min(outer.width, x + side_half + 1)
-        sep_lo = max(0, x - search_half)
-        sep_hi = min(len(separator), x + search_half + 1)
-
-        if gap_hi <= gap_lo or left_hi <= left_lo or right_hi <= right_lo or sep_hi <= sep_lo:
-            marked.append(gap)
-            continue
-
-        gap_content = float(np.median(content_profile[gap_lo:gap_hi]))
-        left_content = float(np.median(content_profile[left_lo:left_hi]))
-        right_content = float(np.median(content_profile[right_lo:right_hi]))
-        side_content = min(left_content, right_content)
-        continuity = gap_content / max(0.001, side_content)
-        separator_peak = float(np.max(separator[sep_lo:sep_hi]))
-        weak_hard = gap.method in {"detected", "edge-pair", "enhanced-detected"} and (
-            gap.score < 0.50 or gap.width <= max(2.0, pitch * 0.006)
-        )
-        model_only = gap.method in {"grid", "equal", "equal-broad-region"}
-        overlap_like = (
-            side_content >= 0.080
-            and gap_content >= 0.070
-            and continuity >= 0.72
-            and separator_peak < 0.46
-            and (model_only or weak_hard)
-        )
-
-        if overlap_like:
-            marked.append(replace(gap, overlap_like=True))
-            records.append(
-                {
-                    "index": int(gap.index),
-                    "method": gap.method,
-                    "center": float(gap.center),
-                    "score": float(gap.score),
-                    "gap_content": gap_content,
-                    "left_content": left_content,
-                    "right_content": right_content,
-                    "continuity": continuity,
-                    "separator_peak": separator_peak,
-                }
-            )
-        else:
-            marked.append(gap)
-
-    return marked, {
-        "used": True,
-        "marked_count": len(records),
-        "marked": records,
-        "gap_half_window_px": int(gap_half),
-        "side_window_px": int(side_half),
-        "separator_window_px": int(search_half),
-    }
-
-
 def frame_boxes_from_gaps(
     outer: Box,
     gaps: list[Gap],
@@ -1939,8 +1841,6 @@ def apply_frame_size_fit(cuts: list[float], outer: Box, count: int, pitch: Optio
 
 
 def frame_edge_weight(gap: Gap) -> float:
-    if gap.overlap_like:
-        return 0.0
     if gap.width <= 0:
         return 0.0
     if gap.method == "edge-pair":
@@ -2009,26 +1909,6 @@ def same_frame_size_fit_boxes(
     inliers = [(i, width) for i, width in samples if abs(width - target) <= tol]
     if len(inliers) < 2:
         return None, {"used": False, "reason": "edge_samples_disagree", "sample_count": len(samples)}
-    sample_indices = [i for i, _ in inliers]
-    leading_model_gaps = 0
-    for gap in gaps:
-        if gap.method in {"grid", "equal", "equal-broad-region"}:
-            leading_model_gaps += 1
-            continue
-        break
-    if (
-        count == 6
-        and len(sample_indices) == 2
-        and sample_indices[1] - sample_indices[0] <= 1
-        and min(sample_indices) >= 4
-        and leading_model_gaps >= 2
-    ):
-        return None, {
-            "used": False,
-            "reason": "clustered_late_edge_samples_with_leading_model_gaps",
-            "sample_indices": sample_indices,
-            "leading_model_gaps": leading_model_gaps,
-        }
     target = float(np.median(np.array([width for _, width in inliers], dtype=np.float64)))
     if not (nominal * 0.72 <= target <= nominal * 1.10):
         return None, {"used": False, "reason": "target_width_out_of_range", "target_width": target}
@@ -2044,21 +1924,15 @@ def same_frame_size_fit_boxes(
         if right_edges[i] is not None:
             candidates.append((float(right_edges[i][0]) - target, float(right_edges[i][1])))
         weak_boundary = any(
-            0 <= gi < len(gaps) and (gaps[gi].method in {"equal", "equal-broad-region", "grid"} or gaps[gi].overlap_like)
+            0 <= gi < len(gaps) and gaps[gi].method in {"equal", "equal-broad-region", "grid"}
             for gi in (i - 1, i)
         )
-        overlap_boundary = any(0 <= gi < len(gaps) and gaps[gi].overlap_like for gi in (i - 1, i))
         base_width = float(base_right) - float(base_left)
         if not candidates and not weak_boundary and abs(base_width - target) <= tol:
             fitted.append((base_left, base_right))
             continue
-        if not candidates and overlap_boundary:
-            fitted.append((base_left, base_right))
-            continue
         base_left_from_center = (float(base_left) + float(base_right) - target) / 2.0
-        candidates.append((base_left_from_center, 0.10 if candidates and overlap_boundary else 0.18 if candidates else 1.0))
-        if candidates and overlap_boundary:
-            candidates.append((base_left, 0.45))
+        candidates.append((base_left_from_center, 0.18 if candidates else 1.0))
         new_left = weighted_median(candidates)
         new_left = min(max(0.0, new_left), max_left)
         new_right = new_left + target
@@ -2273,9 +2147,6 @@ def build_detection_for_outer(
             gaps, separator_analysis_detail = merge_enhanced_separator_gaps(gray_work, outer, gaps, origin, pitch, strip_mode, cache)
         elif config.analysis == "auto":
             separator_analysis_detail = {"used": False, "reason": "auto_not_needed"}
-    overlap_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
-    if strip_mode == "full" and fmt.name == "135":
-        gaps, overlap_detail = mark_overlap_like_gaps(gray_work, outer, gaps, pitch, fmt, strip_mode, count, cache)
     boxes_work_for_score = frame_boxes_from_gaps(outer, gaps, count, ww, wh, config.bleed_x, config.bleed_y, origin=origin, pitch=pitch)
     frame_size_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     fitted_boxes_work: Optional[list[Box]] = None
@@ -2300,12 +2171,10 @@ def build_detection_for_outer(
             "edge_refine": edge_refine_detail,
             "frame_size_fit": frame_size_detail,
             "separator_analysis": separator_analysis_detail,
-            "overlap_like_gaps": overlap_detail,
             "partial_edge_hint": partial_edge_hint(profile, origin, pitch, count) if strip_mode == "partial" else {},
             "gap_centers": [gap.center for gap in gaps],
             "gap_scores": [gap.score for gap in gaps],
             "gap_methods": [gap.method for gap in gaps],
-            "gap_overlap_like": [bool(gap.overlap_like) for gap in gaps],
         }
     )
     return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, confidence, reasons, detail)
@@ -2506,7 +2375,6 @@ def choose_detection_135_dual(gray: np.ndarray, config: Config, cache: AnalysisC
                     start=gap.start,
                     end=gap.end,
                     lane_box=asdict(lane_work_outer),
-                    overlap_like=bool(gap.overlap_like),
                 )
             )
 
@@ -3768,7 +3636,6 @@ def gap_from_dict(value: dict[str, Any]) -> Gap:
         start=(None if value.get("start") is None else float(value.get("start"))),
         end=(None if value.get("end") is None else float(value.get("end"))),
         lane_box=(dict(value["lane_box"]) if isinstance(value.get("lane_box"), dict) else None),
-        overlap_like=bool(value.get("overlap_like", False)),
     )
 
 
@@ -4188,7 +4055,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V3.3.2 candidate-scored single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V3.3.1 candidate-scored single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")
