@@ -34,7 +34,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "3.3"
+VERSION = "3.3.1"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -1177,6 +1177,93 @@ def apply_output_bleed(detection: Detection, detection_config: Config, output_co
         "output_long_axis_bleed": int(output_config.bleed_x),
         "output_short_axis_bleed": int(output_config.bleed_y),
     }
+
+
+def apply_approved_geometry_polish(detection: Detection, gray: np.ndarray, config: Config, status: str) -> None:
+    if status != "approved_auto" or detection.strip_mode != "full" or len(detection.frames) != detection.count:
+        return
+    if detection.review_reasons:
+        return
+    gray_work = work_gray(gray, detection.layout)
+    h, w = gray_work.shape
+    outer = original_box_to_work(detection.outer, detection.layout, gray.shape[1], gray.shape[0])
+    frames = [original_box_to_work(frame, detection.layout, gray.shape[1], gray.shape[0]) for frame in detection.frames]
+    if not outer.valid() or any(not frame.valid() for frame in frames):
+        return
+
+    original_outer = outer
+    changes: dict[str, Any] = {}
+
+    long_limit = max(20, min(60, int(round((outer.width / float(max(1, detection.count))) * 0.018))))
+    band_top = outer.top + int(round(outer.height * 0.12))
+    band_bottom = outer.bottom - int(round(outer.height * 0.12))
+    if band_bottom <= band_top:
+        band_top, band_bottom = outer.top, outer.bottom
+
+    def side_extension(side: str) -> int:
+        if side == "left":
+            lo, hi = max(0, outer.left - long_limit), outer.left
+        else:
+            lo, hi = outer.right, min(w, outer.right + long_limit)
+        if hi <= lo:
+            return 0
+        strip = gray_work[band_top:band_bottom, lo:hi]
+        if strip.size == 0:
+            return 0
+        col_content = (strip < 242).mean(axis=0)
+        if side == "left":
+            active = np.where(col_content > 0.018)[0]
+            return int(hi - (lo + int(active[0]))) if active.size else 0
+        active = np.where(col_content > 0.018)[0]
+        return int(int(active[-1]) + 1) if active.size else 0
+
+    min_long_ext = 50
+    left_ext = side_extension("left")
+    right_ext = side_extension("right")
+    left_ext = left_ext if left_ext >= min_long_ext else 0
+    right_ext = right_ext if right_ext >= min_long_ext else 0
+    if 0 < left_ext <= long_limit:
+        outer = Box(max(0, outer.left - left_ext), outer.top, outer.right, outer.bottom)
+        frames[0] = Box(outer.left, frames[0].top, frames[0].right, frames[0].bottom)
+    if 0 < right_ext <= long_limit:
+        outer = Box(outer.left, outer.top, min(w, outer.right + right_ext), outer.bottom)
+        frames[-1] = Box(frames[-1].left, frames[-1].top, outer.right, frames[-1].bottom)
+    if left_ext or right_ext:
+        changes["long_axis_expand"] = {
+            "left": int(left_ext),
+            "right": int(right_ext),
+            "limit": int(long_limit),
+            "minimum": int(min_long_ext),
+        }
+
+    short_limit = 40
+    crop = gray_work[original_outer.top:original_outer.bottom, original_outer.left:original_outer.right]
+    if crop.size:
+        row_content = (crop < 242).mean(axis=1)
+        threshold = 0.035
+        active_rows = np.where(row_content > threshold)[0]
+        top_shrink = 0
+        bottom_shrink = 0
+        if active_rows.size:
+            top_shrink = min(short_limit, max(0, int(active_rows[0]) - 2))
+            bottom_shrink = min(short_limit, max(0, int(crop.shape[0] - int(active_rows[-1]) - 3)))
+        if top_shrink or bottom_shrink:
+            new_top = min(outer.bottom - 1, outer.top + top_shrink)
+            new_bottom = max(new_top + 1, outer.bottom - bottom_shrink)
+            outer = Box(outer.left, new_top, outer.right, new_bottom)
+            frames = [Box(frame.left, new_top, frame.right, new_bottom) for frame in frames]
+            changes["short_axis_tighten"] = {"top": int(top_shrink), "bottom": int(bottom_shrink), "limit": int(short_limit)}
+
+    if not changes or not outer.valid() or any(not frame.valid() for frame in frames):
+        return
+    detection.detail["geometry_polish"] = {
+        "used": True,
+        "original_outer": asdict(original_outer),
+        "polished_outer": asdict(outer),
+        **changes,
+    }
+    detection.outer = map_work_box(outer, detection.layout, gray.shape[1], gray.shape[0])
+    detection.frames = [map_work_box(frame, detection.layout, gray.shape[1], gray.shape[0]) for frame in frames]
 
 
 def smooth_1d(values: np.ndarray, window: int) -> np.ndarray:
@@ -3892,6 +3979,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     status = "approved_auto" if detection.confidence >= config.confidence_threshold else "needs_review"
     output_files: list[str] = []
     review_copy: Optional[str] = None
+    apply_approved_geometry_polish(detection, gray, config, status)
     apply_output_bleed(detection, detection_config, config, gray.shape[1], gray.shape[0])
     apply_edge_bleed_protection(detection, config, gray.shape[1], gray.shape[0])
 
@@ -3967,7 +4055,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V3.3 candidate-scored single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V3.3.1 candidate-scored single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")

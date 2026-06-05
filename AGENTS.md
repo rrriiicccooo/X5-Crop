@@ -107,10 +107,9 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.3.
-- V3.3 keeps the V3/V3.2 ordinary outer/gap/candidate selection chain while
-  testing a stricter separation between detection geometry and output safety
-  margin.
+- Active script is `X5_Crop.py` V3.3.1.
+- V3.3.1 keeps the V3/V3.2 ordinary outer/gap/candidate selection chain and
+  the V3.3 output-only bleed separation.
 - Default output bleed is long-axis 20px and short-axis 10px. Detection now
   uses 0px bleed internally, so bleed is applied only to final output/report/
   Debug Analysis frame boxes and does not participate in outer, gap,
@@ -172,6 +171,14 @@ Verified:
 - Default-output Debug Analysis terminal messages now print only the generated
   JPG filename instead of the full default `split_output/_debug_analysis/...`
   path. Explicit `--output` runs still print the full output path.
+- V3.3.1 adds a PASS-only geometry polish step after status is decided and
+  before output bleed is applied: long-axis outer/frame edges may expand by a
+  small 20-60px evidence-limited amount, while the short axis may only tighten
+  inward by up to 40px. This does not change confidence or PASS/REVIEW.
+- Focus V3.3.1 smoke dry-run on `X5_00007`, `X5_00009`, `X5_00036`, and
+  `X5_00052` confirmed: `X5_00052` left outer expanded by 59px, `X5_00007`
+  and `X5_00009` only received short-axis tightening, and `X5_00036` stayed
+  `needs_review`.
 - `X5_00009` and `X5_00044` now report/output first and last frame margins at
   long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
 - `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15
