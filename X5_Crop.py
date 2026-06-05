@@ -34,7 +34,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "3.4"
+VERSION = "3.4.1"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -1647,14 +1647,32 @@ def apply_robust_grid(gaps: list[Gap], origin: float, pitch: float, strip_mode: 
         return constrained, {"grid_used": False, "reliable_gaps": len(reliable), "grid_rejected": "high_residual", "grid_residual": median_residual}
     max_shift = pitch * (0.035 if strip_mode == "full" else 0.10)
     adjusted: list[Gap] = []
+    hard_preserved = 0
+    hard_conflicts: list[dict[str, Any]] = []
     for gap in constrained:
         predicted = float(fit_origin + fit_pitch * gap.index)
         theoretical = float(origin + pitch * gap.index)
         predicted = max(theoretical - max_shift, min(theoretical + max_shift, predicted))
-        if gap.method in {"detected", "edge-pair"} and abs(gap.center - predicted) <= max(3.0, pitch * 0.025):
-            adjusted.append(gap)
-        else:
-            adjusted.append(Gap(gap.index, predicted, gap.score, "grid"))
+        residual = abs(gap.center - predicted)
+        tight_tolerance = max(3.0, pitch * 0.025)
+        if gap.method in {"detected", "edge-pair"}:
+            strong_score = 0.75 if gap.method == "edge-pair" else 0.55
+            plausible_width = gap.width <= max(2.0, pitch * 0.060) or gap.width <= 0.0
+            if residual <= tight_tolerance or (gap.score >= strong_score and plausible_width):
+                hard_preserved += 1
+                if residual > tight_tolerance:
+                    if len(hard_conflicts) < 4:
+                        hard_conflicts.append({
+                            "index": gap.index,
+                            "method": gap.method,
+                            "center": float(gap.center),
+                            "grid_center": float(predicted),
+                            "residual": float(residual),
+                            "score": float(gap.score),
+                        })
+                adjusted.append(gap)
+                continue
+        adjusted.append(Gap(gap.index, predicted, gap.score, "grid"))
     return adjusted, {
         "grid_used": True,
         "reliable_gaps": len(reliable),
@@ -1662,6 +1680,8 @@ def apply_robust_grid(gaps: list[Gap], origin: float, pitch: float, strip_mode: 
         "grid_pitch": float(fit_pitch),
         "grid_origin": float(fit_origin),
         "grid_residual": median_residual,
+        "hard_preserved_count": int(hard_preserved),
+        "hard_conflicts": hard_conflicts,
     }
 
 
@@ -2017,7 +2037,7 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
         reasons.append("mostly_equal_split")
     if fmt.name == "135" and expected_gaps >= 3 and actual_detected < 2:
         reasons.append("too_few_detected_separators")
-    if width_cv > 0.030:
+    if width_cv > 0.030 and not full_geometry_ok:
         reasons.append("unstable_frame_width")
     if not (0.35 <= outer_area <= 0.995):
         reasons.append("outer_box_uncertain")
@@ -4057,7 +4077,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V3.4 candidate-scored single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V3.4.1 candidate-scored single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")

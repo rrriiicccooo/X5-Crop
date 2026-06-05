@@ -3,9 +3,9 @@
 X5 Crop is a standalone Python script for splitting long TIFF film-strip scans
 from Hasselblad / Imacon X5 holders into individual TIFF frames.
 
-当前版本：V3.4
+当前版本：V3.4.1
 
-Current version: V3.4
+Current version: V3.4.1
 
 ## 中文说明
 
@@ -305,7 +305,7 @@ using outer-frame geometry, separator evidence, content evidence, and expected
 aspect ratios together. Only high-confidence results are exported
 automatically. Weak, conflicting, or unusual cases are sent to review.
 
-V3.4 keeps bleed outside detection:
+V3.4.1 keeps bleed outside detection:
 
 - Detection uses no bleed when scoring outer boxes, gaps, confidence, or
   PASS/REVIEW.
