@@ -154,6 +154,9 @@ Changed:
   the longer Chinese/English guide.
 - User-facing README and GitHub Release `v3.3.1` now both put bilingual
   Chinese/English quick-start usage near the top.
+- README and GitHub Release `v3.3.1` quick-start sections now mention expected
+  per-file runtime ranges and clarify that a quiet terminal usually means the
+  script is still processing the current TIFF.
 - GitHub Release `v3.3.1` was created with
   `release/X5-Crop-v3.3.1.zip` uploaded as the user-facing package.
 - GitHub Release `v3.3.1` asset was replaced after cleaning the user-facing

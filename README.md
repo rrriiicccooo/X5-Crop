@@ -37,6 +37,13 @@ Current stable release: v3.3.1 (GitHub Releases)
 - `partial mode` 直接回车是 `no`，只在片头、片尾或不完整片条时开启。
 - `debug analysis` 直接回车是 `no`；输入 `y` 会只生成分析 JPG 和报告，不正式裁切。
 
+运行耗时：
+
+- 在当前测试机器和常见 135 TIFF 长图上，普通 dry run / 裁切通常每张约 5-15 秒。
+- Debug Analysis 需要额外生成 JPG 分析图，通常每张约 10-30 秒。
+- 大尺寸 TIFF、开启 deskew、较慢硬盘或较慢电脑都会更久。
+- 终端在处理单张大 TIFF 时可能一段时间没有新的提示；这通常不是出错，而是脚本还在读取、检测、校平或写文件。等它进入下一张图或完成当前图后会继续输出状态。
+
 高置信结果会自动裁切；低置信结果会进入 `needs_review/`，方便人工复核。
 
 ## Quick Start
@@ -68,6 +75,18 @@ Common choices:
   tail, or incomplete strips.
 - Press Return for `debug analysis` to choose `no`; type `y` to generate only
   analysis JPGs and reports without exporting cropped TIFFs.
+
+Runtime:
+
+- On the current test machine with typical 135 TIFF long-strip scans, normal dry
+  run / export usually takes about 5-15 seconds per file.
+- Debug Analysis also writes JPG analysis images and usually takes about 10-30
+  seconds per file.
+- Very large TIFFs, deskew, slower disks, or slower computers can take longer.
+- The terminal may show no new message for a while while one large TIFF is being
+  read, detected, deskewed, or written. This usually does not mean the script has
+  failed; it is still running and will print the next status line after the
+  current file advances or finishes.
 
 High-confidence results are cropped automatically. Low-confidence results go to
 `needs_review/` for manual review.
