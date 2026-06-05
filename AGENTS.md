@@ -145,7 +145,7 @@ Changed:
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.3`.
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.3.1`.
 - Full fresh `Test/135` dry-run with `--format 135 --strip full --count 6
   --dry-run --report --no-copy-review-files --jobs 2 --no-reuse-analysis`
   produced 43 `approved_auto` / 5 `needs_review`, matching the V3.1.1 reference
