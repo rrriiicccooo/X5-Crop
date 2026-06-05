@@ -158,6 +158,9 @@ Changed:
   and workflow changes from V3.0 through the current development version.
 - Added root `CHANGELOG.md` as a more detailed bilingual local development
   changelog for detection logic, rollback context, and future testing notes.
+- `CHANGELOG.md` now follows the same readability structure as `README.md`:
+  a complete Chinese changelog first, followed by a complete English changelog,
+  instead of mixing languages line-by-line.
 - User-facing README now starts with a Chinese quick-start usage section before
   the longer Chinese/English guide.
 - User-facing README and GitHub Release `v3.3.1` now both put bilingual
