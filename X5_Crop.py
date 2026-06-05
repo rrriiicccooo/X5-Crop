@@ -34,7 +34,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "3.1.1"
+VERSION = "3.1.2"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -712,8 +712,10 @@ def corrected_outer_from_alignment(alignment: dict[str, Any], config: Config, co
         return None
 
     pitch = float(outer.width) / float(max(1, count))
-    long_margin = max(int(config.bleed_x), min(80, int(round(pitch * 0.012))))
-    short_margin = max(int(config.bleed_y), min(40, int(round(float(outer.height) * 0.010))))
+    alignment_bleed_x = min(int(config.bleed_x), 15)
+    alignment_bleed_y = min(int(config.bleed_y), 10)
+    long_margin = max(alignment_bleed_x, min(80, int(round(pitch * 0.012))))
+    short_margin = max(alignment_bleed_y, min(40, int(round(float(outer.height) * 0.010))))
     left, top, right, bottom = outer.left, outer.top, outer.right, outer.bottom
 
     if int(alignment.get("long_slack_left", 0)) > 0:
@@ -1107,6 +1109,76 @@ def original_box_to_work(box: Box, layout: str, width: int, height: int) -> Box:
     if layout == "horizontal":
         return box.clamp(width, height)
     return Box(box.top, box.left, box.bottom, box.right).clamp(height, width)
+
+
+def apply_edge_bleed_protection(detection: Detection, config: Config, image_w: int, image_h: int) -> None:
+    if detection.strip_mode != "full" or detection.count <= 1 or len(detection.frames) != detection.count:
+        return
+    outer_work = original_box_to_work(detection.outer, detection.layout, image_w, image_h)
+    frames_work = [original_box_to_work(frame, detection.layout, image_w, image_h) for frame in detection.frames]
+    if not outer_work.valid() or any(not frame.valid() for frame in frames_work):
+        return
+
+    work_w = image_w if detection.layout == "horizontal" else image_h
+    nominal = float(outer_work.width) / float(max(1, detection.count))
+    edge_guard = max(float(config.bleed_x * 2), min(90.0, nominal * 0.018))
+    changed: list[str] = []
+
+    first_target = max(0, outer_work.left - int(config.bleed_x))
+    if frames_work[0].left > first_target + edge_guard:
+        frames_work[0] = Box(first_target, frames_work[0].top, frames_work[0].right, frames_work[0].bottom)
+        changed.append("first")
+
+    last_target = min(work_w, outer_work.right + int(config.bleed_x))
+    if frames_work[-1].right < last_target - edge_guard:
+        frames_work[-1] = Box(frames_work[-1].left, frames_work[-1].top, last_target, frames_work[-1].bottom)
+        changed.append("last")
+
+    if not changed or any(not frame.valid() for frame in frames_work):
+        return
+
+    detection.frames = [map_work_box(frame, detection.layout, image_w, image_h) for frame in frames_work]
+    detection.detail["edge_bleed_protection"] = {
+        "used": True,
+        "pinned": changed,
+        "edge_guard": edge_guard,
+        "long_axis_bleed": int(config.bleed_x),
+    }
+
+
+def detection_geometry_config(config: Config) -> Config:
+    return replace(
+        config,
+        bleed_x=min(int(config.bleed_x), 15),
+        bleed_y=min(int(config.bleed_y), 10),
+    )
+
+
+def apply_output_bleed(detection: Detection, detection_config: Config, output_config: Config, image_w: int, image_h: int) -> None:
+    if int(detection_config.bleed_x) == int(output_config.bleed_x) and int(detection_config.bleed_y) == int(output_config.bleed_y):
+        return
+    frames_work = [original_box_to_work(frame, detection.layout, image_w, image_h) for frame in detection.frames]
+    work_w = image_w if detection.layout == "horizontal" else image_h
+    work_h = image_h if detection.layout == "horizontal" else image_w
+    adjusted_work: list[Box] = []
+    for frame in frames_work:
+        raw = Box(
+            frame.left + int(detection_config.bleed_x),
+            frame.top + int(detection_config.bleed_y),
+            frame.right - int(detection_config.bleed_x),
+            frame.bottom - int(detection_config.bleed_y),
+        )
+        if not raw.valid():
+            return
+        adjusted_work.append(raw.expand(int(output_config.bleed_x), int(output_config.bleed_y), work_w, work_h))
+    detection.frames = [map_work_box(frame, detection.layout, image_w, image_h) for frame in adjusted_work]
+    detection.detail["output_bleed"] = {
+        "used": True,
+        "detection_long_axis_bleed": int(detection_config.bleed_x),
+        "detection_short_axis_bleed": int(detection_config.bleed_y),
+        "output_long_axis_bleed": int(output_config.bleed_x),
+        "output_short_axis_bleed": int(output_config.bleed_y),
+    }
 
 
 def smooth_1d(values: np.ndarray, window: int) -> np.ndarray:
@@ -3925,7 +3997,8 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
             deskew_detail["skipped"] = "angle_out_of_range"
 
     analysis_cache = make_analysis_cache(gray, config.layout)
-    detection = choose_detection_v2(gray, config, fmt, analysis_cache)
+    detection_config = detection_geometry_config(config)
+    detection = choose_detection_v2(gray, detection_config, fmt, analysis_cache)
     content_detail = content_evidence_detail(gray, detection, analysis_cache)
     detection.detail["content_evidence"] = content_detail
     outer_alignment = outer_content_alignment_detail(gray, detection, analysis_cache)
@@ -3934,7 +4007,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
 
     allow_outer_retry = detection.detail.get("analysis_source") != "hard_fallback" and detection.film_format != "135-dual"
     if allow_outer_retry and bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
-        retried_detection = retry_with_content_aligned_outer(gray, config, fmt, detection, outer_alignment, analysis_cache)
+        retried_detection = retry_with_content_aligned_outer(gray, detection_config, fmt, detection, outer_alignment, analysis_cache)
         if retried_detection is not None:
             detection = retried_detection
             content_detail = dict(detection.detail.get("content_evidence", {}))
@@ -3968,6 +4041,8 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     status = "approved_auto" if detection.confidence >= config.confidence_threshold else "needs_review"
     output_files: list[str] = []
     review_copy: Optional[str] = None
+    apply_output_bleed(detection, detection_config, config, gray.shape[1], gray.shape[0])
+    apply_edge_bleed_protection(detection, config, gray.shape[1], gray.shape[0])
 
     if status == "needs_review":
         warnings.append(
@@ -4092,7 +4167,7 @@ def config_from_args(args: argparse.Namespace) -> Config:
         raise ValueError(f"--format {fmt.name} allows --count values: {allowed}")
     layout_auto = str(args.layout) == "auto"
     layout = infer_layout(width, height) if layout_auto else str(args.layout)
-    bleed_x_default = 15 if args.bleed is None else int(args.bleed)
+    bleed_x_default = 20 if args.bleed is None else int(args.bleed)
     bleed_y_default = 10 if args.bleed is None else int(args.bleed)
     bleed_x = int(bleed_x_default if args.bleed_x is None else args.bleed_x)
     bleed_y = int(bleed_y_default if args.bleed_y is None else args.bleed_y)

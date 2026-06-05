@@ -64,7 +64,7 @@ else
     finish 1
 fi
 
-echo "X5 Crop V3.1.1 launcher"
+echo "X5 Crop V3.1.2 launcher"
 echo "Folder: $(pwd)"
 echo
 echo "This will process TIFF files in this folder."

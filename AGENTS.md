@@ -107,9 +107,19 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.1.1.
-- V3.1.1 is based on the recovered V3 baseline, with the simplified terminal
+- Active script is `X5_Crop.py` V3.1.2.
+- V3.1.2 is based on the recovered V3 baseline, with the simplified terminal
   output retained.
+- Default output bleed is now long-axis 20px and short-axis 10px. Detection
+  still uses the V3.1.1 internal geometry bleed scale, so the larger output
+  bleed protects crop edges without changing candidate scoring or making hard
+  images easier to auto-pass.
+- Added final edge bleed protection after PASS/REVIEW status is decided: if
+  same-frame-size fitting leaves the first or last frame too far inside an
+  otherwise stable outer box, the output/report/debug frame is extended back to
+  the outer edge plus requested long-axis bleed. This fixed the V3.1.1-style
+  inward edge shrink seen on `X5_00009` and `X5_00044` while keeping detection
+  scoring unchanged.
 - `separator_derived_outer` is intentionally narrow: it is considered only for
   full strips when ordinary outer candidates are unstable, a reliable white
   outer is missing, outer alignment is already suspicious, or grid/model gaps
@@ -136,13 +146,19 @@ Changed:
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.1.1`.
-- Current V3.1.1 Test/135 reference dry-run before this cleanup produced 43
-  `approved_auto` / 5 `needs_review`; compared with V3, only `X5_00036`
-  changed to review, while the V3.1 false-review files returned to pass.
-- Focus fresh dry-run on `X5_00007`, `X5_00022`, `X5_00032`, `X5_00036`,
-  `X5_00038`, `X5_00051`, and `X5_00052` produced 6 `approved_auto` and
-  `X5_00036` as the only `needs_review`.
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.1.2`.
+- Full fresh `Test/135` dry-run with `--format 135 --strip full --count 6
+  --dry-run --report --no-copy-review-files --jobs 2 --no-reuse-analysis`
+  produced 43 `approved_auto` / 5 `needs_review`, matching the V3.1.1 reference
+  count. In this sandbox process workers were unavailable, so it used the
+  thread fallback and took about 5m28s wall time.
+- Focus fresh dry-run on `X5_00002`, `X5_00007`, `X5_00009`, `X5_00014`,
+  `X5_00019`, `X5_00032`, `X5_00036`, `X5_00038`, `X5_00044`, and `X5_00052`
+  produced 9 `approved_auto` and `X5_00036` as the only `needs_review`.
+- `X5_00009` and `X5_00044` now report/output first and last frame margins at
+  long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
+- `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15
+  only because the requested 20px bleed reaches the TIFF image boundary.
 - The focused reports show full-strip candidates that pass the separator auto
   gate record `content_candidate_skipped=separator_auto_gate_passed`.
 - `printf 'abc\n135\nn\nn\n\n' | ./X5_Crop_Mac.command` confirmed an invalid
@@ -156,8 +172,6 @@ Verified:
   `approved_auto`.
 
 Not verified:
-- A fresh full Test/135 batch after this cleanup has not been run yet; only the
-  focused regression set above was run.
 - Windows launcher format retry was edited but not executed on Windows in this
   turn.
 
