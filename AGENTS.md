@@ -152,6 +152,8 @@ Changed:
   and workflow changes from V3.0 through the current development version.
 - User-facing README now starts with a Chinese quick-start usage section before
   the longer Chinese/English guide.
+- User-facing README and GitHub Release `v3.3.1` now both put bilingual
+  Chinese/English quick-start usage near the top.
 - GitHub Release `v3.3.1` was created with
   `release/X5-Crop-v3.3.1.zip` uploaded as the user-facing package.
 - GitHub Release `v3.3.1` asset was replaced after cleaning the user-facing

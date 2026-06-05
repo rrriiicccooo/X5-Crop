@@ -39,6 +39,39 @@ Current stable release: v3.3.1 (GitHub Releases)
 
 高置信结果会自动裁切；低置信结果会进入 `needs_review/`，方便人工复核。
 
+## Quick Start
+
+For normal use, download the stable zip package from GitHub Releases. The
+repository `main` branch is development progress; it may be newer than the
+Release, but it is not necessarily the stable package.
+
+On a new machine:
+
+1. Unzip the Release package.
+2. Run the installer launcher:
+   - macOS: `install/X5_Crop_Mac_install.command`
+   - Windows: `install/X5_Crop_win_install.bat`
+3. Put these files in the same folder as the TIFF long-strip scans:
+   - `X5_Crop.py`
+   - macOS: `X5_Crop_Mac.command`
+   - Windows: `X5_Crop_win.bat`
+4. Double-click the launcher for your system.
+5. Choose the film format, then choose whether to enable partial mode and Debug
+   Analysis.
+
+Common choices:
+
+- Press Return or type `135`: normal 135, 6 frames per strip.
+- Type `dual` or `135 dual`: dual-strip 135, 12 frames total.
+- Type `xpan` / `half` / `645` / `66` / `67`: other supported formats.
+- Press Return for `partial mode` to choose `no`; enable it only for leader,
+  tail, or incomplete strips.
+- Press Return for `debug analysis` to choose `no`; type `y` to generate only
+  analysis JPGs and reports without exporting cropped TIFFs.
+
+High-confidence results are cropped automatically. Low-confidence results go to
+`needs_review/` for manual review.
+
 ## 中文说明
 
 ### 这个工具做什么
