@@ -120,7 +120,7 @@ Changed:
   PASS/REVIEW.
 - A local-only macOS diagnostic launcher exists under
   `Test/135/_X5_Crop_Mac_diagnostics_local.command`; it defaults to
-  `deskew off`, `dry run`, `debug analysis`, and `--diagnostics`. It is inside
+  `deskew auto`, `dry run`, `debug analysis`, and `--diagnostics`. It is inside
   ignored `Test/` and should not be committed or published.
 - V3.6 starts from the V3.3.1 output baseline and adds diagnostic cleanup only:
   read-only `diagnostics_v3_6`, gap method role labeling, hard-gap trust
@@ -367,8 +367,8 @@ Next recommended step:
 - Run a focused fresh dry-run on `Test/135` target files after any detection
   change: `X5_00007`, `X5_00022`, `X5_00032`, `X5_00036`, `X5_00038`,
   `X5_00051`, and `X5_00052`.
-- Future development/regression dry-runs should pass `--deskew off` by default
-  to keep iteration fast. Enable deskew only when testing deskew itself,
-  deskewed output quality, or reuse of deskew angles.
+- Fast development/regression dry-runs may still pass `--deskew off` when the
+  goal is raw detector comparison. The local diagnostic launcher uses the
+  default `deskew auto` to better match real diagnostic output.
 - For speed work, the largest current cost is full-resolution deskew rotation,
   followed by 135 edge-pair refinement across multiple outer candidates.

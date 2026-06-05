@@ -348,7 +348,7 @@ python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-r
 本地诊断测试：
 
 ```bash
-python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run --diagnostics --deskew off
+python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run --diagnostics
 ```
 
 `--diagnostics` 只写诊断报告字段并在 Separator evidence 面板画诊断 tick，不改变裁切框、置信度或 PASS/REVIEW。普通启动器不会开启它。
@@ -616,7 +616,7 @@ python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-r
 Local diagnostic test:
 
 ```bash
-python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run --diagnostics --deskew off
+python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run --diagnostics
 ```
 
 `--diagnostics` only writes diagnostic report fields and diagnostic ticks in the Separator evidence panel. It does not change crop boxes, confidence, or PASS/REVIEW. Normal launchers do not enable it.
