@@ -34,7 +34,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "3.4.1"
+VERSION = "3.3.1"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -154,7 +154,6 @@ class Gap:
     start: Optional[float] = None
     end: Optional[float] = None
     lane_box: Optional[dict[str, int]] = None
-    overlap_like: bool = False
 
     @property
     def width(self) -> float:
@@ -258,6 +257,7 @@ class AnalysisCache:
     content_evidence_work: np.ndarray
     content_evidence_float_work: np.ndarray
     separator_profiles: dict[tuple[int, int, int, int], np.ndarray] = field(default_factory=dict)
+    enhanced_separator_profiles: dict[tuple[int, int, int, int], np.ndarray] = field(default_factory=dict)
     separator_evidence_crops: dict[tuple[int, int, int, int], np.ndarray] = field(default_factory=dict)
     edge_refine_profiles: dict[tuple[int, int, int, int], tuple[np.ndarray, np.ndarray, np.ndarray]] = field(default_factory=dict)
 
@@ -1058,6 +1058,19 @@ def cached_separator_profile(cache: Optional[AnalysisCache], gray_work: np.ndarr
     return profile
 
 
+def cached_enhanced_separator_profile(cache: Optional[AnalysisCache], gray_work: np.ndarray, outer: Box) -> np.ndarray:
+    if cache is None:
+        crop = crop_work_outer(gray_work, outer)
+        return separator_profile(make_separator_evidence_gray(crop))
+    key = box_cache_key(outer)
+    profile = cache.enhanced_separator_profiles.get(key)
+    if profile is None:
+        crop = crop_work_outer(cache.gray_work, outer)
+        profile = separator_profile(make_separator_evidence_gray(crop))
+        cache.enhanced_separator_profiles[key] = profile
+    return profile
+
+
 def cached_separator_evidence_crop(cache: Optional[AnalysisCache], gray_work: np.ndarray, outer: Box) -> np.ndarray:
     if cache is None:
         return make_separator_evidence_gray(crop_work_outer(gray_work, outer))
@@ -1522,7 +1535,7 @@ def refine_gaps_by_edge_pairs(
         _distance, neg_quality, _neg_bg, a, b = sorted(candidates)[0]
         center = (a + b) / 2.0
         edge_gap = Gap(gap.index, float(center), float(-neg_quality), "edge-pair", float(a), float(b + 1))
-        if gap.method == "detected" and abs(edge_gap.center - gap.center) > max(4.0, edge_gap.width):
+        if gap.method in {"detected", "enhanced-detected"} and abs(edge_gap.center - gap.center) > max(4.0, edge_gap.width):
             refined.append(gap)
             rejected += 1
             continue
@@ -1558,6 +1571,8 @@ def find_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> 
     broad_threshold = max(min_score * 0.72, local_max * 0.48)
     band_threshold = max(min_score * 0.86, local_max * 0.62)
     candidates: list[tuple[float, float, float, float]] = []
+    rejected_broad = False
+
     for run_start, run_end in runs_from_mask(local >= peak_threshold):
         region_start, region_end = run_start, run_end
         while region_start > 0 and local[region_start - 1] >= broad_threshold:
@@ -1569,18 +1584,25 @@ def find_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> 
             band_start -= 1
         while band_end < len(local) and local[band_end] >= band_threshold and ((band_end + 1) - band_start) <= max_gap_w:
             band_end += 1
+        region_width = region_end - region_start
+        touches_edge = region_start == 0 or region_end == len(local)
+        if region_width > max_gap_w * 1.5 or (touches_edge and region_width > max_gap_w * 0.9):
+            rejected_broad = True
         band_width = band_end - band_start
         if band_width < min_gap_w or band_width > max_gap_w:
+            rejected_broad = True
             continue
 
         left_guard = local[max(0, band_start - guard_w):band_start]
         right_guard = local[band_end:min(len(local), band_end + guard_w)]
         if left_guard.size == 0 or right_guard.size == 0:
+            rejected_broad = True
             continue
         mean_score = float(local[band_start:band_end].mean())
         side_score = max(float(left_guard.mean()), float(right_guard.mean()))
         prominence = mean_score - side_score
         if prominence < 0.08 and mean_score < 0.95:
+            rejected_broad = True
             continue
 
         center = float(lo + (band_start + band_end - 1) / 2.0)
@@ -1594,11 +1616,12 @@ def find_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> 
         _, neg_quality, _, center, start, end = sorted(candidates)[0]
         return Gap(index, center, float(-neg_quality), "detected", start, end)
 
-    return Gap(index, float(expected), local_max, "equal")
+    method = "equal-broad-region" if rejected_broad else "equal"
+    return Gap(index, float(expected), local_max, method)
 
 
 def constrain_gap_to_geometry(gap: Gap, expected: float, pitch: float, strip_mode: str) -> Gap:
-    if gap.method not in {"detected", "edge-pair"}:
+    if gap.method not in {"detected", "edge-pair", "enhanced-detected"}:
         return Gap(gap.index, float(expected), gap.score, "equal")
     max_shift = pitch * (0.045 if strip_mode == "full" else 0.12)
     shift = max(-max_shift, min(max_shift, gap.center - expected))
@@ -1618,7 +1641,7 @@ def apply_robust_grid(gaps: list[Gap], origin: float, pitch: float, strip_mode: 
     if not gaps:
         return gaps, {"grid_used": False}
     constrained = [constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, strip_mode) for gap in gaps]
-    reliable = [gap for gap in constrained if gap.method in {"detected", "edge-pair"} and gap.score >= 0.28]
+    reliable = [gap for gap in constrained if gap.method in {"detected", "edge-pair", "enhanced-detected"} and gap.score >= 0.28]
     if len(reliable) < 2:
         return constrained, {"grid_used": False, "reliable_gaps": len(reliable)}
     best: Optional[tuple[int, float, float, float]] = None
@@ -1647,32 +1670,14 @@ def apply_robust_grid(gaps: list[Gap], origin: float, pitch: float, strip_mode: 
         return constrained, {"grid_used": False, "reliable_gaps": len(reliable), "grid_rejected": "high_residual", "grid_residual": median_residual}
     max_shift = pitch * (0.035 if strip_mode == "full" else 0.10)
     adjusted: list[Gap] = []
-    hard_preserved = 0
-    hard_conflicts: list[dict[str, Any]] = []
     for gap in constrained:
         predicted = float(fit_origin + fit_pitch * gap.index)
         theoretical = float(origin + pitch * gap.index)
         predicted = max(theoretical - max_shift, min(theoretical + max_shift, predicted))
-        residual = abs(gap.center - predicted)
-        tight_tolerance = max(3.0, pitch * 0.025)
-        if gap.method in {"detected", "edge-pair"}:
-            strong_score = 0.75 if gap.method == "edge-pair" else 0.55
-            plausible_width = gap.width <= max(2.0, pitch * 0.060) or gap.width <= 0.0
-            if residual <= tight_tolerance or (gap.score >= strong_score and plausible_width):
-                hard_preserved += 1
-                if residual > tight_tolerance:
-                    if len(hard_conflicts) < 4:
-                        hard_conflicts.append({
-                            "index": gap.index,
-                            "method": gap.method,
-                            "center": float(gap.center),
-                            "grid_center": float(predicted),
-                            "residual": float(residual),
-                            "score": float(gap.score),
-                        })
-                adjusted.append(gap)
-                continue
-        adjusted.append(Gap(gap.index, predicted, gap.score, "grid"))
+        if gap.method in {"detected", "edge-pair", "enhanced-detected"} and abs(gap.center - predicted) <= max(3.0, pitch * 0.025):
+            adjusted.append(gap)
+        else:
+            adjusted.append(Gap(gap.index, predicted, gap.score, "grid"))
     return adjusted, {
         "grid_used": True,
         "reliable_gaps": len(reliable),
@@ -1680,106 +1685,93 @@ def apply_robust_grid(gaps: list[Gap], origin: float, pitch: float, strip_mode: 
         "grid_pitch": float(fit_pitch),
         "grid_origin": float(fit_origin),
         "grid_residual": median_residual,
-        "hard_preserved_count": int(hard_preserved),
-        "hard_conflicts": hard_conflicts,
     }
 
 
-def mark_overlap_like_gaps(
+def find_enhanced_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> Gap:
+    gap = find_gap(profile, expected, pitch, index)
+    if gap.method != "detected":
+        return gap
+    if gap.score < 0.34:
+        return Gap(index, float(expected), gap.score, "equal")
+    if gap.start is None or gap.end is None:
+        return Gap(index, float(expected), gap.score, "equal")
+    width = abs(float(gap.end) - float(gap.start))
+    if width <= 0 or width > max(3.0, pitch * 0.040):
+        return Gap(index, float(expected), gap.score, "equal-broad-region")
+    if abs(gap.center - expected) > max(4.0, pitch * 0.035):
+        return Gap(index, float(expected), gap.score, "equal")
+    return Gap(index, gap.center, gap.score, "enhanced-detected", gap.start, gap.end)
+
+
+def merge_enhanced_separator_gaps(
     gray_work: np.ndarray,
     outer: Box,
     gaps: list[Gap],
+    origin: float,
     pitch: float,
-    fmt: FilmFormat,
     strip_mode: str,
-    count: int,
     cache: Optional[AnalysisCache] = None,
 ) -> tuple[list[Gap], dict[str, Any]]:
-    if fmt.name != "135" or strip_mode != "full" or count != fmt.default_count or not gaps:
-        return gaps, {"used": False, "reason": "not_applicable"}
-    if outer.width <= 1 or outer.height <= 1:
-        return gaps, {"used": False, "reason": "invalid_outer"}
-
-    if cache is not None:
-        content = cache.content_evidence_float_work[outer.top:outer.bottom, outer.left:outer.right]
-    else:
-        crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-        content = make_content_evidence_gray(crop).astype(np.float32) / 255.0 if crop.size else np.zeros((0, 0), dtype=np.float32)
-    if content.size == 0:
+    crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
+    if crop.size == 0 or outer.width <= 0 or outer.height <= 0:
         return gaps, {"used": False, "reason": "empty_outer"}
-
-    separator = cached_separator_profile(cache, gray_work, outer)
-    if separator.size == 0:
-        return gaps, {"used": False, "reason": "empty_separator_profile"}
-
-    marked: list[Gap] = []
-    records: list[dict[str, Any]] = []
-    gap_half = max(3, int(round(pitch * 0.012)))
-    side_half = max(gap_half + 2, int(round(pitch * 0.050)))
-    search_half = max(gap_half + 2, int(round(pitch * 0.030)))
-    content_profile = content.mean(axis=0).astype(np.float32)
-    if content_profile.size != outer.width:
-        return gaps, {"used": False, "reason": "content_profile_shape_mismatch"}
-
+    profile = cached_enhanced_separator_profile(cache, gray_work, outer)
+    merged: list[Gap] = []
+    accepted: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
     for gap in gaps:
-        x = int(round(gap.center))
-        gap_lo = max(0, x - gap_half)
-        gap_hi = min(outer.width, x + gap_half + 1)
-        left_lo = max(0, x - side_half)
-        left_hi = max(left_lo, x - gap_half)
-        right_lo = min(outer.width, x + gap_half + 1)
-        right_hi = min(outer.width, x + side_half + 1)
-        sep_lo = max(0, x - search_half)
-        sep_hi = min(len(separator), x + search_half + 1)
-
-        if gap_hi <= gap_lo or left_hi <= left_lo or right_hi <= right_lo or sep_hi <= sep_lo:
-            marked.append(gap)
+        if gap.method in {"detected", "edge-pair"}:
+            merged.append(gap)
             continue
-
-        gap_content = float(np.median(content_profile[gap_lo:gap_hi]))
-        left_content = float(np.median(content_profile[left_lo:left_hi]))
-        right_content = float(np.median(content_profile[right_lo:right_hi]))
-        side_content = min(left_content, right_content)
-        continuity = gap_content / max(0.001, side_content)
-        separator_peak = float(np.max(separator[sep_lo:sep_hi]))
-        weak_hard = gap.method in {"detected", "edge-pair"} and (
-            gap.score < 0.50 or gap.width <= max(2.0, pitch * 0.006)
-        )
-        model_only = gap.method in {"grid", "equal"}
-        overlap_like = (
-            side_content >= 0.080
-            and gap_content >= 0.070
-            and continuity >= 0.72
-            and separator_peak < 0.46
-            and (model_only or weak_hard)
-        )
-
-        if overlap_like:
-            marked.append(replace(gap, overlap_like=True))
-            records.append(
+        expected = origin + pitch * gap.index
+        enhanced = find_enhanced_gap(profile, expected, pitch, gap.index)
+        if enhanced.method == "enhanced-detected":
+            merged.append(enhanced)
+            accepted.append(
                 {
                     "index": int(gap.index),
-                    "method": gap.method,
-                    "center": float(gap.center),
-                    "score": float(gap.score),
-                    "gap_content": gap_content,
-                    "left_content": left_content,
-                    "right_content": right_content,
-                    "continuity": continuity,
-                    "separator_peak": separator_peak,
+                    "center": float(enhanced.center),
+                    "score": float(enhanced.score),
+                    "replaced_method": gap.method,
                 }
             )
         else:
-            marked.append(gap)
-
-    return marked, {
+            merged.append(gap)
+            rejected.append(
+                {
+                    "index": int(gap.index),
+                    "score": float(enhanced.score),
+                    "method": enhanced.method,
+                    "kept_method": gap.method,
+                }
+            )
+    constrained = [
+        constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, strip_mode)
+        if gap.method == "enhanced-detected" else gap
+        for gap in merged
+    ]
+    return constrained, {
         "used": True,
-        "marked_count": len(records),
-        "marked": records,
-        "gap_half_window_px": int(gap_half),
-        "side_window_px": int(side_half),
-        "separator_window_px": int(search_half),
+        "accepted": accepted,
+        "rejected": rejected[:8],
+        "accepted_count": len(accepted),
+        "rejected_count": len(rejected),
     }
+
+
+def should_run_enhanced_separator_analysis(analysis: str, gaps: list[Gap], count: int) -> bool:
+    if analysis == "off":
+        return False
+    if analysis == "always":
+        return True
+    expected = max(0, count - 1)
+    if expected <= 0:
+        return False
+    hard = [gap for gap in gaps if gap.method in {"detected", "edge-pair", "enhanced-detected"}]
+    model_only = [gap for gap in gaps if gap.method in {"equal", "equal-broad-region", "grid"}]
+    low_score_hard = any(gap.score < 0.34 for gap in hard)
+    return len(hard) < expected or bool(model_only) or low_score_hard
 
 
 def frame_boxes_from_gaps(
@@ -1792,14 +1784,12 @@ def frame_boxes_from_gaps(
     bleed_y: int,
     origin: float = 0.0,
     pitch: Optional[float] = None,
-    apply_size_fit: bool = True,
 ) -> list[Box]:
     if pitch is None:
         cuts = [float(outer.left)] + [gap.center + outer.left for gap in gaps] + [float(outer.right)]
     else:
         cuts = [outer.left + origin] + [outer.left + gap.center for gap in gaps] + [outer.left + origin + pitch * count]
-    if apply_size_fit:
-        cuts = apply_frame_size_fit(cuts, outer, count, pitch)
+    cuts = apply_frame_size_fit(cuts, outer, count, pitch)
     boxes: list[Box] = []
     for left, right in zip(cuts[:-1], cuts[1:]):
         box = Box(int(round(left)), outer.top, int(round(right)), outer.bottom)
@@ -1833,14 +1823,14 @@ def apply_frame_size_fit(cuts: list[float], outer: Box, count: int, pitch: Optio
 
 
 def frame_edge_weight(gap: Gap) -> float:
-    if gap.overlap_like:
-        return 0.0
     if gap.width <= 0:
         return 0.0
     if gap.method == "edge-pair":
         return max(0.0, min(1.8, gap.score)) * 1.20
     if gap.method == "detected":
         return max(0.0, min(1.5, gap.score))
+    if gap.method == "enhanced-detected":
+        return max(0.0, min(1.2, gap.score)) * 0.70
     return 0.0
 
 
@@ -1901,26 +1891,6 @@ def same_frame_size_fit_boxes(
     inliers = [(i, width) for i, width in samples if abs(width - target) <= tol]
     if len(inliers) < 2:
         return None, {"used": False, "reason": "edge_samples_disagree", "sample_count": len(samples)}
-    sample_indices = [i for i, _ in inliers]
-    leading_model_gaps = 0
-    for gap in gaps:
-        if gap.method in {"grid", "equal"}:
-            leading_model_gaps += 1
-            continue
-        break
-    if (
-        count == 6
-        and len(sample_indices) == 2
-        and sample_indices[1] - sample_indices[0] <= 1
-        and min(sample_indices) >= 4
-        and leading_model_gaps >= 2
-    ):
-        return None, {
-            "used": False,
-            "reason": "clustered_late_edge_samples_with_leading_model_gaps",
-            "sample_indices": sample_indices,
-            "leading_model_gaps": leading_model_gaps,
-        }
     target = float(np.median(np.array([width for _, width in inliers], dtype=np.float64)))
     if not (nominal * 0.72 <= target <= nominal * 1.10):
         return None, {"used": False, "reason": "target_width_out_of_range", "target_width": target}
@@ -1936,21 +1906,15 @@ def same_frame_size_fit_boxes(
         if right_edges[i] is not None:
             candidates.append((float(right_edges[i][0]) - target, float(right_edges[i][1])))
         weak_boundary = any(
-            0 <= gi < len(gaps) and (gaps[gi].method in {"equal", "grid"} or gaps[gi].overlap_like)
+            0 <= gi < len(gaps) and gaps[gi].method in {"equal", "equal-broad-region", "grid"}
             for gi in (i - 1, i)
         )
-        overlap_boundary = any(0 <= gi < len(gaps) and gaps[gi].overlap_like for gi in (i - 1, i))
         base_width = float(base_right) - float(base_left)
         if not candidates and not weak_boundary and abs(base_width - target) <= tol:
             fitted.append((base_left, base_right))
             continue
-        if not candidates and overlap_boundary:
-            fitted.append((base_left, base_right))
-            continue
         base_left_from_center = (float(base_left) + float(base_right) - target) / 2.0
-        candidates.append((base_left_from_center, 0.10 if candidates and overlap_boundary else 0.18 if candidates else 1.0))
-        if candidates and overlap_boundary:
-            candidates.append((base_left, 0.45))
+        candidates.append((base_left_from_center, 0.18 if candidates else 1.0))
         new_left = weighted_median(candidates)
         new_left = min(max(0.0, new_left), max_left)
         new_right = new_left + target
@@ -1991,10 +1955,11 @@ def weighted_median(candidates: list[tuple[float, float]]) -> float:
 def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: list[Box], count: int, fmt: FilmFormat, strip_mode: str) -> tuple[float, list[str], dict[str, Any]]:
     expected_gaps = max(0, count - 1)
     actual_detected = sum(1 for gap in gaps if gap.method in {"detected", "edge-pair"})
+    enhanced_detected = sum(1 for gap in gaps if gap.method == "enhanced-detected")
     grid_gaps = sum(1 for gap in gaps if gap.method == "grid")
-    detected = actual_detected + grid_gaps
+    detected = actual_detected + enhanced_detected + grid_gaps
     equal = sum(1 for gap in gaps if gap.method == "equal")
-    reliable = sum(1 for gap in gaps if gap.method in {"detected", "edge-pair", "grid"} and gap.score >= 0.28)
+    reliable = sum(1 for gap in gaps if gap.method in {"detected", "enhanced-detected", "grid"} and gap.score >= 0.28)
     widths = np.array([box.width for box in boxes if box.valid()], dtype=np.float64)
     width_cv = float(widths.std() / max(1.0, widths.mean())) if widths.size else 1.0
     outer_area = float(outer.width * outer.height) / max(1.0, float(gray_work.shape[0] * gray_work.shape[1]))
@@ -2009,6 +1974,7 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
         fmt.name != "135"
         or expected_gaps <= 1
         or (actual_detected >= 2 and equal <= max(2, expected_gaps // 2))
+        or (actual_detected >= 1 and enhanced_detected >= 2 and equal <= max(2, expected_gaps // 2))
     )
 
     confidence = 0.40 * gap_conf + 0.30 * width_conf + 0.20 * outer_conf + 0.10 * contrast_conf
@@ -2035,9 +2001,9 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
         reasons.append("weak_separators")
     if equal >= max(2, expected_gaps // 2 + 1) and not full_geometry_ok:
         reasons.append("mostly_equal_split")
-    if fmt.name == "135" and expected_gaps >= 3 and actual_detected < 2:
+    if fmt.name == "135" and expected_gaps >= 3 and actual_detected < 2 and not (actual_detected >= 1 and enhanced_detected >= 2):
         reasons.append("too_few_detected_separators")
-    if width_cv > 0.030 and not full_geometry_ok:
+    if width_cv > 0.030:
         reasons.append("unstable_frame_width")
     if not (0.35 <= outer_area <= 0.995):
         reasons.append("outer_box_uncertain")
@@ -2066,7 +2032,7 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
     if fmt.name == "135" and expected_gaps >= 3:
         if actual_detected < 1:
             confidence = min(confidence, 0.82)
-        elif actual_detected < 2:
+        elif actual_detected < 2 and enhanced_detected < 2:
             confidence = min(confidence, 0.82)
         elif equal >= max(2, expected_gaps // 2 + 1):
             confidence = min(confidence, 0.84)
@@ -2076,6 +2042,7 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
     detail = {
         "detected_gaps": detected,
         "actual_detected_gaps": actual_detected,
+        "enhanced_detected_gaps": enhanced_detected,
         "grid_gaps": grid_gaps,
         "reliable_gaps": reliable,
         "equal_gaps": equal,
@@ -2102,6 +2069,7 @@ def build_detection_for_outer(
     outer: Box,
     offset_fraction: float = 0.0,
     outer_candidate_name: str = "unknown",
+    allow_separator_analysis: bool = True,
     cache: Optional[AnalysisCache] = None,
     allow_outer_refine: bool = True,
 ) -> Detection:
@@ -2154,22 +2122,14 @@ def build_detection_for_outer(
                 gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, cache, outer)
             gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
             grid_detail["outer_refined"] = True
-    overlap_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
-    if strip_mode == "full" and fmt.name == "135":
-        gaps, overlap_detail = mark_overlap_like_gaps(gray_work, outer, gaps, pitch, fmt, strip_mode, count, cache)
-    use_simple_size_fit = not (strip_mode == "full" and fmt.name == "135")
-    boxes_work_for_score = frame_boxes_from_gaps(
-        outer,
-        gaps,
-        count,
-        ww,
-        wh,
-        config.bleed_x,
-        config.bleed_y,
-        origin=origin,
-        pitch=pitch,
-        apply_size_fit=use_simple_size_fit,
-    )
+    separator_analysis_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
+    separator_analysis_allowed = allow_separator_analysis and strip_mode == "full" and fmt.name != "half"
+    if separator_analysis_allowed:
+        if should_run_enhanced_separator_analysis(config.analysis, gaps, count):
+            gaps, separator_analysis_detail = merge_enhanced_separator_gaps(gray_work, outer, gaps, origin, pitch, strip_mode, cache)
+        elif config.analysis == "auto":
+            separator_analysis_detail = {"used": False, "reason": "auto_not_needed"}
+    boxes_work_for_score = frame_boxes_from_gaps(outer, gaps, count, ww, wh, config.bleed_x, config.bleed_y, origin=origin, pitch=pitch)
     frame_size_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     fitted_boxes_work: Optional[list[Box]] = None
     if strip_mode == "full" and fmt.name == "135":
@@ -2192,12 +2152,11 @@ def build_detection_for_outer(
             "grid_used": bool(grid_detail.get("grid_used", False)),
             "edge_refine": edge_refine_detail,
             "frame_size_fit": frame_size_detail,
-            "overlap_like_gaps": overlap_detail,
+            "separator_analysis": separator_analysis_detail,
             "partial_edge_hint": partial_edge_hint(profile, origin, pitch, count) if strip_mode == "partial" else {},
             "gap_centers": [gap.center for gap in gaps],
             "gap_scores": [gap.score for gap in gaps],
             "gap_methods": [gap.method for gap in gaps],
-            "gap_overlap_like": [bool(gap.overlap_like) for gap in gaps],
         }
     )
     return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, confidence, reasons, detail)
@@ -2398,7 +2357,6 @@ def choose_detection_135_dual(gray: np.ndarray, config: Config, cache: AnalysisC
                     start=gap.start,
                     end=gap.end,
                     lane_box=asdict(lane_work_outer),
-                    overlap_like=bool(gap.overlap_like),
                 )
             )
 
@@ -2510,19 +2468,26 @@ def content_is_ambiguous(detection: Detection) -> bool:
 def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[bool, dict[str, Any]]:
     expected = max(0, int(detection.count) - 1)
     actual = int(detection.detail.get("actual_detected_gaps", 0))
+    enhanced = int(detection.detail.get("enhanced_detected_gaps", 0))
     grid = int(detection.detail.get("grid_gaps", 0))
     equal = int(detection.detail.get("equal_gaps", 0))
-    hard = actual
+    hard = actual + enhanced
     hard_indexes = [
         int(gap.index)
         for gap in detection.gaps
-        if gap.method in {"detected", "edge-pair"}
+        if gap.method in {"detected", "edge-pair", "enhanced-detected"}
     ]
     leading_grid_scores: list[float] = []
     for gap in detection.gaps:
         if gap.method != "grid":
             break
         leading_grid_scores.append(float(gap.score))
+    separator_analysis = detection.detail.get("separator_analysis", {})
+    enhanced_accepted = (
+        int(separator_analysis.get("accepted_count", 0) or 0)
+        if isinstance(separator_analysis, dict)
+        else 0
+    )
     hard_adjacent_late = False
     if hard_indexes:
         expected_sequence = list(
@@ -2536,6 +2501,7 @@ def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[
         and len(leading_grid_scores) >= 3
         and all(score < 0.35 for score in leading_grid_scores[:3])
         and sum(1 for score in leading_grid_scores[:3] if score < 0.12) >= 2
+        and enhanced_accepted == 0
         and len(hard_indexes) <= 2
         and hard_adjacent_late
     )
@@ -2567,10 +2533,12 @@ def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[
         "expected_gaps": expected,
         "hard_gaps": hard,
         "actual_detected_gaps": actual,
+        "enhanced_detected_gaps": enhanced,
         "grid_gaps": grid,
         "equal_gaps": equal,
         "hard_gap_indexes": hard_indexes,
         "leading_grid_scores": leading_grid_scores,
+        "enhanced_separator_accepted_count": enhanced_accepted,
         "leading_grid_separator_failure": bool(leading_grid_failure),
         "separator_confidence": float(detection.confidence),
     }
@@ -2791,9 +2759,6 @@ def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache
                 )
                 if strip_mode == "full" and separator_auto_gate and separator_candidate.confidence >= config.confidence_threshold:
                     separator_candidate.detail["content_candidate_skipped"] = "separator_auto_gate_passed"
-                    continue
-                if strip_mode == "full":
-                    separator_candidate.detail["content_candidate_skipped"] = "full_strip_uses_content_validation_only"
                     continue
                 content = content_detection_for_count(gray, config, fmt, count, strip_mode, offset, cache)
                 if content is not None:
@@ -3172,7 +3137,7 @@ def gap_mark_box(detection: Detection, gap: Gap) -> Optional[Box]:
         )
     except Exception:
         return None
-    if gap.method in {"detected", "edge-pair"} and gap.start is not None and gap.end is not None:
+    if gap.method in {"detected", "edge-pair", "enhanced-detected"} and gap.start is not None and gap.end is not None:
         start = int(round(work_outer.left + min(gap.start, gap.end)))
         end = int(round(work_outer.left + max(gap.start, gap.end)))
         if end <= start:
@@ -3274,26 +3239,22 @@ def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> Non
     gap_colors = {
         "detected": (255, 0, 0),
         "edge-pair": (255, 0, 0),
+        "enhanced-detected": (255, 140, 0),
         "grid": (255, 220, 30),
         "equal": (190, 80, 255),
+        "equal-broad-region": (190, 80, 255),
     }
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
-    detected_centers = [gap.center for gap in detection.gaps if gap.method in {"detected", "edge-pair"}]
+    detected_centers = [gap.center for gap in detection.gaps if gap.method in {"detected", "edge-pair", "enhanced-detected"}]
     overlap_tolerance = max(4.0, pitch * 0.012)
     for gap in detection.gaps:
-        if not gap.overlap_like:
-            continue
-        mark = gap_mark_box(detection, gap)
-        if mark is not None:
-            fill_preview_rect(rgb, mark, scale, (180, 180, 180), 0.22)
-    for gap in detection.gaps:
-        if gap.method not in {"detected", "edge-pair"}:
+        if gap.method not in {"detected", "edge-pair", "enhanced-detected"}:
             continue
         mark = gap_mark_box(detection, gap)
         if mark is not None:
             draw_preview_mark(rgb, mark, scale, gap_colors.get(gap.method, (255, 255, 255)), 2)
     for gap in detection.gaps:
-        if gap.method in {"detected", "edge-pair"}:
+        if gap.method in {"detected", "edge-pair", "enhanced-detected"}:
             continue
         if any(abs(gap.center - center) <= overlap_tolerance for center in detected_centers):
             continue
@@ -3658,7 +3619,6 @@ def gap_from_dict(value: dict[str, Any]) -> Gap:
         start=(None if value.get("start") is None else float(value.get("start"))),
         end=(None if value.get("end") is None else float(value.get("end"))),
         lane_box=(dict(value["lane_box"]) if isinstance(value.get("lane_box"), dict) else None),
-        overlap_like=bool(value.get("overlap_like", False)),
     )
 
 
@@ -4078,7 +4038,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V3.4.1 candidate-scored single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V3.3.1 candidate-scored single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")
@@ -4090,7 +4050,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bleed-x", type=int, default=None, help="Long-axis bleed override; default 15. Horizontal scans: left/right. Vertical scans: top/bottom.")
     parser.add_argument("--bleed-y", type=int, default=None, help="Short-axis bleed override; default 10. Horizontal scans: top/bottom. Vertical scans: left/right.")
     parser.add_argument("--deskew", choices=DESKEW_CHOICES, default="auto", help="Deskew strip before detection/export.")
-    parser.add_argument("--analysis", choices=ANALYSIS_CHOICES, default="auto", help="Deskew analysis assist: auto tries enhanced gray only when base deskew is weak; always tries it every time; off disables it.")
+    parser.add_argument("--analysis", choices=ANALYSIS_CHOICES, default="auto", help="Enhanced separator assist: auto only runs on weak separator evidence; always runs every full-strip pass; off disables it.")
     parser.add_argument("--compression", choices=COMPRESSION_CHOICES, default="same", help="TIFF output compression: same for known lossless source compression, or none.")
     parser.add_argument("--deskew-min-angle", type=float, default=0.03, help="Minimum absolute deskew angle in degrees.")
     parser.add_argument("--deskew-max-angle", type=float, default=2.0, help="Maximum absolute deskew angle in degrees.")

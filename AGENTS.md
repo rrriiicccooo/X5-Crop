@@ -109,23 +109,27 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is temporarily rolled back to `X5_Crop.py` V3.4.1.
+- Active script is temporarily rolled back to `X5_Crop.py` V3.3.1, using the
+  archived V3.3.1 snapshot plus the later permanent Debug JPG / Debug Analysis
+  version-label patch.
+- V3.3.2, V3.4, V3.4.1, V3.4.2, and V3.5 are preserved as archive/reference
+  versions, but their detection changes are not active right now. The user
+  wants future optimization to start from the V3.3.1 baseline and avoid
+  damaging known-accurate scans.
 - V3.5 hard-gap semantic validation and V3.4.2 local grid segments are paused
-  in the active script because the user found previously accurate scans such as
-  `X5_00051`, `X5_00044`, `X5_00038`, and `X5_00022` became less accurate.
-  Keep those ideas as historical attempts only unless the user explicitly asks
-  to reintroduce them with narrower safeguards.
-- V3.4.1 keeps strong hard separator evidence authoritative when robust grid
-  fills missing/model gaps. If a strong `detected` or `edge-pair` gap conflicts
-  with the equal-spacing grid, the hard gap is preserved and the conflict is
-  recorded in `grid.hard_conflicts` instead of being rewritten as `grid`.
+  because the user found previously accurate scans such as `X5_00051`,
+  `X5_00044`, `X5_00038`, and `X5_00022` became less accurate. Keep those ideas
+  as historical attempts unless the user explicitly asks to reintroduce them
+  with narrower safeguards.
+- V3.4.1's strong-hard-gap-over-grid idea remains a reference direction, but it
+  is not active in the current V3.3.1 rollback.
 - Debug JPG and Debug Analysis JPG status bars now include the generating
   script name and version, for example `X5_Crop.py 3.4.1`, so future visual
   regression checks can identify which script produced an image.
 - The same Debug Analysis version-label change has been applied to every
   archived X5 Crop V3 snapshot from V3.0 through V3.5, so rolling back to an
   archived version preserves version labeling in generated JPGs.
-- V3.4 is a detection simplification pass: separator enhanced detection was
+- Paused V3.4 was a detection simplification pass: separator enhanced detection was
   removed entirely, `equal-broad-region` was folded into ordinary `equal`, full
   strips now use content only as validation rather than generating separate
   content candidates, and 135 full strips no longer run the simple cuts-based
@@ -197,8 +201,9 @@ Changed:
 - The `X5_00036` failure shape is guarded by
   `135_leading_grid_separator_failure`: three leading low-score grid separators,
   too few hard separators, and only adjacent late hard separators.
-- Full-strip detection no longer generates separate content candidates; content
-  is used as validation after separator/geometric candidates are built.
+- In paused V3.4 and later, full-strip detection no longer generated separate
+  content candidates; in the current V3.3.1 rollback, do not assume that
+  simplification is active.
 - README now has one consolidated Chinese Debug Analysis section instead of two
   overlapping sections.
 - macOS and Windows launchers now re-prompt after an unknown format instead of
@@ -213,12 +218,12 @@ Changed:
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py archive/X5_Crop_v3.0.py archive/X5_Crop_v3.1.py archive/X5_Crop_v3.1.1.py archive/X5_Crop_v3.1.2.py archive/X5_Crop_v3.2.py archive/X5_Crop_v3.3.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.4.1`.
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.3.1`.
 - `python3 -m py_compile X5_Crop.py` passed after adding the version label to
   Debug JPG and Debug Analysis JPG status bars.
 - Generated local comparison JPGs for `Test/135/X5_00007.tif` using V3.3.1,
-  V3.3.2, and current V3.4.1 with `--deskew off`; the comparison files are
-  ignored local artifacts under `Test/135/version_compare/`.
+  V3.3.2, and then-current V3.4.1 with `--deskew off`; the comparison files
+  are ignored local artifacts under `Test/135/version_compare/`.
 - Generated new vertical Debug Analysis comparison JPGs for `Test/135/X5_00007.tif`:
   a V3.3.1/V3.3.2/V3.4.1 comparison and an all-V3 snapshot comparison from
   V3.0 through V3.5. These are ignored local artifacts under
@@ -294,9 +299,13 @@ Verified:
   stayed `needs_review`. `X5_00026` recorded one `suspect_internal_edge`
   demotion in `hard_gap_validation`; `X5_00001`, `X5_00004`, and
   `X5_00025` recorded no suspect hard gaps.
-- After the temporary rollback to V3.4.1, a focused `--deskew off` dry-run on
+- Historical V3.4.1 rollback check: a focused `--deskew off` dry-run on
   `X5_00022`, `X5_00038`, `X5_00044`, and `X5_00051` confirmed all four stayed
   `approved_auto`.
+- Current V3.3.1 rollback smoke test: `python3 X5_Crop.py --version` prints
+  `X5_Crop.py 3.3.1`; `python3 -m py_compile X5_Crop.py` passed; and a
+  `--deskew off --debug-analysis --dry-run` smoke test on `X5_00007` produced
+  `approved_auto confidence=1.000`.
 - `X5_00009` and `X5_00044` now report/output first and last frame margins at
   long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
 - `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15
@@ -319,7 +328,6 @@ Not verified:
 
 Known local-only files:
 - `Test/`
-- `release/X5-Crop-v3.3.1.zip`
 - Temporary verification outputs under `/private/tmp/`.
 
 Next recommended step:
