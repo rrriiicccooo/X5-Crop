@@ -107,17 +107,12 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.5.
-- V3.5 adds lightweight hard-gap semantic validation after edge-pair refinement
-  and before robust grid fitting. It labels accepted red hard gaps as strong or
-  suspect, and only demotes a very narrow, content-continuous internal-edge-like
-  hard gap to a model gap. The validation reuses cached content and edge
-  profiles and records details in `hard_gap_validation`.
-- V3.4.2 adds conservative local grid segments for irregular 135 full-strip
-  spacing. Model-only `grid` / `equal` gaps can be repositioned between two
-  strong hard separator anchors using a local pitch; hard separators are not
-  moved, confidence is not increased, and the detail is recorded in
-  `local_grid`.
+- Active script is temporarily rolled back to `X5_Crop.py` V3.4.1.
+- V3.5 hard-gap semantic validation and V3.4.2 local grid segments are paused
+  in the active script because the user found previously accurate scans such as
+  `X5_00051`, `X5_00044`, `X5_00038`, and `X5_00022` became less accurate.
+  Keep those ideas as historical attempts only unless the user explicitly asks
+  to reintroduce them with narrower safeguards.
 - V3.4.1 keeps strong hard separator evidence authoritative when robust grid
   fills missing/model gaps. If a strong `detected` or `edge-pair` gap conflicts
   with the equal-spacing grid, the hard gap is preserved and the conflict is
@@ -202,7 +197,7 @@ Changed:
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py archive/X5_Crop_v3.0.py archive/X5_Crop_v3.1.py archive/X5_Crop_v3.1.1.py archive/X5_Crop_v3.1.2.py archive/X5_Crop_v3.2.py archive/X5_Crop_v3.3.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.5`.
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.4.1`.
 - `release/X5-Crop-v3.3.1.zip` was generated locally from the current
   V3.3.1 script, launchers, install scripts, README, LICENSE, and archive
   snapshots; the zip listing was checked.
@@ -274,6 +269,9 @@ Verified:
   stayed `needs_review`. `X5_00026` recorded one `suspect_internal_edge`
   demotion in `hard_gap_validation`; `X5_00001`, `X5_00004`, and
   `X5_00025` recorded no suspect hard gaps.
+- After the temporary rollback to V3.4.1, a focused `--deskew off` dry-run on
+  `X5_00022`, `X5_00038`, `X5_00044`, and `X5_00051` confirmed all four stayed
+  `approved_auto`.
 - `X5_00009` and `X5_00044` now report/output first and last frame margins at
   long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
 - `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15

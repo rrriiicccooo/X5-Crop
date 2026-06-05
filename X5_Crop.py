@@ -34,7 +34,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "3.5"
+VERSION = "3.4.1"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -1539,123 +1539,6 @@ def refine_gaps_by_edge_pairs(
     return refined, {"used": True, "accepted": accepted, "accepted_count": len(accepted), "rejected_count": rejected}
 
 
-def validate_hard_gap_semantics(
-    gray_work: np.ndarray,
-    outer: Box,
-    gaps: list[Gap],
-    pitch: float,
-    cache: Optional[AnalysisCache] = None,
-) -> tuple[list[Gap], dict[str, Any]]:
-    if not gaps or outer.width <= 1 or outer.height <= 1:
-        return gaps, {"used": False, "reason": "not_applicable"}
-    if cache is not None:
-        content = cache.content_evidence_float_work[outer.top:outer.bottom, outer.left:outer.right]
-    else:
-        crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-        content = make_content_evidence_gray(crop).astype(np.float32) / 255.0 if crop.size else np.zeros((0, 0), dtype=np.float32)
-    if content.size == 0:
-        return gaps, {"used": False, "reason": "empty_content"}
-
-    crop = crop_work_outer(gray_work, outer)
-    edge, background, activity = cached_edge_refine_profiles(cache, crop, outer)
-    if edge.size == 0:
-        return gaps, {"used": False, "reason": "empty_profiles"}
-
-    content_profile = content.mean(axis=0).astype(np.float32)
-    if content_profile.size != edge.size:
-        return gaps, {"used": False, "reason": "profile_shape_mismatch"}
-
-    def profile_mean(profile: np.ndarray, start: int, end: int) -> float:
-        start = max(0, min(int(start), len(profile)))
-        end = max(start, min(int(end), len(profile)))
-        return float(profile[start:end].mean()) if end > start else 0.0
-
-    def profile_median(profile: np.ndarray, start: int, end: int) -> float:
-        start = max(0, min(int(start), len(profile)))
-        end = max(start, min(int(end), len(profile)))
-        return float(np.median(profile[start:end])) if end > start else 0.0
-
-    gap_half = max(3, int(round(pitch * 0.012)))
-    side_half = max(gap_half + 2, int(round(pitch * 0.055)))
-    validated: list[Gap] = []
-    records: list[dict[str, Any]] = []
-    suspect_count = 0
-    for gap in gaps:
-        if gap.method not in {"detected", "edge-pair"}:
-            validated.append(gap)
-            continue
-        x = int(round(gap.center))
-        gap_lo = max(0, x - gap_half)
-        gap_hi = min(len(edge), x + gap_half + 1)
-        left_lo = max(0, x - side_half)
-        left_hi = max(left_lo, x - gap_half)
-        right_lo = min(len(edge), x + gap_half + 1)
-        right_hi = min(len(edge), x + side_half + 1)
-        if gap_hi <= gap_lo or left_hi <= left_lo or right_hi <= right_lo:
-            validated.append(gap)
-            continue
-
-        gap_content = profile_median(content_profile, gap_lo, gap_hi)
-        left_content = profile_median(content_profile, left_lo, left_hi)
-        right_content = profile_median(content_profile, right_lo, right_hi)
-        side_min = min(left_content, right_content)
-        side_max = max(left_content, right_content)
-        continuity_max = gap_content / max(0.001, side_max)
-        background_gap = profile_mean(background, gap_lo, gap_hi)
-        edge_gap = profile_mean(edge, gap_lo, gap_hi)
-        activity_gap = profile_mean(activity, gap_lo, gap_hi)
-        activity_side = max(profile_mean(activity, left_lo, left_hi), profile_mean(activity, right_lo, right_hi))
-
-        narrow_internal_edge = (
-            gap.width > 0
-            and gap.width <= max(8.0, pitch * 0.015)
-            and gap_content >= 0.28
-            and continuity_max >= 0.90
-            and background_gap >= 0.84
-            and activity_gap >= activity_side * 0.84
-        )
-
-        if narrow_internal_edge:
-            suspect_count += 1
-            validated.append(Gap(gap.index, gap.center, gap.score, "equal"))
-            label = "suspect_internal_edge"
-            action = "demote_to_model_gap"
-        else:
-            validated.append(gap)
-            label = "strong_hard_gap"
-            action = "keep"
-
-        if len(records) < 12:
-            records.append(
-                {
-                    "index": int(gap.index),
-                    "method": gap.method,
-                    "center": float(gap.center),
-                    "width": float(gap.width),
-                    "score": float(gap.score),
-                    "label": label,
-                    "action": action,
-                    "gap_content": float(gap_content),
-                    "left_content": float(left_content),
-                    "right_content": float(right_content),
-                    "continuity_max": float(continuity_max),
-                    "background_gap": float(background_gap),
-                    "edge_gap": float(edge_gap),
-                    "activity_gap": float(activity_gap),
-                    "activity_side": float(activity_side),
-                }
-            )
-
-    return validated, {
-        "used": True,
-        "checked_count": len(records),
-        "suspect_count": int(suspect_count),
-        "records": records,
-        "gap_half_window_px": int(gap_half),
-        "side_window_px": int(side_half),
-    }
-
-
 def find_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> Gap:
     radius = max(6, int(round(pitch * 0.16)))
     lo = max(1, int(round(expected)) - radius)
@@ -1799,88 +1682,6 @@ def apply_robust_grid(gaps: list[Gap], origin: float, pitch: float, strip_mode: 
         "grid_residual": median_residual,
         "hard_preserved_count": int(hard_preserved),
         "hard_conflicts": hard_conflicts,
-    }
-
-
-def is_strong_hard_gap(gap: Gap, pitch: float) -> bool:
-    if gap.method not in {"detected", "edge-pair"}:
-        return False
-    strong_score = 0.75 if gap.method == "edge-pair" else 0.55
-    plausible_width = gap.width <= max(2.0, pitch * 0.060) or gap.width <= 0.0
-    return gap.score >= strong_score and plausible_width
-
-
-def apply_local_grid_segments(gaps: list[Gap], pitch: float, strip_mode: str) -> tuple[list[Gap], dict[str, Any]]:
-    """Use local hard-gap anchors to place model-only gaps without increasing confidence."""
-    if len(gaps) < 3:
-        return gaps, {"used": False, "reason": "too_few_gaps"}
-    anchors = [gap for gap in gaps if is_strong_hard_gap(gap, pitch)]
-    if len(anchors) < 2:
-        return gaps, {"used": False, "reason": "too_few_hard_anchors", "anchor_count": len(anchors)}
-
-    by_index = {gap.index: gap for gap in gaps}
-    adjusted_by_index: dict[int, Gap] = {}
-    records: list[dict[str, Any]] = []
-    max_shift = pitch * (0.12 if strip_mode == "full" else 0.18)
-    max_projection = 2 if strip_mode == "full" else 3
-
-    def adjust_model_gap(index: int, predicted: float, left: Gap, right: Gap, local_pitch: float, mode: str) -> None:
-        gap = by_index.get(index)
-        if gap is None or gap.method not in {"grid", "equal"}:
-            return
-        shift = float(predicted - gap.center)
-        if abs(shift) <= 1.0 or abs(shift) > max_shift:
-            return
-        adjusted_by_index[index] = Gap(
-            gap.index,
-            float(predicted),
-            gap.score,
-            "grid",
-            overlap_like=gap.overlap_like,
-        )
-        if len(records) < 8:
-            records.append(
-                {
-                    "index": int(index),
-                    "from": float(gap.center),
-                    "to": float(predicted),
-                    "shift": float(shift),
-                    "left_anchor": int(left.index),
-                    "right_anchor": int(right.index),
-                    "local_pitch": float(local_pitch),
-                    "mode": mode,
-                }
-            )
-
-    for left, right in zip(anchors[:-1], anchors[1:]):
-        span = right.index - left.index
-        if span <= 0:
-            continue
-        local_pitch = (right.center - left.center) / float(span)
-        if local_pitch <= pitch * 0.70 or local_pitch >= pitch * 1.30:
-            continue
-        for index in range(left.index + 1, right.index):
-            predicted = float(left.center + local_pitch * (index - left.index))
-            adjust_model_gap(index, predicted, left, right, local_pitch, "bounded")
-        if left == anchors[0] and left.index <= max(2, len(gaps) // 2 + 1):
-            for index in range(max(1, left.index - max_projection), left.index):
-                predicted = float(left.center + local_pitch * (index - left.index))
-                adjust_model_gap(index, predicted, left, right, local_pitch, "leading_projection")
-        if right == anchors[-1]:
-            for index in range(right.index + 1, min(len(gaps), right.index + max_projection) + 1):
-                predicted = float(left.center + local_pitch * (index - left.index))
-                adjust_model_gap(index, predicted, left, right, local_pitch, "trailing_projection")
-
-    if not adjusted_by_index:
-        return gaps, {"used": False, "reason": "no_model_gap_adjustment", "anchor_count": len(anchors)}
-    adjusted_gaps = [adjusted_by_index.get(gap.index, gap) for gap in gaps]
-    return adjusted_gaps, {
-        "used": True,
-        "anchor_count": len(anchors),
-        "adjusted_count": len(adjusted_by_index),
-        "adjusted": records,
-        "max_shift": float(max_shift),
-        "max_projection": int(max_projection),
     }
 
 
@@ -2328,13 +2129,7 @@ def build_detection_for_outer(
     edge_refine_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     if strip_mode == "full" and fmt.name == "135" and count > 1:
         gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, cache, outer)
-    hard_validation_detail: dict[str, Any] = {"used": False, "reason": "not_applicable"}
-    if strip_mode == "full" and fmt.name == "135":
-        gaps, hard_validation_detail = validate_hard_gap_semantics(gray_work, outer, gaps, pitch, cache)
     gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
-    local_grid_detail: dict[str, Any] = {"used": False, "reason": "not_applicable"}
-    if strip_mode == "full" and fmt.name == "135":
-        gaps, local_grid_detail = apply_local_grid_segments(gaps, pitch, strip_mode)
     if allow_outer_refine and strip_mode == "full" and bool(grid_detail.get("grid_used", False)):
         model_origin = float(grid_detail.get("grid_origin", 0.0))
         model_pitch = float(grid_detail.get("grid_pitch", pitch))
@@ -2357,11 +2152,7 @@ def build_detection_for_outer(
             gaps = [find_gap(profile, pitch * i, pitch, i) for i in range(1, count)]
             if strip_mode == "full" and fmt.name == "135" and count > 1:
                 gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, cache, outer)
-            if strip_mode == "full" and fmt.name == "135":
-                gaps, hard_validation_detail = validate_hard_gap_semantics(gray_work, outer, gaps, pitch, cache)
             gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
-            if strip_mode == "full" and fmt.name == "135":
-                gaps, local_grid_detail = apply_local_grid_segments(gaps, pitch, strip_mode)
             grid_detail["outer_refined"] = True
     overlap_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     if strip_mode == "full" and fmt.name == "135":
@@ -2397,11 +2188,9 @@ def build_detection_for_outer(
             "outer_candidate": outer_candidate_name,
             "work_outer": asdict(outer),
             "grid": grid_detail,
-            "local_grid": local_grid_detail,
             "grid_residual": grid_detail.get("grid_residual"),
             "grid_used": bool(grid_detail.get("grid_used", False)),
             "edge_refine": edge_refine_detail,
-            "hard_gap_validation": hard_validation_detail,
             "frame_size_fit": frame_size_detail,
             "overlap_like_gaps": overlap_detail,
             "partial_edge_hint": partial_edge_hint(profile, origin, pitch, count) if strip_mode == "partial" else {},
@@ -2745,7 +2534,7 @@ def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[
         and detection.strip_mode == "full"
         and expected >= 5
         and len(leading_grid_scores) >= 3
-        and all(score < 0.36 for score in leading_grid_scores[:3])
+        and all(score < 0.35 for score in leading_grid_scores[:3])
         and sum(1 for score in leading_grid_scores[:3] if score < 0.12) >= 2
         and len(hard_indexes) <= 2
         and hard_adjacent_late
@@ -4288,7 +4077,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V3.5 candidate-scored single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V3.4.1 candidate-scored single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")
