@@ -3,9 +3,13 @@
 X5 Crop is a standalone Python script for splitting long TIFF film-strip scans
 from Hasselblad / Imacon X5 holders into individual TIFF frames.
 
-当前版本：V3.4.1
+当前最新开发版本：V3.4.2
 
-Current version: V3.4.1
+当前稳定发布版本：v3.3.1（GitHub Releases）
+
+Current development version: V3.4.2
+
+Current stable release: v3.3.1 (GitHub Releases)
 
 ## 中文说明
 
@@ -179,7 +183,7 @@ REVIEW confidence 0.676 < threshold 0.850
 | 颜色 | 含义 |
 |---|---|
 | 红色框 / 红色线 | 原图中检测到的真实分隔区域，包括黑条和可信双边缘 |
-| 黄色短 tick | grid / 全局片距模型推算出的切线，不代表一定看到真实黑条 |
+| 黄色短 tick | grid / 全局或局部片距模型推算出的切线，不代表一定看到真实黑条 |
 | 紫色短 tick | 证据不足时的等分或 fallback 切线 |
 | 白色短 tick | 其它未分类切线来源 |
 
@@ -307,7 +311,7 @@ using outer-frame geometry, separator evidence, content evidence, and expected
 aspect ratios together. Only high-confidence results are exported
 automatically. Weak, conflicting, or unusual cases are sent to review.
 
-V3.4.1 keeps bleed outside detection:
+V3.4.2 keeps bleed outside detection:
 
 - Detection uses no bleed when scoring outer boxes, gaps, confidence, or
   PASS/REVIEW.
@@ -453,7 +457,7 @@ be cropped automatically. `REVIEW` means it will not be auto-exported.
 | Color | Meaning |
 |---|---|
 | Red box / line | Real separator evidence detected from the original image |
-| Yellow tick | Grid / pitch-model cut line, not necessarily a visible separator |
+| Yellow tick | Global or local grid / pitch-model cut line, not necessarily a visible separator |
 | Purple tick | Equal/fallback cut line with weak evidence |
 | White tick | Other separator source |
 

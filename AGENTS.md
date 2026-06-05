@@ -107,7 +107,12 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.4.1.
+- Active script is `X5_Crop.py` V3.4.2.
+- V3.4.2 adds conservative local grid segments for irregular 135 full-strip
+  spacing. Model-only `grid` / `equal` gaps can be repositioned between two
+  strong hard separator anchors using a local pitch; hard separators are not
+  moved, confidence is not increased, and the detail is recorded in
+  `local_grid`.
 - V3.4.1 keeps strong hard separator evidence authoritative when robust grid
   fills missing/model gaps. If a strong `detected` or `edge-pair` gap conflicts
   with the equal-spacing grid, the hard gap is preserved and the conflict is
@@ -136,6 +141,8 @@ Changed:
 - User-facing README now states that GitHub Releases are the stable user-facing
   downloads, while the repository `main` branch may contain in-progress
   development changes.
+- User-facing README header now lists both the current development version and
+  the current stable GitHub Release version.
 - GitHub Release `v3.3.1` was created with
   `release/X5-Crop-v3.3.1.zip` uploaded as the user-facing package.
 - GitHub Release `v3.3.1` asset was replaced after cleaning the user-facing
@@ -178,7 +185,7 @@ Changed:
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py archive/X5_Crop_v3.0.py archive/X5_Crop_v3.1.py archive/X5_Crop_v3.1.1.py archive/X5_Crop_v3.1.2.py archive/X5_Crop_v3.2.py archive/X5_Crop_v3.3.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.4.1`.
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.4.2`.
 - `release/X5-Crop-v3.3.1.zip` was generated locally from the current
   V3.3.1 script, launchers, install scripts, README, LICENSE, and archive
   snapshots; the zip listing was checked.
@@ -236,6 +243,11 @@ Verified:
   `needs_review`. `X5_00014` now keeps the right-side hard separator as
   `edge-pair` at `11492.5` instead of rewriting it to grid at `11294.375`;
   the conflict is recorded in `grid.hard_conflicts`.
+- Focus V3.4.2 dry-run on `X5_00002`, `X5_00007`, `X5_00009`, `X5_00014`,
+  and `X5_00036` confirmed `2/7/9/14` stayed `approved_auto` and `36` stayed
+  `needs_review`. Local grid adjusted leading model gaps on `X5_00009` and
+  bounded model gaps on `X5_00014`; `X5_00007` and `X5_00036` recorded
+  `local_grid.used=false`.
 - `X5_00009` and `X5_00044` now report/output first and last frame margins at
   long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
 - `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15

@@ -34,7 +34,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "3.4.1"
+VERSION = "3.4.2"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -1685,6 +1685,88 @@ def apply_robust_grid(gaps: list[Gap], origin: float, pitch: float, strip_mode: 
     }
 
 
+def is_strong_hard_gap(gap: Gap, pitch: float) -> bool:
+    if gap.method not in {"detected", "edge-pair"}:
+        return False
+    strong_score = 0.75 if gap.method == "edge-pair" else 0.55
+    plausible_width = gap.width <= max(2.0, pitch * 0.060) or gap.width <= 0.0
+    return gap.score >= strong_score and plausible_width
+
+
+def apply_local_grid_segments(gaps: list[Gap], pitch: float, strip_mode: str) -> tuple[list[Gap], dict[str, Any]]:
+    """Use local hard-gap anchors to place model-only gaps without increasing confidence."""
+    if len(gaps) < 3:
+        return gaps, {"used": False, "reason": "too_few_gaps"}
+    anchors = [gap for gap in gaps if is_strong_hard_gap(gap, pitch)]
+    if len(anchors) < 2:
+        return gaps, {"used": False, "reason": "too_few_hard_anchors", "anchor_count": len(anchors)}
+
+    by_index = {gap.index: gap for gap in gaps}
+    adjusted_by_index: dict[int, Gap] = {}
+    records: list[dict[str, Any]] = []
+    max_shift = pitch * (0.12 if strip_mode == "full" else 0.18)
+    max_projection = 2 if strip_mode == "full" else 3
+
+    def adjust_model_gap(index: int, predicted: float, left: Gap, right: Gap, local_pitch: float, mode: str) -> None:
+        gap = by_index.get(index)
+        if gap is None or gap.method not in {"grid", "equal"}:
+            return
+        shift = float(predicted - gap.center)
+        if abs(shift) <= 1.0 or abs(shift) > max_shift:
+            return
+        adjusted_by_index[index] = Gap(
+            gap.index,
+            float(predicted),
+            gap.score,
+            "grid",
+            overlap_like=gap.overlap_like,
+        )
+        if len(records) < 8:
+            records.append(
+                {
+                    "index": int(index),
+                    "from": float(gap.center),
+                    "to": float(predicted),
+                    "shift": float(shift),
+                    "left_anchor": int(left.index),
+                    "right_anchor": int(right.index),
+                    "local_pitch": float(local_pitch),
+                    "mode": mode,
+                }
+            )
+
+    for left, right in zip(anchors[:-1], anchors[1:]):
+        span = right.index - left.index
+        if span <= 0:
+            continue
+        local_pitch = (right.center - left.center) / float(span)
+        if local_pitch <= pitch * 0.70 or local_pitch >= pitch * 1.30:
+            continue
+        for index in range(left.index + 1, right.index):
+            predicted = float(left.center + local_pitch * (index - left.index))
+            adjust_model_gap(index, predicted, left, right, local_pitch, "bounded")
+        if left == anchors[0] and left.index <= max(2, len(gaps) // 2 + 1):
+            for index in range(max(1, left.index - max_projection), left.index):
+                predicted = float(left.center + local_pitch * (index - left.index))
+                adjust_model_gap(index, predicted, left, right, local_pitch, "leading_projection")
+        if right == anchors[-1]:
+            for index in range(right.index + 1, min(len(gaps), right.index + max_projection) + 1):
+                predicted = float(left.center + local_pitch * (index - left.index))
+                adjust_model_gap(index, predicted, left, right, local_pitch, "trailing_projection")
+
+    if not adjusted_by_index:
+        return gaps, {"used": False, "reason": "no_model_gap_adjustment", "anchor_count": len(anchors)}
+    adjusted_gaps = [adjusted_by_index.get(gap.index, gap) for gap in gaps]
+    return adjusted_gaps, {
+        "used": True,
+        "anchor_count": len(anchors),
+        "adjusted_count": len(adjusted_by_index),
+        "adjusted": records,
+        "max_shift": float(max_shift),
+        "max_projection": int(max_projection),
+    }
+
+
 def mark_overlap_like_gaps(
     gray_work: np.ndarray,
     outer: Box,
@@ -2130,6 +2212,9 @@ def build_detection_for_outer(
     if strip_mode == "full" and fmt.name == "135" and count > 1:
         gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, cache, outer)
     gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
+    local_grid_detail: dict[str, Any] = {"used": False, "reason": "not_applicable"}
+    if strip_mode == "full" and fmt.name == "135":
+        gaps, local_grid_detail = apply_local_grid_segments(gaps, pitch, strip_mode)
     if allow_outer_refine and strip_mode == "full" and bool(grid_detail.get("grid_used", False)):
         model_origin = float(grid_detail.get("grid_origin", 0.0))
         model_pitch = float(grid_detail.get("grid_pitch", pitch))
@@ -2153,6 +2238,8 @@ def build_detection_for_outer(
             if strip_mode == "full" and fmt.name == "135" and count > 1:
                 gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, cache, outer)
             gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
+            if strip_mode == "full" and fmt.name == "135":
+                gaps, local_grid_detail = apply_local_grid_segments(gaps, pitch, strip_mode)
             grid_detail["outer_refined"] = True
     overlap_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     if strip_mode == "full" and fmt.name == "135":
@@ -2188,6 +2275,7 @@ def build_detection_for_outer(
             "outer_candidate": outer_candidate_name,
             "work_outer": asdict(outer),
             "grid": grid_detail,
+            "local_grid": local_grid_detail,
             "grid_residual": grid_detail.get("grid_residual"),
             "grid_used": bool(grid_detail.get("grid_used", False)),
             "edge_refine": edge_refine_detail,
@@ -4077,7 +4165,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V3.4.1 candidate-scored single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V3.4.2 candidate-scored single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")
