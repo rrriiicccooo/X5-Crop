@@ -107,32 +107,25 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.1.2.
-- V3.1.2 is based on the recovered V3 baseline, with the simplified terminal
-  output retained.
-- Default output bleed is now long-axis 20px and short-axis 10px. Detection
-  still uses the V3.1.1 internal geometry bleed scale, so the larger output
-  bleed protects crop edges without changing candidate scoring or making hard
-  images easier to auto-pass.
+- Active script is `X5_Crop.py` V3.2.
+- V3.2 restores the V3 detection main chain for ordinary outer/gap/candidate
+  selection while keeping the simplified terminal output and current workflow
+  improvements.
+- Default output bleed is long-axis 20px and short-axis 10px. Detection still
+  uses the V3 internal geometry bleed scale of long-axis 15px and short-axis
+  10px, so the larger output bleed protects crop edges without changing
+  candidate scoring or making hard images easier to auto-pass.
 - Added final edge bleed protection after PASS/REVIEW status is decided: if
   same-frame-size fitting leaves the first or last frame too far inside an
   otherwise stable outer box, the output/report/debug frame is extended back to
   the outer edge plus requested long-axis bleed. This fixed the V3.1.1-style
   inward edge shrink seen on `X5_00009` and `X5_00044` while keeping detection
   scoring unchanged.
-- Added a conservative local separator rescue for full-strip `135`: after grid
-  fitting, grid/equal gaps get one narrow profile-window search around their
-  predicted position. Only strong local separator bands are upgraded to
-  `detected`; missing or weak evidence leaves the original grid/equal gap in
-  place.
 - Added an MIT `LICENSE` file and documented the project license in `README.md`
   before making the GitHub repository public.
-- `separator_derived_outer` is intentionally narrow: it is considered only for
-  full strips when ordinary outer candidates are unstable, a reliable white
-  outer is missing, outer alignment is already suspicious, or grid/model gaps
-  suggest the initial outer may be shifted. The derived outer still only
-  competes with normal candidates and cannot expand to full canvas or shift too
-  far.
+- Removed the V3.1.1 `separator_derived_outer` competition and the V3.1.2 local
+  separator rescue from the active detection chain. `X5_00007`, `X5_00019`, and
+  `X5_00052` now follow the V3-style ordinary outer/gap path again.
 - The `X5_00036` failure shape is guarded by
   `135_leading_grid_separator_failure`: three leading low-score grid separators,
   no accepted enhanced separator, and only adjacent late hard separators.
@@ -153,18 +146,20 @@ Changed:
 Verified:
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.1.2`.
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.2`.
 - Full fresh `Test/135` dry-run with `--format 135 --strip full --count 6
   --dry-run --report --no-copy-review-files --jobs 2 --no-reuse-analysis`
   produced 43 `approved_auto` / 5 `needs_review`, matching the V3.1.1 reference
-  count. After local separator rescue, the same full fresh `Test/135` dry-run
-  again produced 43 / 5; in this sandbox process workers were unavailable, so
-  it used the thread fallback and took about 5m21s wall time.
+  count. After the V3.2 detection rollback, the same full fresh `Test/135`
+  dry-run again produced 43 / 5; in this sandbox process workers were
+  unavailable, so it used the thread fallback and took about 5m13s wall time.
 - Focus fresh dry-run on `X5_00002`, `X5_00007`, `X5_00009`, `X5_00014`,
   `X5_00019`, `X5_00032`, `X5_00036`, `X5_00038`, `X5_00044`, and `X5_00052`
   produced 9 `approved_auto` and `X5_00036` as the only `needs_review`.
-- The local separator rescue accepted 12 model gaps across 10 files in the full
-  `Test/135` run. It did not rescue `X5_00036`, so that file stayed review.
+- Focus V3.2 dry-run on `X5_00007`, `X5_00019`, `X5_00036`, and `X5_00052`
+  restored the V3-style outer/gap/frame-fit behavior for `7`, `19`, and `52`;
+  `X5_00036` stayed `needs_review` with
+  `separator_hard_evidence_weak` / `v2_auto_gate_not_satisfied`.
 - `X5_00009` and `X5_00044` now report/output first and last frame margins at
   long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
 - `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15

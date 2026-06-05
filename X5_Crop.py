@@ -34,7 +34,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "3.1.2"
+VERSION = "3.2"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -777,8 +777,6 @@ def retry_with_content_aligned_outer(
         "retry_alignment": retry_alignment,
         "retry_content_support": retry_content.get("support"),
     }
-    if "separator_derived_outer_gate" in detection.detail:
-        retried.detail["separator_derived_outer_gate"] = detection.detail["separator_derived_outer_gate"]
     return retried
 
 
@@ -1621,103 +1619,6 @@ def apply_robust_grid(gaps: list[Gap], origin: float, pitch: float, strip_mode: 
     }
 
 
-def find_local_separator_rescue_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> Gap:
-    width = len(profile)
-    if width <= 2:
-        return Gap(index, float(expected), 0.0, "equal")
-    radius = max(8, int(round(pitch * 0.055)))
-    center_i = int(round(expected))
-    lo = max(1, center_i - radius)
-    hi = min(width - 1, center_i + radius + 1)
-    if hi <= lo:
-        return Gap(index, float(expected), 0.0, "equal")
-    local = profile[lo:hi]
-    if local.size == 0:
-        return Gap(index, float(expected), 0.0, "equal")
-    local_max = float(local.max())
-    if local_max < 0.38:
-        return Gap(index, float(expected), local_max, "equal")
-
-    narrow_max_w = max(2, int(round(pitch * 0.040)))
-    broad_max_w = max(narrow_max_w + 1, int(round(pitch * 0.075)))
-    threshold = max(0.30, local_max * 0.62)
-    guard_w = max(5, int(round(pitch * 0.030)))
-    candidates: list[tuple[float, float, float, float, float]] = []
-    for run_start, run_end in runs_from_mask(local >= threshold):
-        if run_end <= run_start:
-            continue
-        band_start, band_end = run_start, run_end
-        while band_start > 0 and local[band_start - 1] >= threshold * 0.80 and (band_end - (band_start - 1)) <= broad_max_w:
-            band_start -= 1
-        while band_end < len(local) and local[band_end] >= threshold * 0.80 and ((band_end + 1) - band_start) <= broad_max_w:
-            band_end += 1
-        band_w = band_end - band_start
-        if band_w < 1 or band_w > broad_max_w:
-            continue
-        start = float(lo + band_start)
-        end = float(lo + band_end)
-        center = float((start + end - 1.0) / 2.0)
-        if abs(center - expected) > radius:
-            continue
-        left_guard = local[max(0, band_start - guard_w):band_start]
-        right_guard = local[band_end:min(len(local), band_end + guard_w)]
-        if left_guard.size == 0 or right_guard.size == 0:
-            continue
-        band_mean = float(local[band_start:band_end].mean())
-        side_mean = max(float(left_guard.mean()), float(right_guard.mean()))
-        prominence = band_mean - side_mean
-        if band_w <= narrow_max_w:
-            if band_mean < 0.42 or prominence < 0.06:
-                continue
-            method_score = band_mean + prominence
-        else:
-            if band_mean < 0.48 or prominence < 0.10:
-                continue
-            method_score = band_mean + 0.7 * prominence
-        distance = abs(center - expected) / max(1.0, pitch)
-        candidates.append((distance, -method_score, -band_mean, start, end))
-    if not candidates:
-        return Gap(index, float(expected), local_max, "equal")
-    _distance, neg_score, _neg_mean, start, end = sorted(candidates)[0]
-    return Gap(index, float((start + end - 1.0) / 2.0), float(-neg_score), "detected", start, end)
-
-
-def rescue_model_gaps_with_local_separators(profile: np.ndarray, gaps: list[Gap], origin: float, pitch: float, strip_mode: str) -> tuple[list[Gap], dict[str, Any]]:
-    if not gaps:
-        return gaps, {"used": False, "reason": "empty"}
-    rescued: list[Gap] = []
-    accepted: list[dict[str, Any]] = []
-    rejected = 0
-    for gap in gaps:
-        if gap.method not in {"grid", "equal", "equal-broad-region"}:
-            rescued.append(gap)
-            continue
-        expected = origin + pitch * gap.index
-        local_gap = find_local_separator_rescue_gap(profile, expected, pitch, gap.index)
-        if local_gap.method == "detected":
-            constrained = constrain_gap_to_geometry(local_gap, expected, pitch, strip_mode)
-            if constrained.method == "detected" and constrained.score >= 0.42:
-                rescued.append(constrained)
-                accepted.append(
-                    {
-                        "index": int(gap.index),
-                        "center": float(constrained.center),
-                        "score": float(constrained.score),
-                        "width": float(constrained.width),
-                        "replaced_method": gap.method,
-                    }
-                )
-                continue
-        rescued.append(gap)
-        rejected += 1
-    return rescued, {
-        "used": True,
-        "accepted": accepted,
-        "accepted_count": len(accepted),
-        "rejected_count": rejected,
-    }
-
-
 def find_enhanced_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> Gap:
     gap = find_gap(profile, expected, pitch, index)
     if gap.method != "detected":
@@ -2128,7 +2029,6 @@ def build_detection_for_outer(
     if strip_mode == "full" and fmt.name == "135" and count > 1:
         gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, cache, outer)
     gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
-    local_separator_detail: dict[str, Any] = {"used": False, "reason": "not_applicable"}
     if allow_outer_refine and strip_mode == "full" and bool(grid_detail.get("grid_used", False)):
         model_origin = float(grid_detail.get("grid_origin", 0.0))
         model_pitch = float(grid_detail.get("grid_pitch", pitch))
@@ -2153,8 +2053,6 @@ def build_detection_for_outer(
                 gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, cache, outer)
             gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode)
             grid_detail["outer_refined"] = True
-    if strip_mode == "full" and fmt.name == "135" and count > 1:
-        gaps, local_separator_detail = rescue_model_gaps_with_local_separators(profile, gaps, origin, pitch, strip_mode)
     separator_analysis_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     separator_analysis_allowed = allow_separator_analysis and strip_mode == "full" and fmt.name != "half"
     if separator_analysis_allowed:
@@ -2184,7 +2082,6 @@ def build_detection_for_outer(
             "grid_residual": grid_detail.get("grid_residual"),
             "grid_used": bool(grid_detail.get("grid_used", False)),
             "edge_refine": edge_refine_detail,
-            "local_separator_rescue": local_separator_detail,
             "frame_size_fit": frame_size_detail,
             "separator_analysis": separator_analysis_detail,
             "partial_edge_hint": partial_edge_hint(profile, origin, pitch, count) if strip_mode == "partial" else {},
@@ -2205,119 +2102,6 @@ def detection_rank(detection: Detection, threshold: float) -> tuple[int, float, 
     )
 
 
-def should_try_separator_derived_outer(
-    gray: np.ndarray,
-    config: Config,
-    detection: Detection,
-    outer_candidates: list[OuterCandidate],
-    cache: Optional[AnalysisCache],
-) -> tuple[bool, dict[str, Any]]:
-    names = [candidate.name for candidate in outer_candidates]
-    areas = [candidate.box.width * candidate.box.height for candidate in outer_candidates if candidate.box.valid()]
-    spread = (max(areas) - min(areas)) / max(1.0, float(max(areas))) if areas else 0.0
-    alignment = outer_content_alignment_detail(gray, detection, cache)
-    alignment_ok = bool(alignment.get("ok", True)) if bool(alignment.get("used", False)) else True
-    gap_methods = [str(method) for method in detection.detail.get("gap_methods", [])]
-    model_gap_count = sum(1 for method in gap_methods if method in {"grid", "equal", "equal-broad-region"})
-    initial_outer = str(detection.detail.get("outer_candidate", ""))
-    grid_used = bool(detection.detail.get("grid_used", False))
-    no_white_outer = "white_x" not in names
-    outer_disagreement = spread >= 0.08
-    model_supported_outer = grid_used and model_gap_count >= 2 and initial_outer != "white_x"
-    allowed = no_white_outer or outer_disagreement or not alignment_ok or model_supported_outer
-    reason = "allowed"
-    if not allowed:
-        reason = "ordinary_outer_candidates_are_stable"
-    detail = {
-        "allowed": bool(allowed),
-        "reason": reason,
-        "outer_candidate_names": names,
-        "outer_area_spread_ratio": float(spread),
-        "initial_outer_candidate": initial_outer,
-        "no_white_outer": bool(no_white_outer),
-        "outer_disagreement": bool(outer_disagreement),
-        "alignment_ok": bool(alignment_ok),
-        "alignment_reason": alignment.get("reason"),
-        "grid_used": bool(grid_used),
-        "model_gap_count": int(model_gap_count),
-        "model_supported_outer": bool(model_supported_outer),
-    }
-    return allowed, detail
-
-
-def separator_derived_outer_candidate(
-    detection: Detection,
-    work_w: int,
-    work_h: int,
-    fmt: FilmFormat,
-    count: int,
-) -> Optional[OuterCandidate]:
-    if detection.strip_mode != "full" or count <= 1:
-        return None
-    if fmt.name not in {"135", "xpan", "120-645", "120-66", "120-67"}:
-        return None
-    try:
-        outer = box_from_dict(detection.detail["work_outer"])
-    except Exception:
-        return None
-    if not outer.valid() or outer.width <= 1 or outer.height <= 1:
-        return None
-
-    grid = detection.detail.get("grid", {})
-    model_pitch: Optional[float] = None
-    model_origin: Optional[float] = None
-    if isinstance(grid, dict) and bool(grid.get("grid_used", False)):
-        model_pitch = float(grid.get("grid_pitch", 0.0))
-        model_origin = float(grid.get("grid_origin", 0.0))
-    else:
-        hard = [
-            gap for gap in detection.gaps
-            if gap.method in {"detected", "edge-pair", "enhanced-detected"}
-        ]
-        if len(hard) < 2:
-            return None
-        pitches: list[float] = []
-        origins: list[float] = []
-        for i, a in enumerate(hard):
-            for b in hard[i + 1:]:
-                dk = b.index - a.index
-                if dk <= 0:
-                    continue
-                pitch = (float(b.center) - float(a.center)) / float(dk)
-                nominal = outer.width / float(count)
-                if nominal * 0.75 <= pitch <= nominal * 1.25:
-                    pitches.append(pitch)
-                    origins.append(float(a.center) - pitch * a.index)
-        if not pitches:
-            return None
-        model_pitch = float(np.median(np.array(pitches, dtype=np.float64)))
-        model_origin = float(np.median(np.array(origins, dtype=np.float64)))
-
-    if model_pitch is None or model_origin is None or model_pitch <= 1:
-        return None
-    proposed_left = int(round(outer.left + model_origin))
-    proposed_right = int(round(outer.left + model_origin + model_pitch * count))
-    if proposed_right <= proposed_left:
-        return None
-    proposed = Box(proposed_left, outer.top, proposed_right, outer.bottom).clamp(work_w, work_h)
-    if not proposed.valid():
-        return None
-
-    canvas_area = float(work_w * work_h)
-    area_ratio = float(proposed.width * proposed.height) / max(1.0, canvas_area)
-    if area_ratio > 0.94:
-        return None
-    width_change = abs(proposed.width - outer.width) / max(1.0, float(outer.width))
-    if width_change > 0.22:
-        return None
-    max_side_shift = max(12, int(round((outer.width / float(count)) * 0.22)))
-    if abs(proposed.left - outer.left) > max_side_shift or abs(proposed.right - outer.right) > max_side_shift:
-        return None
-    if proposed == outer:
-        return None
-    return OuterCandidate("separator_derived_outer", proposed)
-
-
 def detect_for_count(
     gray: np.ndarray,
     config: Config,
@@ -2333,55 +2117,14 @@ def detect_for_count(
         build_detection_for_outer(gray, config, fmt, count, strip_mode, candidate.box, offset_fraction, candidate.name, cache=cache)
         for candidate in outer_candidates
     ]
-    initial_best = max(candidates, key=lambda d: detection_rank(d, config.confidence_threshold))
-    if strip_mode == "full":
-        derived_candidates: list[OuterCandidate] = []
-        allow_derived, derived_gate = should_try_separator_derived_outer(gray, config, initial_best, outer_candidates, cache)
-        initial_best.detail["separator_derived_outer_gate"] = derived_gate
-        if allow_derived:
-            derived = separator_derived_outer_candidate(
-                initial_best,
-                gray_work.shape[1],
-                gray_work.shape[0],
-                fmt,
-                count,
-            )
-            if derived is not None:
-                derived_candidates.append(derived)
-        for candidate in unique_outer_candidates(derived_candidates):
-            candidates.append(
-                build_detection_for_outer(
-                    gray,
-                    config,
-                    fmt,
-                    count,
-                    strip_mode,
-                    candidate.box,
-                    offset_fraction,
-                    candidate.name,
-                    cache=cache,
-                    allow_outer_refine=False,
-                )
-            )
     best = max(candidates, key=lambda d: detection_rank(d, config.confidence_threshold))
-    if strip_mode == "full" and "separator_derived_outer_gate" not in best.detail:
-        best.detail["separator_derived_outer_gate"] = initial_best.detail.get("separator_derived_outer_gate", {})
-    derived_report_candidates = [
-        OuterCandidate(
-            str(d.detail.get("outer_candidate", "unknown")),
-            original_box_to_work(d.outer, config.layout, gray.shape[1], gray.shape[0]),
-        )
-        for d in candidates
-        if str(d.detail.get("outer_candidate", "")).startswith("separator_derived")
-    ]
-    all_outer_candidates = outer_candidates + derived_report_candidates
-    areas = [candidate.box.width * candidate.box.height for candidate in all_outer_candidates if candidate.box.valid()]
+    areas = [candidate.box.width * candidate.box.height for candidate in outer_candidates if candidate.box.valid()]
     if areas:
-        best.detail["outer_candidate_count"] = len(all_outer_candidates)
+        best.detail["outer_candidate_count"] = len(outer_candidates)
         best.detail["outer_area_spread_ratio"] = (max(areas) - min(areas)) / max(1.0, float(max(areas)))
         best.detail["outer_candidates"] = [
             {"name": candidate.name, "box": asdict(candidate.box)}
-            for candidate in all_outer_candidates
+            for candidate in outer_candidates
         ]
     return best
 
@@ -4217,7 +3960,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V3.1.2 candidate-scored single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V3.2 candidate-scored single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")
