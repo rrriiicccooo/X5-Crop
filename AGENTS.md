@@ -71,7 +71,6 @@ project documentation consolidated in `README.md`.
 ```text
 /*
 !/archive/
-!/install/
 !/LICENSE
 !/release/
 ```
@@ -100,9 +99,11 @@ project documentation consolidated in `README.md`.
   - `X5_Crop_win.bat`
   - `README.md`
   - `快速启动_Quick_Start.md`
-  Do not package `archive/`, `install/`, `CHANGELOG.md`, `AGENTS.md`,
-  `LICENSE`, `.github/`, or local test/output folders into the Release zip
-  unless the user explicitly changes this policy.
+  - `install/X5_Crop_Mac_install.command`
+  - `install/X5_Crop_win_install.bat`
+  Do not package `archive/`, `CHANGELOG.md`, `AGENTS.md`, `LICENSE`,
+  `.github/`, or local test/output folders into the Release zip unless the user
+  explicitly changes this policy.
   Prefer Python `zipfile` for release zips so the Chinese quick-start filename
   is stored with UTF-8 metadata; the macOS `zip` CLI may display or store the
   Chinese filename poorly in some environments.
@@ -150,11 +151,12 @@ Changed:
   working.
 - User-facing Release packaging policy is now explicit: Release zip packages
   should include only `X5_Crop.py`, `X5_Crop_Mac.command`,
-  `X5_Crop_win.bat`, `README.md`, and `快速启动_Quick_Start.md`; installers,
-  license, archive snapshots, GitHub config, and local test/output folders
-  should not be packaged into the zip.
+  `X5_Crop_win.bat`, `README.md`, `快速启动_Quick_Start.md`, and the two
+  installer launchers under `install/`; license, archive snapshots, GitHub
+  config, and local test/output folders should not be packaged into the zip.
 - Added `快速启动_Quick_Start.md`, a bilingual quick-start guide with Chinese
-  first and English second. It points users to `README.md` and `CHANGELOG.md`
+  first and English second. It puts first-time installer launchers in a
+  prominent note near the top and points users to `README.md` and `CHANGELOG.md`
   for fuller documentation.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
@@ -397,9 +399,9 @@ Verified:
   `--report` on the Debug Analysis command path. Ignored local launcher copies
   under `Test/135/` were synced.
 - Current release-doc verification: `快速启动_Quick_Start.md` was added and
-  release package policy now includes `README.md` plus the bilingual quick-start
-  guide while still excluding installers, archive snapshots, license, GitHub
-  config, and local test/output folders.
+  release package policy now includes `README.md`, the bilingual quick-start
+  guide, and installer launchers under `install/`, while still excluding archive
+  snapshots, license, GitHub config, and local test/output folders.
 - Current V3.6.12 verification: `python3 X5_Crop.py --version` prints
   `X5_Crop.py 3.6.12`; `python3 -m py_compile X5_Crop.py` passed. Full
   `Test/半格` dry-run with `--format half --strip full --count 12 --deskew off

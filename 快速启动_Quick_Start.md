@@ -4,6 +4,14 @@
 
 这是 X5 Crop 的最短使用说明。更完整的安装、参数、Debug Analysis 和版本变化，请看 `README.md` 和 `CHANGELOG.md`。
 
+> **第一次使用请先运行安装启动器。**
+>
+> macOS: 双击 `install/X5_Crop_Mac_install.command`
+>
+> Windows: 双击 `install/X5_Crop_win_install.bat`
+>
+> 安装完成后，再把 `X5_Crop.py`、对应系统的主启动器和 TIFF 长图放在同一个文件夹里运行。
+
 ### Release 压缩包里有什么
 
 Release 包默认包含：
@@ -14,7 +22,12 @@ X5_Crop_Mac.command
 X5_Crop_win.bat
 README.md
 快速启动_Quick_Start.md
+install/
+  X5_Crop_Mac_install.command
+  X5_Crop_win_install.bat
 ```
+
+`install/` 只用于第一次安装依赖。正式裁切时使用根目录里的主启动器。
 
 ### 放在哪里
 
@@ -27,6 +40,24 @@ X5_Crop_Mac.command 或 X5_Crop_win.bat
 ```
 
 启动器和 `X5_Crop.py` 必须在同一个文件夹里。只移动启动器、不带脚本本体，不能运行。
+
+### 第一次使用
+
+新机器第一次使用时，先运行安装启动器：
+
+macOS:
+
+```text
+install/X5_Crop_Mac_install.command
+```
+
+Windows:
+
+```text
+install/X5_Crop_win_install.bat
+```
+
+安装器会检查 Python 和依赖库。安装完成后，再运行主启动器。
 
 ### 怎么启动
 
@@ -102,7 +133,7 @@ split_output/
 
 如果启动器提示找不到可用 Python 或缺少依赖，请看 `README.md` 里的安装依赖说明。
 
-仓库源码里有安装器，但安装器不放进 Release 压缩包。也可以手动安装：
+Release 包里的 `install/` 文件夹有安装器。也可以手动安装：
 
 ```bash
 python3 -m pip install --user -U numpy tifffile imagecodecs Pillow
@@ -111,6 +142,14 @@ python3 -m pip install --user -U numpy tifffile imagecodecs Pillow
 ## English Quick Start
 
 This is the shortest guide for X5 Crop. For full installation notes, command-line options, Debug Analysis details, and version history, see `README.md` and `CHANGELOG.md`.
+
+> **On first use, run the installer launcher first.**
+>
+> macOS: double-click `install/X5_Crop_Mac_install.command`
+>
+> Windows: double-click `install/X5_Crop_win_install.bat`
+>
+> After installation, put `X5_Crop.py`, the main launcher for your system, and the TIFF long-strip scans in the same folder.
 
 ### What Is In The Release Zip
 
@@ -122,7 +161,12 @@ X5_Crop_Mac.command
 X5_Crop_win.bat
 README.md
 快速启动_Quick_Start.md
+install/
+  X5_Crop_Mac_install.command
+  X5_Crop_win_install.bat
 ```
+
+`install/` is only for first-time dependency setup. For actual cropping, use the main launcher in the root folder.
 
 ### Where To Put The Files
 
@@ -135,6 +179,24 @@ X5_Crop_Mac.command or X5_Crop_win.bat
 ```
 
 The launcher and `X5_Crop.py` must stay together in the same folder. A launcher by itself cannot run the script.
+
+### First Use
+
+On a new machine, run the installer launcher first:
+
+macOS:
+
+```text
+install/X5_Crop_Mac_install.command
+```
+
+Windows:
+
+```text
+install/X5_Crop_win_install.bat
+```
+
+The installer checks Python and required libraries. After installation, run the main launcher.
 
 ### How To Launch
 
@@ -210,7 +272,7 @@ Typical 135 long-strip scans take about 5-15 seconds per file. Debug Analysis us
 
 If the launcher says no usable Python was found or dependencies are missing, see the dependency installation section in `README.md`.
 
-Installer launchers exist in the source repository, but they are not included in the Release zip. You can also install dependencies manually:
+The Release package includes installer launchers in `install/`. You can also install dependencies manually:
 
 ```bash
 python3 -m pip install --user -U numpy tifffile imagecodecs Pillow
