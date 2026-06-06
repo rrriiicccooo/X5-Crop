@@ -11,6 +11,13 @@
 > Windows: 双击 `install/X5_Crop_win_install.bat`
 >
 > 安装完成后，再把 `X5_Crop.py`、对应系统的主启动器和 TIFF 长图放在同一个文件夹里运行。
+>
+> 如果 macOS 双击安装启动器打不开，请用终端运行：
+>
+> ```bash
+> cd "/path/to/X5-Crop"
+> /bin/bash install/X5_Crop_Mac_install.command
+> ```
 
 ### Release 压缩包里有什么
 
@@ -58,6 +65,14 @@ install/X5_Crop_win_install.bat
 ```
 
 安装器会检查 Python 和依赖库。安装完成后，再运行主启动器。
+
+macOS 安装器还会尝试为当前 Release 文件夹里的主启动器添加执行权限，并移除下载隔离标记。它不能把脚本永久加入 macOS 的全局可信名单；如果重新下载或解压一份新的 Release，请对新的文件夹再运行一次安装器。
+
+如果双击安装启动器打不开，请打开 Terminal，输入 `cd `，把 X5 Crop 文件夹拖进窗口后按 Return，然后运行：
+
+```bash
+/bin/bash install/X5_Crop_Mac_install.command
+```
 
 ### 怎么启动
 
@@ -150,6 +165,13 @@ This is the shortest guide for X5 Crop. For full installation notes, command-lin
 > Windows: double-click `install/X5_Crop_win_install.bat`
 >
 > After installation, put `X5_Crop.py`, the main launcher for your system, and the TIFF long-strip scans in the same folder.
+>
+> If macOS will not open the installer by double-clicking, run it from Terminal:
+>
+> ```bash
+> cd "/path/to/X5-Crop"
+> /bin/bash install/X5_Crop_Mac_install.command
+> ```
 
 ### What Is In The Release Zip
 
@@ -197,6 +219,14 @@ install/X5_Crop_win_install.bat
 ```
 
 The installer checks Python and required libraries. After installation, run the main launcher.
+
+The macOS installer also tries to make the main launcher executable and remove the download quarantine flag from the current Release folder. It cannot permanently add the script to a global macOS trusted list. If you download or unzip a fresh Release copy later, run the installer again for that new folder.
+
+If double-clicking the installer does not work, open Terminal, type `cd `, drag the X5 Crop folder into the window, press Return, then run:
+
+```bash
+/bin/bash install/X5_Crop_Mac_install.command
+```
 
 ### How To Launch
 

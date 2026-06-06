@@ -25,6 +25,15 @@ echo "X5 Crop first-time setup for macOS"
 echo "Folder: $(pwd)"
 echo
 
+echo "Preparing launchers for macOS..."
+chmod +x "X5_Crop_Mac.command" >/dev/null 2>&1 || true
+chmod +x "install/X5_Crop_Mac_install.command" >/dev/null 2>&1 || true
+if command -v xattr >/dev/null 2>&1; then
+    xattr -dr com.apple.quarantine . >/dev/null 2>&1 || true
+fi
+echo "Launcher permissions prepared."
+echo
+
 if command -v python3 >/dev/null 2>&1; then
     PYTHON_BASE="python3"
 elif command -v python >/dev/null 2>&1; then

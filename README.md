@@ -183,6 +183,14 @@ macOS:
 install/X5_Crop_Mac_install.command
 ```
 
+macOS 安装器还会尝试为当前 Release 文件夹里的主启动器添加执行权限，并移除下载隔离标记。它不能把脚本永久加入 macOS 的全局可信名单；如果重新下载或解压一份新的 Release，请对新的文件夹再运行一次安装器。
+
+如果 macOS 双击安装启动器打不开，请打开 Terminal，输入 `cd `，把 X5 Crop 文件夹拖进窗口后按 Return，然后运行：
+
+```bash
+/bin/bash install/X5_Crop_Mac_install.command
+```
+
 Windows:
 
 ```text
@@ -526,6 +534,18 @@ macOS:
 
 ```text
 install/X5_Crop_Mac_install.command
+```
+
+The macOS installer also tries to make the main launcher executable and remove
+the download quarantine flag from the current Release folder. It cannot
+permanently add the script to a global macOS trusted list. If you download or
+unzip a fresh Release copy later, run the installer again for that new folder.
+
+If double-clicking the macOS installer does not work, open Terminal, type
+`cd `, drag the X5 Crop folder into the window, press Return, then run:
+
+```bash
+/bin/bash install/X5_Crop_Mac_install.command
 ```
 
 Windows:

@@ -47,6 +47,11 @@ project documentation consolidated in `README.md`.
 - Keep detection changes close to the script logic.
 - Avoid broad refactors while solving a narrow detection or workflow task.
 - Add or update docs when script usage, setup, or testing behavior changes.
+- macOS installer setup should keep launchers usable after download: it should
+  `chmod +x` the main macOS launcher and installer, and remove
+  `com.apple.quarantine` from the current Release folder when `xattr` is
+  available. This is a per-folder preparation step, not a permanent global
+  macOS trust registration.
 - After changing the active script or launchers, sync the local ignored Test
   copies too, especially `Test/135/X5_Crop.py`,
   `Test/135/X5_Crop_Mac.command`, and `Test/135/X5_Crop_win.bat`.
@@ -158,6 +163,11 @@ Changed:
   first and English second. It puts first-time installer launchers in a
   prominent note near the top and points users to `README.md` and `CHANGELOG.md`
   for fuller documentation.
+- macOS installer now prepares launch permissions for the current Release
+  folder by running `chmod +x` on the main macOS launcher and installer, then
+  removing `com.apple.quarantine` with `xattr` when available. README and
+  `快速启动_Quick_Start.md` now include the Terminal fallback command:
+  `/bin/bash install/X5_Crop_Mac_install.command`.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
   unchanged because the full run stayed stable. 120-66 / 120-67 now use a
@@ -402,6 +412,10 @@ Verified:
   release package policy now includes `README.md`, the bilingual quick-start
   guide, and installer launchers under `install/`, while still excluding archive
   snapshots, license, GitHub config, and local test/output folders.
+- Current macOS installer permission verification: `bash -n
+  install/X5_Crop_Mac_install.command X5_Crop_Mac.command` passed. The installer
+  now contains the `chmod +x` and `xattr -dr com.apple.quarantine .` preparation
+  steps.
 - Current V3.6.12 verification: `python3 X5_Crop.py --version` prints
   `X5_Crop.py 3.6.12`; `python3 -m py_compile X5_Crop.py` passed. Full
   `Test/半格` dry-run with `--format half --strip full --count 12 --deskew off
