@@ -196,6 +196,10 @@ class FormatTuning:
     outer_min_height_ratio: float = 0.10
     content_profile_smooth_ratio: float = 0.010
     content_profile_min_run_ratio: float = 0.20
+    content_profile_threshold_min: float = 0.035
+    content_profile_threshold_max: float = 0.40
+    content_profile_p35_weight: float = 0.38
+    content_profile_p65_multiplier: float = 0.82
     content_mask_p55_weight: float = 0.34
     content_mask_p75_multiplier: float = 0.78
     content_mask_min: float = 0.045
@@ -207,6 +211,11 @@ class FormatTuning:
     content_conf_aspect_norm: float = 0.18
     content_weak_coverage: float = 0.14
     content_aspect_uncertain: float = 0.18
+    content_grid_fallback_cap: float = 0.82
+    content_run_mismatch_cap: float = 0.84
+    content_runs_incomplete_cap: float = 0.84
+    content_weak_coverage_cap: float = 0.82
+    content_aspect_uncertain_cap: float = 0.82
     gap_radius_ratio: float = 0.16
     gap_radius_min: int = 6
     gap_radius_max: int = 900
@@ -243,6 +252,7 @@ class FormatTuning:
     nearby_local_gain_ratio: float = 0.006
     nearby_local_gain_min: float = 8.0
     nearby_local_gain_max: float = 40.0
+    nearby_active_correction: bool = True
     robust_reliable_min_score: float = 0.28
     robust_min_reliable: int = 2
     robust_pitch_min_ratio: float = 0.70
@@ -323,8 +333,32 @@ class FormatTuning:
     score_geometry_floor_high: float = 0.92
     score_geometry_floor_low: float = 0.88
     score_unstable_width_cv: float = 0.030
+    score_full_outer_min_area: float = 0.40
+    score_135_min_hard_gaps: int = 2
+    score_135_max_equal_min: int = 2
+    score_135_low_hard_cap: float = 0.82
+    score_135_mostly_equal_cap: float = 0.84
+    score_partial_one_cap: float = 0.78
+    score_partial_two_35mm_cap: float = 0.82
+    score_partial_general_cap: float = 0.84
+    score_outer_too_large_cap: float = 0.82
+    score_low_confidence_floor: float = 0.85
+    score_120_require_all_hard: bool = True
+    score_allow_135_full_detected_geometry: bool = True
+    score_allow_half_geometry: bool = True
     separator_model_grid_credit: float = 0.35
     separator_model_equal_credit: float = 0.12
+    separator_135_needed_hard_max: int = 2
+    separator_135_max_equal_min: int = 2
+    separator_half_allow_geometry_support: bool = True
+    separator_120_require_all_hard: bool = True
+    leading_grid_failure_enabled: bool = True
+    leading_grid_failure_min_count: int = 5
+    leading_grid_failure_leading_count: int = 3
+    leading_grid_failure_low_score: float = 0.35
+    leading_grid_failure_very_low_score: float = 0.12
+    leading_grid_failure_very_low_count: int = 2
+    leading_grid_failure_max_hard: int = 2
     geometry_width_cv_norm: float = 0.040
     content_support_aspect_norm: float = 0.22
     content_support_coverage_weight: float = 0.42
@@ -344,6 +378,8 @@ class FormatTuning:
     partial_edge_hint_window_max: int = 900
     partial_content_min_count_35mm: int = 3
     partial_content_min_count_small: int = 2
+    content_only_partial_enabled: bool = True
+    lucky_pass_risk_enabled: bool = True
     approved_polish_long_limit_ratio: float = 0.018
     approved_polish_long_limit_min: int = 20
     approved_polish_long_limit_max: int = 60
@@ -360,6 +396,9 @@ def format_tuning(format_name: str) -> FormatTuning:
             content_profile_min_run_ratio=0.16,
             separator_model_grid_credit=0.25,
             separator_model_equal_credit=0.08,
+            nearby_active_correction=False,
+            lucky_pass_risk_enabled=False,
+            leading_grid_failure_enabled=False,
         )
     if format_name == "xpan":
         return FormatTuning(
@@ -369,6 +408,9 @@ def format_tuning(format_name: str) -> FormatTuning:
             content_profile_min_run_ratio=0.24,
             separator_model_grid_credit=0.20,
             separator_model_equal_credit=0.06,
+            nearby_active_correction=False,
+            lucky_pass_risk_enabled=False,
+            leading_grid_failure_enabled=False,
         )
     if format_name in {"120-645", "120-66", "120-67"}:
         return FormatTuning(
@@ -381,9 +423,17 @@ def format_tuning(format_name: str) -> FormatTuning:
             calibrate_separator_weight=0.36,
             calibrate_geometry_weight=0.32,
             calibrate_content_weight=0.32,
+            nearby_active_correction=False,
+            lucky_pass_risk_enabled=False,
+            leading_grid_failure_enabled=False,
         )
     if format_name == "135-dual":
-        return FormatTuning("135-dual")
+        return FormatTuning(
+            "135-dual",
+            nearby_active_correction=False,
+            lucky_pass_risk_enabled=False,
+            leading_grid_failure_enabled=False,
+        )
     return FormatTuning("135")
 
 
@@ -1044,7 +1094,14 @@ def content_profile_runs(evidence: np.ndarray, outer: Box, count: int, format_na
     smooth_window = max(5, int(round(max(1, outer.width) * tuning.content_profile_smooth_ratio)))
     smoothed = smooth_1d(profile.astype(np.float32), smooth_window)
     p35, p65, p90 = sampled_percentile(smoothed, [35, 65, 90])
-    threshold = max(0.035, min(0.40, float(p35 + (p90 - p35) * 0.38), float(p65) * 0.82))
+    threshold = max(
+        tuning.content_profile_threshold_min,
+        min(
+            tuning.content_profile_threshold_max,
+            float(p35 + (p90 - p35) * tuning.content_profile_p35_weight),
+            float(p65) * tuning.content_profile_p65_multiplier,
+        ),
+    )
     runs = runs_from_mask(smoothed >= threshold)
     min_width = max(6, int(round(outer.width / max(1, count) * tuning.content_profile_min_run_ratio)))
     filtered: list[tuple[int, int]] = []
@@ -1163,19 +1220,19 @@ def content_detection_for_count(
     confidence = 0.38 * coverage_conf + 0.30 * mean_conf + 0.22 * run_conf + 0.10 * aspect_conf
     reasons: list[str] = []
     if placement != "content_runs":
-        confidence = min(confidence, 0.82)
+        confidence = min(confidence, tuning.content_grid_fallback_cap)
         reasons.append("content_grid_fallback")
     if len(runs) != count:
-        confidence = min(confidence, 0.84)
+        confidence = min(confidence, tuning.content_run_mismatch_cap)
         reasons.append("content_run_count_mismatch")
     if run_conf < 1.0:
-        confidence = min(confidence, 0.84)
+        confidence = min(confidence, tuning.content_runs_incomplete_cap)
         reasons.append("content_runs_incomplete")
     if median_coverage < tuning.content_weak_coverage:
-        confidence = min(confidence, 0.82)
+        confidence = min(confidence, tuning.content_weak_coverage_cap)
         reasons.append("content_coverage_weak")
     if max_aspect_error > tuning.content_aspect_uncertain:
-        confidence = min(confidence, 0.82)
+        confidence = min(confidence, tuning.content_aspect_uncertain_cap)
         reasons.append("content_aspect_uncertain")
     if strip_mode == "partial":
         reasons.append("partial_strip_count_candidate")
@@ -2705,8 +2762,8 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
     enough_135_separator_evidence = (
         fmt.name != "135"
         or expected_gaps <= 1
-        or (actual_detected >= 2 and equal <= max(2, expected_gaps // 2))
-        or (actual_detected >= 1 and enhanced_detected >= 2 and equal <= max(2, expected_gaps // 2))
+        or (actual_detected >= tuning.score_135_min_hard_gaps and equal <= max(tuning.score_135_max_equal_min, expected_gaps // 2))
+        or (actual_detected >= 1 and enhanced_detected >= 2 and equal <= max(tuning.score_135_max_equal_min, expected_gaps // 2))
     )
 
     confidence = 0.40 * gap_conf + 0.30 * width_conf + 0.20 * outer_conf + 0.10 * contrast_conf
@@ -2717,12 +2774,12 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
         and len(boxes) == count
         and (
             width_cv <= tuning.score_full_width_cv
-            or (fmt.name == "135" and detected == expected_gaps)
+            or (fmt.name == "135" and tuning.score_allow_135_full_detected_geometry and detected == expected_gaps)
         )
-        and 0.40 <= outer_area <= tuning.score_outer_max_area
+        and tuning.score_full_outer_min_area <= outer_area <= tuning.score_outer_max_area
         and outer_area <= tuning.score_outer_too_large
         and enough_135_separator_evidence
-        and (fmt.name in {"135", "half"} or (reliable >= expected_gaps and equal == 0))
+        and (fmt.name == "135" or (fmt.name == "half" and tuning.score_allow_half_geometry) or (reliable >= expected_gaps and equal == 0))
     )
     if full_geometry_ok:
         geometry_floor = tuning.score_geometry_floor_high if fmt.name in {"135", "half"} and width_cv <= tuning.score_geometry_floor_tight_cv else tuning.score_geometry_floor_low
@@ -2747,29 +2804,29 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
         reasons.append("low_contrast")
     if len(boxes) != count:
         reasons.append("frame_count_mismatch")
-    if confidence < 0.85 and not reasons:
+    if confidence < tuning.score_low_confidence_floor and not reasons:
         reasons.append("low_confidence")
 
     if strip_mode == "partial" and count < fmt.default_count:
         if count <= 1:
-            confidence = min(confidence, 0.78)
+            confidence = min(confidence, tuning.score_partial_one_cap)
             reasons.append("partial_too_ambiguous")
         elif count <= 2 and fmt.default_count >= 6:
-            confidence = min(confidence, 0.82)
+            confidence = min(confidence, tuning.score_partial_two_35mm_cap)
             reasons.append("partial_too_ambiguous")
         else:
-            confidence = min(confidence, 0.84)
+            confidence = min(confidence, tuning.score_partial_general_cap)
         reasons.append("partial_strip_count_candidate")
 
     if fmt.name == "135" and expected_gaps >= 3:
         if actual_detected < 1:
-            confidence = min(confidence, 0.82)
+            confidence = min(confidence, tuning.score_135_low_hard_cap)
         elif actual_detected < 2 and enhanced_detected < 2:
-            confidence = min(confidence, 0.82)
+            confidence = min(confidence, tuning.score_135_low_hard_cap)
         elif equal >= max(2, expected_gaps // 2 + 1):
-            confidence = min(confidence, 0.84)
+            confidence = min(confidence, tuning.score_135_mostly_equal_cap)
     if outer_area > tuning.score_outer_too_large:
-        confidence = min(confidence, 0.82)
+        confidence = min(confidence, tuning.score_outer_too_large_cap)
 
     detail = {
         "detected_gaps": detected,
@@ -2863,7 +2920,7 @@ def build_detection_for_outer(
             separator_analysis_detail = {"used": False, "reason": "auto_not_needed"}
     nearby_correction_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     confidence_cap_after_nearby: Optional[float] = None
-    if strip_mode == "full" and fmt.name == "135":
+    if strip_mode == "full" and fmt.name == "135" and format_tuning(fmt.name).nearby_active_correction:
         pre_correction_boxes = frame_boxes_from_gaps(
             outer, gaps, count, ww, wh, config.bleed_x, config.bleed_y, origin=origin, pitch=pitch
         )
@@ -3254,14 +3311,15 @@ def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[
         )
         hard_adjacent_late = hard_indexes == expected_sequence and min(hard_indexes) >= 4
     leading_grid_failure = (
-        detection.film_format == "135"
+        tuning.leading_grid_failure_enabled
+        and detection.film_format == "135"
         and detection.strip_mode == "full"
-        and expected >= 5
-        and len(leading_grid_scores) >= 3
-        and all(score < 0.35 for score in leading_grid_scores[:3])
-        and sum(1 for score in leading_grid_scores[:3] if score < 0.12) >= 2
+        and expected >= tuning.leading_grid_failure_min_count
+        and len(leading_grid_scores) >= tuning.leading_grid_failure_leading_count
+        and all(score < tuning.leading_grid_failure_low_score for score in leading_grid_scores[:tuning.leading_grid_failure_leading_count])
+        and sum(1 for score in leading_grid_scores[:tuning.leading_grid_failure_leading_count] if score < tuning.leading_grid_failure_very_low_score) >= tuning.leading_grid_failure_very_low_count
         and enhanced_accepted == 0
-        and len(hard_indexes) <= 2
+        and len(hard_indexes) <= tuning.leading_grid_failure_max_hard
         and hard_adjacent_late
     )
 
@@ -3275,14 +3333,14 @@ def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[
         ok = False
         reason = "135_leading_grid_separator_failure"
     elif detection.film_format == "135":
-        needed = min(expected, 2)
-        ok = hard >= needed and equal <= max(2, expected // 2)
+        needed = min(expected, tuning.separator_135_needed_hard_max)
+        ok = hard >= needed and equal <= max(tuning.separator_135_max_equal_min, expected // 2)
         reason = "135_hard_separator_support" if ok else "135_separator_support_weak"
     elif detection.film_format == "half":
-        ok = detection.confidence >= threshold and equal <= expected
+        ok = bool(tuning.separator_half_allow_geometry_support) and detection.confidence >= threshold and equal <= expected
         reason = "half_geometry_support" if ok else "half_separator_support_weak"
     else:
-        needed = max(1, expected)
+        needed = max(1, expected if tuning.separator_120_require_all_hard else min(expected, 1))
         ok = hard >= needed
         reason = "120_hard_separator_support" if ok else "120_separator_support_weak"
 
@@ -3308,6 +3366,8 @@ def content_only_partial_can_pass(detection: Detection, threshold: float, fmt: F
     tuning = format_tuning(fmt.name)
     min_partial_count = tuning.partial_content_min_count_35mm if fmt.default_count >= 6 else tuning.partial_content_min_count_small
     return (
+        tuning.content_only_partial_enabled
+        and
         detection.strip_mode == "partial"
         and detection.count < fmt.default_count
         and detection.count >= min_partial_count
@@ -4189,8 +4249,10 @@ def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection) -> None
 
 
 def lucky_pass_risk_score_detail(gray: np.ndarray, detection: Detection, threshold: float) -> dict[str, Any]:
+    tuning = format_tuning(detection.film_format)
     if (
-        detection.film_format != "135"
+        not tuning.lucky_pass_risk_enabled
+        or detection.film_format != "135"
         or detection.strip_mode != "full"
         or detection.count != FORMATS["135"].default_count
         or detection.confidence < threshold

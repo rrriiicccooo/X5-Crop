@@ -216,6 +216,13 @@ Changed:
   geometry-polish thresholds behind format-aware policy values. 135 keeps the
   current values; non-135 formats now have conservative policy entry points for
   future tuning.
+- Follow-up V3.7 format-policy expansion moved content-run thresholds, content
+  confidence caps, score caps, separator hard-evidence gates,
+  leading-grid-failure, content-only partial passing, nearby active correction,
+  and lucky-pass risk behind `FormatTuning` as well. High-risk active behavior
+  remains conservative: nearby active correction, lucky-pass risk, and
+  leading-grid failure are still enabled only on the validated 135 path; other
+  formats have separate policy hooks and diagnostics groundwork only.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
   unchanged because the full run stayed stable. 120-66 / 120-67 now use a
@@ -504,6 +511,14 @@ Verified:
   `/private/tmp/x5_format_policy_after_135/split_report.jsonl` against
   `/private/tmp/x5_scale_threshold_more_after2_135/split_report.jsonl`; there
   were 0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps`.
+- V3.7 follow-up format-policy expansion verification: `python3 -m py_compile
+  X5_Crop.py` passed, `Test/135/X5_Crop.py` was synced, and full `Test/135`
+  `deskew off` dry run with the same settings produced 48 ok / 0 failed /
+  43 `approved_auto` / 5 `needs_review`. Compared
+  `/private/tmp/x5_format_policy_after2_135/split_report.jsonl` against
+  `/private/tmp/x5_format_policy_after_135/split_report.jsonl`; there were
+  0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
   `frame_boxes`, and `gaps`.
 - Current format-aware frame-fit policy verification: compared current script
   against a temporary pre-policy `HEAD:X5_Crop.py` copy. Full `Test/135`
