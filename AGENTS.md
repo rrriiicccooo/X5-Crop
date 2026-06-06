@@ -131,7 +131,13 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.6.9.
+- Active script is `X5_Crop.py` V3.6.10.
+- V3.6.10 is a low-risk cleanup after V3.6.9. It removes the unused
+  `grid_protection_trust()` wrapper, updates CLI version/help text, fixes the
+  `--bleed-x` help default from 15 to 20, clarifies that `--analysis` affects
+  both enhanced separator assist and enhanced deskew angle selection, and
+  updates stale diagnostic wording that referenced the V3.3.1 output baseline.
+  It should not change detection flow, PASS/REVIEW logic, or output boxes.
 - V3.6.9 unifies active grid protection with lightweight diagnostic hard-gap
   trust. `apply_robust_grid` now calls shared `light_hard_gap_trust` before
   letting a hard gap resist grid override. This shared trust can flag
@@ -249,7 +255,7 @@ Changed:
   strips now use content only as validation rather than generating separate
   content candidates, and 135 full strips no longer run the simple cuts-based
   frame-size fit before the explicit edge-sample fit.
-- V3.0 through V3.6.9 active-script snapshots are preserved in `archive/`:
+- V3.0 through V3.6.10 active-script snapshots are preserved in `archive/`:
   `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
   `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
   `X5_Crop_v3.3.1.py`, `X5_Crop_v3.3.2.py`, `X5_Crop_v3.4.py`,
@@ -257,8 +263,8 @@ Changed:
   `X5_Crop_v3.6.py`, `X5_Crop_v3.6.1.py`, `X5_Crop_v3.6.2.py`, and
   `X5_Crop_v3.6.3.py`, `X5_Crop_v3.6.4.py`,
   `X5_Crop_v3.6.5.py`, `X5_Crop_v3.6.6.py`,
-  `X5_Crop_v3.6.7.py`, `X5_Crop_v3.6.8.py`, and
-  `X5_Crop_v3.6.9.py`.
+  `X5_Crop_v3.6.7.py`, `X5_Crop_v3.6.8.py`,
+  `X5_Crop_v3.6.9.py`, and `X5_Crop_v3.6.10.py`.
 - Future named development versions, including experiments that are later
   paused or rolled back, should also be saved as archive snapshots.
 - V3.3.2 adds conservative overlap-aware gap handling for 135 full strips:
@@ -343,6 +349,12 @@ Changed:
   falls back to 2 thread workers instead of failing.
 
 Verified:
+- Current V3.6.10 verification: `python3 X5_Crop.py --version` and
+  `python3 archive/X5_Crop_v3.6.10.py --version` both print
+  `X5_Crop.py 3.6.10`; `python3 -m py_compile X5_Crop.py
+  Test/135/X5_Crop.py archive/X5_Crop_v3.6.10.py` passed. Focus dry-run with
+  diagnostics on `X5_00014`, `X5_00026`, `X5_00036`, and `X5_00041`
+  produced `14/26` as `approved_auto` and `36/41` as `needs_review`.
 - Current V3.6.9 verification: `python3 X5_Crop.py --version` prints
   `X5_Crop.py 3.6.9`; `python3 -m py_compile X5_Crop.py` passed. Focus
   dry-run on `X5_00007`, `X5_00014`, `X5_00023`, `X5_00026`,
