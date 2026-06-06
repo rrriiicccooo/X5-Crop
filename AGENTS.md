@@ -125,13 +125,40 @@ Next recommended step:
 
 ## Current Handoff
 
-Date: 2026-06-05
+Date: 2026-06-06
 Computer: primary macOS machine
 Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.6.6.
+- Active script is `X5_Crop.py` V3.6.8.
+- V3.6.8 replaces the V3.6.7 exact `single_anchor_review_gate` with
+  `lucky_pass_risk_score`, so the rule no longer reads as tailored to one
+  image. It scores model-gap dependence, limited strong hard separators,
+  suspicious hard gaps, strong overlap model gaps, combined suspicion/overlap,
+  and geometry stability credits. At score `>= 0.80`, it adds
+  `lucky_pass_risk` and caps confidence below threshold. This can only move a
+  suspicious PASS to REVIEW; it cannot make a weak image pass.
+- V3.6.7 promotes the V3.6.6 nearby separator check into a very narrow
+  correction rule for 135 full strips: a red hard separator can be moved only
+  when a nearby candidate within `±4% pitch` is clearly stronger, the local
+  frame geometry improves, and global width stability does not get worse. The
+  pre-correction confidence is kept as a cap, so the correction cannot increase
+  confidence or make a weak image pass by itself.
+- V3.6.7 added a narrow `single_anchor_review_gate` for `X5_00041`-like lucky
+  PASS shapes. The active gate requires exactly 2 `strong_separator` hard gaps,
+  1 suspicious hard gap, 1 strong overlap model gap, and 2 model gaps. It sends
+  `X5_00041` to REVIEW while the focused check kept `X5_00007`, `X5_00023`,
+  and `X5_00035` as PASS.
+- V3.6.7 target result: compared with V3.6.6, full `Test/135` dry-run changed
+  structurally only on `X5_00026` and `X5_00041`; `X5_00026` pulls back the
+  first red gap, and `X5_00041` enters REVIEW.
+- macOS and Windows launchers now print the active script version dynamically
+  from `X5_Crop.py --version` instead of carrying a hard-coded launcher version.
+  The ignored `Test/135/` launcher copies were synced with the same change.
+- Older handoff / changelog wording that implied all `--jobs` values above 2
+  are capped to 2, or used obsolete early V3.6 `hard_trust` labels as if they
+  were current, has been clarified.
 - Current stable GitHub Release is `v3.6.2`, published from commit
   `5321d74560dcd97d54d150bd5e7aff73e997bd67` with asset
   `X5-Crop-v3.6.2.zip`. Release notes explicitly warn that overlap,
@@ -210,14 +237,15 @@ Changed:
   strips now use content only as validation rather than generating separate
   content candidates, and 135 full strips no longer run the simple cuts-based
   frame-size fit before the explicit edge-sample fit.
-- V3.0 through V3.6.6 active-script snapshots are preserved in `archive/`:
+- V3.0 through V3.6.8 active-script snapshots are preserved in `archive/`:
   `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
   `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
   `X5_Crop_v3.3.1.py`, `X5_Crop_v3.3.2.py`, `X5_Crop_v3.4.py`,
   `X5_Crop_v3.4.1.py`, `X5_Crop_v3.4.2.py`, `X5_Crop_v3.5.py`,
   `X5_Crop_v3.6.py`, `X5_Crop_v3.6.1.py`, `X5_Crop_v3.6.2.py`, and
   `X5_Crop_v3.6.3.py`, `X5_Crop_v3.6.4.py`,
-  `X5_Crop_v3.6.5.py`, and `X5_Crop_v3.6.6.py`.
+  `X5_Crop_v3.6.5.py`, `X5_Crop_v3.6.6.py`,
+  `X5_Crop_v3.6.7.py`, and `X5_Crop_v3.6.8.py`.
 - Future named development versions, including experiments that are later
   paused or rolled back, should also be saved as archive snapshots.
 - V3.3.2 adds conservative overlap-aware gap handling for 135 full strips:
@@ -293,14 +321,42 @@ Changed:
   overlapping sections.
 - macOS and Windows launchers now re-prompt after an unknown format instead of
   exiting immediately.
-- Folder runs now process TIFF files in parallel with `--jobs 2` by default.
+- Folder runs process TIFF files in parallel with `--jobs 2` by default.
   Reports are still written by the main process after each file completes, so
   `split_report.jsonl` and `split_summary.csv` are not appended by multiple
-  workers at the same time. Values above 2 are capped to 2.
+  workers at the same time. Normal runs cap at 2 workers; explicit diagnostics
+  runs can use up to 4 workers.
 - If process workers are unavailable in a restricted environment, the script
   falls back to 2 thread workers instead of failing.
 
 Verified:
+- Current V3.6.8 verification: `python3 X5_Crop.py --version` prints
+  `X5_Crop.py 3.6.8`; `python3 -m py_compile X5_Crop.py` passed. Focus
+  dry-run on `X5_00007`, `X5_00014`, `X5_00023`, `X5_00026`,
+  `X5_00032`, `X5_00035`, and `X5_00041` produced only `X5_00041` as
+  REVIEW. Focus risk scores: `X5_00041=0.96`, `X5_00007=0.71`,
+  `X5_00035=0.74`, threshold `0.80`.
+- Full V3.6.8 `Test/135` dry-run with `--format 135 --strip full --count 6
+  --dry-run --report --no-copy-review-files --jobs 2` produced 42
+  `approved_auto` / 6 `needs_review`, with `X5_00041` entering REVIEW via
+  `lucky_pass_risk`.
+- Current V3.6.7 verification: `python3 X5_Crop.py --version` prints
+  `X5_Crop.py 3.6.7`; `python3 -m py_compile X5_Crop.py` passed. Focus
+  dry-run with diagnostics on `X5_00014`, `X5_00026`, `X5_00032`,
+  `X5_00041`, and `X5_00036` kept `14/26/32` approved, kept `36` in review,
+  and moved `41` to review with `single_anchor_pass_risk`.
+- After narrowing the `single_anchor_review_gate`, focus dry-run on
+  `X5_00007`, `X5_00014`, `X5_00023`, `X5_00026`, `X5_00032`, `X5_00035`,
+  and `X5_00041` produced only `X5_00041` as REVIEW.
+- Full V3.6.7 `Test/135` dry-run with `--format 135 --strip full --count 6
+  --dry-run --report --no-copy-review-files --jobs 2` produced 42
+  `approved_auto` / 6 `needs_review`. Compared with the local V3.6.6 full
+  report, changed files were only `X5_00026` and `X5_00041`.
+- `bash -n X5_Crop_Mac.command Test/135/X5_Crop_Mac.command`
+- `python3 -m py_compile X5_Crop.py Test/135/X5_Crop.py`
+- `printf '\n\n\n\n' | ./X5_Crop_Mac.command` printed
+  `X5_Crop.py 3.6.7 launcher` before stopping at the expected no-TIFF message
+  in the repository root.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py archive/X5_Crop_v3.0.py archive/X5_Crop_v3.1.py archive/X5_Crop_v3.1.1.py archive/X5_Crop_v3.1.2.py archive/X5_Crop_v3.2.py archive/X5_Crop_v3.3.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 3.6`.

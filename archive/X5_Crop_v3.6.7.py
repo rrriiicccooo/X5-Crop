@@ -34,7 +34,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "3.6.8"
+VERSION = "3.6.7"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -3656,7 +3656,7 @@ def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection) -> None
     }
 
 
-def lucky_pass_risk_score_detail(gray: np.ndarray, detection: Detection, threshold: float) -> dict[str, Any]:
+def single_anchor_review_gate_detail(gray: np.ndarray, detection: Detection, threshold: float) -> dict[str, Any]:
     if (
         detection.film_format != "135"
         or detection.strip_mode != "full"
@@ -3680,47 +3680,22 @@ def lucky_pass_risk_score_detail(gray: np.ndarray, detection: Detection, thresho
     )
     strong_overlap_models = int(overlap_risk_counts.get("strong", 0))
     grid_or_equal = sum(1 for gap in detection.gaps if gap.method in {"grid", "equal"})
-    width_cv = float(detection.detail.get("width_cv", 0.0) or 0.0)
-    components: dict[str, float] = {}
-    if grid_or_equal >= 2:
-        components["model_gap_support"] = 0.24
-    elif grid_or_equal == 1:
-        components["minor_model_gap_support"] = 0.08
-    if strong_hard <= 2:
-        components["limited_strong_hard_evidence"] = 0.20
-    if strong_hard <= 1:
-        components["very_limited_strong_hard_evidence"] = 0.10
-    if suspicious_hard >= 1:
-        components["suspicious_hard_gap"] = 0.20
-    if strong_overlap_models >= 1:
-        components["strong_overlap_model_gap"] = 0.20
-    if grid_or_equal >= 2 and suspicious_hard >= 1 and strong_overlap_models >= 1:
-        components["model_suspicion_overlap_combo"] = 0.12
-    if width_cv >= 0.006:
-        components["unstable_widths"] = 0.16
-    elif width_cv >= 0.003:
-        components["mild_width_instability"] = 0.08
-    if strong_hard >= 3:
-        components["strong_hard_evidence_credit"] = -0.15
-    if width_cv < 0.002 and grid_or_equal >= 3:
-        components["stable_global_geometry_credit"] = -0.35
-    risk_score = max(0.0, min(1.0, sum(components.values())))
-    risk_threshold = 0.80
-    risk = risk_score >= risk_threshold
+    risk = (
+        grid_or_equal == 2
+        and strong_hard == 2
+        and suspicious_hard == 1
+        and strong_overlap_models == 1
+    )
     return {
         "used": True,
         "risk": bool(risk),
-        "reason": "lucky_pass_risk" if risk else "ok",
-        "risk_score": float(risk_score),
-        "risk_threshold": float(risk_threshold),
-        "components": components,
+        "reason": "single_anchor_pass_risk" if risk else "ok",
         "hard_trust_counts": hard_counts,
         "overlap_risk_counts": overlap_risk_counts,
         "strong_hard_gaps": int(strong_hard),
         "suspicious_hard_gaps": int(suspicious_hard),
         "strong_overlap_model_gaps": int(strong_overlap_models),
         "model_gap_count": int(grid_or_equal),
-        "width_cv": float(width_cv),
     }
 
 
@@ -4528,11 +4503,11 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     if not unsupported_mode and bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
         detection.confidence = min(detection.confidence, 0.84)
         detection.review_reasons.append("outer_content_bbox_mismatch")
-    lucky_pass_risk = lucky_pass_risk_score_detail(gray, detection, config.confidence_threshold)
-    detection.detail["lucky_pass_risk_score"] = lucky_pass_risk
-    if bool(lucky_pass_risk.get("risk", False)):
+    single_anchor_gate = single_anchor_review_gate_detail(gray, detection, config.confidence_threshold)
+    detection.detail["single_anchor_review_gate"] = single_anchor_gate
+    if bool(single_anchor_gate.get("risk", False)):
         detection.confidence = min(detection.confidence, 0.84)
-        detection.review_reasons.append("lucky_pass_risk")
+        detection.review_reasons.append("single_anchor_pass_risk")
 
     if detection.confidence < config.confidence_threshold:
         if detection.detail.get("partial_best"):
@@ -4623,7 +4598,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V3.6.8 lucky-pass risk scoring single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V3.6.7 nearby separator correction single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")

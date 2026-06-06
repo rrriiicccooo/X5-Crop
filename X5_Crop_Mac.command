@@ -64,7 +64,12 @@ else
     finish 1
 fi
 
-echo "X5 Crop V3.6.3 launcher"
+VERSION_LABEL="$($PYTHON "$SCRIPT" --version 2>/dev/null)"
+if [ -n "$VERSION_LABEL" ]; then
+    echo "$VERSION_LABEL launcher"
+else
+    echo "X5 Crop launcher"
+fi
 echo "Folder: $(pwd)"
 echo
 echo "This will process TIFF files in this folder."

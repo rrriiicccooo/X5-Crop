@@ -28,7 +28,12 @@ if %errorlevel%==0 (
     )
 )
 
-echo X5 Crop V3.6.3 launcher
+for /f "usebackq delims=" %%V in (`%PYTHON% "%SCRIPT%" --version 2^>nul`) do set "VERSION_LABEL=%%V"
+if defined VERSION_LABEL (
+    echo %VERSION_LABEL% launcher
+) else (
+    echo X5 Crop launcher
+)
 echo Folder: %cd%
 echo.
 echo This will process TIFF files in this folder.
