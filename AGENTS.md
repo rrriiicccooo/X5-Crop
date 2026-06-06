@@ -184,6 +184,10 @@ Changed:
   `same_frame_size_fit_boxes()` role is now `fit_boxes_by_edge_evidence()`;
   `fit_frame_boxes_from_gaps()` is the unified entry point for edge-evidence
   fit, geometry fallback, and raw-gap fallback.
+- After V3.7, the default output long-axis bleed was changed from 20px to 35px
+  without a version bump; short-axis bleed remains 10px. Detection still keeps
+  bleed out of scoring and applies bleed only to output/report/Debug Analysis
+  frame boxes.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
   unchanged because the full run stayed stable. 120-66 / 120-67 now use a
@@ -387,7 +391,7 @@ Changed:
   image content may still require manual Debug Analysis review.
 - V3.3.1 keeps the V3/V3.2 ordinary outer/gap/candidate selection chain and
   the V3.3 output-only bleed separation.
-- Default output bleed is long-axis 20px and short-axis 10px. Detection now
+- Default output bleed is long-axis 35px and short-axis 10px. Detection now
   uses 0px bleed internally, so bleed is applied only to final output/report/
   Debug Analysis frame boxes and does not participate in outer, gap,
   confidence, or PASS/REVIEW scoring.

@@ -117,7 +117,7 @@ X5 Crop 会处理同一个文件夹里的 `.tif` / `.tiff` 长图，并把高置
 当前默认行为：
 
 - 检测阶段不使用 bleed；bleed 只在最终输出和 Debug Analysis 色块里应用。
-- 默认输出 bleed 为长轴 20px、短轴 10px。横向长图是左右各 20px、上下各 10px；竖向长图会自动对应旋转。
+- 默认输出 bleed 为长轴 35px、短轴 10px。横向长图是左右各 35px、上下各 10px；竖向长图会自动对应旋转。
 - 对已经 `approved_auto` 且没有复核原因的结果，会做一个很小的输出几何 polish：只允许长轴最多向外微扩。这一步不改变 PASS/REVIEW 和置信度。
 - 对近似叠片、片距局部不稳定、分隔证据不足或内容证据冲突的长图，会保持保守判断，不会为了自动导出而放宽置信规则。
 
@@ -425,7 +425,7 @@ python3 X5_Crop.py . --format 135 --strip full --report --jobs 1
 调整输出 bleed：
 
 ```bash
-python3 X5_Crop.py . --format 135 --strip full --report --bleed-x 20 --bleed-y 10
+python3 X5_Crop.py . --format 135 --strip full --report --bleed-x 35 --bleed-y 10
 ```
 
 `--bleed-x` 是长轴 bleed，`--bleed-y` 是短轴 bleed。
@@ -473,8 +473,8 @@ V3.6.4 keeps bleed outside detection and adds a narrow white-edge outer alignmen
 
 - Detection uses no bleed when scoring outer boxes, gaps, confidence, or
   PASS/REVIEW.
-- Output bleed defaults to 20px on the long axis and 10px on the short axis.
-- Horizontal strips use 20px left/right and 10px top/bottom. Vertical strips are
+- Output bleed defaults to 35px on the long axis and 10px on the short axis.
+- Horizontal strips use 35px left/right and 10px top/bottom. Vertical strips are
   rotated accordingly.
 - A small PASS-only geometry polish may slightly expand long-axis output edges.
 - If both end separators are reliable, the content box is complete, and one
@@ -750,7 +750,7 @@ python3 X5_Crop.py . --format 135 --strip full --report --jobs 1
 Set output bleed:
 
 ```bash
-python3 X5_Crop.py . --format 135 --strip full --report --bleed-x 20 --bleed-y 10
+python3 X5_Crop.py . --format 135 --strip full --report --bleed-x 35 --bleed-y 10
 ```
 
 Disable deskew:

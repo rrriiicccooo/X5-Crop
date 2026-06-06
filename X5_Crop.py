@@ -4838,7 +4838,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-n", "--count", type=int, default=None, help="Override frame count.")
     parser.add_argument("--page", type=int, default=0, help="TIFF page index; default 0.")
     parser.add_argument("--bleed", type=int, default=None, help="Bleed in pixels on all sides; overrides layout-aware defaults.")
-    parser.add_argument("--bleed-x", type=int, default=None, help="Long-axis bleed override; default 20. Horizontal scans: left/right. Vertical scans: top/bottom.")
+    parser.add_argument("--bleed-x", type=int, default=None, help="Long-axis bleed override; default 35. Horizontal scans: left/right. Vertical scans: top/bottom.")
     parser.add_argument("--bleed-y", type=int, default=None, help="Short-axis bleed override; default 10. Horizontal scans: top/bottom. Vertical scans: left/right.")
     parser.add_argument("--deskew", choices=DESKEW_CHOICES, default="auto", help="Deskew strip before detection/export.")
     parser.add_argument("--analysis", choices=ANALYSIS_CHOICES, default="auto", help="Enhanced analysis for separator assist and deskew angle selection. auto runs enhanced separator only on weak separator evidence and enhanced deskew only when base deskew quality is weak; always enables enhanced passes; off disables enhanced analysis.")
@@ -4881,7 +4881,7 @@ def config_from_args(args: argparse.Namespace) -> Config:
         raise ValueError(f"--format {fmt.name} allows --count values: {allowed}")
     layout_auto = str(args.layout) == "auto"
     layout = infer_layout(width, height) if layout_auto else str(args.layout)
-    bleed_x_default = 20 if args.bleed is None else int(args.bleed)
+    bleed_x_default = 35 if args.bleed is None else int(args.bleed)
     bleed_y_default = 10 if args.bleed is None else int(args.bleed)
     bleed_x = int(bleed_x_default if args.bleed_x is None else args.bleed_x)
     bleed_y = int(bleed_y_default if args.bleed_y is None else args.bleed_y)
