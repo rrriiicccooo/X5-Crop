@@ -39,6 +39,13 @@ Current stable release: v3.6.2 (GitHub Releases)
 - `debug analysis` 直接回车是 `no`；输入 `y` 会只生成分析 JPG 和报告，不正式裁切。
 - 正常裁切不会生成 report；只有开启 Debug Analysis 时启动器才会写报告。
 
+格式准确度说明：
+
+- 当前开发版本主要围绕普通 135 长图优化和回归测试。
+- `half`、`xpan`、`645`、`66`、`67` 可以选择使用，但没有经过和 135 同等细致的参数调整，效果可能不如 135 稳定。
+- 对其它 format 的结果，建议先用 Debug Analysis 检查，确认可靠后再正式裁切。
+- 一些高风险修正能力目前只在已验证的 135 路径启用；其它 format 暂时只保留独立参数入口和诊断基础。
+
 运行耗时：
 
 - 在当前测试机器和常见 135 TIFF 长图上，普通 dry run / 裁切通常每张约 5-15 秒。
@@ -83,6 +90,18 @@ Common choices:
 - Normal launcher runs do not write reports; launchers write reports only when
   Debug Analysis is enabled.
 
+Format accuracy note:
+
+- The current development version is primarily optimized and regression-tested
+  for normal 135 long-strip scans.
+- `half`, `xpan`, `645`, `66`, and `67` are available, but they have not been
+  tuned as carefully as 135 and may be less stable.
+- For non-135 formats, use Debug Analysis first and review the result before a
+  final export.
+- Some high-risk correction features are currently enabled only on the validated
+  135 path. Other formats have separate policy hooks and diagnostic groundwork,
+  but those active corrections are not opened yet.
+
 Runtime:
 
 - On the current test machine with typical 135 TIFF long-strip scans, normal dry
@@ -120,6 +139,13 @@ X5 Crop 会处理同一个文件夹里的 `.tif` / `.tiff` 长图，并把高置
 - 默认输出 bleed 为长轴 35px、短轴 10px。横向长图是左右各 35px、上下各 10px；竖向长图会自动对应旋转。
 - 对已经 `approved_auto` 且没有复核原因的结果，会做一个很小的输出几何 polish：只允许长轴最多向外微扩。这一步不改变 PASS/REVIEW 和置信度。
 - 对近似叠片、片距局部不稳定、分隔证据不足或内容证据冲突的长图，会保持保守判断，不会为了自动导出而放宽置信规则。
+
+格式支持状态：
+
+- 当前版本的检测逻辑、参数和回归测试主要服务普通 135。
+- 其它 format 已经有 format-aware 参数入口，但还没有像 135 那样逐张细调。
+- 未对其它 format 开放的高风险 active 能力包括：nearby separator active correction、lucky-pass risk、leading-grid failure。它们目前只在已验证的 135 路径启用。
+- 对 half / xpan / 120 格式，Debug Analysis 里的诊断信息可以辅助判断，但正式自动裁切仍建议人工复核后使用。
 
 ### 更新日志
 

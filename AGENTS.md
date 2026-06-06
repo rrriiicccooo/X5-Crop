@@ -226,6 +226,12 @@ Changed:
 - `hard_fallback_detection()` detail has been simplified to only describe the
   review-only fallback type, format/count/layout, work outer, and pitch. It no
   longer emits `v2_competition` or duplicate gap center/score/method arrays.
+- README and CHANGELOG now explicitly state that the current development
+  version is primarily optimized for normal 135 scans. Other formats are
+  selectable but have not been tuned as carefully as 135. Nearby separator
+  active correction, lucky-pass risk, and leading-grid failure are documented as
+  not opened to non-135 formats yet; they only have policy hooks / diagnostics
+  groundwork there.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
   unchanged because the full run stayed stable. 120-66 / 120-67 now use a
