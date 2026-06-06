@@ -223,6 +223,9 @@ Changed:
   remains conservative: nearby active correction, lucky-pass risk, and
   leading-grid failure are still enabled only on the validated 135 path; other
   formats have separate policy hooks and diagnostics groundwork only.
+- `hard_fallback_detection()` detail has been simplified to only describe the
+  review-only fallback type, format/count/layout, work outer, and pitch. It no
+  longer emits `v2_competition` or duplicate gap center/score/method arrays.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
   unchanged because the full run stayed stable. 120-66 / 120-67 now use a
@@ -520,6 +523,10 @@ Verified:
   `/private/tmp/x5_format_policy_after_135/split_report.jsonl`; there were
   0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
   `frame_boxes`, and `gaps`.
+- Hard-fallback detail cleanup verification: `python3 -m py_compile X5_Crop.py`
+  passed, `Test/135/X5_Crop.py` was synced, `git diff --check` passed, and a
+  direct smoke call to `hard_fallback_detection()` confirmed detail now contains
+  only the compact fallback fields.
 - Current format-aware frame-fit policy verification: compared current script
   against a temporary pre-policy `HEAD:X5_Crop.py` copy. Full `Test/135`
   `deskew off` dry-run had 0 diffs for `status`, `confidence`,

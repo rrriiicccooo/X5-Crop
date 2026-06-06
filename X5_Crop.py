@@ -3549,12 +3549,11 @@ def hard_fallback_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -
             "fallback_kind": "review_only_equal_split",
             "changes_pass_review": False,
             "layout": config.layout,
+            "film_format": fmt.name,
+            "strip_mode": config.strip_mode,
+            "count": int(count),
             "work_outer": asdict(outer),
             "pitch": float(pitch),
-            "gap_centers": [gap.center for gap in gaps],
-            "gap_scores": [gap.score for gap in gaps],
-            "gap_methods": [gap.method for gap in gaps],
-            "v2_competition": {"candidate_count": 0, "selection_override": "hard_fallback_review_only"},
         },
     )
 
