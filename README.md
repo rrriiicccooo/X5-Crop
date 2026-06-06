@@ -185,7 +185,14 @@ install/X5_Crop_Mac_install.command
 
 macOS 安装器还会尝试为当前 Release 文件夹里的主启动器添加执行权限，并移除下载隔离标记。它不能把脚本永久加入 macOS 的全局可信名单。
 
-安装后，可以把这一整套 Release 文件夹复制到别的目录继续使用。不要只移动主启动器，因为主启动器必须和 `X5_Crop.py` 放在同一个文件夹里。
+安装后，可以把 `X5_Crop.py` 和对应系统的主启动器作为一对复制到不同的 TIFF 文件夹里使用：
+
+```text
+macOS: X5_Crop.py + X5_Crop_Mac.command
+Windows: X5_Crop.py + X5_Crop_win.bat
+```
+
+不要只移动主启动器，因为主启动器必须和 `X5_Crop.py` 放在同一个文件夹里。
 
 如果重新下载、重新解压，或者从网页、网盘、聊天软件又拿到一份新的 Release，那一份新文件夹可能重新带有 macOS 下载隔离标记。请在新的文件夹里再运行一次安装启动器。
 
@@ -544,9 +551,16 @@ The macOS installer also tries to make the main launcher executable and remove
 the download quarantine flag from the current Release folder. It cannot
 permanently add the script to a global macOS trusted list.
 
-After installation, you can copy the whole Release folder to another location
-and keep using it. Do not move only the main launcher, because the launcher must
-stay in the same folder as `X5_Crop.py`.
+After installation, you can copy `X5_Crop.py` and the main launcher for your
+system as a pair into different TIFF folders:
+
+```text
+macOS: X5_Crop.py + X5_Crop_Mac.command
+Windows: X5_Crop.py + X5_Crop_win.bat
+```
+
+Do not move only the main launcher, because the launcher must stay in the same
+folder as `X5_Crop.py`.
 
 If you download, unzip, or receive another fresh Release copy from a browser,
 cloud drive, or chat app, that new folder may have a new macOS quarantine flag.
