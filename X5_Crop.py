@@ -2202,6 +2202,7 @@ def box_list_from_relative_ranges(
 
 @dataclass(frozen=True)
 class FrameFitPolicy:
+    name: str
     edge_evidence: bool
     geometry_fallback: bool
     min_edge_samples: int = 2
@@ -2212,9 +2213,60 @@ class FrameFitPolicy:
 
 def frame_fit_policy(fmt: FilmFormat, strip_mode: str) -> FrameFitPolicy:
     if strip_mode != "full":
-        return FrameFitPolicy(edge_evidence=False, geometry_fallback=True)
-    edge_evidence = fmt.name != "135-dual"
-    return FrameFitPolicy(edge_evidence=edge_evidence, geometry_fallback=True)
+        return FrameFitPolicy(name=f"{fmt.name}-partial", edge_evidence=False, geometry_fallback=True)
+    if fmt.name == "135-dual":
+        return FrameFitPolicy(name="135-dual-lane", edge_evidence=False, geometry_fallback=True)
+    if fmt.name == "135":
+        return FrameFitPolicy(
+            name="135",
+            edge_evidence=True,
+            geometry_fallback=True,
+            min_edge_samples=2,
+            nominal_min_ratio=0.72,
+            nominal_max_ratio=1.10,
+            inlier_tolerance_ratio=0.035,
+        )
+    if fmt.name == "half":
+        return FrameFitPolicy(
+            name="half",
+            edge_evidence=True,
+            geometry_fallback=True,
+            min_edge_samples=4,
+            nominal_min_ratio=0.78,
+            nominal_max_ratio=1.08,
+            inlier_tolerance_ratio=0.030,
+        )
+    if fmt.name == "xpan":
+        return FrameFitPolicy(
+            name="xpan",
+            edge_evidence=True,
+            geometry_fallback=True,
+            min_edge_samples=2,
+            nominal_min_ratio=0.70,
+            nominal_max_ratio=1.12,
+            inlier_tolerance_ratio=0.035,
+        )
+    if fmt.name == "120-645":
+        return FrameFitPolicy(
+            name="120-645",
+            edge_evidence=True,
+            geometry_fallback=True,
+            min_edge_samples=2,
+            nominal_min_ratio=0.70,
+            nominal_max_ratio=1.15,
+            inlier_tolerance_ratio=0.040,
+        )
+    if fmt.name in {"120-66", "120-67"}:
+        return FrameFitPolicy(
+            name=fmt.name,
+            edge_evidence=True,
+            geometry_fallback=True,
+            min_edge_samples=2,
+            nominal_min_ratio=0.65,
+            nominal_max_ratio=1.20,
+            inlier_tolerance_ratio=0.045,
+        )
+    return FrameFitPolicy(name=fmt.name, edge_evidence=True, geometry_fallback=True)
 
 
 def fit_boxes_by_edge_evidence(
@@ -2342,6 +2394,7 @@ def fit_frame_boxes_from_gaps(
     )
     detail = dict(detail)
     detail["policy"] = {
+        "name": policy.name,
         "edge_evidence": bool(policy.edge_evidence),
         "geometry_fallback": bool(policy.geometry_fallback),
         "min_edge_samples": int(policy.min_edge_samples),

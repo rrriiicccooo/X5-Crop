@@ -76,6 +76,8 @@ project documentation consolidated in `README.md`.
 ```text
 /*
 !/archive/
+!/install/
+!/快速启动_Quick_Start.md
 !/LICENSE
 !/release/
 ```
@@ -184,6 +186,11 @@ Changed:
   `same_frame_size_fit_boxes()` role is now `fit_boxes_by_edge_evidence()`;
   `fit_frame_boxes_from_gaps()` is the unified entry point for edge-evidence
   fit, geometry fallback, and raw-gap fallback.
+- Frame fit policy is now explicitly format-aware: 135 keeps the original
+  edge-evidence fit thresholds, half-frame requires more edge samples, xpan and
+  each 120 format have their own nominal-width range and inlier tolerance, and
+  135-dual / partial modes keep edge-evidence fit disabled while preserving
+  geometry fallback.
 - After V3.7, the default output long-axis bleed was changed from 20px to 35px
   without a version bump; short-axis bleed remains 10px. Detection still keeps
   bleed out of scoring and applies bleed only to output/report/Debug Analysis
@@ -450,6 +457,12 @@ Verified:
   as 135, `Test/半格` as half, and `Test/120` as 120-645 / 120-66 / 120-67.
   A partial-mode smoke comparison against `archive/X5_Crop_v3.6.12.py` on
   `Test/135/X5_00038.tif` also found 0 diffs for the same fields.
+- Current format-aware frame-fit policy verification: compared current script
+  against a temporary pre-policy `HEAD:X5_Crop.py` copy. Full `Test/135`
+  `deskew off` dry-run had 0 diffs for `status`, `confidence`,
+  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`; smoke comparisons
+  on `Test/半格/X5_00053.tif` and `Test/120/X5_test_45.tif` as 120-66 also had
+  0 diffs, while reports showed the new per-format policy fields.
 - Current V3.6.12 verification: `python3 X5_Crop.py --version` prints
   `X5_Crop.py 3.6.12`; `python3 -m py_compile X5_Crop.py` passed. Full
   `Test/半格` dry-run with `--format half --strip full --count 12 --deskew off
