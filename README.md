@@ -27,7 +27,7 @@ Current stable release: v3.6.2 (GitHub Releases)
    - `X5_Crop.py`
    - macOS 用 `X5_Crop_Mac.command`
    - Windows 用 `X5_Crop_win.bat`
-5. 双击对应系统的主启动器。
+5. 双击对应系统的主启动器：macOS 是 `X5_Crop_Mac.command`，Windows 是 `X5_Crop_win.bat`。
 6. 先选择胶片格式，再选择是否开启 partial mode 和 Debug Analysis。
 
 常用选择：
@@ -66,7 +66,8 @@ On a new machine:
    - `X5_Crop.py`
    - macOS: `X5_Crop_Mac.command`
    - Windows: `X5_Crop_win.bat`
-5. Double-click the main launcher for your system.
+5. Double-click the main launcher for your system: `X5_Crop_Mac.command` on
+   macOS, or `X5_Crop_win.bat` on Windows.
 6. Choose the film format, then choose whether to enable partial mode and Debug
    Analysis.
 
@@ -169,7 +170,16 @@ install/
   X5_Crop_win_install.bat
 ```
 
-把 `X5_Crop.py`、对应系统的启动器和要裁切的 TIFF 长图放在同一个文件夹里，然后双击启动器运行。
+对应系统的主启动器是：
+
+```text
+macOS 主启动器: X5_Crop_Mac.command
+Windows 主启动器: X5_Crop_win.bat
+```
+
+`install/` 里的文件是第一次安装依赖用的安装启动器，不是日常裁切用的主启动器。
+
+把 `X5_Crop.py`、对应系统的主启动器和要裁切的 TIFF 长图放在同一个文件夹里，然后双击主启动器运行。
 
 不支持“只把启动器放进 TIFF 文件夹、脚本留在别处”的模式。
 
@@ -530,8 +540,18 @@ install/
   X5_Crop_win_install.bat
 ```
 
-Put `X5_Crop.py`, the launcher for your system, and the TIFF scans in the same
-folder. Then double-click the launcher.
+The main launcher for each system is:
+
+```text
+macOS main launcher: X5_Crop_Mac.command
+Windows main launcher: X5_Crop_win.bat
+```
+
+Files inside `install/` are installer launchers for first-time dependency setup,
+not the main launchers used for everyday cropping.
+
+Put `X5_Crop.py`, the main launcher for your system, and the TIFF scans in the
+same folder. Then double-click the main launcher.
 
 The launcher-only workflow is not supported. The launcher and `X5_Crop.py` must
 travel together.

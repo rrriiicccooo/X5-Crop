@@ -35,7 +35,12 @@ install/
   X5_Crop_win_install.bat
 ```
 
-`install/` 只用于第一次安装依赖。正式裁切时使用根目录里的主启动器。
+`install/` 只用于第一次安装依赖。正式裁切时使用根目录里的主启动器：
+
+```text
+macOS 主启动器: X5_Crop_Mac.command
+Windows 主启动器: X5_Crop_win.bat
+```
 
 ### 放在哪里
 
@@ -48,6 +53,13 @@ X5_Crop_Mac.command 或 X5_Crop_win.bat
 ```
 
 启动器和 `X5_Crop.py` 必须在同一个文件夹里。只移动启动器、不带脚本本体，不能运行。
+
+对应系统的主启动器是：
+
+```text
+macOS 主启动器: X5_Crop_Mac.command
+Windows 主启动器: X5_Crop_win.bat
+```
 
 ### 第一次使用
 
@@ -201,7 +213,12 @@ install/
   X5_Crop_win_install.bat
 ```
 
-`install/` is only for first-time dependency setup. For actual cropping, use the main launcher in the root folder.
+`install/` is only for first-time dependency setup. For actual cropping, use the main launcher in the root folder:
+
+```text
+macOS main launcher: X5_Crop_Mac.command
+Windows main launcher: X5_Crop_win.bat
+```
 
 ### Where To Put The Files
 
@@ -214,6 +231,13 @@ X5_Crop_Mac.command or X5_Crop_win.bat
 ```
 
 The launcher and `X5_Crop.py` must stay together in the same folder. A launcher by itself cannot run the script.
+
+The main launcher for each system is:
+
+```text
+macOS main launcher: X5_Crop_Mac.command
+Windows main launcher: X5_Crop_win.bat
+```
 
 ### First Use
 

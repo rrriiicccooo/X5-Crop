@@ -170,10 +170,11 @@ Changed:
   `/bin/bash install/X5_Crop_Mac_install.command`.
 - Docs now clarify the macOS permission model: after install, users may copy
   `X5_Crop.py` plus the platform-matching main launcher as a pair into different
-  TIFF folders. They should not move only the launcher. A newly
-  downloaded/unzipped/freshly received Release folder may have a new quarantine
-  flag and should run the installer again. The installer is not a permanent
-  global trust registration.
+  TIFF folders: `X5_Crop_Mac.command` for macOS or `X5_Crop_win.bat` for
+  Windows. They should not move only the launcher. A newly downloaded/unzipped/
+  freshly received Release folder may have a new quarantine flag and should run
+  the installer again. The installer is not a permanent global trust
+  registration.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
   unchanged because the full run stayed stable. 120-66 / 120-67 now use a
