@@ -131,7 +131,13 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.6.10.
+- Active script is `X5_Crop.py` V3.6.11.
+- V3.6.11 extends `edge-pair` from 135-only to format-aware full-strip
+  separator refinement. The original 135 parameters are preserved. Other
+  formats use conservative per-format search windows, gutter widths, edge /
+  background strength thresholds, and model-gap replacement quality thresholds.
+  This is intended to let non-135 formats benefit from adjacent-frame edge
+  evidence without simply copying 135 tuning.
 - V3.6.10 is a low-risk cleanup after V3.6.9. It removes the unused
   `grid_protection_trust()` wrapper, updates CLI version/help text, fixes the
   `--bleed-x` help default from 15 to 20, clarifies that `--analysis` affects
@@ -255,7 +261,7 @@ Changed:
   strips now use content only as validation rather than generating separate
   content candidates, and 135 full strips no longer run the simple cuts-based
   frame-size fit before the explicit edge-sample fit.
-- V3.0 through V3.6.10 active-script snapshots are preserved in `archive/`:
+- V3.0 through V3.6.11 active-script snapshots are preserved in `archive/`:
   `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
   `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
   `X5_Crop_v3.3.1.py`, `X5_Crop_v3.3.2.py`, `X5_Crop_v3.4.py`,
@@ -264,7 +270,8 @@ Changed:
   `X5_Crop_v3.6.3.py`, `X5_Crop_v3.6.4.py`,
   `X5_Crop_v3.6.5.py`, `X5_Crop_v3.6.6.py`,
   `X5_Crop_v3.6.7.py`, `X5_Crop_v3.6.8.py`,
-  `X5_Crop_v3.6.9.py`, and `X5_Crop_v3.6.10.py`.
+  `X5_Crop_v3.6.9.py`, `X5_Crop_v3.6.10.py`, and
+  `X5_Crop_v3.6.11.py`.
 - Future named development versions, including experiments that are later
   paused or rolled back, should also be saved as archive snapshots.
 - V3.3.2 adds conservative overlap-aware gap handling for 135 full strips:
@@ -349,6 +356,19 @@ Changed:
   falls back to 2 thread workers instead of failing.
 
 Verified:
+- Current V3.6.11 verification: `python3 X5_Crop.py --version` and
+  `python3 archive/X5_Crop_v3.6.11.py --version` both print
+  `X5_Crop.py 3.6.11`; `python3 -m py_compile X5_Crop.py
+  Test/135/X5_Crop.py archive/X5_Crop_v3.6.11.py` passed. Focus dry-run with
+  diagnostics on `X5_00014`, `X5_00026`, `X5_00036`, and `X5_00041`
+  produced `14/26` as `approved_auto` and `36/41` as `needs_review`.
+  Structured comparison against V3.6.10 on those four 135 focus files had
+  changed `0` for status, confidence, outer boxes, frame boxes, gap methods,
+  and gap centers.
+  Lightweight full-strip code-path checks for `xpan`, `half`, `120-645`,
+  `120-66`, and `120-67` completed without errors on a single TIFF; those
+  checks were only path/syntax smoke tests, not accuracy validation for those
+  formats.
 - Current V3.6.10 verification: `python3 X5_Crop.py --version` and
   `python3 archive/X5_Crop_v3.6.10.py --version` both print
   `X5_Crop.py 3.6.10`; `python3 -m py_compile X5_Crop.py
