@@ -669,6 +669,9 @@ def outer_content_alignment_detail(gray: np.ndarray, detection: Detection, cache
     short_slack_ratio = float(max_short_slack) / max(1.0, float(outer.height))
     content_width_ratio = float(content_box.width) / max(1.0, float(outer.width))
     content_height_ratio = float(content_box.height) / max(1.0, float(outer.height))
+    white_edge_long_slack_min = max(90, min(180, int(round(pitch * 0.0190))))
+    long_slack_pixel_gate = max(160, min(320, int(round(pitch * 0.0340))))
+    short_slack_pixel_gate = max(28, min(80, int(round(float(outer.height) * 0.0060))))
 
     edge_band = max(4, min(80, int(round(min(outer.width, outer.height) * 0.018))))
     outer_crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
@@ -697,12 +700,12 @@ def outer_content_alignment_detail(gray: np.ndarray, detection: Detection, cache
         and content_width_ratio >= 0.985
         and max_short_slack <= max(24, int(round(float(outer.height) * 0.015)))
         and (
-            (long_slack_left >= 90 and float(border_dark_fraction.get("left", 1.0)) <= 0.02)
-            or (long_slack_right >= 90 and float(border_dark_fraction.get("right", 1.0)) <= 0.02)
+            (long_slack_left >= white_edge_long_slack_min and float(border_dark_fraction.get("left", 1.0)) <= 0.02)
+            or (long_slack_right >= white_edge_long_slack_min and float(border_dark_fraction.get("right", 1.0)) <= 0.02)
         )
     )
-    excess_long = long_slack_ratio > 0.050 or (max_long_slack >= 160 and long_slack_ratio > 0.035) or white_edge_slack
-    excess_short = short_slack_ratio > 0.035 and max_short_slack >= 28
+    excess_long = long_slack_ratio > 0.050 or (max_long_slack >= long_slack_pixel_gate and long_slack_ratio > 0.035) or white_edge_slack
+    excess_short = short_slack_ratio > 0.035 and max_short_slack >= short_slack_pixel_gate
     ok = not (excess_long or excess_short)
     reason = "ok"
     if excess_long:
@@ -727,6 +730,9 @@ def outer_content_alignment_detail(gray: np.ndarray, detection: Detection, cache
         "short_slack_ratio": short_slack_ratio,
         "content_width_ratio": content_width_ratio,
         "content_height_ratio": content_height_ratio,
+        "white_edge_long_slack_min": int(white_edge_long_slack_min),
+        "long_slack_pixel_gate": int(long_slack_pixel_gate),
+        "short_slack_pixel_gate": int(short_slack_pixel_gate),
         "border_dark_fraction": border_dark_fraction,
         "edge_hard_anchors": edge_hard_anchors,
         "white_edge_slack": white_edge_slack,
@@ -745,10 +751,12 @@ def corrected_outer_from_alignment(alignment: dict[str, Any], config: Config, co
         return None
 
     pitch = float(outer.width) / float(max(1, count))
-    alignment_bleed_x = min(int(config.bleed_x), 15)
-    alignment_bleed_y = min(int(config.bleed_y), 10)
-    long_margin = max(alignment_bleed_x, min(80, int(round(pitch * 0.012))))
-    short_margin = max(alignment_bleed_y, min(40, int(round(float(outer.height) * 0.010))))
+    alignment_margin_x = max(15, min(30, int(round(pitch * 0.0030))))
+    alignment_margin_y = max(10, min(20, int(round(float(outer.height) * 0.0030))))
+    long_margin_cap = max(80, min(160, int(round(pitch * 0.0170))))
+    short_margin_cap = max(40, min(80, int(round(float(outer.height) * 0.0100))))
+    long_margin = max(alignment_margin_x, min(long_margin_cap, int(round(pitch * 0.012))))
+    short_margin = max(alignment_margin_y, min(short_margin_cap, int(round(float(outer.height) * 0.010))))
     left, top, right, bottom = outer.left, outer.top, outer.right, outer.bottom
 
     if int(alignment.get("long_slack_left", 0)) > 0:
@@ -1154,7 +1162,7 @@ def apply_edge_bleed_protection(detection: Detection, config: Config, image_w: i
 
     work_w = image_w if detection.layout == "horizontal" else image_h
     nominal = float(outer_work.width) / float(max(1, detection.count))
-    edge_guard = max(float(config.bleed_x * 2), min(90.0, nominal * 0.018))
+    edge_guard = max(70.0, min(120.0, nominal * 0.0150))
     changed: list[str] = []
 
     first_target = max(0, outer_work.left - int(config.bleed_x))
@@ -1176,6 +1184,7 @@ def apply_edge_bleed_protection(detection: Detection, config: Config, image_w: i
         "pinned": changed,
         "edge_guard": edge_guard,
         "long_axis_bleed": int(config.bleed_x),
+        "edge_guard_basis": "nominal_frame_width_ratio",
     }
 
 
@@ -1252,7 +1261,8 @@ def apply_approved_geometry_polish(detection: Detection, gray: np.ndarray, confi
         active = np.where(col_content > 0.018)[0]
         return int(int(active[-1]) + 1) if active.size else 0
 
-    min_long_ext = 50
+    pitch = float(outer.width) / float(max(1, detection.count))
+    min_long_ext = max(50, min(120, int(round(pitch * 0.0100))))
     left_ext = side_extension("left")
     right_ext = side_extension("right")
     left_ext = left_ext if left_ext >= min_long_ext else 0
@@ -1970,7 +1980,8 @@ def apply_robust_grid(
     if median_residual > max(4.0, pitch * 0.045):
         return constrained, {"grid_used": False, "reliable_gaps": len(reliable), "grid_rejected": "high_residual", "grid_residual": median_residual}
     max_shift = pitch * (0.035 if strip_mode == "full" else 0.10)
-    allow_hard_protection = median_residual > max(12.0, pitch * 0.006)
+    hard_protection_residual_threshold = max(12.0, min(40.0, pitch * 0.006))
+    allow_hard_protection = median_residual > hard_protection_residual_threshold
     adjusted: list[Gap] = []
     protected_hard: list[dict[str, Any]] = []
     overridden_hard: list[dict[str, Any]] = []
@@ -2026,6 +2037,7 @@ def apply_robust_grid(
         "grid_pitch": float(fit_pitch),
         "grid_origin": float(fit_origin),
         "grid_residual": median_residual,
+        "hard_protection_residual_threshold": float(hard_protection_residual_threshold),
         "hard_protection_allowed": bool(allow_hard_protection),
         "protected_hard_gaps": protected_hard,
         "overridden_hard_gaps": overridden_hard,

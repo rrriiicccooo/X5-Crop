@@ -145,7 +145,7 @@ Next recommended step:
 
 ## Current Handoff
 
-Date: 2026-06-06
+Date: 2026-06-07
 Computer: primary macOS machine
 Branch: main
 Last commit: see `git log -1`
@@ -195,6 +195,12 @@ Changed:
   without a version bump; short-axis bleed remains 10px. Detection still keeps
   bleed out of scoring and applies bleed only to output/report/Debug Analysis
   frame boxes.
+- Follow-up V3.7 threshold cleanup changed fixed pixel gates in
+  `apply_edge_bleed_protection()`, `apply_approved_geometry_polish()`,
+  `outer_content_alignment_detail()`, `corrected_outer_from_alignment()`, and
+  `apply_robust_grid()` into pitch / outer-height ratios with pixel clamps.
+  These internal gates are decoupled from output bleed while preserving the
+  current 135 trigger behavior.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
   unchanged because the full run stayed stable. 120-66 / 120-67 now use a
@@ -457,6 +463,15 @@ Verified:
   as 135, `Test/半格` as half, and `Test/120` as 120-645 / 120-66 / 120-67.
   A partial-mode smoke comparison against `archive/X5_Crop_v3.6.12.py` on
   `Test/135/X5_00038.tif` also found 0 diffs for the same fields.
+- V3.7 scale-threshold cleanup verification: `python3 -m py_compile
+  X5_Crop.py` passed, `Test/135/X5_Crop.py` was synced, and a full
+  `Test/135` `deskew off` dry run with `--format 135 --strip full --count 6
+  --dry-run --report --no-copy-review-files --no-reuse-analysis --jobs 2`
+  produced 48 ok / 0 failed / 43 `approved_auto` / 5 `needs_review`.
+  Compared with `/private/tmp/x5_policy_after_135/split_report.jsonl`, the
+  final `/private/tmp/x5_scale_threshold_after4_135/split_report.jsonl` had
+  0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps`.
 - Current format-aware frame-fit policy verification: compared current script
   against a temporary pre-policy `HEAD:X5_Crop.py` copy. Full `Test/135`
   `deskew off` dry-run had 0 diffs for `status`, `confidence`,
