@@ -176,13 +176,13 @@ if /i "%STRIP%"=="full" (
     if /i "%DEBUG%"=="yes" (
         %PYTHON% "%SCRIPT%" "." --format "%FORMAT%" --strip "%STRIP%" --count "%COUNT%" --report --debug-analysis --dry-run
     ) else (
-        %PYTHON% "%SCRIPT%" "." --format "%FORMAT%" --strip "%STRIP%" --count "%COUNT%" --report
+        %PYTHON% "%SCRIPT%" "." --format "%FORMAT%" --strip "%STRIP%" --count "%COUNT%"
     )
 ) else (
     if /i "%DEBUG%"=="yes" (
         %PYTHON% "%SCRIPT%" "." --format "%FORMAT%" --strip "%STRIP%" --report --debug-analysis --dry-run
     ) else (
-        %PYTHON% "%SCRIPT%" "." --format "%FORMAT%" --strip "%STRIP%" --report
+        %PYTHON% "%SCRIPT%" "." --format "%FORMAT%" --strip "%STRIP%"
     )
 )
 set "EXITCODE=%errorlevel%"

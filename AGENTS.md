@@ -94,6 +94,13 @@ project documentation consolidated in `README.md`.
   - generated `split_output/` folders
 - Do not commit large TIFF samples unless the user explicitly decides they are
   official fixtures and Git LFS tracking is configured for them.
+- User-facing Release zip packages should contain only:
+  - `X5_Crop.py`
+  - `X5_Crop_Mac.command`
+  - `X5_Crop_win.bat`
+  Do not package `archive/`, `install/`, `README.md`, `CHANGELOG.md`,
+  `AGENTS.md`, `LICENSE`, `.github/`, or local test/output folders into the
+  Release zip unless the user explicitly changes this policy.
 
 ## Handoff Rule
 
@@ -132,6 +139,14 @@ Last commit: see `git log -1`
 
 Changed:
 - Active script is `X5_Crop.py` V3.6.12.
+- macOS and Windows main launchers no longer pass `--report` during normal
+  non-Debug-Analysis runs. They still pass `--report --debug-analysis --dry-run`
+  when Debug Analysis is enabled, so analysis JPG reuse/report workflows keep
+  working.
+- User-facing Release packaging policy is now explicit: Release zip packages
+  should include only `X5_Crop.py`, `X5_Crop_Mac.command`, and
+  `X5_Crop_win.bat`; installers, docs, license, archive snapshots, GitHub
+  config, and local test/output folders should not be packaged into the zip.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
   unchanged because the full run stayed stable. 120-66 / 120-67 now use a
@@ -368,6 +383,10 @@ Changed:
   falls back to 2 thread workers instead of failing.
 
 Verified:
+- Current launcher/package-policy verification: `bash -n X5_Crop_Mac.command`
+  passed; `X5_Crop_Mac.command` and `X5_Crop_win.bat` now only include
+  `--report` on the Debug Analysis command path. Ignored local launcher copies
+  under `Test/135/` were synced.
 - Current V3.6.12 verification: `python3 X5_Crop.py --version` prints
   `X5_Crop.py 3.6.12`; `python3 -m py_compile X5_Crop.py` passed. Full
   `Test/半格` dry-run with `--format half --strip full --count 12 --deskew off

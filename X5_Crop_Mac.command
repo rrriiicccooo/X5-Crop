@@ -193,12 +193,12 @@ else
 fi
 echo
 
-ARGS=("$SCRIPT" "." --format "$FORMAT" --strip "$STRIP" --report)
+ARGS=("$SCRIPT" "." --format "$FORMAT" --strip "$STRIP")
 if [ "$STRIP" = "full" ]; then
     ARGS+=(--count "$COUNT")
 fi
 if [ "$DEBUG" = "yes" ]; then
-    ARGS+=(--debug-analysis --dry-run)
+    ARGS+=(--report --debug-analysis --dry-run)
 fi
 
 $PYTHON "${ARGS[@]}"
