@@ -131,7 +131,19 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.6.11.
+- Active script is `X5_Crop.py` V3.6.12.
+- V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
+  dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
+  unchanged because the full run stayed stable. 120-66 / 120-67 now use a
+  wider search window, wider gutter range, lower edge/background thresholds,
+  and a tighter non-135 hard-gap movement guard. This lets 120 wide dark bands
+  become separator evidence without loosening PASS/REVIEW.
+- V3.6.12 target result: compared with V3.6.11 temporary full dry runs,
+  half-frame stayed 6 `approved_auto` / 9 `needs_review`; 120-66 and 120-67
+  stayed 0 `approved_auto` / 16 `needs_review` while edge-pair accepted totals
+  increased from 0 to 16; 120-645 stayed 0 / 16 with 0 edge-pair accepts. A
+  135 focus `deskew off` comparison against V3.6.11 was structurally identical
+  on `X5_00014`, `X5_00026`, `X5_00036`, and `X5_00041`.
 - V3.6.11 extends `edge-pair` from 135-only to format-aware full-strip
   separator refinement. The original 135 parameters are preserved. Other
   formats use conservative per-format search windows, gutter widths, edge /
@@ -261,7 +273,7 @@ Changed:
   strips now use content only as validation rather than generating separate
   content candidates, and 135 full strips no longer run the simple cuts-based
   frame-size fit before the explicit edge-sample fit.
-- V3.0 through V3.6.11 active-script snapshots are preserved in `archive/`:
+- V3.0 through V3.6.12 active-script snapshots are preserved in `archive/`:
   `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
   `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
   `X5_Crop_v3.3.1.py`, `X5_Crop_v3.3.2.py`, `X5_Crop_v3.4.py`,
@@ -270,8 +282,8 @@ Changed:
   `X5_Crop_v3.6.3.py`, `X5_Crop_v3.6.4.py`,
   `X5_Crop_v3.6.5.py`, `X5_Crop_v3.6.6.py`,
   `X5_Crop_v3.6.7.py`, `X5_Crop_v3.6.8.py`,
-  `X5_Crop_v3.6.9.py`, `X5_Crop_v3.6.10.py`, and
-  `X5_Crop_v3.6.11.py`.
+  `X5_Crop_v3.6.9.py`, `X5_Crop_v3.6.10.py`,
+  `X5_Crop_v3.6.11.py`, and `X5_Crop_v3.6.12.py`.
 - Future named development versions, including experiments that are later
   paused or rolled back, should also be saved as archive snapshots.
 - V3.3.2 adds conservative overlap-aware gap handling for 135 full strips:
@@ -356,6 +368,19 @@ Changed:
   falls back to 2 thread workers instead of failing.
 
 Verified:
+- Current V3.6.12 verification: `python3 X5_Crop.py --version` prints
+  `X5_Crop.py 3.6.12`; `python3 -m py_compile X5_Crop.py` passed. Full
+  `Test/半格` dry-run with `--format half --strip full --count 12 --deskew off
+  --dry-run --report --diagnostics --no-copy-review-files --jobs 2
+  --no-reuse-analysis` produced 6 `approved_auto` / 9 `needs_review`, matching
+  V3.6.11, with edge-pair accepted total 13. Full `Test/120` dry-runs with
+  `--format 120-66`, `--format 120-67`, and `--format 120-645` all produced
+  0 `approved_auto` / 16 `needs_review`; 120-66 and 120-67 edge-pair accepted
+  totals increased from 0 to 16, while 120-645 stayed 0. Focus Debug Analysis
+  on `X5_test_45` / `X5_test_55` for 120-66 was visually inspected.
+  V3.6.12 vs archive V3.6.11 135 focus dry-run (`deskew off`) kept identical
+  status, confidence, outer boxes, frame boxes, gap methods, and gap centers
+  for `X5_00014`, `X5_00026`, `X5_00036`, and `X5_00041`.
 - Current V3.6.11 verification: `python3 X5_Crop.py --version` and
   `python3 archive/X5_Crop_v3.6.11.py --version` both print
   `X5_Crop.py 3.6.11`; `python3 -m py_compile X5_Crop.py
