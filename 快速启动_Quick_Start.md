@@ -4,13 +4,13 @@
 
 这是 X5 Crop 的最短使用说明。更完整的安装、参数、Debug Analysis 和版本变化，请看 `README.md` 和 `CHANGELOG.md`。
 
-> **macOS 如果双击安装启动器打不开，请先用终端启动安装器。**
->
-> 打开 Terminal，输入 `cd `，把 X5 Crop 文件夹拖进窗口后按 Return，然后运行：
+> 如果双击安装启动器打不开，请打开 Terminal，输入 `cd `，把 X5 Crop 文件夹拖进窗口后按 Return，然后运行：
 >
 > ```bash
 > /bin/bash install/X5_Crop_Mac_install.command
 > ```
+>
+> **macOS 如果双击安装启动器打不开，请先用终端启动安装器。**
 
 > **第一次使用请先运行安装启动器。**
 >
@@ -91,12 +91,6 @@ Windows: X5_Crop.py + X5_Crop_win.bat
 不要只移动主启动器，因为主启动器必须和 `X5_Crop.py` 放在同一个文件夹里。
 
 如果重新下载、重新解压，或者从网页、网盘、聊天软件又拿到一份新的 Release，那一份新文件夹可能重新带有 macOS 下载隔离标记。请在新的文件夹里再运行一次安装启动器。
-
-如果双击安装启动器打不开，请打开 Terminal，输入 `cd `，把 X5 Crop 文件夹拖进窗口后按 Return，然后运行：
-
-```bash
-/bin/bash install/X5_Crop_Mac_install.command
-```
 
 ### 怎么启动
 
