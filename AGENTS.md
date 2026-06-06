@@ -201,6 +201,13 @@ Changed:
   `apply_robust_grid()` into pitch / outer-height ratios with pixel clamps.
   These internal gates are decoupled from output bleed while preserving the
   current 135 trigger behavior.
+- A second V3.7 threshold cleanup covered the remaining pitch-scaled window /
+  movement / width guards: gap search radius and width limits, nearby separator
+  search and correction thresholds, edge-pair window / gutter / hard-gap
+  movement guards, robust-grid shift and tolerance, enhanced separator width /
+  movement checks, partial edge hints, hard-gap trust diagnostics, and deskew
+  span skip threshold. Integer pixel windows use `clamp_int`; pre-existing
+  floating-point tolerances use `clamp_float` to avoid sub-pixel grid drift.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
   unchanged because the full run stayed stable. 120-66 / 120-67 now use a
@@ -471,6 +478,16 @@ Verified:
   Compared with `/private/tmp/x5_policy_after_135/split_report.jsonl`, the
   final `/private/tmp/x5_scale_threshold_after4_135/split_report.jsonl` had
   0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps`.
+- Second V3.7 scale-threshold cleanup verification: `python3 -m py_compile
+  X5_Crop.py` passed, `Test/135/X5_Crop.py` was synced, and a full
+  `Test/135` `deskew off` dry run with the same settings produced 48 ok /
+  0 failed / 43 `approved_auto` / 5 `needs_review`. An intermediate attempt
+  caused 7 structural diffs because some originally floating-point tolerances
+  were rounded to integers; after switching those to `clamp_float`, the final
+  `/private/tmp/x5_scale_threshold_more_after2_135/split_report.jsonl`
+  compared against `/private/tmp/x5_scale_threshold_after4_135/split_report.jsonl`
+  had 0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
   `frame_boxes`, and `gaps`.
 - Current format-aware frame-fit policy verification: compared current script
   against a temporary pre-policy `HEAD:X5_Crop.py` copy. Full `Test/135`

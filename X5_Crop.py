@@ -147,6 +147,14 @@ class Box:
         ).clamp(width, height)
 
 
+def clamp_int(value: float, lower: int, upper: int) -> int:
+    return int(max(lower, min(upper, int(round(value)))))
+
+
+def clamp_float(value: float, lower: float, upper: float) -> float:
+    return float(max(lower, min(upper, float(value))))
+
+
 @dataclass
 class Gap:
     index: int
@@ -1549,8 +1557,8 @@ def edge_pair_params_for_format(format_name: str) -> EdgePairParams:
 def edge_pair_can_replace_hard_gap(gap: Gap, edge_gap: Gap, pitch: float, params: EdgePairParams) -> bool:
     delta = abs(edge_gap.center - gap.center)
     if params.max_hard_shift_ratio <= 0.0:
-        return delta <= max(4.0, edge_gap.width)
-    shift_limit = max(edge_gap.width * 2.0, pitch * params.max_hard_shift_ratio)
+        return delta <= max(clamp_float(pitch * 0.001, 4.0, 20.0), edge_gap.width)
+    shift_limit = max(edge_gap.width * 2.0, clamp_float(pitch * params.max_hard_shift_ratio, 15.0, 220.0))
     if delta > shift_limit:
         return False
     min_quality = max(params.min_quality_for_hard_gap, gap.score * params.hard_gap_quality_ratio)
@@ -1573,9 +1581,9 @@ def refine_gaps_by_edge_pairs(
     edge, background, _activity = cached_edge_refine_profiles(cache, crop, outer) if outer is not None else edge_refine_profiles(crop)
     pitch = w / float(max(1, count))
     params = edge_pair_params_for_format(format_name)
-    window = max(8, int(round(pitch * params.window_ratio)))
-    min_gutter = max(2, int(round(pitch * params.min_gutter_ratio)))
-    max_gutter = max(min_gutter + 1, int(round(pitch * params.max_gutter_ratio)))
+    window = clamp_int(pitch * params.window_ratio, 8, 520)
+    min_gutter = clamp_int(pitch * params.min_gutter_ratio, 2, 40)
+    max_gutter = max(min_gutter + 1, clamp_int(pitch * params.max_gutter_ratio, 8, 420))
     refined: list[Gap] = []
     accepted: list[dict[str, Any]] = []
     rejected = 0
@@ -1636,7 +1644,7 @@ def refine_gaps_by_edge_pairs(
 
 
 def find_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> Gap:
-    radius = max(6, int(round(pitch * 0.16)))
+    radius = clamp_int(pitch * 0.16, 6, 900)
     lo = max(1, int(round(expected)) - radius)
     hi = min(len(profile) - 1, int(round(expected)) + radius + 1)
     if hi <= lo:
@@ -1647,9 +1655,9 @@ def find_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> 
     if local.size == 0 or local_max < min_score:
         return Gap(index, float(expected), local_max, "equal")
 
-    max_gap_w = max(2, int(round(pitch * 0.045)))
-    min_gap_w = max(1, int(round(pitch * 0.001)))
-    guard_w = max(3, int(round(pitch * 0.035)))
+    max_gap_w = clamp_int(pitch * 0.045, 2, 420)
+    min_gap_w = clamp_int(pitch * 0.001, 1, 12)
+    guard_w = clamp_int(pitch * 0.035, 3, 220)
     peak_threshold = max(min_score, local_max * 0.90)
     band_threshold = max(min_score * 0.86, local_max * 0.62)
     candidates: list[tuple[float, float, float, float]] = []
@@ -1691,7 +1699,7 @@ def find_gap(profile: np.ndarray, expected: float, pitch: float, index: int) -> 
 def constrain_gap_to_geometry(gap: Gap, expected: float, pitch: float, strip_mode: str) -> Gap:
     if gap.method not in {"detected", "edge-pair", "enhanced-detected"}:
         return Gap(gap.index, float(expected), gap.score, "equal")
-    max_shift = pitch * (0.045 if strip_mode == "full" else 0.12)
+    max_shift = clamp_float(pitch * (0.045 if strip_mode == "full" else 0.12), 20.0, 520.0)
     shift = max(-max_shift, min(max_shift, gap.center - expected))
     center = float(expected + shift)
     method = gap.method
@@ -1736,7 +1744,7 @@ def light_hard_gap_trust(
         end = int(round(outer.left + max(gap.start, gap.end)))
         start = max(outer.left, min(outer.right, start))
         end = max(start + 1, min(outer.right, end))
-        guard = max(4, min(80, int(round(max(float(end - start), pitch * 0.020)))))
+        guard = clamp_int(max(float(end - start), pitch * 0.020), 4, 80)
         left_start = max(outer.left, start - guard)
         right_end = min(outer.right, end + guard)
         core = gray_work[outer.top:outer.bottom, start:end]
@@ -1752,7 +1760,7 @@ def light_hard_gap_trust(
             continuity = min(core_content, min(left_content, right_content))
             dark_separator_like = core_mean <= 45.0 and core_dark >= 0.45 and core_activity <= 0.18
             weak_dark_gap = core_mean >= 70.0 and core_content >= 0.10
-            narrow_hard = 0.0 < gap.width <= max(3.0, pitch * 0.020)
+            narrow_hard = 0.0 < gap.width <= clamp_float(pitch * 0.020, 3.0, 140.0)
             detail["signals"] = {
                 "core_mean": core_mean,
                 "core_content": core_content,
@@ -1802,8 +1810,8 @@ def nearby_separator_replacement(
     center = int(round(gap.center))
     current_start = max(0, min(len(profile), int(round(min(gap.start, gap.end)))))
     current_end = max(current_start + 1, min(len(profile), int(round(max(gap.start, gap.end)))))
-    window = max(16, int(round(pitch * 0.040)))
-    exclude = max(8, int(round(max(float(current_end - current_start), pitch * 0.012))))
+    window = clamp_int(pitch * 0.040, 16, 320)
+    exclude = max(8, clamp_int(max(float(current_end - current_start), pitch * 0.012), 8, 120))
     lo = max(0, center - window)
     hi = min(len(profile), center + window + 1)
     if hi <= lo:
@@ -1819,12 +1827,12 @@ def nearby_separator_replacement(
         if abs_start < current_end + exclude and abs_end > current_start - exclude:
             continue
         width = abs_end - abs_start
-        if width > max(2, int(round(pitch * 0.070))):
+        if width > clamp_int(pitch * 0.070, 2, 520):
             continue
         score = interval_mean(profile, abs_start, abs_end)
         candidate_center = (abs_start + abs_end - 1) / 2.0
         distance = candidate_center - gap.center
-        if abs(distance) > pitch * 0.040:
+        if abs(distance) > clamp_float(pitch * 0.040, 16.0, 320.0):
             continue
         candidates.append(
             {
@@ -1895,7 +1903,7 @@ def apply_nearby_separator_corrections(
         after_cv = gap_width_cv(proposed, origin, pitch, count)
         local_gain = before_local - after_local
         cv_gain = before_cv - after_cv
-        local_ok = local_gain >= max(8.0, pitch * 0.006)
+        local_ok = local_gain >= clamp_float(pitch * 0.006, 8.0, 40.0)
         cv_ok = after_cv <= before_cv + 0.0015 and after_cv <= original_cv + 0.0015
         if not (local_ok and cv_ok):
             rejected.append(
@@ -1966,7 +1974,7 @@ def apply_robust_grid(
                 continue
             cand_origin = a.center - cand_pitch * a.index
             residuals = [abs(g.center - (cand_origin + cand_pitch * g.index)) for g in reliable]
-            tolerance = max(4.0, pitch * (0.040 if strip_mode == "full" else 0.090))
+            tolerance = clamp_float(pitch * (0.040 if strip_mode == "full" else 0.090), 4.0, 520.0)
             inliers = sum(1 for value in residuals if value <= tolerance)
             median_residual = float(np.median(np.array(residuals, dtype=np.float64))) if residuals else 0.0
             rank = (inliers, -median_residual, -abs(cand_pitch - pitch), cand_pitch)
@@ -1977,9 +1985,9 @@ def apply_robust_grid(
     inlier_count, fit_pitch, fit_origin, median_residual = best
     if inlier_count < 2:
         return constrained, {"grid_used": False, "reliable_gaps": len(reliable), "grid_rejected": "too_few_inliers"}
-    if median_residual > max(4.0, pitch * 0.045):
+    if median_residual > clamp_float(pitch * 0.045, 4.0, 520.0):
         return constrained, {"grid_used": False, "reliable_gaps": len(reliable), "grid_rejected": "high_residual", "grid_residual": median_residual}
-    max_shift = pitch * (0.035 if strip_mode == "full" else 0.10)
+    max_shift = clamp_float(pitch * (0.035 if strip_mode == "full" else 0.10), 20.0, 520.0)
     hard_protection_residual_threshold = max(12.0, min(40.0, pitch * 0.006))
     allow_hard_protection = median_residual > hard_protection_residual_threshold
     adjusted: list[Gap] = []
@@ -1997,7 +2005,7 @@ def apply_robust_grid(
             gray_work=gray_work,
             outer=outer,
         )
-        if gap.method in {"detected", "edge-pair", "enhanced-detected"} and abs(gap.center - predicted) <= max(3.0, pitch * 0.025):
+        if gap.method in {"detected", "edge-pair", "enhanced-detected"} and abs(gap.center - predicted) <= clamp_float(pitch * 0.025, 3.0, 180.0):
             adjusted.append(gap)
         elif allow_hard_protection and trust == "strong_separator":
             adjusted.append(gap)
@@ -2053,9 +2061,9 @@ def find_enhanced_gap(profile: np.ndarray, expected: float, pitch: float, index:
     if gap.start is None or gap.end is None:
         return Gap(index, float(expected), gap.score, "equal")
     width = abs(float(gap.end) - float(gap.start))
-    if width <= 0 or width > max(3.0, pitch * 0.040):
+    if width <= 0 or width > clamp_float(pitch * 0.040, 3.0, 420.0):
         return Gap(index, float(expected), gap.score, "equal")
-    if abs(gap.center - expected) > max(4.0, pitch * 0.035):
+    if abs(gap.center - expected) > clamp_float(pitch * 0.035, 4.0, 420.0):
         return Gap(index, float(expected), gap.score, "equal")
     return Gap(index, gap.center, gap.score, "enhanced-detected", gap.start, gap.end)
 
@@ -2586,7 +2594,7 @@ def build_detection_for_outer(
         model_pitch = float(grid_detail.get("grid_pitch", pitch))
         proposed_left = int(round(outer.left + model_origin))
         proposed_right = int(round(outer.left + model_origin + model_pitch * count))
-        max_shift = max(8, int(round(pitch * 0.08)))
+        max_shift = clamp_int(pitch * 0.08, 8, 420)
         width_change = abs((proposed_right - proposed_left) - outer.width) / max(1.0, float(outer.width))
         if (
             proposed_right > proposed_left
@@ -2958,8 +2966,9 @@ def partial_edge_hint(profile: np.ndarray, origin: float, pitch: float, count: i
         return {}
     span_start = int(max(0, min(len(profile) - 1, round(origin))))
     span_end = int(max(0, min(len(profile), round(origin + pitch * count))))
-    left_window = profile[span_start:min(len(profile), span_start + max(8, int(pitch * 0.18)))]
-    right_window = profile[max(0, span_end - max(8, int(pitch * 0.18))):span_end]
+    edge_window = clamp_int(pitch * 0.18, 8, 900)
+    left_window = profile[span_start:min(len(profile), span_start + edge_window)]
+    right_window = profile[max(0, span_end - edge_window):span_end]
     return {
         "left_edge_score": float(left_window.max()) if left_window.size else 0.0,
         "right_edge_score": float(right_window.max()) if right_window.size else 0.0,
@@ -3716,8 +3725,8 @@ def nearby_separator_candidate_detail(
     center = int(round(gap.center))
     current_start = max(0, min(len(profile), int(round(start - work_outer.left))))
     current_end = max(current_start + 1, min(len(profile), int(round(end - work_outer.left))))
-    window = max(16, int(round(pitch * 0.040)))
-    exclude = max(8, int(round(max(float(current_end - current_start), pitch * 0.012))))
+    window = clamp_int(pitch * 0.040, 16, 320)
+    exclude = max(8, clamp_int(max(float(current_end - current_start), pitch * 0.012), 8, 120))
     lo = max(0, center - window)
     hi = min(len(profile), center + window + 1)
     current_score = interval_mean(profile, current_start, current_end)
@@ -3731,7 +3740,7 @@ def nearby_separator_candidate_detail(
         if abs_start < current_end + exclude and abs_end > current_start - exclude:
             continue
         width = abs_end - abs_start
-        if width > max(2, int(round(pitch * 0.070))):
+        if width > clamp_int(pitch * 0.070, 2, 520):
             continue
         score = interval_mean(profile, abs_start, abs_end)
         candidate_center = (abs_start + abs_end - 1) / 2.0
@@ -3794,12 +3803,12 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap)
         start = int(round(work_outer.left + min(gap.start, gap.end)))
         end = int(round(work_outer.left + max(gap.start, gap.end)))
     else:
-        half = max(2, int(round(pitch * 0.012)))
+        half = clamp_int(pitch * 0.012, 2, 80)
         center = int(round(work_outer.left + gap.center))
         start, end = center - half, center + half + 1
     start = max(work_outer.left, min(work_outer.right, start))
     end = max(start + 1, min(work_outer.right, end))
-    guard = max(4, min(80, int(round(max(float(end - start), pitch * 0.020)))))
+    guard = clamp_int(max(float(end - start), pitch * 0.020), 4, 80)
     left_start = max(work_outer.left, start - guard)
     right_end = min(work_outer.right, end + guard)
     core = gray_work[work_outer.top:work_outer.bottom, start:end]
@@ -3834,7 +3843,7 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap)
     }
     record["nearby_separator_candidate"] = nearby
 
-    narrow_hard = gap.method in HARD_GAP_METHODS and 0.0 < gap.width <= max(3.0, pitch * 0.020)
+    narrow_hard = gap.method in HARD_GAP_METHODS and 0.0 < gap.width <= clamp_float(pitch * 0.020, 3.0, 140.0)
     width_ratio = float(gap.width) / max(1.0, float(pitch))
     model_delta_ratio = abs(float(gap.center - expected)) / max(1.0, float(pitch))
     content_continuous = continuity >= 0.12 and core_activity >= 0.030
@@ -4061,7 +4070,7 @@ def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> Non
     }
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
     detected_centers = [gap.center for gap in detection.gaps if gap.method in {"detected", "edge-pair", "enhanced-detected"}]
-    overlap_tolerance = max(4.0, pitch * 0.012)
+    overlap_tolerance = clamp_float(pitch * 0.012, 4.0, 80.0)
     for gap in detection.gaps:
         if gap.method not in {"detected", "edge-pair", "enhanced-detected"}:
             continue
@@ -4753,9 +4762,12 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         angle, angle_detail = choose_deskew_angle(gray, config.layout, config.analysis)
         deskew_detail.update(angle_detail)
         deskew_detail["angle"] = angle
-        deskew_span = abs(math.tan(math.radians(angle)) * float(work_gray(gray, config.layout).shape[1]))
+        deskew_work_width = float(work_gray(gray, config.layout).shape[1])
+        deskew_span = abs(math.tan(math.radians(angle)) * deskew_work_width)
+        deskew_span_threshold = max(3.0, min(12.0, deskew_work_width * 0.0005))
         deskew_detail["span_px"] = deskew_span
-        if deskew_span < 5.0:
+        deskew_detail["span_threshold_px"] = deskew_span_threshold
+        if deskew_span < deskew_span_threshold:
             deskew_detail["skipped"] = "span_below_threshold"
         elif config.deskew_min_angle <= abs(angle) <= config.deskew_max_angle:
             arr = rotate_array_expand(arr, -angle, profile.axes)
