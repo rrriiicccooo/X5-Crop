@@ -4,14 +4,6 @@
 
 这是 X5 Crop 的最短使用说明。更完整的安装、参数、Debug Analysis 和版本变化，请看 `README.md` 和 `CHANGELOG.md`。
 
-> 如果双击安装启动器打不开，请打开 Terminal，输入 `cd `，把 X5 Crop 文件夹拖进窗口后按 Return，然后运行：
->
-> ```bash
-> /bin/bash install/X5_Crop_Mac_install.command
-> ```
->
-> **macOS 如果双击安装启动器打不开，请先用终端启动安装器。**
-
 > **第一次使用请先运行安装启动器。**
 >
 > macOS: 双击 `install/X5_Crop_Mac_install.command`
@@ -19,6 +11,14 @@
 > Windows: 双击 `install/X5_Crop_win_install.bat`
 >
 > 安装完成后，再把 `X5_Crop.py`、对应系统的主启动器和 TIFF 长图放在同一个文件夹里运行。
+
+> **macOS 如果双击安装启动器打不开，请先用终端启动安装器。**
+>
+> 打开 Terminal，输入 `cd `，把 X5 Crop 文件夹拖进窗口后按 Return，然后运行：
+>
+> ```bash
+> /bin/bash install/X5_Crop_Mac_install.command
+> ```
 
 ### Release 压缩包里有什么
 
@@ -176,14 +176,6 @@ python3 -m pip install --user -U numpy tifffile imagecodecs Pillow
 
 This is the shortest guide for X5 Crop. For full installation notes, command-line options, Debug Analysis details, and version history, see `README.md` and `CHANGELOG.md`.
 
-> **On macOS, if double-clicking the installer does not work, start the installer from Terminal first.**
->
-> Open Terminal, type `cd `, drag the X5 Crop folder into the window, press Return, then run:
->
-> ```bash
-> /bin/bash install/X5_Crop_Mac_install.command
-> ```
-
 > **On first use, run the installer launcher first.**
 >
 > macOS: double-click `install/X5_Crop_Mac_install.command`
@@ -191,6 +183,14 @@ This is the shortest guide for X5 Crop. For full installation notes, command-lin
 > Windows: double-click `install/X5_Crop_win_install.bat`
 >
 > After installation, put `X5_Crop.py`, the main launcher for your system, and the TIFF long-strip scans in the same folder.
+
+> **On macOS, if double-clicking the installer does not work, start the installer from Terminal first.**
+>
+> Open Terminal, type `cd `, drag the X5 Crop folder into the window, press Return, then run:
+>
+> ```bash
+> /bin/bash install/X5_Crop_Mac_install.command
+> ```
 
 ### What Is In The Release Zip
 

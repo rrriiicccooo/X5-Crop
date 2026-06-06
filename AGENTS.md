@@ -175,6 +175,9 @@ Changed:
   freshly received Release folder may have a new quarantine flag and should run
   the installer again. The installer is not a permanent global trust
   registration.
+- `快速启动_Quick_Start.md` now puts the first-use installer instructions above
+  the macOS Terminal fallback, in both the Chinese and English quick-start
+  sections.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
   unchanged because the full run stayed stable. 120-66 / 120-67 now use a
@@ -423,6 +426,9 @@ Verified:
   install/X5_Crop_Mac_install.command X5_Crop_Mac.command` passed. The installer
   now contains the `chmod +x` and `xattr -dr com.apple.quarantine .` preparation
   steps.
+- Current quick-start order verification: checked the Chinese and English
+  opening sections of `快速启动_Quick_Start.md`; both now show first-use
+  installer instructions before the macOS Terminal fallback.
 - Current V3.6.12 verification: `python3 X5_Crop.py --version` prints
   `X5_Crop.py 3.6.12`; `python3 -m py_compile X5_Crop.py` passed. Full
   `Test/半格` dry-run with `--format half --strip full --count 12 --deskew off
