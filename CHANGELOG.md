@@ -49,7 +49,7 @@ V3.6.12 是 V3.6.11 format-aware `edge-pair` 的参数优化版。它用本地 `
 - hard gap 替换保护改为参数化：135 保持旧的严格位移限制；非 135 只允许小幅替换已经存在的 hard gap，避免 edge-pair 大幅挪动原生红框。
 - 120-645 参数只做轻微准备性调整；当前 `Test/120` 更像 3-frame 120 样本，不能用它过度校准 645。
 - 半格参数不变。
-- 后续工作流整理：主启动器在普通非 Debug Analysis 裁切时不再传 `--report`；只有 Debug Analysis dry run 仍生成报告。Release zip 封装策略改为包含 `X5_Crop.py`、`X5_Crop_Mac.command`、`X5_Crop_win.bat`、`README.md`、`快速启动_Quick_Start.md` 和 `install/` 内两个安装启动器，不包含 archive、license 或本地测试输出。macOS 安装器现在会尝试为当前 Release 文件夹里的启动器添加执行权限并移除下载隔离标记；文档补充了双击安装器失败时的 Terminal 启动命令。
+- 后续工作流整理：主启动器在普通非 Debug Analysis 裁切时不再传 `--report`；只有 Debug Analysis dry run 仍生成报告。Release zip 封装策略改为包含 `X5_Crop.py`、`X5_Crop_Mac.command`、`X5_Crop_win.bat`、`README.md`、`快速启动_Quick_Start.md` 和 `install/` 内两个安装启动器，不包含 archive、license 或本地测试输出。macOS 安装器现在会尝试为当前 Release 文件夹里的启动器添加执行权限并移除下载隔离标记；文档补充了双击安装器失败时的 Terminal 启动命令，并说明该准备只作用于当前文件夹，重新下载或重新解压的新文件夹需要再次运行安装器。
 
 验证：
 
@@ -569,7 +569,7 @@ Main changes:
 - Parameterizes hard-gap replacement protection: 135 keeps the old strict shift guard; non-135 can only replace existing hard gaps with small movement, preventing edge-pair from moving native red separators too aggressively.
 - Makes only a light preparatory adjustment for 120-645; the current `Test/120` set looks more like 3-frame 120 material, so it should not over-tune 645.
 - Leaves half-frame parameters unchanged.
-- Follow-up workflow cleanup: main launchers no longer pass `--report` for normal non-Debug-Analysis crop runs; only Debug Analysis dry runs still write reports. Release zip packaging now includes `X5_Crop.py`, `X5_Crop_Mac.command`, `X5_Crop_win.bat`, `README.md`, `快速启动_Quick_Start.md`, and the two installer launchers under `install/`, and excludes archive snapshots, license, and local test/output folders. The macOS installer now tries to make launchers executable and remove the download quarantine flag from the current Release folder; docs now include a Terminal command for cases where double-clicking the installer fails.
+- Follow-up workflow cleanup: main launchers no longer pass `--report` for normal non-Debug-Analysis crop runs; only Debug Analysis dry runs still write reports. Release zip packaging now includes `X5_Crop.py`, `X5_Crop_Mac.command`, `X5_Crop_win.bat`, `README.md`, `快速启动_Quick_Start.md`, and the two installer launchers under `install/`, and excludes archive snapshots, license, and local test/output folders. The macOS installer now tries to make launchers executable and remove the download quarantine flag from the current Release folder; docs now include a Terminal command for cases where double-clicking the installer fails and clarify that a newly downloaded or unzipped folder needs the installer run again.
 
 Verification:
 

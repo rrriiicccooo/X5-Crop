@@ -168,6 +168,10 @@ Changed:
   removing `com.apple.quarantine` with `xattr` when available. README and
   `快速启动_Quick_Start.md` now include the Terminal fallback command:
   `/bin/bash install/X5_Crop_Mac_install.command`.
+- Docs now clarify the macOS permission model: users may copy the whole
+  prepared Release folder elsewhere, but a newly downloaded/unzipped/freshly
+  received Release folder may have a new quarantine flag and should run the
+  installer again. The installer is not a permanent global trust registration.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
   unchanged because the full run stayed stable. 120-66 / 120-67 now use a

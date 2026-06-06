@@ -4,6 +4,14 @@
 
 这是 X5 Crop 的最短使用说明。更完整的安装、参数、Debug Analysis 和版本变化，请看 `README.md` 和 `CHANGELOG.md`。
 
+> **macOS 如果双击安装启动器打不开，请先用终端启动安装器。**
+>
+> 打开 Terminal，输入 `cd `，把 X5 Crop 文件夹拖进窗口后按 Return，然后运行：
+>
+> ```bash
+> /bin/bash install/X5_Crop_Mac_install.command
+> ```
+
 > **第一次使用请先运行安装启动器。**
 >
 > macOS: 双击 `install/X5_Crop_Mac_install.command`
@@ -11,13 +19,6 @@
 > Windows: 双击 `install/X5_Crop_win_install.bat`
 >
 > 安装完成后，再把 `X5_Crop.py`、对应系统的主启动器和 TIFF 长图放在同一个文件夹里运行。
->
-> 如果 macOS 双击安装启动器打不开，请用终端运行：
->
-> ```bash
-> cd "/path/to/X5-Crop"
-> /bin/bash install/X5_Crop_Mac_install.command
-> ```
 
 ### Release 压缩包里有什么
 
@@ -66,7 +67,11 @@ install/X5_Crop_win_install.bat
 
 安装器会检查 Python 和依赖库。安装完成后，再运行主启动器。
 
-macOS 安装器还会尝试为当前 Release 文件夹里的主启动器添加执行权限，并移除下载隔离标记。它不能把脚本永久加入 macOS 的全局可信名单；如果重新下载或解压一份新的 Release，请对新的文件夹再运行一次安装器。
+macOS 安装器还会尝试为当前 Release 文件夹里的主启动器添加执行权限，并移除下载隔离标记。它不能把脚本永久加入 macOS 的全局可信名单。
+
+安装后，可以把这一整套 Release 文件夹复制到别的目录继续使用。不要只移动主启动器，因为主启动器必须和 `X5_Crop.py` 放在同一个文件夹里。
+
+如果重新下载、重新解压，或者从网页、网盘、聊天软件又拿到一份新的 Release，那一份新文件夹可能重新带有 macOS 下载隔离标记。请在新的文件夹里再运行一次安装启动器。
 
 如果双击安装启动器打不开，请打开 Terminal，输入 `cd `，把 X5 Crop 文件夹拖进窗口后按 Return，然后运行：
 
@@ -158,6 +163,14 @@ python3 -m pip install --user -U numpy tifffile imagecodecs Pillow
 
 This is the shortest guide for X5 Crop. For full installation notes, command-line options, Debug Analysis details, and version history, see `README.md` and `CHANGELOG.md`.
 
+> **On macOS, if double-clicking the installer does not work, start the installer from Terminal first.**
+>
+> Open Terminal, type `cd `, drag the X5 Crop folder into the window, press Return, then run:
+>
+> ```bash
+> /bin/bash install/X5_Crop_Mac_install.command
+> ```
+
 > **On first use, run the installer launcher first.**
 >
 > macOS: double-click `install/X5_Crop_Mac_install.command`
@@ -165,13 +178,6 @@ This is the shortest guide for X5 Crop. For full installation notes, command-lin
 > Windows: double-click `install/X5_Crop_win_install.bat`
 >
 > After installation, put `X5_Crop.py`, the main launcher for your system, and the TIFF long-strip scans in the same folder.
->
-> If macOS will not open the installer by double-clicking, run it from Terminal:
->
-> ```bash
-> cd "/path/to/X5-Crop"
-> /bin/bash install/X5_Crop_Mac_install.command
-> ```
 
 ### What Is In The Release Zip
 
@@ -220,7 +226,11 @@ install/X5_Crop_win_install.bat
 
 The installer checks Python and required libraries. After installation, run the main launcher.
 
-The macOS installer also tries to make the main launcher executable and remove the download quarantine flag from the current Release folder. It cannot permanently add the script to a global macOS trusted list. If you download or unzip a fresh Release copy later, run the installer again for that new folder.
+The macOS installer also tries to make the main launcher executable and remove the download quarantine flag from the current Release folder. It cannot permanently add the script to a global macOS trusted list.
+
+After installation, you can copy the whole Release folder to another location and keep using it. Do not move only the main launcher, because the launcher must stay in the same folder as `X5_Crop.py`.
+
+If you download, unzip, or receive another fresh Release copy from a browser, cloud drive, or chat app, that new folder may have a new macOS quarantine flag. Run the installer again inside that new folder.
 
 If double-clicking the installer does not work, open Terminal, type `cd `, drag the X5 Crop folder into the window, press Return, then run:
 
