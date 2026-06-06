@@ -223,6 +223,22 @@ Changed:
   remains conservative: nearby active correction, lucky-pass risk, and
   leading-grid failure are still enabled only on the validated 135 path; other
   formats have separate policy hooks and diagnostics groundwork only.
+- Follow-up V3.7 policy cleanup moved low-level outer extraction, separator
+  profiles, edge-refine profiles, grid outer refine, frame-fit geometry
+  fallback, edge-evidence inlier tolerance/weights, non-auto candidate
+  confidence caps, and deskew sampling/enhanced-quality gates behind
+  format-aware policy values. 135 defaults preserve the previous behavior.
+- Debug Analysis report reuse no longer treats output bleed as part of the
+  detection cache signature. When a normal export reuses a matching report, it
+  normalizes cached output frames from their previous output bleed and reapplies
+  the current bleed before cropping, so changing only bleed can reuse analysis
+  without using stale crop boxes.
+- Diagnostics now reuse cached separator profiles for nearby-separator checks in
+  `gap_diagnostic_record()`, reducing repeated profile work during full
+  `--diagnostics` runs.
+- README and CHANGELOG now clarify that the current V3.7 script still keeps the
+  conservative `--analysis` enhanced separator assist. V3.4 was an experiment
+  that tried removing that layer; it is not the current active behavior.
 - `hard_fallback_detection()` detail has been simplified to only describe the
   review-only fallback type, format/count/layout, work outer, and pitch. It no
   longer emits `v2_competition` or duplicate gap center/score/method arrays.
@@ -539,6 +555,16 @@ Verified:
   `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`; smoke comparisons
   on `Test/半格/X5_00053.tif` and `Test/120/X5_test_45.tif` as 120-66 also had
   0 diffs, while reports showed the new per-format policy fields.
+- Current V3.7 low-level policy/cache cleanup verification:
+  `python3 -m py_compile X5_Crop.py` and `git diff --check` passed;
+  `Test/135/X5_Crop.py` was synced. Full `Test/135` `deskew off` dry-run with
+  `--format 135 --strip full --count 6 --dry-run --report
+  --no-copy-review-files --no-reuse-analysis --jobs 2` produced 48 ok /
+  0 failed / 43 `approved_auto` / 5 `needs_review`. Compared
+  `/private/tmp/x5_v37_after_policy_cleanup/split_report.jsonl` against
+  `/private/tmp/x5_v37_before_policy_cleanup/split_report.jsonl`; there were
+  0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps`.
 - Current V3.6.12 verification: `python3 X5_Crop.py --version` prints
   `X5_Crop.py 3.6.12`; `python3 -m py_compile X5_Crop.py` passed. Full
   `Test/半格` dry-run with `--format half --strip full --count 12 --deskew off

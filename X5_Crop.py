@@ -194,6 +194,23 @@ class FormatTuning:
     outer_mask_expand_ratio: float = 0.002
     outer_min_width_ratio: float = 0.10
     outer_min_height_ratio: float = 0.10
+    outer_bw_not_white_threshold: int = 246
+    outer_bw_dark_threshold: int = 210
+    outer_bw_min_fraction: float = 0.015
+    outer_bw_min_width_ratio: float = 0.10
+    outer_bw_min_height_ratio: float = 0.10
+    outer_bw_margin_ratio: float = 0.002
+    outer_bw_margin_min: int = 2
+    outer_white_border_ratio: float = 0.985
+    outer_white_run_ratio: float = 0.003
+    outer_white_run_min: int = 2
+    outer_white_run_max: int = 80
+    outer_white_dark_threshold: int = 30
+    outer_white_light_threshold: int = 225
+    outer_white_min_width_ratio: float = 0.10
+    outer_white_min_height_ratio: float = 0.10
+    outer_white_margin_ratio: float = 0.002
+    outer_white_margin_min: int = 2
     content_profile_smooth_ratio: float = 0.010
     content_profile_min_run_ratio: float = 0.20
     content_profile_threshold_min: float = 0.035
@@ -279,6 +296,35 @@ class FormatTuning:
     enhanced_shift_min: float = 4.0
     enhanced_shift_max: float = 420.0
     enhanced_auto_low_score: float = 0.34
+    separator_profile_top_ratio: float = 0.10
+    separator_profile_bottom_ratio: float = 0.90
+    separator_profile_segments: int = 5
+    separator_profile_dark_threshold: int = 30
+    separator_profile_light_threshold: int = 225
+    separator_profile_consistency_percentile: float = 20.0
+    separator_profile_average_weight: float = 0.35
+    separator_profile_consistency_weight: float = 0.65
+    separator_profile_std_norm: float = 70.0
+    separator_profile_dark_soft_mean: float = 54.0
+    separator_profile_light_soft_mean: float = 225.0
+    separator_profile_light_soft_span: float = 30.0
+    separator_profile_soft_weight: float = 0.50
+    separator_profile_uniform_base: float = 0.90
+    separator_profile_uniform_weight: float = 0.10
+    separator_profile_gradient_weight: float = 0.25
+    separator_profile_smooth_ratio: float = 0.0015
+    separator_profile_smooth_min: int = 3
+    edge_refine_top_ratio: float = 0.12
+    edge_refine_bottom_ratio: float = 0.88
+    edge_refine_mean_weight: float = 0.65
+    edge_refine_p75_weight: float = 0.35
+    edge_refine_smooth_ratio: float = 0.0008
+    edge_refine_smooth_min: int = 3
+    edge_refine_high_percentile: float = 99.2
+    edge_refine_background_dark_threshold: int = 30
+    edge_refine_background_light_threshold: int = 225
+    edge_refine_y_edge_weight: float = 0.50
+    edge_refine_activity_percentile: float = 95.0
     hard_trust_guard_ratio: float = 0.020
     hard_trust_guard_min: int = 4
     hard_trust_guard_max: int = 80
@@ -372,6 +418,23 @@ class FormatTuning:
     calibrate_content_weight: float = 0.33
     calibrate_separator_weight: float = 0.33
     calibrate_separator_source_bias: float = 0.03
+    calibrate_partial_no_auto_cap: float = 0.82
+    calibrate_full_no_auto_cap: float = 0.84
+    grid_outer_refine_shift_ratio: float = 0.080
+    grid_outer_refine_shift_min: int = 8
+    grid_outer_refine_shift_max: int = 420
+    grid_outer_refine_max_width_change: float = 0.12
+    deskew_min_outer_width: int = 100
+    deskew_sample_width_px: int = 350
+    deskew_min_samples: int = 6
+    deskew_max_samples: int = 24
+    deskew_min_col_content: int = 10
+    deskew_min_col_content_ratio: float = 0.05
+    deskew_slope_delta_max: float = 0.006
+    deskew_residual_min: float = 3.0
+    deskew_residual_height_ratio: float = 0.003
+    deskew_auto_quality_ok: float = 8.0
+    deskew_enhanced_quality_gain: float = 3.0
     partial_offsets: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0)
     partial_edge_hint_window_ratio: float = 0.18
     partial_edge_hint_window_min: int = 8
@@ -532,10 +595,10 @@ class AnalysisCache:
     gray_work: np.ndarray
     content_evidence_work: np.ndarray
     content_evidence_float_work: np.ndarray
-    separator_profiles: dict[tuple[int, int, int, int], np.ndarray] = field(default_factory=dict)
-    enhanced_separator_profiles: dict[tuple[int, int, int, int], np.ndarray] = field(default_factory=dict)
+    separator_profiles: dict[tuple[str, int, int, int, int], np.ndarray] = field(default_factory=dict)
+    enhanced_separator_profiles: dict[tuple[str, int, int, int, int], np.ndarray] = field(default_factory=dict)
     separator_evidence_crops: dict[tuple[int, int, int, int], np.ndarray] = field(default_factory=dict)
-    edge_refine_profiles: dict[tuple[int, int, int, int], tuple[np.ndarray, np.ndarray, np.ndarray]] = field(default_factory=dict)
+    edge_refine_profiles: dict[tuple[str, int, int, int, int], tuple[np.ndarray, np.ndarray, np.ndarray]] = field(default_factory=dict)
 
 
 def json_safe(value: Any) -> Any:
@@ -1361,6 +1424,10 @@ def box_cache_key(box: Box) -> tuple[int, int, int, int]:
     return (int(box.left), int(box.top), int(box.right), int(box.bottom))
 
 
+def format_box_cache_key(format_name: str, box: Box) -> tuple[str, int, int, int, int]:
+    return (str(format_name), int(box.left), int(box.top), int(box.right), int(box.bottom))
+
+
 def crop_work_outer(gray_work: np.ndarray, outer: Box) -> np.ndarray:
     if not outer.valid():
         return gray_work
@@ -1368,26 +1435,26 @@ def crop_work_outer(gray_work: np.ndarray, outer: Box) -> np.ndarray:
     return crop if crop.size else gray_work
 
 
-def cached_separator_profile(cache: Optional[AnalysisCache], gray_work: np.ndarray, outer: Box) -> np.ndarray:
+def cached_separator_profile(cache: Optional[AnalysisCache], gray_work: np.ndarray, outer: Box, format_name: str = "135") -> np.ndarray:
     if cache is None:
-        return separator_profile(crop_work_outer(gray_work, outer))
-    key = box_cache_key(outer)
+        return separator_profile(crop_work_outer(gray_work, outer), format_name)
+    key = format_box_cache_key(format_name, outer)
     profile = cache.separator_profiles.get(key)
     if profile is None:
-        profile = separator_profile(crop_work_outer(cache.gray_work, outer))
+        profile = separator_profile(crop_work_outer(cache.gray_work, outer), format_name)
         cache.separator_profiles[key] = profile
     return profile
 
 
-def cached_enhanced_separator_profile(cache: Optional[AnalysisCache], gray_work: np.ndarray, outer: Box) -> np.ndarray:
+def cached_enhanced_separator_profile(cache: Optional[AnalysisCache], gray_work: np.ndarray, outer: Box, format_name: str = "135") -> np.ndarray:
     if cache is None:
         crop = crop_work_outer(gray_work, outer)
-        return separator_profile(make_separator_evidence_gray(crop))
-    key = box_cache_key(outer)
+        return separator_profile(make_separator_evidence_gray(crop), format_name)
+    key = format_box_cache_key(format_name, outer)
     profile = cache.enhanced_separator_profiles.get(key)
     if profile is None:
         crop = crop_work_outer(cache.gray_work, outer)
-        profile = separator_profile(make_separator_evidence_gray(crop))
+        profile = separator_profile(make_separator_evidence_gray(crop), format_name)
         cache.enhanced_separator_profiles[key] = profile
     return profile
 
@@ -1407,13 +1474,14 @@ def cached_edge_refine_profiles(
     cache: Optional[AnalysisCache],
     crop: np.ndarray,
     outer: Box,
+    format_name: str = "135",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if cache is None:
-        return edge_refine_profiles(crop)
-    key = box_cache_key(outer)
+        return edge_refine_profiles(crop, format_name)
+    key = format_box_cache_key(format_name, outer)
     profiles = cache.edge_refine_profiles.get(key)
     if profiles is None:
-        profiles = edge_refine_profiles(crop_work_outer(cache.gray_work, outer))
+        profiles = edge_refine_profiles(crop_work_outer(cache.gray_work, outer), format_name)
         cache.edge_refine_profiles[key] = profiles
     return profiles
 
@@ -1498,6 +1566,27 @@ def apply_output_bleed(detection: Detection, detection_config: Config, output_co
         "detection_short_axis_bleed": int(detection_config.bleed_y),
         "output_long_axis_bleed": int(output_config.bleed_x),
         "output_short_axis_bleed": int(output_config.bleed_y),
+    }
+
+
+def reapply_cached_output_bleed(detection: Detection, config: Config, image_w: int, image_h: int) -> None:
+    output_bleed = detection.detail.get("output_bleed")
+    if not isinstance(output_bleed, dict):
+        return
+    try:
+        cached_x = int(output_bleed.get("output_long_axis_bleed", config.bleed_x))
+        cached_y = int(output_bleed.get("output_short_axis_bleed", config.bleed_y))
+    except (TypeError, ValueError):
+        return
+    if cached_x == int(config.bleed_x) and cached_y == int(config.bleed_y):
+        return
+    cached_config = replace(config, bleed_x=cached_x, bleed_y=cached_y)
+    apply_output_bleed(detection, cached_config, config, image_w, image_h)
+    detection.detail["reused_output_bleed_adjustment"] = {
+        "from_long_axis_bleed": int(cached_x),
+        "from_short_axis_bleed": int(cached_y),
+        "to_long_axis_bleed": int(config.bleed_x),
+        "to_short_axis_bleed": int(config.bleed_y),
     }
 
 
@@ -1618,37 +1707,38 @@ def first_content_index(border_mask: np.ndarray, min_run: int) -> int:
     return int(candidates[0]) if candidates.size else 0
 
 
-def detect_outer(gray: np.ndarray) -> Box:
+def detect_outer(gray: np.ndarray, format_name: str = "135") -> Box:
+    tuning = format_tuning(format_name)
     h, w = gray.shape
-    not_white = gray < 246
-    dark = gray < 210
+    not_white = gray < tuning.outer_bw_not_white_threshold
+    dark = gray < tuning.outer_bw_dark_threshold
     mask = not_white | dark
-    box = bbox_from_mask(mask, min_row_fraction=0.015, min_col_fraction=0.015)
-    if box is None or box.width < max(20, w * 0.10) or box.height < max(20, h * 0.10):
+    box = bbox_from_mask(mask, min_row_fraction=tuning.outer_bw_min_fraction, min_col_fraction=tuning.outer_bw_min_fraction)
+    if box is None or box.width < max(20, w * tuning.outer_bw_min_width_ratio) or box.height < max(20, h * tuning.outer_bw_min_height_ratio):
         return Box(0, 0, w, h)
 
-    margin_x = max(2, int(round(w * 0.002)))
-    margin_y = max(2, int(round(h * 0.002)))
+    margin_x = max(tuning.outer_bw_margin_min, int(round(w * tuning.outer_bw_margin_ratio)))
+    margin_y = max(tuning.outer_bw_margin_min, int(round(h * tuning.outer_bw_margin_ratio)))
     return box.expand(margin_x, margin_y, w, h)
 
 
-def detect_outer_white_x(gray: np.ndarray) -> Box:
+def detect_outer_white_x(gray: np.ndarray, format_name: str = "135") -> Box:
+    tuning = format_tuning(format_name)
     h, w = gray.shape
-    border_ratio = 0.985
-    min_run_y = max(2, min(80, int(round(h * 0.003))))
-    min_run_x = max(2, min(80, int(round(w * 0.003))))
-    y_background = (gray <= 30) | (gray >= 225)
-    x_background = gray >= 225
-    row_border = y_background.mean(axis=1) >= border_ratio
-    col_border = x_background.mean(axis=0) >= border_ratio
+    min_run_y = clamp_int(h * tuning.outer_white_run_ratio, tuning.outer_white_run_min, tuning.outer_white_run_max)
+    min_run_x = clamp_int(w * tuning.outer_white_run_ratio, tuning.outer_white_run_min, tuning.outer_white_run_max)
+    y_background = (gray <= tuning.outer_white_dark_threshold) | (gray >= tuning.outer_white_light_threshold)
+    x_background = gray >= tuning.outer_white_light_threshold
+    row_border = y_background.mean(axis=1) >= tuning.outer_white_border_ratio
+    col_border = x_background.mean(axis=0) >= tuning.outer_white_border_ratio
     top = first_content_index(row_border, min_run_y)
     bottom = h - first_content_index(row_border[::-1], min_run_y)
     left = first_content_index(col_border, min_run_x)
     right = w - first_content_index(col_border[::-1], min_run_x)
-    margin_x = max(2, int(round(w * 0.002)))
-    margin_y = max(2, int(round(h * 0.002)))
+    margin_x = max(tuning.outer_white_margin_min, int(round(w * tuning.outer_white_margin_ratio)))
+    margin_y = max(tuning.outer_white_margin_min, int(round(h * tuning.outer_white_margin_ratio)))
     box = Box(left, top, right, bottom).expand(margin_x, margin_y, w, h)
-    if not box.valid() or box.width < max(20, w * 0.10) or box.height < max(20, h * 0.10):
+    if not box.valid() or box.width < max(20, w * tuning.outer_white_min_width_ratio) or box.height < max(20, h * tuning.outer_white_min_height_ratio):
         return Box(0, 0, w, h)
     return box
 
@@ -1669,8 +1759,8 @@ def unique_outer_candidates(candidates: Iterable[OuterCandidate]) -> list[OuterC
 def detect_outer_candidates(gray: np.ndarray, format_name: str = "135") -> list[OuterCandidate]:
     tuning = format_tuning(format_name)
     h, w = gray.shape
-    bw = detect_outer(gray)
-    white_x = detect_outer_white_x(gray)
+    bw = detect_outer(gray, format_name)
+    white_x = detect_outer_white_x(gray, format_name)
     candidates = [OuterCandidate("bw", bw)]
     if white_x.valid():
         max_reasonable = max(float(bw.width) * tuning.outer_white_x_width_multiplier, float(bw.width) + w * tuning.outer_white_x_extra_ratio)
@@ -1699,44 +1789,46 @@ def detect_outer_candidates(gray: np.ndarray, format_name: str = "135") -> list[
     return unique or [OuterCandidate("full_canvas", Box(0, 0, w, h))]
 
 
-def separator_profile(crop: np.ndarray) -> np.ndarray:
+def separator_profile(crop: np.ndarray, format_name: str = "135") -> np.ndarray:
+    tuning = format_tuning(format_name)
     h, w = crop.shape
     if h <= 0 or w <= 0:
         return np.zeros(0, dtype=np.float32)
-    y0 = max(0, min(h - 1, int(round(h * 0.10))))
-    y1 = max(y0 + 1, min(h, int(round(h * 0.90))))
+    y0 = max(0, min(h - 1, int(round(h * tuning.separator_profile_top_ratio))))
+    y1 = max(y0 + 1, min(h, int(round(h * tuning.separator_profile_bottom_ratio))))
     middle = crop[y0:y1, :]
     middle_f = middle.astype(np.float32, copy=False)
 
     profiles: list[np.ndarray] = []
-    for i in range(5):
-        sy0 = int(round(i * middle.shape[0] / 5))
-        sy1 = int(round((i + 1) * middle.shape[0] / 5))
+    segments = max(1, int(tuning.separator_profile_segments))
+    for i in range(segments):
+        sy0 = int(round(i * middle.shape[0] / segments))
+        sy1 = int(round((i + 1) * middle.shape[0] / segments))
         if sy1 <= sy0:
             continue
         part = middle[sy0:sy1, :]
-        black = (part <= 30).mean(axis=0).astype(np.float32)
-        white = (part >= 225).mean(axis=0).astype(np.float32)
+        black = (part <= tuning.separator_profile_dark_threshold).mean(axis=0).astype(np.float32)
+        white = (part >= tuning.separator_profile_light_threshold).mean(axis=0).astype(np.float32)
         profiles.append(np.maximum(black, white))
     if not profiles:
-        profiles.append(((middle <= 30) | (middle >= 225)).mean(axis=0).astype(np.float32))
+        profiles.append(((middle <= tuning.separator_profile_dark_threshold) | (middle >= tuning.separator_profile_light_threshold)).mean(axis=0).astype(np.float32))
 
     stack = np.stack(profiles, axis=0)
     average_extreme = stack.mean(axis=0).astype(np.float32)
-    vertical_consistency = np.percentile(stack, 20, axis=0).astype(np.float32)
-    extreme_score = 0.35 * average_extreme + 0.65 * vertical_consistency
+    vertical_consistency = np.percentile(stack, tuning.separator_profile_consistency_percentile, axis=0).astype(np.float32)
+    extreme_score = tuning.separator_profile_average_weight * average_extreme + tuning.separator_profile_consistency_weight * vertical_consistency
 
     col_std = middle_f.std(axis=0)
-    uniform_score = 1.0 - np.clip(col_std / 70.0, 0.0, 1.0)
+    uniform_score = 1.0 - np.clip(col_std / tuning.separator_profile_std_norm, 0.0, 1.0)
     col_mean = middle_f.mean(axis=0)
-    dark_soft = np.clip((54.0 - col_mean) / 54.0, 0.0, 1.0)
-    light_soft = np.clip((col_mean - 225.0) / 30.0, 0.0, 1.0)
-    soft_score = np.maximum(dark_soft, light_soft) * uniform_score * 0.50
+    dark_soft = np.clip((tuning.separator_profile_dark_soft_mean - col_mean) / tuning.separator_profile_dark_soft_mean, 0.0, 1.0)
+    light_soft = np.clip((col_mean - tuning.separator_profile_light_soft_mean) / tuning.separator_profile_light_soft_span, 0.0, 1.0)
+    soft_score = np.maximum(dark_soft, light_soft) * uniform_score * tuning.separator_profile_soft_weight
 
     gradient = np.abs(np.diff(middle_f, axis=1, prepend=middle_f[:, :1])).mean(axis=0) / 255.0
-    score = np.maximum(extreme_score * (0.90 + 0.10 * uniform_score), soft_score)
-    score = np.maximum(score, np.clip(gradient, 0.0, 1.0) * 0.25)
-    return smooth_1d(score.astype(np.float32), max(3, int(round(w * 0.0015))))
+    score = np.maximum(extreme_score * (tuning.separator_profile_uniform_base + tuning.separator_profile_uniform_weight * uniform_score), soft_score)
+    score = np.maximum(score, np.clip(gradient, 0.0, 1.0) * tuning.separator_profile_gradient_weight)
+    return smooth_1d(score.astype(np.float32), max(tuning.separator_profile_smooth_min, int(round(w * tuning.separator_profile_smooth_ratio))))
 
 
 def normalize_profile(profile: np.ndarray, high_percentile: float = 99.0) -> np.ndarray:
@@ -1749,13 +1841,14 @@ def normalize_profile(profile: np.ndarray, high_percentile: float = 99.0) -> np.
     return np.clip(profile / hi, 0.0, 1.0).astype(np.float32)
 
 
-def edge_refine_profiles(crop: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def edge_refine_profiles(crop: np.ndarray, format_name: str = "135") -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    tuning = format_tuning(format_name)
     h, w = crop.shape
     if h <= 0 or w <= 1:
         zeros = np.zeros(w, dtype=np.float32)
         return zeros, zeros, zeros
-    y0 = max(0, min(h - 1, int(round(h * 0.12))))
-    y1 = max(y0 + 1, min(h, int(round(h * 0.88))))
+    y0 = max(0, min(h - 1, int(round(h * tuning.edge_refine_top_ratio))))
+    y1 = max(y0 + 1, min(h, int(round(h * tuning.edge_refine_bottom_ratio))))
     middle = crop[y0:y1, :]
     if middle.size == 0:
         zeros = np.zeros(w, dtype=np.float32)
@@ -1764,17 +1857,17 @@ def edge_refine_profiles(crop: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.n
     diff_x = np.abs(np.diff(middle_i16, axis=1)).astype(np.float32)
     edge = np.zeros(w, dtype=np.float32)
     if diff_x.shape[1] > 0:
-        raw = 0.65 * diff_x.mean(axis=0) + 0.35 * np.percentile(diff_x, 75, axis=0)
+        raw = tuning.edge_refine_mean_weight * diff_x.mean(axis=0) + tuning.edge_refine_p75_weight * np.percentile(diff_x, 75, axis=0)
         edge[1:] = raw
-        edge = normalize_profile(smooth_1d(edge, max(3, int(round(w * 0.0008)))), 99.2)
-    background = ((middle <= 30) | (middle >= 225)).mean(axis=0).astype(np.float32)
+        edge = normalize_profile(smooth_1d(edge, max(tuning.edge_refine_smooth_min, int(round(w * tuning.edge_refine_smooth_ratio)))), tuning.edge_refine_high_percentile)
+    background = ((middle <= tuning.edge_refine_background_dark_threshold) | (middle >= tuning.edge_refine_background_light_threshold)).mean(axis=0).astype(np.float32)
     col_std = middle.astype(np.float32, copy=False).std(axis=0)
     if middle.shape[0] > 1:
         diff_y = np.abs(np.diff(middle_i16, axis=0)).astype(np.float32)
         y_edge = diff_y.mean(axis=0)
     else:
         y_edge = np.zeros(w, dtype=np.float32)
-    activity = normalize_profile(col_std + 0.5 * y_edge, 95.0)
+    activity = normalize_profile(col_std + tuning.edge_refine_y_edge_weight * y_edge, tuning.edge_refine_activity_percentile)
     return edge, background, activity
 
 
@@ -1850,7 +1943,7 @@ def refine_gaps_by_edge_pairs(
     h, w = crop.shape
     if count <= 1 or w <= 1 or not gaps:
         return gaps, {"used": False, "reason": "empty"}
-    edge, background, _activity = cached_edge_refine_profiles(cache, crop, outer) if outer is not None else edge_refine_profiles(crop)
+    edge, background, _activity = cached_edge_refine_profiles(cache, crop, outer, format_name) if outer is not None else edge_refine_profiles(crop, format_name)
     pitch = w / float(max(1, count))
     params = edge_pair_params_for_format(format_name)
     window = clamp_int(pitch * params.window_ratio, 8, 520)
@@ -2376,7 +2469,7 @@ def merge_enhanced_separator_gaps(
     crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
     if crop.size == 0 or outer.width <= 0 or outer.height <= 0:
         return gaps, {"used": False, "reason": "empty_outer"}
-    profile = cached_enhanced_separator_profile(cache, gray_work, outer)
+    profile = cached_enhanced_separator_profile(cache, gray_work, outer, format_name)
     merged: list[Gap] = []
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
@@ -2446,13 +2539,14 @@ def frame_boxes_from_gaps(
     origin: float = 0.0,
     pitch: Optional[float] = None,
     apply_geometry_fit: bool = True,
+    geometry_policy: Optional["FrameFitPolicy"] = None,
 ) -> list[Box]:
     if pitch is None:
         cuts = [float(outer.left)] + [gap.center + outer.left for gap in gaps] + [float(outer.right)]
     else:
         cuts = [outer.left + origin] + [outer.left + gap.center for gap in gaps] + [outer.left + origin + pitch * count]
     if apply_geometry_fit:
-        cuts = fit_cuts_by_geometry(cuts, outer, count, pitch)
+        cuts = fit_cuts_by_geometry(cuts, outer, count, pitch, geometry_policy)
     boxes: list[Box] = []
     for left, right in zip(cuts[:-1], cuts[1:]):
         box = Box(int(round(left)), outer.top, int(round(right)), outer.bottom)
@@ -2460,17 +2554,18 @@ def frame_boxes_from_gaps(
     return boxes[:count]
 
 
-def fit_cuts_by_geometry(cuts: list[float], outer: Box, count: int, pitch: Optional[float]) -> list[float]:
+def fit_cuts_by_geometry(cuts: list[float], outer: Box, count: int, pitch: Optional[float], policy: Optional["FrameFitPolicy"] = None) -> list[float]:
     if len(cuts) != count + 1 or count <= 1:
         return cuts
+    policy = policy or FrameFitPolicy(name="default", edge_evidence=False, geometry_fallback=True)
     widths = np.diff(np.array(cuts, dtype=np.float64))
     if widths.size != count or np.any(widths <= 1):
         return cuts
     width_cv = float(widths.std() / max(1.0, widths.mean()))
     target = float(np.median(widths))
-    if pitch is not None and 0.85 <= target / max(1.0, float(pitch)) <= 1.15:
+    if pitch is not None and policy.geometry_pitch_min_ratio <= target / max(1.0, float(pitch)) <= policy.geometry_pitch_max_ratio:
         target = float(pitch)
-    if width_cv <= 0.006:
+    if width_cv <= policy.geometry_noop_width_cv:
         return cuts
 
     centers = (np.array(cuts[:-1], dtype=np.float64) + np.array(cuts[1:], dtype=np.float64)) / 2.0
@@ -2478,7 +2573,7 @@ def fit_cuts_by_geometry(cuts: list[float], outer: Box, count: int, pitch: Optio
     start = float(np.median(starts))
     start = max(float(outer.left), min(float(outer.right) - target * count, start))
     fitted = [start + target * i for i in range(count + 1)]
-    if fitted[0] < outer.left - 1 or fitted[-1] > outer.right + 1:
+    if fitted[0] < outer.left - policy.geometry_outer_tolerance_px or fitted[-1] > outer.right + policy.geometry_outer_tolerance_px:
         return cuts
     if len(fitted) != len(cuts) or any(b <= a for a, b in zip(fitted[:-1], fitted[1:])):
         return cuts
@@ -2526,6 +2621,14 @@ class FrameFitPolicy:
     nominal_min_ratio: float = 0.72
     nominal_max_ratio: float = 1.10
     inlier_tolerance_ratio: float = 0.035
+    min_inlier_tolerance_px: float = 3.0
+    geometry_pitch_min_ratio: float = 0.85
+    geometry_pitch_max_ratio: float = 1.15
+    geometry_noop_width_cv: float = 0.006
+    geometry_outer_tolerance_px: float = 1.0
+    edge_candidate_weight_with_edges: float = 0.18
+    edge_candidate_weight_without_edges: float = 1.0
+    edge_adjust_tolerance_px: float = 1.0
 
 
 def frame_fit_policy(fmt: FilmFormat, strip_mode: str) -> FrameFitPolicy:
@@ -2622,7 +2725,7 @@ def fit_boxes_by_edge_evidence(
 
     widths = np.array([width for _, width in samples], dtype=np.float64)
     target = float(np.median(widths))
-    tol = max(3.0, target * policy.inlier_tolerance_ratio)
+    tol = max(policy.min_inlier_tolerance_px, target * policy.inlier_tolerance_ratio)
     inliers = [(i, width) for i, width in samples if abs(width - target) <= tol]
     if len(inliers) < policy.min_edge_samples:
         return None, {"used": False, "reason": "edge_samples_disagree", "sample_count": len(samples)}
@@ -2649,11 +2752,11 @@ def fit_boxes_by_edge_evidence(
             fitted.append((base_left, base_right))
             continue
         base_left_from_center = (float(base_left) + float(base_right) - target) / 2.0
-        candidates.append((base_left_from_center, 0.18 if candidates else 1.0))
+        candidates.append((base_left_from_center, policy.edge_candidate_weight_with_edges if candidates else policy.edge_candidate_weight_without_edges))
         new_left = weighted_median(candidates)
         new_left = min(max(0.0, new_left), max_left)
         new_right = new_left + target
-        if abs(new_left - base_left) > 1.0 or abs(new_right - base_right) > 1.0:
+        if abs(new_left - base_left) > policy.edge_adjust_tolerance_px or abs(new_right - base_right) > policy.edge_adjust_tolerance_px:
             adjusted.append(i + 1)
         fitted.append((new_left, new_right))
     if not adjusted:
@@ -2698,6 +2801,7 @@ def fit_frame_boxes_from_gaps(
         origin=origin,
         pitch=pitch,
         apply_geometry_fit=policy.geometry_fallback,
+        geometry_policy=policy,
     )
     fitted_boxes, detail = fit_boxes_by_edge_evidence(
         outer,
@@ -2718,6 +2822,14 @@ def fit_frame_boxes_from_gaps(
         "nominal_min_ratio": float(policy.nominal_min_ratio),
         "nominal_max_ratio": float(policy.nominal_max_ratio),
         "inlier_tolerance_ratio": float(policy.inlier_tolerance_ratio),
+        "min_inlier_tolerance_px": float(policy.min_inlier_tolerance_px),
+        "geometry_pitch_min_ratio": float(policy.geometry_pitch_min_ratio),
+        "geometry_pitch_max_ratio": float(policy.geometry_pitch_max_ratio),
+        "geometry_noop_width_cv": float(policy.geometry_noop_width_cv),
+        "geometry_outer_tolerance_px": float(policy.geometry_outer_tolerance_px),
+        "edge_candidate_weight_with_edges": float(policy.edge_candidate_weight_with_edges),
+        "edge_candidate_weight_without_edges": float(policy.edge_candidate_weight_without_edges),
+        "edge_adjust_tolerance_px": float(policy.edge_adjust_tolerance_px),
     }
     if fitted_boxes is not None:
         return fitted_boxes, detail
@@ -2869,7 +2981,7 @@ def build_detection_for_outer(
     if crop.size == 0 or outer.width <= 0:
         outer = Box(0, 0, ww, wh)
         crop = gray_work
-    profile = cached_separator_profile(cache, gray_work, outer)
+    profile = cached_separator_profile(cache, gray_work, outer, fmt.name)
     if strip_mode == "partial" and count < fmt.default_count:
         pitch = outer.width / float(max(1, fmt.default_count))
         total_width = pitch * count
@@ -2888,22 +3000,23 @@ def build_detection_for_outer(
         gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, fmt.name, cache, outer)
     gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode, fmt.name, profile, gray_work, outer)
     if allow_outer_refine and strip_mode == "full" and bool(grid_detail.get("grid_used", False)):
+        tuning = format_tuning(fmt.name)
         model_origin = float(grid_detail.get("grid_origin", 0.0))
         model_pitch = float(grid_detail.get("grid_pitch", pitch))
         proposed_left = int(round(outer.left + model_origin))
         proposed_right = int(round(outer.left + model_origin + model_pitch * count))
-        max_shift = clamp_int(pitch * 0.08, 8, 420)
+        max_shift = clamp_int(pitch * tuning.grid_outer_refine_shift_ratio, tuning.grid_outer_refine_shift_min, tuning.grid_outer_refine_shift_max)
         width_change = abs((proposed_right - proposed_left) - outer.width) / max(1.0, float(outer.width))
         if (
             proposed_right > proposed_left
             and abs(proposed_left - outer.left) <= max_shift
             and abs(proposed_right - outer.right) <= max_shift
-            and width_change <= 0.12
+            and width_change <= tuning.grid_outer_refine_max_width_change
             and 0 <= proposed_left < proposed_right <= ww
         ):
             outer = Box(proposed_left, outer.top, proposed_right, outer.bottom)
             crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-            profile = cached_separator_profile(cache, gray_work, outer)
+            profile = cached_separator_profile(cache, gray_work, outer, fmt.name)
             pitch = outer.width / float(max(1, count))
             origin = 0.0
             gaps = [find_gap(profile, pitch * i, pitch, i, fmt.name) for i in range(1, count)]
@@ -3479,7 +3592,7 @@ def calibrate_v2_candidate(
         auto_gate = content_only_partial_can_pass(candidate, config.confidence_threshold, fmt)
 
     if not auto_gate:
-        cap = 0.82 if candidate.strip_mode == "partial" else 0.84
+        cap = tuning.calibrate_partial_no_auto_cap if candidate.strip_mode == "partial" else tuning.calibrate_full_no_auto_cap
         confidence = min(confidence, cap)
         reasons.append("v2_auto_gate_not_satisfied")
     else:
@@ -3682,21 +3795,26 @@ def fit_line(points: list[tuple[float, float]]) -> Optional[dict[str, Any]]:
     }
 
 
-def fit_edge_angle(gray: np.ndarray, layout: str) -> tuple[float, dict[str, Any]]:
+def fit_edge_angle(gray: np.ndarray, layout: str, format_name: str = "135") -> tuple[float, dict[str, Any]]:
+    tuning = format_tuning(format_name)
     work = work_gray(gray, layout)
     h, w = work.shape
     mask = work < 245
     outer = bbox_from_mask(mask, 0.01, 0.01)
-    if outer is None or outer.width < 100:
+    if outer is None or outer.width < tuning.deskew_min_outer_width:
         return 0.0, {"reason": "no_outer"}
 
-    xs = np.linspace(outer.left, outer.right - 1, num=min(24, max(6, outer.width // 350))).astype(int)
+    xs = np.linspace(
+        outer.left,
+        outer.right - 1,
+        num=min(tuning.deskew_max_samples, max(tuning.deskew_min_samples, outer.width // tuning.deskew_sample_width_px)),
+    ).astype(int)
     top_points: list[tuple[float, float]] = []
     bottom_points: list[tuple[float, float]] = []
     for x in xs:
         col = mask[:, x]
         ys = np.flatnonzero(col)
-        if ys.size < max(10, h * 0.05):
+        if ys.size < max(tuning.deskew_min_col_content, h * tuning.deskew_min_col_content_ratio):
             continue
         top_points.append((float(x), float(ys[0])))
         bottom_points.append((float(x), float(ys[-1])))
@@ -3708,14 +3826,14 @@ def fit_edge_angle(gray: np.ndarray, layout: str) -> tuple[float, dict[str, Any]
         return 0.0, {"reason": "not_enough_points", "top_samples": len(top_points), "bottom_samples": len(bottom_points)}
 
     slopes = [float(fit["slope"]) for fit in fits]
-    if len(slopes) == 2 and abs(slopes[0] - slopes[1]) > 0.006:
+    if len(slopes) == 2 and abs(slopes[0] - slopes[1]) > tuning.deskew_slope_delta_max:
         return 0.0, {
             "reason": "top_bottom_disagree",
             "top": top_fit,
             "bottom": bottom_fit,
             "slope_delta": abs(slopes[0] - slopes[1]),
         }
-    if any(float(fit["median_residual"]) > max(3.0, h * 0.003) for fit in fits):
+    if any(float(fit["median_residual"]) > max(tuning.deskew_residual_min, h * tuning.deskew_residual_height_ratio) for fit in fits):
         return 0.0, {"reason": "high_residual", "top": top_fit, "bottom": bottom_fit}
 
     slope = float(np.median(slopes))
@@ -3742,18 +3860,19 @@ def deskew_quality(detail: dict[str, Any]) -> float:
     return score
 
 
-def choose_deskew_angle(gray: np.ndarray, layout: str, analysis: str) -> tuple[float, dict[str, Any]]:
-    base_angle, base_detail = fit_edge_angle(gray, layout)
+def choose_deskew_angle(gray: np.ndarray, layout: str, analysis: str, format_name: str = "135") -> tuple[float, dict[str, Any]]:
+    tuning = format_tuning(format_name)
+    base_angle, base_detail = fit_edge_angle(gray, layout, format_name)
     base_detail["source"] = "base"
     if analysis == "off":
         return base_angle, base_detail
-    if analysis == "auto" and deskew_quality(base_detail) >= 8.0:
+    if analysis == "auto" and deskew_quality(base_detail) >= tuning.deskew_auto_quality_ok:
         base_detail["enhanced_candidate"] = {"skipped": "auto_base_quality_ok"}
         return base_angle, base_detail
     enhanced_gray = make_analysis_gray(gray)
-    enhanced_angle, enhanced_detail = fit_edge_angle(enhanced_gray, layout)
+    enhanced_angle, enhanced_detail = fit_edge_angle(enhanced_gray, layout, format_name)
     enhanced_detail["source"] = "enhanced"
-    if deskew_quality(enhanced_detail) > deskew_quality(base_detail) + 3.0:
+    if deskew_quality(enhanced_detail) > deskew_quality(base_detail) + tuning.deskew_enhanced_quality_gain:
         enhanced_detail["base_candidate"] = base_detail
         return enhanced_angle, enhanced_detail
     base_detail["enhanced_candidate"] = enhanced_detail
@@ -4021,6 +4140,7 @@ def nearby_separator_candidate_detail(
     start: int,
     end: int,
     format_name: str = "135",
+    cache: Optional[AnalysisCache] = None,
 ) -> dict[str, Any]:
     if gap.method not in HARD_GAP_METHODS or pitch <= 0:
         return {"searched": False, "reason": "not_hard_gap"}
@@ -4028,7 +4148,7 @@ def nearby_separator_candidate_detail(
     crop = gray_work[work_outer.top:work_outer.bottom, work_outer.left:work_outer.right]
     if crop.size == 0:
         return {"searched": False, "reason": "empty_outer"}
-    profile = separator_profile(crop)
+    profile = cached_separator_profile(cache, gray_work, work_outer, format_name)
     if profile.size == 0:
         return {"searched": False, "reason": "empty_profile"}
 
@@ -4078,7 +4198,7 @@ def nearby_separator_candidate_detail(
     }
 
 
-def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap) -> dict[str, Any]:
+def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap, cache: Optional[AnalysisCache] = None) -> dict[str, Any]:
     tuning = format_tuning(detection.film_format)
     work_outer = gap_work_outer(detection, gap)
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
@@ -4138,7 +4258,7 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap)
     side_content = min(left_content, right_content)
     side_balance = abs(left_content - right_content)
     continuity = min(core_content, side_content)
-    nearby = nearby_separator_candidate_detail(gray_work, work_outer, gap, pitch, start, end, detection.film_format)
+    nearby = nearby_separator_candidate_detail(gray_work, work_outer, gap, pitch, start, end, detection.film_format, cache)
     record["signals"] = {
         "available": True,
         "core_mean": core_mean,
@@ -4191,9 +4311,9 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap)
     return record
 
 
-def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection) -> None:
-    gray_work = work_gray(gray, detection.layout)
-    gap_records = [gap_diagnostic_record(gray_work, detection, gap) for gap in detection.gaps]
+def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> None:
+    gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
+    gap_records = [gap_diagnostic_record(gray_work, detection, gap, cache) for gap in detection.gaps]
     hard_counts: dict[str, int] = {}
     for record in gap_records:
         trust = str(record.get("hard_trust", "not_hard_gap"))
@@ -4257,8 +4377,9 @@ def lucky_pass_risk_score_detail(gray: np.ndarray, detection: Detection, thresho
         or detection.confidence < threshold
     ):
         return {"used": False, "reason": "not_applicable"}
-    gray_work = work_gray(gray, detection.layout)
-    gap_records = [gap_diagnostic_record(gray_work, detection, gap) for gap in detection.gaps]
+    cache = make_analysis_cache(gray, detection.layout)
+    gray_work = cache.gray_work
+    gap_records = [gap_diagnostic_record(gray_work, detection, gap, cache) for gap in detection.gaps]
     hard_counts: dict[str, int] = {}
     overlap_risk_counts: dict[str, int] = {}
     for record in gap_records:
@@ -4758,8 +4879,6 @@ def config_cache_signature(config: Config) -> dict[str, Any]:
         "strip_mode": config.strip_mode,
         "count": int(config.count),
         "page": int(config.page),
-        "bleed_x": int(config.bleed_x),
-        "bleed_y": int(config.bleed_y),
         "deskew": config.deskew,
         "analysis": config.analysis,
         "deskew_min_angle": float(config.deskew_min_angle),
@@ -4806,7 +4925,13 @@ def cached_record_matches(record: dict[str, Any], input_file: Path, profile: Ima
     expected_config = config_cache_signature(config)
     if cache.get("source") != expected_source:
         return False
-    if cache.get("config") != expected_config:
+    cached_config = cache.get("config")
+    if not isinstance(cached_config, dict):
+        return False
+    comparable_cached_config = dict(cached_config)
+    comparable_cached_config.pop("bleed_x", None)
+    comparable_cached_config.pop("bleed_y", None)
+    if comparable_cached_config != expected_config:
         return False
     return str(record.get("status", "")) in {"approved_auto", "needs_review"}
 
@@ -5028,6 +5153,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
                 detection.detail,
                 warnings,
             )
+            reapply_cached_output_bleed(detection, config, gray.shape[1], gray.shape[0])
             output_files = write_crops(
                 input_file,
                 arr,
@@ -5072,7 +5198,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
 
     deskew_detail: dict[str, Any] = {"applied": False}
     if config.deskew != "off":
-        angle, angle_detail = choose_deskew_angle(gray, config.layout, config.analysis)
+        angle, angle_detail = choose_deskew_angle(gray, config.layout, config.analysis, fmt.name)
         deskew_detail.update(angle_detail)
         deskew_detail["angle"] = angle
         deskew_work_width = float(work_gray(gray, config.layout).shape[1])
@@ -5145,7 +5271,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     apply_output_bleed(detection, detection_config, config, gray.shape[1], gray.shape[0])
     apply_edge_bleed_protection(detection, config, gray.shape[1], gray.shape[0])
     if config.diagnostics:
-        attach_read_only_diagnostics(gray, detection)
+        attach_read_only_diagnostics(gray, detection, analysis_cache)
 
     if status == "needs_review":
         warnings.append(
