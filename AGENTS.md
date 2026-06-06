@@ -163,6 +163,11 @@ Changed:
 - macOS and Windows launchers now print the active script version dynamically
   from `X5_Crop.py --version` instead of carrying a hard-coded launcher version.
   The ignored `Test/135/` launcher copies were synced with the same change.
+- macOS and Windows launchers now search for a dependency-ready Python instead
+  of accepting the first `python` on PATH. They require imports for `numpy`,
+  `Pillow`, and `tifffile` before selecting an interpreter. macOS also checks
+  common Homebrew paths before falling back to PATH/system Python, and the
+  local ignored `Test/135/` launcher copies were synced with the same change.
 - Older handoff / changelog wording that implied all `--jobs` values above 2
   are capped to 2, or used obsolete early V3.6 `hard_trust` labels as if they
   were current, has been clarified.
@@ -371,6 +376,11 @@ Verified:
 - `printf '\n\n\n\n' | ./X5_Crop_Mac.command` printed
   `X5_Crop.py 3.6.7 launcher` before stopping at the expected no-TIFF message
   in the repository root.
+- `env PATH=/usr/bin:/bin bash -c 'printf "\n\n\n\n" |
+  ./X5_Crop_Mac.command'` printed `X5_Crop.py 3.6.9 launcher`, confirming the
+  macOS launcher can still find a dependency-ready Homebrew Python when PATH
+  would otherwise prefer system Python. It then stopped at the expected no-TIFF
+  message in the repository root.
 - `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py archive/X5_Crop_v3.0.py archive/X5_Crop_v3.1.py archive/X5_Crop_v3.1.1.py archive/X5_Crop_v3.1.2.py archive/X5_Crop_v3.2.py archive/X5_Crop_v3.3.py`
 - `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 3.6`.
@@ -548,7 +558,7 @@ Verified:
   `approved_auto`.
 
 Not verified:
-- Windows launcher format retry was edited but not executed on Windows in this
+- Windows launcher Python search was edited but not executed on Windows in this
   turn.
 
 Known local-only files:

@@ -54,13 +54,46 @@ if [ ! -f "$SCRIPT" ]; then
     finish 1
 fi
 
-if command -v python3 >/dev/null 2>&1; then
-    PYTHON="python3"
-elif command -v python >/dev/null 2>&1; then
-    PYTHON="python"
-else
-    echo "Python was not found."
+find_python() {
+    REQUIRED_IMPORTS="import numpy, PIL, tifffile"
+    CHECKED=""
+
+    try_python() {
+        CANDIDATE="$1"
+        [ -n "$CANDIDATE" ] || return 1
+        case "
+$CHECKED
+" in
+            *"
+$CANDIDATE
+"*) return 1 ;;
+        esac
+        CHECKED="${CHECKED}
+$CANDIDATE"
+        "$CANDIDATE" -c "$REQUIRED_IMPORTS" >/dev/null 2>&1 || return 1
+        PYTHON="$CANDIDATE"
+        return 0
+    }
+
+    if [ -n "${X5_CROP_PYTHON:-}" ]; then
+        try_python "$X5_CROP_PYTHON" && return 0
+    fi
+    try_python "/opt/homebrew/bin/python3" && return 0
+    try_python "/usr/local/bin/python3" && return 0
+    try_python "$(command -v python3 2>/dev/null)" && return 0
+    try_python "$(command -v python 2>/dev/null)" && return 0
+    try_python "/usr/bin/python3" && return 0
+
+    return 1
+}
+
+if ! find_python; then
+    echo "A usable Python was not found."
+    echo "The launcher needs Python with numpy, Pillow, and tifffile installed."
     echo "Run install/X5_Crop_Mac_install.command first, then try again."
+    echo
+    echo "Checked:"
+    printf '%s\n' "$CHECKED" | sed '/^$/d'
     finish 1
 fi
 

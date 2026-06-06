@@ -188,6 +188,8 @@ python3 -m pip install --user -U numpy tifffile imagecodecs Pillow
 
 这样脚本文件夹可以自由移动，依赖跟随当前用户的 Python，不绑在项目路径上。
 
+主启动器运行时会优先寻找已经能导入 `numpy`、`Pillow` 和 `tifffile` 的 Python；这样即使 macOS 系统自带 Python 或其它空环境排在前面，也会尽量选择真正可用的解释器。
+
 macOS 如果遇到新版 Python / Homebrew 的 externally-managed 限制，安装器会提示是否用 `--break-system-packages --user` 重试。这里仍然是用户级安装。
 
 如果机器没有 Python：
@@ -526,6 +528,10 @@ python3 -m pip install --user -U numpy tifffile imagecodecs Pillow
 
 This keeps the project folder movable. Dependencies belong to the current
 user's Python installation, not to this folder.
+
+The main launchers prefer a Python that can already import `numpy`, `Pillow`,
+and `tifffile`. This helps avoid accidentally using the macOS system Python or
+another empty Python environment when a dependency-ready Python is available.
 
 ### Launcher Flow
 
