@@ -149,7 +149,7 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.6.12.
+- Active script is `X5_Crop.py` V3.7.
 - macOS and Windows main launchers no longer pass `--report` during normal
   non-Debug-Analysis runs. They still pass `--report --debug-analysis --dry-run`
   when Debug Analysis is enabled, so analysis JPG reuse/report workflows keep
@@ -178,6 +178,12 @@ Changed:
 - `快速启动_Quick_Start.md` now puts the first-use installer instructions above
   the macOS Terminal fallback, in both the Chinese and English quick-start
   sections.
+- V3.7 merges the frame-size fit pipeline without changing tested detection
+  output. The old cuts-level `apply_frame_size_fit()` role is now explicit as
+  `fit_cuts_by_geometry()` geometry fallback; the old box-level
+  `same_frame_size_fit_boxes()` role is now `fit_boxes_by_edge_evidence()`;
+  `fit_frame_boxes_from_gaps()` is the unified entry point for edge-evidence
+  fit, geometry fallback, and raw-gap fallback.
 - V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
   dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
   unchanged because the full run stayed stable. 120-66 / 120-67 now use a
@@ -319,7 +325,7 @@ Changed:
   strips now use content only as validation rather than generating separate
   content candidates, and 135 full strips no longer run the simple cuts-based
   frame-size fit before the explicit edge-sample fit.
-- V3.0 through V3.6.12 active-script snapshots are preserved in `archive/`:
+- V3.0 through V3.7 active-script snapshots are preserved in `archive/`:
   `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
   `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
   `X5_Crop_v3.3.1.py`, `X5_Crop_v3.3.2.py`, `X5_Crop_v3.4.py`,
@@ -329,7 +335,8 @@ Changed:
   `X5_Crop_v3.6.5.py`, `X5_Crop_v3.6.6.py`,
   `X5_Crop_v3.6.7.py`, `X5_Crop_v3.6.8.py`,
   `X5_Crop_v3.6.9.py`, `X5_Crop_v3.6.10.py`,
-  `X5_Crop_v3.6.11.py`, and `X5_Crop_v3.6.12.py`.
+  `X5_Crop_v3.6.11.py`, `X5_Crop_v3.6.12.py`, and
+  `X5_Crop_v3.7.py`.
 - Future named development versions, including experiments that are later
   paused or rolled back, should also be saved as archive snapshots.
 - V3.3.2 adds conservative overlap-aware gap handling for 135 full strips:
@@ -429,6 +436,16 @@ Verified:
 - Current quick-start order verification: checked the Chinese and English
   opening sections of `快速启动_Quick_Start.md`; both now show first-use
   installer instructions before the macOS Terminal fallback.
+- Current V3.7 verification: `python3 X5_Crop.py --version`,
+  `python3 archive/X5_Crop_v3.7.py --version`, and
+  `python3 Test/135/X5_Crop.py --version` all print `X5_Crop.py 3.7`;
+  `python3 -m py_compile X5_Crop.py archive/X5_Crop_v3.7.py
+  Test/135/X5_Crop.py` passed. Full `deskew off` dry-run comparisons against
+  V3.6.12 baseline reports found 0 diffs for `status`, `confidence`,
+  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps` across `Test/135`
+  as 135, `Test/半格` as half, and `Test/120` as 120-645 / 120-66 / 120-67.
+  A partial-mode smoke comparison against `archive/X5_Crop_v3.6.12.py` on
+  `Test/135/X5_00038.tif` also found 0 diffs for the same fields.
 - Current V3.6.12 verification: `python3 X5_Crop.py --version` prints
   `X5_Crop.py 3.6.12`; `python3 -m py_compile X5_Crop.py` passed. Full
   `Test/半格` dry-run with `--format half --strip full --count 12 --deskew off
