@@ -147,13 +147,24 @@ Next recommended step:
 
 ## Current Handoff
 
-Date: 2026-06-07
+Date: 2026-06-08
 Computer: primary macOS machine
 Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.7.
+- Active script is `X5_Crop.py` V3.9.
+- V3.9 is a structural policy cleanup after V3.7. It moves remaining outer
+  mask profiles, post-detection confidence caps, deskew span skip, frame-fit
+  small-pixel tolerances, separator gate mode, and outer retry enable/disable
+  behind `FormatTuning` / format-aware policy entry points. The goal is cleaner
+  management of percentage/clamp parameters, format-specific branches, and
+  future cross-format promotion points without changing 135 output.
+- V3.9 keeps high-risk active behavior policy-gated: nearby active correction,
+  lucky-pass risk, and leading-grid failure still do not automatically apply to
+  non-135 formats.
+- `Test/135/X5_Crop.py` is synced to V3.9, and
+  `archive/X5_Crop_v3.9.py` is preserved as the named snapshot.
 - macOS and Windows main launchers no longer pass `--report` during normal
   non-Debug-Analysis runs. They still pass `--report --debug-analysis --dry-run`
   when Debug Analysis is enabled, so analysis JPG reuse/report workflows keep
@@ -271,7 +282,7 @@ Changed:
 - Diagnostics now reuse cached separator profiles for nearby-separator checks in
   `gap_diagnostic_record()`, reducing repeated profile work during full
   `--diagnostics` runs.
-- README and CHANGELOG now clarify that the current V3.7 script still keeps the
+- README and CHANGELOG now clarify that the current V3.9 script still keeps the
   conservative `--analysis` enhanced separator assist. V3.4 was an experiment
   that tried removing that layer; it is not the current active behavior.
 - `hard_fallback_detection()` detail has been simplified to only describe the
@@ -424,7 +435,7 @@ Changed:
   strips now use content only as validation rather than generating separate
   content candidates, and 135 full strips no longer run the simple cuts-based
   frame-size fit before the explicit edge-sample fit.
-- V3.0 through V3.7 active-script snapshots are preserved in `archive/`:
+- V3.0 through V3.9 active-script snapshots are preserved in `archive/`:
   `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
   `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
   `X5_Crop_v3.3.1.py`, `X5_Crop_v3.3.2.py`, `X5_Crop_v3.4.py`,
@@ -434,8 +445,8 @@ Changed:
   `X5_Crop_v3.6.5.py`, `X5_Crop_v3.6.6.py`,
   `X5_Crop_v3.6.7.py`, `X5_Crop_v3.6.8.py`,
   `X5_Crop_v3.6.9.py`, `X5_Crop_v3.6.10.py`,
-  `X5_Crop_v3.6.11.py`, `X5_Crop_v3.6.12.py`, and
-  `X5_Crop_v3.7.py`.
+  `X5_Crop_v3.6.11.py`, `X5_Crop_v3.6.12.py`,
+  `X5_Crop_v3.7.py`, and `X5_Crop_v3.9.py`.
 - Future named development versions, including experiments that are later
   paused or rolled back, should also be saved as archive snapshots.
 - V3.3.2 adds conservative overlap-aware gap handling for 135 full strips:
@@ -541,7 +552,17 @@ Verified:
   48 ok / 0 failed / 42 `approved_auto` / 6 `needs_review`, or about
   8.2 seconds per file. In the sandbox, process workers were unavailable and
   the script used 2 thread workers.
-- Current V3.7 verification: `python3 X5_Crop.py --version`,
+- Current V3.9 verification: `python3 X5_Crop.py --version`,
+  `python3 archive/X5_Crop_v3.9.py --version`, and
+  `python3 Test/135/X5_Crop.py --version` all print `X5_Crop.py 3.9`.
+  `python3 -m py_compile X5_Crop.py archive/X5_Crop_v3.9.py
+  Test/135/X5_Crop.py` passed. A full `Test/135` default-deskew dry run
+  compared V3.9 against `/private/tmp/X5_Crop_v37_before_v39.py`; both runs
+  processed 48 TIFF files with 0 failed, 42 `approved_auto`, and
+  6 `needs_review`. Comparing `status`, `confidence`, `review_reasons`,
+  `outer_box`, `frame_boxes`, and `gaps` across all 48 report rows produced
+  0 diffs.
+- V3.7 verification at the time of that version: `python3 X5_Crop.py --version`,
   `python3 archive/X5_Crop_v3.7.py --version`, and
   `python3 Test/135/X5_Crop.py --version` all print `X5_Crop.py 3.7`;
   `python3 -m py_compile X5_Crop.py archive/X5_Crop_v3.7.py
@@ -596,7 +617,7 @@ Verified:
   `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`; smoke comparisons
   on `Test/半格/X5_00053.tif` and `Test/120/X5_test_45.tif` as 120-66 also had
   0 diffs, while reports showed the new per-format policy fields.
-- Current V3.7 low-level policy/cache cleanup verification:
+- V3.7 low-level policy/cache cleanup verification:
   `python3 -m py_compile X5_Crop.py` and `git diff --check` passed;
   `Test/135/X5_Crop.py` was synced. Full `Test/135` `deskew off` dry-run with
   `--format 135 --strip full --count 6 --dry-run --report
@@ -606,7 +627,7 @@ Verified:
   `/private/tmp/x5_v37_before_policy_cleanup/split_report.jsonl`; there were
   0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
   `frame_boxes`, and `gaps`.
-- Current V3.7 high-level policy cleanup verification:
+- V3.7 high-level policy cleanup verification:
   `python3 -m py_compile X5_Crop.py` passed; `Test/135/X5_Crop.py` was synced.
   Full current-script `Test/135` `deskew off` dry-run with `--format 135
   --strip full --count 6 --dry-run --report --no-copy-review-files
@@ -617,7 +638,7 @@ Verified:
   `/private/tmp/x5_v37_policy_highlevel_before/split_report.jsonl` produced
   0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
   `frame_boxes`, and `gaps`.
-- Current V3.7 low-risk code cleanup verification:
+- V3.7 low-risk code cleanup verification:
   `python3 -m py_compile X5_Crop.py Test/135/X5_Crop.py` and
   `git diff --check` passed. Full current-script `Test/135` `deskew off`
   dry-run with `--format 135 --strip full --count 6 --dry-run --report
@@ -628,7 +649,7 @@ Verified:
   against `/private/tmp/x5_v37_lowrisk_before/split_report.jsonl` produced
   0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
   `frame_boxes`, and `gaps`.
-- Current V3.7 follow-up policy expansion verification:
+- V3.7 follow-up policy expansion verification:
   `python3 -m py_compile X5_Crop.py Test/135/X5_Crop.py` and
   `git diff --check` passed. Full current-script `Test/135` `deskew off`
   dry-run with `--format 135 --strip full --count 6 --dry-run --report
