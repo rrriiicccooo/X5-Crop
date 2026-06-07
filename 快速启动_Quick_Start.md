@@ -159,7 +159,7 @@ split_output/
 
 通常不是。大 TIFF 在读取、检测、校平或写入时，终端可能一段时间没有新文字。
 
-常见 135 长图通常每张约 5-15 秒；Debug Analysis 通常每张约 10-30 秒。更大的 TIFF、开启 deskew、较慢硬盘或较慢电脑会更久。
+最近一次普通 135 启动器实测：48 张 TIFF 全量正式裁切用时 394 秒，平均约 8.2 秒/张。Debug Analysis 通常每张约 10-30 秒。更大的 TIFF、开启 deskew、较慢硬盘或较慢电脑会更久。
 
 ### 如何卸载
 
@@ -336,7 +336,7 @@ High-confidence results are cropped automatically. Low-confidence or difficult s
 
 This usually does not mean the script is stuck. Large TIFF files can take time to read, detect, deskew, or write.
 
-Typical 135 long-strip scans take about 5-15 seconds per file. Debug Analysis usually takes about 10-30 seconds per file. Larger TIFF files, deskew, slower disks, or slower computers can take longer.
+The latest normal 135 launcher measurement was 394 seconds for 48 TIFF files, or about 8.2 seconds per file. Debug Analysis usually takes about 10-30 seconds per file. Larger TIFF files, deskew, slower disks, or slower computers can take longer.
 
 ### How To Uninstall
 

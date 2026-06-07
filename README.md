@@ -48,7 +48,7 @@ Current stable release: v3.6.2 (GitHub Releases)
 
 运行耗时：
 
-- 在当前测试机器和常见 135 TIFF 长图上，普通 dry run / 裁切通常每张约 5-15 秒。
+- 最近一次普通 135 启动器实测：48 张 TIFF 全量正式裁切用时 394 秒，平均约 8.2 秒/张。
 - Debug Analysis 需要额外生成 JPG 分析图，通常每张约 10-30 秒。
 - 大尺寸 TIFF、开启 deskew、较慢硬盘或较慢电脑都会更久。
 - 终端在处理单张大 TIFF 时可能一段时间没有新的提示；这通常不是出错，而是脚本还在读取、检测、校平或写文件。等它进入下一张图或完成当前图后会继续输出状态。
@@ -106,7 +106,8 @@ Format accuracy note:
 Runtime:
 
 - On the current test machine with typical 135 TIFF long-strip scans, normal dry
-  run / export usually takes about 5-15 seconds per file.
+  export was last measured at 394 seconds for 48 TIFF files, or about 8.2
+  seconds per file.
 - Debug Analysis also writes JPG analysis images and usually takes about 10-30
   seconds per file.
 - Very large TIFFs, deskew, slower disks, or slower computers can take longer.

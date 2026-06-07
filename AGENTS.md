@@ -176,6 +176,9 @@ Changed:
   test/analyze mode that reads TIFFs, runs detection, decides PASS/REVIEW, and
   may write Debug Analysis JPGs/reports, but does not export cropped TIFFs or
   modify source TIFFs.
+- README and `快速启动_Quick_Start.md` now use the latest normal 135 macOS
+  launcher timing: 48 TIFF files exported in 394 seconds, averaging about
+  8.2 seconds per file.
 - Added `快速启动_Quick_Start.md`, a bilingual quick-start guide with Chinese
   first and English second. It puts first-time installer launchers in a
   prominent note near the top and points users to `README.md` and `CHANGELOG.md`
@@ -532,6 +535,12 @@ Verified:
 - Current quick-start order verification: checked the Chinese and English
   opening sections of `快速启动_Quick_Start.md`; both now show first-use
   installer instructions before the macOS Terminal fallback.
+- Current normal-launcher runtime verification: ran the local `Test/135`
+  macOS main launcher as default 135 full, partial=no, debug analysis=no. It
+  processed 48 TIFF files with real export in 394.14 seconds, producing
+  48 ok / 0 failed / 42 `approved_auto` / 6 `needs_review`, or about
+  8.2 seconds per file. In the sandbox, process workers were unavailable and
+  the script used 2 thread workers.
 - Current V3.7 verification: `python3 X5_Crop.py --version`,
   `python3 archive/X5_Crop_v3.7.py --version`, and
   `python3 Test/135/X5_Crop.py --version` all print `X5_Crop.py 3.7`;
