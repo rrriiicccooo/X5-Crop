@@ -108,6 +108,8 @@ project documentation consolidated in `README.md`.
   - `快速启动_Quick_Start.md`
   - `install/X5_Crop_Mac_install.command`
   - `install/X5_Crop_win_install.bat`
+  - `install/X5_Crop_Mac_uninstall.command`
+  - `install/X5_Crop_win_uninstall.bat`
   Do not package `archive/`, `CHANGELOG.md`, `AGENTS.md`, `LICENSE`,
   `.github/`, or local test/output folders into the Release zip unless the user
   explicitly changes this policy.
@@ -158,9 +160,18 @@ Changed:
   working.
 - User-facing Release packaging policy is now explicit: Release zip packages
   should include only `X5_Crop.py`, `X5_Crop_Mac.command`,
-  `X5_Crop_win.bat`, `README.md`, `快速启动_Quick_Start.md`, and the two
-  installer launchers under `install/`; license, archive snapshots, GitHub
-  config, and local test/output folders should not be packaged into the zip.
+  `X5_Crop_win.bat`, `README.md`, `快速启动_Quick_Start.md`, the two
+  installer launchers, and the two uninstall launchers under `install/`;
+  license, archive snapshots, GitHub config, and local test/output folders
+  should not be packaged into the zip.
+- Added uninstall launchers for GitHub/Release use:
+  `install/X5_Crop_Mac_uninstall.command` and
+  `install/X5_Crop_win_uninstall.bat`. They clean user-level Python packages
+  only after confirmation and do not uninstall Python itself.
+- README and `快速启动_Quick_Start.md` now explain why X5 Crop stays as a
+  script + launcher workflow instead of an app package, how to uninstall
+  cleanly, what dependency removal can affect, that `needs_review/` contains
+  plain source-TIFF copies, and when partial mode should be used.
 - Added `快速启动_Quick_Start.md`, a bilingual quick-start guide with Chinese
   first and English second. It puts first-time installer launchers in a
   prominent note near the top and points users to `README.md` and `CHANGELOG.md`
@@ -228,6 +239,23 @@ Changed:
   fallback, edge-evidence inlier tolerance/weights, non-auto candidate
   confidence caps, and deskew sampling/enhanced-quality gates behind
   format-aware policy values. 135 defaults preserve the previous behavior.
+- Follow-up V3.7 high-level policy cleanup moved main gap/width/outer/contrast
+  scoring weights, content-evidence thresholds, content/geometry/separator
+  support gates, V2 candidate competition margin/cap, hard-gap trust semantic
+  thresholds, overlap-risk diagnostic thresholds, and Debug gap-overlay display
+  parameters behind `FormatTuning`. 135 defaults preserve the previous
+  behavior; the goal is future format tuning without changing current output.
+- Follow-up V3.7 low-risk code cleanup removed the unused
+  `score_120_require_all_hard` policy field, renamed `detect_for_count()` to
+  `detect_candidate_for_count()`, and made `lucky_pass_risk_score_detail()`
+  reuse the main analysis cache instead of rebuilding content/separator
+  evidence. This should not change detection parameters or PASS/REVIEW.
+- Follow-up V3.7 policy expansion moved content-primary candidate bbox
+  fractions, minimum sizes, percentiles, coverage/mean/run/aspect weights,
+  deskew edge-fit outer extraction and line-fit tolerance, and lucky-pass risk
+  component weights/thresholds behind `FormatTuning`. Current defaults preserve
+  behavior. `make_content_evidence_gray()` intentionally remains format-neutral
+  for now so analysis-cache semantics do not change.
 - Debug Analysis report reuse no longer treats output bleed as part of the
   detection cache signature. When a normal export reuses a matching report, it
   normalizes cached output frames from their previous output bleed and reapplies
@@ -564,6 +592,39 @@ Verified:
   `/private/tmp/x5_v37_after_policy_cleanup/split_report.jsonl` against
   `/private/tmp/x5_v37_before_policy_cleanup/split_report.jsonl`; there were
   0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps`.
+- Current V3.7 high-level policy cleanup verification:
+  `python3 -m py_compile X5_Crop.py` passed; `Test/135/X5_Crop.py` was synced.
+  Full current-script `Test/135` `deskew off` dry-run with `--format 135
+  --strip full --count 6 --dry-run --report --no-copy-review-files
+  --no-reuse-analysis --jobs 2` produced 48 ok / 0 failed /
+  43 `approved_auto` / 5 `needs_review`. The same command was run against a
+  temporary pre-cleanup `git show HEAD:X5_Crop.py` baseline. Comparing
+  `/private/tmp/x5_v37_policy_highlevel_after/split_report.jsonl` against
+  `/private/tmp/x5_v37_policy_highlevel_before/split_report.jsonl` produced
+  0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps`.
+- Current V3.7 low-risk code cleanup verification:
+  `python3 -m py_compile X5_Crop.py Test/135/X5_Crop.py` and
+  `git diff --check` passed. Full current-script `Test/135` `deskew off`
+  dry-run with `--format 135 --strip full --count 6 --dry-run --report
+  --no-copy-review-files --no-reuse-analysis --jobs 2` produced 48 ok /
+  0 failed / 43 `approved_auto` / 5 `needs_review`. The same command was run
+  against `/private/tmp/X5_Crop_before_lowrisk_cleanup.py`, saved before the
+  cleanup. Comparing `/private/tmp/x5_v37_lowrisk_after/split_report.jsonl`
+  against `/private/tmp/x5_v37_lowrisk_before/split_report.jsonl` produced
+  0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps`.
+- Current V3.7 follow-up policy expansion verification:
+  `python3 -m py_compile X5_Crop.py Test/135/X5_Crop.py` and
+  `git diff --check` passed. Full current-script `Test/135` `deskew off`
+  dry-run with `--format 135 --strip full --count 6 --dry-run --report
+  --no-copy-review-files --no-reuse-analysis --jobs 2` produced 48 ok /
+  0 failed / 43 `approved_auto` / 5 `needs_review`. The same command was run
+  against `/private/tmp/X5_Crop_before_policy_batch2.py`, saved before this
+  policy expansion. Comparing `/private/tmp/x5_v37_policy_batch2_after/split_report.jsonl`
+  against `/private/tmp/x5_v37_policy_batch2_before/split_report.jsonl`
+  produced 0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
   `frame_boxes`, and `gaps`.
 - Current V3.6.12 verification: `python3 X5_Crop.py --version` prints
   `X5_Crop.py 3.6.12`; `python3 -m py_compile X5_Crop.py` passed. Full

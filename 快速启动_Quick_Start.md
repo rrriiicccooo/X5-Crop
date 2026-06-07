@@ -2,7 +2,7 @@
 
 ## 中文快速启动
 
-这是 X5 Crop 的最短使用说明。更完整的安装、参数、Debug Analysis 和版本变化，请看 `README.md` 和 `CHANGELOG.md`。
+这是 X5 Crop 的最短使用说明。更完整的安装、卸载、参数、Debug Analysis 和版本变化，请看 `README.md` 和 `CHANGELOG.md`。
 
 > **第一次使用请先运行安装启动器。**
 >
@@ -33,9 +33,11 @@ README.md
 install/
   X5_Crop_Mac_install.command
   X5_Crop_win_install.bat
+  X5_Crop_Mac_uninstall.command
+  X5_Crop_win_uninstall.bat
 ```
 
-`install/` 只用于第一次安装依赖。正式裁切时使用根目录里的主启动器：
+`install/` 里的安装启动器只用于第一次安装依赖；卸载启动器用于清理用户级 Python 依赖。正式裁切时使用根目录里的主启动器：
 
 ```text
 macOS 主启动器: X5_Crop_Mac.command
@@ -54,56 +56,22 @@ X5_Crop_Mac.command 或 X5_Crop_win.bat
 
 启动器和 `X5_Crop.py` 必须在同一个文件夹里。只移动启动器、不带脚本本体，不能运行。
 
-对应系统的主启动器是：
-
-```text
-macOS 主启动器: X5_Crop_Mac.command
-Windows 主启动器: X5_Crop_win.bat
-```
-
 ### 第一次使用
 
 新机器第一次使用时，先运行安装启动器：
 
-macOS:
-
 ```text
-install/X5_Crop_Mac_install.command
-```
-
-Windows:
-
-```text
-install/X5_Crop_win_install.bat
+macOS:   install/X5_Crop_Mac_install.command
+Windows: install/X5_Crop_win_install.bat
 ```
 
 安装器会检查 Python 和依赖库。安装完成后，再运行主启动器。
 
-macOS 安装器还会尝试为当前 Release 文件夹里的主启动器添加执行权限，并移除下载隔离标记。它不能把脚本永久加入 macOS 的全局可信名单。
-
-安装后，可以把 `X5_Crop.py` 和对应系统的主启动器作为一对复制到不同的 TIFF 文件夹里使用：
-
-```text
-macOS: X5_Crop.py + X5_Crop_Mac.command
-Windows: X5_Crop.py + X5_Crop_win.bat
-```
-
-不要只移动主启动器，因为主启动器必须和 `X5_Crop.py` 放在同一个文件夹里。
-
-如果重新下载、重新解压，或者从网页、网盘、聊天软件又拿到一份新的 Release，那一份新文件夹可能重新带有 macOS 下载隔离标记。请在新的文件夹里再运行一次安装启动器。
-
 ### 怎么启动
 
-macOS:
-
 ```text
-双击 X5_Crop_Mac.command
-```
-
-Windows:
-
-```text
-双击 X5_Crop_win.bat
+macOS:   双击 X5_Crop_Mac.command
+Windows: 双击 X5_Crop_win.bat
 ```
 
 启动器会依次询问：
@@ -132,7 +100,26 @@ half = 半格，一条 12 张
 
 通常直接回车，等于 `no`。
 
-只有片头、片尾、不完整片条，或者你明确想让脚本自动判断张数时，才输入 `y`。
+`partial mode = no` 时，脚本认为这是一条完整片条，会使用对应 format 的固定张数：
+
+```text
+135 = 6
+135-dual = 12
+half = 12
+xpan = 3
+645 = 4
+66 = 3
+67 = 3
+```
+
+只有下面这些情况才建议输入 `y`：
+
+- 片头或片尾。
+- 只扫到一部分片条。
+- 片夹没有被照片铺满。
+- 你明确想让脚本自动判断这条里有几张。
+
+开启 partial mode 后，脚本会用 auto count，并且判断更保守。它不是普通完整片条的推荐模式；完整片条请保持 `no`，这样速度和稳定性都更好。
 
 ### debug analysis
 
@@ -146,6 +133,16 @@ half = 半格，一条 12 张
 
 普通非 Debug Analysis 裁切不会生成 report。
 
+### needs_review 是什么
+
+低置信或困难图片会进入复核流程，必要时原 TIFF 会被复制到：
+
+```text
+split_output/needs_review/
+```
+
+这里的文件是原 TIFF 的复制粘贴。脚本没有对这些复制进去的 TIFF 做裁切、压缩、改色、校平或其它处理。你可以放心在 `needs_review/` 里手动检查、移动、删除或另行处理这些副本。
+
 ### 输出在哪里
 
 脚本会在当前文件夹生成：
@@ -154,7 +151,7 @@ half = 半格，一条 12 张
 split_output/
 ```
 
-高置信结果会自动裁切。低置信或困难图片会进入复核流程，必要时会复制原 TIFF 到 `needs_review/`。
+高置信结果会自动裁切。低置信或困难图片会进入复核流程。
 
 ### 运行时没有新提示是不是卡住了
 
@@ -162,19 +159,22 @@ split_output/
 
 常见 135 长图通常每张约 5-15 秒；Debug Analysis 通常每张约 10-30 秒。更大的 TIFF、开启 deskew、较慢硬盘或较慢电脑会更久。
 
-### 新机器缺少依赖怎么办
+### 如何卸载
 
-如果启动器提示找不到可用 Python 或缺少依赖，请看 `README.md` 里的安装依赖说明。
+X5 Crop 不是 App。脚本本体没有系统级安装，也不会写入应用支持目录。删除 X5 Crop 文件夹就能移除脚本、启动器和这个文件夹里的输出。
 
-Release 包里的 `install/` 文件夹有安装器。也可以手动安装：
+如果想同时清理安装过的 Python 依赖，可以运行：
 
-```bash
-python3 -m pip install --user -U numpy tifffile imagecodecs Pillow
+```text
+macOS:   install/X5_Crop_Mac_uninstall.command
+Windows: install/X5_Crop_win_uninstall.bat
 ```
+
+卸载脚本只会尝试卸载当前用户 Python 里的 `numpy`、`tifffile`、`imagecodecs`、`Pillow`，并可选清理 pip 下载缓存。它不会自动卸载 Python。卸载 Python 或这些依赖可能影响其它 Python 脚本，请确认没有其它工具依赖它们后再清理。
 
 ## English Quick Start
 
-This is the shortest guide for X5 Crop. For full installation notes, command-line options, Debug Analysis details, and version history, see `README.md` and `CHANGELOG.md`.
+This is the shortest guide for X5 Crop. For full installation, uninstall, command-line options, Debug Analysis details, and version history, see `README.md` and `CHANGELOG.md`.
 
 > **On first use, run the installer launcher first.**
 >
@@ -205,9 +205,11 @@ README.md
 install/
   X5_Crop_Mac_install.command
   X5_Crop_win_install.bat
+  X5_Crop_Mac_uninstall.command
+  X5_Crop_win_uninstall.bat
 ```
 
-`install/` is only for first-time dependency setup. For actual cropping, use the main launcher in the root folder:
+Installer launchers inside `install/` are only for first-time dependency setup. Uninstall launchers are for removing user-level Python dependencies. For actual cropping, use the main launcher in the root folder:
 
 ```text
 macOS main launcher: X5_Crop_Mac.command
@@ -226,62 +228,22 @@ X5_Crop_Mac.command or X5_Crop_win.bat
 
 The launcher and `X5_Crop.py` must stay together in the same folder. A launcher by itself cannot run the script.
 
-The main launcher for each system is:
-
-```text
-macOS main launcher: X5_Crop_Mac.command
-Windows main launcher: X5_Crop_win.bat
-```
-
 ### First Use
 
 On a new machine, run the installer launcher first:
 
-macOS:
-
 ```text
-install/X5_Crop_Mac_install.command
-```
-
-Windows:
-
-```text
-install/X5_Crop_win_install.bat
+macOS:   install/X5_Crop_Mac_install.command
+Windows: install/X5_Crop_win_install.bat
 ```
 
 The installer checks Python and required libraries. After installation, run the main launcher.
 
-The macOS installer also tries to make the main launcher executable and remove the download quarantine flag from the current Release folder. It cannot permanently add the script to a global macOS trusted list.
-
-After installation, you can copy `X5_Crop.py` and the main launcher for your system as a pair into different TIFF folders:
-
-```text
-macOS: X5_Crop.py + X5_Crop_Mac.command
-Windows: X5_Crop.py + X5_Crop_win.bat
-```
-
-Do not move only the main launcher, because the launcher must stay in the same folder as `X5_Crop.py`.
-
-If you download, unzip, or receive another fresh Release copy from a browser, cloud drive, or chat app, that new folder may have a new macOS quarantine flag. Run the installer again inside that new folder.
-
-If double-clicking the installer does not work, open Terminal, type `cd `, drag the X5 Crop folder into the window, press Return, then run:
-
-```bash
-/bin/bash install/X5_Crop_Mac_install.command
-```
-
 ### How To Launch
 
-macOS:
-
 ```text
-Double-click X5_Crop_Mac.command
-```
-
-Windows:
-
-```text
-Double-click X5_Crop_win.bat
+macOS:   Double-click X5_Crop_Mac.command
+Windows: Double-click X5_Crop_win.bat
 ```
 
 The launcher asks:
@@ -310,7 +272,26 @@ If you mistype the format, the launcher will ask again.
 
 Usually press Return, which means `no`.
 
-Use `y` only for leader, tail, incomplete strips, or when you intentionally want the script to decide the frame count automatically.
+When `partial mode = no`, the script treats the scan as a complete strip and uses the fixed frame count for the selected format:
+
+```text
+135 = 6
+135-dual = 12
+half = 12
+xpan = 3
+645 = 4
+66 = 3
+67 = 3
+```
+
+Use `y` only for:
+
+- leader or tail scans.
+- incomplete strips.
+- holders that are not filled by frames.
+- cases where you intentionally want the script to decide the frame count automatically.
+
+With partial mode enabled, the script uses auto count and behaves more conservatively. It is not recommended for normal complete strips; keep it at `no` for better speed and stability.
 
 ### Debug Analysis
 
@@ -324,6 +305,16 @@ Type `y` for Debug Analysis dry run:
 
 Normal non-Debug-Analysis crop runs do not write reports.
 
+### What Is needs_review
+
+Low-confidence or difficult scans may be copied to:
+
+```text
+split_output/needs_review/
+```
+
+Files in this folder are plain copies of the original TIFF files. The script does not crop, compress, recolor, deskew, or otherwise process those copied TIFFs. You can safely inspect, move, delete, or manually process the copies in `needs_review/`.
+
 ### Output Folder
 
 The script creates:
@@ -332,7 +323,7 @@ The script creates:
 split_output/
 ```
 
-High-confidence results are cropped automatically. Low-confidence or difficult scans go to review, and the original TIFF may be copied to `needs_review/`.
+High-confidence results are cropped automatically. Low-confidence or difficult scans go to review.
 
 ### No New Terminal Text
 
@@ -340,12 +331,15 @@ This usually does not mean the script is stuck. Large TIFF files can take time t
 
 Typical 135 long-strip scans take about 5-15 seconds per file. Debug Analysis usually takes about 10-30 seconds per file. Larger TIFF files, deskew, slower disks, or slower computers can take longer.
 
-### Missing Dependencies On A New Machine
+### How To Uninstall
 
-If the launcher says no usable Python was found or dependencies are missing, see the dependency installation section in `README.md`.
+X5 Crop is not an app. The script itself has no system-level app install and does not write to application-support folders. Delete the X5 Crop folder to remove the script, launchers, and outputs in that folder.
 
-The Release package includes installer launchers in `install/`. You can also install dependencies manually:
+To also remove Python dependencies installed for X5 Crop, run:
 
-```bash
-python3 -m pip install --user -U numpy tifffile imagecodecs Pillow
+```text
+macOS:   install/X5_Crop_Mac_uninstall.command
+Windows: install/X5_Crop_win_uninstall.bat
 ```
+
+The uninstall helper only tries to remove `numpy`, `tifffile`, `imagecodecs`, and `Pillow` from the current user's Python, and can optionally purge the pip download cache. It does not uninstall Python itself. Removing Python or these packages may affect other Python scripts, so only remove them if you are sure no other tool needs them.

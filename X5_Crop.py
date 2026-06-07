@@ -221,13 +221,29 @@ class FormatTuning:
     content_mask_p75_multiplier: float = 0.78
     content_mask_min: float = 0.045
     content_mask_max: float = 0.45
+    content_mask_percentiles: tuple[float, float, float] = (55.0, 75.0, 92.0)
+    content_bbox_min_fraction: float = 0.008
     content_outer_min_width_ratio: float = 0.08
     content_outer_min_height_ratio: float = 0.08
+    content_outer_min_width_px: int = 60
+    content_outer_min_height_px: int = 30
+    content_expected_width_min_px: float = 8.0
+    content_candidate_coverage_weight: float = 0.38
+    content_candidate_mean_weight: float = 0.30
+    content_candidate_run_weight: float = 0.22
+    content_candidate_aspect_weight: float = 0.10
     content_conf_coverage_norm: float = 0.22
     content_conf_mean_norm: float = 0.16
     content_conf_aspect_norm: float = 0.18
     content_weak_coverage: float = 0.14
     content_aspect_uncertain: float = 0.18
+    content_evidence_percentile: float = 70.0
+    content_evidence_threshold_multiplier: float = 0.70
+    content_evidence_threshold_min: float = 0.08
+    content_evidence_threshold_max: float = 0.45
+    content_evidence_aspect_ok_max: float = 0.22
+    content_evidence_present_mean_min: float = 0.075
+    content_evidence_present_coverage_min: float = 0.18
     content_grid_fallback_cap: float = 0.82
     content_run_mismatch_cap: float = 0.84
     content_runs_incomplete_cap: float = 0.84
@@ -339,6 +355,31 @@ class FormatTuning:
     hard_trust_narrow_ok_score: float = 0.70
     hard_trust_narrow_ok_width_min: float = 0.006
     hard_trust_narrow_ok_width_max: float = 0.018
+    hard_trust_model_conflict_score: float = 1.05
+    hard_trust_core_content_threshold: int = 235
+    hard_trust_core_dark_threshold: int = 55
+    hard_trust_dark_mean_max: float = 45.0
+    hard_trust_dark_fraction_min: float = 0.45
+    hard_trust_dark_activity_max: float = 0.18
+    hard_trust_strong_core_content_max: float = 0.08
+    hard_trust_weak_mean_min: float = 70.0
+    hard_trust_weak_content_min: float = 0.10
+    hard_trust_frame_border_width_ratio: float = 0.010
+    hard_trust_continuity_min: float = 0.12
+    hard_trust_activity_min: float = 0.030
+    diagnostic_overlap_mean_min: float = 55.0
+    diagnostic_overlap_weak_continuity: float = 0.16
+    diagnostic_overlap_weak_activity: float = 0.04
+    diagnostic_overlap_medium_continuity: float = 0.35
+    diagnostic_overlap_medium_activity: float = 0.08
+    diagnostic_overlap_strong_continuity: float = 0.70
+    diagnostic_overlap_strong_activity: float = 0.12
+    debug_gap_overlap_tolerance_ratio: float = 0.012
+    debug_gap_overlap_tolerance_min: float = 4.0
+    debug_gap_overlap_tolerance_max: float = 80.0
+    debug_gap_hard_line_width: int = 2
+    debug_gap_model_line_width: int = 2
+    debug_gap_diagnostic_line_width: int = 3
     outer_align_white_edge_long_ratio: float = 0.0190
     outer_align_white_edge_long_min: int = 90
     outer_align_white_edge_long_max: int = 180
@@ -370,10 +411,16 @@ class FormatTuning:
     outer_align_short_margin_cap_min: int = 40
     outer_align_short_margin_cap_max: int = 80
     score_width_cv_norm: float = 0.030
+    score_gap_weight: float = 0.40
+    score_width_weight: float = 0.30
+    score_outer_weight: float = 0.20
+    score_contrast_weight: float = 0.10
     score_outer_min_area: float = 0.35
     score_outer_max_area: float = 0.995
     score_outer_too_large: float = 0.94
+    score_outer_uncertain_confidence: float = 0.45
     score_contrast_min: float = 35.0
+    score_contrast_floor: float = 0.35
     score_full_width_cv: float = 0.040
     score_geometry_floor_tight_cv: float = 0.006
     score_geometry_floor_high: float = 0.92
@@ -389,7 +436,6 @@ class FormatTuning:
     score_partial_general_cap: float = 0.84
     score_outer_too_large_cap: float = 0.82
     score_low_confidence_floor: float = 0.85
-    score_120_require_all_hard: bool = True
     score_allow_135_full_detected_geometry: bool = True
     score_allow_half_geometry: bool = True
     separator_model_grid_credit: float = 0.35
@@ -410,21 +456,35 @@ class FormatTuning:
     content_support_coverage_weight: float = 0.42
     content_support_mean_weight: float = 0.40
     content_support_aspect_weight: float = 0.18
+    content_support_gate_ok: float = 1.0
+    content_support_gate_weak: float = 0.72
+    content_support_gate_low_content: float = 0.58
+    content_support_gate_aspect_conflict: float = 0.35
+    content_support_gate_unknown: float = 0.50
     geometry_support_width_weight: float = 0.34
     geometry_support_outer_weight: float = 0.24
     geometry_support_aspect_weight: float = 0.26
     geometry_support_count_weight: float = 0.16
+    geometry_support_outer_uncertain: float = 0.55
+    geometry_support_no_aspect_score: float = 0.80
+    separator_support_hard_weight: float = 0.78
+    separator_support_model_weight: float = 0.22
     calibrate_geometry_weight: float = 0.34
     calibrate_content_weight: float = 0.33
     calibrate_separator_weight: float = 0.33
     calibrate_separator_source_bias: float = 0.03
     calibrate_partial_no_auto_cap: float = 0.82
     calibrate_full_no_auto_cap: float = 0.84
+    candidate_competition_top_n: int = 8
+    candidate_competition_close_margin: float = 0.04
+    candidate_competition_confidence_cap: float = 0.84
     grid_outer_refine_shift_ratio: float = 0.080
     grid_outer_refine_shift_min: int = 8
     grid_outer_refine_shift_max: int = 420
     grid_outer_refine_max_width_change: float = 0.12
     deskew_min_outer_width: int = 100
+    deskew_outer_dark_threshold: int = 245
+    deskew_outer_min_fraction: float = 0.01
     deskew_sample_width_px: int = 350
     deskew_min_samples: int = 6
     deskew_max_samples: int = 24
@@ -435,6 +495,9 @@ class FormatTuning:
     deskew_residual_height_ratio: float = 0.003
     deskew_auto_quality_ok: float = 8.0
     deskew_enhanced_quality_gain: float = 3.0
+    deskew_fit_min_points: int = 4
+    deskew_fit_tolerance_min: float = 2.0
+    deskew_fit_tolerance_multiplier: float = 3.0
     partial_offsets: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0)
     partial_edge_hint_window_ratio: float = 0.18
     partial_edge_hint_window_min: int = 8
@@ -443,6 +506,26 @@ class FormatTuning:
     partial_content_min_count_small: int = 2
     content_only_partial_enabled: bool = True
     lucky_pass_risk_enabled: bool = True
+    lucky_model_gap_support_min: int = 2
+    lucky_model_gap_support_weight: float = 0.24
+    lucky_minor_model_gap_support_weight: float = 0.08
+    lucky_limited_strong_hard_max: int = 2
+    lucky_limited_strong_hard_weight: float = 0.20
+    lucky_very_limited_strong_hard_max: int = 1
+    lucky_very_limited_strong_hard_weight: float = 0.10
+    lucky_suspicious_hard_weight: float = 0.20
+    lucky_strong_overlap_weight: float = 0.20
+    lucky_combo_weight: float = 0.12
+    lucky_unstable_width_cv: float = 0.006
+    lucky_unstable_width_weight: float = 0.16
+    lucky_mild_width_cv: float = 0.003
+    lucky_mild_width_weight: float = 0.08
+    lucky_strong_hard_credit_min: int = 3
+    lucky_strong_hard_credit: float = -0.15
+    lucky_stable_width_cv: float = 0.002
+    lucky_stable_model_gap_min: int = 3
+    lucky_stable_geometry_credit: float = -0.35
+    lucky_risk_threshold: float = 0.80
     approved_polish_long_limit_ratio: float = 0.018
     approved_polish_long_limit_min: int = 20
     approved_polish_long_limit_max: int = 60
@@ -803,6 +886,7 @@ def expected_content_aspect(format_name: str, layout: str) -> Optional[float]:
 def content_evidence_detail(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> dict[str, Any]:
     if cache is not None and cache.layout == detection.layout:
         return content_evidence_detail_from_cache(gray, detection, cache)
+    tuning = format_tuning(detection.film_format)
 
     outer = detection.outer.clamp(gray.shape[1], gray.shape[0])
     if not outer.valid():
@@ -813,8 +897,11 @@ def content_evidence_detail(gray: np.ndarray, detection: Detection, cache: Optio
         return {"used": False, "reason": "empty_outer"}
 
     evidence = make_content_evidence_gray(source_crop).astype(np.float32) / 255.0
-    outer_p70 = float(sampled_percentile(evidence, [70.0])[0])
-    threshold = max(0.08, min(0.45, outer_p70 * 0.70))
+    outer_p70 = float(sampled_percentile(evidence, [tuning.content_evidence_percentile])[0])
+    threshold = max(
+        tuning.content_evidence_threshold_min,
+        min(tuning.content_evidence_threshold_max, outer_p70 * tuning.content_evidence_threshold_multiplier),
+    )
     frame_scores: list[dict[str, Any]] = []
     means: list[float] = []
     coverages: list[float] = []
@@ -861,8 +948,8 @@ def content_evidence_detail(gray: np.ndarray, detection: Detection, cache: Optio
     min_mean = float(min(means)) if means else 0.0
     median_coverage = float(np.median(np.array(coverages, dtype=np.float32))) if coverages else 0.0
     max_aspect_error = float(max(aspect_errors)) if aspect_errors else None
-    aspect_ok = max_aspect_error is None or max_aspect_error <= 0.22
-    content_present = median_mean >= 0.075 or median_coverage >= 0.18
+    aspect_ok = max_aspect_error is None or max_aspect_error <= tuning.content_evidence_aspect_ok_max
+    content_present = median_mean >= tuning.content_evidence_present_mean_min or median_coverage >= tuning.content_evidence_present_coverage_min
     support = "ok" if content_present and aspect_ok else "weak"
     if not aspect_ok:
         support = "aspect_conflict"
@@ -884,6 +971,7 @@ def content_evidence_detail(gray: np.ndarray, detection: Detection, cache: Optio
 
 
 def content_evidence_detail_from_cache(gray: np.ndarray, detection: Detection, cache: AnalysisCache) -> dict[str, Any]:
+    tuning = format_tuning(detection.film_format)
     source_h, source_w = gray.shape
     work_h, work_w = cache.gray_work.shape
     outer = original_box_to_work(detection.outer, detection.layout, source_w, source_h).clamp(work_w, work_h)
@@ -894,8 +982,11 @@ def content_evidence_detail_from_cache(gray: np.ndarray, detection: Detection, c
     if evidence.size == 0:
         return {"used": False, "reason": "empty_outer"}
 
-    outer_p70 = float(sampled_percentile(evidence, [70.0])[0])
-    threshold = max(0.08, min(0.45, outer_p70 * 0.70))
+    outer_p70 = float(sampled_percentile(evidence, [tuning.content_evidence_percentile])[0])
+    threshold = max(
+        tuning.content_evidence_threshold_min,
+        min(tuning.content_evidence_threshold_max, outer_p70 * tuning.content_evidence_threshold_multiplier),
+    )
     frame_scores: list[dict[str, Any]] = []
     means: list[float] = []
     coverages: list[float] = []
@@ -942,8 +1033,8 @@ def content_evidence_detail_from_cache(gray: np.ndarray, detection: Detection, c
     min_mean = float(min(means)) if means else 0.0
     median_coverage = float(np.median(np.array(coverages, dtype=np.float32))) if coverages else 0.0
     max_aspect_error = float(max(aspect_errors)) if aspect_errors else None
-    aspect_ok = max_aspect_error is None or max_aspect_error <= 0.22
-    content_present = median_mean >= 0.075 or median_coverage >= 0.18
+    aspect_ok = max_aspect_error is None or max_aspect_error <= tuning.content_evidence_aspect_ok_max
+    content_present = median_mean >= tuning.content_evidence_present_mean_min or median_coverage >= tuning.content_evidence_present_coverage_min
     support = "ok" if content_present and aspect_ok else "weak"
     if not aspect_ok:
         support = "aspect_conflict"
@@ -1206,7 +1297,7 @@ def content_detection_for_count(
     else:
         evidence = make_content_evidence_gray(gray_work)
         evidence_float = evidence.astype(np.float32) / 255.0
-    p55, p75, p92 = sampled_percentile(evidence_float, [55, 75, 92])
+    p55, p75, p92 = sampled_percentile(evidence_float, tuning.content_mask_percentiles)
     mask_threshold = max(
         tuning.content_mask_min,
         min(
@@ -1216,8 +1307,8 @@ def content_detection_for_count(
         ),
     )
     mask = evidence_float >= mask_threshold
-    outer = bbox_from_mask(mask, min_row_fraction=0.008, min_col_fraction=0.008)
-    if outer is None or outer.width < max(60, int(ww * tuning.content_outer_min_width_ratio)) or outer.height < max(30, int(wh * tuning.content_outer_min_height_ratio)):
+    outer = bbox_from_mask(mask, min_row_fraction=tuning.content_bbox_min_fraction, min_col_fraction=tuning.content_bbox_min_fraction)
+    if outer is None or outer.width < max(tuning.content_outer_min_width_px, int(ww * tuning.content_outer_min_width_ratio)) or outer.height < max(tuning.content_outer_min_height_px, int(wh * tuning.content_outer_min_height_ratio)):
         return None
     outer = outer.expand(max(2, int(round(ww * tuning.outer_mask_expand_ratio))), max(2, int(round(wh * tuning.outer_mask_expand_ratio))), ww, wh)
 
@@ -1228,7 +1319,7 @@ def content_detection_for_count(
     selected_runs = select_content_runs(runs, count)
 
     frame_h = max(1.0, float(outer.height))
-    expected_w = max(8.0, frame_h * expected_aspect)
+    expected_w = max(tuning.content_expected_width_min_px, frame_h * expected_aspect)
     raw_boxes: list[Box] = []
     placement = "content_runs" if len(selected_runs) >= count else "content_grid_fallback"
     if placement == "content_runs":
@@ -1280,7 +1371,12 @@ def content_detection_for_count(
     aspect_errors = [abs((box.width / max(1.0, float(box.height))) - expected_aspect) / expected_aspect for box in raw_boxes]
     max_aspect_error = float(max(aspect_errors)) if aspect_errors else 1.0
     aspect_conf = max(0.0, min(1.0, 1.0 - max_aspect_error / tuning.content_conf_aspect_norm))
-    confidence = 0.38 * coverage_conf + 0.30 * mean_conf + 0.22 * run_conf + 0.10 * aspect_conf
+    confidence = (
+        tuning.content_candidate_coverage_weight * coverage_conf
+        + tuning.content_candidate_mean_weight * mean_conf
+        + tuning.content_candidate_run_weight * run_conf
+        + tuning.content_candidate_aspect_weight * aspect_conf
+    )
     reasons: list[str] = []
     if placement != "content_runs":
         confidence = min(confidence, tuning.content_grid_fallback_cap)
@@ -2110,7 +2206,7 @@ def light_hard_gap_trust(
     if predicted is not None:
         model_delta_ratio = abs(float(gap.center) - float(predicted)) / max(1.0, float(pitch))
         detail["model_delta_ratio"] = float(model_delta_ratio)
-        if model_delta_ratio >= tuning.hard_trust_model_delta_ratio and (width_ratio < tuning.hard_trust_geometry_width_ratio or gap.score < 1.05):
+        if model_delta_ratio >= tuning.hard_trust_model_delta_ratio and (width_ratio < tuning.hard_trust_geometry_width_ratio or gap.score < tuning.hard_trust_model_conflict_score):
             return "geometry_conflict", detail
     if gray_work is not None and outer is not None and gap.start is not None and gap.end is not None:
         start = int(round(outer.left + min(gap.start, gap.end)))
@@ -2125,14 +2221,14 @@ def light_hard_gap_trust(
         right = gray_work[outer.top:outer.bottom, end:right_end]
         if core.size:
             core_mean = float(core.mean())
-            core_content = float((core < 235).mean())
-            core_dark = float((core < 55).mean())
+            core_content = float((core < tuning.hard_trust_core_content_threshold).mean())
+            core_dark = float((core < tuning.hard_trust_core_dark_threshold).mean())
             core_activity = float(core.std() / 255.0)
-            left_content = float((left < 235).mean()) if left.size else 0.0
-            right_content = float((right < 235).mean()) if right.size else 0.0
+            left_content = float((left < tuning.hard_trust_core_content_threshold).mean()) if left.size else 0.0
+            right_content = float((right < tuning.hard_trust_core_content_threshold).mean()) if right.size else 0.0
             continuity = min(core_content, min(left_content, right_content))
-            dark_separator_like = core_mean <= 45.0 and core_dark >= 0.45 and core_activity <= 0.18
-            weak_dark_gap = core_mean >= 70.0 and core_content >= 0.10
+            dark_separator_like = core_mean <= tuning.hard_trust_dark_mean_max and core_dark >= tuning.hard_trust_dark_fraction_min and core_activity <= tuning.hard_trust_dark_activity_max
+            weak_dark_gap = core_mean >= tuning.hard_trust_weak_mean_min and core_content >= tuning.hard_trust_weak_content_min
             narrow_hard = 0.0 < gap.width <= clamp_float(pitch * tuning.hard_trust_narrow_ratio, tuning.hard_trust_narrow_min, tuning.hard_trust_narrow_max)
             detail["signals"] = {
                 "core_mean": core_mean,
@@ -2141,9 +2237,9 @@ def light_hard_gap_trust(
                 "core_activity": core_activity,
                 "continuity": continuity,
             }
-            if width_ratio < 0.010 and dark_separator_like:
+            if width_ratio < tuning.hard_trust_frame_border_width_ratio and dark_separator_like:
                 return "suspect_frame_border", detail
-            if narrow_hard and ((continuity >= 0.12 and core_activity >= 0.030) or weak_dark_gap):
+            if narrow_hard and ((continuity >= tuning.hard_trust_continuity_min and core_activity >= tuning.hard_trust_activity_min) or weak_dark_gap):
                 return "suspect_internal_edge", detail
     if gap.score >= tuning.hard_trust_strong_min_score and tuning.hard_trust_strong_width_min <= width_ratio <= tuning.hard_trust_strong_width_max:
         return "strong_separator", detail
@@ -2860,7 +2956,7 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
     grid_gaps = sum(1 for gap in gaps if gap.method == "grid")
     detected = actual_detected + enhanced_detected + grid_gaps
     equal = sum(1 for gap in gaps if gap.method == "equal")
-    reliable = sum(1 for gap in gaps if gap.method in {"detected", "enhanced-detected", "grid"} and gap.score >= 0.28)
+    reliable = sum(1 for gap in gaps if gap.method in {"detected", "enhanced-detected", "grid"} and gap.score >= tuning.robust_reliable_min_score)
     widths = np.array([box.width for box in boxes if box.valid()], dtype=np.float64)
     width_cv = float(widths.std() / max(1.0, widths.mean())) if widths.size else 1.0
     outer_area = float(outer.width * outer.height) / max(1.0, float(gray_work.shape[0] * gray_work.shape[1]))
@@ -2869,8 +2965,8 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
 
     gap_conf = 1.0 if expected_gaps == 0 else detected / float(expected_gaps)
     width_conf = max(0.0, min(1.0, 1.0 - width_cv / tuning.score_width_cv_norm))
-    outer_conf = 1.0 if tuning.score_outer_min_area <= outer_area <= tuning.score_outer_max_area else 0.45
-    contrast_conf = 1.0 if contrast >= tuning.score_contrast_min else max(0.35, contrast / tuning.score_contrast_min)
+    outer_conf = 1.0 if tuning.score_outer_min_area <= outer_area <= tuning.score_outer_max_area else tuning.score_outer_uncertain_confidence
+    contrast_conf = 1.0 if contrast >= tuning.score_contrast_min else max(tuning.score_contrast_floor, contrast / tuning.score_contrast_min)
     enough_135_separator_evidence = (
         fmt.name != "135"
         or expected_gaps <= 1
@@ -2878,7 +2974,12 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
         or (actual_detected >= 1 and enhanced_detected >= 2 and equal <= max(tuning.score_135_max_equal_min, expected_gaps // 2))
     )
 
-    confidence = 0.40 * gap_conf + 0.30 * width_conf + 0.20 * outer_conf + 0.10 * contrast_conf
+    confidence = (
+        tuning.score_gap_weight * gap_conf
+        + tuning.score_width_weight * width_conf
+        + tuning.score_outer_weight * outer_conf
+        + tuning.score_contrast_weight * contrast_conf
+    )
 
     full_geometry_ok = (
         strip_mode == "full"
@@ -3097,7 +3198,7 @@ def detection_rank(detection: Detection, threshold: float) -> tuple[int, float, 
     )
 
 
-def detect_for_count(
+def detect_candidate_for_count(
     gray: np.ndarray,
     config: Config,
     fmt: FilmFormat,
@@ -3498,7 +3599,12 @@ def content_support_score(detail: dict[str, Any], format_name: str = "135") -> f
     aspect_error = detail.get("max_aspect_error")
     aspect_score = 0.75 if aspect_error is None else max(0.0, min(1.0, 1.0 - float(aspect_error) / tuning.content_support_aspect_norm))
     support = str(detail.get("support", ""))
-    support_gate = {"ok": 1.0, "weak": 0.72, "low_content": 0.58, "aspect_conflict": 0.35}.get(support, 0.50)
+    support_gate = {
+        "ok": tuning.content_support_gate_ok,
+        "weak": tuning.content_support_gate_weak,
+        "low_content": tuning.content_support_gate_low_content,
+        "aspect_conflict": tuning.content_support_gate_aspect_conflict,
+    }.get(support, tuning.content_support_gate_unknown)
     return max(0.0, min(1.0, (tuning.content_support_coverage_weight * coverage_score + tuning.content_support_mean_weight * mean_score + tuning.content_support_aspect_weight * aspect_score) * support_gate))
 
 
@@ -3510,9 +3616,9 @@ def geometry_support_score(detection: Detection, content_detail: dict[str, Any])
         width_cv = float(widths.std() / max(1.0, widths.mean())) if widths.size else 1.0
     width_score = max(0.0, min(1.0, 1.0 - width_cv / tuning.geometry_width_cv_norm))
     outer_area = float(detection.detail.get("outer_area_ratio", 0.70))
-    outer_score = 1.0 if tuning.score_outer_min_area <= outer_area <= tuning.score_outer_too_large else 0.55
+    outer_score = 1.0 if tuning.score_outer_min_area <= outer_area <= tuning.score_outer_too_large else tuning.geometry_support_outer_uncertain
     aspect_error = content_detail.get("max_aspect_error")
-    aspect_score = 0.80 if aspect_error is None else max(0.0, min(1.0, 1.0 - float(aspect_error) / tuning.content_support_aspect_norm))
+    aspect_score = tuning.geometry_support_no_aspect_score if aspect_error is None else max(0.0, min(1.0, 1.0 - float(aspect_error) / tuning.content_support_aspect_norm))
     count_score = 1.0 if len(detection.frames) == detection.count else 0.0
     return max(0.0, min(1.0, tuning.geometry_support_width_weight * width_score + tuning.geometry_support_outer_weight * outer_score + tuning.geometry_support_aspect_weight * aspect_score + tuning.geometry_support_count_weight * count_score))
 
@@ -3527,7 +3633,7 @@ def separator_support_score(detection: Detection, hard_detail: dict[str, Any]) -
     equal = int(hard_detail.get("equal_gaps", 0))
     hard_ratio = min(1.0, hard / float(max(1, expected)))
     model_ratio = min(1.0, (hard + tuning.separator_model_grid_credit * grid + tuning.separator_model_equal_credit * equal) / float(max(1, expected)))
-    return max(0.0, min(1.0, 0.78 * hard_ratio + 0.22 * model_ratio))
+    return max(0.0, min(1.0, tuning.separator_support_hard_weight * hard_ratio + tuning.separator_support_model_weight * model_ratio))
 
 
 def candidate_counts_for_format(config: Config, fmt: FilmFormat) -> list[tuple[int, str, tuple[float, ...]]]:
@@ -3683,7 +3789,7 @@ def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache
             if count not in fmt.allowed_counts:
                 continue
             for offset in offsets:
-                separator = detect_for_count(gray, config, fmt, count, strip_mode, offset, cache)
+                separator = detect_candidate_for_count(gray, config, fmt, count, strip_mode, offset, cache)
                 separator_candidate = calibrate_v2_candidate(gray, separator, config, fmt, "separator", cache)
                 candidates.append(separator_candidate)
                 separator_auto_gate = bool(
@@ -3726,6 +3832,7 @@ def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache
             best = best_full
             selected_by_full_guard = True
     second = next((candidate for candidate in candidates if candidate is not best), None)
+    selected_tuning = format_tuning(best.film_format)
     competition = [
         {
             "rank": index,
@@ -3737,7 +3844,7 @@ def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache
             "review_reasons": list(candidate.review_reasons),
             "v2_candidate": candidate.detail.get("v2_candidate", {}),
         }
-        for index, candidate in enumerate(candidates[:8], start=1)
+        for index, candidate in enumerate(candidates[:selected_tuning.candidate_competition_top_n], start=1)
     ]
     best.detail["v2_competition"] = {
         "candidate_count": len(candidates),
@@ -3756,7 +3863,7 @@ def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache
     if second is not None:
         margin = float(best.confidence) - float(second.confidence)
         best.detail["v2_competition"]["margin_to_second"] = margin
-        second_close = margin < 0.04
+        second_close = margin < selected_tuning.candidate_competition_close_margin
         partial_full_conflict = (
             best.strip_mode != second.strip_mode
             and min(best.confidence, second.confidence) >= config.confidence_threshold
@@ -3766,23 +3873,29 @@ def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache
             and not selected_by_full_guard
             and (second_close or partial_full_conflict)
         ):
-            best.confidence = min(best.confidence, 0.84)
+            best.confidence = min(best.confidence, selected_tuning.candidate_competition_confidence_cap)
             best.review_reasons.append("v2_candidate_competition_uncertain")
             best.review_reasons = sorted(set(best.review_reasons))
     return best
 
 
-def fit_line(points: list[tuple[float, float]]) -> Optional[dict[str, Any]]:
-    if len(points) < 4:
+def fit_line(
+    points: list[tuple[float, float]],
+    *,
+    min_points: int = 4,
+    tolerance_min: float = 2.0,
+    tolerance_multiplier: float = 3.0,
+) -> Optional[dict[str, Any]]:
+    if len(points) < min_points:
         return None
     x = np.array([p[0] for p in points], dtype=np.float64)
     y = np.array([p[1] for p in points], dtype=np.float64)
     slope, intercept = np.polyfit(x, y, 1)
     residuals = np.abs(y - (slope * x + intercept))
     median_residual = float(np.median(residuals)) if residuals.size else 0.0
-    tolerance = max(2.0, median_residual * 3.0)
+    tolerance = max(tolerance_min, median_residual * tolerance_multiplier)
     inliers = residuals <= tolerance
-    if int(inliers.sum()) >= 4 and int(inliers.sum()) < len(points):
+    if int(inliers.sum()) >= min_points and int(inliers.sum()) < len(points):
         slope, intercept = np.polyfit(x[inliers], y[inliers], 1)
         residuals = np.abs(y[inliers] - (slope * x[inliers] + intercept))
         median_residual = float(np.median(residuals)) if residuals.size else 0.0
@@ -3799,8 +3912,8 @@ def fit_edge_angle(gray: np.ndarray, layout: str, format_name: str = "135") -> t
     tuning = format_tuning(format_name)
     work = work_gray(gray, layout)
     h, w = work.shape
-    mask = work < 245
-    outer = bbox_from_mask(mask, 0.01, 0.01)
+    mask = work < tuning.deskew_outer_dark_threshold
+    outer = bbox_from_mask(mask, tuning.deskew_outer_min_fraction, tuning.deskew_outer_min_fraction)
     if outer is None or outer.width < tuning.deskew_min_outer_width:
         return 0.0, {"reason": "no_outer"}
 
@@ -3819,8 +3932,18 @@ def fit_edge_angle(gray: np.ndarray, layout: str, format_name: str = "135") -> t
         top_points.append((float(x), float(ys[0])))
         bottom_points.append((float(x), float(ys[-1])))
 
-    top_fit = fit_line(top_points)
-    bottom_fit = fit_line(bottom_points)
+    top_fit = fit_line(
+        top_points,
+        min_points=tuning.deskew_fit_min_points,
+        tolerance_min=tuning.deskew_fit_tolerance_min,
+        tolerance_multiplier=tuning.deskew_fit_tolerance_multiplier,
+    )
+    bottom_fit = fit_line(
+        bottom_points,
+        min_points=tuning.deskew_fit_min_points,
+        tolerance_min=tuning.deskew_fit_tolerance_min,
+        tolerance_multiplier=tuning.deskew_fit_tolerance_multiplier,
+    )
     fits = [fit for fit in (top_fit, bottom_fit) if fit is not None]
     if not fits:
         return 0.0, {"reason": "not_enough_points", "top_samples": len(top_points), "bottom_samples": len(bottom_points)}
@@ -4250,11 +4373,11 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
         return record
 
     core_mean = float(core.mean())
-    core_content = float((core < 235).mean())
-    core_dark = float((core < 55).mean())
+    core_content = float((core < tuning.hard_trust_core_content_threshold).mean())
+    core_dark = float((core < tuning.hard_trust_core_dark_threshold).mean())
     core_activity = float(core.std() / 255.0)
-    left_content = float((left < 235).mean()) if left.size else 0.0
-    right_content = float((right < 235).mean()) if right.size else 0.0
+    left_content = float((left < tuning.hard_trust_core_content_threshold).mean()) if left.size else 0.0
+    right_content = float((right < tuning.hard_trust_core_content_threshold).mean()) if right.size else 0.0
     side_content = min(left_content, right_content)
     side_balance = abs(left_content - right_content)
     continuity = min(core_content, side_content)
@@ -4277,32 +4400,32 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
     narrow_hard = gap.method in HARD_GAP_METHODS and 0.0 < gap.width <= clamp_float(pitch * tuning.hard_trust_narrow_ratio, tuning.hard_trust_narrow_min, tuning.hard_trust_narrow_max)
     width_ratio = float(gap.width) / max(1.0, float(pitch))
     model_delta_ratio = abs(float(gap.center - expected)) / max(1.0, float(pitch))
-    content_continuous = continuity >= 0.12 and core_activity >= 0.030
-    dark_separator_like = core_mean <= 45.0 and core_dark >= 0.45 and core_activity <= 0.18
-    weak_dark_gap = core_mean >= 70.0 and core_content >= 0.10
+    content_continuous = continuity >= tuning.hard_trust_continuity_min and core_activity >= tuning.hard_trust_activity_min
+    dark_separator_like = core_mean <= tuning.hard_trust_dark_mean_max and core_dark >= tuning.hard_trust_dark_fraction_min and core_activity <= tuning.hard_trust_dark_activity_max
+    weak_dark_gap = core_mean >= tuning.hard_trust_weak_mean_min and core_content >= tuning.hard_trust_weak_content_min
     if gap.method in HARD_GAP_METHODS:
         if bool(nearby.get("stronger_found", False)):
             record["hard_trust"] = "nearby_separator_conflict"
-        elif model_delta_ratio >= tuning.hard_trust_model_delta_ratio and (width_ratio < tuning.hard_trust_geometry_width_ratio or gap.score < 1.05):
+        elif model_delta_ratio >= tuning.hard_trust_model_delta_ratio and (width_ratio < tuning.hard_trust_geometry_width_ratio or gap.score < tuning.hard_trust_model_conflict_score):
             record["hard_trust"] = "geometry_conflict"
-        elif width_ratio < 0.010 and dark_separator_like:
+        elif width_ratio < tuning.hard_trust_frame_border_width_ratio and dark_separator_like:
             record["hard_trust"] = "suspect_frame_border"
         elif narrow_hard and (content_continuous or weak_dark_gap):
             record["hard_trust"] = "suspect_internal_edge"
         elif narrow_hard:
             record["hard_trust"] = "narrow_but_ok"
-        elif dark_separator_like or core_content <= 0.08 or gap.score >= tuning.hard_trust_strong_min_score:
+        elif dark_separator_like or core_content <= tuning.hard_trust_strong_core_content_max or gap.score >= tuning.hard_trust_strong_min_score:
             record["hard_trust"] = "strong_separator"
         else:
             record["hard_trust"] = "weak_or_ambiguous_separator"
     elif gap.method in MODEL_GAP_METHODS:
         if dark_separator_like:
             overlap_risk = "none"
-        elif continuity >= 0.70 and core_activity >= 0.12 and core_mean >= 55.0:
+        elif continuity >= tuning.diagnostic_overlap_strong_continuity and core_activity >= tuning.diagnostic_overlap_strong_activity and core_mean >= tuning.diagnostic_overlap_mean_min:
             overlap_risk = "strong"
-        elif continuity >= 0.35 and core_activity >= 0.08 and core_mean >= 55.0:
+        elif continuity >= tuning.diagnostic_overlap_medium_continuity and core_activity >= tuning.diagnostic_overlap_medium_activity and core_mean >= tuning.diagnostic_overlap_mean_min:
             overlap_risk = "medium"
-        elif continuity >= 0.16 and core_activity >= 0.04 and core_mean >= 55.0:
+        elif continuity >= tuning.diagnostic_overlap_weak_continuity and core_activity >= tuning.diagnostic_overlap_weak_activity and core_mean >= tuning.diagnostic_overlap_mean_min:
             overlap_risk = "weak"
         else:
             overlap_risk = "none"
@@ -4367,7 +4490,12 @@ def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: 
     }
 
 
-def lucky_pass_risk_score_detail(gray: np.ndarray, detection: Detection, threshold: float) -> dict[str, Any]:
+def lucky_pass_risk_score_detail(
+    gray: np.ndarray,
+    detection: Detection,
+    threshold: float,
+    cache: Optional[AnalysisCache] = None,
+) -> dict[str, Any]:
     tuning = format_tuning(detection.film_format)
     if (
         not tuning.lucky_pass_risk_enabled
@@ -4377,9 +4505,9 @@ def lucky_pass_risk_score_detail(gray: np.ndarray, detection: Detection, thresho
         or detection.confidence < threshold
     ):
         return {"used": False, "reason": "not_applicable"}
-    cache = make_analysis_cache(gray, detection.layout)
-    gray_work = cache.gray_work
-    gap_records = [gap_diagnostic_record(gray_work, detection, gap, cache) for gap in detection.gaps]
+    analysis_cache = cache if cache is not None and cache.layout == detection.layout else make_analysis_cache(gray, detection.layout)
+    gray_work = analysis_cache.gray_work
+    gap_records = [gap_diagnostic_record(gray_work, detection, gap, analysis_cache) for gap in detection.gaps]
     hard_counts: dict[str, int] = {}
     overlap_risk_counts: dict[str, int] = {}
     for record in gap_records:
@@ -4396,30 +4524,30 @@ def lucky_pass_risk_score_detail(gray: np.ndarray, detection: Detection, thresho
     grid_or_equal = sum(1 for gap in detection.gaps if gap.method in {"grid", "equal"})
     width_cv = float(detection.detail.get("width_cv", 0.0) or 0.0)
     components: dict[str, float] = {}
-    if grid_or_equal >= 2:
-        components["model_gap_support"] = 0.24
+    if grid_or_equal >= tuning.lucky_model_gap_support_min:
+        components["model_gap_support"] = tuning.lucky_model_gap_support_weight
     elif grid_or_equal == 1:
-        components["minor_model_gap_support"] = 0.08
-    if strong_hard <= 2:
-        components["limited_strong_hard_evidence"] = 0.20
-    if strong_hard <= 1:
-        components["very_limited_strong_hard_evidence"] = 0.10
+        components["minor_model_gap_support"] = tuning.lucky_minor_model_gap_support_weight
+    if strong_hard <= tuning.lucky_limited_strong_hard_max:
+        components["limited_strong_hard_evidence"] = tuning.lucky_limited_strong_hard_weight
+    if strong_hard <= tuning.lucky_very_limited_strong_hard_max:
+        components["very_limited_strong_hard_evidence"] = tuning.lucky_very_limited_strong_hard_weight
     if suspicious_hard >= 1:
-        components["suspicious_hard_gap"] = 0.20
+        components["suspicious_hard_gap"] = tuning.lucky_suspicious_hard_weight
     if strong_overlap_models >= 1:
-        components["strong_overlap_model_gap"] = 0.20
-    if grid_or_equal >= 2 and suspicious_hard >= 1 and strong_overlap_models >= 1:
-        components["model_suspicion_overlap_combo"] = 0.12
-    if width_cv >= 0.006:
-        components["unstable_widths"] = 0.16
-    elif width_cv >= 0.003:
-        components["mild_width_instability"] = 0.08
-    if strong_hard >= 3:
-        components["strong_hard_evidence_credit"] = -0.15
-    if width_cv < 0.002 and grid_or_equal >= 3:
-        components["stable_global_geometry_credit"] = -0.35
+        components["strong_overlap_model_gap"] = tuning.lucky_strong_overlap_weight
+    if grid_or_equal >= tuning.lucky_model_gap_support_min and suspicious_hard >= 1 and strong_overlap_models >= 1:
+        components["model_suspicion_overlap_combo"] = tuning.lucky_combo_weight
+    if width_cv >= tuning.lucky_unstable_width_cv:
+        components["unstable_widths"] = tuning.lucky_unstable_width_weight
+    elif width_cv >= tuning.lucky_mild_width_cv:
+        components["mild_width_instability"] = tuning.lucky_mild_width_weight
+    if strong_hard >= tuning.lucky_strong_hard_credit_min:
+        components["strong_hard_evidence_credit"] = tuning.lucky_strong_hard_credit
+    if width_cv < tuning.lucky_stable_width_cv and grid_or_equal >= tuning.lucky_stable_model_gap_min:
+        components["stable_global_geometry_credit"] = tuning.lucky_stable_geometry_credit
     risk_score = max(0.0, min(1.0, sum(components.values())))
-    risk_threshold = 0.80
+    risk_threshold = tuning.lucky_risk_threshold
     risk = risk_score >= risk_threshold
     return {
         "used": True,
@@ -4495,6 +4623,7 @@ def make_debug_preview_rgb(gray: np.ndarray, detection: Detection) -> np.ndarray
 
 
 def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> None:
+    tuning = format_tuning(detection.film_format)
     gap_colors = {
         "detected": (255, 0, 0),
         "edge-pair": (255, 0, 0),
@@ -4504,13 +4633,17 @@ def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> Non
     }
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
     detected_centers = [gap.center for gap in detection.gaps if gap.method in {"detected", "edge-pair", "enhanced-detected"}]
-    overlap_tolerance = clamp_float(pitch * 0.012, 4.0, 80.0)
+    overlap_tolerance = clamp_float(
+        pitch * tuning.debug_gap_overlap_tolerance_ratio,
+        tuning.debug_gap_overlap_tolerance_min,
+        tuning.debug_gap_overlap_tolerance_max,
+    )
     for gap in detection.gaps:
         if gap.method not in {"detected", "edge-pair", "enhanced-detected"}:
             continue
         mark = gap_mark_box(detection, gap)
         if mark is not None:
-            draw_preview_mark(rgb, mark, scale, gap_colors.get(gap.method, (255, 255, 255)), 2)
+            draw_preview_mark(rgb, mark, scale, gap_colors.get(gap.method, (255, 255, 255)), tuning.debug_gap_hard_line_width)
     for gap in detection.gaps:
         if gap.method in {"detected", "edge-pair", "enhanced-detected"}:
             continue
@@ -4519,13 +4652,14 @@ def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> Non
         color = gap_colors.get(gap.method, (255, 255, 255))
         for tick in gap_tick_boxes(detection, gap):
             if detection.layout == "horizontal":
-                draw_preview_line(rgb, tick, scale, color, 2)
+                draw_preview_line(rgb, tick, scale, color, tuning.debug_gap_model_line_width)
             else:
-                draw_preview_hline(rgb, tick, scale, color, 2)
+                draw_preview_hline(rgb, tick, scale, color, tuning.debug_gap_model_line_width)
     draw_gap_diagnostic_overlay(rgb, detection, scale)
 
 
 def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> None:
+    tuning = format_tuning(detection.film_format)
     diagnostics = detection.detail.get("diagnostics_v3_6")
     if not isinstance(diagnostics, dict):
         return
@@ -4553,9 +4687,9 @@ def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: Detection, scale: fl
             continue
         for tick in gap_tick_boxes(detection, gap):
             if detection.layout == "horizontal":
-                draw_preview_line(rgb, tick, scale, color, 3)
+                draw_preview_line(rgb, tick, scale, color, tuning.debug_gap_diagnostic_line_width)
             else:
-                draw_preview_hline(rgb, tick, scale, color, 3)
+                draw_preview_hline(rgb, tick, scale, color, tuning.debug_gap_diagnostic_line_width)
 
 
 def make_separator_evidence_debug_gray(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> np.ndarray:
@@ -5250,7 +5384,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     if not unsupported_mode and bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
         detection.confidence = min(detection.confidence, 0.84)
         detection.review_reasons.append("outer_content_bbox_mismatch")
-    lucky_pass_risk = lucky_pass_risk_score_detail(gray, detection, config.confidence_threshold)
+    lucky_pass_risk = lucky_pass_risk_score_detail(gray, detection, config.confidence_threshold, analysis_cache)
     detection.detail["lucky_pass_risk_score"] = lucky_pass_risk
     if bool(lucky_pass_risk.get("risk", False)):
         detection.confidence = min(detection.confidence, 0.84)
