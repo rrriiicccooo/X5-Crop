@@ -28,6 +28,11 @@ Current stable release: v3.6.2 (GitHub Releases)
      ```bash
      /bin/bash install/X5_Crop_Mac_install.command
      ```
+   - macOS 如果安装完成后双击主启动器 `X5_Crop_Mac.command` 仍打不开：打开 Terminal，输入 `cd `，把放有 TIFF 长图的文件夹拖进窗口后按 Return，然后运行：
+
+     ```bash
+     /bin/bash X5_Crop_Mac.command
+     ```
 
 4. 把下面这些文件和要裁切的 TIFF 长图放在同一个文件夹里：
    - `X5_Crop.py`
@@ -81,6 +86,13 @@ On a new machine:
 
      ```bash
      /bin/bash install/X5_Crop_Mac_install.command
+     ```
+   - If the main launcher `X5_Crop_Mac.command` still will not open after
+     installation: open Terminal, type `cd `, drag the TIFF folder into the
+     window, press Return, then run:
+
+     ```bash
+     /bin/bash X5_Crop_Mac.command
      ```
 
 4. Put these files in the same folder as the TIFF long-strip scans:
@@ -270,6 +282,12 @@ Windows: X5_Crop.py + X5_Crop_win.bat
 
 ```bash
 /bin/bash install/X5_Crop_Mac_install.command
+```
+
+如果安装完成后，双击主启动器 `X5_Crop_Mac.command` 仍然打不开，请打开 Terminal，输入 `cd `，把放有 `X5_Crop.py`、`X5_Crop_Mac.command` 和 TIFF 长图的文件夹拖进窗口后按 Return，然后运行：
+
+```bash
+/bin/bash X5_Crop_Mac.command
 ```
 
 Windows:
@@ -710,6 +728,15 @@ If double-clicking the macOS installer does not work, open Terminal, type
 
 ```bash
 /bin/bash install/X5_Crop_Mac_install.command
+```
+
+If the main launcher `X5_Crop_Mac.command` still will not open after
+installation, open Terminal, type `cd `, drag the folder containing
+`X5_Crop.py`, `X5_Crop_Mac.command`, and the TIFF scans into the window, press
+Return, then run:
+
+```bash
+/bin/bash X5_Crop_Mac.command
 ```
 
 Windows:

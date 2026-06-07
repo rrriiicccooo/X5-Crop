@@ -187,6 +187,11 @@ Changed:
   test/analyze mode that reads TIFFs, runs detection, decides PASS/REVIEW, and
   may write Debug Analysis JPGs/reports, but does not export cropped TIFFs or
   modify source TIFFs.
+- README and `快速启动_Quick_Start.md` now use the same macOS fallback wording
+  for launcher permission issues: if the installer will not open, run
+  `/bin/bash install/X5_Crop_Mac_install.command` from the Release folder; if
+  the main launcher still will not open after installation, run
+  `/bin/bash X5_Crop_Mac.command` from the TIFF working folder.
 - README and `快速启动_Quick_Start.md` now use the latest normal 135 macOS
   launcher timing: 48 TIFF files exported in 394 seconds, averaging about
   8.2 seconds per file.

@@ -20,6 +20,14 @@
 > /bin/bash install/X5_Crop_Mac_install.command
 > ```
 
+> **macOS 如果安装完成后双击主启动器打不开，请用终端启动主启动器。**
+>
+> 打开 Terminal，输入 `cd `，把放有 `X5_Crop.py`、`X5_Crop_Mac.command` 和 TIFF 长图的文件夹拖进窗口后按 Return，然后运行：
+>
+> ```bash
+> /bin/bash X5_Crop_Mac.command
+> ```
+
 ### Release 压缩包里有什么
 
 Release 包默认包含：
@@ -66,6 +74,18 @@ Windows: install/X5_Crop_win_install.bat
 ```
 
 安装器会检查 Python 和依赖库。安装完成后，再运行主启动器。
+
+如果 macOS 双击安装启动器打不开，请打开 Terminal，输入 `cd `，把 X5 Crop 文件夹拖进窗口后按 Return，然后运行：
+
+```bash
+/bin/bash install/X5_Crop_Mac_install.command
+```
+
+如果安装完成后，双击主启动器 `X5_Crop_Mac.command` 仍然打不开，请打开 Terminal，输入 `cd `，把放有 `X5_Crop.py`、`X5_Crop_Mac.command` 和 TIFF 长图的文件夹拖进窗口后按 Return，然后运行：
+
+```bash
+/bin/bash X5_Crop_Mac.command
+```
 
 ### 怎么启动
 
@@ -194,6 +214,14 @@ This is the shortest guide for X5 Crop. For full installation, uninstall, comman
 > /bin/bash install/X5_Crop_Mac_install.command
 > ```
 
+> **On macOS, if the main launcher still will not open after installation, start the main launcher from Terminal.**
+>
+> Open Terminal, type `cd `, drag the folder containing `X5_Crop.py`, `X5_Crop_Mac.command`, and the TIFF scans into the window, press Return, then run:
+>
+> ```bash
+> /bin/bash X5_Crop_Mac.command
+> ```
+
 ### What Is In The Release Zip
 
 The Release package normally contains:
@@ -240,6 +268,22 @@ Windows: install/X5_Crop_win_install.bat
 ```
 
 The installer checks Python and required libraries. After installation, run the main launcher.
+
+If double-clicking the macOS installer does not work, open Terminal, type
+`cd `, drag the X5 Crop folder into the window, press Return, then run:
+
+```bash
+/bin/bash install/X5_Crop_Mac_install.command
+```
+
+If the main launcher `X5_Crop_Mac.command` still will not open after
+installation, open Terminal, type `cd `, drag the folder containing
+`X5_Crop.py`, `X5_Crop_Mac.command`, and the TIFF scans into the window, press
+Return, then run:
+
+```bash
+/bin/bash X5_Crop_Mac.command
+```
 
 ### How To Launch
 
