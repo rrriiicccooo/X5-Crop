@@ -23,6 +23,12 @@ Current stable release: v3.6.2 (GitHub Releases)
 3. 第一次使用先运行安装启动器：
    - macOS: `install/X5_Crop_Mac_install.command`
    - Windows: `install/X5_Crop_win_install.bat`
+   - macOS 如果双击安装启动器打不开：打开 Terminal，输入 `cd `，把 X5 Crop 文件夹拖进窗口后按 Return，然后运行：
+
+     ```bash
+     /bin/bash install/X5_Crop_Mac_install.command
+     ```
+
 4. 把下面这些文件和要裁切的 TIFF 长图放在同一个文件夹里：
    - `X5_Crop.py`
    - macOS 用 `X5_Crop_Mac.command`
@@ -69,6 +75,14 @@ On a new machine:
 3. On first use, run the installer launcher:
    - macOS: `install/X5_Crop_Mac_install.command`
    - Windows: `install/X5_Crop_win_install.bat`
+   - If the macOS installer will not open by double-clicking: open Terminal,
+     type `cd `, drag the X5 Crop folder into the window, press Return, then
+     run:
+
+     ```bash
+     /bin/bash install/X5_Crop_Mac_install.command
+     ```
+
 4. Put these files in the same folder as the TIFF long-strip scans:
    - `X5_Crop.py`
    - macOS: `X5_Crop_Mac.command`
