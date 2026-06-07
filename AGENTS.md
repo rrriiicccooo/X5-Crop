@@ -36,8 +36,10 @@ archive/X5_Split_v18.py
 ```
 
 Keep `X5_Crop.py` as the active script. Keep `X5_Split_v17.py` and
-`X5_Split_v18.py` in `archive/` as preserved references. Keep every named X5
-Crop development version snapshot in `archive/` before moving past it, including
+`X5_Split_v18.py` in `archive/` as preserved references. In V4 and later,
+`X5_Crop.py` is a thin entry point and the active implementation lives in
+`x5crop/`, so source changes may need both. Keep every named X5 Crop
+development version snapshot in `archive/` before moving past it, including
 experimental versions that are later paused or rolled back. Keep user-facing
 project documentation consolidated in `README.md`.
 
@@ -54,7 +56,8 @@ project documentation consolidated in `README.md`.
   macOS trust registration.
 - After changing the active script or launchers, sync the local ignored Test
   copies too, especially `Test/135/X5_Crop.py`,
-  `Test/135/X5_Crop_Mac.command`, and `Test/135/X5_Crop_win.bat`.
+  `Test/135/x5crop/`, `Test/135/X5_Crop_Mac.command`, and
+  `Test/135/X5_Crop_win.bat`.
 - When the user describes directional behavior with left/right or top/bottom,
   treat that as the horizontal-strip baseline unless they say otherwise, and
   add the rotated vertical-strip behavior too.
@@ -102,6 +105,7 @@ project documentation consolidated in `README.md`.
   official fixtures and Git LFS tracking is configured for them.
 - User-facing Release zip packages should contain only:
   - `X5_Crop.py`
+  - `x5crop/`
   - `X5_Crop_Mac.command`
   - `X5_Crop_win.bat`
   - `README.md`
@@ -153,24 +157,42 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V3.9.
-- V3.9 is a structural policy cleanup after V3.7. It moves remaining outer
-  mask profiles, post-detection confidence caps, deskew span skip, frame-fit
-  small-pixel tolerances, separator gate mode, and outer retry enable/disable
-  behind `FormatTuning` / format-aware policy entry points. The goal is cleaner
-  management of percentage/clamp parameters, format-specific branches, and
-  future cross-format promotion points without changing 135 output.
+- Active script is `X5_Crop.py` V4.0.
+- V4.0 is the compatibility architecture migration requested from the V4
+  blueprint. Root `X5_Crop.py` is now a thin entry point, the full
+  implementation lives in `x5crop/core.py`, and façade modules now define
+  package boundaries for I/O, policy, reports, deskew, detection, debug, and
+  regression. V4.0 intentionally preserves V3.9 behavior first; OpenCV/scipy
+  or other heavy image-processing dependencies are deferred to a future V5
+  direction.
+- V4.0 added `x5crop/regression.py` for JSONL report comparison. The default
+  comparison fields are `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps`.
+- V4.0 changes the release/user file layout: `X5_Crop.py`, `x5crop/`, and the
+  platform-matching main launcher must stay together in the TIFF folder.
+  README and `快速启动_Quick_Start.md` have been updated with this.
+- Local ignored test copies now include both `Test/135/X5_Crop.py` and
+  `Test/135/x5crop/`.
+- Archive for V4.0 should include both the thin entry script and the matching
+  `x5crop/` package snapshot.
+- V3.9 was the previous structural policy cleanup after V3.7. It moved remaining
+  outer mask profiles, post-detection confidence caps, deskew span skip,
+  frame-fit small-pixel tolerances, separator gate mode, and outer retry
+  enable/disable behind `FormatTuning` / format-aware policy entry points.
+  The goal was cleaner management of percentage/clamp parameters,
+  format-specific branches, and future cross-format promotion points without
+  changing 135 output.
 - V3.9 keeps high-risk active behavior policy-gated: nearby active correction,
   lucky-pass risk, and leading-grid failure still do not automatically apply to
   non-135 formats.
-- `Test/135/X5_Crop.py` is synced to V3.9, and
-  `archive/X5_Crop_v3.9.py` is preserved as the named snapshot.
+- `Test/135/X5_Crop.py` and `Test/135/x5crop/` are synced to V4.0. The V3.9
+  named snapshot remains preserved as `archive/X5_Crop_v3.9.py`.
 - macOS and Windows main launchers no longer pass `--report` during normal
   non-Debug-Analysis runs. They still pass `--report --debug-analysis --dry-run`
   when Debug Analysis is enabled, so analysis JPG reuse/report workflows keep
   working.
 - User-facing Release packaging policy is now explicit: Release zip packages
-  should include only `X5_Crop.py`, `X5_Crop_Mac.command`,
+  should include only `X5_Crop.py`, `x5crop/`, `X5_Crop_Mac.command`,
   `X5_Crop_win.bat`, `README.md`, `快速启动_Quick_Start.md`, the two
   installer launchers, and the two uninstall launchers under `install/`;
   license, archive snapshots, GitHub config, and local test/output folders
@@ -287,7 +309,7 @@ Changed:
 - Diagnostics now reuse cached separator profiles for nearby-separator checks in
   `gap_diagnostic_record()`, reducing repeated profile work during full
   `--diagnostics` runs.
-- README and CHANGELOG now clarify that the current V3.9 script still keeps the
+- README and CHANGELOG now clarify that the current V4.0 script still keeps the
   conservative `--analysis` enhanced separator assist. V3.4 was an experiment
   that tried removing that layer; it is not the current active behavior.
 - `hard_fallback_detection()` detail has been simplified to only describe the
@@ -440,7 +462,7 @@ Changed:
   strips now use content only as validation rather than generating separate
   content candidates, and 135 full strips no longer run the simple cuts-based
   frame-size fit before the explicit edge-sample fit.
-- V3.0 through V3.9 active-script snapshots are preserved in `archive/`:
+- V3.0 through V4.0 active-script snapshots are preserved in `archive/`:
   `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
   `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
   `X5_Crop_v3.3.1.py`, `X5_Crop_v3.3.2.py`, `X5_Crop_v3.4.py`,
@@ -451,7 +473,8 @@ Changed:
   `X5_Crop_v3.6.7.py`, `X5_Crop_v3.6.8.py`,
   `X5_Crop_v3.6.9.py`, `X5_Crop_v3.6.10.py`,
   `X5_Crop_v3.6.11.py`, `X5_Crop_v3.6.12.py`,
-  `X5_Crop_v3.7.py`, and `X5_Crop_v3.9.py`.
+  `X5_Crop_v3.7.py`, `X5_Crop_v3.9.py`, and V4.0's thin entry plus
+  `x5crop/` package snapshot.
 - Future named development versions, including experiments that are later
   paused or rolled back, should also be saved as archive snapshots.
 - V3.3.2 adds conservative overlap-aware gap handling for 135 full strips:
@@ -557,6 +580,17 @@ Verified:
   48 ok / 0 failed / 42 `approved_auto` / 6 `needs_review`, or about
   8.2 seconds per file. In the sandbox, process workers were unavailable and
   the script used 2 thread workers.
+- Current V4.0 verification: `python3 X5_Crop.py --version` prints
+  `X5_Crop.py 4.0`; importing `x5crop`, `x5crop.io`, `x5crop.policy`,
+  `x5crop.reports`, `x5crop.deskew`, `x5crop.detection`, `x5crop.debug`, and
+  `x5crop.regression` succeeds. `python3 -m py_compile X5_Crop.py
+  x5crop/core.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` passed.
+  Full `Test/135` default-deskew dry-run compared V4.0 against a V3.9 baseline
+  extracted to `/private/tmp/X5_Crop_v39_before_v4.py`; both runs processed
+  48 TIFF files with 0 failed, 42 `approved_auto`, and 6 `needs_review`.
+  `python3 -m x5crop.regression` compared their `split_report.jsonl` files and
+  reported 48 baseline rows, 48 candidate rows, and diff count 0 for `status`,
+  `confidence`, `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`.
 - Current V3.9 verification: `python3 X5_Crop.py --version`,
   `python3 archive/X5_Crop_v3.9.py --version`, and
   `python3 Test/135/X5_Crop.py --version` all print `X5_Crop.py 3.9`.
