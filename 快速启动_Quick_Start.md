@@ -131,6 +131,8 @@ xpan = 3
 - 会生成 Debug Analysis JPG。
 - 会生成 report，之后可以复用分析结果进行裁切。
 
+这里的 `dry run` 是试运行 / 分析模式：脚本会读取 TIFF、执行检测并判断 PASS/REVIEW，但不会导出正式裁切 TIFF，也不会修改原 TIFF。它适合在正式裁切前先检查外框、分隔线和裁切范围。
+
 普通非 Debug Analysis 裁切不会生成 report。
 
 ### needs_review 是什么
@@ -302,6 +304,11 @@ Type `y` for Debug Analysis dry run:
 - It does not export cropped TIFF files.
 - It writes Debug Analysis JPGs.
 - It writes reports that can be reused later for cropping.
+
+Here, `dry run` means test/analyze only: the script reads the TIFF, runs
+detection, and decides PASS/REVIEW, but does not export cropped TIFFs and does
+not modify the original TIFF. Use it before real export to inspect the outer
+box, separators, and crop boxes.
 
 Normal non-Debug-Analysis crop runs do not write reports.
 

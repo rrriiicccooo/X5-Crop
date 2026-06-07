@@ -172,6 +172,10 @@ Changed:
   script + launcher workflow instead of an app package, how to uninstall
   cleanly, what dependency removal can affect, that `needs_review/` contains
   plain source-TIFF copies, and when partial mode should be used.
+- README and `快速启动_Quick_Start.md` now define `dry run` as a
+  test/analyze mode that reads TIFFs, runs detection, decides PASS/REVIEW, and
+  may write Debug Analysis JPGs/reports, but does not export cropped TIFFs or
+  modify source TIFFs.
 - Added `快速启动_Quick_Start.md`, a bilingual quick-start guide with Chinese
   first and English second. It puts first-time installer launchers in a
   prominent note near the top and points users to `README.md` and `CHANGELOG.md`
