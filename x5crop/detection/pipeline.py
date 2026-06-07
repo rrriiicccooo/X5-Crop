@@ -1,16 +1,1499 @@
-"""Detection pipeline entry points.
+from __future__ import annotations
 
-The V4 compatibility build routes these calls to ``x5crop.core``. Future V4
-work can move the implementation into this package without changing callers.
-"""
+from ..common import *
+from ..evidence import *
+from ..geometry import *
 
-from ..core import choose_detection_v2, detect_candidate_for_count
+def expected_content_aspect(format_name: str, layout: str) -> Optional[float]:
+    aspect = CONTENT_ASPECTS_HORIZONTAL.get(format_name)
+    if aspect is None:
+        return None
+    if layout == "vertical":
+        return 1.0 / aspect
+    return aspect
 
 
-def detect_image(*args, **kwargs):
-    """Run the current detection pipeline and return a Detection object."""
+def content_evidence_detail(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> dict[str, Any]:
+    if cache is not None and cache.layout == detection.layout:
+        return content_evidence_detail_from_cache(gray, detection, cache)
+    tuning = format_tuning(detection.film_format)
+
+    outer = detection.outer.clamp(gray.shape[1], gray.shape[0])
+    if not outer.valid():
+        return {"used": False, "reason": "invalid_outer"}
+
+    source_crop = gray[outer.top:outer.bottom, outer.left:outer.right]
+    if source_crop.size == 0:
+        return {"used": False, "reason": "empty_outer"}
+
+    evidence = make_content_evidence_gray(source_crop).astype(np.float32) / 255.0
+    outer_p70 = float(sampled_percentile(evidence, [tuning.content_evidence_percentile])[0])
+    threshold = max(
+        tuning.content_evidence_threshold_min,
+        min(tuning.content_evidence_threshold_max, outer_p70 * tuning.content_evidence_threshold_multiplier),
+    )
+    frame_scores: list[dict[str, Any]] = []
+    means: list[float] = []
+    coverages: list[float] = []
+    aspect_errors: list[float] = []
+    expected_aspect = expected_content_aspect(detection.film_format, detection.layout)
+
+    for index, frame in enumerate(detection.frames, start=1):
+        absolute_box = frame.clamp(gray.shape[1], gray.shape[0])
+        box = Box(
+            max(0, absolute_box.left - outer.left),
+            max(0, absolute_box.top - outer.top),
+            min(outer.width, absolute_box.right - outer.left),
+            min(outer.height, absolute_box.bottom - outer.top),
+        )
+        if not box.valid():
+            continue
+        crop = evidence[box.top:box.bottom, box.left:box.right]
+        if crop.size == 0:
+            continue
+        mean = float(crop.mean())
+        coverage = float((crop >= threshold).mean())
+        means.append(mean)
+        coverages.append(coverage)
+        actual_aspect = float(absolute_box.width) / max(1.0, float(absolute_box.height))
+        aspect_error: Optional[float] = None
+        if expected_aspect is not None and expected_aspect > 0:
+            aspect_error = abs(actual_aspect - expected_aspect) / expected_aspect
+            aspect_errors.append(float(aspect_error))
+        frame_scores.append(
+            {
+                "index": index,
+                "mean": mean,
+                "coverage": coverage,
+                "actual_aspect": actual_aspect,
+                "expected_aspect": expected_aspect,
+                "aspect_error": aspect_error,
+            }
+        )
+
+    if not frame_scores:
+        return {"used": False, "reason": "no_valid_frames"}
+
+    median_mean = float(np.median(np.array(means, dtype=np.float32))) if means else 0.0
+    min_mean = float(min(means)) if means else 0.0
+    median_coverage = float(np.median(np.array(coverages, dtype=np.float32))) if coverages else 0.0
+    max_aspect_error = float(max(aspect_errors)) if aspect_errors else None
+    aspect_ok = max_aspect_error is None or max_aspect_error <= tuning.content_evidence_aspect_ok_max
+    content_present = median_mean >= tuning.content_evidence_present_mean_min or median_coverage >= tuning.content_evidence_present_coverage_min
+    support = "ok" if content_present and aspect_ok else "weak"
+    if not aspect_ok:
+        support = "aspect_conflict"
+    elif not content_present:
+        support = "low_content"
+
+    return {
+        "used": True,
+        "support": support,
+        "composite": "gradient+neighbor_texture+local_contrast+tonal_presence",
+        "threshold": threshold,
+        "median_mean": median_mean,
+        "min_mean": min_mean,
+        "median_coverage": median_coverage,
+        "expected_aspect": expected_aspect,
+        "max_aspect_error": max_aspect_error,
+        "frame_scores": frame_scores,
+    }
+
+
+def content_evidence_detail_from_cache(gray: np.ndarray, detection: Detection, cache: AnalysisCache) -> dict[str, Any]:
+    tuning = format_tuning(detection.film_format)
+    source_h, source_w = gray.shape
+    work_h, work_w = cache.gray_work.shape
+    outer = original_box_to_work(detection.outer, detection.layout, source_w, source_h).clamp(work_w, work_h)
+    if not outer.valid():
+        return {"used": False, "reason": "invalid_outer"}
+
+    evidence = cache.content_evidence_float_work[outer.top:outer.bottom, outer.left:outer.right]
+    if evidence.size == 0:
+        return {"used": False, "reason": "empty_outer"}
+
+    outer_p70 = float(sampled_percentile(evidence, [tuning.content_evidence_percentile])[0])
+    threshold = max(
+        tuning.content_evidence_threshold_min,
+        min(tuning.content_evidence_threshold_max, outer_p70 * tuning.content_evidence_threshold_multiplier),
+    )
+    frame_scores: list[dict[str, Any]] = []
+    means: list[float] = []
+    coverages: list[float] = []
+    aspect_errors: list[float] = []
+    expected_aspect = CONTENT_ASPECTS_HORIZONTAL.get(detection.film_format)
+
+    for index, frame in enumerate(detection.frames, start=1):
+        absolute_box = original_box_to_work(frame, detection.layout, source_w, source_h).clamp(work_w, work_h)
+        box = Box(
+            max(0, absolute_box.left - outer.left),
+            max(0, absolute_box.top - outer.top),
+            min(outer.width, absolute_box.right - outer.left),
+            min(outer.height, absolute_box.bottom - outer.top),
+        )
+        if not box.valid():
+            continue
+        crop = evidence[box.top:box.bottom, box.left:box.right]
+        if crop.size == 0:
+            continue
+        mean = float(crop.mean())
+        coverage = float((crop >= threshold).mean())
+        means.append(mean)
+        coverages.append(coverage)
+        actual_aspect = float(absolute_box.width) / max(1.0, float(absolute_box.height))
+        aspect_error: Optional[float] = None
+        if expected_aspect is not None and expected_aspect > 0:
+            aspect_error = abs(actual_aspect - expected_aspect) / expected_aspect
+            aspect_errors.append(float(aspect_error))
+        frame_scores.append(
+            {
+                "index": index,
+                "mean": mean,
+                "coverage": coverage,
+                "actual_aspect": actual_aspect,
+                "expected_aspect": expected_aspect,
+                "aspect_error": aspect_error,
+            }
+        )
+
+    if not frame_scores:
+        return {"used": False, "reason": "no_valid_frames"}
+
+    median_mean = float(np.median(np.array(means, dtype=np.float32))) if means else 0.0
+    min_mean = float(min(means)) if means else 0.0
+    median_coverage = float(np.median(np.array(coverages, dtype=np.float32))) if coverages else 0.0
+    max_aspect_error = float(max(aspect_errors)) if aspect_errors else None
+    aspect_ok = max_aspect_error is None or max_aspect_error <= tuning.content_evidence_aspect_ok_max
+    content_present = median_mean >= tuning.content_evidence_present_mean_min or median_coverage >= tuning.content_evidence_present_coverage_min
+    support = "ok" if content_present and aspect_ok else "weak"
+    if not aspect_ok:
+        support = "aspect_conflict"
+    elif not content_present:
+        support = "low_content"
+
+    return {
+        "used": True,
+        "support": support,
+        "composite": "cached_gradient+neighbor_texture+local_contrast+tonal_presence",
+        "threshold": threshold,
+        "median_mean": median_mean,
+        "min_mean": min_mean,
+        "median_coverage": median_coverage,
+        "expected_aspect": expected_aspect,
+        "max_aspect_error": max_aspect_error,
+        "frame_scores": frame_scores,
+    }
+
+
+def outer_content_alignment_detail(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> dict[str, Any]:
+    gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
+    tuning = format_tuning(detection.film_format)
+    work_h, work_w = gray_work.shape
+    source_h, source_w = gray.shape
+    outer = original_box_to_work(detection.outer, detection.layout, source_w, source_h).clamp(work_w, work_h)
+    if not outer.valid():
+        return {"used": False, "reason": "invalid_outer"}
+
+    candidates: list[tuple[str, Box]] = []
+    for threshold in (225, 210, 190):
+        box = bbox_from_mask(gray_work < threshold, min_row_fraction=0.015, min_col_fraction=0.015)
+        if box is not None and box.valid():
+            candidates.append((f"gray_lt_{threshold}", box))
+    if not candidates:
+        return {"used": False, "reason": "no_content_bbox"}
+
+    source, content_box = candidates[0]
+    pitch = float(outer.width) / float(max(1, detection.count))
+    long_slack_left = max(0, content_box.left - outer.left)
+    long_slack_right = max(0, outer.right - content_box.right)
+    short_slack_top = max(0, content_box.top - outer.top)
+    short_slack_bottom = max(0, outer.bottom - content_box.bottom)
+    max_long_slack = max(long_slack_left, long_slack_right)
+    max_short_slack = max(short_slack_top, short_slack_bottom)
+    long_slack_ratio = float(max_long_slack) / max(1.0, pitch)
+    short_slack_ratio = float(max_short_slack) / max(1.0, float(outer.height))
+    content_width_ratio = float(content_box.width) / max(1.0, float(outer.width))
+    content_height_ratio = float(content_box.height) / max(1.0, float(outer.height))
+    white_edge_long_slack_min = clamp_int(pitch * tuning.outer_align_white_edge_long_ratio, tuning.outer_align_white_edge_long_min, tuning.outer_align_white_edge_long_max)
+    long_slack_pixel_gate = clamp_int(pitch * tuning.outer_align_long_gate_ratio, tuning.outer_align_long_gate_min, tuning.outer_align_long_gate_max)
+    short_slack_pixel_gate = clamp_int(float(outer.height) * tuning.outer_align_short_gate_ratio, tuning.outer_align_short_gate_min, tuning.outer_align_short_gate_max)
+
+    edge_band = max(4, min(80, int(round(min(outer.width, outer.height) * tuning.outer_align_border_band_ratio))))
+    outer_crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
+    if outer_crop.size:
+        left_band = outer_crop[:, :min(edge_band, outer_crop.shape[1])]
+        right_band = outer_crop[:, max(0, outer_crop.shape[1] - edge_band):]
+        top_band = outer_crop[:min(edge_band, outer_crop.shape[0]), :]
+        bottom_band = outer_crop[max(0, outer_crop.shape[0] - edge_band):, :]
+        border_dark_fraction = {
+            "left": float((left_band < 245).mean()) if left_band.size else 0.0,
+            "right": float((right_band < 245).mean()) if right_band.size else 0.0,
+            "top": float((top_band < 245).mean()) if top_band.size else 0.0,
+            "bottom": float((bottom_band < 245).mean()) if bottom_band.size else 0.0,
+        }
+    else:
+        border_dark_fraction = {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0}
+
+    edge_hard_anchors = (
+        detection.strip_mode == "full"
+        and len(detection.gaps) >= 2
+        and detection.gaps[0].method in HARD_GAP_METHODS
+        and detection.gaps[-1].method in HARD_GAP_METHODS
+    )
+    white_edge_slack = (
+        edge_hard_anchors
+        and content_width_ratio >= tuning.outer_align_content_width_min
+        and max_short_slack <= max(24, int(round(float(outer.height) * tuning.outer_align_edge_short_ratio)))
+        and (
+            (long_slack_left >= white_edge_long_slack_min and float(border_dark_fraction.get("left", 1.0)) <= tuning.outer_align_edge_dark_max)
+            or (long_slack_right >= white_edge_long_slack_min and float(border_dark_fraction.get("right", 1.0)) <= tuning.outer_align_edge_dark_max)
+        )
+    )
+    excess_long = long_slack_ratio > tuning.outer_align_long_excess_ratio or (max_long_slack >= long_slack_pixel_gate and long_slack_ratio > tuning.outer_align_long_gate_excess_ratio) or white_edge_slack
+    excess_short = short_slack_ratio > tuning.outer_align_short_excess_ratio and max_short_slack >= short_slack_pixel_gate
+    ok = not (excess_long or excess_short)
+    reason = "ok"
+    if excess_long:
+        reason = "outer_long_axis_excess"
+    elif excess_short:
+        reason = "outer_short_axis_excess"
+
+    return {
+        "used": True,
+        "ok": ok,
+        "reason": reason,
+        "content_bbox_source": source,
+        "outer_work_box": asdict(outer),
+        "content_work_box": asdict(content_box),
+        "long_slack_left": int(long_slack_left),
+        "long_slack_right": int(long_slack_right),
+        "short_slack_top": int(short_slack_top),
+        "short_slack_bottom": int(short_slack_bottom),
+        "max_long_slack": int(max_long_slack),
+        "max_short_slack": int(max_short_slack),
+        "long_slack_ratio": long_slack_ratio,
+        "short_slack_ratio": short_slack_ratio,
+        "content_width_ratio": content_width_ratio,
+        "content_height_ratio": content_height_ratio,
+        "white_edge_long_slack_min": int(white_edge_long_slack_min),
+        "long_slack_pixel_gate": int(long_slack_pixel_gate),
+        "short_slack_pixel_gate": int(short_slack_pixel_gate),
+        "border_dark_fraction": border_dark_fraction,
+        "edge_hard_anchors": edge_hard_anchors,
+        "white_edge_slack": white_edge_slack,
+    }
+
+
+def corrected_outer_from_alignment(alignment: dict[str, Any], config: Config, count: int) -> Optional[Box]:
+    tuning = format_tuning(config.film_format)
+    if not bool(alignment.get("used", False)) or bool(alignment.get("ok", True)):
+        return None
+    try:
+        outer = box_from_dict(alignment["outer_work_box"])
+        content = box_from_dict(alignment["content_work_box"])
+    except Exception:
+        return None
+    if not outer.valid() or not content.valid():
+        return None
+
+    pitch = float(outer.width) / float(max(1, count))
+    alignment_margin_x = clamp_int(pitch * tuning.outer_align_margin_x_ratio, tuning.outer_align_margin_x_min, tuning.outer_align_margin_x_max)
+    alignment_margin_y = clamp_int(float(outer.height) * tuning.outer_align_margin_y_ratio, tuning.outer_align_margin_y_min, tuning.outer_align_margin_y_max)
+    long_margin_cap = clamp_int(pitch * tuning.outer_align_long_margin_cap_ratio, tuning.outer_align_long_margin_cap_min, tuning.outer_align_long_margin_cap_max)
+    short_margin_cap = clamp_int(float(outer.height) * tuning.outer_align_short_margin_cap_ratio, tuning.outer_align_short_margin_cap_min, tuning.outer_align_short_margin_cap_max)
+    long_margin = max(alignment_margin_x, min(long_margin_cap, int(round(pitch * tuning.outer_align_long_margin_ratio))))
+    short_margin = max(alignment_margin_y, min(short_margin_cap, int(round(float(outer.height) * tuning.outer_align_short_margin_ratio))))
+    left, top, right, bottom = outer.left, outer.top, outer.right, outer.bottom
+
+    if int(alignment.get("long_slack_left", 0)) > 0:
+        left = max(outer.left, content.left - long_margin)
+    if int(alignment.get("long_slack_right", 0)) > 0:
+        right = min(outer.right, content.right + long_margin)
+    if int(alignment.get("short_slack_top", 0)) > 0 and str(alignment.get("reason", "")) == "outer_short_axis_excess":
+        top = max(outer.top, content.top - short_margin)
+    if int(alignment.get("short_slack_bottom", 0)) > 0 and str(alignment.get("reason", "")) == "outer_short_axis_excess":
+        bottom = min(outer.bottom, content.bottom + short_margin)
+
+    corrected = Box(left, top, right, bottom)
+    if not corrected.valid():
+        return None
+    if corrected.width < max(80, int(round(outer.width * 0.80))) or corrected.height < max(40, int(round(outer.height * 0.80))):
+        return None
+    if corrected == outer:
+        return None
+    return corrected
+
+
+def retry_with_content_aligned_outer(
+    gray: np.ndarray,
+    config: Config,
+    fmt: FilmFormat,
+    detection: Detection,
+    alignment: dict[str, Any],
+    cache: AnalysisCache,
+) -> Optional[Detection]:
+    if detection.strip_mode != "full":
+        return None
+    corrected_outer = corrected_outer_from_alignment(alignment, config, detection.count)
+    if corrected_outer is None:
+        return None
+
+    retried = build_detection_for_outer(
+        gray,
+        config,
+        fmt,
+        detection.count,
+        detection.strip_mode,
+        corrected_outer,
+        float(detection.detail.get("offset_fraction", 0.0)),
+        "content_aligned_outer",
+        cache=cache,
+        allow_outer_refine=False,
+    )
+    retried = calibrate_v2_candidate(gray, retried, config, fmt, "separator", cache)
+    retry_alignment = outer_content_alignment_detail(gray, retried, cache)
+    retry_content = content_evidence_detail(gray, retried, cache)
+    retried.detail["outer_content_alignment"] = retry_alignment
+    retried.detail["content_evidence"] = retry_content
+    retried.detail["outer_correction"] = {
+        "used": True,
+        "source_reason": alignment.get("reason"),
+        "source_edge_hard_anchors": bool(alignment.get("edge_hard_anchors", False)),
+        "source_white_edge_slack": bool(alignment.get("white_edge_slack", False)),
+        "original_outer_work_box": alignment.get("outer_work_box"),
+        "content_work_box": alignment.get("content_work_box"),
+        "corrected_outer_work_box": asdict(corrected_outer),
+        "retry_alignment": retry_alignment,
+        "retry_content_support": retry_content.get("support"),
+    }
+    return retried
+
+
+def content_profile_runs(evidence: np.ndarray, outer: Box, count: int, format_name: str = "135") -> tuple[list[tuple[int, int]], dict[str, Any]]:
+    crop = evidence[outer.top:outer.bottom, outer.left:outer.right].astype(np.float32) / 255.0
+    if crop.size == 0:
+        return [], {"reason": "empty_content_outer"}
+    tuning = format_tuning(format_name)
+    profile = crop.mean(axis=0)
+    smooth_window = max(5, int(round(max(1, outer.width) * tuning.content_profile_smooth_ratio)))
+    smoothed = smooth_1d(profile.astype(np.float32), smooth_window)
+    p35, p65, p90 = sampled_percentile(smoothed, [35, 65, 90])
+    threshold = max(
+        tuning.content_profile_threshold_min,
+        min(
+            tuning.content_profile_threshold_max,
+            float(p35 + (p90 - p35) * tuning.content_profile_p35_weight),
+            float(p65) * tuning.content_profile_p65_multiplier,
+        ),
+    )
+    runs = runs_from_mask(smoothed >= threshold)
+    min_width = max(6, int(round(outer.width / max(1, count) * tuning.content_profile_min_run_ratio)))
+    filtered: list[tuple[int, int]] = []
+    for start, end in runs:
+        if end - start >= min_width:
+            filtered.append((outer.left + start, outer.left + end))
+    return filtered, {
+        "profile_threshold": threshold,
+        "profile_smooth_window": smooth_window,
+        "profile_percentiles": {"p35": float(p35), "p65": float(p65), "p90": float(p90)},
+        "raw_run_count": len(runs),
+        "usable_run_count": len(filtered),
+        "min_run_width": min_width,
+    }
+
+
+def select_content_runs(runs: list[tuple[int, int]], count: int) -> list[tuple[int, int]]:
+    if len(runs) <= count:
+        return runs
+    ordered = sorted(runs, key=lambda run: run[1] - run[0], reverse=True)[:count]
+    return sorted(ordered)
+
+
+def content_detection_for_count(
+    gray: np.ndarray,
+    config: Config,
+    fmt: FilmFormat,
+    count: int,
+    strip_mode: str,
+    offset_fraction: float = 0.0,
+    cache: Optional[AnalysisCache] = None,
+) -> Optional[Detection]:
+    gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
+    tuning = format_tuning(fmt.name)
+    wh, ww = gray_work.shape
+    if cache is not None and cache.layout == config.layout:
+        evidence = cache.content_evidence_work
+        evidence_float = cache.content_evidence_float_work
+    else:
+        evidence = make_content_evidence_gray(gray_work)
+        evidence_float = evidence.astype(np.float32) / 255.0
+    p55, p75, p92 = sampled_percentile(evidence_float, tuning.content_mask_percentiles)
+    mask_threshold = max(
+        tuning.content_mask_min,
+        min(
+            tuning.content_mask_max,
+            float(p55 + (p92 - p55) * tuning.content_mask_p55_weight),
+            float(p75) * tuning.content_mask_p75_multiplier,
+        ),
+    )
+    mask = evidence_float >= mask_threshold
+    outer = bbox_from_mask(mask, min_row_fraction=tuning.content_bbox_min_fraction, min_col_fraction=tuning.content_bbox_min_fraction)
+    if outer is None or outer.width < max(tuning.content_outer_min_width_px, int(ww * tuning.content_outer_min_width_ratio)) or outer.height < max(tuning.content_outer_min_height_px, int(wh * tuning.content_outer_min_height_ratio)):
+        return None
+    outer = outer.expand(max(2, int(round(ww * tuning.outer_mask_expand_ratio))), max(2, int(round(wh * tuning.outer_mask_expand_ratio))), ww, wh)
+
+    expected_aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
+    if expected_aspect is None or expected_aspect <= 0:
+        return None
+    runs, run_detail = content_profile_runs(evidence, outer, count, fmt.name)
+    selected_runs = select_content_runs(runs, count)
+
+    frame_h = max(1.0, float(outer.height))
+    expected_w = max(tuning.content_expected_width_min_px, frame_h * expected_aspect)
+    raw_boxes: list[Box] = []
+    placement = "content_runs" if len(selected_runs) >= count else "content_grid_fallback"
+    if placement == "content_runs":
+        for start, end in selected_runs[:count]:
+            center = (float(start) + float(end)) * 0.5
+            left = int(round(center - expected_w * 0.5))
+            right = int(round(center + expected_w * 0.5))
+            raw_boxes.append(Box(left, outer.top, right, outer.bottom).clamp(ww, wh))
+    else:
+        if strip_mode == "partial" and count < fmt.default_count:
+            pitch = max(expected_w, outer.width / float(max(1, fmt.default_count)))
+            total_width = pitch * count
+            origin = max(0.0, min(float(outer.width) - total_width, (float(outer.width) - total_width) * offset_fraction))
+            start_x = outer.left + origin
+        else:
+            pitch = max(expected_w, outer.width / float(max(1, count)))
+            total_width = pitch * count
+            start_x = outer.left + max(0.0, (outer.width - total_width) * 0.5)
+        for i in range(count):
+            center = start_x + pitch * (i + 0.5)
+            raw_boxes.append(Box(int(round(center - expected_w * 0.5)), outer.top, int(round(center + expected_w * 0.5)), outer.bottom).clamp(ww, wh))
+
+    raw_boxes = [box for box in raw_boxes if box.valid()]
+    if len(raw_boxes) != count:
+        return None
+
+    boxes_work = [box.expand(config.bleed_x, config.bleed_y, ww, wh) for box in raw_boxes]
+    boxes = [map_work_box(box, config.layout, gray.shape[1], gray.shape[0]) for box in boxes_work]
+    outer_original = map_work_box(outer, config.layout, gray.shape[1], gray.shape[0])
+    gaps: list[Gap] = []
+    for index in range(1, count):
+        left_box = raw_boxes[index - 1]
+        right_box = raw_boxes[index]
+        center = (float(left_box.right) + float(right_box.left)) * 0.5 - float(outer.left)
+        gaps.append(Gap(index, center, 0.0, "content", float(left_box.right - outer.left), float(right_box.left - outer.left)))
+
+    means: list[float] = []
+    coverages: list[float] = []
+    for box in raw_boxes:
+        crop = evidence_float[box.top:box.bottom, box.left:box.right]
+        if crop.size:
+            means.append(float(crop.mean()))
+            coverages.append(float((crop >= mask_threshold).mean()))
+    median_mean = float(np.median(np.array(means, dtype=np.float32))) if means else 0.0
+    median_coverage = float(np.median(np.array(coverages, dtype=np.float32))) if coverages else 0.0
+    run_conf = min(1.0, len(selected_runs) / float(max(1, count)))
+    coverage_conf = min(1.0, median_coverage / tuning.content_conf_coverage_norm)
+    mean_conf = min(1.0, median_mean / tuning.content_conf_mean_norm)
+    aspect_errors = [abs((box.width / max(1.0, float(box.height))) - expected_aspect) / expected_aspect for box in raw_boxes]
+    max_aspect_error = float(max(aspect_errors)) if aspect_errors else 1.0
+    aspect_conf = max(0.0, min(1.0, 1.0 - max_aspect_error / tuning.content_conf_aspect_norm))
+    confidence = (
+        tuning.content_candidate_coverage_weight * coverage_conf
+        + tuning.content_candidate_mean_weight * mean_conf
+        + tuning.content_candidate_run_weight * run_conf
+        + tuning.content_candidate_aspect_weight * aspect_conf
+    )
+    reasons: list[str] = []
+    if placement != "content_runs":
+        confidence = min(confidence, tuning.content_grid_fallback_cap)
+        reasons.append("content_grid_fallback")
+    if len(runs) != count:
+        confidence = min(confidence, tuning.content_run_mismatch_cap)
+        reasons.append("content_run_count_mismatch")
+    if run_conf < 1.0:
+        confidence = min(confidence, tuning.content_runs_incomplete_cap)
+        reasons.append("content_runs_incomplete")
+    if median_coverage < tuning.content_weak_coverage:
+        confidence = min(confidence, tuning.content_weak_coverage_cap)
+        reasons.append("content_coverage_weak")
+    if max_aspect_error > tuning.content_aspect_uncertain:
+        confidence = min(confidence, tuning.content_aspect_uncertain_cap)
+        reasons.append("content_aspect_uncertain")
+    if strip_mode == "partial":
+        reasons.append("partial_strip_count_candidate")
+    if confidence < config.confidence_threshold and not reasons:
+        reasons.append("content_confidence_low")
+
+    detail = {
+        "analysis_source": "content_primary",
+        "candidate_count": count,
+        "offset_fraction": float(offset_fraction),
+        "layout": config.layout,
+        "outer_candidate": "content_evidence",
+        "work_outer": asdict(outer),
+        "content_primary": {
+            "used": True,
+            "placement": placement,
+            "mask_threshold": mask_threshold,
+            "expected_frame_aspect": expected_aspect,
+            "expected_frame_width": expected_w,
+            "median_mean": median_mean,
+            "median_coverage": median_coverage,
+            "run_conf": run_conf,
+            "coverage_conf": coverage_conf,
+            "mean_conf": mean_conf,
+            "max_aspect_error": max_aspect_error,
+            "raw_boxes": [asdict(box) for box in raw_boxes],
+            **run_detail,
+        },
+        "gap_centers": [gap.center for gap in gaps],
+        "gap_scores": [gap.score for gap in gaps],
+        "gap_methods": [gap.method for gap in gaps],
+    }
+    return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, float(max(0.0, min(1.0, confidence))), sorted(set(reasons)), detail)
+
+
+def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: list[Box], count: int, fmt: FilmFormat, strip_mode: str) -> tuple[float, list[str], dict[str, Any]]:
+    tuning = format_tuning(fmt.name)
+    expected_gaps = max(0, count - 1)
+    actual_detected = sum(1 for gap in gaps if gap.method in {"detected", "edge-pair"})
+    enhanced_detected = sum(1 for gap in gaps if gap.method == "enhanced-detected")
+    grid_gaps = sum(1 for gap in gaps if gap.method == "grid")
+    detected = actual_detected + enhanced_detected + grid_gaps
+    equal = sum(1 for gap in gaps if gap.method == "equal")
+    reliable = sum(1 for gap in gaps if gap.method in {"detected", "enhanced-detected", "grid"} and gap.score >= tuning.robust_reliable_min_score)
+    widths = np.array([box.width for box in boxes if box.valid()], dtype=np.float64)
+    width_cv = float(widths.std() / max(1.0, widths.mean())) if widths.size else 1.0
+    outer_area = float(outer.width * outer.height) / max(1.0, float(gray_work.shape[0] * gray_work.shape[1]))
+    p01, p50, p99 = sampled_percentile(gray_work, [1, 50, 99])
+    contrast = float(p99 - p01)
+
+    gap_conf = 1.0 if expected_gaps == 0 else detected / float(expected_gaps)
+    width_conf = max(0.0, min(1.0, 1.0 - width_cv / tuning.score_width_cv_norm))
+    outer_conf = 1.0 if tuning.score_outer_min_area <= outer_area <= tuning.score_outer_max_area else tuning.score_outer_uncertain_confidence
+    contrast_conf = 1.0 if contrast >= tuning.score_contrast_min else max(tuning.score_contrast_floor, contrast / tuning.score_contrast_min)
+    enough_135_separator_evidence = (
+        fmt.name != "135"
+        or expected_gaps <= 1
+        or (actual_detected >= tuning.score_135_min_hard_gaps and equal <= max(tuning.score_135_max_equal_min, expected_gaps // 2))
+        or (actual_detected >= 1 and enhanced_detected >= 2 and equal <= max(tuning.score_135_max_equal_min, expected_gaps // 2))
+    )
+
+    confidence = (
+        tuning.score_gap_weight * gap_conf
+        + tuning.score_width_weight * width_conf
+        + tuning.score_outer_weight * outer_conf
+        + tuning.score_contrast_weight * contrast_conf
+    )
+
+    full_geometry_ok = (
+        strip_mode == "full"
+        and count == fmt.default_count
+        and len(boxes) == count
+        and (
+            width_cv <= tuning.score_full_width_cv
+            or (fmt.name == "135" and tuning.score_allow_135_full_detected_geometry and detected == expected_gaps)
+        )
+        and tuning.score_full_outer_min_area <= outer_area <= tuning.score_outer_max_area
+        and outer_area <= tuning.score_outer_too_large
+        and enough_135_separator_evidence
+        and (fmt.name == "135" or (fmt.name == "half" and tuning.score_allow_half_geometry) or (reliable >= expected_gaps and equal == 0))
+    )
+    if full_geometry_ok:
+        geometry_floor = tuning.score_geometry_floor_high if fmt.name in {"135", "half"} and width_cv <= tuning.score_geometry_floor_tight_cv else tuning.score_geometry_floor_low
+        confidence = max(confidence, geometry_floor)
+
+    reasons: list[str] = []
+    if expected_gaps and detected < max(1, expected_gaps // 2) and not full_geometry_ok:
+        reasons.append("weak_separators")
+    if equal >= max(2, expected_gaps // 2 + 1) and not full_geometry_ok:
+        reasons.append("mostly_equal_split")
+    if fmt.name == "135" and expected_gaps >= 3 and actual_detected < 2 and not (actual_detected >= 1 and enhanced_detected >= 2):
+        reasons.append("too_few_detected_separators")
+    if width_cv > tuning.score_unstable_width_cv:
+        reasons.append("unstable_frame_width")
+    if not (tuning.score_outer_min_area <= outer_area <= tuning.score_outer_max_area):
+        reasons.append("outer_box_uncertain")
+    if outer_area > tuning.score_outer_too_large:
+        reasons.append("outer_box_too_large")
+    if fmt.family == "120" and detected < expected_gaps:
+        reasons.append("120_separator_uncertain")
+    if contrast < tuning.score_contrast_min:
+        reasons.append("low_contrast")
+    if len(boxes) != count:
+        reasons.append("frame_count_mismatch")
+    if confidence < tuning.score_low_confidence_floor and not reasons:
+        reasons.append("low_confidence")
+
+    if strip_mode == "partial" and count < fmt.default_count:
+        if count <= 1:
+            confidence = min(confidence, tuning.score_partial_one_cap)
+            reasons.append("partial_too_ambiguous")
+        elif count <= 2 and fmt.default_count >= 6:
+            confidence = min(confidence, tuning.score_partial_two_35mm_cap)
+            reasons.append("partial_too_ambiguous")
+        else:
+            confidence = min(confidence, tuning.score_partial_general_cap)
+        reasons.append("partial_strip_count_candidate")
+
+    if fmt.name == "135" and expected_gaps >= 3:
+        if actual_detected < 1:
+            confidence = min(confidence, tuning.score_135_low_hard_cap)
+        elif actual_detected < 2 and enhanced_detected < 2:
+            confidence = min(confidence, tuning.score_135_low_hard_cap)
+        elif equal >= max(2, expected_gaps // 2 + 1):
+            confidence = min(confidence, tuning.score_135_mostly_equal_cap)
+    if outer_area > tuning.score_outer_too_large:
+        confidence = min(confidence, tuning.score_outer_too_large_cap)
+
+    detail = {
+        "detected_gaps": detected,
+        "actual_detected_gaps": actual_detected,
+        "enhanced_detected_gaps": enhanced_detected,
+        "grid_gaps": grid_gaps,
+        "reliable_gaps": reliable,
+        "equal_gaps": equal,
+        "width_cv": width_cv,
+        "outer_area_ratio": outer_area,
+        "image_quality": {
+            "p01": float(p01),
+            "p50": float(p50),
+            "p99": float(p99),
+            "range_1_99": contrast,
+        },
+        "contrast_1_99": contrast,
+        "full_geometry_ok": full_geometry_ok,
+    }
+    return float(max(0.0, min(1.0, confidence))), sorted(set(reasons)), detail
+
+
+def build_detection_for_outer(
+    gray: np.ndarray,
+    config: Config,
+    fmt: FilmFormat,
+    count: int,
+    strip_mode: str,
+    outer: Box,
+    offset_fraction: float = 0.0,
+    outer_candidate_name: str = "unknown",
+    allow_separator_analysis: bool = True,
+    cache: Optional[AnalysisCache] = None,
+    allow_outer_refine: bool = True,
+) -> Detection:
+    h, w = gray.shape
+    gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
+    wh, ww = gray_work.shape
+    crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
+    if crop.size == 0 or outer.width <= 0:
+        outer = Box(0, 0, ww, wh)
+        crop = gray_work
+    profile = cached_separator_profile(cache, gray_work, outer, fmt.name)
+    if strip_mode == "partial" and count < fmt.default_count:
+        pitch = outer.width / float(max(1, fmt.default_count))
+        total_width = pitch * count
+        origin = max(0.0, min(float(outer.width) - total_width, (float(outer.width) - total_width) * offset_fraction))
+    else:
+        pitch = outer.width / float(max(1, count))
+        origin = 0.0
+    gaps = [find_gap(profile, origin + pitch * i, pitch, i, fmt.name) for i in range(1, count)]
+    if strip_mode == "full" and fmt.name == "half" and count == fmt.default_count:
+        gaps = [
+            Gap(i, origin + pitch * i, float(profile[min(len(profile) - 1, max(0, int(round(origin + pitch * i))))]), "equal")
+            for i in range(1, count)
+        ]
+    edge_refine_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
+    if strip_mode == "full" and count > 1:
+        gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, fmt.name, cache, outer)
+    gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode, fmt.name, profile, gray_work, outer)
+    if allow_outer_refine and strip_mode == "full" and bool(grid_detail.get("grid_used", False)):
+        tuning = format_tuning(fmt.name)
+        model_origin = float(grid_detail.get("grid_origin", 0.0))
+        model_pitch = float(grid_detail.get("grid_pitch", pitch))
+        proposed_left = int(round(outer.left + model_origin))
+        proposed_right = int(round(outer.left + model_origin + model_pitch * count))
+        max_shift = clamp_int(pitch * tuning.grid_outer_refine_shift_ratio, tuning.grid_outer_refine_shift_min, tuning.grid_outer_refine_shift_max)
+        width_change = abs((proposed_right - proposed_left) - outer.width) / max(1.0, float(outer.width))
+        if (
+            proposed_right > proposed_left
+            and abs(proposed_left - outer.left) <= max_shift
+            and abs(proposed_right - outer.right) <= max_shift
+            and width_change <= tuning.grid_outer_refine_max_width_change
+            and 0 <= proposed_left < proposed_right <= ww
+        ):
+            outer = Box(proposed_left, outer.top, proposed_right, outer.bottom)
+            crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
+            profile = cached_separator_profile(cache, gray_work, outer, fmt.name)
+            pitch = outer.width / float(max(1, count))
+            origin = 0.0
+            gaps = [find_gap(profile, pitch * i, pitch, i, fmt.name) for i in range(1, count)]
+            if strip_mode == "full" and count > 1:
+                gaps, edge_refine_detail = refine_gaps_by_edge_pairs(crop, gaps, count, fmt.name, cache, outer)
+            gaps, grid_detail = apply_robust_grid(gaps, origin, pitch, strip_mode, fmt.name, profile, gray_work, outer)
+            grid_detail["outer_refined"] = True
+    separator_analysis_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
+    separator_analysis_allowed = allow_separator_analysis and strip_mode == "full" and fmt.name != "half"
+    if separator_analysis_allowed:
+        if should_run_enhanced_separator_analysis(config.analysis, gaps, count, fmt.name):
+            gaps, separator_analysis_detail = merge_enhanced_separator_gaps(gray_work, outer, gaps, origin, pitch, strip_mode, fmt.name, cache)
+        elif config.analysis == "auto":
+            separator_analysis_detail = {"used": False, "reason": "auto_not_needed"}
+    nearby_correction_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
+    confidence_cap_after_nearby: Optional[float] = None
+    if strip_mode == "full" and format_tuning(fmt.name).nearby_active_correction:
+        pre_correction_boxes = frame_boxes_from_gaps(
+            outer, gaps, count, ww, wh, config.bleed_x, config.bleed_y, origin=origin, pitch=pitch
+        )
+        pre_correction_confidence, _pre_reasons, _pre_detail = score_detection(
+            gray_work, outer, gaps, pre_correction_boxes, count, fmt, strip_mode
+        )
+        gaps, nearby_correction_detail = apply_nearby_separator_corrections(
+            profile, gaps, origin, pitch, count, strip_mode, fmt.name
+        )
+        if bool(nearby_correction_detail.get("confidence_cap_required", False)):
+            confidence_cap_after_nearby = float(pre_correction_confidence)
+    boxes_work, frame_size_detail = fit_frame_boxes_from_gaps(
+        outer,
+        gaps,
+        count,
+        ww,
+        wh,
+        config.bleed_x,
+        config.bleed_y,
+        fmt,
+        strip_mode,
+        origin=origin,
+        pitch=pitch,
+    )
+    boxes = [map_work_box(box, config.layout, w, h) for box in boxes_work]
+    outer_original = map_work_box(outer, config.layout, w, h)
+    confidence, reasons, detail = score_detection(gray_work, outer, gaps, boxes_work, count, fmt, strip_mode)
+    detail.update(
+        {
+            "candidate_count": count,
+            "offset_fraction": float(offset_fraction),
+            "origin": float(origin),
+            "pitch": float(pitch),
+            "layout": config.layout,
+            "outer_candidate": outer_candidate_name,
+            "work_outer": asdict(outer),
+            "grid": grid_detail,
+            "grid_residual": grid_detail.get("grid_residual"),
+            "grid_used": bool(grid_detail.get("grid_used", False)),
+            "edge_refine": edge_refine_detail,
+            "frame_size_fit": frame_size_detail,
+            "separator_analysis": separator_analysis_detail,
+            "nearby_separator_correction": nearby_correction_detail,
+            "partial_edge_hint": partial_edge_hint(profile, origin, pitch, count, fmt.name) if strip_mode == "partial" else {},
+            "gap_centers": [gap.center for gap in gaps],
+            "gap_scores": [gap.score for gap in gaps],
+            "gap_methods": [gap.method for gap in gaps],
+        }
+    )
+    if confidence_cap_after_nearby is not None:
+        detail["nearby_separator_correction_confidence_cap"] = float(confidence_cap_after_nearby)
+    return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, confidence, reasons, detail)
+
+
+def detection_rank(detection: Detection, threshold: float) -> tuple[int, float, int, float]:
+    return (
+        1 if detection.confidence >= threshold else 0,
+        float(detection.confidence),
+        int(detection.count),
+        -float(detection.detail.get("width_cv", 1.0)),
+    )
+
+
+def detect_candidate_for_count(
+    gray: np.ndarray,
+    config: Config,
+    fmt: FilmFormat,
+    count: int,
+    strip_mode: str,
+    offset_fraction: float = 0.0,
+    cache: Optional[AnalysisCache] = None,
+) -> Detection:
+    gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
+    outer_candidates = detect_outer_candidates(gray_work, fmt.name)
+    candidates = [
+        build_detection_for_outer(gray, config, fmt, count, strip_mode, candidate.box, offset_fraction, candidate.name, cache=cache)
+        for candidate in outer_candidates
+    ]
+    best = max(candidates, key=lambda d: detection_rank(d, config.confidence_threshold))
+    areas = [candidate.box.width * candidate.box.height for candidate in outer_candidates if candidate.box.valid()]
+    if areas:
+        best.detail["outer_candidate_count"] = len(outer_candidates)
+        best.detail["outer_area_spread_ratio"] = (max(areas) - min(areas)) / max(1.0, float(max(areas)))
+        best.detail["outer_candidates"] = [
+            {"name": candidate.name, "box": asdict(candidate.box)}
+            for candidate in outer_candidates
+        ]
+    return best
+
+
+def translate_box(box: Box, dx: int, dy: int) -> Box:
+    return Box(box.left + dx, box.top + dy, box.right + dx, box.bottom + dy)
+
+
+def split_dual_135_lanes(gray_work: np.ndarray) -> list[Box]:
+    h, w = gray_work.shape
+    content = bbox_from_mask(gray_work < 246, min_row_fraction=0.010, min_col_fraction=0.010)
+    if content is None or not content.valid():
+        content = Box(0, 0, w, h)
+    split_y = int(round((content.top + content.bottom) / 2.0))
+    guard = max(2, min(80, int(round(content.height * 0.006))))
+    lanes = [
+        Box(content.left, content.top, content.right, max(content.top + 1, split_y - guard)).clamp(w, h),
+        Box(content.left, min(content.bottom - 1, split_y + guard), content.right, content.bottom).clamp(w, h),
+    ]
+    if any(not lane.valid() or lane.height < max(20, h * 0.10) for lane in lanes):
+        split_y = h // 2
+        lanes = [Box(0, 0, w, split_y), Box(0, split_y, w, h)]
+    return lanes
+
+
+def detect_dual_135_lane(
+    gray: np.ndarray,
+    config: Config,
+    lane: Box,
+    lane_index: int,
+    cache: AnalysisCache,
+) -> Optional[Detection]:
+    lane_crop = cache.gray_work[lane.top:lane.bottom, lane.left:lane.right]
+    if lane_crop.size == 0:
+        return None
+    fmt_135 = FORMATS["135"]
+    lane_config = replace(config, film_format="135", count=fmt_135.default_count, count_override=fmt_135.default_count)
+    candidates: list[Detection] = []
+    for outer_candidate in detect_outer_candidates(lane_crop):
+        lane_outer = translate_box(outer_candidate.box, lane.left, lane.top)
+        raw = build_detection_for_outer(
+            gray,
+            lane_config,
+            fmt_135,
+            fmt_135.default_count,
+            "full",
+            lane_outer,
+            0.0,
+            f"135_dual_lane_{lane_index}_{outer_candidate.name}",
+            cache=cache,
+        )
+        calibrated = calibrate_v2_candidate(gray, raw, lane_config, fmt_135, "separator", cache)
+        calibrated.detail["dual_lane_index"] = lane_index
+        calibrated.detail["dual_lane_work_box"] = asdict(lane)
+        candidates.append(calibrated)
+    if not candidates:
+        return None
+    best = max(candidates, key=lambda d: v2_candidate_rank(d, config.confidence_threshold))
+    content_detail = content_evidence_detail(gray, best, cache)
+    outer_alignment = outer_content_alignment_detail(gray, best, cache)
+    best.detail["content_evidence"] = content_detail
+    best.detail["outer_content_alignment"] = outer_alignment
+    if bool(content_detail.get("used", False)):
+        support = str(content_detail.get("support", ""))
+        if support == "aspect_conflict":
+            best.confidence = min(best.confidence, 0.82)
+            best.review_reasons.append("content_aspect_conflict")
+        elif support in {"low_content", "weak"} and best.confidence >= config.confidence_threshold:
+            best.confidence = min(best.confidence, 0.84)
+            best.review_reasons.append("content_evidence_weak")
+    if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
+        best.confidence = min(best.confidence, 0.84)
+        best.review_reasons.append("outer_content_bbox_mismatch")
+    best.review_reasons = sorted(set(best.review_reasons))
+    return best
+
+
+def unsupported_dual_135_partial_detection(gray: np.ndarray, config: Config) -> Detection:
+    gray_work = work_gray(gray, config.layout)
+    wh, ww = gray_work.shape
+    outer = Box(0, 0, ww, wh)
+    source_h, source_w = gray.shape
+    return Detection(
+        "135-dual",
+        config.layout,
+        config.strip_mode,
+        12,
+        map_work_box(outer, config.layout, source_w, source_h),
+        [],
+        [],
+        0.0,
+        ["135_dual_partial_not_supported", "needs_manual_review"],
+        {
+            "analysis_source": "unsupported_mode",
+            "candidate_count": 0,
+            "layout": config.layout,
+            "work_outer": asdict(outer),
+            "v2_competition": {
+                "candidate_count": 0,
+                "formats": ["135-dual"],
+                "selected_candidate": {
+                    "format": "135-dual",
+                    "count": 12,
+                    "strip_mode": config.strip_mode,
+                    "confidence": 0.0,
+                    "review_reasons": ["135_dual_partial_not_supported", "needs_manual_review"],
+                },
+                "selection_override": "unsupported_135_dual_partial",
+                "top_candidates": [],
+            },
+        },
+    )
+
+
+def choose_detection_135_dual(gray: np.ndarray, config: Config, cache: AnalysisCache) -> Detection:
+    if config.strip_mode != "full":
+        return unsupported_dual_135_partial_detection(gray, config)
+
+    gray_work = cache.gray_work
+    source_h, source_w = gray.shape
+    lanes = split_dual_135_lanes(gray_work)
+    lane_detections = [
+        detect_dual_135_lane(gray, config, lane, index, cache)
+        for index, lane in enumerate(lanes, start=1)
+    ]
+    if any(detection is None for detection in lane_detections):
+        detection = hard_fallback_detection(gray, config, FORMATS["135-dual"])
+        detection.review_reasons.append("135_dual_lane_detection_failed")
+        detection.review_reasons = sorted(set(detection.review_reasons))
+        return detection
+
+    confirmed_lanes = [detection for detection in lane_detections if detection is not None]
+    lane_work_outers = [
+        box_from_dict(detection.detail["work_outer"])
+        for detection in confirmed_lanes
+        if isinstance(detection.detail.get("work_outer"), dict)
+    ]
+    if len(lane_work_outers) != 2:
+        detection = hard_fallback_detection(gray, config, FORMATS["135-dual"])
+        detection.review_reasons.append("135_dual_outer_detection_failed")
+        detection.review_reasons = sorted(set(detection.review_reasons))
+        return detection
+
+    combined_work_outer = Box(
+        min(box.left for box in lane_work_outers),
+        min(box.top for box in lane_work_outers),
+        max(box.right for box in lane_work_outers),
+        max(box.bottom for box in lane_work_outers),
+    )
+    frames = [box for detection in confirmed_lanes for box in detection.frames]
+    gaps: list[Gap] = []
+    for lane_number, detection in enumerate(confirmed_lanes, start=1):
+        lane_work_outer = box_from_dict(detection.detail["work_outer"])
+        for gap in detection.gaps:
+            gaps.append(
+                Gap(
+                    index=(lane_number - 1) * 6 + int(gap.index),
+                    center=float(gap.center),
+                    score=float(gap.score),
+                    method=gap.method,
+                    start=gap.start,
+                    end=gap.end,
+                    lane_box=asdict(lane_work_outer),
+                )
+            )
+
+    lane_confidences = [float(detection.confidence) for detection in confirmed_lanes]
+    confidence = min(lane_confidences)
+    review_reasons = sorted(set(reason for detection in confirmed_lanes for reason in detection.review_reasons))
+    if any(conf < config.confidence_threshold for conf in lane_confidences):
+        confidence = min(confidence, 0.84)
+        review_reasons.append("135_dual_lane_below_threshold")
+    if len(frames) != 12:
+        confidence = min(confidence, 0.82)
+        review_reasons.append("frame_count_mismatch")
+
+    lane_summaries = [
+        {
+            "lane": index,
+            "lane_format": "135",
+            "lane_count": 6,
+            "total_format": "135-dual",
+            "total_count": 12,
+            "confidence": float(detection.confidence),
+            "review_reasons": list(detection.review_reasons),
+            "work_outer": detection.detail.get("work_outer"),
+            "content_evidence": detection.detail.get("content_evidence", {}),
+            "outer_content_alignment": detection.detail.get("outer_content_alignment", {}),
+            "v2_candidate": detection.detail.get("v2_candidate", {}),
+        }
+        for index, detection in enumerate(confirmed_lanes, start=1)
+    ]
+    detail = {
+        "analysis_source": "135_dual_parallel_lanes",
+        "layout": config.layout,
+        "candidate_count": 12,
+        "work_outer": asdict(combined_work_outer),
+        "dual_lane_work_boxes": [asdict(lane) for lane in lanes],
+        "dual_lane_detections": lane_summaries,
+        "gap_centers": [gap.center for gap in gaps],
+        "gap_scores": [gap.score for gap in gaps],
+        "gap_methods": [gap.method for gap in gaps],
+        "v2_competition": {
+            "candidate_count": 2,
+            "formats": ["135-dual"],
+            "selected_candidate": {
+                "format": "135-dual",
+                "count": 12,
+                "strip_mode": "full",
+                "confidence": float(confidence),
+                "review_reasons": sorted(set(review_reasons)),
+            },
+            "selection_override": None,
+            "top_candidates": lane_summaries,
+        },
+    }
+    outer_original = map_work_box(combined_work_outer, config.layout, source_w, source_h)
+    return Detection(
+        "135-dual",
+        config.layout,
+        "full",
+        12,
+        outer_original,
+        frames,
+        gaps,
+        float(max(0.0, min(1.0, confidence))),
+        sorted(set(review_reasons)),
+        detail,
+    )
+
+
+def partial_candidates(fmt: FilmFormat, seed: Optional[Detection]) -> tuple[int, ...]:
+    default = fmt.default_count
+    candidates: set[int] = {default, max(1, default - 1), max(1, default - 2), 1}
+    if default >= 3:
+        candidates.add(2)
+    if default >= 6:
+        candidates.add(max(1, default // 2))
+    if seed is not None:
+        detected = int(seed.detail.get("detected_gaps", 0))
+        for count in (detected, detected + 1, detected + 2):
+            if count >= 1:
+                candidates.add(count)
+    return tuple(sorted((c for c in candidates if c in fmt.allowed_counts), reverse=True))
+
+
+def partial_offsets(fmt: FilmFormat, count: int) -> tuple[float, ...]:
+    if count >= fmt.default_count:
+        return (0.0,)
+    return format_tuning(fmt.name).partial_offsets
+
+
+def partial_edge_hint(profile: np.ndarray, origin: float, pitch: float, count: int, format_name: str = "135") -> dict[str, Any]:
+    if profile.size == 0 or count <= 0:
+        return {}
+    tuning = format_tuning(format_name)
+    span_start = int(max(0, min(len(profile) - 1, round(origin))))
+    span_end = int(max(0, min(len(profile), round(origin + pitch * count))))
+    edge_window = clamp_int(pitch * tuning.partial_edge_hint_window_ratio, tuning.partial_edge_hint_window_min, tuning.partial_edge_hint_window_max)
+    left_window = profile[span_start:min(len(profile), span_start + edge_window)]
+    right_window = profile[max(0, span_end - edge_window):span_end]
+    return {
+        "left_edge_score": float(left_window.max()) if left_window.size else 0.0,
+        "right_edge_score": float(right_window.max()) if right_window.size else 0.0,
+        "span_start": span_start,
+        "span_end": span_end,
+    }
+
+
+def content_is_ambiguous(detection: Detection) -> bool:
+    return bool(CONTENT_AMBIGUITY_REASONS.intersection(detection.review_reasons))
+
+
+def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[bool, dict[str, Any]]:
+    tuning = format_tuning(detection.film_format)
+    expected = max(0, int(detection.count) - 1)
+    actual = int(detection.detail.get("actual_detected_gaps", 0))
+    enhanced = int(detection.detail.get("enhanced_detected_gaps", 0))
+    grid = int(detection.detail.get("grid_gaps", 0))
+    equal = int(detection.detail.get("equal_gaps", 0))
+    hard = actual + enhanced
+    hard_indexes = [
+        int(gap.index)
+        for gap in detection.gaps
+        if gap.method in {"detected", "edge-pair", "enhanced-detected"}
+    ]
+    leading_grid_scores: list[float] = []
+    for gap in detection.gaps:
+        if gap.method != "grid":
+            break
+        leading_grid_scores.append(float(gap.score))
+    separator_analysis = detection.detail.get("separator_analysis", {})
+    enhanced_accepted = (
+        int(separator_analysis.get("accepted_count", 0) or 0)
+        if isinstance(separator_analysis, dict)
+        else 0
+    )
+    hard_adjacent_late = False
+    if hard_indexes:
+        expected_sequence = list(
+            range(max(hard_indexes) - len(hard_indexes) + 1, max(hard_indexes) + 1)
+        )
+        hard_adjacent_late = hard_indexes == expected_sequence and min(hard_indexes) >= 4
+    leading_grid_failure = (
+        tuning.leading_grid_failure_enabled
+        and detection.strip_mode == "full"
+        and expected >= tuning.leading_grid_failure_min_count
+        and len(leading_grid_scores) >= tuning.leading_grid_failure_leading_count
+        and all(score < tuning.leading_grid_failure_low_score for score in leading_grid_scores[:tuning.leading_grid_failure_leading_count])
+        and sum(1 for score in leading_grid_scores[:tuning.leading_grid_failure_leading_count] if score < tuning.leading_grid_failure_very_low_score) >= tuning.leading_grid_failure_very_low_count
+        and enhanced_accepted == 0
+        and len(hard_indexes) <= tuning.leading_grid_failure_max_hard
+        and hard_adjacent_late
+    )
+
+    if expected == 0:
+        ok = detection.confidence >= threshold
+        reason = "single_frame_no_separator_needed" if ok else "single_frame_low_confidence"
+    elif detection.confidence < threshold:
+        ok = False
+        reason = "separator_below_threshold"
+    elif leading_grid_failure:
+        ok = False
+        reason = "135_leading_grid_separator_failure"
+    elif tuning.separator_gate_mode == "135":
+        needed = min(expected, tuning.separator_135_needed_hard_max)
+        ok = hard >= needed and equal <= max(tuning.separator_135_max_equal_min, expected // 2)
+        reason = "135_hard_separator_support" if ok else "135_separator_support_weak"
+    elif tuning.separator_gate_mode == "half":
+        ok = bool(tuning.separator_half_allow_geometry_support) and detection.confidence >= threshold and equal <= expected
+        reason = "half_geometry_support" if ok else "half_separator_support_weak"
+    else:
+        needed = max(1, expected if tuning.separator_120_require_all_hard else min(expected, 1))
+        ok = hard >= needed
+        reason = "120_hard_separator_support" if ok else "120_separator_support_weak"
+
+    return ok, {
+        "ok": ok,
+        "reason": reason,
+        "expected_gaps": expected,
+        "hard_gaps": hard,
+        "actual_detected_gaps": actual,
+        "enhanced_detected_gaps": enhanced,
+        "grid_gaps": grid,
+        "equal_gaps": equal,
+        "hard_gap_indexes": hard_indexes,
+        "leading_grid_scores": leading_grid_scores,
+        "enhanced_separator_accepted_count": enhanced_accepted,
+        "leading_grid_separator_failure": bool(leading_grid_failure),
+        "separator_confidence": float(detection.confidence),
+        "format_policy": tuning.name,
+    }
+
+
+def content_only_partial_can_pass(detection: Detection, threshold: float, fmt: FilmFormat) -> bool:
+    tuning = format_tuning(fmt.name)
+    min_partial_count = tuning.partial_content_min_count_35mm if fmt.default_count >= 6 else tuning.partial_content_min_count_small
+    return (
+        tuning.content_only_partial_enabled
+        and
+        detection.strip_mode == "partial"
+        and detection.count < fmt.default_count
+        and detection.count >= min_partial_count
+        and detection.confidence >= max(threshold, CONTENT_ONLY_PARTIAL_PASS_MIN_CONFIDENCE)
+        and not content_is_ambiguous(detection)
+    )
+
+
+def content_support_score(detail: dict[str, Any], format_name: str = "135") -> float:
+    if not bool(detail.get("used", False)):
+        return 0.0
+    tuning = format_tuning(format_name)
+    mean_score = min(1.0, float(detail.get("median_mean", 0.0)) / tuning.content_conf_mean_norm)
+    coverage_score = min(1.0, float(detail.get("median_coverage", 0.0)) / tuning.content_conf_coverage_norm)
+    aspect_error = detail.get("max_aspect_error")
+    aspect_score = 0.75 if aspect_error is None else max(0.0, min(1.0, 1.0 - float(aspect_error) / tuning.content_support_aspect_norm))
+    support = str(detail.get("support", ""))
+    support_gate = {
+        "ok": tuning.content_support_gate_ok,
+        "weak": tuning.content_support_gate_weak,
+        "low_content": tuning.content_support_gate_low_content,
+        "aspect_conflict": tuning.content_support_gate_aspect_conflict,
+    }.get(support, tuning.content_support_gate_unknown)
+    return max(0.0, min(1.0, (tuning.content_support_coverage_weight * coverage_score + tuning.content_support_mean_weight * mean_score + tuning.content_support_aspect_weight * aspect_score) * support_gate))
+
+
+def geometry_support_score(detection: Detection, content_detail: dict[str, Any]) -> float:
+    tuning = format_tuning(detection.film_format)
+    width_cv = float(detection.detail.get("width_cv", 0.0))
+    if width_cv <= 0.0:
+        widths = np.array([box.width for box in detection.frames if box.valid()], dtype=np.float64)
+        width_cv = float(widths.std() / max(1.0, widths.mean())) if widths.size else 1.0
+    width_score = max(0.0, min(1.0, 1.0 - width_cv / tuning.geometry_width_cv_norm))
+    outer_area = float(detection.detail.get("outer_area_ratio", 0.70))
+    outer_score = 1.0 if tuning.score_outer_min_area <= outer_area <= tuning.score_outer_too_large else tuning.geometry_support_outer_uncertain
+    aspect_error = content_detail.get("max_aspect_error")
+    aspect_score = tuning.geometry_support_no_aspect_score if aspect_error is None else max(0.0, min(1.0, 1.0 - float(aspect_error) / tuning.content_support_aspect_norm))
+    count_score = 1.0 if len(detection.frames) == detection.count else 0.0
+    return max(0.0, min(1.0, tuning.geometry_support_width_weight * width_score + tuning.geometry_support_outer_weight * outer_score + tuning.geometry_support_aspect_weight * aspect_score + tuning.geometry_support_count_weight * count_score))
+
+
+def separator_support_score(detection: Detection, hard_detail: dict[str, Any]) -> float:
+    tuning = format_tuning(detection.film_format)
+    expected = max(0, int(hard_detail.get("expected_gaps", 0)))
+    if expected == 0:
+        return 1.0 if detection.confidence >= 0.85 else min(0.75, detection.confidence)
+    hard = int(hard_detail.get("hard_gaps", 0))
+    grid = int(hard_detail.get("grid_gaps", 0))
+    equal = int(hard_detail.get("equal_gaps", 0))
+    hard_ratio = min(1.0, hard / float(max(1, expected)))
+    model_ratio = min(1.0, (hard + tuning.separator_model_grid_credit * grid + tuning.separator_model_equal_credit * equal) / float(max(1, expected)))
+    return max(0.0, min(1.0, tuning.separator_support_hard_weight * hard_ratio + tuning.separator_support_model_weight * model_ratio))
+
+
+def candidate_counts_for_format(config: Config, fmt: FilmFormat) -> list[tuple[int, str, tuple[float, ...]]]:
+    def v2_offsets(count: int) -> tuple[float, ...]:
+        return partial_offsets(fmt, count)
+
+    if config.strip_mode == "full":
+        return [(config.count, "full", (0.0,))]
+    if config.strip_mode == "partial":
+        if config.count_override is not None:
+            return [(config.count, "partial", v2_offsets(config.count))]
+        return [
+            (count, "partial", v2_offsets(count))
+            for count in partial_candidates(fmt, None)
+            if count < fmt.default_count
+        ] or [(1, "partial", partial_offsets(fmt, 1))]
+    raise ValueError(f"Unsupported strip mode: {config.strip_mode}")
+
+
+def calibrate_v2_candidate(
+    gray: np.ndarray,
+    detection: Detection,
+    config: Config,
+    fmt: FilmFormat,
+    source: str,
+    cache: Optional[AnalysisCache] = None,
+) -> Detection:
+    candidate = replace(
+        detection,
+        review_reasons=list(detection.review_reasons),
+        detail=dict(detection.detail),
+    )
+    content_detail = content_evidence_detail(gray, candidate, cache)
+    hard_ok, hard_detail = separator_hard_evidence_ok(candidate, config.confidence_threshold)
+    tuning = format_tuning(fmt.name)
+    content_score = content_support_score(content_detail, fmt.name)
+    geometry_score = geometry_support_score(candidate, content_detail)
+    separator_score = separator_support_score(candidate, hard_detail) if source == "separator" else 0.0
+    source_bias = tuning.calibrate_separator_source_bias if source == "separator" else 0.0
+    joint_score = tuning.calibrate_geometry_weight * geometry_score + tuning.calibrate_content_weight * content_score + tuning.calibrate_separator_weight * separator_score + source_bias
+    joint_score = max(0.0, min(1.0, joint_score))
+    support = str(content_detail.get("support", ""))
+    reasons = list(candidate.review_reasons)
+
+    if source == "separator" and not hard_ok:
+        reasons.append("separator_hard_evidence_weak")
+    if support == "aspect_conflict":
+        reasons.append("content_aspect_conflict")
+    elif support == "low_content":
+        reasons.append("content_evidence_weak")
+    elif support == "weak":
+        reasons.append("content_evidence_weak")
+    if source == "content" and not content_only_partial_can_pass(candidate, config.confidence_threshold, fmt):
+        reasons.append("content_only_not_enough_for_auto")
+
+    confidence = max(float(candidate.confidence), joint_score)
+    hard_reasons = HARD_REVIEW_REASONS.intersection(reasons)
+    auto_gate = False
+    if source == "separator":
+        auto_gate = hard_ok and support == "ok" and not hard_reasons
+    elif source == "content":
+        auto_gate = content_only_partial_can_pass(candidate, config.confidence_threshold, fmt)
+
+    if not auto_gate:
+        cap = tuning.calibrate_partial_no_auto_cap if candidate.strip_mode == "partial" else tuning.calibrate_full_no_auto_cap
+        confidence = min(confidence, cap)
+        reasons.append("v2_auto_gate_not_satisfied")
+    else:
+        confidence = max(confidence, config.confidence_threshold + min(0.10, joint_score * 0.08))
+    nearby_cap = candidate.detail.get("nearby_separator_correction_confidence_cap")
+    if nearby_cap is not None:
+        try:
+            confidence = min(confidence, float(nearby_cap))
+        except (TypeError, ValueError):
+            pass
+
+    candidate.confidence = float(max(0.0, min(1.0, confidence)))
+    candidate.review_reasons = sorted(set(reasons))
+    candidate.detail["analysis_source"] = f"v2_{source}_candidate"
+    candidate.detail["content_evidence"] = content_detail
+    candidate.detail["v2_candidate"] = {
+        "source": source,
+        "joint_score": float(joint_score),
+        "auto_gate": bool(auto_gate),
+        "geometry_score": float(geometry_score),
+        "separator_score": float(separator_score),
+        "content_score": float(content_score),
+        "content_support": support,
+        "separator_hard_evidence": hard_detail,
+    }
+    return candidate
+
+
+def v2_candidate_rank(detection: Detection, threshold: float) -> tuple[int, float, int, float]:
+    candidate = detection.detail.get("v2_candidate", {})
+    joint = float(candidate.get("joint_score", 0.0)) if isinstance(candidate, dict) else 0.0
+    return (
+        1 if detection.confidence >= threshold else 0,
+        float(detection.confidence),
+        int(detection.count),
+        joint,
+    )
+
+
+def hard_fallback_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detection:
+    gray_work = work_gray(gray, config.layout)
+    wh, ww = gray_work.shape
+    count = max(1, int(config.count))
+    outer = Box(0, 0, ww, wh)
+    if count > 1:
+        pitch = ww / float(count)
+        gaps = [Gap(i, pitch * i, 0.0, "equal") for i in range(1, count)]
+    else:
+        pitch = float(ww)
+        gaps = []
+    boxes_work = frame_boxes_from_gaps(outer, gaps, count, ww, wh, config.bleed_x, config.bleed_y, origin=0.0, pitch=pitch)
+    source_h, source_w = gray.shape
+    boxes = [map_work_box(box, config.layout, source_w, source_h) for box in boxes_work]
+    outer_original = map_work_box(outer, config.layout, source_w, source_h)
+    return Detection(
+        fmt.name,
+        config.layout,
+        config.strip_mode,
+        count,
+        outer_original,
+        boxes,
+        gaps,
+        0.0,
+        ["hard_fallback_no_v2_candidates", "needs_manual_review"],
+        {
+            "analysis_source": "hard_fallback",
+            "fallback_kind": "review_only_equal_split",
+            "changes_pass_review": False,
+            "layout": config.layout,
+            "film_format": fmt.name,
+            "strip_mode": config.strip_mode,
+            "count": int(count),
+            "work_outer": asdict(outer),
+            "pitch": float(pitch),
+        },
+    )
+
+
+def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache: Optional[AnalysisCache] = None) -> Detection:
+    candidates: list[Detection] = []
+    cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
+    if fmt.name == "135-dual":
+        return choose_detection_135_dual(gray, config, cache)
+    format_candidates = [fmt]
+    for fmt in format_candidates:
+        count_specs = candidate_counts_for_format(config, fmt)
+        for count, strip_mode, offsets in count_specs:
+            if count not in fmt.allowed_counts:
+                continue
+            for offset in offsets:
+                separator = detect_candidate_for_count(gray, config, fmt, count, strip_mode, offset, cache)
+                separator_candidate = calibrate_v2_candidate(gray, separator, config, fmt, "separator", cache)
+                candidates.append(separator_candidate)
+                separator_auto_gate = bool(
+                    separator_candidate.detail.get("v2_candidate", {}).get("auto_gate", False)
+                )
+                if strip_mode == "full" and separator_auto_gate and separator_candidate.confidence >= config.confidence_threshold:
+                    separator_candidate.detail["content_candidate_skipped"] = "separator_auto_gate_passed"
+                    continue
+                content = content_detection_for_count(gray, config, fmt, count, strip_mode, offset, cache)
+                if content is not None:
+                    candidates.append(calibrate_v2_candidate(gray, content, config, fmt, "content", cache))
+
+    if not candidates:
+        return hard_fallback_detection(gray, config, fmt)
+
+    candidates = sorted(candidates, key=lambda d: v2_candidate_rank(d, config.confidence_threshold), reverse=True)
+    best = candidates[0]
+    selected_by_full_guard = False
+    if best.strip_mode == "partial":
+        best_full = next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate.film_format == best.film_format
+                and candidate.strip_mode == "full"
+                and candidate.count == FORMATS[candidate.film_format].default_count
+                and candidate.confidence >= PARTIAL_FULL_COMPETE_MIN_CONFIDENCE
+            ),
+            None,
+        )
+        if best_full is not None:
+            best_full.review_reasons.append("partial_competes_with_plausible_full_strip")
+            best_full.review_reasons = sorted(set(best_full.review_reasons))
+            best_full.detail["partial_best"] = {
+                "count": int(best.count),
+                "confidence": float(best.confidence),
+                "review_reasons": list(best.review_reasons),
+                "v2_candidate": best.detail.get("v2_candidate", {}),
+            }
+            best = best_full
+            selected_by_full_guard = True
+    second = next((candidate for candidate in candidates if candidate is not best), None)
+    selected_tuning = format_tuning(best.film_format)
+    competition = [
+        {
+            "rank": index,
+            "selected": candidate is best,
+            "format": candidate.film_format,
+            "count": int(candidate.count),
+            "strip_mode": candidate.strip_mode,
+            "confidence": float(candidate.confidence),
+            "review_reasons": list(candidate.review_reasons),
+            "v2_candidate": candidate.detail.get("v2_candidate", {}),
+        }
+        for index, candidate in enumerate(candidates[:selected_tuning.candidate_competition_top_n], start=1)
+    ]
+    best.detail["v2_competition"] = {
+        "candidate_count": len(candidates),
+        "formats": [fmt.name for fmt in format_candidates],
+        "selected_candidate": {
+            "format": best.film_format,
+            "count": int(best.count),
+            "strip_mode": best.strip_mode,
+            "confidence": float(best.confidence),
+            "review_reasons": list(best.review_reasons),
+            "v2_candidate": best.detail.get("v2_candidate", {}),
+        },
+        "selection_override": "partial_competes_with_plausible_full_strip" if selected_by_full_guard else None,
+        "top_candidates": competition,
+    }
+    if second is not None:
+        margin = float(best.confidence) - float(second.confidence)
+        best.detail["v2_competition"]["margin_to_second"] = margin
+        second_close = margin < selected_tuning.candidate_competition_close_margin
+        partial_full_conflict = (
+            best.strip_mode != second.strip_mode
+            and min(best.confidence, second.confidence) >= config.confidence_threshold
+        )
+        if (
+            best.confidence >= config.confidence_threshold
+            and not selected_by_full_guard
+            and (second_close or partial_full_conflict)
+        ):
+            best.confidence = min(best.confidence, selected_tuning.candidate_competition_confidence_cap)
+            best.review_reasons.append("v2_candidate_competition_uncertain")
+            best.review_reasons = sorted(set(best.review_reasons))
+    return best
+
+
+
+
+
+def detect_image(*args, **kwargs) -> Detection:
+    """Run the current full detection pipeline.
+
+    This is the stable package-level detection entry point used by V4 callers.
+    """
 
     return choose_detection_v2(*args, **kwargs)
-
-
-__all__ = ["detect_candidate_for_count", "detect_image"]

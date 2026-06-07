@@ -158,13 +158,20 @@ Last commit: see `git log -1`
 
 Changed:
 - Active script is `X5_Crop.py` V4.0.
-- V4.0 is the compatibility architecture migration requested from the V4
-  blueprint. Root `X5_Crop.py` is now a thin entry point, the full
-  implementation lives in `x5crop/core.py`, and façade modules now define
-  package boundaries for I/O, policy, reports, deskew, detection, debug, and
-  regression. V4.0 intentionally preserves V3.9 behavior first; OpenCV/scipy
-  or other heavy image-processing dependencies are deferred to a future V5
-  direction.
+- V4.0 is the bold modular rewrite requested from the V4 blueprint. Root
+  `X5_Crop.py` is now a thin entry point, actual responsibilities live in
+  dedicated `x5crop/` modules, and `x5crop/core.py` is only a compatibility
+  re-export surface. V4.0 intentionally preserves V3.9 results while changing
+  the internal architecture; OpenCV/scipy or other heavy image-processing
+  dependencies are deferred to a future V5 direction.
+- V4.0 module ownership: `common.py` owns dataclasses, format policy, and
+  helpers; `evidence.py` owns gray/evidence image creation; `io.py` owns TIFF
+  read/write, metadata preservation, and review-copy behavior; `geometry.py`
+  owns outer/gap/edge-pair/grid/frame-fit logic; `detection/pipeline.py` owns
+  candidate generation, scoring, review gates, and final selection;
+  `deskew.py` owns leveling; `debug/render.py` owns Debug JPG / Debug Analysis
+  rendering; `reports.py` owns report reuse and crop export; `cli.py` owns
+  argument parsing, folder parallelism, and per-file orchestration.
 - V4.0 added `x5crop/regression.py` for JSONL report comparison. The default
   comparison fields are `status`, `confidence`, `review_reasons`, `outer_box`,
   `frame_boxes`, and `gaps`.
@@ -581,10 +588,11 @@ Verified:
   8.2 seconds per file. In the sandbox, process workers were unavailable and
   the script used 2 thread workers.
 - Current V4.0 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 4.0`; importing `x5crop`, `x5crop.io`, `x5crop.policy`,
-  `x5crop.reports`, `x5crop.deskew`, `x5crop.detection`, `x5crop.debug`, and
-  `x5crop.regression` succeeds. `python3 -m py_compile X5_Crop.py
-  x5crop/core.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` passed.
+  `X5_Crop.py 4.0`; importing `x5crop`, `x5crop.common`, `x5crop.evidence`,
+  `x5crop.io`, `x5crop.geometry`, `x5crop.detection`, `x5crop.debug`,
+  `x5crop.reports`, `x5crop.deskew`, `x5crop.cli`, and `x5crop.regression`
+  succeeds. `python3 -m py_compile X5_Crop.py x5crop/*.py
+  x5crop/detection/*.py x5crop/debug/*.py` passed.
   Full `Test/135` default-deskew dry-run compared V4.0 against a V3.9 baseline
   extracted to `/private/tmp/X5_Crop_v39_before_v4.py`; both runs processed
   48 TIFF files with 0 failed, 42 `approved_auto`, and 6 `needs_review`.

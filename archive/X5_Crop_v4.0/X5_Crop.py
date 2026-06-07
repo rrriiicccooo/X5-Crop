@@ -2,12 +2,11 @@
 # -*- coding: utf-8 -*-
 """Command-line entry point for X5 Crop.
 
-The implementation lives in :mod:`x5crop.core`. Keeping this file thin lets
-the user keep launching ``X5_Crop.py`` while V4 moves the internals into a
-package that can be tested and refactored more safely.
+V4 keeps the user-facing ``X5_Crop.py`` launcher stable while the real
+implementation lives in focused modules under :mod:`x5crop`.
 """
 
-from x5crop.core import main
+from x5crop.cli import main
 
 
 if __name__ == "__main__":
