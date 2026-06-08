@@ -229,6 +229,12 @@ Changed:
   into the TIFF folder, and double-click. They also warn users to download the
   prepared GitHub Release zip instead of GitHub's auto-generated Source code
   zip, and state early that original TIFF files are not modified.
+- README, `快速启动_Quick_Start.md`, and CHANGELOG were polished into a clearer
+  documentation split: complete Chinese content first, complete English content
+  second. README now has one Chinese guide and one English guide instead of
+  interleaving quick-start copies; `快速启动_Quick_Start.md` stays as the short
+  Release-user instruction card; CHANGELOG now explicitly says normal users
+  should start with README / quick start and keeps development history there.
 - README Debug Analysis color tables now include whether each mark directly
   affects cropping, so users can distinguish final crop boxes from evidence and
   model/fallback guide marks.
@@ -240,11 +246,12 @@ Changed:
 - GitHub Release `v4.0` is now the current stable user-facing release. The
   uploaded asset is `X5-Crop-v4.0.zip`, generated with the standalone V4
   `X5_Crop.py` and release docs/installers only. Asset digest:
-  `sha256:e063c388a7662e82ed70ae663f5c3628845c3133bfe8f7b7d390c3993f027c0d`.
+  `sha256:7fe2a9fdd0e6f0e4981b85202309ee4b81d8c8dd06c0c707e555c80d792cb3a4`.
   Verification: `/usr/bin/unzip` preserved executable bits on `X5_Crop.py` and
-  macOS `.command` files; package script prints `X5_Crop.py 4.0`; a package
-  smoke test with only package files plus `X5_00002.tif` ran the normal macOS
-  launcher and produced 6 TIFF files with `approved_auto confidence=0.996`.
+  macOS `.command` files; package script prints `X5_Crop.py 4.0`. Earlier V4.0
+  package smoke test with only package files plus `X5_00002.tif` ran the normal
+  macOS launcher and produced 6 TIFF files with
+  `approved_auto confidence=0.996`.
 - README and `快速启动_Quick_Start.md` now define `dry run` as a
   test/analyze mode that reads TIFFs, runs detection, decides PASS/REVIEW, and
   may write Debug Analysis JPGs/reports, but does not export cropped TIFFs or

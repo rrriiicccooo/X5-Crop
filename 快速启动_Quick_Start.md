@@ -2,7 +2,7 @@
 
 ## 中文快速启动
 
-这是 X5 Crop 的最短使用说明。更完整的安装、卸载、参数、Debug Analysis 和版本变化，请看 `README.md` 和 `CHANGELOG.md`。
+这是给 Release 用户的最短使用说明。按这里操作即可开始裁切；更完整的安装、卸载、参数、Debug Analysis 和版本变化，请看 `README.md` 和 `CHANGELOG.md`。
 
 > **请下载 GitHub Releases 里的 `X5-Crop-vX.X.zip`。**
 >
@@ -36,7 +36,7 @@
 > /bin/bash X5_Crop_Mac.command
 > ```
 
-### Release 压缩包里有什么
+### Release 包里有什么
 
 Release 包默认包含：
 
@@ -206,7 +206,7 @@ Windows: install/X5_Crop_win_uninstall.bat
 
 ## English Quick Start
 
-This is the shortest guide for X5 Crop. For full installation, uninstall, command-line options, Debug Analysis details, and version history, see `README.md` and `CHANGELOG.md`.
+This is the shortest guide for Release users. Follow these steps to start cropping; for full installation, uninstall, command-line options, Debug Analysis details, and version history, see `README.md` and `CHANGELOG.md`.
 
 > **Download `X5-Crop-vX.X.zip` from GitHub Releases.**
 >
@@ -240,7 +240,7 @@ This is the shortest guide for X5 Crop. For full installation, uninstall, comman
 > /bin/bash X5_Crop_Mac.command
 > ```
 
-### What Is In The Release Zip
+### What Is In The Release Package
 
 The Release package normally contains:
 
