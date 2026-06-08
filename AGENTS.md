@@ -71,17 +71,16 @@ project documentation consolidated in `README.md`.
 - Do not run two Codex sessions against the same NAS-synced working tree at the
   same time unless they are only reading.
 - Current local sparse-checkout policy keeps root-level source/docs/config files
-  visible and hides bulky or release-only paths locally. Keep `.gitignore`
-  visible. If `.github/` appears later, keep it visible too because it contains
-  GitHub repository automation/configuration.
+  visible, including `README.md`, `CHANGELOG.md`, `AGENTS.md`,
+  `快速启动_Quick_Start.md`, and `LICENSE`. It hides bulky or release-only
+  paths locally. Keep `.gitignore` visible. If `.github/` appears later, keep it
+  visible too because it contains GitHub repository automation/configuration.
 - The intended sparse-checkout rules are:
 
 ```text
 /*
 !/archive/
 !/install/
-!/快速启动_Quick_Start.md
-!/LICENSE
 !/release/
 !/tools/
 ```
@@ -246,7 +245,7 @@ Changed:
 - GitHub Release `v4.0` is now the current stable user-facing release. The
   uploaded asset is `X5-Crop-v4.0.zip`, generated with the standalone V4
   `X5_Crop.py` and release docs/installers only. Asset digest:
-  `sha256:18a403d607900c9b7c245cbb765374c098acffd40e3e974bbe5cf8a2722508d8`.
+  `sha256:97ee7326875ff56e8b2cb4deed3cc1dd4d937546a153da0486a105184c28e054`.
   Verification: `/usr/bin/unzip` preserved executable bits on `X5_Crop.py` and
   macOS `.command` files; package script prints `X5_Crop.py 4.0`. Earlier V4.0
   package smoke test with only package files plus `X5_00002.tif` ran the normal
@@ -272,6 +271,12 @@ Changed:
 - README and `快速启动_Quick_Start.md` now use the latest normal 135 macOS
   launcher timing: 48 TIFF files exported in 394 seconds, averaging about
   8.2 seconds per file.
+- README and `快速启动_Quick_Start.md` now explicitly state that auto-cropped
+  output TIFF files preserve source-TIFF quality-related attributes, including
+  bit depth, channel layout, ICC / color space, resolution, and metadata.
+  Cropping should not intentionally lower bit depth, recolor, compress, or
+  resample image data. This is a documentation clarification of the existing
+  TIFF output policy.
 - README, `快速启动_Quick_Start.md`, and CHANGELOG received a follow-up
   documentation polish after V4.0: README no longer embeds quick-start steps or
   changelog-style version notes because those live in the standalone quick-start

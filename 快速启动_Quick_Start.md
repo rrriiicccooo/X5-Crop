@@ -10,7 +10,7 @@
 
 > **原始 TIFF 不会被修改。**
 >
-> 自动裁切会生成新文件；进入 `needs_review/` 的文件也是原 TIFF 的复制粘贴，方便人工处理。
+> 自动裁切会生成新 TIFF；进入 `needs_review/` 的文件也是原 TIFF 的复制粘贴，方便人工处理。自动裁切输出会保留原 TIFF 的画质相关属性，包括位深、通道结构、ICC / 色彩空间、resolution 和 metadata；脚本不会为了裁切而主动降位深、改色、压缩或重采样。
 
 > **第一次使用请先运行安装启动器。**
 >
@@ -185,6 +185,8 @@ split_output/
 
 高置信结果会自动裁切。低置信或困难图片会进入复核流程。
 
+自动裁切输出的单张 TIFF 是新文件，但会保留原 TIFF 的位深、通道结构、ICC / 色彩空间、resolution 和 metadata 等画质相关属性；裁切不会主动降位深、改色、压缩或重采样。
+
 默认输出 bleed 是长轴 20px、短轴 10px。如果检测到叠片 / 近似叠片 / 连续内容风险，输出长轴 bleed 会自动提高到 50px；这只影响最终输出范围，不参与检测评分。
 
 ### 终端暂时没有新提示
@@ -216,7 +218,7 @@ This is a quick operation card for Release users. It covers first-time setup, fi
 
 > **Original TIFF files are not modified.**
 >
-> Auto crops are written as new files; files in `needs_review/` are plain copies of the source TIFFs for manual handling.
+> Auto crops are written as new TIFF files; files in `needs_review/` are plain copies of the source TIFFs for manual handling. Auto-cropped output preserves source-TIFF quality-related attributes, including bit depth, channel layout, ICC / color space, resolution, and metadata. Cropping does not intentionally lower bit depth, recolor, compress, or resample image data.
 
 > **On first use, run the installer launcher first.**
 >
@@ -398,6 +400,8 @@ split_output/
 ```
 
 High-confidence results are cropped automatically. Low-confidence or difficult scans go to review.
+
+Auto-cropped frame TIFFs are new files, but X5 Crop preserves source-TIFF quality-related attributes, including bit depth, channel layout, ICC / color space, resolution, and metadata. Cropping does not intentionally lower bit depth, recolor, compress, or resample the image.
 
 Default output bleed is 20px on the long axis and 10px on the short axis. When overlap, near-overlap, or continuous-content risk is detected, long-axis output bleed is automatically raised to 50px. This affects final output only, not detection scoring.
 

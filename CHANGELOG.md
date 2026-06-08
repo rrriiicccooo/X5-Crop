@@ -63,6 +63,7 @@ V4.0 是一次大胆的完整模块化重写，但它仍然遵守“重写结构
 - 新增 `tools/build_standalone.py`：发布时把 V4 模块化源码生成一个单文件版 `X5_Crop.py`，让普通用户仍然只需要复制脚本本体和对应系统主启动器，不需要复制 `x5crop/` 文件夹。
 - 本地 ignored 测试副本 `Test/135/X5_Crop.py` 和 `Test/135/x5crop/` 已同步到 V4。
 - 不改版本号的输出 bleed 调整：默认长轴 bleed 从 35px 改为 20px，短轴仍为 10px；如果检测到叠片、近似叠片或连续内容风险，输出长轴 bleed 自动提高到 50px。这个调整只影响最终输出、报告和 Debug Analysis 色块，不参与检测评分。
+- 不改版本号的文档澄清：README 和快速启动文档明确说明自动裁切输出 TIFF 会保留原 TIFF 的画质相关属性，包括但不限于位深、通道结构、ICC / 色彩空间、resolution 和 metadata；裁切不会为了输出而主动降位深、改色、压缩或重采样。
 
 验证：
 
@@ -688,6 +689,12 @@ Main changes:
   folder.
 - Syncs the ignored local test copies under `Test/135/` to include both
   `Test/135/X5_Crop.py` and `Test/135/x5crop/`.
+- Documentation clarification without a version bump: README and the quick-start
+  guide now state that auto-cropped TIFF output preserves source-TIFF
+  quality-related attributes including but not limited to
+  bit depth, channel layout, ICC / color space, resolution, and metadata.
+  Cropping does not intentionally lower bit depth, recolor, compress, or
+  resample image data.
 - Output bleed update without a version bump: default long-axis bleed changed
   from 35px to 20px, while short-axis bleed remains 10px. When overlap,
   near-overlap, or continuous-content risk is detected, long-axis output bleed
