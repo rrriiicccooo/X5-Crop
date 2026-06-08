@@ -14,8 +14,17 @@ Current stable release: v3.6.2 (GitHub Releases)
 
 ## 快速使用
 
-普通使用请优先下载 GitHub Releases 里的稳定版压缩包。仓库 `main`
-分支是开发进度，可能比 Release 新，但不一定是稳定发布版。
+普通用户只需要三步：
+
+1. 第一次使用先运行 `install/` 里的安装启动器。
+2. 把 Release 里的 `X5_Crop.py`、对应系统启动器和 TIFF 长图放在同一个文件夹。
+3. 双击启动器，按提示选择 format、partial mode 和 Debug Analysis。
+
+请下载 GitHub Releases 里的 `X5-Crop-vX.X.zip`。不要下载 GitHub 自动生成的 `Source code` / 源码压缩包给普通用户使用；源码包是开发结构，不是整理好的用户发布包。
+
+脚本不会修改原始 TIFF。自动裁切会生成新文件；进入 `needs_review/` 的文件也是原 TIFF 的复制粘贴，方便人工处理。
+
+仓库 `main` 分支是开发进度，可能比 Release 新，但不一定是稳定发布版。
 
 第一次在新机器上使用：
 
@@ -69,8 +78,21 @@ Current stable release: v3.6.2 (GitHub Releases)
 
 ## Quick Start
 
-For normal use, download the stable zip package from GitHub Releases. The
-repository `main` branch is development progress; it may be newer than the
+Normal users only need three steps:
+
+1. On first use, run the installer launcher inside `install/`.
+2. Put the Release `X5_Crop.py`, the platform launcher, and TIFF scans in one folder.
+3. Double-click the launcher, then choose format, partial mode, and Debug Analysis.
+
+Download `X5-Crop-vX.X.zip` from GitHub Releases. Do not give normal users the
+auto-generated GitHub `Source code` zip; that is the development source layout,
+not the prepared user package.
+
+The script does not modify original TIFF files. Auto crops are written as new
+files; files in `needs_review/` are plain copies of the source TIFFs for manual
+handling.
+
+The repository `main` branch is development progress; it may be newer than the
 Release, but it is not necessarily the stable package.
 
 On a new machine:
@@ -437,19 +459,19 @@ REVIEW confidence 0.676 < threshold 0.850
 
 `Debug boxes` 颜色：
 
-| 颜色 | 含义 |
-|---|---|
-| 绿色外框 | 脚本认为整条胶片有效区域的外框 |
-| 不同半透明色块 | 每一张最终输出裁切范围，包含输出 bleed |
+| 颜色 / 标记 | 含义 | 是否直接影响裁切 |
+|---|---|---|
+| 绿色外框 | 脚本认为整条胶片有效区域的外框 | 会 |
+| 不同半透明色块 | 每一张最终输出裁切范围，包含输出 bleed | 会，这是最终输出范围 |
 
 `Separator evidence` 颜色：
 
-| 颜色 | 含义 |
-|---|---|
-| 红色框 / 红色线 | 原图中检测到的真实分隔区域，包括黑条和可信双边缘 |
-| 黄色短 tick | grid / 全局或局部片距模型推算出的切线，不代表一定看到真实黑条 |
-| 紫色短 tick | 证据不足时的等分或 fallback 切线 |
-| 白色短 tick | 其它未分类切线来源 |
+| 颜色 / 标记 | 含义 | 是否直接影响裁切 |
+|---|---|---|
+| 红色框 / 红色线 | 原图中检测到的真实分隔区域，包括黑条和可信双边缘 | 会，是强分隔证据 |
+| 黄色短 tick | grid / 全局或局部片距模型推算出的切线，不代表一定看到真实黑条 | 可能会，是模型补位 |
+| 紫色短 tick | 证据不足时的等分或 fallback 切线 | 可能会，但通常不会让困难图自动通过 |
+| 白色短 tick | 其它未分类切线来源 | 主要用于辅助阅读 |
 
 看 Debug Analysis 时建议优先检查：
 
@@ -894,19 +916,19 @@ be cropped automatically. `REVIEW` means it will not be auto-exported.
 
 `Debug boxes` colors:
 
-| Color | Meaning |
-|---|---|
-| Green outer box | Detected usable film-strip area |
-| Semi-transparent color blocks | Final output crop boxes, including output bleed |
+| Color / mark | Meaning | Directly affects crop? |
+|---|---|---|
+| Green outer box | Detected usable film-strip area | Yes |
+| Semi-transparent color blocks | Final output crop boxes, including output bleed | Yes, this is the final output area |
 
 `Separator evidence` colors:
 
-| Color | Meaning |
-|---|---|
-| Red box / line | Real separator evidence detected from the original image |
-| Yellow tick | Global or local grid / pitch-model cut line, not necessarily a visible separator |
-| Purple tick | Equal/fallback cut line with weak evidence |
-| White tick | Other separator source |
+| Color / mark | Meaning | Directly affects crop? |
+|---|---|---|
+| Red box / line | Real separator evidence detected from the original image | Yes, strong separator evidence |
+| Yellow tick | Global or local grid / pitch-model cut line, not necessarily a visible separator | Sometimes, as model fill-in |
+| Purple tick | Equal/fallback cut line with weak evidence | Sometimes, but normally does not make difficult scans auto-pass |
+| White tick | Other separator source | Mainly for reading the debug image |
 
 ### Reusing Debug Analysis For Export
 

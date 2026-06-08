@@ -4,6 +4,14 @@
 
 这是 X5 Crop 的最短使用说明。更完整的安装、卸载、参数、Debug Analysis 和版本变化，请看 `README.md` 和 `CHANGELOG.md`。
 
+> **请下载 GitHub Releases 里的 `X5-Crop-vX.X.zip`。**
+>
+> 不要下载 GitHub 自动生成的 `Source code` / 源码压缩包给普通用户使用；源码包是开发结构，不是整理好的用户发布包。
+
+> **脚本不会修改原始 TIFF。**
+>
+> 自动裁切会生成新文件；进入 `needs_review/` 的文件也是原 TIFF 的复制粘贴，方便人工处理。
+
 > **第一次使用请先运行安装启动器。**
 >
 > macOS: 双击 `install/X5_Crop_Mac_install.command`
@@ -199,6 +207,14 @@ Windows: install/X5_Crop_win_uninstall.bat
 ## English Quick Start
 
 This is the shortest guide for X5 Crop. For full installation, uninstall, command-line options, Debug Analysis details, and version history, see `README.md` and `CHANGELOG.md`.
+
+> **Download `X5-Crop-vX.X.zip` from GitHub Releases.**
+>
+> Do not give normal users the auto-generated GitHub `Source code` zip; that is the development source layout, not the prepared user package.
+
+> **The script does not modify original TIFF files.**
+>
+> Auto crops are written as new files; files in `needs_review/` are plain copies of the source TIFFs for manual handling.
 
 > **On first use, run the installer launcher first.**
 >

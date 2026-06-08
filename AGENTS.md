@@ -224,6 +224,19 @@ Changed:
   is a generated standalone script with the internal `x5crop/` code embedded.
   Users no longer need to copy the `x5crop/` folder when using a Release
   package.
+- README and `快速启动_Quick_Start.md` now put the normal-user path closer to
+  the top: run installer first, copy `X5_Crop.py` plus the platform launcher
+  into the TIFF folder, and double-click. They also warn users to download the
+  prepared GitHub Release zip instead of GitHub's auto-generated Source code
+  zip, and state early that original TIFF files are not modified.
+- README Debug Analysis color tables now include whether each mark directly
+  affects cropping, so users can distinguish final crop boxes from evidence and
+  model/fallback guide marks.
+- GitHub Release `v3.6.2` body and `X5-Crop-v3.6.2.zip` asset were refreshed
+  with the clearer quick-start wording, Source-code-zip warning, original-TIFF
+  safety note, package contents, and single-script user workflow. The refreshed
+  asset digest is
+  `sha256:e01ed0f7e6661690c94d29d8e1c5d18987afa256baf4fd06267587d8188c85dc`.
 - README and `快速启动_Quick_Start.md` now define `dry run` as a
   test/analyze mode that reads TIFFs, runs detection, decides PASS/REVIEW, and
   may write Debug Analysis JPGs/reports, but does not export cropped TIFFs or
