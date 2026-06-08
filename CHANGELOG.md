@@ -6,13 +6,13 @@
 
 当前 active 脚本：`X5_Crop.py` V4.0
 
-当前稳定 GitHub Release：`v3.6.2`
+当前稳定 GitHub Release：`v4.0`
 
 ### 版本状态
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.0 | 当前 active 开发版 | 大胆模块化重写版：根入口 `X5_Crop.py` 变薄，实际检测、I/O、几何、证据、Debug、report、deskew 和 CLI 职责拆进 `x5crop/` 多个模块，`core.py` 仅保留兼容导出。新增单文件发布版生成器，让 Release 用户仍然只需要脚本本体和启动器。全量 135 default-deskew dry run 对比 V3.9 为 0 diff。 |
+| V4.0 | 稳定 Release / 当前 active 开发版 | 大胆模块化重写版：根入口 `X5_Crop.py` 变薄，实际检测、I/O、几何、证据、Debug、report、deskew 和 CLI 职责拆进 `x5crop/` 多个模块，`core.py` 仅保留兼容导出。新增单文件发布版生成器，让 Release 用户仍然只需要脚本本体和启动器。全量 135 default-deskew dry run 对比 V3.9 为 0 diff。 |
 | V3.9 | 开发版 | 结构清理版：把剩余 outer mask profiles、post-detection confidence caps、deskew span skip、frame-fit 小像素容忍、separator gate mode 和 outer retry 开关收进 policy / format-aware 配置。全量 135 default-deskew dry run 对比 V3.7 为 0 diff。 |
 | V3.7 | 开发版 | 合并 frame-size fit 管线：cuts 级等宽修正改为 geometry fallback，box 级同画幅拟合改为 edge-evidence fit，并通过统一入口选择。目标是让 edge-pair 扩展到各格式后的 frame fit 更清楚，同时保持现有输出不变。 |
 | V3.6.12 | 开发版 | 根据 `Test/120` 和半格全量 dry run 调整非 135 edge-pair 参数：120-66 / 120-67 能识别更宽、更低背景的 120 暗带证据，但不会放宽 PASS。 |
@@ -625,13 +625,13 @@ This changelog is kept in the repository for development, rollback, and future d
 
 Current active script: `X5_Crop.py` V4.0
 
-Current stable GitHub Release: `v3.6.2`
+Current stable GitHub Release: `v4.0`
 
 ### Version Status
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.0 | Current active development | Bold modular rewrite: root `X5_Crop.py` is thin, while detection, I/O, geometry, evidence, Debug, report, deskew, and CLI responsibilities now live in dedicated `x5crop/` modules; `core.py` is only a compatibility export surface. Adds a standalone release-script builder so Release users still need only the script and launcher. A full 135 default-deskew dry run compared with V3.9 had 0 diffs. |
+| V4.0 | Stable Release / Current active development | Bold modular rewrite: root `X5_Crop.py` is thin, while detection, I/O, geometry, evidence, Debug, report, deskew, and CLI responsibilities now live in dedicated `x5crop/` modules; `core.py` is only a compatibility export surface. Adds a standalone release-script builder so Release users still need only the script and launcher. A full 135 default-deskew dry run compared with V3.9 had 0 diffs. |
 | V3.9 | Development | Structural cleanup: moves the remaining outer mask profiles, post-detection confidence caps, deskew span skip, frame-fit small-pixel tolerances, separator gate mode, and outer retry switch into policy / format-aware configuration. A full 135 default-deskew dry run compared with V3.7 had 0 diffs. |
 | V3.7 | Development | Merges the frame-size fit pipeline: cuts-level equal-width correction becomes geometry fallback, box-level same-frame fitting becomes edge-evidence fit, and a single entry point chooses the layer. The goal is clearer frame fitting after edge-pair expanded across formats, while preserving existing output. |
 | V3.6.12 | Development | Tunes non-135 edge-pair parameters with full `Test/120` and half-frame dry runs: 120-66 / 120-67 can now recognize wider, lower-background 120 separator evidence without loosening PASS. |
@@ -644,7 +644,7 @@ Current stable GitHub Release: `v3.6.2`
 | V3.6.5 | Development | Diagnostics mode can use up to 4 workers; normal runs still cap at 2. Detection logic is unchanged. |
 | V3.6.4 | Development | Returns to the V3.6.2 detection baseline and adds a narrow one-sided long-axis white-edge outer tightening rule when both end hard separators are reliable. |
 | V3.6.3 | Paused / reference direction | Treats overlap / near-overlap as difficult: strong overlap-risk model gaps in 135 full strips are sent to REVIEW. This direction is paused. |
-| V3.6.2 | Stable Release | Folds the low-value `equal-broad-region` method into ordinary `equal`, and shrinks hard fallback into a review-only equal split fallback. Overlap, near-overlap, and locally irregular spacing can still be misdetected. |
+| V3.6.2 | Previous Stable Release | Folds the low-value `equal-broad-region` method into ordinary `equal`, and shrinks hard fallback into a review-only equal split fallback. Overlap, near-overlap, and locally irregular spacing can still be misdetected. |
 | V3.6.1 | Development | Continues the diagnostic layer: diagnostic report data and Debug Analysis diagnostic ticks are only generated with explicit `--diagnostics`; normal launchers do not enable diagnostics. |
 | V3.6 | Development | Diagnostic cleanup from the V3.3.1 output baseline. Adds read-only hard-gap trust and overlap/continuous-content diagnostics without changing V3.3.1 output. |
 | V3.5 | Paused / rolled back | Hard-gap semantic validation experiment. Removed from the active script after accuracy regressions. |

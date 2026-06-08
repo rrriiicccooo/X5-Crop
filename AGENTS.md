@@ -237,6 +237,14 @@ Changed:
   safety note, package contents, and single-script user workflow. The refreshed
   asset digest is
   `sha256:e01ed0f7e6661690c94d29d8e1c5d18987afa256baf4fd06267587d8188c85dc`.
+- GitHub Release `v4.0` is now the current stable user-facing release. The
+  uploaded asset is `X5-Crop-v4.0.zip`, generated with the standalone V4
+  `X5_Crop.py` and release docs/installers only. Asset digest:
+  `sha256:e063c388a7662e82ed70ae663f5c3628845c3133bfe8f7b7d390c3993f027c0d`.
+  Verification: `/usr/bin/unzip` preserved executable bits on `X5_Crop.py` and
+  macOS `.command` files; package script prints `X5_Crop.py 4.0`; a package
+  smoke test with only package files plus `X5_00002.tif` ran the normal macOS
+  launcher and produced 6 TIFF files with `approved_auto confidence=0.996`.
 - README and `快速启动_Quick_Start.md` now define `dry run` as a
   test/analyze mode that reads TIFFs, runs detection, decides PASS/REVIEW, and
   may write Debug Analysis JPGs/reports, but does not export cropped TIFFs or
@@ -416,7 +424,7 @@ Changed:
 - Older handoff / changelog wording that implied all `--jobs` values above 2
   are capped to 2, or used obsolete early V3.6 `hard_trust` labels as if they
   were current, has been clarified.
-- Current stable GitHub Release is `v3.6.2`, published from commit
+- Previous stable GitHub Release was `v3.6.2`, published from commit
   `5321d74560dcd97d54d150bd5e7aff73e997bd67` with asset
   `X5-Crop-v3.6.2.zip`. Release notes explicitly warn that overlap,
   near-overlap, locally irregular spacing, missing separators, or continuous
