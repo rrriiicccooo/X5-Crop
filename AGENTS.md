@@ -246,12 +246,20 @@ Changed:
 - GitHub Release `v4.0` is now the current stable user-facing release. The
   uploaded asset is `X5-Crop-v4.0.zip`, generated with the standalone V4
   `X5_Crop.py` and release docs/installers only. Asset digest:
-  `sha256:7fe2a9fdd0e6f0e4981b85202309ee4b81d8c8dd06c0c707e555c80d792cb3a4`.
+  `sha256:d6848cfd74119e5d2e3dcd8739e8ba8d2bcdefcdefb0848619ad2a5c3b4b8fcc`.
   Verification: `/usr/bin/unzip` preserved executable bits on `X5_Crop.py` and
   macOS `.command` files; package script prints `X5_Crop.py 4.0`. Earlier V4.0
   package smoke test with only package files plus `X5_00002.tif` ran the normal
   macOS launcher and produced 6 TIFF files with
   `approved_auto confidence=0.996`.
+- Current V4.0 bleed behavior: default output long-axis bleed is 20px and
+  short-axis bleed is 10px; overlap / near-overlap / continuous-content risk
+  raises long-axis output bleed to 50px. Verification smoke: `X5_00007`
+  recorded `output_long_axis_bleed=50` and
+  `overlap_risk_long_axis_bleed=true`; `X5_00003` recorded
+  `output_long_axis_bleed=20`; full `Test/135` dry-run remained 42
+  `approved_auto` / 6 `needs_review`. Reusing the Debug Analysis report for
+  `X5_00007` exported 6 TIFF files and adjusted cached output bleed to 50px.
 - README and `快速启动_Quick_Start.md` now define `dry run` as a
   test/analyze mode that reads TIFFs, runs detection, decides PASS/REVIEW, and
   may write Debug Analysis JPGs/reports, but does not export cropped TIFFs or
@@ -294,10 +302,10 @@ Changed:
   each 120 format have their own nominal-width range and inlier tolerance, and
   135-dual / partial modes keep edge-evidence fit disabled while preserving
   geometry fallback.
-- After V3.7, the default output long-axis bleed was changed from 20px to 35px
-  without a version bump; short-axis bleed remains 10px. Detection still keeps
-  bleed out of scoring and applies bleed only to output/report/Debug Analysis
-  frame boxes.
+- In current V4.0, default output long-axis bleed is 20px and short-axis bleed
+  remains 10px. If overlap / near-overlap / continuous-content risk is detected,
+  long-axis output bleed is raised to 50px. Detection still keeps bleed out of
+  scoring and applies bleed only to output/report/Debug Analysis frame boxes.
 - Follow-up V3.7 threshold cleanup changed fixed pixel gates in
   `apply_edge_bleed_protection()`, `apply_approved_geometry_polish()`,
   `outer_content_alignment_detail()`, `corrected_outer_from_alignment()`, and
@@ -572,10 +580,11 @@ Changed:
   image content may still require manual Debug Analysis review.
 - V3.3.1 keeps the V3/V3.2 ordinary outer/gap/candidate selection chain and
   the V3.3 output-only bleed separation.
-- Default output bleed is long-axis 35px and short-axis 10px. Detection now
-  uses 0px bleed internally, so bleed is applied only to final output/report/
-  Debug Analysis frame boxes and does not participate in outer, gap,
-  confidence, or PASS/REVIEW scoring.
+- Default output bleed is long-axis 20px and short-axis 10px. If overlap /
+  near-overlap / continuous-content risk is detected, long-axis output bleed is
+  raised to 50px. Detection uses 0px bleed internally, so bleed is applied only
+  to final output/report/Debug Analysis frame boxes and does not participate in
+  outer, gap, confidence, or PASS/REVIEW scoring.
 - Added final edge bleed protection after PASS/REVIEW status is decided: if
   same-frame-size fitting leaves the first or last frame too far inside an
   otherwise stable outer box, the output/report/debug frame is extended back to

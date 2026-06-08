@@ -185,6 +185,8 @@ split_output/
 
 高置信结果会自动裁切。低置信或困难图片会进入复核流程。
 
+默认输出 bleed 是长轴 20px、短轴 10px。如果检测到叠片 / 近似叠片 / 连续内容风险，输出长轴 bleed 会自动提高到 50px；这只影响最终输出范围，不参与检测评分。
+
 ### 运行时没有新提示是不是卡住了
 
 通常不是。大 TIFF 在读取、检测、校平或写入时，终端可能一段时间没有新文字。
@@ -396,6 +398,8 @@ split_output/
 ```
 
 High-confidence results are cropped automatically. Low-confidence or difficult scans go to review.
+
+Default output bleed is 20px on the long axis and 10px on the short axis. When overlap, near-overlap, or continuous-content risk is detected, long-axis output bleed is automatically raised to 50px. This affects final output only, not detection scoring.
 
 ### No New Terminal Text
 

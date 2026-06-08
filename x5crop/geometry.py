@@ -144,6 +144,38 @@ def detection_geometry_config(config: Config) -> Config:
     )
 
 
+def detection_has_overlap_bleed_risk(detection: Detection) -> bool:
+    lucky = detection.detail.get("lucky_pass_risk_score")
+    if isinstance(lucky, dict):
+        if bool(lucky.get("risk", False)):
+            return True
+        counts = lucky.get("overlap_risk_counts")
+        if isinstance(counts, dict):
+            if int(counts.get("strong", 0) or 0) > 0 or int(counts.get("medium", 0) or 0) > 0:
+                return True
+
+    diagnostics = detection.detail.get("diagnostics_v3_6")
+    if isinstance(diagnostics, dict):
+        summary = diagnostics.get("summary")
+        if isinstance(summary, dict):
+            if int(summary.get("overlap_like_model_gaps", 0) or 0) > 0:
+                return True
+            counts = summary.get("overlap_risk_counts")
+            if isinstance(counts, dict):
+                if int(counts.get("strong", 0) or 0) > 0 or int(counts.get("medium", 0) or 0) > 0:
+                    return True
+    return False
+
+
+def output_bleed_config_for_detection(config: Config, detection: Detection) -> Config:
+    if not detection_has_overlap_bleed_risk(detection):
+        return config
+    target_bleed_x = max(int(config.bleed_x), 50)
+    if target_bleed_x == int(config.bleed_x):
+        return config
+    return replace(config, bleed_x=target_bleed_x)
+
+
 def apply_output_bleed(detection: Detection, detection_config: Config, output_config: Config, image_w: int, image_h: int) -> None:
     if int(detection_config.bleed_x) == int(output_config.bleed_x) and int(detection_config.bleed_y) == int(output_config.bleed_y):
         return
@@ -168,6 +200,7 @@ def apply_output_bleed(detection: Detection, detection_config: Config, output_co
         "detection_short_axis_bleed": int(detection_config.bleed_y),
         "output_long_axis_bleed": int(output_config.bleed_x),
         "output_short_axis_bleed": int(output_config.bleed_y),
+        "overlap_risk_long_axis_bleed": bool(detection_has_overlap_bleed_risk(detection)),
     }
 
 
@@ -1478,5 +1511,4 @@ def weighted_median(candidates: list[tuple[float, float]]) -> float:
         if acc >= total / 2.0:
             return value
     return ordered[-1][0]
-
 

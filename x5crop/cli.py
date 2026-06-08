@@ -63,6 +63,8 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
                 warnings,
             )
             reapply_cached_output_bleed(detection, config, gray.shape[1], gray.shape[0])
+            output_config = output_bleed_config_for_detection(config, detection)
+            reapply_cached_output_bleed(detection, output_config, gray.shape[1], gray.shape[0])
             output_files = write_crops(
                 input_file,
                 arr,
@@ -182,8 +184,9 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     output_files: list[str] = []
     review_copy: Optional[str] = None
     apply_approved_geometry_polish(detection, gray, config, status)
-    apply_output_bleed(detection, detection_config, config, gray.shape[1], gray.shape[0])
-    apply_edge_bleed_protection(detection, config, gray.shape[1], gray.shape[0])
+    output_config = output_bleed_config_for_detection(config, detection)
+    apply_output_bleed(detection, detection_config, output_config, gray.shape[1], gray.shape[0])
+    apply_edge_bleed_protection(detection, output_config, gray.shape[1], gray.shape[0])
     if config.diagnostics:
         attach_read_only_diagnostics(gray, detection, analysis_cache)
 
@@ -259,7 +262,7 @@ def iter_input_files(path: Path) -> list[Path]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="X5 Crop V3.7 single-strip TIFF film cropper.")
+    parser = argparse.ArgumentParser(description="X5 Crop V4.0 single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/split_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")
@@ -268,7 +271,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-n", "--count", type=int, default=None, help="Override frame count.")
     parser.add_argument("--page", type=int, default=0, help="TIFF page index; default 0.")
     parser.add_argument("--bleed", type=int, default=None, help="Bleed in pixels on all sides; overrides layout-aware defaults.")
-    parser.add_argument("--bleed-x", type=int, default=None, help="Long-axis bleed override; default 35. Horizontal scans: left/right. Vertical scans: top/bottom.")
+    parser.add_argument("--bleed-x", type=int, default=None, help="Long-axis bleed override; default 20, or 50 when overlap/continuous-content risk is detected. Horizontal scans: left/right. Vertical scans: top/bottom.")
     parser.add_argument("--bleed-y", type=int, default=None, help="Short-axis bleed override; default 10. Horizontal scans: top/bottom. Vertical scans: left/right.")
     parser.add_argument("--deskew", choices=DESKEW_CHOICES, default="auto", help="Deskew strip before detection/export.")
     parser.add_argument("--analysis", choices=ANALYSIS_CHOICES, default="auto", help="Enhanced analysis for separator assist and deskew angle selection. auto runs enhanced separator only on weak separator evidence and enhanced deskew only when base deskew quality is weak; always enables enhanced passes; off disables enhanced analysis.")
@@ -311,7 +314,7 @@ def config_from_args(args: argparse.Namespace) -> Config:
         raise ValueError(f"--format {fmt.name} allows --count values: {allowed}")
     layout_auto = str(args.layout) == "auto"
     layout = infer_layout(width, height) if layout_auto else str(args.layout)
-    bleed_x_default = 35 if args.bleed is None else int(args.bleed)
+    bleed_x_default = 20 if args.bleed is None else int(args.bleed)
     bleed_y_default = 10 if args.bleed is None else int(args.bleed)
     bleed_x = int(bleed_x_default if args.bleed_x is None else args.bleed_x)
     bleed_y = int(bleed_y_default if args.bleed_y is None else args.bleed_y)
