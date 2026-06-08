@@ -2,7 +2,7 @@
 
 ## 中文快速启动
 
-这是一份面向 Release 用户的快速操作卡片，用于完成第一次安装、文件摆放和启动器运行。完整的安装说明、卸载说明、命令行参数和 Debug Analysis 解释，请看 `README.md`；版本差异和开发记录请看 `CHANGELOG.md`。
+这是一份面向 Release 用户的快速操作卡片，用于完成第一次安装、文件摆放和启动器运行。完整的安装说明、卸载说明、命令行参数和 Debug Analysis 解释，请看 Release 包内的 `README.txt`；版本差异和开发记录请看 GitHub 仓库中的 `CHANGELOG.md`。
 
 > **请使用 GitHub Releases 里的 `X5-Crop-vX.X.zip`。**
 >
@@ -44,8 +44,8 @@ Release 包默认包含：
 X5_Crop.py
 X5_Crop_Mac.command
 X5_Crop_win.bat
-README.md
-快速启动_Quick_Start.md
+README.txt
+快速启动_Quick_Start.txt
 install/
   X5_Crop_Mac_install.command
   X5_Crop_win_install.bat
@@ -53,7 +53,7 @@ install/
   X5_Crop_win_uninstall.bat
 ```
 
-Release 里的 `X5_Crop.py` 是单文件发布版，已经内置内部 `x5crop/` 代码。普通用户不需要复制 `x5crop/` 文件夹。
+Release 里的 `X5_Crop.py` 是单文件发布版，已经内置内部 `x5crop/` 代码。普通用户不需要复制 `x5crop/` 文件夹。Release 包里的用户文档使用 `.txt` 文件名，方便在不同系统上直接打开阅读。
 
 `install/` 里的安装启动器只用于第一次安装依赖；卸载启动器用于清理用户级 Python 依赖。正式裁切时，请使用根目录里的主启动器：
 
@@ -210,7 +210,7 @@ Windows: install/X5_Crop_win_uninstall.bat
 
 ## English Quick Start
 
-This is a quick operation card for Release users. It covers first-time setup, file placement, and launcher use. For full installation, uninstall, command-line options, and Debug Analysis details, see `README.md`; for version differences and development history, see `CHANGELOG.md`.
+This is a quick operation card for Release users. It covers first-time setup, file placement, and launcher use. For full installation, uninstall, command-line options, and Debug Analysis details, see `README.txt` in the Release package; for version differences and development history, see `CHANGELOG.md` in the GitHub repository.
 
 > **Use `X5-Crop-vX.X.zip` from GitHub Releases.**
 >
@@ -252,8 +252,8 @@ The Release package normally contains:
 X5_Crop.py
 X5_Crop_Mac.command
 X5_Crop_win.bat
-README.md
-快速启动_Quick_Start.md
+README.txt
+快速启动_Quick_Start.txt
 install/
   X5_Crop_Mac_install.command
   X5_Crop_win_install.bat
@@ -263,6 +263,9 @@ install/
 
 The Release `X5_Crop.py` is a standalone file with the internal `x5crop/` code
 embedded. Normal users do not need to copy an `x5crop/` folder.
+
+User documents in the Release package use `.txt` filenames so they can be
+opened easily across systems.
 
 Installer launchers inside `install/` are only for first-time dependency setup. Uninstall launchers remove user-level Python dependencies. For actual cropping, use the main launcher in the root folder:
 
