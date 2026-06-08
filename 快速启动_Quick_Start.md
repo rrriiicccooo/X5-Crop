@@ -10,7 +10,7 @@
 >
 > Windows: 双击 `install/X5_Crop_win_install.bat`
 >
-> 安装完成后，再把 `X5_Crop.py`、`x5crop/`、对应系统的主启动器和 TIFF 长图放在同一个文件夹里运行。
+> 安装完成后，再把 `X5_Crop.py`、对应系统的主启动器和 TIFF 长图放在同一个文件夹里运行。
 
 > **macOS 如果双击安装启动器打不开，请先用终端启动安装器。**
 >
@@ -22,7 +22,7 @@
 
 > **macOS 如果安装完成后双击主启动器打不开，请用终端启动主启动器。**
 >
-> 打开 Terminal，输入 `cd `，把放有 `X5_Crop.py`、`x5crop/`、`X5_Crop_Mac.command` 和 TIFF 长图的文件夹拖进窗口后按 Return，然后运行：
+> 打开 Terminal，输入 `cd `，把放有 `X5_Crop.py`、`X5_Crop_Mac.command` 和 TIFF 长图的文件夹拖进窗口后按 Return，然后运行：
 >
 > ```bash
 > /bin/bash X5_Crop_Mac.command
@@ -34,7 +34,6 @@ Release 包默认包含：
 
 ```text
 X5_Crop.py
-x5crop/
 X5_Crop_Mac.command
 X5_Crop_win.bat
 README.md
@@ -45,6 +44,8 @@ install/
   X5_Crop_Mac_uninstall.command
   X5_Crop_win_uninstall.bat
 ```
+
+Release 里的 `X5_Crop.py` 是单文件发布版，已经内置内部 `x5crop/` 代码。普通用户不需要复制 `x5crop/` 文件夹。
 
 `install/` 里的安装启动器只用于第一次安装依赖；卸载启动器用于清理用户级 Python 依赖。正式裁切时使用根目录里的主启动器：
 
@@ -59,12 +60,11 @@ Windows 主启动器: X5_Crop_win.bat
 
 ```text
 X5_Crop.py
-x5crop/
 X5_Crop_Mac.command 或 X5_Crop_win.bat
 *.tif / *.tiff
 ```
 
-启动器、`X5_Crop.py` 和 `x5crop/` 必须在同一个文件夹里。只移动启动器、不带入口脚本和内部包，不能运行。
+启动器和 `X5_Crop.py` 必须在同一个文件夹里。只移动启动器、不带入口脚本，不能运行。
 
 ### 第一次使用
 
@@ -83,7 +83,7 @@ Windows: install/X5_Crop_win_install.bat
 /bin/bash install/X5_Crop_Mac_install.command
 ```
 
-如果安装完成后，双击主启动器 `X5_Crop_Mac.command` 仍然打不开，请打开 Terminal，输入 `cd `，把放有 `X5_Crop.py`、`x5crop/`、`X5_Crop_Mac.command` 和 TIFF 长图的文件夹拖进窗口后按 Return，然后运行：
+如果安装完成后，双击主启动器 `X5_Crop_Mac.command` 仍然打不开，请打开 Terminal，输入 `cd `，把放有 `X5_Crop.py`、`X5_Crop_Mac.command` 和 TIFF 长图的文件夹拖进窗口后按 Return，然后运行：
 
 ```bash
 /bin/bash X5_Crop_Mac.command
@@ -206,7 +206,7 @@ This is the shortest guide for X5 Crop. For full installation, uninstall, comman
 >
 > Windows: double-click `install/X5_Crop_win_install.bat`
 >
-> After installation, put `X5_Crop.py`, `x5crop/`, the main launcher for your system, and the TIFF long-strip scans in the same folder.
+> After installation, put `X5_Crop.py`, the main launcher for your system, and the TIFF long-strip scans in the same folder.
 
 > **On macOS, if double-clicking the installer does not work, start the installer from Terminal first.**
 >
@@ -218,7 +218,7 @@ This is the shortest guide for X5 Crop. For full installation, uninstall, comman
 
 > **On macOS, if the main launcher still will not open after installation, start the main launcher from Terminal.**
 >
-> Open Terminal, type `cd `, drag the folder containing `X5_Crop.py`, `x5crop/`, `X5_Crop_Mac.command`, and the TIFF scans into the window, press Return, then run:
+> Open Terminal, type `cd `, drag the folder containing `X5_Crop.py`, `X5_Crop_Mac.command`, and the TIFF scans into the window, press Return, then run:
 >
 > ```bash
 > /bin/bash X5_Crop_Mac.command
@@ -230,7 +230,6 @@ The Release package normally contains:
 
 ```text
 X5_Crop.py
-x5crop/
 X5_Crop_Mac.command
 X5_Crop_win.bat
 README.md
@@ -241,6 +240,9 @@ install/
   X5_Crop_Mac_uninstall.command
   X5_Crop_win_uninstall.bat
 ```
+
+The Release `X5_Crop.py` is a standalone file with the internal `x5crop/` code
+embedded. Normal users do not need to copy an `x5crop/` folder.
 
 Installer launchers inside `install/` are only for first-time dependency setup. Uninstall launchers are for removing user-level Python dependencies. For actual cropping, use the main launcher in the root folder:
 
@@ -255,12 +257,11 @@ Put these files in the same folder as the TIFF long-strip scans:
 
 ```text
 X5_Crop.py
-x5crop/
 X5_Crop_Mac.command or X5_Crop_win.bat
 *.tif / *.tiff
 ```
 
-The launcher, `X5_Crop.py`, and `x5crop/` must stay together in the same folder. A launcher by itself cannot run the script.
+The launcher and `X5_Crop.py` must stay together in the same folder. A launcher by itself cannot run the script.
 
 ### First Use
 
@@ -282,7 +283,7 @@ If double-clicking the macOS installer does not work, open Terminal, type
 
 If the main launcher `X5_Crop_Mac.command` still will not open after
 installation, open Terminal, type `cd `, drag the folder containing
-`X5_Crop.py`, `x5crop/`, `X5_Crop_Mac.command`, and the TIFF scans into the window, press
+`X5_Crop.py`, `X5_Crop_Mac.command`, and the TIFF scans into the window, press
 Return, then run:
 
 ```bash

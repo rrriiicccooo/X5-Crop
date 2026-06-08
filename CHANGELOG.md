@@ -12,7 +12,7 @@
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.0 | 当前 active 开发版 | 大胆模块化重写版：根入口 `X5_Crop.py` 变薄，实际检测、I/O、几何、证据、Debug、report、deskew 和 CLI 职责拆进 `x5crop/` 多个模块，`core.py` 仅保留兼容导出。全量 135 default-deskew dry run 对比 V3.9 为 0 diff。 |
+| V4.0 | 当前 active 开发版 | 大胆模块化重写版：根入口 `X5_Crop.py` 变薄，实际检测、I/O、几何、证据、Debug、report、deskew 和 CLI 职责拆进 `x5crop/` 多个模块，`core.py` 仅保留兼容导出。新增单文件发布版生成器，让 Release 用户仍然只需要脚本本体和启动器。全量 135 default-deskew dry run 对比 V3.9 为 0 diff。 |
 | V3.9 | 开发版 | 结构清理版：把剩余 outer mask profiles、post-detection confidence caps、deskew span skip、frame-fit 小像素容忍、separator gate mode 和 outer retry 开关收进 policy / format-aware 配置。全量 135 default-deskew dry run 对比 V3.7 为 0 diff。 |
 | V3.7 | 开发版 | 合并 frame-size fit 管线：cuts 级等宽修正改为 geometry fallback，box 级同画幅拟合改为 edge-evidence fit，并通过统一入口选择。目标是让 edge-pair 扩展到各格式后的 frame fit 更清楚，同时保持现有输出不变。 |
 | V3.6.12 | 开发版 | 根据 `Test/120` 和半格全量 dry run 调整非 135 edge-pair 参数：120-66 / 120-67 能识别更宽、更低背景的 120 暗带证据，但不会放宽 PASS。 |
@@ -58,7 +58,7 @@ V4.0 是一次大胆的完整模块化重写，但它仍然遵守“重写结构
 - 新增 `x5crop/reports.py`：负责 report 写入、report reuse、output-only bleed 复用校正、needs_review 复制和裁切写出。
 - 新增 `x5crop/cli.py`：负责参数解析、文件夹并行、单文件处理、终端输出和主流程编排。
 - 新增 `x5crop/regression.py`：可以比较两份 `split_report.jsonl`，默认比较 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes` 和 `gaps`。
-- 文档和快速启动说明更新为 V4 文件布局：`X5_Crop.py`、`x5crop/` 和对应系统主启动器必须一起放在 TIFF 文件夹里。
+- 新增 `tools/build_standalone.py`：发布时把 V4 模块化源码生成一个单文件版 `X5_Crop.py`，让普通用户仍然只需要复制脚本本体和对应系统主启动器，不需要复制 `x5crop/` 文件夹。
 - 本地 ignored 测试副本 `Test/135/X5_Crop.py` 和 `Test/135/x5crop/` 已同步到 V4。
 
 验证：
@@ -631,7 +631,7 @@ Current stable GitHub Release: `v3.6.2`
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.0 | Current active development | Bold modular rewrite: root `X5_Crop.py` is thin, while detection, I/O, geometry, evidence, Debug, report, deskew, and CLI responsibilities now live in dedicated `x5crop/` modules; `core.py` is only a compatibility export surface. A full 135 default-deskew dry run compared with V3.9 had 0 diffs. |
+| V4.0 | Current active development | Bold modular rewrite: root `X5_Crop.py` is thin, while detection, I/O, geometry, evidence, Debug, report, deskew, and CLI responsibilities now live in dedicated `x5crop/` modules; `core.py` is only a compatibility export surface. Adds a standalone release-script builder so Release users still need only the script and launcher. A full 135 default-deskew dry run compared with V3.9 had 0 diffs. |
 | V3.9 | Development | Structural cleanup: moves the remaining outer mask profiles, post-detection confidence caps, deskew span skip, frame-fit small-pixel tolerances, separator gate mode, and outer retry switch into policy / format-aware configuration. A full 135 default-deskew dry run compared with V3.7 had 0 diffs. |
 | V3.7 | Development | Merges the frame-size fit pipeline: cuts-level equal-width correction becomes geometry fallback, box-level same-frame fitting becomes edge-evidence fit, and a single entry point chooses the layer. The goal is clearer frame fitting after edge-pair expanded across formats, while preserving existing output. |
 | V3.6.12 | Development | Tunes non-135 edge-pair parameters with full `Test/120` and half-frame dry runs: 120-66 / 120-67 can now recognize wider, lower-background 120 separator evidence without loosening PASS. |
@@ -698,9 +698,10 @@ Main changes:
 - Adds `x5crop/regression.py`, which compares two `split_report.jsonl` files.
   By default it compares `status`, `confidence`, `review_reasons`, `outer_box`,
   `frame_boxes`, and `gaps`.
-- Updates README and quick-start docs for the V4 layout: `X5_Crop.py`,
-  `x5crop/`, and the platform-matching main launcher must stay together in the
-  TIFF folder.
+- Adds `tools/build_standalone.py`, which turns the modular V4 source tree into
+  a standalone Release `X5_Crop.py`. Normal users can still copy only the script
+  and the platform-matching launcher; they do not need to copy an `x5crop/`
+  folder.
 - Syncs the ignored local test copies under `Test/135/` to include both
   `Test/135/X5_Crop.py` and `Test/135/x5crop/`.
 
