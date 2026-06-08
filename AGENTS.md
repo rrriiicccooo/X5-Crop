@@ -83,6 +83,7 @@ project documentation consolidated in `README.md`.
 !/快速启动_Quick_Start.md
 !/LICENSE
 !/release/
+!/tools/
 ```
 
 - `.gitignore` and `.github/` are hidden dot paths by name. Treat them as
