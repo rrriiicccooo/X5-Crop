@@ -2,13 +2,13 @@
 
 ## 中文快速启动
 
-这是给 Release 用户的最短使用说明。按这里操作即可开始裁切；更完整的安装、卸载、参数、Debug Analysis 和版本变化，请看 `README.md` 和 `CHANGELOG.md`。
+这是一份面向 Release 用户的快速操作卡片，用于完成第一次安装、文件摆放和启动器运行。完整的安装说明、卸载说明、命令行参数和 Debug Analysis 解释，请看 `README.md`；版本差异和开发记录请看 `CHANGELOG.md`。
 
-> **请下载 GitHub Releases 里的 `X5-Crop-vX.X.zip`。**
+> **请使用 GitHub Releases 里的 `X5-Crop-vX.X.zip`。**
 >
-> 不要下载 GitHub 自动生成的 `Source code` / 源码压缩包给普通用户使用；源码包是开发结构，不是整理好的用户发布包。
+> 不要把 GitHub 自动生成的 `Source code` / 源码压缩包给普通用户使用；源码包是开发源码结构，不是整理好的用户发布包。
 
-> **脚本不会修改原始 TIFF。**
+> **原始 TIFF 不会被修改。**
 >
 > 自动裁切会生成新文件；进入 `needs_review/` 的文件也是原 TIFF 的复制粘贴，方便人工处理。
 
@@ -36,7 +36,7 @@
 > /bin/bash X5_Crop_Mac.command
 > ```
 
-### Release 包里有什么
+### Release 包内容
 
 Release 包默认包含：
 
@@ -55,14 +55,14 @@ install/
 
 Release 里的 `X5_Crop.py` 是单文件发布版，已经内置内部 `x5crop/` 代码。普通用户不需要复制 `x5crop/` 文件夹。
 
-`install/` 里的安装启动器只用于第一次安装依赖；卸载启动器用于清理用户级 Python 依赖。正式裁切时使用根目录里的主启动器：
+`install/` 里的安装启动器只用于第一次安装依赖；卸载启动器用于清理用户级 Python 依赖。正式裁切时，请使用根目录里的主启动器：
 
 ```text
 macOS 主启动器: X5_Crop_Mac.command
 Windows 主启动器: X5_Crop_win.bat
 ```
 
-### 放在哪里
+### 文件摆放
 
 把下面这些文件和要裁切的 TIFF 长图放在同一个文件夹里：
 
@@ -72,7 +72,7 @@ X5_Crop_Mac.command 或 X5_Crop_win.bat
 *.tif / *.tiff
 ```
 
-启动器和 `X5_Crop.py` 必须在同一个文件夹里。只移动启动器、不带入口脚本，不能运行。
+启动器和 `X5_Crop.py` 必须在同一个文件夹里。只移动启动器、不带入口脚本，无法运行。
 
 ### 第一次使用
 
@@ -97,7 +97,7 @@ Windows: install/X5_Crop_win_install.bat
 /bin/bash X5_Crop_Mac.command
 ```
 
-### 怎么启动
+### 启动方式
 
 ```text
 macOS:   双击 X5_Crop_Mac.command
@@ -112,7 +112,7 @@ partial mode? [y/n, return=no]:
 debug analysis? [y/n, return=no]:
 ```
 
-### format 怎么填
+### Format 输入
 
 ```text
 直接回车 或 135 = 普通 135，一条 6 张
@@ -165,7 +165,7 @@ xpan = 3
 
 普通非 Debug Analysis 裁切不会生成 report。
 
-### needs_review 是什么
+### needs_review 目录
 
 低置信或困难图片会进入复核流程，必要时原 TIFF 会被复制到：
 
@@ -175,7 +175,7 @@ split_output/needs_review/
 
 这里的文件是原 TIFF 的复制粘贴。脚本没有对这些复制进去的 TIFF 做裁切、压缩、改色、校平或其它处理。你可以放心在 `needs_review/` 里手动检查、移动、删除或另行处理这些副本。
 
-### 输出在哪里
+### 输出位置
 
 脚本会在当前文件夹生成：
 
@@ -187,13 +187,13 @@ split_output/
 
 默认输出 bleed 是长轴 20px、短轴 10px。如果检测到叠片 / 近似叠片 / 连续内容风险，输出长轴 bleed 会自动提高到 50px；这只影响最终输出范围，不参与检测评分。
 
-### 运行时没有新提示是不是卡住了
+### 终端暂时没有新提示
 
-通常不是。大 TIFF 在读取、检测、校平或写入时，终端可能一段时间没有新文字。
+通常不是卡住。大 TIFF 在读取、检测、校平或写入时，终端可能一段时间没有新文字。
 
 最近一次普通 135 启动器实测：48 张 TIFF 全量正式裁切用时 394 秒，平均约 8.2 秒/张。Debug Analysis 通常每张约 10-30 秒。更大的 TIFF、开启 deskew、较慢硬盘或较慢电脑会更久。
 
-### 如何卸载
+### 卸载
 
 X5 Crop 不是 App。脚本本体没有系统级安装，也不会写入应用支持目录。删除 X5 Crop 文件夹就能移除脚本、启动器和这个文件夹里的输出。
 
@@ -208,13 +208,13 @@ Windows: install/X5_Crop_win_uninstall.bat
 
 ## English Quick Start
 
-This is the shortest guide for Release users. Follow these steps to start cropping; for full installation, uninstall, command-line options, Debug Analysis details, and version history, see `README.md` and `CHANGELOG.md`.
+This is a quick operation card for Release users. It covers first-time setup, file placement, and launcher use. For full installation, uninstall, command-line options, and Debug Analysis details, see `README.md`; for version differences and development history, see `CHANGELOG.md`.
 
-> **Download `X5-Crop-vX.X.zip` from GitHub Releases.**
+> **Use `X5-Crop-vX.X.zip` from GitHub Releases.**
 >
 > Do not give normal users the auto-generated GitHub `Source code` zip; that is the development source layout, not the prepared user package.
 
-> **The script does not modify original TIFF files.**
+> **Original TIFF files are not modified.**
 >
 > Auto crops are written as new files; files in `needs_review/` are plain copies of the source TIFFs for manual handling.
 
@@ -242,7 +242,7 @@ This is the shortest guide for Release users. Follow these steps to start croppi
 > /bin/bash X5_Crop_Mac.command
 > ```
 
-### What Is In The Release Package
+### Release Package Contents
 
 The Release package normally contains:
 
@@ -262,14 +262,14 @@ install/
 The Release `X5_Crop.py` is a standalone file with the internal `x5crop/` code
 embedded. Normal users do not need to copy an `x5crop/` folder.
 
-Installer launchers inside `install/` are only for first-time dependency setup. Uninstall launchers are for removing user-level Python dependencies. For actual cropping, use the main launcher in the root folder:
+Installer launchers inside `install/` are only for first-time dependency setup. Uninstall launchers remove user-level Python dependencies. For actual cropping, use the main launcher in the root folder:
 
 ```text
 macOS main launcher: X5_Crop_Mac.command
 Windows main launcher: X5_Crop_win.bat
 ```
 
-### Where To Put The Files
+### File Placement
 
 Put these files in the same folder as the TIFF long-strip scans:
 
@@ -308,7 +308,7 @@ Return, then run:
 /bin/bash X5_Crop_Mac.command
 ```
 
-### How To Launch
+### Launch
 
 ```text
 macOS:   Double-click X5_Crop_Mac.command
@@ -379,7 +379,7 @@ box, separators, and crop boxes.
 
 Normal non-Debug-Analysis crop runs do not write reports.
 
-### What Is needs_review
+### needs_review Folder
 
 Low-confidence or difficult scans may be copied to:
 
@@ -389,7 +389,7 @@ split_output/needs_review/
 
 Files in this folder are plain copies of the original TIFF files. The script does not crop, compress, recolor, deskew, or otherwise process those copied TIFFs. You can safely inspect, move, delete, or manually process the copies in `needs_review/`.
 
-### Output Folder
+### Output Location
 
 The script creates:
 
@@ -407,7 +407,7 @@ This usually does not mean the script is stuck. Large TIFF files can take time t
 
 The latest normal 135 launcher measurement was 394 seconds for 48 TIFF files, or about 8.2 seconds per file. Debug Analysis usually takes about 10-30 seconds per file. Larger TIFF files, deskew, slower disks, or slower computers can take longer.
 
-### How To Uninstall
+### Uninstall
 
 X5 Crop is not an app. The script itself has no system-level app install and does not write to application-support folders. Delete the X5 Crop folder to remove the script, launchers, and outputs in that folder.
 

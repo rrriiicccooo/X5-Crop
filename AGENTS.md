@@ -246,7 +246,7 @@ Changed:
 - GitHub Release `v4.0` is now the current stable user-facing release. The
   uploaded asset is `X5-Crop-v4.0.zip`, generated with the standalone V4
   `X5_Crop.py` and release docs/installers only. Asset digest:
-  `sha256:d6848cfd74119e5d2e3dcd8739e8ba8d2bcdefcdefb0848619ad2a5c3b4b8fcc`.
+  `sha256:18a403d607900c9b7c245cbb765374c098acffd40e3e974bbe5cf8a2722508d8`.
   Verification: `/usr/bin/unzip` preserved executable bits on `X5_Crop.py` and
   macOS `.command` files; package script prints `X5_Crop.py 4.0`. Earlier V4.0
   package smoke test with only package files plus `X5_00002.tif` ran the normal
@@ -272,6 +272,12 @@ Changed:
 - README and `快速启动_Quick_Start.md` now use the latest normal 135 macOS
   launcher timing: 48 TIFF files exported in 394 seconds, averaging about
   8.2 seconds per file.
+- README, `快速启动_Quick_Start.md`, and CHANGELOG received a follow-up
+  documentation polish after V4.0: README no longer embeds quick-start steps or
+  changelog-style version notes because those live in the standalone quick-start
+  and changelog documents. README should remain the full user manual, quick
+  start should remain a short Release-user operation card, and CHANGELOG should
+  remain development / regression history.
 - Added `快速启动_Quick_Start.md`, a bilingual quick-start guide with Chinese
   first and English second. It puts first-time installer launchers in a
   prominent note near the top and points users to `README.md` and `CHANGELOG.md`
