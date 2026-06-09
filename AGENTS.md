@@ -1098,5 +1098,9 @@ Next recommended step:
 - Fast development/regression dry-runs may still pass `--deskew off` when the
   goal is raw detector comparison. The local diagnostic launcher uses the
   default `deskew auto` to better match real diagnostic output.
+- For our own local tests and diagnostic runs, use 4 TIFF workers by passing
+  `--jobs 4` explicitly. This is a development/testing convention; ordinary
+  user launchers and normal crop defaults remain more conservative unless the
+  user asks to change them.
 - For speed work, the largest current cost is full-resolution deskew rotation,
   followed by 135 edge-pair refinement across multiple outer candidates.
