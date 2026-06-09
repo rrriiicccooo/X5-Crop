@@ -6,15 +6,16 @@
 
 如果只是使用脚本，请优先阅读 `快速启动_Quick_Start.md` 和 `README.md`。本文件保留更细的开发背景、实验结论和验证结果。
 
-当前 active 脚本：`X5_Crop.py` V4.0
+当前 active 脚本：`X5_Crop.py` V4.0.1
 
-当前稳定 GitHub Release：`v4.0`
+当前稳定 GitHub Release：`v4.0.1`
 
 ### 版本状态
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.0 | 稳定 Release / 当前 active 开发版 | 大胆模块化重写版：根入口 `X5_Crop.py` 变薄，实际检测、I/O、几何、证据、Debug、report、deskew 和 CLI 职责拆进 `x5crop/` 多个模块，`core.py` 仅保留兼容导出。新增单文件发布版生成器，让 Release 用户仍然只需要脚本本体和启动器。全量 135 default-deskew dry run 对比 V3.9 为 0 diff。 |
+| V4.0.1 | 稳定 Release / 当前 active 版本 | 135 宽片距兼容调整：默认窄分隔逻辑保持 V4.0 行为；只有普通 separator 候选未通过 auto gate 时，才启用正式 `wide-separator` 分支。目标是兼容清晰但片距较宽的 135 扫描，同时不改变既有 `Test/135` 输出。 |
+| V4.0 | 上一个稳定 Release | 大胆模块化重写版：根入口 `X5_Crop.py` 变薄，实际检测、I/O、几何、证据、Debug、report、deskew 和 CLI 职责拆进 `x5crop/` 多个模块，`core.py` 仅保留兼容导出。新增单文件发布版生成器，让 Release 用户仍然只需要脚本本体和启动器。全量 135 default-deskew dry run 对比 V3.9 为 0 diff。 |
 | V3.9 | 开发版 | 结构清理版：把剩余 outer mask profiles、post-detection confidence caps、deskew span skip、frame-fit 小像素容忍、separator gate mode 和 outer retry 开关收进 policy / format-aware 配置。全量 135 default-deskew dry run 对比 V3.7 为 0 diff。 |
 | V3.7 | 开发版 | 合并 frame-size fit 管线：cuts 级等宽修正改为 geometry fallback，box 级同画幅拟合改为 edge-evidence fit，并通过统一入口选择。目标是让 edge-pair 扩展到各格式后的 frame fit 更清楚，同时保持现有输出不变。 |
 | V3.6.12 | 开发版 | 根据 `Test/120` 和半格全量 dry run 调整非 135 edge-pair 参数：120-66 / 120-67 能识别更宽、更低背景的 120 暗带证据，但不会放宽 PASS。 |
@@ -41,7 +42,25 @@
 | V3.1.x | 实验版 | 激进外框/gap 修复实验，稳定性不足。 |
 | V3.0 | 基线版 | X5 Crop 主脚本与用户工作流基础。 |
 
-### 当前 Active 版本：V4.0
+### 当前 Active 版本：V4.0.1
+
+V4.0.1 是 V4.0 之后的一个窄范围检测兼容更新。它不把 135 的 hard gap 最大宽度全局放宽；普通路径仍使用 V4.0 的 `gap_max_width_ratio=0.045`。当普通 separator 候选因为分隔证据不足无法通过 auto gate 时，脚本才会额外启用正式 `wide-separator` 分支，允许宽度上限到 `wide_gap_retry_max_width_ratio=0.060`。
+
+`wide-separator` 不是普通 `detected` 的全局放宽。它只在普通窄分隔失败后介入，并要求宽黑带的均值和相对突出度达标。通过后，gap method 会写成 `wide-separator`，报告会单独记录 `wide_detected_gaps` 和 `wide_gap_retry`，Debug Analysis 里也使用红色系的独立标记。包含宽分隔条的 separator 候选会被轻微限制最高置信度，避免宽黑带把 confidence 直接顶满。
+
+这个设计用于处理肉眼分隔清楚、但黑色片距比旧规则更宽的 135 长图。`wide-separator` 只在普通 135 full strip 上启用；half、xpan、120 和 135-dual 仍保持关闭，避免未调参格式被顺手放宽。
+
+同时新增仓库内的 macOS 诊断启动器 `X5_Crop_Mac_diagnostics.command`。它固定开启 dry run、Debug Analysis、`--diagnostics`、`--no-copy-review-files`、`--no-reuse-analysis` 和 `--jobs 4`，用于本地开发测试。它不是普通用户启动器，不放进 Release 包。
+
+验证：
+
+- `python3 X5_Crop.py --version` 输出 `X5_Crop.py 4.0.1`。
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` 通过。
+- 新增 `Test/new_135` 4 张宽片距样本从 V4.0 的 `needs_review` 变为 4 个 `approved_auto`，且报告中出现 `wide-separator` / `wide_detected_gaps` / `wide_gap_retry.used=true`。
+- 全量 `Test/135` default-deskew Debug Analysis dry run 保持 42 个 `approved_auto` / 6 个 `needs_review`。
+- 使用 `python3 -m x5crop.regression` 比较既有 `Test/135/split_output/split_report.jsonl` 和 V4.0.1 临时输出，48 行报告的 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes` 和 `gaps` 均为 0 diff。
+
+### V4.0
 
 V4.0 是一次大胆的完整模块化重写，但它仍然遵守“重写结构，保持结果”的约束。它不是新检测算法，也没有引入 OpenCV、scipy 或其它大依赖；这些图像处理后端暂定为未来 V5 方向。V4 的目标是把入口、检测核心、几何证据、I/O、Debug Analysis、report、deskew、CLI 和 regression 真正拆开，同时用全量 135 回归证明输出不变。
 
@@ -609,15 +628,16 @@ This changelog records X5 Crop detector changes, workflow updates, regression ch
 
 If you only want to use the script, start with `快速启动_Quick_Start.md` and `README.md`. This file keeps deeper development context, experiment outcomes, and verification notes.
 
-Current active script: `X5_Crop.py` V4.0
+Current active script: `X5_Crop.py` V4.0.1
 
-Current stable GitHub Release: `v4.0`
+Current stable GitHub Release: `v4.0.1`
 
 ### Version Status
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.0 | Stable Release / Current active development | Bold modular rewrite: root `X5_Crop.py` is thin, while detection, I/O, geometry, evidence, Debug, report, deskew, and CLI responsibilities now live in dedicated `x5crop/` modules; `core.py` is only a compatibility export surface. Adds a standalone release-script builder so Release users still need only the script and launcher. A full 135 default-deskew dry run compared with V3.9 had 0 diffs. |
+| V4.0.1 | Stable Release / current active version | 135 wide-spacing compatibility update: the default narrow-separator path keeps V4.0 behavior; only when the normal separator candidate fails the auto gate does the detector enable the formal `wide-separator` branch. The goal is to support clear but wider 135 gutters without changing existing `Test/135` output. |
+| V4.0 | Previous Stable Release | Bold modular rewrite: root `X5_Crop.py` is thin, while detection, I/O, geometry, evidence, Debug, report, deskew, and CLI responsibilities now live in dedicated `x5crop/` modules; `core.py` is only a compatibility export surface. Adds a standalone release-script builder so Release users still need only the script and launcher. A full 135 default-deskew dry run compared with V3.9 had 0 diffs. |
 | V3.9 | Development | Structural cleanup: moves the remaining outer mask profiles, post-detection confidence caps, deskew span skip, frame-fit small-pixel tolerances, separator gate mode, and outer retry switch into policy / format-aware configuration. A full 135 default-deskew dry run compared with V3.7 had 0 diffs. |
 | V3.7 | Development | Merges the frame-size fit pipeline: cuts-level equal-width correction becomes geometry fallback, box-level same-frame fitting becomes edge-evidence fit, and a single entry point chooses the layer. The goal is clearer frame fitting after edge-pair expanded across formats, while preserving existing output. |
 | V3.6.12 | Development | Tunes non-135 edge-pair parameters with full `Test/120` and half-frame dry runs: 120-66 / 120-67 can now recognize wider, lower-background 120 separator evidence without loosening PASS. |
@@ -644,7 +664,49 @@ Current stable GitHub Release: `v4.0`
 | V3.1.x | Experimental | Aggressive outer/gap rescue ideas. Not stable enough. |
 | V3.0 | Baseline | Main X5 Crop script and user workflow foundation. |
 
-### Current Active: V4.0
+### Current Active: V4.0.1
+
+V4.0.1 is a narrow compatibility update after V4.0. It does not globally loosen
+the maximum hard-gap width for 135. The normal path still uses the V4.0
+`gap_max_width_ratio=0.045`. When the normal separator candidate cannot satisfy
+the auto gate because separator evidence is too weak, the detector enables the
+formal `wide-separator` branch, allowing the width limit to reach
+`wide_gap_retry_max_width_ratio=0.060`.
+
+`wide-separator` is not a global loosening of ordinary `detected` gaps. It only
+runs after the narrow separator path fails, and the wide dark band must satisfy
+mean-score and relative-prominence requirements. Accepted gaps are written as
+the `wide-separator` method, reports separately record `wide_detected_gaps` and
+`wide_gap_retry`, and Debug Analysis draws them with a distinct red-family mark.
+Separator candidates that contain wide separators have a light confidence cap so
+wide dark gutters do not automatically push confidence to the maximum.
+
+This is meant for 135 strips where the gutter is visually clear but wider than
+the old rule allowed. `wide-separator` is enabled only for normal 135 full
+strips. It remains disabled for half-frame, xpan, 120 formats, and 135-dual so
+untuned formats are not loosened accidentally.
+
+The repository also adds the macOS diagnostic launcher
+`X5_Crop_Mac_diagnostics.command`. It always enables dry run, Debug Analysis,
+`--diagnostics`, `--no-copy-review-files`, `--no-reuse-analysis`, and
+`--jobs 4` for local development testing. It is not a normal user launcher and
+is not included in Release packages.
+
+Verification:
+
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.0.1`.
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` passed.
+- The 4 new `Test/new_135` wide-gutter samples changed from V4.0 `needs_review`
+  to 4 `approved_auto`, with `wide-separator`, `wide_detected_gaps`, and
+  `wide_gap_retry.used=true` recorded in the reports.
+- A full `Test/135` default-deskew Debug Analysis dry run remained 42
+  `approved_auto` / 6 `needs_review`.
+- `python3 -m x5crop.regression` compared the existing
+  `Test/135/split_output/split_report.jsonl` with the V4.0.1 temporary output;
+  all 48 rows had 0 diffs for `status`, `confidence`, `review_reasons`,
+  `outer_box`, `frame_boxes`, and `gaps`.
+
+### V4.0
 
 V4.0 is a bold full modular rewrite, while still following the constraint:
 rewrite the structure, preserve the result. It is not a new detection algorithm,

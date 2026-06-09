@@ -2,9 +2,9 @@
 
 X5 Crop 是一个用于 Hasselblad / Imacon X5 胶片片夹长图的 TIFF 自动裁切工具。它会把同一文件夹里的长条 TIFF 扫描图拆分成单张 TIFF；只有高置信结果会自动导出，低置信或困难图片会进入复核。
 
-当前 active 脚本版本：V4.0
+当前 active 脚本版本：V4.0.1
 
-当前稳定发布版本：v4.0（GitHub Releases）
+当前稳定发布版本：v4.0.1（GitHub Releases）
 
 普通用户请下载 GitHub Releases 里的 `X5-Crop-vX.X.zip`。不要下载 GitHub 自动生成的 `Source code` / 源码压缩包；源码包是开发源码结构，不是整理好的用户发布包。
 
@@ -90,6 +90,8 @@ install/
 Release 里的 `X5_Crop.py` 是从 V4 模块化源码自动生成的单文件发布版，已经内置 `x5crop/` 的内部代码。普通用户不需要复制 `x5crop/` 文件夹。Release 包内的用户文档使用 `.txt` 扩展名，便于在不同系统上直接打开阅读；仓库中的维护源文档仍保留为 `.md`。
 
 如果你不是下载 Release，而是直接从仓库 `main` 分支运行开发源码，那么根目录 `X5_Crop.py` 是开发入口，仍然需要旁边的 `x5crop/` 包。这是给开发和测试用的结构，不是普通 Release 用户需要复制的结构。
+
+仓库里还包含 `X5_Crop_Mac_diagnostics.command`，这是给开发和本地测试用的 macOS 诊断启动器。它会固定开启 dry run、Debug Analysis、诊断报告和 `--jobs 4`，不会导出裁切 TIFF，也不会复制 `needs_review/` 文件。它不属于普通用户启动器，也不会放进 Release 包。
 
 对应系统的主启动器是：
 
@@ -359,7 +361,7 @@ python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-r
 python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run --diagnostics
 ```
 
-`--diagnostics` 只写诊断报告字段并在 Separator evidence 面板画诊断 tick，不改变裁切框、置信度或 PASS/REVIEW。普通启动器不会开启它。
+`--diagnostics` 只写诊断报告字段并在 Separator evidence 面板画诊断 tick，不改变裁切框、置信度或 PASS/REVIEW。普通启动器不会开启它。仓库里的 `X5_Crop_Mac_diagnostics.command` 可以双击运行同类本地诊断流程，但它是开发/测试工具，不随 Release 包分发。
 
 普通自动裁切：
 
@@ -407,9 +409,9 @@ python3 X5_Crop.py . --format 135 --strip full --report --export-review
 
 ## English Guide
 
-Current active script version: V4.0
+Current active script version: V4.0.1
 
-Current stable release: v4.0 (GitHub Releases)
+Current stable release: v4.0.1 (GitHub Releases)
 
 Download `X5-Crop-vX.X.zip` from GitHub Releases. Do not give normal users the
 auto-generated GitHub `Source code` zip; that is the development source layout,
@@ -549,6 +551,12 @@ need to copy an `x5crop/` folder.
 User documents inside the Release package use `.txt` filenames so they can be
 opened easily across systems. The repository source documents remain `.md` for
 maintenance and GitHub rendering.
+
+The repository also includes `X5_Crop_Mac_diagnostics.command`, a macOS
+diagnostic launcher for development and local testing. It always enables dry
+run, Debug Analysis, diagnostics, and `--jobs 4`; it does not export cropped
+TIFFs and does not copy `needs_review/` files. It is not a normal user launcher
+and is not included in the Release package.
 
 If you run directly from the repository `main` branch instead of a Release
 package, root `X5_Crop.py` is the development entry point and still needs the
@@ -797,7 +805,7 @@ Local diagnostic test:
 python3 X5_Crop.py . --format 135 --strip full --report --debug-analysis --dry-run --diagnostics
 ```
 
-`--diagnostics` only writes diagnostic report fields and diagnostic ticks in the Separator evidence panel. It does not change crop boxes, confidence, or PASS/REVIEW. Normal launchers do not enable it.
+`--diagnostics` only writes diagnostic report fields and diagnostic ticks in the Separator evidence panel. It does not change crop boxes, confidence, or PASS/REVIEW. Normal launchers do not enable it. The repository `X5_Crop_Mac_diagnostics.command` runs the same kind of local diagnostic workflow from a double-clickable macOS launcher, but it is a development/testing tool and is not shipped in the Release package.
 
 Normal auto export:
 

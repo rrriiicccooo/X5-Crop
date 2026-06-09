@@ -115,8 +115,9 @@ project documentation consolidated in `README.md`.
   - `install/X5_Crop_Mac_uninstall.command`
   - `install/X5_Crop_win_uninstall.bat`
   Do not package `x5crop/`, `archive/`, `CHANGELOG.md`, `AGENTS.md`,
-  `LICENSE`, `.github/`, or local test/output folders into the Release zip
-  unless the user explicitly changes this policy.
+  `LICENSE`, `.github/`, `X5_Crop_Mac_diagnostics.command`, or local
+  test/output folders into the Release zip unless the user explicitly changes
+  this policy.
   Release user documents use `.txt` filenames for maximum readability across
   systems; repository source documents remain `.md` for maintenance and GitHub
   rendering.
@@ -154,15 +155,40 @@ Next recommended step:
 
 ## Current Handoff
 
-Date: 2026-06-08
+Date: 2026-06-09
 Computer: primary macOS machine
 Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is `X5_Crop.py` V4.0.
-- V4.0 is the bold modular rewrite requested from the V4 blueprint. Root
-  `X5_Crop.py` is now a thin entry point, actual responsibilities live in
+- Active script is now `X5_Crop.py` V4.0.1. V4.0.1 is the intended current
+  stable GitHub Release.
+- V4.0.1 adds a formal 135 `wide-separator` branch. The default 135 hard-gap
+  maximum width remains the V4.0 value (`gap_max_width_ratio=0.045`). Only when
+  the normal separator candidate fails the V2 auto gate does ordinary 135
+  full-strip detection add a separate wide candidate using
+  `wide_gap_retry_max_width_ratio=0.060`.
+- `wide-separator` requires the wide dark band to satisfy mean-score and
+  relative-prominence gates, is recorded separately from ordinary `detected`
+  gaps as `wide_detected_gaps`, and uses a red-family Debug Analysis mark.
+  Candidates containing wide separators have a light confidence cap. The branch
+  is disabled for half-frame, xpan, 120 formats, and 135-dual. If a selected
+  wide candidate later triggers content-aligned outer retry, the corrected-outer
+  retry preserves the same wide gap width override so it does not accidentally
+  fall back to narrow-gap evidence.
+- Added `X5_Crop_Mac_diagnostics.command` as a repository-tracked local
+  diagnostics launcher. It always runs dry run + Debug Analysis + diagnostics,
+  uses `--jobs 4`, does not copy review files, and is explicitly excluded from
+  Release packages.
+- `README.md` active version and `CHANGELOG.md` Chinese/English version notes
+  now mention V4.0.1, formal `wide-separator`, and the diagnostics launcher
+  release-package exclusion.
+- Local ignored `Test/135/X5_Crop.py` and `Test/135/x5crop/` were synced to
+  V4.0.1.
+- V4.0.1 archive snapshot is saved as `archive/X5_Crop_v4.0.1/`, including the
+  thin entry script and the matching `x5crop/` package.
+- V4.0 is the previous stable modular baseline requested from the V4 blueprint.
+  Root `X5_Crop.py` is now a thin entry point, actual responsibilities live in
   dedicated `x5crop/` modules, and `x5crop/core.py` is only a compatibility
   re-export surface. V4.0 intentionally preserves V3.9 results while changing
   the internal architecture; OpenCV/scipy or other heavy image-processing
@@ -201,7 +227,7 @@ Changed:
 - V3.9 keeps high-risk active behavior policy-gated: nearby active correction,
   lucky-pass risk, and leading-grid failure still do not automatically apply to
   non-135 formats.
-- `Test/135/X5_Crop.py` and `Test/135/x5crop/` are synced to V4.0. The V3.9
+- `Test/135/X5_Crop.py` and `Test/135/x5crop/` are synced to V4.0.1. The V3.9
   named snapshot remains preserved as `archive/X5_Crop_v3.9.py`.
 - macOS and Windows main launchers no longer pass `--report` during normal
   non-Debug-Analysis runs. They still pass `--report --debug-analysis --dry-run`
@@ -245,7 +271,7 @@ Changed:
   safety note, package contents, and single-script user workflow. The refreshed
   asset digest is
   `sha256:e01ed0f7e6661690c94d29d8e1c5d18987afa256baf4fd06267587d8188c85dc`.
-- GitHub Release `v4.0` is now the current stable user-facing release. The
+- GitHub Release `v4.0` was the previous stable user-facing release. The
   uploaded asset is `X5-Crop-v4.0.zip`, generated with the standalone V4
   `X5_Crop.py` and release docs/installers only. Asset digest:
   `sha256:400341479f53da639262f1c521fba17d3fb259a7562ca32fca964cc1c6f4630b`.
@@ -254,6 +280,14 @@ Changed:
   package smoke test with only package files plus `X5_00002.tif` ran the normal
   macOS launcher and produced 6 TIFF files with
   `approved_auto confidence=0.996`.
+- GitHub Release `v4.0.1` is the intended current stable user-facing release.
+  The generated asset is `X5-Crop-v4.0.1.zip`, built with the standalone
+  V4.0.1 `X5_Crop.py` and release docs/installers only. Asset digest:
+  `sha256:5496ecf79fd725f20f487569e0ffb560496f52350e9e9fdfcd1fdeb836c9c5cf`.
+  Verification: package contents are limited to the standalone script, macOS /
+  Windows main launchers, `README.txt`, `快速启动_Quick_Start.txt`, and the four
+  installer/uninstaller scripts under `install/`; the diagnostic launcher is
+  excluded. Extracted package script prints `X5_Crop.py 4.0.1`.
 - Current V4.0 bleed behavior: default output long-axis bleed is 20px and
   short-axis bleed is 10px; overlap / near-overlap / continuous-content risk
   raises long-axis output bleed to 50px. Verification smoke: `X5_00007`
@@ -632,6 +666,28 @@ Changed:
   falls back to 2 thread workers instead of failing.
 
 Verified:
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.0.1`.
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` passed.
+- `bash -n X5_Crop_Mac_diagnostics.command` passed.
+- `Test/new_135` full dry run with Debug Analysis and no report reuse changed
+  the four new wide-gutter TIFFs to 4 `approved_auto`; each selected report has
+  `wide-separator`, `wide_detected_gaps`, and `wide_gap_retry.used=true`.
+- Full `Test/135` default-deskew Debug Analysis dry run to
+  `/private/tmp/x5_v401_wide_135` completed with 48 ok, 42 `approved_auto`,
+  and 6 `needs_review`.
+- `python3 -m x5crop.regression Test/135/split_output/split_report.jsonl /private/tmp/x5_v401_wide_135/split_report.jsonl`
+  reported `diff count: 0` for the default comparison fields.
+- `tools/build_standalone.py` generated `release/X5-Crop-v4.0.1/X5_Crop.py`;
+  `release/X5-Crop-v4.0.1.zip` contains 9 files and excludes
+  `X5_Crop_Mac_diagnostics.command`, `x5crop/`, `archive/`, `CHANGELOG.md`,
+  `AGENTS.md`, `LICENSE`, and local test/output folders.
+- `python3 release/X5-Crop-v4.0.1/X5_Crop.py --version` and
+  `python3 /private/tmp/x5_release_v401_verify/X5-Crop-v4.0.1/X5_Crop.py --version`
+  both print `X5_Crop.py 4.0.1`.
+- `bash -n` passed for the package macOS launcher, macOS installer, and macOS
+  uninstaller.
+- `shasum -a 256 release/X5-Crop-v4.0.1.zip` reports
+  `5496ecf79fd725f20f487569e0ffb560496f52350e9e9fdfcd1fdeb836c9c5cf`.
 - Current launcher/package-policy verification: `bash -n X5_Crop_Mac.command`
   passed; `X5_Crop_Mac.command` and `X5_Crop_win.bat` now only include
   `--report` on the Debug Analysis command path. Ignored local launcher copies
