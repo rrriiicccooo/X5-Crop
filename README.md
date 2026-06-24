@@ -1,12 +1,16 @@
 # X5 Crop
 
+> **下载提示 / Download Notice**
+>
+> 普通用户请从 GitHub **Releases** 下载整理好的 `X5-Crop-vX.X.zip`。不要点击 GitHub 仓库页面里的 **Code > Download ZIP**，也不要下载自动生成的 **Source code** 压缩包；那些是开发源码结构，不是面向使用者整理好的发布包。
+>
+> Regular users should download the prepared `X5-Crop-vX.X.zip` from GitHub **Releases**. Do not use **Code > Download ZIP** on the repository page, and do not download GitHub's auto-generated **Source code** archives; those are development source trees, not user-ready release packages.
+
 X5 Crop 是一个用于 Hasselblad / Imacon X5 胶片片夹长图的 TIFF 自动裁切工具。它会把同一文件夹里的长条 TIFF 扫描图拆分成单张 TIFF；只有高置信结果会自动导出，低置信或困难图片会进入复核。
 
 当前 active 脚本版本：V4.0.1
 
 当前稳定发布版本：v4.0.1（GitHub Releases）
-
-普通用户请下载 GitHub Releases 里的 `X5-Crop-vX.X.zip`。不要下载 GitHub 自动生成的 `Source code` / 源码压缩包；源码包是开发源码结构，不是整理好的用户发布包。
 
 脚本不会修改原始 TIFF。自动裁切会生成新文件；进入 `needs_review/` 的文件也是原 TIFF 的复制粘贴，方便人工处理。自动裁切输出的 TIFF 会保留原 TIFF 的画质相关属性，包括但不限于位深、通道结构、ICC / 色彩空间、resolution 和 metadata；脚本不会为了裁切而主动降位深、改色、压缩或重采样图像数据。
 
