@@ -6,7 +6,7 @@
 
 如果只是使用脚本，请优先阅读 `快速启动_Quick_Start.md` 和 `README.md`。本文件保留更细的开发背景、实验结论和验证结果。
 
-当前 active 脚本：`X5_Crop.py` V4.1
+当前 active 脚本：`X5_Crop.py` V4.1.1
 
 当前稳定 GitHub Release：`v4.0.1`
 
@@ -14,7 +14,8 @@
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.1 | 当前 active 开发版 | 120-66 / 120-67 参数校准：66 在可靠 hard separator 下可做短轴 outer 扩展，67 横向比例修正为 5:4，并为 120-67 的 edge-pair / hard separator candidate 提供更合适的 confidence floor。content-only 仍不会自动 PASS。 |
+| V4.1.1 | 当前 active 开发版 | 120-67 窄修复：普通 separator 未过 auto gate 时，允许 120-67 使用保守 `wide-separator` retry，解决 `Test/120/67/2.tif` 第一条宽分隔被退成 equal 的问题。 |
+| V4.1 | 开发版 | 120-66 / 120-67 参数校准：66 在可靠 hard separator 下可做短轴 outer 扩展，67 横向比例修正为 5:4，并为 120-67 的 edge-pair / hard separator candidate 提供更合适的 confidence floor。content-only 仍不会自动 PASS。 |
 | V4.0.1 | 当前稳定 Release | 135 宽片距兼容调整：默认窄分隔逻辑保持 V4.0 行为；只有普通 separator 候选未通过 auto gate 时，才启用正式 `wide-separator` 分支。目标是兼容清晰但片距较宽的 135 扫描，同时不改变既有 `Test/135` 输出。 |
 | V4.0 | 上一个稳定 Release | 大胆模块化重写版：根入口 `X5_Crop.py` 变薄，实际检测、I/O、几何、证据、Debug、report、deskew 和 CLI 职责拆进 `x5crop/` 多个模块，`core.py` 仅保留兼容导出。新增单文件发布版生成器，让 Release 用户仍然只需要脚本本体和启动器。全量 135 default-deskew dry run 对比 V3.9 为 0 diff。 |
 | V3.9 | 开发版 | 结构清理版：把剩余 outer mask profiles、post-detection confidence caps、deskew span skip、frame-fit 小像素容忍、separator gate mode 和 outer retry 开关收进 policy / format-aware 配置。全量 135 default-deskew dry run 对比 V3.7 为 0 diff。 |
@@ -43,7 +44,18 @@
 | V3.1.x | 实验版 | 激进外框/gap 修复实验，稳定性不足。 |
 | V3.0 | 基线版 | X5 Crop 主脚本与用户工作流基础。 |
 
-### 当前 Active 版本：V4.1
+### 当前 Active 版本：V4.1.1
+
+V4.1.1 是一个只针对 120-67 宽分隔的窄修复。V4.1 中 `Test/120/67/2.tif` 的右侧分隔能被识别为 `edge-pair`，但左侧真实宽分隔被退回 `equal`，导致 hard separator evidence 不完整。V4.1.1 不改变默认窄分隔路径，只在普通 separator candidate 没过 auto gate 时，为 120-67 启用保守的 `wide-separator` retry，宽度上限为 `0.090 * pitch`。
+
+验证：
+
+- `python3 X5_Crop.py --version` 输出 `X5_Crop.py 4.1.1`。
+- 只跑 `Test/120/67/2.tif`：从 V4.1 的 `needs_review confidence=0.835` 变为 `approved_auto confidence=0.995`。
+- 修复后 `2.tif` 的第一条 gap 为 `wide-separator`，第二条 gap 为 `edge-pair`，`equal_gaps=0`，`separator_hard_evidence.ok=True`。
+- 这次按要求只验证 `2.tif`，没有做全量 135 / 120 回归。
+
+### V4.1
 
 V4.1 是一个面向 120-66 / 120-67 的参数与 retry 策略更新，不改变 135 的检测路径。它继续保留核心原则：没有分隔证据的 content-only candidate 不能自动通过，避免 120 困难图被“蒙对”。
 
@@ -650,7 +662,7 @@ This changelog records X5 Crop detector changes, workflow updates, regression ch
 
 If you only want to use the script, start with `快速启动_Quick_Start.md` and `README.md`. This file keeps deeper development context, experiment outcomes, and verification notes.
 
-Current active script: `X5_Crop.py` V4.1
+Current active script: `X5_Crop.py` V4.1.1
 
 Current stable GitHub Release: `v4.0.1`
 
@@ -658,7 +670,8 @@ Current stable GitHub Release: `v4.0.1`
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.1 | Current active development version | 120-66 / 120-67 tuning: 66 can retry short-axis outer expansion when hard separators are reliable, 67 horizontal aspect is corrected to 5:4, and 120-67 edge-pair / hard-separator candidates get a more suitable confidence floor. Content-only still cannot auto-pass. |
+| V4.1.1 | Current active development version | Narrow 120-67 fix: when the normal separator candidate fails the auto gate, 120-67 can use a conservative `wide-separator` retry. This fixes `Test/120/67/2.tif`, where the first wide separator had fallen back to equal. |
+| V4.1 | Development | 120-66 / 120-67 tuning: 66 can retry short-axis outer expansion when hard separators are reliable, 67 horizontal aspect is corrected to 5:4, and 120-67 edge-pair / hard-separator candidates get a more suitable confidence floor. Content-only still cannot auto-pass. |
 | V4.0.1 | Current Stable Release | 135 wide-spacing compatibility update: the default narrow-separator path keeps V4.0 behavior; only when the normal separator candidate fails the auto gate does the detector enable the formal `wide-separator` branch. The goal is to support clear but wider 135 gutters without changing existing `Test/135` output. |
 | V4.0 | Previous Stable Release | Bold modular rewrite: root `X5_Crop.py` is thin, while detection, I/O, geometry, evidence, Debug, report, deskew, and CLI responsibilities now live in dedicated `x5crop/` modules; `core.py` is only a compatibility export surface. Adds a standalone release-script builder so Release users still need only the script and launcher. A full 135 default-deskew dry run compared with V3.9 had 0 diffs. |
 | V3.9 | Development | Structural cleanup: moves the remaining outer mask profiles, post-detection confidence caps, deskew span skip, frame-fit small-pixel tolerances, separator gate mode, and outer retry switch into policy / format-aware configuration. A full 135 default-deskew dry run compared with V3.7 had 0 diffs. |
@@ -687,7 +700,26 @@ Current stable GitHub Release: `v4.0.1`
 | V3.1.x | Experimental | Aggressive outer/gap rescue ideas. Not stable enough. |
 | V3.0 | Baseline | Main X5 Crop script and user workflow foundation. |
 
-### Current Active: V4.1
+### Current Active: V4.1.1
+
+V4.1.1 is a narrow 120-67 wide-separator fix. In V4.1,
+`Test/120/67/2.tif` had a reliable right separator as `edge-pair`, but the left
+wide separator fell back to `equal`, so hard separator evidence was incomplete.
+V4.1.1 does not change the default narrow-separator path. It only enables a
+conservative 120-67 `wide-separator` retry when the normal separator candidate
+fails the auto gate, with the retry width capped at `0.090 * pitch`.
+
+Verification:
+
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.1.1`.
+- Running only `Test/120/67/2.tif` changed it from V4.1
+  `needs_review confidence=0.835` to `approved_auto confidence=0.995`.
+- After the fix, `2.tif` has the first gap as `wide-separator`, the second gap
+  as `edge-pair`, `equal_gaps=0`, and `separator_hard_evidence.ok=True`.
+- Per request, this update was verified only on `2.tif`; no full 135 / 120
+  regression was run.
+
+### V4.1
 
 V4.1 is a focused policy and retry-strategy update for 120-66 and 120-67. It
 does not change the 135 detection path. It keeps the central safety rule:

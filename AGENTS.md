@@ -161,9 +161,14 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is now `X5_Crop.py` V4.1. This is an active development update;
+- Active script is now `X5_Crop.py` V4.1.1. This is an active development update;
   the current stable GitHub Release remains v4.0.1 unless a later handoff says
   it was packaged and published.
+- V4.1.1 is a narrow 120-67 wide-separator fix. It enables conservative
+  120-67 `wide-separator` retry only when the normal separator candidate fails
+  the auto gate, with `wide_gap_retry_max_width_ratio=0.090`. This fixes
+  `Test/120/67/2.tif`, where the first real wide separator had fallen back to
+  `equal`.
 - V4.1 adds 120-66 short-axis aspect outer retry. It only runs for full-strip
   separator candidates when hard separator evidence already passes and content
   evidence says frames are too tall/narrow because the short-axis outer is too
@@ -173,10 +178,10 @@ Changed:
 - V4.1 adds conservative 120-66 / 120-67 hard-full confidence floors for
   complete hard separator / edge-pair full-strip candidates with stable frame
   widths and no equal gaps. Content-only still remains review-only.
-- README and CHANGELOG now mention V4.1 behavior and the 120-66 / 120-67
+- README and CHANGELOG now mention V4.1.1 behavior and the 120-66 / 120-67
   calibration status.
 - Local ignored `Test/135/X5_Crop.py` and `Test/135/x5crop/` were synced to
-  V4.1.
+  V4.1.1.
 - V4.1 archive snapshot is saved as `archive/X5_Crop_v4.1/`, including the thin
   entry script and the matching `x5crop/` package.
 - Previous active script was `X5_Crop.py` V4.0.1. V4.0.1 remains the current
@@ -683,6 +688,14 @@ Changed:
   falls back to 2 thread workers instead of failing.
 
 Verified:
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.1.1`.
+- V4.1.1 single-file test on `Test/120/67/2.tif` with dry run + Debug Analysis
+  + diagnostics changed it from V4.1 `needs_review confidence=0.835` to
+  `approved_auto confidence=0.995`. The selected gaps are now
+  `wide-separator` and `edge-pair`, with `equal_gaps=0` and
+  `separator_hard_evidence.ok=True`.
+- Per user request, this V4.1.1 fix was verified only on `2.tif`; no full 135 /
+  120 regression was run after this narrow change.
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 4.1`.
 - `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py`
   passed.
