@@ -155,14 +155,32 @@ Next recommended step:
 
 ## Current Handoff
 
-Date: 2026-06-09
+Date: 2026-06-25
 Computer: primary macOS machine
 Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is now `X5_Crop.py` V4.0.1. V4.0.1 is the intended current
-  stable GitHub Release.
+- Active script is now `X5_Crop.py` V4.1. This is an active development update;
+  the current stable GitHub Release remains v4.0.1 unless a later handoff says
+  it was packaged and published.
+- V4.1 adds 120-66 short-axis aspect outer retry. It only runs for full-strip
+  separator candidates when hard separator evidence already passes and content
+  evidence says frames are too tall/narrow because the short-axis outer is too
+  tight. The retry expands the short-axis outer toward a 1:1 66 frame and does
+  not make content-only candidates auto-pass.
+- V4.1 corrects horizontal 120-67 content aspect from 4:5 to 5:4.
+- V4.1 adds conservative 120-66 / 120-67 hard-full confidence floors for
+  complete hard separator / edge-pair full-strip candidates with stable frame
+  widths and no equal gaps. Content-only still remains review-only.
+- README and CHANGELOG now mention V4.1 behavior and the 120-66 / 120-67
+  calibration status.
+- Local ignored `Test/135/X5_Crop.py` and `Test/135/x5crop/` were synced to
+  V4.1.
+- V4.1 archive snapshot is saved as `archive/X5_Crop_v4.1/`, including the thin
+  entry script and the matching `x5crop/` package.
+- Previous active script was `X5_Crop.py` V4.0.1. V4.0.1 remains the current
+  stable GitHub Release unless a later handoff says it was superseded.
 - V4.0.1 adds a formal 135 `wide-separator` branch. The default 135 hard-gap
   maximum width remains the V4.0 value (`gap_max_width_ratio=0.045`). Only when
   the normal separator candidate fails the V2 auto gate does ordinary 135
@@ -180,11 +198,10 @@ Changed:
   diagnostics launcher. It always runs dry run + Debug Analysis + diagnostics,
   uses `--jobs 4`, does not copy review files, and is explicitly excluded from
   Release packages.
-- `README.md` active version and `CHANGELOG.md` Chinese/English version notes
-  now mention V4.0.1, formal `wide-separator`, and the diagnostics launcher
-  release-package exclusion.
+- V4.0.1 README / CHANGELOG notes mentioned the formal 135 `wide-separator`
+  branch and diagnostics launcher release-package exclusion.
 - Local ignored `Test/135/X5_Crop.py` and `Test/135/x5crop/` were synced to
-  V4.0.1.
+  V4.0.1 at that release point.
 - V4.0.1 archive snapshot is saved as `archive/X5_Crop_v4.0.1/`, including the
   thin entry script and the matching `x5crop/` package.
 - V4.0 is the previous stable modular baseline requested from the V4 blueprint.
@@ -666,6 +683,19 @@ Changed:
   falls back to 2 thread workers instead of failing.
 
 Verified:
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.1`.
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py`
+  passed.
+- V4.1 `Test/120/66` full dry-run + diagnostics produced 16 ok, 7
+  `approved_auto`, and 9 `needs_review`; approved files had complete hard
+  separator evidence and content-only cases remained review.
+- V4.1 `Test/120/67` full dry-run + diagnostics produced 4 ok, 2
+  `approved_auto`, and 2 `needs_review`; `2.tif` remains review because one gap
+  is still equal / separator evidence incomplete, and `4.tif` remains review as
+  a partial/single-frame-like full-count case.
+- Full `Test/135` `deskew off` dry-run compared against V4.0.1 commit
+  `b9940a8` with `python3 -m x5crop.regression`: 48 rows, 0 diffs across
+  status, confidence, review_reasons, outer_box, frame_boxes, and gaps.
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 4.0.1`.
 - `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` passed.
 - `bash -n X5_Crop_Mac_diagnostics.command` passed.
