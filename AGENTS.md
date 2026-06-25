@@ -161,9 +161,17 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is now `X5_Crop.py` V4.1.2. This is an active development update;
+- Active script is now `X5_Crop.py` V4.1.3. This is an active development update;
   the current stable GitHub Release remains v4.0.1 unless a later handoff says
   it was packaged and published.
+- V4.1.3 is a behavior-preserving cleanup after V4.1.2. It moves the 120
+  hard-full confidence floor from `score_detection()` into
+  `calibrate_v2_candidate()` as `calibrate_hard_full_confidence_floor`, extracts
+  shared 120 format policy defaults, unifies outer retry dispatch behind one
+  proposal helper, and makes the 120-67 short-axis outer trigger require
+  semantic support from hard anchors plus content-height slack.
+- V4.1.3 full dry-run regression checks against the V4.1.2 baseline were 0 diff
+  for `Test/135`, `Test/半格`, `Test/120/66`, and `Test/120/67`.
 - V4.1.2 is a narrow 120-67 short-axis outer fix. It lowers the 120-67
   `outer_align_short_excess_ratio` to `0.024`, letting the existing
   `content_aligned_outer` retry tighten the short axis when hard separators are
@@ -184,10 +192,10 @@ Changed:
 - V4.1 adds conservative 120-66 / 120-67 hard-full confidence floors for
   complete hard separator / edge-pair full-strip candidates with stable frame
   widths and no equal gaps. Content-only still remains review-only.
-- README and CHANGELOG now mention V4.1.2 behavior and the 120-66 / 120-67
-  calibration status.
+- README and CHANGELOG now mention V4.1.3 behavior-preserving cleanup and the
+  V4.1.2 baseline regression result.
 - Local ignored `Test/135/X5_Crop.py` and `Test/135/x5crop/` were synced to
-  V4.1.2.
+  V4.1.3.
 - V4.1 archive snapshot is saved as `archive/X5_Crop_v4.1/`, including the thin
   entry script and the matching `x5crop/` package.
 - Previous active script was `X5_Crop.py` V4.0.1. V4.0.1 remains the current
@@ -694,7 +702,13 @@ Changed:
   falls back to 2 thread workers instead of failing.
 
 Verified:
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.1.2`.
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.1.3`.
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py
+  x5crop/debug/*.py` passed.
+- Full dry-run regression comparison against the V4.1.2 baseline was 0 diff for
+  `Test/135` (48 rows), `Test/半格` (15 rows), `Test/120/66` (16 rows), and
+  `Test/120/67` (4 rows).
+- V4.1.2 historical verification:
 - V4.1.2 single-file test on `Test/120/67/3.tif` with dry run + Debug Analysis
   + diagnostics kept it as `approved_auto confidence=1.000`. The selected outer
   changed from `top=1, bottom=4009` to `top=68, bottom=3974`; both gaps remain

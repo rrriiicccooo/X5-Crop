@@ -6,7 +6,7 @@
 
 如果只是使用脚本，请优先阅读 `快速启动_Quick_Start.md` 和 `README.md`。本文件保留更细的开发背景、实验结论和验证结果。
 
-当前 active 脚本：`X5_Crop.py` V4.1.2
+当前 active 脚本：`X5_Crop.py` V4.1.3
 
 当前稳定 GitHub Release：`v4.0.1`
 
@@ -14,7 +14,8 @@
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.1.2 | 当前 active 开发版 | 120-67 短轴 outer 窄修复：当 hard separator 可靠、content aspect 正常、但短轴 content slack 明显偏大时，让 120-67 走现有 content-aligned outer retry，解决 `Test/120/67/3.tif` 短轴 outer 偏松的问题。 |
+| V4.1.3 | 当前 active 开发版 | 行为保持的结构清理：把 120 hard-full confidence floor 从评分层移到 candidate calibration 层，抽出 120 共享 format policy，统一 outer retry 入口，并让 120-67 短轴 outer 触发条件更语义化。全量 135、半格、120-66、120-67 回归对比 V4.1.2 为 0 diff。 |
+| V4.1.2 | 开发版 | 120-67 短轴 outer 窄修复：当 hard separator 可靠、content aspect 正常、但短轴 content slack 明显偏大时，让 120-67 走现有 content-aligned outer retry，解决 `Test/120/67/3.tif` 短轴 outer 偏松的问题。 |
 | V4.1.1 | 开发版 | 120-67 窄修复：普通 separator 未过 auto gate 时，允许 120-67 使用保守 `wide-separator` retry，解决 `Test/120/67/2.tif` 第一条宽分隔被退成 equal 的问题。 |
 | V4.1 | 开发版 | 120-66 / 120-67 参数校准：66 在可靠 hard separator 下可做短轴 outer 扩展，67 横向比例修正为 5:4，并为 120-67 的 edge-pair / hard separator candidate 提供更合适的 confidence floor。content-only 仍不会自动 PASS。 |
 | V4.0.1 | 当前稳定 Release | 135 宽片距兼容调整：默认窄分隔逻辑保持 V4.0 行为；只有普通 separator 候选未通过 auto gate 时，才启用正式 `wide-separator` 分支。目标是兼容清晰但片距较宽的 135 扫描，同时不改变既有 `Test/135` 输出。 |
@@ -45,7 +46,24 @@
 | V3.1.x | 实验版 | 激进外框/gap 修复实验，稳定性不足。 |
 | V3.0 | 基线版 | X5 Crop 主脚本与用户工作流基础。 |
 
-### 当前 Active 版本：V4.1.2
+### 当前 Active 版本：V4.1.3
+
+V4.1.3 是 V4.1.2 之后的行为保持清理版，不以改变检测结果为目标。它主要整理前两轮审查指出的语义和维护问题：
+
+- `score_hard_full_confidence_floor` 的角色从 `score_detection()` 移到 `calibrate_v2_candidate()`，并更名为 `calibrate_hard_full_confidence_floor`。它现在明确是 candidate 级别的置信度校准，而不是 separator 分数或几何分数的一部分。
+- 120-66 / 120-67 / 120-645 的重复基础参数抽成共享 120 format policy helper，后续调 120 参数时更不容易出现分支漂移。
+- 120-67 短轴 outer excess 触发条件从单纯阈值变成语义判断：需要 hard anchor 可靠，并且 content height 明确小于 outer，才进入短轴收紧 retry。
+- CLI 里的两个 outer retry 路径合并为一个 outer correction proposal 入口，保持原来的优先级：先短轴 aspect retry，失败后才尝试 content-aligned retry。
+
+验证：
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` 通过。
+- 与 V4.1.2 baseline 对比，全量 `Test/135`：48 行，`python3 -m x5crop.regression` 为 0 diff。
+- 与 V4.1.2 baseline 对比，全量 `Test/半格`：15 行，0 diff。
+- 与 V4.1.2 baseline 对比，全量 `Test/120/66`：16 行，0 diff。
+- 与 V4.1.2 baseline 对比，全量 `Test/120/67`：4 行，0 diff。
+
+### V4.1.2
 
 V4.1.2 是一个只针对 120-67 短轴 outer 的窄修复。`Test/120/67/3.tif` 的两条分隔已经都是 `edge-pair`，问题不是分隔证据，而是初始 outer 的短轴上下留白偏多。V4.1.2 不新增检测算法，只把 120-67 的短轴 outer excess 判断调得更敏感，让它在 hard separator 可靠、content aspect 正常、短轴 content slack 明显偏大时，复用现有 `content_aligned_outer` retry 收紧短轴。
 
@@ -674,7 +692,7 @@ This changelog records X5 Crop detector changes, workflow updates, regression ch
 
 If you only want to use the script, start with `快速启动_Quick_Start.md` and `README.md`. This file keeps deeper development context, experiment outcomes, and verification notes.
 
-Current active script: `X5_Crop.py` V4.1.2
+Current active script: `X5_Crop.py` V4.1.3
 
 Current stable GitHub Release: `v4.0.1`
 
@@ -682,7 +700,8 @@ Current stable GitHub Release: `v4.0.1`
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.1.2 | Current active development version | Narrow 120-67 short-axis outer fix: when hard separators are reliable, content aspect is normal, and short-axis content slack is clearly high, 120-67 can use the existing content-aligned outer retry. This fixes the loose short-axis outer on `Test/120/67/3.tif`. |
+| V4.1.3 | Current active development version | Behavior-preserving cleanup: moves the 120 hard-full confidence floor from scoring into candidate calibration, extracts shared 120 format policy, unifies the outer retry entry point, and makes the 120-67 short-axis outer trigger more semantic. Full 135, half, 120-66, and 120-67 regression checks are 0 diff against V4.1.2. |
+| V4.1.2 | Development | Narrow 120-67 short-axis outer fix: when hard separators are reliable, content aspect is normal, and short-axis content slack is clearly high, 120-67 can use the existing content-aligned outer retry. This fixes the loose short-axis outer on `Test/120/67/3.tif`. |
 | V4.1.1 | Development | Narrow 120-67 fix: when the normal separator candidate fails the auto gate, 120-67 can use a conservative `wide-separator` retry. This fixes `Test/120/67/2.tif`, where the first wide separator had fallen back to equal. |
 | V4.1 | Development | 120-66 / 120-67 tuning: 66 can retry short-axis outer expansion when hard separators are reliable, 67 horizontal aspect is corrected to 5:4, and 120-67 edge-pair / hard-separator candidates get a more suitable confidence floor. Content-only still cannot auto-pass. |
 | V4.0.1 | Current Stable Release | 135 wide-spacing compatibility update: the default narrow-separator path keeps V4.0 behavior; only when the normal separator candidate fails the auto gate does the detector enable the formal `wide-separator` branch. The goal is to support clear but wider 135 gutters without changing existing `Test/135` output. |
@@ -713,7 +732,37 @@ Current stable GitHub Release: `v4.0.1`
 | V3.1.x | Experimental | Aggressive outer/gap rescue ideas. Not stable enough. |
 | V3.0 | Baseline | Main X5 Crop script and user workflow foundation. |
 
-### Current Active: V4.1.2
+### Current Active: V4.1.3
+
+V4.1.3 is a behavior-preserving cleanup after V4.1.2. It is not intended to
+change detection output. It addresses the semantic and maintenance issues found
+in the previous review:
+
+- The old `score_hard_full_confidence_floor` role moved out of
+  `score_detection()` and into `calibrate_v2_candidate()` as
+  `calibrate_hard_full_confidence_floor`. It is now explicitly candidate-level
+  confidence calibration, not separator scoring or geometry scoring.
+- Shared base parameters for 120-66 / 120-67 / 120-645 are now collected in one
+  120 format policy helper, reducing branch drift when future 120 tuning
+  changes.
+- The 120-67 short-axis outer excess trigger is more semantic: it requires
+  reliable hard anchors and content height clearly below the outer before
+  short-axis tightening is proposed.
+- The CLI now calls one outer correction proposal entry point instead of
+  manually chaining two retry paths. The original priority is preserved:
+  short-axis aspect retry first, then content-aligned retry.
+
+Verification:
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py
+  x5crop/debug/*.py` passed.
+- Compared against the V4.1.2 baseline, full `Test/135`: 48 rows,
+  `python3 -m x5crop.regression` reported 0 diff.
+- Compared against the V4.1.2 baseline, full `Test/半格`: 15 rows, 0 diff.
+- Compared against the V4.1.2 baseline, full `Test/120/66`: 16 rows, 0 diff.
+- Compared against the V4.1.2 baseline, full `Test/120/67`: 4 rows, 0 diff.
+
+### V4.1.2
 
 V4.1.2 is a narrow 120-67 short-axis outer fix. In
 `Test/120/67/3.tif`, both separators were already `edge-pair`; the issue was
