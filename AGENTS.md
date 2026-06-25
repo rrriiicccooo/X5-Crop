@@ -161,9 +161,15 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is now `X5_Crop.py` V4.1.1. This is an active development update;
+- Active script is now `X5_Crop.py` V4.1.2. This is an active development update;
   the current stable GitHub Release remains v4.0.1 unless a later handoff says
   it was packaged and published.
+- V4.1.2 is a narrow 120-67 short-axis outer fix. It lowers the 120-67
+  `outer_align_short_excess_ratio` to `0.024`, letting the existing
+  `content_aligned_outer` retry tighten the short axis when hard separators are
+  reliable, content aspect is normal, and short-axis content slack is clearly
+  high. This fixes `Test/120/67/3.tif`, whose separators were already correct
+  but whose short-axis outer was too loose.
 - V4.1.1 is a narrow 120-67 wide-separator fix. It enables conservative
   120-67 `wide-separator` retry only when the normal separator candidate fails
   the auto gate, with `wide_gap_retry_max_width_ratio=0.090`. This fixes
@@ -178,10 +184,10 @@ Changed:
 - V4.1 adds conservative 120-66 / 120-67 hard-full confidence floors for
   complete hard separator / edge-pair full-strip candidates with stable frame
   widths and no equal gaps. Content-only still remains review-only.
-- README and CHANGELOG now mention V4.1.1 behavior and the 120-66 / 120-67
+- README and CHANGELOG now mention V4.1.2 behavior and the 120-66 / 120-67
   calibration status.
 - Local ignored `Test/135/X5_Crop.py` and `Test/135/x5crop/` were synced to
-  V4.1.1.
+  V4.1.2.
 - V4.1 archive snapshot is saved as `archive/X5_Crop_v4.1/`, including the thin
   entry script and the matching `x5crop/` package.
 - Previous active script was `X5_Crop.py` V4.0.1. V4.0.1 remains the current
@@ -688,6 +694,13 @@ Changed:
   falls back to 2 thread workers instead of failing.
 
 Verified:
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.1.2`.
+- V4.1.2 single-file test on `Test/120/67/3.tif` with dry run + Debug Analysis
+  + diagnostics kept it as `approved_auto confidence=1.000`. The selected outer
+  changed from `top=1, bottom=4009` to `top=68, bottom=3974`; both gaps remain
+  `edge-pair` and `separator_hard_evidence.ok=True`.
+- Per target, this V4.1.2 fix was verified only on `3.tif`; no full 135 / 120
+  regression was run after this narrow change.
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 4.1.1`.
 - V4.1.1 single-file test on `Test/120/67/2.tif` with dry run + Debug Analysis
   + diagnostics changed it from V4.1 `needs_review confidence=0.835` to

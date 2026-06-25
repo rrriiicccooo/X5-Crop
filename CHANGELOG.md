@@ -6,7 +6,7 @@
 
 如果只是使用脚本，请优先阅读 `快速启动_Quick_Start.md` 和 `README.md`。本文件保留更细的开发背景、实验结论和验证结果。
 
-当前 active 脚本：`X5_Crop.py` V4.1.1
+当前 active 脚本：`X5_Crop.py` V4.1.2
 
 当前稳定 GitHub Release：`v4.0.1`
 
@@ -14,7 +14,8 @@
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.1.1 | 当前 active 开发版 | 120-67 窄修复：普通 separator 未过 auto gate 时，允许 120-67 使用保守 `wide-separator` retry，解决 `Test/120/67/2.tif` 第一条宽分隔被退成 equal 的问题。 |
+| V4.1.2 | 当前 active 开发版 | 120-67 短轴 outer 窄修复：当 hard separator 可靠、content aspect 正常、但短轴 content slack 明显偏大时，让 120-67 走现有 content-aligned outer retry，解决 `Test/120/67/3.tif` 短轴 outer 偏松的问题。 |
+| V4.1.1 | 开发版 | 120-67 窄修复：普通 separator 未过 auto gate 时，允许 120-67 使用保守 `wide-separator` retry，解决 `Test/120/67/2.tif` 第一条宽分隔被退成 equal 的问题。 |
 | V4.1 | 开发版 | 120-66 / 120-67 参数校准：66 在可靠 hard separator 下可做短轴 outer 扩展，67 横向比例修正为 5:4，并为 120-67 的 edge-pair / hard separator candidate 提供更合适的 confidence floor。content-only 仍不会自动 PASS。 |
 | V4.0.1 | 当前稳定 Release | 135 宽片距兼容调整：默认窄分隔逻辑保持 V4.0 行为；只有普通 separator 候选未通过 auto gate 时，才启用正式 `wide-separator` 分支。目标是兼容清晰但片距较宽的 135 扫描，同时不改变既有 `Test/135` 输出。 |
 | V4.0 | 上一个稳定 Release | 大胆模块化重写版：根入口 `X5_Crop.py` 变薄，实际检测、I/O、几何、证据、Debug、report、deskew 和 CLI 职责拆进 `x5crop/` 多个模块，`core.py` 仅保留兼容导出。新增单文件发布版生成器，让 Release 用户仍然只需要脚本本体和启动器。全量 135 default-deskew dry run 对比 V3.9 为 0 diff。 |
@@ -44,7 +45,18 @@
 | V3.1.x | 实验版 | 激进外框/gap 修复实验，稳定性不足。 |
 | V3.0 | 基线版 | X5 Crop 主脚本与用户工作流基础。 |
 
-### 当前 Active 版本：V4.1.1
+### 当前 Active 版本：V4.1.2
+
+V4.1.2 是一个只针对 120-67 短轴 outer 的窄修复。`Test/120/67/3.tif` 的两条分隔已经都是 `edge-pair`，问题不是分隔证据，而是初始 outer 的短轴上下留白偏多。V4.1.2 不新增检测算法，只把 120-67 的短轴 outer excess 判断调得更敏感，让它在 hard separator 可靠、content aspect 正常、短轴 content slack 明显偏大时，复用现有 `content_aligned_outer` retry 收紧短轴。
+
+验证：
+
+- `python3 X5_Crop.py --version` 输出 `X5_Crop.py 4.1.2`。
+- 只跑 `Test/120/67/3.tif`：保持 `approved_auto confidence=1.000`。
+- 修复后 `3.tif` 的 outer 从 `top=1, bottom=4009` 收紧为 `top=68, bottom=3974`，两条 gap 仍为 `edge-pair`，`separator_hard_evidence.ok=True`。
+- 这次按目标只验证 `3.tif`，没有做全量 135 / 120 回归。
+
+### V4.1.1
 
 V4.1.1 是一个只针对 120-67 宽分隔的窄修复。V4.1 中 `Test/120/67/2.tif` 的右侧分隔能被识别为 `edge-pair`，但左侧真实宽分隔被退回 `equal`，导致 hard separator evidence 不完整。V4.1.1 不改变默认窄分隔路径，只在普通 separator candidate 没过 auto gate 时，为 120-67 启用保守的 `wide-separator` retry，宽度上限为 `0.090 * pitch`。
 
@@ -662,7 +674,7 @@ This changelog records X5 Crop detector changes, workflow updates, regression ch
 
 If you only want to use the script, start with `快速启动_Quick_Start.md` and `README.md`. This file keeps deeper development context, experiment outcomes, and verification notes.
 
-Current active script: `X5_Crop.py` V4.1.1
+Current active script: `X5_Crop.py` V4.1.2
 
 Current stable GitHub Release: `v4.0.1`
 
@@ -670,7 +682,8 @@ Current stable GitHub Release: `v4.0.1`
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.1.1 | Current active development version | Narrow 120-67 fix: when the normal separator candidate fails the auto gate, 120-67 can use a conservative `wide-separator` retry. This fixes `Test/120/67/2.tif`, where the first wide separator had fallen back to equal. |
+| V4.1.2 | Current active development version | Narrow 120-67 short-axis outer fix: when hard separators are reliable, content aspect is normal, and short-axis content slack is clearly high, 120-67 can use the existing content-aligned outer retry. This fixes the loose short-axis outer on `Test/120/67/3.tif`. |
+| V4.1.1 | Development | Narrow 120-67 fix: when the normal separator candidate fails the auto gate, 120-67 can use a conservative `wide-separator` retry. This fixes `Test/120/67/2.tif`, where the first wide separator had fallen back to equal. |
 | V4.1 | Development | 120-66 / 120-67 tuning: 66 can retry short-axis outer expansion when hard separators are reliable, 67 horizontal aspect is corrected to 5:4, and 120-67 edge-pair / hard-separator candidates get a more suitable confidence floor. Content-only still cannot auto-pass. |
 | V4.0.1 | Current Stable Release | 135 wide-spacing compatibility update: the default narrow-separator path keeps V4.0 behavior; only when the normal separator candidate fails the auto gate does the detector enable the formal `wide-separator` branch. The goal is to support clear but wider 135 gutters without changing existing `Test/135` output. |
 | V4.0 | Previous Stable Release | Bold modular rewrite: root `X5_Crop.py` is thin, while detection, I/O, geometry, evidence, Debug, report, deskew, and CLI responsibilities now live in dedicated `x5crop/` modules; `core.py` is only a compatibility export surface. Adds a standalone release-script builder so Release users still need only the script and launcher. A full 135 default-deskew dry run compared with V3.9 had 0 diffs. |
@@ -700,7 +713,27 @@ Current stable GitHub Release: `v4.0.1`
 | V3.1.x | Experimental | Aggressive outer/gap rescue ideas. Not stable enough. |
 | V3.0 | Baseline | Main X5 Crop script and user workflow foundation. |
 
-### Current Active: V4.1.1
+### Current Active: V4.1.2
+
+V4.1.2 is a narrow 120-67 short-axis outer fix. In
+`Test/120/67/3.tif`, both separators were already `edge-pair`; the issue was
+not separator evidence, but extra top/bottom slack in the initial outer. V4.1.2
+does not add a new detection algorithm. It makes 120-67 short-axis outer excess
+slightly more sensitive so the existing `content_aligned_outer` retry can
+tighten the short axis when hard separators are reliable, content aspect is
+normal, and short-axis content slack is clearly high.
+
+Verification:
+
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.1.2`.
+- Running only `Test/120/67/3.tif` kept it as `approved_auto confidence=1.000`.
+- After the fix, `3.tif` outer changed from `top=1, bottom=4009` to `top=68,
+  bottom=3974`; both gaps remain `edge-pair`, and
+  `separator_hard_evidence.ok=True`.
+- Per target, this update was verified only on `3.tif`; no full 135 / 120
+  regression was run.
+
+### V4.1.1
 
 V4.1.1 is a narrow 120-67 wide-separator fix. In V4.1,
 `Test/120/67/2.tif` had a reliable right separator as `edge-pair`, but the left
