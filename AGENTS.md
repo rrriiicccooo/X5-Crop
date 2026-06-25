@@ -161,9 +161,8 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is now `X5_Crop.py` V4.1.3. This is an active development update;
-  the current stable GitHub Release remains v4.0.1 unless a later handoff says
-  it was packaged and published.
+- Active script is now `X5_Crop.py` V4.1.3. It has been packaged as the current
+  stable GitHub Release `v4.1.3`.
 - V4.1.3 is a behavior-preserving cleanup after V4.1.2. It moves the 120
   hard-full confidence floor from `score_detection()` into
   `calibrate_v2_candidate()` as `calibrate_hard_full_confidence_floor`, extracts
@@ -172,6 +171,15 @@ Changed:
   semantic support from hard anchors plus content-height slack.
 - V4.1.3 full dry-run regression checks against the V4.1.2 baseline were 0 diff
   for `Test/135`, `Test/半格`, `Test/120/66`, and `Test/120/67`.
+- GitHub Release `v4.1.3` is the intended current stable user-facing release.
+  The generated asset is `X5-Crop-v4.1.3.zip`, built with the standalone
+  V4.1.3 `X5_Crop.py` and release docs/installers only. Asset digest:
+  `sha256:0a4585f6a340cb576c170cc7efc594990002183a20573605e3cbe51cb2806da9`.
+  Verification: package contents are limited to the standalone script, macOS /
+  Windows main launchers, `README.txt`, `快速启动_Quick_Start.txt`, and the four
+  installer/uninstaller scripts under `install/`; the diagnostic launcher is
+  excluded. Extracted package script prints `X5_Crop.py 4.1.3`, and `/usr/bin/unzip`
+  preserved executable bits on `X5_Crop.py` and macOS `.command` files.
 - V4.1.2 is a narrow 120-67 short-axis outer fix. It lowers the 120-67
   `outer_align_short_excess_ratio` to `0.024`, letting the existing
   `content_aligned_outer` retry tighten the short axis when hard separators are
