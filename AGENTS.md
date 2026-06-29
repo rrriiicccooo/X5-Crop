@@ -161,8 +161,25 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is now `X5_Crop.py` V4.2.3. The current stable GitHub Release
+- Active script is now `X5_Crop.py` V4.2.4. The current stable GitHub Release
   remains `v4.1.3`.
+- V4.2.4 is a behavior-preserving cleanup after V4.2.3. Separator-first
+  fallback now builds only `separator_first_*` outer candidates instead of
+  rerunning ordinary outer candidates in the same retry. If no separator-first
+  outer is generated, no retry-used marker is written and the detector continues
+  to the existing content / review flow.
+- V4.2.4 validates `separator_first_outer_mode` as `off` / `fallback` /
+  `always`, so future typos fail loudly instead of silently changing detection
+  behavior.
+- V4.2.4 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
+  x5crop/detection/*.py x5crop/debug/*.py` passed; full `Test/135` regression
+  against the V4.2.3 baseline was 48 rows / 0 diff; full `Test/120/67`
+  regression against the V4.2.3 baseline was 4 rows / 0 diff; full `Test/半格`
+  regression against the V4.2.3 baseline was 15 rows / 0 diff; full
+  `Test/120/66` regression against the V4.2.2 baseline was 16 rows / 0 diff.
+- V4.2.4 archive snapshot is preserved as `archive/X5_Crop_v4.2.4/`, including
+  the thin entry script and the matching `x5crop/` package.
+- Previous active script was `X5_Crop.py` V4.2.3.
 - V4.2.3 generalizes the V4.2.2 separator-first outer proposal into a
   format-aware framework. It still works by finding trusted dark separator
   bands, matching them against the current format count / frame aspect, inferring
