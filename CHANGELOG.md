@@ -6,7 +6,7 @@
 
 如果只是使用脚本，请优先阅读 `快速启动_Quick_Start.md` 和 `README.md`。本文件保留更细的开发背景、实验结论和验证结果。
 
-当前 active 脚本：`X5_Crop.py` V4.2.2
+当前 active 脚本：`X5_Crop.py` V4.2.3
 
 当前稳定 GitHub Release：`v4.1.3`
 
@@ -14,7 +14,8 @@
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.2.2 | 当前 active 开发版 | 为 120-66 full 增加 separator-first outer proposal：先从全局清晰黑色分隔带挑出两条内部分隔，再用 3 张 1:1 画幅反推 outer。候选仍走原有 separator / edge-pair / scoring / review gate，content-only 仍不能自动 PASS。当前 `Test/120/66` 为 16 个 `approved_auto` / 0 个 `needs_review`；135 对比 V4.2.1 为 0 diff，120-67 对比 V4.2.1 为 0 diff。 |
+| V4.2.3 | 当前 active 开发版 | 将 separator-first outer proposal 从 120-66 专用逻辑推广成 format-aware 框架。120-66 继续 `always` 主动使用；135、half、xpan、120-645、120-67 改为 `fallback`，只在常规 separator / wide retry 未满足 auto gate 时尝试，因此不会覆盖已可靠的正常结果。135-dual 暂不启用。验证：120-66 full 为 16 个 `approved_auto` / 0 个 `needs_review`；135 对比 V4.2.2 为 0 diff，120-67 对比 V4.2.2 为 0 diff，半格对比 V4.2 baseline 为 0 diff。 |
+| V4.2.2 | 开发版 | 为 120-66 full 增加 separator-first outer proposal：先从全局清晰黑色分隔带挑出两条内部分隔，再用 3 张 1:1 画幅反推 outer。候选仍走原有 separator / edge-pair / scoring / review gate，content-only 仍不能自动 PASS。当前 `Test/120/66` 为 16 个 `approved_auto` / 0 个 `needs_review`；135 对比 V4.2.1 为 0 diff，120-67 对比 V4.2.1 为 0 diff。 |
 | V4.2.1 | 开发版 | 重做 120-66 full 的 outer 候选策略：count 固定为 3，但有效 outer 可以在整张扫描长图内浮动，用 3 张 6x6 画幅加分隔总宽度来解释几何，不再保护旧版 66 输出。120-66 full 测试为 13 个 `approved_auto` / 3 个 `needs_review`；135 对比 V4.2 为 0 diff，120-67 对比 V4.2 为 0 diff。 |
 | V4.2 | 开发版 | 建立统一 full-format geometry model：用 `count * frame_aspect + separator_total / outer_short` 解释 outer 比例，并加入保守的阶段 C outer correction retry。当前规则只在完整 hard separator 能解释几何、修正幅度小且不裁内容时移动 outer。全量 135、半格、120-66、120-67 回归对比 V4.1.3 为 0 diff。 |
 | V4.1.3 | 当前稳定 Release | 行为保持的结构清理：把 120 hard-full confidence floor 从评分层移到 candidate calibration 层，抽出 120 共享 format policy，统一 outer retry 入口，并让 120-67 短轴 outer 触发条件更语义化。全量 135、半格、120-66、120-67 回归对比 V4.1.2 为 0 diff。 |
@@ -49,7 +50,37 @@
 | V3.1.x | 实验版 | 激进外框/gap 修复实验，稳定性不足。 |
 | V3.0 | 基线版 | X5 Crop 主脚本与用户工作流基础。 |
 
-### 当前 Active 版本：V4.2.2
+### 当前 Active 版本：V4.2.3
+
+V4.2.3 把 V4.2.2 的 120-66 separator-first outer proposal 推广成 format-aware 框架。核心顺序保持不变：
+
+```text
+先从全局 separator profile 找可信黑色分隔带
+  ↓
+按当前 format 的 count 和 frame aspect 挑选可解释的内部分隔组合
+  ↓
+用 N 张同规格画幅 + 分隔总宽度反推 outer
+  ↓
+交回原有 separator / edge-pair / scoring / review gate
+```
+
+这次不是把 66 的参数直接套给所有格式。V4.2.3 给每个 format 提供独立 policy 入口：
+
+- `120-66` 保持 `always`，因为当前 66 full 的关键问题就是有效 outer 不一定铺满整张扫描，分隔优先路径是主策略。
+- `135`、`half`、`xpan`、`120-645`、`120-67` 使用 `fallback`，只有常规 separator / wide retry 候选没有满足自动通过条件时才尝试 separator-first outer proposal。
+- `135-dual` 暂不启用，因为双条 135 是上下 / 左右双 lane 的特殊逻辑，不能直接用单条 full-strip outer 模型解释。
+
+这样做的目标是把“可信分隔 + format 几何反推 outer”变成可继续调参的共同框架，同时避免它抢走已经可靠的正常检测路径。尤其是 120-67：实测把 separator-first 强行改成 always 会得到更激进、更窄的 outer，但肉眼并不明显更好，所以 V4.2.3 保持 fallback 模式。
+
+验证：
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` 通过。
+- 全量 `Test/120/66` full dry-run：16 张，16 个 `approved_auto` / 0 个 `needs_review`。
+- 对比 V4.2.2 baseline，全量 `Test/135`：48 行，0 diff。
+- 对比 V4.2.2 baseline，全量 `Test/120/67`：4 行，0 diff。
+- 对比 V4.2 baseline，全量 `Test/半格`：15 行，0 diff。
+
+### V4.2.2
 
 V4.2.2 继续解决 120-66 full 的核心问题：66 的三张照片不一定铺满整条扫描，也不一定居中，但两条黑色内部分隔往往非常清晰。V4.2.1 已经允许 outer 浮动，但仍然主要是“先有 outer，再在预测位置附近找 gap”。V4.2.2 增加了相反方向的 66 专用 proposal：
 
@@ -765,7 +796,7 @@ This changelog records X5 Crop detector changes, workflow updates, regression ch
 
 If you only want to use the script, start with `快速启动_Quick_Start.md` and `README.md`. This file keeps deeper development context, experiment outcomes, and verification notes.
 
-Current active script: `X5_Crop.py` V4.2.2
+Current active script: `X5_Crop.py` V4.2.3
 
 Current stable GitHub Release: `v4.1.3`
 
@@ -773,7 +804,8 @@ Current stable GitHub Release: `v4.1.3`
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.2.2 | Current active development version | Adds a separator-first outer proposal for 120-66 full: it first chooses two clear internal dark separator bands from the global profile, then infers the outer from three 1:1 frames. The candidate still goes through the existing separator / edge-pair / scoring / review gate, and content-only still cannot auto-pass. Current `Test/120/66` result is 16 `approved_auto` / 0 `needs_review`; 135 is 0 diff against V4.2.1, and 120-67 is 0 diff against V4.2.1. |
+| V4.2.3 | Current active development version | Generalizes the separator-first outer proposal from a 120-66-only path into a format-aware framework. 120-66 keeps using it in `always` mode; 135, half-frame, xpan, 120-645, and 120-67 use `fallback` mode, so it is tried only when the normal separator / wide-retry path does not satisfy the auto gate. 135-dual remains excluded. Verification: 120-66 full is 16 `approved_auto` / 0 `needs_review`; 135 is 0 diff against V4.2.2, 120-67 is 0 diff against V4.2.2, and half-frame is 0 diff against the V4.2 baseline. |
+| V4.2.2 | Development | Adds a separator-first outer proposal for 120-66 full: it first chooses two clear internal dark separator bands from the global profile, then infers the outer from three 1:1 frames. The candidate still goes through the existing separator / edge-pair / scoring / review gate, and content-only still cannot auto-pass. Current `Test/120/66` result is 16 `approved_auto` / 0 `needs_review`; 135 is 0 diff against V4.2.1, and 120-67 is 0 diff against V4.2.1. |
 | V4.2.1 | Development | Rebuilds 120-66 full outer candidate generation: count stays fixed at 3, but the valid outer may float inside the full scan. Geometry is explained as three 6x6 frames plus total separator width, and old 66 outputs are no longer protected as a baseline. 120-66 full test result was 13 `approved_auto` / 3 `needs_review`; 135 was 0 diff against V4.2, and 120-67 was 0 diff against V4.2. |
 | V4.2 | Development | Adds a shared full-format geometry model: `count * frame_aspect + separator_total / outer_short` explains the expected outer ratio. Also adds a conservative stage-C outer correction retry that only moves the outer when complete hard separators explain the geometry, the correction is small, and content is not cut. Full 135, half, 120-66, and 120-67 regression checks are 0 diff against V4.1.3. |
 | V4.1.3 | Current Stable Release | Behavior-preserving cleanup: moves the 120 hard-full confidence floor from scoring into candidate calibration, extracts shared 120 format policy, unifies the outer retry entry point, and makes the 120-67 short-axis outer trigger more semantic. Full 135, half, 120-66, and 120-67 regression checks are 0 diff against V4.1.2. |
@@ -808,7 +840,49 @@ Current stable GitHub Release: `v4.1.3`
 | V3.1.x | Experimental | Aggressive outer/gap rescue ideas. Not stable enough. |
 | V3.0 | Baseline | Main X5 Crop script and user workflow foundation. |
 
-### Current Active: V4.2.2
+### Current Active: V4.2.3
+
+V4.2.3 generalizes the V4.2.2 120-66 separator-first outer proposal into a
+format-aware framework. The core order stays the same:
+
+```text
+Find trusted dark separator bands in the global separator profile
+  ↓
+Choose internal separator combinations that match the current format count and frame aspect
+  ↓
+Infer the outer from N equal-format frames plus total separator width
+  ↓
+Send the candidate back through the existing separator / edge-pair / scoring / review gate
+```
+
+This is not a direct copy of the 66 parameters into every format. V4.2.3 gives
+each format its own policy entry:
+
+- `120-66` stays in `always` mode because the central 66 full-strip problem is
+  that the valid outer may not fill the full scan, and the separator-first path
+  is the main strategy.
+- `135`, `half`, `xpan`, `120-645`, and `120-67` use `fallback` mode. They try
+  separator-first outer proposals only when the normal separator / wide-retry
+  candidate does not satisfy the auto-pass gate.
+- `135-dual` remains disabled because dual 135 has two-lane strip logic and
+  should not be interpreted with the single-lane full-strip outer model.
+
+The goal is to turn "trusted separators + format geometry infer outer" into a
+shared framework for future tuning without stealing already reliable normal
+detections. This matters for 120-67: forcing separator-first into `always` mode
+gave a more aggressive, tighter outer, but visual review did not show a clear
+improvement, so V4.2.3 keeps 120-67 in fallback mode.
+
+Verification:
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` passed.
+- Full `Test/120/66` full-strip dry run: 16 files, 16 `approved_auto`, 0
+  `needs_review`.
+- Compared against the V4.2.2 baseline, full `Test/135`: 48 rows, 0 diff.
+- Compared against the V4.2.2 baseline, full `Test/120/67`: 4 rows, 0 diff.
+- Compared against the V4.2 baseline, full `Test/半格`: 15 rows, 0 diff.
+
+### V4.2.2
 
 V4.2.2 continues the 120-66 full-strip work. In these scans, the three 6x6
 frames do not necessarily fill the full long scan or sit centered inside it,

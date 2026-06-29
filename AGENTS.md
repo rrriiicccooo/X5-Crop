@@ -155,14 +155,34 @@ Next recommended step:
 
 ## Current Handoff
 
-Date: 2026-06-25
+Date: 2026-06-29
 Computer: primary macOS machine
 Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is now `X5_Crop.py` V4.2.2. The current stable GitHub Release
+- Active script is now `X5_Crop.py` V4.2.3. The current stable GitHub Release
   remains `v4.1.3`.
+- V4.2.3 generalizes the V4.2.2 separator-first outer proposal into a
+  format-aware framework. It still works by finding trusted dark separator
+  bands, matching them against the current format count / frame aspect, inferring
+  an outer from equal-format frames plus separator widths, and then returning
+  the candidate to the normal separator / edge-pair / scoring / review-gate
+  pipeline.
+- V4.2.3 keeps `120-66` in separator-first `always` mode because valid 66 full
+  outers often do not fill the entire scan. `135`, `half`, `xpan`, `120-645`,
+  and `120-67` use separator-first `fallback` mode only after the normal
+  separator / wide retry path fails the auto gate, so reliable existing
+  detections are not overridden. `135-dual` remains excluded because it uses
+  special two-lane logic.
+- V4.2.3 target / verification results: full `Test/120/66` dry-run is 16
+  `approved_auto` / 0 `needs_review`; full `Test/135` regression against the
+  V4.2.2 baseline is 48 rows / 0 diff; full `Test/120/67` regression against
+  the V4.2.2 baseline is 4 rows / 0 diff; full `Test/半格` regression against
+  the V4.2 baseline is 15 rows / 0 diff.
+- V4.2.3 archive snapshot is preserved as `archive/X5_Crop_v4.2.3/`, including
+  the thin entry script and the matching `x5crop/` package.
+- Previous active script was `X5_Crop.py` V4.2.2.
 - V4.2.2 adds a 120-66 full-strip separator-first outer proposal. It first
   finds two clear internal dark separator bands in the global separator profile,
   checks that their spacing matches the 6x6 short axis, infers an outer from
