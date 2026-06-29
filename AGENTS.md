@@ -72,8 +72,9 @@ project documentation consolidated in `README.md`.
   same time unless they are only reading.
 - Current local sparse-checkout policy keeps root-level source/docs/config files
   visible, including `README.md`, `CHANGELOG.md`, `AGENTS.md`,
-  `快速启动_Quick_Start.md`, and `LICENSE`. It hides bulky or release-only
-  paths locally. Keep `.gitignore` visible. If `.github/` appears later, keep it
+  and `快速启动_Quick_Start.md`. It hides bulky or release-only paths locally.
+  Keep `LICENSE` only in GitHub / Git history, not expanded in the local sparse
+  working tree. Keep `.gitignore` visible. If `.github/` appears later, keep it
   visible too because it contains GitHub repository automation/configuration.
 - The intended sparse-checkout rules are:
 
@@ -83,6 +84,7 @@ project documentation consolidated in `README.md`.
 !/install/
 !/release/
 !/tools/
+!/LICENSE
 ```
 
 - `.gitignore` and `.github/` are hidden dot paths by name. Treat them as
