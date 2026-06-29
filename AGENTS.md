@@ -161,8 +161,29 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is now `X5_Crop.py` V4.2. The current stable GitHub Release
+- Active script is now `X5_Crop.py` V4.2.1. The current stable GitHub Release
   remains `v4.1.3`.
+- V4.2.1 rebuilds the 120-66 full-strip outer candidate strategy. It treats
+  120-66 full as fixed count=3, but lets the valid outer float inside the
+  longer scan instead of assuming the three 6x6 frames fill or sit centered in
+  the full image. Existing outer candidates are kept, and 120-66 full adds a
+  small set of floating candidates anchored around the base outer and content
+  bbox. Those candidates still compete through the existing separator /
+  edge-pair / scoring / review-gate pipeline, and content-only candidates still
+  cannot auto-pass without reliable separator evidence.
+- V4.2.1 intentionally does not protect the old 120-66 PASS outputs as a
+  baseline, because the user judged the old 66 PASS results inaccurate. The
+  current 120-66 full result is the new reference for inspection: 16 files, 13
+  `approved_auto`, and 3 `needs_review` (`X5_test_45.tif`, `X5_test_50.tif`,
+  `X5_test_54.tif`).
+- V4.2.1 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
+  x5crop/detection/*.py x5crop/debug/*.py` passed; full `Test/135` dry-run
+  regression against the V4.2 baseline was 48 rows / 0 diff; full
+  `Test/120/67` dry-run regression against the V4.2 baseline was 4 rows /
+  0 diff.
+- V4.2.1 archive snapshot is preserved as `archive/X5_Crop_v4.2.1/`, including
+  the thin entry script and the matching `x5crop/` package.
+- Previous active script was `X5_Crop.py` V4.2.
 - V4.2 adds a shared full-format geometry model for full strips:
   `outer_long / outer_short = count * frame_aspect + separator_total / outer_short`.
   The model is written into report detail and feeds a conservative stage-C outer
