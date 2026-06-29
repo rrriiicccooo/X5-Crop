@@ -6,15 +6,19 @@
 
 如果只是使用脚本，请优先阅读 `快速启动_Quick_Start.md` 和 `README.md`。本文件保留更细的开发背景、实验结论和验证结果。
 
-当前 active 脚本：`X5_Crop.py` V4.2.4
+当前 active 脚本：`X5_Crop.py` V4.2.8
 
-当前稳定 GitHub Release：`v4.1.3`
+当前稳定 GitHub Release：`v4.2.8`
 
 ### 版本状态
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.2.4 | 当前 active 开发版 | 行为保持的 separator-first fallback 清理：fallback 现在只构建 `separator_first_*` outer 候选，不再重复把普通 outer 候选放进同一轮竞争；没有 separator-first outer 时不写 retry used，直接回到原有 content / review 流程。同时校验 `separator_first_outer_mode` 只能是 `off` / `fallback` / `always`。验证：135、120-67、半格、120-66 对比对应 V4.2.x baseline 均为 0 diff。 |
+| V4.2.8 | 当前稳定发布版 / 当前 active 版本 | 启动器交互改进：Mac / Windows 主启动器只在开启 partial mode 后询问 count；直接回车或输入 `auto` 表示自动判断张数，也可以输入当前 format 允许的固定张数。不开启 partial mode 时不再额外询问 count，继续使用完整片条固定张数。检测逻辑不变。 |
+| V4.2.7 | 开发版 | 半格 full 稳定 grid 支持：新增 `half_stable_grid_support`，当 hard+grid 覆盖全部 gap、没有 equal、至少 35% gap 有 hard/wide 证据、frame 宽度极稳定、content support 正常且 joint score 达到 half stable-grid 下限时，可以把稳定几何补位视为可靠证据。`Test/半格/full` 为 10 个 `approved_auto` / 0 个 `needs_review`；相比 V4.2.6，`X5_00062`、`X5_00063` 新增通过，框和 gap 不变。 |
+| V4.2.6 | 开发版 | 半格 full 宽分隔第二轮调参：`half_wide_geometry_support` 改为 majority-wide 规则，要求 wide/hard gap 覆盖至少 60% 分隔、没有 equal、frame 宽度稳定、内容支撑正常且 joint score 达到半格 wide 下限；content candidate 出现 `content_run_count_mismatch` 且存在可信 separator candidate 时，REVIEW 展示优先选择 separator candidate。`Test/半格/full` 为 8 个 `approved_auto` / 2 个 `needs_review`；相比 V4.2.5，`X5_00056`、`X5_00058` 新增通过，`X5_00063` 仍 REVIEW 但不再显示误导性的 content candidate。 |
+| V4.2.5 | 开发版 | 半格 full 宽分隔调参：普通半格路径继续保留原有 equal/grid 行为，只有 wide retry 分支允许用 `wide-separator` 识别较宽黑色片距；新增 `half_wide_geometry_support` 闸门，要求 wide/hard gap 覆盖至少 80% 分隔、没有 equal、frame 宽度稳定、内容支撑正常且 joint score 过阈值。`Test/半格/full` 从 3 个 `approved_auto` / 7 个 `needs_review` 变为 6 个 `approved_auto` / 4 个 `needs_review`，新增通过为 `X5_00059`、`X5_00060`、`X5_00061`；`X5_00056`、`X5_00062` 仍保守 REVIEW。 |
+| V4.2.4 | 开发版 | 行为保持的 separator-first fallback 清理：fallback 现在只构建 `separator_first_*` outer 候选，不再重复把普通 outer 候选放进同一轮竞争；没有 separator-first outer 时不写 retry used，直接回到原有 content / review 流程。同时校验 `separator_first_outer_mode` 只能是 `off` / `fallback` / `always`。验证：135、120-67、半格、120-66 对比对应 V4.2.x baseline 均为 0 diff。 |
 | V4.2.3 | 开发版 | 将 separator-first outer proposal 从 120-66 专用逻辑推广成 format-aware 框架。120-66 继续 `always` 主动使用；135、half、xpan、120-645、120-67 改为 `fallback`，只在常规 separator / wide retry 未满足 auto gate 时尝试，因此不会覆盖已可靠的正常结果。135-dual 暂不启用。验证：120-66 full 为 16 个 `approved_auto` / 0 个 `needs_review`；135 对比 V4.2.2 为 0 diff，120-67 对比 V4.2.2 为 0 diff，半格对比 V4.2 baseline 为 0 diff。 |
 | V4.2.2 | 开发版 | 为 120-66 full 增加 separator-first outer proposal：先从全局清晰黑色分隔带挑出两条内部分隔，再用 3 张 1:1 画幅反推 outer。候选仍走原有 separator / edge-pair / scoring / review gate，content-only 仍不能自动 PASS。当前 `Test/120/66` 为 16 个 `approved_auto` / 0 个 `needs_review`；135 对比 V4.2.1 为 0 diff，120-67 对比 V4.2.1 为 0 diff。 |
 | V4.2.1 | 开发版 | 重做 120-66 full 的 outer 候选策略：count 固定为 3，但有效 outer 可以在整张扫描长图内浮动，用 3 张 6x6 画幅加分隔总宽度来解释几何，不再保护旧版 66 输出。120-66 full 测试为 13 个 `approved_auto` / 3 个 `needs_review`；135 对比 V4.2 为 0 diff，120-67 对比 V4.2 为 0 diff。 |
@@ -51,7 +55,92 @@
 | V3.1.x | 实验版 | 激进外框/gap 修复实验，稳定性不足。 |
 | V3.0 | 基线版 | X5 Crop 主脚本与用户工作流基础。 |
 
-### 当前 Active 版本：V4.2.4
+### 当前 Active 版本：V4.2.8
+
+V4.2.8 是启动器交互改进，检测逻辑不变。Mac / Windows 主启动器现在只在用户开启 partial mode 后追问 count：
+
+```text
+partial mode? [y/n, return=no]: y
+partial count:
+  return or auto = auto
+  allowed: ...
+count:
+```
+
+规则：
+
+- 不开启 partial mode：不询问 count，继续使用所选 format 的 full count。
+- 开启 partial mode：直接回车或输入 `auto` 表示自动判断张数。
+- 开启 partial mode：输入允许范围内的数字，会把 `--count N` 传给脚本，固定局部片条张数。
+- 输入不合法 count 时，启动器会重新询问。
+
+验证：
+
+- `bash -n X5_Crop_Mac.command` 通过。
+- Mac 启动器 smoke test：输入 `half` / partial `y` / count `3` / debug `y` 后，启动器显示 `strip mode: partial`、`count: 3`，并调用脚本。项目根目录没有 TIFF，所以最终报 `No TIFF files found`，这是预期的 smoke-test 结果。
+- Local ignored test copies were synced for `Test/135`, `Test/new_135`, `Test/120/66`, `Test/120/67`, and `Test/半格/full`.
+
+### V4.2.7
+
+V4.2.7 增加半格 full 的稳定 grid 支持。V4.2.6 后，`X5_00062.tif` 和 `X5_00063.tif` 的裁切框已经很好，但仍因为 hard/wide 数量不足、outer area 偏大和 `v2_auto_gate_not_satisfied` 进入 REVIEW。新的 `half_stable_grid_support` 不单独放宽 outer，而是承认一种更窄的半格 full 形态：
+
+```text
+真实 hard/wide 分隔只覆盖一部分
+  +
+grid 补齐全部 gap
+  +
+frame width 极稳定
+  +
+content support 正常
+  +
+没有 equal fallback
+```
+
+验证：
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` 通过。
+- 全量 `Test/半格/full` dry-run + Debug Analysis 已输出到 `Test/半格/full/4.2.7`。
+- `Test/半格/full` 结果：10 张，10 个 `approved_auto` / 0 个 `needs_review`。
+- 相比 V4.2.6，仅 `X5_00062.tif`、`X5_00063.tif` 从 REVIEW 变为 PASS；它们的 outer、frame boxes 和 gaps 不变。
+- `X5_00062.tif` 通过 `half_stable_grid_support`，4/11 个 hard/wide，7/11 个 grid。
+- `X5_00063.tif` 通过 `half_stable_grid_support`，5/11 个 hard/wide，6/11 个 grid。
+
+### V4.2.6
+
+V4.2.6 继续优化半格 full。V4.2.5 已经让 59/60/61 通过，但 56/58 仍被闸门拦住，63 虽然保持 REVIEW，却显示了一个误导性很强的 content candidate。V4.2.6 做两处更贴近半格 full 的修正：
+
+- `half_wide_geometry_support` 从“至少 80% wide/hard gap”改为“至少 60% wide/hard gap + no equal + frame width 稳定 + content support ok + 半格 wide joint score 下限”。这样 56/58 这类多数分隔明确、但仍有少量 grid 补位的半格 full 可以通过。
+- 当 half full 的 content candidate 出现 `content_run_count_mismatch`，且存在较可信 separator candidate 时，REVIEW 展示优先选择 separator candidate。这样 63 继续 REVIEW，但 Debug boxes 不再显示之前那种明显错位的 content 切法。
+
+验证：
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` 通过。
+- 全量 `Test/半格/full` dry-run + Debug Analysis 已输出到 `Test/半格/full/4.2.6`。
+- `Test/半格/full` 结果：10 张，8 个 `approved_auto` / 2 个 `needs_review`。
+- 相比 V4.2.5，新增通过：`X5_00056.tif`、`X5_00058.tif`。
+- `X5_00050.tif`、`X5_00053.tif`、`X5_00054.tif`、`X5_00059.tif`、`X5_00060.tif`、`X5_00061.tif` 与 V4.2.5 保持稳定。
+- `X5_00062.tif` 继续 REVIEW，因为只有 4/11 个 wide/hard gap。
+- `X5_00063.tif` 继续 REVIEW，因为只有 5/11 个 wide/hard gap；但最终展示已从 content candidate 改为 separator candidate，避免误导人工复核。
+
+### V4.2.5
+
+V4.2.5 是半格 full 的保守宽分隔调参。用户把半格测试重新拆成 `full` / `partial` 后，`Test/半格/full` 中 56 之后的多张标准半格图仍进入 REVIEW。诊断显示主要原因不是肉眼不可见分隔，而是半格原路径会把 full 模式内部分隔退成 equal/grid；宽黑色片距没有被当成足够可靠的分隔证据。
+
+这版只对 half full 做两处窄改动：
+
+- 普通 half full 路径继续保留原有 equal/grid 行为，避免影响已经稳定的 50/53/54。
+- 当普通路径没有通过时，wide retry 分支可以用 `wide-separator` 识别较宽黑色片距；只有 wide/hard gap 覆盖至少 80% 分隔、没有 equal fallback、frame 宽度稳定、内容支撑正常且 joint score 过阈值时，才通过 `half_wide_geometry_support` 自动裁切。
+
+验证：
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` 通过。
+- 全量 `Test/半格/full` dry-run + Debug Analysis 已输出到 `Test/半格/full/4.2.5`。
+- `Test/半格/full` 结果：10 张，6 个 `approved_auto` / 4 个 `needs_review`。
+- 相比 V4.2.4，新增通过：`X5_00059.tif`、`X5_00060.tif`、`X5_00061.tif`。
+- `X5_00050.tif`、`X5_00053.tif`、`X5_00054.tif` 与 V4.2.4 保持不变。
+- `X5_00056.tif` 和 `X5_00062.tif` 已能看到部分 `wide-separator`，但 wide 数量不足，继续 REVIEW；`X5_00058.tif` 和 `X5_00063.tif` 仍是 content-only / content mismatch 形态，继续 REVIEW。
+
+### V4.2.4
 
 V4.2.4 是 V4.2.3 之后的行为保持清理，不改变检测结果，主要修掉 separator-first fallback 的两个维护风险：
 
@@ -812,15 +901,19 @@ This changelog records X5 Crop detector changes, workflow updates, regression ch
 
 If you only want to use the script, start with `快速启动_Quick_Start.md` and `README.md`. This file keeps deeper development context, experiment outcomes, and verification notes.
 
-Current active script: `X5_Crop.py` V4.2.4
+Current active script: `X5_Crop.py` V4.2.8
 
-Current stable GitHub Release: `v4.1.3`
+Current stable GitHub Release: `v4.2.8`
 
 ### Version Status
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.2.4 | Current active development version | Behavior-preserving separator-first fallback cleanup: fallback now builds only `separator_first_*` outer candidates instead of rerunning ordinary outer candidates in the same retry. If no separator-first outer is generated, no retry-used marker is written and the detector returns to the existing content / review flow. `separator_first_outer_mode` is now validated as `off` / `fallback` / `always`. Verification: 135, 120-67, half-frame, and 120-66 all have 0 diff against their matching V4.2.x baselines. |
+| V4.2.8 | Current stable release / active version | Launcher interaction update: Mac / Windows main launchers ask for count only after partial mode is enabled. Return or `auto` keeps automatic count detection; an allowed number fixes the partial frame count. When partial mode is off, the launcher does not ask for count and keeps the full-strip count for the selected format. Detection logic is unchanged. |
+| V4.2.7 | Development | Adds half-frame full stable-grid support: `half_stable_grid_support` can accept stable geometric gap fill when hard+grid covers all gaps, no equal fallback is used, at least 35% of gaps have hard/wide evidence, frame widths are very stable, content support is normal, and a half stable-grid joint-score floor is met. `Test/半格/full` is now 10 `approved_auto` / 0 `needs_review`; compared with V4.2.6, only `X5_00062` and `X5_00063` changed from REVIEW to PASS, with unchanged boxes and gaps. |
+| V4.2.6 | Development | Second half-frame full-strip wide-separator tuning pass: `half_wide_geometry_support` now uses a majority-wide rule, requiring wide/hard gaps to cover at least 60% of expected separators, no equal fallback, stable frame widths, normal content support, and a half-wide joint-score floor. When a content candidate has `content_run_count_mismatch` and a plausible separator candidate exists, REVIEW display prefers the separator candidate. `Test/半格/full` is now 8 `approved_auto` / 2 `needs_review`; newly approved compared with V4.2.5 are `X5_00056` and `X5_00058`, while `X5_00063` stays REVIEW but no longer shows the misleading content candidate. |
+| V4.2.5 | Development | Half-frame full-strip wide-separator tuning: the ordinary half-frame path keeps its existing equal/grid behavior, while the wide retry branch may recognize wider dark gutters as `wide-separator`. The new `half_wide_geometry_support` gate requires wide/hard gaps to cover at least 80% of expected separators, no equal fallback, stable frame widths, normal content support, and a joint score above threshold. `Test/半格/full` changed from 3 `approved_auto` / 7 `needs_review` to 6 `approved_auto` / 4 `needs_review`; newly approved files are `X5_00059`, `X5_00060`, and `X5_00061`; `X5_00056` and `X5_00062` remain conservative REVIEW. |
+| V4.2.4 | Development | Behavior-preserving separator-first fallback cleanup: fallback now builds only `separator_first_*` outer candidates instead of rerunning ordinary outer candidates in the same retry. If no separator-first outer is generated, no retry-used marker is written and the detector returns to the existing content / review flow. `separator_first_outer_mode` is now validated as `off` / `fallback` / `always`. Verification: 135, 120-67, half-frame, and 120-66 all have 0 diff against their matching V4.2.x baselines. |
 | V4.2.3 | Development | Generalizes the separator-first outer proposal from a 120-66-only path into a format-aware framework. 120-66 keeps using it in `always` mode; 135, half-frame, xpan, 120-645, and 120-67 use `fallback` mode, so it is tried only when the normal separator / wide-retry path does not satisfy the auto gate. 135-dual remains excluded. Verification: 120-66 full is 16 `approved_auto` / 0 `needs_review`; 135 is 0 diff against V4.2.2, 120-67 is 0 diff against V4.2.2, and half-frame is 0 diff against the V4.2 baseline. |
 | V4.2.2 | Development | Adds a separator-first outer proposal for 120-66 full: it first chooses two clear internal dark separator bands from the global profile, then infers the outer from three 1:1 frames. The candidate still goes through the existing separator / edge-pair / scoring / review gate, and content-only still cannot auto-pass. Current `Test/120/66` result is 16 `approved_auto` / 0 `needs_review`; 135 is 0 diff against V4.2.1, and 120-67 is 0 diff against V4.2.1. |
 | V4.2.1 | Development | Rebuilds 120-66 full outer candidate generation: count stays fixed at 3, but the valid outer may float inside the full scan. Geometry is explained as three 6x6 frames plus total separator width, and old 66 outputs are no longer protected as a baseline. 120-66 full test result was 13 `approved_auto` / 3 `needs_review`; 135 was 0 diff against V4.2, and 120-67 was 0 diff against V4.2. |
@@ -857,7 +950,125 @@ Current stable GitHub Release: `v4.1.3`
 | V3.1.x | Experimental | Aggressive outer/gap rescue ideas. Not stable enough. |
 | V3.0 | Baseline | Main X5 Crop script and user workflow foundation. |
 
-### Current Active: V4.2.4
+### Current Active: V4.2.8
+
+V4.2.8 is a launcher interaction update; detection logic is unchanged. The
+Mac / Windows main launchers now ask for count only after partial mode is
+enabled:
+
+```text
+partial mode? [y/n, return=no]: y
+partial count:
+  return or auto = auto
+  allowed: ...
+count:
+```
+
+Rules:
+
+- If partial mode is off, the launcher does not ask for count and keeps the
+  selected format's full-strip count.
+- If partial mode is on, Return or `auto` means automatic count detection.
+- If partial mode is on, an allowed number is passed as `--count N`, fixing the
+  partial frame count.
+- Invalid count input is rejected and the launcher asks again.
+
+Verification:
+
+- `bash -n X5_Crop_Mac.command` passed.
+- Mac launcher smoke test: entering `half` / partial `y` / count `3` / debug
+  `y` showed `strip mode: partial` and `count: 3`, then invoked the script. The
+  project root has no TIFF files, so the final `No TIFF files found` message is
+  expected for this smoke test.
+- Local ignored test copies were synced for `Test/135`, `Test/new_135`,
+  `Test/120/66`, `Test/120/67`, and `Test/半格/full`.
+
+### V4.2.7
+
+V4.2.7 adds half-frame full stable-grid support. After V4.2.6,
+`X5_00062.tif` and `X5_00063.tif` already had good crop boxes, but they still
+went to REVIEW because hard/wide evidence was below the majority-wide gate,
+outer area was large, and the V2 auto gate was not satisfied. The new
+`half_stable_grid_support` does not loosen outer area by itself. Instead, it
+recognizes a narrow half-frame full pattern:
+
+```text
+real hard/wide separators cover part of the strip
+  +
+grid fills the remaining gaps
+  +
+frame width is very stable
+  +
+content support is normal
+  +
+no equal fallback is used
+```
+
+Verification:
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` passed.
+- Full `Test/半格/full` dry-run + Debug Analysis output was written to `Test/半格/full/4.2.7`.
+- `Test/半格/full` result: 10 files, 10 `approved_auto` / 0 `needs_review`.
+- Compared with V4.2.6, only `X5_00062.tif` and `X5_00063.tif` changed from REVIEW to PASS; their outer boxes, frame boxes, and gaps are unchanged.
+- `X5_00062.tif` passes via `half_stable_grid_support`, with 4/11 hard/wide gaps and 7/11 grid gaps.
+- `X5_00063.tif` passes via `half_stable_grid_support`, with 5/11 hard/wide gaps and 6/11 grid gaps.
+
+### V4.2.6
+
+V4.2.6 continues the half-frame full-strip tuning. V4.2.5 already allowed
+59/60/61 to pass, but 56/58 were still blocked by the gate, and 63 stayed REVIEW
+while showing a misleading content candidate. V4.2.6 makes two half-frame
+full-specific changes:
+
+- `half_wide_geometry_support` now uses a majority-wide rule: at least 60% of
+  expected gaps must be wide/hard, no equal fallback may be used, frame widths
+  must be stable, content support must be normal, and the candidate must reach a
+  half-wide joint-score floor. This lets 56/58 pass while keeping weaker cases
+  in REVIEW.
+- When a half-frame full content candidate has `content_run_count_mismatch` and
+  a plausible separator candidate exists, REVIEW display prefers the separator
+  candidate. This keeps 63 in REVIEW but avoids the previously misleading
+  content-based crop boxes.
+
+Verification:
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` passed.
+- Full `Test/半格/full` dry-run + Debug Analysis output was written to `Test/半格/full/4.2.6`.
+- `Test/半格/full` result: 10 files, 8 `approved_auto` / 2 `needs_review`.
+- Newly approved compared with V4.2.5: `X5_00056.tif` and `X5_00058.tif`.
+- `X5_00050.tif`, `X5_00053.tif`, `X5_00054.tif`, `X5_00059.tif`, `X5_00060.tif`, and `X5_00061.tif` remain stable from V4.2.5.
+- `X5_00062.tif` stays REVIEW because it has only 4/11 wide/hard gaps.
+- `X5_00063.tif` stays REVIEW because it has only 5/11 wide/hard gaps, but final display now uses the separator candidate instead of the misleading content candidate.
+
+### V4.2.5
+
+V4.2.5 is conservative half-frame full-strip wide-separator tuning. After the
+half-frame tests were split into `full` and `partial`, several standard-looking
+full half-frame scans from 56 onward still went to REVIEW. Diagnostics showed
+that the issue was not invisible separators; the half-frame full path was
+falling back to equal/grid behavior, so wider dark gutters were not being
+treated as reliable separator evidence.
+
+This version makes two narrow half-frame-only changes:
+
+- The ordinary half-frame full path keeps its existing equal/grid behavior, so
+  stable existing files such as 50/53/54 are not disturbed.
+- When the ordinary path does not pass, the wide retry branch may use
+  `wide-separator` for wider dark gutters. Auto-crop is allowed only when
+  wide/hard gaps cover at least 80% of expected separators, no equal fallback
+  is used, frame widths are stable, content support is normal, and the joint
+  score is above threshold.
+
+Verification:
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` passed.
+- Full `Test/半格/full` dry-run + Debug Analysis output was written to `Test/半格/full/4.2.5`.
+- `Test/半格/full` result: 10 files, 6 `approved_auto` / 4 `needs_review`.
+- Newly approved compared with V4.2.4: `X5_00059.tif`, `X5_00060.tif`, and `X5_00061.tif`.
+- `X5_00050.tif`, `X5_00053.tif`, and `X5_00054.tif` remain unchanged from V4.2.4.
+- `X5_00056.tif` and `X5_00062.tif` now show some `wide-separator` evidence but still do not have enough wide coverage, so they stay REVIEW. `X5_00058.tif` and `X5_00063.tif` remain content-only / content-mismatch REVIEW cases.
+
+### V4.2.4
 
 V4.2.4 is a behavior-preserving cleanup after V4.2.3. It addresses two
 maintenance risks in the separator-first fallback path:

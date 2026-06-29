@@ -2026,40 +2026,7 @@ def half_wide_geometry_support_applies(
         and equal == 0
         and width_cv <= tuning.score_full_width_cv
         and support == "ok"
-        and joint_score >= tuning.separator_half_wide_geometry_min_joint_score
-        and outer_area <= tuning.score_outer_max_area
-    )
-
-
-def half_stable_grid_support_applies(
-    candidate: Detection,
-    hard_detail: dict[str, Any],
-    fmt: FilmFormat,
-    source: str,
-    support: str,
-    joint_score: float,
-) -> bool:
-    tuning = format_tuning(fmt.name)
-    expected = max(0, int(hard_detail.get("expected_gaps", 0) or 0))
-    hard = int(hard_detail.get("hard_gaps", 0) or 0)
-    grid = int(hard_detail.get("grid_gaps", 0) or 0)
-    equal = int(hard_detail.get("equal_gaps", 0) or 0)
-    width_cv = float(candidate.detail.get("width_cv", 1.0) or 1.0)
-    outer_area = float(candidate.detail.get("outer_area_ratio", 1.0) or 1.0)
-    min_hard = int(math.ceil(expected * tuning.separator_half_stable_grid_min_hard_ratio))
-    return (
-        fmt.name == "half"
-        and source == "separator"
-        and candidate.strip_mode == "full"
-        and candidate.count == fmt.default_count
-        and len(candidate.frames) == candidate.count
-        and expected > 0
-        and hard >= min_hard
-        and hard + grid >= expected
-        and equal == 0
-        and width_cv <= tuning.score_full_width_cv
-        and support == "ok"
-        and joint_score >= tuning.separator_half_stable_grid_min_joint_score
+        and joint_score >= threshold
         and outer_area <= tuning.score_outer_max_area
     )
 
@@ -2117,7 +2084,7 @@ def calibrate_v2_candidate(
     reasons = list(candidate.review_reasons)
     if floor_applies:
         reasons = [reason for reason in reasons if reason != "low_confidence"]
-    half_wide_support = (not hard_ok) and half_wide_geometry_support_applies(
+    half_wide_support = half_wide_geometry_support_applies(
         candidate,
         hard_detail,
         fmt,
@@ -2126,28 +2093,12 @@ def calibrate_v2_candidate(
         joint_score,
         config.confidence_threshold,
     )
-    half_stable_grid_support = (
-        False
-        if half_wide_support
-        else half_stable_grid_support_applies(
-            candidate,
-            hard_detail,
-            fmt,
-            source,
-            support,
-            joint_score,
-        )
-    )
-    if half_wide_support or half_stable_grid_support:
+    if half_wide_support:
         hard_ok = True
         hard_detail = dict(hard_detail)
         hard_detail["ok"] = True
-        if half_wide_support:
-            hard_detail["reason"] = "half_wide_geometry_support"
-            hard_detail["half_wide_geometry_support"] = True
-        else:
-            hard_detail["reason"] = "half_stable_grid_support"
-            hard_detail["half_stable_grid_support"] = True
+        hard_detail["reason"] = "half_wide_geometry_support"
+        hard_detail["half_wide_geometry_support"] = True
         reasons = [reason for reason in reasons if reason != "outer_box_too_large"]
 
     if source == "separator" and not hard_ok:
@@ -2212,48 +2163,6 @@ def v2_candidate_rank(detection: Detection, threshold: float) -> tuple[int, floa
         float(detection.confidence),
         int(detection.count),
         joint,
-    )
-
-
-def half_review_separator_candidate(
-    best: Detection,
-    candidates: list[Detection],
-) -> Optional[Detection]:
-    best_v2 = best.detail.get("v2_candidate", {})
-    best_source = best_v2.get("source") if isinstance(best_v2, dict) else None
-    if (
-        best.film_format != "half"
-        or best.strip_mode != "full"
-        or best.count != FORMATS["half"].default_count
-        or best_source != "content"
-        or "content_run_count_mismatch" not in best.review_reasons
-    ):
-        return None
-    plausible: list[Detection] = []
-    for candidate in candidates:
-        if candidate is best or candidate.film_format != "half" or candidate.strip_mode != "full" or candidate.count != best.count:
-            continue
-        candidate_v2 = candidate.detail.get("v2_candidate", {})
-        if not isinstance(candidate_v2, dict) or candidate_v2.get("source") != "separator":
-            continue
-        hard_detail = candidate_v2.get("separator_hard_evidence", {})
-        if not isinstance(hard_detail, dict):
-            continue
-        expected = max(1, int(hard_detail.get("expected_gaps", best.count - 1) or best.count - 1))
-        hard = int(hard_detail.get("hard_gaps", 0) or 0)
-        equal = int(hard_detail.get("equal_gaps", 0) or 0)
-        support = str(candidate_v2.get("content_support", ""))
-        if hard >= max(1, math.ceil(expected * 0.50)) and equal == 0 and support == "ok":
-            plausible.append(candidate)
-    if not plausible:
-        return None
-    return max(
-        plausible,
-        key=lambda candidate: (
-            int((candidate.detail.get("v2_candidate", {}).get("separator_hard_evidence", {}) or {}).get("hard_gaps", 0) or 0),
-            float((candidate.detail.get("v2_candidate", {}) or {}).get("joint_score", 0.0) or 0.0),
-            float(candidate.confidence),
-        ),
     )
 
 
@@ -2386,18 +2295,6 @@ def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache
     candidates = sorted(candidates, key=lambda d: v2_candidate_rank(d, config.confidence_threshold), reverse=True)
     best = candidates[0]
     selected_by_full_guard = False
-    selection_override: Optional[str] = None
-    half_separator_review = half_review_separator_candidate(best, candidates)
-    if half_separator_review is not None and half_separator_review.confidence < config.confidence_threshold:
-        half_separator_review.review_reasons.append("half_content_candidate_mismatch_prefers_separator_review")
-        half_separator_review.review_reasons = sorted(set(half_separator_review.review_reasons))
-        half_separator_review.detail["half_content_candidate_mismatch"] = {
-            "content_candidate_confidence": float(best.confidence),
-            "content_candidate_review_reasons": list(best.review_reasons),
-            "content_candidate_v2": best.detail.get("v2_candidate", {}),
-        }
-        best = half_separator_review
-        selection_override = "half_content_candidate_mismatch_prefers_separator_review"
     if best.strip_mode == "partial":
         best_full = next(
             (
@@ -2421,7 +2318,6 @@ def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache
             }
             best = best_full
             selected_by_full_guard = True
-            selection_override = "partial_competes_with_plausible_full_strip"
     second = next((candidate for candidate in candidates if candidate is not best), None)
     selected_tuning = format_tuning(best.film_format)
     competition = [
@@ -2448,7 +2344,7 @@ def choose_detection_v2(gray: np.ndarray, config: Config, fmt: FilmFormat, cache
             "review_reasons": list(best.review_reasons),
             "v2_candidate": best.detail.get("v2_candidate", {}),
         },
-        "selection_override": selection_override,
+        "selection_override": "partial_competes_with_plausible_full_strip" if selected_by_full_guard else None,
         "top_candidates": competition,
     }
     if second is not None:

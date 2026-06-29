@@ -109,6 +109,7 @@ Windows: 双击 X5_Crop_win.bat
 ```text
 format:
 partial mode? [y/n, return=no]:
+count:
 debug analysis? [y/n, return=no]:
 ```
 
@@ -149,7 +150,7 @@ xpan = 3
 - 片夹没有被照片铺满。
 - 你明确想让脚本自动判断这条里有几张。
 
-开启 partial mode 后，脚本会用 auto count，并且判断更保守。它不是普通完整片条的推荐模式；完整片条请保持 `no`，这样速度和稳定性都更好。
+开启 partial mode 后，启动器会继续询问 count。直接回车或输入 `auto` 等于自动判断张数；也可以输入当前 format 允许的具体张数。partial mode 不是普通完整片条的推荐模式；完整片条请保持 `no`，这样速度和稳定性都更好。
 
 ### debug analysis
 
@@ -325,6 +326,7 @@ The launcher asks:
 ```text
 format:
 partial mode? [y/n, return=no]:
+count:
 debug analysis? [y/n, return=no]:
 ```
 
@@ -365,7 +367,7 @@ Use `y` only for:
 - holders that are not filled by frames.
 - cases where you intentionally want the script to decide the frame count automatically.
 
-With partial mode enabled, the script uses auto count and behaves more conservatively. It is not recommended for normal complete strips; keep it at `no` for better speed and stability.
+With partial mode enabled, the launcher asks for count. Press Return or type `auto` for automatic count detection, or enter an allowed count for the selected format. Partial mode is not recommended for normal complete strips; keep it at `no` for better speed and stability.
 
 ### Debug Analysis
 

@@ -163,8 +163,86 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is now `X5_Crop.py` V4.2.4. The current stable GitHub Release
-  remains `v4.1.3`.
+- Active script is now `X5_Crop.py` V4.2.8. The current stable GitHub Release
+  is `v4.2.8`.
+- V4.2.8 is a launcher interaction update; detection logic is unchanged. The
+  Mac / Windows main launchers now ask for count only after partial mode is
+  enabled. Return or `auto` keeps automatic count detection; an allowed number
+  is passed as `--count N`. When partial mode is off, the launcher does not ask
+  for count and keeps the selected format's full-strip count.
+- V4.2.8 verification: `bash -n X5_Crop_Mac.command` passed. Mac launcher
+  smoke test with `half` / partial `y` / count `3` / debug `y` showed
+  `strip mode: partial` and `count: 3`, then invoked the script; the final
+  `No TIFF files found` message is expected because the project root has no
+  TIFF files. Local ignored test copies were synced for `Test/135`,
+  `Test/new_135`, `Test/120/66`, `Test/120/67`, and `Test/半格/full`.
+- V4.2.8 archive snapshot is preserved as `archive/X5_Crop_v4.2.8/`, including
+  the thin entry script, both main launchers, and the matching `x5crop/`
+  package.
+- Previous active script was `X5_Crop.py` V4.2.7.
+- V4.2.7 adds half-frame full stable-grid support. It does not loosen
+  `outer_box_too_large` by itself. Instead, `half_stable_grid_support` can pass
+  a half full separator candidate when hard+grid covers all gaps, no equal
+  fallback is used, at least 35% of gaps have hard/wide evidence, frame widths
+  are very stable, content support is normal, and a half stable-grid joint-score
+  floor is met.
+- V4.2.7 target result: full `Test/半格/full` dry-run + Debug Analysis output
+  is saved in `Test/半格/full/4.2.7`. The result is 10 files, 10
+  `approved_auto` / 0 `needs_review`. Compared with V4.2.6, only
+  `X5_00062.tif` and `X5_00063.tif` changed from REVIEW to PASS; their outer
+  boxes, frame boxes, and gaps are unchanged. `X5_00062.tif` passes with 4/11
+  hard/wide gaps and 7/11 grid gaps; `X5_00063.tif` passes with 5/11 hard/wide
+  gaps and 6/11 grid gaps.
+- V4.2.7 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
+  x5crop/detection/*.py x5crop/debug/*.py` passed. Local ignored test copies
+  were synced for `Test/135`, `Test/new_135`, `Test/120/66`, `Test/120/67`,
+  and `Test/半格/full`.
+- V4.2.7 archive snapshot is preserved as `archive/X5_Crop_v4.2.7/`, including
+  the thin entry script and the matching `x5crop/` package.
+- Previous active script was `X5_Crop.py` V4.2.6.
+- V4.2.6 continues half-frame full-strip wide-separator tuning. It changes
+  `half_wide_geometry_support` from the V4.2.5 80% wide/hard requirement to a
+  majority-wide rule: at least 60% wide/hard gaps, no equal fallback, stable
+  frame widths, normal content support, and a half-wide joint-score floor. It
+  also prefers a plausible separator candidate for half full REVIEW display
+  when the best content candidate has `content_run_count_mismatch`.
+- V4.2.6 target result: full `Test/半格/full` dry-run + Debug Analysis output
+  is saved in `Test/半格/full/4.2.6`. The result is 10 files, 8
+  `approved_auto` / 2 `needs_review`. Compared with V4.2.5, newly approved
+  files are `X5_00056.tif` and `X5_00058.tif`. `X5_00062.tif` stays REVIEW
+  with 4/11 wide/hard gaps. `X5_00063.tif` stays REVIEW with 5/11 wide/hard
+  gaps, but final Debug boxes now use the separator candidate instead of the
+  misleading content candidate.
+- V4.2.6 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
+  x5crop/detection/*.py x5crop/debug/*.py` passed. Local ignored test copies
+  were synced for `Test/135`, `Test/new_135`, `Test/120/66`, `Test/120/67`,
+  and `Test/半格/full`.
+- V4.2.6 archive snapshot is preserved as `archive/X5_Crop_v4.2.6/`, including
+  the thin entry script and the matching `x5crop/` package.
+- Previous active script was `X5_Crop.py` V4.2.5.
+- V4.2.5 is a conservative half-frame full-strip wide-separator tuning pass.
+  Ordinary half-frame full detection keeps the previous equal/grid behavior, but
+  the wide retry branch can now preserve real `wide-separator` gaps. The new
+  `half_wide_geometry_support` calibration gate only auto-approves half full
+  separator candidates when wide/hard gaps cover at least 80% of expected
+  separators, no equal fallback is used, frame widths are stable, content
+  support is normal, and the joint score is above threshold.
+- V4.2.5 target result: full `Test/半格/full` dry-run + Debug Analysis output
+  is saved in `Test/半格/full/4.2.5`. The result is 10 files, 6
+  `approved_auto` / 4 `needs_review`. Compared with V4.2.4, newly approved
+  files are `X5_00059.tif`, `X5_00060.tif`, and `X5_00061.tif`; existing
+  approved files `X5_00050.tif`, `X5_00053.tif`, and `X5_00054.tif` remain
+  unchanged. `X5_00056.tif` and `X5_00062.tif` now show some wide separator
+  evidence but stay REVIEW because wide coverage is still insufficient;
+  `X5_00058.tif` and `X5_00063.tif` remain content-only / content-mismatch
+  REVIEW cases.
+- V4.2.5 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
+  x5crop/detection/*.py x5crop/debug/*.py` passed. Local ignored test copies
+  were synced for `Test/135`, `Test/new_135`, `Test/120/66`, `Test/120/67`,
+  and `Test/半格/full`.
+- V4.2.5 archive snapshot is preserved as `archive/X5_Crop_v4.2.5/`, including
+  the thin entry script and the matching `x5crop/` package.
+- Previous active script was `X5_Crop.py` V4.2.4.
 - V4.2.4 is a behavior-preserving cleanup after V4.2.3. Separator-first
   fallback now builds only `separator_first_*` outer candidates instead of
   rerunning ordinary outer candidates in the same retry. If no separator-first
@@ -237,10 +315,9 @@ Changed:
   `approved_auto`, and 3 `needs_review` (`X5_test_45.tif`, `X5_test_50.tif`,
   `X5_test_54.tif`).
 - V4.2.1 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed; full `Test/135` dry-run
-  regression against the V4.2 baseline was 48 rows / 0 diff; full
-  `Test/120/67` dry-run regression against the V4.2 baseline was 4 rows /
-  0 diff.
+  x5crop/detection/*.py` passed; full `Test/135` dry-run regression against
+  the V4.2 baseline was 48 rows / 0 diff; full `Test/120/67` dry-run
+  regression against the V4.2 baseline was 4 rows / 0 diff.
 - V4.2.1 archive snapshot is preserved as `archive/X5_Crop_v4.2.1/`, including
   the thin entry script and the matching `x5crop/` package.
 - Previous active script was `X5_Crop.py` V4.2.

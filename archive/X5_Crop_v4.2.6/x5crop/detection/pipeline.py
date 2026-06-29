@@ -2031,39 +2031,6 @@ def half_wide_geometry_support_applies(
     )
 
 
-def half_stable_grid_support_applies(
-    candidate: Detection,
-    hard_detail: dict[str, Any],
-    fmt: FilmFormat,
-    source: str,
-    support: str,
-    joint_score: float,
-) -> bool:
-    tuning = format_tuning(fmt.name)
-    expected = max(0, int(hard_detail.get("expected_gaps", 0) or 0))
-    hard = int(hard_detail.get("hard_gaps", 0) or 0)
-    grid = int(hard_detail.get("grid_gaps", 0) or 0)
-    equal = int(hard_detail.get("equal_gaps", 0) or 0)
-    width_cv = float(candidate.detail.get("width_cv", 1.0) or 1.0)
-    outer_area = float(candidate.detail.get("outer_area_ratio", 1.0) or 1.0)
-    min_hard = int(math.ceil(expected * tuning.separator_half_stable_grid_min_hard_ratio))
-    return (
-        fmt.name == "half"
-        and source == "separator"
-        and candidate.strip_mode == "full"
-        and candidate.count == fmt.default_count
-        and len(candidate.frames) == candidate.count
-        and expected > 0
-        and hard >= min_hard
-        and hard + grid >= expected
-        and equal == 0
-        and width_cv <= tuning.score_full_width_cv
-        and support == "ok"
-        and joint_score >= tuning.separator_half_stable_grid_min_joint_score
-        and outer_area <= tuning.score_outer_max_area
-    )
-
-
 def candidate_counts_for_format(config: Config, fmt: FilmFormat) -> list[tuple[int, str, tuple[float, ...]]]:
     def v2_offsets(count: int) -> tuple[float, ...]:
         return partial_offsets(fmt, count)
@@ -2117,7 +2084,7 @@ def calibrate_v2_candidate(
     reasons = list(candidate.review_reasons)
     if floor_applies:
         reasons = [reason for reason in reasons if reason != "low_confidence"]
-    half_wide_support = (not hard_ok) and half_wide_geometry_support_applies(
+    half_wide_support = half_wide_geometry_support_applies(
         candidate,
         hard_detail,
         fmt,
@@ -2126,28 +2093,12 @@ def calibrate_v2_candidate(
         joint_score,
         config.confidence_threshold,
     )
-    half_stable_grid_support = (
-        False
-        if half_wide_support
-        else half_stable_grid_support_applies(
-            candidate,
-            hard_detail,
-            fmt,
-            source,
-            support,
-            joint_score,
-        )
-    )
-    if half_wide_support or half_stable_grid_support:
+    if half_wide_support:
         hard_ok = True
         hard_detail = dict(hard_detail)
         hard_detail["ok"] = True
-        if half_wide_support:
-            hard_detail["reason"] = "half_wide_geometry_support"
-            hard_detail["half_wide_geometry_support"] = True
-        else:
-            hard_detail["reason"] = "half_stable_grid_support"
-            hard_detail["half_stable_grid_support"] = True
+        hard_detail["reason"] = "half_wide_geometry_support"
+        hard_detail["half_wide_geometry_support"] = True
         reasons = [reason for reason in reasons if reason != "outer_box_too_large"]
 
     if source == "separator" and not hard_ok:

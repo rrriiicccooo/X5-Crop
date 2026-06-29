@@ -34,7 +34,7 @@ from PIL import Image, ImageDraw
 import tifffile
 
 
-VERSION = "4.2.8"
+VERSION = "4.2.6"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -475,8 +475,6 @@ class FormatTuning:
     separator_half_allow_geometry_support: bool = True
     separator_half_wide_geometry_min_hard_ratio: float = 0.60
     separator_half_wide_geometry_min_joint_score: float = 0.78
-    separator_half_stable_grid_min_hard_ratio: float = 0.35
-    separator_half_stable_grid_min_joint_score: float = 0.65
     separator_120_require_all_hard: bool = True
     leading_grid_failure_enabled: bool = True
     leading_grid_failure_min_count: int = 5
