@@ -6,7 +6,7 @@
 
 如果只是使用脚本，请优先阅读 `快速启动_Quick_Start.md` 和 `README.md`。本文件保留更细的开发背景、实验结论和验证结果。
 
-当前 active 脚本：`X5_Crop.py` V4.1.3
+当前 active 脚本：`X5_Crop.py` V4.2
 
 当前稳定 GitHub Release：`v4.1.3`
 
@@ -14,11 +14,12 @@
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.1.3 | 当前稳定 Release / 当前 active 开发版 | 行为保持的结构清理：把 120 hard-full confidence floor 从评分层移到 candidate calibration 层，抽出 120 共享 format policy，统一 outer retry 入口，并让 120-67 短轴 outer 触发条件更语义化。全量 135、半格、120-66、120-67 回归对比 V4.1.2 为 0 diff。 |
+| V4.2 | 当前 active 开发版 | 建立统一 full-format geometry model：用 `count * frame_aspect + separator_total / outer_short` 解释 outer 比例，并加入保守的阶段 C outer correction retry。当前规则只在完整 hard separator 能解释几何、修正幅度小且不裁内容时移动 outer。全量 135、半格、120-66、120-67 回归对比 V4.1.3 为 0 diff。 |
+| V4.1.3 | 当前稳定 Release | 行为保持的结构清理：把 120 hard-full confidence floor 从评分层移到 candidate calibration 层，抽出 120 共享 format policy，统一 outer retry 入口，并让 120-67 短轴 outer 触发条件更语义化。全量 135、半格、120-66、120-67 回归对比 V4.1.2 为 0 diff。 |
 | V4.1.2 | 开发版 | 120-67 短轴 outer 窄修复：当 hard separator 可靠、content aspect 正常、但短轴 content slack 明显偏大时，让 120-67 走现有 content-aligned outer retry，解决 `Test/120/67/3.tif` 短轴 outer 偏松的问题。 |
 | V4.1.1 | 开发版 | 120-67 窄修复：普通 separator 未过 auto gate 时，允许 120-67 使用保守 `wide-separator` retry，解决 `Test/120/67/2.tif` 第一条宽分隔被退成 equal 的问题。 |
 | V4.1 | 开发版 | 120-66 / 120-67 参数校准：66 在可靠 hard separator 下可做短轴 outer 扩展，67 横向比例修正为 5:4，并为 120-67 的 edge-pair / hard separator candidate 提供更合适的 confidence floor。content-only 仍不会自动 PASS。 |
-| V4.0.1 | 当前稳定 Release | 135 宽片距兼容调整：默认窄分隔逻辑保持 V4.0 行为；只有普通 separator 候选未通过 auto gate 时，才启用正式 `wide-separator` 分支。目标是兼容清晰但片距较宽的 135 扫描，同时不改变既有 `Test/135` 输出。 |
+| V4.0.1 | 历史稳定 Release | 135 宽片距兼容调整：默认窄分隔逻辑保持 V4.0 行为；只有普通 separator 候选未通过 auto gate 时，才启用正式 `wide-separator` 分支。目标是兼容清晰但片距较宽的 135 扫描，同时不改变既有 `Test/135` 输出。 |
 | V4.0 | 上一个稳定 Release | 大胆模块化重写版：根入口 `X5_Crop.py` 变薄，实际检测、I/O、几何、证据、Debug、report、deskew 和 CLI 职责拆进 `x5crop/` 多个模块，`core.py` 仅保留兼容导出。新增单文件发布版生成器，让 Release 用户仍然只需要脚本本体和启动器。全量 135 default-deskew dry run 对比 V3.9 为 0 diff。 |
 | V3.9 | 开发版 | 结构清理版：把剩余 outer mask profiles、post-detection confidence caps、deskew span skip、frame-fit 小像素容忍、separator gate mode 和 outer retry 开关收进 policy / format-aware 配置。全量 135 default-deskew dry run 对比 V3.7 为 0 diff。 |
 | V3.7 | 开发版 | 合并 frame-size fit 管线：cuts 级等宽修正改为 geometry fallback，box 级同画幅拟合改为 edge-evidence fit，并通过统一入口选择。目标是让 edge-pair 扩展到各格式后的 frame fit 更清楚，同时保持现有输出不变。 |
@@ -46,7 +47,34 @@
 | V3.1.x | 实验版 | 激进外框/gap 修复实验，稳定性不足。 |
 | V3.0 | 基线版 | X5 Crop 主脚本与用户工作流基础。 |
 
-### 当前 Active 版本：V4.1.3
+### 当前 Active 版本：V4.2
+
+V4.2 建立了一个统一 full-format geometry model，用同一套公式解释 135、half、xpan、120-66、120-645、120-67 这类 full strip：
+
+```text
+outer_long / outer_short = count * frame_aspect + separator_total / outer_short
+```
+
+这个模型会写入 report detail，并参与一个保守的阶段 C outer correction retry。它只在以下条件同时满足时尝试移动 outer：
+
+- full strip，且 count 是该 format 的 full count；
+- 所有内部分隔都是 hard separator / edge-pair / wide-separator，并且有可测量宽度；
+- 当前 outer 多出来的长轴比例不能被已测量 separator total 解释；
+- 根据 separator 宽度和 format frame aspect 反推的新 outer 更接近几何模型；
+- 修正幅度很小，且不会裁掉 content bbox。
+
+这一步的目标是先把“不同画幅其实共享同一个几何骨架”的框架搭起来，并允许非常窄的 active correction。当前测试集里它没有触发输出变化，说明规则足够保守；120-66 中那些 REVIEW 图主要缺少可靠 hard gap，因此不会被这个阶段 C 规则强行修正或推成 PASS。
+
+验证：
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` 通过。
+- 对比 V4.1.3 baseline，全量 `Test/135`：48 行，0 diff。
+- 对比 V4.1.3 baseline，全量 `Test/半格`：15 行，0 diff。
+- 对比 V4.1.3 baseline，全量 `Test/120/66`：16 行，0 diff。
+- 对比 V4.1.3 baseline，全量 `Test/120/67`：4 行，0 diff。
+- `Test/new_135` 4 张宽片距样本在 V4.2 下保持 4 个 `approved_auto` / 0 个 `needs_review`。
+
+### V4.1.3
 
 V4.1.3 是 V4.1.2 之后的行为保持清理版，不以改变检测结果为目标。它主要整理前两轮审查指出的语义和维护问题：
 
@@ -692,7 +720,7 @@ This changelog records X5 Crop detector changes, workflow updates, regression ch
 
 If you only want to use the script, start with `快速启动_Quick_Start.md` and `README.md`. This file keeps deeper development context, experiment outcomes, and verification notes.
 
-Current active script: `X5_Crop.py` V4.1.3
+Current active script: `X5_Crop.py` V4.2
 
 Current stable GitHub Release: `v4.1.3`
 
@@ -700,11 +728,12 @@ Current stable GitHub Release: `v4.1.3`
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.1.3 | Current Stable Release / current active development version | Behavior-preserving cleanup: moves the 120 hard-full confidence floor from scoring into candidate calibration, extracts shared 120 format policy, unifies the outer retry entry point, and makes the 120-67 short-axis outer trigger more semantic. Full 135, half, 120-66, and 120-67 regression checks are 0 diff against V4.1.2. |
+| V4.2 | Current active development version | Adds a shared full-format geometry model: `count * frame_aspect + separator_total / outer_short` explains the expected outer ratio. Also adds a conservative stage-C outer correction retry that only moves the outer when complete hard separators explain the geometry, the correction is small, and content is not cut. Full 135, half, 120-66, and 120-67 regression checks are 0 diff against V4.1.3. |
+| V4.1.3 | Current Stable Release | Behavior-preserving cleanup: moves the 120 hard-full confidence floor from scoring into candidate calibration, extracts shared 120 format policy, unifies the outer retry entry point, and makes the 120-67 short-axis outer trigger more semantic. Full 135, half, 120-66, and 120-67 regression checks are 0 diff against V4.1.2. |
 | V4.1.2 | Development | Narrow 120-67 short-axis outer fix: when hard separators are reliable, content aspect is normal, and short-axis content slack is clearly high, 120-67 can use the existing content-aligned outer retry. This fixes the loose short-axis outer on `Test/120/67/3.tif`. |
 | V4.1.1 | Development | Narrow 120-67 fix: when the normal separator candidate fails the auto gate, 120-67 can use a conservative `wide-separator` retry. This fixes `Test/120/67/2.tif`, where the first wide separator had fallen back to equal. |
 | V4.1 | Development | 120-66 / 120-67 tuning: 66 can retry short-axis outer expansion when hard separators are reliable, 67 horizontal aspect is corrected to 5:4, and 120-67 edge-pair / hard-separator candidates get a more suitable confidence floor. Content-only still cannot auto-pass. |
-| V4.0.1 | Current Stable Release | 135 wide-spacing compatibility update: the default narrow-separator path keeps V4.0 behavior; only when the normal separator candidate fails the auto gate does the detector enable the formal `wide-separator` branch. The goal is to support clear but wider 135 gutters without changing existing `Test/135` output. |
+| V4.0.1 | Historical Stable Release | 135 wide-spacing compatibility update: the default narrow-separator path keeps V4.0 behavior; only when the normal separator candidate fails the auto gate does the detector enable the formal `wide-separator` branch. The goal is to support clear but wider 135 gutters without changing existing `Test/135` output. |
 | V4.0 | Previous Stable Release | Bold modular rewrite: root `X5_Crop.py` is thin, while detection, I/O, geometry, evidence, Debug, report, deskew, and CLI responsibilities now live in dedicated `x5crop/` modules; `core.py` is only a compatibility export surface. Adds a standalone release-script builder so Release users still need only the script and launcher. A full 135 default-deskew dry run compared with V3.9 had 0 diffs. |
 | V3.9 | Development | Structural cleanup: moves the remaining outer mask profiles, post-detection confidence caps, deskew span skip, frame-fit small-pixel tolerances, separator gate mode, and outer retry switch into policy / format-aware configuration. A full 135 default-deskew dry run compared with V3.7 had 0 diffs. |
 | V3.7 | Development | Merges the frame-size fit pipeline: cuts-level equal-width correction becomes geometry fallback, box-level same-frame fitting becomes edge-evidence fit, and a single entry point chooses the layer. The goal is clearer frame fitting after edge-pair expanded across formats, while preserving existing output. |
@@ -732,7 +761,45 @@ Current stable GitHub Release: `v4.1.3`
 | V3.1.x | Experimental | Aggressive outer/gap rescue ideas. Not stable enough. |
 | V3.0 | Baseline | Main X5 Crop script and user workflow foundation. |
 
-### Current Active: V4.1.3
+### Current Active: V4.2
+
+V4.2 adds a shared full-format geometry model for full-strip detection across
+135, half-frame, xpan, 120-66, 120-645, and 120-67:
+
+```text
+outer_long / outer_short = count * frame_aspect + separator_total / outer_short
+```
+
+The model is written into report detail and is also used by a conservative
+stage-C outer correction retry. The retry only tries to move the outer when all
+of these are true:
+
+- the candidate is a full strip with the format's full count;
+- every internal separator is hard / edge-pair / wide-separator and has a
+  measurable width;
+- the current outer has extra long-axis ratio that cannot be explained by the
+  measured separator total;
+- the separator widths and format frame aspect can infer a corrected outer that
+  is closer to the geometry model;
+- the correction is small and does not cut the content bbox.
+
+The goal is to establish one shared geometry language for all formats while
+allowing only a narrow active correction. On the current test set, this rule did
+not change output, which confirms it is conservative. The 120-66 REVIEW images
+mostly lack reliable hard gaps, so this stage-C rule does not force-correct
+them or push them into PASS.
+
+Verification:
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py
+  x5crop/debug/*.py` passed.
+- Compared against the V4.1.3 baseline, full `Test/135`: 48 rows, 0 diff.
+- Compared against the V4.1.3 baseline, full `Test/半格`: 15 rows, 0 diff.
+- Compared against the V4.1.3 baseline, full `Test/120/66`: 16 rows, 0 diff.
+- Compared against the V4.1.3 baseline, full `Test/120/67`: 4 rows, 0 diff.
+- `Test/new_135` kept 4 `approved_auto` / 0 `needs_review` in V4.2.
+
+### V4.1.3
 
 V4.1.3 is a behavior-preserving cleanup after V4.1.2. It is not intended to
 change detection output. It addresses the semantic and maintenance issues found

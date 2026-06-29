@@ -8,7 +8,7 @@
 
 X5 Crop 是一个用于 Hasselblad / Imacon X5 胶片片夹长图的 TIFF 自动裁切工具。它会把同一文件夹里的长条 TIFF 扫描图拆分成单张 TIFF；只有高置信结果会自动导出，低置信或困难图片会进入复核。
 
-当前 active 脚本版本：V4.1.3
+当前 active 脚本版本：V4.2
 
 当前稳定发布版本：v4.1.3（GitHub Releases）
 
@@ -414,7 +414,7 @@ python3 X5_Crop.py . --format 135 --strip full --report --export-review
 
 ## English Guide
 
-Current active script version: V4.1.3
+Current active script version: V4.2
 
 Current stable release: v4.1.3 (GitHub Releases)
 

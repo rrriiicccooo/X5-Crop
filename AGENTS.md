@@ -161,8 +161,21 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is now `X5_Crop.py` V4.1.3. It has been packaged as the current
-  stable GitHub Release `v4.1.3`.
+- Active script is now `X5_Crop.py` V4.2. The current stable GitHub Release
+  remains `v4.1.3`.
+- V4.2 adds a shared full-format geometry model for full strips:
+  `outer_long / outer_short = count * frame_aspect + separator_total / outer_short`.
+  The model is written into report detail and feeds a conservative stage-C outer
+  correction retry. It only attempts to move outer when all internal gaps are
+  measured hard separators, the current outer has unexplained extra long-axis
+  ratio, the inferred corrected outer is closer to the geometry model, the
+  shrink is small, and the correction does not cut the content bbox.
+- V4.2 full dry-run regression checks against the V4.1.3 baseline were 0 diff
+  for `Test/135`, `Test/半格`, `Test/120/66`, and `Test/120/67`. `Test/new_135`
+  stayed 4 `approved_auto` / 0 `needs_review`. In the current 120-66 tests, the
+  REVIEW images generally lack reliable hard gaps, so the new stage-C rule does
+  not force-correct them or make them PASS.
+- V4.1.3 has been packaged as the current stable GitHub Release `v4.1.3`.
 - V4.1.3 is a behavior-preserving cleanup after V4.1.2. It moves the 120
   hard-full confidence floor from `score_detection()` into
   `calibrate_v2_candidate()` as `calibrate_hard_full_confidence_floor`, extracts
