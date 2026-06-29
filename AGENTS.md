@@ -165,6 +165,13 @@ Last commit: see `git log -1`
 Changed:
 - Active script is now `X5_Crop.py` V4.2.8. The current stable GitHub Release
   is `v4.2.8`.
+- GitHub Release `v4.2.8` has been published as Latest:
+  `https://github.com/rrriiicccooo/X5-Crop/releases/tag/v4.2.8`. The uploaded
+  asset is `X5-Crop-v4.2.8.zip`.
+- Release descriptions now follow the user's simplified rule: only Quick Start
+  and Update Notes, no verification commands, regression details, or digest
+  blocks. This was applied retroactively to `v4.1.3`, `v4.0.1`, `v4.0`,
+  `v3.6.2`, and `v3.3.1`.
 - V4.2.8 is a launcher interaction update; detection logic is unchanged. The
   Mac / Windows main launchers now ask for count only after partial mode is
   enabled. Return or `auto` keeps automatic count detection; an allowed number
@@ -179,6 +186,9 @@ Changed:
 - V4.2.8 archive snapshot is preserved as `archive/X5_Crop_v4.2.8/`, including
   the thin entry script, both main launchers, and the matching `x5crop/`
   package.
+- Local sparse-checkout was restored after publishing. `archive/` and
+  `release/` local working-tree copies were removed after the archive commit
+  and Release upload, so they remain cloud/GitHub-only locally.
 - Previous active script was `X5_Crop.py` V4.2.7.
 - V4.2.7 adds half-frame full stable-grid support. It does not loosen
   `outer_box_too_large` by itself. Instead, `half_stable_grid_support` can pass
