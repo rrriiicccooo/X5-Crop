@@ -161,8 +161,29 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
-- Active script is now `X5_Crop.py` V4.2.1. The current stable GitHub Release
+- Active script is now `X5_Crop.py` V4.2.2. The current stable GitHub Release
   remains `v4.1.3`.
+- V4.2.2 adds a 120-66 full-strip separator-first outer proposal. It first
+  finds two clear internal dark separator bands in the global separator profile,
+  checks that their spacing matches the 6x6 short axis, infers an outer from
+  three 1:1 frames plus separator widths, and then sends that candidate back
+  through the normal separator / edge-pair / scoring / review-gate pipeline.
+  This is only enabled for `120-66`, full strip, count=3. It does not let
+  content-only candidates auto-pass. Separator-first candidates get a limited
+  wide-gap override so clear but wider 66 dark gutters can be accepted; wide
+  separator results remain confidence-capped.
+- V4.2.2 target result: full `Test/120/66` dry-run is now 16
+  `approved_auto` / 0 `needs_review`. `X5_test_45.tif`, `X5_test_50.tif`, and
+  `X5_test_54.tif` now select `v2_separator_candidate` instead of content-only
+  REVIEW, using `detected` / `edge-pair` / `wide-separator` gap evidence.
+- V4.2.2 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
+  x5crop/detection/*.py x5crop/debug/*.py` passed; full `Test/135` dry-run
+  regression against the V4.2.1 baseline was 48 rows / 0 diff; full
+  `Test/120/67` dry-run regression against the V4.2.1 baseline was 4 rows /
+  0 diff.
+- V4.2.2 archive snapshot is preserved as `archive/X5_Crop_v4.2.2/`, including
+  the thin entry script and the matching `x5crop/` package.
+- Previous active script was `X5_Crop.py` V4.2.1.
 - V4.2.1 rebuilds the 120-66 full-strip outer candidate strategy. It treats
   120-66 full as fixed count=3, but lets the valid outer float inside the
   longer scan instead of assuming the three 6x6 frames fill or sit centered in
