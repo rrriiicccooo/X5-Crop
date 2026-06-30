@@ -41,7 +41,7 @@ from .constants import (
 )
 
 
-VERSION = "4.5.4"
+VERSION = "4.5.3"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -547,15 +547,6 @@ class FormatTuning:
     partial_safe_extra_frames_min_joint_score: float = 0.65
     partial_safe_extra_frames_min_content_score: float = 0.72
     partial_safe_extra_frames_min_geometry_score: float = 0.72
-    partial_safe_extra_frames_min_wide_like_gaps: int = 0
-    partial_safe_extra_frames_wide_like_min_width_ratio: float = 0.033
-    partial_safe_extra_frames_leading_content_check: bool = False
-    partial_safe_extra_frames_leading_content_max_mean: float = 0.20
-    partial_safe_extra_frames_leading_content_max_coverage: float = 0.34
-    partial_safe_extra_frames_leading_content_band_ratio: float = 0.04
-    partial_safe_extra_frames_frame_content_check: bool = False
-    partial_safe_extra_frames_min_frame_mean: float = 0.055
-    partial_safe_extra_frames_min_frame_coverage: float = 0.10
     lucky_pass_risk_enabled: bool = True
     lucky_model_gap_support_min: int = 2
     lucky_model_gap_support_weight: float = 0.24
@@ -860,9 +851,6 @@ def format_tuning(format_name: str) -> FormatTuning:
             separator_gate_120_edge_pair_min_score_without_wide=1.0,
             separator_gate_120_edge_pair_min_score_with_wide=0.0,
             separator_gate_120_min_wide_gaps_for_auto=0,
-            partial_safe_extra_frames_min_wide_like_gaps=2,
-            partial_safe_extra_frames_leading_content_check=True,
-            partial_safe_extra_frames_frame_content_check=True,
             short_axis_aspect_retry_enabled=True,
             short_axis_aspect_retry_min_error=0.24,
             short_axis_aspect_retry_target_aspect=1.0,

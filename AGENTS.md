@@ -163,6 +163,136 @@ Branch: main
 Last commit: see `git log -1`
 
 Changed:
+- Active script is now `X5_Crop.py` V4.5.4. The current stable GitHub Release
+  remains `v4.2.8`.
+- V4.5.4 is a 120-66 wide-dark-separator correction after V4.5.3. It adds the
+  `separator_dark_band_outer` candidate strategy for 120-66 count=3 full and
+  partial strips, deriving an outer from two broad dark separator bands plus
+  three square frames.
+- 120-66 partial `partial_safe_extra_frames` now requires wide-like separator
+  evidence and checks both content-floating leading-edge content and per-frame
+  content stability before treating extra holder area as safe.
+- 120-66 full can prefer `separator_dark_band_outer` when the current full
+  outer needs help and the dark-band candidate has normal content support,
+  enough hard gaps, and no equal gap. Full does not reuse partial's
+  extra-holder tolerance.
+- V4.5.4 caps returned 120-66 dark-band gap evidence to a core width so
+  merged dark content is not displayed or scored as an over-wide separator.
+  This keeps `X5_test_51.tif` from reporting the second separator as a
+  1300px-wide band while preserving its selected outer and frame boxes.
+- README and CHANGELOG now describe V4.5.4 as the active development version.
+
+Verified:
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py
+  x5crop/debug/*.py` passed.
+- `Test/120/66` partial dry-run + Debug Analysis + diagnostics with
+  `--deskew off --count 3` passed 16 ok / 0 failed / 16 approved / 0 review
+  in `/private/tmp/x5_66_partial_next2`.
+- Compared with `Test/120/66/4.5.2_regression_partial`, partial results changed
+  on `X5_test_43.tif`, `X5_test_48.tif`, `X5_test_51.tif`, and
+  `X5_test_55.tif`. `X5_test_51.tif` moved from REVIEW to PASS using
+  `separator_dark_band_outer` with two `wide-separator` gaps. `X5_test_43.tif`
+  and `X5_test_55.tif` remain PASS but now use separator-derived outers instead
+  of the overly tight content-floating outer. `X5_test_48.tif` remains PASS and
+  switches to the new dark-band outer path.
+- `Test/120/66` full dry-run + Debug Analysis + diagnostics with
+  `--deskew off --count 3` passed 16 ok / 0 failed / 16 approved / 0 review
+  in `/private/tmp/x5_66_full_next3`.
+- After the dark-band gap core-width cap, `Test/120/66` partial and full were
+  rerun in `/private/tmp/x5_66_partial_gapcap` and
+  `/private/tmp/x5_66_full_gapcap`; both stayed 16 ok / 0 failed /
+  16 approved / 0 review. On `X5_test_51.tif`, the second dark-band gap width
+  changed from about 1315px to about 736px in partial, and from about 1314px to
+  about 737px in full, with selected frames still stable.
+- Compared with the previous full guard report
+  `/private/tmp/x5_66_full_guard_test3`, `X5_test_43.tif`,
+  `X5_test_48.tif`, and `X5_test_51.tif` moved from REVIEW to PASS. Visual
+  inspection of the new Debug Analysis for 43 / 48 / 51 showed good diffs:
+  three real frames are boxed and old content-shape / weak-edge failures are
+  replaced by wide dark-band separator evidence.
+- Full V4.5.4 local diagnostics were rerun after clearing historical `Test/`
+  outputs, using `--deskew off --dry-run --report --debug-analysis
+  --diagnostics --jobs 4`. Outputs follow the current naming rule: full mode
+  uses the version folder only, partial mode adds `_partial`.
+- V4.5.4 full diagnostic results:
+  `Test/135/4.5.4` = 48 ok / 43 approved / 5 review;
+  `Test/new_135/4.5.4` = 4 ok / 4 approved / 0 review;
+  `Test/120/66/4.5.4` = 16 ok / 16 approved / 0 review;
+  `Test/120/66/4.5.4_partial` = 16 ok / 16 approved / 0 review;
+  `Test/120/67/4.5.4` = 4 ok / 3 approved / 1 review;
+  `Test/半格/full/4.5.4` = 10 ok / 10 approved / 0 review;
+  `Test/半格/partial/4.5.4_partial` = 5 ok / 5 approved / 0 review.
+- V4.5.4 timing was recorded in local ignored file
+  `Test/4.5.4_diagnostic_timing.md`: all executed sets were 103 files,
+  221.31s total, average 2.15s/file. Process workers were unavailable in the
+  sandbox, so the script used thread workers.
+
+Not verified:
+- Default-deskew export timing was not remeasured.
+
+Known local-only files:
+- Local ignored Test outputs now include `Test/135/4.5.4`,
+  `Test/new_135/4.5.4`, `Test/120/66/4.5.4`,
+  `Test/120/66/4.5.4_partial`, `Test/120/67/4.5.4`,
+  `Test/半格/full/4.5.4`, `Test/半格/partial/4.5.4_partial`, and
+  `Test/4.5.4_diagnostic_timing.md`.
+- Temporary verification outputs were previously written under `/private/tmp/`,
+  including `/private/tmp/x5_66_partial_next2` and
+  `/private/tmp/x5_66_full_next3`.
+- Local ignored Test copies were synced for `Test/135/X5_Crop.py`,
+  `Test/135/x5crop/`, `Test/120/66/X5_Crop.py`, and
+  `Test/120/66/x5crop/`.
+
+Next recommended step:
+- If V4.5.4 behavior is accepted after visual review, later decide whether to
+  promote it into the stable GitHub Release line.
+
+Date: 2026-06-30
+Computer: primary macOS machine
+Branch: main
+Last commit: see `git log -1`
+
+Changed:
+- Active script is now `X5_Crop.py` V4.5.3. The current stable GitHub Release
+  remains `v4.2.8`.
+- V4.5.3 is a narrow half-frame full gate fix after V4.5.2. It adds a safe
+  detail-value reader in `x5crop/detection/pipeline.py` so valid values such as
+  `width_cv=0.0` are not treated as missing values by `or 1.0`.
+- The fix lets `Test/半格/full/X5_00058.tif` pass through the existing
+  `half_wide_geometry_support` conditions. It does not add a new detector path
+  or globally loosen PASS thresholds.
+- README and CHANGELOG now describe V4.5.3 as the current active development
+  version. Local ignored Test copies were synced to V4.5.3.
+- Archive snapshot `archive/X5_Crop_v4.5.3/` was created with the thin entry
+  script and matching `x5crop/` package.
+
+Verified:
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py
+  x5crop/debug/*.py` passed.
+- `Test/半格/full` dry-run compared with V4.5.2 changes only
+  `X5_00058.tif` status / confidence / review reasons: it moves from
+  `needs_review` to `approved_auto`; outer, frame boxes, and gaps have no diff.
+- `Test/135` full dry-run compared with V4.5.2 produced 48 rows / 0 diff.
+- `Test/半格/partial` dry-run compared with V4.5.2 produced 5 rows / 0 diff.
+
+Not verified:
+- Default-deskew full export timing was not remeasured for V4.5.3.
+- Non-half / non-135 formats were not rerun because the fix is limited to
+  candidate detail numeric reads used by half/full and calibration helpers.
+
+Known local-only files:
+- Local ignored `Test/` script/package/launcher copies were synced to V4.5.3.
+
+Next recommended step:
+- If the V4.5.3 behavior is accepted, decide later whether to promote it into
+  the stable GitHub Release line.
+
+Date: 2026-06-30
+Computer: primary macOS machine
+Branch: main
+Last commit: see `git log -1`
+
+Changed:
 - Active script is now `X5_Crop.py` V4.5.2. The current stable GitHub Release
   remains `v4.2.8`.
 - V4.5.2 is a structural convergence pass after V4.5.1. It moves read-only

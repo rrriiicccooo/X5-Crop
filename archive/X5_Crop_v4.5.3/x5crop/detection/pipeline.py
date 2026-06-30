@@ -174,8 +174,6 @@ def long_axis_edge_anchor_cache_key(
 
 
 def outer_candidate_strategy(candidate_name: str) -> str:
-    if candidate_name.startswith("separator_dark_band_"):
-        return "separator_dark_band_outer"
     if candidate_name.startswith("separator_geometry_"):
         return "separator_geometry_outer"
     if candidate_name.startswith("separator_first_"):
@@ -1296,53 +1294,6 @@ def score_detection(gray_work: np.ndarray, outer: Box, gaps: list[Gap], boxes: l
     return float(max(0.0, min(1.0, confidence))), sorted(set(reasons)), detail
 
 
-def dark_band_gaps_for_outer(gray_work: np.ndarray, outer: Box, count: int, fmt: FilmFormat) -> list[Gap]:
-    if fmt.name != "120-66" or count <= 1 or not outer.valid():
-        return []
-    crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-    if crop.size == 0:
-        return []
-    sample = crop[:: max(1, crop.shape[0] // 500), :: max(1, crop.shape[1] // 2000)]
-    p01, p99 = sampled_percentile(sample, [1, 99])
-    span = max(1.0, float(p99 - p01))
-    dark_threshold = float(p01) + span * 0.12
-    dark_profile = (crop <= dark_threshold).mean(axis=0).astype(np.float32)
-    dark_profile = smooth_1d(dark_profile, max(15, int(round(outer.height * 0.018))))
-    pitch = outer.width / float(max(1, count))
-    min_width = clamp_int(outer.height * 0.030, 80, 520)
-    max_width = clamp_int(outer.height * 0.48, min_width + 1, max(600, int(outer.height * 0.55)))
-    gaps: list[Gap] = []
-    for index in range(1, count):
-        expected = pitch * index
-        window = clamp_int(pitch * 0.28, 260, max(300, int(pitch * 0.38)))
-        lo = max(0, int(round(expected - window)))
-        hi = min(len(dark_profile), int(round(expected + window)))
-        best: Optional[tuple[float, int, int]] = None
-        for run_start, run_end in runs_from_mask(dark_profile[lo:hi] >= 0.42):
-            start = lo + int(run_start)
-            end = lo + int(run_end)
-            width = end - start
-            if width < min_width or width > max_width:
-                continue
-            mean_score = float(dark_profile[start:end].mean())
-            center = (start + end - 1) * 0.5
-            distance_penalty = abs(center - expected) / max(1.0, pitch)
-            score = mean_score - 0.35 * distance_penalty
-            if best is None or score > best[0]:
-                best = (score, start, end)
-        if best is None:
-            continue
-        score, start, end = best
-        center = (start + end - 1) * 0.5
-        max_core_width = max(min_width, outer.height * 0.20)
-        if (end - start) > max_core_width:
-            half_width = max_core_width * 0.5
-            start = int(round(max(0.0, center - half_width)))
-            end = int(round(min(float(len(dark_profile)), center + half_width)))
-        gaps.append(Gap(index, float(center), float(1.0 + max(0.0, score)), "wide-separator", float(start), float(end)))
-    return gaps
-
-
 def build_detection_for_outer(
     gray: np.ndarray,
     config: Config,
@@ -1376,10 +1327,6 @@ def build_detection_for_outer(
         find_gap(profile, origin + pitch * i, pitch, i, fmt.name, gap_max_width_ratio_override)
         for i in range(1, count)
     ]
-    if outer_candidate_name.startswith("separator_dark_band_"):
-        dark_band_gaps = dark_band_gaps_for_outer(gray_work, outer, count, fmt)
-        if len(dark_band_gaps) >= max(1, count - 1):
-            gaps = dark_band_gaps
     if (
         strip_mode == "full"
         and fmt.name == "half"
@@ -1497,68 +1444,6 @@ def raw_detection_rank(detection: Detection, threshold: float) -> tuple[int, flo
     )
 
 
-def select_66_full_dark_band_candidate(
-    gray: np.ndarray,
-    candidates: list[Detection],
-    current_best: Detection,
-    threshold: float,
-    cache: Optional[AnalysisCache],
-) -> Optional[Detection]:
-    if (
-        current_best.film_format != "120-66"
-        or current_best.strip_mode != "full"
-        or current_best.count != FORMATS["120-66"].default_count
-    ):
-        return None
-    dark_candidates = [
-        detection
-        for detection in candidates
-        if str(detection.detail.get("outer_candidate_strategy", "")) == "separator_dark_band_outer"
-    ]
-    if not dark_candidates:
-        return None
-
-    current_content = content_evidence_detail(gray, current_best, cache)
-    current_support = str(current_content.get("support", ""))
-    current_reasons = set(current_best.review_reasons)
-    current_needs_help = (
-        current_best.confidence < threshold
-        or current_support in {"aspect_conflict", "low_content"}
-        or "content_aspect_conflict" in current_reasons
-        or REASON_SEPARATOR_HARD_EVIDENCE_WEAK in current_reasons
-    )
-    if not current_needs_help:
-        return None
-
-    scored: list[tuple[tuple[int, int, float, float, float], Detection]] = []
-    for detection in dark_candidates:
-        content_detail = content_evidence_detail(gray, detection, cache)
-        support = str(content_detail.get("support", ""))
-        if support != "ok":
-            continue
-        hard_gaps = sum(1 for gap in detection.gaps if gap.method != "equal")
-        equal_gaps = int(detection.detail.get("equal_gaps", 0) or 0)
-        if hard_gaps < max(1, detection.count - 1) or equal_gaps > 0:
-            continue
-        width_cv = detail_float(detection.detail, "width_cv", 1.0)
-        median_coverage = detail_float(content_detail, "median_coverage", 0.0)
-        scored.append(
-            (
-                (
-                    1 if detection.confidence >= threshold else 0,
-                    hard_gaps,
-                    median_coverage,
-                    float(detection.confidence),
-                    -width_cv,
-                ),
-                detection,
-            )
-        )
-    if not scored:
-        return None
-    return max(scored, key=lambda item: item[0])[1]
-
-
 def separator_geometry_can_compete(detection: Detection, gray: np.ndarray) -> bool:
     outer_candidate = str(detection.detail.get("outer_candidate", ""))
     frames = [original_box_to_work(frame, detection.layout, gray.shape[1], gray.shape[0]) for frame in detection.frames]
@@ -1658,88 +1543,7 @@ def detect_candidate_for_count(
                 )
             )
         outer_candidates = unique_outer_candidates([*outer_candidates, *separator_geometry_candidates])
-    should_try_dark_band = False
-    current_best_for_dark = max(candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold)) if candidates else None
-    if fmt.name == "120-66" and strip_mode == "partial" and current_best_for_dark is not None:
-        has_wide_like_candidate = False
-        for detection in candidates:
-            candidate_wide_like = partial_safe_wide_like_gap_detail(detection, fmt)
-            if (
-                bool(candidate_wide_like.get("used", False))
-                and int(candidate_wide_like.get("wide_like_gaps", 0) or 0)
-                >= int(candidate_wide_like.get("min_wide_like_gaps", 0) or 0)
-                and int(detection.detail.get("equal_gaps", 0) or 0) == 0
-            ):
-                has_wide_like_candidate = True
-                break
-        wide_like_detail = partial_safe_wide_like_gap_detail(current_best_for_dark, fmt)
-        should_try_dark_band = (
-            not has_wide_like_candidate
-            and (
-                int(current_best_for_dark.detail.get("equal_gaps", 0) or 0) > 0
-                or (
-                    bool(wide_like_detail.get("used", False))
-                    and int(wide_like_detail.get("wide_like_gaps", 0) or 0)
-                    < int(wide_like_detail.get("min_wide_like_gaps", 0) or 0)
-                )
-            )
-        )
-    elif fmt.name == "120-66" and strip_mode == "full" and count == fmt.default_count:
-        should_try_dark_band = True
-    separator_dark_band_candidates = (
-        separator_dark_band_outer_candidates(
-            gray_work,
-            outer_candidates,
-            fmt,
-            count,
-            strip_mode,
-        )
-        if should_try_dark_band
-        else []
-    )
-    if separator_dark_band_candidates:
-        for candidate in separator_dark_band_candidates:
-            candidate_gap_override = gap_max_width_ratio_override
-            if (
-                candidate_gap_override is None
-                and tuning.separator_first_outer_gap_max_width_ratio > tuning.gap_max_width_ratio
-            ):
-                candidate_gap_override = tuning.separator_first_outer_gap_max_width_ratio
-            candidates.append(
-                build_detection_for_outer(
-                    gray,
-                    config,
-                    fmt,
-                    count,
-                    strip_mode,
-                    candidate.box,
-                    offset_fraction,
-                    candidate.name,
-                    cache=cache,
-                    gap_max_width_ratio_override=candidate_gap_override,
-                )
-            )
-        outer_candidates = unique_outer_candidates([*outer_candidates, *separator_dark_band_candidates])
-    best_candidates = candidates
-    if fmt.name == "120-66" and strip_mode == "partial" and len(candidates) > 1:
-        non_cutting_candidates: list[Detection] = []
-        for detection in candidates:
-            if str(detection.detail.get("outer_candidate_strategy", "")) != "content_floating_outer":
-                non_cutting_candidates.append(detection)
-                continue
-            leading_content = partial_safe_leading_content_detail(gray, detection, fmt, cache)
-            frame_content = partial_safe_frame_content_detail(content_evidence_detail(gray, detection, cache), detection, fmt)
-            if (
-                (not bool(leading_content.get("used", False)) or bool(leading_content.get("ok", True)))
-                and (not bool(frame_content.get("used", False)) or bool(frame_content.get("ok", True)))
-            ):
-                non_cutting_candidates.append(detection)
-        if non_cutting_candidates:
-            best_candidates = non_cutting_candidates
-    best = max(best_candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold))
-    full_dark_band_best = select_66_full_dark_band_candidate(gray, candidates, best, config.confidence_threshold, cache)
-    if full_dark_band_best is not None:
-        best = full_dark_band_best
+    best = max(candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold))
     areas = [candidate.box.width * candidate.box.height for candidate in outer_candidates if candidate.box.valid()]
     if areas:
         best.detail["outer_candidate_count"] = len(outer_candidates)
@@ -2164,12 +1968,7 @@ def collect_separator_outer_bands(
         while band_end < len(profile) and profile[band_end] >= band_threshold and ((band_end + 1) - band_start) <= max_width:
             band_end += 1
         width = band_end - band_start
-        oversized_66_band = (
-            tuning.name == "120-66"
-            and width > max_width
-            and width <= short_axis * 0.45
-        )
-        if width < min_width or (width > max_width and not oversized_66_band):
+        if width < min_width or width > max_width:
             continue
         center = (band_start + band_end - 1) / 2.0
         if center < edge_margin or center > float(coordinate_limit) - edge_margin:
@@ -2189,8 +1988,7 @@ def collect_separator_outer_bands(
                 "end": float(band_end),
                 "center": float(center),
                 "width": float(width),
-                "score": float(mean_score + 0.8 * prominence - (0.08 if oversized_66_band else 0.0)),
-                "oversized": float(1.0 if oversized_66_band else 0.0),
+                "score": float(mean_score + 0.8 * prominence),
             }
         )
     return bands, edge_margin
@@ -2329,88 +2127,6 @@ def separator_geometry_outer_candidates(
     if cache is not None:
         cache.separator_geometry_outer_candidates[candidate_key] = list(result)
     return result
-
-
-def separator_dark_band_outer_candidates(
-    gray_work: np.ndarray,
-    base_candidates: list[OuterCandidate],
-    fmt: FilmFormat,
-    count: int,
-    strip_mode: str,
-) -> list[OuterCandidate]:
-    if fmt.name != "120-66" or strip_mode not in {"full", "partial"} or count != 3:
-        return []
-    aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
-    if aspect is None or aspect <= 0.0:
-        return []
-    h, w = gray_work.shape
-    source_candidates = sorted(
-        [candidate for candidate in base_candidates if candidate.box.valid()],
-        key=lambda candidate: candidate.box.width * candidate.box.height,
-        reverse=True,
-    )[:2]
-    candidates: list[OuterCandidate] = []
-    for source in source_candidates:
-        source_box = source.box.clamp(w, h)
-        if not source_box.valid() or source_box.height <= 0:
-            continue
-        full_long_outer = Box(0, source_box.top, w, source_box.bottom)
-        crop = gray_work[full_long_outer.top:full_long_outer.bottom, :]
-        if crop.size == 0:
-            continue
-        sample = crop[:: max(1, crop.shape[0] // 500), :: max(1, crop.shape[1] // 2000)]
-        p01, p99 = sampled_percentile(sample, [1, 99])
-        span = max(1.0, float(p99 - p01))
-        dark_threshold = float(p01) + span * 0.12
-        dark_profile = (crop <= dark_threshold).mean(axis=0).astype(np.float32)
-        dark_profile = smooth_1d(dark_profile, max(15, int(round(full_long_outer.height * 0.018))))
-        short_axis = float(full_long_outer.height)
-        frame_long = short_axis * float(aspect)
-        edge_margin = clamp_float(short_axis * 0.18, 60.0, max(60.0, short_axis * 0.80))
-        min_width = clamp_int(short_axis * 0.030, 80, 520)
-        max_width = clamp_int(short_axis * 0.48, min_width + 1, max(600, int(short_axis * 0.55)))
-        bands: list[dict[str, float]] = []
-        for run_start, run_end in runs_from_mask(dark_profile >= 0.42):
-            width = int(run_end - run_start)
-            if width < min_width or width > max_width:
-                continue
-            center = (float(run_start) + float(run_end) - 1.0) * 0.5
-            if center < edge_margin or center > float(w) - edge_margin:
-                continue
-            score = float(dark_profile[run_start:run_end].mean())
-            bands.append(
-                {
-                    "start": float(run_start),
-                    "end": float(run_end),
-                    "center": center,
-                    "width": float(width),
-                    "score": score,
-                }
-            )
-        bands = sorted(bands, key=lambda band: (-float(band["score"]), float(band["center"])))[:10]
-        sequences: list[tuple[float, tuple[dict[str, float], dict[str, float]]]] = []
-        for index, first in enumerate(bands):
-            for second in bands[index + 1:]:
-                spacing = float(second["center"]) - float(first["center"])
-                spacing_ratio = spacing / max(1.0, frame_long)
-                if spacing_ratio < 0.82 or spacing_ratio > 1.18:
-                    continue
-                inner_width = float(second["start"]) - float(first["end"])
-                if inner_width <= 0:
-                    continue
-                frame_error = abs(inner_width - frame_long) / max(1.0, frame_long)
-                sequence_score = (float(first["score"]) + float(second["score"])) * 0.5
-                rank = frame_error - 0.04 * sequence_score
-                sequences.append((rank, (first, second)))
-        for rank, (_score, sequence) in enumerate(sorted(sequences, key=lambda item: item[0])[:4], start=1):
-            first, second = sequence
-            proposed_left = int(round(float(first["start"]) - frame_long))
-            proposed_right = int(round(float(second["end"]) + frame_long))
-            proposed = Box(proposed_left, full_long_outer.top, proposed_right, full_long_outer.bottom).clamp(w, h)
-            if not proposed.valid():
-                continue
-            candidates.append(OuterCandidate(f"separator_dark_band_{source.name}_{rank}", proposed))
-    return unique_outer_candidates(candidates)[:4]
 
 
 def separator_first_outer_candidates(
@@ -2953,188 +2669,7 @@ def separator_hard_evidence_ok(detection: Detection, threshold: float) -> tuple[
     }
 
 
-def partial_safe_wide_like_gap_detail(detection: Detection, fmt: FilmFormat) -> dict[str, Any]:
-    tuning = format_tuning(fmt.name)
-    min_required = int(tuning.partial_safe_extra_frames_min_wide_like_gaps)
-    if min_required <= 0 or detection.strip_mode != "partial":
-        return {
-            "used": False,
-            "reason": "disabled",
-            "wide_like_gaps": 0,
-            "min_wide_like_gaps": min_required,
-        }
-
-    work_outer_detail = detection.detail.get("work_outer", {})
-    short_axis = 0.0
-    if isinstance(work_outer_detail, dict):
-        try:
-            short_axis = float(work_outer_detail.get("bottom", 0.0)) - float(work_outer_detail.get("top", 0.0))
-        except (TypeError, ValueError):
-            short_axis = 0.0
-    if short_axis <= 0.0:
-        frames = [frame for frame in detection.frames if frame.valid()]
-        short_axis = float(np.median(np.array([frame.width for frame in frames], dtype=np.float32))) if frames else 0.0
-
-    min_width = max(1.0, short_axis * float(tuning.partial_safe_extra_frames_wide_like_min_width_ratio))
-    wide_like_indexes: list[int] = []
-    gap_widths: list[float] = []
-    for gap in detection.gaps:
-        width = 0.0
-        if gap.start is not None and gap.end is not None:
-            width = max(0.0, float(gap.end) - float(gap.start))
-        gap_widths.append(width)
-        if gap.method == "wide-separator" or (gap.method in {"detected", "edge-pair"} and width >= min_width):
-            wide_like_indexes.append(int(gap.index))
-
-    ok = len(wide_like_indexes) >= min_required
-    return {
-        "used": True,
-        "reason": "ok" if ok else "too_few_wide_like_gaps",
-        "wide_like_gaps": int(len(wide_like_indexes)),
-        "min_wide_like_gaps": int(min_required),
-        "wide_like_gap_indexes": wide_like_indexes,
-        "gap_widths": gap_widths,
-        "min_width_px": float(min_width),
-    }
-
-
-def partial_safe_leading_content_detail(
-    gray: np.ndarray,
-    detection: Detection,
-    fmt: FilmFormat,
-    cache: Optional[AnalysisCache],
-) -> dict[str, Any]:
-    tuning = format_tuning(fmt.name)
-    if not tuning.partial_safe_extra_frames_leading_content_check or detection.strip_mode != "partial":
-        return {"used": False, "reason": "disabled"}
-    if str(detection.detail.get("outer_candidate_strategy", "")) != "content_floating_outer":
-        return {"used": False, "reason": "not_content_floating_outer"}
-
-    work_outer_detail = detection.detail.get("work_outer", {})
-    if not isinstance(work_outer_detail, dict):
-        return {"used": False, "reason": "missing_work_outer"}
-    try:
-        left = int(work_outer_detail["left"])
-        top = int(work_outer_detail["top"])
-        right = int(work_outer_detail["right"])
-        bottom = int(work_outer_detail["bottom"])
-    except (KeyError, TypeError, ValueError):
-        return {"used": False, "reason": "invalid_work_outer"}
-    if right <= left or bottom <= top:
-        return {"used": False, "reason": "invalid_work_outer"}
-
-    pitch_value = detection.detail.get("pitch", None)
-    try:
-        pitch = float(pitch_value) if pitch_value is not None else 0.0
-    except (TypeError, ValueError):
-        pitch = 0.0
-    if pitch <= 0.0:
-        pitch = (right - left) / float(max(1, detection.count))
-    band = clamp_int(
-        pitch * float(tuning.partial_safe_extra_frames_leading_content_band_ratio),
-        8,
-        max(8, int(max(8.0, pitch * 0.12))),
-    )
-
-    if cache is not None and cache.layout == detection.layout:
-        evidence = cache.content_evidence_float_work
-    else:
-        gray_work = work_gray(gray, detection.layout)
-        evidence = make_content_evidence_gray(gray_work).astype(np.float32) / 255.0
-
-    left = max(0, min(left, evidence.shape[1]))
-    right = max(0, min(right, evidence.shape[1]))
-    top = max(0, min(top, evidence.shape[0]))
-    bottom = max(0, min(bottom, evidence.shape[0]))
-    band_right = max(left, min(right, left + band))
-    sample = evidence[top:bottom, left:band_right]
-    if sample.size == 0:
-        return {"used": False, "reason": "empty_sample"}
-
-    mean = float(sample.mean())
-    coverage = float((sample > 0.20).mean())
-    ok = (
-        mean <= float(tuning.partial_safe_extra_frames_leading_content_max_mean)
-        and coverage <= float(tuning.partial_safe_extra_frames_leading_content_max_coverage)
-    )
-    return {
-        "used": True,
-        "ok": bool(ok),
-        "reason": "ok" if ok else "leading_edge_content_too_strong",
-        "mean": mean,
-        "coverage": coverage,
-        "band_px": int(band_right - left),
-        "max_mean": float(tuning.partial_safe_extra_frames_leading_content_max_mean),
-        "max_coverage": float(tuning.partial_safe_extra_frames_leading_content_max_coverage),
-    }
-
-
-def partial_safe_frame_content_detail(
-    content_detail: dict[str, Any],
-    detection: Detection,
-    fmt: FilmFormat,
-) -> dict[str, Any]:
-    tuning = format_tuning(fmt.name)
-    if not tuning.partial_safe_extra_frames_frame_content_check or detection.strip_mode != "partial":
-        return {"used": False, "reason": "disabled"}
-    frame_scores = content_detail.get("frame_scores", [])
-    if not isinstance(frame_scores, list) or not frame_scores:
-        return {"used": True, "ok": False, "reason": "missing_frame_scores", "frame_count": 0}
-
-    min_mean = float(tuning.partial_safe_extra_frames_min_frame_mean)
-    min_coverage = float(tuning.partial_safe_extra_frames_min_frame_coverage)
-    weak_frames: list[int] = []
-    aspect_conflict_frames: list[int] = []
-    normalized_scores: list[dict[str, Any]] = []
-    for item in frame_scores:
-        if not isinstance(item, dict):
-            continue
-        try:
-            index = int(item.get("index", len(normalized_scores) + 1))
-            mean = float(item.get("mean", 0.0) or 0.0)
-            coverage = float(item.get("coverage", 0.0) or 0.0)
-        except (TypeError, ValueError):
-            continue
-        aspect_error_value = item.get("aspect_error", None)
-        aspect_error: Optional[float]
-        try:
-            aspect_error = None if aspect_error_value is None else float(aspect_error_value)
-        except (TypeError, ValueError):
-            aspect_error = None
-        if mean < min_mean and coverage < min_coverage:
-            weak_frames.append(index)
-        if aspect_error is not None and aspect_error > tuning.content_evidence_aspect_ok_max:
-            aspect_conflict_frames.append(index)
-        normalized_scores.append(
-            {
-                "index": index,
-                "mean": mean,
-                "coverage": coverage,
-                "aspect_error": aspect_error,
-            }
-        )
-
-    ok = (
-        len(normalized_scores) >= detection.count
-        and not weak_frames
-        and not aspect_conflict_frames
-    )
-    return {
-        "used": True,
-        "ok": bool(ok),
-        "reason": "ok" if ok else "frame_content_not_stable",
-        "frame_count": int(len(normalized_scores)),
-        "expected_count": int(detection.count),
-        "weak_frames": weak_frames,
-        "aspect_conflict_frames": aspect_conflict_frames,
-        "min_mean": min_mean,
-        "min_coverage": min_coverage,
-        "frame_scores": normalized_scores,
-    }
-
-
 def partial_extra_holder_frames_gate_detail(
-    gray: np.ndarray,
     detection: Detection,
     hard_detail: dict[str, Any],
     content_detail: dict[str, Any],
@@ -3143,7 +2678,6 @@ def partial_extra_holder_frames_gate_detail(
     joint_score: float,
     content_score: float,
     geometry_score: float,
-    cache: Optional[AnalysisCache] = None,
 ) -> dict[str, Any]:
     tuning = format_tuning(fmt.name)
     expected = max(0, int(hard_detail.get("expected_gaps", 0) or 0))
@@ -3159,9 +2693,6 @@ def partial_extra_holder_frames_gate_detail(
         else tuning.partial_safe_extra_frames_min_count_small
     )
     hard_ratio = 1.0 if expected <= 0 else hard / float(max(1, expected))
-    wide_like_detail = partial_safe_wide_like_gap_detail(detection, fmt)
-    leading_content = partial_safe_leading_content_detail(gray, detection, fmt, cache)
-    frame_content = partial_safe_frame_content_detail(content_detail, detection, fmt)
     disqualifiers: list[str] = []
     if not tuning.partial_safe_extra_frames_enabled:
         disqualifiers.append("disabled")
@@ -3179,12 +2710,6 @@ def partial_extra_holder_frames_gate_detail(
         disqualifiers.append("too_few_hard_gaps")
     if hard_ratio < tuning.partial_safe_extra_frames_min_hard_ratio:
         disqualifiers.append("hard_gap_ratio_low")
-    if (
-        bool(wide_like_detail.get("used", False))
-        and int(wide_like_detail.get("wide_like_gaps", 0) or 0)
-        < int(wide_like_detail.get("min_wide_like_gaps", 0) or 0)
-    ):
-        disqualifiers.append("too_few_wide_like_gaps")
     if equal > tuning.partial_safe_extra_frames_max_equal_gaps:
         disqualifiers.append("equal_gap_used")
     if width_cv > tuning.partial_safe_extra_frames_max_width_cv:
@@ -3198,10 +2723,6 @@ def partial_extra_holder_frames_gate_detail(
     hard_partial_blockers = HARD_REVIEW_REASONS.difference({"outer_box_too_large", "outer_box_uncertain"})
     if any(reason in detection.review_reasons for reason in hard_partial_blockers):
         disqualifiers.append("hard_review_reason_present")
-    if bool(leading_content.get("used", False)) and not bool(leading_content.get("ok", True)):
-        disqualifiers.append("partial_outer_leading_content")
-    if bool(frame_content.get("used", False)) and not bool(frame_content.get("ok", True)):
-        disqualifiers.append("partial_frame_content_unstable")
     return {
         "used": True,
         "ok": not disqualifiers,
@@ -3219,9 +2740,6 @@ def partial_extra_holder_frames_gate_detail(
         "content_score": float(content_score),
         "geometry_score": float(geometry_score),
         "format_policy": tuning.name,
-        "wide_like_separator": wide_like_detail,
-        "leading_content": leading_content,
-        "frame_content": frame_content,
     }
 
 
@@ -3480,7 +2998,6 @@ def calibrate_candidate_decision(
     if floor_applies:
         confidence = max(confidence, tuning.calibrate_hard_full_confidence_floor)
     partial_safe_extra_frames = partial_extra_holder_frames_gate_detail(
-        gray,
         candidate,
         hard_detail,
         content_detail,
@@ -3489,28 +3006,8 @@ def calibrate_candidate_decision(
         joint_score,
         content_score,
         geometry_score,
-        cache,
     )
     partial_safe_extra_frames_ok = bool(partial_safe_extra_frames.get("ok", False))
-    partial_safe_disqualifiers = set(partial_safe_extra_frames.get("disqualifiers", []))
-    partial_safe_blocks_auto = (
-        fmt.name == "120-66"
-        and candidate.strip_mode == "partial"
-        and source == "separator"
-        and bool(partial_safe_extra_frames.get("used", False))
-        and bool(
-            partial_safe_disqualifiers.intersection(
-                {"too_few_wide_like_gaps", "partial_outer_leading_content", "partial_frame_content_unstable"}
-            )
-        )
-    )
-    if partial_safe_blocks_auto:
-        hard_ok = False
-        hard_detail = dict(hard_detail)
-        hard_detail["ok"] = False
-        hard_detail["reason"] = "partial_safe_extra_frames_blocked"
-        hard_detail["partial_safe_extra_frames_blocked"] = sorted(partial_safe_disqualifiers)
-        reasons.extend(sorted(partial_safe_disqualifiers))
     if partial_safe_extra_frames_ok:
         hard_detail = dict(hard_detail)
         hard_detail["ok"] = True

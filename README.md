@@ -8,7 +8,7 @@
 
 X5 Crop 是一个用于 Hasselblad / Imacon X5 胶片片夹长图的 TIFF 自动裁切工具。它会把同一文件夹里的长条 TIFF 扫描图拆分成单张 TIFF；只有高置信结果会自动导出，低置信或困难图片会进入复核。
 
-当前 active 脚本版本：V4.5.2
+当前 active 脚本版本：V4.5.4
 
 当前稳定发布版本：v4.2.8（GitHub Releases）
 
@@ -35,7 +35,7 @@ X5 Crop 会处理同一个文件夹里的 `.tif` / `.tiff` 长图，并把高置
 - 困难样片进入复核，避免靠猜测自动裁切。
 - 自动裁切输出 TIFF 会保留原 TIFF 的画质相关属性，包括但不限于位深、通道结构、ICC / 色彩空间、resolution 和 metadata。
 
-脚本会在你指定的胶片格式和片条模式内，综合外框、分隔、内容和画幅几何证据评分。最终只有高置信结果会自动导出；证据不足、证据互相冲突或画幅状态异常时会进入复核。V4.5 起，outer 候选会在报告中标注来源策略，例如 base outer、content floating outer、long-axis edge-anchor outer、separator-first outer 和 separator-geometry outer，方便判断结果来自哪一层证据。V4.5.2 继续整理内部结构：诊断计算从 Debug 渲染层移入 detection 层，通用常量、policy 入口和数据模型导出关系更清楚；这是维护性整理，不主动放宽 PASS 规则。
+脚本会在你指定的胶片格式和片条模式内，综合外框、分隔、内容和画幅几何证据评分。最终只有高置信结果会自动导出；证据不足、证据互相冲突或画幅状态异常时会进入复核。V4.5 起，outer 候选会在报告中标注来源策略，例如 base outer、content floating outer、long-axis edge-anchor outer、separator-first outer 和 separator-geometry outer，方便判断结果来自哪一层证据。V4.5.4 针对 120-66 的宽黑条样片增加更实用的 outer / separator 约束：partial 会要求宽分隔和逐格内容稳定，full 在旧 outer 内容形态异常时可让宽黑条候选接管。这个调整只作用于 120-66 的物理特征，不是全局放宽 PASS 规则。
 
 ### 为什么不是 App 封装
 
@@ -414,7 +414,7 @@ python3 X5_Crop.py . --format 135 --strip full --report --export-review
 
 ## English Guide
 
-Current active script version: V4.5.2
+Current active script version: V4.5.4
 
 Current stable release: v4.2.8 (GitHub Releases)
 
@@ -467,6 +467,12 @@ Starting with V4.5, report details label the outer-candidate strategy, such as
 base outer, content floating outer, long-axis edge-anchor outer,
 separator-first outer, and separator-geometry outer, so detector behavior is
 easier to inspect.
+V4.5.4 adds 120-66-specific wide-dark-separator handling. Partial strips now
+require wide-like separator evidence and stable per-frame content before the
+safe-extra-frames gate can auto-pass. Full strips can prefer a wide dark-band
+outer candidate when the old outer produces abnormal content geometry. This is
+format-specific behavior for 120-66, not a global PASS-rule loosening.
+
 V4.5.2 further organizes the internal structure: diagnostic calculations now
 live in the detection layer instead of the Debug rendering layer, while shared
 constants, policy entry points, and data-model exports are clearer. It is a

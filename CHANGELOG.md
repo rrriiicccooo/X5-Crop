@@ -6,7 +6,7 @@
 
 如果只是使用脚本，请优先阅读 `快速启动_Quick_Start.md` 和 `README.md`。本文件保留更细的开发背景、实验结论和验证结果。
 
-当前 active 脚本：`X5_Crop.py` V4.5.2
+当前 active 脚本：`X5_Crop.py` V4.5.4
 
 当前稳定 GitHub Release：`v4.2.8`
 
@@ -14,7 +14,9 @@
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.5.2 | 当前 active 开发版 | 结构收敛版：把只读诊断计算从 Debug 渲染层移入 detection 层，减少检测后处理对 Debug UI 的反向依赖；新增共享常量入口，集中 analysis source、gap method 和主要 review reason；让 `policy.py` 和 detection model 导出直接依赖 common / geometry，而不是绕回 core 兼容层；移除 Debug 渲染对 detection pipeline 的整包导入。检测阈值不主动放宽。 |
+| V4.5.4 | 当前 active 开发版 | 120-66 宽黑条检测改进：partial 的 safe-extra-frames gate 增加 wide-like separator、前缘内容和逐格内容稳定约束；full 在旧 outer 内容形态异常时可让 120-66 宽黑条 outer 候选接管。`Test/120/66` partial 和 full 均为 16 个 `approved_auto` / 0 个 `needs_review`。 |
+| V4.5.3 | 开发版 | 半格 full gate 修复：修正候选 detail 读取 `width_cv=0.0` 时被 `or 1.0` 误判成缺失值的问题。`X5_00058.tif` 现在能按既有 `half_wide_geometry_support` 条件通过；135 full 和半格 partial 回归保持 0 diff。 |
+| V4.5.2 | 开发版 | 结构收敛版：把只读诊断计算从 Debug 渲染层移入 detection 层，减少检测后处理对 Debug UI 的反向依赖；新增共享常量入口，集中 analysis source、gap method 和主要 review reason；让 `policy.py` 和 detection model 导出直接依赖 common / geometry，而不是绕回 core 兼容层；移除 Debug 渲染对 detection pipeline 的整包导入。检测阈值不主动放宽。 |
 | V4.5.1 | 开发版 | 结构收敛版：新增只读 policy view 分组，让 outer / separator / grid / scoring / calibration / partial / diagnostics 等参数有清晰入口；把 detection 后处理从 CLI 移入 `detection/postprocess.py`；把每个 count 的候选生成与最终候选选择拆成明确函数；收敛 active 代码里的旧别名和手写 analysis source 字符串；Debug Analysis 增加 Decision summary 面板，集中显示版本、PASS/REVIEW、confidence、outer strategy、analysis source、auto gate、gap 证据和 review reasons。检测阈值不主动放宽。 |
 | V4.5 | 开发版 | Policy 架构整理版：把“可信分隔条 + format 几何反推 outer”的能力整理为通用 `separator_geometry_outer`，增加 full / partial mode policy；抽出共用的 separator band 搜索和 band sequence 工具，让 `separator_first` 与 `separator_geometry` 不再维护两套重复逻辑；为 report/detail 增加 `outer_candidate_strategy`，明确 base / content floating / long-axis edge-anchor / separator-first / separator-geometry 等候选来源；将历史评分字段命名收敛为 gate 语义。当前 active 行为保持保守：只有 `120-66 partial` 使用 `separator_geometry_outer_partial_mode=conditional`，其它 format 默认关闭。验证：`Test/135` full 对比 V4.4.6 为 48 unique rows / 0 diff；`Test/120/66` partial 对比 V4.4.6 为 16 unique rows / 0 diff；半格 full / partial 均 0 diff；120-67 核心输出 0 diff，仅一个旧 review reason 名称归一化。 |
 | V4.4.6 | 开发版 | 增加通用的 separator-geometry outer candidate，并只在 `120-66` policy 中开启。它不做 PASS 后修框，而是在常规 partial 候选的画幅比例明显可疑时，用可信宽分隔条和当前 format 几何反推一个新的 outer 候选，再送回原有 separator / edge-pair / content / scoring / review-gate 竞争链路。不会提高 confidence，也不会把证据不足的图从 REVIEW 推成 PASS。验证：`Test/135` full 对比 V4.4.6 既有基线为 48 rows / 0 diff；`Test/120/66` partial 对比 V4.4.5 只有 `X5_test_56.tif` 切换到新的 separator-geometry 候选，status / confidence / review_reasons 不变。 |
@@ -69,7 +71,43 @@
 | V3.1.x | 实验版 | 激进外框/gap 修复实验，稳定性不足。 |
 | V3.0 | 基线版 | X5 Crop 主脚本与用户工作流基础。 |
 
-### 当前 Active 版本：V4.5.2
+### 当前 Active 版本：V4.5.4
+
+V4.5.4 是一个 120-66 宽黑条检测改进版。它把这次样片验证得到的规则固化为 format-specific 逻辑：66 的分隔条通常很宽，因此 partial / full 都应优先让宽黑条证据和 1:1 三格几何互相约束，而不是让 content-floating、旧 base outer 或弱 edge-pair 单独主导。
+
+主要变化：
+
+- 新增 `separator_dark_band_outer` 候选来源，用 120-66 的两条宽黑色分隔带和三张 1:1 画幅几何反推 outer。
+- 120-66 partial 的 `partial_safe_extra_frames` 不再只看“有强分隔”。它现在要求至少两个 wide-like gap，并检查 content-floating outer 的前缘是否切进内容，以及三张 frame 的逐格 content evidence 是否稳定。
+- 120-66 full 也可以使用宽黑条 outer 候选，但不继承 partial 的 extra-holder 容忍。只有当前 full outer 需要帮助，且宽黑条候选自身有正常内容支持、足够 hard gap、没有 equal gap 时，才允许接管。
+- Debug / report 的 `outer_candidate_strategy` 会显示 `separator_dark_band_outer`，方便区分这类结果与普通 `separator_first_outer` / `content_floating_outer`。
+
+验证：
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` 通过。
+- `Test/120/66` partial dry-run + Debug Analysis + diagnostics：16 ok / 0 failed / 16 approved / 0 review。`X5_test_51.tif` 从 `needs_review` 变为 `approved_auto`。
+- `Test/120/66` full dry-run + Debug Analysis + diagnostics：16 ok / 0 failed / 16 approved / 0 review。相比上一轮 full 守卫测试，`X5_test_43.tif`、`X5_test_48.tif` 和 `X5_test_51.tif` 从 review 变为 pass；48 / 51 的旧 outer 内容形态异常由 `separator_dark_band_outer` 接管。
+- 全量本地诊断已按命名规则重跑：full 输出目录使用 `4.5.4`，partial 输出目录使用 `4.5.4_partial`。结果为：`Test/135/4.5.4` = 48 ok / 43 approved / 5 review；`Test/new_135/4.5.4` = 4 ok / 4 approved / 0 review；`Test/120/66/4.5.4` = 16 ok / 16 approved / 0 review；`Test/120/66/4.5.4_partial` = 16 ok / 16 approved / 0 review；`Test/120/67/4.5.4` = 4 ok / 3 approved / 1 review；`Test/半格/full/4.5.4` = 10 ok / 10 approved / 0 review；`Test/半格/partial/4.5.4_partial` = 5 ok / 5 approved / 0 review。
+- 本次全量诊断总计 103 张，221.31 秒，平均 2.15 秒/张。Codex 沙盒中 process workers 不可用，实际使用 thread workers。
+
+### V4.5.3
+
+V4.5.3 是一个窄修复版，目标是让半格 full 中已经满足宽分隔 + 稳定 grid 证据条件的样片正常通过，而不是放宽半格或其它 format 的整体 PASS 规则。
+
+主要变化：
+
+- 新增安全的 detail 数值读取 helper，避免 `width_cv=0.0` 这类有效数值被 Python 的 truthy / falsy 规则误当成缺失值。
+- `half_wide_geometry_support` 和 `half_stable_grid_support` 现在能正确看到完全稳定的 frame width CV。
+- `X5_00058.tif` 从 `needs_review` 变为 `approved_auto`，outer、frame boxes 和 gaps 不变。
+
+验证：
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` 通过。
+- `Test/135` full 对比 V4.5.2 为 48 rows / 0 diff。
+- `Test/半格/partial` 对比 V4.5.2 为 5 rows / 0 diff。
+- `Test/半格/full` 对比 V4.5.2 只有 `X5_00058.tif` 的 status / confidence / review reasons 改变：`needs_review` 变为 `approved_auto`，裁切框和 gap 结果没有 diff。
+
+### V4.5.2
 
 V4.5.2 是 V4.5.1 之后的结构收敛版。它继续整理模块职责，不改变检测阈值，也不主动改变 PASS / REVIEW 判断。
 
@@ -1239,7 +1277,7 @@ This changelog records X5 Crop detector changes, workflow updates, regression ch
 
 If you only want to use the script, start with `快速启动_Quick_Start.md` and `README.md`. This file keeps deeper development context, experiment outcomes, and verification notes.
 
-Current active script: `X5_Crop.py` V4.5.2
+Current active script: `X5_Crop.py` V4.5.4
 
 Current stable GitHub Release: `v4.2.8`
 
@@ -1247,7 +1285,9 @@ Current stable GitHub Release: `v4.2.8`
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.5.2 | Current active development version | Structural convergence release. Moves read-only diagnostics calculations from the Debug rendering layer into the detection layer, reducing reverse dependencies from postprocess into Debug UI; adds shared constants for analysis sources, gap methods, and main review reasons; makes `policy.py` and detection model exports depend directly on common / geometry instead of the core compatibility layer; and removes the Debug renderer's broad detection-pipeline import. It does not intentionally loosen detection thresholds. |
+| V4.5.4 | Current active development version | 120-66 wide dark-separator improvement. Partial safe-extra-frames now requires wide-like separator evidence, leading-edge content safety, and stable per-frame content. Full 120-66 can prefer a wide dark-band outer candidate when the old outer has abnormal content geometry. `Test/120/66` partial and full both produce 16 `approved_auto` / 0 `needs_review`. |
+| V4.5.3 | Development version | Half-frame full gate fix. Corrects detail-value reads so `width_cv=0.0` is not treated as a missing value through `or 1.0`. `X5_00058.tif` now passes through the existing `half_wide_geometry_support` conditions; full 135 and half-frame partial regressions stay at 0 diff. |
+| V4.5.2 | Development version | Structural convergence release. Moves read-only diagnostics calculations from the Debug rendering layer into the detection layer, reducing reverse dependencies from postprocess into Debug UI; adds shared constants for analysis sources, gap methods, and main review reasons; makes `policy.py` and detection model exports depend directly on common / geometry instead of the core compatibility layer; and removes the Debug renderer's broad detection-pipeline import. It does not intentionally loosen detection thresholds. |
 | V4.5.1 | Development version | Structural convergence release. Adds read-only policy views so outer / separator / grid / scoring / calibration / partial / diagnostics parameters have clearer entry points; moves post-detection finalization from CLI into `detection/postprocess.py`; splits per-count candidate generation and final candidate selection into explicit functions; removes active-code legacy aliases and hand-written analysis-source strings; and adds a Debug Analysis Decision summary panel with version, PASS/REVIEW, confidence, outer strategy, analysis source, auto gate, gap evidence, and review reasons. It does not intentionally loosen detection thresholds. |
 | V4.5 | Development version | Policy architecture cleanup. The trusted-separator-plus-format-geometry outer proposal is now the general `separator_geometry_outer` layer, with full / partial mode policy. `separator_first` and `separator_geometry` now share separator-band collection and band-sequence tools instead of maintaining duplicate search logic. Report detail now records `outer_candidate_strategy`, making base / content floating / long-axis edge-anchor / separator-first / separator-geometry candidates easier to read. Historical score policy names are moved toward gate semantics. Active behavior stays conservative: only `120-66 partial` uses `separator_geometry_outer_partial_mode=conditional`; other formats stay off. Verification: full `Test/135` is 48 unique rows / 0 diff against V4.4.6; `Test/120/66` partial is 16 unique rows / 0 diff against V4.4.6; half-frame full / partial are both 0 diff; 120-67 has no core-output diff, only one legacy review-reason name normalized. |
 | V4.4.6 | Development version | Adds a generic separator-geometry outer candidate, enabled only by the `120-66` policy for now. When the regular partial candidate has suspicious frame aspect, it derives an extra outer candidate from trusted dark separator bands and the current format geometry, then sends that candidate back through the existing separator / edge-pair / content / scoring / review-gate path. It does not modify the already selected result, raise confidence, or promote weak-evidence REVIEW files to PASS. Verification: full `Test/135` is 48 rows / 0 diff against the existing V4.4.6 baseline; `Test/120/66` partial differs from V4.4.5 only on `X5_test_56.tif`, with unchanged status / confidence / review reasons. |
@@ -1302,7 +1342,63 @@ Current stable GitHub Release: `v4.2.8`
 | V3.1.x | Experimental | Aggressive outer/gap rescue ideas. Not stable enough. |
 | V3.0 | Baseline | Main X5 Crop script and user workflow foundation. |
 
-### Current Active: V4.5.2
+### Current Active: V4.5.4
+
+V4.5.4 is a 120-66 wide dark-separator improvement. It turns the current sample
+findings into format-specific behavior: because 66 separators are usually broad
+dark bands, partial and full 120-66 detections should let those bands and the
+three 1:1 frame geometry constrain each other instead of letting
+content-floating, the old base outer, or weak edge-pair evidence dominate by
+itself.
+
+Main changes:
+
+- Adds the `separator_dark_band_outer` candidate source, deriving a 120-66
+  outer from two broad dark separator bands and three square frames.
+- Tightens 120-66 partial `partial_safe_extra_frames`: it now requires at least
+  two wide-like gaps, checks whether content-floating candidates cut into
+  leading-edge content, and verifies per-frame content evidence for all three
+  frames.
+- Lets 120-66 full use the same wide dark-band outer candidate without using
+  partial's extra-holder tolerance. The dark-band candidate can take over only
+  when the current full outer needs help and the dark-band candidate has normal
+  content support, enough hard gaps, and no equal gap.
+- Reports and Debug Analysis can now show `separator_dark_band_outer` as an
+  outer-candidate strategy.
+
+Verification:
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` passed.
+- `Test/120/66` partial dry run with Debug Analysis and diagnostics: 16 ok / 0 failed / 16 approved / 0 review. `X5_test_51.tif` moves from `needs_review` to `approved_auto`.
+- `Test/120/66` full dry run with Debug Analysis and diagnostics: 16 ok / 0 failed / 16 approved / 0 review. Compared with the previous full guard run, `X5_test_43.tif`, `X5_test_48.tif`, and `X5_test_51.tif` move from review to pass; 48 / 51 are taken over by `separator_dark_band_outer` because the old outer had abnormal content geometry.
+- Full local diagnostics were rerun using the naming rule: full outputs use `4.5.4`, partial outputs use `4.5.4_partial`. Results: `Test/135/4.5.4` = 48 ok / 43 approved / 5 review; `Test/new_135/4.5.4` = 4 ok / 4 approved / 0 review; `Test/120/66/4.5.4` = 16 ok / 16 approved / 0 review; `Test/120/66/4.5.4_partial` = 16 ok / 16 approved / 0 review; `Test/120/67/4.5.4` = 4 ok / 3 approved / 1 review; `Test/半格/full/4.5.4` = 10 ok / 10 approved / 0 review; `Test/半格/partial/4.5.4_partial` = 5 ok / 5 approved / 0 review.
+- The full diagnostic run processed 103 files in 221.31 seconds, averaging 2.15 seconds/file. Process workers were unavailable in the Codex sandbox, so the script used thread workers.
+
+### V4.5.3
+
+V4.5.3 is a narrow fix for half-frame full strips whose broad separator and
+stable-grid evidence already satisfies the existing gate. It does not loosen
+the general PASS rule for half-frame or other formats.
+
+Main changes:
+
+- Adds a safe detail-value reader so valid values such as `width_cv=0.0` are
+  not mistaken for missing values by Python truthy / falsy logic.
+- `half_wide_geometry_support` and `half_stable_grid_support` now correctly see
+  perfectly stable frame width CV values.
+- `X5_00058.tif` changes from `needs_review` to `approved_auto`, with unchanged
+  outer, frame boxes, and gap results.
+
+Verification:
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` passed.
+- Full `Test/135` is 48 rows / 0 diff against V4.5.2.
+- `Test/半格/partial` is 5 rows / 0 diff against V4.5.2.
+- Full `Test/半格` differs from V4.5.2 only on `X5_00058.tif` status /
+  confidence / review reasons: `needs_review` becomes `approved_auto`; crop
+  boxes and gaps have no diff.
+
+### V4.5.2
 
 V4.5.2 is a structural convergence release after V4.5.1. It continues to clean
 up module responsibilities without changing detector thresholds or
