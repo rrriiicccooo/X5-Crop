@@ -171,7 +171,7 @@ xpan = 3
 低置信或困难图片会进入复核流程，必要时原 TIFF 会被复制到：
 
 ```text
-split_output/needs_review/
+x5_crop_output/needs_review/
 ```
 
 这里的文件是原 TIFF 的复制粘贴。脚本没有对这些复制进去的 TIFF 做裁切、压缩、改色、校平或其它处理。你可以放心在 `needs_review/` 里手动检查、移动、删除或另行处理这些副本。
@@ -181,14 +181,14 @@ split_output/needs_review/
 脚本会在当前文件夹生成：
 
 ```text
-split_output/
+x5_crop_output/
 ```
 
 高置信结果会自动裁切。低置信或困难图片会进入复核流程。
 
 自动裁切输出的单张 TIFF 是新文件，但会保留原 TIFF 的位深、通道结构、ICC / 色彩空间、resolution 和 metadata 等画质相关属性；裁切不会主动降位深、改色、压缩或重采样。
 
-默认输出 bleed 是长轴 20px、短轴 10px。如果检测到叠片 / 近似叠片 / 连续内容风险，输出长轴 bleed 会自动提高到 50px；这只影响最终输出范围，不参与检测评分。
+默认输出 bleed 是长轴 20px、短轴 10px。如果检测到叠片 / 近似叠片 / 连续内容风险，输出长轴 bleed 会自动提高到 50px；当前版本中，partial、half 和 120 路径里的诊断叠片风险也会触发这个输出安全边距。这只影响最终输出范围，不参与检测评分。
 
 ### 终端暂时没有新提示
 
@@ -391,7 +391,7 @@ Normal non-Debug-Analysis crop runs do not write reports.
 Low-confidence or difficult scans may be copied to:
 
 ```text
-split_output/needs_review/
+x5_crop_output/needs_review/
 ```
 
 Files in this folder are plain copies of the original TIFF files. The script does not crop, compress, recolor, deskew, or otherwise process those copied TIFFs. You can safely inspect, move, delete, or manually process the copies in `needs_review/`.
@@ -401,14 +401,14 @@ Files in this folder are plain copies of the original TIFF files. The script doe
 The script creates:
 
 ```text
-split_output/
+x5_crop_output/
 ```
 
 High-confidence results are cropped automatically. Low-confidence or difficult scans go to review.
 
 Auto-cropped frame TIFFs are new files, but X5 Crop preserves source-TIFF quality-related attributes, including bit depth, channel layout, ICC / color space, resolution, and metadata. Cropping does not intentionally lower bit depth, recolor, compress, or resample the image.
 
-Default output bleed is 20px on the long axis and 10px on the short axis. When overlap, near-overlap, or continuous-content risk is detected, long-axis output bleed is automatically raised to 50px. This affects final output only, not detection scoring.
+Default output bleed is 20px on the long axis and 10px on the short axis. When overlap, near-overlap, or continuous-content risk is detected, long-axis output bleed is automatically raised to 50px. Current versions also let diagnostic overlap-risk signals from partial, half-frame, and 120-format paths trigger this output safety margin. This affects final output only, not detection scoring.
 
 ### No New Terminal Text
 

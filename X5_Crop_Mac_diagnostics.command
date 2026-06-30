@@ -47,6 +47,34 @@ ask_yes_no() {
     done
 }
 
+ask_partial_count() {
+    while true; do
+        echo "partial count:"
+        echo "  return or auto = auto"
+        echo "  allowed: $ALLOWED_COUNTS"
+        read -r -p "count: " COUNT_INPUT
+        COUNT_INPUT="$(printf '%s' "$COUNT_INPUT" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+        case "$COUNT_INPUT" in
+            ""|auto)
+                PARTIAL_COUNT="auto"
+                return 0
+                ;;
+            *)
+                case " $ALLOWED_COUNTS " in
+                    *" $COUNT_INPUT "*)
+                        PARTIAL_COUNT="$COUNT_INPUT"
+                        return 0
+                        ;;
+                    *)
+                        echo "unknown count: $COUNT_INPUT"
+                        echo "use auto or one of: $ALLOWED_COUNTS"
+                        ;;
+                esac
+                ;;
+        esac
+    done
+}
+
 SCRIPT="./X5_Crop.py"
 if [ ! -f "$SCRIPT" ]; then
     echo "X5_Crop.py was not found in this folder."
@@ -126,36 +154,43 @@ while true; do
         ""|135)
             FORMAT="135"
             COUNT="6"
+            ALLOWED_COUNTS="1 2 3 4 5 6"
             break
             ;;
         dual|135dual|135-dual)
             FORMAT="135-dual"
             COUNT="12"
+            ALLOWED_COUNTS="12"
             break
             ;;
         xpan)
             FORMAT="xpan"
             COUNT="3"
+            ALLOWED_COUNTS="1 2 3"
             break
             ;;
         half)
             FORMAT="half"
             COUNT="12"
+            ALLOWED_COUNTS="1 2 3 4 5 6 7 8 9 10 11 12"
             break
             ;;
         645|120645|120-645)
             FORMAT="120-645"
             COUNT="4"
+            ALLOWED_COUNTS="1 2 3 4"
             break
             ;;
         66|12066|120-66)
             FORMAT="120-66"
             COUNT="3"
+            ALLOWED_COUNTS="1 2 3"
             break
             ;;
         67|12067|120-67)
             FORMAT="120-67"
             COUNT="3"
+            ALLOWED_COUNTS="1 2 3"
             break
             ;;
         *)
@@ -168,8 +203,10 @@ done
 PARTIAL_ANSWER="$(ask_yes_no "partial mode? [y/n, return=no]: " "no")"
 if [ "$PARTIAL_ANSWER" = "yes" ]; then
     STRIP="partial"
+    ask_partial_count
 else
     STRIP="full"
+    PARTIAL_COUNT="auto"
 fi
 
 echo
@@ -180,13 +217,15 @@ if [ "$STRIP" = "full" ]; then
     echo "strip mode: full"
 else
     echo "strip mode: partial"
-    echo "count: auto"
+    echo "count: $PARTIAL_COUNT"
 fi
 echo
 
 ARGS=("$SCRIPT" "." --format "$FORMAT" --strip "$STRIP" --report --debug-analysis --dry-run --diagnostics --no-copy-review-files --no-reuse-analysis --jobs 4)
 if [ "$STRIP" = "full" ]; then
     ARGS+=(--count "$COUNT")
+elif [ "$PARTIAL_COUNT" != "auto" ]; then
+    ARGS+=(--count "$PARTIAL_COUNT")
 fi
 
 $PYTHON "${ARGS[@]}"
