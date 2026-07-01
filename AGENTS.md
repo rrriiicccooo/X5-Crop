@@ -171,7 +171,7 @@ Key local sets:
 For source or policy changes, also run:
 
 ```bash
-python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/policies/*.py x5crop/geometry/*.py x5crop/io/*.py x5crop/image/*.py x5crop/export/*.py
+python3 -m compileall -q X5_Crop.py x5crop
 bash -n X5_Crop_Mac.command
 bash -n X5_Crop_Mac_diagnostics.command
 git diff --check

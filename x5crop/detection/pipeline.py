@@ -10,14 +10,14 @@ from ..formats import FormatSpec
 from ..analysis_cache import make_analysis_cache
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
-from .candidate_run import calibrated_candidates_for_count, detect_candidate_for_count
-from .candidates import candidate_counts_for_format
-from .dual_lane import (
+from .candidate.run import calibrated_candidates_for_count
+from .candidate.counts import candidate_counts_for_format
+from .modes.dual_lane import (
     choose_parallel_lane_detection,
     unsupported_parallel_lane_partial_detection,
 )
-from .fallback import hard_fallback_detection
-from .selection import select_detection_candidate
+from .candidate.fallback import hard_fallback_detection
+from .candidate.selection import select_detection_candidate
 
 
 def choose_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec, cache: Optional[AnalysisCache] = None) -> Detection:
@@ -61,15 +61,3 @@ def choose_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec, c
     detection = select_detection_candidate(candidates, fmt, config.confidence_threshold, policy)
     detection.detail["policy"] = policy.report_detail()
     return detection
-
-
-
-
-
-def detect_image(*args, **kwargs) -> Detection:
-    """Run the current full detection pipeline.
-
-    This is the stable package-level detection entry point used by V4 callers.
-    """
-
-    return choose_detection(*args, **kwargs)

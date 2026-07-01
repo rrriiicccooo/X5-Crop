@@ -33,7 +33,7 @@ Current stable release: v4.2.8
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.9 | 当前 active 开发版 | Evidence-governed decision / policy reset。新增 explicit format physical spec、clean entry layer（`CliOptions` / `RuntimeConfig`、`input_probe.py`、Python interactive launcher）、`x5crop/policies/decision_contract.py` V4.9 policy contract、`x5crop/detection/final_decision.py` conservative PASS/REVIEW gate、`v4_9_policy_schema_1` report schema、policy-controlled three-panel Debug Analysis，以及 `tools/regression/` reference classifier。目标是 0 新错误 PASS，并允许可解释的 conservative diff。 |
+| V4.9 | 当前 active 开发版 | Evidence-governed decision / policy reset。新增 explicit format physical spec、clean entry layer（`CliOptions` / `RuntimeConfig`、`input_probe.py`、Python interactive launcher）、`x5crop/policies/decision_contract.py` V4.9 policy contract、`x5crop/detection/final/decision.py` conservative PASS/REVIEW gate、`v4_9_policy_schema_1` report schema、policy-controlled three-panel Debug Analysis，以及 `tools/regression/` reference classifier。目标是 0 新错误 PASS，并允许可解释的 conservative diff。 |
 | V4.7 | 旧 active 开发版 | Source-layout rewrite。移除旧桥接层，保留 `X5_Crop.py` 薄入口和 `x5crop/` 分层实现；format / mode 行为由 `x5crop/policies/` 管理；`workflow.py` 负责编排；`detection/pipeline.py` 收敛为 orchestration；candidate、dual-lane、partial-holder、fallback、outer retry、calibration 等职责拆入专门模块；geometry 拆分为 focused helpers。目标是保持 V4.5.4 行为，同时让源码边界清晰。 |
 | V4.6 | 开发版 | 建立 `DetectionPolicy` 架构，将 detector、count、outer、separator、content、scoring、selection、postprocess、diagnostics 和 output 行为按 format / strip mode 注册。新增 workflow 层和 historical reference compare helper。 |
 | V4.5.4 | 开发版 | 加强 120-66 full / partial 的宽黑条和 strict holder 处理；目标是更稳地解释 120-66 样片，不推广到其它格式。 |
@@ -69,9 +69,15 @@ Current stable release: v4.2.8
   `analysis_reuse` 负责 report cache 复用，`export` 负责输出路径 / review copy /
   TIFF crop 写出，`result_builder` 统一 fresh / cached `ProcessResult` 组装，
   `report_outputs` 只写 JSONL / CSV。
+- Detection 第 10 层清理完成：`x5crop.detection` 已拆为 `outer/`、`evidence/`、
+  `candidate/`、`modes/` 和 `final/` 子包；旧平铺 `outer.py`、`outer_retry.py`、
+  `candidate_run.py`、`content.py`、`diagnostics.py`、`finalizer.py` 等模块已移除；
+  package `__init__` 只保留 marker，不再 re-export 旧入口。
+- Detection 层 smoke 通过：递归 `compileall`、runtime import smoke，以及
+  135/full、120-66/partial、half/full 三张本地样片 dry-run report 均完成。
 - 命名边界清理完成：candidate-level gate / decision 现在由
-  `candidate_gates.py` 和 `candidate_decision.py` 表达；最终 PASS/REVIEW 与输出前
-  收口由 `final_decision.py` 和 `finalizer.py` 表达；runtime policy 字段统一为
+  `candidate/gates.py` 和 `candidate/decision.py` 表达；最终 PASS/REVIEW 与输出前
+  收口由 `final/decision.py` 和 `final/finalize.py` 表达；runtime policy 字段统一为
   `finalization`。
 - 稳定数据契约层清理通过 smoke：report schema serializer 从 `x5crop.detection`
   移至 `x5crop.report_schema`，`x5crop.detection_detail` 集中记录
@@ -109,8 +115,8 @@ Current stable release: v4.2.8
   传入 workflow/export。
 - Outer primitive 边界进一步收紧：`geometry.outer_boxes` 只返回 `Box` /
   `Box | None`，`OuterCandidate` 包装、候选命名、strategy 和去重全部移到
-  `x5crop.detection.outer.base_outer_candidates` /
-  `x5crop.detection.outer.unique_outer_candidates`。
+  `x5crop.detection.outer.base.base_outer_candidates` /
+  `x5crop.detection.outer.base.unique_outer_candidates`。
 - Workflow / Report / Debug / Policy 结构继续收紧：`workflow.py` 只保留单图主流程，
   runtime deskew、cached analysis、review/export 和 Debug outputs 已下放到 owning
   modules；Debug Analysis 渲染拆为 canvas、gap overlays、panels、status 和 writer；
@@ -200,7 +206,7 @@ rollback.
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.9 | Current active development | Evidence-governed decision / policy reset. Adds explicit format physical specs, a clean entry layer (`CliOptions` / `RuntimeConfig`, `input_probe.py`, Python interactive launcher), the `x5crop/policies/decision_contract.py` V4.9 policy contract, the `x5crop/detection/final_decision.py` conservative PASS/REVIEW gate, `v4_9_policy_schema_1`, policy-controlled three-panel Debug Analysis, and a `tools/regression/` reference classifier. The goal is 0 new wrong PASS with explainable conservative diffs. |
+| V4.9 | Current active development | Evidence-governed decision / policy reset. Adds explicit format physical specs, a clean entry layer (`CliOptions` / `RuntimeConfig`, `input_probe.py`, Python interactive launcher), the `x5crop/policies/decision_contract.py` V4.9 policy contract, the `x5crop/detection/final/decision.py` conservative PASS/REVIEW gate, `v4_9_policy_schema_1`, policy-controlled three-panel Debug Analysis, and a `tools/regression/` reference classifier. The goal is 0 new wrong PASS with explainable conservative diffs. |
 | V4.7 | Previous active development | Source-layout rewrite. Removes old bridge layers, keeps a thin `X5_Crop.py` entry and layered `x5crop/` implementation, moves format/mode behavior into `x5crop/policies/`, keeps `workflow.py` as orchestration, narrows `detection/pipeline.py`, and splits candidate, dual-lane, partial-holder, fallback, outer-retry, calibration, and geometry helpers into focused modules. The goal is V4.5.4 behavior with clearer source boundaries. |
 | V4.6 | Development | Introduces the `DetectionPolicy` architecture for detector, count, outer, separator, content, scoring, selection, postprocess, diagnostics, and output behavior by format / strip mode. Adds workflow separation and a historical reference compare helper. |
 | V4.5.4 | Development | Strengthens 120-66 full / partial wide-dark-band and strict-holder handling while keeping that risk model isolated to 120-66. |
@@ -237,10 +243,19 @@ Verified:
   orchestration, `analysis_reuse` owns report-cache reuse, `export` owns output
   paths / review copies / TIFF crop writes, `result_builder` builds fresh /
   cached `ProcessResult` rows, and `report_outputs` only writes JSONL / CSV.
+- Detection layer 10 cleanup is complete: `x5crop.detection` is split into
+  `outer/`, `evidence/`, `candidate/`, `modes/`, and `final/` subpackages. The
+  old flat `outer.py`, `outer_retry.py`, `candidate_run.py`, `content.py`,
+  `diagnostics.py`, `finalizer.py`, and related modules are removed; package
+  `__init__` files are markers only and no longer re-export old entry points.
+- Detection-layer smoke passes: recursive `compileall`, runtime import smoke,
+  and local 135/full, 120-66/partial, and half/full dry-run report samples all
+  complete.
 - Naming boundary cleanup is complete: candidate-level gates / decisions are now
-  expressed by `candidate_gates.py` and `candidate_decision.py`; final PASS/REVIEW
-  and pre-output finalization are expressed by `final_decision.py` and
-  `finalizer.py`; the runtime policy field is consistently named `finalization`.
+  expressed by `candidate/gates.py` and `candidate/decision.py`; final
+  PASS/REVIEW and pre-output finalization are expressed by `final/decision.py`
+  and `final/finalize.py`; the runtime policy field is consistently named
+  `finalization`.
 - Stable data-contract cleanup smoke passes: report schema serialization moved
   from `x5crop.detection` to `x5crop.report_schema`, and
   `x5crop.detection_detail` centralizes the stable `Detection.detail` keys
@@ -273,8 +288,8 @@ Verified:
 - The outer primitive boundary is tightened: `geometry.outer_boxes` returns only
   `Box` / `Box | None`, while `OuterCandidate` wrapping, candidate names,
   strategies, and deduplication now belong to
-  `x5crop.detection.outer.base_outer_candidates` /
-  `x5crop.detection.outer.unique_outer_candidates`.
+  `x5crop.detection.outer.base.base_outer_candidates` /
+  `x5crop.detection.outer.base.unique_outer_candidates`.
 - Workflow / Report / Debug / Policy structure is tightened: `workflow.py` keeps
   only the single-image main flow, while runtime deskew, cached analysis,
   review/export, and Debug outputs are delegated to owning modules; Debug

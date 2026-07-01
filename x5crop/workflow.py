@@ -9,7 +9,7 @@ from .analysis_reuse import (
 )
 from .config import RuntimeConfig
 from .detection.pipeline import choose_detection
-from .detection.finalizer import finalize_detection
+from .detection.final.finalize import finalize_detection
 from .debug.outputs import write_debug_outputs
 from .deskew_runtime import apply_deskew
 from .domain import ProcessResult
@@ -17,7 +17,7 @@ from .export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from .export.paths import output_directory_for
 from .formats import FORMATS
 from .analysis_cache import make_analysis_cache
-from .detection.final_geometry import detection_geometry_config
+from .detection.final.geometry import detection_geometry_config
 from .io.tiff import read_tiff, read_tiff_profile
 from .policies.registry import get_detection_policy
 from .report_outputs import write_report_outputs_for_result

@@ -1,0 +1,67 @@
+from __future__ import annotations
+
+import numpy as np
+
+from ...app_info import VERSION
+from ...domain import Detection
+from ...geometry.layout import work_gray
+from ...policies.registry import get_detection_policy
+from ...runtime import AnalysisCache
+from .gap_diagnostics import gap_diagnostic_record
+
+
+def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> None:
+    gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
+    gap_records = [gap_diagnostic_record(gray_work, detection, gap, cache) for gap in detection.gaps]
+    hard_counts: dict[str, int] = {}
+    for record in gap_records:
+        trust = str(record.get("hard_trust", "not_hard_gap"))
+        hard_counts[trust] = hard_counts.get(trust, 0) + 1
+    overlap_count = sum(1 for record in gap_records if bool(record.get("overlap_like", False)))
+    overlap_risk_counts: dict[str, int] = {}
+    for record in gap_records:
+        risk = str(record.get("overlap_risk", "none"))
+        overlap_risk_counts[risk] = overlap_risk_counts.get(risk, 0) + 1
+    strong_hard = int(hard_counts.get("strong_separator", 0))
+    suspicious_hard = sum(
+        int(hard_counts.get(name, 0))
+        for name in ("suspect_internal_edge", "suspect_frame_border", "nearby_separator_conflict", "geometry_conflict")
+    )
+    strong_overlap_models = int(overlap_risk_counts.get("strong", 0))
+    lucky_policy = get_detection_policy(detection.film_format, detection.strip_mode).diagnostics.lucky_pass_risk
+    single_anchor_pass_risk = (
+        lucky_policy.enabled
+        and detection.strip_mode == "full"
+        and (
+            (strong_hard <= 1 and (suspicious_hard >= 1 or strong_overlap_models >= 1))
+            or (strong_hard <= 2 and suspicious_hard >= 1 and strong_overlap_models >= 1)
+        )
+    )
+    method_roles = {
+        "detected": "separator_evidence",
+        "edge-pair": "separator_evidence",
+        "enhanced-detected": "separator_evidence_enhanced",
+        "grid": "geometry_model",
+        "equal": "geometry_model",
+        "content": "content_model",
+    }
+    detection.detail["diagnostics"] = {
+        "version": VERSION,
+        "diagnostic_only": True,
+        "changes_output": False,
+        "changes_confidence": False,
+        "changes_pass_review": False,
+        "purpose": "observe hard-gap trust, model-gap overlap risk, and evidence/model roles without changing crop output",
+        "method_roles": method_roles,
+        "gap_diagnostics": gap_records,
+        "summary": {
+            "gap_count": len(gap_records),
+            "hard_trust_counts": hard_counts,
+            "overlap_like_model_gaps": int(overlap_count),
+            "overlap_risk_counts": overlap_risk_counts,
+            "suspect_hard_gaps": int(hard_counts.get("suspect_internal_edge", 0)),
+            "suspicious_hard_gaps": int(suspicious_hard),
+            "strong_hard_gaps": int(strong_hard),
+            "single_anchor_pass_risk": bool(single_anchor_pass_risk),
+        },
+    }
