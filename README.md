@@ -27,19 +27,6 @@ Current active script version: V4.7
 
 Current stable release: v4.2.8
 
-## 文档分工 / Document Roles
-
-- `快速启动_Quick_Start.md`: 第一次使用的快速操作指南。Release 包内对应
-  `快速启动_Quick_Start.txt`。
-- `README.md`: 完整用户手册，说明安装、文件摆放、启动器、Debug Analysis、
-  输出目录、复核和常用命令行。
-- `ARCHITECTURE.md`: 开发者架构地图，说明源码层级、policy 边界和回归验证原则。
-- `CHANGELOG.md`: 版本摘要、行为变化和验证线索，不承担使用说明或架构设计职责。
-- `AGENTS.md`: Codex 协作规则、仓库约束和最新 handoff，不作为用户文档。
-
-The repository `main` branch may be newer than the stable release. For normal
-use, prefer GitHub Releases. For development structure, read `ARCHITECTURE.md`.
-
 ## 中文用户手册
 
 ### 核心原则
