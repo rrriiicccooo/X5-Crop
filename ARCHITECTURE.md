@@ -34,6 +34,26 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
   `tools/regression/` 是开发期 reference compare / safety classification 工具，
   不属于 runtime package。
 
+### 彻底干净定义
+
+一个层级只有在所有公开入口都来自真实 owning module、没有旧 alias / shim /
+bridge / re-export、import 方向可证明、特殊行为 policy 化、文档与代码一致时，
+才算彻底干净。
+
+| 维度 | 标准 |
+| --- | --- |
+| 职责 | 每个文件只有一个明确 ownership，不靠“顺手放这里”存在。 |
+| API 面 | 不保留旧兼容 alias、barrel re-export、bridge module 或 shim module。 |
+| Import 方向 | 只能按层级向下依赖；基础层不能反向依赖 workflow / detection / debug / report。 |
+| 命名 | 文件名、类名、字段名表达当前职责，不带旧版本、旧行为或历史妥协语义。 |
+| Policy | format / mode 特殊行为必须显式写入 policy，不能散落在 runtime 代码里靠隐式判断启用。 |
+| 数据契约 | `RuntimeConfig`、`Detection`、`ProcessResult`、policy detail 和 report schema 各自边界稳定。 |
+| Output surfaces | debug / report / export 只消费和解释结果，不参与候选选择、gate 或 PASS/REVIEW。 |
+| 文档同步 | `ARCHITECTURE.md` 中声明的结构必须和真实文件、import 面、policy 面一致。 |
+
+允许保留有明确语义的聚合层，例如 `registry.py`、`factory.py`、
+`report_schema.py`。不允许保留仅为了旧 import 路径存在的兼容 re-export 层。
+
 ### 运行层级
 
 本节编号按 dependency / ownership boundary 排列，不是 workflow 的逐行调用顺序。
@@ -323,6 +343,28 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 - Analysis reuse, export, report / debug consume stable results and explain V4.9
   decisions; `tools/regression/` contains developer-only reference compare /
   safety classification tools outside the runtime package.
+
+### Fully Clean Definition
+
+A layer is fully clean only when every public entry comes from the true owning
+module, old aliases / shims / bridges / re-exports are removed, import direction
+is provable, format- or mode-specific behavior is policy-owned, and
+documentation matches the real code.
+
+| Dimension | Standard |
+| --- | --- |
+| Responsibility | Each file has one clear ownership reason and is not a convenient dumping place. |
+| API surface | No legacy aliases, barrel re-exports, bridge modules, or shim modules remain. |
+| Import direction | Dependencies flow downward by layer; foundation layers do not depend back on workflow / detection / debug / report. |
+| Naming | File, class, and field names describe current responsibility, not old versions, old behavior, or historical compromise. |
+| Policy | Format / mode special behavior is explicit in policy and is not scattered through runtime code as implicit checks. |
+| Data contracts | `RuntimeConfig`, `Detection`, `ProcessResult`, policy detail, and report schema keep stable boundaries. |
+| Output surfaces | debug / report / export consume and explain results; they do not select candidates, run gates, or decide PASS/REVIEW. |
+| Documentation sync | Structures described in `ARCHITECTURE.md` must match the real files, import surfaces, and policy surfaces. |
+
+Semantic aggregation layers such as `registry.py`, `factory.py`, and
+`report_schema.py` are allowed. Compatibility re-export layers that exist only
+to preserve old import paths are not allowed.
 
 ### Runtime Layers
 
