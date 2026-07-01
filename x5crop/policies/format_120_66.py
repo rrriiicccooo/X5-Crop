@@ -13,9 +13,9 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
     ),
     modes={
         FULL: ModePolicyPreset(
-            role="square_120_full_strip_dark_band_aware",
+            role="square_full_strip_dark_boundary_guarded",
             notes=(
-                "dark-band outer candidates may compete, but full mode does not inherit partial extra-holder tolerance",
+                "dark-boundary outer candidates may compete, but full mode does not inherit partial extra-holder tolerance",
             ),
             frame_fit=FrameFitPolicy(
                 name="120-66",
@@ -34,9 +34,9 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
             diagnostics_overlap_bleed=True,
         ),
         PARTIAL: ModePolicyPreset(
-            role="square_120_partial_strip_dark_band_safe_extra_frames",
+            role="square_partial_strip_dark_boundary_edge_guarded",
             notes=(
-                "dark-band outer candidates must still pass separator/content/geometry gates",
+                "dark-boundary outer candidates must still pass separator/content/geometry gates",
                 "safe extra holder frames require wide-like separator evidence and stable frame content",
             ),
             dark_band=DarkBandModePreset(

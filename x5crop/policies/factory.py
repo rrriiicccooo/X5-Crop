@@ -856,7 +856,7 @@ def build_policy_from_preset(
     fmt = FORMATS[preset.format_id]
     tuning = format_parameters(preset.format_id)
     return DetectionPolicy(
-        policy_id=f"{preset.format_id.replace('-', '_')}_{strip_mode}",
+        policy_id=f"v4_9_clean_room_{preset.format_id.replace('-', '_')}_{strip_mode}",
         format_id=preset.format_id,
         strip_mode=strip_mode,
         family=fmt.family,

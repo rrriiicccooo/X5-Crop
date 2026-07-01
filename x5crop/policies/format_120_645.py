@@ -13,8 +13,8 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
     ),
     modes={
         FULL: ModePolicyPreset(
-            role="120_645_full_strip",
-            notes=("120-645 uses the shared 120 separator policy without 120-66 dark-band gates",),
+            role="medium_format_full_strip_separator_guarded",
+            notes=("medium-format full strips use separator policy without square dark-boundary gates",),
             frame_fit=FrameFitPolicy(
                 name="120-645",
                 edge_evidence=True,
@@ -27,8 +27,8 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
             diagnostics_overlap_bleed=True,
         ),
         PARTIAL: ModePolicyPreset(
-            role="120_645_partial_strip",
-            notes=("120-645 partial uses the shared conservative partial policy",),
+            role="medium_format_partial_strip_edge_guarded",
+            notes=("medium-format partial strips use conservative partial edge policy",),
             diagnostics_overlap_bleed=True,
         ),
     },

@@ -939,13 +939,19 @@ class DiagnosticsPolicy:
     lucky_pass_risk: LuckyPassRiskPolicy = field(default_factory=LuckyPassRiskPolicy)
     debug_panels: tuple[str, ...] = (
         "original_gray",
-        "debug_boxes",
+        "outer_candidates",
         "separator_evidence",
+        "frame_geometry",
+        "selected_candidate",
+        "risk_review",
     )
     debug_panel_titles: tuple[DebugPanelPolicy, ...] = (
-        DebugPanelPolicy("original_gray", "Original gray"),
-        DebugPanelPolicy("debug_boxes", "Debug boxes"),
+        DebugPanelPolicy("original_gray", "Original gray context"),
+        DebugPanelPolicy("outer_candidates", "Outer candidates"),
         DebugPanelPolicy("separator_evidence", "Separator evidence"),
+        DebugPanelPolicy("frame_geometry", "Frame geometry"),
+        DebugPanelPolicy("selected_candidate", "Selected candidate"),
+        DebugPanelPolicy("risk_review", "Risk / review overlay"),
     )
 
     def debug_panel_title(self, panel_id: str) -> str:
@@ -957,15 +963,17 @@ class DiagnosticsPolicy:
 
 @dataclass(frozen=True)
 class ReportPolicy:
-    schema_version: str = "v4_7_policy_schema_1"
+    schema_version: str = "v4_9_policy_schema_1"
     sections: tuple[str, ...] = (
+        "version",
+        "format",
         "result",
         "selected_candidate",
+        "evidence_summary",
+        "risk_summary",
+        "decision_policy_detail",
+        "policy_id",
         "candidate_table",
-        "policy",
-        "evidence",
-        "gates",
-        "postprocess",
         "output",
     )
 

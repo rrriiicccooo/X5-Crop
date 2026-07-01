@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
+from ..app_info import VERSION
 from ..domain import Detection, ProcessResult
+from ..policies.clean_room import clean_room_policy_for
 from ..policies.base import ReportPolicy
 from ..policies.registry import get_detection_policy
 from ..utils import json_safe
@@ -83,6 +85,10 @@ def report_policy_for_detection(detection: Detection) -> ReportPolicy:
 
 def report_schema_for_detection(detection: Detection, result: ProcessResult | None = None) -> dict[str, Any]:
     report_policy = report_policy_for_detection(detection)
+    clean_policy = clean_room_policy_for(detection.film_format, detection.strip_mode)
+    decision_detail = detection.detail.get("v4_9_decision", {})
+    if not isinstance(decision_detail, dict):
+        decision_detail = {}
     output = {}
     if result is not None:
         output = {
@@ -91,7 +97,20 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
             "review_copy": result.review_copy,
             "warnings": list(result.warnings),
         }
+    policy_detail = detection.detail.get("policy", clean_policy.report_detail())
+    if not isinstance(policy_detail, dict):
+        policy_detail = clean_policy.report_detail()
     section_values = {
+        "version": {
+            "script_version": VERSION,
+            "schema_version": report_policy.schema_version,
+        },
+        "format": {
+            "format_id": detection.film_format,
+            "strip_mode": detection.strip_mode,
+            "count": int(detection.count),
+            "layout": detection.layout,
+        },
         "result": {
             "status": result.status if result is not None else ("approved_auto" if not detection.review_reasons else "needs_review"),
             "confidence": float(detection.confidence),
@@ -102,7 +121,7 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
         },
         "selected_candidate": selected_candidate(detection),
         "candidate_table": candidate_table(detection),
-        "policy": detection.detail.get("policy", {}),
+        "policy": policy_detail,
         "evidence": {
             "content": detection.detail.get("content_evidence", {}),
             "separator": (
@@ -118,9 +137,42 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
             "overlap_bleed_risk": detection.detail.get("overlap_bleed_risk", {}),
             "deskew": detection.detail.get("deskew", {}),
         },
+        "evidence_summary": detection.detail.get(
+            "evidence_summary",
+            decision_detail.get("evidence_summary", {}),
+        ),
+        "risk_summary": detection.detail.get(
+            "risk_summary",
+            decision_detail.get("risk_summary", {}),
+        ),
+        "decision_policy_detail": detection.detail.get(
+            "decision_policy_detail",
+            decision_detail.get("decision_policy_detail", clean_policy.report_detail()),
+        ),
+        "policy_id": (
+            detection.detail.get("policy_id")
+            or policy_detail.get("policy_id")
+            or clean_policy.policy_id
+        ),
         "output": output,
     }
-    schema = {"schema_version": report_policy.schema_version}
+    schema = {
+        "schema_version": report_policy.schema_version,
+        "version": VERSION,
+        "format_id": detection.film_format,
+        "strip_mode": detection.strip_mode,
+        "status": section_values["result"]["status"],
+        "confidence": section_values["result"]["confidence"],
+        "review_reasons": section_values["result"]["review_reasons"],
+        "outer_box": section_values["result"]["outer_box"],
+        "frame_boxes": section_values["result"]["frame_boxes"],
+        "gaps": section_values["result"]["gaps"],
+        "selected_candidate": section_values["selected_candidate"],
+        "evidence_summary": section_values["evidence_summary"],
+        "risk_summary": section_values["risk_summary"],
+        "decision_policy_detail": section_values["decision_policy_detail"],
+        "policy_id": section_values["policy_id"],
+    }
     for section in report_policy.sections:
         if section in section_values:
             schema[section] = section_values[section]

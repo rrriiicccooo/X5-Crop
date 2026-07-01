@@ -13,8 +13,8 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
     ),
     modes={
         FULL: ModePolicyPreset(
-            role="stable_full_strip_baseline",
-            notes=("preserve current 135 behavior unless sample-based regression approves a change",),
+            role="full_strip_balanced_separator_geometry",
+            notes=("full strips require combined separator, geometry, content, and outer evidence",),
             frame_fit=FrameFitPolicy(
                 name="135",
                 edge_evidence=True,
@@ -26,8 +26,8 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
             ),
         ),
         PARTIAL: ModePolicyPreset(
-            role="conservative_partial_strip",
-            notes=("content evidence validates partial strips but cannot auto-pass alone",),
+            role="partial_strip_edge_uncertainty_guarded",
+            notes=("partial strips require explicit edge trust before automatic export",),
             diagnostics_overlap_bleed=True,
         ),
     },

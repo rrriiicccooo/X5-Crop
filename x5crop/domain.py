@@ -111,6 +111,8 @@ class ProcessResult:
     detail: dict[str, Any]
     profile: dict[str, Any]
     warnings: list[str]
+    version: str = ""
+    policy_id: str = ""
     report_schema: dict[str, Any] = field(default_factory=dict)
 
 

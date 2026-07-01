@@ -14,8 +14,8 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
     content_mismatch_review_enabled=True,
     modes={
         FULL: ModePolicyPreset(
-            role="half_frame_full_strip_with_geometry_support",
-            notes=("half full can use stable grid or wide geometry support without borrowing 120 dark-band gates",),
+            role="dense_full_strip_geometry_supported",
+            notes=("dense full strips can use stable grid or wide geometry support without borrowing dark-boundary gates",),
             frame_fit=FrameFitPolicy(
                 name="half",
                 edge_evidence=True,
@@ -29,8 +29,8 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
             diagnostics_overlap_bleed=True,
         ),
         PARTIAL: ModePolicyPreset(
-            role="half_frame_partial_strip",
-            notes=("partial safe extra frames are allowed without 120-66 wide dark-band assumptions",),
+            role="dense_partial_strip_edge_guarded",
+            notes=("partial safe extra frames require explicit separator/content/geometry support",),
             diagnostics_overlap_bleed=True,
         ),
     },

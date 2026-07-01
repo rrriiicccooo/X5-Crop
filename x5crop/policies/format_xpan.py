@@ -13,8 +13,8 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
     ),
     modes={
         FULL: ModePolicyPreset(
-            role="xpan_full_strip",
-            notes=("xpan full remains conservative and separator-driven",),
+            role="panoramic_full_strip_separator_guarded",
+            notes=("panoramic full strips remain conservative and separator-driven",),
             frame_fit=FrameFitPolicy(
                 name="xpan",
                 edge_evidence=True,
@@ -26,8 +26,8 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
             ),
         ),
         PARTIAL: ModePolicyPreset(
-            role="xpan_partial_strip",
-            notes=("partial xpan may include the default count but still needs separator/content/geometry gates",),
+            role="panoramic_partial_strip_edge_guarded",
+            notes=("partial panoramic strips may include the default count but still need separator/content/geometry gates",),
             diagnostics_overlap_bleed=True,
         ),
     },

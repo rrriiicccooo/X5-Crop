@@ -23,6 +23,7 @@ from .diagnostics import (
     lucky_pass_risk_score_detail,
     overlap_bleed_risk_detail,
 )
+from .decision import apply_v49_decision_policy, normalized_review_reasons
 from .content import content_evidence_detail
 from .outer_retry import (
     outer_content_alignment_detail,
@@ -100,6 +101,15 @@ def finalize_detection_decision(
         detection.confidence = min(detection.confidence, policy.postprocess.lucky_pass_risk_cap)
         detection.review_reasons.append(REASON_LUCKY_PASS_RISK)
 
+    detection = apply_v49_decision_policy(
+        gray,
+        detection,
+        config,
+        fmt,
+        content_detail,
+        outer_alignment,
+    )
+
     if detection.confidence < config.confidence_threshold:
         if detection.detail.get("partial_best"):
             detection.review_reasons.append(policy.postprocess.likely_partial_review_reason)
@@ -107,7 +117,7 @@ def finalize_detection_decision(
             detection.review_reasons.append(policy.postprocess.outer_candidate_disagreement_review_reason)
         if deskew_detail.get("skipped") == "angle_out_of_range" or deskew_detail.get("reason"):
             detection.review_reasons.append(policy.postprocess.deskew_uncertain_review_reason)
-        detection.review_reasons = sorted(set(detection.review_reasons))
+        detection.review_reasons = normalized_review_reasons(detection.review_reasons)
     status = "approved_auto" if detection.confidence >= config.confidence_threshold else "needs_review"
     if policy.postprocess.apply_approved_geometry_adjustment:
         apply_approved_geometry_adjustment(

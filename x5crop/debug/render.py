@@ -244,6 +244,77 @@ def make_debug_preview_rgb(gray: np.ndarray, detection: Detection, cache: Option
     return rgb
 
 
+def box_from_debug_value(value: Any) -> Optional[Box]:
+    if not isinstance(value, dict):
+        return None
+    box_value = value.get("box") if isinstance(value.get("box"), dict) else value
+    try:
+        return Box(
+            int(box_value["left"]),
+            int(box_value["top"]),
+            int(box_value["right"]),
+            int(box_value["bottom"]),
+        )
+    except Exception:
+        return None
+
+
+def make_outer_candidates_rgb(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> np.ndarray:
+    rgb, scale = cached_preview_gray(cache, "outer_candidates", gray)
+    candidates = detection.detail.get("outer_candidates", [])
+    if isinstance(candidates, list):
+        for index, candidate in enumerate(candidates[:16]):
+            box = box_from_debug_value(candidate)
+            if box is None:
+                continue
+            color = FRAME_FILL_COLORS[index % len(FRAME_FILL_COLORS)]
+            draw_preview_rect(rgb, box, scale, color, 1)
+    draw_preview_rect(rgb, detection.outer, scale, (0, 255, 0), 3)
+    return rgb
+
+
+def make_frame_geometry_rgb(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> np.ndarray:
+    rgb, scale = cached_preview_gray(cache, "frame_geometry", gray)
+    draw_preview_rect(rgb, detection.outer, scale, (0, 255, 0), 2)
+    for index, box in enumerate(detection.frames):
+        color = FRAME_FILL_COLORS[index % len(FRAME_FILL_COLORS)]
+        fill_preview_rect(rgb, box, scale, color, 0.18)
+        draw_preview_rect(rgb, box, scale, color, 2)
+    draw_gap_overlay(rgb, detection, scale)
+    return rgb
+
+
+def add_review_lines(rgb: np.ndarray, lines: list[str]) -> np.ndarray:
+    if not lines:
+        return rgb
+    h, w = rgb.shape[:2]
+    line_h = 18
+    pad = 10
+    panel_h = min(h, pad * 2 + line_h * min(len(lines), 6))
+    image = Image.fromarray(rgb, mode="RGB")
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, h - panel_h, w - 1, h - 1), fill=(18, 18, 18))
+    for index, line in enumerate(lines[:6]):
+        draw.text((pad, h - panel_h + pad + index * line_h), line, fill=(245, 245, 245))
+    return np.asarray(image)
+
+
+def make_risk_review_rgb(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> np.ndarray:
+    rgb = make_frame_geometry_rgb(gray, detection, cache)
+    decision = detection.detail.get("v4_9_decision", {})
+    risk = detection.detail.get("risk_summary", {})
+    lines = [
+        f"policy: {detection.detail.get('policy_id', '')}",
+        "reasons: " + (",".join(detection.review_reasons[:4]) if detection.review_reasons else "none"),
+    ]
+    if isinstance(decision, dict):
+        lines.append(f"v4.9 pass: {bool(decision.get('pass', False))}")
+    if isinstance(risk, dict):
+        active = [key for key, value in risk.items() if isinstance(value, bool) and value]
+        lines.append("risks: " + (",".join(active[:4]) if active else "none"))
+    return add_review_lines(rgb, lines)
+
+
 def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> None:
     debug_gap = get_detection_policy(detection.film_format, detection.strip_mode).diagnostics.debug_gap_overlay
     gap_colors = {
@@ -378,11 +449,16 @@ def make_debug_analysis_panel(gray: np.ndarray, detection: Detection, threshold:
     diagnostics = policy.diagnostics
     panel_builders = {
         "original_gray": lambda title: cached_labeled_preview_gray(cache, "original_gray", title, gray)[0],
+        "gray_context": lambda title: cached_labeled_preview_gray(cache, "original_gray", title, gray)[0],
         "debug_boxes": lambda title: add_panel_label(make_debug_preview_rgb(gray, detection, cache), title),
+        "outer_candidates": lambda title: add_panel_label(make_outer_candidates_rgb(gray, detection, cache), title),
         "separator_evidence": lambda title: add_panel_label(
             make_separator_evidence_debug_rgb(gray, detection, cache),
             title,
         ),
+        "frame_geometry": lambda title: add_panel_label(make_frame_geometry_rgb(gray, detection, cache), title),
+        "selected_candidate": lambda title: add_panel_label(make_debug_preview_rgb(gray, detection, cache), title),
+        "risk_review": lambda title: add_panel_label(make_risk_review_rgb(gray, detection, cache), title),
     }
     panels = [
         panel_builders[name](diagnostics.debug_panel_title(name))

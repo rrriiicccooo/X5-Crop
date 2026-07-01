@@ -19,11 +19,11 @@ holders. It splits long-strip TIFF scans into individual TIFF frames. Only
 high-confidence detections are exported automatically; weak or conflicting cases
 are sent to review.
 
-当前 active 脚本版本：V4.7
+当前 active 脚本版本：V4.9
 
 当前稳定发布版本：v4.2.8
 
-Current active script version: V4.7
+Current active script version: V4.9
 
 Current stable release: v4.2.8
 
@@ -37,6 +37,8 @@ Current stable release: v4.2.8
 - 自动裁切输出会保留原 TIFF 的位深、通道结构、ICC / 色彩空间、resolution、
   metadata 和已知无损压缩行为。
 - 检测阶段保持保守；证据不足、证据冲突、疑似叠片或局部片距异常时进入复核。
+- V4.9 使用更保守的 clean-room decision policy；旧版本可 PASS 的困难图片如果
+  证据组合不足，可能改为 `REVIEW`。
 
 ### 推荐下载
 
@@ -158,11 +160,14 @@ Debug Analysis 是试运行 / 分析模式。它会读取 TIFF、执行检测、
 x5_crop_output/_debug_analysis/
 ```
 
-每张 Debug Analysis JPG 包含三个面板：
+每张 Debug Analysis JPG 的面板由 DiagnosticsPolicy 控制，默认包含：
 
-- `Original gray`: 原始灰度图。
-- `Debug boxes`: 外框和最终输出裁切范围。
+- `Original gray context`: 原始灰度上下文。
+- `Outer candidates`: outer 候选。
 - `Separator evidence`: 分隔证据、当前 outer 和切线标记。
+- `Frame geometry`: frame geometry 和裁切范围。
+- `Selected candidate`: 当前候选结果。
+- `Risk / review overlay`: V4.9 risk / review 摘要。
 
 状态含义：
 
@@ -285,6 +290,9 @@ Windows: install/X5_Crop_win_uninstall.bat
   lossless compression behavior.
 - Detection stays conservative. Weak evidence, conflicting evidence, possible
   overlap, or unstable local spacing goes to review.
+- V4.9 uses a more conservative clean-room decision policy. Difficult files
+  that passed in older development versions may now go to `REVIEW` when
+  combined evidence is insufficient.
 
 ### Download
 
@@ -399,11 +407,14 @@ Output:
 x5_crop_output/_debug_analysis/
 ```
 
-Each JPG contains:
+Each JPG is controlled by DiagnosticsPolicy and defaults to:
 
-- `Original gray`: source gray preview.
-- `Debug boxes`: outer box and final crop boxes.
+- `Original gray context`: source gray context.
+- `Outer candidates`: outer candidates.
 - `Separator evidence`: separator evidence, current outer, and cut markers.
+- `Frame geometry`: frame geometry and crop boxes.
+- `Selected candidate`: selected candidate result.
+- `Risk / review overlay`: V4.9 risk and review summary.
 
 `PASS` means the file will be cropped automatically. `REVIEW` means it needs
 manual review.

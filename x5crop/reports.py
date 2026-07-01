@@ -253,6 +253,8 @@ def write_summary(path: Path, result: ProcessResult) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = [
         "source",
+        "version",
+        "policy_id",
         "status",
         "confidence",
         "film_format",
@@ -270,6 +272,8 @@ def write_summary(path: Path, result: ProcessResult) -> None:
         writer.writerow(
             {
                 "source": result.source,
+                "version": result.version,
+                "policy_id": result.policy_id,
                 "status": result.status,
                 "confidence": f"{result.confidence:.3f}",
                 "film_format": result.film_format,

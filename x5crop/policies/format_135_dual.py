@@ -13,7 +13,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
     ),
     modes={
         FULL: ModePolicyPreset(
-            role="dedicated_dual_lane_full_strip",
+            role="two_lane_full_strip_isolated",
             notes=("dual-lane detection is intentionally separate from normal strip policies",),
             detector_kind="dual_lane",
             frame_fit=FrameFitPolicy(
@@ -23,8 +23,8 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
             ),
         ),
         PARTIAL: ModePolicyPreset(
-            role="unsupported_dual_lane_partial",
-            notes=("partial dual-lane scans stay review-only until real samples define a policy",),
+            role="two_lane_partial_review_only",
+            notes=("partial two-lane scans stay review-only until real samples define a policy",),
             detector_kind="review_only",
             diagnostics_overlap_bleed=True,
         ),

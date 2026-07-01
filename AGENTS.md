@@ -45,7 +45,7 @@ colloquial phrasing, duplicated historical detail, and cross-document overlap.
 ## Current Scope
 
 - Active entry point: `X5_Crop.py`.
-- Active script version: V4.7.
+- Active script version: V4.9.
 - Current stable GitHub Release: `v4.2.8`.
 - V4+ development source lives under `x5crop/`; Release builds may package a
   standalone `X5_Crop.py`.
@@ -145,8 +145,9 @@ macOS installer behavior:
 
 ## Regression Priorities
 
-When detection changes are made, prefer comparing reports with
-`python3 -m x5crop.regression.compare` or the current regression CLI.
+When detection changes are made, prefer V4.9 classification with
+`python3 -m x5crop.regression.v49_compare --candidate-root <root>`. Use
+`python3 -m x5crop.regression.compare` when raw field diffs are needed.
 
 Core fields to protect:
 
@@ -188,24 +189,25 @@ guide; no duplicate `docs/` mirror is kept.
 
 Current state:
 
-- Active script is `X5_Crop.py` V4.7.
-- V4.7 is intended as a clean source-layout rewrite over V4.5.4 behavior, not a
-  detector-loosening release.
+- Active script is `X5_Crop.py` V4.9.
+- V4.9 is a clean-room decision / policy reset over the V4.7 source layout, not
+  a detector-loosening release.
 - Source layout is clean-room style: thin entry, package implementation,
-  policy-owned format/mode behavior, focused detection modules, split geometry
-  helpers, and explicit report/debug/regression surfaces.
+  explicit format physical specs, V4.9 clean-room policy contract, focused
+  detection modules, split geometry helpers, and explicit report/debug/regression
+  surfaces.
 - Detailed source layering and policy boundaries live in `ARCHITECTURE.md`.
 - Version history and validation summaries live in `CHANGELOG.md`.
 - User setup and usage live in `README.md` and `快速启动_Quick_Start.md`.
 
 Recent verified baseline:
 
-- `python3 X5_Crop.py --version` printed `X5_Crop.py 4.7`.
-- Full py_compile across the V4.7 package passed.
+- `python3 X5_Crop.py --version` printed `X5_Crop.py 4.9`.
+- Full py_compile across the V4.9 package passed.
 - `git diff --check` passed.
-- Seven local V4.5.4 golden sets produced 0 diff for core crop fields
-  `status`, `confidence`, `review_reasons`, `outer_box`, `frame_boxes`, and
-  `gaps`.
-- Metadata-only diffs in `detail.policy` / `report_schema` are expected when
-  comparing V4.7 reports to V4.5.4 golden reports because the old reports lack
-  those fields.
+- V4.9 clean-room policy smoke passed for 14 format / strip-mode combinations.
+- Seven local V4.5.4 reference sets produced 0 `unacceptable_wrong_pass` and 0
+  `risky_regression` with `python3 -m x5crop.regression.v49_compare`.
+- V4.9 no longer treats V4.5.4 as a mandatory 0-diff oracle; conservative
+  REVIEW and schema/reason diffs must be explained, while new wrong PASS is
+  unacceptable.

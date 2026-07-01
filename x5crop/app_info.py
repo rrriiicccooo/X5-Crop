@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 
-VERSION = "4.7"
+VERSION = "4.9"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 

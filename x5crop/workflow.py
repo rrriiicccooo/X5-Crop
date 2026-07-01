@@ -8,6 +8,7 @@ from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, Optional
 
+from .app_info import VERSION
 from .config import Config
 from .detection.pipeline import choose_detection
 from .detection.postprocess import finalize_detection_decision
@@ -80,6 +81,8 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
                     detail={**dict(cached_record.get("detail", {})), "reused_analysis": True},
                     profile=json_safe(asdict(profile)),
                     warnings=warnings,
+                    version=VERSION,
+                    policy_id=str(cached_record.get("policy_id", "")),
                 )
                 result.report_schema = dict(cached_record.get("report_schema", {}))
                 if config.report:
@@ -133,6 +136,11 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
                 detail=json_safe(detail),
                 profile=json_safe(asdict(profile)),
                 warnings=warnings,
+                version=VERSION,
+                policy_id=str(
+                    detection.detail.get("policy_id")
+                    or detection.detail.get("policy", {}).get("policy_id", "")
+                ),
             )
             result.report_schema = report_schema_for_detection(detection, result)
             if config.report:
@@ -242,6 +250,11 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         detail=json_safe(detail),
         profile=json_safe(asdict(profile)),
         warnings=warnings,
+        version=VERSION,
+        policy_id=str(
+            detection.detail.get("policy_id")
+            or detection.detail.get("policy", {}).get("policy_id", "")
+        ),
     )
     result.report_schema = report_schema_for_detection(detection, result)
     if config.report:
