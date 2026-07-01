@@ -121,6 +121,9 @@ Current stable release: v4.2.8
   或提供 `Config` 旧别名；`x5crop`、`x5crop.io`、`x5crop.export`、`x5crop.debug`
   的 package `__init__` 不再 re-export runtime helper；`parameters.py` 和
   `parameter_types.py` 两个 policy compatibility re-export 文件已删除。
+- Dev tools 层完成清理：`tools/build_standalone.py` 删除旧静态 V4 module list，
+  改为自动收集当前 `x5crop/**/*.py` 并生成 embedded import hook；
+  `tools/regression` 保持开发期 report compare / safety classifier。
 - 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出两条路径。
@@ -285,6 +288,10 @@ Verified:
   `x5crop`, `x5crop.io`, `x5crop.export`, and `x5crop.debug` package
   `__init__` files no longer re-export runtime helpers; the `parameters.py` and
   `parameter_types.py` policy compatibility re-export files are removed.
+- The dev-tool layer is cleaned up: `tools/build_standalone.py` removes the old
+  static V4 module list and now auto-collects the current `x5crop/**/*.py` files
+  into an embedded import hook; `tools/regression` remains developer-only report
+  compare / safety classifier code.
 - 14 format / strip-mode V4.9 decision contract policy smoke tests pass.
 - One-file Debug Analysis smoke writes the V4.9 three-panel debug JPG.
 - Cached analysis reuse smoke covers both approved auto-export and needs_review

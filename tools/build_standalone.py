@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Build a single-file X5_Crop.py for user-facing releases.
-
-The source tree stays modular in V4, but Release packages should remain simple:
-users only need the generated X5_Crop.py plus the platform launcher.
-"""
+"""Build a single-file X5_Crop.py for user-facing releases."""
 
 from __future__ import annotations
 
@@ -13,37 +9,36 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-
-MODULES = [
-    "x5crop.common",
-    "x5crop.evidence",
-    "x5crop.io",
-    "x5crop.geometry",
-    "x5crop.detection.pipeline",
-    "x5crop.deskew",
-    "x5crop.debug.render",
-    "x5crop.reports",
-    "x5crop.cli",
-]
+PACKAGE_ROOT = ROOT / "x5crop"
 
 
-def module_path(module_name: str) -> Path:
-    parts = module_name.split(".")
-    return ROOT.joinpath(*parts).with_suffix(".py")
+def module_name_for_path(path: Path) -> str:
+    relative = path.relative_to(ROOT)
+    parts = list(relative.with_suffix("").parts)
+    if parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts)
 
 
 def read_sources() -> dict[str, str]:
     sources: dict[str, str] = {}
-    for module_name in MODULES:
-        path = module_path(module_name)
-        sources[module_name] = path.read_text(encoding="utf-8")
+    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
+        sources[module_name_for_path(path)] = path.read_text(encoding="utf-8")
     return sources
 
 
-def build_standalone_text(sources: dict[str, str]) -> str:
+def package_names() -> set[str]:
+    return {
+        module_name_for_path(path)
+        for path in PACKAGE_ROOT.rglob("__init__.py")
+    }
+
+
+def build_standalone_text(sources: dict[str, str], packages: set[str]) -> str:
     module_items = ",\n".join(
         f"    {module_name!r}: {source!r}" for module_name, source in sources.items()
     )
+    package_items = ",\n".join(f"    {package!r}" for package in sorted(packages))
     return f'''#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Standalone release build of X5 Crop.
@@ -55,60 +50,57 @@ Do not edit this generated file directly; edit ``x5crop/`` and rebuild.
 
 from __future__ import annotations
 
+import importlib.abc
+import importlib.machinery
 import sys
-import types
 
 
 _X5_EMBEDDED_SOURCES = {{
 {module_items}
 }}
 
-
-def _x5_make_package(name: str) -> types.ModuleType:
-    module = types.ModuleType(name)
-    module.__file__ = __file__
-    module.__package__ = name
-    module.__path__ = []
-    sys.modules[name] = module
-    if "." in name:
-        parent_name, child_name = name.rsplit(".", 1)
-        parent = sys.modules[parent_name]
-        setattr(parent, child_name, module)
-    return module
+_X5_EMBEDDED_PACKAGES = {{
+{package_items}
+}}
 
 
-def _x5_load_module(name: str, source: str) -> types.ModuleType:
-    module = types.ModuleType(name)
-    module.__file__ = __file__
-    module.__package__ = name.rsplit(".", 1)[0]
-    sys.modules[name] = module
-    parent_name, child_name = name.rsplit(".", 1)
-    parent = sys.modules[parent_name]
-    setattr(parent, child_name, module)
-    code = compile(source, f"<{{name}}>", "exec")
-    exec(code, module.__dict__)
-    return module
+class _X5EmbeddedImporter(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    def find_spec(self, fullname: str, path=None, target=None):
+        if fullname not in _X5_EMBEDDED_SOURCES:
+            return None
+        return importlib.machinery.ModuleSpec(
+            fullname,
+            self,
+            is_package=fullname in _X5_EMBEDDED_PACKAGES,
+        )
+
+    def create_module(self, spec):
+        return None
+
+    def exec_module(self, module) -> None:
+        name = module.__name__
+        module.__file__ = f"<{{name}}>"
+        if name in _X5_EMBEDDED_PACKAGES:
+            module.__package__ = name
+            module.__path__ = []
+        else:
+            module.__package__ = name.rsplit(".", 1)[0]
+        code = compile(_X5_EMBEDDED_SOURCES[name], module.__file__, "exec")
+        exec(code, module.__dict__)
 
 
 def _x5_bootstrap() -> None:
-    if "x5crop.cli" in sys.modules:
-        return
-    _x5_make_package("x5crop")
-    _x5_make_package("x5crop.detection")
-    _x5_make_package("x5crop.debug")
-    for module_name, source in _X5_EMBEDDED_SOURCES.items():
-        _x5_load_module(module_name, source)
-    package = sys.modules["x5crop"]
-    common = sys.modules["x5crop.common"]
-    package.SCRIPT_NAME = common.SCRIPT_NAME
-    package.VERSION = common.VERSION
+    if not any(isinstance(finder, _X5EmbeddedImporter) for finder in sys.meta_path):
+        sys.meta_path.insert(0, _X5EmbeddedImporter())
 
 
 _x5_bootstrap()
 
 
 if __name__ == "__main__":
-    raise SystemExit(sys.modules["x5crop.cli"].main())
+    from x5crop.cli import main
+
+    raise SystemExit(main())
 '''
 
 
@@ -129,7 +121,7 @@ def main() -> int:
     args = parse_args()
     output = args.output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(build_standalone_text(read_sources()), encoding="utf-8")
+    output.write_text(build_standalone_text(read_sources(), package_names()), encoding="utf-8")
     output.chmod(0o755)
     print(output)
     return 0
