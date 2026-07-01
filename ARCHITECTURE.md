@@ -21,7 +21,7 @@ V4.9 是一次 evidence-governed decision / policy reset。目标不是为了让
 outer、separator、geometry、content 和 risk 证据能够组合解释时。
 
 - 入口保持精简。
-- CLI、交互式 launcher、input probe、app runner 和 workflow 职责分离。
+- CLI、配置契约、交互式 launcher、input probe、app runner 和 workflow 职责分离。
 - workflow 只承担单图处理编排职责。
 - `x5crop.formats` 明确 format physical spec。
 - detection 只承担 evidence generation、candidate build 和候选排序职责。
@@ -44,8 +44,10 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - 开发入口。
    - V4 Release 会由构建脚本生成单文件发布版。
 
-2. `x5crop.cli`
+2. `x5crop.cli` / `x5crop.config`
    - 只解析命令行参数并构造 `CliOptions`。
+   - `x5crop.config` 拥有 `CliOptions`、`RuntimeConfig` 和 shared choice
+     re-export，是入口 / startup 与 workflow 之间的配置契约。
    - 捕获入口层错误并返回 CLI exit code。
    - 不读取 TIFF，不推断 layout，不调度 worker。
 
@@ -164,7 +166,7 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 
 | 层级 | 人工审核状态 | 当前清洁度 | 说明 / 下一步 |
 | --- | --- | --- | --- |
-| 1-5 Entry / startup：`X5_Crop.py`、`x5crop.cli`、`x5crop.interactive`、`x5crop.input_probe`、`x5crop.app` | 已人工审核并清理 | 彻底干净 | 薄入口、参数解析、交互菜单、输入探测和 app 调度边界清楚；后续避免把 TIFF 读取、layout 推断或 detection 放回入口。 |
+| 1-5 Entry / startup：`X5_Crop.py`、`x5crop.cli`、`x5crop.config`、`x5crop.interactive`、`x5crop.input_probe`、`x5crop.app` | 已人工审核并清理 | 彻底干净 | 薄入口、参数解析、配置契约、交互菜单、输入探测和 app 调度边界清楚；后续避免把 TIFF 读取、layout 推断或 detection 放回入口。 |
 | 6 Workflow：`x5crop.workflow`、`x5crop.source_config`、`x5crop.deskew_runtime` | 已人工审核并清理 | 彻底干净 | `workflow.py` 只保留单图主流程；cached analysis、runtime deskew、review/export、Debug outputs 和 report 写入均由 owning module 承接。 |
 | 7 Policy：`x5crop.policies` | 已人工审核并清理 | 彻底干净 | runtime policy types、factory builders、parameter types、format registry 和 parameter registry 已按职责分组；`factory.py` / `runtime_policy.py` / `parameter_types.py` / `parameters.py` 只保留总装或 re-export 面。`parameter_aggregate.py` 仍较大，但只承担 flat `FormatParameters` compatibility aggregate 一个职责。 |
 | 8 Format：`x5crop.formats` | 已人工审核并清理 | 彻底干净 | format identity、physical spec、count/aspect facts 和 CLI choice 已集中为唯一 source of truth；不反向依赖 policy。 |
@@ -307,7 +309,8 @@ separator, geometry, content, and risk evidence can explain the decision
 together, while TIFF I/O and export-quality behavior remain preserved.
 
 - Thin entry.
-- CLI, interactive launcher, input probe, app runner, and workflow are separate.
+- CLI, configuration contract, interactive launcher, input probe, app runner,
+  and workflow are separate.
 - Workflow only orchestrates one-image processing.
 - `x5crop.formats` owns physical format specs.
 - Detection owns evidence generation, candidate build, and candidate ranking.
@@ -326,8 +329,11 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - Development entry.
    - V4 Release builds produce a standalone single-file script.
 
-2. `x5crop.cli`
+2. `x5crop.cli` / `x5crop.config`
    - Only parses CLI arguments into `CliOptions`.
+   - `x5crop.config` owns `CliOptions`, `RuntimeConfig`, and shared choice
+     re-exports as the configuration contract between entry / startup and
+     workflow.
    - Catches entry-layer errors and returns CLI exit codes.
    - Does not read TIFFs, infer layout, or schedule workers.
 
@@ -454,7 +460,7 @@ section.
 
 | Layer | Manual review state | Current cleanliness | Notes / next step |
 | --- | --- | --- | --- |
-| 1-5 Entry / startup: `X5_Crop.py`, `x5crop.cli`, `x5crop.interactive`, `x5crop.input_probe`, `x5crop.app` | Reviewed and cleaned | Fully clean | Thin entry, argument parsing, interactive menu, input probing, and app scheduling have clear boundaries; keep TIFF reads, layout inference, and detection out of this layer. |
+| 1-5 Entry / startup: `X5_Crop.py`, `x5crop.cli`, `x5crop.config`, `x5crop.interactive`, `x5crop.input_probe`, `x5crop.app` | Reviewed and cleaned | Fully clean | Thin entry, argument parsing, configuration contract, interactive menu, input probing, and app scheduling have clear boundaries; keep TIFF reads, layout inference, and detection out of this layer. |
 | 6 Workflow: `x5crop.workflow`, `x5crop.source_config`, `x5crop.deskew_runtime` | Reviewed and cleaned | Fully clean | `workflow.py` now keeps only the single-image main flow; cached analysis, runtime deskew, review/export, Debug outputs, and report writing are delegated to owning modules. |
 | 7 Policy: `x5crop.policies` | Reviewed and cleaned | Fully clean | Runtime policy types, factory builders, parameter types, format registry, and parameter registry are grouped by responsibility; `factory.py`, `runtime_policy.py`, `parameter_types.py`, and `parameters.py` are now assembly or re-export surfaces. `parameter_aggregate.py` remains large, but owns only the flat `FormatParameters` compatibility aggregate. |
 | 8 Format: `x5crop.formats` | Reviewed and cleaned | Fully clean | Format identity, physical specs, count/aspect facts, and CLI choices are centralized as the single source of truth; this layer does not import policy. |
