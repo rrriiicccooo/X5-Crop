@@ -3,32 +3,34 @@ from __future__ import annotations
 from .base import FULL, PARTIAL, FrameFitPolicy, SeparatorEdgePairPolicy
 from .factory import FormatPolicyPreset, ModePolicyPreset, build_policy_from_preset
 
-FORMAT_ID = "120-645"
+FORMAT_ID = "half"
 
 FORMAT_POLICY_PRESET = FormatPolicyPreset(
     format_id=FORMAT_ID,
-    separator_gate_profile="all_internal_gaps_hard",
+    separator_gate_profile="geometry_support",
     separator_edge_pair=SeparatorEdgePairPolicy(
-        0.075, 0.001, 0.055, 0.32, 0.20, 0.58, 0.50, 0.95, 0.035
+        0.090, 0.003, 0.060, 0.46, 0.66, 1.05, 0.70, 0.95, 0.040
     ),
+    content_mismatch_review_enabled=True,
     modes={
         FULL: ModePolicyPreset(
-            role="medium_format_full_strip_separator_guarded",
-            notes=("medium-format full strips use separator policy without square dark-boundary gates",),
+            role="dense_full_strip_geometry_supported",
+            notes=("dense full strips can use stable grid or wide geometry support without borrowing dark-boundary gates",),
             frame_fit=FrameFitPolicy(
-                name="120-645",
+                name="dense_half_frame_fit",
                 edge_evidence=True,
                 geometry_fallback=True,
-                min_edge_samples=2,
-                nominal_min_ratio=0.70,
-                nominal_max_ratio=1.15,
-                inlier_tolerance_ratio=0.040,
+                min_edge_samples=4,
+                nominal_min_ratio=0.78,
+                nominal_max_ratio=1.08,
+                inlier_tolerance_ratio=0.030,
             ),
+            separator_geometry_support_modes=("wide_geometry", "stable_grid"),
             diagnostics_overlap_bleed=True,
         ),
         PARTIAL: ModePolicyPreset(
-            role="medium_format_partial_strip_edge_guarded",
-            notes=("medium-format partial strips use conservative partial edge policy",),
+            role="dense_partial_strip_edge_guarded",
+            notes=("partial safe extra frames require explicit separator/content/geometry support",),
             diagnostics_overlap_bleed=True,
         ),
     },

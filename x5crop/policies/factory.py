@@ -63,6 +63,16 @@ from .base import (
 )
 from .parameters import FormatParameters, format_parameters
 
+POLICY_ID_STEMS = {
+    "135": "standard_strip",
+    "135-dual": "parallel_lane_strip",
+    "half": "dense_half_frame_strip",
+    "xpan": "panoramic_strip",
+    "120-645": "medium_rectangle_strip",
+    "120-66": "medium_square_strip",
+    "120-67": "medium_wide_strip",
+}
+
 
 @dataclass(frozen=True)
 class DarkBandModePreset:
@@ -855,8 +865,9 @@ def build_policy_from_preset(
     mode_preset = preset.modes[strip_mode]
     fmt = FORMATS[preset.format_id]
     tuning = format_parameters(preset.format_id)
+    policy_id_stem = POLICY_ID_STEMS.get(preset.format_id, "unknown_strip")
     return DetectionPolicy(
-        policy_id=f"v4_9_clean_room_{preset.format_id.replace('-', '_')}_{strip_mode}",
+        policy_id=f"detection_policy_{policy_id_stem}_{strip_mode}",
         format_id=preset.format_id,
         strip_mode=strip_mode,
         family=fmt.family,

@@ -1,4 +1,4 @@
-"""V4.9 reference comparison classification for X5 Crop reports."""
+"""Reference comparison classification for X5 Crop reports."""
 
 from __future__ import annotations
 
@@ -8,40 +8,41 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..app_info import VERSION
 from .compare import load_jsonl_report, report_key
 
 
 GEOMETRY_FIELDS = ("outer_box", "frame_boxes", "gaps")
 
 
-V49_CASES = {
-    "135_full": (
+REFERENCE_CASES = {
+    "standard_strip_full": (
         Path("Test/135/4.5.4/split_report.jsonl"),
-        Path("135/4.9/split_report.jsonl"),
+        Path("135") / VERSION / "split_report.jsonl",
     ),
-    "new_135_full": (
+    "wide_spacing_standard_strip_full": (
         Path("Test/new_135/4.5.4/split_report.jsonl"),
-        Path("new_135/4.9/split_report.jsonl"),
+        Path("new_135") / VERSION / "split_report.jsonl",
     ),
-    "120_66_full": (
+    "medium_square_full": (
         Path("Test/120/66/4.5.4/split_report.jsonl"),
-        Path("120/66/4.9/split_report.jsonl"),
+        Path("120/66") / VERSION / "split_report.jsonl",
     ),
-    "120_66_partial": (
+    "medium_square_partial": (
         Path("Test/120/66/4.5.4_partial/split_report.jsonl"),
-        Path("120/66/4.9_partial/split_report.jsonl"),
+        Path("120/66") / f"{VERSION}_partial" / "split_report.jsonl",
     ),
-    "120_67_full": (
+    "medium_wide_full": (
         Path("Test/120/67/4.5.4/split_report.jsonl"),
-        Path("120/67/4.9/split_report.jsonl"),
+        Path("120/67") / VERSION / "split_report.jsonl",
     ),
-    "half_full": (
+    "dense_half_frame_full": (
         Path("Test/半格/full/4.5.4/split_report.jsonl"),
-        Path("半格/full/4.9/split_report.jsonl"),
+        Path("半格/full") / VERSION / "split_report.jsonl",
     ),
-    "half_partial": (
+    "dense_half_frame_partial": (
         Path("Test/半格/partial/4.5.4_partial/split_report.jsonl"),
-        Path("半格/partial/4.9_partial/split_report.jsonl"),
+        Path("半格/partial") / f"{VERSION}_partial" / "split_report.jsonl",
     ),
 }
 
@@ -63,7 +64,7 @@ def reason_summary(row: dict[str, Any]) -> str:
         return ",".join(str(reason) for reason in reasons[:6])
     detail = row.get("detail", {})
     if isinstance(detail, dict):
-        decision = detail.get("v4_9_decision", {})
+        decision = detail.get("decision_summary", {})
         if isinstance(decision, dict):
             added = decision.get("review_reasons_added", [])
             if isinstance(added, list) and added:
@@ -118,7 +119,7 @@ def run_cases(repo_root: Path, candidate_root: Path, json_output: bool = False) 
     payload: dict[str, Any] = {}
     unacceptable = 0
     risky = 0
-    for name, (baseline_rel, candidate_rel) in V49_CASES.items():
+    for name, (baseline_rel, candidate_rel) in REFERENCE_CASES.items():
         baseline = repo_root / baseline_rel
         candidate = candidate_root / candidate_rel
         if not baseline.exists() or not candidate.exists():
@@ -190,7 +191,7 @@ def run_cases(repo_root: Path, candidate_root: Path, json_output: bool = False) 
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Classify V4.9 reports against V4.5.4 reference reports.")
+    parser = argparse.ArgumentParser(description="Classify candidate reports against reference reports.")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--candidate-root", type=Path, required=True)
     parser.add_argument("--json", action="store_true")

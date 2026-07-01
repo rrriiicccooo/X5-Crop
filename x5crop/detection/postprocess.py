@@ -23,7 +23,7 @@ from .diagnostics import (
     lucky_pass_risk_score_detail,
     overlap_bleed_risk_detail,
 )
-from .decision import apply_v49_decision_policy, normalized_review_reasons
+from .decision import apply_evidence_decision_policy, normalized_review_reasons
 from .content import content_evidence_detail
 from .outer_retry import (
     outer_content_alignment_detail,
@@ -101,7 +101,7 @@ def finalize_detection_decision(
         detection.confidence = min(detection.confidence, policy.postprocess.lucky_pass_risk_cap)
         detection.review_reasons.append(REASON_LUCKY_PASS_RISK)
 
-    detection = apply_v49_decision_policy(
+    detection = apply_evidence_decision_policy(
         gray,
         detection,
         config,

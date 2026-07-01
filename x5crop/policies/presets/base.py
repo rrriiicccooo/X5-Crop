@@ -1741,7 +1741,7 @@ class FormatParameters:
         )
 
 
-def base_120_parameters(format_name: str, **overrides: Any) -> FormatParameters:
+def base_medium_format_parameters(format_name: str, **overrides: Any) -> FormatParameters:
     params: dict[str, Any] = {
         "score_full_width_cv": 0.012,
         "content_profile_min_run_ratio": 0.18,

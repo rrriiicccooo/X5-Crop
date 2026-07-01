@@ -3,31 +3,32 @@ from __future__ import annotations
 from .base import FULL, PARTIAL, FrameFitPolicy, SeparatorEdgePairPolicy
 from .factory import FormatPolicyPreset, ModePolicyPreset, build_policy_from_preset
 
-FORMAT_ID = "135"
+FORMAT_ID = "120-67"
 
 FORMAT_POLICY_PRESET = FormatPolicyPreset(
     format_id=FORMAT_ID,
-    separator_gate_profile="min_hard_with_equal_cap",
+    separator_gate_profile="all_internal_gaps_hard",
     separator_edge_pair=SeparatorEdgePairPolicy(
-        0.080, 0.004, 0.050, 0.42, 0.62, 0.0, 0.0, 1.0, 0.0
+        0.100, 0.001, 0.080, 0.24, 0.02, 0.28, 0.30, 0.95, 0.030
     ),
     modes={
         FULL: ModePolicyPreset(
-            role="full_strip_balanced_separator_geometry",
-            notes=("full strips require combined separator, geometry, content, and outer evidence",),
+            role="wide_medium_format_full_separator_guarded",
+            notes=("wide medium-format full strips can use wide separator retry and tight short-axis correction",),
             frame_fit=FrameFitPolicy(
-                name="135",
+                name="medium_wide_frame_fit",
                 edge_evidence=True,
                 geometry_fallback=True,
                 min_edge_samples=2,
-                nominal_min_ratio=0.72,
-                nominal_max_ratio=1.10,
-                inlier_tolerance_ratio=0.035,
+                nominal_min_ratio=0.65,
+                nominal_max_ratio=1.20,
+                inlier_tolerance_ratio=0.045,
             ),
+            diagnostics_overlap_bleed=True,
         ),
         PARTIAL: ModePolicyPreset(
-            role="partial_strip_edge_uncertainty_guarded",
-            notes=("partial strips require explicit edge trust before automatic export",),
+            role="wide_medium_format_partial_edge_guarded",
+            notes=("wide medium-format partial strips use shared partial policy without square dark-boundary gates",),
             diagnostics_overlap_bleed=True,
         ),
     },

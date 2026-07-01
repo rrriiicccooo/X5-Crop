@@ -3,31 +3,31 @@ from __future__ import annotations
 from .base import FULL, PARTIAL, FrameFitPolicy, SeparatorEdgePairPolicy
 from .factory import FormatPolicyPreset, ModePolicyPreset, build_policy_from_preset
 
-FORMAT_ID = "xpan"
+FORMAT_ID = "135"
 
 FORMAT_POLICY_PRESET = FormatPolicyPreset(
     format_id=FORMAT_ID,
-    separator_gate_profile="all_internal_gaps_hard",
+    separator_gate_profile="min_hard_with_equal_cap",
     separator_edge_pair=SeparatorEdgePairPolicy(
-        0.060, 0.002, 0.035, 0.45, 0.64, 1.03, 0.70, 0.95, 0.035
+        0.080, 0.004, 0.050, 0.42, 0.62, 0.0, 0.0, 1.0, 0.0
     ),
     modes={
         FULL: ModePolicyPreset(
-            role="panoramic_full_strip_separator_guarded",
-            notes=("panoramic full strips remain conservative and separator-driven",),
+            role="full_strip_balanced_separator_geometry",
+            notes=("full strips require combined separator, geometry, content, and outer evidence",),
             frame_fit=FrameFitPolicy(
-                name="xpan",
+                name="standard_strip_frame_fit",
                 edge_evidence=True,
                 geometry_fallback=True,
                 min_edge_samples=2,
-                nominal_min_ratio=0.70,
-                nominal_max_ratio=1.12,
+                nominal_min_ratio=0.72,
+                nominal_max_ratio=1.10,
                 inlier_tolerance_ratio=0.035,
             ),
         ),
         PARTIAL: ModePolicyPreset(
-            role="panoramic_partial_strip_edge_guarded",
-            notes=("partial panoramic strips may include the default count but still need separator/content/geometry gates",),
+            role="partial_strip_edge_uncertainty_guarded",
+            notes=("partial strips require explicit edge trust before automatic export",),
             diagnostics_overlap_bleed=True,
         ),
     },

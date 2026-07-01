@@ -5,7 +5,7 @@ from typing import Any
 
 from ..app_info import VERSION
 from ..domain import Detection, ProcessResult
-from ..policies.clean_room import clean_room_policy_for
+from ..policies.decision_contract import decision_contract_for
 from ..policies.base import ReportPolicy
 from ..policies.registry import get_detection_policy
 from ..utils import json_safe
@@ -85,8 +85,8 @@ def report_policy_for_detection(detection: Detection) -> ReportPolicy:
 
 def report_schema_for_detection(detection: Detection, result: ProcessResult | None = None) -> dict[str, Any]:
     report_policy = report_policy_for_detection(detection)
-    clean_policy = clean_room_policy_for(detection.film_format, detection.strip_mode)
-    decision_detail = detection.detail.get("v4_9_decision", {})
+    decision_contract = decision_contract_for(detection.film_format, detection.strip_mode)
+    decision_detail = detection.detail.get("decision_summary", {})
     if not isinstance(decision_detail, dict):
         decision_detail = {}
     output = {}
@@ -97,9 +97,9 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
             "review_copy": result.review_copy,
             "warnings": list(result.warnings),
         }
-    policy_detail = detection.detail.get("policy", clean_policy.report_detail())
+    policy_detail = detection.detail.get("policy", decision_contract.report_detail())
     if not isinstance(policy_detail, dict):
-        policy_detail = clean_policy.report_detail()
+        policy_detail = decision_contract.report_detail()
     section_values = {
         "version": {
             "script_version": VERSION,
@@ -147,12 +147,12 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
         ),
         "decision_policy_detail": detection.detail.get(
             "decision_policy_detail",
-            decision_detail.get("decision_policy_detail", clean_policy.report_detail()),
+            decision_detail.get("decision_policy_detail", decision_contract.report_detail()),
         ),
         "policy_id": (
             detection.detail.get("policy_id")
             or policy_detail.get("policy_id")
-            or clean_policy.policy_id
+            or decision_contract.policy_id
         ),
         "output": output,
     }

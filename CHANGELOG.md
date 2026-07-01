@@ -23,7 +23,7 @@ Current stable release: v4.2.8
 
 ### 当前重点
 
-- V4.9 是 clean-room decision / policy reset，不是检测阈值放宽版本。
+- V4.9 是 evidence-governed decision / policy reset，不是检测阈值放宽版本。
 - V4.5.4 / V4.7 golden reports 是 reference baseline，不再是必须 0 diff 的 oracle。
 - 自动 PASS 必须由 outer、separator、geometry、content 和 risk 组合证据共同解释。
 - weak grid、equal、content-only、fallback 或 partial edge 不可信的候选默认进入 REVIEW。
@@ -33,8 +33,8 @@ Current stable release: v4.2.8
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.9 | 当前 active 开发版 | Clean-room decision / policy reset。新增 explicit format physical spec、`x5crop/policies/clean_room.py` V4.9 policy contract、`x5crop/detection/decision.py` conservative PASS/REVIEW gate、`v4_9_policy_schema_1` report schema、policy-controlled six-panel Debug Analysis，以及 V4.9 reference classifier。目标是 0 新错误 PASS，并允许可解释的 conservative diff。 |
-| V4.7 | 旧 active 开发版 | Clean-room source rewrite。移除旧兼容层，保留 `X5_Crop.py` 薄入口和 `x5crop/` 分层实现；format / mode 行为由 `x5crop/policies/` 管理；`workflow.py` 负责编排；`detection/pipeline.py` 收敛为 orchestration；candidate、dual-lane、partial-holder、fallback、outer retry、calibration 等职责拆入专门模块；geometry 拆分为 focused helpers。目标是保持 V4.5.4 行为，同时让源码边界清晰。 |
+| V4.9 | 当前 active 开发版 | Evidence-governed decision / policy reset。新增 explicit format physical spec、`x5crop/policies/decision_contract.py` V4.9 policy contract、`x5crop/detection/decision.py` conservative PASS/REVIEW gate、`v4_9_policy_schema_1` report schema、policy-controlled six-panel Debug Analysis，以及 reference classifier。目标是 0 新错误 PASS，并允许可解释的 conservative diff。 |
+| V4.7 | 旧 active 开发版 | Source-layout rewrite。移除旧桥接层，保留 `X5_Crop.py` 薄入口和 `x5crop/` 分层实现；format / mode 行为由 `x5crop/policies/` 管理；`workflow.py` 负责编排；`detection/pipeline.py` 收敛为 orchestration；candidate、dual-lane、partial-holder、fallback、outer retry、calibration 等职责拆入专门模块；geometry 拆分为 focused helpers。目标是保持 V4.5.4 行为，同时让源码边界清晰。 |
 | V4.6 | 开发版 | 建立 `DetectionPolicy` 架构，将 detector、count、outer、separator、content、scoring、selection、postprocess、diagnostics 和 output 行为按 format / strip mode 注册。新增 workflow 层和 golden regression helper。 |
 | V4.5.4 | 开发版 | 加强 120-66 full / partial 的宽黑条和 strict holder 处理；目标是更稳地解释 120-66 样片，不推广到其它格式。 |
 | V4.5.3 | 开发版 | 修复半格 full gate 对 `width_cv=0.0` 的误读；恢复既有 half geometry support 行为。 |
@@ -46,7 +46,7 @@ Current stable release: v4.2.8
 | V4.2.8 | 当前稳定发布版 | 启动器交互改进：仅在 partial mode 开启后询问 count；回车或 `auto` 表示自动判断。检测逻辑不变。 |
 | V4.2.x | 开发版 | 建立 120 family geometry model、separator-first outer proposal、120-66 / 120-67 保守修复和半格 full geometry support。 |
 | V4.1.x | 开发版 | 120-66 / 120-67 参数校准、outer retry 收敛和 120 共享 policy 整理。 |
-| V4.0.1 | 历史稳定发布版 | 135 宽片距兼容调整；默认窄分隔行为保持稳定。 |
+| V4.0.1 | 历史稳定发布版 | 135 宽片距支持调整；默认窄分隔行为保持稳定。 |
 | V4.0 | 历史稳定发布版 | 模块化重写：根入口变薄，检测、I/O、几何、证据、Debug、report、deskew 和 CLI 拆入 `x5crop/`。 |
 | V3.9 | 开发版 | 结构清理版，将更多配置收进 format-aware policy / tuning 层。 |
 | V3.7 | 开发版 | 合并 frame-size fit 管线，统一 edge-evidence fit 与 geometry fallback。 |
@@ -62,20 +62,20 @@ Current stable release: v4.2.8
 - `python3 X5_Crop.py --version` 输出 `X5_Crop.py 4.9`。
 - V4.9 package py_compile 通过。
 - `git diff --check` 通过。
-- 14 个 format / strip mode V4.9 clean-room policy smoke 通过。
+- 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 six-panel debug JPG。
-- 七组本地 V4.5.4 reference reports 通过 V4.9 classifier：
+- 七组本地 V4.5.4 reference reports 通过 reference classifier：
 
 ```text
-candidate root: /private/tmp/x5_v49_validation_run1
+candidate root: /private/tmp/x5_reference_validation_run1
 rows compared: 103
-135_full: {'same': 43, 'metadata/schema diff': 5}
-new_135_full: {'same': 4}
-120_66_full: {'same': 16}
-120_66_partial: {'same': 16}
-120_67_full: {'same': 3, 'metadata/schema diff': 1}
-half_full: {'same': 10}
-half_partial: {'same': 5}
+standard_strip_full: {'same': 43, 'metadata/schema diff': 5}
+wide_spacing_standard_strip_full: {'same': 4}
+medium_square_full: {'same': 16}
+medium_square_partial: {'same': 16}
+medium_wide_full: {'same': 3, 'metadata/schema diff': 1}
+dense_half_frame_full: {'same': 10}
+dense_half_frame_partial: {'same': 5}
 unacceptable_wrong_pass: 0
 risky_regression: 0
 ```
@@ -124,7 +124,7 @@ rollback.
 
 ### Current Focus
 
-- V4.9 is a clean-room decision / policy reset, not a detector-threshold loosening.
+- V4.9 is an evidence-governed decision / policy reset, not a detector-threshold loosening.
 - V4.5.4 / V4.7 golden reports are reference baselines, not required 0-diff oracles.
 - Automatic PASS must be explained by combined outer, separator, geometry,
   content, and risk evidence.
@@ -137,8 +137,8 @@ rollback.
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.9 | Current active development | Clean-room decision / policy reset. Adds explicit format physical specs, the `x5crop/policies/clean_room.py` V4.9 policy contract, the `x5crop/detection/decision.py` conservative PASS/REVIEW gate, `v4_9_policy_schema_1`, policy-controlled six-panel Debug Analysis, and a V4.9 reference classifier. The goal is 0 new wrong PASS with explainable conservative diffs. |
-| V4.7 | Previous active development | Clean-room source rewrite. Removes old compatibility layers, keeps a thin `X5_Crop.py` entry and layered `x5crop/` implementation, moves format/mode behavior into `x5crop/policies/`, keeps `workflow.py` as orchestration, narrows `detection/pipeline.py`, and splits candidate, dual-lane, partial-holder, fallback, outer-retry, calibration, and geometry helpers into focused modules. The goal is V4.5.4 behavior with clearer source boundaries. |
+| V4.9 | Current active development | Evidence-governed decision / policy reset. Adds explicit format physical specs, the `x5crop/policies/decision_contract.py` V4.9 policy contract, the `x5crop/detection/decision.py` conservative PASS/REVIEW gate, `v4_9_policy_schema_1`, policy-controlled six-panel Debug Analysis, and a reference classifier. The goal is 0 new wrong PASS with explainable conservative diffs. |
+| V4.7 | Previous active development | Source-layout rewrite. Removes old bridge layers, keeps a thin `X5_Crop.py` entry and layered `x5crop/` implementation, moves format/mode behavior into `x5crop/policies/`, keeps `workflow.py` as orchestration, narrows `detection/pipeline.py`, and splits candidate, dual-lane, partial-holder, fallback, outer-retry, calibration, and geometry helpers into focused modules. The goal is V4.5.4 behavior with clearer source boundaries. |
 | V4.6 | Development | Introduces the `DetectionPolicy` architecture for detector, count, outer, separator, content, scoring, selection, postprocess, diagnostics, and output behavior by format / strip mode. Adds workflow separation and golden regression helper. |
 | V4.5.4 | Development | Strengthens 120-66 full / partial wide-dark-band and strict-holder handling while keeping that risk model isolated to 120-66. |
 | V4.5.3 | Development | Fixes half-frame full gate handling for `width_cv=0.0`, restoring the intended half geometry support behavior. |
@@ -150,7 +150,7 @@ rollback.
 | V4.2.8 | Current stable release | Improves launcher interaction: count is requested only when partial mode is enabled; Return or `auto` keeps automatic count estimation. Detection logic is unchanged. |
 | V4.2.x | Development | Builds 120 family geometry model, separator-first outer proposal, conservative 120-66 / 120-67 fixes, and half-frame full geometry support. |
 | V4.1.x | Development | Calibrates 120-66 / 120-67 parameters, converges outer retry, and introduces shared 120 policy structure. |
-| V4.0.1 | Historical stable release | Adds 135 wide-spacing compatibility while preserving default narrow-separator behavior. |
+| V4.0.1 | Historical stable release | Adds 135 wide-spacing support while preserving default narrow-separator behavior. |
 | V4.0 | Historical stable release | Modular rewrite: thin root entry, with detection, I/O, geometry, evidence, Debug, report, deskew, and CLI moved into `x5crop/`. |
 | V3.9 | Development | Structural cleanup moving more configuration into format-aware policy / tuning layers. |
 | V3.7 | Development | Unifies frame-size fitting through edge-evidence fit and geometry fallback. |
@@ -166,20 +166,20 @@ Verified:
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 4.9`.
 - V4.9 package py_compile passes.
 - `git diff --check` passes.
-- 14 format / strip-mode V4.9 clean-room policy smoke tests pass.
+- 14 format / strip-mode V4.9 decision contract policy smoke tests pass.
 - One-file Debug Analysis smoke writes the V4.9 six-panel debug JPG.
-- Seven local V4.5.4 reference reports pass the V4.9 classifier:
+- Seven local V4.5.4 reference reports pass the reference classifier:
 
 ```text
-candidate root: /private/tmp/x5_v49_validation_run1
+candidate root: /private/tmp/x5_reference_validation_run1
 rows compared: 103
-135_full: {'same': 43, 'metadata/schema diff': 5}
-new_135_full: {'same': 4}
-120_66_full: {'same': 16}
-120_66_partial: {'same': 16}
-120_67_full: {'same': 3, 'metadata/schema diff': 1}
-half_full: {'same': 10}
-half_partial: {'same': 5}
+standard_strip_full: {'same': 43, 'metadata/schema diff': 5}
+wide_spacing_standard_strip_full: {'same': 4}
+medium_square_full: {'same': 16}
+medium_square_partial: {'same': 16}
+medium_wide_full: {'same': 3, 'metadata/schema diff': 1}
+dense_half_frame_full: {'same': 10}
+dense_half_frame_partial: {'same': 5}
 unacceptable_wrong_pass: 0
 risky_regression: 0
 ```

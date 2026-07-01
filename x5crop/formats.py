@@ -14,13 +14,13 @@ from .policies.parameters import FormatParameters, format_parameters
 
 
 class FormatId(str, Enum):
-    FORMAT_135 = "135"
-    FORMAT_135_DUAL = "135-dual"
+    STANDARD_STRIP = "135"
+    PARALLEL_LANE = "135-dual"
     HALF = "half"
     XPAN = "xpan"
-    FORMAT_120_645 = "120-645"
-    FORMAT_120_66 = "120-66"
-    FORMAT_120_67 = "120-67"
+    MEDIUM_RECTANGLE = "120-645"
+    MEDIUM_SQUARE = "120-66"
+    MEDIUM_WIDE = "120-67"
 
 
 class StripMode(str, Enum):
@@ -116,7 +116,7 @@ FORMAT_PHYSICAL_SPECS: dict[str, dict[str, object]] = {
 
 
 def expected_separator_count(format_id: str, default_count: int) -> int:
-    if format_id == FormatId.FORMAT_135_DUAL.value:
+    if format_id == FormatId.PARALLEL_LANE.value:
         return 10
     return max(0, int(default_count) - 1)
 

@@ -18,7 +18,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
                 "dark-boundary outer candidates may compete, but full mode does not inherit partial extra-holder tolerance",
             ),
             frame_fit=FrameFitPolicy(
-                name="120-66",
+                name="medium_square_frame_fit",
                 edge_evidence=True,
                 geometry_fallback=True,
                 min_edge_samples=2,

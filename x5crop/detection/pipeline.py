@@ -12,7 +12,10 @@ from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
 from .candidate_run import calibrated_candidates_for_count, detect_candidate_for_count
 from .candidates import candidate_counts_for_format
-from .dual_lane import choose_detection_135_dual, unsupported_dual_135_partial_detection
+from .dual_lane import (
+    choose_parallel_lane_detection,
+    unsupported_parallel_lane_partial_detection,
+)
 from .fallback import hard_fallback_detection
 from .selection import select_detection_candidate
 
@@ -22,11 +25,11 @@ def choose_detection(gray: np.ndarray, config: Config, fmt: FilmFormat, cache: O
     cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
     policy = get_detection_policy(fmt.name, config.strip_mode)
     if policy.detector.kind == "dual_lane":
-        detection = choose_detection_135_dual(gray, config, cache)
+        detection = choose_parallel_lane_detection(gray, config, cache)
         detection.detail["policy"] = policy.report_detail()
         return detection
     if policy.detector.kind == "review_only":
-        detection = unsupported_dual_135_partial_detection(gray, config)
+        detection = unsupported_parallel_lane_partial_detection(gray, config)
         detection.detail["policy"] = policy.report_detail()
         return detection
     count_specs = candidate_counts_for_format(config, fmt, policy)

@@ -46,24 +46,24 @@ from .base import (
     SeparatorSupportScoreParameters,
     ShortAxisAspectRetryParameters,
     WideRetryParameters,
-    base_120_parameters,
+    base_medium_format_parameters,
 )
-from .format_120_645 import parameters as _format_120_645_parameters
-from .format_120_66 import parameters as _format_120_66_parameters
-from .format_120_67 import parameters as _format_120_67_parameters
-from .format_135 import parameters as _format_135_parameters
-from .format_135_dual import parameters as _format_135_dual_parameters
-from .format_half import parameters as _format_half_parameters
-from .format_xpan import parameters as _format_xpan_parameters
+from .dense_half_frame import parameters as _dense_half_frame_parameters
+from .medium_rectangle import parameters as _medium_rectangle_parameters
+from .medium_square import parameters as _medium_square_parameters
+from .medium_wide import parameters as _medium_wide_parameters
+from .panoramic_strip import parameters as _panoramic_strip_parameters
+from .parallel_lane import parameters as _parallel_lane_parameters
+from .standard_strip import parameters as _standard_strip_parameters
 
 PARAMETER_PRESETS: dict[str, Callable[[], FormatParameters]] = {
-    "135": _format_135_parameters,
-    "135-dual": _format_135_dual_parameters,
-    "half": _format_half_parameters,
-    "xpan": _format_xpan_parameters,
-    "120-645": _format_120_645_parameters,
-    "120-66": _format_120_66_parameters,
-    "120-67": _format_120_67_parameters,
+    "135": _standard_strip_parameters,
+    "135-dual": _parallel_lane_parameters,
+    "half": _dense_half_frame_parameters,
+    "xpan": _panoramic_strip_parameters,
+    "120-645": _medium_rectangle_parameters,
+    "120-66": _medium_square_parameters,
+    "120-67": _medium_wide_parameters,
 }
 
 
@@ -120,6 +120,6 @@ __all__ = [
     "SeparatorSupportScoreParameters",
     "ShortAxisAspectRetryParameters",
     "WideRetryParameters",
-    "base_120_parameters",
+    "base_medium_format_parameters",
     "format_parameters",
 ]

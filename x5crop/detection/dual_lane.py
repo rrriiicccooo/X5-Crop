@@ -7,7 +7,7 @@ import numpy as np
 
 from ..config import Config
 from ..constants import (
-    ANALYSIS_SOURCE_135_DUAL,
+    ANALYSIS_SOURCE_PARALLEL_LANE,
     ANALYSIS_SOURCE_UNSUPPORTED,
     REASON_CONTENT_ASPECT_CONFLICT,
     REASON_CONTENT_EVIDENCE_WEAK,
@@ -25,7 +25,7 @@ def translate_box(box: Box, dx: int, dy: int) -> Box:
     return Box(box.left + dx, box.top + dy, box.right + dx, box.bottom + dy)
 
 
-def split_dual_135_lanes(gray_work: np.ndarray) -> list[Box]:
+def split_parallel_strip_lanes(gray_work: np.ndarray) -> list[Box]:
     h, w = gray_work.shape
     content = bbox_from_mask(gray_work < 246, min_row_fraction=0.010, min_col_fraction=0.010)
     if content is None or not content.valid():
@@ -42,7 +42,7 @@ def split_dual_135_lanes(gray_work: np.ndarray) -> list[Box]:
     return lanes
 
 
-def detect_dual_135_lane(
+def detect_parallel_strip_lane(
     gray: np.ndarray,
     config: Config,
     lane: Box,
@@ -60,24 +60,37 @@ def detect_dual_135_lane(
     dual_policy = get_detection_policy(config.film_format, config.strip_mode)
     lane_format = dual_policy.detector.dual_lane.lane_format
     lane_policy = get_detection_policy(lane_format, "full")
-    fmt_135 = FORMATS[lane_format]
-    lane_config = replace(config, film_format=lane_format, count=fmt_135.default_count, count_override=fmt_135.default_count)
+    lane_format_spec = FORMATS[lane_format]
+    lane_config = replace(
+        config,
+        film_format=lane_format,
+        count=lane_format_spec.default_count,
+        count_override=lane_format_spec.default_count,
+    )
     candidates: list[Detection] = []
     for outer_candidate in detect_outer_candidates(lane_crop, lane_policy.outer.base_candidates):
         lane_outer = translate_box(outer_candidate.box, lane.left, lane.top)
         raw = build_detection_for_outer(
             gray,
             lane_config,
-            fmt_135,
-            fmt_135.default_count,
+            lane_format_spec,
+            lane_format_spec.default_count,
             "full",
             lane_outer,
             0.0,
-            f"135_dual_lane_{lane_index}_{outer_candidate.name}",
+            f"parallel_lane_{lane_index}_{outer_candidate.name}",
             outer_candidate.strategy,
             cache=cache,
         )
-        calibrated = calibrate_candidate_decision(gray, raw, lane_config, fmt_135, "separator", cache, policy=lane_policy)
+        calibrated = calibrate_candidate_decision(
+            gray,
+            raw,
+            lane_config,
+            lane_format_spec,
+            "separator",
+            cache,
+            policy=lane_policy,
+        )
         calibrated.detail["dual_lane_index"] = lane_index
         calibrated.detail["dual_lane_work_box"] = asdict(lane)
         candidates.append(calibrated)
@@ -103,7 +116,7 @@ def detect_dual_135_lane(
     return best
 
 
-def unsupported_dual_135_partial_detection(gray: np.ndarray, config: Config) -> Detection:
+def unsupported_parallel_lane_partial_detection(gray: np.ndarray, config: Config) -> Detection:
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
     outer = Box(0, 0, ww, wh)
@@ -117,7 +130,7 @@ def unsupported_dual_135_partial_detection(gray: np.ndarray, config: Config) -> 
         [],
         [],
         0.0,
-        ["135_dual_partial_not_supported", "needs_manual_review"],
+        ["parallel_lane_partial_not_supported", "needs_manual_review"],
         {
             "analysis_source": ANALYSIS_SOURCE_UNSUPPORTED,
             "candidate_count": 0,
@@ -131,31 +144,31 @@ def unsupported_dual_135_partial_detection(gray: np.ndarray, config: Config) -> 
                     "count": 12,
                     "strip_mode": config.strip_mode,
                     "confidence": 0.0,
-                    "review_reasons": ["135_dual_partial_not_supported", "needs_manual_review"],
+                    "review_reasons": ["parallel_lane_partial_not_supported", "needs_manual_review"],
                 },
-                "selection_override": "unsupported_135_dual_partial",
+                "selection_override": "unsupported_parallel_lane_partial",
                 "top_candidates": [],
             },
         },
     )
 
 
-def choose_detection_135_dual(gray: np.ndarray, config: Config, cache) -> Detection:
+def choose_parallel_lane_detection(gray: np.ndarray, config: Config, cache) -> Detection:
     from .fallback import hard_fallback_detection
 
     if config.strip_mode != "full":
-        return unsupported_dual_135_partial_detection(gray, config)
+        return unsupported_parallel_lane_partial_detection(gray, config)
 
     gray_work = cache.gray_work
     source_h, source_w = gray.shape
-    lanes = split_dual_135_lanes(gray_work)
+    lanes = split_parallel_strip_lanes(gray_work)
     lane_detections = [
-        detect_dual_135_lane(gray, config, lane, index, cache)
+        detect_parallel_strip_lane(gray, config, lane, index, cache)
         for index, lane in enumerate(lanes, start=1)
     ]
     if any(detection is None for detection in lane_detections):
         detection = hard_fallback_detection(gray, config, FORMATS["135-dual"])
-        detection.review_reasons.append("135_dual_lane_detection_failed")
+        detection.review_reasons.append("parallel_lane_detection_failed")
         detection.review_reasons = sorted(set(detection.review_reasons))
         return detection
 
@@ -167,7 +180,7 @@ def choose_detection_135_dual(gray: np.ndarray, config: Config, cache) -> Detect
     ]
     if len(lane_work_outers) != 2:
         detection = hard_fallback_detection(gray, config, FORMATS["135-dual"])
-        detection.review_reasons.append("135_dual_outer_detection_failed")
+        detection.review_reasons.append("parallel_lane_outer_detection_failed")
         detection.review_reasons = sorted(set(detection.review_reasons))
         return detection
 
@@ -199,7 +212,7 @@ def choose_detection_135_dual(gray: np.ndarray, config: Config, cache) -> Detect
     review_reasons = sorted(set(reason for detection in confirmed_lanes for reason in detection.review_reasons))
     if any(conf < config.confidence_threshold for conf in lane_confidences):
         confidence = min(confidence, 0.84)
-        review_reasons.append("135_dual_lane_below_threshold")
+        review_reasons.append("parallel_lane_below_threshold")
     if len(frames) != 12:
         confidence = min(confidence, 0.82)
         review_reasons.append("frame_count_mismatch")
@@ -221,7 +234,7 @@ def choose_detection_135_dual(gray: np.ndarray, config: Config, cache) -> Detect
         for index, detection in enumerate(confirmed_lanes, start=1)
     ]
     detail = {
-        "analysis_source": ANALYSIS_SOURCE_135_DUAL,
+        "analysis_source": ANALYSIS_SOURCE_PARALLEL_LANE,
         "layout": config.layout,
         "candidate_count": 12,
         "work_outer": asdict(combined_work_outer),
@@ -260,8 +273,8 @@ def choose_detection_135_dual(gray: np.ndarray, config: Config, cache) -> Detect
 
 
 __all__ = [
-    "choose_detection_135_dual",
-    "detect_dual_135_lane",
-    "split_dual_135_lanes",
-    "unsupported_dual_135_partial_detection",
+    "choose_parallel_lane_detection",
+    "detect_parallel_strip_lane",
+    "split_parallel_strip_lanes",
+    "unsupported_parallel_lane_partial_detection",
 ]

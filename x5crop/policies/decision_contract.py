@@ -6,7 +6,17 @@ from typing import Any
 from ..formats import FormatSpec, format_spec
 
 
-SCHEMA_VERSION = "v4_9_policy_schema_1"
+REPORT_SCHEMA_VERSION = "v4_9_policy_schema_1"
+
+POLICY_ID_STEMS = {
+    "135": "standard_strip",
+    "135-dual": "parallel_lane_strip",
+    "half": "dense_half_frame_strip",
+    "xpan": "panoramic_strip",
+    "120-645": "medium_rectangle_strip",
+    "120-66": "medium_square_strip",
+    "120-67": "medium_wide_strip",
+}
 
 
 @dataclass(frozen=True)
@@ -65,7 +75,7 @@ class CandidatePolicy:
 class DecisionPolicy:
     confidence_threshold_default: float = 0.85
     review_confidence_cap: float = 0.84
-    policy_id: str = "v4_9_clean_room"
+    policy_id: str = "evidence_guarded_decision"
     separator_incomplete_reason: str = "separator_evidence_incomplete"
     geometry_unstable_reason: str = "geometry_unstable"
     outer_content_mismatch_reason: str = "outer_content_mismatch"
@@ -115,7 +125,7 @@ class DiagnosticsPolicy:
 
 
 @dataclass(frozen=True)
-class CleanRoomPolicy:
+class DetectionDecisionContract:
     policy_id: str
     schema_version: str
     format: FormatSpec
@@ -262,13 +272,18 @@ def evidence_policy_for(format_id: str, strip_mode: str) -> EvidencePolicy:
     return replace(policy, **values)
 
 
-def clean_room_policy_for(format_id: str, strip_mode: str) -> CleanRoomPolicy:
+def policy_id_for(format_id: str, strip_mode: str) -> str:
+    stem = POLICY_ID_STEMS.get(format_id, "unknown_strip")
+    return f"evidence_guarded_{stem}_{strip_mode}"
+
+
+def decision_contract_for(format_id: str, strip_mode: str) -> DetectionDecisionContract:
     spec = format_spec(format_id)
-    policy_id = f"v4_9_clean_room_{format_id.replace('-', '_')}_{strip_mode}"
+    policy_id = policy_id_for(format_id, strip_mode)
     decision = replace(DecisionPolicy(), policy_id=policy_id)
-    return CleanRoomPolicy(
+    return DetectionDecisionContract(
         policy_id=policy_id,
-        schema_version=SCHEMA_VERSION,
+        schema_version=REPORT_SCHEMA_VERSION,
         format=spec,
         mode=mode_policy_for(spec, strip_mode),
         evidence=evidence_policy_for(format_id, strip_mode),
@@ -281,14 +296,16 @@ def clean_room_policy_for(format_id: str, strip_mode: str) -> CleanRoomPolicy:
 
 
 __all__ = [
-    "SCHEMA_VERSION",
+    "REPORT_SCHEMA_VERSION",
     "CandidatePolicy",
-    "CleanRoomPolicy",
+    "DetectionDecisionContract",
     "DecisionPolicy",
     "DiagnosticsPolicy",
     "EvidencePolicy",
     "ModePolicy",
     "OutputPolicy",
+    "POLICY_ID_STEMS",
     "RiskPolicy",
-    "clean_room_policy_for",
+    "decision_contract_for",
+    "policy_id_for",
 ]

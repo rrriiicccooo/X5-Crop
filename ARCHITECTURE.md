@@ -16,7 +16,7 @@ collaboration rules, read `AGENTS.md`.
 
 ### 架构目标
 
-V4.9 是一次 clean-room decision / policy reset。目标不是为了让更多困难样片
+V4.9 是一次 evidence-governed decision / policy reset。目标不是为了让更多困难样片
 自动 PASS，而是在保留 TIFF I/O 和导出质量行为的前提下，让自动裁切只发生在
 outer、separator、geometry、content 和 risk 证据能够组合解释时。
 
@@ -25,7 +25,7 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 - `x5crop.formats` 明确 format physical spec。
 - detection 只承担 evidence generation、candidate build 和候选排序职责。
 - geometry / image / io 提供低层能力。
-- `x5crop.policies.clean_room` 拥有 V4.9 ModePolicy、EvidencePolicy、
+- `x5crop.policies.decision_contract` 拥有 V4.9 ModePolicy、EvidencePolicy、
   RiskPolicy、CandidatePolicy、DecisionPolicy、OutputPolicy 和
   DiagnosticsPolicy。
 - `x5crop.detection.decision` 统一执行 PASS / REVIEW 决策。
@@ -50,9 +50,10 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 4. `x5crop.policies`
    - 通过 `get_detection_policy(format_id, strip_mode)` 解析 runtime policy。
    - `registry.py` 只做 resolve/cache。
-   - `format_*.py` 拥有各 format / mode 的 policy preset。
+   - `standard_strip.py`、`medium_square.py` 等语义 policy module 拥有各
+     format / mode 的 policy preset。
    - `presets/` 保存 format 参数；`parameters.py` 是薄 lookup / public export。
-   - `clean_room.py` 是 V4.9 public decision policy contract。
+   - `decision_contract.py` 是 V4.9 public decision policy contract。
 
 5. `x5crop.detection`
    - 负责 outer proposal、separator/content evidence、candidate build/run、
@@ -75,7 +76,7 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 
 ### Policy 归属
 
-V4.9 public policy contract 由 `CleanRoomPolicy` 表达：
+V4.9 public policy contract 由 `DetectionDecisionContract` 表达：
 
 - `FormatSpec`: physical facts，不承载检测策略。
 - `ModePolicy`: full / partial count、outer、stop condition 和 edge trust。
@@ -109,7 +110,7 @@ V4.9 public policy contract 由 `CleanRoomPolicy` 表达：
 
 - 135 full 的稳定完整片条假设不能被其它 format 偷用。
 - 135-dual full 走 dual-lane detector；135-dual partial 保守复核。
-- half geometry support 是通用 capability，但默认只给 `half_full` 开启。
+- half geometry support 是通用 capability，但默认只给 `dense_half_frame_full` 开启。
 - 120-66 dark-band、square-frame、wide-like separator 和 strict holder checks
   只给 120-66 full / partial。
 - 120-67 可以有自己的 short-axis / wide separator retry，但不能继承 120-66 dark-band。
@@ -159,7 +160,7 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 ```
 
 V4.9 验收目标不是 0 core diff。使用
-`python3 -m x5crop.regression.v49_compare --candidate-root <root>` 分类：
+`python3 -m x5crop.regression.reference_classify --candidate-root <root>` 分类：
 
 ```text
 same
@@ -176,7 +177,7 @@ unacceptable_wrong_pass
 
 ### Architecture Goal
 
-V4.9 is a clean-room decision / policy reset. It is not intended to make more
+V4.9 is an evidence-governed decision / policy reset. It is not intended to make more
 difficult samples auto-PASS. Automatic crop export is allowed only when outer,
 separator, geometry, content, and risk evidence can explain the decision
 together, while TIFF I/O and export-quality behavior remain preserved.
@@ -186,7 +187,7 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 - `x5crop.formats` owns physical format specs.
 - Detection owns evidence generation, candidate build, and candidate ranking.
 - Geometry / image / io provide lower-level capabilities.
-- `x5crop.policies.clean_room` owns the V4.9 ModePolicy, EvidencePolicy,
+- `x5crop.policies.decision_contract` owns the V4.9 ModePolicy, EvidencePolicy,
   RiskPolicy, CandidatePolicy, DecisionPolicy, OutputPolicy, and DiagnosticsPolicy.
 - `x5crop.detection.decision` applies the unified PASS / REVIEW decision.
 - Report / debug / regression consume stable results and explain V4.9 decisions.
@@ -209,9 +210,9 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 4. `x5crop.policies`
    - Resolves runtime policy through `get_detection_policy(format_id, strip_mode)`.
    - `registry.py` only resolves and caches.
-   - `format_*.py` modules own concrete format / mode policy presets.
+   - semantic policy modules such as `standard_strip.py` and `medium_square.py` own concrete format / mode policy presets.
    - `presets/` stores format parameters; `parameters.py` is a thin lookup/export layer.
-   - `clean_room.py` is the V4.9 public decision policy contract.
+   - `decision_contract.py` is the V4.9 public decision policy contract.
 
 5. `x5crop.detection`
    - Owns outer proposals, separator/content evidence, candidate build/run,
@@ -231,7 +232,7 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 
 ### Policy Ownership
 
-The V4.9 public policy contract is `CleanRoomPolicy`:
+The V4.9 public policy contract is `DetectionDecisionContract`:
 
 - `FormatSpec`: physical facts, not detection strategy.
 - `ModePolicy`: full / partial count, outer, stop condition, and edge trust.
@@ -253,7 +254,7 @@ surface. Decision-affecting V4.9 parameters must be written to
 - 135 full-strip assumptions must not leak into other formats.
 - 135-dual full uses the dual-lane detector; 135-dual partial stays conservative.
 - Half-frame geometry support is generic, but currently enabled only for
-  `half_full`.
+  `dense_half_frame_full`.
 - 120-66 dark-band, square-frame, wide-like separator, and strict-holder checks
   stay limited to 120-66 full / partial.
 - 120-67 may have its own short-axis / wide-separator retry, but must not inherit
@@ -295,7 +296,7 @@ gaps
 ```
 
 V4.9 acceptance is not 0 core diff. Use
-`python3 -m x5crop.regression.v49_compare --candidate-root <root>` to classify:
+`python3 -m x5crop.regression.reference_classify --candidate-root <root>` to classify:
 
 ```text
 same

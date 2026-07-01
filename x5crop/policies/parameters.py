@@ -44,7 +44,7 @@ from .presets import (
     SeparatorSupportScoreParameters,
     ShortAxisAspectRetryParameters,
     WideRetryParameters,
-    base_120_parameters,
+    base_medium_format_parameters,
     format_parameters,
 )
 
@@ -93,6 +93,6 @@ __all__ = [
     "SeparatorSupportScoreParameters",
     "ShortAxisAspectRetryParameters",
     "WideRetryParameters",
-    "base_120_parameters",
+    "base_medium_format_parameters",
     "format_parameters",
 ]

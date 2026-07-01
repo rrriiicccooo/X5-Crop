@@ -28,13 +28,13 @@ class GoldenCase:
 
 
 GOLDEN_REPORTS = {
-    "135_full": Path("Test/135/4.5.4/split_report.jsonl"),
-    "new_135_full": Path("Test/new_135/4.5.4/split_report.jsonl"),
-    "120_66_full": Path("Test/120/66/4.5.4/split_report.jsonl"),
-    "120_66_partial": Path("Test/120/66/4.5.4_partial/split_report.jsonl"),
-    "120_67_full": Path("Test/120/67/4.5.4/split_report.jsonl"),
-    "half_full": Path("Test/半格/full/4.5.4/split_report.jsonl"),
-    "half_partial": Path("Test/半格/partial/4.5.4_partial/split_report.jsonl"),
+    "standard_strip_full": Path("Test/135/4.5.4/split_report.jsonl"),
+    "wide_spacing_standard_strip_full": Path("Test/new_135/4.5.4/split_report.jsonl"),
+    "medium_square_full": Path("Test/120/66/4.5.4/split_report.jsonl"),
+    "medium_square_partial": Path("Test/120/66/4.5.4_partial/split_report.jsonl"),
+    "medium_wide_full": Path("Test/120/67/4.5.4/split_report.jsonl"),
+    "dense_half_frame_full": Path("Test/半格/full/4.5.4/split_report.jsonl"),
+    "dense_half_frame_partial": Path("Test/半格/partial/4.5.4_partial/split_report.jsonl"),
 }
 
 

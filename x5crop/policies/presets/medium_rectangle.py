@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from .base import FormatParameters, base_120_parameters
+from .base import FormatParameters, base_medium_format_parameters
 
 
 FORMAT_ID = '120-645'
 
 
 def parameters() -> FormatParameters:
-    return base_120_parameters(
+    return base_medium_format_parameters(
         FORMAT_ID,
         separator_first_outer_enabled=True,
         separator_first_outer_min_score=0.60,

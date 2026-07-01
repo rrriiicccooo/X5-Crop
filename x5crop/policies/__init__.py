@@ -59,15 +59,17 @@ from .base import (
     SeparatorPolicy,
     ShortAxisAspectRetryPolicy,
 )
-from .clean_room import (
-    SCHEMA_VERSION,
+from .decision_contract import (
+    REPORT_SCHEMA_VERSION,
     CandidatePolicy,
-    CleanRoomPolicy,
+    DetectionDecisionContract,
     DecisionPolicy,
     EvidencePolicy,
     ModePolicy,
+    POLICY_ID_STEMS,
     RiskPolicy,
-    clean_room_policy_for,
+    decision_contract_for,
+    policy_id_for,
 )
 
 __all__ = [
@@ -128,12 +130,14 @@ __all__ = [
     "SeparatorSupportScorePolicy",
     "SeparatorPolicy",
     "ShortAxisAspectRetryPolicy",
-    "SCHEMA_VERSION",
+    "REPORT_SCHEMA_VERSION",
     "CandidatePolicy",
-    "CleanRoomPolicy",
+    "DetectionDecisionContract",
     "DecisionPolicy",
     "EvidencePolicy",
     "ModePolicy",
+    "POLICY_ID_STEMS",
     "RiskPolicy",
-    "clean_room_policy_for",
+    "decision_contract_for",
+    "policy_id_for",
 ]

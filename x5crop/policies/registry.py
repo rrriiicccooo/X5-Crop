@@ -7,13 +7,13 @@ from ..format_specs import FORMAT_CHOICES, STRIP_CHOICES
 from .base import DetectionPolicy
 
 FORMAT_POLICY_MODULES = {
-    "135": "format_135",
-    "135-dual": "format_135_dual",
-    "half": "format_half",
-    "xpan": "format_xpan",
-    "120-645": "format_120_645",
-    "120-66": "format_120_66",
-    "120-67": "format_120_67",
+    "135": "standard_strip",
+    "135-dual": "parallel_lane",
+    "half": "dense_half_frame",
+    "xpan": "panoramic_strip",
+    "120-645": "medium_rectangle",
+    "120-66": "medium_square",
+    "120-67": "medium_wide",
 }
 
 

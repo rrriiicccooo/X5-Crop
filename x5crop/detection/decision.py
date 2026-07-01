@@ -21,10 +21,10 @@ from ..constants import (
 )
 from ..domain import Detection
 from ..format_specs import FilmFormat
-from ..policies.clean_room import CleanRoomPolicy, clean_room_policy_for
+from ..policies.decision_contract import DetectionDecisionContract, decision_contract_for
 
 
-LEGACY_REASON_MAP = {
+REASON_NORMALIZATION_MAP = {
     REASON_AUTO_GATE_NOT_SATISFIED: "evidence_combination_insufficient",
     REASON_SEPARATOR_HARD_EVIDENCE_WEAK: "separator_evidence_incomplete",
     REASON_CONTENT_EVIDENCE_WEAK: "content_only_evidence",
@@ -48,7 +48,6 @@ LEGACY_REASON_MAP = {
     "partial_outer_leading_content": "partial_edge_uncertain",
     "partial_frame_content_unstable": "partial_edge_uncertain",
     "too_few_wide_like_gaps": "partial_edge_uncertain",
-    "135_dual_partial_not_supported": "unsupported_strip_mode",
     "needs_manual_review": "evidence_combination_insufficient",
 }
 
@@ -76,7 +75,7 @@ def _gap_method_count(detection: Detection, methods: set[str]) -> int:
 
 
 def normalized_review_reasons(reasons: list[str]) -> list[str]:
-    normalized = [LEGACY_REASON_MAP.get(str(reason), str(reason)) for reason in reasons]
+    normalized = [REASON_NORMALIZATION_MAP.get(str(reason), str(reason)) for reason in reasons]
     return sorted(set(reason for reason in normalized if reason))
 
 
@@ -110,7 +109,7 @@ def evidence_summary_for(
     detection: Detection,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
-    policy: CleanRoomPolicy,
+    policy: DetectionDecisionContract,
 ) -> dict[str, Any]:
     decision = _dict(detection.detail.get("candidate_decision"))
     separator = _separator_summary(detection)
@@ -207,7 +206,11 @@ def evidence_summary_for(
     }
 
 
-def risk_summary_for(detection: Detection, evidence: dict[str, Any], policy: CleanRoomPolicy) -> dict[str, Any]:
+def risk_summary_for(
+    detection: Detection,
+    evidence: dict[str, Any],
+    policy: DetectionDecisionContract,
+) -> dict[str, Any]:
     decision = _dict(detection.detail.get("candidate_decision"))
     competition = _dict(detection.detail.get("candidate_competition"))
     lucky = _dict(detection.detail.get("lucky_pass_risk_score"))
@@ -242,7 +245,7 @@ def risk_summary_for(detection: Detection, evidence: dict[str, Any], policy: Cle
     }
 
 
-def apply_v49_decision_policy(
+def apply_evidence_decision_policy(
     gray: np.ndarray,
     detection: Detection,
     config: Config,
@@ -250,7 +253,7 @@ def apply_v49_decision_policy(
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
 ) -> Detection:
-    policy = clean_room_policy_for(fmt.name, detection.strip_mode)
+    policy = decision_contract_for(fmt.name, detection.strip_mode)
     evidence = evidence_summary_for(gray, detection, content_detail, outer_alignment, policy)
     risk = risk_summary_for(detection, evidence, policy)
     reasons: list[str] = []
@@ -288,14 +291,14 @@ def apply_v49_decision_policy(
         if isinstance(selected, dict):
             selected["confidence"] = float(detection.confidence)
             selected["review_reasons"] = list(detection.review_reasons)
-            selected["v4_9_status"] = "approved_auto" if passed else "needs_review"
+            selected["decision_status"] = "approved_auto" if passed else "needs_review"
         top = competition.get("top_candidates")
         if isinstance(top, list):
             for candidate in top:
                 if isinstance(candidate, dict) and bool(candidate.get("selected", False)):
                     candidate["confidence"] = float(detection.confidence)
                     candidate["review_reasons"] = list(detection.review_reasons)
-                    candidate["v4_9_status"] = "approved_auto" if passed else "needs_review"
+                    candidate["decision_status"] = "approved_auto" if passed else "needs_review"
     detail = {
         "policy_id": policy.policy_id,
         "schema_version": policy.schema_version,
@@ -306,7 +309,7 @@ def apply_v49_decision_policy(
         "risk_summary": risk,
         "decision_policy_detail": policy.report_detail(),
     }
-    detection.detail["v4_9_decision"] = detail
+    detection.detail["decision_summary"] = detail
     detection.detail["evidence_summary"] = evidence
     detection.detail["risk_summary"] = risk
     detection.detail["decision_policy_detail"] = policy.report_detail()
@@ -316,7 +319,7 @@ def apply_v49_decision_policy(
 
 
 __all__ = [
-    "apply_v49_decision_policy",
+    "apply_evidence_decision_policy",
     "evidence_summary_for",
     "normalized_review_reasons",
     "risk_summary_for",
