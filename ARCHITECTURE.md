@@ -147,6 +147,23 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
      classification 工具。
    - 不被 `X5_Crop.py` 或 runtime package 导入。
 
+### 人工审核状态
+
+本表记录截至 2026-07-02 的人工分层审核状态。它不是发布验收清单；
+检测行为改动仍需要按“验证边界”执行 reference compare / safety classification。
+
+| 层级 | 人工审核状态 | 当前清洁度 | 说明 / 下一步 |
+| --- | --- | --- | --- |
+| 1-5 Entry / startup：`X5_Crop.py`、`x5crop.cli`、`x5crop.interactive`、`x5crop.input_probe`、`x5crop.app` | 已人工审核并清理 | 彻底干净 | 薄入口、参数解析、交互菜单、输入探测和 app 调度边界清楚；后续避免把 TIFF 读取、layout 推断或 detection 放回入口。 |
+| 6 Workflow：`x5crop.workflow`、`x5crop.source_config` | 已人工审核并清理 | 干净 | 只做单图编排和模块连接；仍可继续小幅瘦身，但不需要重写流程。 |
+| 7 Policy：`x5crop.policies` | 已人工审核并清理 | 边界干净，文件体量未完全收小 | registry、format profile、runtime policy、decision contract 和 reporting 分工清楚；`parameters.py`、`runtime_policy.py`、`factory.py` 仍大，后续应按子职责拆，不混入算法改动。 |
+| 8 Format：`x5crop.formats` | 已人工审核并清理 | 彻底干净 | format identity、physical spec、count/aspect facts 和 CLI choice 已集中为唯一 source of truth；不反向依赖 policy。 |
+| 9 Geometry / Image / IO | 已深度审核并清理 | 彻底干净 | 基础能力边界清楚：geometry 返回低层 box / gap / frame helper，image 负责灰度/deskew/像素变换，io 负责 TIFF profile；不拥有 candidate、gate、PASS/REVIEW 或 output bleed 语义。 |
+| 10 Detection：`x5crop.detection` | 已高层审核，细分审核暂缓 | 未彻底干净 | 这是当前最大复杂源；`outer.py`、`outer_retry.py`、`candidate_run.py`、`content.py`、`diagnostics.py` 仍偏大。下一轮应按 outer、candidate、evidence、gate、decision、finalization 子层继续人工审核。 |
+| 11 Output / Report / Debug：`analysis_cache`、`analysis_reuse`、`export`、`result_builder`、`report_schema`、`report_outputs`、`debug` | 已人工审核，未清理完成 | 部分干净 | export、result builder 和 report output 已较薄；`debug/render.py` 仍偏大，`x5crop.diagnostics` 目前只是占位包，Debug status 文案仍应优先消费最终 decision status，而不是重新推断。 |
+| 12 Regression tools：`tools/regression` | 未人工审核 | 未判定 | 该目录是开发期工具，并且当前 sparse checkout 可能未展开；展开后再按 dev-tool 层单独审核，不应进入 runtime package。 |
+| Shared primitives：`domain`、`runtime`、`utils`、`constants`、`app_info`、`detection_detail` | 随相关层部分审核 | 基本干净，但未作为独立层彻底审完 | `detection_detail` 已作为稳定 detail key surface 使用；其它 shared primitives 可以在 detection 或 report/debug 复审时再做一次小层级审核。 |
+
 ### Policy 归属
 
 V4.9 public policy contract 由 `DetectionDecisionContract` 表达：
@@ -343,23 +360,13 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - Does not import `x5crop.policies` and does not own thresholds, gates, or
      candidate strategy.
 
-9. `x5crop.detection`
-   - Owns outer proposals, separator/content evidence, candidate build/run,
-     scoring, candidate gates, selection, fallback, and finalization.
-   - `pipeline.py` should stay orchestration-focused.
-   - `candidate_gates.py` owns candidate-level separator evidence gates.
-   - `candidate_decision.py` owns candidate-level auto_gate / confidence / review reasons.
-   - `final_decision.py` applies conservative V4.9 PASS/REVIEW rules during finalization.
-   - `final_geometry.py` owns final pre-output geometry adjustment, including
-     detection/output bleed, edge bleed protection, and approved geometry adjustment.
-   - `finalizer.py` owns final pre-output handling, including outer retry, risk
-     caps, and calls into final geometry adjustment.
-
-10. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
+9. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
    - Provide boxes, layout, outer primitives, separator profile/cache, gap
      search, hard-gap trust, nearby separator correction, robust grid,
      edge-pair refine, enhanced separator, frame fit, deskew angle, pixel
      transforms, crop pixel validation, evidence images, and TIFF I/O.
+   - These are shared lower-level capabilities used by detection, export, and
+     debug.
    - Helpers that need format context should receive format or policy explicitly.
    - `geometry.__init__` is only a package marker; runtime code should import
      concrete helpers from their owning modules.
@@ -373,6 +380,20 @@ together, while TIFF I/O and export-quality behavior remain preserved.
      objects do not flow through runtime/export.
    - These layers should not depend on the detection pipeline and should not own
      candidate, gate, finalization, output bleed, or PASS/REVIEW semantics.
+
+10. `x5crop.detection`
+   - Owns outer proposals, separator/content evidence, candidate build/run,
+     scoring, candidate gates, selection, fallback, and finalization.
+   - Depends on format / policy contracts and geometry / image / io lower-level
+     capabilities.
+   - `pipeline.py` should stay orchestration-focused.
+   - `candidate_gates.py` owns candidate-level separator evidence gates.
+   - `candidate_decision.py` owns candidate-level auto_gate / confidence / review reasons.
+   - `final_decision.py` applies conservative V4.9 PASS/REVIEW rules during finalization.
+   - `final_geometry.py` owns final pre-output geometry adjustment, including
+     detection/output bleed, edge bleed protection, and approved geometry adjustment.
+   - `finalizer.py` owns final pre-output handling, including outer retry, risk
+     caps, and calls into final geometry adjustment.
 
 11. `x5crop.analysis_cache` / `x5crop.analysis_reuse` / `x5crop.export` /
     `x5crop.result_builder` / `x5crop.report_schema` / `x5crop.report_outputs` /
@@ -392,6 +413,25 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - Developer-only report diff, reference baseline compare, and V4.9 safety
      classification tools.
    - Not imported by `X5_Crop.py` or the runtime package.
+
+### Manual Review Status
+
+This table records the layer-by-layer manual review state as of 2026-07-02.
+It is not a release acceptance checklist; detector behavior changes still need
+the reference compare / safety classification described in the verification
+section.
+
+| Layer | Manual review state | Current cleanliness | Notes / next step |
+| --- | --- | --- | --- |
+| 1-5 Entry / startup: `X5_Crop.py`, `x5crop.cli`, `x5crop.interactive`, `x5crop.input_probe`, `x5crop.app` | Reviewed and cleaned | Fully clean | Thin entry, argument parsing, interactive menu, input probing, and app scheduling have clear boundaries; keep TIFF reads, layout inference, and detection out of this layer. |
+| 6 Workflow: `x5crop.workflow`, `x5crop.source_config` | Reviewed and cleaned | Clean | Owns single-image orchestration and module wiring; it can still be trimmed slightly, but does not need a flow rewrite. |
+| 7 Policy: `x5crop.policies` | Reviewed and cleaned | Boundary-clean, still physically large | Registry, format profiles, runtime policy, decision contract, and reporting are separated; `parameters.py`, `runtime_policy.py`, and `factory.py` remain large and should only be split by sub-responsibility. |
+| 8 Format: `x5crop.formats` | Reviewed and cleaned | Fully clean | Format identity, physical specs, count/aspect facts, and CLI choices are centralized as the single source of truth; this layer does not import policy. |
+| 9 Geometry / Image / IO | Deep-reviewed and cleaned | Fully clean | Lower-level capability boundaries are clear: geometry owns box/gap/frame helpers, image owns grayscale/deskew/pixel transforms, and io owns TIFF profile handling; no candidate, gate, PASS/REVIEW, or output bleed semantics belong here. |
+| 10 Detection: `x5crop.detection` | High-level reviewed, detailed review deferred | Not fully clean | This is the largest complexity source. `outer.py`, `outer_retry.py`, `candidate_run.py`, `content.py`, and `diagnostics.py` remain large. Continue with outer, candidate, evidence, gate, decision, and finalization sublayer reviews. |
+| 11 Output / Report / Debug: `analysis_cache`, `analysis_reuse`, `export`, `result_builder`, `report_schema`, `report_outputs`, `debug` | Reviewed, not fully cleaned | Partially clean | Export, result builder, and report outputs are thin; `debug/render.py` remains oversized, `x5crop.diagnostics` is currently only a placeholder package, and Debug status text should prefer the final decision status instead of re-inferring it. |
+| 12 Regression tools: `tools/regression` | Not manually reviewed | Undetermined | This is a developer-tool layer and may be absent from the current sparse checkout; review it separately when expanded, and keep it out of the runtime package. |
+| Shared primitives: `domain`, `runtime`, `utils`, `constants`, `app_info`, `detection_detail` | Partially reviewed with related layers | Mostly clean, not independently deep-reviewed | `detection_detail` is the stable detail-key surface; the remaining shared primitives can be audited as a small layer during the detection or report/debug pass. |
 
 ### Policy Ownership
 
