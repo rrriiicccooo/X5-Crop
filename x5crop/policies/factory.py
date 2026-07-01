@@ -22,7 +22,6 @@ from .base import (
     DebugGapOverlayPolicy,
     DetectionPolicy,
     DetectorPolicy,
-    DiagnosticsPolicy,
     EdgeAnchorOuterPolicy,
     FormatGeometryRetryPolicy,
     FrameFitPolicy,
@@ -47,6 +46,7 @@ from .base import (
     PostprocessPolicy,
     ReportPolicy,
     RobustGridPolicy,
+    RuntimeDiagnosticsPolicy,
     ScoringPolicy,
     SelectionPolicy,
     SeparatorEdgePairPolicy,
@@ -62,17 +62,8 @@ from .base import (
     ShortAxisAspectRetryPolicy,
     EdgeRefineProfilePolicy,
 )
+from .ids import detection_policy_id_for
 from .parameters import FormatParameters
-
-POLICY_ID_STEMS = {
-    "135": "standard_strip",
-    "135-dual": "parallel_lane_strip",
-    "half": "dense_half_frame_strip",
-    "xpan": "panoramic_strip",
-    "120-645": "medium_rectangle_strip",
-    "120-66": "medium_square_strip",
-    "120-67": "medium_wide_strip",
-}
 
 
 @dataclass(frozen=True)
@@ -795,12 +786,12 @@ def postprocess_policy(tuning: FormatParameters) -> PostprocessPolicy:
     )
 
 
-def diagnostics_policy(mode_preset: ModePolicyPreset, tuning: FormatParameters) -> DiagnosticsPolicy:
+def diagnostics_policy(mode_preset: ModePolicyPreset, tuning: FormatParameters) -> RuntimeDiagnosticsPolicy:
     debug_gap = tuning.debug_gap_overlay
     nearby = tuning.nearby_separator_diagnostics
     overlap = tuning.diagnostic_overlap_risk
     lucky = tuning.lucky_pass_risk
-    return DiagnosticsPolicy(
+    return RuntimeDiagnosticsPolicy(
         overlap_bleed_risk=OverlapBleedRiskPolicy(
             enabled=mode_preset.diagnostics_overlap_bleed,
             mean_min=float(overlap.mean_min),
@@ -867,9 +858,8 @@ def build_policy_from_preset(
     mode_preset = preset.modes[strip_mode]
     fmt = FORMATS[preset.format_id]
     tuning = preset.parameters()
-    policy_id_stem = POLICY_ID_STEMS.get(preset.format_id, "unknown_strip")
     return DetectionPolicy(
-        policy_id=f"detection_policy_{policy_id_stem}_{strip_mode}",
+        policy_id=detection_policy_id_for(preset.format_id, strip_mode),
         format_id=preset.format_id,
         strip_mode=strip_mode,
         family=fmt.family,

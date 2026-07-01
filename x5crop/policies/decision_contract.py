@@ -4,19 +4,7 @@ from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 from ..formats import FormatSpec, format_spec
-
-
-REPORT_SCHEMA_VERSION = "v4_9_policy_schema_1"
-
-POLICY_ID_STEMS = {
-    "135": "standard_strip",
-    "135-dual": "parallel_lane_strip",
-    "half": "dense_half_frame_strip",
-    "xpan": "panoramic_strip",
-    "120-645": "medium_rectangle_strip",
-    "120-66": "medium_square_strip",
-    "120-67": "medium_wide_strip",
-}
+from .ids import POLICY_ID_STEMS, REPORT_SCHEMA_VERSION, decision_policy_id_for
 
 
 @dataclass(frozen=True)
@@ -97,7 +85,7 @@ class OutputPolicy:
 
 
 @dataclass(frozen=True)
-class DiagnosticsPolicy:
+class DecisionDiagnosticsPolicy:
     debug_panels: tuple[str, ...] = (
         "original_gray",
         "debug_boxes",
@@ -133,7 +121,7 @@ class DetectionDecisionContract:
     candidate: CandidatePolicy
     decision: DecisionPolicy
     output: OutputPolicy
-    diagnostics: DiagnosticsPolicy
+    diagnostics: DecisionDiagnosticsPolicy
 
     def report_detail(self) -> dict[str, Any]:
         data = {
@@ -271,8 +259,7 @@ def evidence_policy_for(format_id: str, strip_mode: str) -> EvidencePolicy:
 
 
 def policy_id_for(format_id: str, strip_mode: str) -> str:
-    stem = POLICY_ID_STEMS.get(format_id, "unknown_strip")
-    return f"evidence_guarded_{stem}_{strip_mode}"
+    return decision_policy_id_for(format_id, strip_mode)
 
 
 def decision_contract_for(format_id: str, strip_mode: str) -> DetectionDecisionContract:
@@ -289,7 +276,7 @@ def decision_contract_for(format_id: str, strip_mode: str) -> DetectionDecisionC
         candidate=CandidatePolicy(),
         decision=decision,
         output=OutputPolicy(),
-        diagnostics=DiagnosticsPolicy(),
+        diagnostics=DecisionDiagnosticsPolicy(),
     )
 
 
@@ -298,7 +285,7 @@ __all__ = [
     "CandidatePolicy",
     "DetectionDecisionContract",
     "DecisionPolicy",
-    "DiagnosticsPolicy",
+    "DecisionDiagnosticsPolicy",
     "EvidencePolicy",
     "ModePolicy",
     "OutputPolicy",

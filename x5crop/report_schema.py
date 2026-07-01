@@ -24,11 +24,9 @@ from .detection_detail import (
 from .domain import Detection, ProcessResult
 from .policies.base import ReportPolicy
 from .policies.decision_contract import decision_contract_for
+from .policies.ids import REPORT_SCHEMA_VERSION
 from .policies.registry import get_detection_policy
 from .utils import json_safe
-
-
-REPORT_SCHEMA_VERSION = ReportPolicy().schema_version
 
 
 def candidate_table(detection: Detection) -> list[dict[str, Any]]:

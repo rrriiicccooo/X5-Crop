@@ -160,7 +160,7 @@ Debug Analysis 是试运行 / 分析模式。它会读取 TIFF、执行检测、
 x5_crop_output/_debug_analysis/
 ```
 
-每张 Debug Analysis JPG 的面板由 DiagnosticsPolicy 控制，默认包含：
+每张 Debug Analysis JPG 的面板由 runtime diagnostics policy 控制，默认包含：
 
 - `Original gray context`: 原始灰度上下文。
 - `Debug boxes`: 当前 outer、frame 和裁切框。
@@ -413,7 +413,7 @@ Output:
 x5_crop_output/_debug_analysis/
 ```
 
-Each JPG is controlled by DiagnosticsPolicy and defaults to:
+Each JPG is controlled by runtime diagnostics policy and defaults to:
 
 - `Original gray context`: source gray context.
 - `Debug boxes`: current outer, frames, and crop boxes.

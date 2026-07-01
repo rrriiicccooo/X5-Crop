@@ -83,6 +83,11 @@ Current stable release: v4.2.8
   `parameters.py` 只保留共享参数类型和默认 helper。
 - Policy 入口层清理完成：`x5crop.policies.__init__` 不再 re-export runtime
   policy 类型；runtime policy 解析只通过 `x5crop.policies.registry.get_detection_policy`。
+- Policy 合同子层清理完成：`x5crop.policies.ids` 统一拥有 policy id stem 和
+  report schema version；`x5crop.policies.reporting` 承接 runtime
+  `DetectionPolicy` detail serializer；runtime debug policy 命名为
+  `RuntimeDiagnosticsPolicy`，decision/report diagnostics 命名为
+  `DecisionDiagnosticsPolicy`。
 - 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出两条路径。
@@ -208,6 +213,11 @@ Verified:
   now own both each format / mode runtime preset and that format's parameter
   overrides. `parameters.py` only keeps shared parameter types and default
   helpers.
+- The policy contract sublayer is cleaned up: `x5crop.policies.ids` owns shared
+  policy id stems and the report schema version, `x5crop.policies.reporting`
+  owns runtime `DetectionPolicy` detail serialization, runtime debug policy is
+  named `RuntimeDiagnosticsPolicy`, and decision/report diagnostics is named
+  `DecisionDiagnosticsPolicy`.
 - 14 format / strip-mode V4.9 decision contract policy smoke tests pass.
 - One-file Debug Analysis smoke writes the V4.9 three-panel debug JPG.
 - Cached analysis reuse smoke covers both approved auto-export and needs_review

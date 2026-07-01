@@ -28,7 +28,7 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 - geometry / image / io 提供低层能力。
 - `x5crop.policies.decision_contract` 拥有 V4.9 ModePolicy、EvidencePolicy、
   RiskPolicy、CandidatePolicy、DecisionPolicy、OutputPolicy 和
-  DiagnosticsPolicy。
+  DecisionDiagnosticsPolicy。
 - `x5crop.detection.decision` 统一执行 PASS / REVIEW 决策。
 - analysis reuse、export、report / debug 消费稳定结果并解释 V4.9 决策；
   `tools/regression/` 是开发期 reference compare / safety classification 工具，
@@ -72,6 +72,9 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - `registry.py` 只做 resolve/cache。
    - `format_135.py`、`format_120_66.py` 等 format profile module 同时拥有
      format / mode runtime preset 和该 format 的参数覆盖。
+   - `ids.py` 统一拥有 policy id stem 和 report schema version。
+   - `base.py` 定义 runtime `DetectionPolicy` contract；`reporting.py` 只负责
+     runtime policy detail serializer。
    - `parameters.py` 保存共享参数 dataclass 和默认参数 helper，不维护独立的
      format preset 映射。
    - `decision_contract.py` 是 V4.9 public decision policy contract。
@@ -126,7 +129,8 @@ V4.9 public policy contract 由 `DetectionDecisionContract` 表达：
 - `CandidatePolicy`: content-only、fallback、weak-grid、equal-gap 候选默认不直接 PASS。
 - `DecisionPolicy`: V4.9 PASS / REVIEW reason ids 和 confidence cap。
 - `OutputPolicy`: TIFF metadata/export 行为和输出 bleed。
-- `DiagnosticsPolicy`: 人看的 Debug Analysis panel 顺序、标题和 overlay 策略。
+- `DecisionDiagnosticsPolicy`: decision/report 中记录的 diagnostics panel 和
+  overlay 说明。
 
 旧 `DetectionPolicy` 仍作为 evidence generation 的内部 wiring surface。它应拥有或连接这些能力：
 
@@ -140,15 +144,17 @@ V4.9 public policy contract 由 `DetectionDecisionContract` 表达：
 - `PartialHolderPolicy`: partial safe-extra-frames 和 strict holder safety。
 - `SelectionPolicy`: candidate competition 和 content mismatch review fallback。
 - `PostprocessPolicy`: final caps、postprocess reason ids、approved geometry adjustment。
-- `DiagnosticsPolicy`: Debug Analysis panels、gap overlay、nearby separator diagnostics、overlap-risk diagnostics。
+- `RuntimeDiagnosticsPolicy`: Debug Analysis panels、gap overlay、nearby separator diagnostics、overlap-risk diagnostics。
 - `ReportPolicy`: report schema version 和 section order。
 - `OutputPolicy`: detection bleed、output bleed、edge bleed protection。
 
-`DiagnosticsPolicy`、`ReportPolicy` 和 `DecisionPolicy` detail 不应合并成
-一个大桶：Debug 面向人工快速读图，Report 面向机器回归 / 审计，
-Decision detail 解释 PASS / REVIEW。`x5crop.report_schema` 只负责 serializer，
-不拥有 policy；`x5crop.detection_detail` 集中记录 `Detection.detail` 中被 report /
-debug / result builder 消费的稳定 detail keys。
+`RuntimeDiagnosticsPolicy`、`DecisionDiagnosticsPolicy`、`ReportPolicy` 和
+`DecisionPolicy` detail 不应合并成一个大桶：Debug 面向人工快速读图，
+Report 面向机器回归 / 审计，Decision detail 解释 PASS / REVIEW。
+`x5crop.policies.reporting` 只序列化 runtime policy detail；`x5crop.report_schema`
+只负责 detection/result serializer，不拥有 policy；`x5crop.detection_detail`
+集中记录 `Detection.detail` 中被 report / debug / result builder 消费的稳定
+detail keys。
 
 所有影响 V4.9 decision 的参数必须写入 `report_schema.decision_policy_detail`。
 
@@ -239,7 +245,8 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 - Detection owns evidence generation, candidate build, and candidate ranking.
 - Geometry / image / io provide lower-level capabilities.
 - `x5crop.policies.decision_contract` owns the V4.9 ModePolicy, EvidencePolicy,
-  RiskPolicy, CandidatePolicy, DecisionPolicy, OutputPolicy, and DiagnosticsPolicy.
+  RiskPolicy, CandidatePolicy, DecisionPolicy, OutputPolicy, and
+  DecisionDiagnosticsPolicy.
 - `x5crop.detection.decision` applies the unified PASS / REVIEW decision.
 - Analysis reuse, export, report / debug consume stable results and explain V4.9
   decisions; `tools/regression/` contains developer-only reference compare /
@@ -284,6 +291,9 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - Format profile modules such as `format_135.py` and `format_120_66.py`
      own both format / mode runtime presets and that format's parameter
      overrides.
+   - `ids.py` owns shared policy id stems and the report schema version.
+   - `base.py` defines the runtime `DetectionPolicy` contract; `reporting.py`
+     only serializes runtime policy detail.
    - `parameters.py` stores shared parameter dataclasses and default helpers;
      it does not keep a separate format preset map.
    - `decision_contract.py` is the V4.9 public decision policy contract.
@@ -340,18 +350,20 @@ The V4.9 public policy contract is `DetectionDecisionContract`:
   are review-only by default.
 - `DecisionPolicy`: V4.9 PASS / REVIEW reason ids and confidence cap.
 - `OutputPolicy`: TIFF metadata/export behavior and output bleed.
-- `DiagnosticsPolicy`: human-facing Debug Analysis panel order, titles, and
-  overlay strategy.
+- `DecisionDiagnosticsPolicy`: diagnostics panel and overlay detail recorded in
+  the decision/report contract.
 
 The older `DetectionPolicy` remains an internal evidence-generation wiring
 surface. Decision-affecting V4.9 parameters must be written to
 `report_schema.decision_policy_detail`.
 
-`DiagnosticsPolicy`, `ReportPolicy`, and `DecisionPolicy` detail stay separate:
-Debug is for fast human image review, Report is for machine regression / audit,
-and Decision detail explains PASS / REVIEW. `x5crop.report_schema` is a
-serializer and does not own policy; `x5crop.detection_detail` centralizes the
-stable `Detection.detail` keys consumed by report / debug / result builders.
+`RuntimeDiagnosticsPolicy`, `DecisionDiagnosticsPolicy`, `ReportPolicy`, and
+`DecisionPolicy` detail stay separate: Debug is for fast human image review,
+Report is for machine regression / audit, and Decision detail explains PASS /
+REVIEW. `x5crop.policies.reporting` only serializes runtime policy detail;
+`x5crop.report_schema` serializes detection/result rows and does not own policy;
+`x5crop.detection_detail` centralizes the stable `Detection.detail` keys consumed
+by report / debug / result builders.
 
 ### Behavior That Must Stay Isolated
 
