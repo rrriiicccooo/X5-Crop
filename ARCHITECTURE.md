@@ -30,8 +30,9 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
   RiskPolicy、CandidatePolicy、DecisionPolicy、OutputPolicy 和
   DiagnosticsPolicy。
 - `x5crop.detection.decision` 统一执行 PASS / REVIEW 决策。
-- report / debug 消费稳定结果并解释 V4.9 决策；`tools/regression/` 是开发期
-  reference compare / safety classification 工具，不属于 runtime package。
+- analysis reuse、export、report / debug 消费稳定结果并解释 V4.9 决策；
+  `tools/regression/` 是开发期 reference compare / safety classification 工具，
+  不属于 runtime package。
 
 ### 运行层级
 
@@ -63,7 +64,7 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 
 6. `x5crop.workflow`
    - 编排 read -> deskew -> detect -> postprocess -> export -> report/debug。
-   - 处理单图报告复用、输出目录、Debug Analysis 和导出。
+   - 将单图报告复用、输出目录、Debug Analysis、导出和结果组装委托给专门模块。
    - 不直接实现 scoring、candidate selection 或 TIFF 写入细节。
 
 7. `x5crop.policies`
@@ -89,8 +90,12 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - 需要 format 上下文的 helper 应显式接收 format 或 policy。
    - 这些层不应依赖 detection pipeline。
 
-10. `x5crop.reports` / `x5crop.debug`
-   - 消费稳定的 `Detection`、`ProcessResult` 和 report schema。
+10. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
+    `x5crop.reports` / `x5crop.debug`
+   - `analysis_reuse` 负责 Debug Analysis report cache 匹配和 cached detection 恢复。
+   - `export` 负责输出路径、review copy 和 metadata-safe TIFF crop 写入。
+   - `result_builder` 统一将 fresh / cached detection 转成 `ProcessResult`。
+   - `reports` 只写 JSONL / CSV report；`debug` 只写 Debug Analysis / preview。
    - 不参与候选生成和 PASS/REVIEW 决策。
 
 11. `tools/regression`
@@ -224,9 +229,9 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 - `x5crop.policies.decision_contract` owns the V4.9 ModePolicy, EvidencePolicy,
   RiskPolicy, CandidatePolicy, DecisionPolicy, OutputPolicy, and DiagnosticsPolicy.
 - `x5crop.detection.decision` applies the unified PASS / REVIEW decision.
-- Report / debug consume stable results and explain V4.9 decisions;
-  `tools/regression/` contains developer-only reference compare / safety
-  classification tools outside the runtime package.
+- Analysis reuse, export, report / debug consume stable results and explain V4.9
+  decisions; `tools/regression/` contains developer-only reference compare /
+  safety classification tools outside the runtime package.
 
 ### Runtime Layers
 
@@ -258,7 +263,8 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 
 6. `x5crop.workflow`
    - Orchestrates read -> deskew -> detect -> postprocess -> export -> report/debug.
-   - Owns per-image report reuse, output folders, Debug Analysis, and export.
+   - Delegates per-image report reuse, output folders, Debug Analysis, export,
+     and result assembly to focused modules.
 
 7. `x5crop.policies`
    - Resolves runtime policy through `get_detection_policy(format_id, strip_mode)`.
@@ -279,8 +285,14 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - Helpers that need format context should receive format or policy explicitly.
    - These layers should not depend on the detection pipeline.
 
-10. `x5crop.reports` / `x5crop.debug`
-   - Consume stable `Detection`, `ProcessResult`, and report schema data.
+10. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
+    `x5crop.reports` / `x5crop.debug`
+   - `analysis_reuse` matches Debug Analysis report caches and restores cached
+     detections.
+   - `export` owns output paths, review copies, and metadata-safe TIFF crop writes.
+   - `result_builder` converts fresh / cached detections into `ProcessResult`.
+   - `reports` only writes JSONL / CSV reports; `debug` only writes Debug
+     Analysis / previews.
    - Do not generate candidates or decide PASS/REVIEW.
 
 11. `tools/regression`

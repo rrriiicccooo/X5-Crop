@@ -1,0 +1,24 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from ..config import Config
+
+
+def output_directory_for(input_file: Path, config: Config) -> Path:
+    if config.output_dir is not None:
+        return config.output_dir
+    return input_file.parent / "x5_crop_output"
+
+
+def display_generated_path(path: Path | str, config: Config) -> str:
+    generated_path = Path(path)
+    if config.output_dir is None:
+        return generated_path.name
+    return str(generated_path)
+
+
+__all__ = [
+    "display_generated_path",
+    "output_directory_for",
+]

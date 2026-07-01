@@ -65,8 +65,13 @@ Current stable release: v4.2.8
 - Mac 主启动器和 diagnostics 启动器 `bash -n` 通过。
 - 入口层拆分通过 smoke：`x5crop.cli` 只解析 CLI，`x5crop.app` 负责运行调度，
   `x5crop.input_probe` 负责 TIFF 输入探测，`x5crop.interactive` 负责启动器菜单。
+- Workflow / output 边界清理通过 smoke：`workflow.py` 保留单图编排，
+  `analysis_reuse` 负责 report cache 复用，`export` 负责输出路径 / review copy /
+  TIFF crop 写出，`result_builder` 统一 fresh / cached `ProcessResult` 组装，
+  `reports` 只写 JSONL / CSV。
 - 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
+- Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出两条路径。
 - 七组本地 V4.5.4 reference reports 通过 reference classifier：
 
 ```text
@@ -173,8 +178,14 @@ Verified:
 - Entry-layer smoke passes: `x5crop.cli` only parses CLI, `x5crop.app` owns run
   dispatch, `x5crop.input_probe` owns TIFF input probing, and
   `x5crop.interactive` owns launcher prompts.
+- Workflow / output boundary cleanup smoke passes: `workflow.py` keeps one-image
+  orchestration, `analysis_reuse` owns report-cache reuse, `export` owns output
+  paths / review copies / TIFF crop writes, `result_builder` builds fresh /
+  cached `ProcessResult` rows, and `reports` only writes JSONL / CSV.
 - 14 format / strip-mode V4.9 decision contract policy smoke tests pass.
 - One-file Debug Analysis smoke writes the V4.9 three-panel debug JPG.
+- Cached analysis reuse smoke covers both approved auto-export and needs_review
+  skip-export paths.
 - Seven local V4.5.4 reference reports pass the reference classifier:
 
 ```text
