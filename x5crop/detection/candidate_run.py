@@ -10,7 +10,6 @@ from ..domain import Detection
 from ..formats import FormatSpec
 from ..geometry.boxes import original_box_to_work
 from ..geometry.layout import work_gray
-from ..geometry.outer_boxes import unique_outer_candidates
 from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
@@ -23,6 +22,7 @@ from .outer import (
     outer_proposal_candidates,
     separator_dark_band_outer_candidates,
     separator_geometry_outer_candidates,
+    unique_outer_candidates,
 )
 from .partial_holder import (
     partial_safe_frame_content_detail,

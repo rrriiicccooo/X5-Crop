@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from typing import Iterable
-
 import numpy as np
 
-from ..domain import Box, OuterCandidate
-from ..policies.runtime_policy import OuterCandidateDetectionPolicy
+from ..domain import Box
+from ..policies.runtime_policy import OuterBoxDetectionPolicy, OuterMaskProfilePolicy
 from ..utils import bbox_from_mask, clamp_int, runs_from_mask, smooth_1d
 
 
@@ -23,9 +21,9 @@ def first_content_index(border_mask: np.ndarray, min_run: int) -> int:
 
 def detect_outer(
     gray: np.ndarray,
-    policy: OuterCandidateDetectionPolicy | None = None,
+    policy: OuterBoxDetectionPolicy | None = None,
 ) -> Box:
-    policy = policy or OuterCandidateDetectionPolicy()
+    policy = policy or OuterBoxDetectionPolicy()
     h, w = gray.shape
     not_white = gray < policy.bw_not_white_threshold
     dark = gray < policy.bw_dark_threshold
@@ -49,9 +47,9 @@ def detect_outer(
 
 def detect_outer_white_x(
     gray: np.ndarray,
-    policy: OuterCandidateDetectionPolicy | None = None,
+    policy: OuterBoxDetectionPolicy | None = None,
 ) -> Box:
-    policy = policy or OuterCandidateDetectionPolicy()
+    policy = policy or OuterBoxDetectionPolicy()
     h, w = gray.shape
     min_run_y = clamp_int(h * policy.white_run_ratio, policy.white_run_min, policy.white_run_max)
     min_run_x = clamp_int(w * policy.white_run_ratio, policy.white_run_min, policy.white_run_max)
@@ -75,67 +73,29 @@ def detect_outer_white_x(
     return box
 
 
-def unique_outer_candidates(candidates: Iterable[OuterCandidate]) -> list[OuterCandidate]:
-    seen: set[tuple[int, int, int, int]] = set()
-    out: list[OuterCandidate] = []
-    for candidate in candidates:
-        box = candidate.box
-        key = (box.left, box.top, box.right, box.bottom)
-        if key in seen or not box.valid():
-            continue
-        seen.add(key)
-        out.append(candidate)
-    return out
-
-
-def detect_outer_candidates(
+def detect_mask_profile_outer(
     gray: np.ndarray,
-    policy: OuterCandidateDetectionPolicy | None = None,
-) -> list[OuterCandidate]:
-    policy = policy or OuterCandidateDetectionPolicy()
+    profile: OuterMaskProfilePolicy,
+    policy: OuterBoxDetectionPolicy | None = None,
+) -> Box | None:
+    policy = policy or OuterBoxDetectionPolicy()
     h, w = gray.shape
-    bw = detect_outer(gray, policy)
-    white_x = detect_outer_white_x(gray, policy)
-    candidates = [OuterCandidate("bw", bw, "base_outer")]
-    if white_x.valid():
-        max_reasonable = max(
-            float(bw.width) * policy.white_x_width_multiplier,
-            float(bw.width) + w * policy.white_x_extra_ratio,
-        )
-        if white_x.width >= bw.width and white_x.width <= max_reasonable:
-            candidates.append(OuterCandidate("white_x", white_x, "base_outer"))
-    for profile in policy.mask_profiles:
-        mask = np.ones_like(gray, dtype=bool)
-        if profile.low is not None:
-            mask &= gray > int(profile.low)
-        if profile.high is not None:
-            mask &= gray < int(profile.high)
-        box = bbox_from_mask(mask, min_row_fraction=profile.min_row_fraction, min_col_fraction=profile.min_col_fraction)
-        if box is None:
-            continue
-        if (
-            box.width < max(policy.min_width_px, w * policy.min_width_ratio)
-            or box.height < max(policy.min_height_px, h * policy.min_height_ratio)
-        ):
-            continue
-        candidates.append(
-            OuterCandidate(
-                profile.name,
-                box.expand(
-                    max(policy.bw_margin_min, int(w * policy.mask_expand_ratio)),
-                    max(policy.bw_margin_min, int(h * policy.mask_expand_ratio)),
-                    w,
-                    h,
-                ),
-                "base_outer",
-            )
-        )
-    unique = unique_outer_candidates(candidates)
-    canvas_area = float(w * h)
-    non_full = [
-        candidate for candidate in unique
-        if (candidate.box.width * candidate.box.height) / max(1.0, canvas_area) <= policy.candidate_max_area
-    ]
-    if non_full:
-        return non_full
-    return unique or [OuterCandidate("full_canvas", Box(0, 0, w, h), "base_outer")]
+    mask = np.ones_like(gray, dtype=bool)
+    if profile.low is not None:
+        mask &= gray > int(profile.low)
+    if profile.high is not None:
+        mask &= gray < int(profile.high)
+    box = bbox_from_mask(mask, min_row_fraction=profile.min_row_fraction, min_col_fraction=profile.min_col_fraction)
+    if box is None:
+        return None
+    if (
+        box.width < max(policy.min_width_px, w * policy.min_width_ratio)
+        or box.height < max(policy.min_height_px, h * policy.min_height_ratio)
+    ):
+        return None
+    return box.expand(
+        max(policy.bw_margin_min, int(w * policy.mask_expand_ratio)),
+        max(policy.bw_margin_min, int(h * policy.mask_expand_ratio)),
+        w,
+        h,
+    )

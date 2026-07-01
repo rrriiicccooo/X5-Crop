@@ -104,6 +104,9 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - 是 detection、export 和 debug 共享的基础能力层。
    - 需要 format 上下文的 helper 应显式接收 format 或 policy。
    - `geometry.__init__` 只标记 package；runtime 应从具体 owning module import。
+   - `geometry.outer_boxes` 只返回 `Box` / `Box | None`；`OuterCandidate`
+     包装、candidate name、strategy 和去重归属 `x5crop.detection.outer`
+     的 `base_outer_candidates` / `unique_outer_candidates`。
    - `image.deskew` 只负责 deskew angle 选择；旋转和裁切像素工具分别归属
      `image.transforms` 和 `image.crop_pixels`。
    - `io.tiff.read_tiff` 只返回 array、gray、profile 和 warnings；TIFF page object
@@ -360,6 +363,10 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - Helpers that need format context should receive format or policy explicitly.
    - `geometry.__init__` is only a package marker; runtime code should import
      concrete helpers from their owning modules.
+   - `geometry.outer_boxes` returns only `Box` / `Box | None`; `OuterCandidate`
+     wrapping, candidate names, strategies, and deduplication belong to
+     `x5crop.detection.outer` via `base_outer_candidates` /
+     `unique_outer_candidates`.
    - `image.deskew` owns only deskew angle selection; rotation and crop pixel
      helpers live in `image.transforms` and `image.crop_pixels`.
    - `io.tiff.read_tiff` returns only array, gray, profile, and warnings; TIFF page

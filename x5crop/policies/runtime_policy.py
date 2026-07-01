@@ -183,7 +183,7 @@ class OuterMaskProfilePolicy:
 
 
 @dataclass(frozen=True)
-class OuterCandidateDetectionPolicy:
+class OuterBoxDetectionPolicy:
     white_x_width_multiplier: float = 1.80
     white_x_extra_ratio: float = 0.060
     candidate_max_area: float = 0.94
@@ -259,7 +259,7 @@ class OuterPolicy:
     content_alignment: OuterContentAlignmentPolicy = field(default_factory=OuterContentAlignmentPolicy)
     content_floating_outer: ContentFloatingOuterPolicy = field(default_factory=ContentFloatingOuterPolicy)
     edge_anchor_outer: EdgeAnchorOuterPolicy = field(default_factory=EdgeAnchorOuterPolicy)
-    base_candidates: OuterCandidateDetectionPolicy = field(default_factory=OuterCandidateDetectionPolicy)
+    base_candidates: OuterBoxDetectionPolicy = field(default_factory=OuterBoxDetectionPolicy)
     separator_outer_band: SeparatorOuterBandPolicy = field(default_factory=SeparatorOuterBandPolicy)
     separator_geometry_outer: SeparatorGeometryOuterPolicy = field(default_factory=SeparatorGeometryOuterPolicy)
     retries: tuple[str, ...] = ()

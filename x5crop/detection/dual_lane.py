@@ -17,9 +17,9 @@ from ..domain import Box, Detection, Gap
 from ..formats import FORMATS
 from ..geometry.boxes import map_work_box
 from ..geometry.layout import work_gray
-from ..geometry.outer_boxes import detect_outer_candidates
 from ..policies.registry import get_detection_policy
 from ..utils import bbox_from_mask, box_from_dict
+from .outer import base_outer_candidates
 from .selection import calibrated_candidate_rank
 
 
@@ -70,7 +70,7 @@ def detect_parallel_strip_lane(
         count_override=lane_format_spec.default_count,
     )
     candidates: list[Detection] = []
-    for outer_candidate in detect_outer_candidates(lane_crop, lane_policy.outer.base_candidates):
+    for outer_candidate in base_outer_candidates(lane_crop, lane_policy.outer.base_candidates):
         lane_outer = translate_box(outer_candidate.box, lane.left, lane.top)
         raw = build_detection_for_outer(
             gray,

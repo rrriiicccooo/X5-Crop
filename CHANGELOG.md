@@ -106,6 +106,10 @@ Current stable release: v4.2.8
   只保留 deskew angle 选择，像素旋转和 crop validation 分别移入
   `image.transforms` / `image.crop_pixels`；`read_tiff` 不再把 TIFF page object
   传入 workflow/export。
+- Outer primitive 边界进一步收紧：`geometry.outer_boxes` 只返回 `Box` /
+  `Box | None`，`OuterCandidate` 包装、候选命名、strategy 和去重全部移到
+  `x5crop.detection.outer.base_outer_candidates` /
+  `x5crop.detection.outer.unique_outer_candidates`。
 - 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出两条路径。
@@ -251,6 +255,11 @@ Verified:
   import lower-level helpers through the wide `geometry.__init__` surface;
   analysis-cache initialization moved out of geometry, and TIFF I/O helpers no
   longer depend on the full runtime `Config`.
+- The outer primitive boundary is tightened: `geometry.outer_boxes` returns only
+  `Box` / `Box | None`, while `OuterCandidate` wrapping, candidate names,
+  strategies, and deduplication now belong to
+  `x5crop.detection.outer.base_outer_candidates` /
+  `x5crop.detection.outer.unique_outer_candidates`.
 - 14 format / strip-mode V4.9 decision contract policy smoke tests pass.
 - One-file Debug Analysis smoke writes the V4.9 three-panel debug JPG.
 - Cached analysis reuse smoke covers both approved auto-export and needs_review

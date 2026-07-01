@@ -32,7 +32,7 @@ from .runtime_policy import (
     LuckyPassRiskPolicy,
     NearbySeparatorCorrectionPolicy,
     NearbySeparatorDiagnosticsPolicy,
-    OuterCandidateDetectionPolicy,
+    OuterBoxDetectionPolicy,
     OuterContentAlignmentPolicy,
     OuterMaskProfilePolicy,
     OuterPolicy,
@@ -447,7 +447,7 @@ def outer_policy(
             min_width_ratio=float(edge_anchor.min_width_ratio),
             max_candidates=int(edge_anchor.max_candidates),
         ),
-        base_candidates=OuterCandidateDetectionPolicy(
+        base_candidates=OuterBoxDetectionPolicy(
             white_x_width_multiplier=float(base_candidates.white_x_width_multiplier),
             white_x_extra_ratio=float(base_candidates.white_x_extra_ratio),
             candidate_max_area=float(base_candidates.candidate_max_area),
