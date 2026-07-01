@@ -36,6 +36,10 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 
 ### 运行层级
 
+本节编号按 dependency / ownership boundary 排列，不是 workflow 的逐行调用顺序。
+`x5crop.geometry` / `x5crop.image` / `x5crop.io` 是 detection、export 和 debug
+共享的基础能力层，因此排在 `x5crop.detection` 之前；它们不是 detection 的子层。
+
 1. `X5_Crop.py`
    - 开发入口。
    - V4 Release 会由构建脚本生成单文件发布版。
@@ -92,9 +96,18 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
      contract 共享。
    - 不导入 `x5crop.policies`，不承载 threshold、gate 或候选策略。
 
-9. `x5crop.detection`
+9. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
+   - 提供 box、layout、gap、separator profile、frame fit、output adjustment、
+     deskew、证据图和 TIFF I/O helper。
+   - 是 detection、export 和 debug 共享的基础能力层。
+   - 需要 format 上下文的 helper 应显式接收 format 或 policy。
+   - 这些层不应依赖 detection pipeline，也不应拥有 candidate、gate 或
+     PASS/REVIEW 语义。
+
+10. `x5crop.detection`
    - 负责 outer proposal、separator/content evidence、candidate build/run、
      scoring、candidate gates、selection、fallback 和 finalization。
+   - 依赖 format / policy contract 和 geometry / image / io 基础能力。
    - `pipeline.py` 应保持主流程 orchestration。
    - `candidate_gates.py` 只负责候选级 separator evidence gate。
    - `candidate_decision.py` 只负责候选级 auto_gate / confidence / review reason。
@@ -103,12 +116,6 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - 专门模块承接具体职责，例如 `candidate_build.py`、`candidate_run.py`、
      `dual_lane.py`、`partial_holder.py`、`outer_retry.py`、`candidate_gates.py`、
      `candidate_decision.py`、`selection.py`、`final_decision.py` 和 `finalizer.py`。
-
-10. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
-   - 提供 box、layout、gap、separator profile、frame fit、output adjustment、
-     deskew、证据图和 TIFF I/O helper。
-   - 需要 format 上下文的 helper 应显式接收 format 或 policy。
-   - 这些层不应依赖 detection pipeline。
 
 11. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
     `x5crop.report_schema` / `x5crop.report_outputs` / `x5crop.debug`
