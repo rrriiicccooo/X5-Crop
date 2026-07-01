@@ -355,7 +355,7 @@ def retry_with_format_geometry_outer(
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
 ) -> Optional[Detection]:
-    from .calibration import calibrate_candidate_decision
+    from .candidate_decision import apply_candidate_decision_policy
     from .content import content_evidence_detail
     from .candidate_build import build_detection_for_outer
 
@@ -394,7 +394,7 @@ def retry_with_format_geometry_outer(
         gap_max_width_ratio_override=gap_override,
         policy=policy,
     )
-    retried = calibrate_candidate_decision(gray, retried, config, fmt, "separator", cache, policy=policy)
+    retried = apply_candidate_decision_policy(gray, retried, config, fmt, "separator", cache, policy=policy)
     retry_alignment = outer_content_alignment_detail(gray, retried, cache, policy=policy)
     retry_content = content_evidence_detail(gray, retried, cache, policy.content)
     retry_geometry = format_geometry_model_detail(gray, retried, config, fmt, cache)
@@ -429,7 +429,7 @@ def retry_with_content_aligned_outer(
     alignment: dict[str, Any],
     cache: AnalysisCache,
 ) -> Optional[Detection]:
-    from .calibration import calibrate_candidate_decision
+    from .candidate_decision import apply_candidate_decision_policy
     from .content import content_evidence_detail
     from .candidate_build import build_detection_for_outer
 
@@ -460,7 +460,7 @@ def retry_with_content_aligned_outer(
         gap_max_width_ratio_override=gap_override,
         policy=policy,
     )
-    retried = calibrate_candidate_decision(gray, retried, config, fmt, "separator", cache, policy=policy)
+    retried = apply_candidate_decision_policy(gray, retried, config, fmt, "separator", cache, policy=policy)
     if gap_override is not None:
         retried.detail["wide_gap_retry"] = {
             "used": True,
@@ -557,7 +557,7 @@ def retry_with_short_axis_aspect_outer(
     content_detail: dict[str, Any],
     cache: AnalysisCache,
 ) -> Optional[Detection]:
-    from .calibration import calibrate_candidate_decision
+    from .candidate_decision import apply_candidate_decision_policy
     from .content import content_evidence_detail
     from .candidate_build import build_detection_for_outer
 
@@ -587,7 +587,7 @@ def retry_with_short_axis_aspect_outer(
         allow_outer_refine=False,
         policy=policy,
     )
-    retried = calibrate_candidate_decision(gray, retried, config, fmt, "separator", cache, policy=policy)
+    retried = apply_candidate_decision_policy(gray, retried, config, fmt, "separator", cache, policy=policy)
     retry_content = content_evidence_detail(gray, retried, cache, policy.content)
     retry_alignment = outer_content_alignment_detail(gray, retried, cache, policy=policy)
     retried.detail["content_evidence"] = retry_content

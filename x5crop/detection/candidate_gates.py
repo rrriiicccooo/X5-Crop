@@ -11,7 +11,7 @@ from ..policies.registry import get_detection_policy
 
 
 @dataclass(frozen=True)
-class GateResult:
+class CandidateGateOutcome:
     name: str
     ok: bool
     reason: str
@@ -66,7 +66,7 @@ def separator_gate_all_internal_gaps_hard_decision(
     return ok, reason
 
 
-def separator_hard_evidence_ok(
+def candidate_has_hard_separator_evidence(
     detection: Detection,
     threshold: float,
     policy: Optional[DetectionPolicy] = None,
@@ -177,9 +177,9 @@ def separator_hard_evidence_ok(
 
 
 __all__ = [
-    "GateResult",
+    "CandidateGateOutcome",
     "separator_gate_all_internal_gaps_hard_decision",
     "separator_gate_geometry_support_decision",
     "separator_gate_min_hard_with_equal_cap_decision",
-    "separator_hard_evidence_ok",
+    "candidate_has_hard_separator_evidence",
 ]

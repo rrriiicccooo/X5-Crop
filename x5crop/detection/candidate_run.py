@@ -12,7 +12,7 @@ from ..geometry import original_box_to_work, unique_outer_candidates, work_gray
 from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
-from .calibration import calibrate_candidate_decision
+from .candidate_decision import apply_candidate_decision_policy
 from .candidate_build import build_detection_for_outer
 from .candidates import raw_detection_rank
 from .content import content_detection_for_count, content_evidence_detail
@@ -481,7 +481,7 @@ def calibrated_candidates_for_count(
         and wide_retry_has_room
     )
     separator = detect_candidate_for_count(gray, config, fmt, count, strip_mode, offset, cache, policy=policy)
-    separator_candidate = calibrate_candidate_decision(gray, separator, config, fmt, "separator", cache, policy=policy)
+    separator_candidate = apply_candidate_decision_policy(gray, separator, config, fmt, "separator", cache, policy=policy)
     candidates.append(separator_candidate)
     separator_gate_candidate = separator_candidate
     separator_auto_gate = bool(
@@ -503,7 +503,7 @@ def calibrated_candidates_for_count(
             gap_max_width_ratio_override=wide_retry_max_width_ratio,
             policy=policy,
         )
-        wide_candidate = calibrate_candidate_decision(gray, wide_separator, config, fmt, "separator", cache, policy=policy)
+        wide_candidate = apply_candidate_decision_policy(gray, wide_separator, config, fmt, "separator", cache, policy=policy)
         wide_candidate.detail["wide_gap_retry"] = {
             "used": True,
             "base_gap_max_width_ratio": float(policy.separator.gap_search.max_width_ratio),
@@ -530,7 +530,7 @@ def calibrated_candidates_for_count(
             policy=policy,
         )
         if fallback_proposal is not None:
-            fallback_candidate = calibrate_candidate_decision(gray, fallback_proposal, config, fmt, "separator", cache, policy=policy)
+            fallback_candidate = apply_candidate_decision_policy(gray, fallback_proposal, config, fmt, "separator", cache, policy=policy)
             fallback_candidate.detail["outer_proposal_fallback_retry"] = {
                 "used": True,
                 "separator_first_mode": policy.outer.separator_first,
@@ -579,5 +579,5 @@ def calibrated_candidates_for_count(
         policy.content,
     )
     if content is not None:
-        candidates.append(calibrate_candidate_decision(gray, content, config, fmt, "content", cache, policy=policy))
+        candidates.append(apply_candidate_decision_policy(gray, content, config, fmt, "content", cache, policy=policy))
     return candidates, stop_after_this_count

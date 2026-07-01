@@ -14,7 +14,7 @@ from .analysis_reuse import (
 from .app_info import REPORT_JSONL_NAME
 from .config import Config
 from .detection.pipeline import choose_detection
-from .detection.postprocess import finalize_detection_decision
+from .detection.finalizer import finalize_detection
 from .debug.render import write_debug_analysis, write_debug_preview
 from .domain import Detection, ImageProfile, ProcessResult
 from .export import (
@@ -37,7 +37,7 @@ from .image.evidence import make_gray_u8
 from .io import read_tiff, read_tiff_profile
 from .policies.parameters import format_parameters
 from .policies.registry import get_detection_policy
-from .reports import write_reports_for_result
+from .report_outputs import write_report_outputs_for_result
 from .result_builder import result_from_cached_record, result_from_detection
 from .source_config import config_for_profile
 from .utils import clamp_float
@@ -69,7 +69,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     policy = get_detection_policy(fmt.name, config.strip_mode)
     detection_config = detection_geometry_config(config, policy.output)
     detection = choose_detection(gray, detection_config, fmt, analysis_cache)
-    postprocess = finalize_detection_decision(
+    finalization = finalize_detection(
         gray,
         detection,
         config,
@@ -77,8 +77,8 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         analysis_cache,
         deskew_detail,
     )
-    detection = postprocess.detection
-    status = postprocess.status
+    detection = finalization.detection
+    status = finalization.status
 
     review_copy = _copy_for_review_if_needed(input_file, output_dir, config, detection, status, warnings)
     output_files = _write_crops_if_allowed(
@@ -282,7 +282,7 @@ def _write_debug_outputs(
 
 
 def _finish_result(result: ProcessResult, config: Config) -> ProcessResult:
-    write_reports_for_result(result, config)
+    write_report_outputs_for_result(result, config)
     return result
 
 

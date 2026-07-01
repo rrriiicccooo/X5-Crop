@@ -137,7 +137,7 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
             "outer_content_alignment": detail_dict(detection, OUTER_CONTENT_ALIGNMENT),
         },
         "gates": gate_records(detection),
-        "postprocess": {
+        "finalization": {
             "lucky_pass_risk": detail_dict(detection, LUCKY_PASS_RISK_SCORE),
             "overlap_bleed_risk": detail_dict(detection, OVERLAP_BLEED_RISK),
             "deskew": detail_dict(detection, DESKEW),

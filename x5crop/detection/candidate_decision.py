@@ -21,7 +21,7 @@ from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
 from ..utils import HARD_REVIEW_REASONS
 from .content import content_evidence_detail
-from .gates import separator_hard_evidence_ok
+from .candidate_gates import candidate_has_hard_separator_evidence
 from .partial_holder import partial_extra_holder_frames_gate_detail
 from .scoring import (
     content_support_score,
@@ -32,7 +32,7 @@ from .scoring import (
 )
 
 
-def calibrate_candidate_decision(
+def apply_candidate_decision_policy(
     gray: np.ndarray,
     detection: Detection,
     config: Config,
@@ -47,7 +47,7 @@ def calibrate_candidate_decision(
         detail=dict(detection.detail),
     )
     policy = policy or get_detection_policy(fmt.name, candidate.strip_mode)
-    hard_ok, hard_detail = separator_hard_evidence_ok(candidate, config.confidence_threshold, policy)
+    hard_ok, hard_detail = candidate_has_hard_separator_evidence(candidate, config.confidence_threshold, policy)
     content_detail = content_evidence_detail(gray, candidate, cache, policy.content)
     scoring_policy = policy.scoring
     floor_applies = hard_full_calibration_floor_applies(candidate, hard_detail, fmt, source, policy)
@@ -56,7 +56,7 @@ def calibrate_candidate_decision(
             candidate,
             confidence=max(float(candidate.confidence), scoring_policy.hard_full_confidence_floor),
         )
-        hard_ok, hard_detail = separator_hard_evidence_ok(gate_candidate, config.confidence_threshold, policy)
+        hard_ok, hard_detail = candidate_has_hard_separator_evidence(gate_candidate, config.confidence_threshold, policy)
         hard_detail = dict(hard_detail)
         hard_detail["calibrate_hard_full_confidence_floor_applied"] = True
         hard_detail["calibrate_hard_full_confidence_floor"] = float(scoring_policy.hard_full_confidence_floor)

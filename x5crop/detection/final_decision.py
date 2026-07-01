@@ -245,7 +245,7 @@ def risk_summary_for(
     }
 
 
-def apply_evidence_decision_policy(
+def apply_final_decision_policy(
     gray: np.ndarray,
     detection: Detection,
     config: Config,
@@ -319,7 +319,7 @@ def apply_evidence_decision_policy(
 
 
 __all__ = [
-    "apply_evidence_decision_policy",
+    "apply_final_decision_policy",
     "evidence_summary_for",
     "normalized_review_reasons",
     "risk_summary_for",

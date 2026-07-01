@@ -40,7 +40,7 @@ from .runtime_policy import (
     PartialEdgeHintPolicy,
     PartialHolderPolicy,
     PartialStopPolicy,
-    PostprocessPolicy,
+    FinalizationPolicy,
     ReportPolicy,
     RobustGridPolicy,
     RuntimeDiagnosticsPolicy,
@@ -526,7 +526,7 @@ def gate_policy() -> GatePolicy:
             "mode_specific_gate",
             "hard_review_reason_gate",
             "auto_pass_gate",
-            "postprocess_gate",
+            "finalization_gate",
         ),
     )
 
@@ -731,12 +731,12 @@ def partial_edge_hint_policy(params: FormatParameters) -> PartialEdgeHintPolicy:
     )
 
 
-def postprocess_policy(params: FormatParameters) -> PostprocessPolicy:
-    postprocess = params.postprocess
+def finalization_policy(params: FormatParameters) -> FinalizationPolicy:
+    finalization = params.finalization
     approved_adjustment = params.approved_geometry_adjustment
-    return PostprocessPolicy(
+    return FinalizationPolicy(
         align_outer_to_content=True,
-        retry_uncertain_outer=bool(postprocess.retry_uncertain_outer),
+        retry_uncertain_outer=bool(finalization.retry_uncertain_outer),
         apply_output_bleed=True,
         apply_approved_geometry_adjustment=True,
         approved_geometry_adjustment=ApprovedGeometryAdjustmentPolicy(
@@ -747,10 +747,10 @@ def postprocess_policy(params: FormatParameters) -> PostprocessPolicy:
             min_ext_min=int(approved_adjustment.min_ext_min),
             min_ext_max=int(approved_adjustment.min_ext_max),
         ),
-        content_aspect_conflict_cap=float(postprocess.content_aspect_conflict_cap),
-        content_low_confidence_cap=float(postprocess.content_low_confidence_cap),
-        outer_mismatch_cap=float(postprocess.outer_mismatch_cap),
-        lucky_pass_risk_cap=float(postprocess.lucky_pass_risk_cap),
+        content_aspect_conflict_cap=float(finalization.content_aspect_conflict_cap),
+        content_low_confidence_cap=float(finalization.content_low_confidence_cap),
+        outer_mismatch_cap=float(finalization.outer_mismatch_cap),
+        lucky_pass_risk_cap=float(finalization.lucky_pass_risk_cap),
     )
 
 
@@ -845,7 +845,7 @@ def build_policy_from_preset(
         scoring=scoring_policy(params),
         candidate_selection=selection_policy(preset, strip_mode, params),
         candidate_run=candidate_run_policy(),
-        postprocess=postprocess_policy(params),
+        finalization=finalization_policy(params),
         diagnostics=diagnostics_policy(mode_preset, params),
         report=report_policy(),
         notes=mode_preset.notes,

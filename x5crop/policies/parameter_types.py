@@ -409,7 +409,7 @@ class CandidateCompetitionParameters:
 
 
 @dataclass(frozen=True)
-class PostprocessParameters:
+class FinalizationParameters:
     retry_uncertain_outer: bool
     content_aspect_conflict_cap: float
     content_low_confidence_cap: float
@@ -665,7 +665,7 @@ __all__ = [
     "SeparatorSupportScoreParameters",
     "GeometrySupportScoreParameters",
     "CandidateCompetitionParameters",
-    "PostprocessParameters",
+    "FinalizationParameters",
     "ApprovedGeometryAdjustmentParameters",
     "DebugGapOverlayParameters",
     "NearbySeparatorDiagnosticsParameters",

@@ -35,7 +35,7 @@ from .parameter_types import (
     SeparatorSupportScoreParameters,
     GeometrySupportScoreParameters,
     CandidateCompetitionParameters,
-    PostprocessParameters,
+    FinalizationParameters,
     ApprovedGeometryAdjustmentParameters,
     DebugGapOverlayParameters,
     NearbySeparatorDiagnosticsParameters,
@@ -967,8 +967,8 @@ class FormatParameters:
         )
 
     @property
-    def postprocess(self) -> PostprocessParameters:
-        return PostprocessParameters(
+    def finalization(self) -> FinalizationParameters:
+        return FinalizationParameters(
             retry_uncertain_outer=self.outer_retry_enabled,
             content_aspect_conflict_cap=self.post_content_aspect_conflict_cap,
             content_low_confidence_cap=self.post_content_low_confidence_cap,

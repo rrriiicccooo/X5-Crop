@@ -17,7 +17,6 @@ from ..geometry import (
     separator_profile,
     should_run_enhanced_separator_analysis,
 )
-from .gates import separator_hard_evidence_ok
 from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..utils import clamp_int, runs_from_mask, sampled_percentile, smooth_1d
@@ -96,7 +95,6 @@ __all__ = [
     "light_hard_gap_trust",
     "merge_enhanced_separator_gaps",
     "refine_gaps_by_edge_pairs",
-    "separator_hard_evidence_ok",
     "separator_profile",
     "should_run_enhanced_separator_analysis",
 ]

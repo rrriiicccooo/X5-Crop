@@ -829,7 +829,7 @@ class ApprovedGeometryAdjustmentPolicy:
 
 
 @dataclass(frozen=True)
-class PostprocessPolicy:
+class FinalizationPolicy:
     align_outer_to_content: bool = True
     retry_uncertain_outer: bool = True
     apply_output_bleed: bool = True
@@ -999,7 +999,7 @@ class DetectionPolicy:
     scoring: ScoringPolicy
     candidate_selection: SelectionPolicy
     candidate_run: CandidateRunPolicy
-    postprocess: PostprocessPolicy
+    finalization: FinalizationPolicy
     output: OutputPolicy = field(default_factory=OutputPolicy)
     diagnostics: RuntimeDiagnosticsPolicy = field(default_factory=RuntimeDiagnosticsPolicy)
     report: ReportPolicy = field(default_factory=ReportPolicy)

@@ -11,7 +11,7 @@ from .config import CliOptions, RuntimeConfig
 from .domain import ProcessResult
 from .input_probe import runtime_config_from_options
 from .policies.registry import get_detection_policy
-from .reports import write_reports_for_result
+from .report_outputs import write_report_outputs_for_result
 from .workflow import (
     process_one,
     process_one_worker,
@@ -80,7 +80,7 @@ def process_parallel_files(
                 ok += 1
                 approved += int(result.status == "approved_auto")
                 review += int(result.status == "needs_review")
-                write_reports_for_result(result, config)
+                write_report_outputs_for_result(result, config)
                 print_process_result(result, config)
             except Exception as exc:
                 failed += 1
@@ -107,7 +107,7 @@ def run_runtime(config: RuntimeConfig, files: list[Path]) -> int:
                 ok += 1
                 approved += int(result.status == "approved_auto")
                 review += int(result.status == "needs_review")
-                write_reports_for_result(result, config)
+                write_report_outputs_for_result(result, config)
                 print_process_result(result, config)
             except Exception as exc:
                 failed += 1

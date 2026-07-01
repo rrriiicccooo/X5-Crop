@@ -4,7 +4,7 @@ from ..domain import Box, Detection, Gap, OuterCandidate
 from .context import DetectionContext, detection_policy_for
 from .candidate_run import detect_candidate_for_count
 from .pipeline import detect_image
-from .postprocess import finalize_detection_decision
+from .finalizer import finalize_detection
 
 __all__ = [
     "Box",
@@ -15,5 +15,5 @@ __all__ = [
     "detect_candidate_for_count",
     "detect_image",
     "detection_policy_for",
-    "finalize_detection_decision",
+    "finalize_detection",
 ]

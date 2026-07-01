@@ -49,7 +49,7 @@ def detect_parallel_strip_lane(
     lane_index: int,
     cache,
 ) -> Optional[Detection]:
-    from .calibration import calibrate_candidate_decision
+    from .candidate_decision import apply_candidate_decision_policy
     from .candidate_build import build_detection_for_outer
     from .content import content_evidence_detail
     from .outer_retry import outer_content_alignment_detail
@@ -82,7 +82,7 @@ def detect_parallel_strip_lane(
             outer_candidate.strategy,
             cache=cache,
         )
-        calibrated = calibrate_candidate_decision(
+        calibrated = apply_candidate_decision_policy(
             gray,
             raw,
             lane_config,

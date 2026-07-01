@@ -29,7 +29,7 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 - `x5crop.policies.decision_contract` 拥有 V4.9 ModePolicy、EvidencePolicy、
   RiskPolicy、CandidatePolicy、DecisionPolicy、OutputPolicy 和
   DecisionDiagnosticsPolicy。
-- `x5crop.detection.decision` 统一执行 PASS / REVIEW 决策。
+- `x5crop.detection.final_decision` 统一执行 PASS / REVIEW 决策。
 - analysis reuse、export、report / debug 消费稳定结果并解释 V4.9 决策；
   `tools/regression/` 是开发期 reference compare / safety classification 工具，
   不属于 runtime package。
@@ -63,7 +63,7 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - 不实现检测逻辑。
 
 6. `x5crop.workflow`
-   - 编排 read -> deskew -> detect -> postprocess -> export -> report/debug。
+   - 编排 read -> deskew -> detect -> finalization -> export -> report/debug。
    - 将单图报告复用、输出目录、Debug Analysis、导出和结果组装委托给专门模块。
    - 不直接实现 scoring、candidate selection 或 TIFF 写入细节。
 
@@ -94,12 +94,15 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 
 9. `x5crop.detection`
    - 负责 outer proposal、separator/content evidence、candidate build/run、
-     scoring、gates、selection、fallback 和 postprocess。
+     scoring、candidate gates、selection、fallback 和 finalization。
    - `pipeline.py` 应保持主流程 orchestration。
-   - `decision.py` 在 postprocess 中统一执行 V4.9 conservative PASS/REVIEW。
+   - `candidate_gates.py` 只负责候选级 separator evidence gate。
+   - `candidate_decision.py` 只负责候选级 auto_gate / confidence / review reason。
+   - `final_decision.py` 在 finalization 中统一执行 V4.9 conservative PASS/REVIEW。
+   - `finalizer.py` 负责输出前最终收口，包括 outer retry、risk caps 和 output bleed。
    - 专门模块承接具体职责，例如 `candidate_build.py`、`candidate_run.py`、
-     `dual_lane.py`、`partial_holder.py`、`outer_retry.py`、`calibration.py`、
-     `gates.py`、`selection.py` 和 `postprocess.py`。
+     `dual_lane.py`、`partial_holder.py`、`outer_retry.py`、`candidate_gates.py`、
+     `candidate_decision.py`、`selection.py`、`final_decision.py` 和 `finalizer.py`。
 
 10. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
    - 提供 box、layout、gap、separator profile、frame fit、output adjustment、
@@ -108,12 +111,12 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - 这些层不应依赖 detection pipeline。
 
 11. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
-    `x5crop.report_schema` / `x5crop.reports` / `x5crop.debug`
+    `x5crop.report_schema` / `x5crop.report_outputs` / `x5crop.debug`
    - `analysis_reuse` 负责 Debug Analysis report cache 匹配和 cached detection 恢复。
    - `export` 负责输出路径、review copy 和 metadata-safe TIFF crop 写入。
    - `result_builder` 统一将 fresh / cached detection 转成 `ProcessResult`。
    - `report_schema` 将 `Detection` / `ProcessResult` 序列化为稳定 report schema。
-   - `reports` 只写 JSONL / CSV report；`debug` 只写 Debug Analysis / preview。
+   - `report_outputs` 只写 JSONL / CSV report outputs；`debug` 只写 Debug Analysis / preview。
    - 不参与候选生成和 PASS/REVIEW 决策。
 
 12. `tools/regression`
@@ -147,7 +150,7 @@ V4.9 public policy contract 由 `DetectionDecisionContract` 表达：
 - `CandidateRunPolicy`: content candidate skip、separator-geometry competition、equal-first wide retry、dark-band retry、partial stop。
 - `PartialHolderPolicy`: partial safe-extra-frames 和 strict holder safety。
 - `SelectionPolicy`: candidate competition 和 content mismatch review fallback。
-- `PostprocessPolicy`: final caps、postprocess reason ids、approved geometry adjustment。
+- `FinalizationPolicy`: finalization caps、finalization reason ids、approved geometry adjustment。
 - `RuntimeDiagnosticsPolicy`: Debug Analysis panels、gap overlay、nearby separator diagnostics、overlap-risk diagnostics。
 - `ReportPolicy`: report schema version 和 section order。
 - `OutputPolicy`: detection bleed、output bleed、edge bleed protection。
@@ -251,7 +254,7 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 - `x5crop.policies.decision_contract` owns the V4.9 ModePolicy, EvidencePolicy,
   RiskPolicy, CandidatePolicy, DecisionPolicy, OutputPolicy, and
   DecisionDiagnosticsPolicy.
-- `x5crop.detection.decision` applies the unified PASS / REVIEW decision.
+- `x5crop.detection.final_decision` applies the unified PASS / REVIEW decision.
 - Analysis reuse, export, report / debug consume stable results and explain V4.9
   decisions; `tools/regression/` contains developer-only reference compare /
   safety classification tools outside the runtime package.
@@ -285,7 +288,7 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - Does not implement detector logic.
 
 6. `x5crop.workflow`
-   - Orchestrates read -> deskew -> detect -> postprocess -> export -> report/debug.
+   - Orchestrates read -> deskew -> detect -> finalization -> export -> report/debug.
    - Delegates per-image report reuse, output folders, Debug Analysis, export,
      and result assembly to focused modules.
 
@@ -319,9 +322,12 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 
 9. `x5crop.detection`
    - Owns outer proposals, separator/content evidence, candidate build/run,
-     scoring, gates, selection, fallback, and postprocess.
+     scoring, candidate gates, selection, fallback, and finalization.
    - `pipeline.py` should stay orchestration-focused.
-   - `decision.py` applies conservative V4.9 PASS/REVIEW rules in postprocess.
+   - `candidate_gates.py` owns candidate-level separator evidence gates.
+   - `candidate_decision.py` owns candidate-level auto_gate / confidence / review reasons.
+   - `final_decision.py` applies conservative V4.9 PASS/REVIEW rules during finalization.
+   - `finalizer.py` owns final pre-output handling, including outer retry, risk caps, and output bleed.
 
 10. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
    - Provide boxes, layout, gaps, separator profiles, frame fit, output
@@ -330,14 +336,14 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - These layers should not depend on the detection pipeline.
 
 11. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
-    `x5crop.report_schema` / `x5crop.reports` / `x5crop.debug`
+    `x5crop.report_schema` / `x5crop.report_outputs` / `x5crop.debug`
    - `analysis_reuse` matches Debug Analysis report caches and restores cached
      detections.
    - `export` owns output paths, review copies, and metadata-safe TIFF crop writes.
    - `result_builder` converts fresh / cached detections into `ProcessResult`.
    - `report_schema` serializes `Detection` / `ProcessResult` into the stable
      report schema.
-   - `reports` only writes JSONL / CSV reports; `debug` only writes Debug
+   - `report_outputs` only writes JSONL / CSV report outputs; `debug` only writes Debug
      Analysis / previews.
    - Do not generate candidates or decide PASS/REVIEW.
 
