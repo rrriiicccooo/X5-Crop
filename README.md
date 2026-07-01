@@ -182,7 +182,7 @@ V4.9 的详细 evidence / risk / decision 说明写入 report；Debug Analysis
 - 黄色 / 紫色 tick 是否只是模型补位。
 
 普通非 Debug Analysis 裁切不会生成报告。同一批 TIFF 已执行 Debug Analysis 后，
-普通裁切时可复用匹配的 `split_report.jsonl`；如果文件大小、修改时间、图像形状、
+普通裁切时可复用匹配的 `x5_crop_report.jsonl`；如果文件大小、修改时间、图像形状、
 脚本版本或关键参数不匹配，会自动重新检测。
 
 ### 输出目录和复核
@@ -202,16 +202,16 @@ x5_crop_output/
   ...
   needs_review/
   _debug_analysis/
-  split_report.jsonl
-  split_summary.csv
+  x5_crop_report.jsonl
+  x5_crop_summary.csv
 ```
 
 说明：
 
 - 自动裁切 TIFF 是新文件，会保留原 TIFF 的画质相关属性。
 - `needs_review/` 存放需要人工处理的原 TIFF 副本。
-- `split_report.jsonl` 是机器可读报告。
-- `split_summary.csv` 是便于人工浏览的摘要表。
+- `x5_crop_report.jsonl` 是机器可读报告。
+- `x5_crop_summary.csv` 是便于人工浏览的摘要表。
 - 普通启动器不会覆盖已有裁切 TIFF；命令行可用 `--overwrite` 覆盖。
 
 默认输出 bleed 为长轴 20px、短轴 10px。若检测到叠片、近似叠片或连续内容风险，
@@ -442,8 +442,8 @@ x5_crop_output/
   ...
   needs_review/
   _debug_analysis/
-  split_report.jsonl
-  split_summary.csv
+  x5_crop_report.jsonl
+  x5_crop_summary.csv
 ```
 
 Default output bleed is 20px on the long axis and 10px on the short axis. When

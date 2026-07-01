@@ -5,7 +5,7 @@ import sys
 import traceback
 from pathlib import Path
 
-from .app_info import SCRIPT_NAME, VERSION
+from .app_info import REPORT_JSONL_NAME, SCRIPT_NAME, SUMMARY_CSV_NAME, VERSION
 from .config import CliOptions
 from .format_specs import (
     ANALYSIS_CHOICES,
@@ -42,7 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--export-review", action="store_true", help="Export crops even when confidence is below threshold.")
     parser.add_argument("--dry-run", action="store_true", help="Detect only; do not write cropped TIFFs.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing outputs.")
-    parser.add_argument("--report", action="store_true", help="Write split_report.jsonl and split_summary.csv.")
+    parser.add_argument("--report", action="store_true", help=f"Write {REPORT_JSONL_NAME} and {SUMMARY_CSV_NAME}.")
     parser.add_argument("--debug", action="store_true", help="Write lightweight JPG previews with detected outer/frame boxes.")
     parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with original gray, debug boxes, and separator evidence.")
     parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --dry-run --no-copy-review-files --no-reuse-analysis.")

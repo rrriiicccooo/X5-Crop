@@ -86,7 +86,7 @@ Windows: 双击 X5_Crop_win.bat
 
 - 不导出正式裁切 TIFF。
 - 生成 Debug Analysis JPG。
-- 生成 `split_report.jsonl` 和 `split_summary.csv`。
+- 生成 `x5_crop_report.jsonl` 和 `x5_crop_summary.csv`。
 
 适合正式裁切前检查外框、分隔线和裁切范围。
 
@@ -202,7 +202,7 @@ Type `y` for a dry run:
 
 - It does not export final crop TIFFs.
 - It writes Debug Analysis JPGs.
-- It writes `split_report.jsonl` and `split_summary.csv`.
+- It writes `x5_crop_report.jsonl` and `x5_crop_summary.csv`.
 
 Use it before final cropping to inspect the outer box, separators, and crop
 range.

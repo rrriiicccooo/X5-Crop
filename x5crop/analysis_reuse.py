@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from .app_info import SCRIPT_NAME, VERSION
+from .app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
 from .config import Config
 from .domain import Box, Detection, Gap, ImageProfile
 from .image.deskew import rotate_array_expand
@@ -140,7 +140,7 @@ def find_reusable_analysis(
     profile: ImageProfile,
     config: Config,
 ) -> Optional[dict[str, Any]]:
-    report_path = output_dir / "split_report.jsonl"
+    report_path = output_dir / REPORT_JSONL_NAME
     for record in load_report_records(report_path):
         if Path(str(record.get("source", ""))).name != input_file.name:
             continue

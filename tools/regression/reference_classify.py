@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from x5crop.app_info import VERSION
+from x5crop.app_info import REPORT_JSONL_NAME, VERSION
 from .compare import load_jsonl_report, report_key
 
 
@@ -18,31 +18,31 @@ GEOMETRY_FIELDS = ("outer_box", "frame_boxes", "gaps")
 REFERENCE_CASES = {
     "standard_strip_full": (
         Path("Test/135/4.5.4/split_report.jsonl"),
-        Path("135") / VERSION / "split_report.jsonl",
+        Path("135") / VERSION / REPORT_JSONL_NAME,
     ),
     "wide_spacing_standard_strip_full": (
         Path("Test/new_135/4.5.4/split_report.jsonl"),
-        Path("new_135") / VERSION / "split_report.jsonl",
+        Path("new_135") / VERSION / REPORT_JSONL_NAME,
     ),
     "medium_square_full": (
         Path("Test/120/66/4.5.4/split_report.jsonl"),
-        Path("120/66") / VERSION / "split_report.jsonl",
+        Path("120/66") / VERSION / REPORT_JSONL_NAME,
     ),
     "medium_square_partial": (
         Path("Test/120/66/4.5.4_partial/split_report.jsonl"),
-        Path("120/66") / f"{VERSION}_partial" / "split_report.jsonl",
+        Path("120/66") / f"{VERSION}_partial" / REPORT_JSONL_NAME,
     ),
     "medium_wide_full": (
         Path("Test/120/67/4.5.4/split_report.jsonl"),
-        Path("120/67") / VERSION / "split_report.jsonl",
+        Path("120/67") / VERSION / REPORT_JSONL_NAME,
     ),
     "dense_half_frame_full": (
         Path("Test/半格/full/4.5.4/split_report.jsonl"),
-        Path("半格/full") / VERSION / "split_report.jsonl",
+        Path("半格/full") / VERSION / REPORT_JSONL_NAME,
     ),
     "dense_half_frame_partial": (
         Path("Test/半格/partial/4.5.4_partial/split_report.jsonl"),
-        Path("半格/partial") / f"{VERSION}_partial" / "split_report.jsonl",
+        Path("半格/partial") / f"{VERSION}_partial" / REPORT_JSONL_NAME,
     ),
 }
 

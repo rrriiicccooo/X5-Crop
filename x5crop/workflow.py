@@ -11,6 +11,7 @@ from .analysis_reuse import (
     find_reusable_analysis,
     make_analysis_cache_metadata,
 )
+from .app_info import REPORT_JSONL_NAME
 from .config import Config
 from .detection.pipeline import choose_detection
 from .detection.postprocess import finalize_detection_decision
@@ -124,7 +125,7 @@ def _result_from_reusable_analysis(
         return None
 
     status = str(cached_record["status"])
-    warnings.append("reused analysis report: split_report.jsonl")
+    warnings.append(f"reused analysis report: {REPORT_JSONL_NAME}")
     if status == "needs_review":
         warnings.append("cached status is needs_review; skipped export")
         return result_from_cached_record(input_file, cached_record, profile, warnings)

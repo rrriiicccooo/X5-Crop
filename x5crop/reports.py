@@ -5,6 +5,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+from .app_info import REPORT_JSONL_NAME, SUMMARY_CSV_NAME
 from .config import Config
 from .domain import ProcessResult
 from .export.paths import output_directory_for
@@ -58,8 +59,8 @@ def write_reports_for_result(result: ProcessResult, config: Config) -> None:
     if not config.report:
         return
     output_dir = output_directory_for(Path(result.source), config)
-    write_jsonl(output_dir / "split_report.jsonl", result)
-    write_summary(output_dir / "split_summary.csv", result)
+    write_jsonl(output_dir / REPORT_JSONL_NAME, result)
+    write_summary(output_dir / SUMMARY_CSV_NAME, result)
 
 
 __all__ = [

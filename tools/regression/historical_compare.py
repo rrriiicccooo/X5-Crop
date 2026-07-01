@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+from x5crop.app_info import REPORT_JSONL_NAME
+
 from .compare import compare_report_files
 
 
@@ -39,10 +41,12 @@ REFERENCE_REPORTS = {
 
 
 def candidate_report_path(candidate_root: Path, baseline: Path) -> Path:
-    parts = baseline.parts
+    parts = list(baseline.parts)
+    if parts and parts[-1] == "split_report.jsonl":
+        parts[-1] = REPORT_JSONL_NAME
     if parts and parts[0] == "Test":
         return candidate_root.joinpath(*parts[1:])
-    return candidate_root / baseline
+    return candidate_root.joinpath(*parts)
 
 
 def reference_cases(repo_root: Path, candidate_root: Path) -> list[ReferenceCase]:
