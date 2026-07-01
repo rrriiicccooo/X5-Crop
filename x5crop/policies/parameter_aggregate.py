@@ -1,20 +1,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from .parameter_types import (
-    EdgePairParams,
-    OuterMaskProfile,
+
+from .parameter_base import (
     PartialCountParameters,
     PartialEdgeHintParameters,
-    SeparatorGateParameters,
-    LeadingGridFailureParameters,
-    SeparatorGeometrySupportParameters,
-    WideRetryParameters,
+)
+from .parameter_content import (
     ContentEvidenceParameters,
     ContentProfileParameters,
     ContentMaskParameters,
     ContentCandidateParameters,
     ContentSupportParameters,
+)
+from .parameter_diagnostics import (
+    DebugGapOverlayParameters,
+    NearbySeparatorDiagnosticsParameters,
+    DiagnosticOverlapRiskParameters,
+    LuckyPassRiskParameters,
+)
+from .parameter_finalization import (
+    PartialHolderParameters,
+    FinalizationParameters,
+    ApprovedGeometryAdjustmentParameters,
+)
+from .parameter_outer import (
+    OuterMaskProfile,
     OuterStrategyParameters,
     ContentFloatingOuterParameters,
     EdgeAnchorOuterParameters,
@@ -25,25 +36,27 @@ from .parameter_types import (
     GridOuterRefineParameters,
     ShortAxisAspectRetryParameters,
     OuterContentAlignmentParameters,
-    PartialHolderParameters,
+)
+from .parameter_scoring import (
     ScoringCalibrationParameters,
     BaseDetectionScoreParameters,
     SeparatorSupportScoreParameters,
     GeometrySupportScoreParameters,
     CandidateCompetitionParameters,
-    FinalizationParameters,
-    ApprovedGeometryAdjustmentParameters,
-    DebugGapOverlayParameters,
-    NearbySeparatorDiagnosticsParameters,
+)
+from .parameter_separator import (
+    EdgePairParams,
+    SeparatorGateParameters,
+    LeadingGridFailureParameters,
+    SeparatorGeometrySupportParameters,
+    WideRetryParameters,
     NearbySeparatorCorrectionParameters,
     RobustGridParameters,
     GapSearchParameters,
     EnhancedSeparatorParameters,
     SeparatorProfileParameters,
     EdgeRefineProfileParameters,
-    DiagnosticOverlapRiskParameters,
     HardGapTrustParameters,
-    LuckyPassRiskParameters,
 )
 
 

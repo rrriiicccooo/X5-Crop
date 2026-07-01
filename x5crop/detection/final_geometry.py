@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..domain import Box, Detection
 from ..geometry.boxes import map_work_box, original_box_to_work
 from ..geometry.layout import work_gray
@@ -19,7 +19,7 @@ from ..utils import clamp_float, clamp_int
 
 def apply_edge_bleed_protection(
     detection: Detection,
-    config: Config,
+    config: RuntimeConfig,
     image_w: int,
     image_h: int,
     policy: EdgeBleedProtectionPolicy,
@@ -65,7 +65,7 @@ def apply_edge_bleed_protection(
     }
 
 
-def detection_geometry_config(config: Config, policy: OutputPolicy) -> Config:
+def detection_geometry_config(config: RuntimeConfig, policy: OutputPolicy) -> RuntimeConfig:
     return replace(
         config,
         bleed_x=int(policy.detection_long_axis_bleed),
@@ -101,10 +101,10 @@ def detection_has_overlap_bleed_risk(detection: Detection) -> bool:
 
 
 def output_bleed_config_for_detection(
-    config: Config,
+    config: RuntimeConfig,
     detection: Detection,
     policy: OutputPolicy,
-) -> Config:
+) -> RuntimeConfig:
     if not detection_has_overlap_bleed_risk(detection):
         return config
     target_bleed_x = max(int(config.bleed_x), int(policy.overlap_risk_long_axis_bleed))
@@ -113,7 +113,7 @@ def output_bleed_config_for_detection(
     return replace(config, bleed_x=target_bleed_x)
 
 
-def apply_output_bleed(detection: Detection, detection_config: Config, output_config: Config, image_w: int, image_h: int) -> None:
+def apply_output_bleed(detection: Detection, detection_config: RuntimeConfig, output_config: RuntimeConfig, image_w: int, image_h: int) -> None:
     if int(detection_config.bleed_x) == int(output_config.bleed_x) and int(detection_config.bleed_y) == int(output_config.bleed_y):
         return
     frames_work = [original_box_to_work(frame, detection.layout, image_w, image_h) for frame in detection.frames]
@@ -141,7 +141,7 @@ def apply_output_bleed(detection: Detection, detection_config: Config, output_co
     }
 
 
-def reapply_cached_output_bleed(detection: Detection, config: Config, image_w: int, image_h: int) -> None:
+def reapply_cached_output_bleed(detection: Detection, config: RuntimeConfig, image_w: int, image_h: int) -> None:
     output_bleed = detection.detail.get("output_bleed")
     if not isinstance(output_bleed, dict):
         return
@@ -165,7 +165,7 @@ def reapply_cached_output_bleed(detection: Detection, config: Config, image_w: i
 def apply_approved_geometry_adjustment(
     detection: Detection,
     gray: np.ndarray,
-    config: Config,
+    config: RuntimeConfig,
     status: str,
     policy: ApprovedGeometryAdjustmentPolicy,
 ) -> None:

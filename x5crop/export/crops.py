@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import tifffile
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..domain import Detection, ImageProfile
 from ..image.crop_pixels import crop_array, validate_source_crop_pixels
 from ..io import tiff_write_kwargs, validate_written_tiff
@@ -18,7 +18,7 @@ def write_crops(
     source_arr: np.ndarray,
     profile: ImageProfile,
     detection: Detection,
-    config: Config,
+    config: RuntimeConfig,
     deskew_applied: bool,
     output_dir: Path,
 ) -> list[str]:

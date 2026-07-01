@@ -82,7 +82,7 @@ from .runtime_separator import (
 )
 
 if TYPE_CHECKING:
-    from .parameters import FormatParameters
+    from .parameter_aggregate import FormatParameters
 
 
 @dataclass(frozen=True)

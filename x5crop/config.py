@@ -4,15 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from .formats import (
-    ANALYSIS_CHOICES,
-    COMPRESSION_CHOICES,
-    DESKEW_CHOICES,
-    FORMAT_CHOICES,
-    LAYOUT_CHOICES,
-    STRIP_CHOICES,
-)
-
 
 @dataclass(frozen=True)
 class CliOptions:
@@ -79,17 +70,7 @@ class RuntimeConfig:
     jobs: int
 
 
-Config = RuntimeConfig
-
-
 __all__ = [
-    "ANALYSIS_CHOICES",
-    "COMPRESSION_CHOICES",
-    "DESKEW_CHOICES",
-    "FORMAT_CHOICES",
-    "LAYOUT_CHOICES",
-    "STRIP_CHOICES",
     "CliOptions",
-    "Config",
     "RuntimeConfig",
 ]

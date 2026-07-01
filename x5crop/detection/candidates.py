@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..domain import Detection
 from ..formats import FormatSpec
 from ..policies.runtime_policy import DetectionPolicy
@@ -17,7 +17,7 @@ def raw_detection_rank(detection: Detection, threshold: float) -> tuple[int, flo
     )
 
 def candidate_counts_for_format(
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     policy: Optional[DetectionPolicy] = None,
 ) -> list[tuple[int, str, tuple[float, ...]]]:

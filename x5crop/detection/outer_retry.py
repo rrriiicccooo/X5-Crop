@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Detection
 from ..formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
@@ -206,7 +206,7 @@ def corrected_outer_from_alignment(alignment: dict[str, Any], count: int, policy
     return corrected
 
 
-def format_geometry_model_detail(gray: np.ndarray, detection: Detection, config: Config, fmt: FormatSpec, cache: AnalysisCache) -> dict[str, Any]:
+def format_geometry_model_detail(gray: np.ndarray, detection: Detection, config: RuntimeConfig, fmt: FormatSpec, cache: AnalysisCache) -> dict[str, Any]:
     if detection.strip_mode != "full" or detection.count <= 0:
         return {"used": False, "reason": "not_full_strip"}
     aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
@@ -253,7 +253,7 @@ def format_geometry_model_detail(gray: np.ndarray, detection: Detection, config:
 
 def corrected_outer_from_format_geometry(
     detection: Detection,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     geometry_detail: dict[str, Any],
     alignment: dict[str, Any],
@@ -350,7 +350,7 @@ def corrected_outer_from_format_geometry(
 
 def retry_with_format_geometry_outer(
     gray: np.ndarray,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     detection: Detection,
     outer_alignment: dict[str, Any],
@@ -424,7 +424,7 @@ def retry_with_format_geometry_outer(
 
 def retry_with_content_aligned_outer(
     gray: np.ndarray,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     detection: Detection,
     alignment: dict[str, Any],
@@ -489,7 +489,7 @@ def retry_with_content_aligned_outer(
 
 def corrected_outer_for_short_axis_aspect(
     gray: np.ndarray,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     detection: Detection,
     content_detail: dict[str, Any],
@@ -552,7 +552,7 @@ def corrected_outer_for_short_axis_aspect(
 
 def retry_with_short_axis_aspect_outer(
     gray: np.ndarray,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     detection: Detection,
     content_detail: dict[str, Any],
@@ -606,7 +606,7 @@ def retry_with_short_axis_aspect_outer(
 
 def retry_with_outer_correction_proposals(
     gray: np.ndarray,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     detection: Detection,
     content_detail: dict[str, Any],

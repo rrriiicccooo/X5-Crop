@@ -84,8 +84,9 @@ Current stable release: v4.2.8
   基础 format 层不再反向依赖 policy 参数层。
 - Policy profile 层清理完成：删除旧 runtime preset / parameter preset 双拆，
   7 个 `format_*` 文件现在同时拥有 format / mode runtime preset 和对应参数覆盖；
-  `parameter_types.py` 保存 source parameter group dataclass，`parameters.py`
-  只保留 `FormatParameters` aggregate、120 共享默认 helper 和 format 参数解析。
+  source parameter group dataclass 按 `parameter_*.py` owning module 分组，
+  `parameter_aggregate.py` 只保留 flat `FormatParameters` aggregate，
+  `parameter_registry.py` 只保留 120 共享默认 helper 和 format 参数解析。
 - Policy 入口层清理完成：`x5crop.policies.__init__` 不再 re-export runtime
   policy 类型；runtime policy 解析只通过 `x5crop.policies.registry.get_detection_policy`。
 - Policy 合同子层清理完成：`x5crop.policies.ids` 统一拥有 policy id stem 和
@@ -115,8 +116,11 @@ Current stable release: v4.2.8
   modules；Debug Analysis 渲染拆为 canvas、gap overlays、panels、status 和 writer；
   `report_sections.py` 承接 candidate/gate section builder；空的 `x5crop.diagnostics`
   占位包已删除；runtime policy types、factory builders、parameter types 和 parameter
-  registry 已按职责分组，`parameter_aggregate.py` 专门保留 flat `FormatParameters`
-  compatibility aggregate。
+  registry 已按职责分组。
+- 非 Detection 层旧兼容面进一步删除：`x5crop.config` 不再 re-export format choices
+  或提供 `Config` 旧别名；`x5crop`、`x5crop.io`、`x5crop.export`、`x5crop.debug`
+  的 package `__init__` 不再 re-export runtime helper；`parameters.py` 和
+  `parameter_types.py` 两个 policy compatibility re-export 文件已删除。
 - 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出两条路径。
@@ -244,9 +248,10 @@ Verified:
 - Policy profile layout is consolidated: the old split between runtime preset
   modules and parameter preset modules is removed, and the 7 `format_*` files
   now own both each format / mode runtime preset and that format's parameter
-  overrides. `parameter_types.py` stores source parameter group dataclasses,
-  while `parameters.py` only keeps the `FormatParameters` aggregate, shared 120
-  defaults, and format parameter resolution.
+  overrides. Source parameter group dataclasses are grouped by owning
+  `parameter_*.py` modules, `parameter_aggregate.py` only keeps the flat
+  `FormatParameters` aggregate, and `parameter_registry.py` owns shared 120
+  defaults plus format parameter resolution.
 - The policy contract sublayer is cleaned up: `x5crop.policies.ids` owns shared
   policy id stems and the report schema version, `factory_presets.py` owns the
   format / mode preset contract, `runtime_policy.py` owns the runtime
@@ -274,8 +279,12 @@ Verified:
   writer modules; `report_sections.py` owns candidate/gate section builders; the
   empty `x5crop.diagnostics` placeholder package is removed; runtime policy
   types, factory builders, parameter types, and the parameter registry are
-  grouped by responsibility, while `parameter_aggregate.py` specifically owns
-  the flat `FormatParameters` compatibility aggregate.
+  grouped by responsibility.
+- Non-detection compatibility surfaces are further removed: `x5crop.config` no
+  longer re-exports format choices or provides the old `Config` alias; the
+  `x5crop`, `x5crop.io`, `x5crop.export`, and `x5crop.debug` package
+  `__init__` files no longer re-export runtime helpers; the `parameters.py` and
+  `parameter_types.py` policy compatibility re-export files are removed.
 - 14 format / strip-mode V4.9 decision contract policy smoke tests pass.
 - One-file Debug Analysis smoke writes the V4.9 three-panel debug JPG.
 - Cached analysis reuse smoke covers both approved auto-export and needs_review

@@ -1,10 +1,3 @@
-"""X5 Crop package.
+"""X5 Crop package marker."""
 
-The public launcher workflow stays simple while the implementation is split
-into focused importable modules. Architecture changes should remain regression
-checked against the validated crop behavior.
-"""
-
-from .app_info import SCRIPT_NAME, VERSION
-
-__all__ = ["SCRIPT_NAME", "VERSION"]
+__all__: tuple[str, ...] = ()

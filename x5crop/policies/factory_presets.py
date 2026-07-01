@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from .runtime_policy import FrameFitPolicy, SeparatorEdgePairPolicy
 
 if TYPE_CHECKING:
-    from .parameters import FormatParameters
+    from .parameter_aggregate import FormatParameters
 
 
 @dataclass(frozen=True)

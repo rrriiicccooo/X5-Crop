@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..constants import (
     ANALYSIS_SOURCE_PARALLEL_LANE,
     ANALYSIS_SOURCE_UNSUPPORTED,
@@ -46,7 +46,7 @@ def split_parallel_strip_lanes(gray_work: np.ndarray) -> list[Box]:
 
 def detect_parallel_strip_lane(
     gray: np.ndarray,
-    config: Config,
+    config: RuntimeConfig,
     lane: Box,
     lane_index: int,
     cache,
@@ -118,7 +118,7 @@ def detect_parallel_strip_lane(
     return best
 
 
-def unsupported_parallel_lane_partial_detection(gray: np.ndarray, config: Config) -> Detection:
+def unsupported_parallel_lane_partial_detection(gray: np.ndarray, config: RuntimeConfig) -> Detection:
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
     outer = Box(0, 0, ww, wh)
@@ -155,7 +155,7 @@ def unsupported_parallel_lane_partial_detection(gray: np.ndarray, config: Config
     )
 
 
-def choose_parallel_lane_detection(gray: np.ndarray, config: Config, cache) -> Detection:
+def choose_parallel_lane_detection(gray: np.ndarray, config: RuntimeConfig, cache) -> Detection:
     from .fallback import hard_fallback_detection
 
     if config.strip_mode != "full":

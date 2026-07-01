@@ -4,7 +4,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..domain import Detection
 from ..formats import FormatSpec
 from ..analysis_cache import make_analysis_cache
@@ -20,7 +20,7 @@ from .fallback import hard_fallback_detection
 from .selection import select_detection_candidate
 
 
-def choose_detection(gray: np.ndarray, config: Config, fmt: FormatSpec, cache: Optional[AnalysisCache] = None) -> Detection:
+def choose_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec, cache: Optional[AnalysisCache] = None) -> Detection:
     candidates: list[Detection] = []
     cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
     policy = get_detection_policy(fmt.name, config.strip_mode)

@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..constants import (
     ANALYSIS_SOURCE_CONTENT,
     ANALYSIS_SOURCE_SEPARATOR,
@@ -35,7 +35,7 @@ from .scoring import (
 def apply_candidate_decision_policy(
     gray: np.ndarray,
     detection: Detection,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     source: str,
     cache: Optional[AnalysisCache] = None,

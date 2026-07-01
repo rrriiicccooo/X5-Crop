@@ -3,7 +3,7 @@ from __future__ import annotations
 from .runtime_policy import FULL, PARTIAL, FrameFitPolicy, SeparatorEdgePairPolicy
 from .factory import build_policy_from_preset
 from .factory_presets import FormatPolicyPreset, ModePolicyPreset
-from .parameters import FormatParameters
+from .parameter_aggregate import FormatParameters
 
 FORMAT_ID = "135"
 

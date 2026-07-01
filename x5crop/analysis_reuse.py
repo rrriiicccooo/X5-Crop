@@ -7,13 +7,13 @@ from typing import Any, Optional
 import numpy as np
 
 from .app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
-from .config import Config
+from .config import RuntimeConfig
 from .detection.final_geometry import output_bleed_config_for_detection, reapply_cached_output_bleed
 from .domain import Box, Detection, Gap, ImageProfile, ProcessResult
 from .export.crops import write_crops
 from .image.evidence import make_gray_u8
 from .image.transforms import rotate_array_expand
-from .io import read_tiff
+from .io.tiff import read_tiff
 from .policies.registry import get_detection_policy
 from .result_builder import result_from_cached_record, result_from_detection
 from .runtime import REPORT_RECORD_CACHE
@@ -33,7 +33,7 @@ def source_cache_signature(input_file: Path, profile: ImageProfile, page_index: 
     }
 
 
-def config_cache_signature(config: Config) -> dict[str, Any]:
+def config_cache_signature(config: RuntimeConfig) -> dict[str, Any]:
     return {
         "film_format": config.film_format,
         "layout": config.layout,
@@ -48,7 +48,7 @@ def config_cache_signature(config: Config) -> dict[str, Any]:
     }
 
 
-def make_analysis_cache_metadata(input_file: Path, profile: ImageProfile, config: Config) -> dict[str, Any]:
+def make_analysis_cache_metadata(input_file: Path, profile: ImageProfile, config: RuntimeConfig) -> dict[str, Any]:
     return {
         "script": SCRIPT_NAME,
         "version": VERSION,
@@ -88,7 +88,7 @@ def detection_from_record(record: dict[str, Any]) -> Detection:
     )
 
 
-def cached_record_matches(record: dict[str, Any], input_file: Path, profile: ImageProfile, config: Config) -> bool:
+def cached_record_matches(record: dict[str, Any], input_file: Path, profile: ImageProfile, config: RuntimeConfig) -> bool:
     detail = record.get("detail")
     if not isinstance(detail, dict):
         return False
@@ -143,7 +143,7 @@ def find_reusable_analysis(
     input_file: Path,
     output_dir: Path,
     profile: ImageProfile,
-    config: Config,
+    config: RuntimeConfig,
 ) -> Optional[dict[str, Any]]:
     report_path = output_dir / REPORT_JSONL_NAME
     for record in load_report_records(report_path):
@@ -174,7 +174,7 @@ def apply_cached_deskew(
 
 def result_from_reusable_analysis(
     input_file: Path,
-    config: Config,
+    config: RuntimeConfig,
     output_dir: Path,
     profile: ImageProfile,
     warnings: list[str],

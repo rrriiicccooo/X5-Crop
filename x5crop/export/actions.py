@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..domain import Detection, ImageProfile
 from .crops import write_crops
 from .review import copy_for_review, review_directory_for
@@ -12,7 +12,7 @@ from .review import copy_for_review, review_directory_for
 def copy_for_review_if_needed(
     input_file: Path,
     output_dir: Path,
-    config: Config,
+    config: RuntimeConfig,
     detection: Detection,
     status: str,
     warnings: list[str],
@@ -36,7 +36,7 @@ def write_crops_if_allowed(
     source_arr: Any,
     profile: ImageProfile,
     detection: Detection,
-    config: Config,
+    config: RuntimeConfig,
     deskew_applied: bool,
     output_dir: Path,
     status: str,

@@ -3,14 +3,14 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from .config import Config
+from .config import RuntimeConfig
 from .domain import ImageProfile
 from .formats import FormatSpec
 from .geometry.layout import work_gray
 from .image.deskew import choose_deskew_angle
 from .image.evidence import make_gray_u8
 from .image.transforms import rotate_array_expand
-from .policies.parameters import format_parameters
+from .policies.parameter_registry import format_parameters
 from .utils import clamp_float
 
 
@@ -18,7 +18,7 @@ def apply_deskew(
     arr: Any,
     gray: Any,
     profile: ImageProfile,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     warnings: list[str],
 ) -> tuple[Any, Any, dict[str, Any]]:

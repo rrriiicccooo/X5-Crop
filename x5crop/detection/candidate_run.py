@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..domain import Detection
 from ..formats import FormatSpec
 from ..geometry.boxes import original_box_to_work
@@ -239,7 +239,7 @@ def should_try_dark_band_candidates(
 
 def detect_candidate_for_count(
     gray: np.ndarray,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     count: int,
     strip_mode: str,
@@ -407,7 +407,7 @@ def detect_candidate_for_count(
 
 def detect_fallback_outer_proposal_candidate_for_count(
     gray: np.ndarray,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     count: int,
     strip_mode: str,
@@ -462,7 +462,7 @@ def detect_fallback_outer_proposal_candidate_for_count(
 
 def calibrated_candidates_for_count(
     gray: np.ndarray,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     count: int,
     strip_mode: str,

@@ -7,7 +7,7 @@ import numpy as np
 
 from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
-from ..policies.parameter_types import EdgePairParams
+from ..policies.parameter_separator import EdgePairParams
 from ..policies.runtime_policy import EdgeRefineProfilePolicy
 from ..runtime import AnalysisCache
 from ..utils import clamp_float, clamp_int

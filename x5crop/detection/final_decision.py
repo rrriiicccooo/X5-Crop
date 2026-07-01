@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..constants import (
     ANALYSIS_SOURCE_CONTENT,
     ANALYSIS_SOURCE_CONTENT_PRIMARY,
@@ -248,7 +248,7 @@ def risk_summary_for(
 def apply_final_decision_policy(
     gray: np.ndarray,
     detection: Detection,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],

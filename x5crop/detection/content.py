@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..domain import Box, Detection, Gap
 from ..formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ..image.evidence import make_content_evidence_gray
@@ -346,7 +346,7 @@ def content_mask_outer_detail(
 
 def content_detection_for_count(
     gray: np.ndarray,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     count: int,
     strip_mode: str,

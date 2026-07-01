@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..domain import Detection
 from ..formats import FormatSpec
 from .final_geometry import (
@@ -43,7 +43,7 @@ from ..constants import (
 class DetectionFinalizationResult:
     detection: Detection
     status: str
-    output_config: Config
+    output_config: RuntimeConfig
     content_detail: dict[str, Any]
     outer_alignment: dict[str, Any]
 
@@ -51,7 +51,7 @@ class DetectionFinalizationResult:
 def finalize_detection(
     gray: np.ndarray,
     detection: Detection,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     analysis_cache: AnalysisCache,
     deskew_detail: dict[str, Any],

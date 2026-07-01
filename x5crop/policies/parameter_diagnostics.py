@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -14,6 +13,7 @@ class DebugGapOverlayParameters:
     hard_line_width: int
     model_line_width: int
     diagnostic_line_width: int
+
 
 @dataclass(frozen=True)
 class NearbySeparatorDiagnosticsParameters:
@@ -29,6 +29,7 @@ class NearbySeparatorDiagnosticsParameters:
     detail_score_add: float
     detail_score_multiplier: float
 
+
 @dataclass(frozen=True)
 class DiagnosticOverlapRiskParameters:
     mean_min: float
@@ -38,6 +39,7 @@ class DiagnosticOverlapRiskParameters:
     medium_activity: float
     strong_continuity: float
     strong_activity: float
+
 
 @dataclass(frozen=True)
 class LuckyPassRiskParameters:
@@ -63,54 +65,10 @@ class LuckyPassRiskParameters:
     stable_geometry_credit: float
     risk_threshold: float
 
-__all__ = [
-    "EdgePairParams",
-    "OuterMaskProfile",
-    "PartialCountParameters",
-    "PartialEdgeHintParameters",
-    "SeparatorGateParameters",
-    "LeadingGridFailureParameters",
-    "SeparatorGeometrySupportParameters",
-    "WideRetryParameters",
-    "ContentEvidenceParameters",
-    "ContentProfileParameters",
-    "ContentMaskParameters",
-    "ContentCandidateParameters",
-    "ContentSupportParameters",
-    "OuterStrategyParameters",
-    "ContentFloatingOuterParameters",
-    "EdgeAnchorOuterParameters",
-    "BaseOuterCandidateParameters",
-    "SeparatorOuterBandParameters",
-    "SeparatorGeometryOuterParameters",
-    "FormatGeometryRetryParameters",
-    "GridOuterRefineParameters",
-    "ShortAxisAspectRetryParameters",
-    "OuterContentAlignmentParameters",
-    "PartialHolderParameters",
-    "ScoringCalibrationParameters",
-    "BaseDetectionScoreParameters",
-    "SeparatorSupportScoreParameters",
-    "GeometrySupportScoreParameters",
-    "CandidateCompetitionParameters",
-    "FinalizationParameters",
-    "ApprovedGeometryAdjustmentParameters",
-    "DebugGapOverlayParameters",
-    "NearbySeparatorDiagnosticsParameters",
-    "NearbySeparatorCorrectionParameters",
-    "RobustGridParameters",
-    "GapSearchParameters",
-    "EnhancedSeparatorParameters",
-    "SeparatorProfileParameters",
-    "EdgeRefineProfileParameters",
-    "DiagnosticOverlapRiskParameters",
-    "HardGapTrustParameters",
-    "LuckyPassRiskParameters",
-]
 
 __all__ = [
-    'DebugGapOverlayParameters',
-    'NearbySeparatorDiagnosticsParameters',
-    'DiagnosticOverlapRiskParameters',
-    'LuckyPassRiskParameters',
+    "DebugGapOverlayParameters",
+    "NearbySeparatorDiagnosticsParameters",
+    "DiagnosticOverlapRiskParameters",
+    "LuckyPassRiskParameters",
 ]

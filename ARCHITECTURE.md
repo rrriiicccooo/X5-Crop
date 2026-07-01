@@ -46,8 +46,9 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 
 2. `x5crop.cli` / `x5crop.config`
    - 只解析命令行参数并构造 `CliOptions`。
-   - `x5crop.config` 拥有 `CliOptions`、`RuntimeConfig` 和 shared choice
-     re-export，是入口 / startup 与 workflow 之间的配置契约。
+   - `x5crop.config` 只拥有 `CliOptions` 和 `RuntimeConfig`，是入口 /
+     startup 与 workflow 之间的配置契约。
+   - CLI choice 常量属于 `x5crop.formats`，不从 `x5crop.config` re-export。
    - 捕获入口层错误并返回 CLI exit code。
    - 不读取 TIFF，不推断 layout，不调度 worker。
 
@@ -85,21 +86,21 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
      policy value object 按 `runtime_base.py`、`runtime_outer.py`、
      `runtime_separator.py`、`runtime_content.py`、`runtime_candidate.py`、
      `runtime_final.py`、`runtime_diagnostics.py` 分组。
-   - `parameter_types.py` 是 source parameter group dataclass 的 re-export 面；
-     具体类型按 `parameter_content.py`、`parameter_outer.py`、
+   - source parameter group dataclass 按 `parameter_content.py`、`parameter_outer.py`、
      `parameter_separator.py`、`parameter_scoring.py`、`parameter_finalization.py`
      和 `parameter_diagnostics.py` 分组。
-   - `parameter_aggregate.py` 保存 flat `FormatParameters` compatibility
-     aggregate 和 property views；`parameter_registry.py` 保存 120 共享默认 helper
-     和 format 参数解析；`parameters.py` 只是兼容 re-export 面。
+   - `parameter_aggregate.py` 保存 flat `FormatParameters` aggregate 和
+     property views；`parameter_registry.py` 保存 120 共享默认 helper 和 format
+     参数解析。
    - `factory_presets.py` 定义 format / mode preset contract；`factory.py` 只做
      runtime `DetectionPolicy` 总装，具体 builder 按 `factory_*` 文件分组。
    - `reporting.py` 只负责 runtime policy detail serializer，不拥有 detection
      result schema。
    - `decision_contract.py` 是 V4.9 public decision policy contract；
      `decision_overrides.py` 保存 format / mode decision evidence 覆盖。
-   - `__init__.py` 只标记 package，不作为 compatibility barrel 或 public
-     re-export surface。
+   - `x5crop.__init__`、`x5crop.io.__init__`、`x5crop.export.__init__`、
+     `x5crop.debug.__init__` 和 `x5crop.policies.__init__` 只标记 package，
+     不作为 compatibility barrel 或 public re-export surface。
 
 8. `x5crop.formats`
    - 是 format identity、physical spec、count/aspect facts 和 CLI choice 的唯一
@@ -168,10 +169,10 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 | --- | --- | --- | --- |
 | 1-5 Entry / startup：`X5_Crop.py`、`x5crop.cli`、`x5crop.config`、`x5crop.interactive`、`x5crop.input_probe`、`x5crop.app` | 已人工审核并清理 | 彻底干净 | 薄入口、参数解析、配置契约、交互菜单、输入探测和 app 调度边界清楚；后续避免把 TIFF 读取、layout 推断或 detection 放回入口。 |
 | 6 Workflow：`x5crop.workflow`、`x5crop.source_config`、`x5crop.deskew_runtime` | 已人工审核并清理 | 彻底干净 | `workflow.py` 只保留单图主流程；cached analysis、runtime deskew、review/export、Debug outputs 和 report 写入均由 owning module 承接。 |
-| 7 Policy：`x5crop.policies` | 已人工审核并清理 | 彻底干净 | runtime policy types、factory builders、parameter types、format registry 和 parameter registry 已按职责分组；`factory.py` / `runtime_policy.py` / `parameter_types.py` / `parameters.py` 只保留总装或 re-export 面。`parameter_aggregate.py` 仍较大，但只承担 flat `FormatParameters` compatibility aggregate 一个职责。 |
+| 7 Policy：`x5crop.policies` | 已人工审核并清理 | 彻底干净 | runtime policy types、factory builders、parameter modules、format registry 和 parameter registry 已按职责分组；旧 `parameters.py` / `parameter_types.py` 兼容 re-export 层已删除。`parameter_aggregate.py` 仍较大，但只承担 flat `FormatParameters` aggregate 一个职责。 |
 | 8 Format：`x5crop.formats` | 已人工审核并清理 | 彻底干净 | format identity、physical spec、count/aspect facts 和 CLI choice 已集中为唯一 source of truth；不反向依赖 policy。 |
 | 9 Geometry / Image / IO | 已深度审核并清理 | 彻底干净 | 基础能力边界清楚：geometry 返回低层 box / gap / frame helper，image 负责灰度/deskew/像素变换，io 负责 TIFF profile；不拥有 candidate、gate、PASS/REVIEW 或 output bleed 语义。 |
-| 10 Detection：`x5crop.detection` | 已高层审核，细分审核暂缓 | 未彻底干净 | 这是当前最大复杂源；`outer.py`、`outer_retry.py`、`candidate_run.py`、`content.py`、`diagnostics.py` 仍偏大。下一轮应按 outer、candidate、evidence、gate、decision、finalization 子层继续人工审核。 |
+| 10 Detection：`x5crop.detection` | 已高层审核，细分审核暂缓 | 未彻底干净 | 这是当前最大复杂源；`outer.py`、`outer_retry.py`、`candidate_run.py`、`content.py`、`diagnostics.py` 仍偏大，`detection.__init__` 仍是第 10 层 re-export 面。下一轮应按 outer、candidate、evidence、gate、decision、finalization 子层继续人工审核。 |
 | 11 Output / Report / Debug：`analysis_cache`、`analysis_reuse`、`export`、`result_builder`、`report_schema`、`report_sections`、`report_outputs`、`debug` | 已人工审核并清理 | 彻底干净 | Debug 已拆为 canvas、gap overlays、panels、status 和 writer；Debug status 优先消费最终 decision summary。`report_schema` 只组装稳定 schema，candidate/gate section builder 归属 `report_sections.py`。空的 `x5crop.diagnostics` 占位包已删除。 |
 | 12 Regression tools：`tools/regression` | 未人工审核 | 未判定 | 该目录是开发期工具，并且当前 sparse checkout 可能未展开；展开后再按 dev-tool 层单独审核，不应进入 runtime package。 |
 | Shared primitives：`domain`、`runtime`、`utils`、`constants`、`app_info`、`detection_detail` | 已独立人工审核 | 彻底干净 | 基础 dataclass、运行缓存、通用 helper、常量、版本/报告文件名和 stable detail key surface 均无反向依赖 workflow/debug/policy builder/detection pipeline。 |
@@ -181,7 +182,7 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 | 范围 | 当前文件 | 复审结论 | 后续约束 |
 | --- | --- | --- | --- |
 | Workflow / runtime glue | `workflow.py`、`source_config.py`、`deskew_runtime.py`、`analysis_reuse.py`、`debug/outputs.py`、`export/actions.py` | 彻底干净。`workflow.py` 保持约 110 行，只做 read -> deskew -> detect -> finalization -> export -> report/debug 编排；cached analysis、profile-to-config、deskew、review copy、crop writing、Debug output 和 report writing 均已交给 owning module。 | 不把 scoring、candidate selection、TIFF metadata 写入细节、Debug 渲染或 report section 组装放回 workflow。 |
-| Policy runtime / factory / parameters | `runtime_*.py`、`factory_*.py`、`parameter_*.py`、`format_*.py`、`registry.py`、`ids.py`、`decision_contract.py`、`decision_overrides.py`、`reporting.py` | 彻底干净。runtime contract、factory builder、source parameter type、format preset、decision contract 和 policy report serializer 已分开；`factory.py` 只做总装，`runtime_policy.py` 只定义 DetectionPolicy contract / re-export，`parameters.py` 与 `parameter_types.py` 只做 compatibility re-export。`parameter_aggregate.py` 仍大，但职责单一：flat `FormatParameters` aggregate 和 property views。 | 新参数必须先判断是 physical fact、runtime evidence wiring、source parameter、decision policy 还是 report/debug policy，不允许塞回一个大 bucket。 |
+| Policy runtime / factory / parameters | `runtime_*.py`、`factory_*.py`、`parameter_*.py`、`format_*.py`、`registry.py`、`ids.py`、`decision_contract.py`、`decision_overrides.py`、`reporting.py` | 彻底干净。runtime contract、factory builder、source parameter type、format preset、decision contract 和 policy report serializer 已分开；`factory.py` 只做总装，`runtime_policy.py` 只定义 DetectionPolicy contract / re-export；旧 `parameters.py` 与 `parameter_types.py` 已删除。`parameter_aggregate.py` 仍大，但职责单一：flat `FormatParameters` aggregate 和 property views。 | 新参数必须先判断是 physical fact、runtime evidence wiring、source parameter、decision policy 还是 report/debug policy，不允许塞回一个大 bucket。 |
 | Output / Report / Debug | `analysis_cache.py`、`analysis_reuse.py`、`result_builder.py`、`report_schema.py`、`report_sections.py`、`report_outputs.py`、`export/*`、`debug/*` | 彻底干净。`report_schema.py` 只做稳定 schema assembly；candidate table、selected candidate 和 gate records 在 `report_sections.py`；Debug 已拆成 canvas、gap overlays、panels、status、writer、outputs，空的 `x5crop.diagnostics` 包已删除。 | `detection/diagnostics.py` 仍属于 detection 内部只读诊断，不是 output/debug 层；如果继续清 detection，应同时考虑是否改名降低歧义。 |
 | Shared primitives | `domain.py`、`runtime.py`、`utils.py`、`constants.py`、`app_info.py`、`detection_detail.py` | 彻底干净。基础 dataclass、analysis cache runtime object、通用 helper、常量、版本/报告文件名和 stable detail key surface 没有反向依赖 workflow、debug、policy builder 或 detection pipeline。 | 只能放无上层语义的共享 primitive；不能承载 candidate、gate、policy factory、report rendering 或 PASS/REVIEW 规则。 |
 
@@ -331,9 +332,10 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 
 2. `x5crop.cli` / `x5crop.config`
    - Only parses CLI arguments into `CliOptions`.
-   - `x5crop.config` owns `CliOptions`, `RuntimeConfig`, and shared choice
-     re-exports as the configuration contract between entry / startup and
-     workflow.
+   - `x5crop.config` owns only `CliOptions` and `RuntimeConfig` as the
+     configuration contract between entry / startup and workflow.
+   - CLI choice constants belong to `x5crop.formats` and are not re-exported
+     from `x5crop.config`.
    - Catches entry-layer errors and returns CLI exit codes.
    - Does not read TIFFs, infer layout, or schedule workers.
 
@@ -371,14 +373,12 @@ together, while TIFF I/O and export-quality behavior remain preserved.
      policy value objects are grouped into `runtime_base.py`, `runtime_outer.py`,
      `runtime_separator.py`, `runtime_content.py`, `runtime_candidate.py`,
      `runtime_final.py`, and `runtime_diagnostics.py`.
-   - `parameter_types.py` is the re-export surface for source parameter group
-     dataclasses; concrete types are grouped into `parameter_content.py`,
+   - Source parameter group dataclasses are grouped into `parameter_content.py`,
      `parameter_outer.py`, `parameter_separator.py`, `parameter_scoring.py`,
      `parameter_finalization.py`, and `parameter_diagnostics.py`.
-   - `parameter_aggregate.py` stores the flat `FormatParameters` compatibility
-     aggregate and property views; `parameter_registry.py` stores shared 120
-     defaults and format parameter resolution; `parameters.py` is only a
-     compatibility re-export surface.
+   - `parameter_aggregate.py` stores the flat `FormatParameters` aggregate and
+     property views; `parameter_registry.py` stores shared 120 defaults and
+     format parameter resolution.
    - `factory_presets.py` defines the format / mode preset contract; `factory.py`
      only assembles runtime `DetectionPolicy`, while concrete builders live in
      `factory_*` modules.
@@ -386,8 +386,9 @@ together, while TIFF I/O and export-quality behavior remain preserved.
      detection result schema.
    - `decision_contract.py` is the V4.9 public decision policy contract;
      `decision_overrides.py` stores format / mode decision evidence overrides.
-   - `__init__.py` is only a package marker, not a compatibility barrel or
-     public re-export surface.
+   - `x5crop.__init__`, `x5crop.io.__init__`, `x5crop.export.__init__`,
+     `x5crop.debug.__init__`, and `x5crop.policies.__init__` are only package
+     markers, not compatibility barrels or public re-export surfaces.
 
 8. `x5crop.formats`
    - Is the single source of truth for format identity, physical specs,
@@ -462,10 +463,10 @@ section.
 | --- | --- | --- | --- |
 | 1-5 Entry / startup: `X5_Crop.py`, `x5crop.cli`, `x5crop.config`, `x5crop.interactive`, `x5crop.input_probe`, `x5crop.app` | Reviewed and cleaned | Fully clean | Thin entry, argument parsing, configuration contract, interactive menu, input probing, and app scheduling have clear boundaries; keep TIFF reads, layout inference, and detection out of this layer. |
 | 6 Workflow: `x5crop.workflow`, `x5crop.source_config`, `x5crop.deskew_runtime` | Reviewed and cleaned | Fully clean | `workflow.py` now keeps only the single-image main flow; cached analysis, runtime deskew, review/export, Debug outputs, and report writing are delegated to owning modules. |
-| 7 Policy: `x5crop.policies` | Reviewed and cleaned | Fully clean | Runtime policy types, factory builders, parameter types, format registry, and parameter registry are grouped by responsibility; `factory.py`, `runtime_policy.py`, `parameter_types.py`, and `parameters.py` are now assembly or re-export surfaces. `parameter_aggregate.py` remains large, but owns only the flat `FormatParameters` compatibility aggregate. |
+| 7 Policy: `x5crop.policies` | Reviewed and cleaned | Fully clean | Runtime policy types, factory builders, parameter modules, format registry, and parameter registry are grouped by responsibility; the old `parameters.py` / `parameter_types.py` compatibility re-export layers are removed. `parameter_aggregate.py` remains large, but owns only the flat `FormatParameters` aggregate. |
 | 8 Format: `x5crop.formats` | Reviewed and cleaned | Fully clean | Format identity, physical specs, count/aspect facts, and CLI choices are centralized as the single source of truth; this layer does not import policy. |
 | 9 Geometry / Image / IO | Deep-reviewed and cleaned | Fully clean | Lower-level capability boundaries are clear: geometry owns box/gap/frame helpers, image owns grayscale/deskew/pixel transforms, and io owns TIFF profile handling; no candidate, gate, PASS/REVIEW, or output bleed semantics belong here. |
-| 10 Detection: `x5crop.detection` | High-level reviewed, detailed review deferred | Not fully clean | This is the largest complexity source. `outer.py`, `outer_retry.py`, `candidate_run.py`, `content.py`, and `diagnostics.py` remain large. Continue with outer, candidate, evidence, gate, decision, and finalization sublayer reviews. |
+| 10 Detection: `x5crop.detection` | High-level reviewed, detailed review deferred | Not fully clean | This is the largest complexity source. `outer.py`, `outer_retry.py`, `candidate_run.py`, `content.py`, and `diagnostics.py` remain large, and `detection.__init__` remains the layer-10 re-export surface. Continue with outer, candidate, evidence, gate, decision, and finalization sublayer reviews. |
 | 11 Output / Report / Debug: `analysis_cache`, `analysis_reuse`, `export`, `result_builder`, `report_schema`, `report_sections`, `report_outputs`, `debug` | Reviewed and cleaned | Fully clean | Debug is split into canvas, gap overlays, panels, status, and writer modules; Debug status prefers the final decision summary. `report_schema` only assembles the stable schema, candidate/gate section builders live in `report_sections.py`, and the empty `x5crop.diagnostics` placeholder package has been removed. |
 | 12 Regression tools: `tools/regression` | Not manually reviewed | Undetermined | This is a developer-tool layer and may be absent from the current sparse checkout; review it separately when expanded, and keep it out of the runtime package. |
 | Shared primitives: `domain`, `runtime`, `utils`, `constants`, `app_info`, `detection_detail` | Independently reviewed | Fully clean | Base dataclasses, runtime caches, generic helpers, constants, version/report filenames, and stable detail-key surface have no reverse dependency on workflow/debug/policy builders/detection pipeline. |
@@ -475,7 +476,7 @@ section.
 | Scope | Current files | Review result | Constraint |
 | --- | --- | --- | --- |
 | Workflow / runtime glue | `workflow.py`, `source_config.py`, `deskew_runtime.py`, `analysis_reuse.py`, `debug/outputs.py`, `export/actions.py` | Fully clean. `workflow.py` stays around 110 lines and only orchestrates read -> deskew -> detect -> finalization -> export -> report/debug. Cached analysis, profile-to-config, deskew, review copies, crop writing, Debug output, and report writing are delegated to owning modules. | Do not move scoring, candidate selection, TIFF metadata write details, Debug rendering, or report section assembly back into workflow. |
-| Policy runtime / factory / parameters | `runtime_*.py`, `factory_*.py`, `parameter_*.py`, `format_*.py`, `registry.py`, `ids.py`, `decision_contract.py`, `decision_overrides.py`, `reporting.py` | Fully clean. Runtime contracts, factory builders, source parameter types, format presets, decision contracts, and policy report serialization are separated. `factory.py` only assembles policies, `runtime_policy.py` only defines the DetectionPolicy contract / re-export surface, and `parameters.py` / `parameter_types.py` only provide compatibility re-exports. `parameter_aggregate.py` remains large but has one job: the flat `FormatParameters` aggregate and property views. | Classify new parameters as physical facts, runtime evidence wiring, source parameters, decision policy, or report/debug policy before adding them; do not rebuild a single mixed bucket. |
+| Policy runtime / factory / parameters | `runtime_*.py`, `factory_*.py`, `parameter_*.py`, `format_*.py`, `registry.py`, `ids.py`, `decision_contract.py`, `decision_overrides.py`, `reporting.py` | Fully clean. Runtime contracts, factory builders, source parameter types, format presets, decision contracts, and policy report serialization are separated. `factory.py` only assembles policies, `runtime_policy.py` only defines the DetectionPolicy contract / re-export surface, and the old `parameters.py` / `parameter_types.py` files are removed. `parameter_aggregate.py` remains large but has one job: the flat `FormatParameters` aggregate and property views. | Classify new parameters as physical facts, runtime evidence wiring, source parameters, decision policy, or report/debug policy before adding them; do not rebuild a single mixed bucket. |
 | Output / Report / Debug | `analysis_cache.py`, `analysis_reuse.py`, `result_builder.py`, `report_schema.py`, `report_sections.py`, `report_outputs.py`, `export/*`, `debug/*` | Fully clean. `report_schema.py` only assembles the stable schema. Candidate table, selected candidate, and gate records live in `report_sections.py`. Debug is split into canvas, gap overlays, panels, status, writer, and outputs, and the empty `x5crop.diagnostics` package is removed. | `detection/diagnostics.py` is still detection-internal read-only diagnostics, not the output/debug layer. When detection cleanup resumes, consider renaming or splitting it to reduce ambiguity. |
 | Shared primitives | `domain.py`, `runtime.py`, `utils.py`, `constants.py`, `app_info.py`, `detection_detail.py` | Fully clean. Base dataclasses, analysis-cache runtime objects, generic helpers, constants, version/report filenames, and stable detail-key surface have no reverse dependency on workflow, debug, policy builders, or the detection pipeline. | Keep this layer free of upper-layer semantics: no candidates, gates, policy factory behavior, report rendering, or PASS/REVIEW rules. |
 

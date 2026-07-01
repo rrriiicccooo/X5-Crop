@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..formats import FORMATS
 from .factory_presets import FormatPolicyPreset, ModePolicyPreset
-from .parameters import FormatParameters
+from .parameter_aggregate import FormatParameters
 from .runtime_policy import (
     FULL,
     CountPolicy,

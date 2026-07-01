@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..config import Config
+from ..config import RuntimeConfig
 from ..domain import Box, Detection, Gap
 from ..formats import FormatSpec
 from ..geometry.boxes import map_work_box
@@ -32,7 +32,7 @@ from .separator import dark_band_gaps_for_outer
 
 def build_detection_for_outer(
     gray: np.ndarray,
-    config: Config,
+    config: RuntimeConfig,
     fmt: FormatSpec,
     count: int,
     strip_mode: str,

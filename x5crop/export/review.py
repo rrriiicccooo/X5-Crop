@@ -3,10 +3,10 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from ..config import Config
+from ..config import RuntimeConfig
 
 
-def review_directory_for(output_dir: Path, config: Config) -> Path:
+def review_directory_for(output_dir: Path, config: RuntimeConfig) -> Path:
     return config.review_dir if config.review_dir is not None else output_dir / "needs_review"
 
 
