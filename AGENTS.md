@@ -146,8 +146,8 @@ macOS installer behavior:
 ## Regression Priorities
 
 When detection changes are made, prefer V4.9 classification with
-`python3 -m x5crop.regression.reference_classify --candidate-root <root>`. Use
-`python3 -m x5crop.regression.compare` when raw field diffs are needed.
+`python3 -m tools.regression.reference_classify --candidate-root <root>`. Use
+`python3 -m tools.regression.compare` when raw field diffs are needed.
 
 Core fields to protect:
 
@@ -171,7 +171,7 @@ Key local sets:
 For source or policy changes, also run:
 
 ```bash
-python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/policies/*.py x5crop/geometry/*.py x5crop/io/*.py x5crop/image/*.py x5crop/export/*.py x5crop/diagnostics/*.py x5crop/regression/*.py
+python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/policies/*.py x5crop/geometry/*.py x5crop/io/*.py x5crop/image/*.py x5crop/export/*.py x5crop/diagnostics/*.py tools/regression/*.py
 git diff --check
 python3 X5_Crop.py --version
 ```
@@ -207,7 +207,7 @@ Recent verified baseline:
 - `git diff --check` passed.
 - V4.9 decision contract policy smoke passed for 14 format / strip-mode combinations.
 - Seven local V4.5.4 reference sets produced 0 `unacceptable_wrong_pass` and 0
-  `risky_regression` with `python3 -m x5crop.regression.reference_classify`.
+  `risky_regression` with `python3 -m tools.regression.reference_classify`.
 - V4.9 no longer treats V4.5.4 as a mandatory 0-diff oracle; conservative
   REVIEW and schema/reason diffs must be explained, while new wrong PASS is
   unacceptable.

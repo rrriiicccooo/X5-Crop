@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..app_info import VERSION
+from x5crop.app_info import VERSION
 from .compare import load_jsonl_report, report_key
 
 

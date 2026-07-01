@@ -21,13 +21,13 @@ CORE_FIELDS = (
 
 
 @dataclass(frozen=True)
-class GoldenCase:
+class ReferenceCase:
     name: str
     baseline_report: Path
     candidate_report: Path
 
 
-GOLDEN_REPORTS = {
+REFERENCE_REPORTS = {
     "standard_strip_full": Path("Test/135/4.5.4/split_report.jsonl"),
     "wide_spacing_standard_strip_full": Path("Test/new_135/4.5.4/split_report.jsonl"),
     "medium_square_full": Path("Test/120/66/4.5.4/split_report.jsonl"),
@@ -45,18 +45,18 @@ def candidate_report_path(candidate_root: Path, baseline: Path) -> Path:
     return candidate_root / baseline
 
 
-def golden_cases(repo_root: Path, candidate_root: Path) -> list[GoldenCase]:
+def reference_cases(repo_root: Path, candidate_root: Path) -> list[ReferenceCase]:
     return [
-        GoldenCase(
+        ReferenceCase(
             name=name,
             baseline_report=repo_root / baseline,
             candidate_report=candidate_report_path(candidate_root, baseline),
         )
-        for name, baseline in GOLDEN_REPORTS.items()
+        for name, baseline in REFERENCE_REPORTS.items()
     ]
 
 
-def compare_golden_cases(cases: Iterable[GoldenCase], fields: Iterable[str] = CORE_FIELDS) -> int:
+def compare_reference_cases(cases: Iterable[ReferenceCase], fields: Iterable[str] = CORE_FIELDS) -> int:
     total_diffs = 0
     for case in cases:
         if not case.baseline_report.exists():
@@ -79,14 +79,14 @@ def compare_golden_cases(cases: Iterable[GoldenCase], fields: Iterable[str] = CO
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Compare candidate X5 Crop reports against V4.5.4 golden reports.")
+    parser = argparse.ArgumentParser(description="Compare candidate X5 Crop reports against V4.5.4 historical reference reports.")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd(), help="Repository root containing Test/.")
     parser.add_argument("--candidate-root", type=Path, required=True, help="Root containing candidate reports laid out like Test/.")
     parser.add_argument("--field", action="append", dest="fields", help="Field to compare. Can be repeated.")
     args = parser.parse_args(argv)
     fields = tuple(args.fields) if args.fields else CORE_FIELDS
-    cases = golden_cases(args.repo_root.resolve(), args.candidate_root.resolve())
-    return 1 if compare_golden_cases(cases, fields=fields) else 0
+    cases = reference_cases(args.repo_root.resolve(), args.candidate_root.resolve())
+    return 1 if compare_reference_cases(cases, fields=fields) else 0
 
 
 if __name__ == "__main__":

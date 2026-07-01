@@ -163,11 +163,11 @@ x5_crop_output/_debug_analysis/
 每张 Debug Analysis JPG 的面板由 DiagnosticsPolicy 控制，默认包含：
 
 - `Original gray context`: 原始灰度上下文。
-- `Outer candidates`: outer 候选。
+- `Debug boxes`: 当前 outer、frame 和裁切框。
 - `Separator evidence`: 分隔证据、当前 outer 和切线标记。
-- `Frame geometry`: frame geometry 和裁切范围。
-- `Selected candidate`: 当前候选结果。
-- `Risk / review overlay`: V4.9 risk / review 摘要。
+
+V4.9 的详细 evidence / risk / decision 说明写入 report；Debug Analysis
+默认保持三联图，优先服务人工快速读图。
 
 状态含义：
 
@@ -410,11 +410,11 @@ x5_crop_output/_debug_analysis/
 Each JPG is controlled by DiagnosticsPolicy and defaults to:
 
 - `Original gray context`: source gray context.
-- `Outer candidates`: outer candidates.
+- `Debug boxes`: current outer, frames, and crop boxes.
 - `Separator evidence`: separator evidence, current outer, and cut markers.
-- `Frame geometry`: frame geometry and crop boxes.
-- `Selected candidate`: selected candidate result.
-- `Risk / review overlay`: V4.9 risk and review summary.
+
+Detailed V4.9 evidence / risk / decision explanations are written to the
+report. Debug Analysis defaults to a three-panel image for fast human review.
 
 `PASS` means the file will be cropped automatically. `REVIEW` means it needs
 manual review.

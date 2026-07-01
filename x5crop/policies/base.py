@@ -939,17 +939,15 @@ class DiagnosticsPolicy:
     lucky_pass_risk: LuckyPassRiskPolicy = field(default_factory=LuckyPassRiskPolicy)
     debug_panels: tuple[str, ...] = (
         "original_gray",
-        "outer_candidates",
+        "debug_boxes",
         "separator_evidence",
-        "frame_geometry",
-        "selected_candidate",
-        "risk_review",
     )
     debug_panel_titles: tuple[DebugPanelPolicy, ...] = (
         DebugPanelPolicy("original_gray", "Original gray context"),
-        DebugPanelPolicy("outer_candidates", "Outer candidates"),
+        DebugPanelPolicy("debug_boxes", "Debug boxes"),
         DebugPanelPolicy("separator_evidence", "Separator evidence"),
         DebugPanelPolicy("frame_geometry", "Frame geometry"),
+        DebugPanelPolicy("outer_candidates", "Outer candidates"),
         DebugPanelPolicy("selected_candidate", "Selected candidate"),
         DebugPanelPolicy("risk_review", "Risk / review overlay"),
     )

@@ -100,11 +100,8 @@ class OutputPolicy:
 class DiagnosticsPolicy:
     debug_panels: tuple[str, ...] = (
         "original_gray",
-        "outer_candidates",
+        "debug_boxes",
         "separator_evidence",
-        "frame_geometry",
-        "selected_candidate",
-        "risk_review",
     )
     panel_titles: dict[str, str] | None = None
     hard_gap_color: str = "red"
@@ -115,9 +112,10 @@ class DiagnosticsPolicy:
     def title_for(self, panel_id: str) -> str:
         titles = self.panel_titles or {
             "original_gray": "Original gray context",
-            "outer_candidates": "Outer candidates",
+            "debug_boxes": "Debug boxes",
             "separator_evidence": "Separator evidence",
             "frame_geometry": "Frame geometry",
+            "outer_candidates": "Outer candidates",
             "selected_candidate": "Selected candidate",
             "risk_review": "Risk / review overlay",
         }

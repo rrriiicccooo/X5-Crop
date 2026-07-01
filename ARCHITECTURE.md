@@ -29,7 +29,8 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
   RiskPolicy、CandidatePolicy、DecisionPolicy、OutputPolicy 和
   DiagnosticsPolicy。
 - `x5crop.detection.decision` 统一执行 PASS / REVIEW 决策。
-- report / debug / regression 消费稳定结果，并解释 V4.9 决策。
+- report / debug 消费稳定结果并解释 V4.9 决策；`tools/regression/` 是开发期
+  reference compare / safety classification 工具，不属于 runtime package。
 
 ### 运行层级
 
@@ -70,9 +71,14 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - 需要 format 上下文的 helper 应显式接收 format 或 policy。
    - 这些层不应依赖 detection pipeline。
 
-7. `x5crop.reports` / `x5crop.debug` / `x5crop.regression`
+7. `x5crop.reports` / `x5crop.debug`
    - 消费稳定的 `Detection`、`ProcessResult` 和 report schema。
    - 不参与候选生成和 PASS/REVIEW 决策。
+
+8. `tools/regression`
+   - 开发期 report diff、reference baseline compare 和 V4.9 safety
+     classification 工具。
+   - 不被 `X5_Crop.py` 或 runtime package 导入。
 
 ### Policy 归属
 
@@ -86,7 +92,7 @@ V4.9 public policy contract 由 `DetectionDecisionContract` 表达：
 - `CandidatePolicy`: content-only、fallback、weak-grid、equal-gap 候选默认不直接 PASS。
 - `DecisionPolicy`: V4.9 PASS / REVIEW reason ids 和 confidence cap。
 - `OutputPolicy`: TIFF metadata/export 行为和输出 bleed。
-- `DiagnosticsPolicy`: Debug Analysis panel 顺序、标题和 overlay 策略。
+- `DiagnosticsPolicy`: 人看的 Debug Analysis panel 顺序、标题和 overlay 策略。
 
 旧 `DetectionPolicy` 仍作为 evidence generation 的内部 wiring surface。它应拥有或连接这些能力：
 
@@ -103,6 +109,11 @@ V4.9 public policy contract 由 `DetectionDecisionContract` 表达：
 - `DiagnosticsPolicy`: Debug Analysis panels、gap overlay、nearby separator diagnostics、overlap-risk diagnostics。
 - `ReportPolicy`: report schema version 和 section order。
 - `OutputPolicy`: detection bleed、output bleed、edge bleed protection。
+
+`DiagnosticsPolicy`、`ReportPolicy` 和 `DecisionPolicy` detail 不应合并成
+一个大桶：Debug 面向人工快速读图，Report 面向机器回归 / 审计，
+Decision detail 解释 PASS / REVIEW。`x5crop.detection.schema` 只负责
+serializer，不拥有 policy。
 
 所有影响 V4.9 decision 的参数必须写入 `report_schema.decision_policy_detail`。
 
@@ -123,7 +134,7 @@ V4.9 public policy contract 由 `DetectionDecisionContract` 表达：
 - report row 顶层包含 `version` 和 `policy_id`。
 - `report_schema` 使用 `v4_9_policy_schema_1`，并包含 `evidence_summary`、
   `risk_summary`、`decision_policy_detail` 和 `selected_candidate`。
-- V4.5.4 golden reports 是 reference baseline，不再是必须 0 diff 的 oracle。
+- V4.5.4 reference reports 是 historical baseline，不再是必须 0 diff 的 oracle。
   conservative PASS -> REVIEW 需要按原因解释，新增错误 PASS 不可接受。
 
 ### 验证边界
@@ -131,7 +142,7 @@ V4.9 public policy contract 由 `DetectionDecisionContract` 表达：
 结构或 policy 改动后至少运行：
 
 ```bash
-python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/policies/*.py x5crop/geometry/*.py x5crop/io/*.py x5crop/image/*.py x5crop/export/*.py x5crop/diagnostics/*.py x5crop/regression/*.py
+python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/policies/*.py x5crop/geometry/*.py x5crop/io/*.py x5crop/image/*.py x5crop/export/*.py x5crop/diagnostics/*.py tools/regression/*.py
 git diff --check
 python3 X5_Crop.py --version
 ```
@@ -147,7 +158,7 @@ frame_boxes
 gaps
 ```
 
-常用 golden sets：
+常用 reference sets：
 
 ```text
 Test/135/4.5.4/split_report.jsonl
@@ -160,7 +171,7 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 ```
 
 V4.9 验收目标不是 0 core diff。使用
-`python3 -m x5crop.regression.reference_classify --candidate-root <root>` 分类：
+`python3 -m tools.regression.reference_classify --candidate-root <root>` 分类：
 
 ```text
 same
@@ -190,7 +201,9 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 - `x5crop.policies.decision_contract` owns the V4.9 ModePolicy, EvidencePolicy,
   RiskPolicy, CandidatePolicy, DecisionPolicy, OutputPolicy, and DiagnosticsPolicy.
 - `x5crop.detection.decision` applies the unified PASS / REVIEW decision.
-- Report / debug / regression consume stable results and explain V4.9 decisions.
+- Report / debug consume stable results and explain V4.9 decisions;
+  `tools/regression/` contains developer-only reference compare / safety
+  classification tools outside the runtime package.
 
 ### Runtime Layers
 
@@ -226,9 +239,14 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - Helpers that need format context should receive format or policy explicitly.
    - These layers should not depend on the detection pipeline.
 
-7. `x5crop.reports` / `x5crop.debug` / `x5crop.regression`
+7. `x5crop.reports` / `x5crop.debug`
    - Consume stable `Detection`, `ProcessResult`, and report schema data.
    - Do not generate candidates or decide PASS/REVIEW.
+
+8. `tools/regression`
+   - Developer-only report diff, reference baseline compare, and V4.9 safety
+     classification tools.
+   - Not imported by `X5_Crop.py` or the runtime package.
 
 ### Policy Ownership
 
@@ -243,11 +261,17 @@ The V4.9 public policy contract is `DetectionDecisionContract`:
   are review-only by default.
 - `DecisionPolicy`: V4.9 PASS / REVIEW reason ids and confidence cap.
 - `OutputPolicy`: TIFF metadata/export behavior and output bleed.
-- `DiagnosticsPolicy`: Debug Analysis panel order, titles, and overlay strategy.
+- `DiagnosticsPolicy`: human-facing Debug Analysis panel order, titles, and
+  overlay strategy.
 
 The older `DetectionPolicy` remains an internal evidence-generation wiring
 surface. Decision-affecting V4.9 parameters must be written to
 `report_schema.decision_policy_detail`.
+
+`DiagnosticsPolicy`, `ReportPolicy`, and `DecisionPolicy` detail stay separate:
+Debug is for fast human image review, Report is for machine regression / audit,
+and Decision detail explains PASS / REVIEW. `x5crop.detection.schema` is a
+serializer and does not own policy.
 
 ### Behavior That Must Stay Isolated
 
@@ -270,7 +294,7 @@ surface. Decision-affecting V4.9 parameters must be written to
 - Report rows include top-level `version` and `policy_id`.
 - `report_schema` uses `v4_9_policy_schema_1` and includes `evidence_summary`,
   `risk_summary`, `decision_policy_detail`, and `selected_candidate`.
-- V4.5.4 golden reports are a reference baseline, not a required 0-diff oracle.
+- V4.5.4 reference reports are a historical baseline, not a required 0-diff oracle.
   Conservative PASS -> REVIEW changes must be explained; new wrong PASS results
   are unacceptable.
 
@@ -279,7 +303,7 @@ surface. Decision-affecting V4.9 parameters must be written to
 After structure or policy changes, run:
 
 ```bash
-python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/policies/*.py x5crop/geometry/*.py x5crop/io/*.py x5crop/image/*.py x5crop/export/*.py x5crop/diagnostics/*.py x5crop/regression/*.py
+python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/policies/*.py x5crop/geometry/*.py x5crop/io/*.py x5crop/image/*.py x5crop/export/*.py x5crop/diagnostics/*.py tools/regression/*.py
 git diff --check
 python3 X5_Crop.py --version
 ```
@@ -296,7 +320,7 @@ gaps
 ```
 
 V4.9 acceptance is not 0 core diff. Use
-`python3 -m x5crop.regression.reference_classify --candidate-root <root>` to classify:
+`python3 -m tools.regression.reference_classify --candidate-root <root>` to classify:
 
 ```text
 same
