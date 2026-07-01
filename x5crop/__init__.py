@@ -5,6 +5,6 @@ into focused importable modules. Architecture changes should remain regression
 compatible with the validated crop behavior.
 """
 
-from .core import SCRIPT_NAME, VERSION
+from .app_info import SCRIPT_NAME, VERSION
 
 __all__ = ["SCRIPT_NAME", "VERSION"]

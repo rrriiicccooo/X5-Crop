@@ -6,7 +6,7 @@
 
 如果只是使用脚本，请优先阅读 `快速启动_Quick_Start.md` 和 `README.md`。本文件保留更细的开发背景、实验结论和验证结果。
 
-当前 active 脚本：`X5_Crop.py` V4.5.4
+当前 active 脚本：`X5_Crop.py` V4.7
 
 当前稳定 GitHub Release：`v4.2.8`
 
@@ -14,7 +14,9 @@
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.5.4 | 当前 active 开发版 | 120-66 宽黑条检测改进：partial 的 safe-extra-frames gate 增加 wide-like separator、前缘内容和逐格内容稳定约束；full 在旧 outer 内容形态异常时可让 120-66 宽黑条 outer 候选接管。`Test/120/66` partial 和 full 均为 16 个 `approved_auto` / 0 个 `needs_review`。 |
+| V4.7 | 当前 active 开发版 | Clean-room source rewrite：删除旧 `common.py`、`policy.py`、`core.py` 和根级 `io.py` / `geometry.py` / `regression.py` 兼容层，让 active source 只通过真实职责模块工作。format 参数拆入 `policies/presets/`，registry 只负责 policy resolve/cache；`pipeline.py` 收敛为 detection orchestration，候选构建/运行拆入 `candidate_build.py` / `candidate_run.py`；geometry 拆出 boxes/layout/outer_boxes/gaps/separator_profile/frame_fit/output_adjustment。`FrameFitPolicy`、separator edge-pair、gap search、separator-derived outer gap override、short-axis aspect retry 和 content evidence 参数由 policy / preset 分组拥有，runtime 只消费明确参数对象。七组 V4.5.4 golden core comparison 为 0 diff。 |
+| V4.6 | 开发版 | Policy 化重构版：新增 `x5crop/policies/`，把每个 format / strip mode 的 detector、count、outer、separator、content、partial-holder、frame-fit、gate、scoring、selection、postprocess、output 和 diagnostics 策略注册成独立 `DetectionPolicy`；检测 runtime 已通过 policy 驱动 count planning、outer strategy、separator gate、partial-holder gate、candidate selection、postprocess 和 debug panel policy。`workflow.py` 现在承接 read -> deskew -> detect -> postprocess -> export -> report/debug 编排，CLI 回到薄入口。目标是以 V4.5.4 为 golden baseline，把 135、135-dual、half、xpan、120-645、120-66、120-67 的 full / partial 调试入口清晰拆开。 |
+| V4.5.4 | 开发版 | 120-66 宽黑条检测改进：partial 的 safe-extra-frames gate 增加 wide-like separator、前缘内容和逐格内容稳定约束；full 在旧 outer 内容形态异常时可让 120-66 宽黑条 outer 候选接管。`Test/120/66` partial 和 full 均为 16 个 `approved_auto` / 0 个 `needs_review`。 |
 | V4.5.3 | 开发版 | 半格 full gate 修复：修正候选 detail 读取 `width_cv=0.0` 时被 `or 1.0` 误判成缺失值的问题。`X5_00058.tif` 现在能按既有 `half_wide_geometry_support` 条件通过；135 full 和半格 partial 回归保持 0 diff。 |
 | V4.5.2 | 开发版 | 结构收敛版：把只读诊断计算从 Debug 渲染层移入 detection 层，减少检测后处理对 Debug UI 的反向依赖；新增共享常量入口，集中 analysis source、gap method 和主要 review reason；让 `policy.py` 和 detection model 导出直接依赖 common / geometry，而不是绕回 core 兼容层；移除 Debug 渲染对 detection pipeline 的整包导入。检测阈值不主动放宽。 |
 | V4.5.1 | 开发版 | 结构收敛版：新增只读 policy view 分组，让 outer / separator / grid / scoring / calibration / partial / diagnostics 等参数有清晰入口；把 detection 后处理从 CLI 移入 `detection/postprocess.py`；把每个 count 的候选生成与最终候选选择拆成明确函数；收敛 active 代码里的旧别名和手写 analysis source 字符串；Debug Analysis 增加 Decision summary 面板，集中显示版本、PASS/REVIEW、confidence、outer strategy、analysis source、auto gate、gap 证据和 review reasons。检测阈值不主动放宽。 |
@@ -71,7 +73,193 @@
 | V3.1.x | 实验版 | 激进外框/gap 修复实验，稳定性不足。 |
 | V3.0 | 基线版 | X5 Crop 主脚本与用户工作流基础。 |
 
-### 当前 Active 版本：V4.5.4
+### 当前 Active 版本：V4.7
+
+V4.7 是一次 clean-room source rewrite。它不以主动改变检测阈值为目标，而是在 V4.6 policy 架构基础上移除旧兼容残留，让 active source 只剩真实职责模块，并以 V4.5.4 golden reports 验证行为不漂移。
+
+主要变化：
+
+- 删除旧 `x5crop/common.py`、`x5crop/policy.py`、`x5crop/core.py` 和根级 `x5crop/io.py` / `x5crop/geometry.py` / `x5crop/regression.py` 兼容层。
+- `FormatTuning` 已从 active source 移除；`x5crop/policies/parameters.py` 只保留薄 lookup / public export，具体 format 参数拆到 `x5crop/policies/presets/`。
+- `FormatParameters` 新增 capability-specific 参数分组：partial counts、separator gate、leading-grid separator failure、separator geometry support、gap search、hard-gap trust、nearby separator correction、robust grid、wide retry、outer strategy、short-axis aspect retry、partial holder、scoring calibration、candidate competition、content evidence、debug gap overlay、nearby separator diagnostics、overlap-risk diagnostics、lucky-pass risk 和 postprocess。policy factory 现在从这些分组构建 `DetectionPolicy`，candidate calibration、wide-retry、content-evidence runtime、Debug Analysis gap overlay、nearby separator diagnostics、overlap-risk diagnostics、gap search、hard-gap trust、nearby separator correction、robust grid、short-axis aspect retry、lucky-pass risk diagnostics、postprocess final caps 和 leading-grid failure gate 也分别从 `ScoringPolicy` / `wide_retry` / `content_evidence` / `DiagnosticsPolicy.debug_gap_overlay` / `DiagnosticsPolicy.nearby_separator` / `DiagnosticsPolicy.overlap_bleed_risk` / `SeparatorPolicy.gap_search` / `SeparatorPolicy.hard_gap_trust` / `SeparatorPolicy.nearby_correction` / `SeparatorPolicy.robust_grid` / `OuterPolicy.short_axis_aspect_retry` / `DiagnosticsPolicy.lucky_pass_risk` / `PostprocessPolicy` / `SeparatorGatePolicy` 读取 caps、weights、retry width、内容证据阈值、诊断叠加线条参数、nearby 搜索阈值、gap 搜索半径/宽度/guard/score、wide separator 接受阈值、nearby correction 阈值、robust-grid 阈值、short-axis aspect retry 误差/目标比例/边距、overlap 风险阈值、trust 阈值、风险评分权重、最终 REVIEW cap 和 gate limits；剩余平面字段只作为 detector / geometry runtime 迁移面保留。
+- `x5crop/policies/registry.py` 收敛为 policy resolve/cache；每个 format/mode 的 gate profile、edge-pair、frame-fit、dark-band、diagnostics 和 notes 由对应 `format_*.py` preset 拥有。
+- `FrameFitPolicy` 迁入 `x5crop/policies/base.py`，由 `DetectionPolicy.frame_fit` 拥有；geometry 不再构造 `frame_fit_policy(fmt, strip_mode)` fallback。
+- `SeparatorEdgePairPolicy` 继续由 `DetectionPolicy.separator` 持有；geometry edge-pair refinement 要求调用方传入 policy 对象，不再保留 `edge_pair_params_for_format()` fallback。
+- `detection/pipeline.py` 继续缩小为主流程编排；candidate build/run、cache keys、candidate calibration、hard fallback 和 partial edge hint 已迁出到 `candidate_build.py`、`candidate_run.py`、`cache_keys.py`、`calibration.py`、`fallback.py` 和 `partial.py`。
+- `CandidateRunPolicy.content_candidate` / `FallbackPolicy` / `PartialStopPolicy` 现在显式描述 candidate run 的 content-candidate 启用、separator-auto 后跳过 content 的 strip-mode 集合和 reason、fallback outer proposal，以及 partial safe-auto 停止 / 跳过 content 的 strip-mode 集合和 reason；`CandidateRunPolicy.separator_geometry_competition` 接管 conditional separator-geometry 候选是否可竞争的 content-outer strategy scope、strip-mode scope 和 median-aspect 阈值，`CandidateRunPolicy.equal_first_before_wide_retry` 接管 equal-first wide-retry 的 wide-geometry 依赖、strip-mode scope 和 default-count 要求，`CandidateRunPolicy.dark_band_retry` 接管 full/partial dark-band retry 触发条件，`candidate_run.py` 不再隐藏 1.045 / 1.090 常量、full/partial content-skip mode 或 120-66 dark-band retry 分支。
+- `OuterCandidate.strategy` 成为 outer 候选类型契约，candidate build / run / calibration 不再靠候选名称 prefix 推断 dark-band、separator-first、edge-anchor 或 retry 行为。
+- `separator_gate_120_*` 参数命名收敛为语义化 `separator_gate_*` 字段；separator gate detail reason 也去掉了 `135_` / `half_` / `120_` 格式前缀。
+- `SeparatorGatePolicy.leading_grid_failure` 接管 leading weak-grid separator failure 判断；`detection/gates.py` 不再直接读取平面 `leading_grid_failure_*` preset 字段。
+- `SeparatorPolicy.hard_gap_trust` 接管 hard-gap trust 的语义阈值；robust-grid hard separator protection 和 `detection/diagnostics.py` 不再直接读取平面 `hard_trust_*` preset 字段。
+- `SeparatorPolicy.nearby_correction` 接管 active nearby separator correction 的启用开关、搜索窗口、score / distance / local-geometry 阈值；`candidate_build.py` 和 `geometry/gaps.py` 不再直接读取平面 `nearby_*` preset 字段做候选修正。
+- `SeparatorPolicy.robust_grid` 接管 hard-gap 几何约束、robust-grid 拟合、reliable-gap score 和 hard-separator protection 阈值；`geometry/gaps.py`、`geometry/core.py` 和 scoring runtime 不再直接读取平面 `constrain_*` / `robust_*` preset 字段。
+- `SeparatorPolicy.gap_search` 接管 base separator gap search 的半径、宽度、guard、score 和 wide separator 接受阈值；`geometry/gaps.py`、`geometry/core.py`、`candidate_build.py`、`candidate_run.py` 和 `outer_retry.py` 不再直接读取平面 `gap_*` / `wide_gap_min_*` preset 字段。
+- `SeparatorPolicy.profile` / `edge_refine_profile` 接管 separator profile 和 edge-refine profile 生成阈值、平滑窗口、权重和背景阈值；`geometry/separator_profile.py` 不再直接读取平面 `separator_profile_*` / `edge_refine_*` preset 字段，检测路径和 read-only diagnostics 会显式传入当前 policy，profile / edge-refine 缓存也按当前 policy 分桶。
+- `SeparatorPolicy.enhanced` 接管 enhanced separator 辅助层的触发低分阈值、接受分数、宽度和位移限制；`geometry/core.py` 不再直接读取平面 `enhanced_*` preset 字段，policy factory 改为读取 `enhanced_separator` 参数分组。
+- `SeparatorPolicy.wide_separator_confidence_cap` 接管包含 wide separator gap 的候选 confidence cap；`calibration.py` 不再直接读取 flat wide-retry confidence-cap 参数。
+- `DiagnosticsPolicy.lucky_pass_risk` 接管 lucky-pass risk 的启用开关、评分权重和风险阈值；`detection/diagnostics.py` 不再直接读取平面 `lucky_*` preset 字段计算风险。
+- `DiagnosticsPolicy.nearby_separator` 接管 nearby separator diagnostic search 的窗口、排除范围、候选宽度上限和 stronger-candidate 阈值；`nearby_separator_candidate_detail()` 不再直接读取平面 `nearby_*` preset 字段。
+- `DiagnosticsPolicy.overlap_bleed_risk` 接管 overlap-bleed diagnostic attachment 和 overlap-risk 阈值；`detection/diagnostics.py` 不再直接读取平面 `diagnostic_overlap_*` preset 字段。
+- `DiagnosticsPolicy.debug_panels` / `debug_panel_titles` 接管 Debug Analysis 三栏顺序和标题；渲染层只保留当前 `Original gray`、`Debug boxes`、`Separator evidence` 面板。
+- `ReportPolicy` 接管 report schema version 和 section order；`report_schema_for_detection()` 现在从当前 format/mode policy 读取报告 schema，而不是直接使用检测层硬编码常量。
+- `ScoringPolicy` 接管 candidate calibration weights、separator source bias、hard-full confidence floor 和 no-auto caps；`calibration.py` / `scoring.py` 不再直接读取 flat `scoring_calibration`。
+- `ScoringPolicy.base_detection` 接管 `score_detection()` 的 gap / width / outer / contrast 权重、full-geometry floor、partial caps、outer-too-large cap 和低置信阈值；`score_detection()` 不再直接读取 flat `score_*` 字段。
+- `ContentPolicy` 接管 candidate calibration 中 content-support score 的 norm、weight 和 support gate；`content_support_score()` 不再直接读取 flat `content_support_*` 字段。
+- `ContentPolicy.evidence` / `profile` / `mask` / `candidate` 接管 content evidence 阈值、content-run profile、content mask outer 和 content-only candidate confidence cap；`detection/content.py` 不再直接读取 flat `content_*` preset 字段或 runtime `FormatParameters`。
+- `FormatParameters.content_evidence` / `content_profile` / `content_mask` / `content_candidate` / `content_support` 现在是构建 `ContentPolicy` 的 preset-side 能力视图；policy factory 不再直接读取对应平面 `content_*` 字段。
+- `ScoringPolicy.geometry_support` 接管 candidate calibration 中 geometry-support score 的 width、outer、aspect、count norm / weight 和 outer-area bounds；`geometry_support_score()` 不再直接读取 flat `geometry_support_*`、`geometry_width_cv_norm`、`content_support_aspect_norm` 或 score outer-area 字段。
+- `FormatParameters.geometry_support_score` 现在是构建 `ScoringPolicy.geometry_support` 的 preset-side 能力视图；policy factory 不再直接读取 geometry-support 相关平面 score 字段。
+- `ScoringPolicy.separator_support` 接管 candidate calibration 中 separator-support score 的 hard/model 权重、grid/equal credit 和 single-frame cap；`separator_support_score()` 不再直接读取 flat `separator_model_*` / `separator_support_*` 字段。
+- `PartialHolderPolicy` 接管 66 partial strict holder 的 safe-extra-frames strip-mode scope、frame mean / coverage / aspect-error 检查；`partial_holder.py` 不再直接读取 `policy.parameters.content_evidence`。
+- 旧 outer mode helper / adapter 已从 active runtime 删除，outer proposal 是否启用由 `DetectionPolicy.outer` 统一决定。
+- `x5crop/geometry/core.py` 继续拆分为真实职责模块：`boxes.py`、`layout.py`、`outer_boxes.py`、`gaps.py`、`separator_profile.py`、`frame_fit.py` 和 `output_adjustment.py`。
+- `separator_outer_allow_oversized_band` 成为 `OuterPolicy` capability，当前只由 `120-66` full / partial 开启，替代实现层 `tuning.name == "120-66"` 判断。
+- `OuterPolicy.separator_gap_search_max_width_ratio` 接管 separator-derived outer 候选的 gap-search 宽度覆盖值；`candidate_run.py` 不再直接读取平面 `separator_first_outer_gap_max_width_ratio`。
+- `OuterPolicy.separator_outer_band` / `separator_geometry_outer` 接管 separator-first / separator-geometry outer proposer 的 band、sequence、source、margin 和候选数量参数；`detection/outer.py` 不再直接读取平面 `separator_first_outer_*` / `separator_geometry_outer_*` preset 字段。
+- `FormatParameters.content_floating_outer` / `edge_anchor_outer` / `base_outer_candidates` / `separator_outer_band` / `separator_geometry_outer` 现在是构建 outer proposal policy 的 preset-side 能力视图；policy factory 不再直接读取这些 outer proposal 平面字段。
+- `OuterPolicy.grid_refine` 接管 full-strip grid-based outer refinement 的 shift 和 width-change 限制；`candidate_build.py` 不再直接读取平面 `grid_outer_refine_*` preset 字段。
+- `OuterPolicy.format_geometry_retry` 接管 format-geometry outer retry 的启用开关、比例容差、收缩限制和 content margin；`outer_retry.py` 不再直接读取平面 `format_geometry_outer_retry_*` preset 字段。
+- `OuterPolicy.short_axis_aspect_retry` 接管 short-axis aspect outer retry 的误差、目标比例和边距阈值；该 capability 默认关闭，当前只在 `120-66` full policy 中启用，`outer_retry.py` 不再直接读取平面 `short_axis_aspect_retry_*` preset 字段。
+- `OuterPolicy.content_alignment` 接管 outer/content alignment 的 slack、white-edge、mismatch gate 和 content-aligned retry margin 阈值；`outer_retry.py` / `postprocess.py` 不再直接读取平面 `outer_align_*` preset 字段。
+- `OuterPolicy.base_candidates` 接管 base outer candidate 的 bw / white-x / mask-profile 搜索阈值、margin 和候选面积限制；`geometry/outer_boxes.py` 不再直接读取平面 `outer_*` preset 字段或按 format 名查参数。
+- `PartialEdgeHintPolicy` 接管 partial-strip edge hint 的 window ratio / min / max；`detection/partial.py` / `candidate_build.py` 不再直接读取平面 `partial_edge_hint_*` preset 字段。
+- `x5crop/io/tiff.py`、`x5crop/image/evidence.py`、`x5crop/image/deskew.py` 和 `x5crop/detection/diagnostics.py` 改为显式 import，不再依赖旧 `common` 星号导入。
+- `DiagnosticsPolicy.debug_gap_overlay` 接管 Debug Analysis separator-panel 的 gap overlay 容差、tick 长度和线宽，`debug/render.py` 不再直接读取平面 `debug_gap_*` preset 字段，也不再硬编码 gap tick 长度。
+- `PostprocessPolicy` 接管 content aspect、low content、outer mismatch 和 lucky-pass risk 的最终 confidence cap，以及 postprocess 阶段 outer-alignment disabled、likely partial、outer-candidate disagreement 和 deskew uncertainty reason id；`finalize_detection_decision()` 不再通过旧 `tuning` 参数或 runtime 硬编码读取这些字段。
+- `PostprocessPolicy.approved_geometry_adjustment` 接管 approved-auto 输出几何微扩的 long-axis limit 和 minimum extension；`geometry/output_adjustment.py` 不再直接读取平面 `approved_adjust_*` preset 字段。
+- `OutputPolicy.overlap_risk_long_axis_bleed` 接管 overlap-risk 时输出阶段长轴 bleed 提升值；`postprocess.py` 和缓存复用 workflow 不再硬编码 50px。
+- `OutputPolicy.edge_bleed_protection` 接管 full-strip 输出 edge guard 的 ratio / min / max；`geometry/output_adjustment.py` 不再保留硬编码 edge guard。
+- `OutputPolicy.detection_long_axis_bleed` / `detection_short_axis_bleed` 接管检测阶段 bleed 配置；默认仍为 0/0，`detection_geometry_config()` 不再硬编码 0/0。
+- `OuterPolicy.content_floating_outer` / `edge_anchor_outer` 接管 content-floating 和 long-axis edge-anchor outer proposal 的 threshold、margin、ratio extra 和候选数量；`detection/outer.py` 不再直接读取平面 `floating_outer_*` / `long_axis_edge_anchor_*` preset 字段。
+- `x5crop/geometry/__init__.py` 和 `x5crop/io/__init__.py` 改为白名单导出；未使用的纯 re-export wrapper 已删除。
+- 评分路径修正为保持 V4.5.4 语义：输出 frame 仍可使用 edge-evidence frame fit，但 nearby separator correction 后的 confidence 只用 geometry fallback score 做窄限制，避免结构迁移把少数 135 样片推到 1.0 或压到 0.88。
+
+验证：
+
+- `python3 X5_Crop.py --version` 输出 `X5_Crop.py 4.7`。
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/*/*.py x5crop/*/*/*.py` 通过。
+- 旧兼容残留扫描没有命中：`common`、`FormatTuning`、`format_tuning`、`separator_gate_mode`、`score_gate_135`、`separator_135`、`separator_half`、`import *`、`edge_pair_params_for_format`、`frame_fit_policy`。
+- `git diff --check` 通过。
+- policy smoke 确认 14 个 format / strip mode policies resolve。
+- `ReportPolicy` smoke 确认 report schema version `v4_7_policy_schema_1` 和 report sections 可通过当前 format / strip mode policy resolve。
+- V4.7 content policy runtime 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_content_policy_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff，并生成 103 张 Debug Analysis JPG：
+  - `Test/135` full，48 rows，43 approved / 5 review
+  - `Test/new_135` full，4 rows，4 approved / 0 review
+  - `Test/120/66` full，16 rows，16 approved / 0 review
+  - `Test/120/66` partial，16 rows，16 approved / 0 review
+  - `Test/120/67` full，4 rows，3 approved / 1 review
+  - `Test/半格/full`，10 rows，10 approved / 0 review
+  - `Test/半格/partial`，5 rows，5 approved / 0 review
+- V4.7 candidate-run policy 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_candidate_run_policy_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。本轮没有生成 Debug Analysis JPG。
+- V4.7 report policy 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_report_policy_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。
+- V4.7 dark-band candidate-run policy 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_dark_band_candidate_run_policy_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。
+- V4.7 selection policy 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_selection_policy_20260701_run3`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。14-policy smoke 确认只有 `half_full` 启用 `SelectionPolicy.content_mismatch_review`。
+- V4.7 content-candidate run policy 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_content_candidate_run_policy_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。14-policy smoke 确认所有 format/mode 都通过 `CandidateRunPolicy.content_candidate` 解析 content candidate 运行规则。
+- V4.7 postprocess reason policy 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_postprocess_reason_policy_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。14-policy smoke 确认所有 format/mode 都通过 `PostprocessPolicy` 解析 postprocess review/detail reason id。
+- V4.7 Debug panel policy 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_debug_panel_policy_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。14-policy smoke 确认所有 format/mode 都解析到同一组三栏 panel id / title；单张 135 Debug Analysis smoke 写出 1679x876 RGB JPG。
+- V4.7 candidate-run mode policy 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_candidate_run_mode_policy_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。14-policy smoke 确认 separator-auto content skip 只给 `full`，partial-safe content skip 只给 `partial`。
+- V4.7 selection scope policy 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_selection_scope_policy_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。14-policy smoke 确认只有 `half_full` 启用 `SelectionPolicy.content_mismatch_review`，其 scope 为 `full` 且要求 default count。
+- V4.7 dark-band selection scope 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_dark_band_selection_scope_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。14-policy smoke 确认只有 `120_66_full` / `120_66_partial` 启用 dark-band full-selection capability，scope 为 `full` 且要求 required count。
+- V4.7 dark-band retry scope policy 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_dark_band_retry_scope_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。14-policy smoke 确认只有 `120_66_full` / `120_66_partial` 启用 dark-band，retry scope 为 `full` / `partial`，full retry 要求 default count。
+- V4.7 equal-first wide-retry policy 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_equal_first_wide_retry_policy_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。14-policy smoke 确认 equal-first wide-retry policy scope 为 `full` 且要求 default count，实际 wide geometry support 仍只有 `half_full` 开启。
+- V4.7 partial-holder scope policy 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_partial_holder_scope_policy_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。14-policy smoke 确认 partial-holder safe-extra-frames scope 为 `partial`，strict holder 仍只有 `120_66_partial` 启用。
+- V4.7 separator-geometry competition scope 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_separator_geometry_competition_scope_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。14-policy smoke 确认 content-outer max median-aspect cap 的 strategy scope 为 `content_outer`、strip-mode scope 为 `partial`。
+- V4.7 separator-incomplete reason 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_separator_uncertain_reason_policy_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。14-policy smoke 确认所有 format/mode 都通过 `ScoringPolicy.base_detection` 解析语义化的 `separator_evidence_incomplete` reason id，active runtime 不再保留旧 `120_separator_uncertain` reason 名称。
+- V4.7 implicit-135 default 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_no_implicit_135_default_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。底层 deskew、gap、separator profile cache、content profile 和 diagnostics helper 现在要求显式 `format_name`，不再保留 `"135"` 隐式默认值。
+- V4.7 dark-band mode-preset 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_dark_band_mode_preset_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。`ModePolicyPreset.dark_band` 现在把 dark-band mode、full-selection 和 oversized separator-band 开关收成单个能力包；14-policy smoke 确认 dark-band / oversized separator-band enablement 仍只给 `120_66_full` 和 `120_66_partial`。
+- V4.7 separator-profile parameter-view 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_profile_parameter_views_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。新增 `SeparatorProfileParameters` / `EdgeRefineProfileParameters` 以及 `FormatParameters.separator_profile` / `edge_refine_profile` 能力视图，policy factory 不再直接读取平面 `separator_profile_*` / `edge_refine_*` 字段。
+- V4.7 content / geometry-support parameter-view 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_content_parameter_views_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。新增 `ContentProfileParameters` / `ContentMaskParameters` / `ContentCandidateParameters` / `ContentSupportParameters` / `GeometrySupportScoreParameters` 以及对应 `FormatParameters` 能力视图，policy factory 不再直接读取这些 content / geometry-support 平面字段。
+- V4.7 outer-proposal parameter-view 清理后的 dry-run regressions 写入 `/private/tmp/x5_v47_outer_parameter_views_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。新增 `ContentFloatingOuterParameters` / `EdgeAnchorOuterParameters` / `BaseOuterCandidateParameters` / `SeparatorOuterBandParameters` / `SeparatorGeometryOuterParameters` 以及对应 `FormatParameters` 能力视图，policy factory 不再直接读取这些 outer proposal 平面字段。
+- V4.7 final policy-readiness dry-run regressions 写入 `/private/tmp/x5_v47_final_policy_readiness_20260701_run1`；七组本地 V4.5.4 golden core comparison 在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes`、`gaps` 上全部 0 diff。新增 `DebugGapOverlayPolicy.tick_length_ratio` / `tick_length_min`，Debug Analysis gap tick 长度现在由 policy 控制。focused Debug Analysis smoke 生成 `/private/tmp/x5_v47_final_debug_smoke_20260701/_debug_analysis/X5_00041_debug_analysis.jpg`，JPG 为 1679x876 RGB，三栏标题和 Debug gap tick 参数均由 policy resolve。
+- 默认 golden compare 仍有 196 个 metadata-only diffs，字段为 `detail.policy` / `report_schema`，原因是 V4.5.4 golden reports 没有 V4.7 policy/report-schema 元数据。
+- 旧兼容 / 旧命名扫描没有命中：candidate-name `startswith()` strategy inference、旧 outer mode helper、`separator_gate_120_*`、旧格式前缀 gate/scoring reason、`120_separator_uncertain`、`FormatTuning`、`format_tuning`、`import *`、`edge_pair_params_for_format`、`frame_fit_policy`、隐式 `format_name: str = "135"` 默认值。
+- policy factory flat-field residue 扫描没有命中 separator gate、score gate、partial-safe holder、candidate competition、calibration caps、outer strategy、wide retry、outer retry、leading-grid failure、nearby separator diagnostics、overlap-risk diagnostics、hard-gap trust、nearby separator correction、robust grid、gap search 或 lucky-pass risk 直接平面字段读取；这些入口已经改为读取 `FormatParameters` 的 capability 分组。
+- scoring runtime residue 扫描没有在 active detection / geometry / workflow runtime 命中 `tuning.scoring_calibration`、`policy.parameters.scoring_calibration` 或 `scoring_calibration`；这些路径已经改为读取 `ScoringPolicy`。
+- base scoring residue 扫描没有在 `score_detection()` 中命中 `score_*` 直接平面字段读取；这些路径已经改为读取 `ScoringPolicy.base_detection`。
+- content-support scoring residue 扫描没有在 `content_support_score()` / candidate calibration 中命中 `content_conf_*` 或 `content_support_*` 直接平面字段读取；这些路径已经改为读取 `ContentPolicy`。
+- content runtime residue 扫描没有在 `detection/content.py` 命中 `format_parameters()`、`tuning.content*` 或 `policy.parameters`；content evidence、profile、mask 和 content-only candidate confidence 已经改为读取 `ContentPolicy` 子 policy。
+- geometry-support scoring residue 扫描没有在 `geometry_support_score()` / candidate calibration 中命中 `geometry_support_*`、`geometry_width_cv_norm`、`content_support_aspect_norm` 或 score outer-area 直接平面字段读取；这些路径已经改为读取 `ScoringPolicy.geometry_support`。
+- separator-support scoring residue 扫描没有在 `separator_support_score()` / candidate calibration 中命中 `separator_model_*` 或 `separator_support_*` 直接平面字段读取；这些路径已经改为读取 `ScoringPolicy.separator_support`。
+- wide-retry / content-evidence runtime residue 扫描没有命中 `tuning.wide_retry`、`tuning.wide_gap_retry_*`、`tuning.wide_gap_confidence_cap`、`tuning.content_evidence_*` 或 `format_parameters(...).content_evidence_*` 直接平面字段读取；这些路径已经改为读取 `SeparatorPolicy.wide_separator_confidence_cap`、`wide_retry` 和 `content_evidence` 分组。
+- partial-holder frame-content residue 扫描没有在 `x5crop/detection/partial_holder.py` 命中 `policy.parameters.content_evidence`；frame aspect conflict 检查已经改为读取 `PartialHolderPolicy`。
+- candidate-run separator outer gap override residue 扫描没有在 `x5crop/detection/candidate_run.py` 命中 `format_parameters()` 或 `separator_first_outer_gap_max_width_ratio` 直接平面字段读取；runtime 已经改为读取 `OuterPolicy.separator_gap_search_max_width_ratio`。
+- separator-derived outer proposer residue 扫描没有在 `x5crop/detection/outer.py` 命中 `FormatParameters`、`format_parameters()`、`tuning.*`、`separator_first_outer_*` 或 `separator_geometry_outer_*` 直接平面字段读取；runtime 已经改为读取 `OuterPolicy.separator_outer_band`、`OuterPolicy.separator_geometry_outer` 和 `SeparatorPolicy.gap_search`。
+- base outer candidate residue 扫描没有在 `x5crop/geometry/outer_boxes.py`、`x5crop/detection/outer.py` 或 `x5crop/detection/dual_lane.py` 命中 `FormatParameters`、`format_parameters()`、`tuning.*` 或 flat `outer_*` candidate-threshold 直接读取；runtime 已经改为读取 `OuterPolicy.base_candidates`。
+- separator profile residue 扫描没有在 `x5crop/geometry/separator_profile.py`、`x5crop/detection/candidate_build.py`、`x5crop/detection/outer.py` 或 `x5crop/detection/diagnostics.py` 命中 `format_parameters()`、`tuning.*`、`separator_profile_*` 或 `edge_refine_*` 直接平面字段读取；runtime 已经改为读取 `SeparatorPolicy.profile` 和 `SeparatorPolicy.edge_refine_profile`，缓存 key 也包含当前 profile policy。
+- enhanced separator residue 扫描没有在 `x5crop/geometry/core.py` 或 `x5crop/detection/candidate_build.py` 命中 `format_parameters()`、`tuning.*` 或 flat `enhanced_*` 直接平面字段读取；runtime 已经改为读取 `SeparatorPolicy.enhanced`，policy factory 改为读取 `enhanced_separator` 参数分组。
+- grid outer-refine residue 扫描没有在 `x5crop/policies/**` 以外命中 `grid_outer_refine_*` 直接平面字段读取；runtime 已经改为读取 `OuterPolicy.grid_refine`。
+- format-geometry retry residue 扫描没有在 `x5crop/policies/**` 以外命中 `format_geometry_outer_retry_*` 直接平面字段读取；runtime 已经改为读取 `OuterPolicy.format_geometry_retry`。
+- short-axis aspect retry residue 扫描没有在 `x5crop/detection/outer_retry.py` 命中 `short_axis_aspect_retry_*` 直接平面字段读取；runtime 已经改为读取 `OuterPolicy.short_axis_aspect_retry`。
+- outer content-alignment residue 扫描没有在 `x5crop/detection/outer_retry.py` 或 `x5crop/detection/postprocess.py` 命中 `outer_align_*` 直接平面字段读取；runtime 已经改为读取 `OuterPolicy.content_alignment`。
+- content-floating / edge-anchor outer residue 扫描没有在 `x5crop/detection/outer.py` 命中 `floating_outer_*` 或 `long_axis_edge_anchor_*` 直接平面字段读取；runtime 已经改为读取 `OuterPolicy.content_floating_outer` 和 `OuterPolicy.edge_anchor_outer`。
+- partial edge-hint residue 扫描没有在 `x5crop/policies/**` 以外命中 `partial_edge_hint_*` 直接平面字段读取；runtime 已经改为读取 `PartialEdgeHintPolicy`。
+- Debug Analysis gap-overlay residue 扫描没有在 `x5crop/debug/render.py` 命中 `format_parameters()`、`debug_gap_*` 直接平面字段读取或硬编码 gap tick 长度；渲染层已经改为读取 `DiagnosticsPolicy.debug_gap_overlay` 的 overlay 容差、tick 长度和线宽。
+- Debug Analysis panel residue 扫描没有在 `x5crop/debug/render.py` / `x5crop/policies` 命中旧 `Content evidence` 或 `Decision summary` 面板入口；三栏标题由 `DiagnosticsPolicy.debug_panel_titles` 提供。
+- Candidate-run mode residue 扫描没有命中旧 `skip_after_full_separator_auto` / `full_separator_auto_skip_reason` 字段；content skip 的 mode 集合现在由 `CandidateRunPolicy.content_candidate` 和 `PartialStopPolicy` 显式提供。
+- Selection scope residue 扫描没有在 `selection.py` 命中 content mismatch review 的硬编码 `best.strip_mode != "full"` / `candidate.strip_mode != "full"`；strip-mode scope 和 default-count 要求现在由 `SelectionPolicy.content_mismatch_review` 显式提供。
+- Dark-band selection residue 扫描没有在 `candidate_run.py` 命中 `current_best.strip_mode != "full"`；dark-band full-selection 的 strip-mode scope 和 required-count 要求现在由 `DarkBandOuterPolicy` 显式提供。
+- postprocess-cap residue 扫描没有在 `x5crop/detection/postprocess.py` 命中 `tuning.post_*_cap` 直接平面字段读取；最终 decision cap 已经改为读取 `PostprocessPolicy`。
+- approved geometry adjustment residue 扫描没有在 `x5crop/policies/**` 以外命中 `approved_adjust_*` 直接平面字段读取；runtime 已经改为读取 `PostprocessPolicy.approved_geometry_adjustment`。
+- overlap-risk output bleed residue 扫描没有在 active runtime 命中 `max(int(config.bleed_x), 50)` 硬编码；runtime 已经改为读取 `OutputPolicy.overlap_risk_long_axis_bleed`。
+- edge bleed protection residue 扫描没有在 active runtime 命中硬编码 `max(70.0, min(120.0, nominal * 0.0150))` 风格 guard；runtime 已经改为读取 `OutputPolicy.edge_bleed_protection`。
+- detection bleed residue 扫描没有在 active runtime 命中 `bleed_x=0` / `bleed_y=0` 硬编码；runtime 已经改为读取 `OutputPolicy.detection_*_bleed`。
+- 135 Debug Analysis smoke 生成 `/private/tmp/x5_v47_postprocess_policy_debug_smoke/_debug_analysis/X5_00041_debug_analysis.jpg`，JPEG 1679x876 RGB。
+
+未验证：
+
+- default-deskew export timing。
+- `xpan`、`120-645` 和 `135-dual` full sample comparisons，因为本地 golden reports 未列出。
+- Release package generation。
+
+### V4.6
+
+V4.6 是一次 policy 化重构。它不以主动改变检测阈值为目标，而是把 V4.5.4 已验证的行为整理成 format / strip mode 明确分离的策略入口，方便后续只调某个格式和模式。
+
+主要变化：
+
+- 目标目录结构已落地：新增 `app.py`、`config.py`、`formats.py`，并把 I/O、image、geometry、detection、diagnostics、export、regression 拆成对应包入口。旧 `x5crop/core.py` 兼容层已移除。
+- 新增 `x5crop/policies/` 包，公共接口在 `base.py`，注册入口在 `registry.py`，并为 `135`、`135-dual`、`half`、`xpan`、`120-645`、`120-66`、`120-67` 各保留独立 policy 模块。
+- 每个 `DetectionPolicy` 都显式包含 count、outer、separator、content、frame-fit、gate、scoring、selection、postprocess、output 和 diagnostics policy。`120-66/full` 与 `120-66/partial` 的宽黑条语义在 policy 层分开描述。
+- `DetectionPolicy` 新增 detector kind 和 partial-holder policy：`135-dual` 通过 `dual_lane` detector kind 进入专用检测路径，unsupported partial 通过 `review_only` 表达；partial safe extra frames 的 wide-like gap、leading-content 和 frame-content 检查统一收敛到 partial-holder policy。
+- half 的 wide-geometry / stable-grid 支持现在通过 separator geometry support modes 启用，仍只由 half full policy 打开，不向其它 format 自动推广。
+- `x5crop/io.py`、`x5crop/geometry.py` 和 `x5crop/regression.py` 已迁移为 `x5crop/io/tiff.py`、`x5crop/geometry/core.py` 和 `x5crop/regression/compare.py`，包入口继续提供清晰导出。
+- detection 层新增 `context.py`、`outer.py`、`separator.py`、`content.py`、`candidates.py`、`scoring.py`、`gates.py`、`selection.py` 和 `schema.py`，将外框候选、证据、候选、评分、gate、选择和报告 schema 的调试入口分开。
+- `scoring.py`、`gates.py` 和 `selection.py` 现在承载真实实现，而不是只从 `pipeline.py` re-export：候选支持分数、half geometry support、separator hard-evidence gate、candidate rank 和最终 selection competition 已迁出 pipeline。
+- `content.py` 现在承载真实 content evidence / content-primary candidate 实现：`content_evidence_detail()`、content profile runs、content mask outer 和 `content_detection_for_count()` 已从 `pipeline.py` 迁出。
+- `outer.py` 现在承载真实 outer proposal 实现，而不是只做 re-export：`OuterProposalStrategy`、policy strategy planning、floating outer、edge-anchor outer、separator-first / separator-geometry outer 和 120-66 dark-band outer proposer 已迁出 pipeline。report/detail 中的 outer strategy 名称同步收敛为 `content_outer`、`edge_anchor_outer`、`separator_outer`、`separator_geometry_outer`、`dark_band_outer`、`content_aligned_retry`、`format_geometry_retry` 和 `short_axis_retry`。
+- `candidates.py` 现在承载独立候选 helper：count planning、wide retry 判断和 candidate rank helper 已迁出 pipeline，并通过 policy 读取当前 format / strip-mode 的 count 计划。
+- `separator.py` 现在承载 120-66 dark-band gap evidence helper，`dark_band_gaps_for_outer()` 已从 pipeline 迁出。
+- detection runtime 现在从 `DetectionPolicy` 取得 full / partial count 计划、outer proposal strategy、dark-band 开关、separator gate mode、partial safe gate 约束、candidate selection 参数和 postprocess policy，保留 V4.5.4 的实际输出行为。
+- gate policy 命名进一步收敛：runtime 通过 `SeparatorGatePolicy.profile` 和显式阈值读取 separator gate，不再让 detection 主流程直接读取 `score_gate_135_*` 或 `separator_gate_mode` 作为行为入口；旧 `FormatTuning` 字段仅作为 policy adapter 来源保留。
+- selection policy 从 half 专用语义收敛为通用 content-mismatch review
+  candidate preference；当前仍只有 half policy 开启。
+- frame-fit format branching 迁入 `DetectionPolicy.frame_fit`，`geometry/core.py` 的旧 `frame_fit_policy(fmt, strip_mode)` 仅保留为兼容 adapter；新的 detection 路径向 geometry 传入 policy frame-fit 参数。
+- 新增 `SeparatorGeometrySupportPolicy`，把 half full 的 `wide_geometry` / `stable_grid` 支持改成通用 capability；默认 off，当前只由 half full policy 开启，runtime 不再调用 half 命名的 support helper。
+- 新增 `SeparatorEdgePairPolicy`，runtime 调用 `refine_gaps_by_edge_pairs()` 时从 `DetectionPolicy.separator.edge_pair` 传入 edge-pair 参数；`edge_pair_params_for_format()` 继续作为 geometry fallback / legacy adapter。
+- 新增 `DarkBandOuterPolicy`，把 120-66 dark-band outer / gap helper 的阈值、宽度、pair spacing、source count、candidate count 和 full selection 开关收进 policy；默认 off，当前只给 120-66 full / partial conditional。
+- `DiagnosticsPolicy.overlap_bleed_risk` 接管 postprocess overlap bleed 诊断开关，替代 postprocess 里的 partial / half / 120 硬编码判断。
+- `DetectorPolicy.dual_lane` 预留 lane count、lane format 和 unsupported partial reason；135-dual full / partial 仍分别通过 `dual_lane` / `review_only` detector kind 进入。
+- partial-holder policy 现在显式描述 66 partial 的 strict holder 条件，包括 wide-like gaps、leading content、frame content、hard/equal gap、width CV、joint/content/geometry score 和逐格内容阈值；half / xpan / 645 继续使用轻量默认配置。
+- `dual_lane.py`、`partial_holder.py` 和 `outer_retry.py` 已从 pipeline 中拆出 135-dual detector、partial-holder gate helper、outer alignment / retry / fallback 逻辑，使 `pipeline.py` 更接近 orchestration。
+- `common.py` 的重力井已开始拆分：domain models 迁入 `domain.py`，format specs 迁入 `format_specs.py`，runtime config/cache 迁入 `runtime.py`；`common.py` 继续 re-export 以保护旧 import。
+- `cli.py`、`workflow.py`、`reports.py`、`debug/render.py` 和 `detection/pipeline.py` 已清理为显式导入，不再使用 `from ... import *`。
+- 新增 `workflow.py`，把原先放在 CLI 里的单文件处理、报告复用、deskew、检测、postprocess、导出、Debug Analysis 和并行处理编排搬到 workflow 层；`cli.py` 继续负责参数解析、启动摘要和终端进度。
+- 选中的 detection 会在 report detail 中写入 `policy`；CLI 启动摘要会显示当前 policy id。Debug Analysis 保持三栏图面，只显示 Original gray、Debug boxes 和 Separator evidence。
+- `split_report.jsonl` 每行新增顶层带 `schema_version` 的 `report_schema`，固定包含 `result`、`selected_candidate`、`candidate_table`、`policy`、`evidence`、`gates`、`postprocess` 和 `output`，同时保留旧字段以便回归对比和旧报告复用。
+- 新增 `docs/ARCHITECTURE.md` 作为开发者架构地图，并新增 `python3 -m x5crop.regression.golden --candidate-root <candidate-root>` 用于把候选报告和本地 V4.5.4 golden reports 按核心字段统一比较。
+- CLI 启动摘要会显示当前 policy id，例如 `policy: 120_66_partial`。
+
+验证：
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/io/*.py x5crop/geometry/*.py x5crop/image/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/diagnostics/*.py x5crop/export/*.py x5crop/policies/*.py x5crop/regression/*.py` 通过。
+- `Test/135` full、`Test/new_135` full、`Test/120/66` full / partial、`Test/120/67` full、`Test/半格/full` 和 `Test/半格/partial` 对比本地 V4.5.4 报告，在 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes` 和 `gaps` 上均为 0 core diff。
+- outer proposer 真实迁移后，上述七组 golden comparison 在 `/private/tmp/x5_v46_outer_impl_*` 下重跑，`status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes` 和 `gaps` 仍全部为 0 core diff。
+- candidates helper 迁移后，上述七组 golden comparison 在 `/private/tmp/x5_v46_candidates_split_*` 下重跑，`status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes` 和 `gaps` 仍全部为 0 core diff。
+- `dark_band_gaps_for_outer()` 迁出 `separator.py` 后，`Test/120/66` partial 在 `/private/tmp/x5_v46_separator_split_66_partial` 下重跑，对 V4.5.4 partial baseline 的 `status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes` 和 `gaps` 为 0 core diff。
+- policy convergence cleanup 后，七组 golden reports 在 `/private/tmp/x5_v46_policy_converge_20260630_after_score_policy` 下重跑；`status`、`confidence`、`review_reasons`、`outer_box`、`frame_boxes` 和 `gaps` 仍全部为 0 core diff。包含 `detail.policy` 和 `report_schema` 的完整字段 compare 有 196 个 metadata diff，原因是 V4.5.4 golden rows 缺少 V4.6 的 policy/report schema 元数据；没有裁切框、gap、状态或 confidence diff。
+- policy 专用逻辑收敛审核后，七组 golden reports 在 `/private/tmp/x5_v46_policy_audit_20260630_final2` 下重跑；核心字段仍全部为 0 diff。包含 `detail.policy` 和 `report_schema` 的完整字段 compare 仍为 196 个 metadata-only diff，原因同上：V4.5.4 golden rows 缺少 V4.6 policy/report schema 元数据。
+
+### V4.5.4
 
 V4.5.4 是一个 120-66 宽黑条检测改进版。它把这次样片验证得到的规则固化为 format-specific 逻辑：66 的分隔条通常很宽，因此 partial / full 都应优先让宽黑条证据和 1:1 三格几何互相约束，而不是让 content-floating、旧 base outer 或弱 edge-pair 单独主导。
 
@@ -1277,7 +1465,7 @@ This changelog records X5 Crop detector changes, workflow updates, regression ch
 
 If you only want to use the script, start with `快速启动_Quick_Start.md` and `README.md`. This file keeps deeper development context, experiment outcomes, and verification notes.
 
-Current active script: `X5_Crop.py` V4.5.4
+Current active script: `X5_Crop.py` V4.7
 
 Current stable GitHub Release: `v4.2.8`
 
@@ -1285,7 +1473,9 @@ Current stable GitHub Release: `v4.2.8`
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.5.4 | Current active development version | 120-66 wide dark-separator improvement. Partial safe-extra-frames now requires wide-like separator evidence, leading-edge content safety, and stable per-frame content. Full 120-66 can prefer a wide dark-band outer candidate when the old outer has abnormal content geometry. `Test/120/66` partial and full both produce 16 `approved_auto` / 0 `needs_review`. |
+| V4.7 | Current active development version | Clean-room source rewrite. Removes old `common.py`, `policy.py`, `core.py`, and root-level `io.py` / `geometry.py` / `regression.py` compatibility layers while preserving the V4.6 policy architecture. Active source now works only through real responsibility modules. `FrameFitPolicy`, separator edge-pair, gap-search, separator-derived outer gap override, and short-axis aspect retry parameters are owned by policy; `format_parameters` replaces the old `FormatTuning` surface. Seven V4.5.4 golden core comparisons are 0 diff. |
+| V4.6 | Development version | Policy refactor. Adds `x5crop/policies/` and registers each format / strip-mode pair as a `DetectionPolicy` with explicit count, outer, separator, content, gate, scoring, selection, postprocess, output, and diagnostics policy surfaces. The runtime now uses policy for count planning, outer strategy, separator gates, partial-safe gates, candidate selection, and postprocess policy. The target baseline is V4.5.4 behavior. |
+| V4.5.4 | Development version | 120-66 wide dark-separator improvement. Partial safe-extra-frames now requires wide-like separator evidence, leading-edge content safety, and stable per-frame content. Full 120-66 can prefer a wide dark-band outer candidate when the old outer has abnormal content geometry. `Test/120/66` partial and full both produce 16 `approved_auto` / 0 `needs_review`. |
 | V4.5.3 | Development version | Half-frame full gate fix. Corrects detail-value reads so `width_cv=0.0` is not treated as a missing value through `or 1.0`. `X5_00058.tif` now passes through the existing `half_wide_geometry_support` conditions; full 135 and half-frame partial regressions stay at 0 diff. |
 | V4.5.2 | Development version | Structural convergence release. Moves read-only diagnostics calculations from the Debug rendering layer into the detection layer, reducing reverse dependencies from postprocess into Debug UI; adds shared constants for analysis sources, gap methods, and main review reasons; makes `policy.py` and detection model exports depend directly on common / geometry instead of the core compatibility layer; and removes the Debug renderer's broad detection-pipeline import. It does not intentionally loosen detection thresholds. |
 | V4.5.1 | Development version | Structural convergence release. Adds read-only policy views so outer / separator / grid / scoring / calibration / partial / diagnostics parameters have clearer entry points; moves post-detection finalization from CLI into `detection/postprocess.py`; splits per-count candidate generation and final candidate selection into explicit functions; removes active-code legacy aliases and hand-written analysis-source strings; and adds a Debug Analysis Decision summary panel with version, PASS/REVIEW, confidence, outer strategy, analysis source, auto gate, gap evidence, and review reasons. It does not intentionally loosen detection thresholds. |
@@ -1342,7 +1532,463 @@ Current stable GitHub Release: `v4.2.8`
 | V3.1.x | Experimental | Aggressive outer/gap rescue ideas. Not stable enough. |
 | V3.0 | Baseline | Main X5 Crop script and user workflow foundation. |
 
-### Current Active: V4.5.4
+### Current Active: V4.7
+
+V4.7 is a clean-room source rewrite. It does not intentionally loosen detector
+thresholds; instead, it removes the old compatibility residue left after the
+V4.6 policy refactor and verifies behavior against the V4.5.4 golden reports.
+
+Main changes:
+
+- Removes old `x5crop/common.py`, `x5crop/policy.py`, `x5crop/core.py`, and
+  root-level `x5crop/io.py` / `x5crop/geometry.py` / `x5crop/regression.py`
+  compatibility layers.
+- Removes `FormatTuning` from active source. `x5crop/policies/parameters.py`
+  is now a thin lookup/public export, and concrete format parameters live under
+  `x5crop/policies/presets/`.
+- Adds capability-specific `FormatParameters` views for partial counts,
+  separator gates, leading-grid separator failure, separator geometry support,
+  gap search, hard-gap trust, nearby separator correction, robust grid, wide
+  retry, outer strategy, short-axis aspect retry, partial holder, scoring
+  calibration, candidate competition, content evidence, debug gap overlay, nearby separator
+  diagnostics, overlap-risk diagnostics, lucky-pass risk, and postprocess. The
+  policy factory now builds `DetectionPolicy` from those grouped views, and
+  candidate calibration, wide-retry, content-evidence runtime, Debug Analysis
+  gap overlay, nearby separator diagnostics, overlap-risk diagnostics,
+  gap search, hard-gap trust, nearby separator correction, robust grid,
+  short-axis aspect retry, lucky-pass risk diagnostics, postprocess final caps,
+  and leading-grid failure gates read their caps, weights, retry width,
+  evidence thresholds, overlay line settings, nearby search thresholds,
+  separator search radius/width/guard/score, wide separator acceptance
+  thresholds, nearby correction thresholds, robust-grid thresholds, short-axis
+  aspect retry error/aspect/margins, overlap risk thresholds, trust thresholds,
+  risk weights, final REVIEW caps, and gate limits from grouped policy views;
+  remaining flat fields stay only as a detector/geometry runtime migration
+  surface.
+- Narrows `x5crop/policies/registry.py` to policy resolve/cache. Each
+  `format_*.py` module owns its format/mode preset, including gate profile,
+  edge-pair, frame-fit, dark-band, diagnostics, and notes.
+- Moves `FrameFitPolicy` into `x5crop/policies/base.py`, owned by
+  `DetectionPolicy.frame_fit`; geometry no longer builds a
+  `frame_fit_policy(fmt, strip_mode)` fallback.
+- Keeps `SeparatorEdgePairPolicy` under `DetectionPolicy.separator`; geometry
+  edge-pair refinement requires the caller to pass the policy object and no
+  longer keeps an `edge_pair_params_for_format()` fallback.
+- Shrinks `detection/pipeline.py` to orchestration by moving candidate
+  build/run, cache keys, candidate calibration, hard fallback, and partial edge
+  hints into focused modules.
+- Splits `geometry/core.py` into `boxes.py`, `layout.py`, `outer_boxes.py`,
+  `gaps.py`, `separator_profile.py`, `frame_fit.py`, and
+  `output_adjustment.py`.
+- Moves the 120-66 oversized separator-band behavior behind the
+  `OuterPolicy.separator_outer_allow_oversized_band` capability.
+- Moves separator-derived outer candidate gap-search width override into
+  `OuterPolicy.separator_gap_search_max_width_ratio`; `candidate_run.py` no
+  longer reads the flat `separator_first_outer_gap_max_width_ratio` field
+  directly.
+- Moves separator-first / separator-geometry outer proposer band thresholds,
+  sequence limits, source counts, margin ratios, and candidate limits into
+  `OuterPolicy.separator_outer_band` / `separator_geometry_outer`;
+  `detection/outer.py` no longer reads flat `separator_first_outer_*` or
+  `separator_geometry_outer_*` preset fields directly.
+- Moves full-strip grid-based outer refinement thresholds into
+  `OuterPolicy.grid_refine`; `candidate_build.py` no longer reads flat
+  `grid_outer_refine_*` preset fields directly.
+- Moves format-geometry outer retry thresholds into
+  `OuterPolicy.format_geometry_retry`; `outer_retry.py` no longer reads flat
+  `format_geometry_outer_retry_*` preset fields directly.
+- Moves short-axis aspect outer retry thresholds into
+  `OuterPolicy.short_axis_aspect_retry`. The capability remains off by default
+  and is currently active only for 120-66 full; `outer_retry.py` no longer reads
+  flat `short_axis_aspect_retry_*` preset fields directly.
+- Moves outer/content alignment thresholds into
+  `OuterPolicy.content_alignment`; `outer_retry.py` and `postprocess.py` no
+  longer read flat `outer_align_*` preset fields directly.
+- Moves base outer candidate bw / white-x / mask-profile thresholds, margins,
+  and candidate area limits into `OuterPolicy.base_candidates`;
+  `geometry/outer_boxes.py` no longer reads flat `outer_*` preset fields or
+  resolves parameters by format name.
+- Moves partial-strip edge hint thresholds into `PartialEdgeHintPolicy`;
+  `detection/partial.py` and `candidate_build.py` no longer read flat
+  `partial_edge_hint_*` preset fields directly.
+- Makes TIFF I/O, evidence/deskew image helpers, diagnostics, package exports,
+  and policy imports explicit instead of relying on old `common` or wildcard
+  re-export surfaces.
+- Moves Debug Analysis separator-panel gap overlay tolerances, tick length, and
+  line widths into `DiagnosticsPolicy.debug_gap_overlay`; `debug/render.py` no
+  longer reads flat `debug_gap_*` preset fields or hard-codes gap tick length
+  directly.
+- Moves overlap-risk diagnostic thresholds into
+  `DiagnosticsPolicy.overlap_bleed_risk`; `detection/diagnostics.py` no longer
+  reads flat `diagnostic_overlap_*` preset fields directly.
+- Moves candidate calibration weights, separator source bias, hard-full
+  confidence floor, and no-auto caps into `ScoringPolicy`; `calibration.py` and
+  `scoring.py` no longer read flat `scoring_calibration` directly.
+- Moves base detector scoring weights, full-geometry floors, partial caps,
+  outer-too-large caps, and low-confidence thresholds into
+  `ScoringPolicy.base_detection`; `score_detection()` no longer reads flat
+  `score_*` fields directly.
+- Moves content-support score norms, weights, and support gates used by
+  candidate calibration into `ContentPolicy`; `content_support_score()` no
+  longer reads flat `content_support_*` fields directly.
+- Moves content evidence thresholds, content-run profile, content mask outer,
+  and content-only candidate confidence caps into `ContentPolicy.evidence`,
+  `profile`, `mask`, and `candidate`; `detection/content.py` no longer reads
+  flat `content_*` preset fields or runtime `FormatParameters` directly.
+- Adds `FormatParameters.content_evidence`, `content_profile`, `content_mask`,
+  `content_candidate`, and `content_support` preset-side capability views for
+  constructing `ContentPolicy`; policy construction no longer reads the
+  corresponding flat content fields directly.
+- Moves geometry-support score width/outer/aspect/count norms, weights, and
+  outer-area bounds used by candidate calibration into
+  `ScoringPolicy.geometry_support`; `geometry_support_score()` no longer reads
+  flat `geometry_support_*`, `geometry_width_cv_norm`,
+  `content_support_aspect_norm`, or score outer-area fields directly.
+- Adds `FormatParameters.geometry_support_score` as the preset-side capability
+  view for constructing `ScoringPolicy.geometry_support`; policy construction
+  no longer reads flat geometry-support score fields directly.
+- Moves separator-support hard/model weights, grid/equal credit, and
+  single-frame cap into `ScoringPolicy.separator_support`;
+  `separator_support_score()` no longer reads flat `separator_model_*` or
+  `separator_support_*` fields directly.
+- Adds `FormatParameters.content_floating_outer`, `edge_anchor_outer`,
+  `base_outer_candidates`, `separator_outer_band`, and
+  `separator_geometry_outer` preset-side capability views for constructing
+  outer proposal policy objects; policy construction no longer reads those flat
+  outer proposal fields directly.
+- Moves 120-66 partial holder frame mean / coverage / aspect-error checks into
+  `PartialHolderPolicy`; `partial_holder.py` no longer reads
+  `policy.parameters.content_evidence` directly.
+- Moves hard-gap trust thresholds into `SeparatorPolicy.hard_gap_trust`;
+  robust-grid hard separator protection and `detection/diagnostics.py` no
+  longer read flat `hard_trust_*` preset fields directly.
+- Moves active nearby-separator correction thresholds into
+  `SeparatorPolicy.nearby_correction`; `candidate_build.py` and
+  `geometry/gaps.py` no longer read flat `nearby_*` preset fields to move
+  candidate gaps.
+- Moves robust-grid and hard-gap constraining thresholds into
+  `SeparatorPolicy.robust_grid`; `geometry/gaps.py`, `geometry/core.py`, and
+  scoring no longer read flat `constrain_*` / `robust_*` preset fields
+  directly.
+- Moves base separator gap-search thresholds into
+  `SeparatorPolicy.gap_search`; `geometry/gaps.py`, `geometry/core.py`,
+  `candidate_build.py`, `candidate_run.py`, and `outer_retry.py` no longer read
+  flat `gap_*` / `wide_gap_min_*` preset fields directly.
+- Moves separator profile and edge-refine profile generation thresholds into
+  `SeparatorPolicy.profile` / `edge_refine_profile`, including smoothing,
+  weights, and background thresholds; `geometry/separator_profile.py` no longer
+  reads flat `separator_profile_*` / `edge_refine_*` preset fields directly, and
+  detection plus read-only diagnostics pass the selected policy explicitly.
+  Profile and edge-refine caches are keyed by the selected policy.
+- Moves enhanced separator analysis thresholds into `SeparatorPolicy.enhanced`,
+  including the low-score trigger, accepted score, width, and shift limits;
+  `geometry/core.py` no longer reads flat `enhanced_*` preset fields directly,
+  and the policy factory reads the `enhanced_separator` parameter group.
+- Moves the confidence cap for candidates containing wide separator gaps into
+  `SeparatorPolicy.wide_separator_confidence_cap`; `calibration.py` no longer
+  reads flat wide-retry confidence-cap parameters directly.
+- Moves final postprocess confidence caps for content aspect conflict, low
+  content evidence, outer/content mismatch, and lucky-pass risk into
+  `PostprocessPolicy`; `finalize_detection_decision()` no longer accepts a flat
+  tuning object for those caps.
+- Moves approved-auto output geometry extension limits into
+  `PostprocessPolicy.approved_geometry_adjustment`; `geometry/output_adjustment.py`
+  no longer reads flat `approved_adjust_*` preset fields directly.
+- Moves overlap-risk output long-axis bleed into
+  `OutputPolicy.overlap_risk_long_axis_bleed`; postprocess and cached workflow
+  reuse no longer hard-code the 50px value.
+- Moves full-strip output edge guard ratio and clamp bounds into
+  `OutputPolicy.edge_bleed_protection`; `geometry/output_adjustment.py` no
+  longer carries hard-coded edge guard values.
+- Moves detection-time bleed defaults into
+  `OutputPolicy.detection_long_axis_bleed` /
+  `detection_short_axis_bleed`; `detection_geometry_config()` no longer
+  hard-codes 0/0.
+- Moves content-floating and long-axis edge-anchor outer proposal thresholds into
+  `OuterPolicy.content_floating_outer` and `edge_anchor_outer`, including content
+  thresholds, margins, ratio extras, and candidate limits.
+- Preserves V4.5.4 scoring semantics: output frames may still use edge-evidence
+  frame fit, while nearby separator correction only uses geometry fallback score
+  as a narrow confidence limiter.
+
+Verification:
+
+- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.7`.
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/*/*.py x5crop/*/*/*.py` passed.
+- The legacy-residue scan has no hits for `common`, `FormatTuning`,
+  `format_tuning`, `separator_gate_mode`, `score_gate_135`, `separator_135`,
+  `separator_half`, wildcard imports, `edge_pair_params_for_format`, or
+  `frame_fit_policy`.
+- `git diff --check` passed.
+- Policy smoke resolved all 14 format / strip-mode policies.
+- V4.7 content policy runtime cleanup dry-run regressions were written to
+  `/private/tmp/x5_v47_content_policy_20260701_run1`. The seven local V4.5.4
+  golden core comparisons were 0 diff for `status`, `confidence`,
+  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`, with 103 Debug
+  Analysis JPGs generated.
+- V4.7 selection policy cleanup dry-run regressions were written to
+  `/private/tmp/x5_v47_selection_policy_20260701_run3`. The seven local V4.5.4
+  golden core comparisons were 0 diff for `status`, `confidence`,
+  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`. The 14-policy smoke
+  confirmed only `half_full` enables `SelectionPolicy.content_mismatch_review`.
+- V4.7 content-candidate run policy cleanup dry-run regressions were written to
+  `/private/tmp/x5_v47_content_candidate_run_policy_20260701_run1`. The seven
+  local V4.5.4 golden core comparisons were 0 diff for `status`, `confidence`,
+  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`. The 14-policy smoke
+  confirmed every format/mode resolves `CandidateRunPolicy.content_candidate`.
+- V4.7 postprocess reason policy cleanup dry-run regressions were written to
+  `/private/tmp/x5_v47_postprocess_reason_policy_20260701_run1`. The seven local
+  V4.5.4 golden core comparisons were 0 diff for `status`, `confidence`,
+  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`. The 14-policy smoke
+  confirmed every format/mode resolves postprocess review/detail reasons through
+  `PostprocessPolicy`.
+- V4.7 separator-incomplete reason cleanup dry-run regressions were written to
+  `/private/tmp/x5_v47_separator_uncertain_reason_policy_20260701_run1`. The
+  seven local V4.5.4 golden core comparisons were 0 diff for `status`,
+  `confidence`, `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`. The
+  14-policy smoke confirmed every format/mode resolves the semantic
+  `separator_evidence_incomplete` reason id through
+  `ScoringPolicy.base_detection`; active runtime no longer emits the old
+  `120_separator_uncertain` reason name.
+- V4.7 implicit-135 default cleanup dry-run regressions were written to
+  `/private/tmp/x5_v47_no_implicit_135_default_20260701_run1`. The seven local
+  V4.5.4 golden core comparisons were 0 diff for `status`, `confidence`,
+  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`. Low-level deskew,
+  gap, separator profile cache, content profile, and diagnostics helpers now
+  require explicit `format_name` and no longer keep an implicit `"135"` default.
+- V4.7 dark-band mode-preset cleanup dry-run regressions were written to
+  `/private/tmp/x5_v47_dark_band_mode_preset_20260701_run1`. The seven local
+  V4.5.4 golden core comparisons were 0 diff for `status`, `confidence`,
+  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`. `ModePolicyPreset.dark_band`
+  now groups dark-band mode, full-selection, and oversized separator-band
+  enablement; the 14-policy smoke confirmed it still resolves only for
+  `120_66_full` and `120_66_partial`.
+- V4.7 separator-profile parameter-view cleanup dry-run regressions were written
+  to `/private/tmp/x5_v47_profile_parameter_views_20260701_run1`. The seven
+  local V4.5.4 golden core comparisons were 0 diff for `status`, `confidence`,
+  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`. Added
+  `SeparatorProfileParameters` / `EdgeRefineProfileParameters` plus
+  `FormatParameters.separator_profile` / `edge_refine_profile` capability views,
+  so policy construction no longer reads flat `separator_profile_*` /
+  `edge_refine_*` fields directly.
+- V4.7 content / geometry-support parameter-view cleanup dry-run regressions
+  were written to `/private/tmp/x5_v47_content_parameter_views_20260701_run1`.
+  The seven local V4.5.4 golden core comparisons were 0 diff for `status`,
+  `confidence`, `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`. Added
+  `ContentProfileParameters` / `ContentMaskParameters` /
+  `ContentCandidateParameters` / `ContentSupportParameters` /
+  `GeometrySupportScoreParameters` plus the matching `FormatParameters`
+  capability views, so policy construction no longer reads those flat content /
+  geometry-support fields directly.
+- V4.7 outer-proposal parameter-view cleanup dry-run regressions were written
+  to `/private/tmp/x5_v47_outer_parameter_views_20260701_run1`. The seven local
+  V4.5.4 golden core comparisons were 0 diff for `status`, `confidence`,
+  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`. Added
+  `ContentFloatingOuterParameters` / `EdgeAnchorOuterParameters` /
+  `BaseOuterCandidateParameters` / `SeparatorOuterBandParameters` /
+  `SeparatorGeometryOuterParameters` plus the matching `FormatParameters`
+  capability views, so policy construction no longer reads those flat outer
+  proposal fields directly.
+- V4.7 final policy-readiness dry-run regressions were written to
+  `/private/tmp/x5_v47_final_policy_readiness_20260701_run1`. The seven local
+  V4.5.4 golden core comparisons were 0 diff for `status`, `confidence`,
+  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`. Added
+  `DebugGapOverlayPolicy.tick_length_ratio` / `tick_length_min`, so Debug
+  Analysis gap tick length is policy-owned. A focused Debug Analysis smoke wrote
+  `/private/tmp/x5_v47_final_debug_smoke_20260701/_debug_analysis/X5_00041_debug_analysis.jpg`
+  as a 1679x876 RGB JPEG, with the three panel titles and Debug gap tick
+  parameters resolved through policy.
+- Default golden compare still reports 196 metadata-only diffs in
+  `detail.policy` / `report_schema`, because V4.5.4 golden rows do not contain
+  V4.7 policy/report-schema metadata.
+- A policy-factory flat-field residue scan has no direct hits for separator
+  gate, score gate, partial-safe holder, candidate competition, calibration
+  caps, outer strategy, wide retry, outer retry, leading-grid failure, nearby
+  separator diagnostics, overlap-risk diagnostics, hard-gap trust, nearby
+  separator correction, robust grid, gap search, or lucky-pass risk
+  parameters; those entries now come from grouped
+  `FormatParameters` capability views.
+- A scoring runtime residue scan has no direct hits for
+  `tuning.scoring_calibration`, `policy.parameters.scoring_calibration`, or
+  `scoring_calibration` under active detection / geometry / workflow runtime;
+  those paths now read `ScoringPolicy`.
+- A base scoring residue scan has no direct `score_*` flat-field reads in
+  `score_detection()`; those paths now read `ScoringPolicy.base_detection`.
+- A content-support scoring residue scan has no direct hits for
+  `content_conf_*` or `content_support_*` flat-field reads in
+  `content_support_score()` / candidate calibration; those paths now read
+  `ContentPolicy`.
+- A content runtime residue scan has no hits in `detection/content.py` for
+  `format_parameters()`, `tuning.content*`, or `policy.parameters`; content
+  evidence, profile, mask, and content-only candidate confidence now read
+  `ContentPolicy` sub-policies.
+- A geometry-support scoring residue scan has no direct hits for
+  `geometry_support_*`, `geometry_width_cv_norm`,
+  `content_support_aspect_norm`, or score outer-area flat-field reads in
+  `geometry_support_score()` / candidate calibration; those paths now read
+  `ScoringPolicy.geometry_support`.
+- A separator-support scoring residue scan has no direct hits for
+  `separator_model_*` or `separator_support_*` flat-field reads in
+  `separator_support_score()` / candidate calibration; those paths now read
+  `ScoringPolicy.separator_support`.
+- A wide-retry / content-evidence runtime residue scan has no direct hits for
+  `tuning.wide_retry`, `tuning.wide_gap_retry_*`,
+  `tuning.wide_gap_confidence_cap`, `tuning.content_evidence_*`, or
+  `format_parameters(...).content_evidence_*`; those paths now read
+  `SeparatorPolicy.wide_separator_confidence_cap`, `wide_retry`, and
+  `content_evidence` grouped views.
+- A partial-holder frame-content residue scan has no direct
+  `policy.parameters.content_evidence` hits in
+  `x5crop/detection/partial_holder.py`; frame aspect conflict checks now read
+  `PartialHolderPolicy`.
+- A candidate-run separator outer gap override residue scan has no direct
+  `format_parameters()` or `separator_first_outer_gap_max_width_ratio` hits in
+  `x5crop/detection/candidate_run.py`; runtime now reads
+  `OuterPolicy.separator_gap_search_max_width_ratio`.
+- A separator-derived outer proposer residue scan has no direct
+  `FormatParameters`, `format_parameters()`, `tuning.*`,
+  `separator_first_outer_*`, or `separator_geometry_outer_*` flat-field reads in
+  `x5crop/detection/outer.py`; runtime now reads
+  `OuterPolicy.separator_outer_band`, `OuterPolicy.separator_geometry_outer`,
+  and `SeparatorPolicy.gap_search`.
+- A base outer candidate residue scan has no direct `FormatParameters`,
+  `format_parameters()`, `tuning.*`, or flat `outer_*` candidate-threshold reads
+  in `x5crop/geometry/outer_boxes.py`, `x5crop/detection/outer.py`, or
+  `x5crop/detection/dual_lane.py`; runtime now reads
+  `OuterPolicy.base_candidates`.
+- A separator profile residue scan has no direct `format_parameters()`,
+  `tuning.*`, `separator_profile_*`, or `edge_refine_*` flat-field reads in
+  `x5crop/geometry/separator_profile.py`, `x5crop/detection/candidate_build.py`,
+  `x5crop/detection/outer.py`, or `x5crop/detection/diagnostics.py`; runtime now
+  reads `SeparatorPolicy.profile` and `SeparatorPolicy.edge_refine_profile`, and
+  cache keys include the selected profile policy.
+- An enhanced separator residue scan has no direct `format_parameters()`,
+  `tuning.*`, or flat `enhanced_*` preset-field reads in `x5crop/geometry/core.py`
+  or `x5crop/detection/candidate_build.py`; runtime now reads
+  `SeparatorPolicy.enhanced`, and the policy factory reads the
+  `enhanced_separator` parameter group.
+- A grid outer-refine residue scan has no direct `grid_outer_refine_*` hits
+  outside `x5crop/policies/**`; runtime now reads `OuterPolicy.grid_refine`.
+- A format-geometry retry residue scan has no direct
+  `format_geometry_outer_retry_*` hits outside `x5crop/policies/**`; runtime
+  now reads `OuterPolicy.format_geometry_retry`.
+- A short-axis aspect retry residue scan has no direct
+  `short_axis_aspect_retry_*` hits in `x5crop/detection/outer_retry.py`;
+  runtime now reads `OuterPolicy.short_axis_aspect_retry`.
+- An outer content-alignment residue scan has no direct `outer_align_*` hits in
+  `x5crop/detection/outer_retry.py` or `x5crop/detection/postprocess.py`;
+  runtime now reads `OuterPolicy.content_alignment`.
+- A content-floating / edge-anchor outer residue scan has no direct
+  `floating_outer_*` or `long_axis_edge_anchor_*` hits in
+  `x5crop/detection/outer.py`; runtime now reads
+  `OuterPolicy.content_floating_outer` and `OuterPolicy.edge_anchor_outer`.
+- A partial edge-hint residue scan has no direct `partial_edge_hint_*` hits
+  outside `x5crop/policies/**`; runtime now reads `PartialEdgeHintPolicy`.
+- A Debug Analysis gap-overlay residue scan has no direct `format_parameters()`,
+  `debug_gap_*`, or hard-coded gap tick-length hits in
+  `x5crop/debug/render.py`; rendering now reads
+  `DiagnosticsPolicy.debug_gap_overlay`.
+- A postprocess-cap residue scan has no direct `tuning.post_*_cap` hits in
+  `x5crop/detection/postprocess.py`; final decision caps now read from
+  `PostprocessPolicy`.
+- An approved geometry adjustment residue scan has no direct
+  `approved_adjust_*` hits outside `x5crop/policies/**`; runtime now reads
+  `PostprocessPolicy.approved_geometry_adjustment`.
+- An overlap-risk output bleed residue scan has no active-runtime
+  `max(int(config.bleed_x), 50)` hard-code; runtime now reads
+  `OutputPolicy.overlap_risk_long_axis_bleed`.
+- An edge bleed protection residue scan has no active-runtime hard-coded
+  `max(70.0, min(120.0, nominal * 0.0150))` style guard; runtime now reads
+  `OutputPolicy.edge_bleed_protection`.
+- A detection bleed residue scan has no active-runtime `bleed_x=0` /
+  `bleed_y=0` hard-code; runtime now reads `OutputPolicy.detection_*_bleed`.
+- A 135 Debug Analysis smoke generated
+  `/private/tmp/x5_v47_final_debug_smoke_20260701/_debug_analysis/X5_00041_debug_analysis.jpg`
+  as a 1679x876 RGB JPEG with policy-owned three-panel titles and Debug gap
+  tick parameters.
+
+Not verified:
+
+- Default-deskew export timing.
+- `xpan`, `120-645`, and `135-dual` full sample comparisons, because local
+  golden reports were not listed.
+- Release package generation.
+
+### V4.6
+
+V4.6 is a policy refactor. It does not intentionally loosen detector
+thresholds; instead, it organizes the verified V4.5.4 behavior behind explicit
+format / strip-mode policy surfaces so future tuning can focus on one format
+and mode at a time.
+
+Main changes:
+
+- The target module layout now exists: `app.py`, `config.py`, `formats.py`,
+  plus package entry points for I/O, image, geometry, detection, diagnostics,
+  export, and regression. The old `x5crop/core.py` compatibility layer has
+  been removed.
+- Adds the `x5crop/policies/` package. Shared interfaces live in `base.py`,
+  the registry lives in `registry.py`, and each supported format has a small
+  dedicated policy module.
+- Each `DetectionPolicy` explicitly contains count, outer, separator, content,
+  frame-fit, gate, scoring, selection, postprocess, output, and diagnostics
+  policy surfaces.
+- `x5crop/io.py`, `x5crop/geometry.py`, and `x5crop/regression.py` are now
+  `x5crop/io/tiff.py`, `x5crop/geometry/core.py`, and
+  `x5crop/regression/compare.py`.
+- Detection now has focused entry modules for context, outer proposals,
+  separator evidence, content evidence, candidates, scoring, gates, selection,
+  and report schema.
+- `scoring.py`, `gates.py`, and `selection.py` now own real implementation
+  instead of only re-exporting from `pipeline.py`: candidate support scoring,
+  half geometry support, separator hard-evidence gates, candidate ranking, and
+  final selection competition have moved out of the pipeline module.
+- `content.py` now owns real content evidence and content-primary candidate
+  implementation: `content_evidence_detail()`, content profile runs, content
+  mask outer, and `content_detection_for_count()` have moved out of
+  `pipeline.py`.
+- `outer.py` now owns real outer proposal implementation instead of only
+  re-exporting from `pipeline.py`: `OuterProposalStrategy`, policy strategy
+  planning, floating outer, edge-anchor outer, separator-first /
+  separator-geometry outer, and 120-66 dark-band outer proposers have moved
+  out of the pipeline module. Report/detail outer strategy names now use
+  `content_outer`, `edge_anchor_outer`, `separator_outer`,
+  `separator_geometry_outer`, `dark_band_outer`, `content_aligned_retry`,
+  `format_geometry_retry`, and `short_axis_retry`.
+- `candidates.py` now owns independent candidate helpers: count planning, wide
+  retry checks, and candidate rank helpers have moved out of `pipeline.py` and
+  read count plans from the current format / strip-mode policy.
+- `separator.py` now owns the 120-66 dark-band gap evidence helper;
+  `dark_band_gaps_for_outer()` has moved out of `pipeline.py`.
+- The detection runtime now gets full / partial count plans, outer proposal
+  strategy, dark-band enablement, separator gate mode, partial-safe gate
+  constraints, candidate-selection parameters, and postprocess policy from
+  `DetectionPolicy`, while preserving V4.5.4 output behavior.
+- Selected detections write `detail.policy` to reports, and the CLI startup
+  summary prints the active policy id, such as `120_66_partial`.
+- Debug Analysis keeps a compact three-panel layout with Original gray, Debug
+  boxes, and Separator evidence.
+- `split_report.jsonl` rows now include a top-level `report_schema` object with
+  `result`, `selected_candidate`, `candidate_table`, `policy`, `evidence`,
+  `gates`, `postprocess`, and `output`, while retaining the previous fields for
+  regression comparison and cache reuse.
+
+Verification:
+
+- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/io/*.py x5crop/geometry/*.py x5crop/image/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/diagnostics/*.py x5crop/export/*.py x5crop/policies/*.py x5crop/regression/*.py` passed.
+- After the real outer proposer migration, the seven V4.5.4 golden comparisons
+  were rerun under `/private/tmp/x5_v46_outer_impl_*`; `status`, `confidence`,
+  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps` all remained 0 core
+  diff.
+- After the candidates helper migration, the same seven V4.5.4 golden
+  comparisons were rerun under `/private/tmp/x5_v46_candidates_split_*`;
+  `status`, `confidence`, `review_reasons`, `outer_box`, `frame_boxes`, and
+  `gaps` all remained 0 core diff.
+- After moving `dark_band_gaps_for_outer()` to `separator.py`, `Test/120/66`
+  partial was rerun under `/private/tmp/x5_v46_separator_split_66_partial`;
+  the same core fields remained 0 diff against the V4.5.4 partial baseline.
+
+### V4.5.4
 
 V4.5.4 is a 120-66 wide dark-separator improvement. It turns the current sample
 findings into format-specific behavior: because 66 separators are usually broad

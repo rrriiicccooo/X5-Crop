@@ -1,7 +1,19 @@
 from __future__ import annotations
 
-from ..common import *
-from ..geometry import *
+import copy
+from typing import Any, Optional
+
+import numpy as np
+
+from ..app_info import VERSION
+from ..constants import HARD_GAP_METHODS, MODEL_GAP_METHODS
+from ..domain import Box, Detection, Gap
+from ..format_specs import CONTENT_ASPECTS_HORIZONTAL, FORMATS
+from ..geometry import box_cache_key, cached_separator_profile, interval_mean, make_analysis_cache, work_gray
+from ..policies.base import NearbySeparatorDiagnosticsPolicy, SeparatorProfilePolicy
+from ..policies.registry import get_detection_policy
+from ..runtime import AnalysisCache
+from ..utils import clamp_float, clamp_int, runs_from_mask
 
 
 def gap_work_outer(detection: Detection, gap: Gap) -> Optional[Box]:
@@ -26,16 +38,19 @@ def nearby_separator_candidate_detail(
     pitch: float,
     start: int,
     end: int,
-    format_name: str = "135",
+    nearby_policy: NearbySeparatorDiagnosticsPolicy,
+    format_name: str,
     cache: Optional[AnalysisCache] = None,
+    profile_policy: Optional[SeparatorProfilePolicy] = None,
 ) -> dict[str, Any]:
     if gap.method not in HARD_GAP_METHODS or pitch <= 0:
         return {"searched": False, "reason": "not_hard_gap"}
-    tuning = format_tuning(format_name)
     cache_key: Optional[tuple[Any, ...]] = None
     if cache is not None:
         cache_key = (
             str(format_name),
+            "nearby_separator",
+            profile_policy or SeparatorProfilePolicy(),
             box_cache_key(work_outer),
             int(gap.index),
             str(gap.method),
@@ -53,15 +68,26 @@ def nearby_separator_candidate_detail(
     crop = gray_work[work_outer.top:work_outer.bottom, work_outer.left:work_outer.right]
     if crop.size == 0:
         return {"searched": False, "reason": "empty_outer"}
-    profile = cached_separator_profile(cache, gray_work, work_outer, format_name)
+    profile = cached_separator_profile(cache, gray_work, work_outer, format_name, profile_policy)
     if profile.size == 0:
         return {"searched": False, "reason": "empty_profile"}
 
     center = int(round(gap.center))
     current_start = max(0, min(len(profile), int(round(start - work_outer.left))))
     current_end = max(current_start + 1, min(len(profile), int(round(end - work_outer.left))))
-    window = clamp_int(pitch * tuning.nearby_window_ratio, tuning.nearby_window_min, tuning.nearby_window_max)
-    exclude = max(tuning.nearby_exclude_min, clamp_int(max(float(current_end - current_start), pitch * tuning.nearby_exclude_ratio), tuning.nearby_exclude_min, tuning.nearby_exclude_max))
+    window = clamp_int(
+        pitch * nearby_policy.window_ratio,
+        nearby_policy.window_min,
+        nearby_policy.window_max,
+    )
+    exclude = max(
+        nearby_policy.exclude_min,
+        clamp_int(
+            max(float(current_end - current_start), pitch * nearby_policy.exclude_ratio),
+            nearby_policy.exclude_min,
+            nearby_policy.exclude_max,
+        ),
+    )
     lo = max(0, center - window)
     hi = min(len(profile), center + window + 1)
     current_score = interval_mean(profile, current_start, current_end)
@@ -75,7 +101,11 @@ def nearby_separator_candidate_detail(
         if abs_start < current_end + exclude and abs_end > current_start - exclude:
             continue
         width = abs_end - abs_start
-        if width > clamp_int(pitch * tuning.nearby_max_width_ratio, tuning.nearby_max_width_min, tuning.nearby_max_width_max):
+        if width > clamp_int(
+            pitch * nearby_policy.max_width_ratio,
+            nearby_policy.max_width_min,
+            nearby_policy.max_width_max,
+        ):
             continue
         score = interval_mean(profile, abs_start, abs_end)
         candidate_center = (abs_start + abs_end - 1) / 2.0
@@ -92,7 +122,14 @@ def nearby_separator_candidate_detail(
         )
     candidates.sort(key=lambda item: (float(item["score"]), -abs(float(item["distance_px"]))), reverse=True)
     best = candidates[0] if candidates else None
-    stronger = bool(best and float(best["score"]) >= max(current_score + tuning.nearby_detail_score_add, current_score * tuning.nearby_detail_score_multiplier))
+    stronger = bool(
+        best
+        and float(best["score"])
+        >= max(
+            current_score + nearby_policy.detail_score_add,
+            current_score * nearby_policy.detail_score_multiplier,
+        )
+    )
     detail = {
         "searched": True,
         "window_px": int(window),
@@ -107,7 +144,11 @@ def nearby_separator_candidate_detail(
 
 
 def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap, cache: Optional[AnalysisCache] = None) -> dict[str, Any]:
-    tuning = format_tuning(detection.film_format)
+    policy = get_detection_policy(detection.film_format, detection.strip_mode)
+    diagnostics_policy = policy.diagnostics
+    hard_gap_trust_policy = policy.separator.hard_gap_trust
+    nearby_policy = diagnostics_policy.nearby_separator
+    overlap_policy = diagnostics_policy.overlap_bleed_risk
     work_outer = gap_work_outer(detection, gap)
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
     origin = float(detection.detail.get("origin", 0.0) or 0.0)
@@ -142,12 +183,16 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
         start = int(round(work_outer.left + min(gap.start, gap.end)))
         end = int(round(work_outer.left + max(gap.start, gap.end)))
     else:
-        half = clamp_int(pitch * tuning.nearby_exclude_ratio, 2, 80)
+        half = clamp_int(pitch * nearby_policy.exclude_ratio, 2, 80)
         center = int(round(work_outer.left + gap.center))
         start, end = center - half, center + half + 1
     start = max(work_outer.left, min(work_outer.right, start))
     end = max(start + 1, min(work_outer.right, end))
-    guard = clamp_int(max(float(end - start), pitch * tuning.hard_trust_guard_ratio), tuning.hard_trust_guard_min, tuning.hard_trust_guard_max)
+    guard = clamp_int(
+        max(float(end - start), pitch * hard_gap_trust_policy.guard_ratio),
+        hard_gap_trust_policy.guard_min,
+        hard_gap_trust_policy.guard_max,
+    )
     left_start = max(work_outer.left, start - guard)
     right_end = min(work_outer.right, end + guard)
     core = gray_work[work_outer.top:work_outer.bottom, start:end]
@@ -158,15 +203,26 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
         return record
 
     core_mean = float(core.mean())
-    core_content = float((core < tuning.hard_trust_core_content_threshold).mean())
-    core_dark = float((core < tuning.hard_trust_core_dark_threshold).mean())
+    core_content = float((core < hard_gap_trust_policy.core_content_threshold).mean())
+    core_dark = float((core < hard_gap_trust_policy.core_dark_threshold).mean())
     core_activity = float(core.std() / 255.0)
-    left_content = float((left < tuning.hard_trust_core_content_threshold).mean()) if left.size else 0.0
-    right_content = float((right < tuning.hard_trust_core_content_threshold).mean()) if right.size else 0.0
+    left_content = float((left < hard_gap_trust_policy.core_content_threshold).mean()) if left.size else 0.0
+    right_content = float((right < hard_gap_trust_policy.core_content_threshold).mean()) if right.size else 0.0
     side_content = min(left_content, right_content)
     side_balance = abs(left_content - right_content)
     continuity = min(core_content, side_content)
-    nearby = nearby_separator_candidate_detail(gray_work, work_outer, gap, pitch, start, end, detection.film_format, cache)
+    nearby = nearby_separator_candidate_detail(
+        gray_work,
+        work_outer,
+        gap,
+        pitch,
+        start,
+        end,
+        nearby_policy,
+        detection.film_format,
+        cache,
+        policy.separator.profile,
+    )
     record["signals"] = {
         "available": True,
         "core_mean": core_mean,
@@ -182,35 +238,68 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
     }
     record["nearby_separator_candidate"] = nearby
 
-    narrow_hard = gap.method in HARD_GAP_METHODS and 0.0 < gap.width <= clamp_float(pitch * tuning.hard_trust_narrow_ratio, tuning.hard_trust_narrow_min, tuning.hard_trust_narrow_max)
+    narrow_hard = gap.method in HARD_GAP_METHODS and 0.0 < gap.width <= clamp_float(
+        pitch * hard_gap_trust_policy.narrow_ratio,
+        hard_gap_trust_policy.narrow_min,
+        hard_gap_trust_policy.narrow_max,
+    )
     width_ratio = float(gap.width) / max(1.0, float(pitch))
     model_delta_ratio = abs(float(gap.center - expected)) / max(1.0, float(pitch))
-    content_continuous = continuity >= tuning.hard_trust_continuity_min and core_activity >= tuning.hard_trust_activity_min
-    dark_separator_like = core_mean <= tuning.hard_trust_dark_mean_max and core_dark >= tuning.hard_trust_dark_fraction_min and core_activity <= tuning.hard_trust_dark_activity_max
-    weak_dark_gap = core_mean >= tuning.hard_trust_weak_mean_min and core_content >= tuning.hard_trust_weak_content_min
+    content_continuous = (
+        continuity >= hard_gap_trust_policy.continuity_min
+        and core_activity >= hard_gap_trust_policy.activity_min
+    )
+    dark_separator_like = (
+        core_mean <= hard_gap_trust_policy.dark_mean_max
+        and core_dark >= hard_gap_trust_policy.dark_fraction_min
+        and core_activity <= hard_gap_trust_policy.dark_activity_max
+    )
+    weak_dark_gap = (
+        core_mean >= hard_gap_trust_policy.weak_mean_min
+        and core_content >= hard_gap_trust_policy.weak_content_min
+    )
     if gap.method in HARD_GAP_METHODS:
         if bool(nearby.get("stronger_found", False)):
             record["hard_trust"] = "nearby_separator_conflict"
-        elif model_delta_ratio >= tuning.hard_trust_model_delta_ratio and (width_ratio < tuning.hard_trust_geometry_width_ratio or gap.score < tuning.hard_trust_model_conflict_score):
+        elif model_delta_ratio >= hard_gap_trust_policy.model_delta_ratio and (
+            width_ratio < hard_gap_trust_policy.geometry_width_ratio
+            or gap.score < hard_gap_trust_policy.model_conflict_score
+        ):
             record["hard_trust"] = "geometry_conflict"
-        elif width_ratio < tuning.hard_trust_frame_border_width_ratio and dark_separator_like:
+        elif width_ratio < hard_gap_trust_policy.frame_border_width_ratio and dark_separator_like:
             record["hard_trust"] = "suspect_frame_border"
         elif narrow_hard and (content_continuous or weak_dark_gap):
             record["hard_trust"] = "suspect_internal_edge"
         elif narrow_hard:
             record["hard_trust"] = "narrow_but_ok"
-        elif dark_separator_like or core_content <= tuning.hard_trust_strong_core_content_max or gap.score >= tuning.hard_trust_strong_min_score:
+        elif (
+            dark_separator_like
+            or core_content <= hard_gap_trust_policy.strong_core_content_max
+            or gap.score >= hard_gap_trust_policy.strong_min_score
+        ):
             record["hard_trust"] = "strong_separator"
         else:
             record["hard_trust"] = "weak_or_ambiguous_separator"
     elif gap.method in MODEL_GAP_METHODS:
         if dark_separator_like:
             overlap_risk = "none"
-        elif continuity >= tuning.diagnostic_overlap_strong_continuity and core_activity >= tuning.diagnostic_overlap_strong_activity and core_mean >= tuning.diagnostic_overlap_mean_min:
+        elif (
+            continuity >= overlap_policy.strong_continuity
+            and core_activity >= overlap_policy.strong_activity
+            and core_mean >= overlap_policy.mean_min
+        ):
             overlap_risk = "strong"
-        elif continuity >= tuning.diagnostic_overlap_medium_continuity and core_activity >= tuning.diagnostic_overlap_medium_activity and core_mean >= tuning.diagnostic_overlap_mean_min:
+        elif (
+            continuity >= overlap_policy.medium_continuity
+            and core_activity >= overlap_policy.medium_activity
+            and core_mean >= overlap_policy.mean_min
+        ):
             overlap_risk = "medium"
-        elif continuity >= tuning.diagnostic_overlap_weak_continuity and core_activity >= tuning.diagnostic_overlap_weak_activity and core_mean >= tuning.diagnostic_overlap_mean_min:
+        elif (
+            continuity >= overlap_policy.weak_continuity
+            and core_activity >= overlap_policy.weak_activity
+            and core_mean >= overlap_policy.mean_min
+        ):
             overlap_risk = "weak"
         else:
             overlap_risk = "none"
@@ -237,8 +326,9 @@ def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: 
         for name in ("suspect_internal_edge", "suspect_frame_border", "nearby_separator_conflict", "geometry_conflict")
     )
     strong_overlap_models = int(overlap_risk_counts.get("strong", 0))
+    lucky_policy = get_detection_policy(detection.film_format, detection.strip_mode).diagnostics.lucky_pass_risk
     single_anchor_pass_risk = (
-        format_tuning(detection.film_format).lucky_pass_risk_enabled
+        lucky_policy.enabled
         and detection.strip_mode == "full"
         and (
             (strong_hard <= 1 and (suspicious_hard >= 1 or strong_overlap_models >= 1))
@@ -301,10 +391,10 @@ def lucky_pass_risk_score_detail(
     threshold: float,
     cache: Optional[AnalysisCache] = None,
 ) -> dict[str, Any]:
-    tuning = format_tuning(detection.film_format)
+    policy = get_detection_policy(detection.film_format, detection.strip_mode).diagnostics.lucky_pass_risk
     fmt = FORMATS.get(detection.film_format, FORMATS["135"])
     if (
-        not tuning.lucky_pass_risk_enabled
+        not policy.enabled
         or detection.strip_mode != "full"
         or detection.count != fmt.default_count
         or detection.confidence < threshold
@@ -329,30 +419,30 @@ def lucky_pass_risk_score_detail(
     grid_or_equal = sum(1 for gap in detection.gaps if gap.method in {"grid", "equal"})
     width_cv = float(detection.detail.get("width_cv", 0.0) or 0.0)
     components: dict[str, float] = {}
-    if grid_or_equal >= tuning.lucky_model_gap_support_min:
-        components["model_gap_support"] = tuning.lucky_model_gap_support_weight
+    if grid_or_equal >= policy.model_gap_support_min:
+        components["model_gap_support"] = policy.model_gap_support_weight
     elif grid_or_equal == 1:
-        components["minor_model_gap_support"] = tuning.lucky_minor_model_gap_support_weight
-    if strong_hard <= tuning.lucky_limited_strong_hard_max:
-        components["limited_strong_hard_evidence"] = tuning.lucky_limited_strong_hard_weight
-    if strong_hard <= tuning.lucky_very_limited_strong_hard_max:
-        components["very_limited_strong_hard_evidence"] = tuning.lucky_very_limited_strong_hard_weight
+        components["minor_model_gap_support"] = policy.minor_model_gap_support_weight
+    if strong_hard <= policy.limited_strong_hard_max:
+        components["limited_strong_hard_evidence"] = policy.limited_strong_hard_weight
+    if strong_hard <= policy.very_limited_strong_hard_max:
+        components["very_limited_strong_hard_evidence"] = policy.very_limited_strong_hard_weight
     if suspicious_hard >= 1:
-        components["suspicious_hard_gap"] = tuning.lucky_suspicious_hard_weight
+        components["suspicious_hard_gap"] = policy.suspicious_hard_weight
     if strong_overlap_models >= 1:
-        components["strong_overlap_model_gap"] = tuning.lucky_strong_overlap_weight
-    if grid_or_equal >= tuning.lucky_model_gap_support_min and suspicious_hard >= 1 and strong_overlap_models >= 1:
-        components["model_suspicion_overlap_combo"] = tuning.lucky_combo_weight
-    if width_cv >= tuning.lucky_unstable_width_cv:
-        components["unstable_widths"] = tuning.lucky_unstable_width_weight
-    elif width_cv >= tuning.lucky_mild_width_cv:
-        components["mild_width_instability"] = tuning.lucky_mild_width_weight
-    if strong_hard >= tuning.lucky_strong_hard_credit_min:
-        components["strong_hard_evidence_credit"] = tuning.lucky_strong_hard_credit
-    if width_cv < tuning.lucky_stable_width_cv and grid_or_equal >= tuning.lucky_stable_model_gap_min:
-        components["stable_global_geometry_credit"] = tuning.lucky_stable_geometry_credit
+        components["strong_overlap_model_gap"] = policy.strong_overlap_weight
+    if grid_or_equal >= policy.model_gap_support_min and suspicious_hard >= 1 and strong_overlap_models >= 1:
+        components["model_suspicion_overlap_combo"] = policy.combo_weight
+    if width_cv >= policy.unstable_width_cv:
+        components["unstable_widths"] = policy.unstable_width_weight
+    elif width_cv >= policy.mild_width_cv:
+        components["mild_width_instability"] = policy.mild_width_weight
+    if strong_hard >= policy.strong_hard_credit_min:
+        components["strong_hard_evidence_credit"] = policy.strong_hard_credit
+    if width_cv < policy.stable_width_cv and grid_or_equal >= policy.stable_model_gap_min:
+        components["stable_global_geometry_credit"] = policy.stable_geometry_credit
     risk_score = max(0.0, min(1.0, sum(components.values())))
-    risk_threshold = tuning.lucky_risk_threshold
+    risk_threshold = policy.risk_threshold
     risk = risk_score >= risk_threshold
     return {
         "used": True,

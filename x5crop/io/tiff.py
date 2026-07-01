@@ -1,7 +1,23 @@
 from __future__ import annotations
 
-from .common import *
-from .evidence import *
+from pathlib import Path
+from typing import Any, Optional
+
+import numpy as np
+import tifffile
+
+from ..config import Config
+from ..domain import ImageProfile
+from ..image.evidence import make_gray_u8
+from ..utils import (
+    enum_name,
+    infer_axes,
+    infer_axes_from_shape,
+    planar_config_name,
+)
+
+
+LOSSLESS_COMPRESSIONS = {"NONE", "LZW", "ADOBE_DEFLATE", "DEFLATE", "ZSTD"}
 
 def profile_from_page(page: Any, shape: tuple[int, ...], dtype: np.dtype, axes: str) -> ImageProfile:
     photometric = enum_name(getattr(page, "photometric", None), "UNKNOWN")

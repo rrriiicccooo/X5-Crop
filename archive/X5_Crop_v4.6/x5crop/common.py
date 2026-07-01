@@ -10,7 +10,7 @@ Design goals:
 - Automatic high-confidence crop for common 135 and 120 scans.
 - half-frame and XPAN remain available, but must be selected manually.
 - Difficult scans are marked for review instead of being forced through.
-- Debug analysis includes separator evidence and content evidence.
+- Debug analysis includes original gray, debug boxes, and separator evidence.
 - TIFF pixel data and key TIFF metadata are preserved as much as practical.
 """
 
@@ -41,7 +41,7 @@ from .constants import (
 )
 
 
-VERSION = "4.5.4"
+VERSION = "4.6"
 SCRIPT_NAME = "X5_Crop.py"
 TIFF_SUFFIXES = {".tif", ".tiff"}
 REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
@@ -577,12 +577,12 @@ class FormatTuning:
     lucky_stable_model_gap_min: int = 3
     lucky_stable_geometry_credit: float = -0.35
     lucky_risk_threshold: float = 0.80
-    approved_polish_long_limit_ratio: float = 0.018
-    approved_polish_long_limit_min: int = 20
-    approved_polish_long_limit_max: int = 60
-    approved_polish_min_ext_ratio: float = 0.0100
-    approved_polish_min_ext_min: int = 50
-    approved_polish_min_ext_max: int = 120
+    approved_adjust_long_limit_ratio: float = 0.018
+    approved_adjust_long_limit_min: int = 20
+    approved_adjust_long_limit_max: int = 60
+    approved_adjust_min_ext_ratio: float = 0.0100
+    approved_adjust_min_ext_min: int = 50
+    approved_adjust_min_ext_max: int = 120
     separator_geometry_outer_full_mode: str = "off"
     separator_geometry_outer_partial_mode: str = "off"
     separator_geometry_outer_count: int = 0
@@ -1066,6 +1066,7 @@ class ProcessResult:
     detail: dict[str, Any]
     profile: dict[str, Any]
     warnings: list[str]
+    report_schema: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

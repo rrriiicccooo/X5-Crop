@@ -1,21 +1,20 @@
 # Codex Agent Rules
 
-This is the single Codex coordination file for this repository. Keep standing
-rules, sync notes, and the current handoff here.
+This is the single coordination file for this repository. Keep it short:
+standing rules, current source layout, release rules, and the latest handoff.
 
 ## First Moves
 
-1. Read `README.md` and the current handoff at the bottom of this file.
-2. Check the current branch and dirty state before editing:
+1. Read `README.md` and this handoff.
+2. Check branch and dirty state before editing:
 
 ```bash
 git branch --show-current
 git status --short
 ```
 
-3. If the folder is NAS-synced or the branch is ahead/behind, inspect the
-   situation before editing. GitHub is authoritative for source and docs; NAS is
-   only a local-file transport layer.
+3. Treat GitHub as authoritative for source/docs. NAS or local copied folders
+   are only transport/testing surfaces.
 
 Repository:
 
@@ -26,57 +25,49 @@ https://github.com/rrriiicccooo/X5-Crop
 
 ## Current Scope
 
-The app/native packaging direction is paused. Keep active work focused on the
-standalone script workflow unless the user explicitly resumes the app direction:
-
-```text
-X5_Crop.py
-archive/X5_Split_v17.py
-archive/X5_Split_v18.py
-```
-
-Keep `X5_Crop.py` as the active script. Keep `X5_Split_v17.py` and
-`X5_Split_v18.py` in `archive/` as preserved references. In V4 and later,
-`X5_Crop.py` is a thin entry point and the active implementation lives in
-`x5crop/`, so source changes may need both. Keep every named X5 Crop
-development version snapshot in `archive/` before moving past it, including
-experimental versions that are later paused or rolled back. Keep user-facing
-project documentation consolidated in `README.md`.
+- Keep active work focused on the standalone X5 Crop workflow unless the user
+  explicitly resumes app/native packaging.
+- Active entry point: `X5_Crop.py`.
+- In V4+, `X5_Crop.py` is a thin development entry; implementation lives under
+  `x5crop/`.
+- Keep named development snapshots in `archive/` before moving past them.
+- Preserve `archive/X5_Split_v17.py` and `archive/X5_Split_v18.py` as old
+  references when present.
+- User-facing docs are `README.md`, `快速启动_Quick_Start.md`, and
+  `CHANGELOG.md`.
 
 ## Coding Rules
 
-- Preserve TIFF metadata behavior unless the user explicitly asks to change it.
-- Keep detection changes close to the script logic.
-- Avoid broad refactors while solving a narrow detection or workflow task.
-- Add or update docs when script usage, setup, or testing behavior changes.
-- macOS installer setup should keep launchers usable after download: it should
-  `chmod +x` the main macOS launcher and installer, and remove
-  `com.apple.quarantine` from the current Release folder when `xattr` is
-  available. This is a per-folder preparation step, not a permanent global
-  macOS trust registration.
-- After changing the active script or launchers, sync the local ignored Test
-  copies too, especially `Test/135/X5_Crop.py`,
-  `Test/135/x5crop/`, `Test/135/X5_Crop_Mac.command`, and
-  `Test/135/X5_Crop_win.bat`.
-- When the user describes directional behavior with left/right or top/bottom,
-  treat that as the horizontal-strip baseline unless they say otherwise, and
-  add the rotated vertical-strip behavior too.
+- Preserve TIFF quality/metadata behavior unless the user explicitly asks
+  otherwise. Cropped TIFF output must keep bit depth, channel structure,
+  ICC/color space, resolution, and metadata.
+- Keep detection changes conservative and sample-driven. Do not loosen
+  PASS/REVIEW rules broadly to fix one file.
+- For detection changes, verify known-good formats before calling the change
+  safe, especially `135`.
+- Use `--deskew off` for fast detector regressions unless the task is about
+  export/deskew behavior.
+- Update docs when usage, setup, output folders, launcher behavior, or release
+  packaging changes.
+- Directional requests use horizontal-strip wording as baseline. Add rotated
+  vertical-strip behavior when implementing.
+- After changing active script/package/launchers, sync ignored local Test
+  copies when available:
+  - `Test/135`
+  - `Test/new_135`
+  - `Test/120/66`
+  - `Test/120/67`
+  - `Test/半格/full`
+  - `Test/半格/partial`
 
-## Git Rules
+## Git And Local Files
 
 - Commit only intentional source/docs/config changes.
-- If the working tree is NAS-synced, check `git status --short` before and
-  after edits because another computer may have synchronized changes into the
-  folder.
-- Do not run two Codex sessions against the same NAS-synced working tree at the
-  same time unless they are only reading.
-- Current local sparse-checkout policy keeps root-level source/docs/config files
-  visible, including `README.md`, `CHANGELOG.md`, `AGENTS.md`,
-  and `快速启动_Quick_Start.md`. It hides bulky or release-only paths locally.
-  Keep `LICENSE` only in GitHub / Git history, not expanded in the local sparse
-  working tree. Keep `.gitignore` visible. If `.github/` appears later, keep it
-  visible too because it contains GitHub repository automation/configuration.
-- The intended sparse-checkout rules are:
+- Check `git status --short` before and after edits. Other synced Codex
+  sessions may have changed files.
+- Do not revert user/other-session changes unless explicitly asked.
+- Keep `.gitignore` visible. If `.github/` appears, keep it visible too.
+- Intended sparse checkout:
 
 ```text
 /*
@@ -87,73 +78,68 @@ project documentation consolidated in `README.md`.
 !/LICENSE
 ```
 
-- `.gitignore` and `.github/` are hidden dot paths by name. Treat them as
-  project configuration, keep them in sync for other Codex sessions, and do not
-  rename them to non-hidden paths. On macOS they may also have the Finder
-  hidden flag; on Windows, if the user wants them hidden in Explorer, use the
-  Windows hidden attribute while keeping the same Git path names.
-- Do not commit local generated files or folders such as:
-  - `.venv/`
-  - `.venv-build/`
-  - `build/`
-  - `dist/`
-  - `release/`
-  - `__pycache__/`
-  - `.DS_Store`
-  - `downloaded_apps/`
+- Keep `LICENSE`, `archive/`, `install/`, `release/`, and `tools/` cloud/GitHub
+  only locally unless the user asks to expand them.
+- Do not commit generated/local files:
+  - `.venv/`, `.venv-build/`, `build/`, `dist/`, `release/`
+  - `__pycache__/`, `.DS_Store`, `downloaded_apps/`
   - `Test/`
-  - generated `x5_crop_output/` folders
-- Do not commit large TIFF samples unless the user explicitly decides they are
-  official fixtures and Git LFS tracking is configured for them.
-- User-facing Release zip packages should contain only:
-  - `X5_Crop.py` generated by `tools/build_standalone.py` as a standalone
-    release script, not the thin development entry point
-  - `X5_Crop_Mac.command`
-  - `X5_Crop_win.bat`
-  - `README.txt` copied from root `README.md`
-  - `快速启动_Quick_Start.txt` copied from root `快速启动_Quick_Start.md`
-  - `install/X5_Crop_Mac_install.command`
-  - `install/X5_Crop_win_install.bat`
-  - `install/X5_Crop_Mac_uninstall.command`
-  - `install/X5_Crop_win_uninstall.bat`
-  Do not package `x5crop/`, `archive/`, `CHANGELOG.md`, `AGENTS.md`,
-  `LICENSE`, `.github/`, `X5_Crop_Mac_diagnostics.command`, or local
-  test/output folders into the Release zip unless the user explicitly changes
-  this policy.
-  Release user documents use `.txt` filenames for maximum readability across
-  systems; repository source documents remain `.md` for maintenance and GitHub
-  rendering.
-  Prefer Python `zipfile` for release zips so the Chinese quick-start filename
-  is stored with UTF-8 metadata; the macOS `zip` CLI may display or store the
-  Chinese filename poorly in some environments.
+  - generated `x5_crop_output/`
+  - large TIFF samples unless explicitly made official fixtures with Git LFS
 
-## Handoff Rule
+## Release Package Rules
 
-When stopping work after source/docs changes, update the current handoff below.
-
-Template:
+User Release zip should contain only:
 
 ```text
-Date:
-Computer:
-Branch:
-Last commit:
-
-Changed:
-- 
-
-Verified:
-- 
-
-Not verified:
-- 
-
-Known local-only files:
-- 
-
-Next recommended step:
-- 
+X5_Crop.py                  # standalone script from tools/build_standalone.py
+X5_Crop_Mac.command
+X5_Crop_win.bat
+README.txt
+快速启动_Quick_Start.txt
+install/X5_Crop_Mac_install.command
+install/X5_Crop_win_install.bat
+install/X5_Crop_Mac_uninstall.command
+install/X5_Crop_win_uninstall.bat
 ```
+
+Do not package `x5crop/`, `archive/`, `CHANGELOG.md`, `AGENTS.md`, `LICENSE`,
+`.github/`, diagnostics launchers, Test files, or generated outputs unless the
+user changes this policy.
+
+Use Python `zipfile` for release zips so Chinese filenames are stored with
+UTF-8 metadata.
+
+macOS installer behavior:
+
+- `chmod +x` the main macOS launcher and installer.
+- Remove `com.apple.quarantine` from the current Release folder when `xattr` is
+  available.
+- This is per-folder preparation, not a permanent global trust registration.
+
+## Regression Priorities
+
+When detection changes are made, prefer comparing reports with
+`python3 -m x5crop.regression.compare` or the current regression CLI.
+
+Core fields to protect:
+
+```text
+status
+confidence
+review_reasons
+outer_box
+frame_boxes
+gaps
+```
+
+Key local sets:
+
+- `Test/135` full: core safety baseline.
+- `Test/new_135` full: wide 135 spacing examples.
+- `Test/半格/full` and `Test/半格/partial`: half-frame gate and partial behavior.
+- `Test/120/66` full/partial: dark-band / separator-derived outer behavior.
+- `Test/120/67` full: 120-67 baseline.
 
 ## Current Handoff
 
@@ -162,1698 +148,601 @@ Computer: primary macOS machine
 Branch: main
 Last commit: see `git log -1`
 
-Changed:
-- Active script is now `X5_Crop.py` V4.5.4. The current stable GitHub Release
-  remains `v4.2.8`.
-- V4.5.4 is a 120-66 wide-dark-separator correction after V4.5.3. It adds the
-  `separator_dark_band_outer` candidate strategy for 120-66 count=3 full and
-  partial strips, deriving an outer from two broad dark separator bands plus
-  three square frames.
-- 120-66 partial `partial_safe_extra_frames` now requires wide-like separator
-  evidence and checks both content-floating leading-edge content and per-frame
-  content stability before treating extra holder area as safe.
-- 120-66 full can prefer `separator_dark_band_outer` when the current full
-  outer needs help and the dark-band candidate has normal content support,
-  enough hard gaps, and no equal gap. Full does not reuse partial's
-  extra-holder tolerance.
-- V4.5.4 caps returned 120-66 dark-band gap evidence to a core width so
-  merged dark content is not displayed or scored as an over-wide separator.
-  This keeps `X5_test_51.tif` from reporting the second separator as a
-  1300px-wide band while preserving its selected outer and frame boxes.
-- README and CHANGELOG now describe V4.5.4 as the active development version.
+Current state:
 
-Verified:
-- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py
-  x5crop/debug/*.py` passed.
-- `Test/120/66` partial dry-run + Debug Analysis + diagnostics with
-  `--deskew off --count 3` passed 16 ok / 0 failed / 16 approved / 0 review
-  in `/private/tmp/x5_66_partial_next2`.
-- Compared with `Test/120/66/4.5.2_regression_partial`, partial results changed
-  on `X5_test_43.tif`, `X5_test_48.tif`, `X5_test_51.tif`, and
-  `X5_test_55.tif`. `X5_test_51.tif` moved from REVIEW to PASS using
-  `separator_dark_band_outer` with two `wide-separator` gaps. `X5_test_43.tif`
-  and `X5_test_55.tif` remain PASS but now use separator-derived outers instead
-  of the overly tight content-floating outer. `X5_test_48.tif` remains PASS and
-  switches to the new dark-band outer path.
-- `Test/120/66` full dry-run + Debug Analysis + diagnostics with
-  `--deskew off --count 3` passed 16 ok / 0 failed / 16 approved / 0 review
-  in `/private/tmp/x5_66_full_next3`.
-- After the dark-band gap core-width cap, `Test/120/66` partial and full were
-  rerun in `/private/tmp/x5_66_partial_gapcap` and
-  `/private/tmp/x5_66_full_gapcap`; both stayed 16 ok / 0 failed /
-  16 approved / 0 review. On `X5_test_51.tif`, the second dark-band gap width
-  changed from about 1315px to about 736px in partial, and from about 1314px to
-  about 737px in full, with selected frames still stable.
-- Compared with the previous full guard report
-  `/private/tmp/x5_66_full_guard_test3`, `X5_test_43.tif`,
-  `X5_test_48.tif`, and `X5_test_51.tif` moved from REVIEW to PASS. Visual
-  inspection of the new Debug Analysis for 43 / 48 / 51 showed good diffs:
-  three real frames are boxed and old content-shape / weak-edge failures are
-  replaced by wide dark-band separator evidence.
-- Full V4.5.4 local diagnostics were rerun after clearing historical `Test/`
-  outputs, using `--deskew off --dry-run --report --debug-analysis
-  --diagnostics --jobs 4`. Outputs follow the current naming rule: full mode
-  uses the version folder only, partial mode adds `_partial`.
-- V4.5.4 full diagnostic results:
-  `Test/135/4.5.4` = 48 ok / 43 approved / 5 review;
-  `Test/new_135/4.5.4` = 4 ok / 4 approved / 0 review;
-  `Test/120/66/4.5.4` = 16 ok / 16 approved / 0 review;
-  `Test/120/66/4.5.4_partial` = 16 ok / 16 approved / 0 review;
-  `Test/120/67/4.5.4` = 4 ok / 3 approved / 1 review;
-  `Test/半格/full/4.5.4` = 10 ok / 10 approved / 0 review;
-  `Test/半格/partial/4.5.4_partial` = 5 ok / 5 approved / 0 review.
-- V4.5.4 timing was recorded in local ignored file
-  `Test/4.5.4_diagnostic_timing.md`: all executed sets were 103 files,
-  221.31s total, average 2.15s/file. Process workers were unavailable in the
-  sandbox, so the script used thread workers.
+- Working tree is dirty with V4.7 clean-room source rewrite cleanup changes.
+  Treat the whole tree as intentional in-progress work; do not overwrite it.
+- Active script is `X5_Crop.py` V4.7.
+- Current stable GitHub Release remains `v4.2.8`.
+- V4.7 is intended as a clean source-layout rewrite over V4.5.4 behavior, not
+  a detector-loosening release.
 
-Not verified:
-- Default-deskew export timing was not remeasured.
+V4.7 source layout:
 
-Known local-only files:
-- Local ignored Test outputs now include `Test/135/4.5.4`,
-  `Test/new_135/4.5.4`, `Test/120/66/4.5.4`,
-  `Test/120/66/4.5.4_partial`, `Test/120/67/4.5.4`,
-  `Test/半格/full/4.5.4`, `Test/半格/partial/4.5.4_partial`, and
-  `Test/4.5.4_diagnostic_timing.md`.
-- Temporary verification outputs were previously written under `/private/tmp/`,
-  including `/private/tmp/x5_66_partial_next2` and
-  `/private/tmp/x5_66_full_next3`.
-- Local ignored Test copies were synced for `Test/135/X5_Crop.py`,
-  `Test/135/x5crop/`, `Test/120/66/X5_Crop.py`, and
-  `Test/120/66/x5crop/`.
+- Thin entry: `X5_Crop.py`
+- Main package: `x5crop/`
+- Active layout includes:
+  - `app.py`, `config.py`, `formats.py`, `workflow.py`
+  - `domain.py`, `format_specs.py`, `runtime.py`
+  - `io/`, `image/`, `geometry/`, `detection/`, `diagnostics/`, `export/`
+  - `policies/`, `regression/`
+- Old root modules `x5crop/common.py`, `x5crop/policy.py`, `x5crop/core.py`,
+  `x5crop/io.py`, `x5crop/geometry.py`, and `x5crop/regression.py` have been
+  removed from active source.
+- `archive/X5_Crop_v4.6/` exists as the V4.6 snapshot.
 
-Next recommended step:
-- If V4.5.4 behavior is accepted after visual review, later decide whether to
-  promote it into the stable GitHub Release line.
+Important V4.7 behavior notes:
 
-Date: 2026-06-30
-Computer: primary macOS machine
-Branch: main
-Last commit: see `git log -1`
+- Per-format policies now live in `x5crop/policies/`.
+- Format parameter presets are split under `x5crop/policies/presets/`;
+  `policies/parameters.py` is now a thin lookup / public export. Policy
+  construction reads capability-specific parameter groups such as separator
+  gate, leading-grid separator failure, separator geometry support, gap search,
+  hard-gap trust, nearby separator correction, robust grid, outer strategy,
+  content-floating outer, edge-anchor outer, short-axis aspect retry,
+  partial holder, scoring calibration, candidate competition, content evidence,
+  debug gap overlay, nearby separator diagnostics, overlap-risk diagnostics,
+  lucky-pass risk, postprocess, approved geometry adjustment, detection/output
+  bleed, and edge bleed protection instead of reaching into the flat preset table
+  directly. Runtime calibration, wide-retry,
+  content-evidence, Debug Analysis gap-overlay, nearby separator diagnostics,
+  overlap-risk diagnostics, gap search, hard-gap trust, nearby separator
+  correction, robust grid, grid outer refinement, content-floating outer,
+  edge-anchor outer, format-geometry retry,
+  short-axis aspect retry, outer content alignment, partial edge hint,
+  lucky-pass risk,
+  postprocess-cap, approved geometry adjustment, detection/output bleed,
+  edge bleed protection, and leading-grid failure gate
+  paths also read their thresholds/caps/weights from those grouped views.
+- `policies/registry.py` is a thin policy resolve/cache layer. Concrete
+  format/mode policy presets now live in the corresponding `format_*.py`
+  modules.
+- `SeparatorGatePolicy.profile` and explicit gate thresholds are the runtime
+  separator-gate contract.
+- `SeparatorGatePolicy.leading_grid_failure` owns the leading weak-grid
+  separator failure capability; runtime gates no longer read flat
+  `leading_grid_failure_*` preset fields directly.
+- Format-family gate parameter names have been normalized: edge-pair and wide
+  separator gate thresholds are semantic `separator_gate_*` parameters, not
+  `separator_gate_120_*` names.
+- `SelectionPolicy.content_mismatch_review` owns the review-only candidate
+  preference for content-count mismatch cases. It defaults off and is currently
+  enabled only by `half_full`.
+- `SeparatorGeometrySupportPolicy` expresses `wide_geometry` and `stable_grid`
+  support as generic separator capability modes. They default off and are
+  currently enabled only by half full.
+- `SeparatorEdgePairPolicy` is held by `DetectionPolicy.separator`; runtime
+  passes it into geometry edge-pair refinement.
+- `SeparatorPolicy.hard_gap_trust` controls semantic hard-gap trust thresholds
+  used by robust-grid hard separator protection and read-only diagnostics;
+  active geometry/diagnostics no longer read flat `hard_trust_*` preset fields
+  directly.
+- `SeparatorPolicy.nearby_correction` controls active nearby-separator
+  correction search, score, distance, and local-geometry thresholds;
+  `candidate_build.py` and `geometry/gaps.py` no longer read flat `nearby_*`
+  preset fields for candidate-moving correction.
+- `SeparatorPolicy.robust_grid` controls hard-gap geometry constraining,
+  robust-grid fitting, reliable-gap scoring, and hard-separator protection;
+  geometry/scoring runtime no longer reads flat `constrain_*` or `robust_*`
+  preset fields directly.
+- `SeparatorPolicy.gap_search` controls base separator gap search radius,
+  width, guard, score, and wide separator acceptance thresholds; active
+  geometry/candidate retry no longer reads flat `gap_*` / `wide_gap_min_*`
+  preset fields directly.
+- `SeparatorPolicy.profile` and `edge_refine_profile` control separator-profile
+  and edge-refine-profile generation thresholds, weights, smoothing, and
+  background thresholds; `geometry/separator_profile.py` no longer reads flat
+  `separator_profile_*` / `edge_refine_*` preset fields directly, and detection
+  plus read-only diagnostics pass the selected policy explicitly. Separator
+  profile and edge-refine profile caches are keyed by the selected policy.
+  Policy construction reads these values through
+  `FormatParameters.separator_profile` / `edge_refine_profile` capability views
+  rather than direct flat profile fields.
+- `SeparatorPolicy.enhanced` controls enhanced separator analysis trigger,
+  acceptance score, width, and shift limits; `geometry/core.py` no longer reads
+  flat `enhanced_*` preset fields directly.
+- `ContentPolicy.evidence`, `profile`, `mask`, and `candidate` own content
+  evidence thresholds, content-run profile, content mask outer, and content-only
+  candidate confidence caps; `detection/content.py` consumes policy instead of
+  flat `content_*` preset fields or runtime `FormatParameters`.
+- `FormatParameters.content_evidence`, `content_profile`, `content_mask`,
+  `content_candidate`, and `content_support` are the preset-side capability
+  views for constructing `ContentPolicy`; policy factory no longer reads the
+  corresponding flat content fields directly.
+- `SeparatorPolicy.wide_separator_confidence_cap` owns the confidence cap for
+  candidates containing wide separator gaps; `calibration.py` no longer reads
+  flat wide-retry confidence-cap parameters directly.
+- `DarkBandOuterPolicy` expresses dark-band outer/gap parameters and full
+  dark-band candidate selection. It defaults off and is currently conditional
+  only for `120-66` full/partial.
+- `OuterPolicy.separator_outer_allow_oversized_band` holds the 120-66 oversized
+  separator-band capability; implementation code no longer checks
+  `tuning.name == "120-66"`.
+- `OuterPolicy.separator_gap_search_max_width_ratio` controls the gap-search
+  width override for separator-derived outer candidates; `candidate_run.py` no
+  longer reads flat `separator_first_outer_gap_max_width_ratio` directly.
+- `OuterPolicy.separator_outer_band` and `separator_geometry_outer` control
+  separator-first / separator-geometry outer proposal band thresholds, sequence
+  limits, source counts, margin ratios, and candidate limits; `detection/outer.py`
+  no longer reads flat `separator_first_outer_*` or
+  `separator_geometry_outer_*` preset fields directly.
+- `FormatParameters.content_floating_outer`, `edge_anchor_outer`,
+  `base_outer_candidates`, `separator_outer_band`, and
+  `separator_geometry_outer` are the preset-side capability views for
+  constructing outer proposal policy objects; policy factory no longer reads the
+  corresponding flat outer proposal fields directly.
+- `OuterPolicy.format_geometry_retry` controls format-geometry outer retry
+  enablement, ratio tolerance, shrink limits, and content margin; `outer_retry.py`
+  no longer reads flat `format_geometry_outer_retry_*` preset fields directly.
+- `OuterPolicy.grid_refine` controls full-strip grid-based outer refinement
+  shift and width-change limits; `candidate_build.py` no longer reads flat
+  `grid_outer_refine_*` preset fields directly.
+- `OuterPolicy.short_axis_aspect_retry` controls short-axis aspect outer retry
+  error/aspect/margins. It defaults off and is currently enabled only for
+  `120-66` full; `outer_retry.py` no longer reads flat
+  `short_axis_aspect_retry_*` preset fields directly.
+- `OuterPolicy.content_alignment` controls outer/content alignment slack,
+  white-edge detection, mismatch gates, and content-aligned retry margins;
+  `outer_retry.py` and `postprocess.py` no longer read flat `outer_align_*`
+  preset fields directly.
+- `OuterPolicy.base_candidates` controls base outer candidate bw / white-x /
+  mask-profile thresholds, margins, and candidate area limits;
+  `geometry/outer_boxes.py` no longer reads flat `outer_*` preset fields or
+  resolves parameters by format name.
+- `OuterPolicy.content_floating_outer` and `edge_anchor_outer` own
+  content-floating and long-axis edge-anchor outer proposal thresholds;
+  `detection/outer.py` no longer reads flat `floating_outer_*` or
+  `long_axis_edge_anchor_*` preset fields directly.
+- `PartialEdgeHintPolicy` controls partial-strip edge hint window thresholds;
+  `detection/partial.py` and `candidate_build.py` no longer read flat
+  `partial_edge_hint_*` preset fields directly.
+- `DiagnosticsPolicy.overlap_bleed_risk` controls overlap-bleed diagnostic
+  attachment and overlap-risk thresholds instead of postprocess checking
+  partial/half/120 directly or diagnostics reading flat `diagnostic_overlap_*`
+  preset fields.
+- `DiagnosticsPolicy.debug_gap_overlay` controls Debug Analysis separator-panel
+  gap overlay tolerances, tick length, and line widths instead of
+  `debug/render.py` reading flat `debug_gap_*` preset fields or hard-coding gap
+  tick length directly.
+- `DiagnosticsPolicy.nearby_separator` controls nearby-separator diagnostic
+  search windows and stronger-candidate thresholds; `detection/diagnostics.py`
+  no longer reads flat `nearby_*` preset fields for that diagnostic search.
+- `DiagnosticsPolicy.lucky_pass_risk` controls lucky-pass risk scoring weights
+  and enablement; `detection/diagnostics.py` no longer reads flat `lucky_*`
+  preset fields directly for that risk score.
+- `ScoringPolicy` owns candidate calibration weights, separator source bias,
+  hard-full confidence floor, and no-auto caps; calibration/scoring runtime no
+  longer reads `scoring_calibration` from flat format parameters directly.
+- `ScoringPolicy.base_detection` owns base detector scoring weights,
+  full-geometry floors, partial caps, outer-too-large caps, low-confidence
+  thresholds, and the separator-incomplete reason id; `score_detection()` no
+  longer reads flat `score_*` fields directly or emits the old
+  `120_separator_uncertain` format-prefixed reason name.
+- `ContentPolicy` owns content-support scoring norms, weights, and support
+  gates used during candidate calibration; `content_support_score()` no longer
+  reads flat `content_support_*` fields directly.
+- `ScoringPolicy.geometry_support` owns geometry-support scoring width, outer,
+  aspect, and count norms/weights plus outer-area bounds used during candidate
+  calibration; `geometry_support_score()` no longer reads flat
+  `geometry_support_*`, `geometry_width_cv_norm`, `content_support_aspect_norm`,
+  or score outer-area fields directly.
+- `ScoringPolicy.separator_support` owns separator-support hard/model weights,
+  grid/equal credit, and single-frame cap used during candidate calibration;
+  `separator_support_score()` no longer reads flat `separator_model_*` or
+  `separator_support_*` fields directly.
+- `PostprocessPolicy` owns postprocess confidence caps for content aspect
+  conflict, low content evidence, outer/content mismatch, and lucky-pass risk;
+  `finalize_detection_decision()` no longer receives flat tuning parameters for
+  those caps. It also owns postprocess review/detail reason ids for
+  outer-alignment disabled, likely partial, outer-candidate disagreement, and
+  deskew uncertainty cases.
+- `PostprocessPolicy.approved_geometry_adjustment` owns the approved-auto
+  long-axis output geometry extension limits; `geometry/output_adjustment.py`
+  no longer reads flat `approved_adjust_*` preset fields directly.
+- `OutputPolicy.edge_bleed_protection` owns the full-strip output edge guard
+  used after output bleed; `geometry/output_adjustment.py` no longer carries
+  hard-coded edge guard ratio/min/max values.
+- `OutputPolicy.overlap_risk_long_axis_bleed` owns the output-only long-axis
+  bleed increase for overlap-risk cases; postprocess and cached workflow reuse
+  no longer hard-code the 50px value.
+- `OutputPolicy.detection_long_axis_bleed` and
+  `detection_short_axis_bleed` own the bleed used during detection geometry;
+  `detection_geometry_config()` no longer hard-codes zero detection bleed.
+- `DetectorPolicy.dual_lane` records lane count, lane format, and unsupported
+  partial reason for the 135-dual detector path.
+- `DetectionPolicy.frame_fit` owns frame-fit behavior. Geometry consumes the
+  policy object and no longer constructs format frame-fit defaults.
+- `PartialHolderPolicy` now expresses 66 partial strict holder rules, including
+  safe-extra-frames strip-mode scope, wide-like gaps, leading content, frame
+  content, hard/equal gap limits, width CV, joint/content/geometry score,
+  per-frame content thresholds, and frame aspect-error limits.
+- `CandidateRunPolicy.content_candidate`, `FallbackPolicy`, and
+  `PartialStopPolicy` now express candidate-run behavior such as content
+  candidate enable/skip modes and reasons, fallback outer proposal use, and
+  partial safe-auto stopping.
+- `CandidateRunPolicy.separator_geometry_competition` owns the median-aspect
+  thresholds, content-outer strategy scope, and strip-mode scope used to decide
+  when conditional separator-geometry candidates may compete; runtime no longer
+  hides those constants or mode branches in `candidate_run.py`.
+- `CandidateRunPolicy.equal_first_before_wide_retry` owns equal-first wide-retry
+  enablement, its wide-geometry dependency, strip-mode scope, and default-count
+  requirement. The policy scope defaults to full/default-count, while the active
+  support still depends on format-local wide-geometry policy.
+- `CandidateRunPolicy.dark_band_retry` owns full/partial dark-band retry
+  strip-mode scope, full default-count checks, and partial retry trigger
+  conditions. The interface is generic, but actual activation still requires
+  `OuterPolicy.dark_band` to be enabled, currently only for `120-66`
+  full/partial.
+- `DarkBandOuterPolicy` owns dark-band full-selection strip-mode scope and
+  required-count checks; the active capability remains isolated to `120-66`.
+- `ModePolicyPreset.dark_band` groups dark-band activation, full-selection, and
+  oversized separator-band enablement so the 120-66 risk model stays isolated in
+  policy preset construction.
+- `OuterCandidate.strategy` is the runtime candidate-kind contract. Candidate
+  selection/build/calibration no longer infer behavior from candidate-name
+  prefixes.
+- `candidate_build.py`, `candidate_run.py`, `dual_lane.py`,
+  `partial_holder.py`, `outer_retry.py`, `calibration.py`, `fallback.py`,
+  `cache_keys.py`, and `partial.py` hold candidate-building, candidate-running,
+  specialized detector, holder, retry, candidate-calibration, fallback,
+  cache-key, and partial-hint logic that used to bloat `pipeline.py`.
+- Geometry is split into focused modules: `boxes.py`, `layout.py`,
+  `outer_boxes.py`, `gaps.py`, `separator_profile.py`, `frame_fit.py`, and
+  `output_adjustment.py`; `geometry/core.py` now holds the remaining
+  cache-heavy separator helpers.
+- Low-level helpers that need format context now require explicit
+  `format_name`; active runtime should not keep implicit `"135"` defaults in
+  deskew, gap, separator profile cache, content profile, or diagnostics helpers.
+- `FormatParameters` / `format_parameters()` in `policies/parameters.py`
+  replace the old active-source `FormatTuning` surface. Remaining flat fields
+  are a runtime transition surface for detector/geometry helpers, not the
+  policy factory or calibration/wide-retry contract.
+- Runtime policy ids are written into reports.
+- `ReportPolicy` owns report schema version and section order; report rows
+  include `report_schema`.
+- Debug Analysis has been simplified to three visual panels:
+  `Original gray`, `Debug boxes`, and `Separator evidence`.
+- `DiagnosticsPolicy.debug_panels` and `debug_panel_titles` own the Debug
+  Analysis panel order and labels; the active renderer only exposes the current
+  three-panel surface.
+- `120-66` full/partial are the only modes with dark-band behavior enabled
+  conditionally; other formats keep it off unless later verified.
 
-Changed:
-- Active script is now `X5_Crop.py` V4.5.3. The current stable GitHub Release
-  remains `v4.2.8`.
-- V4.5.3 is a narrow half-frame full gate fix after V4.5.2. It adds a safe
-  detail-value reader in `x5crop/detection/pipeline.py` so valid values such as
-  `width_cv=0.0` are not treated as missing values by `or 1.0`.
-- The fix lets `Test/半格/full/X5_00058.tif` pass through the existing
-  `half_wide_geometry_support` conditions. It does not add a new detector path
-  or globally loosen PASS thresholds.
-- README and CHANGELOG now describe V4.5.3 as the current active development
-  version. Local ignored Test copies were synced to V4.5.3.
-- Archive snapshot `archive/X5_Crop_v4.5.3/` was created with the thin entry
-  script and matching `x5crop/` package.
+Verified after V4.7 clean-room rewrite:
 
-Verified:
-- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py
-  x5crop/debug/*.py` passed.
-- `Test/半格/full` dry-run compared with V4.5.2 changes only
-  `X5_00058.tif` status / confidence / review reasons: it moves from
-  `needs_review` to `approved_auto`; outer, frame boxes, and gaps have no diff.
-- `Test/135` full dry-run compared with V4.5.2 produced 48 rows / 0 diff.
-- `Test/半格/partial` dry-run compared with V4.5.2 produced 5 rows / 0 diff.
-
-Not verified:
-- Default-deskew full export timing was not remeasured for V4.5.3.
-- Non-half / non-135 formats were not rerun because the fix is limited to
-  candidate detail numeric reads used by half/full and calibration helpers.
-
-Known local-only files:
-- Local ignored `Test/` script/package/launcher copies were synced to V4.5.3.
-
-Next recommended step:
-- If the V4.5.3 behavior is accepted, decide later whether to promote it into
-  the stable GitHub Release line.
-
-Date: 2026-06-30
-Computer: primary macOS machine
-Branch: main
-Last commit: see `git log -1`
-
-Changed:
-- Active script is now `X5_Crop.py` V4.5.2. The current stable GitHub Release
-  remains `v4.2.8`.
-- V4.5.2 is a structural convergence pass after V4.5.1. It moves read-only
-  diagnostics calculations from `x5crop/debug/render.py` into
-  `x5crop/detection/diagnostics.py`, so detection postprocess no longer
-  depends backward on the Debug UI layer.
-- V4.5.2 adds `x5crop/constants.py` for shared analysis-source, gap-method, and
-  main review-reason strings. It also makes `x5crop/policy.py` and
-  `x5crop/detection/models.py` import directly from `common.py` / `geometry.py`
-  instead of routing through the `core.py` compatibility surface.
-- `x5crop/debug/render.py` no longer imports the full detection pipeline.
-- README and CHANGELOG now describe V4.5.2 as the current active development
-  version. Local ignored Test copies were synced to V4.5.2.
-- Archive snapshot `archive/X5_Crop_v4.5.2/` was created with the thin entry
-  script and matching `x5crop/` package.
-
-Verified:
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.5.2`.
-- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py
-  x5crop/debug/*.py` passed.
-- V4.5.2 dry-run regressions against `archive/X5_Crop_v4.5.1/` with
-  `--deskew off` produced 0 diff for: `Test/135` full (48 rows),
-  `Test/120/66` partial (16 rows), `Test/120/67` full (4 rows),
-  `Test/半格/full` (10 rows), and `Test/半格/partial` (5 rows).
-- Full `Test/135` Debug Analysis dry run generated 48 JPG files successfully
-  in `/private/tmp/x5_v452_debug_smoke/_debug_analysis`.
-
-Not verified:
-- Default-deskew full export timing was not remeasured for V4.5.2.
-
-Known local-only files:
-- Local ignored `Test/` script/package/launcher copies were synced to V4.5.2.
-
-Next recommended step:
-- If publishing a user Release later, build the standalone Release
-  script/package from V4.5.2 and decide whether V4.5.2 should supersede the
-  current stable Release.
-
-Date: 2026-06-30
-Computer: primary macOS machine
-Branch: main
-Last commit: see `git log -1`
-
-Changed:
-- Active script is now `X5_Crop.py` V4.5.1. The current stable GitHub Release
-  remains `v4.2.8`.
-- V4.5.1 is a structural convergence pass after V4.5. It adds read-only
-  policy view groups over existing `FormatTuning` fields, so outer, content,
-  separator, grid, scoring, calibration, partial, diagnostics, debug, and
-  deskew parameters have clearer entry points without changing thresholds.
-- V4.5.1 moves post-detection finalization out of CLI into
-  `x5crop/detection/postprocess.py`. Content evidence, outer/content
-  alignment, outer retry, review gates, output bleed, edge protection, and
-  diagnostics attachment now live in one detection-layer finalization helper.
-- V4.5.1 splits candidate generation / selection: per-count calibrated
-  candidates are built by `calibrated_candidates_for_count()`, final ranking
-  happens in `select_detection_candidate()`, and `choose_detection()` is kept
-  closer to orchestration.
-- V4.5.1 splits separator hard-evidence gate helpers by policy mode and removes
-  active-code legacy aliases / hand-written `analysis_source` strings.
-- Debug Analysis now has a Decision summary panel with version, PASS/REVIEW,
-  confidence, format, strip, count, outer strategy, analysis source, auto gate,
-  gap evidence, and review reasons.
-
-Verified:
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.5.1`.
-- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py
-  x5crop/debug/*.py` passed.
-- `python3 -m py_compile` also passed for `archive/X5_Crop_v4.5.1/` and the
-  synced `Test/135` copy.
-- V4.5.1 dry-run regressions against `archive/X5_Crop_v4.5/` with
-  `--deskew off` produced 0 diff for: `Test/135` full (48 rows),
-  `Test/120/66` partial (16 rows), `Test/120/67` full (4 rows),
-  `Test/半格/full` (10 rows), and `Test/半格/partial` (5 rows).
-
-Not verified:
-- Default-deskew full export timing was not remeasured for V4.5.1.
-
-Known local-only files:
-- Local ignored `Test/` script/package/launcher copies were synced to V4.5.1.
-- Archive snapshot `archive/X5_Crop_v4.5.1/` was created with the thin entry
-  script and matching `x5crop/` package.
-
-Next recommended step:
-- If publishing, build the standalone Release script/package from V4.5.1 and
-  decide whether V4.5.1 should supersede the current stable Release.
-
-Date: 2026-06-29
-Computer: primary macOS machine
-Branch: main
-Last commit: see `git log -1`
-
-Changed:
-- Active script is now `X5_Crop.py` V4.5. The current stable GitHub Release
-  remains `v4.2.8`.
-- V4.5 is a policy architecture cleanup after V4.4.6. It consolidates the
-  trusted-separator-plus-format-geometry outer proposal into the general
-  `separator_geometry_outer` policy, with separate full / partial mode fields.
-  Current active behavior stays conservative: only `120-66 partial` has
-  `separator_geometry_outer_partial_mode=conditional`; other formats stay off
-  until sample-based verification justifies opening them.
-- V4.5 extracts shared separator-band helpers:
-  `collect_separator_outer_bands()` and `separator_outer_band_sequences()`.
-  `separator_first_outer_candidates()` and `separator_geometry_outer_candidates()`
-  now share dark-band collection / sequence logic instead of maintaining two
-  near-duplicate implementations.
-- V4.5 adds `outer_candidate_strategy` to detection detail and to
-  `outer_candidates` report entries. This makes candidate sources explicit:
-  `base_outer`, `content_floating_outer`, `long_axis_edge_anchor_outer`,
-  `separator_first_outer`, `separator_geometry_outer`, or retry variants.
-- V4.5 also renames several historical scoring policy fields toward gate
-  semantics, such as `score_gate_135_*`, `score_gate_half_allow_geometry`,
-  `separator_gate_120_*`, and `separator_hard_required_all_gaps`. Thresholds
-  are unchanged.
-- V4.5 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed. Full `Test/135` dry-run
-  compared with V4.4.6 is 48 unique rows / 0 diff. `Test/120/66` partial
-  compared with V4.4.6 is 16 unique rows / 0 diff; `X5_test_56.tif` still uses
-  the `separator_geometry_*` outer candidate and `X5_test_51.tif` remains
-  REVIEW. Full `Test/120/67` compared with the existing V4.4.2 baseline has
-  no status / confidence / outer / frame / gap diff; only one historical review
-  reason name is normalized from `v2_auto_gate_not_satisfied` to
-  `auto_gate_not_satisfied`. `Test/半格/full` compared with V4.4.4 is
-  10 rows / 0 diff. `Test/半格/partial` compared with V4.4.4 is 5 rows /
-  0 diff.
-- V4.5 archive snapshot is preserved as `archive/X5_Crop_v4.5/`, including the
-  thin entry script and the matching `x5crop/` package.
-- Previous active script was `X5_Crop.py` V4.4.6.
-- V4.4.6 adds a generic separator-geometry outer candidate, enabled only by
-  the `120-66` policy for now. When the regular partial candidate has
-  suspicious frame aspect, it can add an extra outer candidate inferred from
-  two trusted dark separator bands and the 120-66 count=3 / 1:1 frame geometry.
-  That candidate is sent back through the existing separator / edge-pair /
-  content / scoring / review-gate pipeline. It does not raise confidence, skip
-  gates, or promote weak-evidence REVIEW results.
-- V4.4.6 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed. Full `Test/135` dry-run
-  compared with the existing V4.4.6 baseline is 48 rows / 0 diff.
-  `Test/120/66` partial compared with V4.4.5 keeps status / confidence /
-  review_reasons unchanged; only `X5_test_56.tif` switches to the new
-  `separator_geometry_*` outer candidate. `X5_test_51.tif` remains REVIEW.
-- Active script is now `X5_Crop.py` V4.4.5. The current stable GitHub Release
-  remains `v4.2.8`, and its release asset has been refreshed with the new
-  default output folder name.
-- V4.4.5 retroactively renames the default output folder from `split_output/`
-  to `x5_crop_output/`. Active source, README, CHANGELOG, quick-start docs, and
-  this handoff now use the new folder name. CLI help now says
-  `default input/x5_crop_output`.
-- V4.4.5 also updates the locally visible archive snapshots so their modular
-  `x5crop/reports.py` defaults and CLI help use `x5_crop_output/` as well.
-  GitHub release package assets were refreshed retroactively for v4.2.8,
-  v4.1.3, v4.0.1, v4.0, v3.6.2, and v3.3.1; re-downloaded verification found
-  0 `split_output` hits and confirmed `x5_crop_output` is present in each zip.
-- Previous active script was `X5_Crop.py` V4.4.4.
-- Active script is now `X5_Crop.py` V4.4.4. The current stable GitHub Release
-  remains `v4.2.8`.
-- V4.4.4 is a naming cleanup and diagnostic readability fix after V4.4.3. It
-  removes active-code historical version-coded names from the current detection
-  path: the main entry is now `choose_detection()`, candidate-level scoring and
-  auto-gate detail is `candidate_decision`, multi-candidate ranking detail is
-  `candidate_competition`, read-only diagnosis stays under `diagnostics`, and
-  candidate calibration is `calibrate_candidate_decision()`.
-- V4.4.4 removes the unused partial-content policy fields
-  `partial_content_min_count_35mm` and `partial_content_min_count_small`.
-- V4.4.4 improves 2-gap `separator_outer_band_sequences()` pruning by ranking
-  pairs with spacing geometry error plus a small score tie-breaker, so top-k
-  pruning is no longer based on dark-band score alone.
-- V4.4.4 keeps the gap diagnostic records that trigger output-only 50px bleed
-  in `overlap_bleed_risk`. Ordinary Debug Analysis can now draw cyan overlap
-  ticks for those risks even when `--diagnostics` is not enabled.
-- V4.4.4 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed; `python3 X5_Crop.py
-  --version` prints `X5_Crop.py 4.4.4`. Full `Test/135` dry-run compared with
-  V4.4.3 has only review-reason rename diffs from the old version-coded name to
-  `auto_gate_not_satisfied`; status / confidence / outer / frame_boxes / gaps
-  are unchanged. `Test/半格/full` and `Test/半格/partial` are 0 diff against
-  V4.4.3. `Test/120/66` partial has only the same review-reason rename on
-  `X5_test_51.tif`; status / confidence / outer / frame_boxes / gaps are
-  unchanged.
-- Previous active script was `X5_Crop.py` V4.4.3.
-- Active script is now `X5_Crop.py` V4.4.3. The current stable GitHub Release
-  remains `v4.2.8`.
-- V4.4.3 is a maintenance-noise and local performance cleanup after V4.4.2. It
-  removes unused legacy constants / helper surfaces, simplifies the unused
-  partial-count helper signature, and keeps the old full/partial competition
-  guard removed.
-- V4.4.3 caches same-image / same-format content mask and expanded-bbox
-  intermediates in `content_detection_for_count()`, adds a labeled original-gray
-  Debug Analysis panel cache, and keeps separator-first outer candidate caches
-  exact rather than approximate.
-- V4.4.3 adds lighter separator-first band sequence paths for expected 1-gap /
-  2-gap cases and caps 2-gap pair combinations with top-k ranking. This is aimed
-  at 66 partial-style searches where pair enumeration can otherwise create
-  avoidable work.
-- V4.4.3 keeps half full behavior equal-first + wide-retry, but marks the
-  wide-retry detail as `half_full_equal_first` so that the branch is explicit
-  without changing current half full detection.
-- V4.4.3 extends output-only overlap safety bleed: diagnostic overlap-risk
-  signals in partial, half-frame, and 120-format paths can now trigger long-axis
-  output bleed=50px. This does not participate in scoring or PASS/REVIEW.
-- V4.4.3 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed; `python3 X5_Crop.py
-  --version` prints `X5_Crop.py 4.4.3`; full `Test/135` dry-run compared with
-  V4.4.2 was 48 rows / 0 diff.
-- Expected non-135 / partial diffs from V4.4.3: `Test/半格/full` differs from
-  V4.4.2 only on `X5_00050.tif` frame_boxes, `Test/半格/partial` differs only on
-  `X5_00055.tif` frame_boxes, and `Test/120/66` partial differs only on
-  `X5_test_51.tif` frame_boxes. In each case, the diff is the intended
-  output-only long-axis bleed expansion from 20px to 50px due to diagnostic
-  overlap risk; status / confidence / outer / gaps are unchanged.
-- Active script is now `X5_Crop.py` V4.4.2. The current stable GitHub Release
-  remains `v4.2.8`.
-- V4.4.2 is a conservative performance and old-logic cleanup pass after
-  V4.4.1. It removes the legacy content-only partial auto-pass interface:
-  content candidates can still be analyzed, but they never trigger auto gate by
-  themselves. Partial auto-pass now relies on `partial_safe_extra_frames` /
-  separator-evidence semantics only.
-- V4.4.2 adds a narrow partial short-circuit: once a same-count separator
-  candidate has auto-passed through `partial_safe_extra_frames`, the detector
-  skips that offset's content candidate and stops trying lower counts. It still
-  evaluates other offsets for the same count. V4.4.2 also prunes invalid
-  separator-first band spacing while generating sequences, and adds exact
-  caches for enhanced separator merge plus Debug nearby-separator diagnostics.
-- V4.4.2 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed. `python3 X5_Crop.py
-  --version` prints `X5_Crop.py 4.4.2`. Full `Test/135` dry-run compared with
-  V4.4.1 was 48 rows / 0 diff. `Test/半格/partial` compared with V4.4.1 was
-  5 rows / 0 diff. `Test/120/66` partial auto compared with V4.4.1 was
-  16 rows / 0 diff. Full `Test/120/67` compared with V4.4.1 was 4 rows /
-  0 diff. Full `Test/半格` compared with V4.4.1 was 10 rows / 0 diff.
-- Previous active script was `X5_Crop.py` V4.4.1.
-- V4.4.1 is a behavior-preserving cleanup after V4.4's full / partial
-  restructuring. Partial `separator-first` now defaults back to fallback, while
-  `120-66` and `xpan` keep the more active partial path. Content-only partial
-  candidates no longer auto-pass by themselves; content still contributes to
-  validation, but automatic approval returns to `partial_safe_extra_frames` /
-  separator-evidence semantics.
-- V4.4.1 renames the active floating outer code from `floating_full_*` to
-  generic floating outer terminology, because the candidate family now serves
-  both full and partial modes. Partial long-axis edge-anchor now judges edge
-  bias from the local content bbox inside each candidate outer instead of one
-  global scan content bbox. `135-dual` explicitly disables invalid partial /
-  floating / wide-retry policy fields because it uses the dedicated dual-lane
-  path.
-- V4.4.1 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed. `python3 X5_Crop.py
-  --version` prints `X5_Crop.py 4.4.1`. Full `Test/135` dry-run compared with
-  V4.4 was 48 rows / 0 diff. `Test/半格/partial` compared with V4.4 was
-  5 rows / 0 diff and stayed 5 `approved_auto` / 0 `needs_review`.
-  `Test/120/66` partial auto compared with V4.4 was 16 rows / 0 diff and
-  stayed 15 `approved_auto` / 1 `needs_review`. Full `Test/120/67` compared
-  with the existing V4.3 baseline was 4 rows / 0 diff. Full `Test/半格`
-  compared with the existing V4.3 baseline was 10 rows / 0 diff.
-- Previous active script was `X5_Crop.py` V4.4.
-- V4.4 separates full / partial outer proposal responsibilities. `full` now
-  means complete strip / filled holder / fixed count, and no longer carries the
-  main "not filling the holder" assumptions. `partial` now owns the off-center,
-  floating, one-end-anchored, or non-filled holder cases.
-- V4.4 keeps full useful logic: normal outer, separator / edge-pair,
-  wide-separator retry, content validation, format geometry, and outer/content
-  alignment. It removes or downgrades non-filled-holder assumptions from full:
-  `120-66` no longer enables `floating_full_outer`, `long_axis_edge_anchor` is
-  no longer always-on for 66 full, and 66 `separator-first` is fallback instead
-  of always. `xpan` full also disables long-axis edge-anchor.
-- V4.4 moves the non-filled-holder tools to partial. Partial can now use
-  floating outer, separator-first outer for any count > 1, wide retry, and
-  fallback-only long-axis edge-anchor. Partial edge-anchor is conditional: it
-  only generates candidates when the content center is clearly biased toward
-  one long-axis end, which avoids interfering with centered partial strips such
-  as half-frame partial 55.
-- V4.4 allows `120-66` and `xpan` partial auto count to include default
-  count=3 because those formats can have normal three-frame scans that still do
-  not fill the holder. Other formats keep the previous partial auto count
-  behavior unless their policy is changed later.
-- V4.4 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed. `python3 X5_Crop.py
-  --version` prints `X5_Crop.py 4.4`. Full `Test/135` dry-run compared with
-  V4.3 was 48 rows / 0 diff. `Test/半格/partial` dry-run compared with V4.3.1
-  was 5 rows / 0 diff. `Test/120/66` partial auto dry-run was 15
-  `approved_auto` / 1 `needs_review`, with most PASS rows selecting
-  `separator_first_*` or `floating_partial_*`; `X5_test_51.tif` remains REVIEW
-  due to weak 120 separator evidence. `Test/120/66` full dry-run was 13
-  `approved_auto` / 3 `needs_review`, which is expected because this local 66
-  sample set is closer to the new partial/non-filled-holder meaning.
-- Previous active script was `X5_Crop.py` V4.3.1.
-- V4.3.1 adds `partial_safe_extra_frames` auto-pass support for partial mode
-  across formats. It keeps content-only candidates conservative, but lets a
-  separator candidate pass when real frames are safely covered, content support
-  is normal, frame geometry is stable, no equal gap is used, and there is at
-  least some hard separator / edge / wide evidence. The intent is that partial
-  mode may safely over-crop a few empty holder frames instead of reviewing only
-  because auto count or grid support is imperfect.
-- V4.3.1 keeps hard safety gates: content conflicts, unstable frame widths, and
-  other hard review reasons still force REVIEW. `outer_box_too_large` and
-  `outer_box_uncertain` are no longer automatic blockers inside this partial
-  safe-extra-frames gate because partial output uses frame boxes, and extra
-  holder frames are acceptable when the frame boxes remain stable.
-- V4.3.1 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed. `Test/半格/partial` dry-run
-  with Debug Analysis + diagnostics changed from 0 `approved_auto` / 5
-  `needs_review` to 5 `approved_auto` / 0 `needs_review`. Full `Test/135`
-  dry-run compared with V4.3 was 48 rows / 0 diff for `status`,
-  `confidence`, `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`.
-- Previous active script was `X5_Crop.py` V4.3.
-- V4.3 reorganizes V4.2 full-mode outer generation into a shared outer proposal
-  layer. `outer_proposal_candidates()` now collects normal outer, floating full,
-  long-axis edge-anchor, and separator-first proposals before sending every
-  candidate through the same `build_detection_for_outer()` /
-  `calibrate_candidate_decision()` / review-gate path.
-- V4.3 adds `long_axis_edge_anchor_outer_candidates()`. It models the full-mode
-  physical pattern that the valid frame sequence may not be centered in the
-  scan, but often starts near one long-axis end. In work orientation this means
-  start/end anchors on the long axis; horizontal originals map to left/right,
-  vertical originals are handled after orientation normalization.
-- V4.3 format policy: only `120-66` and `xpan` currently enable long-axis
-  edge-anchor. `120-66` uses it as `always`; `xpan` uses it as `fallback`
-  because its physical holder-fill problem is likely similar to 66 but still
-  lacks samples. `135`, `half`, `120-645`, `120-67`, and `135-dual` keep it
-  disabled for now; half regression showed `X5_00063` could be pulled into a
-  pure-equal edge-anchor REVIEW candidate.
-- V4.3 safety gate: a `long_axis_edge_anchor_*` separator candidate with zero
-  hard separator evidence is forced below auto-pass with
-  `long_axis_edge_anchor_separator_weak`. Edge-anchor only proposes outer boxes;
-  it does not directly raise confidence.
-- V4.3 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed. Full `Test/120/66` dry-run
-  compared with V4.2.9 was 16 rows / 0 diff for `status`, `confidence`,
-  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`. Full
-  `Test/半格/full` dry-run compared with V4.2.7 was 10 rows / 0 diff for the
-  same fields.
-- Previous active script was `X5_Crop.py` V4.2.10.
-- V4.2.10 is a risk-controlled global cache optimization. `AnalysisCache` now
-  stores full-scan separator evidence, per-format full-scan separator profiles,
-  per-format enhanced full-scan separator profiles, content profile runs,
-  content-evidence detail, outer/content alignment detail, separator-first outer
-  candidates, and Debug Analysis preview RGB images. Cached preview images are
-  copied before overlays are drawn, so Debug Analysis annotations do not
-  pollute later panels. Cached detail dictionaries are deep-copied on read to
-  avoid report / Debug mutation.
-- V4.2.10 is global across formats, not 120-66-only. It should help most on
-  120-66 / 120 / partial / Debug Analysis paths where full-scan evidence and
-  candidate profiles are reused more often. It intentionally does not add
-  approximate nearby-outer caching, broad edge-profile slice caching, or deskew
-  intermediate caching.
-- V4.2.10 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed. Full `Test/120/66` dry-run
-  compared with V4.2.9 was 16 rows / 0 diff for `status`, `confidence`,
-  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`. A single 120-66
-  Debug Analysis smoke test generated JPG output normally.
-- Previous active script was `X5_Crop.py` V4.2.9.
-- V4.2.9 is a 120-66 development tuning pass plus a Debug Analysis readability
-  change. For 120-66 full, ordinary `edge-pair` gaps without `wide-separator`
-  support must meet a higher minimum score before satisfying the auto gate.
-  This is intended to demote weak internal-edge-like 66 separators without
-  changing 66's broad separator-first model. Debug Analysis Separator evidence
-  and Content evidence now render full-scan evidence with the current outer /
-  frame overlay instead of showing evidence only inside the selected outer.
-- V4.2.9 target result: full `Test/120/66` dry-run + Debug Analysis output is
-  saved in `Test/120/66/4.2.9`. Result is 9 `approved_auto` / 7
-  `needs_review`. The manually accurate group `45 / 46 / 49 / 50 / 52 / 54`
-  remains PASS. `44 / 47 / 51 / 53 / 55 / 56 / 58` moved from PASS to REVIEW.
-  `43 / 48 / 57` still PASS and need further 66-specific review/tuning.
-- V4.2.9 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed. A full `Test/120/66`
-  dry-run + Debug Analysis completed with 16 ok / 0 failed.
-- Previous active script was `X5_Crop.py` V4.2.8.
-- GitHub Release `v4.2.8` has been published as Latest:
-  `https://github.com/rrriiicccooo/X5-Crop/releases/tag/v4.2.8`. The uploaded
-  asset is `X5-Crop-v4.2.8.zip`.
-- Release descriptions now follow the user's simplified rule: only Quick Start
-  and Update Notes, no verification commands, regression details, or digest
-  blocks. This was applied retroactively to `v4.1.3`, `v4.0.1`, `v4.0`,
-  `v3.6.2`, and `v3.3.1`.
-- V4.2.8 is a launcher interaction update; detection logic is unchanged. The
-  Mac / Windows main launchers now ask for count only after partial mode is
-  enabled. Return or `auto` keeps automatic count detection; an allowed number
-  is passed as `--count N`. When partial mode is off, the launcher does not ask
-  for count and keeps the selected format's full-strip count.
-- V4.2.8 verification: `bash -n X5_Crop_Mac.command` passed. Mac launcher
-  smoke test with `half` / partial `y` / count `3` / debug `y` showed
-  `strip mode: partial` and `count: 3`, then invoked the script; the final
-  `No TIFF files found` message is expected because the project root has no
-  TIFF files. Local ignored test copies were synced for `Test/135`,
-  `Test/new_135`, `Test/120/66`, `Test/120/67`, and `Test/半格/full`.
-- V4.2.8 archive snapshot is preserved as `archive/X5_Crop_v4.2.8/`, including
-  the thin entry script, both main launchers, and the matching `x5crop/`
-  package.
-- Local sparse-checkout was restored after publishing. `archive/` and
-  `release/` local working-tree copies were removed after the archive commit
-  and Release upload, so they remain cloud/GitHub-only locally.
-- Previous active script was `X5_Crop.py` V4.2.7.
-- V4.2.7 adds half-frame full stable-grid support. It does not loosen
-  `outer_box_too_large` by itself. Instead, `half_stable_grid_support` can pass
-  a half full separator candidate when hard+grid covers all gaps, no equal
-  fallback is used, at least 35% of gaps have hard/wide evidence, frame widths
-  are very stable, content support is normal, and a half stable-grid joint-score
-  floor is met.
-- V4.2.7 target result: full `Test/半格/full` dry-run + Debug Analysis output
-  is saved in `Test/半格/full/4.2.7`. The result is 10 files, 10
-  `approved_auto` / 0 `needs_review`. Compared with V4.2.6, only
-  `X5_00062.tif` and `X5_00063.tif` changed from REVIEW to PASS; their outer
-  boxes, frame boxes, and gaps are unchanged. `X5_00062.tif` passes with 4/11
-  hard/wide gaps and 7/11 grid gaps; `X5_00063.tif` passes with 5/11 hard/wide
-  gaps and 6/11 grid gaps.
-- V4.2.7 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed. Local ignored test copies
-  were synced for `Test/135`, `Test/new_135`, `Test/120/66`, `Test/120/67`,
-  and `Test/半格/full`.
-- V4.2.7 archive snapshot is preserved as `archive/X5_Crop_v4.2.7/`, including
-  the thin entry script and the matching `x5crop/` package.
-- Previous active script was `X5_Crop.py` V4.2.6.
-- V4.2.6 continues half-frame full-strip wide-separator tuning. It changes
-  `half_wide_geometry_support` from the V4.2.5 80% wide/hard requirement to a
-  majority-wide rule: at least 60% wide/hard gaps, no equal fallback, stable
-  frame widths, normal content support, and a half-wide joint-score floor. It
-  also prefers a plausible separator candidate for half full REVIEW display
-  when the best content candidate has `content_run_count_mismatch`.
-- V4.2.6 target result: full `Test/半格/full` dry-run + Debug Analysis output
-  is saved in `Test/半格/full/4.2.6`. The result is 10 files, 8
-  `approved_auto` / 2 `needs_review`. Compared with V4.2.5, newly approved
-  files are `X5_00056.tif` and `X5_00058.tif`. `X5_00062.tif` stays REVIEW
-  with 4/11 wide/hard gaps. `X5_00063.tif` stays REVIEW with 5/11 wide/hard
-  gaps, but final Debug boxes now use the separator candidate instead of the
-  misleading content candidate.
-- V4.2.6 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed. Local ignored test copies
-  were synced for `Test/135`, `Test/new_135`, `Test/120/66`, `Test/120/67`,
-  and `Test/半格/full`.
-- V4.2.6 archive snapshot is preserved as `archive/X5_Crop_v4.2.6/`, including
-  the thin entry script and the matching `x5crop/` package.
-- Previous active script was `X5_Crop.py` V4.2.5.
-- V4.2.5 is a conservative half-frame full-strip wide-separator tuning pass.
-  Ordinary half-frame full detection keeps the previous equal/grid behavior, but
-  the wide retry branch can now preserve real `wide-separator` gaps. The new
-  `half_wide_geometry_support` calibration gate only auto-approves half full
-  separator candidates when wide/hard gaps cover at least 80% of expected
-  separators, no equal fallback is used, frame widths are stable, content
-  support is normal, and the joint score is above threshold.
-- V4.2.5 target result: full `Test/半格/full` dry-run + Debug Analysis output
-  is saved in `Test/半格/full/4.2.5`. The result is 10 files, 6
-  `approved_auto` / 4 `needs_review`. Compared with V4.2.4, newly approved
-  files are `X5_00059.tif`, `X5_00060.tif`, and `X5_00061.tif`; existing
-  approved files `X5_00050.tif`, `X5_00053.tif`, and `X5_00054.tif` remain
-  unchanged. `X5_00056.tif` and `X5_00062.tif` now show some wide separator
-  evidence but stay REVIEW because wide coverage is still insufficient;
-  `X5_00058.tif` and `X5_00063.tif` remain content-only / content-mismatch
-  REVIEW cases.
-- V4.2.5 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed. Local ignored test copies
-  were synced for `Test/135`, `Test/new_135`, `Test/120/66`, `Test/120/67`,
-  and `Test/半格/full`.
-- V4.2.5 archive snapshot is preserved as `archive/X5_Crop_v4.2.5/`, including
-  the thin entry script and the matching `x5crop/` package.
-- Previous active script was `X5_Crop.py` V4.2.4.
-- V4.2.4 is a behavior-preserving cleanup after V4.2.3. Separator-first
-  fallback now builds only `separator_first_*` outer candidates instead of
-  rerunning ordinary outer candidates in the same retry. If no separator-first
-  outer is generated, no retry-used marker is written and the detector continues
-  to the existing content / review flow.
-- V4.2.4 validates `separator_first_outer_mode` as `off` / `fallback` /
-  `always`, so future typos fail loudly instead of silently changing detection
-  behavior.
-- V4.2.4 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed; full `Test/135` regression
-  against the V4.2.3 baseline was 48 rows / 0 diff; full `Test/120/67`
-  regression against the V4.2.3 baseline was 4 rows / 0 diff; full `Test/半格`
-  regression against the V4.2.3 baseline was 15 rows / 0 diff; full
-  `Test/120/66` regression against the V4.2.2 baseline was 16 rows / 0 diff.
-- V4.2.4 archive snapshot is preserved as `archive/X5_Crop_v4.2.4/`, including
-  the thin entry script and the matching `x5crop/` package.
-- Previous active script was `X5_Crop.py` V4.2.3.
-- V4.2.3 generalizes the V4.2.2 separator-first outer proposal into a
-  format-aware framework. It still works by finding trusted dark separator
-  bands, matching them against the current format count / frame aspect, inferring
-  an outer from equal-format frames plus separator widths, and then returning
-  the candidate to the normal separator / edge-pair / scoring / review-gate
-  pipeline.
-- V4.2.3 keeps `120-66` in separator-first `always` mode because valid 66 full
-  outers often do not fill the entire scan. `135`, `half`, `xpan`, `120-645`,
-  and `120-67` use separator-first `fallback` mode only after the normal
-  separator / wide retry path fails the auto gate, so reliable existing
-  detections are not overridden. `135-dual` remains excluded because it uses
-  special two-lane logic.
-- V4.2.3 target / verification results: full `Test/120/66` dry-run is 16
-  `approved_auto` / 0 `needs_review`; full `Test/135` regression against the
-  V4.2.2 baseline is 48 rows / 0 diff; full `Test/120/67` regression against
-  the V4.2.2 baseline is 4 rows / 0 diff; full `Test/半格` regression against
-  the V4.2 baseline is 15 rows / 0 diff.
-- V4.2.3 archive snapshot is preserved as `archive/X5_Crop_v4.2.3/`, including
-  the thin entry script and the matching `x5crop/` package.
-- Previous active script was `X5_Crop.py` V4.2.2.
-- V4.2.2 adds a 120-66 full-strip separator-first outer proposal. It first
-  finds two clear internal dark separator bands in the global separator profile,
-  checks that their spacing matches the 6x6 short axis, infers an outer from
-  three 1:1 frames plus separator widths, and then sends that candidate back
-  through the normal separator / edge-pair / scoring / review-gate pipeline.
-  This is only enabled for `120-66`, full strip, count=3. It does not let
-  content-only candidates auto-pass. Separator-first candidates get a limited
-  wide-gap override so clear but wider 66 dark gutters can be accepted; wide
-  separator results remain confidence-capped.
-- V4.2.2 target result: full `Test/120/66` dry-run is now 16
-  `approved_auto` / 0 `needs_review`. `X5_test_45.tif`, `X5_test_50.tif`, and
-  `X5_test_54.tif` now select `separator_candidate` instead of content-only
-  REVIEW, using `detected` / `edge-pair` / `wide-separator` gap evidence.
-- V4.2.2 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed; full `Test/135` dry-run
-  regression against the V4.2.1 baseline was 48 rows / 0 diff; full
-  `Test/120/67` dry-run regression against the V4.2.1 baseline was 4 rows /
-  0 diff.
-- V4.2.2 archive snapshot is preserved as `archive/X5_Crop_v4.2.2/`, including
-  the thin entry script and the matching `x5crop/` package.
-- Previous active script was `X5_Crop.py` V4.2.1.
-- V4.2.1 rebuilds the 120-66 full-strip outer candidate strategy. It treats
-  120-66 full as fixed count=3, but lets the valid outer float inside the
-  longer scan instead of assuming the three 6x6 frames fill or sit centered in
-  the full image. Existing outer candidates are kept, and 120-66 full adds a
-  small set of floating candidates anchored around the base outer and content
-  bbox. Those candidates still compete through the existing separator /
-  edge-pair / scoring / review-gate pipeline, and content-only candidates still
-  cannot auto-pass without reliable separator evidence.
-- V4.2.1 intentionally does not protect the old 120-66 PASS outputs as a
-  baseline, because the user judged the old 66 PASS results inaccurate. The
-  current 120-66 full result is the new reference for inspection: 16 files, 13
-  `approved_auto`, and 3 `needs_review` (`X5_test_45.tif`, `X5_test_50.tif`,
-  `X5_test_54.tif`).
-- V4.2.1 verification: `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py` passed; full `Test/135` dry-run regression against
-  the V4.2 baseline was 48 rows / 0 diff; full `Test/120/67` dry-run
-  regression against the V4.2 baseline was 4 rows / 0 diff.
-- V4.2.1 archive snapshot is preserved as `archive/X5_Crop_v4.2.1/`, including
-  the thin entry script and the matching `x5crop/` package.
-- Previous active script was `X5_Crop.py` V4.2.
-- V4.2 adds a shared full-format geometry model for full strips:
-  `outer_long / outer_short = count * frame_aspect + separator_total / outer_short`.
-  The model is written into report detail and feeds a conservative stage-C outer
-  correction retry. It only attempts to move outer when all internal gaps are
-  measured hard separators, the current outer has unexplained extra long-axis
-  ratio, the inferred corrected outer is closer to the geometry model, the
-  shrink is small, and the correction does not cut the content bbox.
-- V4.2 full dry-run regression checks against the V4.1.3 baseline were 0 diff
-  for `Test/135`, `Test/半格`, `Test/120/66`, and `Test/120/67`. `Test/new_135`
-  stayed 4 `approved_auto` / 0 `needs_review`. In the current 120-66 tests, the
-  REVIEW images generally lack reliable hard gaps, so the new stage-C rule does
-  not force-correct them or make them PASS.
-- V4.1.3 has been packaged as the current stable GitHub Release `v4.1.3`.
-- V4.1.3 is a behavior-preserving cleanup after V4.1.2. It moves the 120
-  hard-full confidence floor from `score_detection()` into
-  `calibrate_candidate_decision()` as `calibrate_hard_full_confidence_floor`, extracts
-  shared 120 format policy defaults, unifies outer retry dispatch behind one
-  proposal helper, and makes the 120-67 short-axis outer trigger require
-  semantic support from hard anchors plus content-height slack.
-- V4.1.3 full dry-run regression checks against the V4.1.2 baseline were 0 diff
-  for `Test/135`, `Test/半格`, `Test/120/66`, and `Test/120/67`.
-- GitHub Release `v4.1.3` is the intended current stable user-facing release.
-  The generated asset is `X5-Crop-v4.1.3.zip`, built with the standalone
-  V4.1.3 `X5_Crop.py` and release docs/installers only. Asset digest:
-  `sha256:0a4585f6a340cb576c170cc7efc594990002183a20573605e3cbe51cb2806da9`.
-  Verification: package contents are limited to the standalone script, macOS /
-  Windows main launchers, `README.txt`, `快速启动_Quick_Start.txt`, and the four
-  installer/uninstaller scripts under `install/`; the diagnostic launcher is
-  excluded. Extracted package script prints `X5_Crop.py 4.1.3`, and `/usr/bin/unzip`
-  preserved executable bits on `X5_Crop.py` and macOS `.command` files.
-- V4.1.2 is a narrow 120-67 short-axis outer fix. It lowers the 120-67
-  `outer_align_short_excess_ratio` to `0.024`, letting the existing
-  `content_aligned_outer` retry tighten the short axis when hard separators are
-  reliable, content aspect is normal, and short-axis content slack is clearly
-  high. This fixes `Test/120/67/3.tif`, whose separators were already correct
-  but whose short-axis outer was too loose.
-- V4.1.1 is a narrow 120-67 wide-separator fix. It enables conservative
-  120-67 `wide-separator` retry only when the normal separator candidate fails
-  the auto gate, with `wide_gap_retry_max_width_ratio=0.090`. This fixes
-  `Test/120/67/2.tif`, where the first real wide separator had fallen back to
-  `equal`.
-- V4.1 adds 120-66 short-axis aspect outer retry. It only runs for full-strip
-  separator candidates when hard separator evidence already passes and content
-  evidence says frames are too tall/narrow because the short-axis outer is too
-  tight. The retry expands the short-axis outer toward a 1:1 66 frame and does
-  not make content-only candidates auto-pass.
-- V4.1 corrects horizontal 120-67 content aspect from 4:5 to 5:4.
-- V4.1 adds conservative 120-66 / 120-67 hard-full confidence floors for
-  complete hard separator / edge-pair full-strip candidates with stable frame
-  widths and no equal gaps. Content-only still remains review-only.
-- README and CHANGELOG now mention V4.1.3 behavior-preserving cleanup and the
-  V4.1.2 baseline regression result.
-- Local ignored `Test/135/X5_Crop.py` and `Test/135/x5crop/` were synced to
-  V4.1.3.
-- V4.1 archive snapshot is saved as `archive/X5_Crop_v4.1/`, including the thin
-  entry script and the matching `x5crop/` package.
-- Previous active script was `X5_Crop.py` V4.0.1. V4.0.1 remains the current
-  stable GitHub Release unless a later handoff says it was superseded.
-- V4.0.1 adds a formal 135 `wide-separator` branch. The default 135 hard-gap
-  maximum width remains the V4.0 value (`gap_max_width_ratio=0.045`). Only when
-  the normal separator candidate fails the candidate auto gate does ordinary 135
-  full-strip detection add a separate wide candidate using
-  `wide_gap_retry_max_width_ratio=0.060`.
-- `wide-separator` requires the wide dark band to satisfy mean-score and
-  relative-prominence gates, is recorded separately from ordinary `detected`
-  gaps as `wide_detected_gaps`, and uses a red-family Debug Analysis mark.
-  Candidates containing wide separators have a light confidence cap. The branch
-  is disabled for half-frame, xpan, 120 formats, and 135-dual. If a selected
-  wide candidate later triggers content-aligned outer retry, the corrected-outer
-  retry preserves the same wide gap width override so it does not accidentally
-  fall back to narrow-gap evidence.
-- Added `X5_Crop_Mac_diagnostics.command` as a repository-tracked local
-  diagnostics launcher. It always runs dry run + Debug Analysis + diagnostics,
-  uses `--jobs 4`, does not copy review files, and is explicitly excluded from
-  Release packages.
-- V4.0.1 README / CHANGELOG notes mentioned the formal 135 `wide-separator`
-  branch and diagnostics launcher release-package exclusion.
-- Local ignored `Test/135/X5_Crop.py` and `Test/135/x5crop/` were synced to
-  V4.0.1 at that release point.
-- V4.0.1 archive snapshot is saved as `archive/X5_Crop_v4.0.1/`, including the
-  thin entry script and the matching `x5crop/` package.
-- V4.0 is the previous stable modular baseline requested from the V4 blueprint.
-  Root `X5_Crop.py` is now a thin entry point, actual responsibilities live in
-  dedicated `x5crop/` modules, and `x5crop/core.py` is only a compatibility
-  re-export surface. V4.0 intentionally preserves V3.9 results while changing
-  the internal architecture; OpenCV/scipy or other heavy image-processing
-  dependencies are deferred to a future V5 direction.
-- V4.0 module ownership: `common.py` owns dataclasses, format policy, and
-  helpers; `evidence.py` owns gray/evidence image creation; `io.py` owns TIFF
-  read/write, metadata preservation, and review-copy behavior; `geometry.py`
-  owns outer/gap/edge-pair/grid/frame-fit logic; `detection/pipeline.py` owns
-  candidate generation, scoring, review gates, and final selection;
-  `deskew.py` owns leveling; `debug/render.py` owns Debug JPG / Debug Analysis
-  rendering; `reports.py` owns report reuse and crop export; `cli.py` owns
-  argument parsing, folder parallelism, and per-file orchestration.
-- `tools/build_standalone.py` now generates the user-facing standalone
-  Release `X5_Crop.py` from the modular V4 source tree. This keeps source code
-  modular while restoring the old user workflow: ordinary users copy only
-  `X5_Crop.py` plus the platform launcher into a TIFF folder.
-- V4.0 added `x5crop/regression.py` for JSONL report comparison. The default
-  comparison fields are `status`, `confidence`, `review_reasons`, `outer_box`,
-  `frame_boxes`, and `gaps`.
-- V4.0 source stays modular, but user-facing Release packages now return to the
-  simpler file layout: generated standalone `X5_Crop.py` plus the
-  platform-matching main launcher. The generated script embeds the internal
-  `x5crop/` modules, so ordinary users do not need to copy an `x5crop/`
-  folder. README and `快速启动_Quick_Start.md` have been updated with this.
-- Local ignored test copies now include both `Test/135/X5_Crop.py` and
-  `Test/135/x5crop/`.
-- Archive for V4.0 should include both the thin entry script and the matching
-  `x5crop/` package snapshot.
-- V3.9 was the previous structural policy cleanup after V3.7. It moved remaining
-  outer mask profiles, post-detection confidence caps, deskew span skip,
-  frame-fit small-pixel tolerances, separator gate mode, and outer retry
-  enable/disable behind `FormatTuning` / format-aware policy entry points.
-  The goal was cleaner management of percentage/clamp parameters,
-  format-specific branches, and future cross-format promotion points without
-  changing 135 output.
-- V3.9 keeps high-risk active behavior policy-gated: nearby active correction,
-  lucky-pass risk, and leading-grid failure still do not automatically apply to
-  non-135 formats.
-- `Test/135/X5_Crop.py` and `Test/135/x5crop/` are synced to V4.0.1. The V3.9
-  named snapshot remains preserved as `archive/X5_Crop_v3.9.py`.
-- macOS and Windows main launchers no longer pass `--report` during normal
-  non-Debug-Analysis runs. They still pass `--report --debug-analysis --dry-run`
-  when Debug Analysis is enabled, so analysis JPG reuse/report workflows keep
-  working.
-- User-facing Release packaging policy is now explicit: Release zip packages
-  should include only the standalone `X5_Crop.py` generated by
-  `tools/build_standalone.py`, `X5_Crop_Mac.command`, `X5_Crop_win.bat`,
-  `README.txt`, `快速启动_Quick_Start.txt`, the two installer launchers, and the
-  two uninstall launchers under `install/`; `x5crop/`, license, archive
-  snapshots, GitHub config, and local test/output folders should not be
-  packaged into the zip.
-- Added uninstall launchers for GitHub/Release use:
-  `install/X5_Crop_Mac_uninstall.command` and
-  `install/X5_Crop_win_uninstall.bat`. They clean user-level Python packages
-  only after confirmation and do not uninstall Python itself.
-- README and `快速启动_Quick_Start.md` now explain why X5 Crop stays as a
-  script + launcher workflow instead of an app package, how to uninstall
-  cleanly, what dependency removal can affect, that `needs_review/` contains
-  plain source-TIFF copies, and when partial mode should be used.
-- README and `快速启动_Quick_Start.md` now explain that Release `X5_Crop.py`
-  is a generated standalone script with the internal `x5crop/` code embedded.
-  Users no longer need to copy the `x5crop/` folder when using a Release
-  package.
-- README and `快速启动_Quick_Start.md` now put the normal-user path closer to
-  the top: run installer first, copy `X5_Crop.py` plus the platform launcher
-  into the TIFF folder, and double-click. They also warn users to download the
-  prepared GitHub Release zip instead of GitHub's auto-generated Source code
-  zip, and state early that original TIFF files are not modified.
-- README, `快速启动_Quick_Start.md`, and CHANGELOG were polished into a clearer
-  documentation split: complete Chinese content first, complete English content
-  second. README now has one Chinese guide and one English guide instead of
-  interleaving quick-start copies; `快速启动_Quick_Start.md` stays as the short
-  Release-user instruction card; CHANGELOG now explicitly says normal users
-  should start with README / quick start and keeps development history there.
-- README Debug Analysis color tables now include whether each mark directly
-  affects cropping, so users can distinguish final crop boxes from evidence and
-  model/fallback guide marks.
-- GitHub Release `v3.6.2` body and `X5-Crop-v3.6.2.zip` asset were refreshed
-  with the clearer quick-start wording, Source-code-zip warning, original-TIFF
-  safety note, package contents, and single-script user workflow. The refreshed
-  asset digest is
-  `sha256:e01ed0f7e6661690c94d29d8e1c5d18987afa256baf4fd06267587d8188c85dc`.
-- GitHub Release `v4.0` was the previous stable user-facing release. The
-  uploaded asset is `X5-Crop-v4.0.zip`, generated with the standalone V4
-  `X5_Crop.py` and release docs/installers only. Asset digest:
-  `sha256:400341479f53da639262f1c521fba17d3fb259a7562ca32fca964cc1c6f4630b`.
-  Verification: `/usr/bin/unzip` preserved executable bits on `X5_Crop.py` and
-  macOS `.command` files; package script prints `X5_Crop.py 4.0`. Earlier V4.0
-  package smoke test with only package files plus `X5_00002.tif` ran the normal
-  macOS launcher and produced 6 TIFF files with
-  `approved_auto confidence=0.996`.
-- GitHub Release `v4.0.1` is the intended current stable user-facing release.
-  The generated asset is `X5-Crop-v4.0.1.zip`, built with the standalone
-  V4.0.1 `X5_Crop.py` and release docs/installers only. Asset digest:
-  `sha256:5496ecf79fd725f20f487569e0ffb560496f52350e9e9fdfcd1fdeb836c9c5cf`.
-  Verification: package contents are limited to the standalone script, macOS /
-  Windows main launchers, `README.txt`, `快速启动_Quick_Start.txt`, and the four
-  installer/uninstaller scripts under `install/`; the diagnostic launcher is
-  excluded. Extracted package script prints `X5_Crop.py 4.0.1`.
-- Current V4.0 bleed behavior: default output long-axis bleed is 20px and
-  short-axis bleed is 10px; overlap / near-overlap / continuous-content risk
-  raises long-axis output bleed to 50px. Verification smoke: `X5_00007`
-  recorded `output_long_axis_bleed=50` and
-  `overlap_risk_long_axis_bleed=true`; `X5_00003` recorded
-  `output_long_axis_bleed=20`; full `Test/135` dry-run remained 42
-  `approved_auto` / 6 `needs_review`. Reusing the Debug Analysis report for
-  `X5_00007` exported 6 TIFF files and adjusted cached output bleed to 50px.
-- README and `快速启动_Quick_Start.md` now define `dry run` as a
-  test/analyze mode that reads TIFFs, runs detection, decides PASS/REVIEW, and
-  may write Debug Analysis JPGs/reports, but does not export cropped TIFFs or
-  modify source TIFFs.
-- README and `快速启动_Quick_Start.md` now use the same macOS fallback wording
-  for launcher permission issues: if the installer will not open, run
-  `/bin/bash install/X5_Crop_Mac_install.command` from the Release folder; if
-  the main launcher still will not open after installation, run
-  `/bin/bash X5_Crop_Mac.command` from the TIFF working folder.
-- README and `快速启动_Quick_Start.md` now use the latest normal 135 macOS
-  launcher timing: 48 TIFF files exported in 394 seconds, averaging about
-  8.2 seconds per file.
-- README and `快速启动_Quick_Start.md` now explicitly state that auto-cropped
-  output TIFF files preserve source-TIFF quality-related attributes, including
-  bit depth, channel layout, ICC / color space, resolution, and metadata.
-  Cropping should not intentionally lower bit depth, recolor, compress, or
-  resample image data. This is a documentation clarification of the existing
-  TIFF output policy.
-- Release package user documents now ship as `README.txt` and
-  `快速启动_Quick_Start.txt` for broader readability across systems. Root source
-  docs remain `README.md` and `快速启动_Quick_Start.md`.
-- README, `快速启动_Quick_Start.md`, and CHANGELOG received a follow-up
-  documentation polish after V4.0: README no longer embeds quick-start steps or
-  changelog-style version notes because those live in the standalone quick-start
-  and changelog documents. README should remain the full user manual, quick
-  start should remain a short Release-user operation card, and CHANGELOG should
-  remain development / regression history.
-- Added `快速启动_Quick_Start.md`, a bilingual quick-start guide with Chinese
-  first and English second. It puts first-time installer launchers in a
-  prominent note near the top and points users to `README.md` and `CHANGELOG.md`
-  for fuller documentation.
-- macOS installer now prepares launch permissions for the current Release
-  folder by running `chmod +x` on the main macOS launcher and installer, then
-  removing `com.apple.quarantine` with `xattr` when available. README and
-  `快速启动_Quick_Start.md` now include the Terminal fallback command:
-  `/bin/bash install/X5_Crop_Mac_install.command`.
-- Docs now clarify the macOS permission model: after install, users may copy
-  `X5_Crop.py` plus the platform-matching main launcher as a pair into different
-  TIFF folders: `X5_Crop_Mac.command` for macOS or `X5_Crop_win.bat` for
-  Windows. They should not move only the launcher. A newly downloaded/unzipped/
-  freshly received Release folder may have a new quarantine flag and should run
-  the installer again. The installer is not a permanent global trust
-  registration.
-- `快速启动_Quick_Start.md` now puts the first-use installer instructions above
-  the macOS Terminal fallback, in both the Chinese and English quick-start
-  sections.
-- V3.7 merges the frame-size fit pipeline without changing tested detection
-  output. The old cuts-level `apply_frame_size_fit()` role is now explicit as
-  `fit_cuts_by_geometry()` geometry fallback; the old box-level
-  `same_frame_size_fit_boxes()` role is now `fit_boxes_by_edge_evidence()`;
-  `fit_frame_boxes_from_gaps()` is the unified entry point for edge-evidence
-  fit, geometry fallback, and raw-gap fallback.
-- Frame fit policy is now explicitly format-aware: 135 keeps the original
-  edge-evidence fit thresholds, half-frame requires more edge samples, xpan and
-  each 120 format have their own nominal-width range and inlier tolerance, and
-  135-dual / partial modes keep edge-evidence fit disabled while preserving
-  geometry fallback.
-- In current V4.0, default output long-axis bleed is 20px and short-axis bleed
-  remains 10px. If overlap / near-overlap / continuous-content risk is detected,
-  long-axis output bleed is raised to 50px. Detection still keeps bleed out of
-  scoring and applies bleed only to output/report/Debug Analysis frame boxes.
-- Follow-up V3.7 threshold cleanup changed fixed pixel gates in
-  `apply_edge_bleed_protection()`, `apply_approved_geometry_polish()`,
-  `outer_content_alignment_detail()`, `corrected_outer_from_alignment()`, and
-  `apply_robust_grid()` into pitch / outer-height ratios with pixel clamps.
-  These internal gates are decoupled from output bleed while preserving the
-  current 135 trigger behavior.
-- A second V3.7 threshold cleanup covered the remaining pitch-scaled window /
-  movement / width guards: gap search radius and width limits, nearby separator
-  search and correction thresholds, edge-pair window / gutter / hard-gap
-  movement guards, robust-grid shift and tolerance, enhanced separator width /
-  movement checks, partial edge hints, hard-gap trust diagnostics, and deskew
-  span skip threshold. Integer pixel windows use `clamp_int`; pre-existing
-  floating-point tolerances use `clamp_float` to avoid sub-pixel grid drift.
-- Follow-up V3.7 format-policy cleanup added `FormatTuning` and moved outer
-  candidate, outer/content alignment, content primary, gap detection, geometry
-  constrain, robust grid, hard-gap trust, nearby separator, enhanced separator,
-  scoring, auto-gate support, content/geometry/separator support,
-  candidate-decision calibration, partial strategy, diagnostics, and approved
-  geometry-polish thresholds behind format-aware policy values. 135 keeps the
-  current values; non-135 formats now have conservative policy entry points for
-  future tuning.
-- Follow-up V3.7 format-policy expansion moved content-run thresholds, content
-  confidence caps, score caps, separator hard-evidence gates,
-  leading-grid-failure, content-only partial passing, nearby active correction,
-  and lucky-pass risk behind `FormatTuning` as well. High-risk active behavior
-  remains conservative: nearby active correction, lucky-pass risk, and
-  leading-grid failure are still enabled only on the validated 135 path; other
-  formats have separate policy hooks and diagnostics groundwork only.
-- Follow-up V3.7 policy cleanup moved low-level outer extraction, separator
-  profiles, edge-refine profiles, grid outer refine, frame-fit geometry
-  fallback, edge-evidence inlier tolerance/weights, non-auto candidate
-  confidence caps, and deskew sampling/enhanced-quality gates behind
-  format-aware policy values. 135 defaults preserve the previous behavior.
-- Follow-up V3.7 high-level policy cleanup moved main gap/width/outer/contrast
-  scoring weights, content-evidence thresholds, content/geometry/separator
-  support gates, candidate decision competition margin/cap, hard-gap trust semantic
-  thresholds, overlap-risk diagnostic thresholds, and Debug gap-overlay display
-  parameters behind `FormatTuning`. 135 defaults preserve the previous
-  behavior; the goal is future format tuning without changing current output.
-- Follow-up V3.7 low-risk code cleanup removed the unused
-  `score_120_require_all_hard` policy field, renamed `detect_for_count()` to
-  `detect_candidate_for_count()`, and made `lucky_pass_risk_score_detail()`
-  reuse the main analysis cache instead of rebuilding content/separator
-  evidence. This should not change detection parameters or PASS/REVIEW.
-- Follow-up V3.7 policy expansion moved content-primary candidate bbox
-  fractions, minimum sizes, percentiles, coverage/mean/run/aspect weights,
-  deskew edge-fit outer extraction and line-fit tolerance, and lucky-pass risk
-  component weights/thresholds behind `FormatTuning`. Current defaults preserve
-  behavior. `make_content_evidence_gray()` intentionally remains format-neutral
-  for now so analysis-cache semantics do not change.
-- Debug Analysis report reuse no longer treats output bleed as part of the
-  detection cache signature. When a normal export reuses a matching report, it
-  normalizes cached output frames from their previous output bleed and reapplies
-  the current bleed before cropping, so changing only bleed can reuse analysis
-  without using stale crop boxes.
-- Diagnostics now reuse cached separator profiles for nearby-separator checks in
-  `gap_diagnostic_record()`, reducing repeated profile work during full
-  `--diagnostics` runs.
-- README and CHANGELOG now clarify that the current V4.0 script still keeps the
-  conservative `--analysis` enhanced separator assist. V3.4 was an experiment
-  that tried removing that layer; it is not the current active behavior.
-- `hard_fallback_detection()` detail has been simplified to only describe the
-  review-only fallback type, format/count/layout, work outer, and pitch. It no
-  longer emits `candidate_competition` or duplicate gap center/score/method arrays.
-- README and CHANGELOG now explicitly state that the current development
-  version is primarily optimized for normal 135 scans. Other formats are
-  selectable but have not been tuned as carefully as 135. Nearby separator
-  active correction, lucky-pass risk, and leading-grid failure are documented as
-  not opened to non-135 formats yet; they only have policy hooks / diagnostics
-  groundwork there.
-- V3.6.12 tunes the V3.6.11 format-aware `edge-pair` parameters after full
-  dry runs on local `Test/120` and `Test/半格`. Half-frame parameters are
-  unchanged because the full run stayed stable. 120-66 / 120-67 now use a
-  wider search window, wider gutter range, lower edge/background thresholds,
-  and a tighter non-135 hard-gap movement guard. This lets 120 wide dark bands
-  become separator evidence without loosening PASS/REVIEW.
-- V3.6.12 target result: compared with V3.6.11 temporary full dry runs,
-  half-frame stayed 6 `approved_auto` / 9 `needs_review`; 120-66 and 120-67
-  stayed 0 `approved_auto` / 16 `needs_review` while edge-pair accepted totals
-  increased from 0 to 16; 120-645 stayed 0 / 16 with 0 edge-pair accepts. A
-  135 focus `deskew off` comparison against V3.6.11 was structurally identical
-  on `X5_00014`, `X5_00026`, `X5_00036`, and `X5_00041`.
-- V3.6.11 extends `edge-pair` from 135-only to format-aware full-strip
-  separator refinement. The original 135 parameters are preserved. Other
-  formats use conservative per-format search windows, gutter widths, edge /
-  background strength thresholds, and model-gap replacement quality thresholds.
-  This is intended to let non-135 formats benefit from adjacent-frame edge
-  evidence without simply copying 135 tuning.
-- V3.6.10 is a low-risk cleanup after V3.6.9. It removes the unused
-  `grid_protection_trust()` wrapper, updates CLI version/help text, fixes the
-  `--bleed-x` help default from 15 to 20, clarifies that `--analysis` affects
-  both enhanced separator assist and enhanced deskew angle selection, and
-  updates stale diagnostic wording that referenced the V3.3.1 output baseline.
-  It should not change detection flow, PASS/REVIEW logic, or output boxes.
-- V3.6.9 unifies active grid protection with lightweight diagnostic hard-gap
-  trust. `apply_robust_grid` now calls shared `light_hard_gap_trust` before
-  letting a hard gap resist grid override. This shared trust can flag
-  `nearby_separator_conflict`, `geometry_conflict`, `suspect_internal_edge`,
-  and `suspect_frame_border`, and writes `trust_detail` into grid detail. The
-  goal is to reduce active/diagnostic two-track red-gap trust without changing
-  output.
-- V3.6.8 replaces the V3.6.7 exact `single_anchor_review_gate` with
-  `lucky_pass_risk_score`, so the rule no longer reads as tailored to one
-  image. It scores model-gap dependence, limited strong hard separators,
-  suspicious hard gaps, strong overlap model gaps, combined suspicion/overlap,
-  and geometry stability credits. At score `>= 0.80`, it adds
-  `lucky_pass_risk` and caps confidence below threshold. This can only move a
-  suspicious PASS to REVIEW; it cannot make a weak image pass.
-- V3.6.7 promotes the V3.6.6 nearby separator check into a very narrow
-  correction rule for 135 full strips: a red hard separator can be moved only
-  when a nearby candidate within `±4% pitch` is clearly stronger, the local
-  frame geometry improves, and global width stability does not get worse. The
-  pre-correction confidence is kept as a cap, so the correction cannot increase
-  confidence or make a weak image pass by itself.
-- V3.6.7 added a narrow `single_anchor_review_gate` for `X5_00041`-like lucky
-  PASS shapes. The active gate requires exactly 2 `strong_separator` hard gaps,
-  1 suspicious hard gap, 1 strong overlap model gap, and 2 model gaps. It sends
-  `X5_00041` to REVIEW while the focused check kept `X5_00007`, `X5_00023`,
-  and `X5_00035` as PASS.
-- V3.6.7 target result: compared with V3.6.6, full `Test/135` dry-run changed
-  structurally only on `X5_00026` and `X5_00041`; `X5_00026` pulls back the
-  first red gap, and `X5_00041` enters REVIEW.
-- macOS and Windows launchers now print the active script version dynamically
-  from `X5_Crop.py --version` instead of carrying a hard-coded launcher version.
-  The ignored `Test/135/` launcher copies were synced with the same change.
-- macOS and Windows launchers now search for a dependency-ready Python instead
-  of accepting the first `python` on PATH. They require imports for `numpy`,
-  `Pillow`, and `tifffile` before selecting an interpreter. macOS also checks
-  common Homebrew paths before falling back to PATH/system Python, and the
-  local ignored `Test/135/` launcher copies were synced with the same change.
-- Older handoff / changelog wording that implied all `--jobs` values above 2
-  are capped to 2, or used obsolete early V3.6 `hard_trust` labels as if they
-  were current, has been clarified.
-- Previous stable GitHub Release was `v3.6.2`, published from commit
-  `5321d74560dcd97d54d150bd5e7aff73e997bd67` with asset
-  `X5-Crop-v3.6.2.zip`. Release notes explicitly warn that overlap,
-  near-overlap, locally irregular spacing, missing separators, or continuous
-  image content can still be misdetected and should be reviewed with Debug
-  Analysis.
-- V3.6.6 adds hard-gap trust diagnostics and a limited correction rule:
-  `strong_separator` hard gaps can resist grid override only when the robust
-  grid model residual is high. It also records nearby stronger separator
-  candidates within `±4% pitch`, marks suspicious hard gaps in Debug Analysis,
-  and adds `single_anchor_pass_risk` for locally lucky PASS cases.
-- V3.6.6 target truth notes from the user: `X5_00026` leftmost red gap is
-  wrong; `X5_00032` red gaps 1, 4, and 5 are wrong; `X5_00041` only the
-  leftmost red gap is correct, while the other separators are not reliable.
-- V3.6.5 does not change detection logic. It only changes worker caps so
-  normal runs still cap at 2 workers, while explicit `--diagnostics` runs can
-  use up to 4 workers. The local-only diagnostics launcher under `Test/135/`
-  now passes `--jobs 4`.
-- V3.6.4 rolls the active script back to the V3.6.2 detection baseline and
-  pauses the V3.6.3 overlap REVIEW gate. It adds a narrow long-axis white-edge
-  outer correction: only when both end gaps are hard separators, the content
-  box nearly fills the outer, short-axis slack is small, and one long-axis edge
-  is almost entirely white can `outer_content_alignment` trigger the existing
-  `content_aligned_outer` retry.
-- V3.6.3 is preserved as a paused reference direction. It promoted strong
-  overlap risk on model gaps to REVIEW for 135 full strips, but the user wants
-  that idea held aside while narrower diagnostics/corrections are developed.
-- V3.6.2 is a small cleanup step after V3.6.1 diagnostics: it folds
-  `equal-broad-region` into ordinary `equal` and keeps `hard_fallback_detection`
-  as a smaller review-only equal split fallback. It must not make fallback an
-  auto-pass path or loosen PASS/REVIEW.
-- Sparse checkout should keep `.gitignore` visible and should also keep
-  `.github/` visible if that directory is added later. Local-only hidden dot
-  files remain hidden by name, but should be treated as real project config.
-  The other Codex workspace may be on Windows, so do not assume Finder hidden
-  flags exist there; use Windows hidden attributes only when local UI hiding is
-  requested.
-- `Test/135/X5_Crop.py`, `Test/135/X5_Crop_Mac.command`, and
-  `Test/135/X5_Crop_win.bat` should be synced after active script / launcher
-  changes; this was done for V3.6.4 after the active script change.
-- V3.6.1 keeps the V3.3.1 output baseline and the V3.6 diagnostic direction,
-  but diagnostics now run only when `--diagnostics` is explicitly passed.
-  Normal macOS / Windows launchers do not enable diagnostics.
-- V3.6.1 refines diagnostic-only overlap / continuous-content reporting into
-  weak / medium / strong risk levels. Only strong overlap risk is drawn as a
-  cyan diagnostic tick in Debug Analysis, reducing visual noise. This remains
-  report/visual-only and must not alter output boxes, confidence, or
-  PASS/REVIEW.
-- A local-only macOS diagnostic launcher exists under
-  `Test/135/_X5_Crop_Mac_diagnostics_local.command`; it defaults to
-  `deskew auto`, `dry run`, `debug analysis`, and `--diagnostics`. It is inside
-  ignored `Test/` and should not be committed or published.
-- V3.6 starts from the V3.3.1 output baseline and adds diagnostic cleanup only:
-  read-only `diagnostics`, gap method role labeling, hard-gap trust
-  diagnostics, overlap/continuous-content model-gap diagnostics, and lightweight
-  Debug Analysis ticks. It must not change V3.3.1 `status`, `outer_box`,
-  `frame_boxes`, confidence, or PASS/REVIEW.
-- V3.3.2, V3.4, V3.4.1, V3.4.2, and V3.5 are preserved as archive/reference
-  versions. The user wants future optimization to start from the V3.6
-  diagnostic baseline and avoid damaging known-accurate scans.
-- V3.5 hard-gap semantic validation and V3.4.2 local grid segments are paused
-  because the user found previously accurate scans such as `X5_00051`,
-  `X5_00044`, `X5_00038`, and `X5_00022` became less accurate. Keep those ideas
-  as historical attempts unless the user explicitly asks to reintroduce them
-  with narrower safeguards.
-- V3.4.1's strong-hard-gap-over-grid idea remains a reference direction, but it
-  is not active as a correction rule in V3.6.
-- Debug JPG and Debug Analysis JPG status bars now include the generating
-  script name and version, for example `X5_Crop.py 3.4.1`, so future visual
-  regression checks can identify which script produced an image.
-- The same Debug Analysis version-label change has been applied to every
-  archived X5 Crop V3 snapshot from V3.0 through V3.6, so rolling back to an
-  archived version preserves version labeling in generated JPGs.
-- Paused V3.4 was a detection simplification pass: separator enhanced detection was
-  removed entirely, `equal-broad-region` was folded into ordinary `equal`, full
-  strips now use content only as validation rather than generating separate
-  content candidates, and 135 full strips no longer run the simple cuts-based
-  frame-size fit before the explicit edge-sample fit.
-- V3.0 through V4.0 active-script snapshots are preserved in `archive/`:
-  `X5_Crop_v3.0.py`, `X5_Crop_v3.1.py`, `X5_Crop_v3.1.1.py`,
-  `X5_Crop_v3.1.2.py`, `X5_Crop_v3.2.py`, `X5_Crop_v3.3.py`, and
-  `X5_Crop_v3.3.1.py`, `X5_Crop_v3.3.2.py`, `X5_Crop_v3.4.py`,
-  `X5_Crop_v3.4.1.py`, `X5_Crop_v3.4.2.py`, `X5_Crop_v3.5.py`,
-  `X5_Crop_v3.6.py`, `X5_Crop_v3.6.1.py`, `X5_Crop_v3.6.2.py`, and
-  `X5_Crop_v3.6.3.py`, `X5_Crop_v3.6.4.py`,
-  `X5_Crop_v3.6.5.py`, `X5_Crop_v3.6.6.py`,
-  `X5_Crop_v3.6.7.py`, `X5_Crop_v3.6.8.py`,
-  `X5_Crop_v3.6.9.py`, `X5_Crop_v3.6.10.py`,
-  `X5_Crop_v3.6.11.py`, `X5_Crop_v3.6.12.py`,
-  `X5_Crop_v3.7.py`, `X5_Crop_v3.9.py`, and V4.0's thin entry plus
-  `x5crop/` package snapshot.
-- Future named development versions, including experiments that are later
-  paused or rolled back, should also be saved as archive snapshots.
-- V3.3.2 adds conservative overlap-aware gap handling for 135 full strips:
-  suspected overlap-like gaps are marked with `overlap_like=true` and are not
-  used as strong same-frame-size anchors. This does not increase confidence or
-  alter PASS/REVIEW gates.
-- PASS-only geometry polish is limited to small evidence-limited long-axis
-  expansion.
-- README has been rewritten as a bilingual Chinese/English user guide for
-  V3.3.x, covering install, launchers, Debug Analysis, reuse, command line
-  usage, outputs, and license.
-- User-facing README no longer mentions internal test filenames, regression
-  samples, archived scripts, rollback history, or previous-version detection
-  details.
-- User-facing README now states that GitHub Releases are the stable user-facing
-  downloads, while the repository `main` branch may contain in-progress
-  development changes.
-- User-facing README header now lists both the current development version and
-  the current stable GitHub Release version.
-- User-facing README now includes a bilingual changelog describing detection
-  and workflow changes from V3.0 through the current development version.
-- Added root `CHANGELOG.md` as a more detailed bilingual local development
-  changelog for detection logic, rollback context, and future testing notes.
-- `CHANGELOG.md` now follows the same readability structure as `README.md`:
-  a complete Chinese changelog first, followed by a complete English changelog,
-  instead of mixing languages line-by-line.
-- User-facing README now starts with a Chinese quick-start usage section before
-  the longer Chinese/English guide.
-- User-facing README and GitHub Release `v3.3.1` now both put bilingual
-  Chinese/English quick-start usage near the top.
-- README and GitHub Release `v3.3.1` quick-start sections now mention expected
-  per-file runtime ranges and clarify that a quiet terminal usually means the
-  script is still processing the current TIFF.
-- GitHub Release `v3.3.1` was created with
-  `release/X5-Crop-v3.3.1.zip` uploaded as the user-facing package.
-- GitHub Release `v3.3.1` asset was replaced after cleaning the user-facing
-  README and removing the short-axis polish code from the V3.3.1
-  archive/package. The uploaded asset digest is
-  `sha256:cec114dedd61a8cad8540676bf485e6589d078c2eb994255456bacb88137dd3d`.
-- GitHub Release `v3.3.1` body now describes the stable release policy and
-  summarizes major changes compared with the previous `v3` tag in Chinese and
-  English.
-- GitHub Release `v3.6.2` was created as the current stable user-facing release
-  with `X5-Crop-v3.6.2.zip`, digest
-  `sha256:981cb501b63b59f3ea116bcf0030668cd18df42b6ef064ad847b45c792e61e2b`.
-  The release body includes bilingual quick start and warns that overlap,
-  near-overlap, irregular local spacing, missing separators, and continuous
-  image content may still require manual Debug Analysis review.
-- V3.3.1 keeps the V3/V3.2 ordinary outer/gap/candidate selection chain and
-  the V3.3 output-only bleed separation.
-- Default output bleed is long-axis 20px and short-axis 10px. If overlap /
-  near-overlap / continuous-content risk is detected, long-axis output bleed is
-  raised to 50px. Detection uses 0px bleed internally, so bleed is applied only
-  to final output/report/Debug Analysis frame boxes and does not participate in
-  outer, gap, confidence, or PASS/REVIEW scoring.
-- Added final edge bleed protection after PASS/REVIEW status is decided: if
-  same-frame-size fitting leaves the first or last frame too far inside an
-  otherwise stable outer box, the output/report/debug frame is extended back to
-  the outer edge plus requested long-axis bleed. This fixed the V3.1.1-style
-  inward edge shrink seen on `X5_00009` and `X5_00044` while keeping detection
-  scoring unchanged.
-- Added an MIT `LICENSE` file and documented the project license in `README.md`
-  before making the GitHub repository public.
-- Removed the V3.1.1 `separator_derived_outer` competition and the V3.1.2 local
-  separator rescue from the active detection chain. `X5_00007`, `X5_00019`, and
-  `X5_00052` now follow the V3-style ordinary outer/gap path again.
-- The `X5_00036` failure shape is guarded by
-  `135_leading_grid_separator_failure`: three leading low-score grid separators,
-  too few hard separators, and only adjacent late hard separators.
-- In paused V3.4 and later, full-strip detection no longer generated separate
-  content candidates; in V3.6, do not assume that simplification is active
-  because V3.6 intentionally preserves V3.3.1 output behavior.
-- README now has one consolidated Chinese Debug Analysis section instead of two
-  overlapping sections.
-- macOS and Windows launchers now re-prompt after an unknown format instead of
-  exiting immediately.
-- Folder runs process TIFF files in parallel with `--jobs 2` by default.
-  Reports are still written by the main process after each file completes, so
-  `split_report.jsonl` and `split_summary.csv` are not appended by multiple
-  workers at the same time. Normal runs cap at 2 workers; explicit diagnostics
-  runs can use up to 4 workers.
-- If process workers are unavailable in a restricted environment, the script
-  falls back to 2 thread workers instead of failing.
-
-Verified:
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.1.3`.
-- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py
-  x5crop/debug/*.py` passed.
-- Full dry-run regression comparison against the V4.1.2 baseline was 0 diff for
-  `Test/135` (48 rows), `Test/半格` (15 rows), `Test/120/66` (16 rows), and
-  `Test/120/67` (4 rows).
-- V4.1.2 historical verification:
-- V4.1.2 single-file test on `Test/120/67/3.tif` with dry run + Debug Analysis
-  + diagnostics kept it as `approved_auto confidence=1.000`. The selected outer
-  changed from `top=1, bottom=4009` to `top=68, bottom=3974`; both gaps remain
-  `edge-pair` and `separator_hard_evidence.ok=True`.
-- Per target, this V4.1.2 fix was verified only on `3.tif`; no full 135 / 120
-  regression was run after this narrow change.
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.1.1`.
-- V4.1.1 single-file test on `Test/120/67/2.tif` with dry run + Debug Analysis
-  + diagnostics changed it from V4.1 `needs_review confidence=0.835` to
-  `approved_auto confidence=0.995`. The selected gaps are now
-  `wide-separator` and `edge-pair`, with `equal_gaps=0` and
-  `separator_hard_evidence.ok=True`.
-- Per user request, this V4.1.1 fix was verified only on `2.tif`; no full 135 /
-  120 regression was run after this narrow change.
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.1`.
-- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py`
-  passed.
-- V4.1 `Test/120/66` full dry-run + diagnostics produced 16 ok, 7
-  `approved_auto`, and 9 `needs_review`; approved files had complete hard
-  separator evidence and content-only cases remained review.
-- V4.1 `Test/120/67` full dry-run + diagnostics produced 4 ok, 2
-  `approved_auto`, and 2 `needs_review`; `2.tif` remains review because one gap
-  is still equal / separator evidence incomplete, and `4.tif` remains review as
-  a partial/single-frame-like full-count case.
-- Full `Test/135` `deskew off` dry-run compared against V4.0.1 commit
-  `b9940a8` with `python3 -m x5crop.regression`: 48 rows, 0 diffs across
-  status, confidence, review_reasons, outer_box, frame_boxes, and gaps.
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 4.0.1`.
-- `python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py` passed.
-- `bash -n X5_Crop_Mac_diagnostics.command` passed.
-- `Test/new_135` full dry run with Debug Analysis and no report reuse changed
-  the four new wide-gutter TIFFs to 4 `approved_auto`; each selected report has
-  `wide-separator`, `wide_detected_gaps`, and `wide_gap_retry.used=true`.
-- Full `Test/135` default-deskew Debug Analysis dry run to
-  `/private/tmp/x5_v401_wide_135` completed with 48 ok, 42 `approved_auto`,
-  and 6 `needs_review`.
-- `python3 -m x5crop.regression Test/135/x5_crop_output/split_report.jsonl /private/tmp/x5_v401_wide_135/split_report.jsonl`
-  reported `diff count: 0` for the default comparison fields.
-- `tools/build_standalone.py` generated `release/X5-Crop-v4.0.1/X5_Crop.py`;
-  `release/X5-Crop-v4.0.1.zip` contains 9 files and excludes
-  `X5_Crop_Mac_diagnostics.command`, `x5crop/`, `archive/`, `CHANGELOG.md`,
-  `AGENTS.md`, `LICENSE`, and local test/output folders.
-- `python3 release/X5-Crop-v4.0.1/X5_Crop.py --version` and
-  `python3 /private/tmp/x5_release_v401_verify/X5-Crop-v4.0.1/X5_Crop.py --version`
-  both print `X5_Crop.py 4.0.1`.
-- `bash -n` passed for the package macOS launcher, macOS installer, and macOS
-  uninstaller.
-- `shasum -a 256 release/X5-Crop-v4.0.1.zip` reports
-  `5496ecf79fd725f20f487569e0ffb560496f52350e9e9fdfcd1fdeb836c9c5cf`.
-- Current launcher/package-policy verification: `bash -n X5_Crop_Mac.command`
-  passed; `X5_Crop_Mac.command` and `X5_Crop_win.bat` now only include
-  `--report` on the Debug Analysis command path. Ignored local launcher copies
-  under `Test/135/` were synced.
-- Current release-doc verification: `快速启动_Quick_Start.md` was added and
-  release package policy now includes `README.txt`,
-  `快速启动_Quick_Start.txt`, and installer launchers under `install/`, while
-  still excluding archive snapshots, license, GitHub config, and local
-  test/output folders.
-- Current macOS installer permission verification: `bash -n
-  install/X5_Crop_Mac_install.command X5_Crop_Mac.command` passed. The installer
-  now contains the `chmod +x` and `xattr -dr com.apple.quarantine .` preparation
-  steps.
-- Current quick-start order verification: checked the Chinese and English
-  opening sections of `快速启动_Quick_Start.md`; both now show first-use
-  installer instructions before the macOS Terminal fallback.
-- Current normal-launcher runtime verification: ran the local `Test/135`
-  macOS main launcher as default 135 full, partial=no, debug analysis=no. It
-  processed 48 TIFF files with real export in 394.14 seconds, producing
-  48 ok / 0 failed / 42 `approved_auto` / 6 `needs_review`, or about
-  8.2 seconds per file. In the sandbox, process workers were unavailable and
-  the script used 2 thread workers.
-- Current V4.0 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 4.0`; importing `x5crop`, `x5crop.common`, `x5crop.evidence`,
-  `x5crop.io`, `x5crop.geometry`, `x5crop.detection`, `x5crop.debug`,
-  `x5crop.reports`, `x5crop.deskew`, `x5crop.cli`, and `x5crop.regression`
-  succeeds. `python3 -m py_compile X5_Crop.py x5crop/*.py
-  x5crop/detection/*.py x5crop/debug/*.py` passed.
-  `python3 tools/build_standalone.py --output /private/tmp/x5_standalone_verify/X5_Crop.py`
-  generated a standalone script. A launcher smoke test in
-  `/private/tmp/x5_standalone_verify_launcher` used only `X5_Crop.py`,
-  `X5_Crop_Mac.command`, `X5_Crop_win.bat`, and `X5_00002.tif` with no
-  `x5crop/` folder; it processed the file as 135 full, produced 6 TIFF files,
-  and reported `approved_auto confidence=0.996`.
-  Full `Test/135` default-deskew dry-run compared V4.0 against a V3.9 baseline
-  extracted to `/private/tmp/X5_Crop_v39_before_v4.py`; both runs processed
-  48 TIFF files with 0 failed, 42 `approved_auto`, and 6 `needs_review`.
-  `python3 -m x5crop.regression` compared their `split_report.jsonl` files and
-  reported 48 baseline rows, 48 candidate rows, and diff count 0 for `status`,
-  `confidence`, `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`.
-- Current V3.9 verification: `python3 X5_Crop.py --version`,
-  `python3 archive/X5_Crop_v3.9.py --version`, and
-  `python3 Test/135/X5_Crop.py --version` all print `X5_Crop.py 3.9`.
-  `python3 -m py_compile X5_Crop.py archive/X5_Crop_v3.9.py
-  Test/135/X5_Crop.py` passed. A full `Test/135` default-deskew dry run
-  compared V3.9 against `/private/tmp/X5_Crop_v37_before_v39.py`; both runs
-  processed 48 TIFF files with 0 failed, 42 `approved_auto`, and
-  6 `needs_review`. Comparing `status`, `confidence`, `review_reasons`,
-  `outer_box`, `frame_boxes`, and `gaps` across all 48 report rows produced
-  0 diffs.
-- V3.7 verification at the time of that version: `python3 X5_Crop.py --version`,
-  `python3 archive/X5_Crop_v3.7.py --version`, and
-  `python3 Test/135/X5_Crop.py --version` all print `X5_Crop.py 3.7`;
-  `python3 -m py_compile X5_Crop.py archive/X5_Crop_v3.7.py
-  Test/135/X5_Crop.py` passed. Full `deskew off` dry-run comparisons against
-  V3.6.12 baseline reports found 0 diffs for `status`, `confidence`,
-  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps` across `Test/135`
-  as 135, `Test/半格` as half, and `Test/120` as 120-645 / 120-66 / 120-67.
-  A partial-mode smoke comparison against `archive/X5_Crop_v3.6.12.py` on
-  `Test/135/X5_00038.tif` also found 0 diffs for the same fields.
-- V3.7 scale-threshold cleanup verification: `python3 -m py_compile
-  X5_Crop.py` passed, `Test/135/X5_Crop.py` was synced, and a full
-  `Test/135` `deskew off` dry run with `--format 135 --strip full --count 6
-  --dry-run --report --no-copy-review-files --no-reuse-analysis --jobs 2`
-  produced 48 ok / 0 failed / 43 `approved_auto` / 5 `needs_review`.
-  Compared with `/private/tmp/x5_policy_after_135/split_report.jsonl`, the
-  final `/private/tmp/x5_scale_threshold_after4_135/split_report.jsonl` had
-  0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
-  `frame_boxes`, and `gaps`.
-- Second V3.7 scale-threshold cleanup verification: `python3 -m py_compile
-  X5_Crop.py` passed, `Test/135/X5_Crop.py` was synced, and a full
-  `Test/135` `deskew off` dry run with the same settings produced 48 ok /
-  0 failed / 43 `approved_auto` / 5 `needs_review`. An intermediate attempt
-  caused 7 structural diffs because some originally floating-point tolerances
-  were rounded to integers; after switching those to `clamp_float`, the final
-  `/private/tmp/x5_scale_threshold_more_after2_135/split_report.jsonl`
-  compared against `/private/tmp/x5_scale_threshold_after4_135/split_report.jsonl`
-  had 0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
-  `frame_boxes`, and `gaps`.
-- V3.7 format-policy cleanup verification: `python3 -m py_compile X5_Crop.py`
-  passed, `Test/135/X5_Crop.py` was synced, and full `Test/135` `deskew off`
-  dry run with the same settings produced 48 ok / 0 failed /
-  43 `approved_auto` / 5 `needs_review`. Compared
-  `/private/tmp/x5_format_policy_after_135/split_report.jsonl` against
-  `/private/tmp/x5_scale_threshold_more_after2_135/split_report.jsonl`; there
-  were 0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
-  `frame_boxes`, and `gaps`.
-- V3.7 follow-up format-policy expansion verification: `python3 -m py_compile
-  X5_Crop.py` passed, `Test/135/X5_Crop.py` was synced, and full `Test/135`
-  `deskew off` dry run with the same settings produced 48 ok / 0 failed /
-  43 `approved_auto` / 5 `needs_review`. Compared
-  `/private/tmp/x5_format_policy_after2_135/split_report.jsonl` against
-  `/private/tmp/x5_format_policy_after_135/split_report.jsonl`; there were
-  0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
-  `frame_boxes`, and `gaps`.
-- Hard-fallback detail cleanup verification: `python3 -m py_compile X5_Crop.py`
-  passed, `Test/135/X5_Crop.py` was synced, `git diff --check` passed, and a
-  direct smoke call to `hard_fallback_detection()` confirmed detail now contains
-  only the compact fallback fields.
-- Current format-aware frame-fit policy verification: compared current script
-  against a temporary pre-policy `HEAD:X5_Crop.py` copy. Full `Test/135`
-  `deskew off` dry-run had 0 diffs for `status`, `confidence`,
-  `review_reasons`, `outer_box`, `frame_boxes`, and `gaps`; smoke comparisons
-  on `Test/半格/X5_00053.tif` and `Test/120/X5_test_45.tif` as 120-66 also had
-  0 diffs, while reports showed the new per-format policy fields.
-- V3.7 low-level policy/cache cleanup verification:
-  `python3 -m py_compile X5_Crop.py` and `git diff --check` passed;
-  `Test/135/X5_Crop.py` was synced. Full `Test/135` `deskew off` dry-run with
-  `--format 135 --strip full --count 6 --dry-run --report
-  --no-copy-review-files --no-reuse-analysis --jobs 2` produced 48 ok /
-  0 failed / 43 `approved_auto` / 5 `needs_review`. Compared
-  `/private/tmp/x5_v37_after_policy_cleanup/split_report.jsonl` against
-  `/private/tmp/x5_v37_before_policy_cleanup/split_report.jsonl`; there were
-  0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
-  `frame_boxes`, and `gaps`.
-- V3.7 high-level policy cleanup verification:
-  `python3 -m py_compile X5_Crop.py` passed; `Test/135/X5_Crop.py` was synced.
-  Full current-script `Test/135` `deskew off` dry-run with `--format 135
-  --strip full --count 6 --dry-run --report --no-copy-review-files
-  --no-reuse-analysis --jobs 2` produced 48 ok / 0 failed /
-  43 `approved_auto` / 5 `needs_review`. The same command was run against a
-  temporary pre-cleanup `git show HEAD:X5_Crop.py` baseline. Comparing
-  `/private/tmp/x5_v37_policy_highlevel_after/split_report.jsonl` against
-  `/private/tmp/x5_v37_policy_highlevel_before/split_report.jsonl` produced
-  0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
-  `frame_boxes`, and `gaps`.
-- V3.7 low-risk code cleanup verification:
-  `python3 -m py_compile X5_Crop.py Test/135/X5_Crop.py` and
-  `git diff --check` passed. Full current-script `Test/135` `deskew off`
-  dry-run with `--format 135 --strip full --count 6 --dry-run --report
-  --no-copy-review-files --no-reuse-analysis --jobs 2` produced 48 ok /
-  0 failed / 43 `approved_auto` / 5 `needs_review`. The same command was run
-  against `/private/tmp/X5_Crop_before_lowrisk_cleanup.py`, saved before the
-  cleanup. Comparing `/private/tmp/x5_v37_lowrisk_after/split_report.jsonl`
-  against `/private/tmp/x5_v37_lowrisk_before/split_report.jsonl` produced
-  0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
-  `frame_boxes`, and `gaps`.
-- V3.7 follow-up policy expansion verification:
-  `python3 -m py_compile X5_Crop.py Test/135/X5_Crop.py` and
-  `git diff --check` passed. Full current-script `Test/135` `deskew off`
-  dry-run with `--format 135 --strip full --count 6 --dry-run --report
-  --no-copy-review-files --no-reuse-analysis --jobs 2` produced 48 ok /
-  0 failed / 43 `approved_auto` / 5 `needs_review`. The same command was run
-  against `/private/tmp/X5_Crop_before_policy_batch2.py`, saved before this
-  policy expansion. Comparing `/private/tmp/x5_v37_policy_batch2_after/split_report.jsonl`
-  against `/private/tmp/x5_v37_policy_batch2_before/split_report.jsonl`
-  produced 0 diffs for `status`, `confidence`, `review_reasons`, `outer_box`,
-  `frame_boxes`, and `gaps`.
-- Current V3.6.12 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 3.6.12`; `python3 -m py_compile X5_Crop.py` passed. Full
-  `Test/半格` dry-run with `--format half --strip full --count 12 --deskew off
-  --dry-run --report --diagnostics --no-copy-review-files --jobs 2
-  --no-reuse-analysis` produced 6 `approved_auto` / 9 `needs_review`, matching
-  V3.6.11, with edge-pair accepted total 13. Full `Test/120` dry-runs with
-  `--format 120-66`, `--format 120-67`, and `--format 120-645` all produced
-  0 `approved_auto` / 16 `needs_review`; 120-66 and 120-67 edge-pair accepted
-  totals increased from 0 to 16, while 120-645 stayed 0. Focus Debug Analysis
-  on `X5_test_45` / `X5_test_55` for 120-66 was visually inspected.
-  V3.6.12 vs archive V3.6.11 135 focus dry-run (`deskew off`) kept identical
-  status, confidence, outer boxes, frame boxes, gap methods, and gap centers
-  for `X5_00014`, `X5_00026`, `X5_00036`, and `X5_00041`.
-- Current V3.6.11 verification: `python3 X5_Crop.py --version` and
-  `python3 archive/X5_Crop_v3.6.11.py --version` both print
-  `X5_Crop.py 3.6.11`; `python3 -m py_compile X5_Crop.py
-  Test/135/X5_Crop.py archive/X5_Crop_v3.6.11.py` passed. Focus dry-run with
-  diagnostics on `X5_00014`, `X5_00026`, `X5_00036`, and `X5_00041`
-  produced `14/26` as `approved_auto` and `36/41` as `needs_review`.
-  Structured comparison against V3.6.10 on those four 135 focus files had
-  changed `0` for status, confidence, outer boxes, frame boxes, gap methods,
-  and gap centers.
-  Lightweight full-strip code-path checks for `xpan`, `half`, `120-645`,
-  `120-66`, and `120-67` completed without errors on a single TIFF; those
-  checks were only path/syntax smoke tests, not accuracy validation for those
-  formats.
-- Current V3.6.10 verification: `python3 X5_Crop.py --version` and
-  `python3 archive/X5_Crop_v3.6.10.py --version` both print
-  `X5_Crop.py 3.6.10`; `python3 -m py_compile X5_Crop.py
-  Test/135/X5_Crop.py archive/X5_Crop_v3.6.10.py` passed. Focus dry-run with
-  diagnostics on `X5_00014`, `X5_00026`, `X5_00036`, and `X5_00041`
-  produced `14/26` as `approved_auto` and `36/41` as `needs_review`.
-- Current V3.6.9 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 3.6.9`; `python3 -m py_compile X5_Crop.py` passed. Focus
-  dry-run on `X5_00007`, `X5_00014`, `X5_00023`, `X5_00026`,
-  `X5_00032`, `X5_00035`, and `X5_00041` kept only `X5_00041` as REVIEW.
-  Full `Test/135` dry-run produced 42 `approved_auto` / 6 `needs_review`.
-  Structured comparison against the V3.6.8 full report had changed `0`.
-- Current V3.6.8 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 3.6.8`; `python3 -m py_compile X5_Crop.py` passed. Focus
-  dry-run on `X5_00007`, `X5_00014`, `X5_00023`, `X5_00026`,
-  `X5_00032`, `X5_00035`, and `X5_00041` produced only `X5_00041` as
-  REVIEW. Focus risk scores: `X5_00041=0.96`, `X5_00007=0.71`,
-  `X5_00035=0.74`, threshold `0.80`.
-- Full V3.6.8 `Test/135` dry-run with `--format 135 --strip full --count 6
-  --dry-run --report --no-copy-review-files --jobs 2` produced 42
-  `approved_auto` / 6 `needs_review`, with `X5_00041` entering REVIEW via
-  `lucky_pass_risk`.
-- Current V3.6.7 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 3.6.7`; `python3 -m py_compile X5_Crop.py` passed. Focus
-  dry-run with diagnostics on `X5_00014`, `X5_00026`, `X5_00032`,
-  `X5_00041`, and `X5_00036` kept `14/26/32` approved, kept `36` in review,
-  and moved `41` to review with `single_anchor_pass_risk`.
-- After narrowing the `single_anchor_review_gate`, focus dry-run on
-  `X5_00007`, `X5_00014`, `X5_00023`, `X5_00026`, `X5_00032`, `X5_00035`,
-  and `X5_00041` produced only `X5_00041` as REVIEW.
-- Full V3.6.7 `Test/135` dry-run with `--format 135 --strip full --count 6
-  --dry-run --report --no-copy-review-files --jobs 2` produced 42
-  `approved_auto` / 6 `needs_review`. Compared with the local V3.6.6 full
-  report, changed files were only `X5_00026` and `X5_00041`.
-- `bash -n X5_Crop_Mac.command Test/135/X5_Crop_Mac.command`
-- `python3 -m py_compile X5_Crop.py Test/135/X5_Crop.py`
-- `printf '\n\n\n\n' | ./X5_Crop_Mac.command` printed
-  `X5_Crop.py 3.6.7 launcher` before stopping at the expected no-TIFF message
-  in the repository root.
-- `env PATH=/usr/bin:/bin bash -c 'printf "\n\n\n\n" |
-  ./X5_Crop_Mac.command'` printed `X5_Crop.py 3.6.9 launcher`, confirming the
-  macOS launcher can still find a dependency-ready Homebrew Python when PATH
-  would otherwise prefer system Python. It then stopped at the expected no-TIFF
-  message in the repository root.
-- `python3 -m py_compile X5_Crop.py archive/X5_Split_v17.py archive/X5_Split_v18.py archive/X5_Crop_v3.0.py archive/X5_Crop_v3.1.py archive/X5_Crop_v3.1.1.py archive/X5_Crop_v3.1.2.py archive/X5_Crop_v3.2.py archive/X5_Crop_v3.3.py`
-- `bash -n X5_Crop_Mac.command install/X5_Crop_Mac_install.command`
-- `python3 X5_Crop.py --version` prints `X5_Crop.py 3.6`.
-- `python3 -m py_compile X5_Crop.py` passed after adding the version label to
-  Debug JPG and Debug Analysis JPG status bars.
-- Generated local comparison JPGs for `Test/135/X5_00007.tif` using V3.3.1,
-  V3.3.2, and then-current V3.4.1 with `--deskew off`; the comparison files
-  are ignored local artifacts under `Test/135/version_compare/`.
-- Generated new vertical Debug Analysis comparison JPGs for `Test/135/X5_00007.tif`:
-  a V3.3.1/V3.3.2/V3.4.1 comparison and an all-V3 snapshot comparison from
-  V3.0 through V3.5. These are ignored local artifacts under
-  `Test/135/version_compare/`.
-- `release/X5-Crop-v3.3.1.zip` was generated locally from the current
-  V3.3.1 script, launchers, install scripts, README, LICENSE, and archive
-  snapshots; the zip listing was checked.
-- GitHub Release URL:
-  `https://github.com/rrriiicccooo/X5-Crop/releases/tag/v3.3.1`
-- Verified the updated GitHub Release asset `X5-Crop-v3.3.1.zip` reports
-  digest `sha256:cec114dedd61a8cad8540676bf485e6589d078c2eb994255456bacb88137dd3d`.
-- Verified GitHub Release `v3.3.1` body via `gh release view v3.3.1 --json
-  body,name,tagName,assets`; it now includes Chinese/English changes compared
-  with `v3`.
-- Verified GitHub Release `v3.6.2` via `gh release view v3.6.2 --json
-  tagName,name,url,targetCommitish,assets,body`; it targets
-  `5321d74560dcd97d54d150bd5e7aff73e997bd67` and asset
-  `X5-Crop-v3.6.2.zip` reports digest
-  `sha256:981cb501b63b59f3ea116bcf0030668cd18df42b6ef064ad847b45c792e61e2b`.
-- Archived `X5_Crop_v3*.py` snapshots report internal versions 3.0, 3.1,
-  3.1.1, 3.1.2, 3.2, 3.3, and 3.3.1.
-- Full fresh `Test/135` dry-run with `--format 135 --strip full --count 6
-  --dry-run --report --no-copy-review-files --jobs 2 --no-reuse-analysis`
-  produced 43 `approved_auto` / 5 `needs_review`, matching the V3.1.1 reference
-  count. After the V3.2 detection rollback, the same full fresh `Test/135`
-  dry-run again produced 43 / 5; in this sandbox process workers were
-  unavailable, so it used the thread fallback and took about 5m13s wall time.
-- Focus fresh dry-run on `X5_00002`, `X5_00007`, `X5_00009`, `X5_00014`,
-  `X5_00019`, `X5_00032`, `X5_00036`, `X5_00038`, `X5_00044`, and `X5_00052`
-  produced 9 `approved_auto` and `X5_00036` as the only `needs_review`.
-- Focus V3.2 dry-run on `X5_00007`, `X5_00019`, `X5_00036`, and `X5_00052`
-  restored the V3-style outer/gap/frame-fit behavior for `7`, `19`, and `52`;
-  `X5_00036` stayed `needs_review` with
-  `separator_hard_evidence_weak` / `auto_gate_not_satisfied`.
-- V3.3 was intentionally not full-regression tested in this turn at the user's
-  request. Only syntax/launcher checks and a small focus smoke test were run;
-  the user plans to run the full export and place the named output folder under
-  `Test/135`.
-- Focus V3.3 smoke dry-run on `X5_00007`, `X5_00019`, `X5_00036`, and
-  `X5_00052` confirmed report `output_bleed` records
-  `detection_long_axis_bleed=0`, `detection_short_axis_bleed=0`,
-  `output_long_axis_bleed=20`, and `output_short_axis_bleed=10`; `X5_00036`
-  stayed `needs_review`.
-- Default-output Debug Analysis terminal messages now print only the generated
-  JPG filename instead of the full default `x5_crop_output/_debug_analysis/...`
-  path. Explicit `--output` runs still print the full output path.
-- V3.3.1 added a PASS-only geometry polish step after status is decided and
-  before output bleed is applied; current behavior keeps this limited to small
-  evidence-limited long-axis expansion. This does not change confidence or
-  PASS/REVIEW.
-- Focus V3.3.1 smoke dry-run on `X5_00007`, `X5_00009`, `X5_00036`, and
-  `X5_00052` confirmed: `X5_00052` left outer expanded by 59px and
-  `X5_00036` stayed `needs_review`.
-- Focus V3.3.2 smoke dry-run on `X5_00007`, `X5_00009`, and `X5_00036`
-  confirmed: `X5_00007` and `X5_00009` stayed `approved_auto`, `X5_00036`
-  stayed `needs_review`, `X5_00007` marked one overlap-like grid gap, and
-  `X5_00009` skipped global same-frame-size fitting with
-  `clustered_late_edge_samples_with_leading_model_gaps`.
-- Focus dry-run on `X5_00007`, `X5_00009`, `X5_00014`, and `X5_00036`
-  confirmed `7/9/14` stayed `approved_auto` and `36` stayed `needs_review`.
-- Focus V3.4 dry-run on `X5_00002`, `X5_00007`, `X5_00009`, `X5_00014`,
-  and `X5_00036` confirmed `2/7/9/14` stayed `approved_auto`, `36` stayed
-  `needs_review`, and gap methods no longer include `enhanced-detected` or
-  `equal-broad-region`.
-- Focus V3.4.1 dry-run on `X5_00002`, `X5_00007`, `X5_00009`, `X5_00014`,
-  and `X5_00036` confirmed `2/7/9/14` stayed `approved_auto` and `36` stayed
-  `needs_review`. `X5_00014` now keeps the right-side hard separator as
-  `edge-pair` at `11492.5` instead of rewriting it to grid at `11294.375`;
-  the conflict is recorded in `grid.hard_conflicts`.
-- Focus V3.4.2 dry-run on `X5_00002`, `X5_00007`, `X5_00009`, `X5_00014`,
-  and `X5_00036` confirmed `2/7/9/14` stayed `approved_auto` and `36` stayed
-  `needs_review`. Local grid adjusted leading model gaps on `X5_00009` and
-  bounded model gaps on `X5_00014`; `X5_00007` and `X5_00036` recorded
-  `local_grid.used=false`.
-- Focus V3.5 dry-run with `--deskew off` on `X5_00001`, `X5_00004`,
-  `X5_00007`, `X5_00009`, `X5_00014`, `X5_00025`, `X5_00026`, and
-  `X5_00036` confirmed `1/4/7/9/14/25/26` stayed `approved_auto` and `36`
-  stayed `needs_review`. `X5_00026` recorded one `suspect_internal_edge`
-  demotion in `hard_gap_validation`; `X5_00001`, `X5_00004`, and
-  `X5_00025` recorded no suspect hard gaps.
-- Historical V3.4.1 rollback check: a focused `--deskew off` dry-run on
-  `X5_00022`, `X5_00038`, `X5_00044`, and `X5_00051` confirmed all four stayed
-  `approved_auto`.
-- Current V3.3.1 rollback smoke test: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 3.3.1`; `python3 -m py_compile X5_Crop.py` passed; and a
-  `--deskew off --debug-analysis --dry-run` smoke test on `X5_00007` produced
-  `approved_auto confidence=1.000`.
-- Current V3.6 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 3.6`; `python3 -m py_compile X5_Crop.py` and `git diff --check`
-  passed; a `--deskew off --debug-analysis --dry-run` smoke test on
-  `X5_00007` produced `approved_auto confidence=1.000` and wrote
-  `diagnostics` to the report.
-- Current V3.6.1 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 3.6.1`; `python3 -m py_compile X5_Crop.py` and
-  `archive/X5_Crop_v3.6.1.py` passed; normal `--debug-analysis --dry-run
-  --deskew off` on `X5_00007` produced `approved_auto confidence=1.000`
-  without `diagnostics`; the same run with `--diagnostics` wrote
-  `diagnostics` version `3.6.1` and `changes_output=false`.
-- Current V3.6.2 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 3.6.2`; `python3 -m py_compile X5_Crop.py` and
-  `archive/X5_Crop_v3.6.2.py` passed; a focused `--debug-analysis
-  --diagnostics --dry-run` smoke test on `X5_00014`, `X5_00032`,
-  `X5_00036`, and `X5_00052` produced `14/32/52` as `approved_auto` and
-  `36` as `needs_review`; report gap methods no longer include
-  `equal-broad-region`.
-- Current V3.6.3 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 3.6.3`; `python3 -m py_compile X5_Crop.py` and
-  `archive/X5_Crop_v3.6.3.py` passed; a focused `--debug-analysis
-  --diagnostics --dry-run` smoke test on `X5_00002`, `X5_00007`,
-  `X5_00009`, `X5_00022`, `X5_00026`, `X5_00032`, `X5_00036`,
-  `X5_00038`, `X5_00051`, and `X5_00052` produced `2/7/9/22/26/36/38/51`
-  as `needs_review` due to `overlap_or_near_overlap_review`, while
-  `32/52` stayed `approved_auto`. Based on the existing V3.6.2 full report,
-  a full V3.6.3 run is expected to newly review previously approved
-  `2/7/9/22/26/38/40/41/51`; `36/37/39/43` were already review and also have
-  strong overlap-risk model gaps.
-- Current V3.6.4 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 3.6.4`; `python3 -m py_compile X5_Crop.py` passed; focused
-  `--debug-analysis --dry-run --no-reuse-analysis` tests on
-  `X5_00007`, `X5_00009`, `X5_00014`, `X5_00022`, `X5_00038`, and
-  `X5_00051` kept all six as `approved_auto`. `X5_00014` triggered
-  `outer_correction` from the new white-edge rule, moving the work outer from
-  `186..17254` to `203..17173`. Guard tests on `X5_00001`, `X5_00004`,
-  `X5_00025`, `X5_00026`, `X5_00032`, `X5_00036`, `X5_00044`, and
-  `X5_00052` kept prior PASS/REVIEW status, with `X5_00036` still
-  `needs_review`.
-- Current V3.6.5 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 3.6.5`; `python3 -m py_compile X5_Crop.py` passed; `bash -n`
-  passed for `Test/135/_X5_Crop_Mac_diagnostics_local.command`. A 4-file
-  diagnostics dry run with `--jobs 4` on `X5_00014`, `X5_00032`,
-  `X5_00036`, and `X5_00052` printed `parallel: 4 workers`, completed in
-  about 29 seconds in the sandbox thread fallback, and produced 3 approved /
-  1 review with `X5_00036` still `needs_review`.
-- Current V3.6.6 verification: `python3 X5_Crop.py --version` prints
-  `X5_Crop.py 3.6.6`; `python3 -m py_compile X5_Crop.py` passed. Focus
-  diagnostics dry-run on `X5_00014`, `X5_00026`, `X5_00032`, and `X5_00041`
-  confirmed: `X5_00014` keeps the corrected outer and restores the rightmost
-  hard separator as `edge-pair`; `X5_00026` marks left gap 1 as
-  `nearby_separator_conflict`; `X5_00032` marks gaps 1 and 5 as
-  `geometry_conflict` and gap 4 as `nearby_separator_conflict`; `X5_00041`
-  marks gap 4 as `suspect_internal_edge` and summary
-  `single_anchor_pass_risk=true`.
-- Full V3.6.6 dry-run report against the local V3.6.4 report kept PASS/REVIEW
-  counts at 43 / 5. Geometry changed only on `X5_00014` and `X5_00026`.
-  Earlier broad protection also changed `X5_00004` and `X5_00040`, but was
-  narrowed by requiring high robust-grid residual before hard-gap protection.
-- Full V3.6 `Test/135` dry-run with `--format 135 --strip full --count 6
-  --dry-run --report --no-copy-review-files --jobs 2 --no-reuse-analysis`
-  produced 43 `approved_auto` / 5 `needs_review`. Compared against the
-  V3.3.1 rollback commit `8928f70`, all 48 files had identical `status`,
-  `outer_box`, `frame_boxes`, and confidence; every V3.6 report row included
-  `diagnostics`.
-- `X5_00009` and `X5_00044` now report/output first and last frame margins at
-  long-axis `-20/-20` while keeping their stable V3.1.1 outer boxes.
-- `X5_00014` kept its V3.1.1 outer box; one long-axis edge is limited to -15
-  only because the requested 20px bleed reaches the TIFF image boundary.
-- V3.4 focused reports show full-strip candidates record
-  `content_candidate_skipped` and use content validation only.
-- `printf 'abc\n135\nn\nn\n\n' | ./X5_Crop_Mac.command` confirmed an invalid
-  format is rejected and the next valid input continues the launcher flow; the
-  run then stopped at the expected no-TIFF message in the repository root.
-- Parallel smoke test on 3 linked Test/135 files produced 2 `approved_auto` and
-  1 `needs_review`; in this sandbox, process workers were unavailable and the
-  thread fallback completed successfully. `split_report.jsonl` had 3 rows and
-  `split_summary.csv` had header + 3 rows.
-- `--jobs 1` single-file smoke test on `X5_00019.tif` remained
-  `approved_auto`.
+- `python3 X5_Crop.py --version` printed `X5_Crop.py 4.7`.
+- Full py_compile across the V4.7 package passed.
+- `git diff --check` passed.
+- Legacy-residue scan had no hits for `common`, `FormatTuning`,
+  `format_tuning`, `separator_gate_mode`, `score_gate_135`, `separator_135`,
+  `separator_half`, `import *`, `edge_pair_params_for_format`, or
+  `frame_fit_policy` under active `x5crop/`.
+- V4.7 content policy runtime cleanup dry-run regressions against local V4.5.4 reports with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_content_policy_20260701_run1` and produced 0 core diff
+  for `status`, `confidence`, `review_reasons`, `outer_box`, `frame_boxes`,
+  and `gaps`. The run also generated 103 Debug Analysis JPGs:
+  - `Test/135` full, 48 rows
+  - `Test/new_135` full, 4 rows
+  - `Test/120/66` full, 16 rows
+  - `Test/120/66` partial, 16 rows
+  - `Test/120/67` full, 4 rows
+  - `Test/半格/full`, 10 rows
+  - `Test/半格/partial`, 5 rows
+- Counts matched V4.5.4:
+  - `135` full: 43 approved / 5 review
+  - `new_135` full: 4 approved / 0 review
+  - `120-66` full: 16 approved / 0 review
+  - `120-66` partial: 16 approved / 0 review
+  - `120-67` full: 3 approved / 1 review
+  - half full: 10 approved / 0 review
+  - half partial: 5 approved / 0 review
+- Including `detail.policy` and `report_schema` in golden comparison produced
+  196 metadata-only diffs because V4.5.4 golden rows lack V4.7 policy/report
+  schema metadata. There were no crop/status/confidence/gap diffs.
+- Latest V4.7 candidate-run policy cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_candidate_run_policy_20260701_run1`. They produced 0
+  diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`. This run did not generate Debug Analysis JPGs.
+- `ReportPolicy` smoke confirmed report schema version
+  `v4_7_policy_schema_1` and sections resolve through the selected
+  format/mode policy.
+- Latest V4.7 report policy cleanup dry-run regressions with `--deskew off`
+  were written under `/private/tmp/x5_v47_report_policy_20260701_run1`. They
+  produced 0 diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`.
+- Latest V4.7 dark-band candidate-run policy cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_dark_band_candidate_run_policy_20260701_run1`. They
+  produced 0 diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`.
+- Latest V4.7 selection policy cleanup dry-run regressions with `--deskew off`
+  were written under `/private/tmp/x5_v47_selection_policy_20260701_run3`. They
+  produced 0 diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`.
+- Latest V4.7 content-candidate run policy cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_content_candidate_run_policy_20260701_run1`. They
+  produced 0 diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`.
+- Latest V4.7 postprocess reason policy cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_postprocess_reason_policy_20260701_run1`. They produced
+  0 diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`.
+- Latest V4.7 Debug panel policy cleanup dry-run regressions with `--deskew off`
+  were written under `/private/tmp/x5_v47_debug_panel_policy_20260701_run1`.
+  They produced 0 diff for `status`, `confidence`, `review_reasons`,
+  `outer_box`, `frame_boxes`, and `gaps` across all seven local V4.5.4 golden
+  cases. Default golden compare still produced 196 metadata-only diffs in
+  `detail.policy` / `report_schema`. A focused 135 Debug Analysis smoke wrote
+  `/private/tmp/x5_v47_debug_panel_policy_smoke/_debug_analysis/X5_00041_debug_analysis.jpg`
+  as a 1679x876 RGB JPEG with the policy-owned three-panel labels.
+- Latest V4.7 candidate-run mode policy cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_candidate_run_mode_policy_20260701_run1`. They produced
+  0 diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`. Policy smoke confirmed separator-auto content skip is scoped
+  to `full`, while partial-safe content skip is scoped to `partial`.
+- Latest V4.7 selection scope policy cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_selection_scope_policy_20260701_run1`. They produced 0
+  diff for `status`, `confidence`, `review_reasons`, `outer_box`, `frame_boxes`,
+  and `gaps` across all seven local V4.5.4 golden cases. Default golden compare
+  still produced 196 metadata-only diffs in `detail.policy` / `report_schema`.
+  Policy smoke confirmed only `half_full` enables content mismatch review, scoped
+  to `full` and default count.
+- Latest V4.7 dark-band selection scope cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_dark_band_selection_scope_20260701_run1`. They produced
+  0 diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`. Policy smoke confirmed only `120_66_full` /
+  `120_66_partial` enable dark-band full-selection capability, scoped to `full`
+  and required count.
+- Latest V4.7 dark-band retry scope cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_dark_band_retry_scope_20260701_run1`. They produced 0
+  diff for `status`, `confidence`, `review_reasons`, `outer_box`, `frame_boxes`,
+  and `gaps` across all seven local V4.5.4 golden cases. Default golden compare
+  still produced 196 metadata-only diffs in `detail.policy` / `report_schema`.
+  Policy smoke confirmed only `120_66_full` / `120_66_partial` enable dark-band,
+  retry scope is `full` / `partial`, and full retry requires default count.
+- Latest V4.7 equal-first wide-retry policy cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_equal_first_wide_retry_policy_20260701_run1`. They
+  produced 0 diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`. Policy smoke confirmed equal-first wide-retry scope is `full`
+  and default count, while actual wide geometry support remains only `half_full`.
+- Latest V4.7 partial-holder scope policy cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_partial_holder_scope_policy_20260701_run1`. They produced
+  0 diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`. Policy smoke confirmed partial-holder safe-extra-frames scope
+  is `partial`, and strict holder remains enabled only for `120_66_partial`.
+- Latest V4.7 separator-geometry competition scope cleanup dry-run regressions
+  with `--deskew off` were written under
+  `/private/tmp/x5_v47_separator_geometry_competition_scope_20260701_run1`. They
+  produced 0 diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`. Policy smoke confirmed content-outer max median-aspect cap
+  scope is strategy `content_outer` and strip mode `partial`.
+- Latest V4.7 separator-incomplete reason cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_separator_uncertain_reason_policy_20260701_run1`. They
+  produced 0 diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`. Policy smoke confirmed every format/mode resolves the
+  semantic `separator_evidence_incomplete` reason id through
+  `ScoringPolicy.base_detection`.
+- Latest V4.7 implicit-135 default cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_no_implicit_135_default_20260701_run1`. They produced 0
+  diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`.
+- Latest V4.7 dark-band mode-preset cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_dark_band_mode_preset_20260701_run1`. They produced 0
+  diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`. Policy smoke confirmed dark-band / oversized separator-band
+  enablement remains limited to `120_66_full` and `120_66_partial`.
+- Latest V4.7 separator-profile parameter-view cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_profile_parameter_views_20260701_run1`. They produced 0
+  diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`. Policy smoke confirmed all 14 policies resolve
+  `SeparatorPolicy.profile` / `edge_refine_profile` through the new preset
+  capability views.
+- Latest V4.7 content/geometry-support parameter-view cleanup dry-run
+  regressions with `--deskew off` were written under
+  `/private/tmp/x5_v47_content_parameter_views_20260701_run1`. They produced 0
+  diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`. Policy smoke confirmed all 14 policies resolve
+  `ContentPolicy` and `ScoringPolicy.geometry_support` through preset-side
+  capability views.
+- Latest V4.7 outer-proposal parameter-view cleanup dry-run regressions with
+  `--deskew off` were written under
+  `/private/tmp/x5_v47_outer_parameter_views_20260701_run1`. They produced 0
+  diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`. Policy smoke confirmed all 14 policies resolve content
+  floating outer, edge-anchor outer, base outer candidates, separator outer band,
+  and separator-geometry outer through preset-side capability views.
+- Latest V4.7 final policy-readiness dry-run regressions with `--deskew off`
+  were written under
+  `/private/tmp/x5_v47_final_policy_readiness_20260701_run1`. They produced 0
+  diff for `status`, `confidence`, `review_reasons`, `outer_box`,
+  `frame_boxes`, and `gaps` across all seven local V4.5.4 golden cases. Default
+  golden compare still produced 196 metadata-only diffs in `detail.policy` /
+  `report_schema`. A focused Debug Analysis smoke wrote
+  `/private/tmp/x5_v47_final_debug_smoke_20260701/_debug_analysis/X5_00041_debug_analysis.jpg`
+  as a 1679x876 RGB JPEG, and policy smoke confirmed the three panel titles and
+  Debug gap tick parameters come from `DiagnosticsPolicy`.
+- Policy smoke confirmed 14 supported format/mode policies resolve; only
+  `half_full` enables `SelectionPolicy.content_mismatch_review`.
+- Current residue scan has no hits for candidate-name `startswith()` strategy
+  inference, old outer mode helper/adapters, `separator_gate_120_*`, old
+  format-prefixed separator gate/scoring reason ids such as
+  `120_separator_uncertain`, `FormatTuning`, `format_tuning`, `import *`,
+  `edge_pair_params_for_format`, `frame_fit_policy`, or implicit
+  `format_name: str = "135"` defaults.
+- Policy factory residue scan has no direct flat-field hits for separator gate,
+  score gate, partial-safe holder, candidate competition, calibration caps,
+  outer strategy, wide retry, outer retry, leading-grid failure, nearby
+  separator diagnostics, overlap-risk diagnostics, hard-gap trust, nearby
+  separator correction, robust grid, gap search, or lucky-pass risk
+  parameters; it now reads grouped capability parameters from
+  `FormatParameters`.
+- Scoring runtime residue scan has no direct hits for
+  `tuning.scoring_calibration`, `policy.parameters.scoring_calibration`, or
+  `scoring_calibration` under active detection/geometry/workflow runtime; those
+  paths now read `ScoringPolicy`.
+- Base scoring residue scan has no direct `score_*` flat-field reads in
+  `score_detection()`; those paths now read `ScoringPolicy.base_detection`.
+- Content-support scoring residue scan has no direct hits for
+  `content_conf_*` or `content_support_*` flat-field reads in
+  `content_support_score()` / candidate calibration; those paths now read
+  `ContentPolicy`.
+- Content runtime residue scan has no direct hits for `format_parameters()`,
+  `tuning.content*`, or `policy.parameters` in `detection/content.py`; content
+  evidence, profile, mask, and content-only candidate confidence now read
+  `ContentPolicy` sub-policies.
+- Geometry-support scoring residue scan has no direct hits for
+  `geometry_support_*`, `geometry_width_cv_norm`, `content_support_aspect_norm`,
+  or score outer-area flat-field reads in `geometry_support_score()` /
+  candidate calibration; those paths now read `ScoringPolicy.geometry_support`.
+- `FormatParameters.geometry_support_score` is the preset-side capability view
+  for constructing `ScoringPolicy.geometry_support`; policy factory no longer
+  reads the flat geometry-support score fields directly.
+- Separator-support scoring residue scan has no direct hits for
+  `separator_model_*` or `separator_support_*` flat-field reads in
+  `separator_support_score()` / candidate calibration; those paths now read
+  `ScoringPolicy.separator_support`.
+- Wide-retry and content-evidence runtime residue scans have no
+  direct flat-field hits for `tuning.wide_retry`, `tuning.wide_gap_retry_*`,
+  `tuning.wide_gap_confidence_cap`, `tuning.content_evidence_*`, or
+  `format_parameters(...).content_evidence_*`; those paths now read
+  `SeparatorPolicy.wide_separator_confidence_cap`, `wide_retry`, and
+  `content_evidence` grouped parameters.
+- Partial-holder frame-content residue scan has no direct
+  `policy.parameters.content_evidence` hit in `x5crop/detection/partial_holder.py`;
+  frame aspect conflict checks now read `PartialHolderPolicy`.
+- Candidate-run separator outer gap override residue scan has no direct
+  `format_parameters()` or `separator_first_outer_gap_max_width_ratio` hits in
+  `x5crop/detection/candidate_run.py`; runtime now reads
+  `OuterPolicy.separator_gap_search_max_width_ratio`.
+- Separator-derived outer proposer residue scan has no direct `FormatParameters`,
+  `format_parameters()`, `tuning.*`, `separator_first_outer_*`, or
+  `separator_geometry_outer_*` flat-field reads in `x5crop/detection/outer.py`;
+  runtime now reads `OuterPolicy.separator_outer_band`,
+  `OuterPolicy.separator_geometry_outer`, and `SeparatorPolicy.gap_search`.
+- Base outer candidate residue scan has no direct `FormatParameters`,
+  `format_parameters()`, `tuning.*`, or flat `outer_*` candidate-threshold reads
+  in `x5crop/geometry/outer_boxes.py`, `x5crop/detection/outer.py`, or
+  `x5crop/detection/dual_lane.py`; runtime now reads
+  `OuterPolicy.base_candidates`.
+- Separator profile residue scan has no direct `format_parameters()`,
+  `tuning.*`, `separator_profile_*`, or `edge_refine_*` flat-field reads in
+  `x5crop/geometry/separator_profile.py`, `x5crop/detection/candidate_build.py`,
+  `x5crop/detection/outer.py`, or `x5crop/detection/diagnostics.py`; runtime now
+  reads `SeparatorPolicy.profile` and `SeparatorPolicy.edge_refine_profile`, and
+  cache keys include the selected profile policy.
+- Enhanced separator residue scan has no direct `format_parameters()`,
+  `tuning.*`, or flat `enhanced_*` preset-field reads in `x5crop/geometry/core.py`
+  or `x5crop/detection/candidate_build.py`; runtime now reads
+  `SeparatorPolicy.enhanced`, and the policy factory reads the
+  `enhanced_separator` parameter group.
+- Format-geometry retry residue scan has no direct flat-field hits for
+  `format_geometry_outer_retry_*` outside `x5crop/policies/**`; runtime now
+  reads `OuterPolicy.format_geometry_retry`.
+- Grid outer-refine residue scan has no direct flat-field hits for
+  `grid_outer_refine_*` outside `x5crop/policies/**`; runtime now reads
+  `OuterPolicy.grid_refine`.
+- Short-axis aspect retry residue scan has no direct flat-field hits for
+  `short_axis_aspect_retry_*` in `x5crop/detection/outer_retry.py`; runtime now
+  reads `OuterPolicy.short_axis_aspect_retry`.
+- Outer content-alignment residue scan has no direct flat-field hits for
+  `outer_align_*` in `x5crop/detection/outer_retry.py` or
+  `x5crop/detection/postprocess.py`; runtime now reads
+  `OuterPolicy.content_alignment`.
+- Content-floating / edge-anchor outer residue scan has no direct flat-field hits
+  for `floating_outer_*` or `long_axis_edge_anchor_*` in
+  `x5crop/detection/outer.py`; runtime now reads
+  `OuterPolicy.content_floating_outer` and `OuterPolicy.edge_anchor_outer`.
+- Partial edge-hint residue scan has no direct flat-field hits for
+  `partial_edge_hint_*` outside `x5crop/policies/**`; runtime now reads
+  `PartialEdgeHintPolicy`.
+- Debug Analysis gap-overlay residue scan has no direct flat-field hits for
+  `format_parameters()` or `debug_gap_*` in `x5crop/debug/render.py`; rendering
+  now reads `DiagnosticsPolicy.debug_gap_overlay` for overlay tolerance, tick
+  length, and line widths.
+- Postprocess-cap residue scan has no direct flat-field hits for
+  `tuning.post_*_cap` in `x5crop/detection/postprocess.py`; final decision
+  caps now read from `PostprocessPolicy`.
+- Approved geometry adjustment residue scan has no direct flat-field hits for
+  `approved_adjust_*` outside `x5crop/policies/**`; runtime now reads
+  `PostprocessPolicy.approved_geometry_adjustment`.
+- Edge bleed protection residue scan has no hard-coded
+  `max(70.0, min(120.0, nominal * 0.0150))` style guard in active runtime;
+  runtime now reads `OutputPolicy.edge_bleed_protection`.
+- Overlap-risk output bleed residue scan has no active-runtime
+  `max(int(config.bleed_x), 50)` hard-code; runtime now reads
+  `OutputPolicy.overlap_risk_long_axis_bleed`.
+- Detection bleed residue scan has no hard-coded `bleed_x=0` / `bleed_y=0`
+  in active runtime; runtime now reads `OutputPolicy.detection_*_bleed`.
+- A focused 135 Debug Analysis smoke produced
+  `/private/tmp/x5_v47_final_debug_smoke_20260701/_debug_analysis/X5_00041_debug_analysis.jpg`
+  as a 1679x876 RGB JPEG with policy-owned three-panel titles and Debug gap
+  tick parameters.
 
 Not verified:
-- Windows launcher Python search was edited but not executed on Windows in this
-  turn.
 
-Known local-only files:
-- `Test/`
-- `Test/135/_X5_Crop_Mac_diagnostics_local.command`
-- Temporary verification outputs under `/private/tmp/`.
+- Default-deskew export timing for V4.7.
+- `xpan`, `120-645`, and `135-dual` full sample comparisons, because local
+  golden reports were not listed.
+- Release package generation.
+
+Known local-only / ignored files:
+
+- `Test/` contains local scripts, packages, TIFF samples, and generated
+  reports/debug outputs.
+- V4.7 temporary verification outputs were written under `/private/tmp/`.
+- `__pycache__/` may exist from compile checks and remains ignored.
 
 Next recommended step:
-- Run a focused fresh dry-run on `Test/135` target files after any detection
-  change: `X5_00007`, `X5_00009`, `X5_00014`, `X5_00022`, `X5_00032`,
-  `X5_00036`, `X5_00038`, `X5_00051`, and `X5_00052`.
-- Fast development/regression dry-runs may still pass `--deskew off` when the
-  goal is raw detector comparison. The local diagnostic launcher uses the
-  default `deskew auto` to better match real diagnostic output.
-- For our own local tests and diagnostic runs, use 4 TIFF workers by passing
-  `--jobs 4` explicitly. This is a development/testing convention; ordinary
-  user launchers and normal crop defaults remain more conservative unless the
-  user asks to change them.
-- For speed work, the largest current cost is full-resolution deskew rotation,
-  followed by 135 edge-pair refinement across multiple outer candidates.
+
+- If continuing V4.7, run default-deskew/export timing before any release call.
+- If publishing, build the standalone Release package from V4.7, run default
+  deskew/export timing, and decide whether V4.7 should supersede stable
+  `v4.2.8`.

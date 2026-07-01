@@ -1,9 +1,21 @@
 from __future__ import annotations
 
-from ..common import *
-from ..evidence import *
-from ..geometry import *
+import math
+from pathlib import Path
+from typing import Any, Optional
+
+import numpy as np
+from PIL import Image, ImageDraw
+
+from ..app_info import SCRIPT_NAME, VERSION
+from ..constants import HARD_GAP_METHODS
+from ..domain import Box, Detection, Gap
+from ..image.evidence import make_separator_evidence_gray
+from ..runtime import AnalysisCache
+from ..utils import clamp_float
+from ..geometry import cached_separator_evidence_crop
 from ..detection.diagnostics import gap_diagnostic_record
+from ..policies.registry import get_detection_policy
 
 def preview_gray(gray: np.ndarray, max_side: int = 1800) -> tuple[np.ndarray, float]:
     h, w = gray.shape
@@ -145,7 +157,7 @@ def gap_mark_box(detection: Detection, gap: Gap) -> Optional[Box]:
     return Box(work_outer.top, x, work_outer.bottom, x + 1)
 
 
-def gap_tick_boxes(detection: Detection, gap: Gap) -> list[Box]:
+def gap_tick_boxes(detection: Detection, gap: Gap, debug_gap: Any) -> list[Box]:
     work_outer_raw = gap.lane_box if isinstance(gap.lane_box, dict) else detection.detail.get("work_outer")
     if not isinstance(work_outer_raw, dict):
         return []
@@ -158,7 +170,11 @@ def gap_tick_boxes(detection: Detection, gap: Gap) -> list[Box]:
         )
     except Exception:
         return []
-    tick = max(20, int(round((work_outer.height if detection.layout == "horizontal" else work_outer.width) * 0.12)))
+    tick_axis = work_outer.height if detection.layout == "horizontal" else work_outer.width
+    tick = max(
+        int(debug_gap.tick_length_min),
+        int(round(tick_axis * float(debug_gap.tick_length_ratio))),
+    )
     if detection.layout == "horizontal":
         x = int(round(work_outer.left + gap.center))
         return [
@@ -229,7 +245,7 @@ def make_debug_preview_rgb(gray: np.ndarray, detection: Detection, cache: Option
 
 
 def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> None:
-    tuning = format_tuning(detection.film_format)
+    debug_gap = get_detection_policy(detection.film_format, detection.strip_mode).diagnostics.debug_gap_overlay
     gap_colors = {
         "detected": (255, 0, 0),
         "edge-pair": (255, 0, 0),
@@ -241,32 +257,32 @@ def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> Non
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
     detected_centers = [gap.center for gap in detection.gaps if gap.method in HARD_GAP_METHODS]
     overlap_tolerance = clamp_float(
-        pitch * tuning.debug_gap_overlap_tolerance_ratio,
-        tuning.debug_gap_overlap_tolerance_min,
-        tuning.debug_gap_overlap_tolerance_max,
+        pitch * debug_gap.overlap_tolerance_ratio,
+        debug_gap.overlap_tolerance_min,
+        debug_gap.overlap_tolerance_max,
     )
     for gap in detection.gaps:
         if gap.method not in HARD_GAP_METHODS:
             continue
         mark = gap_mark_box(detection, gap)
         if mark is not None:
-            draw_preview_mark(rgb, mark, scale, gap_colors.get(gap.method, (255, 255, 255)), tuning.debug_gap_hard_line_width)
+            draw_preview_mark(rgb, mark, scale, gap_colors.get(gap.method, (255, 255, 255)), debug_gap.hard_line_width)
     for gap in detection.gaps:
         if gap.method in HARD_GAP_METHODS:
             continue
         if any(abs(gap.center - center) <= overlap_tolerance for center in detected_centers):
             continue
         color = gap_colors.get(gap.method, (255, 255, 255))
-        for tick in gap_tick_boxes(detection, gap):
+        for tick in gap_tick_boxes(detection, gap, debug_gap):
             if detection.layout == "horizontal":
-                draw_preview_line(rgb, tick, scale, color, tuning.debug_gap_model_line_width)
+                draw_preview_line(rgb, tick, scale, color, debug_gap.model_line_width)
             else:
-                draw_preview_hline(rgb, tick, scale, color, tuning.debug_gap_model_line_width)
+                draw_preview_hline(rgb, tick, scale, color, debug_gap.model_line_width)
     draw_gap_diagnostic_overlay(rgb, detection, scale)
 
 
 def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> None:
-    tuning = format_tuning(detection.film_format)
+    debug_gap = get_detection_policy(detection.film_format, detection.strip_mode).diagnostics.debug_gap_overlay
     diagnostics = detection.detail.get("diagnostics")
     records: Any = None
     if isinstance(diagnostics, dict):
@@ -296,11 +312,11 @@ def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: Detection, scale: fl
             color = (0, 220, 255)
         if color is None:
             continue
-        for tick in gap_tick_boxes(detection, gap):
+        for tick in gap_tick_boxes(detection, gap, debug_gap):
             if detection.layout == "horizontal":
-                draw_preview_line(rgb, tick, scale, color, tuning.debug_gap_diagnostic_line_width)
+                draw_preview_line(rgb, tick, scale, color, debug_gap.diagnostic_line_width)
             else:
-                draw_preview_hline(rgb, tick, scale, color, tuning.debug_gap_diagnostic_line_width)
+                draw_preview_hline(rgb, tick, scale, color, debug_gap.diagnostic_line_width)
 
 
 def work_evidence_to_original_shape(evidence_work: np.ndarray, gray: np.ndarray, layout: str) -> np.ndarray:
@@ -340,19 +356,6 @@ def make_separator_evidence_debug_rgb(gray: np.ndarray, detection: Detection, ca
     return rgb
 
 
-def make_content_evidence_debug_gray(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> np.ndarray:
-    if cache is not None and cache.layout == detection.layout:
-        return work_evidence_to_original_shape(cache.content_evidence_work, gray, detection.layout)
-    return make_content_evidence_gray(gray)
-
-
-def make_content_evidence_debug_rgb(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> np.ndarray:
-    evidence = make_content_evidence_debug_gray(gray, detection, cache)
-    rgb, scale = cached_preview_gray(cache, "content_evidence_full", evidence)
-    draw_evidence_context_overlay(rgb, detection, scale, include_frames=True)
-    return rgb
-
-
 def write_rgb_jpeg(rgb: np.ndarray, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     image = Image.fromarray(np.ascontiguousarray(rgb), mode="RGB")
@@ -370,53 +373,24 @@ def add_panel_label(rgb: np.ndarray, label: str) -> np.ndarray:
     return np.asarray(image)
 
 
-def make_decision_summary_panel(detection: Detection, threshold: float, width: int = 1200) -> np.ndarray:
-    decision = detection.detail.get("candidate_decision", {})
-    hard = decision.get("separator_hard_evidence", {}) if isinstance(decision, dict) else {}
-    content = detection.detail.get("content_evidence", {})
-    competition = detection.detail.get("candidate_competition", {})
-    selected = competition.get("selected_candidate", {}) if isinstance(competition, dict) else {}
-    selected_decision = selected.get("candidate_decision", {}) if isinstance(selected, dict) else {}
-    decision_source = decision.get("source", "unknown") if isinstance(decision, dict) else "unknown"
-    selected_source = selected_decision.get("source", decision_source) if isinstance(selected_decision, dict) else decision_source
-    auto_gate = decision.get("auto_gate", "unknown") if isinstance(decision, dict) else "unknown"
-    content_support = content.get("support", decision.get("content_support", "unknown") if isinstance(decision, dict) else "unknown")
-    hard_gaps = hard.get("hard_gaps", "unknown") if isinstance(hard, dict) else "unknown"
-    grid_gaps = hard.get("grid_gaps", "unknown") if isinstance(hard, dict) else "unknown"
-    equal_gaps = hard.get("equal_gaps", "unknown") if isinstance(hard, dict) else "unknown"
-    hard_reason = hard.get("reason", "unknown") if isinstance(hard, dict) else "unknown"
-    lines = [
-        f"{SCRIPT_NAME} {VERSION}",
-        f"Status: {'PASS' if detection.confidence >= threshold else 'REVIEW'}   confidence={detection.confidence:.3f}   threshold={threshold:.3f}",
-        f"Format: {detection.film_format}   strip={detection.strip_mode}   count={detection.count}   layout={detection.layout}",
-        f"Outer strategy: {detection.detail.get('outer_candidate_strategy', 'unknown')}   outer={detection.detail.get('outer_candidate', 'unknown')}",
-        f"Analysis source: {detection.detail.get('analysis_source', 'unknown')}   selected source={selected_source}",
-        f"Auto gate: {auto_gate}   content={content_support}",
-        f"Gaps: hard={hard_gaps} grid={grid_gaps} equal={equal_gaps} reason={hard_reason}",
-        "Review reasons: " + (", ".join(detection.review_reasons) if detection.review_reasons else "none"),
-    ]
-    line_h = 24
-    pad = 14
-    panel = np.full((pad * 2 + line_h * len(lines), width, 3), 24, dtype=np.uint8)
-    image = Image.fromarray(panel, mode="RGB")
-    draw = ImageDraw.Draw(image)
-    y = pad
-    for index, line in enumerate(lines):
-        color = (245, 245, 245) if index != 1 else ((40, 210, 105) if detection.confidence >= threshold else (245, 95, 80))
-        draw.text((pad, y), line[:190], fill=color)
-        y += line_h
-    return add_panel_label(np.asarray(image), "Decision summary")
-
-
 def make_debug_analysis_panel(gray: np.ndarray, detection: Detection, threshold: float, cache: Optional[AnalysisCache] = None) -> np.ndarray:
-    base_rgb, _ = cached_labeled_preview_gray(cache, "original_gray", "Original gray", gray)
-    debug_rgb = add_panel_label(make_debug_preview_rgb(gray, detection, cache), "Debug boxes")
-    evidence_rgb = make_separator_evidence_debug_rgb(gray, detection, cache)
-    evidence_rgb = add_panel_label(evidence_rgb, "Separator evidence (magenta=suspect hard diag, cyan=overlap diag)")
-    content_rgb = make_content_evidence_debug_rgb(gray, detection, cache)
-    content_rgb = add_panel_label(content_rgb, "Content evidence")
-    decision_rgb = make_decision_summary_panel(detection, threshold, width=max(base_rgb.shape[1], debug_rgb.shape[1]))
-    panels = [decision_rgb, base_rgb, debug_rgb, evidence_rgb, content_rgb]
+    policy = get_detection_policy(detection.film_format, detection.strip_mode)
+    diagnostics = policy.diagnostics
+    panel_builders = {
+        "original_gray": lambda title: cached_labeled_preview_gray(cache, "original_gray", title, gray)[0],
+        "debug_boxes": lambda title: add_panel_label(make_debug_preview_rgb(gray, detection, cache), title),
+        "separator_evidence": lambda title: add_panel_label(
+            make_separator_evidence_debug_rgb(gray, detection, cache),
+            title,
+        ),
+    }
+    panels = [
+        panel_builders[name](diagnostics.debug_panel_title(name))
+        for name in diagnostics.debug_panels
+        if name in panel_builders
+    ]
+    if not panels:
+        panels = [panel_builders["original_gray"](diagnostics.debug_panel_title("original_gray"))]
     gap = 12
     if gray.shape[1] >= gray.shape[0]:
         max_w = max(panel.shape[1] for panel in panels)
@@ -451,6 +425,3 @@ def write_debug_analysis(
     panel_path = analysis_dir / f"{stem}_debug_analysis.jpg"
     write_rgb_jpeg(make_debug_analysis_panel(gray, detection, threshold, cache), panel_path)
     return [str(panel_path)]
-
-
-LOSSLESS_COMPRESSIONS = {"NONE", "LZW", "ADOBE_DEFLATE", "DEFLATE", "ZSTD"}

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from .common import *
-from .evidence import *
+from ..common import *
+from ..evidence import *
 
 def infer_layout(width: int, height: int) -> str:
     return "horizontal" if width >= height else "vertical"
@@ -263,7 +263,7 @@ def reapply_cached_output_bleed(detection: Detection, config: Config, image_w: i
     }
 
 
-def apply_approved_geometry_polish(detection: Detection, gray: np.ndarray, config: Config, status: str) -> None:
+def apply_approved_geometry_adjustment(detection: Detection, gray: np.ndarray, config: Config, status: str) -> None:
     if status != "approved_auto" or detection.strip_mode != "full" or len(detection.frames) != detection.count:
         return
     if detection.review_reasons:
@@ -279,7 +279,7 @@ def apply_approved_geometry_polish(detection: Detection, gray: np.ndarray, confi
     changes: dict[str, Any] = {}
     tuning = format_tuning(detection.film_format)
 
-    long_limit = clamp_int((outer.width / float(max(1, detection.count))) * tuning.approved_polish_long_limit_ratio, tuning.approved_polish_long_limit_min, tuning.approved_polish_long_limit_max)
+    long_limit = clamp_int((outer.width / float(max(1, detection.count))) * tuning.approved_adjust_long_limit_ratio, tuning.approved_adjust_long_limit_min, tuning.approved_adjust_long_limit_max)
     band_top = outer.top + int(round(outer.height * 0.12))
     band_bottom = outer.bottom - int(round(outer.height * 0.12))
     if band_bottom <= band_top:
@@ -303,7 +303,7 @@ def apply_approved_geometry_polish(detection: Detection, gray: np.ndarray, confi
         return int(int(active[-1]) + 1) if active.size else 0
 
     pitch = float(outer.width) / float(max(1, detection.count))
-    min_long_ext = clamp_int(pitch * tuning.approved_polish_min_ext_ratio, tuning.approved_polish_min_ext_min, tuning.approved_polish_min_ext_max)
+    min_long_ext = clamp_int(pitch * tuning.approved_adjust_min_ext_ratio, tuning.approved_adjust_min_ext_min, tuning.approved_adjust_min_ext_max)
     left_ext = side_extension("left")
     right_ext = side_extension("right")
     left_ext = left_ext if left_ext >= min_long_ext else 0
@@ -324,10 +324,10 @@ def apply_approved_geometry_polish(detection: Detection, gray: np.ndarray, confi
 
     if not changes or not outer.valid() or any(not frame.valid() for frame in frames):
         return
-    detection.detail["geometry_polish"] = {
+    detection.detail["approved_geometry_adjustment"] = {
         "used": True,
         "original_outer": asdict(original_outer),
-        "polished_outer": asdict(outer),
+        "adjusted_outer": asdict(outer),
         **changes,
     }
     detection.outer = map_work_box(outer, detection.layout, gray.shape[1], gray.shape[0])
