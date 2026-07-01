@@ -8,7 +8,7 @@ import numpy as np
 from ..config import Config
 from ..domain import Detection
 from ..formats import FormatSpec
-from ..geometry import (
+from .final_geometry import (
     apply_approved_geometry_adjustment,
     apply_edge_bleed_protection,
     apply_output_bleed,

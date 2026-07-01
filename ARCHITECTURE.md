@@ -97,12 +97,13 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - 不导入 `x5crop.policies`，不承载 threshold、gate 或候选策略。
 
 9. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
-   - 提供 box、layout、gap、separator profile、frame fit、output adjustment、
-     deskew、证据图和 TIFF I/O helper。
+   - 提供 box、layout、gap、separator profile、separator cache、edge-pair refine、
+     enhanced separator、frame fit、deskew、证据图和 TIFF I/O helper。
    - 是 detection、export 和 debug 共享的基础能力层。
    - 需要 format 上下文的 helper 应显式接收 format 或 policy。
-   - 这些层不应依赖 detection pipeline，也不应拥有 candidate、gate 或
-     PASS/REVIEW 语义。
+   - `geometry.__init__` 只标记 package；runtime 应从具体 owning module import。
+   - 这些层不应依赖 detection pipeline，也不应拥有 candidate、gate、finalization、
+     output bleed 或 PASS/REVIEW 语义。
 
 10. `x5crop.detection`
    - 负责 outer proposal、separator/content evidence、candidate build/run、
@@ -112,13 +113,19 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - `candidate_gates.py` 只负责候选级 separator evidence gate。
    - `candidate_decision.py` 只负责候选级 auto_gate / confidence / review reason。
    - `final_decision.py` 在 finalization 中统一执行 V4.9 conservative PASS/REVIEW。
-   - `finalizer.py` 负责输出前最终收口，包括 outer retry、risk caps 和 output bleed。
+   - `final_geometry.py` 负责输出前最终几何调整，包括 detection/output bleed、
+     edge bleed protection 和 approved geometry adjustment。
+   - `finalizer.py` 负责输出前最终收口，包括 outer retry、risk caps 和调用
+     final geometry adjustment。
    - 专门模块承接具体职责，例如 `candidate_build.py`、`candidate_run.py`、
      `dual_lane.py`、`partial_holder.py`、`outer_retry.py`、`candidate_gates.py`、
-     `candidate_decision.py`、`selection.py`、`final_decision.py` 和 `finalizer.py`。
+     `candidate_decision.py`、`selection.py`、`final_decision.py`、`final_geometry.py`
+     和 `finalizer.py`。
 
-11. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
-    `x5crop.report_schema` / `x5crop.report_outputs` / `x5crop.debug`
+11. `x5crop.analysis_cache` / `x5crop.analysis_reuse` / `x5crop.export` /
+    `x5crop.result_builder` / `x5crop.report_schema` / `x5crop.report_outputs` /
+    `x5crop.debug`
+   - `analysis_cache` 负责构建 detection/debug 共用的 per-image analysis cache。
    - `analysis_reuse` 负责 Debug Analysis report cache 匹配和 cached detection 恢复。
    - `export` 负责输出路径、review copy 和 metadata-safe TIFF crop 写入。
    - `result_builder` 统一将 fresh / cached detection 转成 `ProcessResult`。
@@ -334,16 +341,25 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - `candidate_gates.py` owns candidate-level separator evidence gates.
    - `candidate_decision.py` owns candidate-level auto_gate / confidence / review reasons.
    - `final_decision.py` applies conservative V4.9 PASS/REVIEW rules during finalization.
-   - `finalizer.py` owns final pre-output handling, including outer retry, risk caps, and output bleed.
+   - `final_geometry.py` owns final pre-output geometry adjustment, including
+     detection/output bleed, edge bleed protection, and approved geometry adjustment.
+   - `finalizer.py` owns final pre-output handling, including outer retry, risk
+     caps, and calls into final geometry adjustment.
 
 10. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
-   - Provide boxes, layout, gaps, separator profiles, frame fit, output
-     adjustment, deskew, evidence images, and TIFF I/O.
+   - Provide boxes, layout, gaps, separator profiles, separator cache,
+     edge-pair refine, enhanced separator, frame fit, deskew, evidence images,
+     and TIFF I/O.
    - Helpers that need format context should receive format or policy explicitly.
-   - These layers should not depend on the detection pipeline.
+   - `geometry.__init__` is only a package marker; runtime code should import
+     concrete helpers from their owning modules.
+   - These layers should not depend on the detection pipeline and should not own
+     candidate, gate, finalization, output bleed, or PASS/REVIEW semantics.
 
-11. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
-    `x5crop.report_schema` / `x5crop.report_outputs` / `x5crop.debug`
+11. `x5crop.analysis_cache` / `x5crop.analysis_reuse` / `x5crop.export` /
+    `x5crop.result_builder` / `x5crop.report_schema` / `x5crop.report_outputs` /
+    `x5crop.debug`
+   - `analysis_cache` builds per-image analysis caches shared by detection/debug.
    - `analysis_reuse` matches Debug Analysis report caches and restores cached
      detections.
    - `export` owns output paths, review copies, and metadata-safe TIFF crop writes.

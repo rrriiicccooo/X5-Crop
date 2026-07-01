@@ -25,11 +25,13 @@ from .export import (
     write_crops,
 )
 from .formats import FormatSpec, FORMATS
-from .geometry import (
+from .analysis_cache import make_analysis_cache
+from .detection.final_geometry import (
     detection_geometry_config,
-    make_analysis_cache,
     output_bleed_config_for_detection,
     reapply_cached_output_bleed,
+)
+from .geometry.layout import (
     work_gray,
 )
 from .image.deskew import choose_deskew_angle, rotate_array_expand

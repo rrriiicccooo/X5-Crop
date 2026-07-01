@@ -6,7 +6,6 @@ from typing import Any, Optional
 import numpy as np
 import tifffile
 
-from ..config import Config
 from ..domain import ImageProfile
 from ..image.evidence import make_gray_u8
 from ..utils import (
@@ -106,7 +105,7 @@ def compression_for_write(profile: ImageProfile, mode: str) -> Optional[str]:
     return mapping.get(name)
 
 
-def tiff_write_kwargs(profile: ImageProfile, page: Any, config: Config) -> dict[str, Any]:
+def tiff_write_kwargs(profile: ImageProfile, compression_mode: str) -> dict[str, Any]:
     kwargs: dict[str, Any] = {}
     photometric = profile.photometric.lower()
     if photometric in {"rgb", "minisblack", "miniswhite"}:
@@ -115,7 +114,7 @@ def tiff_write_kwargs(profile: ImageProfile, page: Any, config: Config) -> dict[
         planar = profile.planar_config.lower()
         if planar in {"contig", "separate"}:
             kwargs["planarconfig"] = planar
-    compression = compression_for_write(profile, config.compression)
+    compression = compression_for_write(profile, compression_mode)
     if compression is not None:
         kwargs["compression"] = compression
     if profile.resolution and profile.resolution[0] and profile.resolution[1]:
@@ -175,7 +174,12 @@ def resolutions_equivalent(a: Any, b: Any, tolerance: float = 1e-6) -> bool:
     return True
 
 
-def validate_written_tiff(out_path: Path, expected_array: np.ndarray, source_profile: ImageProfile, config: Config) -> None:
+def validate_written_tiff(
+    out_path: Path,
+    expected_array: np.ndarray,
+    source_profile: ImageProfile,
+    compression_mode: str,
+) -> None:
     problems: list[str] = []
     with tifffile.TiffFile(out_path) as tif:
         if not tif.pages:
@@ -204,7 +208,7 @@ def validate_written_tiff(out_path: Path, expected_array: np.ndarray, source_pro
             problems.append(f"axes changed: {source_profile.axes} -> {axes}")
         if photometric.upper() != source_profile.photometric.upper():
             problems.append(f"Photometric changed: {source_profile.photometric} -> {photometric}")
-        if config.compression == "same" and compression.upper() != source_profile.compression.upper():
+        if compression_mode == "same" and compression.upper() != source_profile.compression.upper():
             problems.append(f"Compression changed: {source_profile.compression} -> {compression}")
         if source_profile.sample_format is not None:
             actual_sample_format = normalize_tag_value(sample_format.value if sample_format else getattr(page, "sampleformat", None))

@@ -7,8 +7,7 @@ import numpy as np
 from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
 from ..policies.runtime_policy import GapSearchPolicy, HardGapTrustPolicy, NearbySeparatorCorrectionPolicy, RobustGridPolicy
-from ..utils import clamp_float, clamp_int
-from .outer_boxes import runs_from_mask
+from ..utils import clamp_float, clamp_int, runs_from_mask
 from .separator_profile import interval_mean
 
 
@@ -381,7 +380,6 @@ def apply_nearby_separator_corrections(
         "rejected_count": len(rejected),
         "original_width_cv": float(original_cv),
         "final_width_cv": float(gap_width_cv(corrected, origin, pitch, count)),
-        "confidence_cap_required": bool(accepted),
     }
 
 

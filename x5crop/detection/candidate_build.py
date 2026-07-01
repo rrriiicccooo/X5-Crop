@@ -8,19 +8,20 @@ import numpy as np
 from ..config import Config
 from ..domain import Box, Detection, Gap
 from ..formats import FormatSpec
-from ..geometry import (
+from ..geometry.boxes import map_work_box
+from ..geometry.edge_pairs import refine_gaps_by_edge_pairs
+from ..geometry.enhanced_separator import (
+    merge_enhanced_separator_gaps,
+    should_run_enhanced_separator_analysis,
+)
+from ..geometry.frame_fit import fit_frame_boxes_from_gaps, frame_boxes_from_gaps
+from ..geometry.gaps import (
     apply_nearby_separator_corrections,
     apply_robust_grid,
-    cached_separator_profile,
     find_gap,
-    fit_frame_boxes_from_gaps,
-    frame_boxes_from_gaps,
-    map_work_box,
-    merge_enhanced_separator_gaps,
-    refine_gaps_by_edge_pairs,
-    should_run_enhanced_separator_analysis,
-    work_gray,
 )
+from ..geometry.layout import work_gray
+from ..geometry.separator_cache import cached_separator_profile
 from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
@@ -214,7 +215,7 @@ def build_detection_for_outer(
             strip_mode,
             policy.separator.nearby_correction,
         )
-        if bool(nearby_correction_detail.get("confidence_cap_required", False)):
+        if int(nearby_correction_detail.get("accepted_count", 0) or 0) > 0:
             confidence_cap_after_nearby = float(pre_correction_confidence)
     boxes_work, frame_size_detail = fit_frame_boxes_from_gaps(
         outer,
@@ -224,7 +225,6 @@ def build_detection_for_outer(
         wh,
         config.bleed_x,
         config.bleed_y,
-        fmt,
         strip_mode,
         origin=origin,
         pitch=pitch,

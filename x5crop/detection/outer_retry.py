@@ -10,7 +10,8 @@ from ..config import Config
 from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Detection
 from ..formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from ..geometry import box_cache_key, original_box_to_work, work_gray
+from ..geometry.boxes import box_cache_key, original_box_to_work
+from ..geometry.layout import work_gray
 from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache

@@ -7,7 +7,7 @@ import tifffile
 from .app_info import TIFF_SUFFIXES
 from .config import CliOptions, RuntimeConfig
 from .formats import FORMATS
-from .geometry import infer_layout
+from .geometry.layout import infer_layout
 from .utils import spatial_shape_from_shape
 
 

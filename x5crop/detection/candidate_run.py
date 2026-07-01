@@ -8,7 +8,9 @@ import numpy as np
 from ..config import Config
 from ..domain import Detection
 from ..formats import FormatSpec
-from ..geometry import original_box_to_work, unique_outer_candidates, work_gray
+from ..geometry.boxes import original_box_to_work
+from ..geometry.layout import work_gray
+from ..geometry.outer_boxes import unique_outer_candidates
 from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache

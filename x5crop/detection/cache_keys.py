@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from ..domain import Detection
-from ..geometry import box_cache_key
+from ..geometry.boxes import box_cache_key
 
 
 def detection_frame_cache_key(detection: Detection) -> tuple[tuple[int, int, int, int], ...]:

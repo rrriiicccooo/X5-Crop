@@ -5,7 +5,6 @@ from typing import Any, Optional
 import numpy as np
 
 from ..domain import Box, Gap
-from ..formats import FormatSpec
 from ..utils import clamp_float
 
 
@@ -199,7 +198,6 @@ def fit_frame_boxes_from_gaps(
     image_h: int,
     bleed_x: int,
     bleed_y: int,
-    fmt: FormatSpec,
     strip_mode: str,
     origin: float = 0.0,
     pitch: Optional[float] = None,

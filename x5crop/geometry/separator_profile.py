@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..policies.runtime_policy import EdgeRefineProfilePolicy, SeparatorProfilePolicy
-from .outer_boxes import runs_from_mask, smooth_1d
+from ..utils import runs_from_mask, smooth_1d
 
 
 def separator_profile(

@@ -7,12 +7,9 @@ import numpy as np
 
 from ..domain import Box, OuterCandidate
 from ..formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from ..geometry import (
-    box_cache_key,
-    cached_separator_profile,
-    detect_outer_candidates,
-    unique_outer_candidates,
-)
+from ..geometry.boxes import box_cache_key
+from ..geometry.outer_boxes import detect_outer_candidates, unique_outer_candidates
+from ..geometry.separator_cache import cached_separator_profile
 from ..policies.runtime_policy import (
     DetectionPolicy,
     GapSearchPolicy,

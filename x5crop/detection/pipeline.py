@@ -7,7 +7,7 @@ import numpy as np
 from ..config import Config
 from ..domain import Detection
 from ..formats import FormatSpec
-from ..geometry import make_analysis_cache
+from ..analysis_cache import make_analysis_cache
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
 from .candidate_run import calibrated_candidates_for_count, detect_candidate_for_count

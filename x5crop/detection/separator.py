@@ -6,17 +6,19 @@ import numpy as np
 
 from ..domain import Box, Gap
 from ..formats import FormatSpec
-from ..geometry import (
-    apply_nearby_separator_corrections,
-    apply_robust_grid,
+from ..geometry.edge_pairs import refine_gaps_by_edge_pairs
+from ..geometry.enhanced_separator import (
     find_enhanced_gap,
-    find_gap,
-    light_hard_gap_trust,
     merge_enhanced_separator_gaps,
-    refine_gaps_by_edge_pairs,
-    separator_profile,
     should_run_enhanced_separator_analysis,
 )
+from ..geometry.gaps import (
+    apply_nearby_separator_corrections,
+    apply_robust_grid,
+    find_gap,
+    light_hard_gap_trust,
+)
+from ..geometry.separator_profile import separator_profile
 from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..utils import clamp_int, runs_from_mask, sampled_percentile, smooth_1d

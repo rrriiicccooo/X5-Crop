@@ -21,7 +21,8 @@ from ..utils import (
     smooth_1d,
 )
 from ..constants import ANALYSIS_SOURCE_CONTENT_PRIMARY
-from ..geometry import box_cache_key, map_work_box, original_box_to_work, work_gray
+from ..geometry.boxes import box_cache_key, map_work_box, original_box_to_work
+from ..geometry.layout import work_gray
 from .cache_keys import content_detail_cache_key
 from .scoring import content_support_score
 

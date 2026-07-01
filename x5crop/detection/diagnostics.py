@@ -9,7 +9,11 @@ from ..app_info import VERSION
 from ..constants import HARD_GAP_METHODS, MODEL_GAP_METHODS
 from ..domain import Box, Detection, Gap
 from ..formats import CONTENT_ASPECTS_HORIZONTAL, FORMATS
-from ..geometry import box_cache_key, cached_separator_profile, interval_mean, make_analysis_cache, work_gray
+from ..analysis_cache import make_analysis_cache
+from ..geometry.boxes import box_cache_key
+from ..geometry.layout import work_gray
+from ..geometry.separator_cache import cached_separator_profile
+from ..geometry.separator_profile import interval_mean
 from ..policies.runtime_policy import NearbySeparatorDiagnosticsPolicy, SeparatorProfilePolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache

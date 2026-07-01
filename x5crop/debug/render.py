@@ -14,7 +14,7 @@ from ..domain import Box, Detection, Gap
 from ..image.evidence import make_separator_evidence_gray
 from ..runtime import AnalysisCache
 from ..utils import clamp_float
-from ..geometry import cached_separator_evidence_crop
+from ..geometry.separator_cache import cached_separator_evidence_crop
 from ..detection.diagnostics import gap_diagnostic_record
 from ..policies.registry import get_detection_policy
 

@@ -96,6 +96,11 @@ Current stable release: v4.2.8
   `DetectionPolicy` detail serializer；runtime debug policy 命名为
   `RuntimeDiagnosticsPolicy`，decision/report diagnostics 命名为
   `DecisionDiagnosticsPolicy`。
+- Geometry / Image / IO 基础能力层清理完成：删除旧 `geometry.core` 总线和
+  `geometry.output_adjustment` 混层文件；separator cache、edge-pair refine、
+  enhanced separator 和 final geometry adjustment 已拆入明确 owning modules；
+  runtime 内部不再通过 `geometry.__init__` 宽入口导入底层能力；analysis cache
+  初始化移出 geometry，TIFF I/O helper 也不再依赖完整 runtime `Config`。
 - 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出两条路径。
@@ -234,6 +239,13 @@ Verified:
   evidence overrides, `x5crop.policies.reporting` owns runtime `DetectionPolicy`
   detail serialization, runtime debug policy is named `RuntimeDiagnosticsPolicy`,
   and decision/report diagnostics is named `DecisionDiagnosticsPolicy`.
+- The Geometry / Image / IO foundation layer is cleaned up: the old
+  `geometry.core` bus and mixed `geometry.output_adjustment` file are removed;
+  separator cache, edge-pair refine, enhanced separator, and final geometry
+  adjustment now live in explicit owning modules; runtime internals no longer
+  import lower-level helpers through the wide `geometry.__init__` surface;
+  analysis-cache initialization moved out of geometry, and TIFF I/O helpers no
+  longer depend on the full runtime `Config`.
 - 14 format / strip-mode V4.9 decision contract policy smoke tests pass.
 - One-file Debug Analysis smoke writes the V4.9 three-panel debug JPG.
 - Cached analysis reuse smoke covers both approved auto-export and needs_review

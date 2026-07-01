@@ -8,7 +8,9 @@ from ..config import Config
 from ..constants import ANALYSIS_SOURCE_HARD_FALLBACK
 from ..domain import Box, Detection, Gap
 from ..formats import FormatSpec
-from ..geometry import frame_boxes_from_gaps, map_work_box, work_gray
+from ..geometry.boxes import map_work_box
+from ..geometry.frame_fit import frame_boxes_from_gaps
+from ..geometry.layout import work_gray
 
 
 def hard_fallback_detection(gray: np.ndarray, config: Config, fmt: FormatSpec) -> Detection:

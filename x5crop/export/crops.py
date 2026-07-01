@@ -38,8 +38,8 @@ def write_crops(
         if tmp.exists():
             tmp.unlink()
         try:
-            tifffile.imwrite(tmp, cropped, **tiff_write_kwargs(profile, page, config))
-            validate_written_tiff(tmp, cropped, profile, config)
+            tifffile.imwrite(tmp, cropped, **tiff_write_kwargs(profile, config.compression))
+            validate_written_tiff(tmp, cropped, profile, config.compression)
             os.replace(tmp, out_path)
         except Exception:
             if tmp.exists():

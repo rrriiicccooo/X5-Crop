@@ -15,7 +15,9 @@ from ..constants import (
 )
 from ..domain import Box, Detection, Gap
 from ..formats import FORMATS
-from ..geometry import detect_outer_candidates, map_work_box, work_gray
+from ..geometry.boxes import map_work_box
+from ..geometry.layout import work_gray
+from ..geometry.outer_boxes import detect_outer_candidates
 from ..policies.registry import get_detection_policy
 from ..utils import bbox_from_mask, box_from_dict
 from .selection import calibrated_candidate_rank

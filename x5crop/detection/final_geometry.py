@@ -7,14 +7,14 @@ import numpy as np
 
 from ..config import Config
 from ..domain import Box, Detection
+from ..geometry.boxes import map_work_box, original_box_to_work
+from ..geometry.layout import work_gray
 from ..policies.runtime_policy import (
     ApprovedGeometryAdjustmentPolicy,
     EdgeBleedProtectionPolicy,
     OutputPolicy,
 )
 from ..utils import clamp_float, clamp_int
-from .boxes import map_work_box, original_box_to_work
-from .layout import work_gray
 
 
 def apply_edge_bleed_protection(

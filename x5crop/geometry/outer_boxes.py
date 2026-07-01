@@ -1,46 +1,12 @@
 from __future__ import annotations
 
-from typing import Iterable, Optional
+from typing import Iterable
 
 import numpy as np
 
 from ..domain import Box, OuterCandidate
 from ..policies.runtime_policy import OuterCandidateDetectionPolicy
-from ..utils import clamp_int
-
-
-def smooth_1d(values: np.ndarray, window: int) -> np.ndarray:
-    window = max(1, int(window))
-    if window <= 1:
-        return values.astype(np.float32, copy=False)
-    kernel = np.ones(window, dtype=np.float32) / float(window)
-    return np.convolve(values.astype(np.float32), kernel, mode="same")
-
-
-def runs_from_mask(mask: np.ndarray) -> list[tuple[int, int]]:
-    runs: list[tuple[int, int]] = []
-    start: Optional[int] = None
-    for i, flag in enumerate(mask.astype(bool)):
-        if flag and start is None:
-            start = i
-        elif not flag and start is not None:
-            runs.append((start, i))
-            start = None
-    if start is not None:
-        runs.append((start, len(mask)))
-    return runs
-
-
-def bbox_from_mask(mask: np.ndarray, min_row_fraction: float = 0.01, min_col_fraction: float = 0.01) -> Optional[Box]:
-    if mask.size == 0:
-        return None
-    row_has = mask.mean(axis=1) >= min_row_fraction
-    col_has = mask.mean(axis=0) >= min_col_fraction
-    rows = np.flatnonzero(row_has)
-    cols = np.flatnonzero(col_has)
-    if rows.size == 0 or cols.size == 0:
-        return None
-    return Box(int(cols[0]), int(rows[0]), int(cols[-1]) + 1, int(rows[-1]) + 1)
+from ..utils import bbox_from_mask, clamp_int, runs_from_mask, smooth_1d
 
 
 def first_content_index(border_mask: np.ndarray, min_run: int) -> int:

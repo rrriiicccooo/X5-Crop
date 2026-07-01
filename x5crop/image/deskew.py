@@ -6,7 +6,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ..domain import Box
-from ..geometry.core import work_gray
+from ..geometry.layout import work_gray
 from ..policies.parameters import format_parameters
 from ..utils import bbox_from_mask, spatial_shape
 from .evidence import make_analysis_gray
