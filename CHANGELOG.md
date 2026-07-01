@@ -110,6 +110,13 @@ Current stable release: v4.2.8
   `Box | None`，`OuterCandidate` 包装、候选命名、strategy 和去重全部移到
   `x5crop.detection.outer.base_outer_candidates` /
   `x5crop.detection.outer.unique_outer_candidates`。
+- Workflow / Report / Debug / Policy 结构继续收紧：`workflow.py` 只保留单图主流程，
+  runtime deskew、cached analysis、review/export 和 Debug outputs 已下放到 owning
+  modules；Debug Analysis 渲染拆为 canvas、gap overlays、panels、status 和 writer；
+  `report_sections.py` 承接 candidate/gate section builder；空的 `x5crop.diagnostics`
+  占位包已删除；runtime policy types、factory builders、parameter types 和 parameter
+  registry 已按职责分组，`parameter_aggregate.py` 专门保留 flat `FormatParameters`
+  compatibility aggregate。
 - 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出两条路径。
@@ -260,6 +267,15 @@ Verified:
   strategies, and deduplication now belong to
   `x5crop.detection.outer.base_outer_candidates` /
   `x5crop.detection.outer.unique_outer_candidates`.
+- Workflow / Report / Debug / Policy structure is tightened: `workflow.py` keeps
+  only the single-image main flow, while runtime deskew, cached analysis,
+  review/export, and Debug outputs are delegated to owning modules; Debug
+  Analysis rendering is split into canvas, gap overlays, panels, status, and
+  writer modules; `report_sections.py` owns candidate/gate section builders; the
+  empty `x5crop.diagnostics` placeholder package is removed; runtime policy
+  types, factory builders, parameter types, and the parameter registry are
+  grouped by responsibility, while `parameter_aggregate.py` specifically owns
+  the flat `FormatParameters` compatibility aggregate.
 - 14 format / strip-mode V4.9 decision contract policy smoke tests pass.
 - One-file Debug Analysis smoke writes the V4.9 three-panel debug JPG.
 - Cached analysis reuse smoke covers both approved auto-export and needs_review

@@ -110,9 +110,6 @@ def sampled_percentile(values: np.ndarray, percentiles: Iterable[float], max_sam
     return np.percentile(sample, list(percentiles))
 
 
-
-
-
 def smooth_1d(values: np.ndarray, window: int) -> np.ndarray:
     window = max(1, int(window))
     if window <= 1:

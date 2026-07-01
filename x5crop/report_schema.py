@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any
 
 from .app_info import VERSION
 from .detection_detail import (
@@ -14,89 +13,19 @@ from .detection_detail import (
     OUTER_CONTENT_ALIGNMENT,
     OVERLAP_BLEED_RISK,
     RISK_SUMMARY,
-    candidate_competition,
-    candidate_decision,
     decision_summary,
     detail_dict,
     policy_detail,
     policy_id_from_detail,
 )
 from .domain import Detection, ProcessResult
-from .policies.runtime_policy import ReportPolicy
 from .policies.decision_contract import decision_contract_for
 from .policies.ids import REPORT_SCHEMA_VERSION
-from .policies.registry import get_detection_policy
+from .report_sections import candidate_table, gate_records, report_policy_for_detection, selected_candidate
 from .utils import json_safe
 
 
-def candidate_table(detection: Detection) -> list[dict[str, Any]]:
-    candidates = candidate_competition(detection).get("top_candidates", [])
-    return list(candidates) if isinstance(candidates, list) else []
-
-
-def selected_candidate(detection: Detection) -> dict[str, Any]:
-    competition = candidate_competition(detection)
-    selected = competition.get("selected_candidate")
-    if isinstance(selected, dict):
-        return dict(selected)
-    return {
-        "format": detection.film_format,
-        "count": int(detection.count),
-        "strip_mode": detection.strip_mode,
-        "confidence": float(detection.confidence),
-        "review_reasons": list(detection.review_reasons),
-        "candidate_decision": candidate_decision(detection),
-    }
-
-
-def gate_records(detection: Detection) -> list[dict[str, Any]]:
-    decision = candidate_decision(detection)
-    gates: list[dict[str, Any]] = []
-    hard = decision.get("separator_hard_evidence", {})
-    if isinstance(hard, dict):
-        gates.append(
-            {
-                "name": "separator_gate",
-                "ok": bool(hard.get("ok", False)),
-                "reason": str(hard.get("reason", "")),
-                "detail": hard,
-            }
-        )
-    partial = decision.get("partial_safe_extra_frames", {})
-    if isinstance(partial, dict) and bool(partial.get("used", False)):
-        gates.append(
-            {
-                "name": "partial_safe_extra_frames_gate",
-                "ok": bool(partial.get("ok", False)),
-                "reason": str(partial.get("reason", "")),
-                "detail": partial,
-            }
-        )
-    gates.append(
-        {
-            "name": "auto_pass_gate",
-            "ok": bool(decision.get("auto_gate", False)),
-            "reason": "auto_gate_passed" if decision.get("auto_gate", False) else "auto_gate_failed",
-            "detail": {
-                "joint_score": decision.get("joint_score"),
-                "content_support": decision.get("content_support"),
-                "geometry_score": decision.get("geometry_score"),
-                "separator_score": decision.get("separator_score"),
-                "content_score": decision.get("content_score"),
-            },
-        }
-    )
-    return gates
-
-
-def report_policy_for_detection(detection: Detection) -> ReportPolicy:
-    try:
-        return get_detection_policy(detection.film_format, detection.strip_mode).report
-    except ValueError:
-        return ReportPolicy()
-
-
-def report_schema_for_detection(detection: Detection, result: ProcessResult | None = None) -> dict[str, Any]:
+def report_schema_for_detection(detection: Detection, result: ProcessResult | None = None) -> dict:
     report_policy = report_policy_for_detection(detection)
     decision_contract = decision_contract_for(detection.film_format, detection.strip_mode)
     decision_detail = decision_summary(detection)
@@ -180,9 +109,5 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
 
 __all__ = [
     "REPORT_SCHEMA_VERSION",
-    "candidate_table",
-    "gate_records",
-    "report_policy_for_detection",
     "report_schema_for_detection",
-    "selected_candidate",
 ]

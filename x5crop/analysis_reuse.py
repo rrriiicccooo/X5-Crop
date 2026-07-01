@@ -8,9 +8,14 @@ import numpy as np
 
 from .app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
 from .config import Config
-from .domain import Box, Detection, Gap, ImageProfile
+from .detection.final_geometry import output_bleed_config_for_detection, reapply_cached_output_bleed
+from .domain import Box, Detection, Gap, ImageProfile, ProcessResult
+from .export.crops import write_crops
 from .image.evidence import make_gray_u8
 from .image.transforms import rotate_array_expand
+from .io import read_tiff
+from .policies.registry import get_detection_policy
+from .result_builder import result_from_cached_record, result_from_detection
 from .runtime import REPORT_RECORD_CACHE
 
 
@@ -167,6 +172,63 @@ def apply_cached_deskew(
     return arr, gray, True
 
 
+def result_from_reusable_analysis(
+    input_file: Path,
+    config: Config,
+    output_dir: Path,
+    profile: ImageProfile,
+    warnings: list[str],
+) -> ProcessResult | None:
+    if not (config.reuse_analysis and not config.dry_run and not config.debug_analysis):
+        return None
+    cached_record = find_reusable_analysis(input_file, output_dir, profile, config)
+    if cached_record is None:
+        return None
+
+    status = str(cached_record["status"])
+    warnings.append(f"reused analysis report: {REPORT_JSONL_NAME}")
+    if status == "needs_review":
+        warnings.append("cached status is needs_review; skipped export")
+        return result_from_cached_record(input_file, cached_record, profile, warnings)
+
+    arr, gray, profile, page_warnings = read_tiff(input_file, config.page)
+    warnings.extend(warning for warning in page_warnings if warning not in warnings)
+    source_arr = arr
+    detection = detection_from_record(cached_record)
+    arr, gray, deskew_applied = apply_cached_deskew(
+        arr,
+        gray,
+        profile.axes,
+        profile.photometric,
+        detection.detail,
+        warnings,
+    )
+    reapply_cached_output_bleed(detection, config, gray.shape[1], gray.shape[0])
+    policy = get_detection_policy(detection.film_format, detection.strip_mode)
+    output_config = output_bleed_config_for_detection(config, detection, policy.output)
+    reapply_cached_output_bleed(detection, output_config, gray.shape[1], gray.shape[0])
+    output_files = write_crops(
+        input_file,
+        arr,
+        source_arr,
+        profile,
+        detection,
+        config,
+        deskew_applied,
+        output_dir,
+    )
+    return result_from_detection(
+        input_file,
+        detection,
+        profile,
+        status,
+        output_files,
+        cached_record.get("review_copy"),
+        warnings,
+        detail_extra={"reused_analysis": True},
+    )
+
+
 __all__ = [
     "apply_cached_deskew",
     "box_from_dict",
@@ -177,5 +239,6 @@ __all__ = [
     "gap_from_dict",
     "load_report_records",
     "make_analysis_cache_metadata",
+    "result_from_reusable_analysis",
     "source_cache_signature",
 ]

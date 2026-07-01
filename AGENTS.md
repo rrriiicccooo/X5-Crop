@@ -171,12 +171,14 @@ Key local sets:
 For source or policy changes, also run:
 
 ```bash
-python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/policies/*.py x5crop/geometry/*.py x5crop/io/*.py x5crop/image/*.py x5crop/export/*.py x5crop/diagnostics/*.py tools/regression/*.py
+python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/policies/*.py x5crop/geometry/*.py x5crop/io/*.py x5crop/image/*.py x5crop/export/*.py
 bash -n X5_Crop_Mac.command
 bash -n X5_Crop_Mac_diagnostics.command
 git diff --check
 python3 X5_Crop.py --version
 ```
+
+If `tools/` is expanded in the local checkout, also compile `tools/regression/*.py`.
 
 For docs-only changes, `git diff --check` and a final status review are enough
 unless the edit changes commands or release behavior.

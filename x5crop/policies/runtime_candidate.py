@@ -1,0 +1,220 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class GatePolicy:
+    ordered_gates: tuple[str, ...]
+    hard_review_reasons_block_auto: bool = True
+
+
+@dataclass(frozen=True)
+class PartialHolderPolicy:
+    safe_extra_frames: bool = False
+    safe_extra_frames_strip_modes: tuple[str, ...] = ("partial",)
+    requires_wide_like_gaps: int = 0
+    checks_leading_content: bool = False
+    checks_frame_content: bool = False
+    min_count_35mm: int = 2
+    min_count_small: int = 2
+    min_hard_gaps: int = 1
+    min_hard_ratio: float = 0.15
+    max_equal_gaps: int = 0
+    max_width_cv: float = 0.055
+    min_joint_score: float = 0.65
+    min_content_score: float = 0.72
+    min_geometry_score: float = 0.72
+    wide_like_min_width_ratio: float = 0.033
+    leading_content_max_mean: float = 0.20
+    leading_content_max_coverage: float = 0.34
+    leading_content_band_ratio: float = 0.04
+    min_frame_mean: float = 0.055
+    min_frame_coverage: float = 0.10
+    max_frame_aspect_error: float = 0.22
+
+
+@dataclass(frozen=True)
+class PartialEdgeHintPolicy:
+    window_ratio: float = 0.18
+    window_min: int = 8
+    window_max: int = 900
+
+
+@dataclass(frozen=True)
+class GeometrySupportScorePolicy:
+    width_cv_norm: float = 0.040
+    outer_min_area: float = 0.35
+    outer_max_area: float = 0.94
+    outer_uncertain_score: float = 0.55
+    aspect_norm: float = 0.22
+    no_aspect_score: float = 0.80
+    width_weight: float = 0.34
+    outer_weight: float = 0.24
+    aspect_weight: float = 0.26
+    count_weight: float = 0.16
+
+
+@dataclass(frozen=True)
+class BaseDetectionScorePolicy:
+    width_cv_norm: float = 0.030
+    gap_weight: float = 0.40
+    width_weight: float = 0.30
+    outer_weight: float = 0.20
+    contrast_weight: float = 0.10
+    outer_min_area: float = 0.35
+    outer_max_area: float = 0.995
+    outer_too_large: float = 0.94
+    outer_uncertain_confidence: float = 0.45
+    contrast_min: float = 35.0
+    contrast_floor: float = 0.35
+    full_width_cv: float = 0.040
+    geometry_floor_tight_cv: float = 0.006
+    geometry_floor_high: float = 0.92
+    geometry_floor_low: float = 0.88
+    unstable_width_cv: float = 0.030
+    full_outer_min_area: float = 0.40
+    low_confidence_floor: float = 0.85
+    partial_one_cap: float = 0.78
+    partial_two_35mm_cap: float = 0.82
+    partial_general_cap: float = 0.84
+    outer_too_large_cap: float = 0.82
+    family_separator_uncertain_reason: str = "separator_evidence_incomplete"
+
+
+@dataclass(frozen=True)
+class SeparatorSupportScorePolicy:
+    model_grid_credit: float = 0.35
+    model_equal_credit: float = 0.12
+    hard_weight: float = 0.78
+    model_weight: float = 0.22
+    no_expected_confidence_threshold: float = 0.85
+    no_expected_confidence_cap: float = 0.75
+
+
+@dataclass(frozen=True)
+class ScoringPolicy:
+    confidence_threshold_default: float = 0.85
+    hard_full_confidence_floor: float = 0.0
+    geometry_weight: float = 0.34
+    content_weight: float = 0.33
+    separator_weight: float = 0.33
+    separator_source_bias: float = 0.0
+    no_auto_cap_full: float = 0.84
+    no_auto_cap_partial: float = 0.82
+    competition_top_n: int = 8
+    competition_close_margin: float = 0.04
+    base_detection: BaseDetectionScorePolicy = field(default_factory=BaseDetectionScorePolicy)
+    geometry_support: GeometrySupportScorePolicy = field(default_factory=GeometrySupportScorePolicy)
+    separator_support: SeparatorSupportScorePolicy = field(default_factory=SeparatorSupportScorePolicy)
+
+
+@dataclass(frozen=True)
+class ContentMismatchReviewSelectionPolicy:
+    enabled: bool = False
+    strip_modes: tuple[str, ...] = ("full",)
+    require_default_count: bool = True
+    required_best_source: str = "content"
+    required_review_reason: str = "content_run_count_mismatch"
+    candidate_source: str = "separator"
+    min_hard_ratio: float = 0.50
+    max_equal_gaps: int = 0
+    required_content_support: str = "ok"
+    override_reason: str = "content_candidate_mismatch_prefers_separator_review"
+
+
+@dataclass(frozen=True)
+class SelectionPolicy:
+    top_n: int = 8
+    close_margin: float = 0.04
+    confidence_cap: float = 0.84
+    content_mismatch_review: ContentMismatchReviewSelectionPolicy = field(default_factory=ContentMismatchReviewSelectionPolicy)
+
+
+@dataclass(frozen=True)
+class FallbackPolicy:
+    use_outer_proposals: bool = True
+    strategies: tuple[str, ...] = (
+        "separator_outer",
+        "edge_anchor_outer",
+        "separator_geometry_outer",
+    )
+
+
+@dataclass(frozen=True)
+class PartialStopPolicy:
+    stop_after_safe_auto: bool = True
+    skip_content_after_safe_auto: bool = True
+    skip_content_after_safe_auto_strip_modes: tuple[str, ...] = ("partial",)
+    skip_content_after_safe_auto_reason: str = "partial_safe_separator_auto_gate_passed"
+
+
+@dataclass(frozen=True)
+class SeparatorGeometryCompetitionPolicy:
+    enabled: bool = True
+    content_outer_max_median_aspect_strategies: tuple[str, ...] = ("content_outer",)
+    content_outer_max_median_aspect_strip_modes: tuple[str, ...] = ("partial",)
+    content_outer_max_median_aspect: float = 1.045
+    general_min_median_aspect: float = 1.090
+
+
+@dataclass(frozen=True)
+class DarkBandCandidateRunPolicy:
+    try_full_default_count: bool = True
+    full_retry_strip_modes: tuple[str, ...] = ("full",)
+    full_retry_requires_default_count: bool = True
+    partial_retry_strip_modes: tuple[str, ...] = ("partial",)
+    try_partial_when_no_safe_wide_like_candidate: bool = True
+    partial_retry_on_equal_gaps: bool = True
+    partial_retry_on_insufficient_wide_like_gaps: bool = True
+
+
+@dataclass(frozen=True)
+class ContentCandidateRunPolicy:
+    enabled: bool = True
+    skip_after_separator_auto: bool = True
+    separator_auto_skip_strip_modes: tuple[str, ...] = ("full",)
+    separator_auto_skip_reason: str = "separator_auto_gate_passed"
+    disabled_skip_reason: str = "disabled_by_policy"
+
+
+@dataclass(frozen=True)
+class EqualFirstWideRetryPolicy:
+    enabled: bool = True
+    requires_wide_geometry_support: bool = True
+    strip_modes: tuple[str, ...] = ("full",)
+    requires_default_count: bool = True
+
+
+@dataclass(frozen=True)
+class CandidateRunPolicy:
+    equal_first_before_wide_retry: EqualFirstWideRetryPolicy = field(
+        default_factory=EqualFirstWideRetryPolicy
+    )
+    content_candidate: ContentCandidateRunPolicy = field(default_factory=ContentCandidateRunPolicy)
+    fallback: FallbackPolicy = field(default_factory=FallbackPolicy)
+    partial_stop: PartialStopPolicy = field(default_factory=PartialStopPolicy)
+    separator_geometry_competition: SeparatorGeometryCompetitionPolicy = field(
+        default_factory=SeparatorGeometryCompetitionPolicy
+    )
+    dark_band_retry: DarkBandCandidateRunPolicy = field(default_factory=DarkBandCandidateRunPolicy)
+
+
+__all__ = [
+    "BaseDetectionScorePolicy",
+    "CandidateRunPolicy",
+    "ContentCandidateRunPolicy",
+    "ContentMismatchReviewSelectionPolicy",
+    "DarkBandCandidateRunPolicy",
+    "EqualFirstWideRetryPolicy",
+    "FallbackPolicy",
+    "GatePolicy",
+    "GeometrySupportScorePolicy",
+    "PartialEdgeHintPolicy",
+    "PartialHolderPolicy",
+    "PartialStopPolicy",
+    "ScoringPolicy",
+    "SelectionPolicy",
+    "SeparatorGeometryCompetitionPolicy",
+    "SeparatorSupportScorePolicy",
+]
