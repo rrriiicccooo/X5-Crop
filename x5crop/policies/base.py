@@ -933,7 +933,7 @@ class DebugPanelPolicy:
 
 @dataclass(frozen=True)
 class RuntimeDiagnosticsPolicy:
-    attach_read_only_only_when_requested: bool = True
+    attach_read_only_when_requested: bool = True
     overlap_bleed_risk: OverlapBleedRiskPolicy = field(default_factory=OverlapBleedRiskPolicy)
     debug_gap_overlay: DebugGapOverlayPolicy = field(default_factory=DebugGapOverlayPolicy)
     nearby_separator: NearbySeparatorDiagnosticsPolicy = field(default_factory=NearbySeparatorDiagnosticsPolicy)
@@ -985,7 +985,7 @@ class DetectionPolicy:
     family: str
     role: str
     detector: DetectorPolicy
-    parameters: FormatParameters
+    source_parameters: FormatParameters
     counts: CountPolicy
     outer: OuterPolicy
     separator: SeparatorPolicy

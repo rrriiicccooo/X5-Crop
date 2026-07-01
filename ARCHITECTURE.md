@@ -70,14 +70,18 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 7. `x5crop.policies`
    - 通过 `get_detection_policy(format_id, strip_mode)` 解析 runtime policy。
    - `registry.py` 只做 resolve/cache。
+   - `format_modules.py` 只负责 format id 到 `format_*` module 的命名和 import。
    - `format_135.py`、`format_120_66.py` 等 format profile module 同时拥有
      format / mode runtime preset 和该 format 的参数覆盖。
    - `ids.py` 统一拥有 policy id stem 和 report schema version。
    - `base.py` 定义 runtime `DetectionPolicy` contract；`reporting.py` 只负责
-     runtime policy detail serializer。
-   - `parameters.py` 保存共享参数 dataclass 和默认参数 helper，不维护独立的
-     format preset 映射。
-   - `decision_contract.py` 是 V4.9 public decision policy contract。
+     runtime policy detail serializer，不拥有 detection result schema。
+   - `parameter_types.py` 保存 source parameter group dataclass；`parameters.py`
+     保存 `FormatParameters` aggregate、120 共享默认 helper 和 format 参数解析。
+   - `factory_presets.py` 定义 format / mode preset contract；`factory.py` 只把
+     preset + source parameters 编译成 runtime `DetectionPolicy`。
+   - `decision_contract.py` 是 V4.9 public decision policy contract；
+     `decision_overrides.py` 保存 format / mode decision evidence 覆盖。
    - `__init__.py` 只标记 package，不作为 compatibility barrel 或 public
      re-export surface。
 
@@ -288,15 +292,20 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 7. `x5crop.policies`
    - Resolves runtime policy through `get_detection_policy(format_id, strip_mode)`.
    - `registry.py` only resolves and caches.
+   - `format_modules.py` only maps format ids to `format_*` module names and imports.
    - Format profile modules such as `format_135.py` and `format_120_66.py`
      own both format / mode runtime presets and that format's parameter
      overrides.
    - `ids.py` owns shared policy id stems and the report schema version.
    - `base.py` defines the runtime `DetectionPolicy` contract; `reporting.py`
-     only serializes runtime policy detail.
-   - `parameters.py` stores shared parameter dataclasses and default helpers;
-     it does not keep a separate format preset map.
-   - `decision_contract.py` is the V4.9 public decision policy contract.
+     only serializes runtime policy detail and does not own the detection result schema.
+   - `parameter_types.py` stores source parameter group dataclasses; `parameters.py`
+     stores the `FormatParameters` aggregate, shared 120 defaults, and format
+     parameter resolution.
+   - `factory_presets.py` defines the format / mode preset contract; `factory.py`
+     only compiles presets plus source parameters into runtime `DetectionPolicy`.
+   - `decision_contract.py` is the V4.9 public decision policy contract;
+     `decision_overrides.py` stores format / mode decision evidence overrides.
    - `__init__.py` is only a package marker, not a compatibility barrel or
      public re-export surface.
 

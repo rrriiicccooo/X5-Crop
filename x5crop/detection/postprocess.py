@@ -139,7 +139,7 @@ def finalize_detection_decision(
             gray.shape[0],
             policy.output.edge_bleed_protection,
         )
-    if config.diagnostics and (not policy.diagnostics.attach_read_only_only_when_requested or config.diagnostics):
+    if not policy.diagnostics.attach_read_only_when_requested or config.diagnostics:
         attach_read_only_diagnostics(gray, detection, analysis_cache)
     return PostprocessResult(
         detection=detection,

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 from ..formats import FormatSpec, format_spec
-from .ids import POLICY_ID_STEMS, REPORT_SCHEMA_VERSION, decision_policy_id_for
+from .decision_overrides import evidence_policy_values
+from .ids import REPORT_SCHEMA_VERSION, decision_policy_id_for
 
 
 @dataclass(frozen=True)
@@ -124,43 +125,9 @@ class DetectionDecisionContract:
     diagnostics: DecisionDiagnosticsPolicy
 
     def report_detail(self) -> dict[str, Any]:
-        data = {
-            "policy_id": self.policy_id,
-            "schema_version": self.schema_version,
-            "format_spec": {
-                "format_id": self.format.format_id.value,
-                "family": self.format.family,
-                "nominal_frame_count": self.format.default_count,
-                "allowed_count_range": list(self.format.allowed_counts),
-                "frame_aspect": self.format.frame_aspect,
-                "expected_separator_count": self.format.expected_separator_count,
-                "full_mode_behavior": self.format.full_mode_behavior,
-                "partial_mode_behavior": self.format.partial_mode_behavior,
-                "outer_trust_profile": self.format.outer_trust_profile,
-                "separator_visibility_expectation": self.format.separator_visibility,
-                "geometry_tolerance": self.format.geometry_tolerance,
-                "known_physical_risks": list(self.format.known_physical_risks),
-            },
-            "mode_policy": asdict(self.mode),
-            "evidence_policy": asdict(self.evidence),
-            "risk_policy": asdict(self.risk),
-            "candidate_policy": asdict(self.candidate),
-            "decision_policy": asdict(self.decision),
-            "output_policy": asdict(self.output),
-            "diagnostics_policy": {
-                "debug_panels": list(self.diagnostics.debug_panels),
-                "panel_titles": {
-                    panel_id: self.diagnostics.title_for(panel_id)
-                    for panel_id in self.diagnostics.debug_panels
-                },
-                "hard_gap_color": self.diagnostics.hard_gap_color,
-                "model_gap_color": self.diagnostics.model_gap_color,
-                "risk_gap_color": self.diagnostics.risk_gap_color,
-                "overlay_line_width_policy": self.diagnostics.overlay_line_width_policy,
-            },
-        }
-        return data
+        from .reporting import decision_contract_report_detail
 
+        return decision_contract_report_detail(self)
 
 def mode_policy_for(spec: FormatSpec, strip_mode: str) -> ModePolicy:
     partial = strip_mode == "partial"
@@ -194,77 +161,13 @@ def mode_policy_for(spec: FormatSpec, strip_mode: str) -> ModePolicy:
 
 def evidence_policy_for(format_id: str, strip_mode: str) -> EvidencePolicy:
     policy = EvidencePolicy()
-    overrides: dict[str, dict[str, Any]] = {
-        "135": {
-            "min_hard_separator_ratio": 0.35,
-            "min_hard_separator_count": 2,
-            "max_width_cv_ratio": 0.030,
-            "max_model_gap_share": 0.70,
-        },
-        "135-dual": {
-            "min_hard_separator_ratio": 0.50,
-            "min_hard_separator_count": 2,
-            "max_width_cv_ratio": 0.035,
-        },
-        "half": {
-            "min_hard_separator_ratio": 0.55,
-            "min_hard_separator_count": 2,
-            "max_width_cv_ratio": 0.012,
-            "allow_geometry_supported_separator": True,
-            "geometry_supported_min_hard_ratio": 0.20,
-            "geometry_supported_max_width_cv_ratio": 0.010,
-            "max_outer_area_ratio": 0.990,
-        },
-        "xpan": {
-            "min_hard_separator_ratio": 0.67,
-            "min_hard_separator_count": 1,
-            "max_width_cv_ratio": 0.035,
-        },
-        "120-645": {
-            "min_hard_separator_ratio": 0.67,
-            "min_hard_separator_count": 2,
-            "max_width_cv_ratio": 0.035,
-        },
-        "120-66": {
-            "min_hard_separator_ratio": 0.90,
-            "min_hard_separator_count": 2,
-            "max_width_cv_ratio": 0.040,
-            "max_outer_area_ratio": 0.990,
-        },
-        "120-67": {
-            "min_hard_separator_ratio": 0.75,
-            "min_hard_separator_count": 2,
-            "max_width_cv_ratio": 0.040,
-        },
-    }
-    values = overrides.get(format_id, {})
-    if strip_mode == "partial":
-        values = {
-            **values,
-            "min_hard_separator_ratio": min(
-                float(values.get("min_hard_separator_ratio", policy.min_hard_separator_ratio)),
-                0.35,
-            ),
-            "max_width_cv_ratio": max(
-                float(values.get("max_width_cv_ratio", policy.max_width_cv_ratio)),
-                0.045,
-            ),
-            "max_outer_area_ratio": max(
-                float(values.get("max_outer_area_ratio", policy.max_outer_area_ratio)),
-                0.990,
-            ),
-            "partial_requires_safe_edge": True,
-        }
+    values = evidence_policy_values(format_id, strip_mode, policy)
     return replace(policy, **values)
-
-
-def policy_id_for(format_id: str, strip_mode: str) -> str:
-    return decision_policy_id_for(format_id, strip_mode)
 
 
 def decision_contract_for(format_id: str, strip_mode: str) -> DetectionDecisionContract:
     spec = format_spec(format_id)
-    policy_id = policy_id_for(format_id, strip_mode)
+    policy_id = decision_policy_id_for(format_id, strip_mode)
     decision = replace(DecisionPolicy(), policy_id=policy_id)
     return DetectionDecisionContract(
         policy_id=policy_id,
@@ -289,8 +192,6 @@ __all__ = [
     "EvidencePolicy",
     "ModePolicy",
     "OutputPolicy",
-    "POLICY_ID_STEMS",
     "RiskPolicy",
     "decision_contract_for",
-    "policy_id_for",
 ]

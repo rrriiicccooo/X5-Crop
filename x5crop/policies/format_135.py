@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from .base import FULL, PARTIAL, FrameFitPolicy, SeparatorEdgePairPolicy
-from .factory import FormatPolicyPreset, ModePolicyPreset, build_policy_from_preset
+from .factory import build_policy_from_preset
+from .factory_presets import FormatPolicyPreset, ModePolicyPreset
 from .parameters import FormatParameters
 
 FORMAT_ID = "135"

@@ -17,7 +17,7 @@ from ..policies.base import (
     RobustGridPolicy,
     SeparatorProfilePolicy,
 )
-from ..policies.parameters import EdgePairParams
+from ..policies.parameter_types import EdgePairParams
 from ..runtime import AnalysisCache
 from ..utils import clamp_float, clamp_int
 

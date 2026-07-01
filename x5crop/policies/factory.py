@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass, field
-
 from ..formats import FORMATS
 from .base import (
     FULL,
@@ -63,37 +60,8 @@ from .base import (
     EdgeRefineProfilePolicy,
 )
 from .ids import detection_policy_id_for
+from .factory_presets import DarkBandModePreset, FormatPolicyPreset, ModePolicyPreset
 from .parameters import FormatParameters
-
-
-@dataclass(frozen=True)
-class DarkBandModePreset:
-    mode: str = "off"
-    full_selection_enabled: bool = False
-    separator_outer_allow_oversized_band: bool = False
-    separator_outer_oversized_band_max_ratio: float = 0.45
-    separator_outer_oversized_band_score_penalty: float = 0.08
-
-
-@dataclass(frozen=True)
-class ModePolicyPreset:
-    role: str
-    notes: tuple[str, ...] = ()
-    detector_kind: str = "standard_strip"
-    frame_fit: FrameFitPolicy | None = None
-    dark_band: DarkBandModePreset = field(default_factory=DarkBandModePreset)
-    separator_geometry_support_modes: tuple[str, ...] = ()
-    diagnostics_overlap_bleed: bool = False
-
-
-@dataclass(frozen=True)
-class FormatPolicyPreset:
-    format_id: str
-    parameters: Callable[[], FormatParameters]
-    separator_gate_profile: str
-    separator_edge_pair: SeparatorEdgePairPolicy = field(default_factory=SeparatorEdgePairPolicy)
-    content_mismatch_review_enabled: bool = False
-    modes: dict[str, ModePolicyPreset] = field(default_factory=dict)
 
 
 def partial_frame_fit(format_id: str) -> FrameFitPolicy:
@@ -104,11 +72,11 @@ def partial_frame_fit(format_id: str) -> FrameFitPolicy:
     )
 
 
-def count_policy(fmt_id: str, strip_mode: str, tuning: FormatParameters) -> CountPolicy:
+def count_policy(fmt_id: str, strip_mode: str, params: FormatParameters) -> CountPolicy:
     fmt = FORMATS[fmt_id]
     if strip_mode == FULL:
         return CountPolicy(fixed_count=None, auto_counts=(fmt.default_count,))
-    partial = tuning.partial_counts
+    partial = params.partial_counts
     return CountPolicy(
         fixed_count=None,
         auto_counts=tuple(reversed(fmt.allowed_counts)),
@@ -119,10 +87,10 @@ def count_policy(fmt_id: str, strip_mode: str, tuning: FormatParameters) -> Coun
 
 def separator_gate_policy(
     preset: FormatPolicyPreset,
-    tuning: FormatParameters,
+    params: FormatParameters,
 ) -> SeparatorGatePolicy:
-    gate = tuning.separator_gate
-    leading_grid = tuning.leading_grid_failure
+    gate = params.separator_gate
+    leading_grid = params.leading_grid_failure
     return SeparatorGatePolicy(
         profile=preset.separator_gate_profile,
         needed_hard_max=int(gate.needed_hard_max),
@@ -151,11 +119,11 @@ def separator_gate_policy(
 
 def separator_geometry_support_policy(
     mode_preset: ModePolicyPreset,
-    tuning: FormatParameters,
+    params: FormatParameters,
 ) -> SeparatorGeometrySupportPolicy:
     if not mode_preset.separator_geometry_support_modes:
         return SeparatorGeometrySupportPolicy()
-    support = tuning.separator_geometry_support
+    support = params.separator_geometry_support
     mode_policy = SeparatorGeometrySupportModePolicy(
         enabled=True,
         min_hard_ratio=float(support.wide_geometry_min_hard_ratio),
@@ -186,17 +154,17 @@ def separator_policy(
     preset: FormatPolicyPreset,
     mode_preset: ModePolicyPreset,
     strip_mode: str,
-    tuning: FormatParameters,
+    params: FormatParameters,
 ) -> SeparatorPolicy:
-    gate = separator_gate_policy(preset, tuning)
-    wide_retry = tuning.wide_retry
-    hard_gap_trust = tuning.hard_gap_trust
-    nearby_correction = tuning.nearby_separator_correction
-    robust_grid = tuning.robust_grid
-    gap_search = tuning.gap_search
-    enhanced = tuning.enhanced_separator
-    profile = tuning.separator_profile
-    edge_refine = tuning.edge_refine_profile
+    gate = separator_gate_policy(preset, params)
+    wide_retry = params.wide_retry
+    hard_gap_trust = params.hard_gap_trust
+    nearby_correction = params.nearby_separator_correction
+    robust_grid = params.robust_grid
+    gap_search = params.gap_search
+    enhanced = params.enhanced_separator
+    profile = params.separator_profile
+    edge_refine = params.edge_refine_profile
     return SeparatorPolicy(
         gate=gate,
         hard_required_all_gaps=bool(gate.hard_required_all_gaps),
@@ -207,7 +175,7 @@ def separator_policy(
         wide_retry_max_width_ratio=float(wide_retry.max_width_ratio),
         wide_separator_confidence_cap=float(wide_retry.confidence_cap),
         geometry_support_modes=mode_preset.separator_geometry_support_modes,
-        geometry_support=separator_geometry_support_policy(mode_preset, tuning),
+        geometry_support=separator_geometry_support_policy(mode_preset, params),
         edge_pair=preset.separator_edge_pair,
         hard_gap_trust=HardGapTrustPolicy(
             guard_ratio=float(hard_gap_trust.guard_ratio),
@@ -356,19 +324,19 @@ def dark_band_outer_policy(mode_preset: ModePolicyPreset) -> DarkBandOuterPolicy
 def outer_policy(
     mode_preset: ModePolicyPreset,
     strip_mode: str,
-    tuning: FormatParameters,
+    params: FormatParameters,
 ) -> OuterPolicy:
     is_full = strip_mode == FULL
-    outer = tuning.outer_strategy
-    format_geometry = tuning.format_geometry_retry
-    grid_refine = tuning.grid_outer_refine
-    short_axis = tuning.short_axis_aspect_retry
-    content_alignment = tuning.outer_content_alignment
-    content_floating = tuning.content_floating_outer
-    edge_anchor = tuning.edge_anchor_outer
-    base_candidates = tuning.base_outer_candidates
-    separator_outer = tuning.separator_outer_band
-    separator_geometry = tuning.separator_geometry_outer
+    outer = params.outer_strategy
+    format_geometry = params.format_geometry_retry
+    grid_refine = params.grid_outer_refine
+    short_axis = params.short_axis_aspect_retry
+    content_alignment = params.outer_content_alignment
+    content_floating = params.content_floating_outer
+    edge_anchor = params.edge_anchor_outer
+    base_candidates = params.base_outer_candidates
+    separator_outer = params.separator_outer_band
+    separator_geometry = params.separator_geometry_outer
     content_floating_enabled = bool(
         outer.content_floating_full if is_full else outer.content_floating_partial
     )
@@ -563,12 +531,12 @@ def gate_policy() -> GatePolicy:
     )
 
 
-def content_policy(tuning: FormatParameters) -> ContentPolicy:
-    evidence = tuning.content_evidence
-    profile = tuning.content_profile
-    mask = tuning.content_mask
-    candidate = tuning.content_candidate
-    support = tuning.content_support
+def content_policy(params: FormatParameters) -> ContentPolicy:
+    evidence = params.content_evidence
+    profile = params.content_profile
+    mask = params.content_mask
+    candidate = params.content_candidate
+    support = params.content_support
     return ContentPolicy(
         can_auto_pass_alone=False,
         evidence=ContentEvidencePolicy(
@@ -632,9 +600,9 @@ def content_policy(tuning: FormatParameters) -> ContentPolicy:
     )
 
 
-def partial_holder_policy(strip_mode: str, tuning: FormatParameters) -> PartialHolderPolicy:
-    holder = tuning.partial_holder
-    content_evidence = tuning.content_evidence
+def partial_holder_policy(strip_mode: str, params: FormatParameters) -> PartialHolderPolicy:
+    holder = params.partial_holder
+    content_evidence = params.content_evidence
     partial_safe = strip_mode == PARTIAL and bool(holder.enabled)
     return PartialHolderPolicy(
         safe_extra_frames=partial_safe,
@@ -664,12 +632,12 @@ def partial_holder_policy(strip_mode: str, tuning: FormatParameters) -> PartialH
     )
 
 
-def scoring_policy(tuning: FormatParameters) -> ScoringPolicy:
-    calibration = tuning.scoring_calibration
-    competition = tuning.candidate_competition
-    base_score = tuning.base_detection_score
-    geometry_support = tuning.geometry_support_score
-    separator_support = tuning.separator_support_score
+def scoring_policy(params: FormatParameters) -> ScoringPolicy:
+    calibration = params.scoring_calibration
+    competition = params.candidate_competition
+    base_score = params.base_detection_score
+    geometry_support = params.geometry_support_score
+    separator_support = params.separator_support_score
     return ScoringPolicy(
         hard_full_confidence_floor=float(calibration.hard_full_confidence_floor),
         geometry_weight=float(calibration.geometry_weight),
@@ -730,9 +698,9 @@ def scoring_policy(tuning: FormatParameters) -> ScoringPolicy:
 def selection_policy(
     preset: FormatPolicyPreset,
     strip_mode: str,
-    tuning: FormatParameters,
+    params: FormatParameters,
 ) -> SelectionPolicy:
-    competition = tuning.candidate_competition
+    competition = params.candidate_competition
     return SelectionPolicy(
         top_n=int(competition.top_n),
         close_margin=float(competition.close_margin),
@@ -754,8 +722,8 @@ def report_policy() -> ReportPolicy:
     return ReportPolicy()
 
 
-def partial_edge_hint_policy(tuning: FormatParameters) -> PartialEdgeHintPolicy:
-    hint = tuning.partial_edge_hint
+def partial_edge_hint_policy(params: FormatParameters) -> PartialEdgeHintPolicy:
+    hint = params.partial_edge_hint
     return PartialEdgeHintPolicy(
         window_ratio=float(hint.window_ratio),
         window_min=int(hint.window_min),
@@ -763,9 +731,9 @@ def partial_edge_hint_policy(tuning: FormatParameters) -> PartialEdgeHintPolicy:
     )
 
 
-def postprocess_policy(tuning: FormatParameters) -> PostprocessPolicy:
-    postprocess = tuning.postprocess
-    approved_adjustment = tuning.approved_geometry_adjustment
+def postprocess_policy(params: FormatParameters) -> PostprocessPolicy:
+    postprocess = params.postprocess
+    approved_adjustment = params.approved_geometry_adjustment
     return PostprocessPolicy(
         align_outer_to_content=True,
         retry_uncertain_outer=bool(postprocess.retry_uncertain_outer),
@@ -786,11 +754,11 @@ def postprocess_policy(tuning: FormatParameters) -> PostprocessPolicy:
     )
 
 
-def diagnostics_policy(mode_preset: ModePolicyPreset, tuning: FormatParameters) -> RuntimeDiagnosticsPolicy:
-    debug_gap = tuning.debug_gap_overlay
-    nearby = tuning.nearby_separator_diagnostics
-    overlap = tuning.diagnostic_overlap_risk
-    lucky = tuning.lucky_pass_risk
+def diagnostics_policy(mode_preset: ModePolicyPreset, params: FormatParameters) -> RuntimeDiagnosticsPolicy:
+    debug_gap = params.debug_gap_overlay
+    nearby = params.nearby_separator_diagnostics
+    overlap = params.diagnostic_overlap_risk
+    lucky = params.lucky_pass_risk
     return RuntimeDiagnosticsPolicy(
         overlap_bleed_risk=OverlapBleedRiskPolicy(
             enabled=mode_preset.diagnostics_overlap_bleed,
@@ -857,7 +825,7 @@ def build_policy_from_preset(
 ) -> DetectionPolicy:
     mode_preset = preset.modes[strip_mode]
     fmt = FORMATS[preset.format_id]
-    tuning = preset.parameters()
+    params = preset.parameters()
     return DetectionPolicy(
         policy_id=detection_policy_id_for(preset.format_id, strip_mode),
         format_id=preset.format_id,
@@ -865,20 +833,20 @@ def build_policy_from_preset(
         family=fmt.family,
         role=mode_preset.role,
         detector=DetectorPolicy(kind=mode_preset.detector_kind),
-        parameters=tuning,
-        counts=count_policy(preset.format_id, strip_mode, tuning),
-        outer=outer_policy(mode_preset, strip_mode, tuning),
-        separator=separator_policy(preset, mode_preset, strip_mode, tuning),
-        content=content_policy(tuning),
-        partial_holder=partial_holder_policy(strip_mode, tuning),
-        partial_edge_hint=partial_edge_hint_policy(tuning),
+        source_parameters=params,
+        counts=count_policy(preset.format_id, strip_mode, params),
+        outer=outer_policy(mode_preset, strip_mode, params),
+        separator=separator_policy(preset, mode_preset, strip_mode, params),
+        content=content_policy(params),
+        partial_holder=partial_holder_policy(strip_mode, params),
+        partial_edge_hint=partial_edge_hint_policy(params),
         frame_fit=mode_preset.frame_fit or partial_frame_fit(preset.format_id),
         gates=gate_policy(),
-        scoring=scoring_policy(tuning),
-        candidate_selection=selection_policy(preset, strip_mode, tuning),
+        scoring=scoring_policy(params),
+        candidate_selection=selection_policy(preset, strip_mode, params),
         candidate_run=candidate_run_policy(),
-        postprocess=postprocess_policy(tuning),
-        diagnostics=diagnostics_policy(mode_preset, tuning),
+        postprocess=postprocess_policy(params),
+        diagnostics=diagnostics_policy(mode_preset, params),
         report=report_policy(),
         notes=mode_preset.notes,
     )

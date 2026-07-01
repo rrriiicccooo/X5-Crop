@@ -2,7 +2,7 @@ from __future__ import annotations
 
 REPORT_SCHEMA_VERSION = "v4_9_policy_schema_1"
 
-POLICY_ID_STEMS = {
+_POLICY_ID_STEMS = {
     "135": "standard_strip",
     "135-dual": "parallel_lane_strip",
     "half": "dense_half_frame_strip",
@@ -14,7 +14,7 @@ POLICY_ID_STEMS = {
 
 
 def policy_id_stem_for(format_id: str) -> str:
-    return POLICY_ID_STEMS.get(format_id, "unknown_strip")
+    return _POLICY_ID_STEMS.get(format_id, "unknown_strip")
 
 
 def detection_policy_id_for(format_id: str, strip_mode: str) -> str:
@@ -26,7 +26,6 @@ def decision_policy_id_for(format_id: str, strip_mode: str) -> str:
 
 
 __all__ = [
-    "POLICY_ID_STEMS",
     "REPORT_SCHEMA_VERSION",
     "decision_policy_id_for",
     "detection_policy_id_for",
