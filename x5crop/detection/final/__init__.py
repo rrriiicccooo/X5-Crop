@@ -1,1 +1,3 @@
-"""Package marker."""
+"""Detection finalization package marker."""
+
+__all__: tuple[str, ...] = ()

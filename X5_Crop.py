@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 """Command-line entry point for X5 Crop.
 
-V4 keeps the user-facing ``X5_Crop.py`` launcher stable while the real
-implementation lives in focused modules under :mod:`x5crop`.
+The user-facing ``X5_Crop.py`` launcher stays stable while the implementation
+lives in focused modules under :mod:`x5crop`.
 """
 
 from x5crop.cli import main

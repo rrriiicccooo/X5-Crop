@@ -23,7 +23,7 @@ Current stable release: v4.2.8
 
 ### 当前重点
 
-- V4.9 是 evidence-governed decision / policy reset，不是检测阈值放宽版本。
+- V4.9 是 evidence-governed policy reset，不是检测阈值放宽版本。
 - V4.5.4 / V4.7 reference reports 是 historical baseline，不再是必须 0 diff 的 oracle。
 - 自动 PASS 必须由 outer、separator、geometry、content 和 risk 组合证据共同解释。
 - weak grid、equal、content-only、fallback 或 partial edge 不可信的候选默认进入 REVIEW。
@@ -33,7 +33,7 @@ Current stable release: v4.2.8
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.9 | 当前 active 开发版 | Evidence-governed decision / policy reset。新增 explicit format physical spec、clean entry layer（`CliOptions` / `RuntimeConfig`、`input_probe.py`、Python interactive launcher）、`x5crop/policies/decision_contract.py` V4.9 policy contract、`x5crop/detection/final/decision.py` conservative PASS/REVIEW gate、`v4_9_policy_schema_1` report schema、policy-controlled three-panel Debug Analysis，以及 `tools/regression/` reference classifier。目标是 0 新错误 PASS，并允许可解释的 conservative diff。 |
+| V4.9 | 当前 active 开发版 | Evidence-governed policy reset。新增 explicit format physical spec、clean entry layer（`CliOptions` / `RuntimeConfig`、`input_probe.py`、Python interactive launcher）、semantic policy contract、conservative PASS/REVIEW gate、`v4_9_policy_schema_1` report schema、policy-controlled three-panel Debug Analysis，以及 `tools/regression/` reference classifier。目标是 0 新错误 PASS，并允许可解释的 conservative diff。 |
 | V4.7 | 旧 active 开发版 | Source-layout rewrite。移除旧桥接层，保留 `X5_Crop.py` 薄入口和 `x5crop/` 分层实现；format / mode 行为由 `x5crop/policies/` 管理；`workflow.py` 负责编排；`detection/pipeline.py` 收敛为 orchestration；candidate、dual-lane、partial-holder、fallback、outer retry、calibration 等职责拆入专门模块；geometry 拆分为 focused helpers。目标是保持 V4.5.4 行为，同时让源码边界清晰。 |
 | V4.6 | 开发版 | 建立 `DetectionPolicy` 架构，将 detector、count、outer、separator、content、scoring、selection、postprocess、diagnostics 和 output 行为按 format / strip mode 注册。新增 workflow 层和 historical reference compare helper。 |
 | V4.5.4 | 开发版 | 加强 120-66 full / partial 的宽黑条和 strict holder 处理；目标是更稳地解释 120-66 样片，不推广到其它格式。 |
@@ -130,7 +130,7 @@ Current stable release: v4.2.8
 - Dev tools 层完成清理：`tools/build_standalone.py` 删除旧静态 V4 module list，
   改为自动收集当前 `x5crop/**/*.py` 并生成 embedded import hook；
   `tools/regression` 保持开发期 report compare / safety classifier。
-- 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
+- 14 个 format / strip mode decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出两条路径。
 - 七组本地 V4.5.4 reference reports 通过 reference classifier：
@@ -193,7 +193,7 @@ rollback.
 
 ### Current Focus
 
-- V4.9 is an evidence-governed decision / policy reset, not a detector-threshold loosening.
+- V4.9 is an evidence-governed policy reset, not a detector-threshold loosening.
 - V4.5.4 / V4.7 reference reports are historical baselines, not required 0-diff oracles.
 - Automatic PASS must be explained by combined outer, separator, geometry,
   content, and risk evidence.
@@ -206,7 +206,7 @@ rollback.
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.9 | Current active development | Evidence-governed decision / policy reset. Adds explicit format physical specs, a clean entry layer (`CliOptions` / `RuntimeConfig`, `input_probe.py`, Python interactive launcher), the `x5crop/policies/decision_contract.py` V4.9 policy contract, the `x5crop/detection/final/decision.py` conservative PASS/REVIEW gate, `v4_9_policy_schema_1`, policy-controlled three-panel Debug Analysis, and a `tools/regression/` reference classifier. The goal is 0 new wrong PASS with explainable conservative diffs. |
+| V4.9 | Current active development | Evidence-governed policy reset. Adds explicit format physical specs, a clean entry layer (`CliOptions` / `RuntimeConfig`, `input_probe.py`, Python interactive launcher), a semantic policy contract, a conservative PASS/REVIEW gate, `v4_9_policy_schema_1`, policy-controlled three-panel Debug Analysis, and a `tools/regression/` reference classifier. The goal is 0 new wrong PASS with explainable conservative diffs. |
 | V4.7 | Previous active development | Source-layout rewrite. Removes old bridge layers, keeps a thin `X5_Crop.py` entry and layered `x5crop/` implementation, moves format/mode behavior into `x5crop/policies/`, keeps `workflow.py` as orchestration, narrows `detection/pipeline.py`, and splits candidate, dual-lane, partial-holder, fallback, outer-retry, calibration, and geometry helpers into focused modules. The goal is V4.5.4 behavior with clearer source boundaries. |
 | V4.6 | Development | Introduces the `DetectionPolicy` architecture for detector, count, outer, separator, content, scoring, selection, postprocess, diagnostics, and output behavior by format / strip mode. Adds workflow separation and a historical reference compare helper. |
 | V4.5.4 | Development | Strengthens 120-66 full / partial wide-dark-band and strict-holder handling while keeping that risk model isolated to 120-66. |
@@ -307,7 +307,7 @@ Verified:
   static V4 module list and now auto-collects the current `x5crop/**/*.py` files
   into an embedded import hook; `tools/regression` remains developer-only report
   compare / safety classifier code.
-- 14 format / strip-mode V4.9 decision contract policy smoke tests pass.
+- 14 format / strip-mode decision contract policy smoke tests pass.
 - One-file Debug Analysis smoke writes the V4.9 three-panel debug JPG.
 - Cached analysis reuse smoke covers both approved auto-export and needs_review
   skip-export paths.

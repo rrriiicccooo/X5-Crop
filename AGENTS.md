@@ -194,10 +194,10 @@ guide; no duplicate `docs/` mirror is kept.
 Current state:
 
 - Active script is `X5_Crop.py` V4.9.
-- V4.9 is an evidence-governed decision / policy reset over the V4.7 source layout, not
+- V4.9 is an evidence-governed policy reset over the V4.7 source layout, not
   a detector-loosening release.
 - Source layout is layered source layout: thin entry, package implementation,
-  explicit format physical specs, V4.9 decision contract, focused
+  explicit format physical specs, semantic decision contract, focused
   detection modules, split geometry helpers, and explicit report/debug/regression
   surfaces.
 - Detailed source layering and policy boundaries live in `ARCHITECTURE.md`.
@@ -209,7 +209,7 @@ Recent verified baseline:
 - `python3 X5_Crop.py --version` printed `X5_Crop.py 4.9`.
 - Full py_compile across the V4.9 package passed.
 - `git diff --check` passed.
-- V4.9 decision contract policy smoke passed for 14 format / strip-mode combinations.
+- Decision contract policy smoke passed for 14 format / strip-mode combinations.
 - Seven local V4.5.4 reference sets produced 0 `unacceptable_wrong_pass` and 0
   `risky_regression` with `python3 -m tools.regression.reference_classify`.
 - V4.9 no longer treats V4.5.4 as a mandatory 0-diff oracle; conservative

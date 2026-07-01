@@ -37,7 +37,7 @@ Current stable release: v4.2.8
 - 自动裁切输出会保留原 TIFF 的位深、通道结构、ICC / 色彩空间、resolution、
   metadata 和已知无损压缩行为。
 - 检测阶段保持保守；证据不足、证据冲突、疑似叠片或局部片距异常时进入复核。
-- V4.9 使用更保守的 clean-room decision policy；旧版本可 PASS 的困难图片如果
+- 当前 active policy 更保守；旧版本可 PASS 的困难图片如果
   证据组合不足，可能改为 `REVIEW`。
 
 ### 推荐下载
@@ -166,7 +166,7 @@ x5_crop_output/_debug_analysis/
 - `Debug boxes`: 当前 outer、frame 和裁切框。
 - `Separator evidence`: 分隔证据、当前 outer 和切线标记。
 
-V4.9 的详细 evidence / risk / decision 说明写入 report；Debug Analysis
+详细 evidence / risk / decision 说明写入 report；Debug Analysis
 默认保持三联图，优先服务人工快速读图。
 
 状态含义：
@@ -296,7 +296,7 @@ Windows: install/X5_Crop_win_uninstall.bat
   lossless compression behavior.
 - Detection stays conservative. Weak evidence, conflicting evidence, possible
   overlap, or unstable local spacing goes to review.
-- V4.9 uses a more conservative clean-room decision policy. Difficult files
+- The current active policy is more conservative. Difficult files
   that passed in older development versions may now go to `REVIEW` when
   combined evidence is insufficient.
 
@@ -419,7 +419,7 @@ Each JPG is controlled by runtime diagnostics policy and defaults to:
 - `Debug boxes`: current outer, frames, and crop boxes.
 - `Separator evidence`: separator evidence, current outer, and cut markers.
 
-Detailed V4.9 evidence / risk / decision explanations are written to the
+Detailed evidence / risk / decision explanations are written to the
 report. Debug Analysis defaults to a three-panel image for fast human review.
 
 `PASS` means the file will be cropped automatically. `REVIEW` means it needs

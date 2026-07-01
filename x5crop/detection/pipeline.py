@@ -12,10 +12,8 @@ from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
 from .candidate.run import calibrated_candidates_for_count
 from .candidate.counts import candidate_counts_for_format
-from .modes.dual_lane import (
-    choose_parallel_lane_detection,
-    unsupported_parallel_lane_partial_detection,
-)
+from .modes.dual_lane import choose_parallel_lane_detection
+from .modes.unsupported import unsupported_parallel_lane_partial_detection
 from .candidate.fallback import hard_fallback_detection
 from .candidate.selection import select_detection_candidate
 

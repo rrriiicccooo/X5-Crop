@@ -6,4 +6,4 @@ Import concrete helpers from their owning modules, for example
 
 from __future__ import annotations
 
-__all__: list[str] = []
+__all__: tuple[str, ...] = ()
