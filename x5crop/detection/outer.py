@@ -6,7 +6,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ..domain import Box, OuterCandidate
-from ..format_specs import CONTENT_ASPECTS_HORIZONTAL, FilmFormat
+from ..formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ..geometry import (
     box_cache_key,
     cached_separator_profile,
@@ -39,7 +39,7 @@ class OuterProposalStrategy:
 
 def separator_first_cache_key(
     base_candidates: list[OuterCandidate],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
 ) -> tuple[Any, ...]:
@@ -53,7 +53,7 @@ def separator_first_cache_key(
 
 def separator_geometry_cache_key(
     base_candidates: list[OuterCandidate],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
 ) -> tuple[Any, ...]:
@@ -68,7 +68,7 @@ def separator_geometry_cache_key(
 
 def long_axis_edge_anchor_cache_key(
     base_candidates: list[OuterCandidate],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
 ) -> tuple[Any, ...]:
@@ -138,7 +138,7 @@ def outer_candidate_strategy(candidate: OuterCandidate | str) -> str:
 
 def outer_proposal_candidates(
     gray_work: np.ndarray,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
@@ -193,7 +193,7 @@ def outer_proposal_candidates(
 def floating_outer_candidates(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     policy: DetectionPolicy,
@@ -292,7 +292,7 @@ def floating_outer_candidates(
 def long_axis_edge_anchor_outer_candidates(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
@@ -535,7 +535,7 @@ def collect_separator_outer_bands(
 def separator_geometry_outer_candidates(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
@@ -681,7 +681,7 @@ def separator_geometry_outer_candidates(
 def separator_dark_band_outer_candidates(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     policy: Optional[DetectionPolicy] = None,
@@ -784,7 +784,7 @@ def separator_dark_band_outer_candidates(
 def separator_first_outer_candidates(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,

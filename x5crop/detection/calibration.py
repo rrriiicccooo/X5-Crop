@@ -15,7 +15,7 @@ from ..constants import (
     REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
 )
 from ..domain import Detection
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..policies.base import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
@@ -36,7 +36,7 @@ def calibrate_candidate_decision(
     gray: np.ndarray,
     detection: Detection,
     config: Config,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     source: str,
     cache: Optional[AnalysisCache] = None,
     policy: Optional[DetectionPolicy] = None,

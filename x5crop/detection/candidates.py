@@ -4,7 +4,7 @@ from typing import Optional
 
 from ..config import Config
 from ..domain import Detection
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..policies.base import DetectionPolicy
 from ..policies.registry import get_detection_policy
 
@@ -18,7 +18,7 @@ def raw_detection_rank(detection: Detection, threshold: float) -> tuple[int, flo
 
 def candidate_counts_for_format(
     config: Config,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     policy: Optional[DetectionPolicy] = None,
 ) -> list[tuple[int, str, tuple[float, ...]]]:
     policy = policy or get_detection_policy(fmt.name, config.strip_mode)

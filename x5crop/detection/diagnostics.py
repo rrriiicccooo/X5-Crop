@@ -8,7 +8,7 @@ import numpy as np
 from ..app_info import VERSION
 from ..constants import HARD_GAP_METHODS, MODEL_GAP_METHODS
 from ..domain import Box, Detection, Gap
-from ..format_specs import CONTENT_ASPECTS_HORIZONTAL, FORMATS
+from ..formats import CONTENT_ASPECTS_HORIZONTAL, FORMATS
 from ..geometry import box_cache_key, cached_separator_profile, interval_mean, make_analysis_cache, work_gray
 from ..policies.base import NearbySeparatorDiagnosticsPolicy, SeparatorProfilePolicy
 from ..policies.registry import get_detection_policy

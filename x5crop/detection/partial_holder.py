@@ -5,7 +5,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ..domain import Box, Detection
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..image.evidence import make_content_evidence_gray
 from ..geometry import work_gray
 from ..policies.base import DetectionPolicy
@@ -16,7 +16,7 @@ from ..utils import HARD_REVIEW_REASONS, clamp_int
 
 def partial_safe_wide_like_gap_detail(
     detection: Detection,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     policy: Optional[DetectionPolicy] = None,
 ) -> dict[str, Any]:
     policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
@@ -67,7 +67,7 @@ def partial_safe_wide_like_gap_detail(
 def partial_safe_leading_content_detail(
     gray: np.ndarray,
     detection: Detection,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     cache: Optional[AnalysisCache],
     policy: Optional[DetectionPolicy] = None,
 ) -> dict[str, Any]:
@@ -140,7 +140,7 @@ def partial_safe_leading_content_detail(
 def partial_safe_frame_content_detail(
     content_detail: dict[str, Any],
     detection: Detection,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     policy: Optional[DetectionPolicy] = None,
 ) -> dict[str, Any]:
     policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
@@ -209,7 +209,7 @@ def partial_extra_holder_frames_gate_detail(
     detection: Detection,
     hard_detail: dict[str, Any],
     content_detail: dict[str, Any],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     source: str,
     joint_score: float,
     content_score: float,

@@ -7,11 +7,11 @@ import numpy as np
 from ..config import Config
 from ..constants import ANALYSIS_SOURCE_HARD_FALLBACK
 from ..domain import Box, Detection, Gap
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..geometry import frame_boxes_from_gaps, map_work_box, work_gray
 
 
-def hard_fallback_detection(gray: np.ndarray, config: Config, fmt: FilmFormat) -> Detection:
+def hard_fallback_detection(gray: np.ndarray, config: Config, fmt: FormatSpec) -> Detection:
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
     count = max(1, int(config.count))

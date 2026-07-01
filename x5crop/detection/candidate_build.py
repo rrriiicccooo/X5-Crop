@@ -7,7 +7,7 @@ import numpy as np
 
 from ..config import Config
 from ..domain import Box, Detection, Gap
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..geometry import (
     apply_nearby_separator_corrections,
     apply_robust_grid,
@@ -34,7 +34,7 @@ from .separator import dark_band_gaps_for_outer
 def build_detection_for_outer(
     gray: np.ndarray,
     config: Config,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     outer: Box,

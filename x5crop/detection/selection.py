@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ..domain import Detection
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..policies.base import DetectionPolicy
 from ..policies.registry import get_detection_policy
 
@@ -54,7 +54,7 @@ def is_partial_safe_auto_candidate(detection: Detection, threshold: float) -> bo
 def select_separator_review_candidate_on_content_mismatch(
     best: Detection,
     candidates: list[Detection],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     policy: DetectionPolicy,
 ) -> Optional[Detection]:
     review_policy = policy.candidate_selection.content_mismatch_review
@@ -109,7 +109,7 @@ def select_separator_review_candidate_on_content_mismatch(
 
 def select_detection_candidate(
     candidates: list[Detection],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     threshold: float,
     policy: Optional[DetectionPolicy] = None,
 ) -> Detection:

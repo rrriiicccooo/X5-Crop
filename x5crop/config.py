@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from .format_specs import (
+from .formats import (
     ANALYSIS_CHOICES,
     COMPRESSION_CHOICES,
     DESKEW_CHOICES,

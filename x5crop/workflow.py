@@ -24,7 +24,7 @@ from .export import (
     review_directory_for,
     write_crops,
 )
-from .format_specs import FilmFormat, FORMATS
+from .formats import FormatSpec, FORMATS
 from .geometry import (
     detection_geometry_config,
     make_analysis_cache,
@@ -174,7 +174,7 @@ def _apply_deskew(
     gray: Any,
     profile: ImageProfile,
     config: Config,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     warnings: list[str],
 ) -> tuple[Any, Any, dict[str, Any]]:
     tuning = format_parameters(fmt.name)

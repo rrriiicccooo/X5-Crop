@@ -8,7 +8,7 @@ import numpy as np
 
 from ..config import Config
 from ..domain import Box, Detection, Gap
-from ..format_specs import CONTENT_ASPECTS_HORIZONTAL, FilmFormat
+from ..formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ..image.evidence import make_content_evidence_gray
 from ..policies.base import ContentPolicy
 from ..policies.registry import get_detection_policy
@@ -298,7 +298,7 @@ def select_content_runs(runs: list[tuple[int, int]], count: int) -> list[tuple[i
 def content_mask_outer_detail(
     evidence_float: np.ndarray,
     gray_work_shape: tuple[int, int],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     cache: Optional[AnalysisCache] = None,
     content_policy: Optional[ContentPolicy] = None,
 ) -> dict[str, Any]:
@@ -346,7 +346,7 @@ def content_mask_outer_detail(
 def content_detection_for_count(
     gray: np.ndarray,
     config: Config,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,

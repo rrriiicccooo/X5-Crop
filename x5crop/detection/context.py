@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..config import Config
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..policies.base import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
@@ -15,12 +15,12 @@ from ..runtime import AnalysisCache
 class DetectionContext:
     gray: np.ndarray
     config: Config
-    format: FilmFormat
+    format: FormatSpec
     policy: DetectionPolicy
     cache: AnalysisCache
 
 
-def detection_policy_for(config: Config, fmt: FilmFormat) -> DetectionPolicy:
+def detection_policy_for(config: Config, fmt: FormatSpec) -> DetectionPolicy:
     return get_detection_policy(fmt.name, config.strip_mode)
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .app_info import REPORT_JSONL_NAME, SCRIPT_NAME, SUMMARY_CSV_NAME, VERSION
 from .config import CliOptions
-from .format_specs import (
+from .formats import (
     ANALYSIS_CHOICES,
     COMPRESSION_CHOICES,
     DESKEW_CHOICES,

@@ -5,7 +5,7 @@ from typing import Optional
 import numpy as np
 
 from ..domain import Box, Gap
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..geometry import (
     apply_nearby_separator_corrections,
     apply_robust_grid,
@@ -26,7 +26,7 @@ def dark_band_gaps_for_outer(
     gray_work: np.ndarray,
     outer: Box,
     count: int,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     policy: Optional[DetectionPolicy] = None,
 ) -> list[Gap]:
     policy = policy or get_detection_policy(fmt.name, "full")

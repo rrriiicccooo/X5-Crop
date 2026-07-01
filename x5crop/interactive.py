@@ -5,7 +5,7 @@ from pathlib import Path
 from .app import run_cli_options
 from .app_info import SCRIPT_NAME, VERSION
 from .config import CliOptions
-from .format_specs import FORMATS
+from .formats import FORMATS
 
 
 FORMAT_ALIASES = {

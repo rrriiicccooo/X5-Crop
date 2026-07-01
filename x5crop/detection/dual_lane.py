@@ -14,7 +14,7 @@ from ..constants import (
     REASON_OUTER_CONTENT_BBOX_MISMATCH,
 )
 from ..domain import Box, Detection, Gap
-from ..format_specs import FORMATS
+from ..formats import FORMATS
 from ..geometry import detect_outer_candidates, map_work_box, work_gray
 from ..policies.registry import get_detection_policy
 from ..utils import bbox_from_mask, box_from_dict

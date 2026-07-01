@@ -7,7 +7,7 @@ import numpy as np
 
 from ..config import Config
 from ..domain import Detection
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..geometry import (
     apply_approved_geometry_adjustment,
     apply_edge_bleed_protection,
@@ -52,7 +52,7 @@ def finalize_detection_decision(
     gray: np.ndarray,
     detection: Detection,
     config: Config,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     analysis_cache: AnalysisCache,
     deskew_detail: dict[str, Any],
 ) -> PostprocessResult:

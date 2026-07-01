@@ -75,6 +75,9 @@ Current stable release: v4.2.8
 - Runtime report 输出文件名统一为 `x5_crop_report.jsonl` 和
   `x5_crop_summary.csv`；historical reference baseline 仍可读取旧
   `split_report.jsonl`。
+- Format 层清理完成：删除旧 `x5crop.format_specs`，`x5crop.formats` 成为
+  format identity、physical spec、count/aspect facts 和 CLI choices 的唯一入口；
+  基础 format 层不再反向依赖 policy 参数层。
 - 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出两条路径。

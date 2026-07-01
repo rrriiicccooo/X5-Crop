@@ -7,7 +7,7 @@ import numpy as np
 
 from ..config import Config
 from ..domain import Detection
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..geometry import original_box_to_work, unique_outer_candidates, work_gray
 from ..policies.base import DetectionPolicy
 from ..policies.registry import get_detection_policy
@@ -142,7 +142,7 @@ def should_try_equal_first_before_wide_retry(
     policy: DetectionPolicy,
     strip_mode: str,
     count: int,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
 ) -> bool:
     retry_policy = policy.candidate_run.equal_first_before_wide_retry
     if not retry_policy.enabled:
@@ -170,7 +170,7 @@ def separator_outer_gap_max_width_override(
 
 def has_partial_safe_wide_like_candidate(
     candidates: list[Detection],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     policy: DetectionPolicy,
 ) -> bool:
     for detection in candidates:
@@ -188,7 +188,7 @@ def has_partial_safe_wide_like_candidate(
 def partial_dark_band_retry_needed(
     current_best: Detection,
     candidates: list[Detection],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     policy: DetectionPolicy,
 ) -> bool:
     retry_policy = policy.candidate_run.dark_band_retry
@@ -217,7 +217,7 @@ def should_try_dark_band_candidates(
     policy: DetectionPolicy,
     strip_mode: str,
     count: int,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     candidates: list[Detection],
     current_best: Optional[Detection],
 ) -> bool:
@@ -238,7 +238,7 @@ def should_try_dark_band_candidates(
 def detect_candidate_for_count(
     gray: np.ndarray,
     config: Config,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,
@@ -406,7 +406,7 @@ def detect_candidate_for_count(
 def detect_fallback_outer_proposal_candidate_for_count(
     gray: np.ndarray,
     config: Config,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,
@@ -461,7 +461,7 @@ def detect_fallback_outer_proposal_candidate_for_count(
 def calibrated_candidates_for_count(
     gray: np.ndarray,
     config: Config,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     offset: float,

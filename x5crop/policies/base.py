@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from .parameters import FormatParameters
 
 
@@ -58,7 +58,7 @@ class CountPolicy:
 
     def count_specs(
         self,
-        fmt: FilmFormat,
+        fmt: FormatSpec,
         strip_mode: str,
         requested_count: int,
         count_override: int | None,

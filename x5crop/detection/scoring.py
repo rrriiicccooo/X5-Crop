@@ -7,7 +7,7 @@ import numpy as np
 
 from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Detection, Gap
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..policies.base import ContentPolicy, DetectionPolicy, SeparatorGeometrySupportModePolicy
 from ..policies.registry import get_detection_policy
 from ..utils import sampled_percentile
@@ -122,7 +122,7 @@ def detail_float(detail: dict[str, Any], key: str, default: float) -> float:
 def hard_full_calibration_floor_applies(
     candidate: Detection,
     hard_detail: dict[str, Any],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     source: str,
     policy: Optional[DetectionPolicy] = None,
 ) -> bool:
@@ -148,7 +148,7 @@ def hard_full_calibration_floor_applies(
 def separator_geometry_support_applies(
     candidate: Detection,
     hard_detail: dict[str, Any],
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     source: str,
     support: str,
     joint_score: float,
@@ -185,7 +185,7 @@ def score_detection(
     gaps: list[Gap],
     boxes: list[Box],
     count: int,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     strip_mode: str,
     policy: Optional[DetectionPolicy] = None,
 ) -> tuple[float, list[str], dict[str, Any]]:

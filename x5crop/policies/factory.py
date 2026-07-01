@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..format_specs import FORMATS
+from ..formats import FORMATS
 from .base import (
     FULL,
     PARTIAL,

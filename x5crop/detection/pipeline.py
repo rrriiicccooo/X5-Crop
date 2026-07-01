@@ -6,7 +6,7 @@ import numpy as np
 
 from ..config import Config
 from ..domain import Detection
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..geometry import make_analysis_cache
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
@@ -20,7 +20,7 @@ from .fallback import hard_fallback_detection
 from .selection import select_detection_candidate
 
 
-def choose_detection(gray: np.ndarray, config: Config, fmt: FilmFormat, cache: Optional[AnalysisCache] = None) -> Detection:
+def choose_detection(gray: np.ndarray, config: Config, fmt: FormatSpec, cache: Optional[AnalysisCache] = None) -> Detection:
     candidates: list[Detection] = []
     cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
     policy = get_detection_policy(fmt.name, config.strip_mode)

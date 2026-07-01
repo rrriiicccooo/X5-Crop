@@ -4,7 +4,7 @@ from dataclasses import replace
 
 from .config import Config
 from .domain import ImageProfile
-from .format_specs import FORMATS
+from .formats import FORMATS
 from .geometry import infer_layout
 from .utils import spatial_shape_from_shape
 

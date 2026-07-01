@@ -8,7 +8,7 @@ import numpy as np
 
 from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Detection, Gap, OuterCandidate
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..image.evidence import make_separator_evidence_gray
 from ..policies.base import (
     EnhancedSeparatorPolicy,

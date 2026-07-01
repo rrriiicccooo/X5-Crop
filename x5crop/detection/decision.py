@@ -20,7 +20,7 @@ from ..constants import (
     REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
 )
 from ..domain import Detection
-from ..format_specs import FilmFormat
+from ..formats import FormatSpec
 from ..policies.decision_contract import DetectionDecisionContract, decision_contract_for
 
 
@@ -249,7 +249,7 @@ def apply_evidence_decision_policy(
     gray: np.ndarray,
     detection: Detection,
     config: Config,
-    fmt: FilmFormat,
+    fmt: FormatSpec,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
 ) -> Detection:

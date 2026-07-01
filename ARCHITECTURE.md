@@ -49,7 +49,7 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - 拥有 Python 交互式启动器菜单。
    - Mac / Windows launcher 只负责找 Python 并调用 `--interactive` 或
      `--interactive-diagnostics`。
-   - format/count 选择共享 `x5crop.format_specs.FORMATS`。
+   - format/count 选择共享 `x5crop.formats.FORMATS`。
 
 4. `x5crop.input_probe`
    - 扫描输入 TIFF。
@@ -75,7 +75,14 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - `presets/` 保存 format 参数；`parameters.py` 是薄 lookup / public export。
    - `decision_contract.py` 是 V4.9 public decision policy contract。
 
-8. `x5crop.detection`
+8. `x5crop.formats`
+   - 是 format identity、physical spec、count/aspect facts 和 CLI choice 的唯一
+     source of truth。
+   - `FormatSpec` 可被 runtime detection、interactive / CLI 和 V4.9 decision
+     contract 共享。
+   - 不导入 `x5crop.policies`，不承载 threshold、gate 或候选策略。
+
+9. `x5crop.detection`
    - 负责 outer proposal、separator/content evidence、candidate build/run、
      scoring、gates、selection、fallback 和 postprocess。
    - `pipeline.py` 应保持主流程 orchestration。
@@ -84,13 +91,13 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
      `dual_lane.py`、`partial_holder.py`、`outer_retry.py`、`calibration.py`、
      `gates.py`、`selection.py` 和 `postprocess.py`。
 
-9. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
+10. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
    - 提供 box、layout、gap、separator profile、frame fit、output adjustment、
      deskew、证据图和 TIFF I/O helper。
    - 需要 format 上下文的 helper 应显式接收 format 或 policy。
    - 这些层不应依赖 detection pipeline。
 
-10. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
+11. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
     `x5crop.report_schema` / `x5crop.reports` / `x5crop.debug`
    - `analysis_reuse` 负责 Debug Analysis report cache 匹配和 cached detection 恢复。
    - `export` 负责输出路径、review copy 和 metadata-safe TIFF crop 写入。
@@ -99,7 +106,7 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - `reports` 只写 JSONL / CSV report；`debug` 只写 Debug Analysis / preview。
    - 不参与候选生成和 PASS/REVIEW 决策。
 
-11. `tools/regression`
+12. `tools/regression`
    - 开发期 report diff、reference baseline compare 和 V4.9 safety
      classification 工具。
    - 不被 `X5_Crop.py` 或 runtime package 导入。
@@ -250,7 +257,7 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - Owns the Python interactive launcher menu.
    - Mac / Windows launchers only find Python and call `--interactive` or
      `--interactive-diagnostics`.
-   - Format/count choices share `x5crop.format_specs.FORMATS`.
+   - Format/count choices share `x5crop.formats.FORMATS`.
 
 4. `x5crop.input_probe`
    - Scans input TIFF files.
@@ -275,19 +282,27 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - `presets/` stores format parameters; `parameters.py` is a thin lookup/export layer.
    - `decision_contract.py` is the V4.9 public decision policy contract.
 
-8. `x5crop.detection`
+8. `x5crop.formats`
+   - Is the single source of truth for format identity, physical specs,
+     count/aspect facts, and CLI choices.
+   - `FormatSpec` is shared by runtime detection, interactive / CLI, and the
+     V4.9 decision contract.
+   - Does not import `x5crop.policies` and does not own thresholds, gates, or
+     candidate strategy.
+
+9. `x5crop.detection`
    - Owns outer proposals, separator/content evidence, candidate build/run,
      scoring, gates, selection, fallback, and postprocess.
    - `pipeline.py` should stay orchestration-focused.
    - `decision.py` applies conservative V4.9 PASS/REVIEW rules in postprocess.
 
-9. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
+10. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
    - Provide boxes, layout, gaps, separator profiles, frame fit, output
      adjustment, deskew, evidence images, and TIFF I/O.
    - Helpers that need format context should receive format or policy explicitly.
    - These layers should not depend on the detection pipeline.
 
-10. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
+11. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
     `x5crop.report_schema` / `x5crop.reports` / `x5crop.debug`
    - `analysis_reuse` matches Debug Analysis report caches and restores cached
      detections.
@@ -299,7 +314,7 @@ together, while TIFF I/O and export-quality behavior remain preserved.
      Analysis / previews.
    - Do not generate candidates or decide PASS/REVIEW.
 
-11. `tools/regression`
+12. `tools/regression`
    - Developer-only report diff, reference baseline compare, and V4.9 safety
      classification tools.
    - Not imported by `X5_Crop.py` or the runtime package.
