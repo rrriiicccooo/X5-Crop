@@ -5,19 +5,14 @@ from pathlib import Path
 from typing import Any, Optional
 
 from .app_info import VERSION
-from .detection.schema import report_schema_for_detection
+from .detection_detail import policy_id_from_detail
 from .domain import Detection, ImageProfile, ProcessResult
+from .report_schema import report_schema_for_detection
 from .utils import json_safe
 
 
 def policy_id_for_detection(detection: Detection) -> str:
-    policy = detection.detail.get("policy")
-    policy_id = detection.detail.get("policy_id")
-    if policy_id:
-        return str(policy_id)
-    if isinstance(policy, dict):
-        return str(policy.get("policy_id", ""))
-    return ""
+    return policy_id_from_detail(detection)
 
 
 def result_from_detection(

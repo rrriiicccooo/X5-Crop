@@ -69,6 +69,9 @@ Current stable release: v4.2.8
   `analysis_reuse` 负责 report cache 复用，`export` 负责输出路径 / review copy /
   TIFF crop 写出，`result_builder` 统一 fresh / cached `ProcessResult` 组装，
   `reports` 只写 JSONL / CSV。
+- 稳定数据契约层清理通过 smoke：report schema serializer 从 `x5crop.detection`
+  移至 `x5crop.report_schema`，`x5crop.detection_detail` 集中记录
+  `Detection.detail` 的稳定消费键。
 - 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出两条路径。
@@ -182,6 +185,10 @@ Verified:
   orchestration, `analysis_reuse` owns report-cache reuse, `export` owns output
   paths / review copies / TIFF crop writes, `result_builder` builds fresh /
   cached `ProcessResult` rows, and `reports` only writes JSONL / CSV.
+- Stable data-contract cleanup smoke passes: report schema serialization moved
+  from `x5crop.detection` to `x5crop.report_schema`, and
+  `x5crop.detection_detail` centralizes the stable `Detection.detail` keys
+  consumed by reports / debug / result builders.
 - 14 format / strip-mode V4.9 decision contract policy smoke tests pass.
 - One-file Debug Analysis smoke writes the V4.9 three-panel debug JPG.
 - Cached analysis reuse smoke covers both approved auto-export and needs_review

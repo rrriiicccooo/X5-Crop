@@ -91,10 +91,11 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - 这些层不应依赖 detection pipeline。
 
 10. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
-    `x5crop.reports` / `x5crop.debug`
+    `x5crop.report_schema` / `x5crop.reports` / `x5crop.debug`
    - `analysis_reuse` 负责 Debug Analysis report cache 匹配和 cached detection 恢复。
    - `export` 负责输出路径、review copy 和 metadata-safe TIFF crop 写入。
    - `result_builder` 统一将 fresh / cached detection 转成 `ProcessResult`。
+   - `report_schema` 将 `Detection` / `ProcessResult` 序列化为稳定 report schema。
    - `reports` 只写 JSONL / CSV report；`debug` 只写 Debug Analysis / preview。
    - 不参与候选生成和 PASS/REVIEW 决策。
 
@@ -135,8 +136,9 @@ V4.9 public policy contract 由 `DetectionDecisionContract` 表达：
 
 `DiagnosticsPolicy`、`ReportPolicy` 和 `DecisionPolicy` detail 不应合并成
 一个大桶：Debug 面向人工快速读图，Report 面向机器回归 / 审计，
-Decision detail 解释 PASS / REVIEW。`x5crop.detection.schema` 只负责
-serializer，不拥有 policy。
+Decision detail 解释 PASS / REVIEW。`x5crop.report_schema` 只负责 serializer，
+不拥有 policy；`x5crop.detection_detail` 集中记录 `Detection.detail` 中被 report /
+debug / result builder 消费的稳定 detail keys。
 
 所有影响 V4.9 decision 的参数必须写入 `report_schema.decision_policy_detail`。
 
@@ -286,11 +288,13 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - These layers should not depend on the detection pipeline.
 
 10. `x5crop.analysis_reuse` / `x5crop.export` / `x5crop.result_builder` /
-    `x5crop.reports` / `x5crop.debug`
+    `x5crop.report_schema` / `x5crop.reports` / `x5crop.debug`
    - `analysis_reuse` matches Debug Analysis report caches and restores cached
      detections.
    - `export` owns output paths, review copies, and metadata-safe TIFF crop writes.
    - `result_builder` converts fresh / cached detections into `ProcessResult`.
+   - `report_schema` serializes `Detection` / `ProcessResult` into the stable
+     report schema.
    - `reports` only writes JSONL / CSV reports; `debug` only writes Debug
      Analysis / previews.
    - Do not generate candidates or decide PASS/REVIEW.
@@ -322,8 +326,9 @@ surface. Decision-affecting V4.9 parameters must be written to
 
 `DiagnosticsPolicy`, `ReportPolicy`, and `DecisionPolicy` detail stay separate:
 Debug is for fast human image review, Report is for machine regression / audit,
-and Decision detail explains PASS / REVIEW. `x5crop.detection.schema` is a
-serializer and does not own policy.
+and Decision detail explains PASS / REVIEW. `x5crop.report_schema` is a
+serializer and does not own policy; `x5crop.detection_detail` centralizes the
+stable `Detection.detail` keys consumed by report / debug / result builders.
 
 ### Behavior That Must Stay Isolated
 

@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw
 
 from ..app_info import SCRIPT_NAME, VERSION
 from ..constants import HARD_GAP_METHODS
+from ..detection_detail import decision_summary, policy_id_from_detail, detail_dict, RISK_SUMMARY
 from ..domain import Box, Detection, Gap
 from ..image.evidence import make_separator_evidence_gray
 from ..runtime import AnalysisCache
@@ -301,15 +302,15 @@ def add_review_lines(rgb: np.ndarray, lines: list[str]) -> np.ndarray:
 
 def make_risk_review_rgb(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> np.ndarray:
     rgb = make_frame_geometry_rgb(gray, detection, cache)
-    decision = detection.detail.get("decision_summary", {})
-    risk = detection.detail.get("risk_summary", {})
+    decision = decision_summary(detection)
+    risk = detail_dict(detection, RISK_SUMMARY)
     lines = [
-        f"policy: {detection.detail.get('policy_id', '')}",
+        f"policy: {policy_id_from_detail(detection)}",
         "reasons: " + (",".join(detection.review_reasons[:4]) if detection.review_reasons else "none"),
     ]
-    if isinstance(decision, dict):
+    if decision:
         lines.append(f"decision pass: {bool(decision.get('pass', False))}")
-    if isinstance(risk, dict):
+    if risk:
         active = [key for key, value in risk.items() if isinstance(value, bool) and value]
         lines.append("risks: " + (",".join(active[:4]) if active else "none"))
     return add_review_lines(rgb, lines)
