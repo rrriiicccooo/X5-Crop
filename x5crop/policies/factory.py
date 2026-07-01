@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from ..formats import FORMATS
@@ -61,7 +62,7 @@ from .base import (
     ShortAxisAspectRetryPolicy,
     EdgeRefineProfilePolicy,
 )
-from .parameters import FormatParameters, format_parameters
+from .parameters import FormatParameters
 
 POLICY_ID_STEMS = {
     "135": "standard_strip",
@@ -97,6 +98,7 @@ class ModePolicyPreset:
 @dataclass(frozen=True)
 class FormatPolicyPreset:
     format_id: str
+    parameters: Callable[[], FormatParameters]
     separator_gate_profile: str
     separator_edge_pair: SeparatorEdgePairPolicy = field(default_factory=SeparatorEdgePairPolicy)
     content_mismatch_review_enabled: bool = False
@@ -864,7 +866,7 @@ def build_policy_from_preset(
 ) -> DetectionPolicy:
     mode_preset = preset.modes[strip_mode]
     fmt = FORMATS[preset.format_id]
-    tuning = format_parameters(preset.format_id)
+    tuning = preset.parameters()
     policy_id_stem = POLICY_ID_STEMS.get(preset.format_id, "unknown_strip")
     return DetectionPolicy(
         policy_id=f"detection_policy_{policy_id_stem}_{strip_mode}",

@@ -78,6 +78,9 @@ Current stable release: v4.2.8
 - Format 层清理完成：删除旧 `x5crop.format_specs`，`x5crop.formats` 成为
   format identity、physical spec、count/aspect facts 和 CLI choices 的唯一入口；
   基础 format 层不再反向依赖 policy 参数层。
+- Policy profile 层清理完成：删除旧 runtime preset / parameter preset 双拆，
+  7 个 `format_*` 文件现在同时拥有 format / mode runtime preset 和对应参数覆盖；
+  `parameters.py` 只保留共享参数类型和默认 helper。
 - 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出两条路径。
@@ -198,6 +201,11 @@ Verified:
 - Runtime report output filenames are standardized as `x5_crop_report.jsonl`
   and `x5_crop_summary.csv`; historical reference baselines can still read the
   old `split_report.jsonl` name.
+- Policy profile layout is consolidated: the old split between runtime preset
+  modules and parameter preset modules is removed, and the 7 `format_*` files
+  now own both each format / mode runtime preset and that format's parameter
+  overrides. `parameters.py` only keeps shared parameter types and default
+  helpers.
 - 14 format / strip-mode V4.9 decision contract policy smoke tests pass.
 - One-file Debug Analysis smoke writes the V4.9 three-panel debug JPG.
 - Cached analysis reuse smoke covers both approved auto-export and needs_review

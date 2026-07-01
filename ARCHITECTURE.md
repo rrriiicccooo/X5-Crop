@@ -70,9 +70,10 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
 7. `x5crop.policies`
    - 通过 `get_detection_policy(format_id, strip_mode)` 解析 runtime policy。
    - `registry.py` 只做 resolve/cache。
-   - `standard_strip.py`、`medium_square.py` 等语义 policy module 拥有各
-     format / mode 的 policy preset。
-   - `presets/` 保存 format 参数；`parameters.py` 是薄 lookup / public export。
+   - `format_135.py`、`format_120_66.py` 等 format profile module 同时拥有
+     format / mode runtime preset 和该 format 的参数覆盖。
+   - `parameters.py` 保存共享参数 dataclass 和默认参数 helper，不维护独立的
+     format preset 映射。
    - `decision_contract.py` 是 V4.9 public decision policy contract。
 
 8. `x5crop.formats`
@@ -153,7 +154,7 @@ debug / result builder 消费的稳定 detail keys。
 
 - 135 full 的稳定完整片条假设不能被其它 format 偷用。
 - 135-dual full 走 dual-lane detector；135-dual partial 保守复核。
-- half geometry support 是通用 capability，但默认只给 `dense_half_frame_full` 开启。
+- half geometry support 是通用 capability，但默认只给 `half/full` 开启。
 - 120-66 dark-band、square-frame、wide-like separator 和 strict holder checks
   只给 120-66 full / partial。
 - 120-67 可以有自己的 short-axis / wide separator retry，但不能继承 120-66 dark-band。
@@ -278,8 +279,11 @@ together, while TIFF I/O and export-quality behavior remain preserved.
 7. `x5crop.policies`
    - Resolves runtime policy through `get_detection_policy(format_id, strip_mode)`.
    - `registry.py` only resolves and caches.
-   - semantic policy modules such as `standard_strip.py` and `medium_square.py` own concrete format / mode policy presets.
-   - `presets/` stores format parameters; `parameters.py` is a thin lookup/export layer.
+   - Format profile modules such as `format_135.py` and `format_120_66.py`
+     own both format / mode runtime presets and that format's parameter
+     overrides.
+   - `parameters.py` stores shared parameter dataclasses and default helpers;
+     it does not keep a separate format preset map.
    - `decision_contract.py` is the V4.9 public decision policy contract.
 
 8. `x5crop.formats`
@@ -350,7 +354,7 @@ stable `Detection.detail` keys consumed by report / debug / result builders.
 - 135 full-strip assumptions must not leak into other formats.
 - 135-dual full uses the dual-lane detector; 135-dual partial stays conservative.
 - Half-frame geometry support is generic, but currently enabled only for
-  `dense_half_frame_full`.
+  `half/full`.
 - 120-66 dark-band, square-frame, wide-like separator, and strict-holder checks
   stay limited to 120-66 full / partial.
 - 120-67 may have its own short-axis / wide-separator retry, but must not inherit
