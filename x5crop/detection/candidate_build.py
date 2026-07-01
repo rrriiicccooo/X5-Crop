@@ -15,12 +15,10 @@ from ..geometry.enhanced_separator import (
     should_run_enhanced_separator_analysis,
 )
 from ..geometry.frame_fit import fit_frame_boxes_from_gaps, frame_boxes_from_gaps
-from ..geometry.gaps import (
-    apply_nearby_separator_corrections,
-    apply_robust_grid,
-    find_gap,
-)
+from ..geometry.gap_search import find_gap
 from ..geometry.layout import work_gray
+from ..geometry.nearby_separator import apply_nearby_separator_corrections
+from ..geometry.robust_grid import apply_robust_grid
 from ..geometry.separator_cache import cached_separator_profile
 from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
@@ -225,7 +223,6 @@ def build_detection_for_outer(
         wh,
         config.bleed_x,
         config.bleed_y,
-        strip_mode,
         origin=origin,
         pitch=pitch,
         frame_fit=policy.frame_fit,

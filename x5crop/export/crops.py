@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import tifffile
 
 from ..config import Config
 from ..domain import Detection, ImageProfile
-from ..image.deskew import crop_array, validate_source_crop_pixels
+from ..image.crop_pixels import crop_array, validate_source_crop_pixels
 from ..io import tiff_write_kwargs, validate_written_tiff
 
 
@@ -18,7 +17,6 @@ def write_crops(
     arr: np.ndarray,
     source_arr: np.ndarray,
     profile: ImageProfile,
-    page: Any,
     detection: Detection,
     config: Config,
     deskew_applied: bool,

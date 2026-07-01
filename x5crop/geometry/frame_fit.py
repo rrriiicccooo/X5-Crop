@@ -198,7 +198,6 @@ def fit_frame_boxes_from_gaps(
     image_h: int,
     bleed_x: int,
     bleed_y: int,
-    strip_mode: str,
     origin: float = 0.0,
     pitch: Optional[float] = None,
     frame_fit: Optional[Any] = None,

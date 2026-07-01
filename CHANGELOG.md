@@ -101,6 +101,11 @@ Current stable release: v4.2.8
   enhanced separator 和 final geometry adjustment 已拆入明确 owning modules；
   runtime 内部不再通过 `geometry.__init__` 宽入口导入底层能力；analysis cache
   初始化移出 geometry，TIFF I/O helper 也不再依赖完整 runtime `Config`。
+- Geometry / Image / IO 基础能力层二次打磨完成：旧 `geometry.gaps` 大工具箱拆为
+  `gap_search`、`gap_trust`、`nearby_separator` 和 `robust_grid`；`image.deskew`
+  只保留 deskew angle 选择，像素旋转和 crop validation 分别移入
+  `image.transforms` / `image.crop_pixels`；`read_tiff` 不再把 TIFF page object
+  传入 workflow/export。
 - 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出两条路径。

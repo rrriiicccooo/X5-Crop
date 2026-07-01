@@ -97,11 +97,17 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - 不导入 `x5crop.policies`，不承载 threshold、gate 或候选策略。
 
 9. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
-   - 提供 box、layout、gap、separator profile、separator cache、edge-pair refine、
-     enhanced separator、frame fit、deskew、证据图和 TIFF I/O helper。
+   - 提供 box、layout、outer primitive、separator profile/cache、gap search、
+     hard-gap trust、nearby separator correction、robust grid、edge-pair refine、
+     enhanced separator、frame fit、deskew angle、pixel transforms、crop pixel
+     validation、证据图和 TIFF I/O helper。
    - 是 detection、export 和 debug 共享的基础能力层。
    - 需要 format 上下文的 helper 应显式接收 format 或 policy。
    - `geometry.__init__` 只标记 package；runtime 应从具体 owning module import。
+   - `image.deskew` 只负责 deskew angle 选择；旋转和裁切像素工具分别归属
+     `image.transforms` 和 `image.crop_pixels`。
+   - `io.tiff.read_tiff` 只返回 array、gray、profile 和 warnings；TIFF page object
+     不沿 runtime/export 链路传播。
    - 这些层不应依赖 detection pipeline，也不应拥有 candidate、gate、finalization、
      output bleed 或 PASS/REVIEW 语义。
 
@@ -347,12 +353,17 @@ together, while TIFF I/O and export-quality behavior remain preserved.
      caps, and calls into final geometry adjustment.
 
 10. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
-   - Provide boxes, layout, gaps, separator profiles, separator cache,
-     edge-pair refine, enhanced separator, frame fit, deskew, evidence images,
-     and TIFF I/O.
+   - Provide boxes, layout, outer primitives, separator profile/cache, gap
+     search, hard-gap trust, nearby separator correction, robust grid,
+     edge-pair refine, enhanced separator, frame fit, deskew angle, pixel
+     transforms, crop pixel validation, evidence images, and TIFF I/O.
    - Helpers that need format context should receive format or policy explicitly.
    - `geometry.__init__` is only a package marker; runtime code should import
      concrete helpers from their owning modules.
+   - `image.deskew` owns only deskew angle selection; rotation and crop pixel
+     helpers live in `image.transforms` and `image.crop_pixels`.
+   - `io.tiff.read_tiff` returns only array, gray, profile, and warnings; TIFF page
+     objects do not flow through runtime/export.
    - These layers should not depend on the detection pipeline and should not own
      candidate, gate, finalization, output bleed, or PASS/REVIEW semantics.
 

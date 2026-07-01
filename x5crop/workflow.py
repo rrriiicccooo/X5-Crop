@@ -34,8 +34,9 @@ from .detection.final_geometry import (
 from .geometry.layout import (
     work_gray,
 )
-from .image.deskew import choose_deskew_angle, rotate_array_expand
+from .image.deskew import choose_deskew_angle
 from .image.evidence import make_gray_u8
+from .image.transforms import rotate_array_expand
 from .io import read_tiff, read_tiff_profile
 from .policies.parameters import format_parameters
 from .policies.registry import get_detection_policy
@@ -60,7 +61,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     if cached_result is not None:
         return _finish_result(cached_result, config)
 
-    arr, gray, profile, page_warnings, page = read_tiff(input_file, config.page)
+    arr, gray, profile, page_warnings = read_tiff(input_file, config.page)
     _extend_unique(warnings, page_warnings)
     source_arr = arr
     config = config_for_profile(config, profile)
@@ -88,7 +89,6 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
         arr,
         source_arr,
         profile,
-        page,
         detection,
         config,
         bool(deskew_detail["applied"]),
@@ -132,7 +132,7 @@ def _result_from_reusable_analysis(
         warnings.append("cached status is needs_review; skipped export")
         return result_from_cached_record(input_file, cached_record, profile, warnings)
 
-    arr, gray, profile, page_warnings, page = read_tiff(input_file, config.page)
+    arr, gray, profile, page_warnings = read_tiff(input_file, config.page)
     _extend_unique(warnings, page_warnings)
     source_arr = arr
     detection = detection_from_record(cached_record)
@@ -153,7 +153,6 @@ def _result_from_reusable_analysis(
         arr,
         source_arr,
         profile,
-        page,
         detection,
         config,
         deskew_applied,
@@ -234,7 +233,6 @@ def _write_crops_if_allowed(
     arr: Any,
     source_arr: Any,
     profile: ImageProfile,
-    page: Any,
     detection: Detection,
     config: Config,
     deskew_applied: bool,
@@ -249,7 +247,6 @@ def _write_crops_if_allowed(
         arr,
         source_arr,
         profile,
-        page,
         detection,
         config,
         deskew_applied,

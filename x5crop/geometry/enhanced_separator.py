@@ -11,7 +11,7 @@ from ..policies.runtime_policy import EnhancedSeparatorPolicy, GapSearchPolicy, 
 from ..runtime import AnalysisCache
 from ..utils import clamp_float
 from .boxes import box_cache_key
-from .gaps import constrain_gap_to_geometry, find_gap
+from .gap_search import constrain_gap_to_geometry, find_gap
 from .separator_cache import cached_enhanced_separator_profile
 
 

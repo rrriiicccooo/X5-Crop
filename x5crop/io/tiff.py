@@ -71,7 +71,7 @@ def read_tiff_profile(path: Path, page_index: int) -> tuple[ImageProfile, list[s
     return profile, warnings
 
 
-def read_tiff(path: Path, page_index: int) -> tuple[np.ndarray, np.ndarray, ImageProfile, list[str], Any]:
+def read_tiff(path: Path, page_index: int) -> tuple[np.ndarray, np.ndarray, ImageProfile, list[str]]:
     warnings: list[str] = []
     with tifffile.TiffFile(path) as tif:
         if not tif.pages:
@@ -85,7 +85,7 @@ def read_tiff(path: Path, page_index: int) -> tuple[np.ndarray, np.ndarray, Imag
         axes = infer_axes(arr)
         profile = profile_from_page(page, tuple(int(x) for x in arr.shape), arr.dtype, axes)
     gray = make_gray_u8(arr, axes, profile.photometric)
-    return arr, gray, profile, warnings, page
+    return arr, gray, profile, warnings
 
 
 def compression_for_write(profile: ImageProfile, mode: str) -> Optional[str]:

@@ -12,12 +12,10 @@ from ..geometry.enhanced_separator import (
     merge_enhanced_separator_gaps,
     should_run_enhanced_separator_analysis,
 )
-from ..geometry.gaps import (
-    apply_nearby_separator_corrections,
-    apply_robust_grid,
-    find_gap,
-    light_hard_gap_trust,
-)
+from ..geometry.gap_search import find_gap
+from ..geometry.gap_trust import light_hard_gap_trust
+from ..geometry.nearby_separator import apply_nearby_separator_corrections
+from ..geometry.robust_grid import apply_robust_grid
 from ..geometry.separator_profile import separator_profile
 from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy

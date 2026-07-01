@@ -9,8 +9,8 @@ import numpy as np
 from .app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
 from .config import Config
 from .domain import Box, Detection, Gap, ImageProfile
-from .image.deskew import rotate_array_expand
 from .image.evidence import make_gray_u8
+from .image.transforms import rotate_array_expand
 from .runtime import REPORT_RECORD_CACHE
 
 
