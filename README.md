@@ -19,6 +19,7 @@ X5 Crop 是一个用于 Hasselblad / Imacon X5 胶片片夹长图的 TIFF 自动
 - `快速启动_Quick_Start.md`：最短上手步骤，适合第一次使用或给他人转交工具。Release 包内对应文件名为 `快速启动_Quick_Start.txt`。
 - `README.md`：完整用户手册，说明安装、文件摆放、启动器、Debug Analysis、输出目录和命令行参数。Release 包内对应文件名为 `README.txt`。
 - `CHANGELOG.md`：开发记录和版本差异，保留在 GitHub 仓库中，适合排查行为变化、回滚或继续调检测逻辑。
+- `ARCHITECTURE.md`：开发者架构地图，说明源码层级、policy 归属、format / mode 隔离规则和回归验证边界。`docs/ARCHITECTURE.md` 保留同内容镜像。
 
 仓库 `main` 分支是开发进度，可能比 Release 新，但不一定是稳定发布版。普通使用以 GitHub Release 为准。
 
@@ -477,6 +478,9 @@ Document map:
   file is named `README.txt`.
 - `CHANGELOG.md`: development notes and version differences for regression
   checks, rollback, and detector work. It is kept in the GitHub repository.
+- `ARCHITECTURE.md`: developer architecture map for source layers, policy
+  ownership, format / mode isolation, and regression boundaries.
+  `docs/ARCHITECTURE.md` keeps the same mirrored content.
 
 The repository `main` branch tracks development progress. It may be newer than
 the Release, but it is not necessarily the stable user package. For normal use,
