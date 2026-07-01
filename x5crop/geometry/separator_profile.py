@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..policies.base import EdgeRefineProfilePolicy, SeparatorProfilePolicy
+from ..policies.runtime_policy import EdgeRefineProfilePolicy, SeparatorProfilePolicy
 from .outer_boxes import runs_from_mask, smooth_1d
 
 

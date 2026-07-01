@@ -8,7 +8,7 @@ from ..domain import Box, Detection
 from ..formats import FormatSpec
 from ..image.evidence import make_content_evidence_gray
 from ..geometry import work_gray
-from ..policies.base import DetectionPolicy
+from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
 from ..utils import HARD_REVIEW_REASONS, clamp_int

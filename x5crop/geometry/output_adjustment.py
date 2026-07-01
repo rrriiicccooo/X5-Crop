@@ -7,7 +7,7 @@ import numpy as np
 
 from ..config import Config
 from ..domain import Box, Detection
-from ..policies.base import (
+from ..policies.runtime_policy import (
     ApprovedGeometryAdjustmentPolicy,
     EdgeBleedProtectionPolicy,
     OutputPolicy,

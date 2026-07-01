@@ -18,7 +18,7 @@ from ..geometry import (
     should_run_enhanced_separator_analysis,
 )
 from .gates import separator_hard_evidence_ok
-from ..policies.base import DetectionPolicy
+from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..utils import clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 

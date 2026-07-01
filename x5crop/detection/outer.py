@@ -13,7 +13,7 @@ from ..geometry import (
     detect_outer_candidates,
     unique_outer_candidates,
 )
-from ..policies.base import (
+from ..policies.runtime_policy import (
     DetectionPolicy,
     GapSearchPolicy,
     OuterPolicy,

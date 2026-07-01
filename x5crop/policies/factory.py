@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..formats import FORMATS
-from .base import (
+from .runtime_policy import (
     FULL,
     PARTIAL,
     ApprovedGeometryAdjustmentPolicy,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .base import FULL, PARTIAL, FrameFitPolicy, SeparatorEdgePairPolicy
+from .runtime_policy import FULL, PARTIAL, FrameFitPolicy, SeparatorEdgePairPolicy
 from .factory import build_policy_from_preset
 from .factory_presets import FormatPolicyPreset, ModePolicyPreset
 from .parameters import FormatParameters

@@ -10,7 +10,7 @@ from ..constants import HARD_GAP_METHODS, MODEL_GAP_METHODS
 from ..domain import Box, Detection, Gap
 from ..formats import CONTENT_ASPECTS_HORIZONTAL, FORMATS
 from ..geometry import box_cache_key, cached_separator_profile, interval_mean, make_analysis_cache, work_gray
-from ..policies.base import NearbySeparatorDiagnosticsPolicy, SeparatorProfilePolicy
+from ..policies.runtime_policy import NearbySeparatorDiagnosticsPolicy, SeparatorProfilePolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
 from ..utils import clamp_float, clamp_int, runs_from_mask

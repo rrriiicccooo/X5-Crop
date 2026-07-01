@@ -10,7 +10,7 @@ from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Detection, Gap, OuterCandidate
 from ..formats import FormatSpec
 from ..image.evidence import make_separator_evidence_gray
-from ..policies.base import (
+from ..policies.runtime_policy import (
     EnhancedSeparatorPolicy,
     EdgeRefineProfilePolicy,
     GapSearchPolicy,

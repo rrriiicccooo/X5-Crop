@@ -6,7 +6,7 @@ from typing import Any, Optional
 from ..constants import HARD_GAP_METHODS
 from ..domain import Detection
 from ..formats import FORMATS
-from ..policies.base import DetectionPolicy, SeparatorGatePolicy
+from ..policies.runtime_policy import DetectionPolicy, SeparatorGatePolicy
 from ..policies.registry import get_detection_policy
 
 

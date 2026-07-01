@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
-from .base import FrameFitPolicy, SeparatorEdgePairPolicy
-from .parameters import FormatParameters
+from .runtime_policy import FrameFitPolicy, SeparatorEdgePairPolicy
+
+if TYPE_CHECKING:
+    from .parameters import FormatParameters
 
 
 @dataclass(frozen=True)

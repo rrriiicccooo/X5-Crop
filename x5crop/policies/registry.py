@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from ..formats import STRIP_CHOICES
-from .base import DetectionPolicy
+from .runtime_policy import DetectionPolicy
 from .format_modules import import_format_module
 
 

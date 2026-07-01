@@ -6,7 +6,7 @@ import numpy as np
 
 from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
-from ..policies.base import GapSearchPolicy, HardGapTrustPolicy, NearbySeparatorCorrectionPolicy, RobustGridPolicy
+from ..policies.runtime_policy import GapSearchPolicy, HardGapTrustPolicy, NearbySeparatorCorrectionPolicy, RobustGridPolicy
 from ..utils import clamp_float, clamp_int
 from .outer_boxes import runs_from_mask
 from .separator_profile import interval_mean

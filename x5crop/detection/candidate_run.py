@@ -9,7 +9,7 @@ from ..config import Config
 from ..domain import Detection
 from ..formats import FormatSpec
 from ..geometry import original_box_to_work, unique_outer_candidates, work_gray
-from ..policies.base import DetectionPolicy
+from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
 from .calibration import calibrate_candidate_decision

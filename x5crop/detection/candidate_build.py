@@ -21,7 +21,7 @@ from ..geometry import (
     should_run_enhanced_separator_analysis,
     work_gray,
 )
-from ..policies.base import DetectionPolicy
+from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
 from ..utils import clamp_int

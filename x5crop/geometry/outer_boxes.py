@@ -5,7 +5,7 @@ from typing import Iterable, Optional
 import numpy as np
 
 from ..domain import Box, OuterCandidate
-from ..policies.base import OuterCandidateDetectionPolicy
+from ..policies.runtime_policy import OuterCandidateDetectionPolicy
 from ..utils import clamp_int
 
 

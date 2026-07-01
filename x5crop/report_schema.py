@@ -22,7 +22,7 @@ from .detection_detail import (
     policy_id_from_detail,
 )
 from .domain import Detection, ProcessResult
-from .policies.base import ReportPolicy
+from .policies.runtime_policy import ReportPolicy
 from .policies.decision_contract import decision_contract_for
 from .policies.ids import REPORT_SCHEMA_VERSION
 from .policies.registry import get_detection_policy

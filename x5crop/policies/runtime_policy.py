@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from ..formats import FormatSpec
 from .ids import REPORT_SCHEMA_VERSION
-from .parameters import FormatParameters
+
+if TYPE_CHECKING:
+    from ..formats import FormatSpec
+    from .parameters import FormatParameters
 
 
 FULL = "full"

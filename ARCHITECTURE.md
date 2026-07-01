@@ -74,7 +74,7 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - `format_135.py`、`format_120_66.py` 等 format profile module 同时拥有
      format / mode runtime preset 和该 format 的参数覆盖。
    - `ids.py` 统一拥有 policy id stem 和 report schema version。
-   - `base.py` 定义 runtime `DetectionPolicy` contract；`reporting.py` 只负责
+   - `runtime_policy.py` 定义 runtime `DetectionPolicy` contract；`reporting.py` 只负责
      runtime policy detail serializer，不拥有 detection result schema。
    - `parameter_types.py` 保存 source parameter group dataclass；`parameters.py`
      保存 `FormatParameters` aggregate、120 共享默认 helper 和 format 参数解析。
@@ -297,7 +297,7 @@ together, while TIFF I/O and export-quality behavior remain preserved.
      own both format / mode runtime presets and that format's parameter
      overrides.
    - `ids.py` owns shared policy id stems and the report schema version.
-   - `base.py` defines the runtime `DetectionPolicy` contract; `reporting.py`
+   - `runtime_policy.py` defines the runtime `DetectionPolicy` contract; `reporting.py`
      only serializes runtime policy detail and does not own the detection result schema.
    - `parameter_types.py` stores source parameter group dataclasses; `parameters.py`
      stores the `FormatParameters` aggregate, shared 120 defaults, and format

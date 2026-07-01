@@ -11,7 +11,7 @@ from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Detection
 from ..formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ..geometry import box_cache_key, original_box_to_work, work_gray
-from ..policies.base import DetectionPolicy
+from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 from ..runtime import AnalysisCache
 from ..utils import bbox_from_mask, box_from_dict, clamp_int

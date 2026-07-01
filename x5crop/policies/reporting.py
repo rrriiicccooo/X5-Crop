@@ -4,7 +4,7 @@ from dataclasses import asdict, fields, is_dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .base import DetectionPolicy
+    from .runtime_policy import DetectionPolicy
     from .decision_contract import DetectionDecisionContract
 
 
@@ -49,6 +49,7 @@ def _outer_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "grid_refine": _plain(outer.grid_refine),
         "short_axis_aspect_retry": _plain(outer.short_axis_aspect_retry),
         "content_alignment": _plain(outer.content_alignment),
+        # Keep the report schema stable: expose only the audited dark-band fields.
         "dark_band_outer": _fields(
             outer.dark_band_outer,
             (

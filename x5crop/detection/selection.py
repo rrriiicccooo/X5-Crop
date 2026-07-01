@@ -6,7 +6,7 @@ from typing import Optional
 
 from ..domain import Detection
 from ..formats import FormatSpec
-from ..policies.base import DetectionPolicy
+from ..policies.runtime_policy import DetectionPolicy
 from ..policies.registry import get_detection_policy
 
 
