@@ -35,8 +35,7 @@ https://github.com/rrriiicccooo/X5-Crop
   references when present.
 - User-facing docs are `README.md`, `快速启动_Quick_Start.md`, and
   `CHANGELOG.md`.
-- Developer architecture docs are `ARCHITECTURE.md` and
-  `docs/ARCHITECTURE.md`; keep them mirrored when updating either copy.
+- Developer architecture doc is root `ARCHITECTURE.md`.
 
 ## Coding Rules
 
@@ -158,8 +157,8 @@ Current state:
 - Current stable GitHub Release remains `v4.2.8`.
 - V4.7 is intended as a clean source-layout rewrite over V4.5.4 behavior, not
   a detector-loosening release.
-- Root `ARCHITECTURE.md` now mirrors `docs/ARCHITECTURE.md` as a bilingual
-  developer architecture guide.
+- Root `ARCHITECTURE.md` is the single bilingual developer architecture guide;
+  no mirrored `docs/` copy is kept.
 
 V4.7 source layout:
 

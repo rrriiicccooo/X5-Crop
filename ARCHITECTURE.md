@@ -8,12 +8,11 @@ This document is the developer architecture map for X5 Crop. It explains the
 current source layout, how policy owns behavior switches, which capabilities can
 be shared, and which format / mode rules must remain isolated.
 
-根目录的 `ARCHITECTURE.md` 和 `docs/ARCHITECTURE.md` 内容保持一致：
-根目录版本方便在 GitHub 首页发现，`docs/` 版本保留给已有开发链接使用。
+架构说明只保留在根目录 `ARCHITECTURE.md`，方便在 GitHub 首页发现，
+也避免 `docs/` 镜像带来重复维护。
 
-The root `ARCHITECTURE.md` and `docs/ARCHITECTURE.md` are kept in sync. The root
-copy is easier to discover on GitHub, while the `docs/` copy preserves existing
-developer links.
+The architecture guide lives only at root `ARCHITECTURE.md`. This keeps it easy
+to discover on GitHub and avoids duplicate maintenance through a `docs/` mirror.
 
 ## 中文说明
 
