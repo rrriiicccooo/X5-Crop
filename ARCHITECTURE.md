@@ -75,6 +75,8 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - `parameters.py` 保存共享参数 dataclass 和默认参数 helper，不维护独立的
      format preset 映射。
    - `decision_contract.py` 是 V4.9 public decision policy contract。
+   - `__init__.py` 只标记 package，不作为 compatibility barrel 或 public
+     re-export surface。
 
 8. `x5crop.formats`
    - 是 format identity、physical spec、count/aspect facts 和 CLI choice 的唯一
@@ -285,6 +287,8 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - `parameters.py` stores shared parameter dataclasses and default helpers;
      it does not keep a separate format preset map.
    - `decision_contract.py` is the V4.9 public decision policy contract.
+   - `__init__.py` is only a package marker, not a compatibility barrel or
+     public re-export surface.
 
 8. `x5crop.formats`
    - Is the single source of truth for format identity, physical specs,

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import import_module
 from typing import Any, Optional
+
+from ..formats import FORMAT_CHOICES
 
 
 @dataclass(frozen=True)
@@ -1762,7 +1765,7 @@ def base_medium_format_parameters(format_name: str, **overrides: Any) -> FormatP
 
 
 def format_parameters(format_name: str) -> FormatParameters:
-    from .registry import policy_module
-
-    module = policy_module(format_name)
+    if format_name not in FORMAT_CHOICES:
+        raise ValueError(f"Unsupported format parameters: {format_name}")
+    module = import_module(f"{__package__}.format_{format_name.replace('-', '_')}")
     return module.parameters()
