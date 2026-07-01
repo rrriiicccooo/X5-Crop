@@ -3,13 +3,10 @@ from __future__ import annotations
 import argparse
 import sys
 import traceback
-from dataclasses import replace
 from pathlib import Path
 
-import tifffile
-
-from .app_info import SCRIPT_NAME, TIFF_SUFFIXES, VERSION
-from .config import Config
+from .app_info import SCRIPT_NAME, VERSION
+from .config import CliOptions
 from .format_specs import (
     ANALYSIS_CHOICES,
     COMPRESSION_CHOICES,
@@ -19,33 +16,13 @@ from .format_specs import (
     LAYOUT_CHOICES,
     STRIP_CHOICES,
 )
-from .geometry import infer_layout
-from .policies.registry import get_detection_policy
-from .reports import write_reports_for_result
-from .utils import spatial_shape_from_shape
-from .workflow import (
-    print_process_result,
-    process_one,
-    process_one_worker,
-    process_parallel_files,
-)
-
-
-def iter_input_files(path: Path) -> list[Path]:
-    if path.is_file():
-        if path.suffix.lower() not in TIFF_SUFFIXES:
-            raise ValueError(f"Input is not a TIFF: {path}")
-        return [path]
-    if path.is_dir():
-        return [p for p in sorted(path.iterdir()) if p.is_file() and p.suffix.lower() in TIFF_SUFFIXES]
-    raise ValueError(f"Path does not exist: {path}")
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=f"X5 Crop V{VERSION} single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/x5_crop_output.")
-    parser.add_argument("--format", choices=FORMAT_CHOICES, required=True, help="Film format; launchers pass this explicitly.")
+    parser.add_argument("--format", choices=FORMAT_CHOICES, help="Film format. Required unless --interactive is used.")
     parser.add_argument("--layout", choices=LAYOUT_CHOICES, default="auto", help="auto/horizontal/vertical single-strip layout.")
     parser.add_argument("--strip", choices=STRIP_CHOICES, default="full", help="full strip or partial/head mode.")
     parser.add_argument("-n", "--count", type=int, default=None, help="Override frame count.")
@@ -68,132 +45,92 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--report", action="store_true", help="Write split_report.jsonl and split_summary.csv.")
     parser.add_argument("--debug", action="store_true", help="Write lightweight JPG previews with detected outer/frame boxes.")
     parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with original gray, debug boxes, and separator evidence.")
-    parser.add_argument("--diagnostics", action="store_true", help="Write read-only diagnostics and diagnostic Debug Analysis overlays. Does not change crop output.")
+    parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --dry-run --no-copy-review-files --no-reuse-analysis.")
     parser.add_argument("--no-reuse-analysis", dest="reuse_analysis", action="store_false", default=True, help="Do not reuse matching Debug Analysis report data for non-dry-run export.")
     parser.add_argument("--jobs", type=int, default=2, help="Parallel TIFF workers. Default 2. Normal runs cap at 2; diagnostics runs cap at 4.")
     parser.add_argument("--debug-errors", action="store_true", help="Print tracebacks on errors.")
+    parser.add_argument("--interactive", action="store_true", help="Prompt for format, mode, and Debug Analysis options.")
+    parser.add_argument("--interactive-diagnostics", action="store_true", help="Prompt for diagnostics options and run read-only diagnostics.")
     parser.add_argument("--version", action="version", version=f"{SCRIPT_NAME} {VERSION}")
     return parser
 
 
-def config_from_args(args: argparse.Namespace) -> Config:
-    input_path = Path(args.input).expanduser().resolve()
-    files_for_probe = [input_path] if input_path.is_file() else iter_input_files(input_path)
-    first_file = next(iter(files_for_probe), None)
-    if first_file is None:
-        raise ValueError(f"No TIFF files found: {input_path}")
-    with tifffile.TiffFile(first_file) as tif:
-        shape = tuple(int(x) for x in tif.pages[int(args.page)].shape)
-    height, width = spatial_shape_from_shape(shape)
-
-    film_format = str(args.format)
-    fmt = FORMATS[film_format]
-    count = int(fmt.default_count if args.count is None else args.count)
-    if count not in fmt.allowed_counts:
-        allowed = ", ".join(str(x) for x in fmt.allowed_counts)
-        raise ValueError(f"--format {fmt.name} allows --count values: {allowed}")
-    layout_auto = str(args.layout) == "auto"
-    layout = infer_layout(width, height) if layout_auto else str(args.layout)
-    bleed_x_default = 20 if args.bleed is None else int(args.bleed)
-    bleed_y_default = 10 if args.bleed is None else int(args.bleed)
-    bleed_x = int(bleed_x_default if args.bleed_x is None else args.bleed_x)
-    bleed_y = int(bleed_y_default if args.bleed_y is None else args.bleed_y)
-    if bleed_x < 0 or bleed_y < 0:
-        raise ValueError("Bleed cannot be negative")
+def options_from_args(args: argparse.Namespace) -> CliOptions:
+    if args.format is None:
+        raise ValueError("--format is required unless --interactive is used")
+    if int(args.page) < 0:
+        raise ValueError("--page must be 0 or greater")
+    if args.count is not None and int(args.count) not in FORMATS[str(args.format)].allowed_counts:
+        allowed = ", ".join(str(x) for x in FORMATS[str(args.format)].allowed_counts)
+        raise ValueError(f"--format {args.format} allows --count values: {allowed}")
+    for name in ("bleed", "bleed_x", "bleed_y"):
+        value = getattr(args, name)
+        if value is not None and int(value) < 0:
+            raise ValueError("Bleed cannot be negative")
     if not (0.0 <= float(args.confidence_threshold) <= 1.0):
         raise ValueError("--confidence-threshold must be between 0 and 1")
     if float(args.deskew_min_angle) < 0 or float(args.deskew_max_angle) <= 0:
         raise ValueError("Deskew angle limits are invalid")
-    jobs_cap = 4 if bool(args.diagnostics) else 2
-    jobs = max(1, min(jobs_cap, int(args.jobs)))
-    return Config(
-        input_path=input_path,
+    if int(args.jobs) < 1:
+        raise ValueError("--jobs must be 1 or greater")
+
+    diagnostics = bool(args.diagnostics)
+    return CliOptions(
+        input_path=Path(args.input).expanduser().resolve(),
         output_dir=Path(args.output).expanduser().resolve() if args.output else None,
-        film_format=film_format,
-        layout_auto=layout_auto,
-        layout=layout,
+        film_format=str(args.format),
+        layout=str(args.layout),
         strip_mode=str(args.strip),
-        count=count,
         count_override=(None if args.count is None else int(args.count)),
         page=int(args.page),
-        bleed_x=bleed_x,
-        bleed_y=bleed_y,
+        bleed=(None if args.bleed is None else int(args.bleed)),
+        bleed_x=(None if args.bleed_x is None else int(args.bleed_x)),
+        bleed_y=(None if args.bleed_y is None else int(args.bleed_y)),
         deskew=str(args.deskew),
         analysis=str(args.analysis),
         deskew_min_angle=float(args.deskew_min_angle),
         deskew_max_angle=float(args.deskew_max_angle),
         confidence_threshold=float(args.confidence_threshold),
         review_dir=Path(args.review_dir).expanduser().resolve() if args.review_dir else None,
-        copy_review_files=bool(args.copy_review_files),
+        copy_review_files=False if diagnostics else bool(args.copy_review_files),
         export_review=bool(args.export_review),
         compression=str(args.compression),
         debug=bool(args.debug),
-        debug_analysis=bool(args.debug_analysis),
-        dry_run=bool(args.dry_run),
-        diagnostics=bool(args.diagnostics),
+        debug_analysis=bool(args.debug_analysis or diagnostics),
+        dry_run=bool(args.dry_run or diagnostics),
+        diagnostics=diagnostics,
         overwrite=bool(args.overwrite),
-        report=bool(args.report),
+        report=bool(args.report or diagnostics),
         debug_errors=bool(args.debug_errors),
-        reuse_analysis=bool(args.reuse_analysis),
-        jobs=jobs,
+        reuse_analysis=False if diagnostics else bool(args.reuse_analysis),
+        jobs=int(args.jobs),
     )
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     try:
-        config = config_from_args(parser.parse_args())
-        files = iter_input_files(config.input_path)
+        args = parser.parse_args(argv)
+        if bool(args.interactive) or bool(args.interactive_diagnostics):
+            from .interactive import run_interactive
+
+            return run_interactive(diagnostics=bool(args.interactive_diagnostics))
+        from .app import run_cli_options
+
+        return run_cli_options(options_from_args(args))
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
+        if "args" in locals() and bool(getattr(args, "debug_errors", False)):
+            traceback.print_exc()
         return 2
-
-    print(f"{SCRIPT_NAME} {VERSION}")
-    print(f"input: {config.input_path}")
-    print(f"files: {len(files)}")
-    layout_label = f"auto(probe={config.layout})" if config.layout_auto else config.layout
-    mode_parts = [f"layout: {layout_label}", f"strip: {config.strip_mode}"]
-    mode_parts.append(f"policy: {get_detection_policy(config.film_format, config.strip_mode).policy_id}")
-    if config.strip_mode == "partial" and config.count_override is None:
-        mode_parts.append("count: auto")
-    if config.debug_analysis:
-        mode_parts.append("debug analysis")
-    if config.dry_run:
-        mode_parts.append("dry run")
-    print("; ".join(mode_parts))
-    print(f"threshold: {config.confidence_threshold:.2f}; analysis: {config.analysis}")
-    if len(files) > 1 and config.jobs > 1:
-        print(f"parallel: {config.jobs} workers")
-    if config.output_dir is not None:
-        print(f"output: {config.output_dir}")
-
-    ok = 0
-    failed = 0
-    approved = 0
-    review = 0
-    total = len(files)
-    worker_config = replace(config, report=False)
-    if total > 1 and config.jobs > 1:
-        ok, failed, approved, review = process_parallel_files(files, config, worker_config)
-    else:
-        for index, path in enumerate(files, start=1):
-            print(f"\n[{index}/{total}] {path.name}")
-            try:
-                result = process_one_worker(path, worker_config)
-                ok += 1
-                approved += int(result.status == "approved_auto")
-                review += int(result.status == "needs_review")
-                write_reports_for_result(result, config)
-                print_process_result(result, config)
-            except Exception as exc:
-                failed += 1
-                print(f"  error: {exc}", file=sys.stderr)
-                if config.debug_errors:
-                    traceback.print_exc()
-
-    print(f"\ndone: ok={ok} failed={failed} approved={approved} review={review}")
-    return 0 if failed == 0 else 1
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+__all__ = [
+    "build_parser",
+    "main",
+    "options_from_args",
+]

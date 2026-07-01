@@ -225,6 +225,12 @@ x5_crop_output/
 python3 X5_Crop.py --help
 ```
 
+启动和双击启动器相同的交互式流程：
+
+```bash
+python3 X5_Crop.py --interactive
+```
+
 普通自动裁切：
 
 ```bash
@@ -451,6 +457,12 @@ Full help:
 
 ```bash
 python3 X5_Crop.py --help
+```
+
+Interactive launcher flow:
+
+```bash
+python3 X5_Crop.py --interactive
 ```
 
 Normal crop:

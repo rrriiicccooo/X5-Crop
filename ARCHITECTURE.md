@@ -21,7 +21,8 @@ V4.9 是一次 evidence-governed decision / policy reset。目标不是为了让
 outer、separator、geometry、content 和 risk 证据能够组合解释时。
 
 - 入口保持精简。
-- workflow 只承担编排职责。
+- CLI、交互式 launcher、input probe、app runner 和 workflow 职责分离。
+- workflow 只承担单图处理编排职责。
 - `x5crop.formats` 明确 format physical spec。
 - detection 只承担 evidence generation、candidate build 和候选排序职责。
 - geometry / image / io 提供低层能力。
@@ -39,16 +40,33 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - V4 Release 会由构建脚本生成单文件发布版。
 
 2. `x5crop.cli`
-   - 解析命令行参数。
+   - 只解析命令行参数并构造 `CliOptions`。
+   - 捕获入口层错误并返回 CLI exit code。
+   - 不读取 TIFF，不推断 layout，不调度 worker。
+
+3. `x5crop.interactive`
+   - 拥有 Python 交互式启动器菜单。
+   - Mac / Windows launcher 只负责找 Python 并调用 `--interactive` 或
+     `--interactive-diagnostics`。
+   - format/count 选择共享 `x5crop.format_specs.FORMATS`。
+
+4. `x5crop.input_probe`
+   - 扫描输入 TIFF。
+   - 验证 page、读取第一张 TIFF shape、推断 layout。
+   - 将 `CliOptions` 转成经过文件探测的 `RuntimeConfig`。
+
+5. `x5crop.app`
    - 打印启动摘要和终端进度。
+   - 调度单文件 / 批量 worker。
+   - 连接入口配置和 workflow。
    - 不实现检测逻辑。
 
-3. `x5crop.workflow`
+6. `x5crop.workflow`
    - 编排 read -> deskew -> detect -> postprocess -> export -> report/debug。
-   - 处理批量任务、报告复用、输出目录和 worker 调度。
+   - 处理单图报告复用、输出目录、Debug Analysis 和导出。
    - 不直接实现 scoring、candidate selection 或 TIFF 写入细节。
 
-4. `x5crop.policies`
+7. `x5crop.policies`
    - 通过 `get_detection_policy(format_id, strip_mode)` 解析 runtime policy。
    - `registry.py` 只做 resolve/cache。
    - `standard_strip.py`、`medium_square.py` 等语义 policy module 拥有各
@@ -56,7 +74,7 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
    - `presets/` 保存 format 参数；`parameters.py` 是薄 lookup / public export。
    - `decision_contract.py` 是 V4.9 public decision policy contract。
 
-5. `x5crop.detection`
+8. `x5crop.detection`
    - 负责 outer proposal、separator/content evidence、candidate build/run、
      scoring、gates、selection、fallback 和 postprocess。
    - `pipeline.py` 应保持主流程 orchestration。
@@ -65,17 +83,17 @@ outer、separator、geometry、content 和 risk 证据能够组合解释时。
      `dual_lane.py`、`partial_holder.py`、`outer_retry.py`、`calibration.py`、
      `gates.py`、`selection.py` 和 `postprocess.py`。
 
-6. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
+9. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
    - 提供 box、layout、gap、separator profile、frame fit、output adjustment、
      deskew、证据图和 TIFF I/O helper。
    - 需要 format 上下文的 helper 应显式接收 format 或 policy。
    - 这些层不应依赖 detection pipeline。
 
-7. `x5crop.reports` / `x5crop.debug`
+10. `x5crop.reports` / `x5crop.debug`
    - 消费稳定的 `Detection`、`ProcessResult` 和 report schema。
    - 不参与候选生成和 PASS/REVIEW 决策。
 
-8. `tools/regression`
+11. `tools/regression`
    - 开发期 report diff、reference baseline compare 和 V4.9 safety
      classification 工具。
    - 不被 `X5_Crop.py` 或 runtime package 导入。
@@ -130,6 +148,8 @@ serializer，不拥有 policy。
 ### 数据和报告契约
 
 - `OuterCandidate.strategy` 是 candidate kind 契约。runtime 不应靠 name prefix 推断行为。
+- `CliOptions` 是未探测输入文件前的用户选项；`RuntimeConfig` 是绑定具体
+  TIFF profile / layout 后的运行配置。
 - `Detection` 和 `ProcessResult` 是 report/debug/export 的稳定输入。
 - report row 顶层包含 `version` 和 `policy_id`。
 - `report_schema` 使用 `v4_9_policy_schema_1`，并包含 `evidence_summary`、
@@ -143,6 +163,8 @@ serializer，不拥有 policy。
 
 ```bash
 python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/policies/*.py x5crop/geometry/*.py x5crop/io/*.py x5crop/image/*.py x5crop/export/*.py x5crop/diagnostics/*.py tools/regression/*.py
+bash -n X5_Crop_Mac.command
+bash -n X5_Crop_Mac_diagnostics.command
 git diff --check
 python3 X5_Crop.py --version
 ```
@@ -194,7 +216,8 @@ separator, geometry, content, and risk evidence can explain the decision
 together, while TIFF I/O and export-quality behavior remain preserved.
 
 - Thin entry.
-- Workflow only orchestrates.
+- CLI, interactive launcher, input probe, app runner, and workflow are separate.
+- Workflow only orchestrates one-image processing.
 - `x5crop.formats` owns physical format specs.
 - Detection owns evidence generation, candidate build, and candidate ranking.
 - Geometry / image / io provide lower-level capabilities.
@@ -212,38 +235,55 @@ together, while TIFF I/O and export-quality behavior remain preserved.
    - V4 Release builds produce a standalone single-file script.
 
 2. `x5crop.cli`
-   - Parses CLI arguments.
+   - Only parses CLI arguments into `CliOptions`.
+   - Catches entry-layer errors and returns CLI exit codes.
+   - Does not read TIFFs, infer layout, or schedule workers.
+
+3. `x5crop.interactive`
+   - Owns the Python interactive launcher menu.
+   - Mac / Windows launchers only find Python and call `--interactive` or
+     `--interactive-diagnostics`.
+   - Format/count choices share `x5crop.format_specs.FORMATS`.
+
+4. `x5crop.input_probe`
+   - Scans input TIFF files.
+   - Validates page, reads the first TIFF shape, and resolves layout.
+   - Converts `CliOptions` into probed `RuntimeConfig`.
+
+5. `x5crop.app`
    - Prints startup summary and terminal progress.
+   - Schedules single-file / batch workers.
+   - Connects entry configuration to workflow.
    - Does not implement detector logic.
 
-3. `x5crop.workflow`
+6. `x5crop.workflow`
    - Orchestrates read -> deskew -> detect -> postprocess -> export -> report/debug.
-   - Owns batch processing, report reuse, output folders, and worker scheduling.
+   - Owns per-image report reuse, output folders, Debug Analysis, and export.
 
-4. `x5crop.policies`
+7. `x5crop.policies`
    - Resolves runtime policy through `get_detection_policy(format_id, strip_mode)`.
    - `registry.py` only resolves and caches.
    - semantic policy modules such as `standard_strip.py` and `medium_square.py` own concrete format / mode policy presets.
    - `presets/` stores format parameters; `parameters.py` is a thin lookup/export layer.
    - `decision_contract.py` is the V4.9 public decision policy contract.
 
-5. `x5crop.detection`
+8. `x5crop.detection`
    - Owns outer proposals, separator/content evidence, candidate build/run,
      scoring, gates, selection, fallback, and postprocess.
    - `pipeline.py` should stay orchestration-focused.
    - `decision.py` applies conservative V4.9 PASS/REVIEW rules in postprocess.
 
-6. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
+9. `x5crop.geometry` / `x5crop.image` / `x5crop.io`
    - Provide boxes, layout, gaps, separator profiles, frame fit, output
      adjustment, deskew, evidence images, and TIFF I/O.
    - Helpers that need format context should receive format or policy explicitly.
    - These layers should not depend on the detection pipeline.
 
-7. `x5crop.reports` / `x5crop.debug`
+10. `x5crop.reports` / `x5crop.debug`
    - Consume stable `Detection`, `ProcessResult`, and report schema data.
    - Do not generate candidates or decide PASS/REVIEW.
 
-8. `tools/regression`
+11. `tools/regression`
    - Developer-only report diff, reference baseline compare, and V4.9 safety
      classification tools.
    - Not imported by `X5_Crop.py` or the runtime package.
@@ -290,6 +330,8 @@ serializer and does not own policy.
 
 - `OuterCandidate.strategy` is the candidate-kind contract. Runtime should not
   infer behavior from name prefixes.
+- `CliOptions` contains user options before input probing. `RuntimeConfig` is the
+  file-probed runtime configuration with concrete TIFF profile / layout context.
 - `Detection` and `ProcessResult` are stable inputs for report/debug/export.
 - Report rows include top-level `version` and `policy_id`.
 - `report_schema` uses `v4_9_policy_schema_1` and includes `evidence_summary`,
@@ -304,6 +346,8 @@ After structure or policy changes, run:
 
 ```bash
 python3 -m py_compile X5_Crop.py x5crop/*.py x5crop/detection/*.py x5crop/debug/*.py x5crop/policies/*.py x5crop/geometry/*.py x5crop/io/*.py x5crop/image/*.py x5crop/export/*.py x5crop/diagnostics/*.py tools/regression/*.py
+bash -n X5_Crop_Mac.command
+bash -n X5_Crop_Mac_diagnostics.command
 git diff --check
 python3 X5_Crop.py --version
 ```

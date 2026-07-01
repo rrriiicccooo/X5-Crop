@@ -33,7 +33,7 @@ Current stable release: v4.2.8
 
 | 版本 | 状态 | 摘要 |
 |---|---|---|
-| V4.9 | 当前 active 开发版 | Evidence-governed decision / policy reset。新增 explicit format physical spec、`x5crop/policies/decision_contract.py` V4.9 policy contract、`x5crop/detection/decision.py` conservative PASS/REVIEW gate、`v4_9_policy_schema_1` report schema、policy-controlled three-panel Debug Analysis，以及 `tools/regression/` reference classifier。目标是 0 新错误 PASS，并允许可解释的 conservative diff。 |
+| V4.9 | 当前 active 开发版 | Evidence-governed decision / policy reset。新增 explicit format physical spec、clean entry layer（`CliOptions` / `RuntimeConfig`、`input_probe.py`、Python interactive launcher）、`x5crop/policies/decision_contract.py` V4.9 policy contract、`x5crop/detection/decision.py` conservative PASS/REVIEW gate、`v4_9_policy_schema_1` report schema、policy-controlled three-panel Debug Analysis，以及 `tools/regression/` reference classifier。目标是 0 新错误 PASS，并允许可解释的 conservative diff。 |
 | V4.7 | 旧 active 开发版 | Source-layout rewrite。移除旧桥接层，保留 `X5_Crop.py` 薄入口和 `x5crop/` 分层实现；format / mode 行为由 `x5crop/policies/` 管理；`workflow.py` 负责编排；`detection/pipeline.py` 收敛为 orchestration；candidate、dual-lane、partial-holder、fallback、outer retry、calibration 等职责拆入专门模块；geometry 拆分为 focused helpers。目标是保持 V4.5.4 行为，同时让源码边界清晰。 |
 | V4.6 | 开发版 | 建立 `DetectionPolicy` 架构，将 detector、count、outer、separator、content、scoring、selection、postprocess、diagnostics 和 output 行为按 format / strip mode 注册。新增 workflow 层和 historical reference compare helper。 |
 | V4.5.4 | 开发版 | 加强 120-66 full / partial 的宽黑条和 strict holder 处理；目标是更稳地解释 120-66 样片，不推广到其它格式。 |
@@ -62,6 +62,9 @@ Current stable release: v4.2.8
 - `python3 X5_Crop.py --version` 输出 `X5_Crop.py 4.9`。
 - V4.9 package py_compile 通过。
 - `git diff --check` 通过。
+- Mac 主启动器和 diagnostics 启动器 `bash -n` 通过。
+- 入口层拆分通过 smoke：`x5crop.cli` 只解析 CLI，`x5crop.app` 负责运行调度，
+  `x5crop.input_probe` 负责 TIFF 输入探测，`x5crop.interactive` 负责启动器菜单。
 - 14 个 format / strip mode V4.9 decision contract policy smoke 通过。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - 七组本地 V4.5.4 reference reports 通过 reference classifier：
@@ -137,7 +140,7 @@ rollback.
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.9 | Current active development | Evidence-governed decision / policy reset. Adds explicit format physical specs, the `x5crop/policies/decision_contract.py` V4.9 policy contract, the `x5crop/detection/decision.py` conservative PASS/REVIEW gate, `v4_9_policy_schema_1`, policy-controlled three-panel Debug Analysis, and a `tools/regression/` reference classifier. The goal is 0 new wrong PASS with explainable conservative diffs. |
+| V4.9 | Current active development | Evidence-governed decision / policy reset. Adds explicit format physical specs, a clean entry layer (`CliOptions` / `RuntimeConfig`, `input_probe.py`, Python interactive launcher), the `x5crop/policies/decision_contract.py` V4.9 policy contract, the `x5crop/detection/decision.py` conservative PASS/REVIEW gate, `v4_9_policy_schema_1`, policy-controlled three-panel Debug Analysis, and a `tools/regression/` reference classifier. The goal is 0 new wrong PASS with explainable conservative diffs. |
 | V4.7 | Previous active development | Source-layout rewrite. Removes old bridge layers, keeps a thin `X5_Crop.py` entry and layered `x5crop/` implementation, moves format/mode behavior into `x5crop/policies/`, keeps `workflow.py` as orchestration, narrows `detection/pipeline.py`, and splits candidate, dual-lane, partial-holder, fallback, outer-retry, calibration, and geometry helpers into focused modules. The goal is V4.5.4 behavior with clearer source boundaries. |
 | V4.6 | Development | Introduces the `DetectionPolicy` architecture for detector, count, outer, separator, content, scoring, selection, postprocess, diagnostics, and output behavior by format / strip mode. Adds workflow separation and a historical reference compare helper. |
 | V4.5.4 | Development | Strengthens 120-66 full / partial wide-dark-band and strict-holder handling while keeping that risk model isolated to 120-66. |
@@ -166,6 +169,10 @@ Verified:
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 4.9`.
 - V4.9 package py_compile passes.
 - `git diff --check` passes.
+- The main Mac launcher and diagnostics launcher pass `bash -n`.
+- Entry-layer smoke passes: `x5crop.cli` only parses CLI, `x5crop.app` owns run
+  dispatch, `x5crop.input_probe` owns TIFF input probing, and
+  `x5crop.interactive` owns launcher prompts.
 - 14 format / strip-mode V4.9 decision contract policy smoke tests pass.
 - One-file Debug Analysis smoke writes the V4.9 three-panel debug JPG.
 - Seven local V4.5.4 reference reports pass the reference classifier:

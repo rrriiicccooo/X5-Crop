@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import concurrent.futures
 import math
-import sys
-import traceback
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any, Optional
@@ -40,7 +37,6 @@ from .reports import (
     review_directory_for,
     write_crops,
     write_jsonl,
-    write_reports_for_result,
     write_summary,
 )
 from .utils import clamp_float, json_safe
@@ -263,58 +259,7 @@ def process_one(input_file: Path, config: Config) -> ProcessResult:
     return result
 
 
-def print_process_result(result: ProcessResult, config: Config) -> None:
-    print(f"  status={result.status} confidence={result.confidence:.3f}")
-    for warning in result.warnings:
-        print(f"  info: {warning}")
-    if result.output_files:
-        print(f"  wrote: {len(result.output_files)} TIFF files")
-        if config.output_dir is not None:
-            for out in result.output_files:
-                print(f"    {Path(out).name}")
-
-
-def process_parallel_files(
-    files: list[Path],
-    config: Config,
-    worker_config: Config,
-) -> tuple[int, int, int, int]:
-    ok = 0
-    failed = 0
-    approved = 0
-    review = 0
-    total = len(files)
-    try:
-        executor_context = concurrent.futures.ProcessPoolExecutor(max_workers=config.jobs)
-    except (OSError, PermissionError) as exc:
-        print(f"info: process workers unavailable ({exc}); using thread workers")
-        executor_context = concurrent.futures.ThreadPoolExecutor(max_workers=config.jobs)
-    with executor_context as executor:
-        future_to_path = {
-            executor.submit(process_one_worker, path, worker_config): path
-            for path in files
-        }
-        for index, future in enumerate(concurrent.futures.as_completed(future_to_path), start=1):
-            path = future_to_path[future]
-            print(f"\n[{index}/{total}] {path.name}")
-            try:
-                result = future.result()
-                ok += 1
-                approved += int(result.status == "approved_auto")
-                review += int(result.status == "needs_review")
-                write_reports_for_result(result, config)
-                print_process_result(result, config)
-            except Exception as exc:
-                failed += 1
-                print(f"  error: {exc}", file=sys.stderr)
-                if config.debug_errors:
-                    traceback.print_exc()
-    return ok, failed, approved, review
-
-
 __all__ = [
-    "print_process_result",
     "process_one",
     "process_one_worker",
-    "process_parallel_files",
 ]
