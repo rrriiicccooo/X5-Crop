@@ -95,7 +95,7 @@ REVIEW contract。
 | Policy activation | format / mode policy presets | `policies/format_*.py` | format-specific 逻辑是否只在本 format/mode 显式启用。 |
 | Policy activation | runtime policy assembly | `policies/factory*.py`, `runtime_*.py` | preset、parameters、runtime policy 是否一一映射；默认字段不得让报告误以为逻辑已 active。 |
 | Policy activation | final decision contract | `policies/decision_contract.py`, `policies/decision_overrides.py` | runtime `DetectionPolicy` 与 final `DetectionDecisionContract` 的证据门槛不能语义漂移。 |
-| Mode-specific detector | dual-lane detector | `detection/modes/dual_lane.py` | `135-dual/full` 是否独立于普通 135 strip；lane split 和 lane merge 是否可解释。 |
+| Mode-specific detector | dual-lane detector | `detection/modes/dual_lane.py`, `detection/modes/parallel_lane_split.py`, `detection/modes/parallel_lane_detect.py`, `detection/modes/parallel_lane_merge.py` | `135-dual/full` 是否独立于普通 135 strip；入口是否只调度，lane split / lane detect / lane merge 是否可解释。 |
 | Mode-specific detector | unsupported / review-only path | `detection/modes/unsupported.py`, `candidate/fallback.py` | unsupported 或 hard fallback 必须保持 review-only，不得因为 confidence 偶然过线而 PASS。 |
 | Outer | base outer | `geometry/outer_boxes.py`, `detection/outer/base.py` | 基础 holder / content bbox 是否只提出 outer proposal，不承担评分或通过。 |
 | Outer | content floating outer | `detection/outer/content_outer.py` | partial 的内容外框不能单独证明安全；必须经过 separator/content/geometry gate。 |
@@ -317,7 +317,7 @@ and decision detail, and cannot bypass the final PASS / REVIEW contract.
 | Pre-detection | deskew and evidence gray | `image/deskew.py`, `image/evidence.py` | Preprocessing may shape evidence but must not decide PASS / REVIEW. |
 | Policy activation | format facts and policy presets | `formats.py`, `policies/format_*.py` | Physical facts, thresholds, and format/mode activations must stay separate and explicit. |
 | Policy activation | runtime and decision contracts | `policies/runtime_*.py`, `policies/decision_contract.py` | `DetectionPolicy` and `DetectionDecisionContract` must not drift semantically. |
-| Mode-specific detector | dual-lane and review-only paths | `detection/modes/*`, `candidate/fallback.py` | Dedicated detectors and unsupported paths must stay isolated and conservative. |
+| Mode-specific detector | dual-lane and review-only paths | `detection/modes/dual_lane.py`, `detection/modes/parallel_lane_*.py`, `detection/modes/unsupported.py`, `candidate/fallback.py` | Dedicated detectors and unsupported paths must stay isolated and conservative. |
 | Outer | base, content, edge-anchor, separator-first, separator-geometry, dark-band outer | `detection/outer/*`, `geometry/outer_boxes.py` | Outer proposals only propose or correct boxes; they do not score or authorize PASS. |
 | Outer retry | content-aligned, format-geometry, short-axis retry | `detection/outer/retry_*.py`, `detection/outer/outer_correction.py` | Corrections must be policy-scoped and re-enter candidate assessment. |
 | Gap / separator | profile, cache, normal gap search, hard trust, edge pair, robust grid | `geometry/separator_*`, `geometry/gap_search.py`, `geometry/gap_trust.py`, `geometry/edge_pairs.py`, `geometry/robust_grid.py` | Hard evidence must stay stronger than model/equal/grid evidence, and cache keys must include policy-relevant context. |

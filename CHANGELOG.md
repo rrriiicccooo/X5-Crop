@@ -54,6 +54,9 @@ Current stable release: v4.2.8
 - `git diff --check` 通过。
 - Mac 主启动器和 diagnostics 启动器 `bash -n` 通过。
 - Entry、workflow、policy、foundation、detection、report/debug/export 和 tools 分层 smoke 通过。
+- `135-dual/full` mode detector 内部拆为 thin orchestrator、lane split、lane detect
+  和 lane merge；lane format / count / total format 从 active policy 与 format spec
+  读取，不再隐藏在 merge 逻辑中。
 - 14 个 format / strip mode decision contract policy smoke 通过；final contract
   由 active runtime `DetectionPolicy` 派生，避免 geometry support、partial edge
   和 diagnostics/output policy 漂移。
@@ -141,6 +144,9 @@ Verified:
 - `git diff --check` passes.
 - Main Mac launcher and diagnostics launcher pass `bash -n`.
 - Entry, workflow, policy, foundation, detection, report/debug/export, and tools layer smoke checks pass.
+- The `135-dual/full` mode detector is split into a thin orchestrator, lane
+  split, lane detect, and lane merge; lane format / count / total format now
+  come from the active policy and format spec instead of hidden merge constants.
 - 14 format / strip-mode decision contract policy smoke checks pass; the final
   contract is derived from the active runtime `DetectionPolicy` to prevent
   geometry support, partial-edge, diagnostics, and output-policy drift.

@@ -23,7 +23,7 @@ def choose_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec, c
     cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
     policy = get_detection_policy(fmt.name, config.strip_mode)
     if policy.detector.kind == "dual_lane":
-        detection = choose_parallel_lane_detection(gray, config, cache)
+        detection = choose_parallel_lane_detection(gray, config, cache, policy)
         detection.detail["policy"] = policy.report_detail()
         return detection
     if policy.detector.kind == "review_only":
