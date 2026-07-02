@@ -7,7 +7,7 @@ from .analysis_reuse import (
     make_analysis_cache_metadata,
     result_from_reusable_analysis,
 )
-from .config import RuntimeConfig
+from .runtime_config import RuntimeConfig
 from .detection.pipeline import choose_detection
 from .detection.final.finalize import finalize_detection
 from .debug.outputs import write_debug_outputs
@@ -17,12 +17,12 @@ from .export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from .export.paths import output_directory_for
 from .formats import FORMATS
 from .analysis_cache import make_analysis_cache
+from .geometry.output_bleed import detection_bleed_parameters
 from .io.tiff import read_tiff, read_tiff_profile
-from .output_geometry import detection_geometry_config
 from .policies.registry import get_detection_policy
 from .report_outputs import write_report_outputs_for_result
 from .result_builder import result_from_detection
-from .source_config import config_for_profile
+from .profile_runtime import runtime_for_profile
 
 
 def process_one_worker(input_file: Path, config: RuntimeConfig) -> ProcessResult:
@@ -33,7 +33,7 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     output_dir = output_directory_for(input_file, config)
     output_dir.mkdir(parents=True, exist_ok=True)
     profile, warnings = read_tiff_profile(input_file, config.page)
-    config = config_for_profile(config, profile)
+    config = runtime_for_profile(config, profile)
     fmt = FORMATS[config.film_format]
 
     cached_result = result_from_reusable_analysis(input_file, config, output_dir, profile, warnings)
@@ -43,13 +43,14 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     arr, gray, profile, page_warnings = read_tiff(input_file, config.page)
     _extend_unique(warnings, page_warnings)
     source_arr = arr
-    config = config_for_profile(config, profile)
+    config = runtime_for_profile(config, profile)
     fmt = FORMATS[config.film_format]
 
     arr, gray, deskew_detail = apply_deskew(arr, gray, profile, config, fmt, warnings)
     analysis_cache = make_analysis_cache(gray, config.layout)
     policy = get_detection_policy(fmt.name, config.strip_mode)
-    detection_config = detection_geometry_config(config, policy.output)
+    detection_bleed = detection_bleed_parameters(policy.output)
+    detection_config = replace(config, bleed_x=detection_bleed.long_axis, bleed_y=detection_bleed.short_axis)
     detection = choose_detection(gray, detection_config, fmt, analysis_cache)
     finalization = finalize_detection(
         gray,

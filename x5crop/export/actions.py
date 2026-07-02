@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..config import RuntimeConfig
+from ..runtime_config import RuntimeConfig
 from ..domain import Detection, ImageProfile
 from .crops import write_crops
 from .review import copy_for_review, review_directory_for

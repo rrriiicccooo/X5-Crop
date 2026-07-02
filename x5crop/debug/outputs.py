@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..config import RuntimeConfig
+from ..runtime_config import RuntimeConfig
 from ..domain import Detection
 from ..export.paths import display_generated_path
 from .writer import write_debug_analysis, write_debug_preview

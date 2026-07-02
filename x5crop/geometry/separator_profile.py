@@ -3,14 +3,14 @@ from __future__ import annotations
 import numpy as np
 
 from ..utils import runs_from_mask, smooth_1d
-from .detection_parameters import EdgeRefineProfileConfig, SeparatorProfileConfig
+from .detection_parameters import EdgeRefineProfileParameters, SeparatorProfileParameters
 
 
 def separator_profile(
     crop: np.ndarray,
-    config: SeparatorProfileConfig | None = None,
+    config: SeparatorProfileParameters | None = None,
 ) -> np.ndarray:
-    config = config or SeparatorProfileConfig()
+    config = config or SeparatorProfileParameters()
     h, w = crop.shape
     if h <= 0 or w <= 0:
         return np.zeros(0, dtype=np.float32)
@@ -63,9 +63,9 @@ def normalize_profile(profile: np.ndarray, high_percentile: float = 99.0) -> np.
 
 def edge_refine_profiles(
     crop: np.ndarray,
-    config: EdgeRefineProfileConfig | None = None,
+    config: EdgeRefineProfileParameters | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    config = config or EdgeRefineProfileConfig()
+    config = config or EdgeRefineProfileParameters()
     h, w = crop.shape
     if h <= 0 or w <= 1:
         zeros = np.zeros(w, dtype=np.float32)

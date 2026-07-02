@@ -9,7 +9,7 @@ from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
 from ..runtime import AnalysisCache
 from ..utils import clamp_float, clamp_int
-from .detection_parameters import EdgePairParameters, EdgeRefineProfileConfig
+from .detection_parameters import EdgePairParameters, EdgeRefineProfileParameters
 from .separator_cache import cached_edge_refine_profiles
 from .separator_profile import edge_refine_profiles, interval_mean, local_edge_peaks
 
@@ -51,7 +51,7 @@ def refine_gaps_by_edge_pairs(
     cache: Optional[AnalysisCache] = None,
     outer: Optional[Box] = None,
     edge_pair_config: Optional[Any] = None,
-    edge_refine_config: EdgeRefineProfileConfig | None = None,
+    edge_refine_config: EdgeRefineProfileParameters | None = None,
 ) -> tuple[list[Gap], dict[str, Any]]:
     h, w = crop.shape
     if count <= 1 or w <= 1 or not gaps:

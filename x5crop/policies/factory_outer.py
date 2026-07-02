@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..formats import FORMATS
-from ..geometry.detection_parameters import OuterBoxDetectionConfig, OuterMaskProfileConfig
+from ..geometry.detection_parameters import OuterBoxDetectionParameters, OuterMaskProfileParameters
 from .factory_presets import FormatPolicyPreset, ModePolicyPreset
 from .parameter_aggregate import FormatParameters
 from .runtime_policy import (
@@ -152,13 +152,13 @@ def outer_policy(
             min_width_ratio=float(edge_anchor.min_width_ratio),
             max_candidates=int(edge_anchor.max_candidates),
         ),
-        base_candidates=OuterBoxDetectionConfig(
+        base_candidates=OuterBoxDetectionParameters(
             white_x_width_multiplier=float(base_candidates.white_x_width_multiplier),
             white_x_extra_ratio=float(base_candidates.white_x_extra_ratio),
             candidate_max_area=float(base_candidates.candidate_max_area),
             mask_expand_ratio=float(base_candidates.mask_expand_ratio),
             mask_profiles=tuple(
-                OuterMaskProfileConfig(
+                OuterMaskProfileParameters(
                     name=profile.name,
                     low=profile.low,
                     high=profile.high,

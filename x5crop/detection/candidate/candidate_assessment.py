@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...constants import (
     ANALYSIS_SOURCE_CONTENT,
     ANALYSIS_SOURCE_SEPARATOR,
@@ -32,7 +32,7 @@ from .scoring import (
 )
 
 
-def apply_candidate_decision_policy(
+def apply_candidate_assessment_policy(
     gray: np.ndarray,
     detection: Detection,
     config: RuntimeConfig,
@@ -216,7 +216,7 @@ def apply_candidate_decision_policy(
         ANALYSIS_SOURCE_SEPARATOR if source == "separator" else ANALYSIS_SOURCE_CONTENT
     )
     candidate.detail["content_evidence"] = content_detail
-    candidate.detail["candidate_decision"] = {
+    candidate.detail["candidate_assessment"] = {
         "source": source,
         "joint_score": float(joint_score),
         "auto_gate": bool(auto_gate),

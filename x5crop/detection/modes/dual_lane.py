@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...constants import (
     ANALYSIS_SOURCE_PARALLEL_LANE,
     REASON_CONTENT_ASPECT_CONFLICT,
@@ -51,7 +51,7 @@ def detect_parallel_strip_lane(
     lane_index: int,
     cache,
 ) -> Optional[Detection]:
-    from ..candidate.candidate_decision import apply_candidate_decision_policy
+    from ..candidate.candidate_assessment import apply_candidate_assessment_policy
     from ..candidate.build import build_detection_for_outer
     from ..evidence.content_evidence import content_evidence_detail
     from ..outer.alignment import outer_content_alignment_detail
@@ -84,7 +84,7 @@ def detect_parallel_strip_lane(
             outer_candidate.strategy,
             cache=cache,
         )
-        calibrated = apply_candidate_decision_policy(
+        calibrated = apply_candidate_assessment_policy(
             gray,
             raw,
             lane_config,
@@ -194,7 +194,7 @@ def choose_parallel_lane_detection(gray: np.ndarray, config: RuntimeConfig, cach
             "work_outer": detection.detail.get("work_outer"),
             "content_evidence": detection.detail.get("content_evidence", {}),
             "outer_content_alignment": detection.detail.get("outer_content_alignment", {}),
-            "candidate_decision": detection.detail.get("candidate_decision", {}),
+            "candidate_assessment": detection.detail.get("candidate_assessment", {}),
         }
         for index, detection in enumerate(confirmed_lanes, start=1)
     ]

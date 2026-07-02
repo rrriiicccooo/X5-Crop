@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...constants import ANALYSIS_SOURCE_HARD_FALLBACK
 from ...domain import Box, Detection, Gap
 from ...formats import FormatSpec

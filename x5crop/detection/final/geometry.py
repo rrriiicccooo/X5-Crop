@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...domain import Box, Detection
 from ...geometry.boxes import map_work_box, original_box_to_work
 from ...geometry.layout import work_gray

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .detection_detail import candidate_competition, candidate_decision
+from .detection_detail import candidate_competition, candidate_assessment
 from .domain import Detection
 from .policies.runtime_policy import ReportPolicy
 from .policies.registry import get_detection_policy
@@ -24,14 +24,14 @@ def selected_candidate(detection: Detection) -> dict[str, Any]:
         "strip_mode": detection.strip_mode,
         "confidence": float(detection.confidence),
         "review_reasons": list(detection.review_reasons),
-        "candidate_decision": candidate_decision(detection),
+        "candidate_assessment": candidate_assessment(detection),
     }
 
 
 def gate_records(detection: Detection) -> list[dict[str, Any]]:
-    decision = candidate_decision(detection)
+    assessment = candidate_assessment(detection)
     gates: list[dict[str, Any]] = []
-    hard = decision.get("separator_hard_evidence", {})
+    hard = assessment.get("separator_hard_evidence", {})
     if isinstance(hard, dict):
         gates.append(
             {
@@ -41,7 +41,7 @@ def gate_records(detection: Detection) -> list[dict[str, Any]]:
                 "detail": hard,
             }
         )
-    partial = decision.get("partial_safe_extra_frames", {})
+    partial = assessment.get("partial_safe_extra_frames", {})
     if isinstance(partial, dict) and bool(partial.get("used", False)):
         gates.append(
             {
@@ -54,14 +54,14 @@ def gate_records(detection: Detection) -> list[dict[str, Any]]:
     gates.append(
         {
             "name": "auto_pass_gate",
-            "ok": bool(decision.get("auto_gate", False)),
-            "reason": "auto_gate_passed" if decision.get("auto_gate", False) else "auto_gate_failed",
+            "ok": bool(assessment.get("auto_gate", False)),
+            "reason": "auto_gate_passed" if assessment.get("auto_gate", False) else "auto_gate_failed",
             "detail": {
-                "joint_score": decision.get("joint_score"),
-                "content_support": decision.get("content_support"),
-                "geometry_score": decision.get("geometry_score"),
-                "separator_score": decision.get("separator_score"),
-                "content_score": decision.get("content_score"),
+                "joint_score": assessment.get("joint_score"),
+                "content_support": assessment.get("content_support"),
+                "geometry_score": assessment.get("geometry_score"),
+                "separator_score": assessment.get("separator_score"),
+                "content_score": assessment.get("content_score"),
             },
         }
     )

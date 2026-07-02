@@ -6,7 +6,7 @@ import traceback
 from pathlib import Path
 
 from .app_info import REPORT_JSONL_NAME, SCRIPT_NAME, SUMMARY_CSV_NAME, VERSION
-from .config import CliOptions
+from .cli_options import CliOptions
 from .formats import (
     ANALYSIS_CHOICES,
     COMPRESSION_CHOICES,

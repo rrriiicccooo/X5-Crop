@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..config import RuntimeConfig
+from ..runtime_config import RuntimeConfig
 
 
 def output_directory_for(input_file: Path, config: RuntimeConfig) -> Path:

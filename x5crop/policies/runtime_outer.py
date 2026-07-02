@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..geometry.detection_parameters import OuterBoxDetectionConfig, OuterMaskProfileConfig
+from ..geometry.detection_parameters import OuterBoxDetectionParameters, OuterMaskProfileParameters
 
 
 @dataclass(frozen=True)
@@ -176,7 +176,7 @@ class OuterPolicy:
     content_alignment: OuterContentAlignmentPolicy = field(default_factory=OuterContentAlignmentPolicy)
     content_floating_outer: ContentFloatingOuterPolicy = field(default_factory=ContentFloatingOuterPolicy)
     edge_anchor_outer: EdgeAnchorOuterPolicy = field(default_factory=EdgeAnchorOuterPolicy)
-    base_candidates: OuterBoxDetectionConfig = field(default_factory=OuterBoxDetectionConfig)
+    base_candidates: OuterBoxDetectionParameters = field(default_factory=OuterBoxDetectionParameters)
     separator_outer_band: SeparatorOuterBandPolicy = field(default_factory=SeparatorOuterBandPolicy)
     separator_geometry_outer: SeparatorGeometryOuterPolicy = field(default_factory=SeparatorGeometryOuterPolicy)
     retries: tuple[str, ...] = ()

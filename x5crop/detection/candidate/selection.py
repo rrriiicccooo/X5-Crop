@@ -17,7 +17,7 @@ class SelectionResult:
 
 
 def calibrated_candidate_rank(detection: Detection, threshold: float) -> tuple[int, float, int, float]:
-    candidate = detection.detail.get("candidate_decision", {})
+    candidate = detection.detail.get("candidate_assessment", {})
     joint = float(candidate.get("joint_score", 0.0)) if isinstance(candidate, dict) else 0.0
     partial_safe = bool(
         isinstance(candidate, dict)
@@ -40,7 +40,7 @@ def calibrated_candidate_rank(detection: Detection, threshold: float) -> tuple[i
 
 
 def is_partial_safe_auto_candidate(detection: Detection, threshold: float) -> bool:
-    candidate = detection.detail.get("candidate_decision", {})
+    candidate = detection.detail.get("candidate_assessment", {})
     return bool(
         detection.strip_mode == "partial"
         and detection.confidence >= threshold
@@ -58,8 +58,8 @@ def select_separator_review_candidate_on_content_mismatch(
     policy: DetectionPolicy,
 ) -> Optional[Detection]:
     review_policy = policy.candidate_selection.content_mismatch_review
-    best_decision = best.detail.get("candidate_decision", {})
-    best_source = best_decision.get("source") if isinstance(best_decision, dict) else None
+    best_assessment = best.detail.get("candidate_assessment", {})
+    best_source = best_assessment.get("source") if isinstance(best_assessment, dict) else None
     if (
         not review_policy.enabled
         or best.film_format != fmt.name
@@ -78,16 +78,16 @@ def select_separator_review_candidate_on_content_mismatch(
             or candidate.count != best.count
         ):
             continue
-        candidate_decision = candidate.detail.get("candidate_decision", {})
-        if not isinstance(candidate_decision, dict) or candidate_decision.get("source") != review_policy.candidate_source:
+        candidate_assessment = candidate.detail.get("candidate_assessment", {})
+        if not isinstance(candidate_assessment, dict) or candidate_assessment.get("source") != review_policy.candidate_source:
             continue
-        hard_detail = candidate_decision.get("separator_hard_evidence", {})
+        hard_detail = candidate_assessment.get("separator_hard_evidence", {})
         if not isinstance(hard_detail, dict):
             continue
         expected = max(1, int(hard_detail.get("expected_gaps", best.count - 1) or best.count - 1))
         hard = int(hard_detail.get("hard_gaps", 0) or 0)
         equal = int(hard_detail.get("equal_gaps", 0) or 0)
-        support = str(candidate_decision.get("content_support", ""))
+        support = str(candidate_assessment.get("content_support", ""))
         min_hard = max(1, math.ceil(expected * review_policy.min_hard_ratio))
         if (
             hard >= min_hard
@@ -100,8 +100,8 @@ def select_separator_review_candidate_on_content_mismatch(
     return max(
         plausible,
         key=lambda candidate: (
-            int((candidate.detail.get("candidate_decision", {}).get("separator_hard_evidence", {}) or {}).get("hard_gaps", 0) or 0),
-            float((candidate.detail.get("candidate_decision", {}) or {}).get("joint_score", 0.0) or 0.0),
+            int((candidate.detail.get("candidate_assessment", {}).get("separator_hard_evidence", {}) or {}).get("hard_gaps", 0) or 0),
+            float((candidate.detail.get("candidate_assessment", {}) or {}).get("joint_score", 0.0) or 0.0),
             float(candidate.confidence),
         ),
     )
@@ -130,7 +130,7 @@ def select_detection_candidate(
         separator_review_on_mismatch.detail["content_candidate_mismatch"] = {
             "content_candidate_confidence": float(best.confidence),
             "content_candidate_review_reasons": list(best.review_reasons),
-            "content_candidate_decision": best.detail.get("candidate_decision", {}),
+            "content_candidate_assessment": best.detail.get("candidate_assessment", {}),
         }
         best = separator_review_on_mismatch
         selection_override = override_reason
@@ -145,7 +145,7 @@ def select_detection_candidate(
             "strip_mode": candidate.strip_mode,
             "confidence": float(candidate.confidence),
             "review_reasons": list(candidate.review_reasons),
-            "candidate_decision": candidate.detail.get("candidate_decision", {}),
+            "candidate_assessment": candidate.detail.get("candidate_assessment", {}),
         }
         for index, candidate in enumerate(candidates[: selected_policy.candidate_selection.top_n], start=1)
     ]
@@ -158,7 +158,7 @@ def select_detection_candidate(
             "strip_mode": best.strip_mode,
             "confidence": float(best.confidence),
             "review_reasons": list(best.review_reasons),
-            "candidate_decision": best.detail.get("candidate_decision", {}),
+            "candidate_assessment": best.detail.get("candidate_assessment", {}),
         },
         "selection_override": selection_override,
         "top_candidates": competition,
@@ -171,11 +171,11 @@ def select_detection_candidate(
             best.strip_mode != second.strip_mode
             and min(best.confidence, second.confidence) >= threshold
         )
-        best_decision = best.detail.get("candidate_decision", {})
+        best_assessment = best.detail.get("candidate_assessment", {})
         best_partial_safe = bool(
-            isinstance(best_decision, dict)
-            and isinstance(best_decision.get("partial_safe_extra_frames"), dict)
-            and best_decision["partial_safe_extra_frames"].get("ok", False)
+            isinstance(best_assessment, dict)
+            and isinstance(best_assessment.get("partial_safe_extra_frames"), dict)
+            and best_assessment["partial_safe_extra_frames"].get("ok", False)
         )
         if (
             best.confidence >= threshold

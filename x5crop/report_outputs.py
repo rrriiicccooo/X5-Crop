@@ -6,7 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from .app_info import REPORT_JSONL_NAME, SUMMARY_CSV_NAME
-from .config import RuntimeConfig
+from .runtime_config import RuntimeConfig
 from .domain import ProcessResult
 from .export.paths import output_directory_for
 from .utils import json_safe

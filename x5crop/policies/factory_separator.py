@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from ..formats import FORMATS
 from ..geometry.detection_parameters import (
-    EdgeRefineProfileConfig,
-    EnhancedSeparatorConfig,
-    GapSearchConfig,
-    HardGapTrustConfig,
-    NearbySeparatorCorrectionConfig,
-    RobustGridConfig,
-    SeparatorProfileConfig,
+    EdgeRefineProfileParameters,
+    EnhancedSeparatorParameters,
+    GapSearchParameters,
+    HardGapTrustParameters,
+    NearbySeparatorCorrectionParameters,
+    RobustGridParameters,
+    SeparatorProfileParameters,
 )
 from .factory_presets import FormatPolicyPreset, ModePolicyPreset
 from .parameter_aggregate import FormatParameters
@@ -113,7 +113,7 @@ def separator_policy(
         geometry_support_modes=mode_preset.separator_geometry_support_modes,
         geometry_support=separator_geometry_support_policy(mode_preset, params),
         edge_pair=preset.separator_edge_pair,
-        hard_gap_trust=HardGapTrustConfig(
+        hard_gap_trust=HardGapTrustParameters(
             guard_ratio=float(hard_gap_trust.guard_ratio),
             guard_min=int(hard_gap_trust.guard_min),
             guard_max=int(hard_gap_trust.guard_max),
@@ -141,7 +141,7 @@ def separator_policy(
             continuity_min=float(hard_gap_trust.continuity_min),
             activity_min=float(hard_gap_trust.activity_min),
         ),
-        nearby_correction=NearbySeparatorCorrectionConfig(
+        nearby_correction=NearbySeparatorCorrectionParameters(
             enabled=bool(nearby_correction.enabled),
             window_ratio=float(nearby_correction.window_ratio),
             window_min=int(nearby_correction.window_min),
@@ -159,7 +159,7 @@ def separator_policy(
             local_gain_min=float(nearby_correction.local_gain_min),
             local_gain_max=float(nearby_correction.local_gain_max),
         ),
-        robust_grid=RobustGridConfig(
+        robust_grid=RobustGridParameters(
             constrain_full_shift_ratio=float(robust_grid.constrain_full_shift_ratio),
             constrain_partial_shift_ratio=float(robust_grid.constrain_partial_shift_ratio),
             constrain_shift_min=float(robust_grid.constrain_shift_min),
@@ -184,7 +184,7 @@ def separator_policy(
             hard_protect_min=float(robust_grid.hard_protect_min),
             hard_protect_max=float(robust_grid.hard_protect_max),
         ),
-        gap_search=GapSearchConfig(
+        gap_search=GapSearchParameters(
             radius_ratio=float(gap_search.radius_ratio),
             radius_min=int(gap_search.radius_min),
             radius_max=int(gap_search.radius_max),
@@ -203,7 +203,7 @@ def separator_policy(
             wide_min_mean=float(gap_search.wide_min_mean),
             wide_min_prominence=float(gap_search.wide_min_prominence),
         ),
-        enhanced=EnhancedSeparatorConfig(
+        enhanced=EnhancedSeparatorParameters(
             max_width_ratio=float(enhanced.max_width_ratio),
             max_width_min=float(enhanced.max_width_min),
             max_width_max=float(enhanced.max_width_max),
@@ -212,7 +212,7 @@ def separator_policy(
             max_shift_max=float(enhanced.max_shift_max),
             auto_low_score=float(enhanced.auto_low_score),
         ),
-        profile=SeparatorProfileConfig(
+        profile=SeparatorProfileParameters(
             top_ratio=float(profile.top_ratio),
             bottom_ratio=float(profile.bottom_ratio),
             segments=int(profile.segments),
@@ -232,7 +232,7 @@ def separator_policy(
             smooth_ratio=float(profile.smooth_ratio),
             smooth_min=int(profile.smooth_min),
         ),
-        edge_refine_profile=EdgeRefineProfileConfig(
+        edge_refine_profile=EdgeRefineProfileParameters(
             top_ratio=float(edge_refine.top_ratio),
             bottom_ratio=float(edge_refine.bottom_ratio),
             mean_weight=float(edge_refine.mean_weight),

@@ -7,7 +7,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from .app_info import SCRIPT_NAME, VERSION
-from .config import CliOptions, RuntimeConfig
+from .cli_options import CliOptions
+from .runtime_config import RuntimeConfig
 from .domain import ProcessResult
 from .input_probe import runtime_config_from_options
 from .policies.registry import get_detection_policy

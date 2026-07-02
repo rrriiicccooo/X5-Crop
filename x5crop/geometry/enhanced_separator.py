@@ -11,7 +11,7 @@ from ..runtime import AnalysisCache
 from ..utils import clamp_float
 from .boxes import box_cache_key
 from .gap_search import constrain_gap_to_geometry, find_gap
-from .detection_parameters import EnhancedSeparatorConfig, GapSearchConfig, RobustGridConfig, SeparatorProfileConfig
+from .detection_parameters import EnhancedSeparatorParameters, GapSearchParameters, RobustGridParameters, SeparatorProfileParameters
 from .separator_cache import cached_enhanced_separator_profile
 
 
@@ -21,10 +21,10 @@ def find_enhanced_gap(
     pitch: float,
     index: int,
     format_name: str,
-    gap_search: GapSearchConfig | None = None,
-    enhanced_config: EnhancedSeparatorConfig | None = None,
+    gap_search: GapSearchParameters | None = None,
+    enhanced_config: EnhancedSeparatorParameters | None = None,
 ) -> Gap:
-    config = enhanced_config or EnhancedSeparatorConfig()
+    config = enhanced_config or EnhancedSeparatorParameters()
     gap = find_gap(profile, expected, pitch, index, format_name, gap_search=gap_search)
     if gap.method != "detected":
         return gap
@@ -79,10 +79,10 @@ def merge_enhanced_separator_gaps(
     strip_mode: str,
     format_name: str,
     cache: Optional[AnalysisCache] = None,
-    robust_grid: RobustGridConfig | None = None,
-    gap_search: GapSearchConfig | None = None,
-    profile_config: SeparatorProfileConfig | None = None,
-    enhanced_config: EnhancedSeparatorConfig | None = None,
+    robust_grid: RobustGridParameters | None = None,
+    gap_search: GapSearchParameters | None = None,
+    profile_config: SeparatorProfileParameters | None = None,
+    enhanced_config: EnhancedSeparatorParameters | None = None,
 ) -> tuple[list[Gap], dict[str, Any]]:
     crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
     if crop.size == 0 or outer.width <= 0 or outer.height <= 0:
@@ -90,10 +90,10 @@ def merge_enhanced_separator_gaps(
     cache_key: Optional[tuple[Any, ...]] = None
     if cache is not None:
         policy_key = (
-            robust_grid or RobustGridConfig(),
-            gap_search or GapSearchConfig(),
-            profile_config or SeparatorProfileConfig(),
-            enhanced_config or EnhancedSeparatorConfig(),
+            robust_grid or RobustGridParameters(),
+            gap_search or GapSearchParameters(),
+            profile_config or SeparatorProfileParameters(),
+            enhanced_config or EnhancedSeparatorParameters(),
         )
         cache_key = enhanced_separator_merge_cache_key(outer, gaps, origin, pitch, strip_mode, format_name, policy_key)
         cached = cache.enhanced_separator_merges.get(cache_key)
@@ -151,9 +151,9 @@ def should_run_enhanced_separator_analysis(
     analysis: str,
     gaps: list[Gap],
     count: int,
-    enhanced_config: EnhancedSeparatorConfig | None = None,
+    enhanced_config: EnhancedSeparatorParameters | None = None,
 ) -> bool:
-    config = enhanced_config or EnhancedSeparatorConfig()
+    config = enhanced_config or EnhancedSeparatorParameters()
     if analysis == "off":
         return False
     if analysis == "always":

@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...domain import Box, Detection, Gap
 from ...formats import FormatSpec
 from ...geometry.boxes import map_work_box

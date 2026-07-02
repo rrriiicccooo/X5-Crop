@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...constants import ANALYSIS_SOURCE_UNSUPPORTED
 from ...domain import Box, Detection
 from ...geometry.boxes import map_work_box

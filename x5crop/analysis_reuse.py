@@ -7,13 +7,17 @@ from typing import Any, Optional
 import numpy as np
 
 from .app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
-from .config import RuntimeConfig
+from .runtime_config import RuntimeConfig
 from .domain import Box, Detection, Gap, ImageProfile, ProcessResult
 from .export.crops import write_crops
+from .geometry.output_bleed import (
+    AxisBleedParameters,
+    output_bleed_parameters_for_detection,
+    reapply_cached_output_bleed,
+)
 from .image.evidence import make_gray_u8
 from .image.transforms import rotate_array_expand
 from .io.tiff import read_tiff
-from .output_geometry import output_bleed_config_for_detection, reapply_cached_output_bleed
 from .policies.registry import get_detection_policy
 from .result_builder import result_from_cached_record, result_from_detection
 from .runtime import REPORT_RECORD_CACHE
@@ -203,10 +207,11 @@ def result_from_reusable_analysis(
         detection.detail,
         warnings,
     )
-    reapply_cached_output_bleed(detection, config, gray.shape[1], gray.shape[0])
+    base_bleed = AxisBleedParameters(long_axis=int(config.bleed_x), short_axis=int(config.bleed_y))
+    reapply_cached_output_bleed(detection, base_bleed, gray.shape[1], gray.shape[0])
     policy = get_detection_policy(detection.film_format, detection.strip_mode)
-    output_config = output_bleed_config_for_detection(config, detection, policy.output)
-    reapply_cached_output_bleed(detection, output_config, gray.shape[1], gray.shape[0])
+    output_bleed = output_bleed_parameters_for_detection(base_bleed, detection, policy.output)
+    reapply_cached_output_bleed(detection, output_bleed, gray.shape[1], gray.shape[0])
     output_files = write_crops(
         input_file,
         arr,

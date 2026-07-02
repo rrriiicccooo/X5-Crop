@@ -4,7 +4,7 @@ from pathlib import Path
 
 from .app import run_cli_options
 from .app_info import SCRIPT_NAME, VERSION
-from .config import CliOptions
+from .cli_options import CliOptions
 from .formats import FORMATS
 
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ...geometry.detection_parameters import GapSearchConfig
+from ...geometry.detection_parameters import GapSearchParameters
 from ...policies.runtime_policy import OuterPolicy, SeparatorOuterBandPolicy
 from ...utils import clamp_float, clamp_int, runs_from_mask
 
@@ -76,7 +76,7 @@ def collect_separator_outer_bands(
     short_axis: float,
     coordinate_limit: float,
     band_policy: SeparatorOuterBandPolicy,
-    gap_search_config: GapSearchConfig,
+    gap_search_config: GapSearchParameters,
     outer_policy: OuterPolicy,
 ) -> tuple[list[dict[str, float]], float]:
     peak_threshold = float(band_policy.min_score)

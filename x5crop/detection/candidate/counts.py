@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...domain import Detection
 from ...formats import FormatSpec
 from ...policies.runtime_policy import DetectionPolicy

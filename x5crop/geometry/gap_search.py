@@ -7,7 +7,7 @@ import numpy as np
 from ..constants import HARD_GAP_METHODS
 from ..domain import Gap
 from ..utils import clamp_float, clamp_int, runs_from_mask
-from .detection_parameters import GapSearchConfig, RobustGridConfig
+from .detection_parameters import GapSearchParameters, RobustGridParameters
 
 
 def find_gap(
@@ -17,9 +17,9 @@ def find_gap(
     index: int,
     format_name: str,
     max_width_ratio_override: Optional[float] = None,
-    gap_search: GapSearchConfig | None = None,
+    gap_search: GapSearchParameters | None = None,
 ) -> Gap:
-    config = gap_search or GapSearchConfig()
+    config = gap_search or GapSearchParameters()
     radius = clamp_int(pitch * config.radius_ratio, config.radius_min, config.radius_max)
     lo = max(1, int(round(expected)) - radius)
     hi = min(len(profile) - 1, int(round(expected)) + radius + 1)
@@ -84,11 +84,11 @@ def constrain_gap_to_geometry(
     expected: float,
     pitch: float,
     strip_mode: str,
-    robust_grid: RobustGridConfig | None = None,
+    robust_grid: RobustGridParameters | None = None,
 ) -> Gap:
     if gap.method not in HARD_GAP_METHODS:
         return Gap(gap.index, float(expected), gap.score, "equal")
-    config = robust_grid or RobustGridConfig()
+    config = robust_grid or RobustGridParameters()
     max_shift = clamp_float(
         pitch * (config.constrain_full_shift_ratio if strip_mode == "full" else config.constrain_partial_shift_ratio),
         config.constrain_shift_min,

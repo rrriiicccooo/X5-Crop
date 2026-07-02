@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...constants import (
     ANALYSIS_SOURCE_HARD_FALLBACK,
     ANALYSIS_SOURCE_UNSUPPORTED,
@@ -16,11 +16,12 @@ from ...constants import (
 )
 from ...domain import Detection
 from ...formats import FormatSpec
-from ...output_geometry import (
+from ...geometry.output_bleed import (
+    AxisBleedParameters,
     apply_output_bleed,
-    detection_geometry_config,
+    detection_bleed_parameters,
     detection_has_overlap_bleed_risk,
-    output_bleed_config_for_detection,
+    output_bleed_parameters_for_detection,
 )
 from ...policies.registry import get_detection_policy
 from ...runtime import AnalysisCache
@@ -54,7 +55,8 @@ def finalize_detection(
     deskew_detail: dict[str, Any],
 ) -> DetectionFinalizationResult:
     policy = get_detection_policy(fmt.name, detection.strip_mode)
-    detection_config = detection_geometry_config(config, policy.output)
+    detection_bleed = detection_bleed_parameters(policy.output)
+    detection_config = replace(config, bleed_x=detection_bleed.long_axis, bleed_y=detection_bleed.short_axis)
     content_detail = content_evidence_detail(gray, detection, analysis_cache, policy.content)
     detection.detail["content_evidence"] = content_detail
     outer_alignment = (
@@ -126,9 +128,11 @@ def finalize_detection(
         )
     if policy.diagnostics.overlap_bleed_risk.enabled and not detection_has_overlap_bleed_risk(detection):
         detection.detail["overlap_bleed_risk"] = overlap_bleed_risk_detail(gray, detection, analysis_cache)
-    output_config = output_bleed_config_for_detection(config, detection, policy.output)
+    base_bleed = AxisBleedParameters(long_axis=int(config.bleed_x), short_axis=int(config.bleed_y))
+    output_bleed = output_bleed_parameters_for_detection(base_bleed, detection, policy.output)
+    output_config = replace(config, bleed_x=output_bleed.long_axis, bleed_y=output_bleed.short_axis)
     if policy.finalization.apply_output_bleed:
-        apply_output_bleed(detection, detection_config, output_config, gray.shape[1], gray.shape[0])
+        apply_output_bleed(detection, detection_bleed, output_bleed, gray.shape[1], gray.shape[0])
         apply_edge_bleed_protection(
             detection,
             output_config,

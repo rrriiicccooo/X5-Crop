@@ -4,14 +4,14 @@ from typing import Optional
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...domain import Detection
 from ...formats import FormatSpec
 from ...policies.registry import get_detection_policy
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from .content_candidate import content_detection_for_count
-from .candidate_decision import apply_candidate_decision_policy
+from .candidate_assessment import apply_candidate_assessment_policy
 from .selection import is_partial_safe_auto_candidate
 from .source_policy import fallback_outer_proposals_enabled, should_try_equal_first_before_wide_retry
 from .sources import detect_candidate_for_count, detect_fallback_outer_proposal_candidate_for_count
@@ -40,11 +40,11 @@ def calibrated_candidates_for_count(
         and wide_retry_has_room
     )
     separator = detect_candidate_for_count(gray, config, fmt, count, strip_mode, offset, cache, policy=policy)
-    separator_candidate = apply_candidate_decision_policy(gray, separator, config, fmt, "separator", cache, policy=policy)
+    separator_candidate = apply_candidate_assessment_policy(gray, separator, config, fmt, "separator", cache, policy=policy)
     candidates.append(separator_candidate)
     separator_gate_candidate = separator_candidate
     separator_auto_gate = bool(
-        separator_candidate.detail.get("candidate_decision", {}).get("auto_gate", False)
+        separator_candidate.detail.get("candidate_assessment", {}).get("auto_gate", False)
     )
     if (
         not separator_auto_gate
@@ -62,7 +62,7 @@ def calibrated_candidates_for_count(
             gap_max_width_ratio_override=wide_retry_max_width_ratio,
             policy=policy,
         )
-        wide_candidate = apply_candidate_decision_policy(gray, wide_separator, config, fmt, "separator", cache, policy=policy)
+        wide_candidate = apply_candidate_assessment_policy(gray, wide_separator, config, fmt, "separator", cache, policy=policy)
         wide_candidate.detail["wide_gap_retry"] = {
             "used": True,
             "base_gap_max_width_ratio": float(policy.separator.gap_search.max_width_ratio),
@@ -71,7 +71,7 @@ def calibrated_candidates_for_count(
         if equal_first_before_wide_retry:
             wide_candidate.detail["wide_gap_retry"]["equal_first_before_wide_retry"] = True
         candidates.append(wide_candidate)
-        if bool(wide_candidate.detail.get("candidate_decision", {}).get("auto_gate", False)):
+        if bool(wide_candidate.detail.get("candidate_assessment", {}).get("auto_gate", False)):
             separator_auto_gate = True
             separator_gate_candidate = wide_candidate
     if (
@@ -89,7 +89,7 @@ def calibrated_candidates_for_count(
             policy=policy,
         )
         if fallback_proposal is not None:
-            fallback_candidate = apply_candidate_decision_policy(gray, fallback_proposal, config, fmt, "separator", cache, policy=policy)
+            fallback_candidate = apply_candidate_assessment_policy(gray, fallback_proposal, config, fmt, "separator", cache, policy=policy)
             fallback_candidate.detail["outer_proposal_fallback_retry"] = {
                 "used": True,
                 "separator_first_mode": policy.outer.separator_first,
@@ -99,7 +99,7 @@ def calibrated_candidates_for_count(
             }
             candidates.append(fallback_candidate)
             fallback_auto_gate = bool(
-                fallback_candidate.detail.get("candidate_decision", {}).get("auto_gate", False)
+                fallback_candidate.detail.get("candidate_assessment", {}).get("auto_gate", False)
             )
             if fallback_auto_gate:
                 separator_auto_gate = True
@@ -138,5 +138,5 @@ def calibrated_candidates_for_count(
         policy.content,
     )
     if content is not None:
-        candidates.append(apply_candidate_decision_policy(gray, content, config, fmt, "content", cache, policy=policy))
+        candidates.append(apply_candidate_assessment_policy(gray, content, config, fmt, "content", cache, policy=policy))
     return candidates, stop_after_this_count

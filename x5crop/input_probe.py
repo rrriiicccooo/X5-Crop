@@ -5,7 +5,8 @@ from pathlib import Path
 import tifffile
 
 from .app_info import TIFF_SUFFIXES
-from .config import CliOptions, RuntimeConfig
+from .cli_options import CliOptions
+from .runtime_config import RuntimeConfig
 from .formats import FORMATS
 from .geometry.layout import infer_layout
 from .utils import spatial_shape_from_shape

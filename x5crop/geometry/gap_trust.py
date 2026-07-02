@@ -8,7 +8,7 @@ from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
 from ..utils import clamp_float, clamp_int
 from .nearby_separator import nearby_separator_replacement
-from .detection_parameters import HardGapTrustConfig, NearbySeparatorCorrectionConfig
+from .detection_parameters import HardGapTrustParameters, NearbySeparatorCorrectionParameters
 
 
 def light_hard_gap_trust(
@@ -19,12 +19,12 @@ def light_hard_gap_trust(
     profile: Optional[np.ndarray] = None,
     gray_work: Optional[np.ndarray] = None,
     outer: Optional[Box] = None,
-    hard_gap_trust: HardGapTrustConfig | None = None,
-    nearby_correction: NearbySeparatorCorrectionConfig | None = None,
+    hard_gap_trust: HardGapTrustParameters | None = None,
+    nearby_correction: NearbySeparatorCorrectionParameters | None = None,
 ) -> tuple[str, dict[str, Any]]:
     if gap.method not in HARD_GAP_METHODS or pitch <= 0:
         return "not_hard_gap", {"reason": "not_hard_gap"}
-    trust_config = hard_gap_trust or HardGapTrustConfig()
+    trust_config = hard_gap_trust or HardGapTrustParameters()
     width_ratio = float(gap.width) / max(1.0, float(pitch))
     detail: dict[str, Any] = {
         "width_ratio": float(width_ratio),

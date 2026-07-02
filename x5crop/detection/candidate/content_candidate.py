@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...constants import ANALYSIS_SOURCE_CONTENT_PRIMARY
 from ...domain import Box, Detection, Gap
 from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec

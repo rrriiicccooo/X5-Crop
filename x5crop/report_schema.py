@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 from .app_info import VERSION
 from .detection_detail import (
-    CANDIDATE_DECISION,
+    CANDIDATE_ASSESSMENT,
     CONTENT_EVIDENCE,
     DECISION_POLICY_DETAIL,
     DESKEW,
@@ -62,7 +62,7 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
         "policy": policy,
         "evidence": {
             "content": detail_dict(detection, CONTENT_EVIDENCE),
-            "separator": detail_dict(detection, CANDIDATE_DECISION).get("separator_hard_evidence", {}),
+            "separator": detail_dict(detection, CANDIDATE_ASSESSMENT).get("separator_hard_evidence", {}),
             "outer_content_alignment": detail_dict(detection, OUTER_CONTENT_ALIGNMENT),
         },
         "gates": gate_records(detection),

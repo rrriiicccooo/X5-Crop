@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...constants import HARD_GAP_METHODS
 from ...domain import Box, Detection
 from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
@@ -167,7 +167,7 @@ def retry_with_format_geometry_outer(
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
 ) -> Optional[Detection]:
-    from ..candidate.candidate_decision import apply_candidate_decision_policy
+    from ..candidate.candidate_assessment import apply_candidate_assessment_policy
     from ..evidence.content_evidence import content_evidence_detail
     from ..candidate.build import build_detection_for_outer
 
@@ -206,7 +206,7 @@ def retry_with_format_geometry_outer(
         gap_max_width_ratio_override=gap_override,
         policy=policy,
     )
-    retried = apply_candidate_decision_policy(gray, retried, config, fmt, "separator", cache, policy=policy)
+    retried = apply_candidate_assessment_policy(gray, retried, config, fmt, "separator", cache, policy=policy)
     retry_alignment = outer_content_alignment_detail(gray, retried, cache, policy=policy)
     retry_content = content_evidence_detail(gray, retried, cache, policy.content)
     retry_geometry = format_geometry_model_detail(gray, retried, config, fmt, cache)

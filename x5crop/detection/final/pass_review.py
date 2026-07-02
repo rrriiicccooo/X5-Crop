@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...constants import (
     ANALYSIS_SOURCE_CONTENT,
     ANALYSIS_SOURCE_CONTENT_PRIMARY,
@@ -79,8 +79,8 @@ def normalized_review_reasons(reasons: list[str]) -> list[str]:
 
 
 def _separator_summary(detection: Detection) -> dict[str, Any]:
-    decision = _dict(detection.detail.get("candidate_decision"))
-    hard_detail = _dict(decision.get("separator_hard_evidence"))
+    assessment = _dict(detection.detail.get("candidate_assessment"))
+    hard_detail = _dict(assessment.get("separator_hard_evidence"))
     expected = _int(hard_detail.get("expected_gaps"), max(0, int(detection.count) - 1))
     hard = _int(hard_detail.get("hard_gaps"), _gap_method_count(detection, set(HARD_GAP_METHODS)))
     grid = _int(hard_detail.get("grid_gaps"), _gap_method_count(detection, {"grid"}))
@@ -110,17 +110,17 @@ def evidence_summary_for(
     outer_alignment: dict[str, Any],
     policy: DetectionDecisionContract,
 ) -> dict[str, Any]:
-    decision = _dict(detection.detail.get("candidate_decision"))
+    assessment = _dict(detection.detail.get("candidate_assessment"))
     separator = _separator_summary(detection)
     outer_area_ratio = _float(
         detection.detail.get("outer_area_ratio"),
         (detection.outer.width * detection.outer.height) / float(max(1, gray.shape[0] * gray.shape[1])),
     )
-    geometry_score = _float(decision.get("geometry_score"), 0.0)
-    content_score = _float(decision.get("content_score"), 0.0)
+    geometry_score = _float(assessment.get("geometry_score"), 0.0)
+    content_score = _float(assessment.get("content_score"), 0.0)
     width_cv = _float(detection.detail.get("width_cv"), 1.0)
-    content_support = str(content_detail.get("support", decision.get("content_support", "")))
-    partial_detail = _dict(decision.get("partial_safe_extra_frames"))
+    content_support = str(content_detail.get("support", assessment.get("content_support", "")))
+    partial_detail = _dict(assessment.get("partial_safe_extra_frames"))
     partial_edge_safe = bool(partial_detail.get("ok", False))
     expected = int(separator["expected_gaps"])
     hard_ratio = float(separator["hard_gap_ratio"])
@@ -210,10 +210,10 @@ def risk_summary_for(
     evidence: dict[str, Any],
     policy: DetectionDecisionContract,
 ) -> dict[str, Any]:
-    decision = _dict(detection.detail.get("candidate_decision"))
+    assessment = _dict(detection.detail.get("candidate_assessment"))
     competition = _dict(detection.detail.get("candidate_competition"))
     lucky = _dict(detection.detail.get("lucky_pass_risk_score"))
-    source = str(decision.get("source") or detection.detail.get("analysis_source") or "")
+    source = str(assessment.get("source") or detection.detail.get("analysis_source") or "")
     margin_raw = competition.get("margin_to_second")
     margin = None if margin_raw is None else _float(margin_raw)
     partial_edge_safe = bool(evidence["partial_edge"]["ok"])

@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...domain import Box, Detection
 from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ...geometry.boxes import original_box_to_work
@@ -31,7 +31,7 @@ def corrected_outer_for_short_axis_aspect(
         return None
     if detection.strip_mode != "full" or detection.count != fmt.default_count:
         return None
-    candidate = detection.detail.get("candidate_decision", {})
+    candidate = detection.detail.get("candidate_assessment", {})
     if not isinstance(candidate, dict) or candidate.get("source") != "separator":
         return None
     hard_detail = candidate.get("separator_hard_evidence", {})
@@ -87,7 +87,7 @@ def retry_with_short_axis_aspect_outer(
     content_detail: dict[str, Any],
     cache: AnalysisCache,
 ) -> Optional[Detection]:
-    from ..candidate.candidate_decision import apply_candidate_decision_policy
+    from ..candidate.candidate_assessment import apply_candidate_assessment_policy
     from ..evidence.content_evidence import content_evidence_detail
     from ..candidate.build import build_detection_for_outer
 
@@ -117,7 +117,7 @@ def retry_with_short_axis_aspect_outer(
         allow_outer_refine=False,
         policy=policy,
     )
-    retried = apply_candidate_decision_policy(gray, retried, config, fmt, "separator", cache, policy=policy)
+    retried = apply_candidate_assessment_policy(gray, retried, config, fmt, "separator", cache, policy=policy)
     retry_content = content_evidence_detail(gray, retried, cache, policy.content)
     retry_alignment = outer_content_alignment_detail(gray, retried, cache, policy=policy)
     retried.detail["content_evidence"] = retry_content

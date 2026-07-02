@@ -8,7 +8,7 @@ from ..constants import HARD_GAP_METHODS
 from ..domain import Gap
 from ..utils import clamp_float, clamp_int, runs_from_mask
 from .gap_search import gap_width_cv, local_gap_geometry_error
-from .detection_parameters import NearbySeparatorCorrectionConfig
+from .detection_parameters import NearbySeparatorCorrectionParameters
 from .separator_profile import interval_mean
 
 
@@ -16,11 +16,11 @@ def nearby_separator_replacement(
     profile: np.ndarray,
     gap: Gap,
     pitch: float,
-    correction_config: NearbySeparatorCorrectionConfig | None = None,
+    correction_config: NearbySeparatorCorrectionParameters | None = None,
 ) -> Optional[dict[str, Any]]:
     if gap.method not in HARD_GAP_METHODS or pitch <= 0 or gap.start is None or gap.end is None:
         return None
-    config = correction_config or NearbySeparatorCorrectionConfig()
+    config = correction_config or NearbySeparatorCorrectionParameters()
     center = int(round(gap.center))
     current_start = max(0, min(len(profile), int(round(min(gap.start, gap.end)))))
     current_end = max(current_start + 1, min(len(profile), int(round(max(gap.start, gap.end)))))
@@ -96,9 +96,9 @@ def apply_nearby_separator_corrections(
     pitch: float,
     count: int,
     strip_mode: str,
-    correction_config: NearbySeparatorCorrectionConfig | None = None,
+    correction_config: NearbySeparatorCorrectionParameters | None = None,
 ) -> tuple[list[Gap], dict[str, Any]]:
-    config = correction_config or NearbySeparatorCorrectionConfig()
+    config = correction_config or NearbySeparatorCorrectionParameters()
     if not config.enabled or strip_mode != "full" or count <= 1 or len(gaps) != count - 1:
         return gaps, {"used": False, "reason": "not_applicable"}
     if profile.size == 0:

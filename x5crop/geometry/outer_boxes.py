@@ -4,7 +4,7 @@ import numpy as np
 
 from ..domain import Box
 from ..utils import bbox_from_mask, clamp_int, runs_from_mask, smooth_1d
-from .detection_parameters import OuterBoxDetectionConfig, OuterMaskProfileConfig
+from .detection_parameters import OuterBoxDetectionParameters, OuterMaskProfileParameters
 
 
 def first_content_index(border_mask: np.ndarray, min_run: int) -> int:
@@ -21,9 +21,9 @@ def first_content_index(border_mask: np.ndarray, min_run: int) -> int:
 
 def detect_outer(
     gray: np.ndarray,
-    config: OuterBoxDetectionConfig | None = None,
+    config: OuterBoxDetectionParameters | None = None,
 ) -> Box:
-    config = config or OuterBoxDetectionConfig()
+    config = config or OuterBoxDetectionParameters()
     h, w = gray.shape
     not_white = gray < config.bw_not_white_threshold
     dark = gray < config.bw_dark_threshold
@@ -47,9 +47,9 @@ def detect_outer(
 
 def detect_outer_white_x(
     gray: np.ndarray,
-    config: OuterBoxDetectionConfig | None = None,
+    config: OuterBoxDetectionParameters | None = None,
 ) -> Box:
-    config = config or OuterBoxDetectionConfig()
+    config = config or OuterBoxDetectionParameters()
     h, w = gray.shape
     min_run_y = clamp_int(h * config.white_run_ratio, config.white_run_min, config.white_run_max)
     min_run_x = clamp_int(w * config.white_run_ratio, config.white_run_min, config.white_run_max)
@@ -75,10 +75,10 @@ def detect_outer_white_x(
 
 def detect_mask_profile_outer(
     gray: np.ndarray,
-    profile: OuterMaskProfileConfig,
-    config: OuterBoxDetectionConfig | None = None,
+    profile: OuterMaskProfileParameters,
+    config: OuterBoxDetectionParameters | None = None,
 ) -> Box | None:
-    config = config or OuterBoxDetectionConfig()
+    config = config or OuterBoxDetectionParameters()
     h, w = gray.shape
     mask = np.ones_like(gray, dtype=bool)
     if profile.low is not None:

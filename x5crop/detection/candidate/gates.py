@@ -18,7 +18,7 @@ class CandidateGateOutcome:
     detail: dict[str, Any]
 
 
-def separator_gate_min_hard_with_equal_cap_decision(
+def separator_gate_min_hard_with_equal_cap_assessment(
     expected: int,
     hard: int,
     equal: int,
@@ -29,7 +29,7 @@ def separator_gate_min_hard_with_equal_cap_decision(
     return ok, "separator_min_hard_support" if ok else "separator_min_hard_support_weak"
 
 
-def separator_gate_geometry_support_decision(
+def separator_gate_geometry_support_assessment(
     detection: Detection,
     threshold: float,
     equal: int,
@@ -40,7 +40,7 @@ def separator_gate_geometry_support_decision(
     return ok, "separator_geometry_support" if ok else "separator_geometry_support_weak"
 
 
-def separator_gate_all_internal_gaps_hard_decision(
+def separator_gate_all_internal_gaps_hard_assessment(
     detection: Detection,
     expected: int,
     hard: int,
@@ -140,11 +140,11 @@ def candidate_has_hard_separator_evidence(
         ok = False
         reason = "leading_grid_separator_failure"
     elif gate.profile == "min_hard_with_equal_cap":
-        ok, reason = separator_gate_min_hard_with_equal_cap_decision(expected, hard, equal, gate)
+        ok, reason = separator_gate_min_hard_with_equal_cap_assessment(expected, hard, equal, gate)
     elif gate.profile == "geometry_support":
-        ok, reason = separator_gate_geometry_support_decision(detection, threshold, equal, expected, gate)
+        ok, reason = separator_gate_geometry_support_assessment(detection, threshold, equal, expected, gate)
     else:
-        ok, reason = separator_gate_all_internal_gaps_hard_decision(
+        ok, reason = separator_gate_all_internal_gaps_hard_assessment(
             detection,
             expected,
             hard,
@@ -178,8 +178,8 @@ def candidate_has_hard_separator_evidence(
 
 __all__ = [
     "CandidateGateOutcome",
-    "separator_gate_all_internal_gaps_hard_decision",
-    "separator_gate_geometry_support_decision",
-    "separator_gate_min_hard_with_equal_cap_decision",
+    "separator_gate_all_internal_gaps_hard_assessment",
+    "separator_gate_geometry_support_assessment",
+    "separator_gate_min_hard_with_equal_cap_assessment",
     "candidate_has_hard_separator_evidence",
 ]

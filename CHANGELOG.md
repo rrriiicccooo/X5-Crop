@@ -69,16 +69,16 @@ Current stable release: v4.2.8
   `analysis_reuse` 负责 report cache 复用，`export` 负责输出路径 / review copy /
   TIFF crop 写出，`result_builder` 统一 fresh / cached `ProcessResult` 组装，
   `report_outputs` 只写 JSONL / CSV。
-- Output geometry 边界收紧：新增 `x5crop.output_geometry` 作为 fresh
-  finalization 与 cached analysis reuse 共享的 output bleed helper，cached
-  reuse 不再依赖 `x5crop.detection.final.geometry` 内部实现。
+- Output bleed geometry 边界收紧：`x5crop.geometry.output_bleed` 作为 fresh
+  finalization 与 cached analysis reuse 共享的 frame bleed geometry helper，
+  cached reuse 不再依赖 `x5crop.detection.final.geometry` 内部实现。
 - 基础层依赖方向清理完成：`geometry` / `image` 不再直接读取 policy registry；
   低层检测参数归属 `geometry.detection_parameters`，deskew 参数归属
   `image.deskew_parameters`，`parameter_aggregate.py` 只保留 flat defaults，
   derived views 移入 `parameter_views.py`。
 - 基础层命名进一步收紧：低层 outer / separator / gap / grid 参数类型统一为
-  `*Config`，geometry helper 内部使用 config / params 命名；`runtime_policy.py`
-  不再转出口低层 geometry config 类型。
+  `*Parameters`，geometry helper 内部使用 config / params 命名；`runtime_policy.py`
+  不再转出口低层 geometry parameter 类型。
 - Detection 第 10 层清理完成：`x5crop.detection` 已拆为 `outer/`、`evidence/`、
   `candidate/`、`modes/` 和 `final/` 子包；旧平铺 `outer.py`、`outer_retry.py`、
   `candidate_run.py`、`content.py`、`diagnostics.py`、`finalizer.py` 等模块已移除；
@@ -86,7 +86,7 @@ Current stable release: v4.2.8
 - Detection 层 smoke 通过：递归 `compileall`、runtime import smoke，以及
   135/full、120-66/partial、half/full 三张本地样片 dry-run report 均完成。
 - 命名边界清理完成：candidate-level gate / decision 现在由
-  `candidate/gates.py` 和 `candidate/candidate_decision.py` 表达；最终 PASS/REVIEW 与输出前
+  `candidate/gates.py` 和 `candidate/candidate_assessment.py` 表达；最终 PASS/REVIEW 与输出前
   收口由 `final/pass_review.py` 和 `final/finalize.py` 表达；runtime policy 字段统一为
   `finalization`。
 - 稳定数据契约层清理通过 smoke：report schema serializer 从 `x5crop.detection`
@@ -133,10 +133,11 @@ Current stable release: v4.2.8
   `report_sections.py` 承接 candidate/gate section builder；空的 `x5crop.diagnostics`
   占位包已删除；runtime policy types、factory builders、parameter types 和 parameter
   registry 已按职责分组。
-- 非 Detection 层旧兼容面进一步删除：`x5crop.config` 不再 re-export format choices
-  或提供 `Config` 旧别名；`x5crop`、`x5crop.io`、`x5crop.export`、`x5crop.debug`
-  的 package `__init__` 不再 re-export runtime helper；`parameters.py` 和
-  `parameter_types.py` 两个 policy compatibility re-export 文件已删除。
+- 非 Detection 层旧兼容面进一步删除：混合 `config.py` 已删除，入口参数契约改由
+  `cli_options.py` 拥有，运行配置契约改由 `runtime_config.py` 拥有；`x5crop`、
+  `x5crop.io`、`x5crop.export`、`x5crop.debug` 的 package `__init__` 不再
+  re-export runtime helper；`parameters.py` 和 `parameter_types.py` 两个 policy
+  compatibility re-export 文件已删除。
 - Dev tools 层完成清理：`tools/build_standalone.py` 删除旧静态 module list，
   改为自动收集当前 `x5crop/**/*.py` 并生成 embedded import hook；
   `tools/regression` 保持开发期 report compare / safety classifier。
@@ -253,19 +254,19 @@ Verified:
   orchestration, `analysis_reuse` owns report-cache reuse, `export` owns output
   paths / review copies / TIFF crop writes, `result_builder` builds fresh /
   cached `ProcessResult` rows, and `report_outputs` only writes JSONL / CSV.
-- Output geometry boundaries are tightened: `x5crop.output_geometry` is the
-  shared output bleed helper consumed by fresh finalization and cached analysis
-  reuse, so cached reuse no longer depends on `x5crop.detection.final.geometry`
-  internals.
+- Output bleed geometry boundaries are tightened: `x5crop.geometry.output_bleed`
+  is the shared frame bleed geometry helper consumed by fresh finalization and
+  cached analysis reuse, so cached reuse no longer depends on
+  `x5crop.detection.final.geometry` internals.
 - Lower-layer dependency direction is cleaned up: `geometry` / `image` no longer
   read the policy registry directly; low-level detection parameters live in
   `geometry.detection_parameters`, deskew parameters live in
   `image.deskew_parameters`, `parameter_aggregate.py` keeps only flat defaults,
   and derived views live in `parameter_views.py`.
 - Foundation naming is tightened further: low-level outer / separator / gap /
-  grid parameter types use `*Config`, geometry helpers use config / params
+  grid parameter types use `*Parameters`, geometry helpers use config / params
   naming internally, and `runtime_policy.py` no longer re-exports low-level
-  geometry config types.
+  geometry parameter types.
 - Detection layer 10 cleanup is complete: `x5crop.detection` is split into
   `outer/`, `evidence/`, `candidate/`, `modes/`, and `final/` subpackages. The
   old flat `outer.py`, `outer_retry.py`, `candidate_run.py`, `content.py`,
@@ -275,7 +276,7 @@ Verified:
   and local 135/full, 120-66/partial, and half/full dry-run report samples all
   complete.
 - Naming boundary cleanup is complete: candidate-level gates / decisions are now
-  expressed by `candidate/gates.py` and `candidate/candidate_decision.py`; final
+  expressed by `candidate/gates.py` and `candidate/candidate_assessment.py`; final
   PASS/REVIEW and pre-output finalization are expressed by `final/pass_review.py`
   and `final/finalize.py`; the runtime policy field is consistently named
   `finalization`.
@@ -321,10 +322,11 @@ Verified:
   empty `x5crop.diagnostics` placeholder package is removed; runtime policy
   types, factory builders, parameter types, and the parameter registry are
   grouped by responsibility.
-- Non-detection compatibility surfaces are further removed: `x5crop.config` no
-  longer re-exports format choices or provides the old `Config` alias; the
-  `x5crop`, `x5crop.io`, `x5crop.export`, and `x5crop.debug` package
-  `__init__` files no longer re-export runtime helpers; the `parameters.py` and
+- Non-detection compatibility surfaces are further removed: the mixed
+  `config.py` module is deleted, entry arguments belong to `cli_options.py`, and
+  runtime configuration belongs to `runtime_config.py`; the `x5crop`,
+  `x5crop.io`, `x5crop.export`, and `x5crop.debug` package `__init__` files no
+  longer re-export runtime helpers; the `parameters.py` and
   `parameter_types.py` policy compatibility re-export files are removed.
 - The dev-tool layer is cleaned up: `tools/build_standalone.py` removes the old
   static module list and now auto-collects the current `x5crop/**/*.py` files

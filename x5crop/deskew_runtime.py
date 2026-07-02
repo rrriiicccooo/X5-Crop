@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from .config import RuntimeConfig
+from .runtime_config import RuntimeConfig
 from .domain import ImageProfile
 from .formats import FormatSpec
 from .geometry.layout import work_gray

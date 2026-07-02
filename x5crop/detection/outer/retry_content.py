@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from ...config import RuntimeConfig
+from ...runtime_config import RuntimeConfig
 from ...domain import Detection
 from ...formats import FormatSpec
 from ...policies.registry import get_detection_policy
@@ -21,7 +21,7 @@ def retry_with_content_aligned_outer(
     alignment: dict[str, Any],
     cache: AnalysisCache,
 ) -> Optional[Detection]:
-    from ..candidate.candidate_decision import apply_candidate_decision_policy
+    from ..candidate.candidate_assessment import apply_candidate_assessment_policy
     from ..evidence.content_evidence import content_evidence_detail
     from ..candidate.build import build_detection_for_outer
 
@@ -52,7 +52,7 @@ def retry_with_content_aligned_outer(
         gap_max_width_ratio_override=gap_override,
         policy=policy,
     )
-    retried = apply_candidate_decision_policy(gray, retried, config, fmt, "separator", cache, policy=policy)
+    retried = apply_candidate_assessment_policy(gray, retried, config, fmt, "separator", cache, policy=policy)
     if gap_override is not None:
         retried.detail["wide_gap_retry"] = {
             "used": True,

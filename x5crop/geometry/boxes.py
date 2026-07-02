@@ -9,10 +9,6 @@ def box_cache_key(box: Box) -> tuple[int, int, int, int]:
     return (int(box.left), int(box.top), int(box.right), int(box.bottom))
 
 
-def format_box_cache_key(format_name: str, box: Box) -> tuple[str, int, int, int, int]:
-    return (str(format_name), int(box.left), int(box.top), int(box.right), int(box.bottom))
-
-
 def full_work_box(gray_work: np.ndarray) -> Box:
     return Box(0, 0, gray_work.shape[1], gray_work.shape[0])
 

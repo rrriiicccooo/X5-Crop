@@ -4,7 +4,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..config import RuntimeConfig
+from ..runtime_config import RuntimeConfig
 from ..domain import Detection
 from ..formats import FormatSpec
 from ..analysis_cache import make_analysis_cache

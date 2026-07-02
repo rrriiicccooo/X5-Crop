@@ -5,7 +5,7 @@ from typing import Iterable
 import numpy as np
 
 from ...domain import Box, OuterCandidate
-from ...geometry.detection_parameters import OuterBoxDetectionConfig
+from ...geometry.detection_parameters import OuterBoxDetectionParameters
 from ...geometry.outer_boxes import detect_mask_profile_outer, detect_outer, detect_outer_white_x
 
 
@@ -24,9 +24,9 @@ def unique_outer_candidates(candidates: Iterable[OuterCandidate]) -> list[OuterC
 
 def base_outer_candidates(
     gray: np.ndarray,
-    config: OuterBoxDetectionConfig | None = None,
+    config: OuterBoxDetectionParameters | None = None,
 ) -> list[OuterCandidate]:
-    outer_config = config or OuterBoxDetectionConfig()
+    outer_config = config or OuterBoxDetectionParameters()
     h, w = gray.shape
     bw = detect_outer(gray, outer_config)
     white_x = detect_outer_white_x(gray, outer_config)

@@ -9,7 +9,7 @@ from ..domain import Box, Gap
 from ..utils import clamp_float
 from .gap_search import constrain_gap_to_geometry
 from .gap_trust import light_hard_gap_trust
-from .detection_parameters import HardGapTrustConfig, NearbySeparatorCorrectionConfig, RobustGridConfig
+from .detection_parameters import HardGapTrustParameters, NearbySeparatorCorrectionParameters, RobustGridParameters
 
 
 def apply_robust_grid(
@@ -21,13 +21,13 @@ def apply_robust_grid(
     profile: Optional[np.ndarray] = None,
     gray_work: Optional[np.ndarray] = None,
     outer: Optional[Box] = None,
-    hard_gap_trust: HardGapTrustConfig | None = None,
-    nearby_correction: NearbySeparatorCorrectionConfig | None = None,
-    robust_grid: RobustGridConfig | None = None,
+    hard_gap_trust: HardGapTrustParameters | None = None,
+    nearby_correction: NearbySeparatorCorrectionParameters | None = None,
+    robust_grid: RobustGridParameters | None = None,
 ) -> tuple[list[Gap], dict[str, Any]]:
     if not gaps:
         return gaps, {"grid_used": False}
-    config = robust_grid or RobustGridConfig()
+    config = robust_grid or RobustGridParameters()
     constrained = [constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, strip_mode, config) for gap in gaps]
     reliable = [gap for gap in constrained if gap.method in HARD_GAP_METHODS and gap.score >= config.reliable_min_score]
     if len(reliable) < config.min_reliable:
