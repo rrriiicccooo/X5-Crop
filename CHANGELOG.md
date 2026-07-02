@@ -56,9 +56,11 @@ Current stable release: v4.2.8
 - Entry、workflow、policy、foundation、detection、report/debug/export 和 tools 分层 smoke 通过。
 - `135-dual/full` mode detector 内部拆为 thin orchestrator、policy/spec context、
   lane split、lane detect 和 lane merge；lane format / count / total format /
-  partial unsupported reason 从 active policy 与 format spec 读取，不再隐藏在子模块中。
+  review-only reason 从 active policy 与 format spec 读取，不再隐藏在子模块中。
 - `135-dual/full` lane split 固定使用 work image 的 height / 2；相关文件、policy id、
   analysis source 和 review reason 统一使用 `dual_lane` 命名，不再使用泛化的并行 lane 命名。
+- `review_only` mode 已推广为通用 mode detector 接口；`135-dual/partial` 只是
+  该接口的当前使用者，不再通过 dual-lane detector 或旧的专用模块旁路。
 - 14 个 format / strip mode decision contract policy smoke 通过；final contract
   由 active runtime `DetectionPolicy` 派生，避免 geometry support、partial edge
   和 diagnostics/output policy 漂移。
@@ -148,11 +150,14 @@ Verified:
 - Entry, workflow, policy, foundation, detection, report/debug/export, and tools layer smoke checks pass.
 - The `135-dual/full` mode detector is split into a thin orchestrator,
   policy/spec context, lane split, lane detect, and lane merge; lane format /
-  count / total format / partial unsupported reason now come from the active
+  count / total format / review-only reason now come from the active
   policy and format spec instead of hidden submodule constants.
 - `135-dual/full` lane split now uses the work-image height / 2 midpoint; related
   files, policy ids, analysis source, and review reasons use `dual_lane` naming
   instead of generic lane wording.
+- `review_only` mode is now a generic mode-detector interface; `135-dual/partial`
+  is only the current user of that interface and no longer routes through the
+  dual-lane detector or the old dedicated module.
 - 14 format / strip-mode decision contract policy smoke checks pass; the final
   contract is derived from the active runtime `DetectionPolicy` to prevent
   geometry support, partial-edge, diagnostics, and output-policy drift.

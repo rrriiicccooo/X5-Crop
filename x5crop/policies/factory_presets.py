@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .runtime_base import FrameFitPolicy
+from .runtime_base import FrameFitPolicy, ReviewOnlyPolicy
 from .runtime_separator import SeparatorEdgePairPolicy
 
 if TYPE_CHECKING:
@@ -26,6 +26,7 @@ class ModePolicyPreset:
     notes: tuple[str, ...] = ()
     detector_kind: str = "standard_strip"
     frame_fit: FrameFitPolicy | None = None
+    review_only: ReviewOnlyPolicy = field(default_factory=ReviewOnlyPolicy)
     dark_band: DarkBandModePreset = field(default_factory=DarkBandModePreset)
     separator_geometry_support_modes: tuple[str, ...] = ()
     diagnostics_overlap_bleed: bool = False

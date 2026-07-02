@@ -10,7 +10,6 @@ from .dual_lane_context import build_dual_lane_context
 from .dual_lane_detect import detect_dual_lane
 from .dual_lane_merge import merge_dual_lane_detections
 from .dual_lane_split import split_dual_lanes
-from .unsupported import unsupported_dual_lane_partial_detection
 
 
 def choose_dual_lane_detection(
@@ -21,7 +20,7 @@ def choose_dual_lane_detection(
 ) -> Detection:
     context = build_dual_lane_context(policy)
     if config.strip_mode != "full":
-        return unsupported_dual_lane_partial_detection(gray, config, context)
+        raise ValueError("dual-lane detector is only valid for full mode")
 
     lanes = split_dual_lanes(cache.gray_work, context.lane_count)
     lane_detections = [

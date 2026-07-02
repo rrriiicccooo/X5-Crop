@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .runtime_base import FULL, PARTIAL, FrameFitPolicy
+from .runtime_base import FULL, PARTIAL, FrameFitPolicy, ReviewOnlyPolicy
 from .runtime_separator import SeparatorEdgePairPolicy
 from .factory import build_policy_from_preset
 from .factory_presets import FormatPolicyPreset, ModePolicyPreset
@@ -49,6 +49,10 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
             role="two_lane_partial_review_only",
             notes=("partial two-lane scans stay review-only until real samples define a policy",),
             detector_kind="review_only",
+            review_only=ReviewOnlyPolicy(
+                reason="dual_lane_partial_not_supported",
+                selection_override="dual_lane_partial_review_only",
+            ),
             diagnostics_overlap_bleed=True,
         ),
     },

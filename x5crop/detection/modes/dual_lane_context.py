@@ -16,7 +16,6 @@ class DualLaneDetectionContext:
     lane_policy: DetectionPolicy
     lane_count: int
     total_count: int
-    unsupported_partial_reason: str
 
 
 def build_dual_lane_context(policy: DetectionPolicy) -> DualLaneDetectionContext:
@@ -31,7 +30,6 @@ def build_dual_lane_context(policy: DetectionPolicy) -> DualLaneDetectionContext
         lane_policy=get_detection_policy(lane_format_id, "full"),
         lane_count=policy.detector.dual_lane.lane_count,
         total_count=format_spec.default_count,
-        unsupported_partial_reason=policy.detector.dual_lane.unsupported_partial_reason,
     )
 
 

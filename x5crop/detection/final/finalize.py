@@ -8,7 +8,7 @@ import numpy as np
 from ...runtime_config import RuntimeConfig
 from ...constants import (
     ANALYSIS_SOURCE_HARD_FALLBACK,
-    ANALYSIS_SOURCE_UNSUPPORTED,
+    REVIEW_ONLY_ANALYSIS_SOURCES,
     REASON_CONTENT_ASPECT_CONFLICT,
     REASON_CONTENT_EVIDENCE_WEAK,
     REASON_LUCKY_PASS_RISK,
@@ -65,14 +65,14 @@ def finalize_detection(
         else {"used": False, "reason": policy.finalization.outer_alignment_disabled_reason}
     )
     detection.detail["outer_content_alignment"] = outer_alignment
-    unsupported_mode = detection.detail.get("analysis_source") == ANALYSIS_SOURCE_UNSUPPORTED
+    review_only_mode = detection.detail.get("analysis_source") in REVIEW_ONLY_ANALYSIS_SOURCES
 
     allow_outer_retry = (
         detection.detail.get("analysis_source") != ANALYSIS_SOURCE_HARD_FALLBACK
         and bool(policy.finalization.retry_uncertain_outer)
     )
     suppress_outer_mismatch = False
-    if allow_outer_retry and not unsupported_mode:
+    if allow_outer_retry and not review_only_mode:
         detection, content_detail, outer_alignment, suppress_outer_mismatch = retry_with_outer_correction_proposals(
             gray,
             detection_config,
@@ -83,7 +83,7 @@ def finalize_detection(
             analysis_cache,
         )
 
-    if not unsupported_mode and bool(content_detail.get("used", False)):
+    if not review_only_mode and bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
         if support == "aspect_conflict":
             detection.confidence = min(detection.confidence, policy.finalization.content_aspect_conflict_cap)
@@ -91,7 +91,7 @@ def finalize_detection(
         elif support == "low_content" and detection.confidence >= config.confidence_threshold:
             detection.confidence = min(detection.confidence, policy.finalization.content_low_confidence_cap)
             detection.review_reasons.append(REASON_CONTENT_EVIDENCE_WEAK)
-    if not unsupported_mode and not suppress_outer_mismatch and bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
+    if not review_only_mode and not suppress_outer_mismatch and bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
         detection.confidence = min(detection.confidence, policy.finalization.outer_mismatch_cap)
         detection.review_reasons.append(REASON_OUTER_CONTENT_BBOX_MISMATCH)
     lucky_pass_risk = lucky_pass_risk_score_detail(gray, detection, config.confidence_threshold, analysis_cache)

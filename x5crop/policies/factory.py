@@ -32,7 +32,10 @@ def build_policy_from_preset(
         strip_mode=strip_mode,
         family=fmt.family,
         role=mode_preset.role,
-        detector=DetectorPolicy(kind=mode_preset.detector_kind),
+        detector=DetectorPolicy(
+            kind=mode_preset.detector_kind,
+            review_only=mode_preset.review_only,
+        ),
         source_parameters=params,
         counts=count_policy(preset.format_id, strip_mode, params),
         outer=outer_policy(mode_preset, strip_mode, params),

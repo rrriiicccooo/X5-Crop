@@ -96,7 +96,7 @@ REVIEW contract。
 | Policy activation | runtime policy assembly | `policies/factory*.py`, `runtime_*.py` | preset、parameters、runtime policy 是否一一映射；默认字段不得让报告误以为逻辑已 active。 |
 | Policy activation | final decision contract | `policies/decision_contract.py`, `policies/decision_overrides.py` | runtime `DetectionPolicy` 与 final `DetectionDecisionContract` 的证据门槛不能语义漂移。 |
 | Mode-specific detector | dual-lane detector | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_context.py`, `detection/modes/dual_lane_split.py`, `detection/modes/dual_lane_detect.py`, `detection/modes/dual_lane_merge.py` | `135-dual/full` 是否独立于普通 135 strip；入口是否只调度，policy/spec context、lane split / lane detect / lane merge 是否可解释。 |
-| Mode-specific detector | unsupported / review-only path | `detection/modes/unsupported.py`, `candidate/fallback.py` | unsupported 或 hard fallback 必须保持 review-only，不得因为 confidence 偶然过线而 PASS。 |
+| Mode-specific detector | review-only mode | `detection/modes/review_only.py`, `candidate/fallback.py` | review-only 或 hard fallback 必须保持 review-only，不得因为 confidence 偶然过线而 PASS。 |
 | Outer | base outer | `geometry/outer_boxes.py`, `detection/outer/base.py` | 基础 holder / content bbox 是否只提出 outer proposal，不承担评分或通过。 |
 | Outer | content floating outer | `detection/outer/content_outer.py` | partial 的内容外框不能单独证明安全；必须经过 separator/content/geometry gate。 |
 | Outer | edge-anchor outer | `detection/outer/edge_anchor.py` | 长轴锚点 outer 必须有 hard separator 支持；避免用边缘猜测自动通过。 |
@@ -149,7 +149,7 @@ REVIEW contract。
 | Risk | lucky pass risk | `detection/evidence/risk.py` | model/equal/grid 支撑的假 PASS 是否被拉回 REVIEW。 |
 | Risk | outer-content mismatch | `detection/outer/alignment.py`, `detection/final/pass_review.py` | outer 与内容 bbox 不一致时是否压 confidence / 加 review reason。 |
 | Risk | candidate competition close | `candidate/selection.py`, `final/pass_review.py` | 第一、第二候选接近时是否 review，partial safe 情况的豁免是否合理。 |
-| Risk | content-only / fallback risk | `candidate/candidate_assessment.py`, `final/pass_review.py` | content-only、fallback、unsupported 是否保持 conservative review-only。 |
+| Risk | content-only / fallback risk | `candidate/candidate_assessment.py`, `final/pass_review.py` | content-only、fallback、review-only 是否保持 conservative review-only。 |
 | Risk | partial edge uncertain | `candidate/partial_holder.py`, `final/pass_review.py` | partial 边缘不可信时是否必须 REVIEW。 |
 | Finalization | final outer retry | `detection/final/finalize.py`, `detection/outer/outer_correction.py` | selected detection 后的修正是否重新保留 evidence/risk detail。 |
 | Finalization | edge bleed protection | `detection/final/geometry.py` | 输出前 edge bleed 保护是否只做安全几何调整，不改变 decision 证据。 |
@@ -317,7 +317,7 @@ and decision detail, and cannot bypass the final PASS / REVIEW contract.
 | Pre-detection | deskew and evidence gray | `image/deskew.py`, `image/evidence.py` | Preprocessing may shape evidence but must not decide PASS / REVIEW. |
 | Policy activation | format facts and policy presets | `formats.py`, `policies/format_*.py` | Physical facts, thresholds, and format/mode activations must stay separate and explicit. |
 | Policy activation | runtime and decision contracts | `policies/runtime_*.py`, `policies/decision_contract.py` | `DetectionPolicy` and `DetectionDecisionContract` must not drift semantically. |
-| Mode-specific detector | dual-lane and review-only paths | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_*.py`, `detection/modes/unsupported.py`, `candidate/fallback.py` | Dedicated detectors and unsupported paths must stay isolated, context-driven, and conservative. |
+| Mode-specific detector | dual-lane and review-only paths | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_*.py`, `detection/modes/review_only.py`, `candidate/fallback.py` | Dedicated detectors and review-only paths must stay isolated, context-driven, and conservative. |
 | Outer | base, content, edge-anchor, separator-first, separator-geometry, dark-band outer | `detection/outer/*`, `geometry/outer_boxes.py` | Outer proposals only propose or correct boxes; they do not score or authorize PASS. |
 | Outer retry | content-aligned, format-geometry, short-axis retry | `detection/outer/retry_*.py`, `detection/outer/outer_correction.py` | Corrections must be policy-scoped and re-enter candidate assessment. |
 | Gap / separator | profile, cache, normal gap search, hard trust, edge pair, robust grid | `geometry/separator_*`, `geometry/gap_search.py`, `geometry/gap_trust.py`, `geometry/edge_pairs.py`, `geometry/robust_grid.py` | Hard evidence must stay stronger than model/equal/grid evidence, and cache keys must include policy-relevant context. |
@@ -329,7 +329,7 @@ and decision detail, and cannot bypass the final PASS / REVIEW contract.
 | Gate | partial safe extra frames and auto gate | `detection/candidate/partial_holder.py`, `detection/candidate/candidate_assessment.py` | Partial edge safety requires explicit wide-like/content/frame evidence and no hard review reason. |
 | Retry / rescue | equal-first, fallback outer, dark-band retry, full dark-band selection, partial stop | `detection/candidate/source_policy.py`, `detection/candidate/run.py`, `detection/candidate/dark_band_*.py` | Retry paths must be narrow, explainable, and unable to bypass hard evidence. |
 | Risk | overlap bleed, lucky pass, outer-content mismatch, close competition | `detection/evidence/risk.py`, `detection/evidence/gap_diagnostics.py`, `detection/outer/alignment.py`, `detection/candidate/selection.py`, `detection/final/pass_review.py` | Risk logic should pull suspicious PASS candidates back to REVIEW or safer output bleed. |
-| Risk | content-only, fallback, unsupported, partial-edge uncertainty | `detection/candidate/candidate_assessment.py`, `detection/candidate/fallback.py`, `detection/final/pass_review.py` | Conservative REVIEW-only paths must stay review-only unless the decision contract changes. |
+| Risk | content-only, fallback, review-only, partial-edge uncertainty | `detection/candidate/candidate_assessment.py`, `detection/candidate/fallback.py`, `detection/final/pass_review.py` | Conservative REVIEW-only paths must stay review-only unless the decision contract changes. |
 | Finalization | final outer retry, edge bleed protection, approved geometry adjustment, caps | `detection/final/finalize.py`, `detection/final/geometry.py` | Output-adjacent geometry changes must preserve evidence/risk detail and safety caps. |
 | Final decision | PASS / REVIEW, reason normalization, decision detail | `detection/final/pass_review.py` | Final status must be decided only by the decision contract. |
 | Audit visibility | read-only diagnostics, report sections, debug panels, policy reporting | `detection/evidence/read_only.py`, `report_schema.py`, `report_sections.py`, `debug/*`, `policies/reporting.py` | Reports and Debug Analysis explain behavior without feeding back into candidate selection. |
