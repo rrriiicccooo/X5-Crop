@@ -13,7 +13,6 @@ from ..runtime import AnalysisCache
 from .candidate.run import calibrated_candidates_for_count
 from .candidate.counts import candidate_counts_for_format
 from .modes.dual_lane import choose_dual_lane_detection
-from .modes.unsupported import unsupported_dual_lane_partial_detection
 from .candidate.fallback import hard_fallback_detection
 from .candidate.selection import select_detection_candidate
 
@@ -22,12 +21,8 @@ def choose_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec, c
     candidates: list[Detection] = []
     cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
     policy = get_detection_policy(fmt.name, config.strip_mode)
-    if policy.detector.kind == "dual_lane":
+    if policy.detector.kind in {"dual_lane", "review_only"}:
         detection = choose_dual_lane_detection(gray, config, cache, policy)
-        detection.detail["policy"] = policy.report_detail()
-        return detection
-    if policy.detector.kind == "review_only":
-        detection = unsupported_dual_lane_partial_detection(gray, config)
         detection.detail["policy"] = policy.report_detail()
         return detection
     count_specs = candidate_counts_for_format(config, fmt, policy)

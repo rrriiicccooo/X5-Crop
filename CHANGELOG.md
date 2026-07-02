@@ -54,9 +54,9 @@ Current stable release: v4.2.8
 - `git diff --check` 通过。
 - Mac 主启动器和 diagnostics 启动器 `bash -n` 通过。
 - Entry、workflow、policy、foundation、detection、report/debug/export 和 tools 分层 smoke 通过。
-- `135-dual/full` mode detector 内部拆为 thin orchestrator、lane split、lane detect
-  和 lane merge；lane format / count / total format 从 active policy 与 format spec
-  读取，不再隐藏在 merge 逻辑中。
+- `135-dual/full` mode detector 内部拆为 thin orchestrator、policy/spec context、
+  lane split、lane detect 和 lane merge；lane format / count / total format /
+  partial unsupported reason 从 active policy 与 format spec 读取，不再隐藏在子模块中。
 - `135-dual/full` lane split 固定使用 work image 的 height / 2；相关文件、policy id、
   analysis source 和 review reason 统一使用 `dual_lane` 命名，不再使用泛化的并行 lane 命名。
 - 14 个 format / strip mode decision contract policy smoke 通过；final contract
@@ -146,9 +146,10 @@ Verified:
 - `git diff --check` passes.
 - Main Mac launcher and diagnostics launcher pass `bash -n`.
 - Entry, workflow, policy, foundation, detection, report/debug/export, and tools layer smoke checks pass.
-- The `135-dual/full` mode detector is split into a thin orchestrator, lane
-  split, lane detect, and lane merge; lane format / count / total format now
-  come from the active policy and format spec instead of hidden merge constants.
+- The `135-dual/full` mode detector is split into a thin orchestrator,
+  policy/spec context, lane split, lane detect, and lane merge; lane format /
+  count / total format / partial unsupported reason now come from the active
+  policy and format spec instead of hidden submodule constants.
 - `135-dual/full` lane split now uses the work-image height / 2 midpoint; related
   files, policy ids, analysis source, and review reasons use `dual_lane` naming
   instead of generic lane wording.

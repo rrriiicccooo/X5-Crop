@@ -11,13 +11,11 @@ from ...constants import (
     REASON_OUTER_CONTENT_BBOX_MISMATCH,
 )
 from ...domain import Box, Detection
-from ...formats import FORMATS
-from ...policies.registry import get_detection_policy
-from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from ...runtime_config import RuntimeConfig
 from ..candidate.selection import calibrated_candidate_rank
 from ..outer.base import base_outer_candidates
+from .dual_lane_context import DualLaneDetectionContext
 from .dual_lane_split import translate_work_box
 
 
@@ -27,7 +25,7 @@ def detect_dual_lane(
     lane: Box,
     lane_index: int,
     cache: AnalysisCache,
-    dual_policy: DetectionPolicy,
+    context: DualLaneDetectionContext,
 ) -> Optional[Detection]:
     from ..candidate.build import build_detection_for_outer
     from ..candidate.candidate_assessment import apply_candidate_assessment_policy
@@ -38,24 +36,21 @@ def detect_dual_lane(
     if lane_crop.size == 0:
         return None
 
-    lane_format = dual_policy.detector.dual_lane.lane_format
-    lane_policy = get_detection_policy(lane_format, "full")
-    lane_format_spec = FORMATS[lane_format]
     lane_config = replace(
         config,
-        film_format=lane_format,
-        count=lane_format_spec.default_count,
-        count_override=lane_format_spec.default_count,
+        film_format=context.lane_format_id,
+        count=context.lane_format_spec.default_count,
+        count_override=context.lane_format_spec.default_count,
     )
 
     candidates: list[Detection] = []
-    for outer_candidate in base_outer_candidates(lane_crop, lane_policy.outer.base_candidates):
+    for outer_candidate in base_outer_candidates(lane_crop, context.lane_policy.outer.base_candidates):
         lane_outer = translate_work_box(outer_candidate.box, lane.left, lane.top)
         raw = build_detection_for_outer(
             gray,
             lane_config,
-            lane_format_spec,
-            lane_format_spec.default_count,
+            context.lane_format_spec,
+            context.lane_format_spec.default_count,
             "full",
             lane_outer,
             0.0,
@@ -67,10 +62,10 @@ def detect_dual_lane(
             gray,
             raw,
             lane_config,
-            lane_format_spec,
+            context.lane_format_spec,
             "separator",
             cache,
-            policy=lane_policy,
+            policy=context.lane_policy,
         )
         calibrated.detail["dual_lane_index"] = lane_index
         calibrated.detail["dual_lane_work_box"] = asdict(lane)
@@ -80,8 +75,8 @@ def detect_dual_lane(
         return None
 
     best = max(candidates, key=lambda d: calibrated_candidate_rank(d, config.confidence_threshold))
-    content_detail = content_evidence_detail(gray, best, cache, lane_policy.content)
-    outer_alignment = outer_content_alignment_detail(gray, best, cache, policy=lane_policy)
+    content_detail = content_evidence_detail(gray, best, cache, context.lane_policy.content)
+    outer_alignment = outer_content_alignment_detail(gray, best, cache, policy=context.lane_policy)
     best.detail["content_evidence"] = content_detail
     best.detail["outer_content_alignment"] = outer_alignment
 

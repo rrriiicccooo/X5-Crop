@@ -6,21 +6,20 @@ import numpy as np
 
 from ...constants import ANALYSIS_SOURCE_DUAL_LANE
 from ...domain import Box, Detection, Gap
-from ...formats import FORMATS
 from ...geometry.boxes import map_work_box
-from ...policies.runtime_policy import DetectionPolicy
 from ...runtime_config import RuntimeConfig
 from ...utils import box_from_dict
 from ..candidate.fallback import hard_fallback_detection
+from .dual_lane_context import DualLaneDetectionContext
 
 
 def dual_lane_review_detection(
     gray: np.ndarray,
     config: RuntimeConfig,
-    policy: DetectionPolicy,
+    context: DualLaneDetectionContext,
     reason: str,
 ) -> Detection:
-    detection = hard_fallback_detection(gray, config, FORMATS[policy.format_id])
+    detection = hard_fallback_detection(gray, config, context.format_spec)
     detection.review_reasons.append(reason)
     detection.review_reasons = sorted(set(detection.review_reasons))
     return detection
@@ -31,10 +30,10 @@ def merge_dual_lane_detections(
     config: RuntimeConfig,
     lanes: list[Box],
     lane_detections: list[Detection | None],
-    policy: DetectionPolicy,
+    context: DualLaneDetectionContext,
 ) -> Detection:
     if any(detection is None for detection in lane_detections):
-        return dual_lane_review_detection(gray, config, policy, "dual_lane_detection_failed")
+        return dual_lane_review_detection(gray, config, context, "dual_lane_detection_failed")
 
     confirmed_lanes = [detection for detection in lane_detections if detection is not None]
     lane_work_outers = [
@@ -42,8 +41,8 @@ def merge_dual_lane_detections(
         for detection in confirmed_lanes
         if isinstance(detection.detail.get("work_outer"), dict)
     ]
-    if len(lane_work_outers) != policy.detector.dual_lane.lane_count:
-        return dual_lane_review_detection(gray, config, policy, "dual_lane_outer_detection_failed")
+    if len(lane_work_outers) != context.lane_count:
+        return dual_lane_review_detection(gray, config, context, "dual_lane_outer_detection_failed")
 
     combined_work_outer = Box(
         min(box.left for box in lane_work_outers),
@@ -51,11 +50,8 @@ def merge_dual_lane_detections(
         max(box.right for box in lane_work_outers),
         max(box.bottom for box in lane_work_outers),
     )
-    lane_format = policy.detector.dual_lane.lane_format
-    lane_count = FORMATS[lane_format].default_count
-    total_count = FORMATS[policy.format_id].default_count
     frames = [box for detection in confirmed_lanes for box in detection.frames]
-    gaps = _merged_dual_lane_gaps(confirmed_lanes, lane_count)
+    gaps = _merged_dual_lane_gaps(confirmed_lanes, context.lane_format_spec.default_count)
 
     lane_confidences = [float(detection.confidence) for detection in confirmed_lanes]
     confidence = min(lane_confidences)
@@ -63,17 +59,17 @@ def merge_dual_lane_detections(
     if any(conf < config.confidence_threshold for conf in lane_confidences):
         confidence = min(confidence, 0.84)
         review_reasons.append("dual_lane_below_threshold")
-    if len(frames) != total_count:
+    if len(frames) != context.total_count:
         confidence = min(confidence, 0.82)
         review_reasons.append("frame_count_mismatch")
 
     source_h, source_w = gray.shape
     outer_original = map_work_box(combined_work_outer, config.layout, source_w, source_h)
     return Detection(
-        policy.format_id,
+        context.format_id,
         config.layout,
         "full",
-        total_count,
+        context.total_count,
         outer_original,
         frames,
         gaps,
@@ -81,15 +77,13 @@ def merge_dual_lane_detections(
         sorted(set(review_reasons)),
         _dual_lane_detail(
             config,
-            policy,
+            context,
             lanes,
             combined_work_outer,
             gaps,
             confirmed_lanes,
             confidence,
             review_reasons,
-            lane_count,
-            total_count,
         ),
     )
 
@@ -115,24 +109,21 @@ def _merged_dual_lane_gaps(lane_detections: list[Detection], lane_count: int) ->
 
 def _dual_lane_detail(
     config: RuntimeConfig,
-    policy: DetectionPolicy,
+    context: DualLaneDetectionContext,
     lanes: list[Box],
     combined_work_outer: Box,
     gaps: list[Gap],
     lane_detections: list[Detection],
     confidence: float,
     review_reasons: list[str],
-    lane_count: int,
-    total_count: int,
 ) -> dict:
-    lane_format = policy.detector.dual_lane.lane_format
     lane_summaries = [
         {
             "lane": index,
-            "lane_format": lane_format,
-            "lane_count": lane_count,
-            "total_format": policy.format_id,
-            "total_count": total_count,
+            "lane_format": context.lane_format_id,
+            "lane_count": context.lane_format_spec.default_count,
+            "total_format": context.format_id,
+            "total_count": context.total_count,
             "confidence": float(detection.confidence),
             "review_reasons": list(detection.review_reasons),
             "work_outer": detection.detail.get("work_outer"),
@@ -145,7 +136,7 @@ def _dual_lane_detail(
     return {
         "analysis_source": ANALYSIS_SOURCE_DUAL_LANE,
         "layout": config.layout,
-        "candidate_count": total_count,
+        "candidate_count": context.total_count,
         "work_outer": asdict(combined_work_outer),
         "dual_lane_work_boxes": [asdict(lane) for lane in lanes],
         "dual_lane_detections": lane_summaries,
@@ -153,11 +144,11 @@ def _dual_lane_detail(
         "gap_scores": [gap.score for gap in gaps],
         "gap_methods": [gap.method for gap in gaps],
         "candidate_competition": {
-            "candidate_count": policy.detector.dual_lane.lane_count,
-            "formats": [policy.format_id],
+            "candidate_count": context.lane_count,
+            "formats": [context.format_id],
             "selected_candidate": {
-                "format": policy.format_id,
-                "count": total_count,
+                "format": context.format_id,
+                "count": context.total_count,
                 "strip_mode": "full",
                 "confidence": float(confidence),
                 "review_reasons": sorted(set(review_reasons)),
