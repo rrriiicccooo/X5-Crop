@@ -57,6 +57,8 @@ Current stable release: v4.2.8
 - `135-dual/full` mode detector 内部拆为 thin orchestrator、lane split、lane detect
   和 lane merge；lane format / count / total format 从 active policy 与 format spec
   读取，不再隐藏在 merge 逻辑中。
+- `135-dual/full` lane split 固定使用 work image 的 height / 2；相关文件、policy id、
+  analysis source 和 review reason 统一使用 `dual_lane` 命名，不再使用泛化的并行 lane 命名。
 - 14 个 format / strip mode decision contract policy smoke 通过；final contract
   由 active runtime `DetectionPolicy` 派生，避免 geometry support、partial edge
   和 diagnostics/output policy 漂移。
@@ -147,6 +149,9 @@ Verified:
 - The `135-dual/full` mode detector is split into a thin orchestrator, lane
   split, lane detect, and lane merge; lane format / count / total format now
   come from the active policy and format spec instead of hidden merge constants.
+- `135-dual/full` lane split now uses the work-image height / 2 midpoint; related
+  files, policy ids, analysis source, and review reasons use `dual_lane` naming
+  instead of generic lane wording.
 - 14 format / strip-mode decision contract policy smoke checks pass; the final
   contract is derived from the active runtime `DetectionPolicy` to prevent
   geometry support, partial-edge, diagnostics, and output-policy drift.

@@ -14,9 +14,9 @@ def translate_work_box(box: Box, offset_x: int, offset_y: int) -> Box:
     )
 
 
-def split_parallel_strip_lanes(gray_work: np.ndarray, lane_count: int) -> list[Box]:
+def split_dual_lanes(gray_work: np.ndarray, lane_count: int) -> list[Box]:
     if lane_count != 2:
-        raise ValueError("parallel lane detector supports exactly two lanes")
+        raise ValueError("dual lane detector supports exactly two lanes")
 
     h, w = gray_work.shape
     split_y = h // 2
@@ -24,6 +24,6 @@ def split_parallel_strip_lanes(gray_work: np.ndarray, lane_count: int) -> list[B
 
 
 __all__ = [
-    "split_parallel_strip_lanes",
+    "split_dual_lanes",
     "translate_work_box",
 ]

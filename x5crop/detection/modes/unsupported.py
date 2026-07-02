@@ -11,7 +11,7 @@ from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
 
 
-def unsupported_parallel_lane_partial_detection(gray: np.ndarray, config: RuntimeConfig) -> Detection:
+def unsupported_dual_lane_partial_detection(gray: np.ndarray, config: RuntimeConfig) -> Detection:
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
     outer = Box(0, 0, ww, wh)
@@ -25,7 +25,7 @@ def unsupported_parallel_lane_partial_detection(gray: np.ndarray, config: Runtim
         [],
         [],
         0.0,
-        ["parallel_lane_partial_not_supported", "needs_manual_review"],
+        ["dual_lane_partial_not_supported", "needs_manual_review"],
         {
             "analysis_source": ANALYSIS_SOURCE_UNSUPPORTED,
             "candidate_count": 0,
@@ -39,9 +39,9 @@ def unsupported_parallel_lane_partial_detection(gray: np.ndarray, config: Runtim
                     "count": 12,
                     "strip_mode": config.strip_mode,
                     "confidence": 0.0,
-                    "review_reasons": ["parallel_lane_partial_not_supported", "needs_manual_review"],
+                    "review_reasons": ["dual_lane_partial_not_supported", "needs_manual_review"],
                 },
-                "selection_override": "unsupported_parallel_lane_partial",
+                "selection_override": "unsupported_dual_lane_partial",
                 "top_candidates": [],
             },
         },

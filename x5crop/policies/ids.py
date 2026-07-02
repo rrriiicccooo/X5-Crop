@@ -4,7 +4,7 @@ REPORT_SCHEMA_VERSION = "v4_9_policy_schema_1"
 
 _POLICY_ID_STEMS = {
     "135": "standard_strip",
-    "135-dual": "parallel_lane_strip",
+    "135-dual": "dual_lane_strip",
     "half": "dense_half_frame_strip",
     "xpan": "panoramic_strip",
     "120-645": "medium_rectangle_strip",

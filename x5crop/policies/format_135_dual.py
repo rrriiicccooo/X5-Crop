@@ -40,7 +40,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
             notes=("dual-lane detection is intentionally separate from normal strip policies",),
             detector_kind="dual_lane",
             frame_fit=FrameFitPolicy(
-                name="parallel_lane_frame_fit",
+                name="dual_lane_frame_fit",
                 edge_evidence=False,
                 geometry_fallback=True,
             ),

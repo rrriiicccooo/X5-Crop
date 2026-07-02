@@ -6,7 +6,7 @@ from enum import Enum
 
 class FormatId(str, Enum):
     STANDARD_STRIP = "135"
-    PARALLEL_LANE = "135-dual"
+    DUAL_LANE = "135-dual"
     HALF = "half"
     XPAN = "xpan"
     MEDIUM_RECTANGLE = "120-645"
@@ -38,7 +38,7 @@ class FormatSpec:
 
 
 def expected_separator_count(format_id: str, default_count: int) -> int:
-    if format_id == FormatId.PARALLEL_LANE.value:
+    if format_id == FormatId.DUAL_LANE.value:
         return 10
     return max(0, int(default_count) - 1)
 
@@ -91,7 +91,7 @@ FORMATS: dict[str, FormatSpec] = {
         ),
     ),
     "135-dual": _format_spec(
-        FormatId.PARALLEL_LANE,
+        FormatId.DUAL_LANE,
         12,
         (12,),
         "35mm",

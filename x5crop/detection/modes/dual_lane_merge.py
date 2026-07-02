@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 import numpy as np
 
-from ...constants import ANALYSIS_SOURCE_PARALLEL_LANE
+from ...constants import ANALYSIS_SOURCE_DUAL_LANE
 from ...domain import Box, Detection, Gap
 from ...formats import FORMATS
 from ...geometry.boxes import map_work_box
@@ -14,7 +14,7 @@ from ...utils import box_from_dict
 from ..candidate.fallback import hard_fallback_detection
 
 
-def parallel_lane_review_detection(
+def dual_lane_review_detection(
     gray: np.ndarray,
     config: RuntimeConfig,
     policy: DetectionPolicy,
@@ -26,7 +26,7 @@ def parallel_lane_review_detection(
     return detection
 
 
-def merge_parallel_lane_detections(
+def merge_dual_lane_detections(
     gray: np.ndarray,
     config: RuntimeConfig,
     lanes: list[Box],
@@ -34,7 +34,7 @@ def merge_parallel_lane_detections(
     policy: DetectionPolicy,
 ) -> Detection:
     if any(detection is None for detection in lane_detections):
-        return parallel_lane_review_detection(gray, config, policy, "parallel_lane_detection_failed")
+        return dual_lane_review_detection(gray, config, policy, "dual_lane_detection_failed")
 
     confirmed_lanes = [detection for detection in lane_detections if detection is not None]
     lane_work_outers = [
@@ -43,7 +43,7 @@ def merge_parallel_lane_detections(
         if isinstance(detection.detail.get("work_outer"), dict)
     ]
     if len(lane_work_outers) != policy.detector.dual_lane.lane_count:
-        return parallel_lane_review_detection(gray, config, policy, "parallel_lane_outer_detection_failed")
+        return dual_lane_review_detection(gray, config, policy, "dual_lane_outer_detection_failed")
 
     combined_work_outer = Box(
         min(box.left for box in lane_work_outers),
@@ -55,14 +55,14 @@ def merge_parallel_lane_detections(
     lane_count = FORMATS[lane_format].default_count
     total_count = FORMATS[policy.format_id].default_count
     frames = [box for detection in confirmed_lanes for box in detection.frames]
-    gaps = _merged_parallel_lane_gaps(confirmed_lanes, lane_count)
+    gaps = _merged_dual_lane_gaps(confirmed_lanes, lane_count)
 
     lane_confidences = [float(detection.confidence) for detection in confirmed_lanes]
     confidence = min(lane_confidences)
     review_reasons = sorted(set(reason for detection in confirmed_lanes for reason in detection.review_reasons))
     if any(conf < config.confidence_threshold for conf in lane_confidences):
         confidence = min(confidence, 0.84)
-        review_reasons.append("parallel_lane_below_threshold")
+        review_reasons.append("dual_lane_below_threshold")
     if len(frames) != total_count:
         confidence = min(confidence, 0.82)
         review_reasons.append("frame_count_mismatch")
@@ -79,7 +79,7 @@ def merge_parallel_lane_detections(
         gaps,
         float(max(0.0, min(1.0, confidence))),
         sorted(set(review_reasons)),
-        _parallel_lane_detail(
+        _dual_lane_detail(
             config,
             policy,
             lanes,
@@ -94,7 +94,7 @@ def merge_parallel_lane_detections(
     )
 
 
-def _merged_parallel_lane_gaps(lane_detections: list[Detection], lane_count: int) -> list[Gap]:
+def _merged_dual_lane_gaps(lane_detections: list[Detection], lane_count: int) -> list[Gap]:
     gaps: list[Gap] = []
     for lane_number, detection in enumerate(lane_detections, start=1):
         lane_work_outer = box_from_dict(detection.detail["work_outer"])
@@ -113,7 +113,7 @@ def _merged_parallel_lane_gaps(lane_detections: list[Detection], lane_count: int
     return gaps
 
 
-def _parallel_lane_detail(
+def _dual_lane_detail(
     config: RuntimeConfig,
     policy: DetectionPolicy,
     lanes: list[Box],
@@ -143,7 +143,7 @@ def _parallel_lane_detail(
         for index, detection in enumerate(lane_detections, start=1)
     ]
     return {
-        "analysis_source": ANALYSIS_SOURCE_PARALLEL_LANE,
+        "analysis_source": ANALYSIS_SOURCE_DUAL_LANE,
         "layout": config.layout,
         "candidate_count": total_count,
         "work_outer": asdict(combined_work_outer),
@@ -169,6 +169,6 @@ def _parallel_lane_detail(
 
 
 __all__ = [
-    "merge_parallel_lane_detections",
-    "parallel_lane_review_detection",
+    "merge_dual_lane_detections",
+    "dual_lane_review_detection",
 ]

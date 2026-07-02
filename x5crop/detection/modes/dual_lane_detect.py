@@ -18,10 +18,10 @@ from ...runtime import AnalysisCache
 from ...runtime_config import RuntimeConfig
 from ..candidate.selection import calibrated_candidate_rank
 from ..outer.base import base_outer_candidates
-from .parallel_lane_split import translate_work_box
+from .dual_lane_split import translate_work_box
 
 
-def detect_parallel_strip_lane(
+def detect_dual_lane(
     gray: np.ndarray,
     config: RuntimeConfig,
     lane: Box,
@@ -59,7 +59,7 @@ def detect_parallel_strip_lane(
             "full",
             lane_outer,
             0.0,
-            f"parallel_lane_{lane_index}_{outer_candidate.name}",
+            f"dual_lane_{lane_index}_{outer_candidate.name}",
             outer_candidate.strategy,
             cache=cache,
         )
@@ -101,4 +101,4 @@ def detect_parallel_strip_lane(
     return best
 
 
-__all__ = ["detect_parallel_strip_lane"]
+__all__ = ["detect_dual_lane"]

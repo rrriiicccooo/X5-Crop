@@ -5,7 +5,7 @@ ANALYSIS_SOURCE_CONTENT = "content_candidate"
 ANALYSIS_SOURCE_CONTENT_PRIMARY = "content_primary"
 ANALYSIS_SOURCE_HARD_FALLBACK = "hard_fallback"
 ANALYSIS_SOURCE_UNSUPPORTED = "unsupported_mode"
-ANALYSIS_SOURCE_PARALLEL_LANE = "parallel_lane_strip"
+ANALYSIS_SOURCE_DUAL_LANE = "dual_lane_strip"
 
 GAP_DETECTED = "detected"
 GAP_EDGE_PAIR = "edge-pair"

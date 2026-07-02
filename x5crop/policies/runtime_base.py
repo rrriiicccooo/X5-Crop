@@ -15,7 +15,7 @@ PARTIAL = "partial"
 class DualLanePolicy:
     lane_count: int = 2
     lane_format: str = "135"
-    unsupported_partial_reason: str = "parallel_lane_partial_not_supported"
+    unsupported_partial_reason: str = "dual_lane_partial_not_supported"
 
 
 @dataclass(frozen=True)
