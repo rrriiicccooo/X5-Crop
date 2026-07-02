@@ -4,9 +4,9 @@ from typing import Iterable
 
 import numpy as np
 
-from ...domain import Box, OuterCandidate
-from ...geometry.detection_parameters import OuterBoxDetectionParameters
-from ...geometry.outer_boxes import detect_mask_profile_outer, detect_outer, detect_outer_white_x
+from ....domain import Box, OuterCandidate
+from ....geometry.detection_parameters import OuterBoxDetectionParameters
+from ....geometry.outer_boxes import detect_mask_profile_outer, detect_outer, detect_outer_white_x
 
 
 def unique_outer_candidates(candidates: Iterable[OuterCandidate]) -> list[OuterCandidate]:

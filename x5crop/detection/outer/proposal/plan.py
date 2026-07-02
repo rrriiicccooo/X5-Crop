@@ -5,15 +5,20 @@ from typing import Optional
 
 import numpy as np
 
-from ...domain import OuterCandidate
-from ...formats import FormatSpec
-from ...policies.registry import get_detection_policy
-from ...policies.runtime_policy import DetectionPolicy
-from ...runtime import AnalysisCache
+from ....domain import OuterCandidate
+from ....formats import FormatSpec
+from ....policies.registry import get_detection_policy
+from ....policies.runtime_policy import DetectionPolicy
+from ....runtime import AnalysisCache
 from .base import base_outer_candidates, unique_outer_candidates
-from .content_outer import floating_outer_candidates
-from .edge_anchor import long_axis_edge_anchor_outer_candidates
-from .separator import separator_derived_outer_candidates, separator_outer_variants_for_policy
+from .partial_content import floating_outer_candidates
+from .partial_edge import long_axis_edge_anchor_outer_candidates
+from .separator import (
+    FULL_WIDTH_SEPARATOR_OUTER,
+    WIDE_SEPARATOR_OUTER,
+    separator_derived_outer_candidates,
+    separator_outer_variants_for_policy,
+)
 
 
 @dataclass(frozen=True)
@@ -128,3 +133,47 @@ def outer_proposal_candidates(
     if fallback_only:
         return unique_outer_candidates([*long_axis_candidates, *separator_candidates])
     return unique_outer_candidates([*base_candidates, *floating_candidates, *long_axis_candidates, *separator_candidates])
+
+
+def separator_full_width_outer_proposal_candidates(
+    gray_work: np.ndarray,
+    base_candidates: list[OuterCandidate],
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    cache: Optional[AnalysisCache] = None,
+    policy: Optional[DetectionPolicy] = None,
+) -> list[OuterCandidate]:
+    policy = policy or get_detection_policy(fmt.name, strip_mode)
+    return separator_derived_outer_candidates(
+        gray_work,
+        base_candidates,
+        fmt,
+        count,
+        strip_mode,
+        cache,
+        policy,
+        variants=(FULL_WIDTH_SEPARATOR_OUTER,),
+    )
+
+
+def wide_separator_outer_proposal_candidates(
+    gray_work: np.ndarray,
+    base_candidates: list[OuterCandidate],
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    cache: Optional[AnalysisCache] = None,
+    policy: Optional[DetectionPolicy] = None,
+) -> list[OuterCandidate]:
+    policy = policy or get_detection_policy(fmt.name, strip_mode)
+    return separator_derived_outer_candidates(
+        gray_work,
+        base_candidates,
+        fmt,
+        count,
+        strip_mode,
+        cache,
+        policy,
+        variants=(WIDE_SEPARATOR_OUTER,),
+    )

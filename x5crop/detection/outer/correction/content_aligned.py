@@ -5,12 +5,12 @@ from typing import Any
 
 import numpy as np
 
-from ...runtime_config import RuntimeConfig
-from ...domain import Detection
-from ...formats import FormatSpec
-from ...policies.registry import get_detection_policy
-from ...runtime import AnalysisCache
-from .alignment import corrected_outer_from_alignment, outer_content_alignment_detail
+from ....domain import Detection
+from ....formats import FormatSpec
+from ....policies.registry import get_detection_policy
+from ....runtime import AnalysisCache
+from ....runtime_config import RuntimeConfig
+from ...evidence.outer_alignment import corrected_outer_from_alignment, outer_content_alignment_detail
 
 
 def retry_with_content_aligned_outer(
@@ -21,9 +21,9 @@ def retry_with_content_aligned_outer(
     alignment: dict[str, Any],
     cache: AnalysisCache,
 ) -> Optional[Detection]:
-    from ..candidate.candidate_assessment import apply_candidate_assessment_policy
-    from ..evidence.content_evidence import content_evidence_detail
-    from ..candidate.build import build_detection_for_outer
+    from ...candidate.build import build_detection_for_outer
+    from ...candidate.candidate_assessment import apply_candidate_assessment_policy
+    from ...evidence.content_evidence import content_evidence_detail
 
     if detection.strip_mode != "full":
         return None

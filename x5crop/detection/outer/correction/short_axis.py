@@ -5,15 +5,15 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...runtime_config import RuntimeConfig
-from ...domain import Box, Detection
-from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from ...geometry.boxes import original_box_to_work
-from ...policies.registry import get_detection_policy
-from ...policies.runtime_policy import DetectionPolicy
-from ...runtime import AnalysisCache
-from ...utils import clamp_int
-from .alignment import outer_content_alignment_detail
+from ....domain import Box, Detection
+from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ....geometry.boxes import original_box_to_work
+from ....policies.registry import get_detection_policy
+from ....policies.runtime_policy import DetectionPolicy
+from ....runtime import AnalysisCache
+from ....runtime_config import RuntimeConfig
+from ....utils import clamp_int
+from ...evidence.outer_alignment import outer_content_alignment_detail
 
 
 def corrected_outer_for_short_axis_aspect(
@@ -87,9 +87,9 @@ def retry_with_short_axis_aspect_outer(
     content_detail: dict[str, Any],
     cache: AnalysisCache,
 ) -> Optional[Detection]:
-    from ..candidate.candidate_assessment import apply_candidate_assessment_policy
-    from ..evidence.content_evidence import content_evidence_detail
-    from ..candidate.build import build_detection_for_outer
+    from ...candidate.build import build_detection_for_outer
+    from ...candidate.candidate_assessment import apply_candidate_assessment_policy
+    from ...evidence.content_evidence import content_evidence_detail
 
     policy = get_detection_policy(fmt.name, detection.strip_mode)
     corrected_outer = corrected_outer_for_short_axis_aspect(

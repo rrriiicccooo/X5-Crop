@@ -5,16 +5,16 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...runtime_config import RuntimeConfig
-from ...constants import HARD_GAP_METHODS
-from ...domain import Box, Detection
-from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from ...geometry.boxes import original_box_to_work
-from ...policies.registry import get_detection_policy
-from ...policies.runtime_policy import DetectionPolicy
-from ...runtime import AnalysisCache
-from ...utils import box_from_dict, clamp_int
-from .alignment import outer_content_alignment_detail
+from ....constants import HARD_GAP_METHODS
+from ....domain import Box, Detection
+from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ....geometry.boxes import original_box_to_work
+from ....policies.registry import get_detection_policy
+from ....policies.runtime_policy import DetectionPolicy
+from ....runtime import AnalysisCache
+from ....runtime_config import RuntimeConfig
+from ....utils import box_from_dict, clamp_int
+from ...evidence.outer_alignment import outer_content_alignment_detail
 
 
 def format_geometry_model_detail(gray: np.ndarray, detection: Detection, config: RuntimeConfig, fmt: FormatSpec, cache: AnalysisCache) -> dict[str, Any]:
@@ -167,9 +167,9 @@ def retry_with_format_geometry_outer(
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
 ) -> Optional[Detection]:
-    from ..candidate.candidate_assessment import apply_candidate_assessment_policy
-    from ..evidence.content_evidence import content_evidence_detail
-    from ..candidate.build import build_detection_for_outer
+    from ...candidate.build import build_detection_for_outer
+    from ...candidate.candidate_assessment import apply_candidate_assessment_policy
+    from ...evidence.content_evidence import content_evidence_detail
 
     geometry_detail = format_geometry_model_detail(gray, detection, config, fmt, cache)
     detection.detail["format_geometry_model"] = geometry_detail

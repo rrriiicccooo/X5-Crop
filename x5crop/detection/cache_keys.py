@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...domain import OuterCandidate
-from ...formats import FormatSpec
-from ...geometry.boxes import box_cache_key
+from ..domain import OuterCandidate
+from ..formats import FormatSpec
+from ..geometry.boxes import box_cache_key
 
 
 def separator_outer_cache_key(

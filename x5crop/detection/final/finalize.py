@@ -28,8 +28,8 @@ from ...runtime import AnalysisCache
 from ..evidence.content_evidence import content_evidence_detail
 from ..evidence.read_only import attach_read_only_diagnostics
 from ..evidence.risk import lucky_pass_risk_score_detail, overlap_bleed_risk_detail
-from ..outer.alignment import outer_content_alignment_detail
-from ..outer.outer_correction import retry_with_outer_correction_proposals
+from ..evidence.outer_alignment import outer_content_alignment_detail
+from ..outer.correction.flow import retry_with_outer_correction_proposals
 from .pass_review import apply_final_decision_policy, normalized_review_reasons
 from .geometry import (
     apply_approved_geometry_adjustment,

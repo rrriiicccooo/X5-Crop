@@ -24,7 +24,7 @@ from ...policies.runtime_policy import DetectionPolicy
 from ...policies.registry import get_detection_policy
 from ...runtime import AnalysisCache
 from ...utils import clamp_int
-from ..outer.plan import outer_candidate_strategy
+from ..outer.proposal.plan import outer_candidate_strategy
 from .partial import partial_edge_hint
 from .scoring import score_detection
 from ..evidence.separator import wide_separator_gaps_for_outer

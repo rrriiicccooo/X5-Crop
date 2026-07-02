@@ -61,7 +61,11 @@ Current stable release: v4.2.8
   analysis source 和 review reason 统一使用 `dual_lane` 命名，不再使用泛化的并行 lane 命名。
 - `review_only` mode 已推广为通用 mode detector 接口；`135-dual/partial` 只是
   该接口的当前使用者，不再通过 dual-lane detector 或旧的专用模块旁路。
-- separator-derived outer 已收敛为统一 `detection/outer/separator.py` 引擎；
+- outer 源码层级已拆为 `detection/outer/proposal/` 与
+  `detection/outer/correction/`；outer 只负责 proposal / correction，
+  separator bands、outer-content alignment 和 cache key 分别归入 evidence /
+  detection cache 层。
+- separator-derived outer 已收敛为统一 `detection/outer/proposal/separator.py` 引擎；
   local、full-width 和 120-66 wide separator variants 共享 sequence / ranking /
   candidate 输出逻辑，active code 不再保留独立 dark-band outer 分支。
 - 14 个 format / strip mode decision contract policy smoke 通过；final contract
@@ -161,8 +165,12 @@ Verified:
 - `review_only` mode is now a generic mode-detector interface; `135-dual/partial`
   is only the current user of that interface and no longer routes through the
   dual-lane detector or the old dedicated module.
+- Outer source layout is split into `detection/outer/proposal/` and
+  `detection/outer/correction/`; outer owns proposal / correction only, while
+  separator bands, outer-content alignment, and cache keys live in evidence /
+  detection cache layers.
 - Separator-derived outer proposals are consolidated into the single
-  `detection/outer/separator.py` engine; local, full-width, and 120-66 wide
+  `detection/outer/proposal/separator.py` engine; local, full-width, and 120-66 wide
   separator variants share sequence, ranking, and candidate output logic, and
   active code no longer keeps a separate dark-band outer branch.
 - 14 format / strip-mode decision contract policy smoke checks pass; the final

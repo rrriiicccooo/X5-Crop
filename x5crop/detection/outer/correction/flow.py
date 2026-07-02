@@ -4,13 +4,13 @@ from typing import Any
 
 import numpy as np
 
-from ...runtime_config import RuntimeConfig
-from ...domain import Detection
-from ...formats import FormatSpec
-from ...runtime import AnalysisCache
-from .retry_content import retry_with_content_aligned_outer
-from .retry_geometry import format_geometry_model_detail, retry_with_format_geometry_outer
-from .retry_short_axis import retry_with_short_axis_aspect_outer
+from ....domain import Detection
+from ....formats import FormatSpec
+from ....runtime import AnalysisCache
+from ....runtime_config import RuntimeConfig
+from .content_aligned import retry_with_content_aligned_outer
+from .format_geometry import format_geometry_model_detail, retry_with_format_geometry_outer
+from .short_axis import retry_with_short_axis_aspect_outer
 
 
 def retry_with_outer_correction_proposals(

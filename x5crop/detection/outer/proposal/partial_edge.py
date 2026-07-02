@@ -4,14 +4,14 @@ from typing import Optional
 
 import numpy as np
 
-from ...domain import Box, OuterCandidate
-from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from ...policies.registry import get_detection_policy
-from ...policies.runtime_policy import DetectionPolicy
-from ...runtime import AnalysisCache
-from ...utils import bbox_from_mask, clamp_int
+from ....domain import Box, OuterCandidate
+from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ....policies.registry import get_detection_policy
+from ....policies.runtime_policy import DetectionPolicy
+from ....runtime import AnalysisCache
+from ....utils import bbox_from_mask, clamp_int
+from ...cache_keys import long_axis_edge_anchor_cache_key
 from .base import unique_outer_candidates
-from .outer_cache_keys import long_axis_edge_anchor_cache_key
 
 
 def long_axis_edge_anchor_outer_candidates(

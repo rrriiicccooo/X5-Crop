@@ -13,9 +13,13 @@ from ...policies.registry import get_detection_policy
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from ..evidence.content_evidence import content_evidence_detail
-from ..outer.base import unique_outer_candidates
-from ..outer.plan import outer_candidate_strategy, outer_proposal_candidates
-from ..outer.separator import FULL_WIDTH_SEPARATOR_OUTER, WIDE_SEPARATOR_OUTER, separator_derived_outer_candidates
+from ..outer.proposal.base import unique_outer_candidates
+from ..outer.proposal.plan import (
+    outer_candidate_strategy,
+    outer_proposal_candidates,
+    separator_full_width_outer_proposal_candidates,
+    wide_separator_outer_proposal_candidates,
+)
 from .build import build_detection_for_outer
 from .counts import raw_detection_rank
 from .partial_holder import partial_safe_frame_content_detail, partial_safe_leading_content_detail
@@ -75,7 +79,7 @@ def detect_candidate_for_count(
         )
     )
     if should_try_separator_full_width:
-        separator_full_width_candidates = separator_derived_outer_candidates(
+        separator_full_width_candidates = separator_full_width_outer_proposal_candidates(
             gray_work,
             outer_candidates,
             fmt,
@@ -83,7 +87,6 @@ def detect_candidate_for_count(
             strip_mode,
             cache,
             policy,
-            variants=(FULL_WIDTH_SEPARATOR_OUTER,),
         )
         for candidate in separator_full_width_candidates:
             candidate_gap_override = separator_outer_gap_max_width_override(policy, gap_max_width_ratio_override)
@@ -114,7 +117,7 @@ def detect_candidate_for_count(
         current_best_for_wide,
     )
     wide_separator_candidates = (
-        separator_derived_outer_candidates(
+        wide_separator_outer_proposal_candidates(
             gray_work,
             outer_candidates,
             fmt,
@@ -122,7 +125,6 @@ def detect_candidate_for_count(
             strip_mode,
             cache,
             policy,
-            variants=(WIDE_SEPARATOR_OUTER,),
         )
         if should_try_wide_separator
         else []

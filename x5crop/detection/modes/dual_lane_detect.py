@@ -14,7 +14,7 @@ from ...domain import Box, Detection
 from ...runtime import AnalysisCache
 from ...runtime_config import RuntimeConfig
 from ..candidate.selection import calibrated_candidate_rank
-from ..outer.base import base_outer_candidates
+from ..outer.proposal.base import base_outer_candidates
 from .dual_lane_context import DualLaneDetectionContext
 from .dual_lane_split import translate_work_box
 
@@ -30,7 +30,7 @@ def detect_dual_lane(
     from ..candidate.build import build_detection_for_outer
     from ..candidate.candidate_assessment import apply_candidate_assessment_policy
     from ..evidence.content_evidence import content_evidence_detail
-    from ..outer.alignment import outer_content_alignment_detail
+    from ..evidence.outer_alignment import outer_content_alignment_detail
 
     lane_crop = cache.gray_work[lane.top:lane.bottom, lane.left:lane.right]
     if lane_crop.size == 0:
