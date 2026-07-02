@@ -19,14 +19,14 @@ def frame_boxes_from_gaps(
     origin: float = 0.0,
     pitch: Optional[float] = None,
     apply_geometry_fit: bool = True,
-    geometry_policy: Optional[Any] = None,
+    geometry_config: Optional[Any] = None,
 ) -> list[Box]:
     if pitch is None:
         cuts = [float(outer.left)] + [gap.center + outer.left for gap in gaps] + [float(outer.right)]
     else:
         cuts = [outer.left + origin] + [outer.left + gap.center for gap in gaps] + [outer.left + origin + pitch * count]
     if apply_geometry_fit:
-        cuts = fit_cuts_by_geometry(cuts, outer, count, pitch, geometry_policy)
+        cuts = fit_cuts_by_geometry(cuts, outer, count, pitch, geometry_config)
     boxes: list[Box] = []
     for left, right in zip(cuts[:-1], cuts[1:]):
         box = Box(int(round(left)), outer.top, int(round(right)), outer.bottom)
@@ -34,19 +34,19 @@ def frame_boxes_from_gaps(
     return boxes[:count]
 
 
-def fit_cuts_by_geometry(cuts: list[float], outer: Box, count: int, pitch: Optional[float], policy: Optional[Any] = None) -> list[float]:
+def fit_cuts_by_geometry(cuts: list[float], outer: Box, count: int, pitch: Optional[float], config: Optional[Any] = None) -> list[float]:
     if len(cuts) != count + 1 or count <= 1:
         return cuts
-    if policy is None:
+    if config is None:
         return cuts
     widths = np.diff(np.array(cuts, dtype=np.float64))
     if widths.size != count or np.any(widths <= 1):
         return cuts
     width_cv = float(widths.std() / max(1.0, widths.mean()))
     target = float(np.median(widths))
-    if pitch is not None and policy.geometry_pitch_min_ratio <= target / max(1.0, float(pitch)) <= policy.geometry_pitch_max_ratio:
+    if pitch is not None and config.geometry_pitch_min_ratio <= target / max(1.0, float(pitch)) <= config.geometry_pitch_max_ratio:
         target = float(pitch)
-    if width_cv <= policy.geometry_noop_width_cv:
+    if width_cv <= config.geometry_noop_width_cv:
         return cuts
 
     centers = (np.array(cuts[:-1], dtype=np.float64) + np.array(cuts[1:], dtype=np.float64)) / 2.0
@@ -55,9 +55,9 @@ def fit_cuts_by_geometry(cuts: list[float], outer: Box, count: int, pitch: Optio
     start = max(float(outer.left), min(float(outer.right) - target * count, start))
     fitted = [start + target * i for i in range(count + 1)]
     outer_tolerance = clamp_float(
-        target * policy.geometry_outer_tolerance_ratio,
-        policy.geometry_outer_tolerance_min,
-        policy.geometry_outer_tolerance_max,
+        target * config.geometry_outer_tolerance_ratio,
+        config.geometry_outer_tolerance_min,
+        config.geometry_outer_tolerance_max,
     )
     if fitted[0] < outer.left - outer_tolerance or fitted[-1] > outer.right + outer_tolerance:
         return cuts
@@ -106,9 +106,9 @@ def fit_boxes_by_edge_evidence(
     image_h: int,
     bleed_x: int,
     bleed_y: int,
-    policy: Any,
+    config: Any,
 ) -> tuple[Optional[list[Box]], dict[str, Any]]:
-    if not policy.edge_evidence:
+    if not config.edge_evidence:
         return None, {"used": False, "reason": "edge_evidence_disabled"}
     if count <= 1 or len(gaps) != count - 1 or outer.width <= 1:
         return None, {"used": False, "reason": "not_applicable"}
@@ -127,19 +127,19 @@ def fit_boxes_by_edge_evidence(
         if left is None or right is None:
             continue
         width = float(right[0]) - float(left[0])
-        if nominal * policy.nominal_min_ratio <= width <= nominal * policy.nominal_max_ratio:
+        if nominal * config.nominal_min_ratio <= width <= nominal * config.nominal_max_ratio:
             samples.append((i, width))
-    if len(samples) < policy.min_edge_samples:
+    if len(samples) < config.min_edge_samples:
         return None, {"used": False, "reason": "too_few_edge_samples", "sample_count": len(samples)}
 
     widths = np.array([width for _, width in samples], dtype=np.float64)
     target = float(np.median(widths))
-    tol = max(policy.min_inlier_tolerance_px, target * policy.inlier_tolerance_ratio)
+    tol = max(config.min_inlier_tolerance_px, target * config.inlier_tolerance_ratio)
     inliers = [(i, width) for i, width in samples if abs(width - target) <= tol]
-    if len(inliers) < policy.min_edge_samples:
+    if len(inliers) < config.min_edge_samples:
         return None, {"used": False, "reason": "edge_samples_disagree", "sample_count": len(samples)}
     target = float(np.median(np.array([width for _, width in inliers], dtype=np.float64)))
-    if not (nominal * policy.nominal_min_ratio <= target <= nominal * policy.nominal_max_ratio):
+    if not (nominal * config.nominal_min_ratio <= target <= nominal * config.nominal_max_ratio):
         return None, {"used": False, "reason": "target_width_out_of_range", "target_width": target}
 
     base_ranges = relative_ranges_from_gaps(outer, gaps, count)
@@ -161,14 +161,14 @@ def fit_boxes_by_edge_evidence(
             fitted.append((base_left, base_right))
             continue
         base_left_from_center = (float(base_left) + float(base_right) - target) / 2.0
-        candidates.append((base_left_from_center, policy.edge_candidate_weight_with_edges if candidates else policy.edge_candidate_weight_without_edges))
+        candidates.append((base_left_from_center, config.edge_candidate_weight_with_edges if candidates else config.edge_candidate_weight_without_edges))
         new_left = weighted_median(candidates)
         new_left = min(max(0.0, new_left), max_left)
         new_right = new_left + target
         adjust_tolerance = clamp_float(
-            target * policy.edge_adjust_tolerance_ratio,
-            policy.edge_adjust_tolerance_min,
-            policy.edge_adjust_tolerance_max,
+            target * config.edge_adjust_tolerance_ratio,
+            config.edge_adjust_tolerance_min,
+            config.edge_adjust_tolerance_max,
         )
         if abs(new_left - base_left) > adjust_tolerance or abs(new_right - base_right) > adjust_tolerance:
             adjusted.append(i + 1)
@@ -203,8 +203,8 @@ def fit_frame_boxes_from_gaps(
     frame_fit: Optional[Any] = None,
 ) -> tuple[list[Box], dict[str, Any]]:
     if frame_fit is None:
-        raise ValueError("frame_fit policy is required")
-    policy = frame_fit
+        raise ValueError("frame_fit config is required")
+    config = frame_fit
     base_boxes = frame_boxes_from_gaps(
         outer,
         gaps,
@@ -215,8 +215,8 @@ def fit_frame_boxes_from_gaps(
         bleed_y,
         origin=origin,
         pitch=pitch,
-        apply_geometry_fit=policy.geometry_fallback,
-        geometry_policy=policy,
+        apply_geometry_fit=config.geometry_fallback,
+        geometry_config=config,
     )
     fitted_boxes, detail = fit_boxes_by_edge_evidence(
         outer,
@@ -226,33 +226,33 @@ def fit_frame_boxes_from_gaps(
         image_h,
         bleed_x,
         bleed_y,
-        policy,
+        config,
     )
     detail = dict(detail)
     detail["policy"] = {
-        "name": policy.name,
-        "edge_evidence": bool(policy.edge_evidence),
-        "geometry_fallback": bool(policy.geometry_fallback),
-        "min_edge_samples": int(policy.min_edge_samples),
-        "nominal_min_ratio": float(policy.nominal_min_ratio),
-        "nominal_max_ratio": float(policy.nominal_max_ratio),
-        "inlier_tolerance_ratio": float(policy.inlier_tolerance_ratio),
-        "min_inlier_tolerance_px": float(policy.min_inlier_tolerance_px),
-        "geometry_pitch_min_ratio": float(policy.geometry_pitch_min_ratio),
-        "geometry_pitch_max_ratio": float(policy.geometry_pitch_max_ratio),
-        "geometry_noop_width_cv": float(policy.geometry_noop_width_cv),
-        "geometry_outer_tolerance_ratio": float(policy.geometry_outer_tolerance_ratio),
-        "geometry_outer_tolerance_min": float(policy.geometry_outer_tolerance_min),
-        "geometry_outer_tolerance_max": float(policy.geometry_outer_tolerance_max),
-        "edge_candidate_weight_with_edges": float(policy.edge_candidate_weight_with_edges),
-        "edge_candidate_weight_without_edges": float(policy.edge_candidate_weight_without_edges),
-        "edge_adjust_tolerance_ratio": float(policy.edge_adjust_tolerance_ratio),
-        "edge_adjust_tolerance_min": float(policy.edge_adjust_tolerance_min),
-        "edge_adjust_tolerance_max": float(policy.edge_adjust_tolerance_max),
+        "name": config.name,
+        "edge_evidence": bool(config.edge_evidence),
+        "geometry_fallback": bool(config.geometry_fallback),
+        "min_edge_samples": int(config.min_edge_samples),
+        "nominal_min_ratio": float(config.nominal_min_ratio),
+        "nominal_max_ratio": float(config.nominal_max_ratio),
+        "inlier_tolerance_ratio": float(config.inlier_tolerance_ratio),
+        "min_inlier_tolerance_px": float(config.min_inlier_tolerance_px),
+        "geometry_pitch_min_ratio": float(config.geometry_pitch_min_ratio),
+        "geometry_pitch_max_ratio": float(config.geometry_pitch_max_ratio),
+        "geometry_noop_width_cv": float(config.geometry_noop_width_cv),
+        "geometry_outer_tolerance_ratio": float(config.geometry_outer_tolerance_ratio),
+        "geometry_outer_tolerance_min": float(config.geometry_outer_tolerance_min),
+        "geometry_outer_tolerance_max": float(config.geometry_outer_tolerance_max),
+        "edge_candidate_weight_with_edges": float(config.edge_candidate_weight_with_edges),
+        "edge_candidate_weight_without_edges": float(config.edge_candidate_weight_without_edges),
+        "edge_adjust_tolerance_ratio": float(config.edge_adjust_tolerance_ratio),
+        "edge_adjust_tolerance_min": float(config.edge_adjust_tolerance_min),
+        "edge_adjust_tolerance_max": float(config.edge_adjust_tolerance_max),
     }
     if fitted_boxes is not None:
         return fitted_boxes, detail
-    detail.setdefault("method", "geometry_fallback" if policy.geometry_fallback else "raw_gaps")
+    detail.setdefault("method", "geometry_fallback" if config.geometry_fallback else "raw_gaps")
     return base_boxes, detail
 
 

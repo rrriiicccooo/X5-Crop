@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class OuterMaskProfilePolicy:
+class OuterMaskProfileConfig:
     name: str
     low: int | None
     high: int | None
@@ -13,15 +13,15 @@ class OuterMaskProfilePolicy:
 
 
 @dataclass(frozen=True)
-class OuterBoxDetectionPolicy:
+class OuterBoxDetectionConfig:
     white_x_width_multiplier: float = 1.80
     white_x_extra_ratio: float = 0.060
     candidate_max_area: float = 0.94
     mask_expand_ratio: float = 0.002
-    mask_profiles: tuple[OuterMaskProfilePolicy, ...] = (
-        OuterMaskProfilePolicy("mask_not_white_246", None, 246),
-        OuterMaskProfilePolicy("mask_not_white_225", None, 225),
-        OuterMaskProfilePolicy("mask_mid_8_246", 8, 246),
+    mask_profiles: tuple[OuterMaskProfileConfig, ...] = (
+        OuterMaskProfileConfig("mask_not_white_246", None, 246),
+        OuterMaskProfileConfig("mask_not_white_225", None, 225),
+        OuterMaskProfileConfig("mask_mid_8_246", 8, 246),
     )
     min_width_ratio: float = 0.10
     min_height_ratio: float = 0.10
@@ -47,7 +47,7 @@ class OuterBoxDetectionPolicy:
 
 
 @dataclass(frozen=True)
-class HardGapTrustPolicy:
+class HardGapTrustConfig:
     guard_ratio: float = 0.020
     guard_min: int = 4
     guard_max: int = 80
@@ -77,7 +77,7 @@ class HardGapTrustPolicy:
 
 
 @dataclass(frozen=True)
-class NearbySeparatorCorrectionPolicy:
+class NearbySeparatorCorrectionConfig:
     enabled: bool = True
     window_ratio: float = 0.040
     window_min: int = 16
@@ -98,7 +98,7 @@ class NearbySeparatorCorrectionPolicy:
 
 
 @dataclass(frozen=True)
-class RobustGridPolicy:
+class RobustGridConfig:
     constrain_full_shift_ratio: float = 0.045
     constrain_partial_shift_ratio: float = 0.12
     constrain_shift_min: float = 20.0
@@ -125,7 +125,7 @@ class RobustGridPolicy:
 
 
 @dataclass(frozen=True)
-class GapSearchPolicy:
+class GapSearchConfig:
     radius_ratio: float = 0.16
     radius_min: int = 6
     radius_max: int = 900
@@ -146,7 +146,7 @@ class GapSearchPolicy:
 
 
 @dataclass(frozen=True)
-class EnhancedSeparatorPolicy:
+class EnhancedSeparatorConfig:
     min_score: float = 0.34
     max_width_ratio: float = 0.040
     max_width_min: float = 3.0
@@ -158,7 +158,7 @@ class EnhancedSeparatorPolicy:
 
 
 @dataclass(frozen=True)
-class SeparatorProfilePolicy:
+class SeparatorProfileConfig:
     top_ratio: float = 0.10
     bottom_ratio: float = 0.90
     segments: int = 5
@@ -180,7 +180,7 @@ class SeparatorProfilePolicy:
 
 
 @dataclass(frozen=True)
-class EdgeRefineProfilePolicy:
+class EdgeRefineProfileConfig:
     top_ratio: float = 0.12
     bottom_ratio: float = 0.88
     mean_weight: float = 0.65
@@ -209,13 +209,13 @@ class EdgePairParameters:
 
 __all__ = [
     "EdgePairParameters",
-    "EdgeRefineProfilePolicy",
-    "EnhancedSeparatorPolicy",
-    "GapSearchPolicy",
-    "HardGapTrustPolicy",
-    "NearbySeparatorCorrectionPolicy",
-    "OuterBoxDetectionPolicy",
-    "OuterMaskProfilePolicy",
-    "RobustGridPolicy",
-    "SeparatorProfilePolicy",
+    "EdgeRefineProfileConfig",
+    "EnhancedSeparatorConfig",
+    "GapSearchConfig",
+    "HardGapTrustConfig",
+    "NearbySeparatorCorrectionConfig",
+    "OuterBoxDetectionConfig",
+    "OuterMaskProfileConfig",
+    "RobustGridConfig",
+    "SeparatorProfileConfig",
 ]

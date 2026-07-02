@@ -9,24 +9,24 @@ from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
 from ..runtime import AnalysisCache
 from ..utils import clamp_float, clamp_int
-from .detection_parameters import EdgePairParameters, EdgeRefineProfilePolicy
+from .detection_parameters import EdgePairParameters, EdgeRefineProfileConfig
 from .separator_cache import cached_edge_refine_profiles
 from .separator_profile import edge_refine_profiles, interval_mean, local_edge_peaks
 
 
-def edge_pair_parameters_from_policy(policy: Any) -> EdgePairParameters:
-    if isinstance(policy, EdgePairParameters):
-        return policy
+def edge_pair_parameters_from_config(config: Any) -> EdgePairParameters:
+    if isinstance(config, EdgePairParameters):
+        return config
     return EdgePairParameters(
-        window_ratio=float(getattr(policy, "window_ratio")),
-        min_gutter_ratio=float(getattr(policy, "min_gutter_ratio")),
-        max_gutter_ratio=float(getattr(policy, "max_gutter_ratio")),
-        min_strength=float(getattr(policy, "min_strength")),
-        min_background=float(getattr(policy, "min_background")),
-        min_quality_for_model_gap=float(getattr(policy, "min_quality_for_model_gap")),
-        min_quality_for_hard_gap=float(getattr(policy, "min_quality_for_hard_gap")),
-        hard_gap_quality_ratio=float(getattr(policy, "hard_gap_quality_ratio")),
-        max_hard_shift_ratio=float(getattr(policy, "max_hard_shift_ratio")),
+        window_ratio=float(getattr(config, "window_ratio")),
+        min_gutter_ratio=float(getattr(config, "min_gutter_ratio")),
+        max_gutter_ratio=float(getattr(config, "max_gutter_ratio")),
+        min_strength=float(getattr(config, "min_strength")),
+        min_background=float(getattr(config, "min_background")),
+        min_quality_for_model_gap=float(getattr(config, "min_quality_for_model_gap")),
+        min_quality_for_hard_gap=float(getattr(config, "min_quality_for_hard_gap")),
+        hard_gap_quality_ratio=float(getattr(config, "hard_gap_quality_ratio")),
+        max_hard_shift_ratio=float(getattr(config, "max_hard_shift_ratio")),
     )
 
 
@@ -50,21 +50,21 @@ def refine_gaps_by_edge_pairs(
     format_name: str,
     cache: Optional[AnalysisCache] = None,
     outer: Optional[Box] = None,
-    edge_pair_policy: Optional[Any] = None,
-    edge_refine_policy: EdgeRefineProfilePolicy | None = None,
+    edge_pair_config: Optional[Any] = None,
+    edge_refine_config: EdgeRefineProfileConfig | None = None,
 ) -> tuple[list[Gap], dict[str, Any]]:
     h, w = crop.shape
     if count <= 1 or w <= 1 or not gaps:
         return gaps, {"used": False, "reason": "empty"}
     edge, background, _activity = (
-        cached_edge_refine_profiles(cache, crop, outer, format_name, edge_refine_policy)
+        cached_edge_refine_profiles(cache, crop, outer, format_name, edge_refine_config)
         if outer is not None
-        else edge_refine_profiles(crop, edge_refine_policy)
+        else edge_refine_profiles(crop, edge_refine_config)
     )
     pitch = w / float(max(1, count))
-    if edge_pair_policy is None:
-        raise ValueError("edge_pair_policy is required")
-    params = edge_pair_parameters_from_policy(edge_pair_policy)
+    if edge_pair_config is None:
+        raise ValueError("edge_pair config is required")
+    params = edge_pair_parameters_from_config(edge_pair_config)
     window = clamp_int(pitch * params.window_ratio, 8, 520)
     min_gutter = clamp_int(pitch * params.min_gutter_ratio, 2, 40)
     max_gutter = max(min_gutter + 1, clamp_int(pitch * params.max_gutter_ratio, 8, 420))

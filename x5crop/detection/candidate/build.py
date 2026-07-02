@@ -238,7 +238,7 @@ def build_detection_for_outer(
         origin=origin,
         pitch=pitch,
         apply_geometry_fit=policy.frame_fit.geometry_fallback,
-        geometry_policy=policy.frame_fit,
+        geometry_config=policy.frame_fit,
     )
     boxes = [map_work_box(box, config.layout, w, h) for box in boxes_work]
     outer_original = map_work_box(outer, config.layout, w, h)

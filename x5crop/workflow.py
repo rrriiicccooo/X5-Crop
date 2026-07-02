@@ -17,8 +17,8 @@ from .export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from .export.paths import output_directory_for
 from .formats import FORMATS
 from .analysis_cache import make_analysis_cache
-from .detection.final.geometry import detection_geometry_config
 from .io.tiff import read_tiff, read_tiff_profile
+from .output_geometry import detection_geometry_config
 from .policies.registry import get_detection_policy
 from .report_outputs import write_report_outputs_for_result
 from .result_builder import result_from_detection

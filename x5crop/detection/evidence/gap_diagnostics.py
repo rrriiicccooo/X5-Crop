@@ -8,10 +8,11 @@ import numpy as np
 from ...constants import HARD_GAP_METHODS, MODEL_GAP_METHODS
 from ...domain import Box, Detection, Gap
 from ...geometry.boxes import box_cache_key
+from ...geometry.detection_parameters import SeparatorProfileConfig
 from ...geometry.separator_cache import cached_separator_profile
 from ...geometry.separator_profile import interval_mean
 from ...policies.registry import get_detection_policy
-from ...policies.runtime_policy import NearbySeparatorDiagnosticsPolicy, SeparatorProfilePolicy
+from ...policies.runtime_policy import NearbySeparatorDiagnosticsPolicy
 from ...runtime import AnalysisCache
 from ...utils import clamp_float, clamp_int, runs_from_mask
 
@@ -41,7 +42,7 @@ def nearby_separator_candidate_detail(
     nearby_policy: NearbySeparatorDiagnosticsPolicy,
     format_name: str,
     cache: Optional[AnalysisCache] = None,
-    profile_policy: Optional[SeparatorProfilePolicy] = None,
+    profile_policy: Optional[SeparatorProfileConfig] = None,
 ) -> dict[str, Any]:
     if gap.method not in HARD_GAP_METHODS or pitch <= 0:
         return {"searched": False, "reason": "not_hard_gap"}
@@ -50,7 +51,7 @@ def nearby_separator_candidate_detail(
         cache_key = (
             str(format_name),
             "nearby_separator",
-            profile_policy or SeparatorProfilePolicy(),
+            profile_policy or SeparatorProfileConfig(),
             box_cache_key(work_outer),
             int(gap.index),
             str(gap.method),

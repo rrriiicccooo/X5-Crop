@@ -8,12 +8,12 @@ import numpy as np
 
 from .app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
 from .config import RuntimeConfig
-from .detection.final.geometry import output_bleed_config_for_detection, reapply_cached_output_bleed
 from .domain import Box, Detection, Gap, ImageProfile, ProcessResult
 from .export.crops import write_crops
 from .image.evidence import make_gray_u8
 from .image.transforms import rotate_array_expand
 from .io.tiff import read_tiff
+from .output_geometry import output_bleed_config_for_detection, reapply_cached_output_bleed
 from .policies.registry import get_detection_policy
 from .result_builder import result_from_cached_record, result_from_detection
 from .runtime import REPORT_RECORD_CACHE

@@ -4,7 +4,7 @@ import numpy as np
 
 from ..domain import Box
 from ..utils import bbox_from_mask, clamp_int, runs_from_mask, smooth_1d
-from .detection_parameters import OuterBoxDetectionPolicy, OuterMaskProfilePolicy
+from .detection_parameters import OuterBoxDetectionConfig, OuterMaskProfileConfig
 
 
 def first_content_index(border_mask: np.ndarray, min_run: int) -> int:
@@ -21,53 +21,53 @@ def first_content_index(border_mask: np.ndarray, min_run: int) -> int:
 
 def detect_outer(
     gray: np.ndarray,
-    policy: OuterBoxDetectionPolicy | None = None,
+    config: OuterBoxDetectionConfig | None = None,
 ) -> Box:
-    policy = policy or OuterBoxDetectionPolicy()
+    config = config or OuterBoxDetectionConfig()
     h, w = gray.shape
-    not_white = gray < policy.bw_not_white_threshold
-    dark = gray < policy.bw_dark_threshold
+    not_white = gray < config.bw_not_white_threshold
+    dark = gray < config.bw_dark_threshold
     mask = not_white | dark
     box = bbox_from_mask(
         mask,
-        min_row_fraction=policy.bw_min_fraction,
-        min_col_fraction=policy.bw_min_fraction,
+        min_row_fraction=config.bw_min_fraction,
+        min_col_fraction=config.bw_min_fraction,
     )
     if (
         box is None
-        or box.width < max(policy.min_width_px, w * policy.bw_min_width_ratio)
-        or box.height < max(policy.min_height_px, h * policy.bw_min_height_ratio)
+        or box.width < max(config.min_width_px, w * config.bw_min_width_ratio)
+        or box.height < max(config.min_height_px, h * config.bw_min_height_ratio)
     ):
         return Box(0, 0, w, h)
 
-    margin_x = max(policy.bw_margin_min, int(round(w * policy.bw_margin_ratio)))
-    margin_y = max(policy.bw_margin_min, int(round(h * policy.bw_margin_ratio)))
+    margin_x = max(config.bw_margin_min, int(round(w * config.bw_margin_ratio)))
+    margin_y = max(config.bw_margin_min, int(round(h * config.bw_margin_ratio)))
     return box.expand(margin_x, margin_y, w, h)
 
 
 def detect_outer_white_x(
     gray: np.ndarray,
-    policy: OuterBoxDetectionPolicy | None = None,
+    config: OuterBoxDetectionConfig | None = None,
 ) -> Box:
-    policy = policy or OuterBoxDetectionPolicy()
+    config = config or OuterBoxDetectionConfig()
     h, w = gray.shape
-    min_run_y = clamp_int(h * policy.white_run_ratio, policy.white_run_min, policy.white_run_max)
-    min_run_x = clamp_int(w * policy.white_run_ratio, policy.white_run_min, policy.white_run_max)
-    y_background = (gray <= policy.white_dark_threshold) | (gray >= policy.white_light_threshold)
-    x_background = gray >= policy.white_light_threshold
-    row_border = y_background.mean(axis=1) >= policy.white_border_ratio
-    col_border = x_background.mean(axis=0) >= policy.white_border_ratio
+    min_run_y = clamp_int(h * config.white_run_ratio, config.white_run_min, config.white_run_max)
+    min_run_x = clamp_int(w * config.white_run_ratio, config.white_run_min, config.white_run_max)
+    y_background = (gray <= config.white_dark_threshold) | (gray >= config.white_light_threshold)
+    x_background = gray >= config.white_light_threshold
+    row_border = y_background.mean(axis=1) >= config.white_border_ratio
+    col_border = x_background.mean(axis=0) >= config.white_border_ratio
     top = first_content_index(row_border, min_run_y)
     bottom = h - first_content_index(row_border[::-1], min_run_y)
     left = first_content_index(col_border, min_run_x)
     right = w - first_content_index(col_border[::-1], min_run_x)
-    margin_x = max(policy.white_margin_min, int(round(w * policy.white_margin_ratio)))
-    margin_y = max(policy.white_margin_min, int(round(h * policy.white_margin_ratio)))
+    margin_x = max(config.white_margin_min, int(round(w * config.white_margin_ratio)))
+    margin_y = max(config.white_margin_min, int(round(h * config.white_margin_ratio)))
     box = Box(left, top, right, bottom).expand(margin_x, margin_y, w, h)
     if (
         not box.valid()
-        or box.width < max(policy.min_width_px, w * policy.white_min_width_ratio)
-        or box.height < max(policy.min_height_px, h * policy.white_min_height_ratio)
+        or box.width < max(config.min_width_px, w * config.white_min_width_ratio)
+        or box.height < max(config.min_height_px, h * config.white_min_height_ratio)
     ):
         return Box(0, 0, w, h)
     return box
@@ -75,10 +75,10 @@ def detect_outer_white_x(
 
 def detect_mask_profile_outer(
     gray: np.ndarray,
-    profile: OuterMaskProfilePolicy,
-    policy: OuterBoxDetectionPolicy | None = None,
+    profile: OuterMaskProfileConfig,
+    config: OuterBoxDetectionConfig | None = None,
 ) -> Box | None:
-    policy = policy or OuterBoxDetectionPolicy()
+    config = config or OuterBoxDetectionConfig()
     h, w = gray.shape
     mask = np.ones_like(gray, dtype=bool)
     if profile.low is not None:
@@ -89,13 +89,13 @@ def detect_mask_profile_outer(
     if box is None:
         return None
     if (
-        box.width < max(policy.min_width_px, w * policy.min_width_ratio)
-        or box.height < max(policy.min_height_px, h * policy.min_height_ratio)
+        box.width < max(config.min_width_px, w * config.min_width_ratio)
+        or box.height < max(config.min_height_px, h * config.min_height_ratio)
     ):
         return None
     return box.expand(
-        max(policy.bw_margin_min, int(w * policy.mask_expand_ratio)),
-        max(policy.bw_margin_min, int(h * policy.mask_expand_ratio)),
+        max(config.bw_margin_min, int(w * config.mask_expand_ratio)),
+        max(config.bw_margin_min, int(h * config.mask_expand_ratio)),
         w,
         h,
     )

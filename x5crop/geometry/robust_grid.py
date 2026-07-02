@@ -9,7 +9,7 @@ from ..domain import Box, Gap
 from ..utils import clamp_float
 from .gap_search import constrain_gap_to_geometry
 from .gap_trust import light_hard_gap_trust
-from .detection_parameters import HardGapTrustPolicy, NearbySeparatorCorrectionPolicy, RobustGridPolicy
+from .detection_parameters import HardGapTrustConfig, NearbySeparatorCorrectionConfig, RobustGridConfig
 
 
 def apply_robust_grid(
@@ -21,16 +21,16 @@ def apply_robust_grid(
     profile: Optional[np.ndarray] = None,
     gray_work: Optional[np.ndarray] = None,
     outer: Optional[Box] = None,
-    hard_gap_trust: HardGapTrustPolicy | None = None,
-    nearby_correction: NearbySeparatorCorrectionPolicy | None = None,
-    robust_grid: RobustGridPolicy | None = None,
+    hard_gap_trust: HardGapTrustConfig | None = None,
+    nearby_correction: NearbySeparatorCorrectionConfig | None = None,
+    robust_grid: RobustGridConfig | None = None,
 ) -> tuple[list[Gap], dict[str, Any]]:
     if not gaps:
         return gaps, {"grid_used": False}
-    policy = robust_grid or RobustGridPolicy()
-    constrained = [constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, strip_mode, policy) for gap in gaps]
-    reliable = [gap for gap in constrained if gap.method in HARD_GAP_METHODS and gap.score >= policy.reliable_min_score]
-    if len(reliable) < policy.min_reliable:
+    config = robust_grid or RobustGridConfig()
+    constrained = [constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, strip_mode, config) for gap in gaps]
+    reliable = [gap for gap in constrained if gap.method in HARD_GAP_METHODS and gap.score >= config.reliable_min_score]
+    if len(reliable) < config.min_reliable:
         return constrained, {"grid_used": False, "reliable_gaps": len(reliable)}
     best: Optional[tuple[int, float, float, float]] = None
     for a_i, a in enumerate(reliable):
@@ -39,14 +39,14 @@ def apply_robust_grid(
             if dk == 0:
                 continue
             cand_pitch = (b.center - a.center) / float(dk)
-            if cand_pitch <= pitch * policy.pitch_min_ratio or cand_pitch >= pitch * policy.pitch_max_ratio:
+            if cand_pitch <= pitch * config.pitch_min_ratio or cand_pitch >= pitch * config.pitch_max_ratio:
                 continue
             cand_origin = a.center - cand_pitch * a.index
             residuals = [abs(g.center - (cand_origin + cand_pitch * g.index)) for g in reliable]
             tolerance = clamp_float(
-                pitch * (policy.full_tolerance_ratio if strip_mode == "full" else policy.partial_tolerance_ratio),
-                policy.tolerance_min,
-                policy.tolerance_max,
+                pitch * (config.full_tolerance_ratio if strip_mode == "full" else config.partial_tolerance_ratio),
+                config.tolerance_min,
+                config.tolerance_max,
             )
             inliers = sum(1 for value in residuals if value <= tolerance)
             median_residual = float(np.median(np.array(residuals, dtype=np.float64))) if residuals else 0.0
@@ -56,19 +56,19 @@ def apply_robust_grid(
     if best is None:
         return constrained, {"grid_used": False, "reliable_gaps": len(reliable), "grid_rejected": "no_pair_model"}
     inlier_count, fit_pitch, fit_origin, median_residual = best
-    if inlier_count < policy.min_reliable:
+    if inlier_count < config.min_reliable:
         return constrained, {"grid_used": False, "reliable_gaps": len(reliable), "grid_rejected": "too_few_inliers"}
-    if median_residual > clamp_float(pitch * policy.reject_residual_ratio, policy.tolerance_min, policy.tolerance_max):
+    if median_residual > clamp_float(pitch * config.reject_residual_ratio, config.tolerance_min, config.tolerance_max):
         return constrained, {"grid_used": False, "reliable_gaps": len(reliable), "grid_rejected": "high_residual", "grid_residual": median_residual}
     max_shift = clamp_float(
-        pitch * (policy.full_shift_ratio if strip_mode == "full" else policy.partial_shift_ratio),
-        policy.shift_min,
-        policy.shift_max,
+        pitch * (config.full_shift_ratio if strip_mode == "full" else config.partial_shift_ratio),
+        config.shift_min,
+        config.shift_max,
     )
     hard_protection_residual_threshold = clamp_float(
-        pitch * policy.hard_protect_ratio,
-        policy.hard_protect_min,
-        policy.hard_protect_max,
+        pitch * config.hard_protect_ratio,
+        config.hard_protect_min,
+        config.hard_protect_max,
     )
     allow_hard_protection = median_residual > hard_protection_residual_threshold
     adjusted: list[Gap] = []
@@ -89,9 +89,9 @@ def apply_robust_grid(
             nearby_correction=nearby_correction,
         )
         if gap.method in HARD_GAP_METHODS and abs(gap.center - predicted) <= clamp_float(
-            pitch * policy.hard_keep_ratio,
-            policy.hard_keep_min,
-            policy.hard_keep_max,
+            pitch * config.hard_keep_ratio,
+            config.hard_keep_min,
+            config.hard_keep_max,
         ):
             adjusted.append(gap)
         elif allow_hard_protection and trust == "strong_separator":

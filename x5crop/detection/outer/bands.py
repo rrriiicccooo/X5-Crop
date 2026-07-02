@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from ...policies.runtime_policy import GapSearchPolicy, OuterPolicy, SeparatorOuterBandPolicy
+from ...geometry.detection_parameters import GapSearchConfig
+from ...policies.runtime_policy import OuterPolicy, SeparatorOuterBandPolicy
 from ...utils import clamp_float, clamp_int, runs_from_mask
 
 
@@ -75,25 +76,25 @@ def collect_separator_outer_bands(
     short_axis: float,
     coordinate_limit: float,
     band_policy: SeparatorOuterBandPolicy,
-    gap_search_policy: GapSearchPolicy,
+    gap_search_config: GapSearchConfig,
     outer_policy: OuterPolicy,
 ) -> tuple[list[dict[str, float]], float]:
     peak_threshold = float(band_policy.min_score)
     band_threshold = max(band_policy.band_score, peak_threshold * 0.58)
     min_width = clamp_int(
         short_axis * band_policy.min_width_ratio,
-        gap_search_policy.min_width_min,
-        gap_search_policy.max_width_max,
+        gap_search_config.min_width_min,
+        gap_search_config.max_width_max,
     )
     max_width = clamp_int(
         short_axis * band_policy.max_width_ratio,
-        max(min_width + 1, gap_search_policy.max_width_min),
-        gap_search_policy.max_width_max,
+        max(min_width + 1, gap_search_config.max_width_min),
+        gap_search_config.max_width_max,
     )
     guard = clamp_int(
-        short_axis * gap_search_policy.guard_ratio,
-        gap_search_policy.guard_min,
-        gap_search_policy.guard_max,
+        short_axis * gap_search_config.guard_ratio,
+        gap_search_config.guard_min,
+        gap_search_config.guard_max,
     )
     edge_margin = clamp_float(
         short_axis * band_policy.edge_margin_ratio,
@@ -126,7 +127,7 @@ def collect_separator_outer_bands(
         mean_score = float(profile[band_start:band_end].mean())
         side_score = max(float(left_guard.mean()), float(right_guard.mean()))
         prominence = mean_score - side_score
-        if mean_score < gap_search_policy.min_score or (prominence < 0.02 and mean_score < 0.88):
+        if mean_score < gap_search_config.min_score or (prominence < 0.02 and mean_score < 0.88):
             continue
         bands.append(
             {

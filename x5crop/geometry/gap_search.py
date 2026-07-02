@@ -7,7 +7,7 @@ import numpy as np
 from ..constants import HARD_GAP_METHODS
 from ..domain import Gap
 from ..utils import clamp_float, clamp_int, runs_from_mask
-from .detection_parameters import GapSearchPolicy, RobustGridPolicy
+from .detection_parameters import GapSearchConfig, RobustGridConfig
 
 
 def find_gap(
@@ -17,27 +17,27 @@ def find_gap(
     index: int,
     format_name: str,
     max_width_ratio_override: Optional[float] = None,
-    gap_search: GapSearchPolicy | None = None,
+    gap_search: GapSearchConfig | None = None,
 ) -> Gap:
-    policy = gap_search or GapSearchPolicy()
-    radius = clamp_int(pitch * policy.radius_ratio, policy.radius_min, policy.radius_max)
+    config = gap_search or GapSearchConfig()
+    radius = clamp_int(pitch * config.radius_ratio, config.radius_min, config.radius_max)
     lo = max(1, int(round(expected)) - radius)
     hi = min(len(profile) - 1, int(round(expected)) + radius + 1)
     if hi <= lo:
         return Gap(index, float(expected), 0.0, "equal")
     local = profile[lo:hi]
     local_max = float(local.max()) if local.size else 0.0
-    min_score = policy.min_score
+    min_score = config.min_score
     if local.size == 0 or local_max < min_score:
         return Gap(index, float(expected), local_max, "equal")
 
-    normal_max_gap_w = clamp_int(pitch * policy.max_width_ratio, policy.max_width_min, policy.max_width_max)
-    max_width_ratio = policy.max_width_ratio if max_width_ratio_override is None else max_width_ratio_override
-    max_gap_w = clamp_int(pitch * max_width_ratio, policy.max_width_min, policy.max_width_max)
-    min_gap_w = clamp_int(pitch * policy.min_width_ratio, policy.min_width_min, policy.min_width_max)
-    guard_w = clamp_int(pitch * policy.guard_ratio, policy.guard_min, policy.guard_max)
-    peak_threshold = max(min_score, local_max * policy.peak_multiplier)
-    band_threshold = max(min_score * 0.86, local_max * policy.band_multiplier)
+    normal_max_gap_w = clamp_int(pitch * config.max_width_ratio, config.max_width_min, config.max_width_max)
+    max_width_ratio = config.max_width_ratio if max_width_ratio_override is None else max_width_ratio_override
+    max_gap_w = clamp_int(pitch * max_width_ratio, config.max_width_min, config.max_width_max)
+    min_gap_w = clamp_int(pitch * config.min_width_ratio, config.min_width_min, config.min_width_max)
+    guard_w = clamp_int(pitch * config.guard_ratio, config.guard_min, config.guard_max)
+    peak_threshold = max(min_score, local_max * config.peak_multiplier)
+    band_threshold = max(min_score * 0.86, local_max * config.band_multiplier)
     candidates: list[tuple[float, float, float, float, float, float, str]] = []
 
     for run_start, run_end in runs_from_mask(local >= peak_threshold):
@@ -61,7 +61,7 @@ def find_gap(
             continue
         method = "detected"
         if max_width_ratio_override is not None and band_width > normal_max_gap_w:
-            if mean_score < policy.wide_min_mean or prominence < policy.wide_min_prominence:
+            if mean_score < config.wide_min_mean or prominence < config.wide_min_prominence:
                 continue
             method = "wide-separator"
 
@@ -84,15 +84,15 @@ def constrain_gap_to_geometry(
     expected: float,
     pitch: float,
     strip_mode: str,
-    robust_grid: RobustGridPolicy | None = None,
+    robust_grid: RobustGridConfig | None = None,
 ) -> Gap:
     if gap.method not in HARD_GAP_METHODS:
         return Gap(gap.index, float(expected), gap.score, "equal")
-    policy = robust_grid or RobustGridPolicy()
+    config = robust_grid or RobustGridConfig()
     max_shift = clamp_float(
-        pitch * (policy.constrain_full_shift_ratio if strip_mode == "full" else policy.constrain_partial_shift_ratio),
-        policy.constrain_shift_min,
-        policy.constrain_shift_max,
+        pitch * (config.constrain_full_shift_ratio if strip_mode == "full" else config.constrain_partial_shift_ratio),
+        config.constrain_shift_min,
+        config.constrain_shift_max,
     )
     shift = max(-max_shift, min(max_shift, gap.center - expected))
     center = float(expected + shift)

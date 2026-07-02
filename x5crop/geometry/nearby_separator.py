@@ -8,7 +8,7 @@ from ..constants import HARD_GAP_METHODS
 from ..domain import Gap
 from ..utils import clamp_float, clamp_int, runs_from_mask
 from .gap_search import gap_width_cv, local_gap_geometry_error
-from .detection_parameters import NearbySeparatorCorrectionPolicy
+from .detection_parameters import NearbySeparatorCorrectionConfig
 from .separator_profile import interval_mean
 
 
@@ -16,21 +16,21 @@ def nearby_separator_replacement(
     profile: np.ndarray,
     gap: Gap,
     pitch: float,
-    correction_policy: NearbySeparatorCorrectionPolicy | None = None,
+    correction_config: NearbySeparatorCorrectionConfig | None = None,
 ) -> Optional[dict[str, Any]]:
     if gap.method not in HARD_GAP_METHODS or pitch <= 0 or gap.start is None or gap.end is None:
         return None
-    policy = correction_policy or NearbySeparatorCorrectionPolicy()
+    config = correction_config or NearbySeparatorCorrectionConfig()
     center = int(round(gap.center))
     current_start = max(0, min(len(profile), int(round(min(gap.start, gap.end)))))
     current_end = max(current_start + 1, min(len(profile), int(round(max(gap.start, gap.end)))))
-    window = clamp_int(pitch * policy.window_ratio, policy.window_min, policy.window_max)
+    window = clamp_int(pitch * config.window_ratio, config.window_min, config.window_max)
     exclude = max(
-        policy.exclude_min,
+        config.exclude_min,
         clamp_int(
-            max(float(current_end - current_start), pitch * policy.exclude_ratio),
-            policy.exclude_min,
-            policy.exclude_max,
+            max(float(current_end - current_start), pitch * config.exclude_ratio),
+            config.exclude_min,
+            config.exclude_max,
         ),
     )
     lo = max(0, center - window)
@@ -48,15 +48,15 @@ def nearby_separator_replacement(
         if abs_start < current_end + exclude and abs_end > current_start - exclude:
             continue
         width = abs_end - abs_start
-        if width > clamp_int(pitch * policy.max_width_ratio, policy.max_width_min, policy.max_width_max):
+        if width > clamp_int(pitch * config.max_width_ratio, config.max_width_min, config.max_width_max):
             continue
         score = interval_mean(profile, abs_start, abs_end)
         candidate_center = (abs_start + abs_end - 1) / 2.0
         distance = candidate_center - gap.center
         if abs(distance) > clamp_float(
-            pitch * policy.distance_ratio,
-            float(policy.window_min),
-            float(policy.window_max),
+            pitch * config.distance_ratio,
+            float(config.window_min),
+            float(config.window_max),
         ):
             continue
         candidates.append(
@@ -74,8 +74,8 @@ def nearby_separator_replacement(
     if not best:
         return None
     stronger = float(best["score"]) >= max(
-        current_score + policy.score_add,
-        current_score * policy.score_multiplier,
+        current_score + config.score_add,
+        current_score * config.score_multiplier,
     )
     if not stronger:
         return None
@@ -96,10 +96,10 @@ def apply_nearby_separator_corrections(
     pitch: float,
     count: int,
     strip_mode: str,
-    correction_policy: NearbySeparatorCorrectionPolicy | None = None,
+    correction_config: NearbySeparatorCorrectionConfig | None = None,
 ) -> tuple[list[Gap], dict[str, Any]]:
-    policy = correction_policy or NearbySeparatorCorrectionPolicy()
-    if not policy.enabled or strip_mode != "full" or count <= 1 or len(gaps) != count - 1:
+    config = correction_config or NearbySeparatorCorrectionConfig()
+    if not config.enabled or strip_mode != "full" or count <= 1 or len(gaps) != count - 1:
         return gaps, {"used": False, "reason": "not_applicable"}
     if profile.size == 0:
         return gaps, {"used": False, "reason": "empty_profile"}
@@ -108,7 +108,7 @@ def apply_nearby_separator_corrections(
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
     for pos, gap in enumerate(list(corrected)):
-        replacement = nearby_separator_replacement(profile, gap, pitch, policy)
+        replacement = nearby_separator_replacement(profile, gap, pitch, config)
         if replacement is None:
             continue
         best = replacement["best"]
@@ -133,11 +133,11 @@ def apply_nearby_separator_corrections(
         local_gain = before_local - after_local
         cv_gain = before_cv - after_cv
         local_ok = local_gain >= clamp_float(
-            pitch * policy.local_gain_ratio,
-            policy.local_gain_min,
-            policy.local_gain_max,
+            pitch * config.local_gain_ratio,
+            config.local_gain_min,
+            config.local_gain_max,
         )
-        cv_ok = after_cv <= before_cv + policy.width_cv_slack and after_cv <= original_cv + policy.width_cv_slack
+        cv_ok = after_cv <= before_cv + config.width_cv_slack and after_cv <= original_cv + config.width_cv_slack
         if not (local_ok and cv_ok):
             rejected.append(
                 {

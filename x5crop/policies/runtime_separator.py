@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ..geometry.detection_parameters import (
-    EdgeRefineProfilePolicy,
-    EnhancedSeparatorPolicy,
-    GapSearchPolicy,
-    HardGapTrustPolicy,
-    NearbySeparatorCorrectionPolicy,
-    RobustGridPolicy,
-    SeparatorProfilePolicy,
+    EdgeRefineProfileConfig,
+    EnhancedSeparatorConfig,
+    GapSearchConfig,
+    HardGapTrustConfig,
+    NearbySeparatorCorrectionConfig,
+    RobustGridConfig,
+    SeparatorProfileConfig,
 )
 
 
@@ -92,29 +92,22 @@ class SeparatorPolicy:
     geometry_support_modes: tuple[str, ...] = ()
     geometry_support: SeparatorGeometrySupportPolicy = field(default_factory=SeparatorGeometrySupportPolicy)
     edge_pair: SeparatorEdgePairPolicy = field(default_factory=SeparatorEdgePairPolicy)
-    hard_gap_trust: HardGapTrustPolicy = field(default_factory=HardGapTrustPolicy)
-    nearby_correction: NearbySeparatorCorrectionPolicy = field(default_factory=NearbySeparatorCorrectionPolicy)
-    robust_grid: RobustGridPolicy = field(default_factory=RobustGridPolicy)
-    gap_search: GapSearchPolicy = field(default_factory=GapSearchPolicy)
-    enhanced: EnhancedSeparatorPolicy = field(default_factory=EnhancedSeparatorPolicy)
-    profile: SeparatorProfilePolicy = field(default_factory=SeparatorProfilePolicy)
-    edge_refine_profile: EdgeRefineProfilePolicy = field(default_factory=EdgeRefineProfilePolicy)
+    hard_gap_trust: HardGapTrustConfig = field(default_factory=HardGapTrustConfig)
+    nearby_correction: NearbySeparatorCorrectionConfig = field(default_factory=NearbySeparatorCorrectionConfig)
+    robust_grid: RobustGridConfig = field(default_factory=RobustGridConfig)
+    gap_search: GapSearchConfig = field(default_factory=GapSearchConfig)
+    enhanced: EnhancedSeparatorConfig = field(default_factory=EnhancedSeparatorConfig)
+    profile: SeparatorProfileConfig = field(default_factory=SeparatorProfileConfig)
+    edge_refine_profile: EdgeRefineProfileConfig = field(default_factory=EdgeRefineProfileConfig)
     hard_methods: tuple[str, ...] = ("detected", "edge_pair", "enhanced_detected", "wide_separator")
     model_methods: tuple[str, ...] = ("grid", "equal", "content")
 
 
 __all__ = [
-    "EdgeRefineProfilePolicy",
-    "EnhancedSeparatorPolicy",
-    "GapSearchPolicy",
-    "HardGapTrustPolicy",
     "LeadingGridFailurePolicy",
-    "NearbySeparatorCorrectionPolicy",
-    "RobustGridPolicy",
     "SeparatorEdgePairPolicy",
     "SeparatorGatePolicy",
     "SeparatorGeometrySupportModePolicy",
     "SeparatorGeometrySupportPolicy",
     "SeparatorPolicy",
-    "SeparatorProfilePolicy",
 ]

@@ -16,6 +16,12 @@ from ...constants import (
 )
 from ...domain import Detection
 from ...formats import FormatSpec
+from ...output_geometry import (
+    apply_output_bleed,
+    detection_geometry_config,
+    detection_has_overlap_bleed_risk,
+    output_bleed_config_for_detection,
+)
 from ...policies.registry import get_detection_policy
 from ...runtime import AnalysisCache
 from ..evidence.content_evidence import content_evidence_detail
@@ -27,10 +33,6 @@ from .pass_review import apply_final_decision_policy, normalized_review_reasons
 from .geometry import (
     apply_approved_geometry_adjustment,
     apply_edge_bleed_protection,
-    apply_output_bleed,
-    detection_geometry_config,
-    detection_has_overlap_bleed_risk,
-    output_bleed_config_for_detection,
 )
 
 
