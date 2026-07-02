@@ -27,7 +27,7 @@ https://github.com/rrriiicccooo/X5-Crop
 
 ## Document Roles
 
-- `快速启动_Quick_Start.md`: first-use quick operation guide for Release users.
+- `快速启动_Quick_Start.md`: Release quick-start guide.
 - `README.md`: complete user manual for setup, launchers, Debug Analysis,
   outputs, review folders, and common command-line use.
 - `ARCHITECTURE.md`: developer source map, policy ownership, format/mode
@@ -185,19 +185,19 @@ unless the edit changes commands or release behavior.
 
 ## Current Handoff
 
-Date: 2026-07-01
+Date: 2026-07-02
 Computer: primary macOS machine
 Branch: main
-Latest documentation state: root `ARCHITECTURE.md` is the single architecture
-guide; no duplicate `docs/` mirror is kept.
+Latest documentation state: root documents have distinct responsibilities;
+`ARCHITECTURE.md` is the single architecture guide and no `docs/` mirror is kept.
 
 Current state:
 
 - Active script is `X5_Crop.py` V4.9.
 - V4.9 is an evidence-governed policy reset over the V4.7 source layout, not
   a detector-loosening release.
-- Source layout is layered source layout: thin entry, package implementation,
-  explicit format physical specs, semantic decision contract, focused
+- Source layout is layered: thin entry, package implementation, explicit format
+  physical specs, semantic decision contract, focused
   detection modules, split geometry helpers, and explicit report/debug/regression
   surfaces.
 - Detailed source layering and policy boundaries live in `ARCHITECTURE.md`.

@@ -129,7 +129,7 @@ Download `X5-Crop-vX.X.zip` from GitHub Releases.
 Do not use GitHub's auto-generated `Source code` zip. That is the development
 source layout, not the user package.
 
-### 2. Install Dependencies First
+### 2. Install Dependencies
 
 After unzipping, run the installer:
 
@@ -145,7 +145,7 @@ If macOS does not open the installer by double-clicking, open Terminal, type
 /bin/bash install/X5_Crop_Mac_install.command
 ```
 
-### 3. Place Files Together
+### 3. File Placement
 
 Put these files and the TIFF scans in the same folder:
 
@@ -196,7 +196,7 @@ the selected format.
 
 ### 7. Debug Analysis
 
-Usually press Return and keep `no`.
+Default: press Return and keep `no`.
 
 Type `y` for a dry run:
 

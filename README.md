@@ -2,7 +2,7 @@
 
 > **下载提示 / Download Notice**
 >
-> 普通用户请从 GitHub **Releases** 下载整理好的 `X5-Crop-vX.X.zip`。
+> 日常使用请从 GitHub **Releases** 下载整理好的 `X5-Crop-vX.X.zip`。
 > 不要下载 GitHub 自动生成的 **Source code** 压缩包；该压缩包是开发源码结构，
 > 不是面向日常使用整理的发布包。
 >
@@ -42,7 +42,7 @@ Current stable release: v4.2.8
 
 ### 推荐下载
 
-普通用户请下载 GitHub Releases 里的 `X5-Crop-vX.X.zip`。Release 包通常包含：
+日常使用请下载 GitHub Releases 里的 `X5-Crop-vX.X.zip`。Release 包通常包含：
 
 ```text
 X5_Crop.py
@@ -58,10 +58,10 @@ install/
 ```
 
 Release 里的 `X5_Crop.py` 是单文件发布版，已经内置内部 `x5crop/` 代码。
-普通用户不需要复制 `x5crop/` 文件夹。
+Release 用户不需要复制 `x5crop/` 文件夹。
 
 如果直接从仓库 `main` 分支运行，根目录 `X5_Crop.py` 是开发入口，需要旁边的
-`x5crop/` 包。这是开发和测试结构，不是普通用户发布包。
+`x5crop/` 包。这是开发和测试结构，不是面向使用者的发布包。
 
 ### 第一次安装
 
@@ -167,14 +167,14 @@ x5_crop_output/_debug_analysis/
 - `Separator evidence`: 分隔证据、当前 outer 和切线标记。
 
 详细 evidence / risk / decision 说明写入 report；Debug Analysis
-默认保持三联图，优先服务人工快速读图。
+默认保持三联图，优先服务人工快速审阅。
 
 状态含义：
 
 - `PASS`: 会自动裁切。
 - `REVIEW`: 不会自动裁切，需要人工复核。
 
-看图时优先检查：
+检查 Debug Analysis 时优先确认：
 
 - 绿色外框是否裁入画面，或保留过多白边。
 - 半透明裁切色块是否覆盖照片并留出合理 bleed。
