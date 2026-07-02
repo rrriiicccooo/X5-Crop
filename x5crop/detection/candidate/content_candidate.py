@@ -12,7 +12,7 @@ from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
 from ...image.evidence import make_content_evidence_gray
-from ...policies.runtime_policy import ContentPolicy
+from ...policies.runtime_content import ContentPolicy
 from ...runtime import AnalysisCache
 from ...utils import box_from_dict
 from ..evidence.content_evidence import _content_policy_for

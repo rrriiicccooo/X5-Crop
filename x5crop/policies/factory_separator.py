@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from ..formats import FORMATS
 from ..geometry.detection_parameters import (
     EdgeRefineProfileParameters,
     EnhancedSeparatorParameters,
@@ -12,16 +11,15 @@ from ..geometry.detection_parameters import (
 )
 from .factory_presets import FormatPolicyPreset, ModePolicyPreset
 from .parameter_aggregate import FormatParameters
-from .runtime_policy import (
-    FULL,
-    PARTIAL,
-    GatePolicy,
+from .runtime_base import FULL, PARTIAL
+from .runtime_separator import (
     LeadingGridFailurePolicy,
     SeparatorGatePolicy,
     SeparatorGeometrySupportModePolicy,
     SeparatorGeometrySupportPolicy,
     SeparatorPolicy,
 )
+
 
 def separator_gate_policy(
     preset: FormatPolicyPreset,
@@ -54,6 +52,7 @@ def separator_gate_policy(
         ),
     )
 
+
 def separator_geometry_support_policy(
     mode_preset: ModePolicyPreset,
     params: FormatParameters,
@@ -85,6 +84,7 @@ def separator_geometry_support_policy(
         wide_geometry=mode_policy if "wide_geometry" in mode_preset.separator_geometry_support_modes else SeparatorGeometrySupportModePolicy(),
         stable_grid=stable_grid_policy if "stable_grid" in mode_preset.separator_geometry_support_modes else SeparatorGeometrySupportModePolicy(),
     )
+
 
 def separator_policy(
     preset: FormatPolicyPreset,

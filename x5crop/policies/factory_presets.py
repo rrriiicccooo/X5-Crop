@@ -4,7 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .runtime_policy import FrameFitPolicy, SeparatorEdgePairPolicy
+from .runtime_base import FrameFitPolicy
+from .runtime_separator import SeparatorEdgePairPolicy
 
 if TYPE_CHECKING:
     from .parameter_aggregate import FormatParameters

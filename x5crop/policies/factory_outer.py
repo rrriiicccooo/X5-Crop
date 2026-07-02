@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from ..formats import FORMATS
 from ..geometry.detection_parameters import OuterBoxDetectionParameters, OuterMaskProfileParameters
-from .factory_presets import FormatPolicyPreset, ModePolicyPreset
+from .factory_presets import ModePolicyPreset
 from .parameter_aggregate import FormatParameters
-from .runtime_policy import (
-    FULL,
+from .runtime_base import FULL
+from .runtime_outer import (
     ContentFloatingOuterPolicy,
     DarkBandOuterPolicy,
     EdgeAnchorOuterPolicy,
@@ -18,6 +17,7 @@ from .runtime_policy import (
     ShortAxisAspectRetryPolicy,
 )
 
+
 def dark_band_outer_policy(mode_preset: ModePolicyPreset) -> DarkBandOuterPolicy:
     dark_band = mode_preset.dark_band
     return DarkBandOuterPolicy(
@@ -25,6 +25,7 @@ def dark_band_outer_policy(mode_preset: ModePolicyPreset) -> DarkBandOuterPolicy
         required_count=3,
         full_selection_enabled=dark_band.full_selection_enabled,
     )
+
 
 def outer_policy(
     mode_preset: ModePolicyPreset,

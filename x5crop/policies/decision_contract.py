@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ..formats import FormatSpec, format_spec
 from .decision_overrides import evidence_policy_values
 from .ids import REPORT_SCHEMA_VERSION, decision_policy_id_for
+
+if TYPE_CHECKING:
+    from .runtime_policy import DetectionPolicy
 
 
 @dataclass(frozen=True)
@@ -35,7 +38,7 @@ class EvidencePolicy:
     allow_geometry_supported_separator: bool = False
     geometry_supported_min_hard_ratio: float = 0.35
     geometry_supported_max_width_cv_ratio: float = 0.010
-    partial_requires_safe_edge: bool = True
+    partial_requires_safe_edge: bool = False
 
 
 @dataclass(frozen=True)
@@ -159,28 +162,72 @@ def mode_policy_for(spec: FormatSpec, strip_mode: str) -> ModePolicy:
     )
 
 
-def evidence_policy_for(format_id: str, strip_mode: str) -> EvidencePolicy:
+def evidence_policy_for(
+    format_id: str,
+    strip_mode: str,
+    detection_policy: DetectionPolicy | None = None,
+) -> EvidencePolicy:
     policy = EvidencePolicy()
-    values = evidence_policy_values(format_id, strip_mode, policy)
+    values = evidence_policy_values(format_id, strip_mode, policy, detection_policy)
     return replace(policy, **values)
 
 
-def decision_contract_for(format_id: str, strip_mode: str) -> DetectionDecisionContract:
-    spec = format_spec(format_id)
-    policy_id = decision_policy_id_for(format_id, strip_mode)
-    decision = replace(DecisionPolicy(), policy_id=policy_id)
+def decision_policy_for(detection_policy: DetectionPolicy) -> DecisionPolicy:
+    policy_id = decision_policy_id_for(detection_policy.format_id, detection_policy.strip_mode)
+    return replace(
+        DecisionPolicy(),
+        policy_id=policy_id,
+        confidence_threshold_default=detection_policy.scoring.confidence_threshold_default,
+        review_confidence_cap=detection_policy.candidate_selection.confidence_cap,
+    )
+
+
+def output_policy_for(detection_policy: DetectionPolicy) -> OutputPolicy:
+    output = detection_policy.output
+    return OutputPolicy(
+        detection_long_axis_bleed=output.detection_long_axis_bleed,
+        detection_short_axis_bleed=output.detection_short_axis_bleed,
+        output_long_axis_bleed_default=output.output_long_axis_bleed_default,
+        output_short_axis_bleed_default=output.output_short_axis_bleed_default,
+        overlap_risk_long_axis_bleed=output.overlap_risk_long_axis_bleed,
+    )
+
+
+def diagnostics_policy_for(detection_policy: DetectionPolicy) -> DecisionDiagnosticsPolicy:
+    diagnostics = detection_policy.diagnostics
+    return DecisionDiagnosticsPolicy(
+        debug_panels=diagnostics.debug_panels,
+        panel_titles={
+            panel.panel_id: panel.title for panel in diagnostics.debug_panel_titles
+        },
+    )
+
+
+def decision_contract_for_policy(detection_policy: DetectionPolicy) -> DetectionDecisionContract:
+    spec = format_spec(detection_policy.format_id)
+    policy_id = decision_policy_id_for(detection_policy.format_id, detection_policy.strip_mode)
     return DetectionDecisionContract(
         policy_id=policy_id,
-        schema_version=REPORT_SCHEMA_VERSION,
+        schema_version=detection_policy.report.schema_version,
         format=spec,
-        mode=mode_policy_for(spec, strip_mode),
-        evidence=evidence_policy_for(format_id, strip_mode),
+        mode=mode_policy_for(spec, detection_policy.strip_mode),
+        evidence=evidence_policy_for(
+            detection_policy.format_id,
+            detection_policy.strip_mode,
+            detection_policy,
+        ),
         risk=RiskPolicy(),
         candidate=CandidatePolicy(),
-        decision=decision,
-        output=OutputPolicy(),
-        diagnostics=DecisionDiagnosticsPolicy(),
+        decision=decision_policy_for(detection_policy),
+        output=output_policy_for(detection_policy),
+        diagnostics=diagnostics_policy_for(detection_policy),
     )
+
+
+def decision_contract_for(format_id: str, strip_mode: str) -> DetectionDecisionContract:
+    from .registry import get_detection_policy
+
+    return decision_contract_for_policy(get_detection_policy(format_id, strip_mode))
 
 
 __all__ = [
@@ -194,4 +241,9 @@ __all__ = [
     "OutputPolicy",
     "RiskPolicy",
     "decision_contract_for",
+    "decision_contract_for_policy",
+    "decision_policy_for",
+    "diagnostics_policy_for",
+    "evidence_policy_for",
+    "output_policy_for",
 ]

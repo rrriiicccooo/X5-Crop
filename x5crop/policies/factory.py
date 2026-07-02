@@ -15,7 +15,8 @@ from .factory_outer import outer_policy
 from .factory_presets import FormatPolicyPreset
 from .factory_separator import separator_policy
 from .ids import detection_policy_id_for
-from .runtime_policy import DetectionPolicy, DetectorPolicy
+from .runtime_base import DetectorPolicy
+from .runtime_policy import DetectionPolicy
 
 
 def build_policy_from_preset(

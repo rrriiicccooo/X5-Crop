@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ...policies.runtime_policy import PartialEdgeHintPolicy
+from ...policies.runtime_candidate import PartialEdgeHintPolicy
 from ...utils import clamp_int
 
 

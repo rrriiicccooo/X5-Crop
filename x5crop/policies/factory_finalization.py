@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from ..formats import FORMATS
-from .factory_presets import FormatPolicyPreset, ModePolicyPreset
+from .factory_presets import ModePolicyPreset
 from .parameter_aggregate import FormatParameters
-from .runtime_policy import (
-    ApprovedGeometryAdjustmentPolicy,
+from .runtime_diagnostics import (
     DebugGapOverlayPolicy,
     LuckyPassRiskPolicy,
     NearbySeparatorDiagnosticsPolicy,
     OverlapBleedRiskPolicy,
-    FinalizationPolicy,
     RuntimeDiagnosticsPolicy,
 )
+from .runtime_final import (
+    ApprovedGeometryAdjustmentPolicy,
+    FinalizationPolicy,
+)
+
 
 def finalization_policy(params: FormatParameters) -> FinalizationPolicy:
     finalization = params.finalization
@@ -34,6 +36,7 @@ def finalization_policy(params: FormatParameters) -> FinalizationPolicy:
         outer_mismatch_cap=float(finalization.outer_mismatch_cap),
         lucky_pass_risk_cap=float(finalization.lucky_pass_risk_cap),
     )
+
 
 def diagnostics_policy(mode_preset: ModePolicyPreset, params: FormatParameters) -> RuntimeDiagnosticsPolicy:
     debug_gap = params.debug_gap_overlay

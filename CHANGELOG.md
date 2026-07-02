@@ -49,10 +49,14 @@ Current stable release: v4.2.8
 
 - `python3 X5_Crop.py --version` 输出 `X5_Crop.py 4.9`。
 - V4.9 package compile 通过。
+- `python3 -m x5crop.policies.consistency` 对 14 个 format / strip mode 的
+  runtime policy 与 final decision contract 同步关系通过。
 - `git diff --check` 通过。
 - Mac 主启动器和 diagnostics 启动器 `bash -n` 通过。
 - Entry、workflow、policy、foundation、detection、report/debug/export 和 tools 分层 smoke 通过。
-- 14 个 format / strip mode decision contract policy smoke 通过。
+- 14 个 format / strip mode decision contract policy smoke 通过；final contract
+  由 active runtime `DetectionPolicy` 派生，避免 geometry support、partial edge
+  和 diagnostics/output policy 漂移。
 - 单文件 Debug Analysis smoke 生成 V4.9 three-panel debug JPG。
 - Cached analysis reuse smoke 覆盖 approved 自动导出和 needs_review 跳过导出。
 - 七组本地 V4.5.4 reference reports 通过 safety classifier：
@@ -132,10 +136,14 @@ Verified:
 
 - `python3 X5_Crop.py --version` prints `X5_Crop.py 4.9`.
 - V4.9 package compile passes.
+- `python3 -m x5crop.policies.consistency` passes for the runtime policy and
+  final decision contract sync across 14 format / strip-mode combinations.
 - `git diff --check` passes.
 - Main Mac launcher and diagnostics launcher pass `bash -n`.
 - Entry, workflow, policy, foundation, detection, report/debug/export, and tools layer smoke checks pass.
-- 14 format / strip-mode decision contract policy smoke checks pass.
+- 14 format / strip-mode decision contract policy smoke checks pass; the final
+  contract is derived from the active runtime `DetectionPolicy` to prevent
+  geometry support, partial-edge, diagnostics, and output-policy drift.
 - Single-file Debug Analysis smoke writes a V4.9 three-panel debug JPG.
 - Cached analysis reuse smoke covers approved auto export and needs_review skip-export paths.
 - Seven local V4.5.4 reference reports pass safety classification:

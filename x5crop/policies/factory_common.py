@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from ..formats import FORMATS
-from .factory_presets import FormatPolicyPreset, ModePolicyPreset
 from .parameter_aggregate import FormatParameters
-from .runtime_policy import (
+from .runtime_base import (
     FULL,
     CountPolicy,
     FrameFitPolicy,
-    GatePolicy,
-    ReportPolicy,
 )
+from .runtime_candidate import GatePolicy
+from .runtime_diagnostics import ReportPolicy
+
 
 def partial_frame_fit(format_id: str) -> FrameFitPolicy:
     return FrameFitPolicy(
@@ -17,6 +17,7 @@ def partial_frame_fit(format_id: str) -> FrameFitPolicy:
         edge_evidence=False,
         geometry_fallback=True,
     )
+
 
 def count_policy(fmt_id: str, strip_mode: str, params: FormatParameters) -> CountPolicy:
     fmt = FORMATS[fmt_id]
@@ -29,6 +30,7 @@ def count_policy(fmt_id: str, strip_mode: str, params: FormatParameters) -> Coun
         partial_offsets=partial.offsets,
         include_default_in_partial_auto=bool(partial.include_default_auto),
     )
+
 
 def gate_policy() -> GatePolicy:
     return GatePolicy(
@@ -43,6 +45,7 @@ def gate_policy() -> GatePolicy:
             "finalization_gate",
         ),
     )
+
 
 def report_policy() -> ReportPolicy:
     return ReportPolicy()

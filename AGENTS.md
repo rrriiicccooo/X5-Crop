@@ -172,6 +172,7 @@ For source or policy changes, also run:
 
 ```bash
 python3 -m compileall -q X5_Crop.py x5crop
+python3 -m x5crop.policies.consistency
 bash -n X5_Crop_Mac.command
 bash -n X5_Crop_Mac_diagnostics.command
 git diff --check

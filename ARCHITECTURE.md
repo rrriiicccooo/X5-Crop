@@ -74,8 +74,10 @@ debug、report 或 policy registry。
 
 runtime `DetectionPolicy` 仍用于 evidence generation wiring。它连接 detector、count、
 outer、separator、content、scoring、candidate run、selection、finalization、
-diagnostics、report 和 output 等 runtime 能力。影响最终 PASS / REVIEW 的参数必须进入
-report schema 的 decision policy detail。
+diagnostics、report 和 output 等 runtime 能力。`DetectionDecisionContract` 必须通过
+active `DetectionPolicy` 派生；`decision_overrides.py` 只保存不能从 runtime policy
+直接推导的 final evidence threshold。影响最终 PASS / REVIEW 的参数必须进入 report
+schema 的 decision policy detail。
 
 ### Detection / Gate / Risk 人工审核索引
 
@@ -189,6 +191,7 @@ REVIEW contract。
 
 ```bash
 python3 -m compileall -q X5_Crop.py x5crop
+python3 -m x5crop.policies.consistency
 bash -n X5_Crop_Mac.command
 bash -n X5_Crop_Mac_diagnostics.command
 git diff --check
@@ -294,9 +297,11 @@ artifact names, archive paths, and machine schema values.
 - `OutputPolicy`: TIFF metadata/export behavior and output bleed.
 - `DecisionDiagnosticsPolicy`: diagnostics and overlay details recorded in decision/report.
 
-Runtime `DetectionPolicy` remains the evidence-generation wiring surface. Any
-parameter that affects final PASS / REVIEW must be present in report schema
-decision policy detail.
+Runtime `DetectionPolicy` remains the evidence-generation wiring surface.
+`DetectionDecisionContract` must be derived from the active `DetectionPolicy`;
+`decision_overrides.py` only stores final evidence thresholds that cannot be
+directly inferred from runtime policy. Any parameter that affects final PASS /
+REVIEW must be present in report schema decision policy detail.
 
 ### Detection / Gate / Risk Review Index
 
@@ -364,6 +369,7 @@ After structure or policy changes, run:
 
 ```bash
 python3 -m compileall -q X5_Crop.py x5crop
+python3 -m x5crop.policies.consistency
 bash -n X5_Crop_Mac.command
 bash -n X5_Crop_Mac_diagnostics.command
 git diff --check

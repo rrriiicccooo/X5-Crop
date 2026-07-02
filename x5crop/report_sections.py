@@ -4,7 +4,7 @@ from typing import Any
 
 from .detection_detail import candidate_competition, candidate_assessment
 from .domain import Detection
-from .policies.runtime_policy import ReportPolicy
+from .policies.runtime_diagnostics import ReportPolicy
 from .policies.registry import get_detection_policy
 
 

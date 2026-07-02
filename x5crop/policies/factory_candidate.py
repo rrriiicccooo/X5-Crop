@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from ..formats import FORMATS
-from .factory_presets import FormatPolicyPreset, ModePolicyPreset
+from .factory_presets import FormatPolicyPreset
 from .parameter_aggregate import FormatParameters
-from .runtime_policy import (
-    FULL,
-    PARTIAL,
+from .runtime_base import FULL, PARTIAL
+from .runtime_candidate import (
     BaseDetectionScorePolicy,
     CandidateRunPolicy,
     ContentMismatchReviewSelectionPolicy,
@@ -18,6 +16,7 @@ from .runtime_policy import (
     SelectionPolicy,
     SeparatorSupportScorePolicy,
 )
+
 
 def partial_holder_policy(strip_mode: str, params: FormatParameters) -> PartialHolderPolicy:
     holder = params.partial_holder
@@ -49,6 +48,7 @@ def partial_holder_policy(strip_mode: str, params: FormatParameters) -> PartialH
         min_frame_coverage=float(holder.min_frame_coverage),
         max_frame_aspect_error=float(content_evidence.aspect_ok_max),
     )
+
 
 def scoring_policy(params: FormatParameters) -> ScoringPolicy:
     calibration = params.scoring_calibration
@@ -112,6 +112,7 @@ def scoring_policy(params: FormatParameters) -> ScoringPolicy:
         ),
     )
 
+
 def selection_policy(
     preset: FormatPolicyPreset,
     strip_mode: str,
@@ -127,11 +128,13 @@ def selection_policy(
         ),
     )
 
+
 def candidate_run_policy() -> CandidateRunPolicy:
     return CandidateRunPolicy(
         fallback=FallbackPolicy(),
         partial_stop=PartialStopPolicy(),
     )
+
 
 def partial_edge_hint_policy(params: FormatParameters) -> PartialEdgeHintPolicy:
     hint = params.partial_edge_hint

@@ -10,7 +10,7 @@ from ...formats import CONTENT_ASPECTS_HORIZONTAL
 from ...geometry.boxes import original_box_to_work
 from ...image.evidence import make_content_evidence_gray
 from ...policies.registry import get_detection_policy
-from ...policies.runtime_policy import ContentPolicy
+from ...policies.runtime_content import ContentPolicy
 from ...runtime import AnalysisCache
 from ...utils import sampled_percentile
 from .evidence_cache_keys import content_detail_cache_key

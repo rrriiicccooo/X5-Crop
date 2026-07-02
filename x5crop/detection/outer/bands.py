@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ...geometry.detection_parameters import GapSearchParameters
-from ...policies.runtime_policy import OuterPolicy, SeparatorOuterBandPolicy
+from ...policies.runtime_outer import OuterPolicy, SeparatorOuterBandPolicy
 from ...utils import clamp_float, clamp_int, runs_from_mask
 
 

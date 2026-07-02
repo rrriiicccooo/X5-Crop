@@ -8,8 +8,10 @@ import numpy as np
 from ...constants import HARD_GAP_METHODS
 from ...domain import Box, Detection, Gap
 from ...formats import FormatSpec
-from ...policies.runtime_policy import ContentPolicy, DetectionPolicy, SeparatorGeometrySupportModePolicy
 from ...policies.registry import get_detection_policy
+from ...policies.runtime_content import ContentPolicy
+from ...policies.runtime_policy import DetectionPolicy
+from ...policies.runtime_separator import SeparatorGeometrySupportModePolicy
 from ...utils import sampled_percentile
 
 
