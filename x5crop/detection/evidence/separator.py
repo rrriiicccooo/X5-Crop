@@ -18,7 +18,7 @@ from ...policies.runtime_policy import DetectionPolicy
 from ...utils import clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 
 
-def dark_band_gaps_for_outer(
+def wide_separator_gaps_for_outer(
     gray_work: np.ndarray,
     outer: Box,
     count: int,
@@ -26,8 +26,8 @@ def dark_band_gaps_for_outer(
     policy: Optional[DetectionPolicy] = None,
 ) -> list[Gap]:
     policy = policy or get_detection_policy(fmt.name, "full")
-    dark_band = policy.outer.dark_band_outer
-    if dark_band.mode == "off" or count <= 1 or count != dark_band.required_count or not outer.valid():
+    wide_separator = policy.outer.wide_separator_outer
+    if wide_separator.mode == "off" or count <= 1 or count != wide_separator.required_count or not outer.valid():
         return []
     crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
     if crop.size == 0:
@@ -35,22 +35,22 @@ def dark_band_gaps_for_outer(
     sample = crop[:: max(1, crop.shape[0] // 500), :: max(1, crop.shape[1] // 2000)]
     p01, p99 = sampled_percentile(sample, [1, 99])
     span = max(1.0, float(p99 - p01))
-    dark_threshold = float(p01) + span * dark_band.threshold_span_ratio
+    dark_threshold = float(p01) + span * wide_separator.threshold_span_ratio
     dark_profile = (crop <= dark_threshold).mean(axis=0).astype(np.float32)
     dark_profile = smooth_1d(
         dark_profile,
-        max(dark_band.profile_smooth_min, int(round(outer.height * dark_band.profile_smooth_short_axis_ratio))),
+        max(wide_separator.profile_smooth_min, int(round(outer.height * wide_separator.profile_smooth_short_axis_ratio))),
     )
     pitch = outer.width / float(max(1, count))
     min_width = clamp_int(
-        outer.height * dark_band.min_width_ratio,
-        dark_band.min_width_min,
-        dark_band.min_width_max,
+        outer.height * wide_separator.min_width_ratio,
+        wide_separator.min_width_min,
+        wide_separator.min_width_max,
     )
     max_width = clamp_int(
-        outer.height * dark_band.max_width_ratio,
+        outer.height * wide_separator.max_width_ratio,
         min_width + 1,
-        max(dark_band.max_width_floor, int(outer.height * dark_band.max_width_cap_ratio)),
+        max(wide_separator.max_width_floor, int(outer.height * wide_separator.max_width_cap_ratio)),
     )
     gaps: list[Gap] = []
     for index in range(1, count):
@@ -75,7 +75,7 @@ def dark_band_gaps_for_outer(
             continue
         score, start, end = best
         center = (start + end - 1) * 0.5
-        max_core_width = max(min_width, outer.height * dark_band.core_width_cap_ratio)
+        max_core_width = max(min_width, outer.height * wide_separator.core_width_cap_ratio)
         if (end - start) > max_core_width:
             half_width = max_core_width * 0.5
             start = int(round(max(0.0, center - half_width)))

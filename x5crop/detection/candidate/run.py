@@ -92,9 +92,9 @@ def calibrated_candidates_for_count(
             fallback_candidate = apply_candidate_assessment_policy(gray, fallback_proposal, config, fmt, "separator", cache, policy=policy)
             fallback_candidate.detail["outer_proposal_fallback_retry"] = {
                 "used": True,
-                "separator_first_mode": policy.outer.separator_first,
+                "separator_local_mode": policy.outer.separator_local,
                 "long_axis_edge_anchor_mode": policy.outer.edge_anchor,
-                "separator_geometry_mode": policy.outer.separator_geometry,
+                "separator_full_width_mode": policy.outer.separator_full_width,
                 "strategies": list(policy.candidate_run.fallback.strategies),
             }
             candidates.append(fallback_candidate)

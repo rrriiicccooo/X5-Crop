@@ -13,8 +13,7 @@ from ...runtime import AnalysisCache
 from .base import base_outer_candidates, unique_outer_candidates
 from .content_outer import floating_outer_candidates
 from .edge_anchor import long_axis_edge_anchor_outer_candidates
-from .separator_first import separator_first_outer_candidates
-from .separator_geometry import separator_geometry_outer_candidates
+from .separator import separator_derived_outer_candidates, separator_outer_variants_for_policy
 
 
 @dataclass(frozen=True)
@@ -34,6 +33,13 @@ def outer_proposal_strategy_plan_for_policy(
     policy: DetectionPolicy,
     fallback_only: bool = False,
 ) -> list[OuterProposalStrategy]:
+    separator_mode = (
+        "fallback"
+        if fallback_only and separator_outer_variants_for_policy(policy, fallback_only=True)
+        else "always"
+        if (not fallback_only and separator_outer_variants_for_policy(policy, fallback_only=False))
+        else "off"
+    )
     base = [
         OuterProposalStrategy(
             "base",
@@ -59,16 +65,9 @@ def outer_proposal_strategy_plan_for_policy(
             "medium",
         ),
         OuterProposalStrategy(
-            "separator_first",
+            "separator_derived",
             "separator_outer",
-            policy.outer.separator_first,
-            True,
-            "medium",
-        ),
-        OuterProposalStrategy(
-            "separator_geometry",
-            "separator_geometry_outer",
-            policy.outer.separator_geometry,
+            separator_mode,
             True,
             "medium",
         ),
@@ -114,9 +113,9 @@ def outer_proposal_candidates(
             policy,
         )
         pre_separator_candidates = unique_outer_candidates([*pre_separator_candidates, *long_axis_candidates])
-    separator_first_candidates: list[OuterCandidate] = []
-    if "separator_first" in enabled_strategy_names:
-        separator_first_candidates = separator_first_outer_candidates(
+    separator_candidates: list[OuterCandidate] = []
+    if "separator_derived" in enabled_strategy_names:
+        separator_candidates = separator_derived_outer_candidates(
             gray_work,
             pre_separator_candidates,
             fmt,
@@ -124,18 +123,8 @@ def outer_proposal_candidates(
             strip_mode,
             cache,
             policy,
-        )
-    separator_geometry_candidates: list[OuterCandidate] = []
-    if "separator_geometry" in enabled_strategy_names:
-        separator_geometry_candidates = separator_geometry_outer_candidates(
-            gray_work,
-            pre_separator_candidates,
-            fmt,
-            count,
-            strip_mode,
-            cache,
-            policy,
+            variants=separator_outer_variants_for_policy(policy, fallback_only=fallback_only),
         )
     if fallback_only:
-        return unique_outer_candidates([*long_axis_candidates, *separator_first_candidates, *separator_geometry_candidates])
-    return unique_outer_candidates([*base_candidates, *floating_candidates, *long_axis_candidates, *separator_first_candidates, *separator_geometry_candidates])
+        return unique_outer_candidates([*long_axis_candidates, *separator_candidates])
+    return unique_outer_candidates([*base_candidates, *floating_candidates, *long_axis_candidates, *separator_candidates])

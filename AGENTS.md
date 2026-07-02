@@ -165,7 +165,7 @@ Key local sets:
 - `Test/135` full: core safety baseline.
 - `Test/new_135` full: wide 135 spacing examples.
 - `Test/半格/full` and `Test/半格/partial`: half-frame gate and partial behavior.
-- `Test/120/66` full/partial: dark-band / separator-derived outer behavior.
+- `Test/120/66` full/partial: wide-separator / separator-derived outer behavior.
 - `Test/120/67` full: 120-67 baseline.
 
 For source or policy changes, also run:

@@ -11,7 +11,7 @@ from ..evidence.content_evidence import content_evidence_detail
 from .scoring import detail_float
 
 
-def select_full_dark_band_candidate(
+def select_full_wide_separator_candidate(
     gray: np.ndarray,
     candidates: list[Detection],
     current_best: Detection,
@@ -19,23 +19,24 @@ def select_full_dark_band_candidate(
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> Optional[Detection]:
-    dark_band = policy.outer.dark_band_outer
+    wide_separator = policy.outer.wide_separator_outer
     if (
-        dark_band.mode == "off"
-        or not dark_band.full_selection_enabled
-        or current_best.strip_mode not in dark_band.full_selection_strip_modes
+        wide_separator.mode == "off"
+        or not wide_separator.full_selection_enabled
+        or current_best.strip_mode not in wide_separator.full_selection_strip_modes
         or (
-            dark_band.full_selection_requires_required_count
-            and current_best.count != dark_band.required_count
+            wide_separator.full_selection_requires_required_count
+            and current_best.count != wide_separator.required_count
         )
     ):
         return None
-    dark_candidates = [
+    wide_separator_candidates = [
         detection
         for detection in candidates
-        if str(detection.detail.get("outer_candidate_strategy", "")) == "dark_band_outer"
+        if str(detection.detail.get("outer_candidate_strategy", "")) == "separator_outer"
+        and str(detection.detail.get("outer_candidate", "")).startswith("separator_wide_")
     ]
-    if not dark_candidates:
+    if not wide_separator_candidates:
         return None
 
     current_content = content_evidence_detail(gray, current_best, cache, policy.content)
@@ -43,23 +44,23 @@ def select_full_dark_band_candidate(
     current_reasons = set(current_best.review_reasons)
     current_needs_help = (
         current_best.confidence < threshold
-        or current_support in set(dark_band.full_selection_help_supports)
-        or bool(current_reasons.intersection(dark_band.full_selection_help_reasons))
+        or current_support in set(wide_separator.full_selection_help_supports)
+        or bool(current_reasons.intersection(wide_separator.full_selection_help_reasons))
     )
-    if dark_band.full_selection_requires_help and not current_needs_help:
+    if wide_separator.full_selection_requires_help and not current_needs_help:
         return None
 
     scored: list[tuple[tuple[int, int, float, float, float], Detection]] = []
-    for detection in dark_candidates:
+    for detection in wide_separator_candidates:
         content_detail = content_evidence_detail(gray, detection, cache, policy.content)
         support = str(content_detail.get("support", ""))
-        if support != dark_band.full_selection_required_support:
+        if support != wide_separator.full_selection_required_support:
             continue
         hard_gaps = sum(1 for gap in detection.gaps if gap.method != "equal")
         equal_gaps = int(detection.detail.get("equal_gaps", 0) or 0)
         if hard_gaps < max(1, detection.count - 1):
             continue
-        if equal_gaps > 0 and not dark_band.full_selection_allow_equal_gaps:
+        if equal_gaps > 0 and not wide_separator.full_selection_allow_equal_gaps:
             continue
         width_cv = detail_float(detection.detail, "width_cv", 1.0)
         median_coverage = detail_float(content_detail, "median_coverage", 0.0)

@@ -10,12 +10,12 @@ from ...geometry.boxes import original_box_to_work
 from ...policies.runtime_policy import DetectionPolicy
 
 
-def separator_geometry_can_compete(
+def separator_full_width_can_compete(
     detection: Detection,
     gray: np.ndarray,
     policy: DetectionPolicy,
 ) -> bool:
-    competition = policy.candidate_run.separator_geometry_competition
+    competition = policy.candidate_run.separator_full_width_competition
     if not competition.enabled:
         return False
     outer_candidate_strategy = str(detection.detail.get("outer_candidate_strategy", ""))
@@ -42,9 +42,9 @@ def fallback_outer_proposals_enabled(policy: DetectionPolicy) -> bool:
         return False
     strategies = set(fallback.strategies)
     return bool(
-        (policy.outer.separator_first == "fallback" and "separator_outer" in strategies)
+        (policy.outer.separator_local == "fallback" and "separator_outer" in strategies)
         or (policy.outer.edge_anchor == "fallback" and "edge_anchor_outer" in strategies)
-        or (policy.outer.separator_geometry == "fallback" and "separator_geometry_outer" in strategies)
+        or (policy.outer.separator_full_width == "fallback" and "separator_outer" in strategies)
     )
 
 

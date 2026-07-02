@@ -20,7 +20,7 @@ def parameters() -> FormatParameters:
         outer_retry_enabled=False,
         long_axis_edge_anchor_outer_enabled=False,
         long_axis_edge_anchor_partial_enabled=False,
-        separator_first_partial_enabled=False,
+        separator_local_partial_enabled=False,
         floating_outer_partial_enabled=False,
         wide_gap_retry_partial_enabled=False,
         partial_safe_extra_frames_enabled=False,

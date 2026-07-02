@@ -31,7 +31,7 @@ from .parameter_outer import (
     GridOuterRefineParameters,
     OuterContentAlignmentParameters,
     OuterStrategyParameters,
-    SeparatorGeometryOuterParameters,
+    FullWidthSeparatorOuterParameters,
     SeparatorOuterBandParameters,
     ShortAxisAspectRetryParameters,
 )
@@ -206,13 +206,13 @@ class FormatParameterViews:
             edge_anchor_full_mode=self.long_axis_edge_anchor_outer_mode,
             edge_anchor_partial_enabled=self.long_axis_edge_anchor_partial_enabled,
             edge_anchor_partial_mode=self.long_axis_edge_anchor_partial_mode,
-            separator_first_full_enabled=self.separator_first_outer_enabled,
-            separator_first_full_mode=self.separator_first_outer_mode,
-            separator_first_partial_enabled=self.separator_first_partial_enabled,
-            separator_first_partial_mode=self.separator_first_partial_mode,
-            separator_geometry_full_mode=self.separator_geometry_outer_full_mode,
-            separator_geometry_partial_mode=self.separator_geometry_outer_partial_mode,
-            separator_gap_search_max_width_ratio=self.separator_first_outer_gap_max_width_ratio,
+            separator_local_full_enabled=self.separator_local_outer_enabled,
+            separator_local_full_mode=self.separator_local_outer_mode,
+            separator_local_partial_enabled=self.separator_local_partial_enabled,
+            separator_local_partial_mode=self.separator_local_partial_mode,
+            separator_full_width_full_mode=self.separator_full_width_outer_full_mode,
+            separator_full_width_partial_mode=self.separator_full_width_outer_partial_mode,
+            separator_gap_search_max_width_ratio=self.separator_outer_gap_max_width_ratio,
             content_aligned_retry=self.outer_retry_enabled,
             format_geometry_retry=self.format_geometry_outer_retry_enabled,
             short_axis_retry=self.short_axis_aspect_retry_enabled,
@@ -277,27 +277,27 @@ class FormatParameterViews:
     @property
     def separator_outer_band(self) -> SeparatorOuterBandParameters:
         return SeparatorOuterBandParameters(
-            min_score=self.separator_first_outer_min_score,
-            band_score=self.separator_first_outer_band_score,
-            min_width_ratio=self.separator_first_outer_min_width_ratio,
-            max_width_ratio=self.separator_first_outer_max_width_ratio,
-            spacing_min_ratio=self.separator_first_outer_spacing_min_ratio,
-            spacing_max_ratio=self.separator_first_outer_spacing_max_ratio,
-            frame_error_max=self.separator_first_outer_frame_error_max,
-            edge_margin_ratio=self.separator_first_outer_edge_margin_ratio,
-            source_candidate_count=self.separator_first_outer_source_candidates,
-            band_candidate_count=self.separator_first_outer_band_candidates,
-            pair_candidate_count=self.separator_first_outer_pair_candidates,
-            max_candidates=self.separator_first_outer_max_candidates,
+            min_score=self.separator_outer_min_score,
+            band_score=self.separator_outer_band_score,
+            min_width_ratio=self.separator_outer_min_width_ratio,
+            max_width_ratio=self.separator_outer_max_width_ratio,
+            spacing_min_ratio=self.separator_outer_spacing_min_ratio,
+            spacing_max_ratio=self.separator_outer_spacing_max_ratio,
+            frame_error_max=self.separator_outer_frame_error_max,
+            edge_margin_ratio=self.separator_outer_edge_margin_ratio,
+            source_candidate_count=self.separator_outer_source_candidates,
+            band_candidate_count=self.separator_outer_band_candidates,
+            pair_candidate_count=self.separator_outer_pair_candidates,
+            max_candidates=self.separator_outer_max_candidates,
         )
 
     @property
-    def separator_geometry_outer(self) -> SeparatorGeometryOuterParameters:
-        return SeparatorGeometryOuterParameters(
-            required_count=self.separator_geometry_outer_count,
-            source_candidate_count=self.separator_geometry_outer_source_candidates,
-            margin_ratios=self.separator_geometry_outer_margin_ratios,
-            max_candidates=self.separator_geometry_outer_max_candidates,
+    def separator_full_width_outer(self) -> FullWidthSeparatorOuterParameters:
+        return FullWidthSeparatorOuterParameters(
+            required_count=self.separator_full_width_outer_count,
+            source_candidate_count=self.separator_full_width_outer_source_candidates,
+            margin_ratios=self.separator_full_width_outer_margin_ratios,
+            max_candidates=self.separator_full_width_outer_max_candidates,
         )
 
     @property

@@ -137,7 +137,6 @@ class FallbackPolicy:
     strategies: tuple[str, ...] = (
         "separator_outer",
         "edge_anchor_outer",
-        "separator_geometry_outer",
     )
 
 
@@ -150,7 +149,7 @@ class PartialStopPolicy:
 
 
 @dataclass(frozen=True)
-class SeparatorGeometryCompetitionPolicy:
+class SeparatorFullWidthCompetitionPolicy:
     enabled: bool = True
     content_outer_max_median_aspect_strategies: tuple[str, ...] = ("content_outer",)
     content_outer_max_median_aspect_strip_modes: tuple[str, ...] = ("partial",)
@@ -159,7 +158,7 @@ class SeparatorGeometryCompetitionPolicy:
 
 
 @dataclass(frozen=True)
-class DarkBandCandidateRunPolicy:
+class WideSeparatorCandidateRunPolicy:
     try_full_default_count: bool = True
     full_retry_strip_modes: tuple[str, ...] = ("full",)
     full_retry_requires_default_count: bool = True
@@ -194,10 +193,10 @@ class CandidateRunPolicy:
     content_candidate: ContentCandidateRunPolicy = field(default_factory=ContentCandidateRunPolicy)
     fallback: FallbackPolicy = field(default_factory=FallbackPolicy)
     partial_stop: PartialStopPolicy = field(default_factory=PartialStopPolicy)
-    separator_geometry_competition: SeparatorGeometryCompetitionPolicy = field(
-        default_factory=SeparatorGeometryCompetitionPolicy
+    separator_full_width_competition: SeparatorFullWidthCompetitionPolicy = field(
+        default_factory=SeparatorFullWidthCompetitionPolicy
     )
-    dark_band_retry: DarkBandCandidateRunPolicy = field(default_factory=DarkBandCandidateRunPolicy)
+    wide_separator_retry: WideSeparatorCandidateRunPolicy = field(default_factory=WideSeparatorCandidateRunPolicy)
 
 
 __all__ = [
@@ -205,7 +204,6 @@ __all__ = [
     "CandidateRunPolicy",
     "ContentCandidateRunPolicy",
     "ContentMismatchReviewSelectionPolicy",
-    "DarkBandCandidateRunPolicy",
     "EqualFirstWideRetryPolicy",
     "FallbackPolicy",
     "GatePolicy",
@@ -215,6 +213,7 @@ __all__ = [
     "PartialStopPolicy",
     "ScoringPolicy",
     "SelectionPolicy",
-    "SeparatorGeometryCompetitionPolicy",
+    "SeparatorFullWidthCompetitionPolicy",
     "SeparatorSupportScorePolicy",
+    "WideSeparatorCandidateRunPolicy",
 ]

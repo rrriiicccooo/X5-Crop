@@ -112,7 +112,7 @@ class SeparatorOuterBandPolicy:
 
 
 @dataclass(frozen=True)
-class SeparatorGeometryOuterPolicy:
+class FullWidthSeparatorOuterPolicy:
     required_count: int = 0
     source_candidate_count: int = 3
     margin_ratios: tuple[float, ...] = (0.00, 0.018, 0.035)
@@ -120,7 +120,7 @@ class SeparatorGeometryOuterPolicy:
 
 
 @dataclass(frozen=True)
-class DarkBandOuterPolicy:
+class WideSeparatorOuterPolicy:
     mode: str = "off"
     required_count: int = 3
     threshold_ratio: float = 0.42
@@ -162,14 +162,14 @@ class OuterPolicy:
     base_outer: bool = True
     content_floating: bool = False
     edge_anchor: str = "off"
-    separator_first: str = "off"
-    separator_geometry: str = "off"
+    separator_local: str = "off"
+    separator_full_width: str = "off"
     separator_outer_allow_oversized_band: bool = False
     separator_outer_oversized_band_max_ratio: float = 0.45
     separator_outer_oversized_band_score_penalty: float = 0.08
     separator_gap_search_max_width_ratio: float = 0.095
-    dark_band: str = "off"
-    dark_band_outer: DarkBandOuterPolicy = field(default_factory=DarkBandOuterPolicy)
+    wide_separator: str = "off"
+    wide_separator_outer: WideSeparatorOuterPolicy = field(default_factory=WideSeparatorOuterPolicy)
     format_geometry_retry: FormatGeometryRetryPolicy = field(default_factory=FormatGeometryRetryPolicy)
     grid_refine: GridOuterRefinePolicy = field(default_factory=GridOuterRefinePolicy)
     short_axis_aspect_retry: ShortAxisAspectRetryPolicy = field(default_factory=ShortAxisAspectRetryPolicy)
@@ -178,19 +178,19 @@ class OuterPolicy:
     edge_anchor_outer: EdgeAnchorOuterPolicy = field(default_factory=EdgeAnchorOuterPolicy)
     base_candidates: OuterBoxDetectionParameters = field(default_factory=OuterBoxDetectionParameters)
     separator_outer_band: SeparatorOuterBandPolicy = field(default_factory=SeparatorOuterBandPolicy)
-    separator_geometry_outer: SeparatorGeometryOuterPolicy = field(default_factory=SeparatorGeometryOuterPolicy)
+    separator_full_width_outer: FullWidthSeparatorOuterPolicy = field(default_factory=FullWidthSeparatorOuterPolicy)
     retries: tuple[str, ...] = ()
 
 
 __all__ = [
     "ContentFloatingOuterPolicy",
-    "DarkBandOuterPolicy",
     "EdgeAnchorOuterPolicy",
     "FormatGeometryRetryPolicy",
+    "FullWidthSeparatorOuterPolicy",
     "GridOuterRefinePolicy",
     "OuterContentAlignmentPolicy",
     "OuterPolicy",
-    "SeparatorGeometryOuterPolicy",
     "SeparatorOuterBandPolicy",
     "ShortAxisAspectRetryPolicy",
+    "WideSeparatorOuterPolicy",
 ]

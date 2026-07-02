@@ -20,12 +20,12 @@ class OuterStrategyParameters:
     edge_anchor_full_mode: str
     edge_anchor_partial_enabled: bool
     edge_anchor_partial_mode: str
-    separator_first_full_enabled: bool
-    separator_first_full_mode: str
-    separator_first_partial_enabled: bool
-    separator_first_partial_mode: str
-    separator_geometry_full_mode: str
-    separator_geometry_partial_mode: str
+    separator_local_full_enabled: bool
+    separator_local_full_mode: str
+    separator_local_partial_enabled: bool
+    separator_local_partial_mode: str
+    separator_full_width_full_mode: str
+    separator_full_width_partial_mode: str
     separator_gap_search_max_width_ratio: float
     content_aligned_retry: bool
     format_geometry_retry: bool
@@ -97,7 +97,7 @@ class SeparatorOuterBandParameters:
     max_candidates: int
 
 @dataclass(frozen=True)
-class SeparatorGeometryOuterParameters:
+class FullWidthSeparatorOuterParameters:
     required_count: int
     source_candidate_count: int
     margin_ratios: tuple[float, ...]
@@ -171,7 +171,7 @@ __all__ = [
     'EdgeAnchorOuterParameters',
     'BaseOuterCandidateParameters',
     'SeparatorOuterBandParameters',
-    'SeparatorGeometryOuterParameters',
+    'FullWidthSeparatorOuterParameters',
     'FormatGeometryRetryParameters',
     'GridOuterRefineParameters',
     'ShortAxisAspectRetryParameters',

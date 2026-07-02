@@ -100,9 +100,7 @@ REVIEW contract。
 | Outer | base outer | `geometry/outer_boxes.py`, `detection/outer/base.py` | 基础 holder / content bbox 是否只提出 outer proposal，不承担评分或通过。 |
 | Outer | content floating outer | `detection/outer/content_outer.py` | partial 的内容外框不能单独证明安全；必须经过 separator/content/geometry gate。 |
 | Outer | edge-anchor outer | `detection/outer/edge_anchor.py` | 长轴锚点 outer 必须有 hard separator 支持；避免用边缘猜测自动通过。 |
-| Outer | separator-first outer | `detection/outer/separator_first.py`, `outer/bands.py` | separator band 反推 outer 是否有 spacing / width / frame-error 约束。 |
-| Outer | separator-geometry outer | `detection/outer/separator_geometry.py` | separator 几何 outer 是否只在 policy 允许时竞争；不得替代 final gate。 |
-| Outer | dark-band outer | `detection/outer/dark_band.py` | 120-66 dark-band 是否限于 square dark-boundary policy；不得泄漏到 120-67 / 645 / 135。 |
+| Outer | separator-derived outer | `detection/outer/separator.py`, `outer/bands.py` | local、full-width 和 wide separator variants 是否共享同一 outer proposal 引擎；spacing / width / frame-error 约束是否由 policy 控制。 |
 | Outer retry | content-aligned retry | `detection/outer/alignment.py`, `detection/outer/retry_content.py` | 内容边缘修正 outer 后是否重新经过 candidate assessment。 |
 | Outer retry | format-geometry retry | `detection/outer/retry_geometry.py` | 按 format 比例修正 outer 时，content margin / shrink ratio 是否保守。 |
 | Outer retry | short-axis retry | `detection/outer/retry_short_axis.py` | 120 宽/方格式短轴修正是否只在 full / policy-allowed 情况启用。 |
@@ -116,7 +114,7 @@ REVIEW contract。
 | Gap / separator | nearby separator correction | `geometry/nearby_separator.py` | 附近更强 separator 替换后是否保留 confidence cap 和 diagnostics。 |
 | Gap / separator | enhanced separator | `geometry/enhanced_separator.py` | enhanced analysis 何时触发、合并多少 gap、是否导致过度补证据。 |
 | Gap / separator | wide gap retry | `detection/candidate/run.py`, `detection/candidate/source_policy.py` | 放宽 gap width 后的候选是否被标记、cap，并重新过 gate。 |
-| Gap / separator | dark-band gaps | `detection/evidence/separator.py` | dark-band outer 内部 gaps 是否只服务 dark-band path，不污染普通 separator。 |
+| Gap / separator | wide-separator gaps | `detection/evidence/separator.py` | 120-66 宽 separator gaps 是否只在 wide separator variant 中启用，不污染普通窄 separator。 |
 | Gap diagnostics | gap diagnostics | `detection/evidence/gap_diagnostics.py` | diagnostic-only evidence 是否只解释 risk，不直接参与 candidate selection。 |
 | Content | content evidence | `detection/evidence/content_evidence.py` | `ok / weak / low_content / aspect_conflict` 是否符合照片内容和 aspect。 |
 | Content | content profile runs | `detection/evidence/content_profile.py` | content run 推测 frame 时是否处理缺失、断裂、局部曝光。 |
@@ -142,8 +140,8 @@ REVIEW contract。
 | Gate | auto gate | `candidate/candidate_assessment.py` | `auto_gate=True` 是否同时满足 separator/content/geometry/mode-specific 证据且无 hard review reason。 |
 | Retry / rescue | equal-first before wide retry | `candidate/source_policy.py`, `candidate/run.py` | wide retry 前的保守 equal-first 是否只在 policy 允许时使用。 |
 | Retry / rescue | fallback outer proposal | `candidate/run.py`, `candidate/sources.py` | fallback 只能救回可复核候选，不应绕开 hard evidence。 |
-| Retry / rescue | dark-band retry | `candidate/dark_band_retry.py` | 120-66 full/partial 的触发条件是否足够窄。 |
-| Retry / rescue | full dark-band selection | `candidate/dark_band_selection.py` | full 模式 dark-band 候选竞争是否需要明确帮助条件。 |
+| Retry / rescue | wide-separator retry | `candidate/wide_separator_retry.py` | 120-66 full/partial 的触发条件是否足够窄。 |
+| Retry / rescue | full wide-separator selection | `candidate/wide_separator_selection.py` | full 模式 wide-separator 候选竞争是否需要明确帮助条件。 |
 | Retry / rescue | partial stop | `candidate/run.py` | partial safe auto 后提前停止是否不会跳过更安全的 review 证据。 |
 | Risk | overlap bleed risk | `detection/evidence/risk.py`, `gap_diagnostics.py` | gap 附近叠片/连续内容风险是否进入 REVIEW 或 output bleed。 |
 | Risk | lucky pass risk | `detection/evidence/risk.py` | model/equal/grid 支撑的假 PASS 是否被拉回 REVIEW。 |
@@ -161,7 +159,7 @@ REVIEW contract。
 | Audit visibility | debug panels | `debug/*`, `policies/runtime_diagnostics.py` | 三联图默认保持可读；更丰富证据进入 report/detail 而非挤满首屏。 |
 | Audit visibility | policy reporting | `policies/reporting.py` | report 中应区分 active policy、默认值、format/mode role 和 diagnostics detail。 |
 
-建议人工审核顺序：先看 `dark_band`、`wide retry / enhanced separator`、`lucky pass risk`，
+建议人工审核顺序：先看 `wide_separator`、`wide retry / enhanced separator`、`lucky pass risk`，
 再依次看 outer、gap/content、candidate scoring、gate、final decision。任何行为修改都应
 同步检查 report/debug 是否能解释变化。
 
@@ -170,9 +168,9 @@ REVIEW contract。
 - 135 full 的完整片条假设不能推广给其它 format。
 - 135-dual full 使用 dual-lane detector；135-dual partial 保守复核。
 - half geometry support 是通用 capability，但默认只给 `half/full` 开启。
-- 120-66 dark-band、square-frame、wide-like separator 和 strict-holder checks
+- 120-66 wide-separator、square-frame、wide-like separator 和 strict-holder checks
   只适用于 120-66 full / partial。
-- 120-67 可以有自己的 short-axis / wide-separator retry，但不能继承 120-66 dark-band。
+- 120-67 可以有自己的 short-axis / wide-separator retry，但不能继承 120-66 wide-separator。
 - weak grid、equal、content-only、fallback 或不可信 partial-edge 证据不能获得自动 PASS 权限。
 
 ### 数据和报告契约
@@ -318,23 +316,23 @@ and decision detail, and cannot bypass the final PASS / REVIEW contract.
 | Policy activation | format facts and policy presets | `formats.py`, `policies/format_*.py` | Physical facts, thresholds, and format/mode activations must stay separate and explicit. |
 | Policy activation | runtime and decision contracts | `policies/runtime_*.py`, `policies/decision_contract.py` | `DetectionPolicy` and `DetectionDecisionContract` must not drift semantically. |
 | Mode-specific detector | dual-lane and review-only paths | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_*.py`, `detection/modes/review_only.py`, `candidate/fallback.py` | Dedicated detectors and review-only paths must stay isolated, context-driven, and conservative. |
-| Outer | base, content, edge-anchor, separator-first, separator-geometry, dark-band outer | `detection/outer/*`, `geometry/outer_boxes.py` | Outer proposals only propose or correct boxes; they do not score or authorize PASS. |
+| Outer | base, content, edge-anchor, separator-derived outer | `detection/outer/*`, `geometry/outer_boxes.py` | Outer proposals only propose or correct boxes; local, full-width, and wide separator variants share one separator-derived proposal engine. |
 | Outer retry | content-aligned, format-geometry, short-axis retry | `detection/outer/retry_*.py`, `detection/outer/outer_correction.py` | Corrections must be policy-scoped and re-enter candidate assessment. |
 | Gap / separator | profile, cache, normal gap search, hard trust, edge pair, robust grid | `geometry/separator_*`, `geometry/gap_search.py`, `geometry/gap_trust.py`, `geometry/edge_pairs.py`, `geometry/robust_grid.py` | Hard evidence must stay stronger than model/equal/grid evidence, and cache keys must include policy-relevant context. |
-| Gap / separator | nearby correction, enhanced separator, wide retry, dark-band gaps | `geometry/nearby_separator.py`, `geometry/enhanced_separator.py`, `detection/candidate/run.py`, `detection/evidence/separator.py` | Rescue evidence must be marked, capped when needed, and gated again. |
+| Gap / separator | nearby correction, enhanced separator, wide retry, wide-separator gaps | `geometry/nearby_separator.py`, `geometry/enhanced_separator.py`, `detection/candidate/run.py`, `detection/evidence/separator.py` | Rescue evidence must be marked, capped when needed, and gated again. |
 | Content | content evidence, profile runs, mask outer, content candidate | `detection/evidence/content_*`, `candidate/content_candidate.py` | Content can validate or challenge candidates but must not auto-pass alone. |
 | Candidate | count/offset, source orchestration, build, frame fit | `detection/candidate/counts.py`, `detection/candidate/run.py`, `detection/candidate/sources.py`, `detection/candidate/build.py`, `geometry/frame_fit.py` | Candidate lifecycle must keep all intermediate evidence in `Detection.detail`. |
 | Scoring | base confidence, geometry/content/separator scores, joint score, hard-full floor | `detection/candidate/scoring.py`, `detection/candidate/candidate_assessment.py` | Scores support gates; they do not replace separator/content/geometry requirements. |
 | Gate | separator gate profiles and geometry support | `detection/candidate/gates.py`, `detection/candidate/scoring.py` | `min_hard_with_equal_cap`, `all_internal_gaps_hard`, and `geometry_support` must match format/mode policy. |
 | Gate | partial safe extra frames and auto gate | `detection/candidate/partial_holder.py`, `detection/candidate/candidate_assessment.py` | Partial edge safety requires explicit wide-like/content/frame evidence and no hard review reason. |
-| Retry / rescue | equal-first, fallback outer, dark-band retry, full dark-band selection, partial stop | `detection/candidate/source_policy.py`, `detection/candidate/run.py`, `detection/candidate/dark_band_*.py` | Retry paths must be narrow, explainable, and unable to bypass hard evidence. |
+| Retry / rescue | equal-first, fallback outer, wide-separator retry, full wide-separator selection, partial stop | `detection/candidate/source_policy.py`, `detection/candidate/run.py`, `detection/candidate/wide_separator_*.py` | Retry paths must be narrow, explainable, and unable to bypass hard evidence. |
 | Risk | overlap bleed, lucky pass, outer-content mismatch, close competition | `detection/evidence/risk.py`, `detection/evidence/gap_diagnostics.py`, `detection/outer/alignment.py`, `detection/candidate/selection.py`, `detection/final/pass_review.py` | Risk logic should pull suspicious PASS candidates back to REVIEW or safer output bleed. |
 | Risk | content-only, fallback, review-only, partial-edge uncertainty | `detection/candidate/candidate_assessment.py`, `detection/candidate/fallback.py`, `detection/final/pass_review.py` | Conservative REVIEW-only paths must stay review-only unless the decision contract changes. |
 | Finalization | final outer retry, edge bleed protection, approved geometry adjustment, caps | `detection/final/finalize.py`, `detection/final/geometry.py` | Output-adjacent geometry changes must preserve evidence/risk detail and safety caps. |
 | Final decision | PASS / REVIEW, reason normalization, decision detail | `detection/final/pass_review.py` | Final status must be decided only by the decision contract. |
 | Audit visibility | read-only diagnostics, report sections, debug panels, policy reporting | `detection/evidence/read_only.py`, `report_schema.py`, `report_sections.py`, `debug/*`, `policies/reporting.py` | Reports and Debug Analysis explain behavior without feeding back into candidate selection. |
 
-Recommended manual review order: start with `dark_band`, `wide retry / enhanced
+Recommended manual review order: start with `wide_separator`, `wide retry / enhanced
 separator`, and `lucky pass risk`; then review outer, gap/content, candidate
 scoring, gates, and final decision. Any behavior change must also prove that
 report/debug output explains the change.
@@ -345,9 +343,9 @@ report/debug output explains the change.
 - 135-dual full uses the dual-lane detector; 135-dual partial stays conservative.
 - Half-frame geometry support is generic, but currently enabled only for
   `half/full`.
-- 120-66 dark-band, square-frame, wide-like separator, and strict-holder checks
+- 120-66 wide-separator, square-frame, wide-like separator, and strict-holder checks
   stay limited to 120-66 full / partial.
-- 120-67 may have its own retry behavior, but must not inherit 120-66 dark-band behavior.
+- 120-67 may have its own retry behavior, but must not inherit 120-66 wide-separator behavior.
 - Weak grid, equal, content-only, fallback, or untrusted partial-edge evidence
   must not gain automatic PASS authority.
 

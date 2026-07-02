@@ -61,6 +61,9 @@ Current stable release: v4.2.8
   analysis source 和 review reason 统一使用 `dual_lane` 命名，不再使用泛化的并行 lane 命名。
 - `review_only` mode 已推广为通用 mode detector 接口；`135-dual/partial` 只是
   该接口的当前使用者，不再通过 dual-lane detector 或旧的专用模块旁路。
+- separator-derived outer 已收敛为统一 `detection/outer/separator.py` 引擎；
+  local、full-width 和 120-66 wide separator variants 共享 sequence / ranking /
+  candidate 输出逻辑，active code 不再保留独立 dark-band outer 分支。
 - 14 个 format / strip mode decision contract policy smoke 通过；final contract
   由 active runtime `DetectionPolicy` 派生，避免 geometry support、partial edge
   和 diagnostics/output policy 漂移。
@@ -158,6 +161,10 @@ Verified:
 - `review_only` mode is now a generic mode-detector interface; `135-dual/partial`
   is only the current user of that interface and no longer routes through the
   dual-lane detector or the old dedicated module.
+- Separator-derived outer proposals are consolidated into the single
+  `detection/outer/separator.py` engine; local, full-width, and 120-66 wide
+  separator variants share sequence, ranking, and candidate output logic, and
+  active code no longer keeps a separate dark-band outer branch.
 - 14 format / strip-mode decision contract policy smoke checks pass; the final
   contract is derived from the active runtime `DetectionPolicy` to prevent
   geometry support, partial-edge, diagnostics, and output-policy drift.

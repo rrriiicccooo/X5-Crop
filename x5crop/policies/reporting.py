@@ -36,22 +36,21 @@ def _outer_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "base_candidates": _plain(outer.base_candidates),
         "content_floating_outer": _plain(outer.content_floating_outer),
         "edge_anchor_outer": _plain(outer.edge_anchor_outer),
-        "separator_first": outer.separator_first,
-        "separator_geometry": outer.separator_geometry,
+        "separator_local": outer.separator_local,
+        "separator_full_width": outer.separator_full_width,
         "separator_outer_allow_oversized_band": outer.separator_outer_allow_oversized_band,
         "separator_outer_oversized_band_max_ratio": outer.separator_outer_oversized_band_max_ratio,
         "separator_outer_oversized_band_score_penalty": outer.separator_outer_oversized_band_score_penalty,
         "separator_gap_search_max_width_ratio": outer.separator_gap_search_max_width_ratio,
         "separator_outer_band": _plain(outer.separator_outer_band),
-        "separator_geometry_outer": _plain(outer.separator_geometry_outer),
-        "dark_band": outer.dark_band,
+        "separator_full_width_outer": _plain(outer.separator_full_width_outer),
+        "wide_separator": outer.wide_separator,
         "format_geometry_retry": _plain(outer.format_geometry_retry),
         "grid_refine": _plain(outer.grid_refine),
         "short_axis_aspect_retry": _plain(outer.short_axis_aspect_retry),
         "content_alignment": _plain(outer.content_alignment),
-        # Keep the report schema stable: expose only the audited dark-band fields.
-        "dark_band_outer": _fields(
-            outer.dark_band_outer,
+        "wide_separator_outer": _fields(
+            outer.wide_separator_outer,
             (
                 "mode",
                 "required_count",

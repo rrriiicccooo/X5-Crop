@@ -6,24 +6,24 @@ from .parameter_aggregate import FormatParameters
 from .runtime_base import FULL
 from .runtime_outer import (
     ContentFloatingOuterPolicy,
-    DarkBandOuterPolicy,
     EdgeAnchorOuterPolicy,
     FormatGeometryRetryPolicy,
+    FullWidthSeparatorOuterPolicy,
     GridOuterRefinePolicy,
     OuterContentAlignmentPolicy,
     OuterPolicy,
-    SeparatorGeometryOuterPolicy,
     SeparatorOuterBandPolicy,
     ShortAxisAspectRetryPolicy,
+    WideSeparatorOuterPolicy,
 )
 
 
-def dark_band_outer_policy(mode_preset: ModePolicyPreset) -> DarkBandOuterPolicy:
-    dark_band = mode_preset.dark_band
-    return DarkBandOuterPolicy(
-        mode=dark_band.mode,
+def wide_separator_outer_policy(mode_preset: ModePolicyPreset) -> WideSeparatorOuterPolicy:
+    wide_separator = mode_preset.wide_separator
+    return WideSeparatorOuterPolicy(
+        mode=wide_separator.mode,
         required_count=3,
-        full_selection_enabled=dark_band.full_selection_enabled,
+        full_selection_enabled=wide_separator.full_selection_enabled,
     )
 
 
@@ -42,11 +42,11 @@ def outer_policy(
     edge_anchor = params.edge_anchor_outer
     base_candidates = params.base_outer_candidates
     separator_outer = params.separator_outer_band
-    separator_geometry = params.separator_geometry_outer
+    separator_full_width = params.separator_full_width_outer
     content_floating_enabled = bool(
         outer.content_floating_full if is_full else outer.content_floating_partial
     )
-    dark_band = mode_preset.dark_band
+    wide_separator = mode_preset.wide_separator
     edge_anchor_mode = (
         outer.edge_anchor_full_mode
         if is_full and outer.edge_anchor_full_enabled
@@ -57,24 +57,24 @@ def outer_policy(
     return OuterPolicy(
         content_floating=content_floating_enabled,
         edge_anchor=edge_anchor_mode,
-        separator_first=(
-            outer.separator_first_full_mode
-            if is_full and outer.separator_first_full_enabled
-            else outer.separator_first_partial_mode
-            if (not is_full and outer.separator_first_partial_enabled)
+        separator_local=(
+            outer.separator_local_full_mode
+            if is_full and outer.separator_local_full_enabled
+            else outer.separator_local_partial_mode
+            if (not is_full and outer.separator_local_partial_enabled)
             else "off"
         ),
-        separator_geometry=(
-            outer.separator_geometry_full_mode
+        separator_full_width=(
+            outer.separator_full_width_full_mode
             if is_full
-            else outer.separator_geometry_partial_mode
+            else outer.separator_full_width_partial_mode
         ),
-        separator_outer_allow_oversized_band=dark_band.separator_outer_allow_oversized_band,
-        separator_outer_oversized_band_max_ratio=dark_band.separator_outer_oversized_band_max_ratio,
-        separator_outer_oversized_band_score_penalty=dark_band.separator_outer_oversized_band_score_penalty,
+        separator_outer_allow_oversized_band=wide_separator.separator_outer_allow_oversized_band,
+        separator_outer_oversized_band_max_ratio=wide_separator.separator_outer_oversized_band_max_ratio,
+        separator_outer_oversized_band_score_penalty=wide_separator.separator_outer_oversized_band_score_penalty,
         separator_gap_search_max_width_ratio=float(outer.separator_gap_search_max_width_ratio),
-        dark_band=dark_band.mode,
-        dark_band_outer=dark_band_outer_policy(mode_preset),
+        wide_separator=wide_separator.mode,
+        wide_separator_outer=wide_separator_outer_policy(mode_preset),
         format_geometry_retry=FormatGeometryRetryPolicy(
             enabled=bool(format_geometry.enabled),
             ratio_tolerance=float(format_geometry.ratio_tolerance),
@@ -204,11 +204,11 @@ def outer_policy(
             pair_candidate_count=int(separator_outer.pair_candidate_count),
             max_candidates=int(separator_outer.max_candidates),
         ),
-        separator_geometry_outer=SeparatorGeometryOuterPolicy(
-            required_count=int(separator_geometry.required_count),
-            source_candidate_count=int(separator_geometry.source_candidate_count),
-            margin_ratios=tuple(float(value) for value in separator_geometry.margin_ratios),
-            max_candidates=int(separator_geometry.max_candidates),
+        separator_full_width_outer=FullWidthSeparatorOuterPolicy(
+            required_count=int(separator_full_width.required_count),
+            source_candidate_count=int(separator_full_width.source_candidate_count),
+            margin_ratios=tuple(float(value) for value in separator_full_width.margin_ratios),
+            max_candidates=int(separator_full_width.max_candidates),
         ),
         retries=tuple(
             name
@@ -222,6 +222,6 @@ def outer_policy(
     )
 
 __all__ = [
-    'dark_band_outer_policy',
     'outer_policy',
+    'wide_separator_outer_policy',
 ]

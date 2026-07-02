@@ -7,28 +7,16 @@ from ...formats import FormatSpec
 from ...geometry.boxes import box_cache_key
 
 
-def separator_first_cache_key(
+def separator_outer_cache_key(
+    variant: str,
     base_candidates: list[OuterCandidate],
     fmt: FormatSpec,
     count: int,
     strip_mode: str,
 ) -> tuple[Any, ...]:
     return (
-        str(fmt.name),
-        int(count),
-        str(strip_mode),
-        tuple((candidate.name, box_cache_key(candidate.box)) for candidate in base_candidates),
-    )
-
-
-def separator_geometry_cache_key(
-    base_candidates: list[OuterCandidate],
-    fmt: FormatSpec,
-    count: int,
-    strip_mode: str,
-) -> tuple[Any, ...]:
-    return (
-        "separator_geometry",
+        "separator_outer",
+        str(variant),
         str(fmt.name),
         int(count),
         str(strip_mode),

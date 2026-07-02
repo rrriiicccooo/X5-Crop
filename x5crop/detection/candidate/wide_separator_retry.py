@@ -25,13 +25,13 @@ def has_partial_safe_wide_like_candidate(
     return False
 
 
-def partial_dark_band_retry_needed(
+def partial_wide_separator_retry_needed(
     current_best: Detection,
     candidates: list[Detection],
     fmt: FormatSpec,
     policy: DetectionPolicy,
 ) -> bool:
-    retry_policy = policy.candidate_run.dark_band_retry
+    retry_policy = policy.candidate_run.wide_separator_retry
     if (
         not retry_policy.try_partial_when_no_safe_wide_like_candidate
         or has_partial_safe_wide_like_candidate(candidates, fmt, policy)
@@ -53,7 +53,7 @@ def partial_dark_band_retry_needed(
     )
 
 
-def should_try_dark_band_candidates(
+def should_try_wide_separator_candidates(
     policy: DetectionPolicy,
     strip_mode: str,
     count: int,
@@ -61,11 +61,11 @@ def should_try_dark_band_candidates(
     candidates: list[Detection],
     current_best: Optional[Detection],
 ) -> bool:
-    if policy.outer.dark_band == "off":
+    if policy.outer.wide_separator == "off":
         return False
-    retry_policy = policy.candidate_run.dark_band_retry
+    retry_policy = policy.candidate_run.wide_separator_retry
     if strip_mode in retry_policy.partial_retry_strip_modes:
-        return current_best is not None and partial_dark_band_retry_needed(current_best, candidates, fmt, policy)
+        return current_best is not None and partial_wide_separator_retry_needed(current_best, candidates, fmt, policy)
     if strip_mode in retry_policy.full_retry_strip_modes:
         if not retry_policy.try_full_default_count:
             return False

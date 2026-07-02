@@ -3,7 +3,7 @@ from __future__ import annotations
 from .runtime_base import FULL, PARTIAL, FrameFitPolicy
 from .runtime_separator import SeparatorEdgePairPolicy
 from .factory import build_policy_from_preset
-from .factory_presets import DarkBandModePreset, FormatPolicyPreset, ModePolicyPreset
+from .factory_presets import FormatPolicyPreset, ModePolicyPreset, WideSeparatorModePreset
 from .parameter_aggregate import FormatParameters
 from .parameter_registry import base_medium_format_parameters
 
@@ -40,15 +40,15 @@ def parameters() -> FormatParameters:
         long_axis_edge_anchor_partial_mode="fallback",
         long_axis_edge_anchor_ratio_extras=(0.06, 0.10),
         long_axis_edge_anchor_max_candidates=6,
-        separator_first_outer_enabled=True,
-        separator_first_outer_mode="fallback",
-        separator_first_partial_enabled=True,
-        separator_first_partial_mode="always",
-        separator_geometry_outer_partial_mode="conditional",
-        separator_geometry_outer_count=3,
-        separator_geometry_outer_max_candidates=8,
-        separator_geometry_outer_margin_ratios=(0.00, 0.018, 0.035, 0.055),
-        separator_geometry_outer_source_candidates=3,
+        separator_local_outer_enabled=True,
+        separator_local_outer_mode="fallback",
+        separator_local_partial_enabled=True,
+        separator_local_partial_mode="always",
+        separator_full_width_outer_partial_mode="conditional",
+        separator_full_width_outer_count=3,
+        separator_full_width_outer_max_candidates=8,
+        separator_full_width_outer_margin_ratios=(0.00, 0.018, 0.035, 0.055),
+        separator_full_width_outer_source_candidates=3,
     )
 
 
@@ -61,9 +61,9 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
     ),
     modes={
         FULL: ModePolicyPreset(
-            role="square_full_strip_dark_boundary_guarded",
+            role="square_full_strip_wide_separator_guarded",
             notes=(
-                "dark-boundary outer candidates may compete, but full mode does not inherit partial extra-holder tolerance",
+                "wide-separator outer candidates may compete, but full mode does not inherit partial extra-holder tolerance",
             ),
             frame_fit=FrameFitPolicy(
                 name="medium_square_frame_fit",
@@ -74,7 +74,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
                 nominal_max_ratio=1.20,
                 inlier_tolerance_ratio=0.045,
             ),
-            dark_band=DarkBandModePreset(
+            wide_separator=WideSeparatorModePreset(
                 mode="conditional",
                 full_selection_enabled=True,
                 separator_outer_allow_oversized_band=True,
@@ -82,12 +82,12 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
             diagnostics_overlap_bleed=True,
         ),
         PARTIAL: ModePolicyPreset(
-            role="square_partial_strip_dark_boundary_edge_guarded",
+            role="square_partial_strip_wide_separator_edge_guarded",
             notes=(
-                "dark-boundary outer candidates must still pass separator/content/geometry gates",
+                "wide-separator outer candidates must still pass separator/content/geometry gates",
                 "safe extra holder frames require wide-like separator evidence and stable frame content",
             ),
-            dark_band=DarkBandModePreset(
+            wide_separator=WideSeparatorModePreset(
                 mode="conditional",
                 full_selection_enabled=True,
                 separator_outer_allow_oversized_band=True,

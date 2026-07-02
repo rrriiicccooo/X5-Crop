@@ -14,15 +14,14 @@ from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from ..evidence.content_evidence import content_evidence_detail
 from ..outer.base import unique_outer_candidates
-from ..outer.dark_band import separator_dark_band_outer_candidates
 from ..outer.plan import outer_candidate_strategy, outer_proposal_candidates
-from ..outer.separator_geometry import separator_geometry_outer_candidates
+from ..outer.separator import FULL_WIDTH_SEPARATOR_OUTER, WIDE_SEPARATOR_OUTER, separator_derived_outer_candidates
 from .build import build_detection_for_outer
 from .counts import raw_detection_rank
-from .dark_band_selection import select_full_dark_band_candidate
 from .partial_holder import partial_safe_frame_content_detail, partial_safe_leading_content_detail
-from .dark_band_retry import should_try_dark_band_candidates
-from .source_policy import separator_geometry_can_compete, separator_outer_gap_max_width_override
+from .wide_separator_retry import should_try_wide_separator_candidates
+from .wide_separator_selection import select_full_wide_separator_candidate
+from .source_policy import separator_full_width_can_compete, separator_outer_gap_max_width_override
 
 
 def detect_candidate_for_count(
@@ -67,16 +66,16 @@ def detect_candidate_for_count(
         )
         candidates.append(detection)
     regular_best = max(candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold)) if candidates else None
-    separator_geometry_mode = policy.outer.separator_geometry
-    should_try_separator_geometry = (
-        separator_geometry_mode == "always"
+    separator_full_width_mode = policy.outer.separator_full_width
+    should_try_separator_full_width = (
+        separator_full_width_mode == "always"
         or (
-            separator_geometry_mode == "conditional"
-            and (regular_best is None or separator_geometry_can_compete(regular_best, gray, policy))
+            separator_full_width_mode == "conditional"
+            and (regular_best is None or separator_full_width_can_compete(regular_best, gray, policy))
         )
     )
-    if should_try_separator_geometry:
-        separator_geometry_candidates = separator_geometry_outer_candidates(
+    if should_try_separator_full_width:
+        separator_full_width_candidates = separator_derived_outer_candidates(
             gray_work,
             outer_candidates,
             fmt,
@@ -84,8 +83,9 @@ def detect_candidate_for_count(
             strip_mode,
             cache,
             policy,
+            variants=(FULL_WIDTH_SEPARATOR_OUTER,),
         )
-        for candidate in separator_geometry_candidates:
+        for candidate in separator_full_width_candidates:
             candidate_gap_override = separator_outer_gap_max_width_override(policy, gap_max_width_ratio_override)
             candidates.append(
                 build_detection_for_outer(
@@ -103,30 +103,32 @@ def detect_candidate_for_count(
                     policy=policy,
                 )
             )
-        outer_candidates = unique_outer_candidates([*outer_candidates, *separator_geometry_candidates])
-    current_best_for_dark = max(candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold)) if candidates else None
-    should_try_dark_band = should_try_dark_band_candidates(
+        outer_candidates = unique_outer_candidates([*outer_candidates, *separator_full_width_candidates])
+    current_best_for_wide = max(candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold)) if candidates else None
+    should_try_wide_separator = should_try_wide_separator_candidates(
         policy,
         strip_mode,
         count,
         fmt,
         candidates,
-        current_best_for_dark,
+        current_best_for_wide,
     )
-    separator_dark_band_candidates = (
-        separator_dark_band_outer_candidates(
+    wide_separator_candidates = (
+        separator_derived_outer_candidates(
             gray_work,
             outer_candidates,
             fmt,
             count,
             strip_mode,
+            cache,
             policy,
+            variants=(WIDE_SEPARATOR_OUTER,),
         )
-        if should_try_dark_band
+        if should_try_wide_separator
         else []
     )
-    if separator_dark_band_candidates:
-        for candidate in separator_dark_band_candidates:
+    if wide_separator_candidates:
+        for candidate in wide_separator_candidates:
             candidate_gap_override = separator_outer_gap_max_width_override(policy, gap_max_width_ratio_override)
             candidates.append(
                 build_detection_for_outer(
@@ -144,7 +146,7 @@ def detect_candidate_for_count(
                     policy=policy,
                 )
             )
-        outer_candidates = unique_outer_candidates([*outer_candidates, *separator_dark_band_candidates])
+        outer_candidates = unique_outer_candidates([*outer_candidates, *wide_separator_candidates])
     best_candidates = candidates
     if (
         policy.partial_holder.safe_extra_frames
@@ -172,7 +174,7 @@ def detect_candidate_for_count(
         if non_cutting_candidates:
             best_candidates = non_cutting_candidates
     best = max(best_candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold))
-    full_dark_band_best = select_full_dark_band_candidate(
+    full_wide_separator_best = select_full_wide_separator_candidate(
         gray,
         candidates,
         best,
@@ -180,8 +182,8 @@ def detect_candidate_for_count(
         cache,
         policy,
     )
-    if full_dark_band_best is not None:
-        best = full_dark_band_best
+    if full_wide_separator_best is not None:
+        best = full_wide_separator_best
     areas = [candidate.box.width * candidate.box.height for candidate in outer_candidates if candidate.box.valid()]
     if areas:
         best.detail["outer_candidate_count"] = len(outer_candidates)

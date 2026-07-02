@@ -33,8 +33,7 @@ class AnalysisCache:
     content_profile_runs: dict[tuple[Any, ...], tuple[list[tuple[int, int]], dict[str, Any]]] = field(default_factory=dict)
     content_evidence_details: dict[tuple[Any, ...], dict[str, Any]] = field(default_factory=dict)
     outer_alignment_details: dict[tuple[Any, ...], dict[str, Any]] = field(default_factory=dict)
-    separator_first_outer_candidates: dict[tuple[Any, ...], list[OuterCandidate]] = field(default_factory=dict)
-    separator_geometry_outer_candidates: dict[tuple[Any, ...], list[OuterCandidate]] = field(default_factory=dict)
+    separator_outer_candidates: dict[tuple[Any, ...], list[OuterCandidate]] = field(default_factory=dict)
     long_axis_edge_anchor_outer_candidates: dict[tuple[Any, ...], list[OuterCandidate]] = field(default_factory=dict)
 
 

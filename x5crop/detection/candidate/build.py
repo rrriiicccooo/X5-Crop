@@ -27,7 +27,7 @@ from ...utils import clamp_int
 from ..outer.plan import outer_candidate_strategy
 from .partial import partial_edge_hint
 from .scoring import score_detection
-from ..evidence.separator import dark_band_gaps_for_outer
+from ..evidence.separator import wide_separator_gaps_for_outer
 
 
 def build_detection_for_outer(
@@ -75,10 +75,10 @@ def build_detection_for_outer(
         )
         for i in range(1, count)
     ]
-    if candidate_strategy == "dark_band_outer":
-        dark_band_gaps = dark_band_gaps_for_outer(gray_work, outer, count, fmt, policy)
-        if len(dark_band_gaps) >= max(1, count - 1):
-            gaps = dark_band_gaps
+    if candidate_strategy == "separator_outer" and outer_candidate_name.startswith("separator_wide_"):
+        wide_separator_gaps = wide_separator_gaps_for_outer(gray_work, outer, count, fmt, policy)
+        if len(wide_separator_gaps) >= max(1, count - 1):
+            gaps = wide_separator_gaps
     if (
         strip_mode == "full"
         and policy.separator.geometry_support.wide_geometry.enabled

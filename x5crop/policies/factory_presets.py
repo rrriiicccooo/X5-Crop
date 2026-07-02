@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class DarkBandModePreset:
+class WideSeparatorModePreset:
     mode: str = "off"
     full_selection_enabled: bool = False
     separator_outer_allow_oversized_band: bool = False
@@ -27,7 +27,7 @@ class ModePolicyPreset:
     detector_kind: str = "standard_strip"
     frame_fit: FrameFitPolicy | None = None
     review_only: ReviewOnlyPolicy = field(default_factory=ReviewOnlyPolicy)
-    dark_band: DarkBandModePreset = field(default_factory=DarkBandModePreset)
+    wide_separator: WideSeparatorModePreset = field(default_factory=WideSeparatorModePreset)
     separator_geometry_support_modes: tuple[str, ...] = ()
     diagnostics_overlap_bleed: bool = False
 
@@ -43,7 +43,7 @@ class FormatPolicyPreset:
 
 
 __all__ = [
-    "DarkBandModePreset",
     "FormatPolicyPreset",
     "ModePolicyPreset",
+    "WideSeparatorModePreset",
 ]

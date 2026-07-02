@@ -153,10 +153,10 @@ FORMATS: dict[str, FormatSpec] = {
         "120",
         1.0,
         "square_frame_dark_boundary_guarded",
-        "dark_band_or_wide_internal_gaps",
+        "wide_internal_separators",
         "square_frame_spacing_sensitive",
         (
-            "dark_band_can_be_false_frame_boundary",
+            "wide_separator_can_be_false_frame_boundary",
             "holder_edge_can_mimic_separator",
             "overlap_or_stuck_frame_risk",
         ),
