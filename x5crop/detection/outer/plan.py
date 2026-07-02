@@ -11,7 +11,7 @@ from ...policies.registry import get_detection_policy
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from .base import base_outer_candidates, unique_outer_candidates
-from .content import floating_outer_candidates
+from .content_outer import floating_outer_candidates
 from .edge_anchor import long_axis_edge_anchor_outer_candidates
 from .separator_first import separator_first_outer_candidates
 from .separator_geometry import separator_geometry_outer_candidates

@@ -7,18 +7,17 @@ import numpy as np
 
 from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
-from ..policies.parameter_separator import EdgePairParams
-from ..policies.runtime_policy import EdgeRefineProfilePolicy
 from ..runtime import AnalysisCache
 from ..utils import clamp_float, clamp_int
+from .detection_parameters import EdgePairParameters, EdgeRefineProfilePolicy
 from .separator_cache import cached_edge_refine_profiles
 from .separator_profile import edge_refine_profiles, interval_mean, local_edge_peaks
 
 
-def edge_pair_params_from_policy(policy: Any) -> EdgePairParams:
-    if isinstance(policy, EdgePairParams):
+def edge_pair_parameters_from_policy(policy: Any) -> EdgePairParameters:
+    if isinstance(policy, EdgePairParameters):
         return policy
-    return EdgePairParams(
+    return EdgePairParameters(
         window_ratio=float(getattr(policy, "window_ratio")),
         min_gutter_ratio=float(getattr(policy, "min_gutter_ratio")),
         max_gutter_ratio=float(getattr(policy, "max_gutter_ratio")),
@@ -31,7 +30,7 @@ def edge_pair_params_from_policy(policy: Any) -> EdgePairParams:
     )
 
 
-def edge_pair_can_replace_hard_gap(gap: Gap, edge_gap: Gap, pitch: float, params: EdgePairParams) -> bool:
+def edge_pair_can_replace_hard_gap(gap: Gap, edge_gap: Gap, pitch: float, params: EdgePairParameters) -> bool:
     delta = abs(edge_gap.center - gap.center)
     if params.max_hard_shift_ratio <= 0.0:
         return delta <= max(clamp_float(pitch * 0.001, 4.0, 20.0), edge_gap.width)
@@ -65,7 +64,7 @@ def refine_gaps_by_edge_pairs(
     pitch = w / float(max(1, count))
     if edge_pair_policy is None:
         raise ValueError("edge_pair_policy is required")
-    params = edge_pair_params_from_policy(edge_pair_policy)
+    params = edge_pair_parameters_from_policy(edge_pair_policy)
     window = clamp_int(pitch * params.window_ratio, 8, 520)
     min_gutter = clamp_int(pitch * params.min_gutter_ratio, 2, 40)
     max_gutter = max(min_gutter + 1, clamp_int(pitch * params.max_gutter_ratio, 8, 420))

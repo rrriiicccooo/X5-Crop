@@ -6,8 +6,8 @@ import numpy as np
 
 from ..constants import HARD_GAP_METHODS
 from ..domain import Gap
-from ..policies.runtime_policy import GapSearchPolicy, RobustGridPolicy
 from ..utils import clamp_float, clamp_int, runs_from_mask
+from .detection_parameters import GapSearchPolicy, RobustGridPolicy
 
 
 def find_gap(

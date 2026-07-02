@@ -13,7 +13,7 @@ from ...policies.registry import get_detection_policy
 from ...policies.runtime_policy import ContentPolicy
 from ...runtime import AnalysisCache
 from ...utils import sampled_percentile
-from .cache_keys import content_detail_cache_key
+from .evidence_cache_keys import content_detail_cache_key
 
 
 def expected_content_aspect(format_name: str, layout: str) -> Optional[float]:

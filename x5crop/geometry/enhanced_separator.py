@@ -7,11 +7,11 @@ import numpy as np
 
 from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
-from ..policies.runtime_policy import EnhancedSeparatorPolicy, GapSearchPolicy, RobustGridPolicy, SeparatorProfilePolicy
 from ..runtime import AnalysisCache
 from ..utils import clamp_float
 from .boxes import box_cache_key
 from .gap_search import constrain_gap_to_geometry, find_gap
+from .detection_parameters import EnhancedSeparatorPolicy, GapSearchPolicy, RobustGridPolicy, SeparatorProfilePolicy
 from .separator_cache import cached_enhanced_separator_profile
 
 

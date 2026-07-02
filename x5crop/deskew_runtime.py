@@ -22,20 +22,20 @@ def apply_deskew(
     fmt: FormatSpec,
     warnings: list[str],
 ) -> tuple[Any, Any, dict[str, Any]]:
-    tuning = format_parameters(fmt.name)
+    deskew = format_parameters(fmt.name).deskew
     deskew_detail: dict[str, Any] = {"applied": False}
     if config.deskew == "off":
         return arr, gray, deskew_detail
 
-    angle, angle_detail = choose_deskew_angle(gray, config.layout, config.analysis, fmt.name)
+    angle, angle_detail = choose_deskew_angle(gray, config.layout, config.analysis, deskew)
     deskew_detail.update(angle_detail)
     deskew_detail["angle"] = angle
     deskew_work_width = float(work_gray(gray, config.layout).shape[1])
     deskew_span = abs(math.tan(math.radians(angle)) * deskew_work_width)
     deskew_span_threshold = clamp_float(
-        deskew_work_width * tuning.deskew_span_skip_ratio,
-        tuning.deskew_span_skip_min,
-        tuning.deskew_span_skip_max,
+        deskew_work_width * deskew.span_skip_ratio,
+        deskew.span_skip_min,
+        deskew.span_skip_max,
     )
     deskew_detail["span_px"] = deskew_span
     deskew_detail["span_threshold_px"] = deskew_span_threshold

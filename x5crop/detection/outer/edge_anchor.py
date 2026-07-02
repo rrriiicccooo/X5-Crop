@@ -11,7 +11,7 @@ from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from ...utils import bbox_from_mask, clamp_int
 from .base import unique_outer_candidates
-from .cache_keys import long_axis_edge_anchor_cache_key
+from .outer_cache_keys import long_axis_edge_anchor_cache_key
 
 
 def long_axis_edge_anchor_outer_candidates(

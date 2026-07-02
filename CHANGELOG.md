@@ -69,6 +69,10 @@ Current stable release: v4.2.8
   `analysis_reuse` 负责 report cache 复用，`export` 负责输出路径 / review copy /
   TIFF crop 写出，`result_builder` 统一 fresh / cached `ProcessResult` 组装，
   `report_outputs` 只写 JSONL / CSV。
+- 基础层依赖方向清理完成：`geometry` / `image` 不再直接读取 policy registry；
+  低层检测参数归属 `geometry.detection_parameters`，deskew 参数归属
+  `image.deskew_parameters`，`parameter_aggregate.py` 只保留 flat defaults，
+  derived views 移入 `parameter_views.py`。
 - Detection 第 10 层清理完成：`x5crop.detection` 已拆为 `outer/`、`evidence/`、
   `candidate/`、`modes/` 和 `final/` 子包；旧平铺 `outer.py`、`outer_retry.py`、
   `candidate_run.py`、`content.py`、`diagnostics.py`、`finalizer.py` 等模块已移除；
@@ -76,8 +80,8 @@ Current stable release: v4.2.8
 - Detection 层 smoke 通过：递归 `compileall`、runtime import smoke，以及
   135/full、120-66/partial、half/full 三张本地样片 dry-run report 均完成。
 - 命名边界清理完成：candidate-level gate / decision 现在由
-  `candidate/gates.py` 和 `candidate/decision.py` 表达；最终 PASS/REVIEW 与输出前
-  收口由 `final/decision.py` 和 `final/finalize.py` 表达；runtime policy 字段统一为
+  `candidate/gates.py` 和 `candidate/candidate_decision.py` 表达；最终 PASS/REVIEW 与输出前
+  收口由 `final/pass_review.py` 和 `final/finalize.py` 表达；runtime policy 字段统一为
   `finalization`。
 - 稳定数据契约层清理通过 smoke：report schema serializer 从 `x5crop.detection`
   移至 `x5crop.report_schema`，`x5crop.detection_detail` 集中记录
@@ -243,6 +247,11 @@ Verified:
   orchestration, `analysis_reuse` owns report-cache reuse, `export` owns output
   paths / review copies / TIFF crop writes, `result_builder` builds fresh /
   cached `ProcessResult` rows, and `report_outputs` only writes JSONL / CSV.
+- Lower-layer dependency direction is cleaned up: `geometry` / `image` no longer
+  read the policy registry directly; low-level detection parameters live in
+  `geometry.detection_parameters`, deskew parameters live in
+  `image.deskew_parameters`, `parameter_aggregate.py` keeps only flat defaults,
+  and derived views live in `parameter_views.py`.
 - Detection layer 10 cleanup is complete: `x5crop.detection` is split into
   `outer/`, `evidence/`, `candidate/`, `modes/`, and `final/` subpackages. The
   old flat `outer.py`, `outer_retry.py`, `candidate_run.py`, `content.py`,
@@ -252,8 +261,8 @@ Verified:
   and local 135/full, 120-66/partial, and half/full dry-run report samples all
   complete.
 - Naming boundary cleanup is complete: candidate-level gates / decisions are now
-  expressed by `candidate/gates.py` and `candidate/decision.py`; final
-  PASS/REVIEW and pre-output finalization are expressed by `final/decision.py`
+  expressed by `candidate/gates.py` and `candidate/candidate_decision.py`; final
+  PASS/REVIEW and pre-output finalization are expressed by `final/pass_review.py`
   and `final/finalize.py`; the runtime policy field is consistently named
   `finalization`.
 - Stable data-contract cleanup smoke passes: report schema serialization moved
@@ -304,7 +313,7 @@ Verified:
   `__init__` files no longer re-export runtime helpers; the `parameters.py` and
   `parameter_types.py` policy compatibility re-export files are removed.
 - The dev-tool layer is cleaned up: `tools/build_standalone.py` removes the old
-  static V4 module list and now auto-collects the current `x5crop/**/*.py` files
+  static module list and now auto-collects the current `x5crop/**/*.py` files
   into an embedded import hook; `tools/regression` remains developer-only report
   compare / safety classifier code.
 - 14 format / strip-mode decision contract policy smoke tests pass.

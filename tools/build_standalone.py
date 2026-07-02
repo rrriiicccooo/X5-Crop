@@ -43,7 +43,7 @@ def build_standalone_text(sources: dict[str, str], packages: set[str]) -> str:
 # -*- coding: utf-8 -*-
 """Standalone release build of X5 Crop.
 
-This file is generated from the modular V4 source tree. It embeds the internal
+This file is generated from the modular source tree. It embeds the internal
 ``x5crop`` package so end users can keep using one script plus one launcher.
 Do not edit this generated file directly; edit ``x5crop/`` and rebuild.
 """
@@ -106,7 +106,7 @@ if __name__ == "__main__":
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build a standalone X5_Crop.py from the modular V4 source tree."
+        description="Build a standalone X5_Crop.py from the modular source tree."
     )
     parser.add_argument(
         "--output",

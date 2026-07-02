@@ -12,7 +12,7 @@ from ...geometry.boxes import box_cache_key
 from ...policies.runtime_policy import ContentPolicy
 from ...runtime import AnalysisCache
 from ...utils import bbox_from_mask, runs_from_mask, sampled_percentile, smooth_1d
-from .content import _content_policy_for
+from .content_evidence import _content_policy_for
 
 
 def content_profile_runs(

@@ -7,7 +7,7 @@ import numpy as np
 from ...domain import Detection
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
-from ..evidence.content import content_evidence_detail
+from ..evidence.content_evidence import content_evidence_detail
 from .scoring import detail_float
 
 

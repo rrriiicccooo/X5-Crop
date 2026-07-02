@@ -20,7 +20,7 @@ from ...policies.runtime_policy import DetectionPolicy
 from ...policies.registry import get_detection_policy
 from ...runtime import AnalysisCache
 from ...utils import HARD_REVIEW_REASONS
-from ..evidence.content import content_evidence_detail
+from ..evidence.content_evidence import content_evidence_detail
 from .gates import candidate_has_hard_separator_evidence
 from .partial_holder import partial_extra_holder_frames_gate_detail
 from .scoring import (

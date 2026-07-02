@@ -51,9 +51,9 @@ def detect_parallel_strip_lane(
     lane_index: int,
     cache,
 ) -> Optional[Detection]:
-    from ..candidate.decision import apply_candidate_decision_policy
+    from ..candidate.candidate_decision import apply_candidate_decision_policy
     from ..candidate.build import build_detection_for_outer
-    from ..evidence.content import content_evidence_detail
+    from ..evidence.content_evidence import content_evidence_detail
     from ..outer.alignment import outer_content_alignment_detail
 
     lane_crop = cache.gray_work[lane.top:lane.bottom, lane.left:lane.right]

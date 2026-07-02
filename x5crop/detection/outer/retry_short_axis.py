@@ -87,8 +87,8 @@ def retry_with_short_axis_aspect_outer(
     content_detail: dict[str, Any],
     cache: AnalysisCache,
 ) -> Optional[Detection]:
-    from ..candidate.decision import apply_candidate_decision_policy
-    from ..evidence.content import content_evidence_detail
+    from ..candidate.candidate_decision import apply_candidate_decision_policy
+    from ..evidence.content_evidence import content_evidence_detail
     from ..candidate.build import build_detection_for_outer
 
     policy = get_detection_policy(fmt.name, detection.strip_mode)

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ..geometry.detection_parameters import OuterBoxDetectionPolicy, OuterMaskProfilePolicy
+
 
 @dataclass(frozen=True)
 class ShortAxisAspectRetryPolicy:
@@ -91,49 +93,6 @@ class EdgeAnchorOuterPolicy:
     content_margin_max: int = 80
     min_width_ratio: float = 0.30
     max_candidates: int = 8
-
-
-@dataclass(frozen=True)
-class OuterMaskProfilePolicy:
-    name: str
-    low: int | None
-    high: int | None
-    min_row_fraction: float = 0.012
-    min_col_fraction: float = 0.012
-
-
-@dataclass(frozen=True)
-class OuterBoxDetectionPolicy:
-    white_x_width_multiplier: float = 1.80
-    white_x_extra_ratio: float = 0.060
-    candidate_max_area: float = 0.94
-    mask_expand_ratio: float = 0.002
-    mask_profiles: tuple[OuterMaskProfilePolicy, ...] = (
-        OuterMaskProfilePolicy("mask_not_white_246", None, 246),
-        OuterMaskProfilePolicy("mask_not_white_225", None, 225),
-        OuterMaskProfilePolicy("mask_mid_8_246", 8, 246),
-    )
-    min_width_ratio: float = 0.10
-    min_height_ratio: float = 0.10
-    min_width_px: int = 20
-    min_height_px: int = 20
-    bw_not_white_threshold: int = 246
-    bw_dark_threshold: int = 210
-    bw_min_fraction: float = 0.015
-    bw_min_width_ratio: float = 0.10
-    bw_min_height_ratio: float = 0.10
-    bw_margin_ratio: float = 0.002
-    bw_margin_min: int = 2
-    white_border_ratio: float = 0.985
-    white_run_ratio: float = 0.003
-    white_run_min: int = 2
-    white_run_max: int = 80
-    white_dark_threshold: int = 30
-    white_light_threshold: int = 225
-    white_min_width_ratio: float = 0.10
-    white_min_height_ratio: float = 0.10
-    white_margin_ratio: float = 0.002
-    white_margin_min: int = 2
 
 
 @dataclass(frozen=True)

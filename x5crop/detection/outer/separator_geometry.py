@@ -12,7 +12,7 @@ from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from .bands import collect_separator_outer_bands, separator_outer_band_sequences
 from .base import unique_outer_candidates
-from .cache_keys import separator_geometry_cache_key
+from .outer_cache_keys import separator_geometry_cache_key
 
 
 def separator_geometry_outer_candidates(

@@ -12,7 +12,7 @@ from ...geometry.layout import work_gray
 from ...policies.registry import get_detection_policy
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
-from ..evidence.content import content_evidence_detail
+from ..evidence.content_evidence import content_evidence_detail
 from ..outer.base import unique_outer_candidates
 from ..outer.dark_band import separator_dark_band_outer_candidates
 from ..outer.plan import outer_candidate_strategy, outer_proposal_candidates
@@ -21,7 +21,7 @@ from .build import build_detection_for_outer
 from .counts import raw_detection_rank
 from .dark_band_selection import select_full_dark_band_candidate
 from .partial_holder import partial_safe_frame_content_detail, partial_safe_leading_content_detail
-from .retry import should_try_dark_band_candidates
+from .dark_band_retry import should_try_dark_band_candidates
 from .source_policy import separator_geometry_can_compete, separator_outer_gap_max_width_override
 
 

@@ -1,20 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
-
-@dataclass(frozen=True)
-class EdgePairParams:
-    window_ratio: float
-    min_gutter_ratio: float
-    max_gutter_ratio: float
-    min_strength: float
-    min_background: float
-    min_quality_for_model_gap: float
-    min_quality_for_hard_gap: float
-    hard_gap_quality_ratio: float
-    max_hard_shift_ratio: float
 
 @dataclass(frozen=True)
 class SeparatorGateParameters:
@@ -197,7 +184,6 @@ class HardGapTrustParameters:
     activity_min: float
 
 __all__ = [
-    'EdgePairParams',
     'SeparatorGateParameters',
     'LeadingGridFailureParameters',
     'SeparatorGeometrySupportParameters',

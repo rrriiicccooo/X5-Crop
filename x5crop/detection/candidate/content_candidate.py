@@ -15,7 +15,7 @@ from ...image.evidence import make_content_evidence_gray
 from ...policies.runtime_policy import ContentPolicy
 from ...runtime import AnalysisCache
 from ...utils import box_from_dict
-from ..evidence.content import _content_policy_for
+from ..evidence.content_evidence import _content_policy_for
 from ..evidence.content_profile import content_mask_outer_detail, content_profile_runs, select_content_runs
 
 

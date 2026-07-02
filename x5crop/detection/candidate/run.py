@@ -10,8 +10,8 @@ from ...formats import FormatSpec
 from ...policies.registry import get_detection_policy
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
-from .content import content_detection_for_count
-from .decision import apply_candidate_decision_policy
+from .content_candidate import content_detection_for_count
+from .candidate_decision import apply_candidate_decision_policy
 from .selection import is_partial_safe_auto_candidate
 from .source_policy import fallback_outer_proposals_enabled, should_try_equal_first_before_wide_retry
 from .sources import detect_candidate_for_count, detect_fallback_outer_proposal_candidate_for_count

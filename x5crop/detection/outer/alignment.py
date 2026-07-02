@@ -14,7 +14,7 @@ from ...policies.registry import get_detection_policy
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from ...utils import bbox_from_mask, box_from_dict, clamp_int
-from ..evidence.cache_keys import detection_gap_cache_key
+from ..evidence.evidence_cache_keys import detection_gap_cache_key
 
 
 def outer_alignment_cache_key(detection: Detection, source_w: int, source_h: int) -> tuple[Any, ...]:

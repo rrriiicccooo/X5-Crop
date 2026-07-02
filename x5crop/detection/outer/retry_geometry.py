@@ -167,8 +167,8 @@ def retry_with_format_geometry_outer(
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
 ) -> Optional[Detection]:
-    from ..candidate.decision import apply_candidate_decision_policy
-    from ..evidence.content import content_evidence_detail
+    from ..candidate.candidate_decision import apply_candidate_decision_policy
+    from ..evidence.content_evidence import content_evidence_detail
     from ..candidate.build import build_detection_for_outer
 
     geometry_detail = format_geometry_model_detail(gray, detection, config, fmt, cache)

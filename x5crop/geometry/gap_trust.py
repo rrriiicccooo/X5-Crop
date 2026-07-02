@@ -6,9 +6,9 @@ import numpy as np
 
 from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
-from ..policies.runtime_policy import HardGapTrustPolicy, NearbySeparatorCorrectionPolicy
 from ..utils import clamp_float, clamp_int
 from .nearby_separator import nearby_separator_replacement
+from .detection_parameters import HardGapTrustPolicy, NearbySeparatorCorrectionPolicy
 
 
 def light_hard_gap_trust(

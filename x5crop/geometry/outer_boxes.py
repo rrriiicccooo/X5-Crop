@@ -3,8 +3,8 @@ from __future__ import annotations
 import numpy as np
 
 from ..domain import Box
-from ..policies.runtime_policy import OuterBoxDetectionPolicy, OuterMaskProfilePolicy
 from ..utils import bbox_from_mask, clamp_int, runs_from_mask, smooth_1d
+from .detection_parameters import OuterBoxDetectionPolicy, OuterMaskProfilePolicy
 
 
 def first_content_index(border_mask: np.ndarray, min_run: int) -> int:
