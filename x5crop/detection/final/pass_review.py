@@ -9,8 +9,8 @@ from ...constants import (
     ANALYSIS_SOURCE_CONTENT,
     ANALYSIS_SOURCE_CONTENT_PRIMARY,
     ANALYSIS_SOURCE_HARD_FALLBACK,
+    ANALYSIS_SOURCE_REVIEW_ONLY,
     HARD_GAP_METHODS,
-    REVIEW_ONLY_ANALYSIS_SOURCES,
     REASON_AUTO_GATE_NOT_SATISFIED,
     REASON_CONTENT_ASPECT_CONFLICT,
     REASON_CONTENT_EVIDENCE_WEAK,
@@ -229,7 +229,7 @@ def risk_summary_for(
         "content_only_evidence": source in {ANALYSIS_SOURCE_CONTENT, ANALYSIS_SOURCE_CONTENT_PRIMARY, "content"},
         "fallback_or_review_only": (
             detection.detail.get("analysis_source") == ANALYSIS_SOURCE_HARD_FALLBACK
-            or detection.detail.get("analysis_source") in REVIEW_ONLY_ANALYSIS_SOURCES
+            or detection.detail.get("analysis_source") == ANALYSIS_SOURCE_REVIEW_ONLY
         ),
         "outer_content_mismatch": not bool(evidence["outer"]["ok"]),
         "overlap_risk": bool(lucky.get("risk", False)),

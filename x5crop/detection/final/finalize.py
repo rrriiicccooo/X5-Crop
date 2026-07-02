@@ -8,7 +8,7 @@ import numpy as np
 from ...runtime_config import RuntimeConfig
 from ...constants import (
     ANALYSIS_SOURCE_HARD_FALLBACK,
-    REVIEW_ONLY_ANALYSIS_SOURCES,
+    ANALYSIS_SOURCE_REVIEW_ONLY,
     REASON_CONTENT_ASPECT_CONFLICT,
     REASON_CONTENT_EVIDENCE_WEAK,
     REASON_LUCKY_PASS_RISK,
@@ -65,7 +65,7 @@ def finalize_detection(
         else {"used": False, "reason": policy.finalization.outer_alignment_disabled_reason}
     )
     detection.detail["outer_content_alignment"] = outer_alignment
-    review_only_mode = detection.detail.get("analysis_source") in REVIEW_ONLY_ANALYSIS_SOURCES
+    review_only_mode = detection.detail.get("analysis_source") == ANALYSIS_SOURCE_REVIEW_ONLY
 
     allow_outer_retry = (
         detection.detail.get("analysis_source") != ANALYSIS_SOURCE_HARD_FALLBACK
