@@ -78,6 +78,9 @@ Current stable release: v4.2.8
   `detection/candidate/corrected_outer.py` 重新 build detection、重算 evidence
   并重新 apply candidate assessment。outer correction 只改变候选输入，PASS /
   REVIEW 仍只由 candidate gate 和 final decision contract 决定。
+- outer correction proposal type 已归入 `detection/outer/correction/types.py`；
+  candidate 层只消费 `OuterCorrectionProposal`，outer correction 不再 import
+  candidate reassessment 类型。
 - outer correction candidate extension 已从 finalization 移入 detection pipeline /
   candidate lifecycle：outer correction proposal 只生成 corrected box，candidate 层负责
   重新 build detection、重新 assessment，pipeline 将 corrected candidate 追加回候选池后
@@ -221,6 +224,10 @@ Verified:
 - Corrected outer extension now runs inside the detection pipeline before final
   selection: proposal creates only corrected boxes, candidate code rebuilds and
   reassesses them, and finalization no longer creates candidates.
+- The outer correction proposal type now lives in
+  `detection/outer/correction/types.py`; candidate code consumes
+  `OuterCorrectionProposal` instead of outer correction importing candidate
+  reassessment types.
 - Final PASS / REVIEW implementation lives under `detection/decision/`; final
   code only handles output bleed, approved geometry adjustment, and read-only
   diagnostic attachment.

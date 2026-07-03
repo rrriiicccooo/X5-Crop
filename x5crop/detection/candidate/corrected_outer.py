@@ -1,27 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from typing import Any, Optional
+from dataclasses import asdict
+from typing import Optional
 
 import numpy as np
 
-from ...domain import Box, Detection
+from ...domain import Detection
 from ...formats import FormatSpec
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from ...runtime_config import RuntimeConfig
-
-
-@dataclass(frozen=True)
-class CorrectedOuterCandidateInput:
-    box: Box
-    name: str
-    strategy: str
-    source_reason: str
-    original_outer_work_box: Any
-    preserve_separator_width_profile: bool = False
-    suppress_outer_mismatch: bool = False
-    detail: dict[str, Any] = field(default_factory=dict)
+from ..outer.correction.types import OuterCorrectionProposal
 
 
 def build_assessed_corrected_outer_candidate(
@@ -29,7 +18,7 @@ def build_assessed_corrected_outer_candidate(
     config: RuntimeConfig,
     fmt: FormatSpec,
     detection: Detection,
-    corrected: CorrectedOuterCandidateInput,
+    corrected: OuterCorrectionProposal,
     cache: AnalysisCache,
     policy: DetectionPolicy,
 ) -> Detection:
@@ -99,6 +88,5 @@ def build_assessed_corrected_outer_candidate(
 
 
 __all__ = [
-    "CorrectedOuterCandidateInput",
     "build_assessed_corrected_outer_candidate",
 ]

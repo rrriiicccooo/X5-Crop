@@ -14,7 +14,7 @@ from ....policies.runtime_policy import DetectionPolicy
 from ....runtime import AnalysisCache
 from ....runtime_config import RuntimeConfig
 from ....utils import box_from_dict, clamp_int
-from ...candidate.corrected_outer import CorrectedOuterCandidateInput
+from .types import OuterCorrectionProposal
 
 
 def corrected_outer_for_short_axis_geometry(
@@ -230,7 +230,7 @@ def geometry_consistency_correction_proposal(
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
-) -> Optional[CorrectedOuterCandidateInput]:
+) -> Optional[OuterCorrectionProposal]:
     policy = get_detection_policy(fmt.name, detection.strip_mode)
     corrected_outer = corrected_outer_for_short_axis_geometry(
         gray,
@@ -242,7 +242,7 @@ def geometry_consistency_correction_proposal(
         policy=policy,
     )
     if corrected_outer is not None:
-        return CorrectedOuterCandidateInput(
+        return OuterCorrectionProposal(
             box=corrected_outer,
             name="geometry_consistency_short_axis_outer",
             strategy="geometry_consistency_correction",
@@ -266,7 +266,7 @@ def geometry_consistency_correction_proposal(
     if corrected_outer is None:
         return None
 
-    return CorrectedOuterCandidateInput(
+    return OuterCorrectionProposal(
         box=corrected_outer,
         name="geometry_consistency_long_axis_outer",
         strategy="geometry_consistency_correction",

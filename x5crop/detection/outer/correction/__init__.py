@@ -1,3 +1,3 @@
-"""Outer correction proposal and reassessment flow."""
+"""Outer correction proposal package."""
 
 __all__: tuple[str, ...] = ()

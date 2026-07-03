@@ -7,8 +7,8 @@ from ....formats import FormatSpec
 from ....policies.registry import get_detection_policy
 from ....runtime import AnalysisCache
 from ....runtime_config import RuntimeConfig
-from ...candidate.corrected_outer import CorrectedOuterCandidateInput
 from ...evidence.outer_alignment import corrected_outer_from_alignment
+from .types import OuterCorrectionProposal
 
 
 def content_containment_correction_proposal(
@@ -17,7 +17,7 @@ def content_containment_correction_proposal(
     detection: Detection,
     alignment: dict[str, Any],
     cache: AnalysisCache,
-) -> Optional[CorrectedOuterCandidateInput]:
+) -> Optional[OuterCorrectionProposal]:
     del config, cache
     if detection.strip_mode != "full":
         return None
@@ -25,7 +25,7 @@ def content_containment_correction_proposal(
     corrected_outer = corrected_outer_from_alignment(alignment, detection.count, policy)
     if corrected_outer is None:
         return None
-    return CorrectedOuterCandidateInput(
+    return OuterCorrectionProposal(
         box=corrected_outer,
         name="content_containment_outer",
         strategy="content_containment_correction",
