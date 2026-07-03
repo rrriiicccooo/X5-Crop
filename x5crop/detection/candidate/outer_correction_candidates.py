@@ -13,6 +13,7 @@ from ...policies.runtime_policy import DetectionPolicy
 from ..evidence.content_evidence import content_evidence_detail
 from ..evidence.outer_alignment import outer_content_alignment_detail
 from .corrected_outer import build_assessed_corrected_outer_candidate
+from .reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
 from ..outer.correction.content_containment import content_containment_correction_proposal
 from ..outer.correction.geometry import geometry_consistency_correction_proposal, geometry_consistency_model_detail
 from ..outer.correction.policy import correction_family_available
@@ -86,6 +87,26 @@ def outer_correction_candidate_extensions(
         else {"used": False, "reason": policy.finalization.outer_alignment_disabled_reason}
     )
     detection.detail["outer_content_alignment"] = outer_alignment
+    reliable_selection = candidate_is_reliable_for_execution_budget(detection, config.confidence_threshold, policy)
+    outer_alignment_ok = (not bool(outer_alignment.get("used", False))) or bool(outer_alignment.get("ok", True))
+    correction_plan["reliable_selection"] = bool(reliable_selection)
+    correction_plan["outer_alignment_ok"] = bool(outer_alignment_ok)
+    if (
+        policy.candidate_plan.execution_budget.skip_outer_correction_after_reliable_selection
+        and reliable_selection
+        and outer_alignment_ok
+    ):
+        correction_plan["skipped_due_to_reliable_selection"] = True
+        correction_plan["reliability"] = candidate_reliability_detail(
+            detection,
+            config.confidence_threshold,
+            policy,
+        )
+        correction_plan["skipped_reasons"] = {
+            **correction_plan.get("skipped_reasons", {}),
+            "outer_correction_candidate": "reliable_selection",
+        }
+        return []
 
     extensions: list[Detection] = []
     proposal = geometry_consistency_correction_proposal(

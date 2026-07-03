@@ -38,6 +38,8 @@ def detect_candidate_for_count(
     cache: Optional[AnalysisCache] = None,
     gap_max_width_ratio_override: Optional[float] = None,
     policy: Optional[DetectionPolicy] = None,
+    include_late_outer: bool = True,
+    include_auxiliary_outer: bool = True,
 ) -> Detection:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     policy = policy or get_detection_policy(fmt.name, strip_mode)
@@ -93,7 +95,8 @@ def detect_candidate_for_count(
     separator_full_width_family = policy.outer.proposal.geometry.separator.full_width
     separator_full_width_mode = separator_full_width_family.mode
     should_try_separator_full_width = (
-        separator_full_width_family.available_for(strip_mode, explicit_count)
+        include_late_outer
+        and separator_full_width_family.available_for(strip_mode, explicit_count)
         and (
             separator_full_width_mode == "always"
             or (
@@ -119,13 +122,14 @@ def detect_candidate_for_count(
             "standard",
         )
         outer_candidates = merge_outer_proposal_candidates([*outer_candidates, *separator_full_width_candidates])
-    should_include_separator_width_profile = should_include_separator_width_profile_candidates(
+    separator_width_profile_eligible = should_include_separator_width_profile_candidates(
         policy,
         strip_mode,
         count,
         fmt,
         explicit_count,
     )
+    should_include_separator_width_profile = include_auxiliary_outer and separator_width_profile_eligible
     separator_width_profile_candidates = (
         separator_width_profile_outer_proposal_candidates(
             gray_work,
@@ -213,10 +217,18 @@ def detect_candidate_for_count(
     best.detail["candidate_plan"] = {
         "source": "separator",
         "count_explicit": bool(explicit_count),
+        "outer_execution_stage": (
+            "complete"
+            if include_late_outer and include_auxiliary_outer
+            else "primary"
+        ),
+        "late_outer_enabled": bool(include_late_outer),
+        "auxiliary_outer_enabled": bool(include_auxiliary_outer),
         "gap_profiles": gap_profiles,
         "outer_candidate_count": int(len(outer_candidates)),
         "separator_full_width_eligible": bool(separator_full_width_family.available_for(strip_mode, explicit_count)),
         "separator_full_width_included": bool(should_try_separator_full_width),
+        "separator_width_profile_eligible": bool(separator_width_profile_eligible),
         "separator_width_profile_included": bool(should_include_separator_width_profile),
     }
     return best

@@ -12,9 +12,50 @@ from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from .content_candidate import content_detection_for_count
 from .candidate_assessment import apply_candidate_assessment_policy
+from .reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
 from .selection import is_partial_safe_auto_candidate
+from .separator_width_profile_plan import should_include_separator_width_profile_candidates
 from .source_policy import safety_candidate_outer_proposals_enabled
 from .sources import detect_candidate_for_count, detect_safety_outer_proposal_candidate_for_count
+
+
+def _separator_extension_families(
+    policy: DetectionPolicy,
+    strip_mode: str,
+    count: int,
+    fmt: FormatSpec,
+    explicit_count: bool,
+) -> list[str]:
+    separator_policy = policy.outer.proposal.geometry.separator
+    families: list[str] = []
+    if separator_policy.full_width.available_for(strip_mode, explicit_count):
+        families.append("separator_full_width")
+    if should_include_separator_width_profile_candidates(policy, strip_mode, count, fmt, explicit_count):
+        families.append("separator_width_profile")
+    return families
+
+
+def _set_execution_budget_detail(
+    detection: Detection,
+    *,
+    primary_reliability: dict,
+    expanded_after_primary: bool,
+    extension_families: list[str],
+    skipped_reason: str | None = None,
+) -> None:
+    plan = detection.detail.setdefault("candidate_plan", {})
+    if not isinstance(plan, dict):
+        plan = {}
+        detection.detail["candidate_plan"] = plan
+    detail = {
+        "primary_reliability": primary_reliability,
+        "expanded_after_primary": bool(expanded_after_primary),
+        "extension_families": list(extension_families),
+    }
+    if skipped_reason is not None:
+        detail["skipped_extension_families"] = list(extension_families)
+        detail["skipped_reason"] = skipped_reason
+    plan["execution_budget"] = detail
 
 
 def calibrated_candidates_for_count(
@@ -31,8 +72,64 @@ def calibrated_candidates_for_count(
     content_policy = policy.candidate_plan.content_candidate
     candidates: list[Detection] = []
     stop_after_this_count = False
-    separator = detect_candidate_for_count(gray, config, fmt, count, strip_mode, offset, cache, policy=policy)
-    separator_candidate = apply_candidate_assessment_policy(gray, separator, config, fmt, "separator", cache, policy=policy)
+    explicit_count = bool(config.count_override is not None)
+    extension_families = _separator_extension_families(policy, strip_mode, count, fmt, explicit_count)
+    primary_separator = detect_candidate_for_count(
+        gray,
+        config,
+        fmt,
+        count,
+        strip_mode,
+        offset,
+        cache,
+        policy=policy,
+        include_late_outer=False,
+        include_auxiliary_outer=False,
+    )
+    primary_candidate = apply_candidate_assessment_policy(
+        gray,
+        primary_separator,
+        config,
+        fmt,
+        "separator",
+        cache,
+        policy=policy,
+    )
+    primary_reliability = candidate_reliability_detail(
+        primary_candidate,
+        config.confidence_threshold,
+        policy,
+    )
+    if (
+        extension_families
+        and not candidate_is_reliable_for_execution_budget(primary_candidate, config.confidence_threshold, policy)
+    ):
+        separator = detect_candidate_for_count(gray, config, fmt, count, strip_mode, offset, cache, policy=policy)
+        separator_candidate = apply_candidate_assessment_policy(
+            gray,
+            separator,
+            config,
+            fmt,
+            "separator",
+            cache,
+            policy=policy,
+        )
+        _set_execution_budget_detail(
+            separator_candidate,
+            primary_reliability=primary_reliability,
+            expanded_after_primary=True,
+            extension_families=extension_families,
+        )
+    else:
+        separator_candidate = primary_candidate
+        skipped_reason = "reliable_primary" if extension_families else "no_extension_families"
+        _set_execution_budget_detail(
+            separator_candidate,
+            primary_reliability=primary_reliability,
+            expanded_after_primary=False,
+            extension_families=extension_families,
+            skipped_reason=skipped_reason,
+        )
     candidates.append(separator_candidate)
     separator_gate_candidate = separator_candidate
     separator_auto_gate = bool(

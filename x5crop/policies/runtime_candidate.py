@@ -164,6 +164,18 @@ class SeparatorWidthProfileCandidatePolicy:
 
 
 @dataclass(frozen=True)
+class CandidateExecutionBudgetPolicy:
+    stop_after_reliable_primary: bool = True
+    skip_outer_correction_after_reliable_selection: bool = True
+    reliable_confidence_margin: float = 0.02
+    requires_separator_source: bool = True
+    requires_auto_gate: bool = True
+    requires_hard_separator_ok: bool = True
+    requires_content_support: str = "ok"
+    requires_no_review_reasons: bool = True
+
+
+@dataclass(frozen=True)
 class OuterCorrectionCandidateExtensionPolicy:
     enabled: bool = True
 
@@ -186,6 +198,7 @@ class CandidatePlanPolicy:
         default_factory=SeparatorFullWidthCompetitionPolicy
     )
     separator_width_profile: SeparatorWidthProfileCandidatePolicy = field(default_factory=SeparatorWidthProfileCandidatePolicy)
+    execution_budget: CandidateExecutionBudgetPolicy = field(default_factory=CandidateExecutionBudgetPolicy)
     outer_correction_extension: OuterCorrectionCandidateExtensionPolicy = field(
         default_factory=OuterCorrectionCandidateExtensionPolicy
     )
@@ -193,6 +206,7 @@ class CandidatePlanPolicy:
 
 __all__ = [
     "BaseDetectionScorePolicy",
+    "CandidateExecutionBudgetPolicy",
     "CandidatePlanPolicy",
     "ContentCandidatePlanPolicy",
     "ContentMismatchReviewSelectionPolicy",
