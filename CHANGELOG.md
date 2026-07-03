@@ -81,6 +81,8 @@ Current stable release: v4.2.8
 - outer correction proposal type 已归入 `detection/outer/correction/types.py`；
   candidate 层只消费 `OuterCorrectionProposal`，outer correction 不再 import
   candidate reassessment 类型。
+- `outer_correction_extension` runtime policy 只在 full mode 打开；partial mode
+  当前没有 active corrected-outer proposal，policy detail 不再误报启用。
 - outer correction candidate extension 已从 finalization 移入 detection pipeline /
   candidate lifecycle：outer correction proposal 只生成 corrected box，candidate 层负责
   重新 build detection、重新 assessment，pipeline 将 corrected candidate 追加回候选池后

@@ -130,12 +130,12 @@ def selection_policy(
     )
 
 
-def candidate_plan_policy(params: FormatParameters) -> CandidatePlanPolicy:
+def candidate_plan_policy(strip_mode: str, params: FormatParameters) -> CandidatePlanPolicy:
     return CandidatePlanPolicy(
         safety_candidate=SafetyCandidatePolicy(),
         partial_stop=PartialStopPolicy(),
         outer_correction_extension=OuterCorrectionCandidateExtensionPolicy(
-            enabled=bool(params.outer_correction_extension_enabled),
+            enabled=bool(params.outer_correction_extension_enabled and strip_mode == FULL),
         ),
     )
 
