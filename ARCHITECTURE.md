@@ -101,7 +101,7 @@ REVIEW contract。
 | Outer proposal | content floating outer | `detection/outer/proposal/partial_content.py` | partial 的内容外框不能单独证明安全；必须经过 separator/content/geometry gate。 |
 | Outer proposal | edge-anchor outer | `detection/outer/proposal/partial_edge.py` | 长轴锚点 outer 必须有 hard separator 支持；避免用边缘猜测自动通过。 |
 | Outer proposal | separator-derived outer | `detection/outer/proposal/separator.py`, `detection/evidence/separator_bands.py` | local、full-width 和 wide separator variants 是否共享同一 outer proposal 引擎；spacing / width / frame-error 约束是否由 policy 控制。 |
-| Outer proposal | proposal plan | `detection/outer/proposal/plan.py` | candidate 层只能通过 proposal plan 获取 outer candidates；separator variant 常量不应泄露给 candidate 层。 |
+| Outer proposal | proposal plan | `detection/outer/proposal/plan.py` | candidate 层只能通过 proposal plan 获取和合并 outer candidates；不得直接依赖 base/common/separator 内部 helper 或 variant 常量。 |
 | Outer correction | content-aligned retry | `detection/evidence/outer_alignment.py`, `detection/outer/correction/content_aligned.py` | 内容边缘修正 outer 后是否重新经过 candidate assessment。 |
 | Outer correction | format-geometry retry | `detection/outer/correction/format_geometry.py` | 按 format 比例修正 outer 时，content margin / shrink ratio 是否保守。 |
 | Outer correction | short-axis retry | `detection/outer/correction/short_axis.py` | 120 宽/方格式短轴修正是否只在 full / policy-allowed 情况启用。 |

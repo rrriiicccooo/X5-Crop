@@ -13,8 +13,8 @@ from ...policies.registry import get_detection_policy
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from ..evidence.content_evidence import content_evidence_detail
-from ..outer.proposal.base import unique_outer_candidates
 from ..outer.proposal.plan import (
+    merge_outer_proposal_candidates,
     outer_candidate_strategy,
     outer_proposal_candidates,
     separator_full_width_outer_proposal_candidates,
@@ -106,7 +106,7 @@ def detect_candidate_for_count(
                     policy=policy,
                 )
             )
-        outer_candidates = unique_outer_candidates([*outer_candidates, *separator_full_width_candidates])
+        outer_candidates = merge_outer_proposal_candidates([*outer_candidates, *separator_full_width_candidates])
     current_best_for_wide = max(candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold)) if candidates else None
     should_try_wide_separator = should_try_wide_separator_candidates(
         policy,
@@ -148,7 +148,7 @@ def detect_candidate_for_count(
                     policy=policy,
                 )
             )
-        outer_candidates = unique_outer_candidates([*outer_candidates, *wide_separator_candidates])
+        outer_candidates = merge_outer_proposal_candidates([*outer_candidates, *wide_separator_candidates])
     best_candidates = candidates
     if (
         policy.partial_holder.safe_extra_frames

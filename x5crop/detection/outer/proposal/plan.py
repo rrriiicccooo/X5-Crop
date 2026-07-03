@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Optional
 
@@ -10,7 +11,8 @@ from ....formats import FormatSpec
 from ....policies.registry import get_detection_policy
 from ....policies.runtime_policy import DetectionPolicy
 from ....runtime import AnalysisCache
-from .base import base_outer_candidates, unique_outer_candidates
+from .base import base_outer_candidates
+from .common import unique_outer_candidates
 from .partial_content import floating_outer_candidates
 from .partial_edge import long_axis_edge_anchor_outer_candidates
 from .separator import (
@@ -89,6 +91,10 @@ def outer_candidate_strategy(candidate: OuterCandidate | str) -> str:
     if candidate_name in {"bw", "white_x", "full_canvas"}:
         return "base_outer"
     return "unknown_outer"
+
+
+def merge_outer_proposal_candidates(candidates: Iterable[OuterCandidate]) -> list[OuterCandidate]:
+    return unique_outer_candidates(candidates)
 
 
 def outer_proposal_candidates(
