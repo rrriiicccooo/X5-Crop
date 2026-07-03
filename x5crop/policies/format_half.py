@@ -17,8 +17,8 @@ def parameters() -> FormatParameters:
         separator_model_grid_credit=0.25,
         separator_model_equal_credit=0.08,
         separator_gate_profile="geometry_support",
-        wide_gap_retry_enabled=True,
-        wide_gap_retry_max_width_ratio=0.100,
+        relaxed_separator_width_retry_enabled=True,
+        relaxed_separator_width_retry_max_width_ratio=0.100,
         nearby_active_correction=False,
         lucky_pass_risk_enabled=False,
         leading_grid_failure_enabled=False,
@@ -50,7 +50,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
     modes={
         FULL: ModePolicyPreset(
             role="dense_full_strip_geometry_supported",
-            notes=("dense full strips can use stable grid or wide geometry support without borrowing dark-boundary gates",),
+            notes=("dense full strips can use stable grid or detected geometry support without borrowing medium-format holder gates",),
             frame_fit=FrameFitPolicy(
                 name="dense_half_frame_fit",
                 edge_evidence=True,
@@ -60,7 +60,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
                 nominal_max_ratio=1.08,
                 inlier_tolerance_ratio=0.030,
             ),
-            separator_geometry_support_modes=("wide_geometry", "stable_grid"),
+            separator_geometry_support_modes=("detected_geometry", "stable_grid"),
             diagnostics_overlap_bleed=True,
         ),
         PARTIAL: ModePolicyPreset(

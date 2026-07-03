@@ -12,22 +12,23 @@ from ...policies.runtime_policy import DetectionPolicy
 from ...policies.registry import get_detection_policy
 from ...runtime import AnalysisCache
 from ...utils import HARD_REVIEW_REASONS, clamp_int
+from ..evidence.separator_width import separator_width_evidence_detail
 
 
-def partial_safe_wide_like_gap_detail(
+def partial_safe_broad_separator_width_gap_detail(
     detection: Detection,
     fmt: FormatSpec,
     policy: Optional[DetectionPolicy] = None,
 ) -> dict[str, Any]:
     policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     holder = policy.partial_holder
-    min_required = int(holder.requires_wide_like_gaps)
+    min_required = int(holder.requires_broad_separator_width_gaps)
     if min_required <= 0 or detection.strip_mode != "partial":
         return {
             "used": False,
             "reason": "disabled",
-            "wide_like_gaps": 0,
-            "min_wide_like_gaps": min_required,
+            "broad_separator_width_gaps": 0,
+            "min_broad_separator_width_gaps": min_required,
         }
 
     work_outer_detail = detection.detail.get("work_outer", {})
@@ -41,27 +42,14 @@ def partial_safe_wide_like_gap_detail(
         frames = [frame for frame in detection.frames if frame.valid()]
         short_axis = float(np.median(np.array([frame.width for frame in frames], dtype=np.float32))) if frames else 0.0
 
-    min_width = max(1.0, short_axis * float(holder.wide_like_min_width_ratio))
-    wide_like_indexes: list[int] = []
-    gap_widths: list[float] = []
-    for gap in detection.gaps:
-        width = 0.0
-        if gap.start is not None and gap.end is not None:
-            width = max(0.0, float(gap.end) - float(gap.start))
-        gap_widths.append(width)
-        if gap.method == "wide-separator" or (gap.method in {"detected", "edge-pair"} and width >= min_width):
-            wide_like_indexes.append(int(gap.index))
-
-    ok = len(wide_like_indexes) >= min_required
-    return {
-        "used": True,
-        "reason": "ok" if ok else "too_few_wide_like_gaps",
-        "wide_like_gaps": int(len(wide_like_indexes)),
-        "min_wide_like_gaps": int(min_required),
-        "wide_like_gap_indexes": wide_like_indexes,
-        "gap_widths": gap_widths,
-        "min_width_px": float(min_width),
-    }
+    detail = separator_width_evidence_detail(
+        detection.gaps,
+        short_axis,
+        float(holder.broad_separator_width_min_ratio),
+        min_required,
+    )
+    detail["used"] = True
+    return detail
 
 
 def partial_safe_leading_content_detail(
@@ -228,7 +216,7 @@ def partial_extra_holder_frames_gate_detail(
     outer_area = float(detection.detail.get("outer_area_ratio", 1.0) or 1.0)
     min_count = holder.min_count_35mm if fmt.default_count >= 6 else holder.min_count_small
     hard_ratio = 1.0 if expected <= 0 else hard / float(max(1, expected))
-    wide_like_detail = partial_safe_wide_like_gap_detail(detection, fmt, policy)
+    broad_separator_width_detail = partial_safe_broad_separator_width_gap_detail(detection, fmt, policy)
     leading_content = partial_safe_leading_content_detail(gray, detection, fmt, cache, policy)
     frame_content = partial_safe_frame_content_detail(content_detail, detection, fmt, policy)
     disqualifiers: list[str] = []
@@ -249,11 +237,11 @@ def partial_extra_holder_frames_gate_detail(
     if hard_ratio < holder.min_hard_ratio:
         disqualifiers.append("hard_gap_ratio_low")
     if (
-        bool(wide_like_detail.get("used", False))
-        and int(wide_like_detail.get("wide_like_gaps", 0) or 0)
-        < int(wide_like_detail.get("min_wide_like_gaps", 0) or 0)
+        bool(broad_separator_width_detail.get("used", False))
+        and int(broad_separator_width_detail.get("broad_separator_width_gaps", 0) or 0)
+        < int(broad_separator_width_detail.get("min_broad_separator_width_gaps", 0) or 0)
     ):
-        disqualifiers.append("too_few_wide_like_gaps")
+        disqualifiers.append("too_few_broad_separator_width_gaps")
     if equal > holder.max_equal_gaps:
         disqualifiers.append("equal_gap_used")
     if width_cv > holder.max_width_cv:
@@ -290,12 +278,12 @@ def partial_extra_holder_frames_gate_detail(
         "policy_id": policy.policy_id,
         "holder_policy": {
             "safe_extra_frames": holder.safe_extra_frames,
-            "requires_wide_like_gaps": holder.requires_wide_like_gaps,
+            "requires_broad_separator_width_gaps": holder.requires_broad_separator_width_gaps,
             "checks_leading_content": holder.checks_leading_content,
             "checks_frame_content": holder.checks_frame_content,
             "max_frame_aspect_error": holder.max_frame_aspect_error,
         },
-        "wide_like_separator": wide_like_detail,
+        "broad_separator_width_evidence": broad_separator_width_detail,
         "leading_content": leading_content,
         "frame_content": frame_content,
     }
@@ -305,5 +293,5 @@ __all__ = [
     "partial_extra_holder_frames_gate_detail",
     "partial_safe_frame_content_detail",
     "partial_safe_leading_content_detail",
-    "partial_safe_wide_like_gap_detail",
+    "partial_safe_broad_separator_width_gap_detail",
 ]

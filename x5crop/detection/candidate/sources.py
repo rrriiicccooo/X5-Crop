@@ -18,13 +18,13 @@ from ..outer.proposal.plan import (
     outer_candidate_strategy,
     outer_proposal_candidates,
     separator_full_width_outer_proposal_candidates,
-    wide_separator_outer_proposal_candidates,
+    separator_width_profile_outer_proposal_candidates,
 )
 from .build import build_detection_for_outer
 from .counts import raw_detection_rank
 from .partial_holder import partial_safe_frame_content_detail, partial_safe_leading_content_detail
-from .wide_separator_retry import should_try_wide_separator_candidates
-from .wide_separator_selection import select_full_wide_separator_candidate
+from .relaxed_separator_width_retry import should_try_relaxed_separator_width_candidates
+from .separator_width_profile_selection import select_full_separator_width_profile_candidate
 from .source_policy import separator_full_width_can_compete, separator_outer_gap_max_width_override
 
 
@@ -107,17 +107,17 @@ def detect_candidate_for_count(
                 )
             )
         outer_candidates = merge_outer_proposal_candidates([*outer_candidates, *separator_full_width_candidates])
-    current_best_for_wide = max(candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold)) if candidates else None
-    should_try_wide_separator = should_try_wide_separator_candidates(
+    current_best_for_relaxed_width = max(candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold)) if candidates else None
+    should_try_separator_width_profile = should_try_relaxed_separator_width_candidates(
         policy,
         strip_mode,
         count,
         fmt,
         candidates,
-        current_best_for_wide,
+        current_best_for_relaxed_width,
     )
-    wide_separator_candidates = (
-        wide_separator_outer_proposal_candidates(
+    separator_width_profile_candidates = (
+        separator_width_profile_outer_proposal_candidates(
             gray_work,
             outer_candidates,
             fmt,
@@ -126,11 +126,11 @@ def detect_candidate_for_count(
             cache,
             policy,
         )
-        if should_try_wide_separator
+        if should_try_separator_width_profile
         else []
     )
-    if wide_separator_candidates:
-        for candidate in wide_separator_candidates:
+    if separator_width_profile_candidates:
+        for candidate in separator_width_profile_candidates:
             candidate_gap_override = separator_outer_gap_max_width_override(policy, gap_max_width_ratio_override)
             candidates.append(
                 build_detection_for_outer(
@@ -148,7 +148,7 @@ def detect_candidate_for_count(
                     policy=policy,
                 )
             )
-        outer_candidates = merge_outer_proposal_candidates([*outer_candidates, *wide_separator_candidates])
+        outer_candidates = merge_outer_proposal_candidates([*outer_candidates, *separator_width_profile_candidates])
     best_candidates = candidates
     if (
         policy.partial_holder.safe_extra_frames
@@ -176,7 +176,7 @@ def detect_candidate_for_count(
         if non_cutting_candidates:
             best_candidates = non_cutting_candidates
     best = max(best_candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold))
-    full_wide_separator_best = select_full_wide_separator_candidate(
+    full_separator_width_profile_best = select_full_separator_width_profile_candidate(
         gray,
         candidates,
         best,
@@ -184,8 +184,8 @@ def detect_candidate_for_count(
         cache,
         policy,
     )
-    if full_wide_separator_best is not None:
-        best = full_wide_separator_best
+    if full_separator_width_profile_best is not None:
+        best = full_separator_width_profile_best
     areas = [candidate.box.width * candidate.box.height for candidate in outer_candidates if candidate.box.valid()]
     if areas:
         best.detail["outer_candidate_count"] = len(outer_candidates)

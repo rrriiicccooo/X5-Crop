@@ -9,9 +9,9 @@ class SeparatorGateParameters:
     max_equal_gaps_floor: int
     allow_geometry_support: bool
     hard_required_all_gaps: bool
-    edge_pair_min_score_without_wide: float
-    edge_pair_min_score_with_wide: float
-    min_wide_gaps_for_auto: int
+    edge_pair_min_score_without_broad_width: float
+    edge_pair_min_score_with_broad_width: float
+    min_broad_separator_width_gaps_for_auto: int
     score_min_hard_gaps: int
     score_max_equal_gaps_floor: int
     low_hard_confidence_cap: float
@@ -30,15 +30,15 @@ class LeadingGridFailureParameters:
 
 @dataclass(frozen=True)
 class SeparatorGeometrySupportParameters:
-    wide_geometry_min_hard_ratio: float
-    wide_geometry_min_joint_score: float
+    detected_geometry_min_hard_ratio: float
+    detected_geometry_min_joint_score: float
     stable_grid_min_hard_ratio: float
     stable_grid_min_joint_score: float
     max_width_cv: float
     max_outer_area_ratio: float
 
 @dataclass(frozen=True)
-class WideRetryParameters:
+class RelaxedSeparatorWidthRetryParameters:
     full_enabled: bool
     partial_enabled: bool
     max_width_ratio: float
@@ -106,8 +106,8 @@ class GapSearchParameters:
     min_score: float
     peak_multiplier: float
     band_multiplier: float
-    wide_min_mean: float
-    wide_min_prominence: float
+    separator_width_min_mean: float
+    separator_width_min_prominence: float
 
 @dataclass(frozen=True)
 class EnhancedSeparatorParameters:
@@ -187,7 +187,7 @@ __all__ = [
     'SeparatorGateParameters',
     'LeadingGridFailureParameters',
     'SeparatorGeometrySupportParameters',
-    'WideRetryParameters',
+    'RelaxedSeparatorWidthRetryParameters',
     'NearbySeparatorCorrectionParameters',
     'RobustGridParameters',
     'GapSearchParameters',

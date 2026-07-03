@@ -196,10 +196,9 @@ def score_detection(
     separator_gate = policy.separator.gate
     expected_gaps = max(0, count - 1)
     actual_detected = sum(1 for gap in gaps if gap.method in {"detected", "edge-pair"})
-    wide_detected = sum(1 for gap in gaps if gap.method == "wide-separator")
     enhanced_detected = sum(1 for gap in gaps if gap.method == "enhanced-detected")
     grid_gaps = sum(1 for gap in gaps if gap.method == "grid")
-    hard_detected = actual_detected + wide_detected + enhanced_detected
+    hard_detected = actual_detected + enhanced_detected
     detected = hard_detected + grid_gaps
     equal = sum(1 for gap in gaps if gap.method == "equal")
     reliable = sum(
@@ -300,7 +299,6 @@ def score_detection(
     detail = {
         "detected_gaps": detected,
         "actual_detected_gaps": actual_detected,
-        "wide_detected_gaps": wide_detected,
         "enhanced_detected_gaps": enhanced_detected,
         "grid_gaps": grid_gaps,
         "reliable_gaps": reliable,

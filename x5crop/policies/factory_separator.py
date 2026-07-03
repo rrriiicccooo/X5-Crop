@@ -33,9 +33,9 @@ def separator_gate_policy(
         max_equal_gaps_floor=int(gate.max_equal_gaps_floor),
         allow_geometry_support=bool(gate.allow_geometry_support),
         hard_required_all_gaps=bool(gate.hard_required_all_gaps),
-        edge_pair_min_score_without_wide=float(gate.edge_pair_min_score_without_wide),
-        edge_pair_min_score_with_wide=float(gate.edge_pair_min_score_with_wide),
-        min_wide_gaps_for_auto=int(gate.min_wide_gaps_for_auto),
+        edge_pair_min_score_without_broad_width=float(gate.edge_pair_min_score_without_broad_width),
+        edge_pair_min_score_with_broad_width=float(gate.edge_pair_min_score_with_broad_width),
+        min_broad_separator_width_gaps_for_auto=int(gate.min_broad_separator_width_gaps_for_auto),
         score_min_hard_gaps=int(gate.score_min_hard_gaps),
         score_max_equal_gaps_floor=int(gate.score_max_equal_gaps_floor),
         low_hard_confidence_cap=float(gate.low_hard_confidence_cap),
@@ -62,8 +62,8 @@ def separator_geometry_support_policy(
     support = params.separator_geometry_support
     mode_policy = SeparatorGeometrySupportModePolicy(
         enabled=True,
-        min_hard_ratio=float(support.wide_geometry_min_hard_ratio),
-        min_joint_score=float(support.wide_geometry_min_joint_score),
+        min_hard_ratio=float(support.detected_geometry_min_hard_ratio),
+        min_joint_score=float(support.detected_geometry_min_joint_score),
         allow_grid=True,
         max_equal_gaps=0,
         max_width_cv=float(support.max_width_cv),
@@ -81,7 +81,7 @@ def separator_geometry_support_policy(
         max_outer_area_ratio=float(support.max_outer_area_ratio),
     )
     return SeparatorGeometrySupportPolicy(
-        wide_geometry=mode_policy if "wide_geometry" in mode_preset.separator_geometry_support_modes else SeparatorGeometrySupportModePolicy(),
+        detected_geometry=mode_policy if "detected_geometry" in mode_preset.separator_geometry_support_modes else SeparatorGeometrySupportModePolicy(),
         stable_grid=stable_grid_policy if "stable_grid" in mode_preset.separator_geometry_support_modes else SeparatorGeometrySupportModePolicy(),
     )
 
@@ -93,7 +93,7 @@ def separator_policy(
     params: FormatParameters,
 ) -> SeparatorPolicy:
     gate = separator_gate_policy(preset, params)
-    wide_retry = params.wide_retry
+    relaxed_separator_width_retry = params.relaxed_separator_width_retry
     hard_gap_trust = params.hard_gap_trust
     nearby_correction = params.nearby_separator_correction
     robust_grid = params.robust_grid
@@ -104,12 +104,12 @@ def separator_policy(
     return SeparatorPolicy(
         gate=gate,
         hard_required_all_gaps=bool(gate.hard_required_all_gaps),
-        wide_retry=bool(
-            (strip_mode == FULL and wide_retry.full_enabled)
-            or (strip_mode == PARTIAL and wide_retry.partial_enabled)
+        relaxed_separator_width_retry=bool(
+            (strip_mode == FULL and relaxed_separator_width_retry.full_enabled)
+            or (strip_mode == PARTIAL and relaxed_separator_width_retry.partial_enabled)
         ),
-        wide_retry_max_width_ratio=float(wide_retry.max_width_ratio),
-        wide_separator_confidence_cap=float(wide_retry.confidence_cap),
+        relaxed_separator_width_retry_max_width_ratio=float(relaxed_separator_width_retry.max_width_ratio),
+        relaxed_separator_width_confidence_cap=float(relaxed_separator_width_retry.confidence_cap),
         geometry_support_modes=mode_preset.separator_geometry_support_modes,
         geometry_support=separator_geometry_support_policy(mode_preset, params),
         edge_pair=preset.separator_edge_pair,
@@ -200,8 +200,8 @@ def separator_policy(
             min_score=float(gap_search.min_score),
             peak_multiplier=float(gap_search.peak_multiplier),
             band_multiplier=float(gap_search.band_multiplier),
-            wide_min_mean=float(gap_search.wide_min_mean),
-            wide_min_prominence=float(gap_search.wide_min_prominence),
+            separator_width_min_mean=float(gap_search.separator_width_min_mean),
+            separator_width_min_prominence=float(gap_search.separator_width_min_prominence),
         ),
         enhanced=EnhancedSeparatorParameters(
             max_width_ratio=float(enhanced.max_width_ratio),

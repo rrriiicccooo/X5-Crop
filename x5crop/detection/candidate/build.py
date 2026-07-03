@@ -27,7 +27,8 @@ from ...utils import clamp_int
 from ..outer.proposal.plan import outer_candidate_strategy
 from .partial import partial_edge_hint
 from .scoring import score_detection
-from ..evidence.separator import wide_separator_gaps_for_outer
+from ..evidence.separator import separator_width_profile_gaps_for_outer
+from ..evidence.separator_width import separator_width_evidence_detail
 
 
 def build_detection_for_outer(
@@ -75,13 +76,13 @@ def build_detection_for_outer(
         )
         for i in range(1, count)
     ]
-    if candidate_strategy == "separator_outer" and outer_candidate_name.startswith("separator_wide_"):
-        wide_separator_gaps = wide_separator_gaps_for_outer(gray_work, outer, count, fmt, policy)
-        if len(wide_separator_gaps) >= max(1, count - 1):
-            gaps = wide_separator_gaps
+    if candidate_strategy == "separator_outer" and outer_candidate_name.startswith("separator_width_profile_"):
+        separator_width_profile_gaps = separator_width_profile_gaps_for_outer(gray_work, outer, count, fmt, policy)
+        if len(separator_width_profile_gaps) >= max(1, count - 1):
+            gaps = separator_width_profile_gaps
     if (
         strip_mode == "full"
-        and policy.separator.geometry_support.wide_geometry.enabled
+        and policy.separator.geometry_support.detected_geometry.enabled
         and count == fmt.default_count
         and gap_max_width_ratio_override is None
     ):
@@ -175,7 +176,7 @@ def build_detection_for_outer(
     separator_analysis_allowed = (
         allow_separator_analysis
         and strip_mode == "full"
-        and not policy.separator.geometry_support.wide_geometry.enabled
+        and not policy.separator.geometry_support.detected_geometry.enabled
     )
     if separator_analysis_allowed:
         if should_run_enhanced_separator_analysis(config.analysis, gaps, count, policy.separator.enhanced):
@@ -243,6 +244,15 @@ def build_detection_for_outer(
     boxes = [map_work_box(box, config.layout, w, h) for box in boxes_work]
     outer_original = map_work_box(outer, config.layout, w, h)
     confidence, reasons, detail = score_detection(gray_work, outer, gaps, boxes_work, count, fmt, strip_mode, policy)
+    separator_width_evidence = separator_width_evidence_detail(
+        gaps,
+        float(outer.height),
+        float(policy.partial_holder.broad_separator_width_min_ratio),
+        max(
+            int(policy.partial_holder.requires_broad_separator_width_gaps),
+            int(policy.separator.gate.min_broad_separator_width_gaps_for_auto),
+        ),
+    )
     if confidence_cap_after_nearby is not None:
         geometry_confidence, _geometry_reasons, _geometry_detail = score_detection(
             gray_work,
@@ -272,6 +282,10 @@ def build_detection_for_outer(
             "frame_size_fit": frame_size_detail,
             "separator_analysis": separator_analysis_detail,
             "nearby_separator_correction": nearby_correction_detail,
+            "separator_width_evidence": separator_width_evidence,
+            "broad_separator_width_gaps": int(separator_width_evidence.get("broad_separator_width_gaps", 0) or 0),
+            "broad_separator_width_gap_indexes": list(separator_width_evidence.get("broad_separator_width_gap_indexes", [])),
+            "separator_width_min_px": float(separator_width_evidence.get("separator_width_min_px", 0.0) or 0.0),
             "gap_max_width_ratio_override": gap_max_width_ratio_override,
             "partial_edge_hint": partial_edge_hint(profile, origin, pitch, count, policy.partial_edge_hint) if strip_mode == "partial" else {},
             "gap_centers": [gap.center for gap in gaps],

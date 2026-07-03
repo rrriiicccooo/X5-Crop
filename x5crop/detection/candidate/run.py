@@ -13,7 +13,7 @@ from ...runtime import AnalysisCache
 from .content_candidate import content_detection_for_count
 from .candidate_assessment import apply_candidate_assessment_policy
 from .selection import is_partial_safe_auto_candidate
-from .source_policy import fallback_outer_proposals_enabled, should_try_equal_first_before_wide_retry
+from .source_policy import fallback_outer_proposals_enabled, should_try_equal_first_before_relaxed_separator_width_retry
 from .sources import detect_candidate_for_count, detect_fallback_outer_proposal_candidate_for_count
 
 
@@ -31,13 +31,13 @@ def calibrated_candidates_for_count(
     content_policy = policy.candidate_run.content_candidate
     candidates: list[Detection] = []
     stop_after_this_count = False
-    wide_retry_allowed = bool(policy.separator.wide_retry)
-    wide_retry_max_width_ratio = policy.separator.wide_retry_max_width_ratio
-    wide_retry_has_room = wide_retry_max_width_ratio > policy.separator.gap_search.max_width_ratio
-    equal_first_before_wide_retry = (
-        should_try_equal_first_before_wide_retry(policy, strip_mode, count, fmt)
-        and wide_retry_allowed
-        and wide_retry_has_room
+    relaxed_separator_width_retry_allowed = bool(policy.separator.relaxed_separator_width_retry)
+    relaxed_separator_width_retry_max_width_ratio = policy.separator.relaxed_separator_width_retry_max_width_ratio
+    relaxed_separator_width_retry_has_room = relaxed_separator_width_retry_max_width_ratio > policy.separator.gap_search.max_width_ratio
+    equal_first_before_relaxed_separator_width_retry = (
+        should_try_equal_first_before_relaxed_separator_width_retry(policy, strip_mode, count, fmt)
+        and relaxed_separator_width_retry_allowed
+        and relaxed_separator_width_retry_has_room
     )
     separator = detect_candidate_for_count(gray, config, fmt, count, strip_mode, offset, cache, policy=policy)
     separator_candidate = apply_candidate_assessment_policy(gray, separator, config, fmt, "separator", cache, policy=policy)
@@ -48,10 +48,10 @@ def calibrated_candidates_for_count(
     )
     if (
         not separator_auto_gate
-        and wide_retry_allowed
-        and wide_retry_has_room
+        and relaxed_separator_width_retry_allowed
+        and relaxed_separator_width_retry_has_room
     ):
-        wide_separator = detect_candidate_for_count(
+        separator_width_profile = detect_candidate_for_count(
             gray,
             config,
             fmt,
@@ -59,21 +59,21 @@ def calibrated_candidates_for_count(
             strip_mode,
             offset,
             cache,
-            gap_max_width_ratio_override=wide_retry_max_width_ratio,
+            gap_max_width_ratio_override=relaxed_separator_width_retry_max_width_ratio,
             policy=policy,
         )
-        wide_candidate = apply_candidate_assessment_policy(gray, wide_separator, config, fmt, "separator", cache, policy=policy)
-        wide_candidate.detail["wide_gap_retry"] = {
+        relaxed_width_candidate = apply_candidate_assessment_policy(gray, separator_width_profile, config, fmt, "separator", cache, policy=policy)
+        relaxed_width_candidate.detail["relaxed_separator_width_retry"] = {
             "used": True,
             "base_gap_max_width_ratio": float(policy.separator.gap_search.max_width_ratio),
-            "retry_gap_max_width_ratio": float(wide_retry_max_width_ratio),
+            "retry_gap_max_width_ratio": float(relaxed_separator_width_retry_max_width_ratio),
         }
-        if equal_first_before_wide_retry:
-            wide_candidate.detail["wide_gap_retry"]["equal_first_before_wide_retry"] = True
-        candidates.append(wide_candidate)
-        if bool(wide_candidate.detail.get("candidate_assessment", {}).get("auto_gate", False)):
+        if equal_first_before_relaxed_separator_width_retry:
+            relaxed_width_candidate.detail["relaxed_separator_width_retry"]["equal_first_before_relaxed_separator_width_retry"] = True
+        candidates.append(relaxed_width_candidate)
+        if bool(relaxed_width_candidate.detail.get("candidate_assessment", {}).get("auto_gate", False)):
             separator_auto_gate = True
-            separator_gate_candidate = wide_candidate
+            separator_gate_candidate = relaxed_width_candidate
     if (
         not separator_auto_gate
         and fallback_outer_proposals_enabled(policy)

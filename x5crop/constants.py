@@ -10,7 +10,6 @@ ANALYSIS_SOURCE_DUAL_LANE = "dual_lane_strip"
 GAP_DETECTED = "detected"
 GAP_EDGE_PAIR = "edge-pair"
 GAP_ENHANCED_DETECTED = "enhanced-detected"
-GAP_WIDE_SEPARATOR = "wide-separator"
 GAP_GRID = "grid"
 GAP_EQUAL = "equal"
 GAP_CONTENT = "content"
@@ -19,7 +18,6 @@ HARD_GAP_METHODS = {
     GAP_DETECTED,
     GAP_EDGE_PAIR,
     GAP_ENHANCED_DETECTED,
-    GAP_WIDE_SEPARATOR,
 }
 MODEL_GAP_METHODS = {
     GAP_GRID,

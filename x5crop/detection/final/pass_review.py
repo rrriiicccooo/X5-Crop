@@ -46,7 +46,7 @@ REASON_NORMALIZATION_MAP = {
     "likely_partial_strip": "partial_edge_uncertain",
     "partial_outer_leading_content": "partial_edge_uncertain",
     "partial_frame_content_unstable": "partial_edge_uncertain",
-    "too_few_wide_like_gaps": "partial_edge_uncertain",
+    "too_few_broad_separator_width_gaps": "partial_edge_uncertain",
     "needs_manual_review": "evidence_combination_insufficient",
 }
 
@@ -128,7 +128,7 @@ def evidence_summary_for(
     geometry_support_mode = str(separator.get("geometry_support_mode") or "")
     geometry_supported_separator = (
         policy.evidence.allow_geometry_supported_separator
-        and geometry_support_mode in {"wide_geometry", "stable_grid"}
+        and geometry_support_mode in {"detected_geometry", "stable_grid"}
         and hard_ratio >= policy.evidence.geometry_supported_min_hard_ratio
         and width_cv <= policy.evidence.geometry_supported_max_width_cv_ratio
         and int(separator["equal_gaps"]) <= policy.evidence.max_equal_gap_count

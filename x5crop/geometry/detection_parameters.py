@@ -141,8 +141,8 @@ class GapSearchParameters:
     min_score: float = 0.22
     peak_multiplier: float = 0.90
     band_multiplier: float = 0.62
-    wide_min_mean: float = 0.95
-    wide_min_prominence: float = 0.02
+    separator_width_min_mean: float = 0.95
+    separator_width_min_prominence: float = 0.02
 
 
 @dataclass(frozen=True)

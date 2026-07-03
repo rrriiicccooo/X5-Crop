@@ -17,7 +17,7 @@ from .partial_content import floating_content_position_candidates
 from .partial_edge import edge_anchored_outer_candidates
 from .separator import (
     FULL_WIDTH_SEPARATOR_OUTER,
-    WIDE_SEPARATOR_OUTER,
+    SEPARATOR_WIDTH_PROFILE_OUTER,
     separator_derived_outer_candidates,
     separator_outer_variants_for_policy,
 )
@@ -193,7 +193,7 @@ def separator_full_width_outer_proposal_candidates(
     )
 
 
-def wide_separator_outer_proposal_candidates(
+def separator_width_profile_outer_proposal_candidates(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
     fmt: FormatSpec,
@@ -211,5 +211,5 @@ def wide_separator_outer_proposal_candidates(
         strip_mode,
         cache,
         policy,
-        variants=(WIDE_SEPARATOR_OUTER,),
+        variants=(SEPARATOR_WIDTH_PROFILE_OUTER,),
     )

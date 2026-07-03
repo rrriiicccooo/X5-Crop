@@ -39,7 +39,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
     modes={
         FULL: ModePolicyPreset(
             role="medium_format_full_strip_separator_guarded",
-            notes=("medium-format full strips use separator policy without square dark-boundary gates",),
+            notes=("medium-format full strips use separator policy without square holder gates",),
             frame_fit=FrameFitPolicy(
                 name="medium_rectangle_frame_fit",
                 edge_evidence=True,

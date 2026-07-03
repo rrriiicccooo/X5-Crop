@@ -19,7 +19,7 @@ class CorrectedOuterCandidateInput:
     strategy: str
     source_reason: str
     original_outer_work_box: Any
-    preserve_wide_retry: bool = False
+    preserve_relaxed_separator_width_retry: bool = False
     suppress_outer_mismatch: bool = False
     detail: dict[str, Any] = field(default_factory=dict)
 
@@ -39,9 +39,9 @@ def build_assessed_corrected_outer_candidate(
     from .candidate_assessment import apply_candidate_assessment_policy
 
     gap_override: Optional[float] = None
-    wide_retry = detection.detail.get("wide_gap_retry")
-    if corrected.preserve_wide_retry and isinstance(wide_retry, dict) and bool(wide_retry.get("used", False)):
-        gap_override = float(wide_retry.get("retry_gap_max_width_ratio", policy.separator.wide_retry_max_width_ratio))
+    relaxed_separator_width_retry = detection.detail.get("relaxed_separator_width_retry")
+    if corrected.preserve_relaxed_separator_width_retry and isinstance(relaxed_separator_width_retry, dict) and bool(relaxed_separator_width_retry.get("used", False)):
+        gap_override = float(relaxed_separator_width_retry.get("retry_gap_max_width_ratio", policy.separator.relaxed_separator_width_retry_max_width_ratio))
 
     retried = build_detection_for_outer(
         gray,
@@ -60,7 +60,7 @@ def build_assessed_corrected_outer_candidate(
     )
     retried = apply_candidate_assessment_policy(gray, retried, config, fmt, "separator", cache, policy=policy)
     if gap_override is not None:
-        retried.detail["wide_gap_retry"] = {
+        retried.detail["relaxed_separator_width_retry"] = {
             "used": True,
             "base_gap_max_width_ratio": float(policy.separator.gap_search.max_width_ratio),
             "retry_gap_max_width_ratio": float(gap_override),

@@ -79,7 +79,6 @@ def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> Non
     gap_colors = {
         "detected": (255, 0, 0),
         "edge-pair": (255, 0, 0),
-        "wide-separator": (255, 70, 70),
         "enhanced-detected": (255, 140, 0),
         "grid": (255, 220, 30),
         "equal": (190, 80, 255),
@@ -148,4 +147,3 @@ def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: Detection, scale: fl
                 draw_preview_line(rgb, tick, scale, color, debug_gap.diagnostic_line_width)
             else:
                 draw_preview_hline(rgb, tick, scale, color, debug_gap.diagnostic_line_width)
-

@@ -53,7 +53,7 @@ from .parameter_separator import (
     SeparatorGateParameters,
     SeparatorGeometrySupportParameters,
     SeparatorProfileParameters,
-    WideRetryParameters,
+    RelaxedSeparatorWidthRetryParameters,
 )
 
 
@@ -80,9 +80,9 @@ class FormatParameterViews:
             max_equal_gaps_floor=self.separator_gate_max_equal_gaps_floor,
             allow_geometry_support=self.separator_allow_geometry_support,
             hard_required_all_gaps=self.separator_hard_required_all_gaps,
-            edge_pair_min_score_without_wide=self.separator_gate_edge_pair_min_score_without_wide,
-            edge_pair_min_score_with_wide=self.separator_gate_edge_pair_min_score_with_wide,
-            min_wide_gaps_for_auto=self.separator_gate_min_wide_gaps_for_auto,
+            edge_pair_min_score_without_broad_width=self.separator_gate_edge_pair_min_score_without_broad_width,
+            edge_pair_min_score_with_broad_width=self.separator_gate_edge_pair_min_score_with_broad_width,
+            min_broad_separator_width_gaps_for_auto=self.separator_gate_min_broad_separator_width_gaps_for_auto,
             score_min_hard_gaps=self.score_gate_min_hard_gaps,
             score_max_equal_gaps_floor=self.score_gate_max_equal_gaps_floor,
             low_hard_confidence_cap=self.score_gate_low_hard_confidence_cap,
@@ -105,8 +105,8 @@ class FormatParameterViews:
     @property
     def separator_geometry_support(self) -> SeparatorGeometrySupportParameters:
         return SeparatorGeometrySupportParameters(
-            wide_geometry_min_hard_ratio=self.separator_wide_geometry_min_hard_ratio,
-            wide_geometry_min_joint_score=self.separator_wide_geometry_min_joint_score,
+            detected_geometry_min_hard_ratio=self.separator_detected_geometry_min_hard_ratio,
+            detected_geometry_min_joint_score=self.separator_detected_geometry_min_joint_score,
             stable_grid_min_hard_ratio=self.separator_stable_grid_min_hard_ratio,
             stable_grid_min_joint_score=self.separator_stable_grid_min_joint_score,
             max_width_cv=self.score_full_width_cv,
@@ -114,12 +114,12 @@ class FormatParameterViews:
         )
 
     @property
-    def wide_retry(self) -> WideRetryParameters:
-        return WideRetryParameters(
-            full_enabled=self.wide_gap_retry_enabled,
-            partial_enabled=self.wide_gap_retry_partial_enabled,
-            max_width_ratio=self.wide_gap_retry_max_width_ratio,
-            confidence_cap=self.wide_gap_confidence_cap,
+    def relaxed_separator_width_retry(self) -> RelaxedSeparatorWidthRetryParameters:
+        return RelaxedSeparatorWidthRetryParameters(
+            full_enabled=self.relaxed_separator_width_retry_enabled,
+            partial_enabled=self.relaxed_separator_width_retry_partial_enabled,
+            max_width_ratio=self.relaxed_separator_width_retry_max_width_ratio,
+            confidence_cap=self.relaxed_separator_width_confidence_cap,
         )
 
     @property
@@ -397,8 +397,8 @@ class FormatParameterViews:
             min_joint_score=self.partial_safe_extra_frames_min_joint_score,
             min_content_score=self.partial_safe_extra_frames_min_content_score,
             min_geometry_score=self.partial_safe_extra_frames_min_geometry_score,
-            min_wide_like_gaps=self.partial_safe_extra_frames_min_wide_like_gaps,
-            wide_like_min_width_ratio=self.partial_safe_extra_frames_wide_like_min_width_ratio,
+            min_broad_separator_width_gaps=self.partial_safe_extra_frames_min_broad_separator_width_gaps,
+            broad_separator_width_min_ratio=self.partial_safe_extra_frames_broad_separator_width_min_ratio,
             leading_content_check=self.partial_safe_extra_frames_leading_content_check,
             leading_content_max_mean=self.partial_safe_extra_frames_leading_content_max_mean,
             leading_content_max_coverage=self.partial_safe_extra_frames_leading_content_max_coverage,
@@ -649,8 +649,8 @@ class FormatParameterViews:
             min_score=self.gap_min_score,
             peak_multiplier=self.gap_peak_multiplier,
             band_multiplier=self.gap_band_multiplier,
-            wide_min_mean=self.wide_gap_min_mean,
-            wide_min_prominence=self.wide_gap_min_prominence,
+            separator_width_min_mean=self.relaxed_separator_width_min_mean,
+            separator_width_min_prominence=self.relaxed_separator_width_min_prominence,
         )
 
     @property

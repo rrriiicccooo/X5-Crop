@@ -24,7 +24,7 @@ def partial_holder_policy(strip_mode: str, params: FormatParameters) -> PartialH
     partial_safe = strip_mode == PARTIAL and bool(holder.enabled)
     return PartialHolderPolicy(
         safe_extra_frames=partial_safe,
-        requires_wide_like_gaps=(int(holder.min_wide_like_gaps) if partial_safe else 0),
+        requires_broad_separator_width_gaps=(int(holder.min_broad_separator_width_gaps) if partial_safe else 0),
         checks_leading_content=bool(
             partial_safe and holder.leading_content_check
         ),
@@ -40,7 +40,7 @@ def partial_holder_policy(strip_mode: str, params: FormatParameters) -> PartialH
         min_joint_score=float(holder.min_joint_score),
         min_content_score=float(holder.min_content_score),
         min_geometry_score=float(holder.min_geometry_score),
-        wide_like_min_width_ratio=float(holder.wide_like_min_width_ratio),
+        broad_separator_width_min_ratio=float(holder.broad_separator_width_min_ratio),
         leading_content_max_mean=float(holder.leading_content_max_mean),
         leading_content_max_coverage=float(holder.leading_content_max_coverage),
         leading_content_band_ratio=float(holder.leading_content_band_ratio),

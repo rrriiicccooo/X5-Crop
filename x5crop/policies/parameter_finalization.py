@@ -16,8 +16,8 @@ class PartialHolderParameters:
     min_joint_score: float
     min_content_score: float
     min_geometry_score: float
-    min_wide_like_gaps: int
-    wide_like_min_width_ratio: float
+    min_broad_separator_width_gaps: int
+    broad_separator_width_min_ratio: float
     leading_content_check: bool
     leading_content_max_mean: float
     leading_content_max_coverage: float

@@ -3,7 +3,7 @@ from __future__ import annotations
 from .runtime_base import FULL, PARTIAL, FrameFitPolicy
 from .runtime_separator import SeparatorEdgePairPolicy
 from .factory import build_policy_from_preset
-from .factory_presets import FormatPolicyPreset, ModePolicyPreset, WideSeparatorModePreset
+from .factory_presets import FormatPolicyPreset, ModePolicyPreset, SeparatorWidthProfilePreset
 from .parameter_aggregate import FormatParameters
 from .parameter_registry import base_medium_format_parameters
 
@@ -19,14 +19,14 @@ def parameters() -> FormatParameters:
         calibrate_hard_full_confidence_floor=0.86,
         partial_auto_include_default_count=True,
         gap_max_width_max=720,
-        wide_gap_retry_enabled=True,
-        wide_gap_retry_max_width_ratio=0.140,
-        wide_gap_min_mean=0.90,
-        wide_gap_min_prominence=0.015,
-        separator_gate_edge_pair_min_score_without_wide=1.0,
-        separator_gate_edge_pair_min_score_with_wide=0.0,
-        separator_gate_min_wide_gaps_for_auto=0,
-        partial_safe_extra_frames_min_wide_like_gaps=2,
+        relaxed_separator_width_retry_enabled=True,
+        relaxed_separator_width_retry_max_width_ratio=0.140,
+        relaxed_separator_width_min_mean=0.90,
+        relaxed_separator_width_min_prominence=0.015,
+        separator_gate_edge_pair_min_score_without_broad_width=1.0,
+        separator_gate_edge_pair_min_score_with_broad_width=0.0,
+        separator_gate_min_broad_separator_width_gaps_for_auto=0,
+        partial_safe_extra_frames_min_broad_separator_width_gaps=2,
         partial_safe_extra_frames_leading_content_check=True,
         partial_safe_extra_frames_frame_content_check=True,
         short_axis_geometry_correction_enabled=True,
@@ -55,9 +55,9 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
     ),
     modes={
         FULL: ModePolicyPreset(
-            role="square_full_strip_wide_separator_guarded",
+            role="square_full_strip_separator_width_profile_guarded",
             notes=(
-                "wide-separator outer candidates may compete, but full mode does not inherit partial extra-holder tolerance",
+                "separator width profile outer candidates may compete, but full mode does not inherit partial extra-holder tolerance",
             ),
             frame_fit=FrameFitPolicy(
                 name="medium_square_frame_fit",
@@ -68,7 +68,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
                 nominal_max_ratio=1.20,
                 inlier_tolerance_ratio=0.045,
             ),
-            wide_separator=WideSeparatorModePreset(
+            separator_width_profile=SeparatorWidthProfilePreset(
                 mode="conditional",
                 full_selection_enabled=True,
                 separator_outer_allow_oversized_band=True,
@@ -76,12 +76,12 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
             diagnostics_overlap_bleed=True,
         ),
         PARTIAL: ModePolicyPreset(
-            role="square_partial_strip_wide_separator_edge_guarded",
+            role="square_partial_strip_separator_width_profile_edge_guarded",
             notes=(
-                "wide-separator outer candidates must still pass separator/content/geometry gates",
-                "safe extra holder frames require wide-like separator evidence and stable frame content",
+                "separator width profile outer candidates must still pass separator/content/geometry gates",
+                "safe extra holder frames require broad separator width evidence and stable frame content",
             ),
-            wide_separator=WideSeparatorModePreset(
+            separator_width_profile=SeparatorWidthProfilePreset(
                 mode="conditional",
                 full_selection_enabled=True,
                 separator_outer_allow_oversized_band=True,

@@ -75,11 +75,11 @@ def apply_candidate_assessment_policy(
     reasons = list(candidate.review_reasons)
     if floor_applies:
         reasons = [reason for reason in reasons if reason != "low_confidence"]
-    wide_geometry_policy = policy.separator.geometry_support.wide_geometry
+    detected_geometry_policy = policy.separator.geometry_support.detected_geometry
     stable_grid_policy = policy.separator.geometry_support.stable_grid
-    wide_geometry_support = (
+    detected_geometry_support = (
         (not hard_ok)
-        and wide_geometry_policy.enabled
+        and detected_geometry_policy.enabled
     ) and separator_geometry_support_applies(
         candidate,
         hard_detail,
@@ -87,11 +87,11 @@ def apply_candidate_assessment_policy(
         source,
         support,
         joint_score,
-        wide_geometry_policy,
+        detected_geometry_policy,
     )
     stable_grid_support = (
         False
-        if wide_geometry_support
+        if detected_geometry_support
         or not stable_grid_policy.enabled
         else separator_geometry_support_applies(
             candidate,
@@ -103,13 +103,13 @@ def apply_candidate_assessment_policy(
             stable_grid_policy,
         )
     )
-    if wide_geometry_support or stable_grid_support:
+    if detected_geometry_support or stable_grid_support:
         hard_ok = True
         hard_detail = dict(hard_detail)
         hard_detail["ok"] = True
-        if wide_geometry_support:
-            hard_detail["reason"] = "separator_wide_geometry_support"
-            hard_detail["separator_geometry_support_mode"] = "wide_geometry"
+        if detected_geometry_support:
+            hard_detail["reason"] = "separator_detected_geometry_support"
+            hard_detail["separator_geometry_support_mode"] = "detected_geometry"
         else:
             hard_detail["reason"] = "separator_stable_grid_support"
             hard_detail["separator_geometry_support_mode"] = "stable_grid"
@@ -164,7 +164,7 @@ def apply_candidate_assessment_policy(
         and bool(partial_safe_extra_frames.get("used", False))
         and bool(
             partial_safe_disqualifiers.intersection(
-                {"too_few_wide_like_gaps", "partial_outer_leading_content", "partial_frame_content_unstable"}
+                {"too_few_broad_separator_width_gaps", "partial_outer_leading_content", "partial_frame_content_unstable"}
             )
         )
     )
@@ -206,9 +206,9 @@ def apply_candidate_assessment_policy(
         reasons.append(REASON_AUTO_GATE_NOT_SATISFIED)
     else:
         confidence = max(confidence, config.confidence_threshold + min(0.10, joint_score * 0.08))
-    wide_count = int(hard_detail.get("wide_detected_gaps", 0) or 0)
-    if source == "separator" and wide_count > 0:
-        confidence = min(confidence, policy.separator.wide_separator_confidence_cap)
+    broad_width_count = int(hard_detail.get("broad_separator_width_gaps", 0) or 0)
+    if source == "separator" and broad_width_count > 0:
+        confidence = min(confidence, policy.separator.relaxed_separator_width_confidence_cap)
 
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
     candidate.review_reasons = sorted(set(reasons))

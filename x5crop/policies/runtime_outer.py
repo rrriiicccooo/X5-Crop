@@ -130,7 +130,7 @@ class FullWidthSeparatorOuterPolicy:
 
 
 @dataclass(frozen=True)
-class WideSeparatorOuterPolicy:
+class SeparatorWidthProfilePolicy:
     mode: str = "off"
     required_count: int = 3
     threshold_ratio: float = 0.42
@@ -183,8 +183,8 @@ class SeparatorGeometryProposalPolicy:
     separator_gap_search_max_width_ratio: float = 0.095
     band: SeparatorOuterBandPolicy = field(default_factory=SeparatorOuterBandPolicy)
     full_width_outer: FullWidthSeparatorOuterPolicy = field(default_factory=FullWidthSeparatorOuterPolicy)
-    wide_mode: str = "off"
-    wide_outer: WideSeparatorOuterPolicy = field(default_factory=WideSeparatorOuterPolicy)
+    width_profile_mode: str = "off"
+    width_profile: SeparatorWidthProfilePolicy = field(default_factory=SeparatorWidthProfilePolicy)
 
 
 @dataclass(frozen=True)
@@ -236,5 +236,5 @@ __all__ = [
     "SeparatorOuterBandPolicy",
     "SeparatorGeometryProposalPolicy",
     "ShortAxisGeometryCorrectionPolicy",
-    "WideSeparatorOuterPolicy",
+    "SeparatorWidthProfilePolicy",
 ]

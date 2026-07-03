@@ -59,18 +59,16 @@ def find_gap(
         prominence = mean_score - side_score
         if prominence < 0.08 and mean_score < 0.95:
             continue
-        method = "detected"
         if max_width_ratio_override is not None and band_width > normal_max_gap_w:
-            if mean_score < config.wide_min_mean or prominence < config.wide_min_prominence:
+            if mean_score < config.separator_width_min_mean or prominence < config.separator_width_min_prominence:
                 continue
-            method = "wide-separator"
 
         center = float(lo + (band_start + band_end - 1) / 2.0)
         start = float(lo + band_start)
         end = float(lo + band_end)
         distance = abs(center - expected) / max(1.0, pitch)
         quality = mean_score + 0.8 * prominence
-        candidates.append((distance, -quality, -mean_score, center, start, end, method))
+        candidates.append((distance, -quality, -mean_score, center, start, end, "detected"))
 
     if candidates:
         _, neg_quality, _, center, start, end, method = sorted(candidates)[0]

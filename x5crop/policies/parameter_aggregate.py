@@ -87,11 +87,11 @@ class FormatParameters(FormatParameterViews):
     gap_max_width_ratio: float = 0.045
     gap_max_width_min: int = 2
     gap_max_width_max: int = 420
-    wide_gap_retry_enabled: bool = True
-    wide_gap_retry_max_width_ratio: float = 0.060
-    wide_gap_min_mean: float = 0.95
-    wide_gap_min_prominence: float = 0.02
-    wide_gap_confidence_cap: float = 0.995
+    relaxed_separator_width_retry_enabled: bool = True
+    relaxed_separator_width_retry_max_width_ratio: float = 0.060
+    relaxed_separator_width_min_mean: float = 0.95
+    relaxed_separator_width_min_prominence: float = 0.02
+    relaxed_separator_width_confidence_cap: float = 0.995
     gap_min_width_ratio: float = 0.001
     gap_min_width_min: int = 1
     gap_min_width_max: int = 12
@@ -286,14 +286,14 @@ class FormatParameters(FormatParameterViews):
     separator_gate_needed_hard_max: int = 2
     separator_gate_max_equal_gaps_floor: int = 2
     separator_allow_geometry_support: bool = True
-    separator_wide_geometry_min_hard_ratio: float = 0.60
-    separator_wide_geometry_min_joint_score: float = 0.78
+    separator_detected_geometry_min_hard_ratio: float = 0.60
+    separator_detected_geometry_min_joint_score: float = 0.78
     separator_stable_grid_min_hard_ratio: float = 0.35
     separator_stable_grid_min_joint_score: float = 0.65
     separator_hard_required_all_gaps: bool = True
-    separator_gate_edge_pair_min_score_without_wide: float = 0.0
-    separator_gate_edge_pair_min_score_with_wide: float = 0.0
-    separator_gate_min_wide_gaps_for_auto: int = 0
+    separator_gate_edge_pair_min_score_without_broad_width: float = 0.0
+    separator_gate_edge_pair_min_score_with_broad_width: float = 0.0
+    separator_gate_min_broad_separator_width_gaps_for_auto: int = 0
     leading_grid_failure_enabled: bool = True
     leading_grid_failure_min_count: int = 5
     leading_grid_failure_leading_count: int = 3
@@ -366,8 +366,8 @@ class FormatParameters(FormatParameterViews):
     partial_safe_extra_frames_min_joint_score: float = 0.65
     partial_safe_extra_frames_min_content_score: float = 0.72
     partial_safe_extra_frames_min_geometry_score: float = 0.72
-    partial_safe_extra_frames_min_wide_like_gaps: int = 0
-    partial_safe_extra_frames_wide_like_min_width_ratio: float = 0.033
+    partial_safe_extra_frames_min_broad_separator_width_gaps: int = 0
+    partial_safe_extra_frames_broad_separator_width_min_ratio: float = 0.033
     partial_safe_extra_frames_leading_content_check: bool = False
     partial_safe_extra_frames_leading_content_max_mean: float = 0.20
     partial_safe_extra_frames_leading_content_max_coverage: float = 0.34
@@ -454,7 +454,7 @@ class FormatParameters(FormatParameterViews):
     separator_outer_band_candidates: int = 10
     separator_outer_pair_candidates: int = 4
     separator_outer_max_candidates: int = 12
-    wide_gap_retry_partial_enabled: bool = True
+    relaxed_separator_width_retry_partial_enabled: bool = True
 
 
 __all__ = [

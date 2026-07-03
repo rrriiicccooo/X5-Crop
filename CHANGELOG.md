@@ -33,7 +33,7 @@ Current stable release: v4.2.8
 | V4.9 | 当前 active 开发版 | Evidence-governed policy reset。新增 explicit format physical spec、clean entry layer、semantic decision contract、conservative PASS/REVIEW gate、`v4_9_policy_schema_1`、policy-controlled three-panel Debug Analysis 和 `tools/regression/` reference classifier。目标是 0 新错误 PASS，并允许可解释的 conservative diff。 |
 | V4.7 | 旧 active 开发版 | Source-layout rewrite。移除旧桥接层，保留薄入口和 `x5crop/` 分层实现；format / mode 行为由 policy 管理；workflow 编排，detection / geometry / candidate 等职责拆入专门模块。目标是保持 V4.5.4 行为，同时让源码边界清晰。 |
 | V4.6 | 开发版 | 建立 `DetectionPolicy` 架构，将 detector、count、outer、separator、content、scoring、selection、postprocess、diagnostics 和 output 行为按 format / strip mode 注册。 |
-| V4.5.x | 开发版 | 120-66 wide-dark-band / strict-holder、half geometry support、policy view、postprocess 和 separator-geometry outer 收敛。 |
+| V4.5.x | 开发版 | 120-66 broad separator width / strict-holder、half geometry support、policy view、postprocess 和 separator-geometry outer 收敛。 |
 | V4.4.x | 开发版 | 收敛 full / partial outer proposal、output folder 命名、Debug Analysis 可读性、partial safe-extra-frames 和缓存效率；默认输出目录定为 `x5_crop_output/`。 |
 | V4.3.x | 开发版 | 建立 full-mode outer proposal layer，并为 partial mode 增加 conservative safe-extra-frames gate。 |
 | V4.2.8 | 当前稳定发布版 | 启动器交互改进：仅在 partial mode 开启后询问 count；Return 或 `auto` 表示自动判断。检测逻辑不变。 |
@@ -67,7 +67,7 @@ Current stable release: v4.2.8
   detection cache 层。
 - outer runtime policy 已收敛为 `proposal` 与 `correction` 两块：
   `proposal.base` 负责基础外框候选，`proposal.geometry` 统一管理 partial
-  placement、separator geometry 与 wide separator variants；
+  placement、separator geometry 与 separator width profile variants；
   `correction.geometry_consistency` 合并原 short-axis 与 format-geometry retry，
   `correction.content_containment` 替代原 content-aligned retry 命名。
 - corrected outer 不再在 correction helper 内直接完成重建与评估；统一通过
@@ -79,8 +79,11 @@ Current stable release: v4.2.8
   corrected box，candidate 层负责“怎么重新算”，final workflow 层负责“何时必须
   重新算”以及 correction 顺序。
 - separator-derived outer 已收敛为统一 `detection/outer/proposal/separator.py` 引擎；
-  local、full-width 和 120-66 wide separator variants 共享 sequence / ranking /
-  candidate 输出逻辑，active code 不再保留独立 dark-band outer 分支。
+  local、full-width 和 120-66 separator width profile variants 共享 sequence / ranking /
+  candidate 输出逻辑，active code 不再保留独立 broad-width outer 分支。
+- separator width 语义已收敛：宽度 profile 只能影响 proposal / retry 参数，
+  最终 gap method 仍是普通 `detected` hard separator；broad width 只写入
+  `separator_width_evidence`、gate detail 和 partial holder detail。
 - partial placement outer 已收敛到 `policy.outer.proposal.geometry.partial_placement`：标准
   partial 先尝试 edge-anchored 位置候选，edge 候选达到 trust 门槛时跳过
   floating 位置候选；full 与 review-only mode 不启用。edge-anchor 只负责
@@ -151,7 +154,7 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 | V4.9 | Current active development | Evidence-governed policy reset. Adds explicit format physical specs, a clean entry layer, semantic decision contract, conservative PASS/REVIEW gate, `v4_9_policy_schema_1`, policy-controlled three-panel Debug Analysis, and `tools/regression/` reference classifier. The goal is 0 new wrong PASS with explainable conservative diffs. |
 | V4.7 | Previous active development | Source-layout rewrite. Removes old bridge layers, keeps a thin entry and layered `x5crop/` implementation, moves format/mode behavior into policy, and splits workflow, detection, geometry, and candidate responsibilities into focused modules. |
 | V4.6 | Development | Introduces `DetectionPolicy` for detector, count, outer, separator, content, scoring, selection, postprocess, diagnostics, and output behavior by format / strip mode. |
-| V4.5.x | Development | Converges 120-66 wide-dark-band / strict-holder behavior, half geometry support, policy views, postprocess, and separator-geometry outer. |
+| V4.5.x | Development | Converges 120-66 broad separator width / strict-holder behavior, half geometry support, policy views, postprocess, and separator-geometry outer. |
 | V4.4.x | Development | Refines full / partial outer proposal responsibilities, output-folder naming, Debug Analysis readability, partial safe-extra-frames, and cache efficiency. |
 | V4.3.x | Development | Builds full-mode outer proposal layering and conservative partial safe-extra-frames support. |
 | V4.2.8 | Current stable release | Improves launcher interaction: count is requested only when partial mode is enabled; Return or `auto` keeps automatic count estimation. Detection logic is unchanged. |
@@ -187,9 +190,13 @@ Verified:
   separator bands, outer-content alignment, and cache keys live in evidence /
   detection cache layers.
 - Separator-derived outer proposals are consolidated into the single
-  `detection/outer/proposal/separator.py` engine; local, full-width, and 120-66 wide
-  separator variants share sequence, ranking, and candidate output logic, and
-  active code no longer keeps a separate dark-band outer branch.
+  `detection/outer/proposal/separator.py` engine; local, full-width, and 120-66
+  separator width profile variants share sequence, ranking, and candidate output
+  logic, and active code no longer keeps a separate broad-width outer branch.
+- Separator width semantics are now consolidated: width profiles can only tune
+  proposal / retry parameters, final gap methods remain ordinary `detected` hard
+  separators, and broad-width support is reported through `separator_width_evidence`,
+  gate detail, and partial-holder detail.
 - 14 format / strip-mode decision contract policy smoke checks pass; the final
   contract is derived from the active runtime `DetectionPolicy` to prevent
   geometry support, partial-edge, diagnostics, and output-policy drift.

@@ -103,7 +103,7 @@ def refine_gaps_by_edge_pairs(
             refined.append(gap)
             rejected += 1
             continue
-        if gap.method in {"detected", "enhanced-detected", "wide-separator"} and not edge_pair_can_replace_hard_gap(gap, edge_gap, pitch, params):
+        if gap.method in {"detected", "enhanced-detected"} and not edge_pair_can_replace_hard_gap(gap, edge_gap, pitch, params):
             refined.append(gap)
             rejected += 1
             continue

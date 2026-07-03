@@ -48,9 +48,9 @@ def _outer_detail(policy: "DetectionPolicy") -> dict[str, Any]:
                     "separator_gap_search_max_width_ratio": separator.separator_gap_search_max_width_ratio,
                     "band": _plain(separator.band),
                     "full_width_outer": _plain(separator.full_width_outer),
-                    "wide_mode": separator.wide_mode,
-                    "wide_outer": _fields(
-                        separator.wide_outer,
+                    "width_profile_mode": separator.width_profile_mode,
+                    "width_profile": _fields(
+                        separator.width_profile,
                         (
                             "mode",
                             "required_count",
@@ -86,9 +86,9 @@ def _separator_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     return {
         "gate_profile": separator.gate.profile,
         "hard_required_all_gaps": separator.hard_required_all_gaps,
-        "wide_retry": separator.wide_retry,
-        "wide_retry_max_width_ratio": separator.wide_retry_max_width_ratio,
-        "wide_separator_confidence_cap": separator.wide_separator_confidence_cap,
+        "relaxed_separator_width_retry": separator.relaxed_separator_width_retry,
+        "relaxed_separator_width_retry_max_width_ratio": separator.relaxed_separator_width_retry_max_width_ratio,
+        "relaxed_separator_width_confidence_cap": separator.relaxed_separator_width_confidence_cap,
         "geometry_support_modes": list(separator.geometry_support_modes),
         "geometry_support": _plain(separator.geometry_support),
         "profile": _plain(separator.profile),

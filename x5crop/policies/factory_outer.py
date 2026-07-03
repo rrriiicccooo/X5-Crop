@@ -21,16 +21,16 @@ from .runtime_outer import (
     SeparatorOuterBandPolicy,
     SeparatorGeometryProposalPolicy,
     ShortAxisGeometryCorrectionPolicy,
-    WideSeparatorOuterPolicy,
+    SeparatorWidthProfilePolicy,
 )
 
 
-def wide_separator_outer_policy(mode_preset: ModePolicyPreset) -> WideSeparatorOuterPolicy:
-    wide_separator = mode_preset.wide_separator
-    return WideSeparatorOuterPolicy(
-        mode=wide_separator.mode,
+def separator_width_profile_outer_policy(mode_preset: ModePolicyPreset) -> SeparatorWidthProfilePolicy:
+    separator_width_profile = mode_preset.separator_width_profile
+    return SeparatorWidthProfilePolicy(
+        mode=separator_width_profile.mode,
         required_count=3,
-        full_selection_enabled=wide_separator.full_selection_enabled,
+        full_selection_enabled=separator_width_profile.full_selection_enabled,
     )
 
 
@@ -51,7 +51,7 @@ def outer_policy(
     separator_outer = params.separator_outer_band
     separator_full_width = params.separator_full_width_outer
     partial_content_enabled = bool(strip_mode == PARTIAL and mode_preset.detector_kind != "review_only")
-    wide_separator = mode_preset.wide_separator
+    separator_width_profile = mode_preset.separator_width_profile
     return OuterPolicy(
         proposal=OuterProposalPolicy(
             base=BaseOuterProposalPolicy(
@@ -132,9 +132,9 @@ def outer_policy(
                         if is_full
                         else outer.separator_full_width_partial_mode
                     ),
-                    separator_outer_allow_oversized_band=wide_separator.separator_outer_allow_oversized_band,
-                    separator_outer_oversized_band_max_ratio=wide_separator.separator_outer_oversized_band_max_ratio,
-                    separator_outer_oversized_band_score_penalty=wide_separator.separator_outer_oversized_band_score_penalty,
+                    separator_outer_allow_oversized_band=separator_width_profile.separator_outer_allow_oversized_band,
+                    separator_outer_oversized_band_max_ratio=separator_width_profile.separator_outer_oversized_band_max_ratio,
+                    separator_outer_oversized_band_score_penalty=separator_width_profile.separator_outer_oversized_band_score_penalty,
                     separator_gap_search_max_width_ratio=float(outer.separator_gap_search_max_width_ratio),
                     band=SeparatorOuterBandPolicy(
                         min_score=float(separator_outer.min_score),
@@ -156,8 +156,8 @@ def outer_policy(
                         margin_ratios=tuple(float(value) for value in separator_full_width.margin_ratios),
                         max_candidates=int(separator_full_width.max_candidates),
                     ),
-                    wide_mode=wide_separator.mode,
-                    wide_outer=wide_separator_outer_policy(mode_preset),
+                    width_profile_mode=separator_width_profile.mode,
+                    width_profile=separator_width_profile_outer_policy(mode_preset),
                 ),
                 grid_refine=GridOuterRefinePolicy(
                     shift_ratio=float(grid_refine.shift_ratio),
@@ -226,5 +226,5 @@ def outer_policy(
 
 __all__ = [
     'outer_policy',
-    'wide_separator_outer_policy',
+    'separator_width_profile_outer_policy',
 ]

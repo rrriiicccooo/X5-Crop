@@ -33,9 +33,9 @@ class SeparatorGatePolicy:
     max_equal_gaps_floor: int = 2
     allow_geometry_support: bool = False
     hard_required_all_gaps: bool = True
-    edge_pair_min_score_without_wide: float = 0.0
-    edge_pair_min_score_with_wide: float = 0.0
-    min_wide_gaps_for_auto: int = 0
+    edge_pair_min_score_without_broad_width: float = 0.0
+    edge_pair_min_score_with_broad_width: float = 0.0
+    min_broad_separator_width_gaps_for_auto: int = 0
     score_min_hard_gaps: int = 2
     score_max_equal_gaps_floor: int = 2
     low_hard_confidence_cap: float = 0.82
@@ -58,12 +58,12 @@ class SeparatorGeometrySupportModePolicy:
 
 @dataclass(frozen=True)
 class SeparatorGeometrySupportPolicy:
-    wide_geometry: SeparatorGeometrySupportModePolicy = field(default_factory=SeparatorGeometrySupportModePolicy)
+    detected_geometry: SeparatorGeometrySupportModePolicy = field(default_factory=SeparatorGeometrySupportModePolicy)
     stable_grid: SeparatorGeometrySupportModePolicy = field(default_factory=SeparatorGeometrySupportModePolicy)
 
     def mode_policy(self, mode: str) -> SeparatorGeometrySupportModePolicy:
-        if mode == "wide_geometry":
-            return self.wide_geometry
+        if mode == "detected_geometry":
+            return self.detected_geometry
         if mode == "stable_grid":
             return self.stable_grid
         return SeparatorGeometrySupportModePolicy()
@@ -86,9 +86,9 @@ class SeparatorEdgePairPolicy:
 class SeparatorPolicy:
     gate: SeparatorGatePolicy
     hard_required_all_gaps: bool
-    wide_retry: bool
-    wide_retry_max_width_ratio: float
-    wide_separator_confidence_cap: float = 0.995
+    relaxed_separator_width_retry: bool
+    relaxed_separator_width_retry_max_width_ratio: float
+    relaxed_separator_width_confidence_cap: float = 0.995
     geometry_support_modes: tuple[str, ...] = ()
     geometry_support: SeparatorGeometrySupportPolicy = field(default_factory=SeparatorGeometrySupportPolicy)
     edge_pair: SeparatorEdgePairPolicy = field(default_factory=SeparatorEdgePairPolicy)
@@ -99,7 +99,7 @@ class SeparatorPolicy:
     enhanced: EnhancedSeparatorParameters = field(default_factory=EnhancedSeparatorParameters)
     profile: SeparatorProfileParameters = field(default_factory=SeparatorProfileParameters)
     edge_refine_profile: EdgeRefineProfileParameters = field(default_factory=EdgeRefineProfileParameters)
-    hard_methods: tuple[str, ...] = ("detected", "edge_pair", "enhanced_detected", "wide_separator")
+    hard_methods: tuple[str, ...] = ("detected", "edge_pair", "enhanced_detected")
     model_methods: tuple[str, ...] = ("grid", "equal", "content")
 
 

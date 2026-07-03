@@ -48,16 +48,16 @@ def fallback_outer_proposals_enabled(policy: DetectionPolicy) -> bool:
     )
 
 
-def should_try_equal_first_before_wide_retry(
+def should_try_equal_first_before_relaxed_separator_width_retry(
     policy: DetectionPolicy,
     strip_mode: str,
     count: int,
     fmt: FormatSpec,
 ) -> bool:
-    retry_policy = policy.candidate_run.equal_first_before_wide_retry
+    retry_policy = policy.candidate_run.equal_first_before_relaxed_separator_width_retry
     if not retry_policy.enabled:
         return False
-    if retry_policy.requires_wide_geometry_support and not policy.separator.geometry_support.wide_geometry.enabled:
+    if retry_policy.requires_detected_geometry_support and not policy.separator.geometry_support.detected_geometry.enabled:
         return False
     if strip_mode not in retry_policy.strip_modes:
         return False

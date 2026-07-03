@@ -45,7 +45,7 @@ def separator_gate_all_internal_gaps_hard_assessment(
     detection: Detection,
     expected: int,
     hard: int,
-    wide: int,
+    broad_width: int,
     edge_pair_scores: list[float],
     gate: SeparatorGatePolicy,
 ) -> tuple[bool, str]:
@@ -53,13 +53,13 @@ def separator_gate_all_internal_gaps_hard_assessment(
     ok = hard >= needed
     reason = "separator_all_internal_gaps_hard_support" if ok else "separator_all_internal_gaps_hard_support_weak"
     if ok and detection.strip_mode == "full" and detection.count == FORMATS[detection.film_format].default_count:
-        if wide < gate.min_wide_gaps_for_auto:
+        if broad_width < gate.min_broad_separator_width_gaps_for_auto:
             ok = False
-            reason = "separator_wide_support_weak"
+            reason = "separator_broad_width_support_weak"
         edge_min = (
-            gate.edge_pair_min_score_with_wide
-            if wide > 0
-            else gate.edge_pair_min_score_without_wide
+            gate.edge_pair_min_score_with_broad_width
+            if broad_width > 0
+            else gate.edge_pair_min_score_without_broad_width
         )
         if ok and edge_pair_scores and min(edge_pair_scores) < edge_min:
             ok = False
@@ -77,11 +77,11 @@ def candidate_has_hard_separator_evidence(
     leading_grid_policy = gate.leading_grid_failure
     expected = max(0, int(detection.count) - 1)
     actual = int(detection.detail.get("actual_detected_gaps", 0))
-    wide = int(detection.detail.get("wide_detected_gaps", 0))
+    broad_width = int(detection.detail.get("broad_separator_width_gaps", 0))
     enhanced = int(detection.detail.get("enhanced_detected_gaps", 0))
     grid = int(detection.detail.get("grid_gaps", 0))
     equal = int(detection.detail.get("equal_gaps", 0))
-    hard = actual + wide + enhanced
+    hard = actual + enhanced
     hard_indexes = [
         int(gap.index)
         for gap in detection.gaps
@@ -97,11 +97,12 @@ def candidate_has_hard_separator_evidence(
         for gap in detection.gaps
         if gap.method == "detected"
     ]
-    wide_scores = [
-        float(gap.score)
-        for gap in detection.gaps
-        if gap.method == "wide-separator"
-    ]
+    width_evidence = detection.detail.get("separator_width_evidence", {})
+    broad_width_scores = (
+        list(width_evidence.get("broad_separator_width_scores", []))
+        if isinstance(width_evidence, dict)
+        else []
+    )
     leading_grid_scores: list[float] = []
     for gap in detection.gaps:
         if gap.method != "grid":
@@ -149,7 +150,7 @@ def candidate_has_hard_separator_evidence(
             detection,
             expected,
             hard,
-            wide,
+            broad_width,
             edge_pair_scores,
             gate,
         )
@@ -160,14 +161,14 @@ def candidate_has_hard_separator_evidence(
         "expected_gaps": expected,
         "hard_gaps": hard,
         "actual_detected_gaps": actual,
-        "wide_detected_gaps": wide,
+        "broad_separator_width_gaps": broad_width,
         "enhanced_detected_gaps": enhanced,
         "grid_gaps": grid,
         "equal_gaps": equal,
         "hard_gap_indexes": hard_indexes,
         "edge_pair_scores": edge_pair_scores,
         "detected_scores": detected_scores,
-        "wide_separator_scores": wide_scores,
+        "broad_separator_width_scores": broad_width_scores,
         "leading_grid_scores": leading_grid_scores,
         "enhanced_separator_accepted_count": enhanced_accepted,
         "leading_grid_separator_failure": bool(leading_grid_failure),

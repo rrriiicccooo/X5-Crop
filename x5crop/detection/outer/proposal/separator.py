@@ -9,7 +9,7 @@ from ....domain import Box, OuterCandidate
 from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ....geometry.separator_cache import cached_separator_profile
 from ....policies.registry import get_detection_policy
-from ....policies.runtime_outer import SeparatorOuterBandPolicy, WideSeparatorOuterPolicy
+from ....policies.runtime_outer import SeparatorOuterBandPolicy, SeparatorWidthProfilePolicy
 from ....policies.runtime_policy import DetectionPolicy
 from ....runtime import AnalysisCache
 from ....utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
@@ -20,7 +20,7 @@ from .common import unique_outer_candidates
 
 LOCAL_SEPARATOR_OUTER = "local"
 FULL_WIDTH_SEPARATOR_OUTER = "full_width"
-WIDE_SEPARATOR_OUTER = "wide"
+SEPARATOR_WIDTH_PROFILE_OUTER = "width_profile"
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,7 @@ class SeparatorOuterVariant:
     spacing_max_ratio: float
     frame_error_max: float | None
     sequence_score_weight: float
-    use_wide_profile: bool = False
+    use_width_profile: bool = False
 
 
 def separator_outer_variants_for_policy(
@@ -147,24 +147,24 @@ def _variant_policy(
             frame_error_max=float(band_policy.frame_error_max),
             sequence_score_weight=0.02,
         )
-    if variant_name == WIDE_SEPARATOR_OUTER:
-        wide_policy = separator_policy.wide_outer
-        if wide_policy.mode == "off" or count != int(wide_policy.required_count):
+    if variant_name == SEPARATOR_WIDTH_PROFILE_OUTER:
+        width_policy = separator_policy.width_profile
+        if width_policy.mode == "off" or count != int(width_policy.required_count):
             return None
         return SeparatorOuterVariant(
-            name=WIDE_SEPARATOR_OUTER,
-            candidate_prefix="separator_wide",
+            name=SEPARATOR_WIDTH_PROFILE_OUTER,
+            candidate_prefix="separator_width_profile",
             full_width=True,
             margin_ratios=(0.0,),
-            source_candidate_count=max(1, int(wide_policy.source_candidate_count)),
-            band_candidate_count=max(1, int(wide_policy.band_candidate_count)),
-            sequence_candidate_count=max(1, int(wide_policy.sequence_candidate_count)),
-            max_candidates=max(1, int(wide_policy.max_candidates)),
-            spacing_min_ratio=float(wide_policy.spacing_min_ratio),
-            spacing_max_ratio=float(wide_policy.spacing_max_ratio),
+            source_candidate_count=max(1, int(width_policy.source_candidate_count)),
+            band_candidate_count=max(1, int(width_policy.band_candidate_count)),
+            sequence_candidate_count=max(1, int(width_policy.sequence_candidate_count)),
+            max_candidates=max(1, int(width_policy.max_candidates)),
+            spacing_min_ratio=float(width_policy.spacing_min_ratio),
+            spacing_max_ratio=float(width_policy.spacing_max_ratio),
             frame_error_max=None,
-            sequence_score_weight=float(wide_policy.sequence_score_weight),
-            use_wide_profile=True,
+            sequence_score_weight=float(width_policy.sequence_score_weight),
+            use_width_profile=True,
         )
     return None
 
@@ -209,14 +209,14 @@ def _separator_outer_candidates_for_variant(
         if frame_long <= 1.0:
             continue
 
-        if variant.use_wide_profile:
+        if variant.use_width_profile:
             crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-            profile = _wide_separator_profile(crop, separator_policy.wide_outer)
-            bands, edge_margin = _collect_wide_separator_bands(
+            profile = _adaptive_separator_width_profile(crop, separator_policy.width_profile)
+            bands, edge_margin = _collect_separator_width_profile_bands(
                 profile,
                 short_axis,
                 float(outer.width),
-                separator_policy.wide_outer,
+                separator_policy.width_profile,
             )
         else:
             profile = cached_separator_profile(cache, gray_work, outer, fmt.name, policy.separator.profile)
@@ -265,7 +265,7 @@ def _separator_outer_candidates_for_variant(
             proposed = Box(proposed_left, outer.top, proposed_right, outer.bottom).clamp(w, h)
             if not proposed.valid():
                 continue
-            ratio_suffix = f"_r{expected_ratio:.3f}" if not variant.use_wide_profile else ""
+            ratio_suffix = f"_r{expected_ratio:.3f}" if not variant.use_width_profile else ""
             candidates.append(
                 OuterCandidate(
                     f"{variant.candidate_prefix}_{source.name}_{rank}{ratio_suffix}",
@@ -326,7 +326,7 @@ def _rank_separator_sequences(
         for margin_ratio in variant.margin_ratios:
             expected_ratio = expected_ratio_base + 2.0 * float(margin_ratio)
             rank = mean_frame_error - variant.sequence_score_weight * sequence_score
-            if not variant.use_wide_profile:
+            if not variant.use_width_profile:
                 first_band = sequence[0]
                 last_band = sequence[-1]
                 margin = float(margin_ratio) * short_axis
@@ -359,51 +359,51 @@ def _sequence_band_policy(
     )
 
 
-def _wide_separator_profile(
+def _adaptive_separator_width_profile(
     crop: np.ndarray,
-    wide_policy: WideSeparatorOuterPolicy,
+    width_policy: SeparatorWidthProfilePolicy,
 ) -> np.ndarray:
     if crop.size == 0:
         return np.array([], dtype=np.float32)
     sample = crop[:: max(1, crop.shape[0] // 500), :: max(1, crop.shape[1] // 2000)]
     p01, p99 = sampled_percentile(sample, [1, 99])
     span = max(1.0, float(p99 - p01))
-    threshold = float(p01) + span * wide_policy.threshold_span_ratio
+    threshold = float(p01) + span * width_policy.threshold_span_ratio
     profile = (crop <= threshold).mean(axis=0).astype(np.float32)
     return smooth_1d(
         profile,
         max(
-            wide_policy.profile_smooth_min,
-            int(round(crop.shape[0] * wide_policy.profile_smooth_short_axis_ratio)),
+            width_policy.profile_smooth_min,
+            int(round(crop.shape[0] * width_policy.profile_smooth_short_axis_ratio)),
         ),
     )
 
 
-def _collect_wide_separator_bands(
+def _collect_separator_width_profile_bands(
     profile: np.ndarray,
     short_axis: float,
     coordinate_limit: float,
-    wide_policy: WideSeparatorOuterPolicy,
+    width_policy: SeparatorWidthProfilePolicy,
 ) -> tuple[list[dict[str, float]], float]:
     if profile.size <= 0:
         return [], 0.0
     edge_margin = clamp_float(
-        short_axis * wide_policy.edge_margin_ratio,
-        wide_policy.edge_margin_min,
-        max(wide_policy.edge_margin_min, short_axis * wide_policy.edge_margin_cap_ratio),
+        short_axis * width_policy.edge_margin_ratio,
+        width_policy.edge_margin_min,
+        max(width_policy.edge_margin_min, short_axis * width_policy.edge_margin_cap_ratio),
     )
     min_width = clamp_int(
-        short_axis * wide_policy.min_width_ratio,
-        wide_policy.min_width_min,
-        wide_policy.min_width_max,
+        short_axis * width_policy.min_width_ratio,
+        width_policy.min_width_min,
+        width_policy.min_width_max,
     )
     max_width = clamp_int(
-        short_axis * wide_policy.max_width_ratio,
+        short_axis * width_policy.max_width_ratio,
         min_width + 1,
-        max(wide_policy.max_width_floor, int(short_axis * wide_policy.max_width_cap_ratio)),
+        max(width_policy.max_width_floor, int(short_axis * width_policy.max_width_cap_ratio)),
     )
     bands: list[dict[str, float]] = []
-    for run_start, run_end in runs_from_mask(profile >= wide_policy.threshold_ratio):
+    for run_start, run_end in runs_from_mask(profile >= width_policy.threshold_ratio):
         width = int(run_end - run_start)
         if width < min_width or width > max_width:
             continue
@@ -425,7 +425,7 @@ def _collect_wide_separator_bands(
 __all__ = [
     "FULL_WIDTH_SEPARATOR_OUTER",
     "LOCAL_SEPARATOR_OUTER",
-    "WIDE_SEPARATOR_OUTER",
+    "SEPARATOR_WIDTH_PROFILE_OUTER",
     "separator_derived_outer_candidates",
     "separator_outer_variants_for_policy",
 ]
