@@ -134,10 +134,7 @@ class SelectionPolicy:
 @dataclass(frozen=True)
 class FallbackPolicy:
     use_outer_proposals: bool = True
-    strategies: tuple[str, ...] = (
-        "separator_outer",
-        "edge_anchor_outer",
-    )
+    strategies: tuple[str, ...] = ("separator_outer",)
 
 
 @dataclass(frozen=True)

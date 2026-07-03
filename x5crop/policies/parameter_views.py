@@ -200,12 +200,6 @@ class FormatParameterViews:
     @property
     def outer_strategy(self) -> OuterStrategyParameters:
         return OuterStrategyParameters(
-            content_floating_full=self.floating_outer_full_enabled,
-            content_floating_partial=self.floating_outer_partial_enabled,
-            edge_anchor_full_enabled=self.long_axis_edge_anchor_outer_enabled,
-            edge_anchor_full_mode=self.long_axis_edge_anchor_outer_mode,
-            edge_anchor_partial_enabled=self.long_axis_edge_anchor_partial_enabled,
-            edge_anchor_partial_mode=self.long_axis_edge_anchor_partial_mode,
             separator_local_full_enabled=self.separator_local_outer_enabled,
             separator_local_full_mode=self.separator_local_outer_mode,
             separator_local_partial_enabled=self.separator_local_partial_enabled,

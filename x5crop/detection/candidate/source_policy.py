@@ -43,7 +43,6 @@ def fallback_outer_proposals_enabled(policy: DetectionPolicy) -> bool:
     strategies = set(fallback.strategies)
     return bool(
         (policy.outer.separator_local == "fallback" and "separator_outer" in strategies)
-        or (policy.outer.edge_anchor == "fallback" and "edge_anchor_outer" in strategies)
         or (policy.outer.separator_full_width == "fallback" and "separator_outer" in strategies)
     )
 

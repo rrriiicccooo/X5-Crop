@@ -422,8 +422,6 @@ class FormatParameters(FormatParameterViews):
     format_geometry_outer_retry_content_margin_ratio: float = 0.010
     format_geometry_outer_retry_content_margin_min: int = 12
     format_geometry_outer_retry_content_margin_max: int = 80
-    floating_outer_full_enabled: bool = False
-    floating_outer_partial_enabled: bool = True
     floating_outer_ratio_extras: tuple[float, ...] = (0.06, 0.10)
     floating_outer_content_threshold: int = 225
     floating_outer_content_margin_ratio: float = 0.012
@@ -431,10 +429,6 @@ class FormatParameters(FormatParameterViews):
     floating_outer_content_margin_max: int = 80
     floating_outer_min_width_ratio: float = 0.30
     floating_outer_max_candidates: int = 12
-    long_axis_edge_anchor_outer_enabled: bool = False
-    long_axis_edge_anchor_outer_mode: str = "fallback"
-    long_axis_edge_anchor_partial_enabled: bool = True
-    long_axis_edge_anchor_partial_mode: str = "fallback"
     long_axis_edge_anchor_partial_center_ratio: float = 0.35
     long_axis_edge_anchor_ratio_extras: tuple[float, ...] = (0.06, 0.10)
     long_axis_edge_anchor_content_threshold: int = 225

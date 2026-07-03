@@ -24,12 +24,11 @@ def long_axis_edge_anchor_outer_candidates(
     policy: Optional[DetectionPolicy] = None,
 ) -> list[OuterCandidate]:
     policy = policy or get_detection_policy(fmt.name, strip_mode)
-    edge_anchor_policy = policy.outer.edge_anchor_outer
-    if edge_anchor_policy.mode == "off":
+    partial_content = policy.outer.partial_content
+    edge_anchor_policy = partial_content.edge_anchor
+    if not partial_content.enabled or edge_anchor_policy.mode == "off":
         return []
-    if strip_mode == "full" and count != fmt.default_count:
-        return []
-    if strip_mode not in {"full", "partial"} or count <= 0:
+    if strip_mode != "partial" or count <= 0:
         return []
     aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
     if aspect is None or aspect <= 0.0:

@@ -31,11 +31,8 @@ def _detector_detail(policy: "DetectionPolicy") -> dict[str, Any]:
 def _outer_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     outer = policy.outer
     return {
-        "content_floating": outer.content_floating,
-        "edge_anchor": outer.edge_anchor,
+        "partial_content": _plain(outer.partial_content),
         "base_candidates": _plain(outer.base_candidates),
-        "content_floating_outer": _plain(outer.content_floating_outer),
-        "edge_anchor_outer": _plain(outer.edge_anchor_outer),
         "separator_local": outer.separator_local,
         "separator_full_width": outer.separator_full_width,
         "separator_outer_allow_oversized_band": outer.separator_outer_allow_oversized_band,

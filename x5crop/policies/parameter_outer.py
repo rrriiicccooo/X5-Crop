@@ -14,12 +14,6 @@ class OuterMaskProfile:
 
 @dataclass(frozen=True)
 class OuterStrategyParameters:
-    content_floating_full: bool
-    content_floating_partial: bool
-    edge_anchor_full_enabled: bool
-    edge_anchor_full_mode: str
-    edge_anchor_partial_enabled: bool
-    edge_anchor_partial_mode: str
     separator_local_full_enabled: bool
     separator_local_full_mode: str
     separator_local_partial_enabled: bool

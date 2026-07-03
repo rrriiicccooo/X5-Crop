@@ -17,12 +17,11 @@ def floating_outer_candidates(
     strip_mode: str,
     policy: DetectionPolicy,
 ) -> list[OuterCandidate]:
-    floating_policy = policy.outer.content_floating_outer
-    if not floating_policy.enabled:
+    partial_content = policy.outer.partial_content
+    floating_policy = partial_content.floating
+    if not partial_content.enabled or not floating_policy.enabled:
         return []
-    if strip_mode == "full" and count != fmt.default_count:
-        return []
-    if strip_mode not in {"full", "partial"} or count <= 0:
+    if strip_mode != "partial" or count <= 0:
         return []
     aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
     if aspect is None or aspect <= 0.0:

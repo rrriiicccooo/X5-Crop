@@ -58,7 +58,9 @@ def outer_proposal_strategy_plan_for_policy(
         OuterProposalStrategy(
             "content_floating",
             "content_outer",
-            "always" if policy.outer.content_floating else "off",
+            "always"
+            if policy.outer.partial_content.enabled and policy.outer.partial_content.floating.enabled
+            else "off",
             False,
             "medium",
         ),
@@ -67,8 +69,8 @@ def outer_proposal_strategy_plan_for_policy(
         OuterProposalStrategy(
             "long_axis_edge_anchor",
             "edge_anchor_outer",
-            policy.outer.edge_anchor,
-            True,
+            policy.outer.partial_content.edge_anchor.mode if policy.outer.partial_content.enabled else "off",
+            False,
             "medium",
         ),
         OuterProposalStrategy(
@@ -110,7 +112,11 @@ def outer_proposal_candidates(
     strategy_plan = outer_proposal_strategy_plan_for_policy(policy, fallback_only=fallback_only)
     enabled_strategy_names = {strategy.name for strategy in strategy_plan if strategy.enabled}
     base_candidates = base_outer_candidates(gray_work, policy.outer.base_candidates)
-    floating_candidates = floating_outer_candidates(gray_work, base_candidates, fmt, count, strip_mode, policy)
+    floating_candidates = (
+        floating_outer_candidates(gray_work, base_candidates, fmt, count, strip_mode, policy)
+        if "content_floating" in enabled_strategy_names
+        else []
+    )
     pre_separator_candidates = unique_outer_candidates([*base_candidates, *floating_candidates])
     long_axis_candidates: list[OuterCandidate] = []
     if "long_axis_edge_anchor" in enabled_strategy_names:

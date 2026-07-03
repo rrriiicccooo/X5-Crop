@@ -98,8 +98,7 @@ REVIEW contract。
 | Mode-specific detector | dual-lane detector | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_context.py`, `detection/modes/dual_lane_split.py`, `detection/modes/dual_lane_detect.py`, `detection/modes/dual_lane_merge.py` | `135-dual/full` 是否独立于普通 135 strip；入口是否只调度，policy/spec context、lane split / lane detect / lane merge 是否可解释。 |
 | Mode-specific detector | review-only mode | `detection/modes/review_only.py`, `candidate/fallback.py` | review-only 或 hard fallback 必须保持 review-only，不得因为 confidence 偶然过线而 PASS。 |
 | Outer proposal | base outer | `geometry/outer_boxes.py`, `detection/outer/proposal/base.py` | 基础 holder / content bbox 是否只提出 outer proposal，不承担评分或通过。 |
-| Outer proposal | content floating outer | `detection/outer/proposal/partial_content.py` | partial 的内容外框不能单独证明安全；必须经过 separator/content/geometry gate。 |
-| Outer proposal | edge-anchor outer | `detection/outer/proposal/partial_edge.py` | 长轴锚点 outer 必须有 hard separator 支持；避免用边缘猜测自动通过。 |
+| Outer proposal | partial content-position outer | `detection/outer/proposal/partial_content.py`, `detection/outer/proposal/partial_edge.py` | 标准 partial 若内容不铺满片夹，统一建模为 floating 或 edge-anchored 两种位置；两者只提出 outer，必须继续经过 separator/content/geometry gate，`135-dual/partial` 仍由 review-only mode 接管。 |
 | Outer proposal | separator-derived outer | `detection/outer/proposal/separator.py`, `detection/evidence/separator_bands.py` | local、full-width 和 wide separator variants 是否共享同一 outer proposal 引擎；spacing / width / frame-error 约束是否由 policy 控制。 |
 | Outer proposal | proposal plan | `detection/outer/proposal/plan.py` | candidate 层只能通过 proposal plan 获取和合并 outer candidates；不得直接依赖 base/common/separator 内部 helper 或 variant 常量。 |
 | Outer correction | geometry retry | `detection/outer/correction/geometry.py` | short-axis 和 format-geometry 两类几何修正是否保持各自 policy 触发条件，且修正后重新经过 candidate assessment。 |

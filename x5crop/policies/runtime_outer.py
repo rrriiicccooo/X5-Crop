@@ -96,6 +96,13 @@ class EdgeAnchorOuterPolicy:
 
 
 @dataclass(frozen=True)
+class PartialContentOuterPolicy:
+    enabled: bool = False
+    floating: ContentFloatingOuterPolicy = field(default_factory=ContentFloatingOuterPolicy)
+    edge_anchor: EdgeAnchorOuterPolicy = field(default_factory=EdgeAnchorOuterPolicy)
+
+
+@dataclass(frozen=True)
 class SeparatorOuterBandPolicy:
     min_score: float = 0.58
     band_score: float = 0.36
@@ -160,8 +167,7 @@ class WideSeparatorOuterPolicy:
 @dataclass(frozen=True)
 class OuterPolicy:
     base_outer: bool = True
-    content_floating: bool = False
-    edge_anchor: str = "off"
+    partial_content: PartialContentOuterPolicy = field(default_factory=PartialContentOuterPolicy)
     separator_local: str = "off"
     separator_full_width: str = "off"
     separator_outer_allow_oversized_band: bool = False
@@ -174,8 +180,6 @@ class OuterPolicy:
     grid_refine: GridOuterRefinePolicy = field(default_factory=GridOuterRefinePolicy)
     short_axis_aspect_retry: ShortAxisAspectRetryPolicy = field(default_factory=ShortAxisAspectRetryPolicy)
     content_alignment: OuterContentAlignmentPolicy = field(default_factory=OuterContentAlignmentPolicy)
-    content_floating_outer: ContentFloatingOuterPolicy = field(default_factory=ContentFloatingOuterPolicy)
-    edge_anchor_outer: EdgeAnchorOuterPolicy = field(default_factory=EdgeAnchorOuterPolicy)
     base_candidates: OuterBoxDetectionParameters = field(default_factory=OuterBoxDetectionParameters)
     separator_outer_band: SeparatorOuterBandPolicy = field(default_factory=SeparatorOuterBandPolicy)
     separator_full_width_outer: FullWidthSeparatorOuterPolicy = field(default_factory=FullWidthSeparatorOuterPolicy)
@@ -190,6 +194,7 @@ __all__ = [
     "GridOuterRefinePolicy",
     "OuterContentAlignmentPolicy",
     "OuterPolicy",
+    "PartialContentOuterPolicy",
     "SeparatorOuterBandPolicy",
     "ShortAxisAspectRetryPolicy",
     "WideSeparatorOuterPolicy",
