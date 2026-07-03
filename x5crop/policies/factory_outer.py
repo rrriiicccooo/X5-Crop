@@ -77,7 +77,7 @@ def outer_correction_family_policies(
     is_standard_strip = mode_preset.detector_kind == "standard_strip"
     long_and_content_strip_modes = (FULL, PARTIAL)
     long_mode = "conditional" if is_standard_strip else "off"
-    short_mode = "conditional" if is_standard_strip and strip_mode == FULL else "off"
+    short_mode = "conditional" if is_standard_strip else "off"
     content_mode = "conditional" if is_standard_strip else "off"
     return (
         OuterCorrectionFamilyPolicy(
@@ -95,7 +95,7 @@ def outer_correction_family_policies(
             mode=short_mode,
             phase="geometry_consistency",
             requires_explicit_count_for_partial=True,
-            strip_modes=(FULL,),
+            strip_modes=(FULL, PARTIAL),
             requires_separator_assessment=True,
             requires_complete_hard_gaps=False,
             allowed_axes=("short",),

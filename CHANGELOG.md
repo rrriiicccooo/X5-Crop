@@ -84,7 +84,7 @@ Current stable release: v4.2.8
   full 启用全部 separator-derived families，auto-count partial 保持保守。
 - outer correction policy 已通用化为 `OuterCorrectionFamilyPolicy`：标准 full 可用
   long-axis、short-axis 和 content-containment correction；partial 只有显式 count
-  时可用 strict long-axis / content-containment correction；partial auto 不生成
+  时可用 strict long-axis、short-axis 和 content-containment correction；partial auto 不生成
   corrected outer candidate。
 - outer correction proposal type 已归入 `detection/outer/correction/types.py`；
   candidate 层只消费 `OuterCorrectionProposal`，outer correction 不再 import
@@ -243,8 +243,9 @@ Verified:
   reassesses them, and finalization no longer creates candidates.
 - Outer correction policy is generalized as `OuterCorrectionFamilyPolicy`: standard
   full strips can use long-axis, short-axis, and content-containment correction;
-  explicit-count partial strips can use strict long-axis and content-containment
-  correction; auto-count partial strips do not generate corrected outer candidates.
+  explicit-count partial strips can use strict long-axis, short-axis, and
+  content-containment correction; auto-count partial strips do not generate
+  corrected outer candidates.
 - The outer correction proposal type now lives in
   `detection/outer/correction/types.py`; candidate code consumes
   `OuterCorrectionProposal` instead of outer correction importing candidate
