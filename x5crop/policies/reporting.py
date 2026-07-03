@@ -30,47 +30,54 @@ def _detector_detail(policy: "DetectionPolicy") -> dict[str, Any]:
 
 def _outer_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     outer = policy.outer
+    proposal = outer.proposal
+    geometry = proposal.geometry
+    separator = geometry.separator
+    correction = outer.correction
     return {
-        "partial_content": _plain(outer.partial_content),
-        "base_candidates": _plain(outer.base_candidates),
-        "separator_local": outer.separator_local,
-        "separator_full_width": outer.separator_full_width,
-        "separator_outer_allow_oversized_band": outer.separator_outer_allow_oversized_band,
-        "separator_outer_oversized_band_max_ratio": outer.separator_outer_oversized_band_max_ratio,
-        "separator_outer_oversized_band_score_penalty": outer.separator_outer_oversized_band_score_penalty,
-        "separator_gap_search_max_width_ratio": outer.separator_gap_search_max_width_ratio,
-        "separator_outer_band": _plain(outer.separator_outer_band),
-        "separator_full_width_outer": _plain(outer.separator_full_width_outer),
-        "wide_separator": outer.wide_separator,
-        "format_geometry_retry": _plain(outer.format_geometry_retry),
-        "grid_refine": _plain(outer.grid_refine),
-        "short_axis_aspect_retry": _plain(outer.short_axis_aspect_retry),
-        "content_alignment": _plain(outer.content_alignment),
-        "wide_separator_outer": _fields(
-            outer.wide_separator_outer,
-            (
-                "mode",
-                "required_count",
-                "threshold_ratio",
-                "threshold_span_ratio",
-                "min_width_ratio",
-                "max_width_ratio",
-                "core_width_cap_ratio",
-                "spacing_min_ratio",
-                "spacing_max_ratio",
-                "source_candidate_count",
-                "max_candidates",
-                "full_selection_enabled",
-                "full_selection_strip_modes",
-                "full_selection_requires_required_count",
-                "full_selection_requires_help",
-                "full_selection_required_support",
-                "full_selection_allow_equal_gaps",
-                "full_selection_help_supports",
-                "full_selection_help_reasons",
-            ),
-        ),
-        "retries": list(outer.retries),
+        "proposal": {
+            "base": _plain(proposal.base),
+            "geometry": {
+                "partial_placement": _plain(geometry.partial_placement),
+                "separator": {
+                    "local": separator.local,
+                    "full_width": separator.full_width,
+                    "separator_outer_allow_oversized_band": separator.separator_outer_allow_oversized_band,
+                    "separator_outer_oversized_band_max_ratio": separator.separator_outer_oversized_band_max_ratio,
+                    "separator_outer_oversized_band_score_penalty": separator.separator_outer_oversized_band_score_penalty,
+                    "separator_gap_search_max_width_ratio": separator.separator_gap_search_max_width_ratio,
+                    "band": _plain(separator.band),
+                    "full_width_outer": _plain(separator.full_width_outer),
+                    "wide_mode": separator.wide_mode,
+                    "wide_outer": _fields(
+                        separator.wide_outer,
+                        (
+                            "mode",
+                            "required_count",
+                            "threshold_ratio",
+                            "threshold_span_ratio",
+                            "min_width_ratio",
+                            "max_width_ratio",
+                            "core_width_cap_ratio",
+                            "spacing_min_ratio",
+                            "spacing_max_ratio",
+                            "source_candidate_count",
+                            "max_candidates",
+                            "full_selection_enabled",
+                            "full_selection_strip_modes",
+                            "full_selection_requires_required_count",
+                            "full_selection_requires_help",
+                            "full_selection_required_support",
+                            "full_selection_allow_equal_gaps",
+                            "full_selection_help_supports",
+                            "full_selection_help_reasons",
+                        ),
+                    ),
+                },
+                "grid_refine": _plain(geometry.grid_refine),
+            },
+        },
+        "correction": _plain(correction),
     }
 
 

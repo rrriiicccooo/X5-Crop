@@ -32,9 +32,9 @@ def edge_anchored_outer_candidates(
     policy: Optional[DetectionPolicy] = None,
 ) -> list[OuterCandidate]:
     policy = policy or get_detection_policy(fmt.name, strip_mode)
-    partial_content = policy.outer.partial_content
-    edge_anchor_policy = partial_content.edge_anchor
-    if not partial_content.enabled or not edge_anchor_policy.enabled:
+    partial_placement = policy.outer.proposal.geometry.partial_placement
+    edge_anchor_policy = partial_placement.edge_anchor
+    if not partial_placement.enabled or not edge_anchor_policy.enabled:
         return []
     if strip_mode != "partial" or count <= 0:
         return []

@@ -61,7 +61,7 @@ def should_try_wide_separator_candidates(
     candidates: list[Detection],
     current_best: Optional[Detection],
 ) -> bool:
-    if policy.outer.wide_separator == "off":
+    if policy.outer.proposal.geometry.separator.wide_mode == "off":
         return False
     retry_policy = policy.candidate_run.wide_separator_retry
     if strip_mode in retry_policy.partial_retry_strip_modes:

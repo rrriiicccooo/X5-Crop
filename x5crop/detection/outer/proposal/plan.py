@@ -40,6 +40,8 @@ def outer_proposal_strategy_plan_for_policy(
     policy: DetectionPolicy,
     fallback_only: bool = False,
 ) -> list[OuterProposalStrategy]:
+    proposal_policy = policy.outer.proposal
+    partial_placement = proposal_policy.geometry.partial_placement
     separator_mode = (
         "fallback"
         if fallback_only and separator_outer_variants_for_policy(policy, fallback_only=True)
@@ -51,31 +53,30 @@ def outer_proposal_strategy_plan_for_policy(
         OuterProposalStrategy(
             "base",
             "base_outer",
-            "always" if policy.outer.base_outer else "off",
+            "always" if proposal_policy.base.enabled else "off",
             False,
             "low",
         ),
     ]
-    partial_content = policy.outer.partial_content
     partial_positions = {
         "edge_anchor": OuterProposalStrategy(
             "edge_anchor",
             "edge_anchor_outer",
-            "always" if partial_content.enabled and partial_content.edge_anchor.enabled else "off",
+            "always" if partial_placement.enabled and partial_placement.edge_anchor.enabled else "off",
             False,
             "medium",
         ),
         "floating": OuterProposalStrategy(
             "floating",
             "content_outer",
-            "always" if partial_content.enabled and partial_content.floating.enabled else "off",
+            "always" if partial_placement.enabled and partial_placement.floating.enabled else "off",
             False,
             "medium",
         ),
     }
     ordered_partial_positions = [
         partial_positions[name]
-        for name in partial_content.position_order
+        for name in partial_placement.position_order
         if name in partial_positions
     ]
     active = [
@@ -110,11 +111,11 @@ def edge_anchored_candidates_trusted(
     candidates: list[OuterCandidate],
     policy: DetectionPolicy,
 ) -> bool:
-    partial_content = policy.outer.partial_content
+    partial_placement = policy.outer.proposal.geometry.partial_placement
     return bool(
-        partial_content.enabled
-        and partial_content.skip_floating_when_edge_trusted
-        and len(candidates) >= int(partial_content.edge_trust_min_candidates)
+        partial_placement.enabled
+        and partial_placement.skip_floating_when_edge_trusted
+        and len(candidates) >= int(partial_placement.edge_trust_min_candidates)
     )
 
 
@@ -130,7 +131,7 @@ def outer_proposal_candidates(
     policy = policy or get_detection_policy(fmt.name, strip_mode)
     strategy_plan = outer_proposal_strategy_plan_for_policy(policy, fallback_only=fallback_only)
     enabled_strategy_names = {strategy.name for strategy in strategy_plan if strategy.enabled}
-    base_candidates = base_outer_candidates(gray_work, policy.outer.base_candidates)
+    base_candidates = base_outer_candidates(gray_work, policy.outer.proposal.base.candidates)
     edge_candidates: list[OuterCandidate] = []
     if "edge_anchor" in enabled_strategy_names:
         edge_candidates = edge_anchored_outer_candidates(

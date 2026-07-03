@@ -44,7 +44,7 @@ def detect_dual_lane(
     )
 
     candidates: list[Detection] = []
-    for outer_candidate in base_outer_candidates(lane_crop, context.lane_policy.outer.base_candidates):
+    for outer_candidate in base_outer_candidates(lane_crop, context.lane_policy.outer.proposal.base.candidates):
         lane_outer = translate_work_box(outer_candidate.box, lane.left, lane.top)
         raw = build_detection_for_outer(
             gray,

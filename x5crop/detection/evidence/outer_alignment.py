@@ -38,7 +38,7 @@ def outer_content_alignment_detail(
 ) -> dict[str, Any]:
     gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
     policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
-    alignment = policy.outer.content_alignment
+    alignment = policy.outer.correction.content_containment
     work_h, work_w = gray_work.shape
     source_h, source_w = gray.shape
     detail_key: Optional[tuple[Any, ...]] = None
@@ -165,7 +165,7 @@ def outer_content_alignment_detail(
 
 
 def corrected_outer_from_alignment(alignment: dict[str, Any], count: int, policy: DetectionPolicy) -> Optional[Box]:
-    alignment_policy = policy.outer.content_alignment
+    alignment_policy = policy.outer.correction.content_containment
     if not bool(alignment.get("used", False)) or bool(alignment.get("ok", True)):
         return None
     try:

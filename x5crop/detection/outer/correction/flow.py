@@ -6,13 +6,15 @@ import numpy as np
 
 from ....domain import Detection
 from ....formats import FormatSpec
+from ....policies.registry import get_detection_policy
 from ....runtime import AnalysisCache
 from ....runtime_config import RuntimeConfig
-from .content_aligned import retry_with_content_aligned_outer
-from .geometry import retry_with_geometry_outer_correction
+from ...candidate.outer_correction import build_assessed_corrected_outer_candidate
+from .content_containment import content_containment_correction_proposal
+from .geometry import geometry_consistency_correction_proposal, geometry_consistency_model_detail
 
 
-def retry_with_outer_correction_proposals(
+def apply_outer_correction_flow(
     gray: np.ndarray,
     config: RuntimeConfig,
     fmt: FormatSpec,
@@ -21,7 +23,8 @@ def retry_with_outer_correction_proposals(
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
 ) -> tuple[Detection, dict[str, Any], dict[str, Any], bool]:
-    retried, suppress_outer_mismatch = retry_with_geometry_outer_correction(
+    policy = get_detection_policy(fmt.name, detection.strip_mode)
+    proposal = geometry_consistency_correction_proposal(
         gray,
         config,
         fmt,
@@ -30,17 +33,23 @@ def retry_with_outer_correction_proposals(
         outer_alignment,
         cache,
     )
-    if retried is not None:
+    if proposal is not None:
+        retried = build_assessed_corrected_outer_candidate(gray, config, fmt, detection, proposal, cache, policy)
+        if "source_geometry_consistency" in proposal.detail:
+            reassessed_geometry = geometry_consistency_model_detail(gray, retried, config, fmt, cache)
+            retried.detail["geometry_consistency_model"] = reassessed_geometry
+            retried.detail["outer_correction"]["reassessed_geometry_consistency"] = reassessed_geometry
         return (
             retried,
             dict(retried.detail.get("content_evidence", {})),
             dict(retried.detail.get("outer_content_alignment", {})),
-            suppress_outer_mismatch,
+            proposal.suppress_outer_mismatch,
         )
 
     if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
-        retried = retry_with_content_aligned_outer(gray, config, fmt, detection, outer_alignment, cache)
-        if retried is not None:
+        proposal = content_containment_correction_proposal(config, fmt, detection, outer_alignment, cache)
+        if proposal is not None:
+            retried = build_assessed_corrected_outer_candidate(gray, config, fmt, detection, proposal, cache, policy)
             return (
                 retried,
                 dict(retried.detail.get("content_evidence", {})),
@@ -49,7 +58,10 @@ def retry_with_outer_correction_proposals(
             )
         detection.detail["outer_correction"] = {
             "used": False,
-            "reason": "no_valid_content_aligned_outer_retry",
+            "reason": "no_valid_content_containment_correction",
         }
 
     return detection, content_detail, outer_alignment, False
+
+
+__all__ = ["apply_outer_correction_flow"]

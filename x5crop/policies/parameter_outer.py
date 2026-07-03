@@ -21,9 +21,6 @@ class OuterStrategyParameters:
     separator_full_width_full_mode: str
     separator_full_width_partial_mode: str
     separator_gap_search_max_width_ratio: float
-    content_aligned_retry: bool
-    format_geometry_retry: bool
-    short_axis_retry: bool
 
 @dataclass(frozen=True)
 class FloatingContentPositionParameters:
@@ -98,7 +95,7 @@ class FullWidthSeparatorOuterParameters:
     max_candidates: int
 
 @dataclass(frozen=True)
-class FormatGeometryRetryParameters:
+class LongAxisGeometryCorrectionParameters:
     enabled: bool
     ratio_tolerance: float
     min_shrink_ratio: float
@@ -115,7 +112,7 @@ class GridOuterRefineParameters:
     max_width_change: float
 
 @dataclass(frozen=True)
-class ShortAxisAspectRetryParameters:
+class ShortAxisGeometryCorrectionParameters:
     enabled: bool
     min_error: float
     target_aspect: float
@@ -124,7 +121,7 @@ class ShortAxisAspectRetryParameters:
     margin_max: int
 
 @dataclass(frozen=True)
-class OuterContentAlignmentParameters:
+class ContentContainmentCorrectionParameters:
     white_edge_long_ratio: float
     white_edge_long_min: int
     white_edge_long_max: int
@@ -166,8 +163,8 @@ __all__ = [
     'BaseOuterCandidateParameters',
     'SeparatorOuterBandParameters',
     'FullWidthSeparatorOuterParameters',
-    'FormatGeometryRetryParameters',
+    'LongAxisGeometryCorrectionParameters',
     'GridOuterRefineParameters',
-    'ShortAxisAspectRetryParameters',
-    'OuterContentAlignmentParameters',
+    'ShortAxisGeometryCorrectionParameters',
+    'ContentContainmentCorrectionParameters',
 ]

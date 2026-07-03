@@ -26,7 +26,7 @@ def wide_separator_gaps_for_outer(
     policy: Optional[DetectionPolicy] = None,
 ) -> list[Gap]:
     policy = policy or get_detection_policy(fmt.name, "full")
-    wide_separator = policy.outer.wide_separator_outer
+    wide_separator = policy.outer.proposal.geometry.separator.wide_outer
     if wide_separator.mode == "off" or count <= 1 or count != wide_separator.required_count or not outer.valid():
         return []
     crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]

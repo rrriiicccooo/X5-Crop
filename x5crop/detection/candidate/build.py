@@ -115,7 +115,7 @@ def build_detection_for_outer(
         policy.separator.robust_grid,
     )
     if allow_outer_refine and strip_mode == "full" and bool(grid_detail.get("grid_used", False)):
-        grid_refine = policy.outer.grid_refine
+        grid_refine = policy.outer.proposal.geometry.grid_refine
         model_origin = float(grid_detail.get("grid_origin", 0.0))
         model_pitch = float(grid_detail.get("grid_pitch", pitch))
         proposed_left = int(round(outer.left + model_origin))

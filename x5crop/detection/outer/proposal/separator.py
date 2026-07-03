@@ -44,10 +44,11 @@ def separator_outer_variants_for_policy(
     policy: DetectionPolicy,
     fallback_only: bool = False,
 ) -> tuple[str, ...]:
+    separator_policy = policy.outer.proposal.geometry.separator
     variants: list[str] = []
-    if _mode_active(policy.outer.separator_local, fallback_only):
+    if _mode_active(separator_policy.local, fallback_only):
         variants.append(LOCAL_SEPARATOR_OUTER)
-    if _mode_active(policy.outer.separator_full_width, fallback_only):
+    if _mode_active(separator_policy.full_width, fallback_only):
         variants.append(FULL_WIDTH_SEPARATOR_OUTER)
     return tuple(variants)
 
@@ -104,9 +105,10 @@ def _variant_policy(
     count: int,
     strip_mode: str,
 ) -> SeparatorOuterVariant | None:
-    band_policy = policy.outer.separator_outer_band
+    separator_policy = policy.outer.proposal.geometry.separator
+    band_policy = separator_policy.band
     if variant_name == LOCAL_SEPARATOR_OUTER:
-        if policy.outer.separator_local == "off":
+        if separator_policy.local == "off":
             return None
         if strip_mode == "full" and count != fmt.default_count:
             return None
@@ -125,8 +127,8 @@ def _variant_policy(
             sequence_score_weight=0.02,
         )
     if variant_name == FULL_WIDTH_SEPARATOR_OUTER:
-        geometry_policy = policy.outer.separator_full_width_outer
-        if policy.outer.separator_full_width == "off":
+        geometry_policy = separator_policy.full_width_outer
+        if separator_policy.full_width == "off":
             return None
         expected_count = int(geometry_policy.required_count)
         if expected_count > 0 and count != expected_count:
@@ -146,7 +148,7 @@ def _variant_policy(
             sequence_score_weight=0.02,
         )
     if variant_name == WIDE_SEPARATOR_OUTER:
-        wide_policy = policy.outer.wide_separator_outer
+        wide_policy = separator_policy.wide_outer
         if wide_policy.mode == "off" or count != int(wide_policy.required_count):
             return None
         return SeparatorOuterVariant(
@@ -192,7 +194,8 @@ def _separator_outer_candidates_for_variant(
     )[: variant.source_candidate_count]
     candidates: list[OuterCandidate] = []
     expected_gaps = count - 1
-    band_policy = policy.outer.separator_outer_band
+    separator_policy = policy.outer.proposal.geometry.separator
+    band_policy = separator_policy.band
 
     for source in source_candidates:
         source_box = source.box.clamp(w, h)
@@ -208,12 +211,12 @@ def _separator_outer_candidates_for_variant(
 
         if variant.use_wide_profile:
             crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-            profile = _wide_separator_profile(crop, policy.outer.wide_separator_outer)
+            profile = _wide_separator_profile(crop, separator_policy.wide_outer)
             bands, edge_margin = _collect_wide_separator_bands(
                 profile,
                 short_axis,
                 float(outer.width),
-                policy.outer.wide_separator_outer,
+                separator_policy.wide_outer,
             )
         else:
             profile = cached_separator_profile(cache, gray_work, outer, fmt.name, policy.separator.profile)
@@ -223,7 +226,7 @@ def _separator_outer_candidates_for_variant(
                 float(outer.width),
                 band_policy,
                 policy.separator.gap_search,
-                policy.outer,
+                separator_policy,
             )
 
         if profile.size <= 0 or len(bands) < expected_gaps:

@@ -25,15 +25,15 @@ from .parameter_finalization import (
 )
 from .parameter_outer import (
     BaseOuterCandidateParameters,
+    ContentContainmentCorrectionParameters,
     EdgeAnchoredContentPositionParameters,
     FloatingContentPositionParameters,
-    FormatGeometryRetryParameters,
     GridOuterRefineParameters,
-    OuterContentAlignmentParameters,
     OuterStrategyParameters,
     FullWidthSeparatorOuterParameters,
+    LongAxisGeometryCorrectionParameters,
     SeparatorOuterBandParameters,
-    ShortAxisAspectRetryParameters,
+    ShortAxisGeometryCorrectionParameters,
 )
 from .parameter_scoring import (
     BaseDetectionScoreParameters,
@@ -207,9 +207,6 @@ class FormatParameterViews:
             separator_full_width_full_mode=self.separator_full_width_outer_full_mode,
             separator_full_width_partial_mode=self.separator_full_width_outer_partial_mode,
             separator_gap_search_max_width_ratio=self.separator_outer_gap_max_width_ratio,
-            content_aligned_retry=self.outer_retry_enabled,
-            format_geometry_retry=self.format_geometry_outer_retry_enabled,
-            short_axis_retry=self.short_axis_aspect_retry_enabled,
         )
 
     @property
@@ -295,26 +292,26 @@ class FormatParameterViews:
         )
 
     @property
-    def short_axis_aspect_retry(self) -> ShortAxisAspectRetryParameters:
-        return ShortAxisAspectRetryParameters(
-            enabled=self.short_axis_aspect_retry_enabled,
-            min_error=self.short_axis_aspect_retry_min_error,
-            target_aspect=self.short_axis_aspect_retry_target_aspect,
-            margin_ratio=self.short_axis_aspect_retry_margin_ratio,
-            margin_min=self.short_axis_aspect_retry_margin_min,
-            margin_max=self.short_axis_aspect_retry_margin_max,
+    def short_axis_geometry_correction(self) -> ShortAxisGeometryCorrectionParameters:
+        return ShortAxisGeometryCorrectionParameters(
+            enabled=self.short_axis_geometry_correction_enabled,
+            min_error=self.short_axis_geometry_correction_min_error,
+            target_aspect=self.short_axis_geometry_correction_target_aspect,
+            margin_ratio=self.short_axis_geometry_correction_margin_ratio,
+            margin_min=self.short_axis_geometry_correction_margin_min,
+            margin_max=self.short_axis_geometry_correction_margin_max,
         )
 
     @property
-    def format_geometry_retry(self) -> FormatGeometryRetryParameters:
-        return FormatGeometryRetryParameters(
-            enabled=self.format_geometry_outer_retry_enabled,
-            ratio_tolerance=self.format_geometry_outer_retry_ratio_tolerance,
-            min_shrink_ratio=self.format_geometry_outer_retry_min_shrink_ratio,
-            max_shrink_ratio=self.format_geometry_outer_retry_max_shrink_ratio,
-            content_margin_ratio=self.format_geometry_outer_retry_content_margin_ratio,
-            content_margin_min=self.format_geometry_outer_retry_content_margin_min,
-            content_margin_max=self.format_geometry_outer_retry_content_margin_max,
+    def long_axis_geometry_correction(self) -> LongAxisGeometryCorrectionParameters:
+        return LongAxisGeometryCorrectionParameters(
+            enabled=self.long_axis_geometry_correction_enabled,
+            ratio_tolerance=self.long_axis_geometry_correction_ratio_tolerance,
+            min_shrink_ratio=self.long_axis_geometry_correction_min_shrink_ratio,
+            max_shrink_ratio=self.long_axis_geometry_correction_max_shrink_ratio,
+            content_margin_ratio=self.long_axis_geometry_correction_content_margin_ratio,
+            content_margin_min=self.long_axis_geometry_correction_content_margin_min,
+            content_margin_max=self.long_axis_geometry_correction_content_margin_max,
         )
 
     @property
@@ -351,8 +348,8 @@ class FormatParameterViews:
         )
 
     @property
-    def outer_content_alignment(self) -> OuterContentAlignmentParameters:
-        return OuterContentAlignmentParameters(
+    def content_containment_correction(self) -> ContentContainmentCorrectionParameters:
+        return ContentContainmentCorrectionParameters(
             white_edge_long_ratio=self.outer_align_white_edge_long_ratio,
             white_edge_long_min=self.outer_align_white_edge_long_min,
             white_edge_long_max=self.outer_align_white_edge_long_max,

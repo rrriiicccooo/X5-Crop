@@ -6,7 +6,7 @@ from ..geometry.detection_parameters import OuterBoxDetectionParameters, OuterMa
 
 
 @dataclass(frozen=True)
-class ShortAxisAspectRetryPolicy:
+class ShortAxisGeometryCorrectionPolicy:
     enabled: bool = False
     min_error: float = 0.24
     target_aspect: float = 1.0
@@ -16,7 +16,7 @@ class ShortAxisAspectRetryPolicy:
 
 
 @dataclass(frozen=True)
-class FormatGeometryRetryPolicy:
+class LongAxisGeometryCorrectionPolicy:
     enabled: bool = True
     ratio_tolerance: float = 0.025
     min_shrink_ratio: float = 0.003
@@ -35,7 +35,7 @@ class GridOuterRefinePolicy:
 
 
 @dataclass(frozen=True)
-class OuterContentAlignmentPolicy:
+class ContentContainmentCorrectionPolicy:
     white_edge_long_ratio: float = 0.0190
     white_edge_long_min: int = 90
     white_edge_long_max: int = 180
@@ -96,7 +96,7 @@ class EdgeAnchoredContentPositionPolicy:
 
 
 @dataclass(frozen=True)
-class PartialContentOuterPolicy:
+class PartialPlacementGeometryPolicy:
     enabled: bool = False
     position_order: tuple[str, ...] = ("edge_anchor", "floating")
     skip_floating_when_edge_trusted: bool = True
@@ -168,37 +168,73 @@ class WideSeparatorOuterPolicy:
 
 
 @dataclass(frozen=True)
-class OuterPolicy:
-    base_outer: bool = True
-    partial_content: PartialContentOuterPolicy = field(default_factory=PartialContentOuterPolicy)
-    separator_local: str = "off"
-    separator_full_width: str = "off"
+class BaseOuterProposalPolicy:
+    enabled: bool = True
+    candidates: OuterBoxDetectionParameters = field(default_factory=OuterBoxDetectionParameters)
+
+
+@dataclass(frozen=True)
+class SeparatorGeometryProposalPolicy:
+    local: str = "off"
+    full_width: str = "off"
     separator_outer_allow_oversized_band: bool = False
     separator_outer_oversized_band_max_ratio: float = 0.45
     separator_outer_oversized_band_score_penalty: float = 0.08
     separator_gap_search_max_width_ratio: float = 0.095
-    wide_separator: str = "off"
-    wide_separator_outer: WideSeparatorOuterPolicy = field(default_factory=WideSeparatorOuterPolicy)
-    format_geometry_retry: FormatGeometryRetryPolicy = field(default_factory=FormatGeometryRetryPolicy)
+    band: SeparatorOuterBandPolicy = field(default_factory=SeparatorOuterBandPolicy)
+    full_width_outer: FullWidthSeparatorOuterPolicy = field(default_factory=FullWidthSeparatorOuterPolicy)
+    wide_mode: str = "off"
+    wide_outer: WideSeparatorOuterPolicy = field(default_factory=WideSeparatorOuterPolicy)
+
+
+@dataclass(frozen=True)
+class GeometryOuterProposalPolicy:
+    partial_placement: PartialPlacementGeometryPolicy = field(default_factory=PartialPlacementGeometryPolicy)
+    separator: SeparatorGeometryProposalPolicy = field(default_factory=SeparatorGeometryProposalPolicy)
     grid_refine: GridOuterRefinePolicy = field(default_factory=GridOuterRefinePolicy)
-    short_axis_aspect_retry: ShortAxisAspectRetryPolicy = field(default_factory=ShortAxisAspectRetryPolicy)
-    content_alignment: OuterContentAlignmentPolicy = field(default_factory=OuterContentAlignmentPolicy)
-    base_candidates: OuterBoxDetectionParameters = field(default_factory=OuterBoxDetectionParameters)
-    separator_outer_band: SeparatorOuterBandPolicy = field(default_factory=SeparatorOuterBandPolicy)
-    separator_full_width_outer: FullWidthSeparatorOuterPolicy = field(default_factory=FullWidthSeparatorOuterPolicy)
-    retries: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class OuterProposalPolicy:
+    base: BaseOuterProposalPolicy = field(default_factory=BaseOuterProposalPolicy)
+    geometry: GeometryOuterProposalPolicy = field(default_factory=GeometryOuterProposalPolicy)
+
+
+@dataclass(frozen=True)
+class GeometryConsistencyCorrectionPolicy:
+    long_axis: LongAxisGeometryCorrectionPolicy = field(default_factory=LongAxisGeometryCorrectionPolicy)
+    short_axis: ShortAxisGeometryCorrectionPolicy = field(default_factory=ShortAxisGeometryCorrectionPolicy)
+
+
+@dataclass(frozen=True)
+class OuterCorrectionPolicy:
+    order: tuple[str, ...] = ("geometry_consistency", "content_containment")
+    geometry_consistency: GeometryConsistencyCorrectionPolicy = field(default_factory=GeometryConsistencyCorrectionPolicy)
+    content_containment: ContentContainmentCorrectionPolicy = field(default_factory=ContentContainmentCorrectionPolicy)
+
+
+@dataclass(frozen=True)
+class OuterPolicy:
+    proposal: OuterProposalPolicy = field(default_factory=OuterProposalPolicy)
+    correction: OuterCorrectionPolicy = field(default_factory=OuterCorrectionPolicy)
 
 
 __all__ = [
+    "BaseOuterProposalPolicy",
+    "ContentContainmentCorrectionPolicy",
     "EdgeAnchoredContentPositionPolicy",
     "FloatingContentPositionPolicy",
-    "FormatGeometryRetryPolicy",
     "FullWidthSeparatorOuterPolicy",
+    "GeometryConsistencyCorrectionPolicy",
+    "GeometryOuterProposalPolicy",
     "GridOuterRefinePolicy",
-    "OuterContentAlignmentPolicy",
+    "LongAxisGeometryCorrectionPolicy",
+    "OuterCorrectionPolicy",
     "OuterPolicy",
-    "PartialContentOuterPolicy",
+    "OuterProposalPolicy",
+    "PartialPlacementGeometryPolicy",
     "SeparatorOuterBandPolicy",
-    "ShortAxisAspectRetryPolicy",
+    "SeparatorGeometryProposalPolicy",
+    "ShortAxisGeometryCorrectionPolicy",
     "WideSeparatorOuterPolicy",
 ]

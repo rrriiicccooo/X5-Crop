@@ -14,10 +14,10 @@ from ....policies.runtime_policy import DetectionPolicy
 from ....runtime import AnalysisCache
 from ....runtime_config import RuntimeConfig
 from ....utils import box_from_dict, clamp_int
-from ...evidence.outer_alignment import outer_content_alignment_detail
+from ...candidate.outer_correction import CorrectedOuterCandidateInput
 
 
-def corrected_outer_for_short_axis_aspect(
+def corrected_outer_for_short_axis_geometry(
     gray: np.ndarray,
     config: RuntimeConfig,
     fmt: FormatSpec,
@@ -27,8 +27,8 @@ def corrected_outer_for_short_axis_aspect(
     policy: Optional[DetectionPolicy] = None,
 ) -> Optional[Box]:
     policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
-    short_axis_retry = policy.outer.short_axis_aspect_retry
-    if not short_axis_retry.enabled:
+    short_axis = policy.outer.correction.geometry_consistency.short_axis
+    if not short_axis.enabled:
         return None
     if detection.strip_mode != "full" or detection.count != fmt.default_count:
         return None
@@ -41,7 +41,7 @@ def corrected_outer_for_short_axis_aspect(
     if str(content_detail.get("support", "")) != "aspect_conflict":
         return None
     max_aspect_error = content_detail.get("max_aspect_error")
-    if max_aspect_error is None or float(max_aspect_error) < short_axis_retry.min_error:
+    if max_aspect_error is None or float(max_aspect_error) < short_axis.min_error:
         return None
 
     source_h, source_w = gray.shape
@@ -50,15 +50,15 @@ def corrected_outer_for_short_axis_aspect(
     if not outer.valid():
         return None
     pitch = float(outer.width) / float(max(1, detection.count))
-    target_aspect = max(0.01, float(short_axis_retry.target_aspect))
+    target_aspect = max(0.01, float(short_axis.target_aspect))
     target_height = pitch / target_aspect
     if target_height <= float(outer.height):
         return None
 
     margin = clamp_int(
-        pitch * short_axis_retry.margin_ratio,
-        short_axis_retry.margin_min,
-        short_axis_retry.margin_max,
+        pitch * short_axis.margin_ratio,
+        short_axis.margin_min,
+        short_axis.margin_max,
     )
     target_height = min(float(work_h), target_height + float(margin * 2))
     center = (float(outer.top) + float(outer.bottom)) * 0.5
@@ -80,7 +80,7 @@ def corrected_outer_for_short_axis_aspect(
     return corrected
 
 
-def format_geometry_model_detail(gray: np.ndarray, detection: Detection, config: RuntimeConfig, fmt: FormatSpec, cache: AnalysisCache) -> dict[str, Any]:
+def geometry_consistency_model_detail(gray: np.ndarray, detection: Detection, config: RuntimeConfig, fmt: FormatSpec, cache: AnalysisCache) -> dict[str, Any]:
     if detection.strip_mode != "full" or detection.count <= 0:
         return {"used": False, "reason": "not_full_strip"}
     aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
@@ -125,7 +125,7 @@ def format_geometry_model_detail(gray: np.ndarray, detection: Detection, config:
     }
 
 
-def corrected_outer_from_format_geometry(
+def corrected_outer_from_long_axis_geometry(
     detection: Detection,
     config: RuntimeConfig,
     fmt: FormatSpec,
@@ -135,8 +135,8 @@ def corrected_outer_from_format_geometry(
     policy: Optional[DetectionPolicy] = None,
 ) -> Optional[Box]:
     policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
-    retry_policy = policy.outer.format_geometry_retry
-    if not retry_policy.enabled:
+    long_axis = policy.outer.correction.geometry_consistency.long_axis
+    if not long_axis.enabled:
         return None
     if detection.strip_mode != "full" or detection.count != fmt.default_count:
         return None
@@ -146,7 +146,7 @@ def corrected_outer_from_format_geometry(
         return None
 
     unexplained = float(geometry_detail.get("unexplained_extra_ratio", 0.0) or 0.0)
-    if unexplained <= retry_policy.ratio_tolerance:
+    if unexplained <= long_axis.ratio_tolerance:
         return None
 
     try:
@@ -192,9 +192,9 @@ def corrected_outer_from_format_geometry(
     if shrink <= 0:
         return None
     shrink_ratio = shrink / max(1.0, float(outer.width))
-    if shrink_ratio < retry_policy.min_shrink_ratio:
+    if shrink_ratio < long_axis.min_shrink_ratio:
         return None
-    if shrink_ratio > retry_policy.max_shrink_ratio:
+    if shrink_ratio > long_axis.max_shrink_ratio:
         return None
 
     actual_ratio = float(geometry_detail.get("actual_outer_ratio", 0.0) or 0.0)
@@ -210,9 +210,9 @@ def corrected_outer_from_format_geometry(
             content = None
         if content is not None and content.valid():
             margin = clamp_int(
-                float(outer.height) * retry_policy.content_margin_ratio,
-                retry_policy.content_margin_min,
-                retry_policy.content_margin_max,
+                float(outer.height) * long_axis.content_margin_ratio,
+                long_axis.content_margin_min,
+                long_axis.content_margin_max,
             )
             if corrected.left > content.left - margin or corrected.right < content.right + margin:
                 return None
@@ -222,7 +222,7 @@ def corrected_outer_from_format_geometry(
     return corrected
 
 
-def retry_with_geometry_outer_correction(
+def geometry_consistency_correction_proposal(
     gray: np.ndarray,
     config: RuntimeConfig,
     fmt: FormatSpec,
@@ -230,9 +230,9 @@ def retry_with_geometry_outer_correction(
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
-) -> tuple[Optional[Detection], bool]:
+) -> Optional[CorrectedOuterCandidateInput]:
     policy = get_detection_policy(fmt.name, detection.strip_mode)
-    corrected_outer = corrected_outer_for_short_axis_aspect(
+    corrected_outer = corrected_outer_for_short_axis_geometry(
         gray,
         config,
         fmt,
@@ -242,28 +242,19 @@ def retry_with_geometry_outer_correction(
         policy=policy,
     )
     if corrected_outer is not None:
-        return (
-            _retry_with_corrected_geometry_outer(
-                gray,
-                config,
-                fmt,
-                detection,
-                corrected_outer,
-                cache,
-                policy,
-                candidate_name="short_axis_aspect_outer",
-                candidate_strategy="short_axis_retry",
-                source_reason="short_axis_aspect_conflict",
-                original_outer_work_box=detection.detail.get("work_outer"),
-                source_format_geometry=None,
-                preserve_wide_retry=False,
-            ),
-            True,
+        return CorrectedOuterCandidateInput(
+            box=corrected_outer,
+            name="geometry_consistency_short_axis_outer",
+            strategy="geometry_consistency_correction",
+            source_reason="short_axis_aspect_conflict",
+            original_outer_work_box=detection.detail.get("work_outer"),
+            suppress_outer_mismatch=True,
+            detail={"correction_kind": "short_axis"},
         )
 
-    geometry_detail = format_geometry_model_detail(gray, detection, config, fmt, cache)
-    detection.detail["format_geometry_model"] = geometry_detail
-    corrected_outer = corrected_outer_from_format_geometry(
+    geometry_detail = geometry_consistency_model_detail(gray, detection, config, fmt, cache)
+    detection.detail["geometry_consistency_model"] = geometry_detail
+    corrected_outer = corrected_outer_from_long_axis_geometry(
         detection,
         config,
         fmt,
@@ -273,90 +264,25 @@ def retry_with_geometry_outer_correction(
         policy=policy,
     )
     if corrected_outer is None:
-        return None, False
+        return None
 
-    retried = _retry_with_corrected_geometry_outer(
-        gray,
-        config,
-        fmt,
-        detection,
-        corrected_outer,
-        cache,
-        policy,
-        candidate_name="format_geometry_outer",
-        candidate_strategy="format_geometry_retry",
-        source_reason="format_geometry_unexplained_outer_extra",
+    return CorrectedOuterCandidateInput(
+        box=corrected_outer,
+        name="geometry_consistency_long_axis_outer",
+        strategy="geometry_consistency_correction",
+        source_reason="long_axis_geometry_unexplained_outer_extra",
         original_outer_work_box=geometry_detail.get("outer_work_box"),
-        source_format_geometry=geometry_detail,
         preserve_wide_retry=True,
+        detail={
+            "correction_kind": "long_axis",
+            "source_geometry_consistency": geometry_detail,
+        },
     )
-    return retried, False
 
 
-def _retry_with_corrected_geometry_outer(
-    gray: np.ndarray,
-    config: RuntimeConfig,
-    fmt: FormatSpec,
-    detection: Detection,
-    corrected_outer: Box,
-    cache: AnalysisCache,
-    policy: DetectionPolicy,
-    *,
-    candidate_name: str,
-    candidate_strategy: str,
-    source_reason: str,
-    original_outer_work_box: Any,
-    source_format_geometry: Optional[dict[str, Any]],
-    preserve_wide_retry: bool,
-) -> Detection:
-    from ...candidate.build import build_detection_for_outer
-    from ...candidate.candidate_assessment import apply_candidate_assessment_policy
-    from ...evidence.content_evidence import content_evidence_detail
-
-    gap_override = None
-    wide_retry = detection.detail.get("wide_gap_retry")
-    if preserve_wide_retry and isinstance(wide_retry, dict) and bool(wide_retry.get("used", False)):
-        gap_override = float(wide_retry.get("retry_gap_max_width_ratio", policy.separator.wide_retry_max_width_ratio))
-
-    retried = build_detection_for_outer(
-        gray,
-        config,
-        fmt,
-        detection.count,
-        detection.strip_mode,
-        corrected_outer,
-        float(detection.detail.get("offset_fraction", 0.0)),
-        candidate_name,
-        candidate_strategy,
-        cache=cache,
-        allow_outer_refine=False,
-        gap_max_width_ratio_override=gap_override,
-        policy=policy,
-    )
-    retried = apply_candidate_assessment_policy(gray, retried, config, fmt, "separator", cache, policy=policy)
-    retry_alignment = outer_content_alignment_detail(gray, retried, cache, policy=policy)
-    retry_content = content_evidence_detail(gray, retried, cache, policy.content)
-    retry_geometry = format_geometry_model_detail(gray, retried, config, fmt, cache)
-    retried.detail["outer_content_alignment"] = retry_alignment
-    retried.detail["content_evidence"] = retry_content
-    if source_format_geometry is not None:
-        retried.detail["format_geometry_model"] = retry_geometry
-    retried.detail["outer_correction"] = {
-        "used": True,
-        "source_reason": source_reason,
-        "original_outer_work_box": original_outer_work_box,
-        "corrected_outer_work_box": asdict(corrected_outer),
-        "retry_alignment": retry_alignment,
-        "retry_content_support": retry_content.get("support"),
-    }
-    if source_format_geometry is not None:
-        retried.detail["outer_correction"]["source_format_geometry"] = source_format_geometry
-        retried.detail["outer_correction"]["retry_format_geometry"] = retry_geometry
-    if gap_override is not None:
-        retried.detail["wide_gap_retry"] = {
-            "used": True,
-            "base_gap_max_width_ratio": float(policy.separator.gap_search.max_width_ratio),
-            "retry_gap_max_width_ratio": float(gap_override),
-            "preserved_through_outer_retry": True,
-        }
-    return retried
+__all__ = [
+    "corrected_outer_for_short_axis_geometry",
+    "corrected_outer_from_long_axis_geometry",
+    "geometry_consistency_correction_proposal",
+    "geometry_consistency_model_detail",
+]

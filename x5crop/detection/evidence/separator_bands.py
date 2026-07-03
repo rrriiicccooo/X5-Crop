@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ...geometry.detection_parameters import GapSearchParameters
-from ...policies.runtime_outer import OuterPolicy, SeparatorOuterBandPolicy
+from ...policies.runtime_outer import SeparatorGeometryProposalPolicy, SeparatorOuterBandPolicy
 from ...utils import clamp_float, clamp_int, runs_from_mask
 
 
@@ -77,7 +77,7 @@ def collect_separator_outer_bands(
     coordinate_limit: float,
     band_policy: SeparatorOuterBandPolicy,
     gap_search_config: GapSearchParameters,
-    outer_policy: OuterPolicy,
+    separator_policy: SeparatorGeometryProposalPolicy,
 ) -> tuple[list[dict[str, float]], float]:
     peak_threshold = float(band_policy.min_score)
     band_threshold = max(band_policy.band_score, peak_threshold * 0.58)
@@ -111,9 +111,9 @@ def collect_separator_outer_bands(
             band_end += 1
         width = band_end - band_start
         oversized_band = (
-            outer_policy.separator_outer_allow_oversized_band
+            separator_policy.separator_outer_allow_oversized_band
             and width > max_width
-            and width <= short_axis * outer_policy.separator_outer_oversized_band_max_ratio
+            and width <= short_axis * separator_policy.separator_outer_oversized_band_max_ratio
         )
         if width < min_width or (width > max_width and not oversized_band):
             continue
@@ -138,7 +138,7 @@ def collect_separator_outer_bands(
                 "score": float(
                     mean_score
                     + 0.8 * prominence
-                    - (outer_policy.separator_outer_oversized_band_score_penalty if oversized_band else 0.0)
+                    - (separator_policy.separator_outer_oversized_band_score_penalty if oversized_band else 0.0)
                 ),
                 "oversized": float(1.0 if oversized_band else 0.0),
             }

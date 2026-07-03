@@ -65,10 +65,19 @@ Current stable release: v4.2.8
   `detection/outer/correction/`；outer 只负责 proposal / correction，
   separator bands、outer-content alignment 和 cache key 分别归入 evidence /
   detection cache 层。
+- outer runtime policy 已收敛为 `proposal` 与 `correction` 两块：
+  `proposal.base` 负责基础外框候选，`proposal.geometry` 统一管理 partial
+  placement、separator geometry 与 wide separator variants；
+  `correction.geometry_consistency` 合并原 short-axis 与 format-geometry retry，
+  `correction.content_containment` 替代原 content-aligned retry 命名。
+- corrected outer 不再在 correction helper 内直接完成重建与评估；统一通过
+  `detection/candidate/outer_correction.py` 重新 build detection 并重新
+  apply candidate assessment。outer correction 只改变候选输入，PASS / REVIEW
+  仍只由 candidate gate 和 final decision contract 决定。
 - separator-derived outer 已收敛为统一 `detection/outer/proposal/separator.py` 引擎；
   local、full-width 和 120-66 wide separator variants 共享 sequence / ranking /
   candidate 输出逻辑，active code 不再保留独立 dark-band outer 分支。
-- partial content-position outer 已收敛到 `policy.outer.partial_content`：标准
+- partial placement outer 已收敛到 `policy.outer.proposal.geometry.partial_placement`：标准
   partial 先尝试 edge-anchored 位置候选，edge 候选达到 trust 门槛时跳过
   floating 位置候选；full 与 review-only mode 不启用。edge-anchor 只负责
   提出候选，最终 PASS 仍必须经过 hard separator、content 和 geometry gate。

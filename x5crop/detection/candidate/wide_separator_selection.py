@@ -19,7 +19,7 @@ def select_full_wide_separator_candidate(
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> Optional[Detection]:
-    wide_separator = policy.outer.wide_separator_outer
+    wide_separator = policy.outer.proposal.geometry.separator.wide_outer
     if (
         wide_separator.mode == "off"
         or not wide_separator.full_selection_enabled

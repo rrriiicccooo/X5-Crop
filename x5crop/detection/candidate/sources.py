@@ -70,7 +70,7 @@ def detect_candidate_for_count(
         )
         candidates.append(detection)
     regular_best = max(candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold)) if candidates else None
-    separator_full_width_mode = policy.outer.separator_full_width
+    separator_full_width_mode = policy.outer.proposal.geometry.separator.full_width
     should_try_separator_full_width = (
         separator_full_width_mode == "always"
         or (

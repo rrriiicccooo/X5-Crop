@@ -40,10 +40,11 @@ def fallback_outer_proposals_enabled(policy: DetectionPolicy) -> bool:
     fallback = policy.candidate_run.fallback
     if not fallback.use_outer_proposals:
         return False
+    separator_policy = policy.outer.proposal.geometry.separator
     strategies = set(fallback.strategies)
     return bool(
-        (policy.outer.separator_local == "fallback" and "separator_outer" in strategies)
-        or (policy.outer.separator_full_width == "fallback" and "separator_outer" in strategies)
+        (separator_policy.local == "fallback" and "separator_outer" in strategies)
+        or (separator_policy.full_width == "fallback" and "separator_outer" in strategies)
     )
 
 
@@ -71,7 +72,7 @@ def separator_outer_gap_max_width_override(
 ) -> Optional[float]:
     if current_override is not None:
         return current_override
-    override = policy.outer.separator_gap_search_max_width_ratio
+    override = policy.outer.proposal.geometry.separator.separator_gap_search_max_width_ratio
     if override > policy.separator.gap_search.max_width_ratio:
         return override
     return None
