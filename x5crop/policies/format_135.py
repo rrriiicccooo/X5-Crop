@@ -12,7 +12,6 @@ FORMAT_ID = "135"
 def parameters() -> FormatParameters:
     return FormatParameters(
         FORMAT_ID,
-        separator_local_outer_enabled=True,
         separator_outer_min_score=0.72,
         separator_outer_band_score=0.52,
         separator_outer_spacing_min_ratio=0.92,

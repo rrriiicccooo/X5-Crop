@@ -27,7 +27,13 @@ def separator_width_profile_gaps_for_outer(
 ) -> list[Gap]:
     policy = policy or get_detection_policy(fmt.name, "full")
     separator_width_profile = policy.outer.proposal.geometry.separator.width_profile
-    if separator_width_profile.mode == "off" or count <= 1 or count != separator_width_profile.required_count or not outer.valid():
+    required_count = int(separator_width_profile.required_count)
+    if (
+        separator_width_profile.mode == "off"
+        or count <= 1
+        or (required_count > 0 and count != required_count)
+        or not outer.valid()
+    ):
         return []
     crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
     if crop.size == 0:

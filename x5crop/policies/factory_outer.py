@@ -19,18 +19,51 @@ from .runtime_outer import (
     OuterProposalPolicy,
     PartialPlacementGeometryPolicy,
     SeparatorOuterBandPolicy,
+    SeparatorOuterFamilyPolicy,
     SeparatorGeometryProposalPolicy,
     ShortAxisGeometryCorrectionPolicy,
     SeparatorWidthProfilePolicy,
 )
 
 
-def separator_width_profile_outer_policy(mode_preset: ModePolicyPreset) -> SeparatorWidthProfilePolicy:
+def separator_width_profile_outer_policy(
+    mode_preset: ModePolicyPreset,
+    family_mode: str,
+) -> SeparatorWidthProfilePolicy:
     separator_width_profile = mode_preset.separator_width_profile
+    mode = separator_width_profile.mode if separator_width_profile.mode != "off" else family_mode
     return SeparatorWidthProfilePolicy(
-        mode=separator_width_profile.mode,
-        required_count=3,
+        mode=mode,
+        required_count=0,
         full_selection_enabled=separator_width_profile.full_selection_enabled,
+    )
+
+
+def separator_outer_family_policies(
+    mode_preset: ModePolicyPreset,
+    params: FormatParameters,
+) -> tuple[SeparatorOuterFamilyPolicy, SeparatorOuterFamilyPolicy, SeparatorOuterFamilyPolicy]:
+    is_standard_strip = mode_preset.detector_kind == "standard_strip"
+    width_profile_enabled = bool(params.separator_width_profile_enabled)
+    return (
+        SeparatorOuterFamilyPolicy(
+            mode="always" if is_standard_strip else "off",
+            phase="primary",
+            requires_explicit_count_for_partial=False,
+            max_candidates=0,
+        ),
+        SeparatorOuterFamilyPolicy(
+            mode="conditional" if is_standard_strip else "off",
+            phase="late",
+            requires_explicit_count_for_partial=True,
+            max_candidates=int(params.separator_full_width_outer_max_candidates),
+        ),
+        SeparatorOuterFamilyPolicy(
+            mode="conditional" if is_standard_strip and width_profile_enabled else "off",
+            phase="auxiliary",
+            requires_explicit_count_for_partial=True,
+            max_candidates=0,
+        ),
     )
 
 
@@ -52,6 +85,7 @@ def outer_policy(
     separator_full_width = params.separator_full_width_outer
     partial_content_enabled = bool(strip_mode == PARTIAL and mode_preset.detector_kind != "review_only")
     separator_width_profile = mode_preset.separator_width_profile
+    local_family, full_width_family, width_profile_family = separator_outer_family_policies(mode_preset, params)
     return OuterPolicy(
         proposal=OuterProposalPolicy(
             base=BaseOuterProposalPolicy(
@@ -120,18 +154,9 @@ def outer_policy(
                     ),
                 ),
                 separator=SeparatorGeometryProposalPolicy(
-                    local=(
-                        outer.separator_local_full_mode
-                        if is_full and outer.separator_local_full_enabled
-                        else outer.separator_local_partial_mode
-                        if (not is_full and outer.separator_local_partial_enabled)
-                        else "off"
-                    ),
-                    full_width=(
-                        outer.separator_full_width_full_mode
-                        if is_full
-                        else outer.separator_full_width_partial_mode
-                    ),
+                    local=local_family,
+                    full_width=full_width_family,
+                    width_profile_family=width_profile_family,
                     separator_outer_allow_oversized_band=separator_width_profile.separator_outer_allow_oversized_band,
                     separator_outer_oversized_band_max_ratio=separator_width_profile.separator_outer_oversized_band_max_ratio,
                     separator_outer_oversized_band_score_penalty=separator_width_profile.separator_outer_oversized_band_score_penalty,
@@ -156,8 +181,7 @@ def outer_policy(
                         margin_ratios=tuple(float(value) for value in separator_full_width.margin_ratios),
                         max_candidates=int(separator_full_width.max_candidates),
                     ),
-                    width_profile_mode=separator_width_profile.mode,
-                    width_profile=separator_width_profile_outer_policy(mode_preset),
+                    width_profile=separator_width_profile_outer_policy(mode_preset, width_profile_family.mode),
                 ),
                 grid_refine=GridOuterRefinePolicy(
                     shift_ratio=float(grid_refine.shift_ratio),
@@ -226,5 +250,6 @@ def outer_policy(
 
 __all__ = [
     'outer_policy',
+    'separator_outer_family_policies',
     'separator_width_profile_outer_policy',
 ]

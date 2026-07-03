@@ -21,7 +21,6 @@ def parameters() -> FormatParameters:
         outer_align_short_excess_ratio=0.024,
         outer_align_short_requires_hard_anchors=True,
         outer_align_short_content_height_max=0.970,
-        separator_local_outer_enabled=True,
         separator_outer_min_score=0.58,
         separator_outer_band_score=0.36,
         separator_outer_spacing_min_ratio=0.82,

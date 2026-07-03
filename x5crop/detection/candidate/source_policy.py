@@ -42,8 +42,8 @@ def safety_candidate_outer_proposals_enabled(policy: DetectionPolicy) -> bool:
     separator_policy = policy.outer.proposal.geometry.separator
     strategies = set(safety_candidate.strategies)
     return bool(
-        (separator_policy.local == "safety" and "separator_outer" in strategies)
-        or (separator_policy.full_width == "safety" and "separator_outer" in strategies)
+        (separator_policy.local.mode == "safety" and "separator_outer" in strategies)
+        or (separator_policy.full_width.mode == "safety" and "separator_outer" in strategies)
     )
 
 

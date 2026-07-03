@@ -41,6 +41,7 @@ def detect_candidate_for_count(
 ) -> Detection:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     policy = policy or get_detection_policy(fmt.name, strip_mode)
+    explicit_count = bool(config.count_override is not None)
     outer_candidates = outer_proposal_candidates(
         gray_work,
         fmt,
@@ -48,6 +49,7 @@ def detect_candidate_for_count(
         strip_mode,
         cache,
         policy=policy,
+        explicit_count=explicit_count,
     )
     candidates: list[Detection] = []
 
@@ -88,12 +90,16 @@ def detect_candidate_for_count(
 
     append_detections_for_outer_candidates(outer_candidates, gap_max_width_ratio_override, "standard")
     regular_best = max(candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold)) if candidates else None
-    separator_full_width_mode = policy.outer.proposal.geometry.separator.full_width
+    separator_full_width_family = policy.outer.proposal.geometry.separator.full_width
+    separator_full_width_mode = separator_full_width_family.mode
     should_try_separator_full_width = (
-        separator_full_width_mode == "always"
-        or (
-            separator_full_width_mode == "conditional"
-            and (regular_best is None or separator_full_width_can_compete(regular_best, gray, policy))
+        separator_full_width_family.available_for(strip_mode, explicit_count)
+        and (
+            separator_full_width_mode == "always"
+            or (
+                separator_full_width_mode == "conditional"
+                and (regular_best is None or separator_full_width_can_compete(regular_best, gray, policy))
+            )
         )
     )
     if should_try_separator_full_width:
@@ -105,6 +111,7 @@ def detect_candidate_for_count(
             strip_mode,
             cache,
             policy,
+            explicit_count=explicit_count,
         )
         append_detections_for_outer_candidates(
             separator_full_width_candidates,
@@ -117,6 +124,7 @@ def detect_candidate_for_count(
         strip_mode,
         count,
         fmt,
+        explicit_count,
     )
     separator_width_profile_candidates = (
         separator_width_profile_outer_proposal_candidates(
@@ -127,6 +135,7 @@ def detect_candidate_for_count(
             strip_mode,
             cache,
             policy,
+            explicit_count=explicit_count,
         )
         if should_include_separator_width_profile
         else []
@@ -203,8 +212,10 @@ def detect_candidate_for_count(
         gap_profiles.append("separator_width_profile")
     best.detail["candidate_plan"] = {
         "source": "separator",
+        "count_explicit": bool(explicit_count),
         "gap_profiles": gap_profiles,
         "outer_candidate_count": int(len(outer_candidates)),
+        "separator_full_width_eligible": bool(separator_full_width_family.available_for(strip_mode, explicit_count)),
         "separator_full_width_included": bool(should_try_separator_full_width),
         "separator_width_profile_included": bool(should_include_separator_width_profile),
     }
@@ -231,6 +242,7 @@ def detect_safety_outer_proposal_candidate_for_count(
         cache,
         safety_only=True,
         policy=policy,
+        explicit_count=bool(config.count_override is not None),
     )
     if not outer_candidates:
         return None

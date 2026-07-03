@@ -20,13 +20,15 @@ def select_full_separator_width_profile_candidate(
     policy: DetectionPolicy,
 ) -> Optional[Detection]:
     separator_width_profile = policy.outer.proposal.geometry.separator.width_profile
+    required_count = int(separator_width_profile.required_count)
     if (
         separator_width_profile.mode == "off"
         or not separator_width_profile.full_selection_enabled
         or current_best.strip_mode not in separator_width_profile.full_selection_strip_modes
         or (
             separator_width_profile.full_selection_requires_required_count
-            and current_best.count != separator_width_profile.required_count
+            and required_count > 0
+            and current_best.count != required_count
         )
     ):
         return None

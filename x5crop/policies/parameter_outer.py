@@ -14,12 +14,6 @@ class OuterMaskProfile:
 
 @dataclass(frozen=True)
 class OuterStrategyParameters:
-    separator_local_full_enabled: bool
-    separator_local_full_mode: str
-    separator_local_partial_enabled: bool
-    separator_local_partial_mode: str
-    separator_full_width_full_mode: str
-    separator_full_width_partial_mode: str
     separator_gap_search_max_width_ratio: float
 
 @dataclass(frozen=True)

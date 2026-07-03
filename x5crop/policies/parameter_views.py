@@ -200,12 +200,6 @@ class FormatParameterViews:
     @property
     def outer_strategy(self) -> OuterStrategyParameters:
         return OuterStrategyParameters(
-            separator_local_full_enabled=self.separator_local_outer_enabled,
-            separator_local_full_mode=self.separator_local_outer_mode,
-            separator_local_partial_enabled=self.separator_local_partial_enabled,
-            separator_local_partial_mode=self.separator_local_partial_mode,
-            separator_full_width_full_mode=self.separator_full_width_outer_full_mode,
-            separator_full_width_partial_mode=self.separator_full_width_outer_partial_mode,
             separator_gap_search_max_width_ratio=self.separator_outer_gap_max_width_ratio,
         )
 

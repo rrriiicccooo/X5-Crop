@@ -38,15 +38,17 @@ class OuterProposalStrategy:
 
 def outer_proposal_strategy_plan_for_policy(
     policy: DetectionPolicy,
+    strip_mode: str = "full",
+    explicit_count: bool = True,
     safety_only: bool = False,
 ) -> list[OuterProposalStrategy]:
     proposal_policy = policy.outer.proposal
     partial_placement = proposal_policy.geometry.partial_placement
     separator_mode = (
         "safety"
-        if safety_only and separator_outer_variants_for_policy(policy, safety_only=True)
+        if safety_only and separator_outer_variants_for_policy(policy, strip_mode, explicit_count, safety_only=True)
         else "always"
-        if (not safety_only and separator_outer_variants_for_policy(policy, safety_only=False))
+        if (not safety_only and separator_outer_variants_for_policy(policy, strip_mode, explicit_count, safety_only=False))
         else "off"
     )
     base = [
@@ -127,9 +129,15 @@ def outer_proposal_candidates(
     cache: Optional[AnalysisCache] = None,
     safety_only: bool = False,
     policy: Optional[DetectionPolicy] = None,
+    explicit_count: bool = True,
 ) -> list[OuterCandidate]:
     policy = policy or get_detection_policy(fmt.name, strip_mode)
-    strategy_plan = outer_proposal_strategy_plan_for_policy(policy, safety_only=safety_only)
+    strategy_plan = outer_proposal_strategy_plan_for_policy(
+        policy,
+        strip_mode=strip_mode,
+        explicit_count=explicit_count,
+        safety_only=safety_only,
+    )
     enabled_strategy_names = {strategy.name for strategy in strategy_plan if strategy.enabled}
     base_candidates = base_outer_candidates(gray_work, policy.outer.proposal.base.candidates)
     edge_candidates: list[OuterCandidate] = []
@@ -164,7 +172,8 @@ def outer_proposal_candidates(
             strip_mode,
             cache,
             policy,
-            variants=separator_outer_variants_for_policy(policy, safety_only=safety_only),
+            variants=separator_outer_variants_for_policy(policy, strip_mode, explicit_count, safety_only=safety_only),
+            explicit_count=explicit_count,
         )
     if safety_only:
         return unique_outer_candidates([*edge_candidates, *separator_candidates])
@@ -179,6 +188,7 @@ def separator_full_width_outer_proposal_candidates(
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
     policy: Optional[DetectionPolicy] = None,
+    explicit_count: bool = True,
 ) -> list[OuterCandidate]:
     policy = policy or get_detection_policy(fmt.name, strip_mode)
     return separator_derived_outer_candidates(
@@ -190,6 +200,7 @@ def separator_full_width_outer_proposal_candidates(
         cache,
         policy,
         variants=(FULL_WIDTH_SEPARATOR_OUTER,),
+        explicit_count=explicit_count,
     )
 
 
@@ -201,6 +212,7 @@ def separator_width_profile_outer_proposal_candidates(
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
     policy: Optional[DetectionPolicy] = None,
+    explicit_count: bool = True,
 ) -> list[OuterCandidate]:
     policy = policy or get_detection_policy(fmt.name, strip_mode)
     return separator_derived_outer_candidates(
@@ -212,4 +224,5 @@ def separator_width_profile_outer_proposal_candidates(
         cache,
         policy,
         variants=(SEPARATOR_WIDTH_PROFILE_OUTER,),
+        explicit_count=explicit_count,
     )

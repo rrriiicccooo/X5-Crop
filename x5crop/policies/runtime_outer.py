@@ -132,7 +132,7 @@ class FullWidthSeparatorOuterPolicy:
 @dataclass(frozen=True)
 class SeparatorWidthProfilePolicy:
     mode: str = "off"
-    required_count: int = 3
+    required_count: int = 0
     threshold_ratio: float = 0.42
     threshold_span_ratio: float = 0.12
     profile_smooth_short_axis_ratio: float = 0.018
@@ -168,6 +168,22 @@ class SeparatorWidthProfilePolicy:
 
 
 @dataclass(frozen=True)
+class SeparatorOuterFamilyPolicy:
+    mode: str = "off"
+    phase: str = "primary"
+    requires_known_count: bool = True
+    requires_explicit_count_for_partial: bool = False
+    max_candidates: int = 0
+
+    def available_for(self, strip_mode: str, explicit_count: bool) -> bool:
+        if self.mode == "off":
+            return False
+        if strip_mode == "partial" and self.requires_explicit_count_for_partial and not explicit_count:
+            return False
+        return True
+
+
+@dataclass(frozen=True)
 class BaseOuterProposalPolicy:
     enabled: bool = True
     candidates: OuterBoxDetectionParameters = field(default_factory=OuterBoxDetectionParameters)
@@ -175,15 +191,15 @@ class BaseOuterProposalPolicy:
 
 @dataclass(frozen=True)
 class SeparatorGeometryProposalPolicy:
-    local: str = "off"
-    full_width: str = "off"
+    local: SeparatorOuterFamilyPolicy = field(default_factory=SeparatorOuterFamilyPolicy)
+    full_width: SeparatorOuterFamilyPolicy = field(default_factory=SeparatorOuterFamilyPolicy)
+    width_profile_family: SeparatorOuterFamilyPolicy = field(default_factory=SeparatorOuterFamilyPolicy)
     separator_outer_allow_oversized_band: bool = False
     separator_outer_oversized_band_max_ratio: float = 0.45
     separator_outer_oversized_band_score_penalty: float = 0.08
     separator_gap_search_max_width_ratio: float = 0.095
     band: SeparatorOuterBandPolicy = field(default_factory=SeparatorOuterBandPolicy)
     full_width_outer: FullWidthSeparatorOuterPolicy = field(default_factory=FullWidthSeparatorOuterPolicy)
-    width_profile_mode: str = "off"
     width_profile: SeparatorWidthProfilePolicy = field(default_factory=SeparatorWidthProfilePolicy)
 
 
@@ -234,6 +250,7 @@ __all__ = [
     "OuterProposalPolicy",
     "PartialPlacementGeometryPolicy",
     "SeparatorOuterBandPolicy",
+    "SeparatorOuterFamilyPolicy",
     "SeparatorGeometryProposalPolicy",
     "ShortAxisGeometryCorrectionPolicy",
     "SeparatorWidthProfilePolicy",

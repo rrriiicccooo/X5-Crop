@@ -40,15 +40,15 @@ def _outer_detail(policy: "DetectionPolicy") -> dict[str, Any]:
             "geometry": {
                 "partial_placement": _plain(geometry.partial_placement),
                 "separator": {
-                    "local": separator.local,
-                    "full_width": separator.full_width,
+                    "local": _plain(separator.local),
+                    "full_width": _plain(separator.full_width),
+                    "width_profile_family": _plain(separator.width_profile_family),
                     "separator_outer_allow_oversized_band": separator.separator_outer_allow_oversized_band,
                     "separator_outer_oversized_band_max_ratio": separator.separator_outer_oversized_band_max_ratio,
                     "separator_outer_oversized_band_score_penalty": separator.separator_outer_oversized_band_score_penalty,
                     "separator_gap_search_max_width_ratio": separator.separator_gap_search_max_width_ratio,
                     "band": _plain(separator.band),
                     "full_width_outer": _plain(separator.full_width_outer),
-                    "width_profile_mode": separator.width_profile_mode,
                     "width_profile": _fields(
                         separator.width_profile,
                         (

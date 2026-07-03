@@ -402,8 +402,6 @@ class FormatParameters(FormatParameterViews):
     approved_adjust_min_ext_ratio: float = 0.0100
     approved_adjust_min_ext_min: int = 50
     approved_adjust_min_ext_max: int = 120
-    separator_full_width_outer_full_mode: str = "off"
-    separator_full_width_outer_partial_mode: str = "off"
     separator_full_width_outer_count: int = 0
     separator_full_width_outer_max_candidates: int = 8
     separator_full_width_outer_margin_ratios: tuple[float, ...] = (0.00, 0.018, 0.035)
@@ -437,10 +435,6 @@ class FormatParameters(FormatParameterViews):
     partial_edge_content_margin_max: int = 80
     partial_edge_min_width_ratio: float = 0.30
     partial_edge_max_candidates: int = 8
-    separator_local_outer_enabled: bool = False
-    separator_local_outer_mode: str = "safety"
-    separator_local_partial_enabled: bool = True
-    separator_local_partial_mode: str = "safety"
     separator_outer_min_score: float = 0.58
     separator_outer_band_score: float = 0.36
     separator_outer_min_width_ratio: float = 0.006

@@ -24,6 +24,7 @@ Current stable release: v4.2.8
 - 自动 PASS 必须由 outer、separator、geometry、content 和 risk 组合证据解释。
 - weak grid、equal、content-only、safety candidate 或 partial edge 不可信的候选默认进入 REVIEW。
 - active retry architecture 已退休；separator width profile、safety candidate 和 corrected outer 都作为候选计划或候选扩展统一 assessment。
+- separator-derived outer family 已通用化：标准 strip 的 full 默认启用 local、full-width 和 separator width profile；partial 只有显式 count 时启用 late/auxiliary variants，format 只提供 width / spacing / budget 参数。
 - detection 分层已对齐为 pipeline / modes / candidate / outer / evidence /
   decision / final；corrected outer extension 属于 candidate lifecycle，PASS /
   REVIEW 属于 decision 层，finalization 只做 output-adjacent 调整。
@@ -78,6 +79,9 @@ Current stable release: v4.2.8
   `detection/candidate/corrected_outer.py` 重新 build detection、重算 evidence
   并重新 apply candidate assessment。outer correction 只改变候选输入，PASS /
   REVIEW 仍只由 candidate gate 和 final decision contract 决定。
+- separator-derived outer policy 不再由各 format 单独打开 local/full-width/width-profile；
+  `SeparatorOuterFamilyPolicy` 统一声明 phase、mode 和 partial 显式 count 门控，
+  full 启用全部 separator-derived families，auto-count partial 保持保守。
 - outer correction proposal type 已归入 `detection/outer/correction/types.py`；
   candidate 层只消费 `OuterCorrectionProposal`，outer correction 不再 import
   candidate reassessment 类型。
@@ -91,8 +95,9 @@ Current stable release: v4.2.8
   finalization 不再生成候选，只做 output bleed、approved geometry adjustment 和
   read-only diagnostics attachment。
 - separator-derived outer 已收敛为统一 `detection/outer/proposal/separator.py` 引擎；
-  local、full-width 和 120-66 separator width profile variants 共享 sequence / ranking /
-  candidate 输出逻辑，active code 不再保留独立 broad-width outer 分支。
+  local、full-width 和 separator width profile variants 共享 sequence / ranking /
+  candidate 输出逻辑；full 默认启用全部 separator-derived families，partial 显式 count
+  才启用 late/auxiliary variants，active code 不再保留独立 broad-width outer 分支。
 - separator width 语义已收敛：宽度 profile 只能影响 candidate plan / proposal 参数，
   最终 gap method 仍是普通 `detected` hard separator；broad width 只写入
   `separator_width_evidence`、gate detail 和 partial holder detail。
@@ -161,6 +166,9 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - Active retry architecture is retired; separator width profiles, safety
   candidates, and corrected outers are assessed as candidate-plan entries or
   candidate extensions.
+- Separator-derived outer families are generalized: standard full strips enable
+  local, full-width, and separator width profile variants; partial strips enable
+  late/auxiliary variants only when count is explicit.
 - Detection layering is aligned as pipeline / modes / candidate / outer /
   evidence / decision / final. Corrected outer extension belongs to the
   candidate lifecycle, PASS / REVIEW belongs to the decision layer, and
@@ -212,9 +220,11 @@ Verified:
   separator bands, outer-content alignment, and cache keys live in evidence /
   detection cache layers.
 - Separator-derived outer proposals are consolidated into the single
-  `detection/outer/proposal/separator.py` engine; local, full-width, and 120-66
+  `detection/outer/proposal/separator.py` engine; local, full-width, and
   separator width profile variants share sequence, ranking, and candidate output
-  logic, and active code no longer keeps a separate broad-width outer branch.
+  logic. Full strips enable all separator-derived families, explicit-count
+  partial strips enable late/auxiliary variants, and active code no longer keeps
+  a separate broad-width outer branch.
 - Separator width semantics are now consolidated: width profiles can only tune
   candidate-plan / proposal parameters, final gap methods remain ordinary
   `detected` hard separators, and broad-width support is reported through

@@ -9,10 +9,14 @@ def should_include_separator_width_profile_candidates(
     strip_mode: str,
     count: int,
     fmt: FormatSpec,
+    explicit_count: bool,
 ) -> bool:
     if not policy.separator.separator_width_profile_enabled:
         return False
-    if policy.outer.proposal.geometry.separator.width_profile_mode == "off":
+    family = policy.outer.proposal.geometry.separator.width_profile_family
+    if not family.available_for(strip_mode, explicit_count):
+        return False
+    if policy.outer.proposal.geometry.separator.width_profile.mode == "off":
         return False
     profile = policy.candidate_plan.separator_width_profile
     if strip_mode in profile.partial_strip_modes:

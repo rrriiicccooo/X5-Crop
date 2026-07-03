@@ -22,7 +22,6 @@ def parameters() -> FormatParameters:
         nearby_active_correction=False,
         lucky_pass_risk_enabled=False,
         leading_grid_failure_enabled=False,
-        separator_local_outer_enabled=True,
         separator_outer_min_score=0.68,
         separator_outer_band_score=0.48,
         separator_outer_spacing_min_ratio=0.90,

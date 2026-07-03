@@ -9,7 +9,7 @@ from ....domain import Box, OuterCandidate
 from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ....geometry.separator_cache import cached_separator_profile
 from ....policies.registry import get_detection_policy
-from ....policies.runtime_outer import SeparatorOuterBandPolicy, SeparatorWidthProfilePolicy
+from ....policies.runtime_outer import SeparatorOuterBandPolicy, SeparatorOuterFamilyPolicy, SeparatorWidthProfilePolicy
 from ....policies.runtime_policy import DetectionPolicy
 from ....runtime import AnalysisCache
 from ....utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
@@ -42,13 +42,15 @@ class SeparatorOuterVariant:
 
 def separator_outer_variants_for_policy(
     policy: DetectionPolicy,
+    strip_mode: str = "full",
+    explicit_count: bool = True,
     safety_only: bool = False,
 ) -> tuple[str, ...]:
     separator_policy = policy.outer.proposal.geometry.separator
     variants: list[str] = []
-    if _mode_active(separator_policy.local, safety_only):
+    if _mode_active(separator_policy.local, strip_mode, explicit_count, safety_only):
         variants.append(LOCAL_SEPARATOR_OUTER)
-    if _mode_active(separator_policy.full_width, safety_only):
+    if _mode_active(separator_policy.full_width, strip_mode, explicit_count, safety_only):
         variants.append(FULL_WIDTH_SEPARATOR_OUTER)
     return tuple(variants)
 
@@ -62,6 +64,7 @@ def separator_derived_outer_candidates(
     cache: Optional[AnalysisCache] = None,
     policy: Optional[DetectionPolicy] = None,
     variants: tuple[str, ...] | None = None,
+    explicit_count: bool = True,
 ) -> list[OuterCandidate]:
     policy = policy or get_detection_policy(fmt.name, strip_mode)
     if strip_mode not in {"full", "partial"} or count <= 1:
@@ -70,10 +73,10 @@ def separator_derived_outer_candidates(
     if aspect is None or aspect <= 0.0 or not base_candidates:
         return []
 
-    selected_variants = variants or separator_outer_variants_for_policy(policy)
+    selected_variants = variants or separator_outer_variants_for_policy(policy, strip_mode, explicit_count)
     candidates: list[OuterCandidate] = []
     for variant_name in selected_variants:
-        variant = _variant_policy(variant_name, policy, fmt, count, strip_mode)
+        variant = _variant_policy(variant_name, policy, fmt, count, strip_mode, explicit_count)
         if variant is None:
             continue
         candidates.extend(
@@ -92,10 +95,17 @@ def separator_derived_outer_candidates(
     return unique_outer_candidates(candidates)
 
 
-def _mode_active(mode: str, safety_only: bool) -> bool:
+def _mode_active(
+    family: SeparatorOuterFamilyPolicy,
+    strip_mode: str,
+    explicit_count: bool,
+    safety_only: bool,
+) -> bool:
+    if not family.available_for(strip_mode, explicit_count):
+        return False
     if safety_only:
-        return mode == "safety"
-    return mode == "always"
+        return family.mode == "safety"
+    return family.phase == "primary" and family.mode in {"always", "conditional"}
 
 
 def _variant_policy(
@@ -104,11 +114,13 @@ def _variant_policy(
     fmt: FormatSpec,
     count: int,
     strip_mode: str,
+    explicit_count: bool,
 ) -> SeparatorOuterVariant | None:
     separator_policy = policy.outer.proposal.geometry.separator
     band_policy = separator_policy.band
     if variant_name == LOCAL_SEPARATOR_OUTER:
-        if separator_policy.local == "off":
+        family = separator_policy.local
+        if not family.available_for(strip_mode, explicit_count):
             return None
         if strip_mode == "full" and count != fmt.default_count:
             return None
@@ -120,15 +132,16 @@ def _variant_policy(
             source_candidate_count=max(1, int(band_policy.source_candidate_count)),
             band_candidate_count=max(1, int(band_policy.band_candidate_count)),
             sequence_candidate_count=max(1, int(band_policy.pair_candidate_count)),
-            max_candidates=max(1, int(band_policy.max_candidates)),
+            max_candidates=max(1, int(family.max_candidates or band_policy.max_candidates)),
             spacing_min_ratio=float(band_policy.spacing_min_ratio),
             spacing_max_ratio=float(band_policy.spacing_max_ratio),
             frame_error_max=float(band_policy.frame_error_max),
             sequence_score_weight=0.02,
         )
     if variant_name == FULL_WIDTH_SEPARATOR_OUTER:
+        family = separator_policy.full_width
         geometry_policy = separator_policy.full_width_outer
-        if separator_policy.full_width == "off":
+        if not family.available_for(strip_mode, explicit_count):
             return None
         expected_count = int(geometry_policy.required_count)
         if expected_count > 0 and count != expected_count:
@@ -141,15 +154,21 @@ def _variant_policy(
             source_candidate_count=max(1, int(geometry_policy.source_candidate_count)),
             band_candidate_count=max(1, int(band_policy.band_candidate_count)),
             sequence_candidate_count=max(1, int(geometry_policy.max_candidates)),
-            max_candidates=max(1, int(geometry_policy.max_candidates)),
+            max_candidates=max(1, int(family.max_candidates or geometry_policy.max_candidates)),
             spacing_min_ratio=float(band_policy.spacing_min_ratio),
             spacing_max_ratio=float(band_policy.spacing_max_ratio),
             frame_error_max=float(band_policy.frame_error_max),
             sequence_score_weight=0.02,
         )
     if variant_name == SEPARATOR_WIDTH_PROFILE_OUTER:
+        family = separator_policy.width_profile_family
         width_policy = separator_policy.width_profile
-        if width_policy.mode == "off" or count != int(width_policy.required_count):
+        required_count = int(width_policy.required_count)
+        if (
+            not family.available_for(strip_mode, explicit_count)
+            or width_policy.mode == "off"
+            or (required_count > 0 and count != required_count)
+        ):
             return None
         return SeparatorOuterVariant(
             name=SEPARATOR_WIDTH_PROFILE_OUTER,
@@ -159,7 +178,7 @@ def _variant_policy(
             source_candidate_count=max(1, int(width_policy.source_candidate_count)),
             band_candidate_count=max(1, int(width_policy.band_candidate_count)),
             sequence_candidate_count=max(1, int(width_policy.sequence_candidate_count)),
-            max_candidates=max(1, int(width_policy.max_candidates)),
+            max_candidates=max(1, int(family.max_candidates or width_policy.max_candidates)),
             spacing_min_ratio=float(width_policy.spacing_min_ratio),
             spacing_max_ratio=float(width_policy.spacing_max_ratio),
             frame_error_max=None,

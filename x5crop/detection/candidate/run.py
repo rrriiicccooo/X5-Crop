@@ -66,8 +66,8 @@ def calibrated_candidates_for_count(
             safety_candidate.detail["safety_candidate"] = {
                 "used": True,
                 "review_only": True,
-                "separator_local_mode": policy.outer.proposal.geometry.separator.local,
-                "separator_full_width_mode": policy.outer.proposal.geometry.separator.full_width,
+                "separator_local_mode": policy.outer.proposal.geometry.separator.local.mode,
+                "separator_full_width_mode": policy.outer.proposal.geometry.separator.full_width.mode,
                 "strategies": list(policy.candidate_plan.safety_candidate.strategies),
             }
             candidates.append(safety_candidate)

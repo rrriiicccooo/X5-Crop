@@ -131,14 +131,14 @@ REVIEW contract。
 | Pre-detection | deskew angle selection | `image/deskew.py`, `image/deskew_parameters.py` | deskew 只能改变输入姿态和质量 detail；不应直接决定 PASS / REVIEW。 |
 | Pre-detection | analysis / evidence gray | `image/evidence.py` | separator/content evidence gray 只能作为证据图和检测输入；不得隐藏真实灰度上下文。 |
 | Policy activation | format physical facts | `formats.py` | count、aspect、family、physical risk 是否是事实层，不含 gate threshold。 |
-| Policy activation | format / mode policy presets | `policies/format_*.py` | format-specific 逻辑是否只在本 format/mode 显式启用。 |
+| Policy activation | format / mode policy presets | `policies/format_*.py` | format/mode 是否只声明物理参数、gate profile 和 detector 差异；通用 detector capability 不应变成 format 专属算法开关。 |
 | Policy activation | runtime policy assembly | `policies/factory*.py`, `runtime_*.py` | preset、parameters、runtime policy 是否一一映射；默认字段不得让报告误以为逻辑已 active。 |
 | Policy activation | final decision contract | `policies/decision_contract.py`, `policies/decision_overrides.py` | runtime `DetectionPolicy` 与 final `DetectionDecisionContract` 的证据门槛不能语义漂移。 |
 | Mode-specific detector | dual-lane detector | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_context.py`, `detection/modes/dual_lane_split.py`, `detection/modes/dual_lane_detect.py`, `detection/modes/dual_lane_merge.py` | `135-dual/full` 是否独立于普通 135 strip；入口是否只调度，policy/spec context、lane split / lane detect / lane merge 是否可解释。 |
 | Mode-specific detector | review-only mode | `detection/modes/review_only.py`, `candidate/safety_candidate.py` | review-only 或 hard safety 必须保持 review-only，不得因为 confidence 偶然过线而 PASS。 |
 | Outer proposal | base outer | `geometry/outer_boxes.py`, `detection/outer/proposal/base.py` | 基础 holder / content bbox 是否只提出 outer proposal，不承担评分或通过。 |
 | Outer proposal | partial content-position outer | `detection/outer/proposal/partial_content.py`, `detection/outer/proposal/partial_edge.py` | 标准 partial 若内容不铺满片夹，统一建模为 edge-anchored 或 floating 两种位置；proposal plan 先尝试 edge，edge 候选达到 trust 门槛时跳过 floating；两者只提出 outer，必须继续经过 separator/content/geometry gate，`135-dual/partial` 仍由 review-only mode 接管。 |
-| Outer proposal | separator-derived outer | `detection/outer/proposal/separator.py`, `detection/evidence/separator_bands.py` | local、full-width 和 separator width profile variants 是否共享同一 outer proposal 引擎；spacing / width / frame-error 约束是否由 policy 控制。 |
+| Outer proposal | separator-derived outer | `detection/outer/proposal/separator.py`, `detection/evidence/separator_bands.py` | local、full-width 和 separator width profile variants 是否共享同一 outer proposal 引擎；标准 strip 的 full 全部启用，partial 只有显式 count 时启用 late/auxiliary variants，spacing / width / frame-error 约束由 format 参数控制。 |
 | Outer proposal | proposal plan | `detection/outer/proposal/plan.py` | candidate 层只能通过 proposal plan 获取和合并 outer candidates；不得直接依赖 base/common/separator 内部 helper 或 variant 常量。 |
 | Outer correction | geometry consistency correction | `detection/outer/correction/geometry.py`, `detection/outer/correction/types.py` | short-axis 与 long-axis geometry consistency 是否保持各自 policy 触发条件；outer correction 只提出 `OuterCorrectionProposal`，不直接 PASS / REVIEW。 |
 | Outer correction | content containment correction | `detection/evidence/outer_alignment.py`, `detection/outer/correction/content_containment.py`, `detection/outer/correction/types.py` | 内容边缘证据是否只用于提出更小的 corrected outer proposal；修正后的候选必须由 candidate contract 重新 build detection 并重新 assessment。 |
@@ -152,7 +152,7 @@ REVIEW contract。
 | Gap / separator | robust grid | `geometry/robust_grid.py` | grid 只能补模型证据；weak grid 不得单独获得 auto PASS。 |
 | Gap / separator | nearby separator correction | `geometry/nearby_separator.py` | 附近更强 separator 替换后是否保留 confidence cap 和 diagnostics。 |
 | Gap / separator | enhanced separator | `geometry/enhanced_separator.py` | enhanced analysis 何时触发、合并多少 gap、是否导致过度补证据。 |
-| Gap / separator | separator width profile candidate planning | `detection/candidate/separator_width_profile_plan.py`, `detection/candidate/sources.py` | 标准 gap profile 与 separator width profile 是否在第一次候选计划中生成，并统一进入 candidate assessment。 |
+| Gap / separator | separator width profile candidate planning | `detection/candidate/separator_width_profile_plan.py`, `detection/candidate/sources.py` | 标准 gap profile 与 separator width profile 是否在第一次候选计划中生成；full 和显式 count partial 可进入统一 assessment，auto-count partial 不让 auxiliary width profile 抢候选。 |
 | Gap / separator | separator width profile gaps | `detection/evidence/separator.py`, `detection/evidence/separator_width.py` | broad separator width gaps 是否只作为普通 hard separator evidence 加 width detail，不生成独立 gap method。 |
 | Gap diagnostics | gap diagnostics | `detection/evidence/gap_diagnostics.py` | diagnostic-only evidence 是否只解释 risk，不直接参与 candidate selection。 |
 | Content | content evidence | `detection/evidence/content_evidence.py` | `ok / weak / low_content / aspect_conflict` 是否符合照片内容和 aspect。 |
@@ -205,8 +205,7 @@ REVIEW contract。
 - 135 full 的完整片条假设不能推广给其它 format。
 - 135-dual full 使用 dual-lane detector；135-dual partial 保守复核。
 - half geometry support 是通用 capability，但默认只给 `half/full` 开启。
-- 120-66 broad separator width profile、square-frame、broad separator width evidence 和 strict-holder checks
-  只适用于 120-66 full / partial。
+- separator width profile 是通用 separator 宽度证据；120-66 只拥有更宽的 width 参数、square-frame gate、broad separator width evidence 要求和 strict-holder checks。
 - 120-67 可以有自己的 short-axis correction 和 separator width profile，但不能继承 120-66 broad separator width 参数。
 - weak grid、equal、content-only、safety 或不可信 partial-edge 证据不能获得自动 PASS 权限。
 
@@ -350,15 +349,15 @@ and decision detail, and cannot bypass the final PASS / REVIEW contract.
 |---|---|---|---|
 | Pre-detection | layout / coordinate mapping | `geometry/layout.py`, `geometry/boxes.py` | Horizontal / vertical work-space mapping must not change crop semantics. |
 | Pre-detection | deskew and evidence gray | `image/deskew.py`, `image/evidence.py` | Preprocessing may shape evidence but must not decide PASS / REVIEW. |
-| Policy activation | format facts and policy presets | `formats.py`, `policies/format_*.py` | Physical facts, thresholds, and format/mode activations must stay separate and explicit. |
+| Policy activation | format facts and policy presets | `formats.py`, `policies/format_*.py` | Physical facts, thresholds, and detector differences must stay separate from universal capability activation. |
 | Policy activation | runtime and decision contracts | `policies/runtime_*.py`, `policies/decision_contract.py` | `DetectionPolicy` and `DetectionDecisionContract` must not drift semantically. |
 | Mode-specific detector | dual-lane and review-only paths | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_*.py`, `detection/modes/review_only.py`, `candidate/safety_candidate.py` | Dedicated detectors and review-only paths must stay isolated, context-driven, and conservative. |
-| Outer proposal | base, partial content-position, separator-derived outer | `detection/outer/proposal/*`, `geometry/outer_boxes.py`, `detection/evidence/separator_bands.py` | Outer proposals only propose boxes; standard partial mode tries edge-anchored content before floating content and skips floating when edge candidates are trusted. Local, full-width, and separator width profile variants share one separator-derived proposal engine behind the proposal plan. |
+| Outer proposal | base, partial content-position, separator-derived outer | `detection/outer/proposal/*`, `geometry/outer_boxes.py`, `detection/evidence/separator_bands.py` | Outer proposals only propose boxes; standard partial mode tries edge-anchored content before floating content and skips floating when edge candidates are trusted. Local, full-width, and separator width profile variants share one separator-derived proposal engine behind the proposal plan; full enables all separator-derived families, while partial enables late/auxiliary families only when count is explicit. |
 | Outer correction | geometry consistency and content containment correction | `detection/outer/correction/geometry.py`, `detection/outer/correction/content_containment.py`, `detection/outer/correction/types.py`, `detection/evidence/outer_alignment.py` | Outer correction only emits `OuterCorrectionProposal` boxes and reasons. It does not rebuild candidates and does not own PASS / REVIEW. |
 | Corrected candidate | corrected outer reassessment | `detection/candidate/corrected_outer.py` | Candidate contract rebuilds detection, recomputes evidence, and reapplies candidate assessment for any corrected outer. |
 | Candidate extension | outer correction candidate extension | `detection/pipeline.py`, `detection/candidate/outer_correction_candidates.py` | The pipeline appends corrected outer candidates back into the candidate pool before selection; corrected candidates cannot bypass final decision/gate. |
 | Gap / separator | profile, cache, normal gap search, hard trust, edge pair, robust grid | `geometry/separator_*`, `geometry/gap_search.py`, `geometry/gap_trust.py`, `geometry/edge_pairs.py`, `geometry/robust_grid.py` | Hard evidence must stay stronger than model/equal/grid evidence, and cache keys must include policy-relevant context. |
-| Gap / separator | nearby correction, enhanced separator, separator width profile planning, separator width profile gaps | `geometry/nearby_separator.py`, `geometry/enhanced_separator.py`, `detection/candidate/separator_width_profile_plan.py`, `detection/evidence/separator.py` | Profile evidence must be explicit, capped when needed, and assessed through the normal candidate gate. |
+| Gap / separator | nearby correction, enhanced separator, separator width profile planning, separator width profile gaps | `geometry/nearby_separator.py`, `geometry/enhanced_separator.py`, `detection/candidate/separator_width_profile_plan.py`, `detection/evidence/separator.py` | Profile evidence must be explicit, capped when needed, and assessed through the normal candidate gate; auto-count partial does not let auxiliary width profiles compete. |
 | Content | content evidence, profile runs, mask outer, content candidate | `detection/evidence/content_*`, `candidate/content_candidate.py` | Content can validate or challenge candidates but must not auto-pass alone. |
 | Candidate | count/offset, source orchestration, build, frame fit | `detection/candidate/counts.py`, `detection/candidate/run.py`, `detection/candidate/sources.py`, `detection/candidate/build.py`, `geometry/frame_fit.py` | Candidate lifecycle must keep all intermediate evidence in `Detection.detail`. |
 | Scoring | base confidence, geometry/content/separator scores, joint score, hard-full floor | `detection/candidate/scoring.py`, `detection/candidate/candidate_assessment.py` | Scores support gates; they do not replace separator/content/geometry requirements. |
@@ -382,8 +381,9 @@ report/debug output explains the change.
 - 135-dual full uses the dual-lane detector; 135-dual partial stays conservative.
 - Half-frame geometry support is generic, but currently enabled only for
   `half/full`.
-- 120-66 broad separator width profile, square-frame, broad separator width evidence, and strict-holder checks
-  stay limited to 120-66 full / partial.
+- Separator width profile is a universal separator-width evidence capability.
+  120-66 keeps only its broader width parameters, square-frame gate, broad-width
+  evidence requirements, and strict-holder checks.
 - 120-67 may have its own correction candidate behavior, but must not inherit 120-66 broad separator width parameters.
 - Weak grid, equal, content-only, safety, or untrusted partial-edge evidence
   must not gain automatic PASS authority.
