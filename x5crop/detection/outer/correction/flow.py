@@ -9,8 +9,7 @@ from ....formats import FormatSpec
 from ....runtime import AnalysisCache
 from ....runtime_config import RuntimeConfig
 from .content_aligned import retry_with_content_aligned_outer
-from .format_geometry import format_geometry_model_detail, retry_with_format_geometry_outer
-from .short_axis import retry_with_short_axis_aspect_outer
+from .geometry import retry_with_geometry_outer_correction
 
 
 def retry_with_outer_correction_proposals(
@@ -22,24 +21,21 @@ def retry_with_outer_correction_proposals(
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
 ) -> tuple[Detection, dict[str, Any], dict[str, Any], bool]:
-    retried = retry_with_short_axis_aspect_outer(gray, config, fmt, detection, content_detail, cache)
+    retried, suppress_outer_mismatch = retry_with_geometry_outer_correction(
+        gray,
+        config,
+        fmt,
+        detection,
+        content_detail,
+        outer_alignment,
+        cache,
+    )
     if retried is not None:
         return (
             retried,
             dict(retried.detail.get("content_evidence", {})),
             dict(retried.detail.get("outer_content_alignment", {})),
-            True,
-        )
-
-    geometry_detail = format_geometry_model_detail(gray, detection, config, fmt, cache)
-    detection.detail["format_geometry_model"] = geometry_detail
-    retried = retry_with_format_geometry_outer(gray, config, fmt, detection, outer_alignment, cache)
-    if retried is not None:
-        return (
-            retried,
-            dict(retried.detail.get("content_evidence", {})),
-            dict(retried.detail.get("outer_content_alignment", {})),
-            False,
+            suppress_outer_mismatch,
         )
 
     if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):

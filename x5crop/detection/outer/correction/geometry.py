@@ -17,6 +17,69 @@ from ....utils import box_from_dict, clamp_int
 from ...evidence.outer_alignment import outer_content_alignment_detail
 
 
+def corrected_outer_for_short_axis_aspect(
+    gray: np.ndarray,
+    config: RuntimeConfig,
+    fmt: FormatSpec,
+    detection: Detection,
+    content_detail: dict[str, Any],
+    cache: AnalysisCache,
+    policy: Optional[DetectionPolicy] = None,
+) -> Optional[Box]:
+    policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
+    short_axis_retry = policy.outer.short_axis_aspect_retry
+    if not short_axis_retry.enabled:
+        return None
+    if detection.strip_mode != "full" or detection.count != fmt.default_count:
+        return None
+    candidate = detection.detail.get("candidate_assessment", {})
+    if not isinstance(candidate, dict) or candidate.get("source") != "separator":
+        return None
+    hard_detail = candidate.get("separator_hard_evidence", {})
+    if not isinstance(hard_detail, dict) or not bool(hard_detail.get("ok", False)):
+        return None
+    if str(content_detail.get("support", "")) != "aspect_conflict":
+        return None
+    max_aspect_error = content_detail.get("max_aspect_error")
+    if max_aspect_error is None or float(max_aspect_error) < short_axis_retry.min_error:
+        return None
+
+    source_h, source_w = gray.shape
+    work_h, work_w = cache.gray_work.shape
+    outer = original_box_to_work(detection.outer, detection.layout, source_w, source_h).clamp(work_w, work_h)
+    if not outer.valid():
+        return None
+    pitch = float(outer.width) / float(max(1, detection.count))
+    target_aspect = max(0.01, float(short_axis_retry.target_aspect))
+    target_height = pitch / target_aspect
+    if target_height <= float(outer.height):
+        return None
+
+    margin = clamp_int(
+        pitch * short_axis_retry.margin_ratio,
+        short_axis_retry.margin_min,
+        short_axis_retry.margin_max,
+    )
+    target_height = min(float(work_h), target_height + float(margin * 2))
+    center = (float(outer.top) + float(outer.bottom)) * 0.5
+    top = int(round(center - target_height * 0.5))
+    bottom = int(round(center + target_height * 0.5))
+    if top < 0:
+        bottom -= top
+        top = 0
+    if bottom > work_h:
+        top -= bottom - work_h
+        bottom = work_h
+    top = max(0, top)
+    bottom = min(work_h, bottom)
+    corrected = Box(outer.left, top, outer.right, bottom)
+    if not corrected.valid() or corrected == outer:
+        return None
+    if corrected.height <= outer.height:
+        return None
+    return corrected
+
+
 def format_geometry_model_detail(gray: np.ndarray, detection: Detection, config: RuntimeConfig, fmt: FormatSpec, cache: AnalysisCache) -> dict[str, Any]:
     if detection.strip_mode != "full" or detection.count <= 0:
         return {"used": False, "reason": "not_full_strip"}
@@ -159,21 +222,47 @@ def corrected_outer_from_format_geometry(
     return corrected
 
 
-def retry_with_format_geometry_outer(
+def retry_with_geometry_outer_correction(
     gray: np.ndarray,
     config: RuntimeConfig,
     fmt: FormatSpec,
     detection: Detection,
+    content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
-) -> Optional[Detection]:
-    from ...candidate.build import build_detection_for_outer
-    from ...candidate.candidate_assessment import apply_candidate_assessment_policy
-    from ...evidence.content_evidence import content_evidence_detail
+) -> tuple[Optional[Detection], bool]:
+    policy = get_detection_policy(fmt.name, detection.strip_mode)
+    corrected_outer = corrected_outer_for_short_axis_aspect(
+        gray,
+        config,
+        fmt,
+        detection,
+        content_detail,
+        cache,
+        policy=policy,
+    )
+    if corrected_outer is not None:
+        return (
+            _retry_with_corrected_geometry_outer(
+                gray,
+                config,
+                fmt,
+                detection,
+                corrected_outer,
+                cache,
+                policy,
+                candidate_name="short_axis_aspect_outer",
+                candidate_strategy="short_axis_retry",
+                source_reason="short_axis_aspect_conflict",
+                original_outer_work_box=detection.detail.get("work_outer"),
+                source_format_geometry=None,
+                preserve_wide_retry=False,
+            ),
+            True,
+        )
 
     geometry_detail = format_geometry_model_detail(gray, detection, config, fmt, cache)
     detection.detail["format_geometry_model"] = geometry_detail
-    policy = get_detection_policy(fmt.name, detection.strip_mode)
     corrected_outer = corrected_outer_from_format_geometry(
         detection,
         config,
@@ -184,11 +273,49 @@ def retry_with_format_geometry_outer(
         policy=policy,
     )
     if corrected_outer is None:
-        return None
+        return None, False
+
+    retried = _retry_with_corrected_geometry_outer(
+        gray,
+        config,
+        fmt,
+        detection,
+        corrected_outer,
+        cache,
+        policy,
+        candidate_name="format_geometry_outer",
+        candidate_strategy="format_geometry_retry",
+        source_reason="format_geometry_unexplained_outer_extra",
+        original_outer_work_box=geometry_detail.get("outer_work_box"),
+        source_format_geometry=geometry_detail,
+        preserve_wide_retry=True,
+    )
+    return retried, False
+
+
+def _retry_with_corrected_geometry_outer(
+    gray: np.ndarray,
+    config: RuntimeConfig,
+    fmt: FormatSpec,
+    detection: Detection,
+    corrected_outer: Box,
+    cache: AnalysisCache,
+    policy: DetectionPolicy,
+    *,
+    candidate_name: str,
+    candidate_strategy: str,
+    source_reason: str,
+    original_outer_work_box: Any,
+    source_format_geometry: Optional[dict[str, Any]],
+    preserve_wide_retry: bool,
+) -> Detection:
+    from ...candidate.build import build_detection_for_outer
+    from ...candidate.candidate_assessment import apply_candidate_assessment_policy
+    from ...evidence.content_evidence import content_evidence_detail
 
     gap_override = None
     wide_retry = detection.detail.get("wide_gap_retry")
-    if isinstance(wide_retry, dict) and bool(wide_retry.get("used", False)):
+    if preserve_wide_retry and isinstance(wide_retry, dict) and bool(wide_retry.get("used", False)):
         gap_override = float(wide_retry.get("retry_gap_max_width_ratio", policy.separator.wide_retry_max_width_ratio))
 
     retried = build_detection_for_outer(
@@ -199,8 +326,8 @@ def retry_with_format_geometry_outer(
         detection.strip_mode,
         corrected_outer,
         float(detection.detail.get("offset_fraction", 0.0)),
-        "format_geometry_outer",
-        "format_geometry_retry",
+        candidate_name,
+        candidate_strategy,
         cache=cache,
         allow_outer_refine=False,
         gap_max_width_ratio_override=gap_override,
@@ -212,17 +339,19 @@ def retry_with_format_geometry_outer(
     retry_geometry = format_geometry_model_detail(gray, retried, config, fmt, cache)
     retried.detail["outer_content_alignment"] = retry_alignment
     retried.detail["content_evidence"] = retry_content
-    retried.detail["format_geometry_model"] = retry_geometry
+    if source_format_geometry is not None:
+        retried.detail["format_geometry_model"] = retry_geometry
     retried.detail["outer_correction"] = {
         "used": True,
-        "source_reason": "format_geometry_unexplained_outer_extra",
-        "original_outer_work_box": geometry_detail.get("outer_work_box"),
+        "source_reason": source_reason,
+        "original_outer_work_box": original_outer_work_box,
         "corrected_outer_work_box": asdict(corrected_outer),
-        "source_format_geometry": geometry_detail,
-        "retry_format_geometry": retry_geometry,
         "retry_alignment": retry_alignment,
         "retry_content_support": retry_content.get("support"),
     }
+    if source_format_geometry is not None:
+        retried.detail["outer_correction"]["source_format_geometry"] = source_format_geometry
+        retried.detail["outer_correction"]["retry_format_geometry"] = retry_geometry
     if gap_override is not None:
         retried.detail["wide_gap_retry"] = {
             "used": True,

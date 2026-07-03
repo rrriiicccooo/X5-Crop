@@ -102,9 +102,8 @@ REVIEW contract。
 | Outer proposal | edge-anchor outer | `detection/outer/proposal/partial_edge.py` | 长轴锚点 outer 必须有 hard separator 支持；避免用边缘猜测自动通过。 |
 | Outer proposal | separator-derived outer | `detection/outer/proposal/separator.py`, `detection/evidence/separator_bands.py` | local、full-width 和 wide separator variants 是否共享同一 outer proposal 引擎；spacing / width / frame-error 约束是否由 policy 控制。 |
 | Outer proposal | proposal plan | `detection/outer/proposal/plan.py` | candidate 层只能通过 proposal plan 获取和合并 outer candidates；不得直接依赖 base/common/separator 内部 helper 或 variant 常量。 |
+| Outer correction | geometry retry | `detection/outer/correction/geometry.py` | short-axis 和 format-geometry 两类几何修正是否保持各自 policy 触发条件，且修正后重新经过 candidate assessment。 |
 | Outer correction | content-aligned retry | `detection/evidence/outer_alignment.py`, `detection/outer/correction/content_aligned.py` | 内容边缘修正 outer 后是否重新经过 candidate assessment。 |
-| Outer correction | format-geometry retry | `detection/outer/correction/format_geometry.py` | 按 format 比例修正 outer 时，content margin / shrink ratio 是否保守。 |
-| Outer correction | short-axis retry | `detection/outer/correction/short_axis.py` | 120 宽/方格式短轴修正是否只在 full / policy-allowed 情况启用。 |
 | Outer correction | correction flow | `detection/outer/correction/flow.py` | 多个 retry 的顺序和停止条件是否清楚，不能无证据地覆盖已选候选。 |
 | Gap / separator | separator profile | `geometry/separator_profile.py` | profile 生成是否稳定，edge refine profile 是否只作为 gap evidence。 |
 | Gap / separator | separator cache | `geometry/separator_cache.py`, `detection/evidence/evidence_cache_keys.py`, `detection/cache_keys.py` | cache key 是否包含 format / layout / policy 参数，避免复用错误证据。 |
@@ -318,7 +317,7 @@ and decision detail, and cannot bypass the final PASS / REVIEW contract.
 | Policy activation | runtime and decision contracts | `policies/runtime_*.py`, `policies/decision_contract.py` | `DetectionPolicy` and `DetectionDecisionContract` must not drift semantically. |
 | Mode-specific detector | dual-lane and review-only paths | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_*.py`, `detection/modes/review_only.py`, `candidate/fallback.py` | Dedicated detectors and review-only paths must stay isolated, context-driven, and conservative. |
 | Outer proposal | base, content, edge-anchor, separator-derived outer | `detection/outer/proposal/*`, `geometry/outer_boxes.py`, `detection/evidence/separator_bands.py` | Outer proposals only propose boxes; local, full-width, and wide separator variants share one separator-derived proposal engine behind the proposal plan. |
-| Outer correction | content-aligned, format-geometry, short-axis retry | `detection/outer/correction/*`, `detection/evidence/outer_alignment.py` | Corrections must be policy-scoped and re-enter candidate assessment. |
+| Outer correction | geometry and content-aligned retry | `detection/outer/correction/geometry.py`, `detection/outer/correction/content_aligned.py`, `detection/evidence/outer_alignment.py` | Geometry corrections keep short-axis and format-geometry strategies policy-scoped, then re-enter candidate assessment. |
 | Gap / separator | profile, cache, normal gap search, hard trust, edge pair, robust grid | `geometry/separator_*`, `geometry/gap_search.py`, `geometry/gap_trust.py`, `geometry/edge_pairs.py`, `geometry/robust_grid.py` | Hard evidence must stay stronger than model/equal/grid evidence, and cache keys must include policy-relevant context. |
 | Gap / separator | nearby correction, enhanced separator, wide retry, wide-separator gaps | `geometry/nearby_separator.py`, `geometry/enhanced_separator.py`, `detection/candidate/run.py`, `detection/evidence/separator.py` | Rescue evidence must be marked, capped when needed, and gated again. |
 | Content | content evidence, profile runs, mask outer, content candidate | `detection/evidence/content_*`, `candidate/content_candidate.py` | Content can validate or challenge candidates but must not auto-pass alone. |
