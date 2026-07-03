@@ -71,9 +71,13 @@ Current stable release: v4.2.8
   `correction.geometry_consistency` 合并原 short-axis 与 format-geometry retry，
   `correction.content_containment` 替代原 content-aligned retry 命名。
 - corrected outer 不再在 correction helper 内直接完成重建与评估；统一通过
-  `detection/candidate/outer_correction.py` 重新 build detection 并重新
-  apply candidate assessment。outer correction 只改变候选输入，PASS / REVIEW
-  仍只由 candidate gate 和 final decision contract 决定。
+  `detection/candidate/corrected_outer.py` 重新 build detection、重算 evidence
+  并重新 apply candidate assessment。outer correction 只改变候选输入，PASS /
+  REVIEW 仍只由 candidate gate 和 final decision contract 决定。
+- outer correction workflow contract 已从 `detection/outer/correction/` 移到
+  `detection/final/outer_correction.py`：outer correction proposal 只生成
+  corrected box，candidate 层负责“怎么重新算”，final workflow 层负责“何时必须
+  重新算”以及 correction 顺序。
 - separator-derived outer 已收敛为统一 `detection/outer/proposal/separator.py` 引擎；
   local、full-width 和 120-66 wide separator variants 共享 sequence / ranking /
   candidate 输出逻辑，active code 不再保留独立 dark-band outer 分支。

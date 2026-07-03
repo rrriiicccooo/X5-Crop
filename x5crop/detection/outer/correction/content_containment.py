@@ -7,7 +7,7 @@ from ....formats import FormatSpec
 from ....policies.registry import get_detection_policy
 from ....runtime import AnalysisCache
 from ....runtime_config import RuntimeConfig
-from ...candidate.outer_correction import CorrectedOuterCandidateInput
+from ...candidate.corrected_outer import CorrectedOuterCandidateInput
 from ...evidence.outer_alignment import corrected_outer_from_alignment
 
 

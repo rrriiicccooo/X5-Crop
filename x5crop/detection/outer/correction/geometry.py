@@ -14,7 +14,7 @@ from ....policies.runtime_policy import DetectionPolicy
 from ....runtime import AnalysisCache
 from ....runtime_config import RuntimeConfig
 from ....utils import box_from_dict, clamp_int
-from ...candidate.outer_correction import CorrectedOuterCandidateInput
+from ...candidate.corrected_outer import CorrectedOuterCandidateInput
 
 
 def corrected_outer_for_short_axis_geometry(

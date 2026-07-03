@@ -67,17 +67,17 @@ def build_assessed_corrected_outer_candidate(
             "preserved_through_outer_correction": True,
         }
 
-    retry_alignment = outer_content_alignment_detail(gray, retried, cache, policy=policy)
-    retry_content = content_evidence_detail(gray, retried, cache, policy.content)
-    retried.detail["outer_content_alignment"] = retry_alignment
-    retried.detail["content_evidence"] = retry_content
+    reassessed_alignment = outer_content_alignment_detail(gray, retried, cache, policy=policy)
+    reassessed_content = content_evidence_detail(gray, retried, cache, policy.content)
+    retried.detail["outer_content_alignment"] = reassessed_alignment
+    retried.detail["content_evidence"] = reassessed_content
     retried.detail["outer_correction"] = {
         "used": True,
         "source_reason": corrected.source_reason,
         "original_outer_work_box": corrected.original_outer_work_box,
         "corrected_outer_work_box": asdict(corrected.box),
-        "retry_alignment": retry_alignment,
-        "retry_content_support": retry_content.get("support"),
+        "reassessed_alignment": reassessed_alignment,
+        "reassessed_content_support": reassessed_content.get("support"),
         "candidate_reassessment": {
             "used": True,
             "owner": "candidate",
