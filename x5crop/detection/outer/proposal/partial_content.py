@@ -9,7 +9,7 @@ from ....utils import bbox_from_mask, clamp_int
 from .common import unique_outer_candidates
 
 
-def floating_outer_candidates(
+def floating_content_position_candidates(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
     fmt: FormatSpec,

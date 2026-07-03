@@ -29,8 +29,8 @@ def parameters() -> FormatParameters:
         separator_outer_frame_error_max=0.18,
         separator_outer_max_width_ratio=0.110,
         separator_outer_gap_max_width_ratio=0.095,
-        long_axis_edge_anchor_ratio_extras=(0.04, 0.08),
-        long_axis_edge_anchor_max_candidates=4,
+        partial_edge_ratio_extras=(0.04, 0.08),
+        partial_edge_max_candidates=4,
     )
 
 

@@ -10,11 +10,19 @@ from ....policies.registry import get_detection_policy
 from ....policies.runtime_policy import DetectionPolicy
 from ....runtime import AnalysisCache
 from ....utils import bbox_from_mask, clamp_int
-from ...cache_keys import long_axis_edge_anchor_cache_key
+from ...cache_keys import edge_anchored_outer_cache_key
 from .common import unique_outer_candidates
 
 
-def long_axis_edge_anchor_outer_candidates(
+def _edge_anchor_side(content_center: float, edge_limit: float) -> str | None:
+    if content_center < edge_limit:
+        return "start"
+    if content_center > (1.0 - edge_limit):
+        return "end"
+    return None
+
+
+def edge_anchored_outer_candidates(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
     fmt: FormatSpec,
@@ -26,7 +34,7 @@ def long_axis_edge_anchor_outer_candidates(
     policy = policy or get_detection_policy(fmt.name, strip_mode)
     partial_content = policy.outer.partial_content
     edge_anchor_policy = partial_content.edge_anchor
-    if not partial_content.enabled or edge_anchor_policy.mode == "off":
+    if not partial_content.enabled or not edge_anchor_policy.enabled:
         return []
     if strip_mode != "partial" or count <= 0:
         return []
@@ -36,8 +44,8 @@ def long_axis_edge_anchor_outer_candidates(
     if not base_candidates:
         return []
     if cache is not None:
-        candidate_key = long_axis_edge_anchor_cache_key(base_candidates, fmt, count, strip_mode)
-        cached_candidates = cache.long_axis_edge_anchor_outer_candidates.get(candidate_key)
+        candidate_key = edge_anchored_outer_cache_key(base_candidates, fmt, count, strip_mode)
+        cached_candidates = cache.edge_anchored_outer_candidates.get(candidate_key)
         if cached_candidates is not None:
             return list(cached_candidates)
 
@@ -67,13 +75,13 @@ def long_axis_edge_anchor_outer_candidates(
                 outer.left + local_content.right,
                 outer.top + local_content.bottom,
             ).clamp(w, h)
-        if strip_mode == "partial":
-            if content is None or not content.valid():
-                continue
-            content_center = ((float(content.left + content.right) * 0.5) - float(outer.left)) / max(1.0, float(outer.width))
-            edge_limit = float(edge_anchor_policy.partial_center_ratio)
-            if edge_limit <= content_center <= (1.0 - edge_limit):
-                continue
+        if content is None or not content.valid():
+            continue
+        content_center_abs = float(content.left + content.right) * 0.5
+        content_center = (content_center_abs - float(outer.left)) / max(1.0, float(outer.width))
+        anchor_side = _edge_anchor_side(content_center, float(edge_anchor_policy.partial_center_ratio))
+        if anchor_side is None:
+            continue
         margin = clamp_int(
             float(outer.height) * edge_anchor_policy.content_margin_ratio,
             edge_anchor_policy.content_margin_min,
@@ -96,16 +104,19 @@ def long_axis_edge_anchor_outer_candidates(
             if target_width < min_width or target_width >= outer.width:
                 continue
             anchors = (
-                ("start", outer.left, outer.left + target_width),
-                ("end", outer.right - target_width, outer.right),
+                (anchor_side, outer.left, outer.left + target_width)
+                if anchor_side == "start"
+                else (anchor_side, outer.right - target_width, outer.right),
             )
             for anchor_name, left, right in anchors:
+                if not (float(left) <= content_center_abs <= float(right)):
+                    continue
                 box = Box(int(left), y_top, int(right), y_bottom).clamp(w, h)
                 if not box.valid() or box.width < min_width:
                     continue
                 candidates.append(
                     OuterCandidate(
-                        f"long_axis_edge_anchor_{strip_mode}_{anchor_name}_{source.name}_r{target_ratio:.3f}",
+                        f"edge_anchor_{strip_mode}_{anchor_name}_{source.name}_r{target_ratio:.3f}",
                         box,
                         "edge_anchor_outer",
                     )
@@ -113,5 +124,5 @@ def long_axis_edge_anchor_outer_candidates(
 
     result = unique_outer_candidates(candidates)[: int(edge_anchor_policy.max_candidates)]
     if cache is not None:
-        cache.long_axis_edge_anchor_outer_candidates[candidate_key] = list(result)
+        cache.edge_anchored_outer_candidates[candidate_key] = list(result)
     return result

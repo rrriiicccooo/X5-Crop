@@ -122,9 +122,9 @@ def apply_candidate_assessment_policy(
             hard_ok = False
             hard_detail = dict(hard_detail)
             hard_detail["ok"] = False
-            hard_detail["reason"] = "long_axis_edge_anchor_needs_hard_separator"
-            hard_detail["long_axis_edge_anchor_needs_hard_separator"] = True
-            reasons.append("long_axis_edge_anchor_separator_weak")
+            hard_detail["reason"] = "edge_anchor_needs_hard_separator"
+            hard_detail["edge_anchor_needs_hard_separator"] = True
+            reasons.append("edge_anchor_separator_weak")
 
     if source == "separator" and not hard_ok:
         reasons.append(REASON_SEPARATOR_HARD_EVIDENCE_WEAK)

@@ -26,7 +26,7 @@ class OuterStrategyParameters:
     short_axis_retry: bool
 
 @dataclass(frozen=True)
-class ContentFloatingOuterParameters:
+class FloatingContentPositionParameters:
     ratio_extras: tuple[float, ...]
     content_threshold: int
     content_margin_ratio: float
@@ -36,7 +36,7 @@ class ContentFloatingOuterParameters:
     max_candidates: int
 
 @dataclass(frozen=True)
-class EdgeAnchorOuterParameters:
+class EdgeAnchoredContentPositionParameters:
     partial_center_ratio: float
     ratio_extras: tuple[float, ...]
     content_threshold: int
@@ -161,8 +161,8 @@ class OuterContentAlignmentParameters:
 __all__ = [
     'OuterMaskProfile',
     'OuterStrategyParameters',
-    'ContentFloatingOuterParameters',
-    'EdgeAnchorOuterParameters',
+    'FloatingContentPositionParameters',
+    'EdgeAnchoredContentPositionParameters',
     'BaseOuterCandidateParameters',
     'SeparatorOuterBandParameters',
     'FullWidthSeparatorOuterParameters',

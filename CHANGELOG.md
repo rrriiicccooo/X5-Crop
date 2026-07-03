@@ -69,9 +69,9 @@ Current stable release: v4.2.8
   local、full-width 和 120-66 wide separator variants 共享 sequence / ranking /
   candidate 输出逻辑，active code 不再保留独立 dark-band outer 分支。
 - partial content-position outer 已收敛到 `policy.outer.partial_content`：标准
-  partial 同时启用 floating 与 edge-anchored 位置候选，full 与 review-only mode
-  不启用；edge-anchor 只负责提出候选，最终 PASS 仍必须经过 hard separator、
-  content 和 geometry gate。
+  partial 先尝试 edge-anchored 位置候选，edge 候选达到 trust 门槛时跳过
+  floating 位置候选；full 与 review-only mode 不启用。edge-anchor 只负责
+  提出候选，最终 PASS 仍必须经过 hard separator、content 和 geometry gate。
 - 14 个 format / strip mode decision contract policy smoke 通过；final contract
   由 active runtime `DetectionPolicy` 派生，避免 geometry support、partial edge
   和 diagnostics/output policy 漂移。

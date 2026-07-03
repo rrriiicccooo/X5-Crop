@@ -24,7 +24,7 @@ def separator_outer_cache_key(
     )
 
 
-def long_axis_edge_anchor_cache_key(
+def edge_anchored_outer_cache_key(
     base_candidates: list[OuterCandidate],
     fmt: FormatSpec,
     count: int,

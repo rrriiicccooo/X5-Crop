@@ -5,8 +5,8 @@ from .factory_presets import ModePolicyPreset
 from .parameter_aggregate import FormatParameters
 from .runtime_base import FULL, PARTIAL
 from .runtime_outer import (
-    ContentFloatingOuterPolicy,
-    EdgeAnchorOuterPolicy,
+    EdgeAnchoredContentPositionPolicy,
+    FloatingContentPositionPolicy,
     FormatGeometryRetryPolicy,
     FullWidthSeparatorOuterPolicy,
     GridOuterRefinePolicy,
@@ -39,37 +39,36 @@ def outer_policy(
     grid_refine = params.grid_outer_refine
     short_axis = params.short_axis_aspect_retry
     content_alignment = params.outer_content_alignment
-    content_floating = params.content_floating_outer
-    edge_anchor = params.edge_anchor_outer
+    floating_position = params.floating_content_position
+    edge_position = params.edge_anchored_content_position
     base_candidates = params.base_outer_candidates
     separator_outer = params.separator_outer_band
     separator_full_width = params.separator_full_width_outer
     partial_content_enabled = bool(strip_mode == PARTIAL and mode_preset.detector_kind != "review_only")
     wide_separator = mode_preset.wide_separator
-    edge_anchor_mode = "always" if partial_content_enabled else "off"
     return OuterPolicy(
         partial_content=PartialContentOuterPolicy(
             enabled=partial_content_enabled,
-            floating=ContentFloatingOuterPolicy(
+            floating=FloatingContentPositionPolicy(
                 enabled=partial_content_enabled,
-                ratio_extras=tuple(float(value) for value in content_floating.ratio_extras),
-                content_threshold=int(content_floating.content_threshold),
-                content_margin_ratio=float(content_floating.content_margin_ratio),
-                content_margin_min=int(content_floating.content_margin_min),
-                content_margin_max=int(content_floating.content_margin_max),
-                min_width_ratio=float(content_floating.min_width_ratio),
-                max_candidates=int(content_floating.max_candidates),
+                ratio_extras=tuple(float(value) for value in floating_position.ratio_extras),
+                content_threshold=int(floating_position.content_threshold),
+                content_margin_ratio=float(floating_position.content_margin_ratio),
+                content_margin_min=int(floating_position.content_margin_min),
+                content_margin_max=int(floating_position.content_margin_max),
+                min_width_ratio=float(floating_position.min_width_ratio),
+                max_candidates=int(floating_position.max_candidates),
             ),
-            edge_anchor=EdgeAnchorOuterPolicy(
-                mode=edge_anchor_mode,
-                partial_center_ratio=float(edge_anchor.partial_center_ratio),
-                ratio_extras=tuple(float(value) for value in edge_anchor.ratio_extras),
-                content_threshold=int(edge_anchor.content_threshold),
-                content_margin_ratio=float(edge_anchor.content_margin_ratio),
-                content_margin_min=int(edge_anchor.content_margin_min),
-                content_margin_max=int(edge_anchor.content_margin_max),
-                min_width_ratio=float(edge_anchor.min_width_ratio),
-                max_candidates=int(edge_anchor.max_candidates),
+            edge_anchor=EdgeAnchoredContentPositionPolicy(
+                enabled=partial_content_enabled,
+                partial_center_ratio=float(edge_position.partial_center_ratio),
+                ratio_extras=tuple(float(value) for value in edge_position.ratio_extras),
+                content_threshold=int(edge_position.content_threshold),
+                content_margin_ratio=float(edge_position.content_margin_ratio),
+                content_margin_min=int(edge_position.content_margin_min),
+                content_margin_max=int(edge_position.content_margin_max),
+                min_width_ratio=float(edge_position.min_width_ratio),
+                max_candidates=int(edge_position.max_candidates),
             ),
         ),
         separator_local=(

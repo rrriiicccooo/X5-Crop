@@ -24,8 +24,8 @@ def parameters() -> FormatParameters:
         separator_outer_band_candidates=12,
         separator_outer_pair_candidates=2,
         separator_outer_max_candidates=4,
-        long_axis_edge_anchor_ratio_extras=(0.02, 0.04),
-        long_axis_edge_anchor_max_candidates=4,
+        partial_edge_ratio_extras=(0.02, 0.04),
+        partial_edge_max_candidates=4,
     )
 
 

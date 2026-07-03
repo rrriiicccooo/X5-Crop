@@ -71,7 +71,7 @@ class OuterContentAlignmentPolicy:
 
 
 @dataclass(frozen=True)
-class ContentFloatingOuterPolicy:
+class FloatingContentPositionPolicy:
     enabled: bool = False
     ratio_extras: tuple[float, ...] = (0.06, 0.10)
     content_threshold: int = 225
@@ -83,8 +83,8 @@ class ContentFloatingOuterPolicy:
 
 
 @dataclass(frozen=True)
-class EdgeAnchorOuterPolicy:
-    mode: str = "off"
+class EdgeAnchoredContentPositionPolicy:
+    enabled: bool = False
     partial_center_ratio: float = 0.35
     ratio_extras: tuple[float, ...] = (0.06, 0.10)
     content_threshold: int = 225
@@ -98,8 +98,11 @@ class EdgeAnchorOuterPolicy:
 @dataclass(frozen=True)
 class PartialContentOuterPolicy:
     enabled: bool = False
-    floating: ContentFloatingOuterPolicy = field(default_factory=ContentFloatingOuterPolicy)
-    edge_anchor: EdgeAnchorOuterPolicy = field(default_factory=EdgeAnchorOuterPolicy)
+    position_order: tuple[str, ...] = ("edge_anchor", "floating")
+    skip_floating_when_edge_trusted: bool = True
+    edge_trust_min_candidates: int = 2
+    floating: FloatingContentPositionPolicy = field(default_factory=FloatingContentPositionPolicy)
+    edge_anchor: EdgeAnchoredContentPositionPolicy = field(default_factory=EdgeAnchoredContentPositionPolicy)
 
 
 @dataclass(frozen=True)
@@ -187,8 +190,8 @@ class OuterPolicy:
 
 
 __all__ = [
-    "ContentFloatingOuterPolicy",
-    "EdgeAnchorOuterPolicy",
+    "EdgeAnchoredContentPositionPolicy",
+    "FloatingContentPositionPolicy",
     "FormatGeometryRetryPolicy",
     "FullWidthSeparatorOuterPolicy",
     "GridOuterRefinePolicy",

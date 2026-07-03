@@ -25,8 +25,8 @@ from .parameter_finalization import (
 )
 from .parameter_outer import (
     BaseOuterCandidateParameters,
-    ContentFloatingOuterParameters,
-    EdgeAnchorOuterParameters,
+    EdgeAnchoredContentPositionParameters,
+    FloatingContentPositionParameters,
     FormatGeometryRetryParameters,
     GridOuterRefineParameters,
     OuterContentAlignmentParameters,
@@ -213,28 +213,28 @@ class FormatParameterViews:
         )
 
     @property
-    def content_floating_outer(self) -> ContentFloatingOuterParameters:
-        return ContentFloatingOuterParameters(
-            ratio_extras=self.floating_outer_ratio_extras,
-            content_threshold=self.floating_outer_content_threshold,
-            content_margin_ratio=self.floating_outer_content_margin_ratio,
-            content_margin_min=self.floating_outer_content_margin_min,
-            content_margin_max=self.floating_outer_content_margin_max,
-            min_width_ratio=self.floating_outer_min_width_ratio,
-            max_candidates=self.floating_outer_max_candidates,
+    def floating_content_position(self) -> FloatingContentPositionParameters:
+        return FloatingContentPositionParameters(
+            ratio_extras=self.partial_floating_ratio_extras,
+            content_threshold=self.partial_floating_content_threshold,
+            content_margin_ratio=self.partial_floating_content_margin_ratio,
+            content_margin_min=self.partial_floating_content_margin_min,
+            content_margin_max=self.partial_floating_content_margin_max,
+            min_width_ratio=self.partial_floating_min_width_ratio,
+            max_candidates=self.partial_floating_max_candidates,
         )
 
     @property
-    def edge_anchor_outer(self) -> EdgeAnchorOuterParameters:
-        return EdgeAnchorOuterParameters(
-            partial_center_ratio=self.long_axis_edge_anchor_partial_center_ratio,
-            ratio_extras=self.long_axis_edge_anchor_ratio_extras,
-            content_threshold=self.long_axis_edge_anchor_content_threshold,
-            content_margin_ratio=self.long_axis_edge_anchor_content_margin_ratio,
-            content_margin_min=self.long_axis_edge_anchor_content_margin_min,
-            content_margin_max=self.long_axis_edge_anchor_content_margin_max,
-            min_width_ratio=self.long_axis_edge_anchor_min_width_ratio,
-            max_candidates=self.long_axis_edge_anchor_max_candidates,
+    def edge_anchored_content_position(self) -> EdgeAnchoredContentPositionParameters:
+        return EdgeAnchoredContentPositionParameters(
+            partial_center_ratio=self.partial_edge_center_ratio,
+            ratio_extras=self.partial_edge_ratio_extras,
+            content_threshold=self.partial_edge_content_threshold,
+            content_margin_ratio=self.partial_edge_content_margin_ratio,
+            content_margin_min=self.partial_edge_content_margin_min,
+            content_margin_max=self.partial_edge_content_margin_max,
+            min_width_ratio=self.partial_edge_min_width_ratio,
+            max_candidates=self.partial_edge_max_candidates,
         )
 
     @property
