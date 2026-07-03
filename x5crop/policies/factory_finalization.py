@@ -20,7 +20,6 @@ def finalization_policy(params: FormatParameters) -> FinalizationPolicy:
     approved_adjustment = params.approved_geometry_adjustment
     return FinalizationPolicy(
         align_outer_to_content=True,
-        outer_correction_candidates_enabled=bool(finalization.outer_correction_candidates_enabled),
         apply_output_bleed=True,
         apply_approved_geometry_adjustment=True,
         approved_geometry_adjustment=ApprovedGeometryAdjustmentPolicy(

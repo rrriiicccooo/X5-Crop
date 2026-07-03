@@ -18,6 +18,7 @@ OVERLAP_BLEED_RISK = "overlap_bleed_risk"
 POLICY = "policy"
 POLICY_ID = "policy_id"
 RISK_SUMMARY = "risk_summary"
+RUNTIME_POLICY_DETAIL = "runtime_policy_detail"
 
 
 def detail_dict(detection: Detection, key: str) -> dict[str, Any]:
@@ -41,11 +42,15 @@ def policy_detail(detection: Detection) -> dict[str, Any]:
     return detail_dict(detection, POLICY)
 
 
+def runtime_policy_detail(detection: Detection) -> dict[str, Any]:
+    return detail_dict(detection, RUNTIME_POLICY_DETAIL)
+
+
 def policy_id_from_detail(detection: Detection) -> str:
     policy_id = detection.detail.get(POLICY_ID)
     if policy_id:
         return str(policy_id)
-    policy = policy_detail(detection)
+    policy = runtime_policy_detail(detection) or policy_detail(detection)
     return str(policy.get(POLICY_ID, ""))
 
 
@@ -63,10 +68,12 @@ __all__ = [
     "POLICY",
     "POLICY_ID",
     "RISK_SUMMARY",
+    "RUNTIME_POLICY_DETAIL",
     "candidate_competition",
     "candidate_assessment",
     "decision_summary",
     "detail_dict",
     "policy_detail",
     "policy_id_from_detail",
+    "runtime_policy_detail",
 ]

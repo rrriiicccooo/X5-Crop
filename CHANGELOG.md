@@ -24,6 +24,9 @@ Current stable release: v4.2.8
 - 自动 PASS 必须由 outer、separator、geometry、content 和 risk 组合证据解释。
 - weak grid、equal、content-only、safety candidate 或 partial edge 不可信的候选默认进入 REVIEW。
 - active retry architecture 已退休；separator width profile、safety candidate 和 corrected outer 都作为候选计划或候选扩展统一 assessment。
+- detection 分层已对齐为 pipeline / modes / candidate / outer / evidence /
+  decision / final；corrected outer extension 属于 candidate lifecycle，PASS /
+  REVIEW 属于 decision 层，finalization 只做 output-adjacent 调整。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 
@@ -75,10 +78,13 @@ Current stable release: v4.2.8
   `detection/candidate/corrected_outer.py` 重新 build detection、重算 evidence
   并重新 apply candidate assessment。outer correction 只改变候选输入，PASS /
   REVIEW 仍只由 candidate gate 和 final decision contract 决定。
-- outer correction candidate workflow contract 已从 `detection/outer/correction/` 移到
-  `detection/candidate/outer_correction_candidates.py`：outer correction proposal
-  只生成 corrected box，candidate 层负责重新 build detection、重新 assessment，
-  final workflow 只决定何时请求 correction candidate。
+- outer correction candidate extension 已从 finalization 移入 detection pipeline /
+  candidate lifecycle：outer correction proposal 只生成 corrected box，candidate 层负责
+  重新 build detection、重新 assessment，pipeline 将 corrected candidate 追加回候选池后
+  统一 selection。
+- final PASS / REVIEW 实现已从 `detection/final/` 移到 `detection/decision/`；
+  finalization 不再生成候选，只做 output bleed、approved geometry adjustment 和
+  read-only diagnostics attachment。
 - separator-derived outer 已收敛为统一 `detection/outer/proposal/separator.py` 引擎；
   local、full-width 和 120-66 separator width profile variants 共享 sequence / ranking /
   candidate 输出逻辑，active code 不再保留独立 broad-width outer 分支。
@@ -150,6 +156,10 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - Active retry architecture is retired; separator width profiles, safety
   candidates, and corrected outers are assessed as candidate-plan entries or
   candidate extensions.
+- Detection layering is aligned as pipeline / modes / candidate / outer /
+  evidence / decision / final. Corrected outer extension belongs to the
+  candidate lifecycle, PASS / REVIEW belongs to the decision layer, and
+  finalization is output-adjacent only.
 - New wrong PASS is unacceptable; conservative REVIEW and schema / reason diffs
   require explanation.
 - TIFF metadata, bit depth, ICC, resolution, and compression behavior remain unchanged.
@@ -208,6 +218,12 @@ Verified:
   standard gap profiles, separator width profiles, separator-derived outers,
   content candidates, and safety candidates enter one candidate plan and pass
   through the same candidate assessment and final decision contract.
+- Corrected outer extension now runs inside the detection pipeline before final
+  selection: proposal creates only corrected boxes, candidate code rebuilds and
+  reassesses them, and finalization no longer creates candidates.
+- Final PASS / REVIEW implementation lives under `detection/decision/`; final
+  code only handles output bleed, approved geometry adjustment, and read-only
+  diagnostic attachment.
 - 14 format / strip-mode decision contract policy smoke checks pass; the final
   contract is derived from the active runtime `DetectionPolicy` to prevent
   geometry support, partial-edge, diagnostics, and output-policy drift.

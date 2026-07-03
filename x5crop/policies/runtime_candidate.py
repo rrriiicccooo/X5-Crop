@@ -164,6 +164,11 @@ class SeparatorWidthProfileCandidatePolicy:
 
 
 @dataclass(frozen=True)
+class OuterCorrectionCandidateExtensionPolicy:
+    enabled: bool = True
+
+
+@dataclass(frozen=True)
 class ContentCandidatePlanPolicy:
     enabled: bool = True
     skip_after_separator_auto: bool = True
@@ -181,6 +186,9 @@ class CandidatePlanPolicy:
         default_factory=SeparatorFullWidthCompetitionPolicy
     )
     separator_width_profile: SeparatorWidthProfileCandidatePolicy = field(default_factory=SeparatorWidthProfileCandidatePolicy)
+    outer_correction_extension: OuterCorrectionCandidateExtensionPolicy = field(
+        default_factory=OuterCorrectionCandidateExtensionPolicy
+    )
 
 
 __all__ = [
@@ -190,6 +198,7 @@ __all__ = [
     "ContentMismatchReviewSelectionPolicy",
     "GatePolicy",
     "GeometrySupportScorePolicy",
+    "OuterCorrectionCandidateExtensionPolicy",
     "PartialEdgeHintPolicy",
     "PartialHolderPolicy",
     "PartialStopPolicy",

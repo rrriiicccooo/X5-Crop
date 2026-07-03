@@ -85,6 +85,7 @@ def build_assessed_corrected_outer_candidate(
         "source_reason": corrected.source_reason,
         "original_outer_work_box": corrected.original_outer_work_box,
         "corrected_outer_work_box": asdict(corrected.box),
+        "suppress_outer_mismatch": bool(corrected.suppress_outer_mismatch),
         "reassessed_alignment": reassessed_alignment,
         "reassessed_content_support": reassessed_content.get("support"),
         "candidate_reassessment": {

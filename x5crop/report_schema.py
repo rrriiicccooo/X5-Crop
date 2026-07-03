@@ -17,6 +17,7 @@ from .detection_detail import (
     detail_dict,
     policy_detail,
     policy_id_from_detail,
+    runtime_policy_detail,
 )
 from .domain import Detection, ProcessResult
 from .policies.decision_contract import decision_contract_for
@@ -37,7 +38,15 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
             "review_copy": result.review_copy,
             "warnings": list(result.warnings),
         }
-    policy = policy_detail(detection) or decision_contract.report_detail()
+    runtime_policy = runtime_policy_detail(detection) or policy_detail(detection)
+    decision_policy = (
+        detail_dict(detection, DECISION_POLICY_DETAIL)
+        or decision_detail.get(DECISION_POLICY_DETAIL, decision_contract.report_detail())
+    )
+    policy = {
+        "runtime_policy": runtime_policy,
+        "decision_policy": decision_policy,
+    }
     section_values = {
         "version": {
             "script_version": VERSION,
@@ -73,13 +82,11 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
         },
         "evidence_summary": detail_dict(detection, EVIDENCE_SUMMARY) or decision_detail.get(EVIDENCE_SUMMARY, {}),
         "risk_summary": detail_dict(detection, RISK_SUMMARY) or decision_detail.get(RISK_SUMMARY, {}),
-        "decision_policy_detail": (
-            detail_dict(detection, DECISION_POLICY_DETAIL)
-            or decision_detail.get(DECISION_POLICY_DETAIL, decision_contract.report_detail())
-        ),
+        "decision_policy_detail": decision_policy,
         "policy_id": (
             policy_id_from_detail(detection)
-            or policy.get("policy_id")
+            or decision_policy.get("policy_id")
+            or runtime_policy.get("policy_id")
             or decision_contract.policy_id
         ),
         "output": output,

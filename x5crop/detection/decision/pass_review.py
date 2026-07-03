@@ -313,5 +313,4 @@ def apply_final_decision_policy(
     detection.detail["risk_summary"] = risk
     detection.detail["decision_policy_detail"] = policy.report_detail()
     detection.detail["policy_id"] = policy.policy_id
-    detection.detail["policy"] = policy.report_detail()
     return detection

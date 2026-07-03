@@ -47,7 +47,7 @@ def build_policy_from_preset(
         gates=gate_policy(),
         scoring=scoring_policy(params),
         candidate_selection=selection_policy(preset, strip_mode, params),
-        candidate_plan=candidate_plan_policy(),
+        candidate_plan=candidate_plan_policy(params),
         finalization=finalization_policy(params),
         diagnostics=diagnostics_policy(mode_preset, params),
         report=report_policy(),

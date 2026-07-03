@@ -16,6 +16,11 @@ from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import review_only_detection
 from .candidate.safety_candidate import hard_safety_detection
 from .candidate.selection import select_detection_candidate
+from .candidate.outer_correction_candidates import outer_correction_candidate_extensions
+
+
+def _attach_runtime_policy_detail(detection: Detection, policy) -> None:
+    detection.detail["runtime_policy_detail"] = policy.report_detail()
 
 
 def choose_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec, cache: Optional[AnalysisCache] = None) -> Detection:
@@ -24,11 +29,11 @@ def choose_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec, c
     policy = get_detection_policy(fmt.name, config.strip_mode)
     if policy.detector.kind == "dual_lane":
         detection = choose_dual_lane_detection(gray, config, cache, policy)
-        detection.detail["policy"] = policy.report_detail()
+        _attach_runtime_policy_detail(detection, policy)
         return detection
     if policy.detector.kind == "review_only":
         detection = review_only_detection(gray, config, fmt, policy)
-        detection.detail["policy"] = policy.report_detail()
+        _attach_runtime_policy_detail(detection, policy)
         return detection
     count_specs = candidate_counts_for_format(config, fmt, policy)
     for count, strip_mode, offsets in count_specs:
@@ -53,9 +58,22 @@ def choose_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec, c
 
     if not candidates:
         detection = hard_safety_detection(gray, config, fmt)
-        detection.detail["policy"] = policy.report_detail()
+        _attach_runtime_policy_detail(detection, policy)
         return detection
 
-    detection = select_detection_candidate(candidates, fmt, config.confidence_threshold, policy)
-    detection.detail["policy"] = policy.report_detail()
+    provisional = select_detection_candidate(candidates, fmt, config.confidence_threshold, policy)
+    extension_policy = get_detection_policy(provisional.film_format, provisional.strip_mode)
+    extension_candidates = outer_correction_candidate_extensions(
+        gray,
+        config,
+        fmt,
+        provisional,
+        cache,
+        extension_policy,
+    )
+    if extension_candidates:
+        candidates.extend(extension_candidates)
+    detection = select_detection_candidate(candidates, fmt, config.confidence_threshold, extension_policy)
+    selected_policy = get_detection_policy(detection.film_format, detection.strip_mode)
+    _attach_runtime_policy_detail(detection, selected_policy)
     return detection

@@ -535,7 +535,6 @@ class FormatParameterViews:
     @property
     def finalization(self) -> FinalizationParameters:
         return FinalizationParameters(
-            outer_correction_candidates_enabled=self.outer_correction_candidates_enabled,
             content_aspect_conflict_cap=self.post_content_aspect_conflict_cap,
             content_low_confidence_cap=self.post_content_low_confidence_cap,
             outer_mismatch_cap=self.post_outer_mismatch_cap,

@@ -112,6 +112,7 @@ class ReportPolicy:
         "format",
         "result",
         "selected_candidate",
+        "policy",
         "evidence_summary",
         "risk_summary",
         "decision_policy_detail",

@@ -9,6 +9,7 @@ from .runtime_candidate import (
     ContentMismatchReviewSelectionPolicy,
     SafetyCandidatePolicy,
     GeometrySupportScorePolicy,
+    OuterCorrectionCandidateExtensionPolicy,
     PartialEdgeHintPolicy,
     PartialHolderPolicy,
     PartialStopPolicy,
@@ -129,10 +130,13 @@ def selection_policy(
     )
 
 
-def candidate_plan_policy() -> CandidatePlanPolicy:
+def candidate_plan_policy(params: FormatParameters) -> CandidatePlanPolicy:
     return CandidatePlanPolicy(
         safety_candidate=SafetyCandidatePolicy(),
         partial_stop=PartialStopPolicy(),
+        outer_correction_extension=OuterCorrectionCandidateExtensionPolicy(
+            enabled=bool(params.outer_correction_extension_enabled),
+        ),
     )
 
 

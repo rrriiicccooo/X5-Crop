@@ -408,7 +408,7 @@ class FormatParameters(FormatParameterViews):
     separator_full_width_outer_max_candidates: int = 8
     separator_full_width_outer_margin_ratios: tuple[float, ...] = (0.00, 0.018, 0.035)
     separator_full_width_outer_source_candidates: int = 3
-    outer_correction_candidates_enabled: bool = True
+    outer_correction_extension_enabled: bool = True
     short_axis_geometry_correction_enabled: bool = False
     short_axis_geometry_correction_min_error: float = 0.24
     short_axis_geometry_correction_target_aspect: float = 1.0

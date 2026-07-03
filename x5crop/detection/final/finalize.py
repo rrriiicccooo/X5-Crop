@@ -7,7 +7,6 @@ import numpy as np
 
 from ...runtime_config import RuntimeConfig
 from ...constants import (
-    ANALYSIS_SOURCE_HARD_SAFETY,
     ANALYSIS_SOURCE_REVIEW_ONLY,
     REASON_CONTENT_ASPECT_CONFLICT,
     REASON_CONTENT_EVIDENCE_WEAK,
@@ -29,12 +28,11 @@ from ..evidence.content_evidence import content_evidence_detail
 from ..evidence.read_only import attach_read_only_diagnostics
 from ..evidence.risk import lucky_pass_risk_score_detail, overlap_bleed_risk_detail
 from ..evidence.outer_alignment import outer_content_alignment_detail
-from .pass_review import apply_final_decision_policy, normalized_review_reasons
+from ..decision.pass_review import apply_final_decision_policy, normalized_review_reasons
 from .geometry import (
     apply_approved_geometry_adjustment,
     apply_edge_bleed_protection,
 )
-from ..candidate.outer_correction_candidates import apply_outer_correction_candidates
 
 
 @dataclass
@@ -56,7 +54,6 @@ def finalize_detection(
 ) -> DetectionFinalizationResult:
     policy = get_detection_policy(fmt.name, detection.strip_mode)
     detection_bleed = detection_bleed_parameters(policy.output)
-    detection_config = replace(config, bleed_x=detection_bleed.long_axis, bleed_y=detection_bleed.short_axis)
     content_detail = content_evidence_detail(gray, detection, analysis_cache, policy.content)
     detection.detail["content_evidence"] = content_detail
     outer_alignment = (
@@ -67,21 +64,11 @@ def finalize_detection(
     detection.detail["outer_content_alignment"] = outer_alignment
     review_only_mode = detection.detail.get("analysis_source") == ANALYSIS_SOURCE_REVIEW_ONLY
 
-    allow_outer_correction_candidates = (
-        detection.detail.get("analysis_source") != ANALYSIS_SOURCE_HARD_SAFETY
-        and bool(policy.finalization.outer_correction_candidates_enabled)
+    outer_correction_detail = detection.detail.get("outer_correction", {})
+    suppress_outer_mismatch = bool(
+        isinstance(outer_correction_detail, dict)
+        and outer_correction_detail.get("suppress_outer_mismatch", False)
     )
-    suppress_outer_mismatch = False
-    if allow_outer_correction_candidates and not review_only_mode:
-        detection, content_detail, outer_alignment, suppress_outer_mismatch = apply_outer_correction_candidates(
-            gray,
-            detection_config,
-            fmt,
-            detection,
-            content_detail,
-            outer_alignment,
-            analysis_cache,
-        )
 
     if not review_only_mode and bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
