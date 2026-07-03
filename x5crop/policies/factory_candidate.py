@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .factory_presets import FormatPolicyPreset
+from .factory_presets import FormatPolicyPreset, ModePolicyPreset
 from .parameter_aggregate import FormatParameters
 from .runtime_base import FULL, PARTIAL
 from .runtime_candidate import (
@@ -130,12 +130,17 @@ def selection_policy(
     )
 
 
-def candidate_plan_policy(strip_mode: str, params: FormatParameters) -> CandidatePlanPolicy:
+def candidate_plan_policy(
+    mode_preset: ModePolicyPreset,
+    strip_mode: str,
+    params: FormatParameters,
+) -> CandidatePlanPolicy:
+    del strip_mode, params
     return CandidatePlanPolicy(
         safety_candidate=SafetyCandidatePolicy(),
         partial_stop=PartialStopPolicy(),
         outer_correction_extension=OuterCorrectionCandidateExtensionPolicy(
-            enabled=bool(params.outer_correction_extension_enabled and strip_mode == FULL),
+            enabled=mode_preset.detector_kind == "standard_strip",
         ),
     )
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..formats import FormatSpec
 from ..geometry.detection_parameters import OuterBoxDetectionParameters, OuterMaskProfileParameters
 from .factory_presets import ModePolicyPreset
 from .parameter_aggregate import FormatParameters
@@ -14,6 +15,7 @@ from .runtime_outer import (
     GeometryOuterProposalPolicy,
     GridOuterRefinePolicy,
     LongAxisGeometryCorrectionPolicy,
+    OuterCorrectionFamilyPolicy,
     OuterCorrectionPolicy,
     OuterPolicy,
     OuterProposalPolicy,
@@ -67,12 +69,59 @@ def separator_outer_family_policies(
     )
 
 
+def outer_correction_family_policies(
+    mode_preset: ModePolicyPreset,
+    strip_mode: str,
+    long_axis,
+) -> tuple[OuterCorrectionFamilyPolicy, OuterCorrectionFamilyPolicy, OuterCorrectionFamilyPolicy]:
+    is_standard_strip = mode_preset.detector_kind == "standard_strip"
+    long_and_content_strip_modes = (FULL, PARTIAL)
+    long_mode = "conditional" if is_standard_strip else "off"
+    short_mode = "conditional" if is_standard_strip and strip_mode == FULL else "off"
+    content_mode = "conditional" if is_standard_strip else "off"
+    return (
+        OuterCorrectionFamilyPolicy(
+            mode=long_mode,
+            phase="geometry_consistency",
+            requires_explicit_count_for_partial=True,
+            strip_modes=long_and_content_strip_modes,
+            requires_separator_assessment=True,
+            requires_complete_hard_gaps=True,
+            allowed_axes=("long",),
+            max_shrink_ratio=float(long_axis.max_shrink_ratio),
+            max_expand_ratio=0.0,
+        ),
+        OuterCorrectionFamilyPolicy(
+            mode=short_mode,
+            phase="geometry_consistency",
+            requires_explicit_count_for_partial=True,
+            strip_modes=(FULL,),
+            requires_separator_assessment=True,
+            requires_complete_hard_gaps=False,
+            allowed_axes=("short",),
+            max_shrink_ratio=0.0,
+            max_expand_ratio=0.60,
+        ),
+        OuterCorrectionFamilyPolicy(
+            mode=content_mode,
+            phase="content_containment",
+            requires_explicit_count_for_partial=True,
+            strip_modes=long_and_content_strip_modes,
+            requires_separator_assessment=True,
+            requires_complete_hard_gaps=False,
+            allowed_axes=("long", "short"),
+            max_shrink_ratio=float(long_axis.max_shrink_ratio),
+            max_expand_ratio=0.0,
+        ),
+    )
+
+
 def outer_policy(
     mode_preset: ModePolicyPreset,
     strip_mode: str,
     params: FormatParameters,
+    fmt: FormatSpec,
 ) -> OuterPolicy:
-    is_full = strip_mode == FULL
     outer = params.outer_strategy
     long_axis = params.long_axis_geometry_correction
     grid_refine = params.grid_outer_refine
@@ -86,6 +135,16 @@ def outer_policy(
     partial_content_enabled = bool(strip_mode == PARTIAL and mode_preset.detector_kind != "review_only")
     separator_width_profile = mode_preset.separator_width_profile
     local_family, full_width_family, width_profile_family = separator_outer_family_policies(mode_preset, params)
+    long_correction_family, short_correction_family, content_correction_family = outer_correction_family_policies(
+        mode_preset,
+        strip_mode,
+        long_axis,
+    )
+    short_target_aspect = (
+        float(short_axis.target_aspect)
+        if float(short_axis.target_aspect) > 0.0
+        else float(fmt.horizontal_content_aspect or 1.0)
+    )
     return OuterPolicy(
         proposal=OuterProposalPolicy(
             base=BaseOuterProposalPolicy(
@@ -194,7 +253,8 @@ def outer_policy(
         correction=OuterCorrectionPolicy(
             geometry_consistency=GeometryConsistencyCorrectionPolicy(
                 long_axis=LongAxisGeometryCorrectionPolicy(
-                    enabled=bool(long_axis.enabled),
+                    enabled=long_correction_family.mode != "off",
+                    family=long_correction_family,
                     ratio_tolerance=float(long_axis.ratio_tolerance),
                     min_shrink_ratio=float(long_axis.min_shrink_ratio),
                     max_shrink_ratio=float(long_axis.max_shrink_ratio),
@@ -203,15 +263,17 @@ def outer_policy(
                     content_margin_max=int(long_axis.content_margin_max),
                 ),
                 short_axis=ShortAxisGeometryCorrectionPolicy(
-                    enabled=bool(short_axis.enabled and is_full),
+                    enabled=short_correction_family.mode != "off",
+                    family=short_correction_family,
                     min_error=float(short_axis.min_error),
-                    target_aspect=float(short_axis.target_aspect),
+                    target_aspect=short_target_aspect,
                     margin_ratio=float(short_axis.margin_ratio),
                     margin_min=int(short_axis.margin_min),
                     margin_max=int(short_axis.margin_max),
                 ),
             ),
             content_containment=ContentContainmentCorrectionPolicy(
+                family=content_correction_family,
                 white_edge_long_ratio=float(content_containment.white_edge_long_ratio),
                 white_edge_long_min=int(content_containment.white_edge_long_min),
                 white_edge_long_max=int(content_containment.white_edge_long_max),
@@ -250,6 +312,7 @@ def outer_policy(
 
 __all__ = [
     'outer_policy',
+    'outer_correction_family_policies',
     'separator_outer_family_policies',
     'separator_width_profile_outer_policy',
 ]

@@ -90,7 +90,6 @@ class FullWidthSeparatorOuterParameters:
 
 @dataclass(frozen=True)
 class LongAxisGeometryCorrectionParameters:
-    enabled: bool
     ratio_tolerance: float
     min_shrink_ratio: float
     max_shrink_ratio: float
@@ -107,7 +106,6 @@ class GridOuterRefineParameters:
 
 @dataclass(frozen=True)
 class ShortAxisGeometryCorrectionParameters:
-    enabled: bool
     min_error: float
     target_aspect: float
     margin_ratio: float

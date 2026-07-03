@@ -14,6 +14,7 @@ from ....policies.runtime_policy import DetectionPolicy
 from ....runtime import AnalysisCache
 from ....runtime_config import RuntimeConfig
 from ....utils import box_from_dict, clamp_int
+from .policy import correction_axes_allowed, correction_family_available
 from .types import OuterCorrectionProposal
 
 
@@ -24,13 +25,13 @@ def corrected_outer_for_short_axis_geometry(
     detection: Detection,
     content_detail: dict[str, Any],
     cache: AnalysisCache,
+    explicit_count: bool,
     policy: Optional[DetectionPolicy] = None,
 ) -> Optional[Box]:
     policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     short_axis = policy.outer.correction.geometry_consistency.short_axis
-    if not short_axis.enabled:
-        return None
-    if detection.strip_mode != "full" or detection.count != fmt.default_count:
+    family = short_axis.family
+    if not short_axis.enabled or not correction_family_available(family, detection, explicit_count):
         return None
     candidate = detection.detail.get("candidate_assessment", {})
     if not isinstance(candidate, dict) or candidate.get("source") != "separator":
@@ -50,7 +51,10 @@ def corrected_outer_for_short_axis_geometry(
     if not outer.valid():
         return None
     pitch = float(outer.width) / float(max(1, detection.count))
-    target_aspect = max(0.01, float(short_axis.target_aspect))
+    target_aspect = float(short_axis.target_aspect)
+    if target_aspect <= 0.0:
+        target_aspect = float(CONTENT_ASPECTS_HORIZONTAL.get(fmt.name) or 1.0)
+    target_aspect = max(0.01, target_aspect)
     target_height = pitch / target_aspect
     if target_height <= float(outer.height):
         return None
@@ -77,12 +81,17 @@ def corrected_outer_for_short_axis_geometry(
         return None
     if corrected.height <= outer.height:
         return None
+    expand_ratio = float(corrected.height - outer.height) / max(1.0, float(outer.height))
+    if family.max_expand_ratio > 0.0 and expand_ratio > family.max_expand_ratio:
+        return None
+    if not correction_axes_allowed(family, outer, corrected):
+        return None
     return corrected
 
 
 def geometry_consistency_model_detail(gray: np.ndarray, detection: Detection, config: RuntimeConfig, fmt: FormatSpec, cache: AnalysisCache) -> dict[str, Any]:
-    if detection.strip_mode != "full" or detection.count <= 0:
-        return {"used": False, "reason": "not_full_strip"}
+    if detection.count <= 0:
+        return {"used": False, "reason": "invalid_count"}
     aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
     if aspect is None or aspect <= 0.0:
         return {"used": False, "reason": "unknown_format_aspect"}
@@ -132,17 +141,17 @@ def corrected_outer_from_long_axis_geometry(
     geometry_detail: dict[str, Any],
     alignment: dict[str, Any],
     cache: AnalysisCache,
+    explicit_count: bool,
     policy: Optional[DetectionPolicy] = None,
 ) -> Optional[Box]:
     policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     long_axis = policy.outer.correction.geometry_consistency.long_axis
-    if not long_axis.enabled:
-        return None
-    if detection.strip_mode != "full" or detection.count != fmt.default_count:
+    family = long_axis.family
+    if not long_axis.enabled or not correction_family_available(family, detection, explicit_count):
         return None
     if not bool(geometry_detail.get("used", False)):
         return None
-    if not bool(geometry_detail.get("complete_measured_hard_gaps", False)):
+    if family.requires_complete_hard_gaps and not bool(geometry_detail.get("complete_measured_hard_gaps", False)):
         return None
 
     unexplained = float(geometry_detail.get("unexplained_extra_ratio", 0.0) or 0.0)
@@ -196,6 +205,8 @@ def corrected_outer_from_long_axis_geometry(
         return None
     if shrink_ratio > long_axis.max_shrink_ratio:
         return None
+    if family.max_shrink_ratio > 0.0 and shrink_ratio > family.max_shrink_ratio:
+        return None
 
     actual_ratio = float(geometry_detail.get("actual_outer_ratio", 0.0) or 0.0)
     expected_ratio = float(geometry_detail.get("expected_ratio_from_measured_separators", 0.0) or 0.0)
@@ -219,6 +230,8 @@ def corrected_outer_from_long_axis_geometry(
 
     if corrected.width < max(80, int(round(outer.width * 0.80))):
         return None
+    if not correction_axes_allowed(family, outer, corrected):
+        return None
     return corrected
 
 
@@ -230,6 +243,7 @@ def geometry_consistency_correction_proposal(
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
+    explicit_count: bool,
 ) -> Optional[OuterCorrectionProposal]:
     policy = get_detection_policy(fmt.name, detection.strip_mode)
     corrected_outer = corrected_outer_for_short_axis_geometry(
@@ -239,6 +253,7 @@ def geometry_consistency_correction_proposal(
         detection,
         content_detail,
         cache,
+        explicit_count,
         policy=policy,
     )
     if corrected_outer is not None:
@@ -261,6 +276,7 @@ def geometry_consistency_correction_proposal(
         geometry_detail,
         outer_alignment,
         cache,
+        explicit_count,
         policy=policy,
     )
     if corrected_outer is None:

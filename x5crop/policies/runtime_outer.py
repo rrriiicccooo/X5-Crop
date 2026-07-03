@@ -6,10 +6,33 @@ from ..geometry.detection_parameters import OuterBoxDetectionParameters, OuterMa
 
 
 @dataclass(frozen=True)
+class OuterCorrectionFamilyPolicy:
+    mode: str = "off"
+    phase: str = "extension"
+    requires_explicit_count_for_partial: bool = True
+    strip_modes: tuple[str, ...] = ("full",)
+    requires_separator_assessment: bool = True
+    requires_complete_hard_gaps: bool = False
+    allowed_axes: tuple[str, ...] = ()
+    max_shrink_ratio: float = 0.0
+    max_expand_ratio: float = 0.0
+
+    def available_for(self, strip_mode: str, explicit_count: bool) -> bool:
+        if self.mode == "off":
+            return False
+        if strip_mode not in self.strip_modes:
+            return False
+        if strip_mode == "partial" and self.requires_explicit_count_for_partial and not explicit_count:
+            return False
+        return True
+
+
+@dataclass(frozen=True)
 class ShortAxisGeometryCorrectionPolicy:
     enabled: bool = False
+    family: OuterCorrectionFamilyPolicy = field(default_factory=OuterCorrectionFamilyPolicy)
     min_error: float = 0.24
-    target_aspect: float = 1.0
+    target_aspect: float = 0.0
     margin_ratio: float = 0.008
     margin_min: int = 12
     margin_max: int = 80
@@ -18,6 +41,7 @@ class ShortAxisGeometryCorrectionPolicy:
 @dataclass(frozen=True)
 class LongAxisGeometryCorrectionPolicy:
     enabled: bool = True
+    family: OuterCorrectionFamilyPolicy = field(default_factory=OuterCorrectionFamilyPolicy)
     ratio_tolerance: float = 0.025
     min_shrink_ratio: float = 0.003
     max_shrink_ratio: float = 0.120
@@ -36,6 +60,7 @@ class GridOuterRefinePolicy:
 
 @dataclass(frozen=True)
 class ContentContainmentCorrectionPolicy:
+    family: OuterCorrectionFamilyPolicy = field(default_factory=OuterCorrectionFamilyPolicy)
     white_edge_long_ratio: float = 0.0190
     white_edge_long_min: int = 90
     white_edge_long_max: int = 180
@@ -245,6 +270,7 @@ __all__ = [
     "GeometryOuterProposalPolicy",
     "GridOuterRefinePolicy",
     "LongAxisGeometryCorrectionPolicy",
+    "OuterCorrectionFamilyPolicy",
     "OuterCorrectionPolicy",
     "OuterPolicy",
     "OuterProposalPolicy",

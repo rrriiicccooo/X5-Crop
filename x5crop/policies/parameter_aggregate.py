@@ -406,14 +406,11 @@ class FormatParameters(FormatParameterViews):
     separator_full_width_outer_max_candidates: int = 8
     separator_full_width_outer_margin_ratios: tuple[float, ...] = (0.00, 0.018, 0.035)
     separator_full_width_outer_source_candidates: int = 3
-    outer_correction_extension_enabled: bool = True
-    short_axis_geometry_correction_enabled: bool = False
     short_axis_geometry_correction_min_error: float = 0.24
-    short_axis_geometry_correction_target_aspect: float = 1.0
+    short_axis_geometry_correction_target_aspect: float = 0.0
     short_axis_geometry_correction_margin_ratio: float = 0.008
     short_axis_geometry_correction_margin_min: int = 12
     short_axis_geometry_correction_margin_max: int = 80
-    long_axis_geometry_correction_enabled: bool = True
     long_axis_geometry_correction_ratio_tolerance: float = 0.025
     long_axis_geometry_correction_min_shrink_ratio: float = 0.003
     long_axis_geometry_correction_max_shrink_ratio: float = 0.120

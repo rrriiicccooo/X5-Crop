@@ -17,7 +17,6 @@ def parameters() -> FormatParameters:
         nearby_active_correction=False,
         lucky_pass_risk_enabled=False,
         leading_grid_failure_enabled=False,
-        outer_correction_extension_enabled=False,
         separator_width_profile_partial_enabled=False,
         partial_safe_extra_frames_enabled=False,
     )

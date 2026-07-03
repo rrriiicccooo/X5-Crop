@@ -7,7 +7,9 @@ from ....formats import FormatSpec
 from ....policies.registry import get_detection_policy
 from ....runtime import AnalysisCache
 from ....runtime_config import RuntimeConfig
+from ....utils import box_from_dict
 from ...evidence.outer_alignment import corrected_outer_from_alignment
+from .policy import correction_axes_allowed, correction_family_available
 from .types import OuterCorrectionProposal
 
 
@@ -17,13 +19,21 @@ def content_containment_correction_proposal(
     detection: Detection,
     alignment: dict[str, Any],
     cache: AnalysisCache,
+    explicit_count: bool,
 ) -> Optional[OuterCorrectionProposal]:
     del config, cache
-    if detection.strip_mode != "full":
-        return None
     policy = get_detection_policy(fmt.name, detection.strip_mode)
+    family = policy.outer.correction.content_containment.family
+    if not correction_family_available(family, detection, explicit_count):
+        return None
     corrected_outer = corrected_outer_from_alignment(alignment, detection.count, policy)
     if corrected_outer is None:
+        return None
+    try:
+        original_outer = box_from_dict(alignment["outer_work_box"])
+    except Exception:
+        return None
+    if not correction_axes_allowed(family, original_outer, corrected_outer):
         return None
     return OuterCorrectionProposal(
         box=corrected_outer,

@@ -15,6 +15,49 @@ from ..evidence.outer_alignment import outer_content_alignment_detail
 from .corrected_outer import build_assessed_corrected_outer_candidate
 from ..outer.correction.content_containment import content_containment_correction_proposal
 from ..outer.correction.geometry import geometry_consistency_correction_proposal, geometry_consistency_model_detail
+from ..outer.correction.policy import correction_family_available
+
+
+def _correction_skip_reason(family, detection: Detection, explicit_count: bool) -> str | None:
+    if family.mode == "off":
+        return "mode_off"
+    if detection.strip_mode not in family.strip_modes:
+        return "strip_mode_not_enabled"
+    if detection.strip_mode == "partial" and family.requires_explicit_count_for_partial and not explicit_count:
+        return "partial_requires_explicit_count"
+    if family.requires_separator_assessment:
+        assessment = detection.detail.get("candidate_assessment", {})
+        if not isinstance(assessment, dict) or assessment.get("source") != "separator":
+            return "requires_separator_assessment"
+    return None
+
+
+def _outer_correction_plan_detail(
+    detection: Detection,
+    policy: DetectionPolicy,
+    explicit_count: bool,
+) -> dict[str, Any]:
+    correction = policy.outer.correction
+    families = {
+        "long_axis_geometry": correction.geometry_consistency.long_axis.family,
+        "short_axis_geometry": correction.geometry_consistency.short_axis.family,
+        "content_containment": correction.content_containment.family,
+    }
+    eligible = [
+        name
+        for name, family in families.items()
+        if correction_family_available(family, detection, explicit_count)
+    ]
+    skipped = {
+        name: reason
+        for name, family in families.items()
+        if (reason := _correction_skip_reason(family, detection, explicit_count)) is not None
+    }
+    return {
+        "count_explicit": bool(explicit_count),
+        "eligible_families": eligible,
+        "skipped_reasons": skipped,
+    }
 
 
 def outer_correction_candidate_extensions(
@@ -28,6 +71,11 @@ def outer_correction_candidate_extensions(
     if detection.detail.get("analysis_source") == ANALYSIS_SOURCE_HARD_SAFETY:
         return []
     if not bool(policy.candidate_plan.outer_correction_extension.enabled):
+        return []
+    explicit_count = bool(config.count_override is not None)
+    correction_plan = _outer_correction_plan_detail(detection, policy, explicit_count)
+    detection.detail["outer_correction_candidate_plan"] = correction_plan
+    if not correction_plan["eligible_families"]:
         return []
 
     content_detail = content_evidence_detail(gray, detection, cache, policy.content)
@@ -48,6 +96,7 @@ def outer_correction_candidate_extensions(
         content_detail,
         outer_alignment,
         cache,
+        explicit_count,
     )
     if proposal is not None:
         reassessed = build_assessed_corrected_outer_candidate(gray, config, fmt, detection, proposal, cache, policy)
@@ -58,19 +107,27 @@ def outer_correction_candidate_extensions(
         reassessed.detail["candidate_plan"] = {
             "source": "outer_correction_candidate",
             "extension_of": detection.detail.get("candidate_plan", {}),
-            "correction_order": "geometry_consistency",
+            "outer_correction": {
+                **correction_plan,
+                "attempted_family": f"{proposal.detail.get('correction_kind', 'unknown')}_geometry",
+                "correction_order": "geometry_consistency",
+            },
         }
         extensions.append(reassessed)
         return extensions
 
     if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
-        proposal = content_containment_correction_proposal(config, fmt, detection, outer_alignment, cache)
+        proposal = content_containment_correction_proposal(config, fmt, detection, outer_alignment, cache, explicit_count)
         if proposal is not None:
             reassessed = build_assessed_corrected_outer_candidate(gray, config, fmt, detection, proposal, cache, policy)
             reassessed.detail["candidate_plan"] = {
                 "source": "outer_correction_candidate",
                 "extension_of": detection.detail.get("candidate_plan", {}),
-                "correction_order": "content_containment",
+                "outer_correction": {
+                    **correction_plan,
+                    "attempted_family": "content_containment",
+                    "correction_order": "content_containment",
+                },
             }
             extensions.append(reassessed)
             return extensions

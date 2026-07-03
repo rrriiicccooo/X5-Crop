@@ -82,11 +82,16 @@ Current stable release: v4.2.8
 - separator-derived outer policy 不再由各 format 单独打开 local/full-width/width-profile；
   `SeparatorOuterFamilyPolicy` 统一声明 phase、mode 和 partial 显式 count 门控，
   full 启用全部 separator-derived families，auto-count partial 保持保守。
+- outer correction policy 已通用化为 `OuterCorrectionFamilyPolicy`：标准 full 可用
+  long-axis、short-axis 和 content-containment correction；partial 只有显式 count
+  时可用 strict long-axis / content-containment correction；partial auto 不生成
+  corrected outer candidate。
 - outer correction proposal type 已归入 `detection/outer/correction/types.py`；
   candidate 层只消费 `OuterCorrectionProposal`，outer correction 不再 import
   candidate reassessment 类型。
-- `outer_correction_extension` runtime policy 只在 full mode 打开；partial mode
-  当前没有 active corrected-outer proposal，policy detail 不再误报启用。
+- `outer_correction_extension` 现在只表示 standard-strip candidate lifecycle 允许
+  corrected-candidate extension；实际开启面由 correction family 的 mode、strip mode
+  和 partial 显式 count 门控决定。
 - outer correction candidate extension 已从 finalization 移入 detection pipeline /
   candidate lifecycle：outer correction proposal 只生成 corrected box，candidate 层负责
   重新 build detection、重新 assessment，pipeline 将 corrected candidate 追加回候选池后
@@ -236,6 +241,10 @@ Verified:
 - Corrected outer extension now runs inside the detection pipeline before final
   selection: proposal creates only corrected boxes, candidate code rebuilds and
   reassesses them, and finalization no longer creates candidates.
+- Outer correction policy is generalized as `OuterCorrectionFamilyPolicy`: standard
+  full strips can use long-axis, short-axis, and content-containment correction;
+  explicit-count partial strips can use strict long-axis and content-containment
+  correction; auto-count partial strips do not generate corrected outer candidates.
 - The outer correction proposal type now lives in
   `detection/outer/correction/types.py`; candidate code consumes
   `OuterCorrectionProposal` instead of outer correction importing candidate

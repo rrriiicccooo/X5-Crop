@@ -140,10 +140,10 @@ REVIEW contract。
 | Outer proposal | partial content-position outer | `detection/outer/proposal/partial_content.py`, `detection/outer/proposal/partial_edge.py` | 标准 partial 若内容不铺满片夹，统一建模为 edge-anchored 或 floating 两种位置；proposal plan 先尝试 edge，edge 候选达到 trust 门槛时跳过 floating；两者只提出 outer，必须继续经过 separator/content/geometry gate，`135-dual/partial` 仍由 review-only mode 接管。 |
 | Outer proposal | separator-derived outer | `detection/outer/proposal/separator.py`, `detection/evidence/separator_bands.py` | local、full-width 和 separator width profile variants 是否共享同一 outer proposal 引擎；标准 strip 的 full 全部启用，partial 只有显式 count 时启用 late/auxiliary variants，spacing / width / frame-error 约束由 format 参数控制。 |
 | Outer proposal | proposal plan | `detection/outer/proposal/plan.py` | candidate 层只能通过 proposal plan 获取和合并 outer candidates；不得直接依赖 base/common/separator 内部 helper 或 variant 常量。 |
-| Outer correction | geometry consistency correction | `detection/outer/correction/geometry.py`, `detection/outer/correction/types.py` | short-axis 与 long-axis geometry consistency 是否保持各自 policy 触发条件；outer correction 只提出 `OuterCorrectionProposal`，不直接 PASS / REVIEW。 |
-| Outer correction | content containment correction | `detection/evidence/outer_alignment.py`, `detection/outer/correction/content_containment.py`, `detection/outer/correction/types.py` | 内容边缘证据是否只用于提出更小的 corrected outer proposal；修正后的候选必须由 candidate contract 重新 build detection 并重新 assessment。 |
+| Outer correction | geometry consistency correction | `detection/outer/correction/geometry.py`, `detection/outer/correction/types.py` | long-axis / short-axis 是否由 `OuterCorrectionFamilyPolicy` 控制开启面、修正轴和 partial 显式 count 门控；outer correction 只提出 `OuterCorrectionProposal`，不直接 PASS / REVIEW。 |
+| Outer correction | content containment correction | `detection/evidence/outer_alignment.py`, `detection/outer/correction/content_containment.py`, `detection/outer/correction/types.py` | 内容边缘证据是否只用于提出更小的 corrected outer proposal；full 和显式 count partial 可用，auto-count partial 不启用，修正后的候选必须重新 build detection 并重新 assessment。 |
 | Corrected candidate | corrected outer reassessment | `detection/candidate/corrected_outer.py` | corrected outer 重新 build detection、重算 evidence 并重新 candidate assessment；candidate 层负责“怎么重新算”。 |
-| Candidate extension | outer correction candidate extension | `detection/pipeline.py`, `detection/candidate/outer_correction_candidates.py` | correction 顺序固定为 geometry consistency 再 content containment；pipeline 只把 corrected outer 追加回候选池，重新 selection，不能无证据地覆盖已选候选，不能绕过最终 decision / gate。 |
+| Candidate extension | outer correction candidate extension | `detection/pipeline.py`, `detection/candidate/outer_correction_candidates.py` | correction 顺序固定为 geometry consistency 再 content containment；candidate plan 记录 eligible / skipped / attempted family；pipeline 只把 reassessed corrected outer 追加回候选池，不能绕过最终 decision / gate。 |
 | Gap / separator | separator profile | `geometry/separator_profile.py` | profile 生成是否稳定，edge refine profile 是否只作为 gap evidence。 |
 | Gap / separator | separator cache | `geometry/separator_cache.py`, `detection/evidence/evidence_cache_keys.py`, `detection/cache_keys.py` | cache key 是否包含 format / layout / policy 参数，避免复用错误证据。 |
 | Gap / separator | normal gap search | `geometry/gap_search.py` | gap width、guard、peak、geometry constraint 是否符合当前 format/mode。 |
@@ -206,7 +206,7 @@ REVIEW contract。
 - 135-dual full 使用 dual-lane detector；135-dual partial 保守复核。
 - half geometry support 是通用 capability，但默认只给 `half/full` 开启。
 - separator width profile 是通用 separator 宽度证据；120-66 只拥有更宽的 width 参数、square-frame gate、broad separator width evidence 要求和 strict-holder checks。
-- 120-67 可以有自己的 short-axis correction 和 separator width profile，但不能继承 120-66 broad separator width 参数。
+- outer correction 是通用 corrected-candidate capability；format 只能提供 aspect、margin、shrink/expand 和 gate 参数，不能拥有独立 correction 算法开关。
 - weak grid、equal、content-only、safety 或不可信 partial-edge 证据不能获得自动 PASS 权限。
 
 ### 数据和报告契约
@@ -353,9 +353,9 @@ and decision detail, and cannot bypass the final PASS / REVIEW contract.
 | Policy activation | runtime and decision contracts | `policies/runtime_*.py`, `policies/decision_contract.py` | `DetectionPolicy` and `DetectionDecisionContract` must not drift semantically. |
 | Mode-specific detector | dual-lane and review-only paths | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_*.py`, `detection/modes/review_only.py`, `candidate/safety_candidate.py` | Dedicated detectors and review-only paths must stay isolated, context-driven, and conservative. |
 | Outer proposal | base, partial content-position, separator-derived outer | `detection/outer/proposal/*`, `geometry/outer_boxes.py`, `detection/evidence/separator_bands.py` | Outer proposals only propose boxes; standard partial mode tries edge-anchored content before floating content and skips floating when edge candidates are trusted. Local, full-width, and separator width profile variants share one separator-derived proposal engine behind the proposal plan; full enables all separator-derived families, while partial enables late/auxiliary families only when count is explicit. |
-| Outer correction | geometry consistency and content containment correction | `detection/outer/correction/geometry.py`, `detection/outer/correction/content_containment.py`, `detection/outer/correction/types.py`, `detection/evidence/outer_alignment.py` | Outer correction only emits `OuterCorrectionProposal` boxes and reasons. It does not rebuild candidates and does not own PASS / REVIEW. |
+| Outer correction | geometry consistency and content containment correction | `detection/outer/correction/geometry.py`, `detection/outer/correction/content_containment.py`, `detection/outer/correction/types.py`, `detection/evidence/outer_alignment.py` | Outer correction families declare mode, allowed axes, evidence requirements, and explicit-count partial gating. They emit `OuterCorrectionProposal` boxes only and do not own PASS / REVIEW. |
 | Corrected candidate | corrected outer reassessment | `detection/candidate/corrected_outer.py` | Candidate contract rebuilds detection, recomputes evidence, and reapplies candidate assessment for any corrected outer. |
-| Candidate extension | outer correction candidate extension | `detection/pipeline.py`, `detection/candidate/outer_correction_candidates.py` | The pipeline appends corrected outer candidates back into the candidate pool before selection; corrected candidates cannot bypass final decision/gate. |
+| Candidate extension | outer correction candidate extension | `detection/pipeline.py`, `detection/candidate/outer_correction_candidates.py` | The pipeline appends reassessed corrected outer candidates back into the candidate pool before selection; candidate detail records eligible, skipped, and attempted correction families. |
 | Gap / separator | profile, cache, normal gap search, hard trust, edge pair, robust grid | `geometry/separator_*`, `geometry/gap_search.py`, `geometry/gap_trust.py`, `geometry/edge_pairs.py`, `geometry/robust_grid.py` | Hard evidence must stay stronger than model/equal/grid evidence, and cache keys must include policy-relevant context. |
 | Gap / separator | nearby correction, enhanced separator, separator width profile planning, separator width profile gaps | `geometry/nearby_separator.py`, `geometry/enhanced_separator.py`, `detection/candidate/separator_width_profile_plan.py`, `detection/evidence/separator.py` | Profile evidence must be explicit, capped when needed, and assessed through the normal candidate gate; auto-count partial does not let auxiliary width profiles compete. |
 | Content | content evidence, profile runs, mask outer, content candidate | `detection/evidence/content_*`, `candidate/content_candidate.py` | Content can validate or challenge candidates but must not auto-pass alone. |
@@ -384,7 +384,9 @@ report/debug output explains the change.
 - Separator width profile is a universal separator-width evidence capability.
   120-66 keeps only its broader width parameters, square-frame gate, broad-width
   evidence requirements, and strict-holder checks.
-- 120-67 may have its own correction candidate behavior, but must not inherit 120-66 broad separator width parameters.
+- Outer correction is a universal corrected-candidate capability; formats may tune
+  aspect, margins, shrink/expand limits, and gates, but must not own separate
+  correction algorithm switches.
 - Weak grid, equal, content-only, safety, or untrusted partial-edge evidence
   must not gain automatic PASS authority.
 

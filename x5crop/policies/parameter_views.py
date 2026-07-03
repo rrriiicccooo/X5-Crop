@@ -288,7 +288,6 @@ class FormatParameterViews:
     @property
     def short_axis_geometry_correction(self) -> ShortAxisGeometryCorrectionParameters:
         return ShortAxisGeometryCorrectionParameters(
-            enabled=self.short_axis_geometry_correction_enabled,
             min_error=self.short_axis_geometry_correction_min_error,
             target_aspect=self.short_axis_geometry_correction_target_aspect,
             margin_ratio=self.short_axis_geometry_correction_margin_ratio,
@@ -299,7 +298,6 @@ class FormatParameterViews:
     @property
     def long_axis_geometry_correction(self) -> LongAxisGeometryCorrectionParameters:
         return LongAxisGeometryCorrectionParameters(
-            enabled=self.long_axis_geometry_correction_enabled,
             ratio_tolerance=self.long_axis_geometry_correction_ratio_tolerance,
             min_shrink_ratio=self.long_axis_geometry_correction_min_shrink_ratio,
             max_shrink_ratio=self.long_axis_geometry_correction_max_shrink_ratio,
