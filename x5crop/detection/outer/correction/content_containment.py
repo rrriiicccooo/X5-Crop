@@ -31,7 +31,7 @@ def content_containment_correction_proposal(
         strategy="content_containment_correction",
         source_reason=str(alignment.get("reason", "")),
         original_outer_work_box=alignment.get("outer_work_box"),
-        preserve_relaxed_separator_width_retry=True,
+        preserve_separator_width_profile=True,
         detail={
             "source_edge_hard_anchors": bool(alignment.get("edge_hard_anchors", False)),
             "source_white_edge_slack": bool(alignment.get("white_edge_slack", False)),

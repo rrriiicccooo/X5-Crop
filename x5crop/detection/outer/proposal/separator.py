@@ -42,13 +42,13 @@ class SeparatorOuterVariant:
 
 def separator_outer_variants_for_policy(
     policy: DetectionPolicy,
-    fallback_only: bool = False,
+    safety_only: bool = False,
 ) -> tuple[str, ...]:
     separator_policy = policy.outer.proposal.geometry.separator
     variants: list[str] = []
-    if _mode_active(separator_policy.local, fallback_only):
+    if _mode_active(separator_policy.local, safety_only):
         variants.append(LOCAL_SEPARATOR_OUTER)
-    if _mode_active(separator_policy.full_width, fallback_only):
+    if _mode_active(separator_policy.full_width, safety_only):
         variants.append(FULL_WIDTH_SEPARATOR_OUTER)
     return tuple(variants)
 
@@ -92,9 +92,9 @@ def separator_derived_outer_candidates(
     return unique_outer_candidates(candidates)
 
 
-def _mode_active(mode: str, fallback_only: bool) -> bool:
-    if fallback_only:
-        return mode == "fallback"
+def _mode_active(mode: str, safety_only: bool) -> bool:
+    if safety_only:
+        return mode == "safety"
     return mode == "always"
 
 

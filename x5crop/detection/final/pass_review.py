@@ -8,7 +8,7 @@ from ...runtime_config import RuntimeConfig
 from ...constants import (
     ANALYSIS_SOURCE_CONTENT,
     ANALYSIS_SOURCE_CONTENT_PRIMARY,
-    ANALYSIS_SOURCE_HARD_FALLBACK,
+    ANALYSIS_SOURCE_HARD_SAFETY,
     ANALYSIS_SOURCE_REVIEW_ONLY,
     HARD_GAP_METHODS,
     REASON_AUTO_GATE_NOT_SATISFIED,
@@ -227,8 +227,8 @@ def risk_summary_for(
     )
     return {
         "content_only_evidence": source in {ANALYSIS_SOURCE_CONTENT, ANALYSIS_SOURCE_CONTENT_PRIMARY, "content"},
-        "fallback_or_review_only": (
-            detection.detail.get("analysis_source") == ANALYSIS_SOURCE_HARD_FALLBACK
+        "safety_or_review_only": (
+            detection.detail.get("analysis_source") == ANALYSIS_SOURCE_HARD_SAFETY
             or detection.detail.get("analysis_source") == ANALYSIS_SOURCE_REVIEW_ONLY
         ),
         "outer_content_mismatch": not bool(evidence["outer"]["ok"]),
@@ -256,7 +256,7 @@ def apply_final_decision_policy(
     evidence = evidence_summary_for(gray, detection, content_detail, outer_alignment, policy)
     risk = risk_summary_for(detection, evidence, policy)
     reasons: list[str] = []
-    if risk["content_only_evidence"] or risk["fallback_or_review_only"]:
+    if risk["content_only_evidence"] or risk["safety_or_review_only"]:
         reasons.append(policy.decision.content_only_evidence_reason)
     if not bool(evidence["outer"]["ok"]) and policy.risk.review_on_outer_content_mismatch:
         reasons.append(policy.decision.outer_content_mismatch_reason)

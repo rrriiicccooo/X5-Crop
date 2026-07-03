@@ -18,7 +18,7 @@ def parameters() -> FormatParameters:
         separator_model_grid_credit=0.20,
         separator_model_equal_credit=0.06,
         separator_gate_profile="all_internal_gaps_hard",
-        relaxed_separator_width_retry_enabled=False,
+        separator_width_profile_enabled=False,
         partial_auto_include_default_count=True,
         separator_local_partial_mode="always",
         nearby_active_correction=False,

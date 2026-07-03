@@ -17,7 +17,7 @@ def debug_status_parts(detection: Detection, threshold: float) -> tuple[str, str
     else:
         passed = detection.confidence >= threshold and not detection.review_reasons
         status_value = "approved_auto" if passed else "needs_review"
-        source = "fallback"
+        source = "derived"
     status = "PASS" if passed else "REVIEW"
     detail = (
         f"{source} status {status_value}; "
@@ -62,4 +62,3 @@ def add_status_bar(rgb: np.ndarray, detection: Detection, threshold: float) -> n
     status_w, _ = draw_large_status(draw, (12, 10), status, color)
     draw.text((12 + status_w + 14, 17), detail, fill=(245, 245, 245))
     return np.asarray(image)
-

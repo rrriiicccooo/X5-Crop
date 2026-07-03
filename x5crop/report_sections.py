@@ -25,6 +25,8 @@ def selected_candidate(detection: Detection) -> dict[str, Any]:
         "confidence": float(detection.confidence),
         "review_reasons": list(detection.review_reasons),
         "candidate_assessment": candidate_assessment(detection),
+        "candidate_plan": detection.detail.get("candidate_plan", {}),
+        "separator_width_profile": detection.detail.get("separator_width_profile", {}),
     }
 
 

@@ -58,7 +58,7 @@ class FormatParameters(FormatParameterViews):
     content_expected_width_min_px: float = 8.0
     content_candidate_coverage_weight: float = 0.38
     content_candidate_mean_weight: float = 0.30
-    content_candidate_run_weight: float = 0.22
+    content_candidate_plan_weight: float = 0.22
     content_candidate_aspect_weight: float = 0.10
     content_conf_coverage_norm: float = 0.22
     content_conf_mean_norm: float = 0.16
@@ -87,11 +87,11 @@ class FormatParameters(FormatParameterViews):
     gap_max_width_ratio: float = 0.045
     gap_max_width_min: int = 2
     gap_max_width_max: int = 420
-    relaxed_separator_width_retry_enabled: bool = True
-    relaxed_separator_width_retry_max_width_ratio: float = 0.060
-    relaxed_separator_width_min_mean: float = 0.95
-    relaxed_separator_width_min_prominence: float = 0.02
-    relaxed_separator_width_confidence_cap: float = 0.995
+    separator_width_profile_enabled: bool = True
+    separator_width_profile_max_width_ratio: float = 0.060
+    separator_width_profile_min_mean: float = 0.95
+    separator_width_profile_min_prominence: float = 0.02
+    separator_width_profile_confidence_cap: float = 0.995
     gap_min_width_ratio: float = 0.001
     gap_min_width_min: int = 1
     gap_min_width_max: int = 12
@@ -408,7 +408,7 @@ class FormatParameters(FormatParameterViews):
     separator_full_width_outer_max_candidates: int = 8
     separator_full_width_outer_margin_ratios: tuple[float, ...] = (0.00, 0.018, 0.035)
     separator_full_width_outer_source_candidates: int = 3
-    outer_retry_enabled: bool = True
+    outer_correction_candidates_enabled: bool = True
     short_axis_geometry_correction_enabled: bool = False
     short_axis_geometry_correction_min_error: float = 0.24
     short_axis_geometry_correction_target_aspect: float = 1.0
@@ -438,9 +438,9 @@ class FormatParameters(FormatParameterViews):
     partial_edge_min_width_ratio: float = 0.30
     partial_edge_max_candidates: int = 8
     separator_local_outer_enabled: bool = False
-    separator_local_outer_mode: str = "fallback"
+    separator_local_outer_mode: str = "safety"
     separator_local_partial_enabled: bool = True
-    separator_local_partial_mode: str = "fallback"
+    separator_local_partial_mode: str = "safety"
     separator_outer_min_score: float = 0.58
     separator_outer_band_score: float = 0.36
     separator_outer_min_width_ratio: float = 0.006
@@ -454,7 +454,7 @@ class FormatParameters(FormatParameterViews):
     separator_outer_band_candidates: int = 10
     separator_outer_pair_candidates: int = 4
     separator_outer_max_candidates: int = 12
-    relaxed_separator_width_retry_partial_enabled: bool = True
+    separator_width_profile_partial_enabled: bool = True
 
 
 __all__ = [

@@ -19,7 +19,7 @@ class CorrectedOuterCandidateInput:
     strategy: str
     source_reason: str
     original_outer_work_box: Any
-    preserve_relaxed_separator_width_retry: bool = False
+    preserve_separator_width_profile: bool = False
     suppress_outer_mismatch: bool = False
     detail: dict[str, Any] = field(default_factory=dict)
 
@@ -39,11 +39,20 @@ def build_assessed_corrected_outer_candidate(
     from .candidate_assessment import apply_candidate_assessment_policy
 
     gap_override: Optional[float] = None
-    relaxed_separator_width_retry = detection.detail.get("relaxed_separator_width_retry")
-    if corrected.preserve_relaxed_separator_width_retry and isinstance(relaxed_separator_width_retry, dict) and bool(relaxed_separator_width_retry.get("used", False)):
-        gap_override = float(relaxed_separator_width_retry.get("retry_gap_max_width_ratio", policy.separator.relaxed_separator_width_retry_max_width_ratio))
+    separator_width_profile = detection.detail.get("separator_width_profile")
+    if (
+        corrected.preserve_separator_width_profile
+        and isinstance(separator_width_profile, dict)
+        and bool(separator_width_profile.get("used", False))
+    ):
+        gap_override = float(
+            separator_width_profile.get(
+                "gap_max_width_ratio",
+                policy.separator.separator_width_profile_max_width_ratio,
+            )
+        )
 
-    retried = build_detection_for_outer(
+    reassessed = build_detection_for_outer(
         gray,
         config,
         fmt,
@@ -58,20 +67,20 @@ def build_assessed_corrected_outer_candidate(
         gap_max_width_ratio_override=gap_override,
         policy=policy,
     )
-    retried = apply_candidate_assessment_policy(gray, retried, config, fmt, "separator", cache, policy=policy)
+    reassessed = apply_candidate_assessment_policy(gray, reassessed, config, fmt, "separator", cache, policy=policy)
     if gap_override is not None:
-        retried.detail["relaxed_separator_width_retry"] = {
+        reassessed.detail["separator_width_profile"] = {
             "used": True,
             "base_gap_max_width_ratio": float(policy.separator.gap_search.max_width_ratio),
-            "retry_gap_max_width_ratio": float(gap_override),
-            "preserved_through_outer_correction": True,
+            "gap_max_width_ratio": float(gap_override),
+            "preserved_through_outer_correction_candidate": True,
         }
 
-    reassessed_alignment = outer_content_alignment_detail(gray, retried, cache, policy=policy)
-    reassessed_content = content_evidence_detail(gray, retried, cache, policy.content)
-    retried.detail["outer_content_alignment"] = reassessed_alignment
-    retried.detail["content_evidence"] = reassessed_content
-    retried.detail["outer_correction"] = {
+    reassessed_alignment = outer_content_alignment_detail(gray, reassessed, cache, policy=policy)
+    reassessed_content = content_evidence_detail(gray, reassessed, cache, policy.content)
+    reassessed.detail["outer_content_alignment"] = reassessed_alignment
+    reassessed.detail["content_evidence"] = reassessed_content
+    reassessed.detail["outer_correction"] = {
         "used": True,
         "source_reason": corrected.source_reason,
         "original_outer_work_box": corrected.original_outer_work_box,
@@ -84,8 +93,8 @@ def build_assessed_corrected_outer_candidate(
             "source": "separator",
         },
     }
-    retried.detail["outer_correction"].update(corrected.detail)
-    return retried
+    reassessed.detail["outer_correction"].update(corrected.detail)
+    return reassessed
 
 
 __all__ = [

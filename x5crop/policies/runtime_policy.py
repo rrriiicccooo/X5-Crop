@@ -9,7 +9,7 @@ from .runtime_base import (
     FrameFitPolicy,
 )
 from .runtime_candidate import (
-    CandidateRunPolicy,
+    CandidatePlanPolicy,
     GatePolicy,
     PartialEdgeHintPolicy,
     PartialHolderPolicy,
@@ -51,7 +51,7 @@ class DetectionPolicy:
     gates: GatePolicy
     scoring: ScoringPolicy
     candidate_selection: SelectionPolicy
-    candidate_run: CandidateRunPolicy
+    candidate_plan: CandidatePlanPolicy
     finalization: FinalizationPolicy
     output: OutputPolicy = field(default_factory=OutputPolicy)
     diagnostics: RuntimeDiagnosticsPolicy = field(default_factory=RuntimeDiagnosticsPolicy)

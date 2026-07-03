@@ -5,9 +5,9 @@ from .parameter_aggregate import FormatParameters
 from .runtime_base import FULL, PARTIAL
 from .runtime_candidate import (
     BaseDetectionScorePolicy,
-    CandidateRunPolicy,
+    CandidatePlanPolicy,
     ContentMismatchReviewSelectionPolicy,
-    FallbackPolicy,
+    SafetyCandidatePolicy,
     GeometrySupportScorePolicy,
     PartialEdgeHintPolicy,
     PartialHolderPolicy,
@@ -129,9 +129,9 @@ def selection_policy(
     )
 
 
-def candidate_run_policy() -> CandidateRunPolicy:
-    return CandidateRunPolicy(
-        fallback=FallbackPolicy(),
+def candidate_plan_policy() -> CandidatePlanPolicy:
+    return CandidatePlanPolicy(
+        safety_candidate=SafetyCandidatePolicy(),
         partial_stop=PartialStopPolicy(),
     )
 
@@ -148,6 +148,6 @@ __all__ = [
     'partial_holder_policy',
     'scoring_policy',
     'selection_policy',
-    'candidate_run_policy',
+    'candidate_plan_policy',
     'partial_edge_hint_policy',
 ]

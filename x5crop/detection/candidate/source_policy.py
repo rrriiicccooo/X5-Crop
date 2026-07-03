@@ -5,7 +5,6 @@ from typing import Optional
 import numpy as np
 
 from ...domain import Detection
-from ...formats import FormatSpec
 from ...geometry.boxes import original_box_to_work
 from ...policies.runtime_policy import DetectionPolicy
 
@@ -15,7 +14,7 @@ def separator_full_width_can_compete(
     gray: np.ndarray,
     policy: DetectionPolicy,
 ) -> bool:
-    competition = policy.candidate_run.separator_full_width_competition
+    competition = policy.candidate_plan.separator_full_width_competition
     if not competition.enabled:
         return False
     outer_candidate_strategy = str(detection.detail.get("outer_candidate_strategy", ""))
@@ -36,34 +35,16 @@ def separator_full_width_can_compete(
     return median_aspect >= competition.general_min_median_aspect
 
 
-def fallback_outer_proposals_enabled(policy: DetectionPolicy) -> bool:
-    fallback = policy.candidate_run.fallback
-    if not fallback.use_outer_proposals:
+def safety_candidate_outer_proposals_enabled(policy: DetectionPolicy) -> bool:
+    safety_candidate = policy.candidate_plan.safety_candidate
+    if not safety_candidate.use_outer_proposals:
         return False
     separator_policy = policy.outer.proposal.geometry.separator
-    strategies = set(fallback.strategies)
+    strategies = set(safety_candidate.strategies)
     return bool(
-        (separator_policy.local == "fallback" and "separator_outer" in strategies)
-        or (separator_policy.full_width == "fallback" and "separator_outer" in strategies)
+        (separator_policy.local == "safety" and "separator_outer" in strategies)
+        or (separator_policy.full_width == "safety" and "separator_outer" in strategies)
     )
-
-
-def should_try_equal_first_before_relaxed_separator_width_retry(
-    policy: DetectionPolicy,
-    strip_mode: str,
-    count: int,
-    fmt: FormatSpec,
-) -> bool:
-    retry_policy = policy.candidate_run.equal_first_before_relaxed_separator_width_retry
-    if not retry_policy.enabled:
-        return False
-    if retry_policy.requires_detected_geometry_support and not policy.separator.geometry_support.detected_geometry.enabled:
-        return False
-    if strip_mode not in retry_policy.strip_modes:
-        return False
-    if retry_policy.requires_default_count and count != fmt.default_count:
-        return False
-    return True
 
 
 def separator_outer_gap_max_width_override(

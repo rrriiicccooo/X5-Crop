@@ -28,7 +28,7 @@ class OuterProposalStrategy:
     name: str
     report_strategy: str
     mode: str
-    fallback_only: bool
+    safety_only: bool
     risk_level: str
 
     @property
@@ -38,15 +38,15 @@ class OuterProposalStrategy:
 
 def outer_proposal_strategy_plan_for_policy(
     policy: DetectionPolicy,
-    fallback_only: bool = False,
+    safety_only: bool = False,
 ) -> list[OuterProposalStrategy]:
     proposal_policy = policy.outer.proposal
     partial_placement = proposal_policy.geometry.partial_placement
     separator_mode = (
-        "fallback"
-        if fallback_only and separator_outer_variants_for_policy(policy, fallback_only=True)
+        "safety"
+        if safety_only and separator_outer_variants_for_policy(policy, safety_only=True)
         else "always"
-        if (not fallback_only and separator_outer_variants_for_policy(policy, fallback_only=False))
+        if (not safety_only and separator_outer_variants_for_policy(policy, safety_only=False))
         else "off"
     )
     base = [
@@ -89,8 +89,8 @@ def outer_proposal_strategy_plan_for_policy(
             "medium",
         ),
     ]
-    if fallback_only:
-        return [strategy for strategy in active if strategy.mode == "fallback"]
+    if safety_only:
+        return [strategy for strategy in active if strategy.mode == "safety"]
     return [*base, *[strategy for strategy in active if strategy.mode == "always"]]
 
 
@@ -125,11 +125,11 @@ def outer_proposal_candidates(
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
-    fallback_only: bool = False,
+    safety_only: bool = False,
     policy: Optional[DetectionPolicy] = None,
 ) -> list[OuterCandidate]:
     policy = policy or get_detection_policy(fmt.name, strip_mode)
-    strategy_plan = outer_proposal_strategy_plan_for_policy(policy, fallback_only=fallback_only)
+    strategy_plan = outer_proposal_strategy_plan_for_policy(policy, safety_only=safety_only)
     enabled_strategy_names = {strategy.name for strategy in strategy_plan if strategy.enabled}
     base_candidates = base_outer_candidates(gray_work, policy.outer.proposal.base.candidates)
     edge_candidates: list[OuterCandidate] = []
@@ -164,9 +164,9 @@ def outer_proposal_candidates(
             strip_mode,
             cache,
             policy,
-            variants=separator_outer_variants_for_policy(policy, fallback_only=fallback_only),
+            variants=separator_outer_variants_for_policy(policy, safety_only=safety_only),
         )
-    if fallback_only:
+    if safety_only:
         return unique_outer_candidates([*edge_candidates, *separator_candidates])
     return unique_outer_candidates([*base_candidates, *edge_candidates, *floating_candidates, *separator_candidates])
 

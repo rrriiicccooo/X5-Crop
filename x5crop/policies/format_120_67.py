@@ -16,8 +16,8 @@ def parameters() -> FormatParameters:
         score_outer_too_large=0.995,
         score_outer_too_large_cap=0.86,
         calibrate_hard_full_confidence_floor=0.86,
-        relaxed_separator_width_retry_enabled=True,
-        relaxed_separator_width_retry_max_width_ratio=0.090,
+        separator_width_profile_enabled=True,
+        separator_width_profile_max_width_ratio=0.090,
         outer_align_short_excess_ratio=0.024,
         outer_align_short_requires_hard_anchors=True,
         outer_align_short_content_height_max=0.970,
@@ -44,7 +44,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
     modes={
         FULL: ModePolicyPreset(
             role="wide_medium_format_full_separator_guarded",
-            notes=("wide medium-format full strips can use relaxed separator width retry and tight short-axis correction",),
+            notes=("wide medium-format full strips can use separator width profile candidates and tight short-axis correction",),
             frame_fit=FrameFitPolicy(
                 name="medium_wide_frame_fit",
                 edge_evidence=True,

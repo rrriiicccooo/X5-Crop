@@ -16,7 +16,7 @@ class ApprovedGeometryAdjustmentPolicy:
 @dataclass(frozen=True)
 class FinalizationPolicy:
     align_outer_to_content: bool = True
-    retry_uncertain_outer: bool = True
+    outer_correction_candidates_enabled: bool = True
     apply_output_bleed: bool = True
     apply_approved_geometry_adjustment: bool = True
     approved_geometry_adjustment: ApprovedGeometryAdjustmentPolicy = field(default_factory=ApprovedGeometryAdjustmentPolicy)

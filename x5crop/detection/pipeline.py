@@ -14,7 +14,7 @@ from .candidate.run import calibrated_candidates_for_count
 from .candidate.counts import candidate_counts_for_format
 from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import review_only_detection
-from .candidate.fallback import hard_fallback_detection
+from .candidate.safety_candidate import hard_safety_detection
 from .candidate.selection import select_detection_candidate
 
 
@@ -52,7 +52,7 @@ def choose_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec, c
             break
 
     if not candidates:
-        detection = hard_fallback_detection(gray, config, fmt)
+        detection = hard_safety_detection(gray, config, fmt)
         detection.detail["policy"] = policy.report_detail()
         return detection
 

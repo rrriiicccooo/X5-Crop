@@ -9,7 +9,7 @@ from ...domain import Box, Detection, Gap
 from ...geometry.boxes import map_work_box
 from ...runtime_config import RuntimeConfig
 from ...utils import box_from_dict
-from ..candidate.fallback import hard_fallback_detection
+from ..candidate.safety_candidate import hard_safety_detection
 from .dual_lane_context import DualLaneDetectionContext
 
 
@@ -19,7 +19,7 @@ def dual_lane_review_detection(
     context: DualLaneDetectionContext,
     reason: str,
 ) -> Detection:
-    detection = hard_fallback_detection(gray, config, context.format_spec)
+    detection = hard_safety_detection(gray, config, context.format_spec)
     detection.review_reasons.append(reason)
     detection.review_reasons = sorted(set(detection.review_reasons))
     return detection

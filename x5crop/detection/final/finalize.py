@@ -7,7 +7,7 @@ import numpy as np
 
 from ...runtime_config import RuntimeConfig
 from ...constants import (
-    ANALYSIS_SOURCE_HARD_FALLBACK,
+    ANALYSIS_SOURCE_HARD_SAFETY,
     ANALYSIS_SOURCE_REVIEW_ONLY,
     REASON_CONTENT_ASPECT_CONFLICT,
     REASON_CONTENT_EVIDENCE_WEAK,
@@ -34,7 +34,7 @@ from .geometry import (
     apply_approved_geometry_adjustment,
     apply_edge_bleed_protection,
 )
-from .outer_correction import apply_outer_correction_flow
+from ..candidate.outer_correction_candidates import apply_outer_correction_candidates
 
 
 @dataclass
@@ -67,13 +67,13 @@ def finalize_detection(
     detection.detail["outer_content_alignment"] = outer_alignment
     review_only_mode = detection.detail.get("analysis_source") == ANALYSIS_SOURCE_REVIEW_ONLY
 
-    allow_outer_retry = (
-        detection.detail.get("analysis_source") != ANALYSIS_SOURCE_HARD_FALLBACK
-        and bool(policy.finalization.retry_uncertain_outer)
+    allow_outer_correction_candidates = (
+        detection.detail.get("analysis_source") != ANALYSIS_SOURCE_HARD_SAFETY
+        and bool(policy.finalization.outer_correction_candidates_enabled)
     )
     suppress_outer_mismatch = False
-    if allow_outer_retry and not review_only_mode:
-        detection, content_detail, outer_alignment, suppress_outer_mismatch = apply_outer_correction_flow(
+    if allow_outer_correction_candidates and not review_only_mode:
+        detection, content_detail, outer_alignment, suppress_outer_mismatch = apply_outer_correction_candidates(
             gray,
             detection_config,
             fmt,

@@ -171,7 +171,7 @@ FORMATS: dict[str, FormatSpec] = {
         "broad_internal_gap_widths_expected",
         "medium_format_aspect_sensitive",
         (
-            "short_axis_retry_can_overtrust_holder",
+            "short_axis_correction_can_overtrust_holder",
             "broad_separator_width_may_compete_with_content",
         ),
     ),

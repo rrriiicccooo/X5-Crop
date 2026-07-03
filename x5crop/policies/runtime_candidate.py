@@ -132,7 +132,7 @@ class SelectionPolicy:
 
 
 @dataclass(frozen=True)
-class FallbackPolicy:
+class SafetyCandidatePolicy:
     use_outer_proposals: bool = True
     strategies: tuple[str, ...] = ("separator_outer",)
 
@@ -155,18 +155,16 @@ class SeparatorFullWidthCompetitionPolicy:
 
 
 @dataclass(frozen=True)
-class RelaxedSeparatorWidthRetryPolicy:
-    try_full_default_count: bool = True
-    full_retry_strip_modes: tuple[str, ...] = ("full",)
-    full_retry_requires_default_count: bool = True
-    partial_retry_strip_modes: tuple[str, ...] = ("partial",)
-    try_partial_when_no_safe_broad_separator_width_candidate: bool = True
-    partial_retry_on_equal_gaps: bool = True
-    partial_retry_on_insufficient_broad_separator_width_gaps: bool = True
+class SeparatorWidthProfileCandidatePolicy:
+    include_full_default_count: bool = True
+    full_strip_modes: tuple[str, ...] = ("full",)
+    full_requires_default_count: bool = True
+    partial_strip_modes: tuple[str, ...] = ("partial",)
+    include_partial_candidates: bool = True
 
 
 @dataclass(frozen=True)
-class ContentCandidateRunPolicy:
+class ContentCandidatePlanPolicy:
     enabled: bool = True
     skip_after_separator_auto: bool = True
     separator_auto_skip_strip_modes: tuple[str, ...] = ("full",)
@@ -175,42 +173,30 @@ class ContentCandidateRunPolicy:
 
 
 @dataclass(frozen=True)
-class EqualFirstRelaxedSeparatorWidthRetryPolicy:
-    enabled: bool = True
-    requires_detected_geometry_support: bool = True
-    strip_modes: tuple[str, ...] = ("full",)
-    requires_default_count: bool = True
-
-
-@dataclass(frozen=True)
-class CandidateRunPolicy:
-    equal_first_before_relaxed_separator_width_retry: EqualFirstRelaxedSeparatorWidthRetryPolicy = field(
-        default_factory=EqualFirstRelaxedSeparatorWidthRetryPolicy
-    )
-    content_candidate: ContentCandidateRunPolicy = field(default_factory=ContentCandidateRunPolicy)
-    fallback: FallbackPolicy = field(default_factory=FallbackPolicy)
+class CandidatePlanPolicy:
+    content_candidate: ContentCandidatePlanPolicy = field(default_factory=ContentCandidatePlanPolicy)
+    safety_candidate: SafetyCandidatePolicy = field(default_factory=SafetyCandidatePolicy)
     partial_stop: PartialStopPolicy = field(default_factory=PartialStopPolicy)
     separator_full_width_competition: SeparatorFullWidthCompetitionPolicy = field(
         default_factory=SeparatorFullWidthCompetitionPolicy
     )
-    relaxed_separator_width_retry: RelaxedSeparatorWidthRetryPolicy = field(default_factory=RelaxedSeparatorWidthRetryPolicy)
+    separator_width_profile: SeparatorWidthProfileCandidatePolicy = field(default_factory=SeparatorWidthProfileCandidatePolicy)
 
 
 __all__ = [
     "BaseDetectionScorePolicy",
-    "CandidateRunPolicy",
-    "ContentCandidateRunPolicy",
+    "CandidatePlanPolicy",
+    "ContentCandidatePlanPolicy",
     "ContentMismatchReviewSelectionPolicy",
-    "EqualFirstRelaxedSeparatorWidthRetryPolicy",
-    "FallbackPolicy",
     "GatePolicy",
     "GeometrySupportScorePolicy",
     "PartialEdgeHintPolicy",
     "PartialHolderPolicy",
     "PartialStopPolicy",
+    "SafetyCandidatePolicy",
     "ScoringPolicy",
     "SelectionPolicy",
     "SeparatorFullWidthCompetitionPolicy",
+    "SeparatorWidthProfileCandidatePolicy",
     "SeparatorSupportScorePolicy",
-    "RelaxedSeparatorWidthRetryPolicy",
 ]

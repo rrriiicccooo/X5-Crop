@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..formats import FORMATS
 from .factory_candidate import (
-    candidate_run_policy,
+    candidate_plan_policy,
     partial_edge_hint_policy,
     partial_holder_policy,
     scoring_policy,
@@ -47,7 +47,7 @@ def build_policy_from_preset(
         gates=gate_policy(),
         scoring=scoring_policy(params),
         candidate_selection=selection_policy(preset, strip_mode, params),
-        candidate_run=candidate_run_policy(),
+        candidate_plan=candidate_plan_policy(),
         finalization=finalization_policy(params),
         diagnostics=diagnostics_policy(mode_preset, params),
         report=report_policy(),

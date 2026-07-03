@@ -9,12 +9,12 @@ from ...formats import FormatSpec
 from ...policies.registry import get_detection_policy
 from ...runtime import AnalysisCache
 from ...runtime_config import RuntimeConfig
-from ..candidate.corrected_outer import build_assessed_corrected_outer_candidate
+from .corrected_outer import build_assessed_corrected_outer_candidate
 from ..outer.correction.content_containment import content_containment_correction_proposal
 from ..outer.correction.geometry import geometry_consistency_correction_proposal, geometry_consistency_model_detail
 
 
-def apply_outer_correction_flow(
+def apply_outer_correction_candidates(
     gray: np.ndarray,
     config: RuntimeConfig,
     fmt: FormatSpec,
@@ -64,4 +64,4 @@ def apply_outer_correction_flow(
     return detection, content_detail, outer_alignment, False
 
 
-__all__ = ["apply_outer_correction_flow"]
+__all__ = ["apply_outer_correction_candidates"]

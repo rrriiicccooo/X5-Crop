@@ -93,7 +93,7 @@ def separator_policy(
     params: FormatParameters,
 ) -> SeparatorPolicy:
     gate = separator_gate_policy(preset, params)
-    relaxed_separator_width_retry = params.relaxed_separator_width_retry
+    separator_width_profile = params.separator_width_profile
     hard_gap_trust = params.hard_gap_trust
     nearby_correction = params.nearby_separator_correction
     robust_grid = params.robust_grid
@@ -104,12 +104,12 @@ def separator_policy(
     return SeparatorPolicy(
         gate=gate,
         hard_required_all_gaps=bool(gate.hard_required_all_gaps),
-        relaxed_separator_width_retry=bool(
-            (strip_mode == FULL and relaxed_separator_width_retry.full_enabled)
-            or (strip_mode == PARTIAL and relaxed_separator_width_retry.partial_enabled)
+        separator_width_profile_enabled=bool(
+            (strip_mode == FULL and separator_width_profile.full_enabled)
+            or (strip_mode == PARTIAL and separator_width_profile.partial_enabled)
         ),
-        relaxed_separator_width_retry_max_width_ratio=float(relaxed_separator_width_retry.max_width_ratio),
-        relaxed_separator_width_confidence_cap=float(relaxed_separator_width_retry.confidence_cap),
+        separator_width_profile_max_width_ratio=float(separator_width_profile.max_width_ratio),
+        separator_width_profile_confidence_cap=float(separator_width_profile.confidence_cap),
         geometry_support_modes=mode_preset.separator_geometry_support_modes,
         geometry_support=separator_geometry_support_policy(mode_preset, params),
         edge_pair=preset.separator_edge_pair,

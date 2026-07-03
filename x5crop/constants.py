@@ -3,7 +3,7 @@ from __future__ import annotations
 ANALYSIS_SOURCE_SEPARATOR = "separator_candidate"
 ANALYSIS_SOURCE_CONTENT = "content_candidate"
 ANALYSIS_SOURCE_CONTENT_PRIMARY = "content_primary"
-ANALYSIS_SOURCE_HARD_FALLBACK = "hard_fallback"
+ANALYSIS_SOURCE_HARD_SAFETY = "hard_safety"
 ANALYSIS_SOURCE_REVIEW_ONLY = "review_only_mode"
 ANALYSIS_SOURCE_DUAL_LANE = "dual_lane_strip"
 

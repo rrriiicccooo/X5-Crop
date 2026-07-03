@@ -5,7 +5,7 @@ from dataclasses import asdict
 import numpy as np
 
 from ...runtime_config import RuntimeConfig
-from ...constants import ANALYSIS_SOURCE_HARD_FALLBACK
+from ...constants import ANALYSIS_SOURCE_HARD_SAFETY
 from ...domain import Box, Detection, Gap
 from ...formats import FormatSpec
 from ...geometry.boxes import map_work_box
@@ -13,7 +13,7 @@ from ...geometry.frame_fit import frame_boxes_from_gaps
 from ...geometry.layout import work_gray
 
 
-def hard_fallback_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec) -> Detection:
+def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec) -> Detection:
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
     count = max(1, int(config.count))
@@ -37,10 +37,10 @@ def hard_fallback_detection(gray: np.ndarray, config: RuntimeConfig, fmt: Format
         boxes,
         gaps,
         0.0,
-        ["hard_fallback_no_candidates", "needs_manual_review"],
+        ["hard_safety_no_candidates", "needs_manual_review"],
         {
-            "analysis_source": ANALYSIS_SOURCE_HARD_FALLBACK,
-            "fallback_kind": "review_only_equal_split",
+            "analysis_source": ANALYSIS_SOURCE_HARD_SAFETY,
+            "safety_candidate_kind": "review_only_safety_equal_split",
             "changes_pass_review": False,
             "layout": config.layout,
             "film_format": fmt.name,

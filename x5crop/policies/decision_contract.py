@@ -50,14 +50,14 @@ class RiskPolicy:
     candidate_close_margin: float = 0.020
     suppress_close_competition_when_partial_edge_safe: bool = True
     content_only_candidates_review_only: bool = True
-    fallback_candidates_review_only: bool = True
+    safety_candidates_review_only: bool = True
 
 
 @dataclass(frozen=True)
 class CandidatePolicy:
     separator_candidate_can_pass: bool = True
     content_candidate_can_pass: bool = False
-    fallback_candidate_can_pass: bool = False
+    safety_candidate_can_pass: bool = False
     aggressive_candidate_default: str = "review_only"
     weak_grid_can_pass_alone: bool = False
     equal_gap_can_pass_alone: bool = False

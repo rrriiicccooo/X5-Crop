@@ -272,7 +272,7 @@ def geometry_consistency_correction_proposal(
         strategy="geometry_consistency_correction",
         source_reason="long_axis_geometry_unexplained_outer_extra",
         original_outer_work_box=geometry_detail.get("outer_work_box"),
-        preserve_relaxed_separator_width_retry=True,
+        preserve_separator_width_profile=True,
         detail={
             "correction_kind": "long_axis",
             "source_geometry_consistency": geometry_detail,

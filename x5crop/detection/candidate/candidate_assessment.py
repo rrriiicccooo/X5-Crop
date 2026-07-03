@@ -208,7 +208,7 @@ def apply_candidate_assessment_policy(
         confidence = max(confidence, config.confidence_threshold + min(0.10, joint_score * 0.08))
     broad_width_count = int(hard_detail.get("broad_separator_width_gaps", 0) or 0)
     if source == "separator" and broad_width_count > 0:
-        confidence = min(confidence, policy.separator.relaxed_separator_width_confidence_cap)
+        confidence = min(confidence, policy.separator.separator_width_profile_confidence_cap)
 
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
     candidate.review_reasons = sorted(set(reasons))

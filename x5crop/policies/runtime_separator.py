@@ -86,9 +86,9 @@ class SeparatorEdgePairPolicy:
 class SeparatorPolicy:
     gate: SeparatorGatePolicy
     hard_required_all_gaps: bool
-    relaxed_separator_width_retry: bool
-    relaxed_separator_width_retry_max_width_ratio: float
-    relaxed_separator_width_confidence_cap: float = 0.995
+    separator_width_profile_enabled: bool
+    separator_width_profile_max_width_ratio: float
+    separator_width_profile_confidence_cap: float = 0.995
     geometry_support_modes: tuple[str, ...] = ()
     geometry_support: SeparatorGeometrySupportPolicy = field(default_factory=SeparatorGeometrySupportPolicy)
     edge_pair: SeparatorEdgePairPolicy = field(default_factory=SeparatorEdgePairPolicy)

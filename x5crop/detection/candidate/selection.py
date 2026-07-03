@@ -146,6 +146,8 @@ def select_detection_candidate(
             "confidence": float(candidate.confidence),
             "review_reasons": list(candidate.review_reasons),
             "candidate_assessment": candidate.detail.get("candidate_assessment", {}),
+            "candidate_plan": candidate.detail.get("candidate_plan", {}),
+            "separator_width_profile": candidate.detail.get("separator_width_profile", {}),
         }
         for index, candidate in enumerate(candidates[: selected_policy.candidate_selection.top_n], start=1)
     ]
@@ -159,6 +161,8 @@ def select_detection_candidate(
             "confidence": float(best.confidence),
             "review_reasons": list(best.review_reasons),
             "candidate_assessment": best.detail.get("candidate_assessment", {}),
+            "candidate_plan": best.detail.get("candidate_plan", {}),
+            "separator_width_profile": best.detail.get("separator_width_profile", {}),
         },
         "selection_override": selection_override,
         "top_candidates": competition,

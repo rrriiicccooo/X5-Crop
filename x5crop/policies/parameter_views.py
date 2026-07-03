@@ -53,7 +53,7 @@ from .parameter_separator import (
     SeparatorGateParameters,
     SeparatorGeometrySupportParameters,
     SeparatorProfileParameters,
-    RelaxedSeparatorWidthRetryParameters,
+    SeparatorWidthProfileParameters,
 )
 
 
@@ -114,12 +114,12 @@ class FormatParameterViews:
         )
 
     @property
-    def relaxed_separator_width_retry(self) -> RelaxedSeparatorWidthRetryParameters:
-        return RelaxedSeparatorWidthRetryParameters(
-            full_enabled=self.relaxed_separator_width_retry_enabled,
-            partial_enabled=self.relaxed_separator_width_retry_partial_enabled,
-            max_width_ratio=self.relaxed_separator_width_retry_max_width_ratio,
-            confidence_cap=self.relaxed_separator_width_confidence_cap,
+    def separator_width_profile(self) -> SeparatorWidthProfileParameters:
+        return SeparatorWidthProfileParameters(
+            full_enabled=self.separator_width_profile_enabled,
+            partial_enabled=self.separator_width_profile_partial_enabled,
+            max_width_ratio=self.separator_width_profile_max_width_ratio,
+            confidence_cap=self.separator_width_profile_confidence_cap,
         )
 
     @property
@@ -167,7 +167,7 @@ class FormatParameterViews:
             expected_width_min_px=self.content_expected_width_min_px,
             coverage_weight=self.content_candidate_coverage_weight,
             mean_weight=self.content_candidate_mean_weight,
-            run_weight=self.content_candidate_run_weight,
+            run_weight=self.content_candidate_plan_weight,
             aspect_weight=self.content_candidate_aspect_weight,
             coverage_norm=self.content_conf_coverage_norm,
             mean_norm=self.content_conf_mean_norm,
@@ -535,7 +535,7 @@ class FormatParameterViews:
     @property
     def finalization(self) -> FinalizationParameters:
         return FinalizationParameters(
-            retry_uncertain_outer=self.outer_retry_enabled,
+            outer_correction_candidates_enabled=self.outer_correction_candidates_enabled,
             content_aspect_conflict_cap=self.post_content_aspect_conflict_cap,
             content_low_confidence_cap=self.post_content_low_confidence_cap,
             outer_mismatch_cap=self.post_outer_mismatch_cap,
@@ -649,8 +649,8 @@ class FormatParameterViews:
             min_score=self.gap_min_score,
             peak_multiplier=self.gap_peak_multiplier,
             band_multiplier=self.gap_band_multiplier,
-            separator_width_min_mean=self.relaxed_separator_width_min_mean,
-            separator_width_min_prominence=self.relaxed_separator_width_min_prominence,
+            separator_width_min_mean=self.separator_width_profile_min_mean,
+            separator_width_min_prominence=self.separator_width_profile_min_prominence,
         )
 
     @property

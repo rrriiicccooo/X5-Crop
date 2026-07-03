@@ -22,7 +22,8 @@ Current stable release: v4.2.8
 - V4.9 是 evidence-governed policy reset，不是检测阈值放宽版本。
 - V4.5.4 / V4.7 reference reports 是 historical baseline，不再是必须 0 diff 的 oracle。
 - 自动 PASS 必须由 outer、separator、geometry、content 和 risk 组合证据解释。
-- weak grid、equal、content-only、fallback 或 partial edge 不可信的候选默认进入 REVIEW。
+- weak grid、equal、content-only、safety candidate 或 partial edge 不可信的候选默认进入 REVIEW。
+- active retry architecture 已退休；separator width profile、safety candidate 和 corrected outer 都作为候选计划或候选扩展统一 assessment。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 
@@ -74,16 +75,19 @@ Current stable release: v4.2.8
   `detection/candidate/corrected_outer.py` 重新 build detection、重算 evidence
   并重新 apply candidate assessment。outer correction 只改变候选输入，PASS /
   REVIEW 仍只由 candidate gate 和 final decision contract 决定。
-- outer correction workflow contract 已从 `detection/outer/correction/` 移到
-  `detection/final/outer_correction.py`：outer correction proposal 只生成
-  corrected box，candidate 层负责“怎么重新算”，final workflow 层负责“何时必须
-  重新算”以及 correction 顺序。
+- outer correction candidate workflow contract 已从 `detection/outer/correction/` 移到
+  `detection/candidate/outer_correction_candidates.py`：outer correction proposal
+  只生成 corrected box，candidate 层负责重新 build detection、重新 assessment，
+  final workflow 只决定何时请求 correction candidate。
 - separator-derived outer 已收敛为统一 `detection/outer/proposal/separator.py` 引擎；
   local、full-width 和 120-66 separator width profile variants 共享 sequence / ranking /
   candidate 输出逻辑，active code 不再保留独立 broad-width outer 分支。
-- separator width 语义已收敛：宽度 profile 只能影响 proposal / retry 参数，
+- separator width 语义已收敛：宽度 profile 只能影响 candidate plan / proposal 参数，
   最终 gap method 仍是普通 `detected` hard separator；broad width 只写入
   `separator_width_evidence`、gate detail 和 partial holder detail。
+- candidate source orchestration 已去 retry 化：standard gap profile、separator width
+  profile、separator-derived outer、content candidate 和 safety candidate 都进入一次性
+  candidate plan，所有候选统一经过 candidate assessment 与 final decision contract。
 - partial placement outer 已收敛到 `policy.outer.proposal.geometry.partial_placement`：标准
   partial 先尝试 edge-anchored 位置候选，edge 候选达到 trust 门槛时跳过
   floating 位置候选；full 与 review-only mode 不启用。edge-anchor 只负责
@@ -141,8 +145,11 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - V4.5.4 / V4.7 reference reports are historical baselines, not required 0-diff oracles.
 - Automatic PASS must be explained by combined outer, separator, geometry,
   content, and risk evidence.
-- Weak grid, equal, content-only, fallback, or untrusted partial-edge candidates
+- Weak grid, equal, content-only, safety, or untrusted partial-edge candidates
   default to REVIEW.
+- Active retry architecture is retired; separator width profiles, safety
+  candidates, and corrected outers are assessed as candidate-plan entries or
+  candidate extensions.
 - New wrong PASS is unacceptable; conservative REVIEW and schema / reason diffs
   require explanation.
 - TIFF metadata, bit depth, ICC, resolution, and compression behavior remain unchanged.
@@ -194,9 +201,13 @@ Verified:
   separator width profile variants share sequence, ranking, and candidate output
   logic, and active code no longer keeps a separate broad-width outer branch.
 - Separator width semantics are now consolidated: width profiles can only tune
-  proposal / retry parameters, final gap methods remain ordinary `detected` hard
-  separators, and broad-width support is reported through `separator_width_evidence`,
-  gate detail, and partial-holder detail.
+  candidate-plan / proposal parameters, final gap methods remain ordinary
+  `detected` hard separators, and broad-width support is reported through
+  `separator_width_evidence`, gate detail, and partial-holder detail.
+- Candidate source orchestration no longer uses active retry control flow:
+  standard gap profiles, separator width profiles, separator-derived outers,
+  content candidates, and safety candidates enter one candidate plan and pass
+  through the same candidate assessment and final decision contract.
 - 14 format / strip-mode decision contract policy smoke checks pass; the final
   contract is derived from the active runtime `DetectionPolicy` to prevent
   geometry support, partial-edge, diagnostics, and output-policy drift.

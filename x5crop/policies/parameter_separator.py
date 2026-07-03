@@ -38,7 +38,7 @@ class SeparatorGeometrySupportParameters:
     max_outer_area_ratio: float
 
 @dataclass(frozen=True)
-class RelaxedSeparatorWidthRetryParameters:
+class SeparatorWidthProfileParameters:
     full_enabled: bool
     partial_enabled: bool
     max_width_ratio: float
@@ -187,7 +187,7 @@ __all__ = [
     'SeparatorGateParameters',
     'LeadingGridFailureParameters',
     'SeparatorGeometrySupportParameters',
-    'RelaxedSeparatorWidthRetryParameters',
+    'SeparatorWidthProfileParameters',
     'NearbySeparatorCorrectionParameters',
     'RobustGridParameters',
     'GapSearchParameters',
