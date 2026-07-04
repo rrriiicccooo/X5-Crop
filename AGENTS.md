@@ -100,12 +100,12 @@ colloquial phrasing, duplicated historical detail, and cross-document overlap.
 !/archive/
 !/install/
 !/release/
-!/tools/
 !/LICENSE
 ```
 
-- Keep `LICENSE`, `archive/`, `install/`, `release/`, and `tools/` cloud/GitHub
-  only locally unless the user asks to expand them.
+- Keep `tools/` available locally; it contains regression and build utilities
+  used by active verification. Keep `LICENSE`, `archive/`, `install/`, and
+  `release/` cloud/GitHub only locally unless the user asks to expand them.
 - Do not commit generated/local files:
   - `.venv/`, `.venv-build/`, `build/`, `dist/`, `release/`
   - `__pycache__/`, `.DS_Store`, `downloaded_apps/`
@@ -179,7 +179,7 @@ git diff --check
 python3 X5_Crop.py --version
 ```
 
-If `tools/` is expanded in the local checkout, also compile `tools/regression/*.py`.
+Also compile `tools/regression/*.py`.
 
 For docs-only changes, `git diff --check` and a final status review are enough
 unless the edit changes commands or release behavior.
