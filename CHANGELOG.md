@@ -117,6 +117,8 @@ Current stable release: v4.2.8
   margin 和 review reason 均证明可靠，则 extension profiles / outer scope-profile combinations
   只记录 skipped detail；outer correction 还会确认 outer alignment ok
   后才跳过额外候选计算。
+- execution budget detail 增加 `action`、`reason`、`stage` 和可靠性摘要，方便
+  report 人工审核 primary-only、expanded-after-primary 与 outer-correction skip。
 - partial placement outer 已收敛到 `policy.outer.proposal.geometry.partial_placement`：标准
   partial 先尝试 edge-anchored 位置候选，edge 候选达到 trust 门槛时跳过
   floating 位置候选；full 与 review-only mode 不启用。edge-anchor 只负责
@@ -256,6 +258,9 @@ Verified:
   record skipped detail instead of paying for extra candidate computation.
   Correction computation skips only after reliable selection and ok outer
   alignment.
+- Execution budget detail now records `action`, `reason`, `stage`, and reliability
+  summary fields so reports can show primary-only, expanded-after-primary, and
+  outer-correction skip decisions directly.
 - Corrected outer extension now runs inside the detection pipeline before final
   selection: proposal creates only corrected boxes, candidate code rebuilds and
   reassesses them, and finalization no longer creates candidates.

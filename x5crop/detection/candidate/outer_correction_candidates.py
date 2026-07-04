@@ -61,6 +61,21 @@ def _outer_correction_plan_detail(
     }
 
 
+def _outer_correction_budget_reason(
+    *,
+    skip_after_reliable_selection: bool,
+    reliable_selection: bool,
+    outer_alignment_ok: bool,
+) -> str:
+    if not skip_after_reliable_selection:
+        return "skip_after_reliable_selection_disabled"
+    if not reliable_selection:
+        return "selection_not_reliable"
+    if not outer_alignment_ok:
+        return "outer_alignment_conflict"
+    return "reliable_selection"
+
+
 def outer_correction_candidate_extensions(
     gray: np.ndarray,
     config: RuntimeConfig,
@@ -89,13 +104,25 @@ def outer_correction_candidate_extensions(
     detection.detail["outer_content_alignment"] = outer_alignment
     reliable_selection = candidate_is_reliable_for_execution_budget(detection, config.confidence_threshold, policy)
     outer_alignment_ok = (not bool(outer_alignment.get("used", False))) or bool(outer_alignment.get("ok", True))
+    skip_after_reliable_selection = bool(
+        policy.candidate_plan.execution_budget.skip_outer_correction_after_reliable_selection
+    )
     correction_plan["reliable_selection"] = bool(reliable_selection)
     correction_plan["outer_alignment_ok"] = bool(outer_alignment_ok)
-    if (
-        policy.candidate_plan.execution_budget.skip_outer_correction_after_reliable_selection
-        and reliable_selection
-        and outer_alignment_ok
-    ):
+    budget_reason = _outer_correction_budget_reason(
+        skip_after_reliable_selection=skip_after_reliable_selection,
+        reliable_selection=bool(reliable_selection),
+        outer_alignment_ok=bool(outer_alignment_ok),
+    )
+    should_skip_correction = skip_after_reliable_selection and reliable_selection and outer_alignment_ok
+    correction_plan["execution_budget"] = {
+        "stage": "selected_candidate",
+        "action": "skip_outer_correction_candidates" if should_skip_correction else "run_outer_correction_candidates",
+        "reason": budget_reason,
+        "reliable_selection": bool(reliable_selection),
+        "outer_alignment_ok": bool(outer_alignment_ok),
+    }
+    if should_skip_correction:
         correction_plan["skipped_due_to_reliable_selection"] = True
         correction_plan["reliability"] = candidate_reliability_detail(
             detection,

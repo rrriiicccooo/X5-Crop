@@ -48,9 +48,17 @@ def _set_execution_budget_detail(
     if not isinstance(plan, dict):
         plan = {}
         detection.detail["candidate_plan"] = plan
+    expanded = bool(expanded_after_primary)
+    primary_reliable = bool(primary_reliability.get("reliable", False))
+    action = "run_extension_candidates" if expanded else "skip_extension_candidates"
+    reason = "primary_not_reliable" if expanded else (skipped_reason or "no_extension_families")
     detail = {
+        "stage": "expanded_after_primary" if expanded else "primary_only",
+        "action": action,
+        "reason": reason,
+        "primary_reliable": primary_reliable,
         "primary_reliability": primary_reliability,
-        "expanded_after_primary": bool(expanded_after_primary),
+        "expanded_after_primary": expanded,
         "extension_families": list(extension_families),
     }
     if skipped_reason is not None:
