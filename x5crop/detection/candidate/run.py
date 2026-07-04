@@ -12,6 +12,7 @@ from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from .content_candidate import content_detection_for_count
 from .candidate_assessment import apply_candidate_assessment_policy
+from .gap_profiles import BROAD_WIDTH_GAP_PROFILE
 from .reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
 from .selection import is_partial_safe_auto_candidate
 from .separator_width_profile_plan import should_include_separator_width_profile_candidates
@@ -31,7 +32,7 @@ def _separator_extension_families(
     if separator_policy.full_width.available_for(strip_mode, explicit_count):
         families.append("separator_full_width")
     if should_include_separator_width_profile_candidates(policy, strip_mode, count, fmt, explicit_count):
-        families.append("separator_width_profile")
+        families.append(f"{BROAD_WIDTH_GAP_PROFILE}_gap_profile")
     return families
 
 

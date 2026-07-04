@@ -138,7 +138,7 @@ REVIEW contract。
 | Mode-specific detector | review-only mode | `detection/modes/review_only.py`, `candidate/safety_candidate.py` | review-only 或 hard safety 必须保持 review-only，不得因为 confidence 偶然过线而 PASS。 |
 | Outer proposal | base outer | `geometry/outer_boxes.py`, `detection/outer/proposal/base.py` | 基础 holder / content bbox 是否只提出 outer proposal，不承担评分或通过。 |
 | Outer proposal | partial content-position outer | `detection/outer/proposal/partial_content.py`, `detection/outer/proposal/partial_edge.py` | 标准 partial 若内容不铺满片夹，统一建模为 edge-anchored 或 floating 两种位置；proposal plan 先尝试 edge，edge 候选达到 trust 门槛时跳过 floating；两者只提出 outer，必须继续经过 separator/content/geometry gate，`135-dual/partial` 仍由 review-only mode 接管。 |
-| Outer proposal | separator-derived outer | `detection/outer/proposal/separator.py`, `detection/evidence/separator_bands.py` | local、full-width 和 separator width profile variants 是否共享同一 outer proposal 引擎；标准 strip 的 full 全部 eligible，partial 只有显式 count 时 eligible late/auxiliary variants；candidate execution budget 可在可靠 primary 结果后跳过 late/auxiliary 执行。 |
+| Outer proposal | separator-derived outer | `detection/outer/proposal/separator.py`, `detection/evidence/separator_bands.py` | local、full-width 和 broad-width gap profile outer variants 是否共享同一 outer proposal 引擎；标准 strip 的 full 全部 eligible，partial 只有显式 count 时 eligible extension variants；candidate execution budget 可在可靠 primary 结果后跳过 extension 执行。 |
 | Outer proposal | proposal plan | `detection/outer/proposal/plan.py` | candidate 层只能通过 proposal plan 获取和合并 outer candidates；不得直接依赖 base/common/separator 内部 helper 或 variant 常量。 |
 | Outer correction | geometry consistency correction | `detection/outer/correction/geometry.py`, `detection/outer/correction/types.py` | long-axis / short-axis 是否由 `OuterCorrectionFamilyPolicy` 控制开启面、修正轴和 partial 显式 count 门控；outer correction 只提出 `OuterCorrectionProposal`，不直接 PASS / REVIEW。 |
 | Outer correction | content containment correction | `detection/evidence/outer_alignment.py`, `detection/outer/correction/content_containment.py`, `detection/outer/correction/types.py` | 内容边缘证据是否只用于提出更小的 corrected outer proposal；full 和显式 count partial 可用，auto-count partial 不启用，修正后的候选必须重新 build detection 并重新 assessment。 |
@@ -152,8 +152,8 @@ REVIEW contract。
 | Gap / separator | robust grid | `geometry/robust_grid.py` | grid 只能补模型证据；weak grid 不得单独获得 auto PASS。 |
 | Gap / separator | nearby separator correction | `geometry/nearby_separator.py` | 附近更强 separator 替换后是否保留 confidence cap 和 diagnostics。 |
 | Gap / separator | enhanced separator | `geometry/enhanced_separator.py` | enhanced analysis 何时触发、合并多少 gap、是否导致过度补证据。 |
-| Gap / separator | separator width profile candidate planning | `detection/candidate/separator_width_profile_plan.py`, `detection/candidate/sources.py` | 标准 gap profile 与 separator width profile 是否属于同一候选计划；full 和显式 count partial 可进入统一 assessment，但 primary separator 已可靠时可以不执行 auxiliary width profile；auto-count partial 不让 auxiliary width profile 抢候选。 |
-| Gap / separator | separator width profile gaps | `detection/evidence/separator.py`, `detection/evidence/separator_width.py` | broad separator width gaps 是否只作为普通 hard separator evidence 加 width detail，不生成独立 gap method。 |
+| Gap / separator | gap search profile planning | `detection/candidate/gap_profiles.py`, `detection/candidate/separator_width_profile_plan.py`, `detection/candidate/sources.py` | `standard` 与 `broad_width` 是否作为同一候选计划里的 gap search profiles；full 和显式 count partial 可进入统一 assessment，但 primary separator 已可靠时可以不执行 broad-width profile；auto-count partial 不让 broad-width profile 抢候选。 |
+| Gap / separator | broad-width detected gaps | `detection/evidence/separator.py`, `detection/evidence/separator_width.py` | broad separator width gaps 是否只作为普通 hard separator evidence 加 width detail，不生成独立 gap method。 |
 | Gap diagnostics | gap diagnostics | `detection/evidence/gap_diagnostics.py` | diagnostic-only evidence 是否只解释 risk，不直接参与 candidate selection。 |
 | Content | content evidence | `detection/evidence/content_evidence.py` | `ok / weak / low_content / aspect_conflict` 是否符合照片内容和 aspect。 |
 | Content | content profile runs | `detection/evidence/content_profile.py` | content run 推测 frame 时是否处理缺失、断裂、局部曝光。 |
@@ -162,7 +162,7 @@ REVIEW contract。
 | Content | content support score | `candidate/scoring.py` | content score 权重和 gate multiplier 是否不压倒 separator / geometry。 |
 | Content | content mismatch review | `candidate/selection.py` | content 与 separator 候选冲突时是否倾向 review，而不是选择看似更高分的错误候选。 |
 | Candidate | count / offset plan | `candidate/counts.py` | full / partial 的 count、offset、默认 count inclusion 是否符合片夹物理目标。 |
-| Candidate | candidate source orchestration | `candidate/run.py`, `candidate/sources.py`, `candidate/reliability.py` | separator、separator width profile、safety candidate 和 content candidate 是否由同一个 candidate plan 声明；primary separator 是否先 assessment，只有不可靠时才执行 late/auxiliary outer；selection 是否只发生在 assessment 后。 |
+| Candidate | candidate source orchestration | `candidate/run.py`, `candidate/sources.py`, `candidate/reliability.py` | separator、gap search profiles、safety candidate 和 content candidate 是否由同一个 candidate plan 声明；primary separator 是否先 assessment，只有不可靠时才执行 extension profiles / outer variants；selection 是否只发生在 assessment 后。 |
 | Candidate | build detection for outer | `candidate/build.py` | outer -> gaps -> frame boxes -> confidence 的中间 detail 是否完整可审。 |
 | Candidate | frame fit | `geometry/frame_fit.py` | frame boxes 是否以 gaps 为核心，edge / geometry fit 只能保守微调。 |
 | Candidate scoring | base confidence | `candidate/scoring.py` | gap、width、outer、contrast 权重是否不会让弱证据误过线。 |
@@ -177,9 +177,9 @@ REVIEW contract。
 | Gate | leading grid failure | `candidate/gates.py` | 前段 grid 弱、hard gap 偏后时是否阻止 lucky pass。 |
 | Gate | partial safe extra frames | `candidate/partial_holder.py` | partial 多扫 holder 时是否需要 broad separator width evidence、low leading content、stable frame content。 |
 | Gate | auto gate | `candidate/candidate_assessment.py` | `auto_gate=True` 是否同时满足 separator/content/geometry/mode-specific 证据且无 hard review reason。 |
-| Candidate plan | gap search profiles | `candidate/separator_width_profile_plan.py`, `candidate/sources.py`, `candidate/reliability.py` | standard 和 separator width profile 是否作为同一候选计划的 eligible families；execution budget 可在 reliable primary 后跳过更贵的 profile 执行，不得退回失败补救式 retry。 |
+| Candidate plan | gap search profiles | `candidate/gap_profiles.py`, `candidate/separator_width_profile_plan.py`, `candidate/sources.py`, `candidate/reliability.py` | `standard` 和 `broad_width` 是否作为同一候选计划的 eligible profiles；execution budget 可在 reliable primary 后跳过更贵的 profile 执行，不得退回失败补救式 retry。 |
 | Candidate plan | safety outer proposal | `candidate/safety_candidate.py`, `candidate/source_policy.py`, `candidate/sources.py` | safety candidate 只能提供 review-only 安全结果，不应绕开 hard evidence 或 auto gate。 |
-| Candidate plan | separator width profile selection | `candidate/separator_width_profile_selection.py` | full 模式 separator width profile 候选竞争是否有明确帮助条件，且必须保留统一 assessment detail。 |
+| Candidate plan | broad-width profile selection | `candidate/separator_width_profile_selection.py` | full 模式 broad-width profile 候选竞争是否有明确帮助条件，且必须保留统一 assessment detail。 |
 | Candidate plan | partial stop | `candidate/run.py` | partial safe auto 后提前停止是否不会跳过必要的 review evidence。 |
 | Risk | overlap bleed risk | `detection/evidence/risk.py`, `gap_diagnostics.py` | gap 附近叠片/连续内容风险是否进入 REVIEW 或 output bleed。 |
 | Risk | lucky pass risk | `detection/evidence/risk.py` | model/equal/grid 支撑的假 PASS 是否被拉回 REVIEW。 |
@@ -196,7 +196,7 @@ REVIEW contract。
 | Audit visibility | debug panels | `debug/*`, `policies/runtime_diagnostics.py` | 三联图默认保持可读；更丰富证据进入 report/detail 而非挤满首屏。 |
 | Audit visibility | policy reporting | `policies/reporting.py` | report 中应区分 active policy、默认值、format/mode role 和 diagnostics detail。 |
 
-建议人工审核顺序：先看 `separator_width_profile`、enhanced separator、`lucky pass risk`，
+建议人工审核顺序：先看 broad-width gap search profile、enhanced separator、`lucky pass risk`，
 再依次看 outer、gap/content、candidate scoring、gate、final decision。任何行为修改都应
 同步检查 report/debug 是否能解释变化。
 
@@ -205,7 +205,7 @@ REVIEW contract。
 - 135 full 的完整片条假设不能推广给其它 format。
 - 135-dual full 使用 dual-lane detector；135-dual partial 保守复核。
 - half geometry support 是通用 capability，但默认只给 `half/full` 开启。
-- separator width profile 是通用 separator 宽度证据；120-66 只拥有更宽的 width 参数、square-frame gate、broad separator width evidence 要求和 strict-holder checks。
+- broad-width gap search profile 是通用 separator 宽度证据；120-66 只拥有更宽的 width 参数、square-frame gate、broad separator width evidence 要求和 strict-holder checks。
 - outer correction 是通用 corrected-candidate capability；format 只能提供 aspect、margin、shrink/expand 和 gate 参数，不能拥有独立 correction 算法开关。
 - weak grid、equal、content-only、safety 或不可信 partial-edge 证据不能获得自动 PASS 权限。
 
@@ -352,26 +352,26 @@ and decision detail, and cannot bypass the final PASS / REVIEW contract.
 | Policy activation | format facts and policy presets | `formats.py`, `policies/format_*.py` | Physical facts, thresholds, and detector differences must stay separate from universal capability activation. |
 | Policy activation | runtime and decision contracts | `policies/runtime_*.py`, `policies/decision_contract.py` | `DetectionPolicy` and `DetectionDecisionContract` must not drift semantically. |
 | Mode-specific detector | dual-lane and review-only paths | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_*.py`, `detection/modes/review_only.py`, `candidate/safety_candidate.py` | Dedicated detectors and review-only paths must stay isolated, context-driven, and conservative. |
-| Outer proposal | base, partial content-position, separator-derived outer | `detection/outer/proposal/*`, `geometry/outer_boxes.py`, `detection/evidence/separator_bands.py` | Outer proposals only propose boxes; standard partial mode tries edge-anchored content before floating content and skips floating when edge candidates are trusted. Local, full-width, and separator width profile variants share one separator-derived proposal engine behind the proposal plan; full makes all separator-derived families eligible, while partial makes late/auxiliary families eligible only when count is explicit. Candidate execution budget may skip late/auxiliary execution after a reliable primary result. |
+| Outer proposal | base, partial content-position, separator-derived outer | `detection/outer/proposal/*`, `geometry/outer_boxes.py`, `detection/evidence/separator_bands.py` | Outer proposals only propose boxes; standard partial mode tries edge-anchored content before floating content and skips floating when edge candidates are trusted. Local, full-width, and broad-width gap profile variants share one separator-derived proposal engine behind the proposal plan; full makes all separator-derived variants eligible, while partial makes extension variants eligible only when count is explicit. Candidate execution budget may skip extension execution after a reliable primary result. |
 | Outer correction | geometry consistency and content containment correction | `detection/outer/correction/geometry.py`, `detection/outer/correction/content_containment.py`, `detection/outer/correction/types.py`, `detection/evidence/outer_alignment.py` | Outer correction families declare mode, allowed axes, evidence requirements, and explicit-count partial gating. They emit `OuterCorrectionProposal` boxes only and do not own PASS / REVIEW. |
 | Corrected candidate | corrected outer reassessment | `detection/candidate/corrected_outer.py` | Candidate contract rebuilds detection, recomputes evidence, and reapplies candidate assessment for any corrected outer. |
 | Candidate extension | outer correction candidate extension | `detection/pipeline.py`, `detection/candidate/outer_correction_candidates.py` | The pipeline appends reassessed corrected outer candidates back into the candidate pool before selection; candidate detail records eligible, skipped, and attempted correction families. Reliable selected candidates may skip correction computation only when outer alignment is also ok. |
 | Gap / separator | profile, cache, normal gap search, hard trust, edge pair, robust grid | `geometry/separator_*`, `geometry/gap_search.py`, `geometry/gap_trust.py`, `geometry/edge_pairs.py`, `geometry/robust_grid.py` | Hard evidence must stay stronger than model/equal/grid evidence, and cache keys must include policy-relevant context. |
-| Gap / separator | nearby correction, enhanced separator, separator width profile planning, separator width profile gaps | `geometry/nearby_separator.py`, `geometry/enhanced_separator.py`, `detection/candidate/separator_width_profile_plan.py`, `detection/evidence/separator.py` | Profile evidence must be explicit, capped when needed, and assessed through the normal candidate gate; reliable primary separator candidates may skip auxiliary width-profile execution, and auto-count partial does not let auxiliary width profiles compete. |
+| Gap / separator | nearby correction, enhanced separator, gap search profile planning, broad-width detected gaps | `geometry/nearby_separator.py`, `geometry/enhanced_separator.py`, `detection/candidate/gap_profiles.py`, `detection/candidate/separator_width_profile_plan.py`, `detection/evidence/separator.py` | Profile evidence must be explicit, capped when needed, and assessed through the normal candidate gate; reliable primary separator candidates may skip broad-width profile execution, and auto-count partial does not let broad-width profiles compete. |
 | Content | content evidence, profile runs, mask outer, content candidate | `detection/evidence/content_*`, `candidate/content_candidate.py` | Content can validate or challenge candidates but must not auto-pass alone. |
-| Candidate | count/offset, source orchestration, build, frame fit | `detection/candidate/counts.py`, `detection/candidate/run.py`, `detection/candidate/sources.py`, `detection/candidate/reliability.py`, `detection/candidate/build.py`, `geometry/frame_fit.py` | Candidate lifecycle must keep all intermediate evidence in `Detection.detail`; primary separator candidates are assessed before late/auxiliary outer families execute. |
+| Candidate | count/offset, source orchestration, build, frame fit | `detection/candidate/counts.py`, `detection/candidate/run.py`, `detection/candidate/sources.py`, `detection/candidate/gap_profiles.py`, `detection/candidate/reliability.py`, `detection/candidate/build.py`, `geometry/frame_fit.py` | Candidate lifecycle must keep all intermediate evidence in `Detection.detail`; primary separator candidates are assessed before extension profiles / outer variants execute. |
 | Scoring | base confidence, geometry/content/separator scores, joint score, hard-full floor | `detection/candidate/scoring.py`, `detection/candidate/candidate_assessment.py` | Scores support gates; they do not replace separator/content/geometry requirements. |
 | Gate | separator gate profiles and geometry support | `detection/candidate/gates.py`, `detection/candidate/scoring.py` | `min_hard_with_equal_cap`, `all_internal_gaps_hard`, and `geometry_support` must match format/mode policy. |
 | Gate | partial safe extra frames and auto gate | `detection/candidate/partial_holder.py`, `detection/candidate/candidate_assessment.py` | Partial edge safety requires explicit broad separator width, content, and frame evidence and no hard review reason. |
-| Candidate plan | gap profiles, safety candidate, separator width profile selection, partial stop | `detection/candidate/run.py`, `detection/candidate/sources.py`, `detection/candidate/reliability.py`, `detection/candidate/separator_width_profile_plan.py`, `detection/candidate/separator_width_profile_selection.py` | Candidate plan families are declared together, but execution budget may stop after a reliable primary candidate; no source can bypass hard evidence. |
+| Candidate plan | gap search profiles, safety candidate, broad-width profile selection, partial stop | `detection/candidate/run.py`, `detection/candidate/sources.py`, `detection/candidate/gap_profiles.py`, `detection/candidate/reliability.py`, `detection/candidate/separator_width_profile_plan.py`, `detection/candidate/separator_width_profile_selection.py` | Candidate plan profiles and families are declared together, but execution budget may stop after a reliable primary candidate; no source can bypass hard evidence. |
 | Risk | overlap bleed, lucky pass, outer-content mismatch, close competition | `detection/evidence/risk.py`, `detection/evidence/gap_diagnostics.py`, `detection/evidence/outer_alignment.py`, `detection/candidate/selection.py`, `detection/decision/pass_review.py` | Risk logic should pull suspicious PASS candidates back to REVIEW or safer output bleed. |
 | Risk | content-only, safety, review-only, partial-edge uncertainty | `detection/candidate/candidate_assessment.py`, `detection/candidate/safety_candidate.py`, `detection/decision/pass_review.py` | Conservative REVIEW-only paths must stay review-only unless the decision contract changes. |
 | Finalization | edge bleed protection, approved geometry adjustment, caps | `detection/final/finalize.py`, `detection/final/geometry.py` | Output-adjacent geometry changes must preserve evidence/risk detail and safety caps without generating candidates. |
 | Final decision | PASS / REVIEW, reason normalization, decision detail | `detection/decision/pass_review.py` | Final status must be decided only by the decision contract. |
 | Audit visibility | read-only diagnostics, report sections, debug panels, policy reporting | `detection/evidence/read_only.py`, `report_schema.py`, `report_sections.py`, `debug/*`, `policies/reporting.py` | Reports and Debug Analysis explain behavior without feeding back into candidate selection. |
 
-Recommended manual review order: start with `separator_width_profile`, enhanced
-separator, and `lucky pass risk`; then review outer, gap/content, candidate
+Recommended manual review order: start with broad-width gap search profile,
+enhanced separator, and `lucky pass risk`; then review outer, gap/content, candidate
 scoring, gates, and final decision. Any behavior change must also prove that
 report/debug output explains the change.
 

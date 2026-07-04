@@ -22,6 +22,12 @@ from ..outer.proposal.plan import (
 )
 from .build import build_detection_for_outer
 from .counts import raw_detection_rank
+from .gap_profiles import (
+    BROAD_WIDTH_GAP_PROFILE,
+    STANDARD_GAP_PROFILE,
+    broad_width_gap_profile_detail,
+    is_broad_width_gap_profile,
+)
 from .partial_holder import partial_safe_frame_content_detail, partial_safe_leading_content_detail
 from .separator_width_profile_plan import should_include_separator_width_profile_candidates
 from .separator_width_profile_selection import select_full_separator_width_profile_candidate
@@ -78,19 +84,13 @@ def detect_candidate_for_count(
                 gap_max_width_ratio_override=candidate_gap_override,
                 policy=policy,
             )
-            if gap_profile == "separator_width_profile":
-                detection.detail["separator_width_profile"] = {
-                    "used": True,
-                    "base_gap_max_width_ratio": float(policy.separator.gap_search.max_width_ratio),
-                    "gap_max_width_ratio": float(
-                        candidate_gap_override
-                        if candidate_gap_override is not None
-                        else policy.separator.separator_width_profile_max_width_ratio
-                    ),
-                }
+            if is_broad_width_gap_profile(gap_profile):
+                gap_profile_detail = broad_width_gap_profile_detail(policy, candidate_gap_override)
+                detection.detail["gap_search_profile"] = gap_profile_detail
+                detection.detail["separator_width_profile"] = gap_profile_detail
             candidates.append(detection)
 
-    append_detections_for_outer_candidates(outer_candidates, gap_max_width_ratio_override, "standard")
+    append_detections_for_outer_candidates(outer_candidates, gap_max_width_ratio_override, STANDARD_GAP_PROFILE)
     regular_best = max(candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold)) if candidates else None
     separator_full_width_family = policy.outer.proposal.geometry.separator.full_width
     separator_full_width_mode = separator_full_width_family.mode
@@ -119,7 +119,7 @@ def detect_candidate_for_count(
         append_detections_for_outer_candidates(
             separator_full_width_candidates,
             gap_max_width_ratio_override,
-            "standard",
+            STANDARD_GAP_PROFILE,
         )
         outer_candidates = merge_outer_proposal_candidates([*outer_candidates, *separator_full_width_candidates])
     separator_width_profile_eligible = should_include_separator_width_profile_candidates(
@@ -157,13 +157,13 @@ def detect_candidate_for_count(
         append_detections_for_outer_candidates(
             outer_candidates,
             separator_width_profile_gap_override,
-            "separator_width_profile",
+            BROAD_WIDTH_GAP_PROFILE,
         )
     if separator_width_profile_candidates:
         append_detections_for_outer_candidates(
             separator_width_profile_candidates,
             separator_width_profile_gap_override or gap_max_width_ratio_override,
-            "separator_width_profile",
+            BROAD_WIDTH_GAP_PROFILE,
         )
         outer_candidates = merge_outer_proposal_candidates([*outer_candidates, *separator_width_profile_candidates])
     best_candidates = candidates
@@ -211,9 +211,9 @@ def detect_candidate_for_count(
             {"name": candidate.name, "strategy": outer_candidate_strategy(candidate), "box": asdict(candidate.box)}
             for candidate in outer_candidates
         ]
-    gap_profiles = ["standard"]
+    gap_profiles = [STANDARD_GAP_PROFILE]
     if should_include_separator_width_profile:
-        gap_profiles.append("separator_width_profile")
+        gap_profiles.append(BROAD_WIDTH_GAP_PROFILE)
     best.detail["candidate_plan"] = {
         "source": "separator",
         "count_explicit": bool(explicit_count),
@@ -225,9 +225,12 @@ def detect_candidate_for_count(
         "late_outer_enabled": bool(include_late_outer),
         "auxiliary_outer_enabled": bool(include_auxiliary_outer),
         "gap_profiles": gap_profiles,
+        "gap_search_profiles": gap_profiles,
         "outer_candidate_count": int(len(outer_candidates)),
         "separator_full_width_eligible": bool(separator_full_width_family.available_for(strip_mode, explicit_count)),
         "separator_full_width_included": bool(should_try_separator_full_width),
+        "broad_width_gap_profile_eligible": bool(separator_width_profile_eligible),
+        "broad_width_gap_profile_included": bool(should_include_separator_width_profile),
         "separator_width_profile_eligible": bool(separator_width_profile_eligible),
         "separator_width_profile_included": bool(should_include_separator_width_profile),
     }
@@ -289,7 +292,8 @@ def detect_safety_outer_proposal_candidate_for_count(
         ]
     best.detail["candidate_plan"] = {
         "source": "safety_candidate",
-        "gap_profiles": ["standard"],
+        "gap_profiles": [STANDARD_GAP_PROFILE],
+        "gap_search_profiles": [STANDARD_GAP_PROFILE],
         "outer_candidate_count": int(len(outer_candidates)),
         "review_only": True,
     }

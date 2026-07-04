@@ -26,16 +26,20 @@ def build_assessed_corrected_outer_candidate(
     from ..evidence.outer_alignment import outer_content_alignment_detail
     from .build import build_detection_for_outer
     from .candidate_assessment import apply_candidate_assessment_policy
+    from .gap_profiles import BROAD_WIDTH_GAP_PROFILE, broad_width_gap_profile_detail
 
     gap_override: Optional[float] = None
+    gap_search_profile = detection.detail.get("gap_search_profile")
     separator_width_profile = detection.detail.get("separator_width_profile")
+    broad_width_detail = gap_search_profile if isinstance(gap_search_profile, dict) else separator_width_profile
     if (
         corrected.preserve_separator_width_profile
-        and isinstance(separator_width_profile, dict)
-        and bool(separator_width_profile.get("used", False))
+        and isinstance(broad_width_detail, dict)
+        and bool(broad_width_detail.get("used", False))
+        and str(broad_width_detail.get("profile", BROAD_WIDTH_GAP_PROFILE)) == BROAD_WIDTH_GAP_PROFILE
     ):
         gap_override = float(
-            separator_width_profile.get(
+            broad_width_detail.get(
                 "gap_max_width_ratio",
                 policy.separator.separator_width_profile_max_width_ratio,
             )
@@ -58,12 +62,13 @@ def build_assessed_corrected_outer_candidate(
     )
     reassessed = apply_candidate_assessment_policy(gray, reassessed, config, fmt, "separator", cache, policy=policy)
     if gap_override is not None:
-        reassessed.detail["separator_width_profile"] = {
-            "used": True,
-            "base_gap_max_width_ratio": float(policy.separator.gap_search.max_width_ratio),
-            "gap_max_width_ratio": float(gap_override),
-            "preserved_through_outer_correction_candidate": True,
-        }
+        profile_detail = broad_width_gap_profile_detail(
+            policy,
+            gap_override,
+            preserved_through_outer_correction_candidate=True,
+        )
+        reassessed.detail["gap_search_profile"] = profile_detail
+        reassessed.detail["separator_width_profile"] = profile_detail
 
     reassessed_alignment = outer_content_alignment_detail(gray, reassessed, cache, policy=policy)
     reassessed_content = content_evidence_detail(gray, reassessed, cache, policy.content)
