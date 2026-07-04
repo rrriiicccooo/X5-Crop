@@ -186,7 +186,7 @@ unless the edit changes commands or release behavior.
 
 ## Current Handoff
 
-Date: 2026-07-02
+Date: 2026-07-05
 Computer: primary macOS machine
 Branch: main
 Latest documentation state: root documents have distinct responsibilities;
@@ -197,10 +197,9 @@ Current state:
 - Active script is `X5_Crop.py` V4.9.
 - V4.9 is an evidence-governed policy reset over the V4.7 source layout, not
   a detector-loosening release.
-- Source layout is layered: thin entry, package implementation, explicit format
-  physical specs, semantic decision contract, focused
-  detection modules, split geometry helpers, and explicit report/debug/regression
-  surfaces.
+- Source layout is layered: thin entry, explicit `entry/`, `runtime/`,
+  `cache/`, `formats/`, `report/`, `detection/candidate/*`, and `policies/*`
+  subpackages, split geometry helpers, and explicit debug/export/tool surfaces.
 - Detailed source layering and policy boundaries live in `ARCHITECTURE.md`.
 - Version history and validation summaries live in `CHANGELOG.md`.
 - User setup and usage live in `README.md` and `快速启动_Quick_Start.md`.

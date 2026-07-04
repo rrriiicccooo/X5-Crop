@@ -14,7 +14,7 @@ from ...geometry.nearby_separator import apply_nearby_separator_corrections
 from ...geometry.robust_grid import apply_robust_grid
 from ...geometry.separator_profile import separator_profile
 from ...policies.registry import get_detection_policy
-from ...policies.runtime_policy import DetectionPolicy
+from ...policies.runtime.policy import DetectionPolicy
 from ...utils import clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 
 

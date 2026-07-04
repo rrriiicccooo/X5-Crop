@@ -1,0 +1,49 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+from ..runtime.base import FrameFitPolicy, ReviewOnlyPolicy
+from ..runtime.separator import SeparatorEdgePairPolicy
+
+if TYPE_CHECKING:
+    from ..parameters.aggregate import FormatParameters
+
+
+@dataclass(frozen=True)
+class SeparatorWidthProfilePreset:
+    mode: str = "off"
+    full_selection_enabled: bool = False
+    separator_outer_allow_oversized_band: bool = False
+    separator_outer_oversized_band_max_ratio: float = 0.45
+    separator_outer_oversized_band_score_penalty: float = 0.08
+
+
+@dataclass(frozen=True)
+class ModePolicyPreset:
+    role: str
+    notes: tuple[str, ...] = ()
+    detector_kind: str = "standard_strip"
+    frame_fit: FrameFitPolicy | None = None
+    review_only: ReviewOnlyPolicy = field(default_factory=ReviewOnlyPolicy)
+    separator_width_profile: SeparatorWidthProfilePreset = field(default_factory=SeparatorWidthProfilePreset)
+    separator_geometry_support_modes: tuple[str, ...] = ()
+    diagnostics_overlap_bleed: bool = False
+
+
+@dataclass(frozen=True)
+class FormatPolicyPreset:
+    format_id: str
+    parameters: Callable[[], FormatParameters]
+    separator_gate_profile: str
+    separator_edge_pair: SeparatorEdgePairPolicy = field(default_factory=SeparatorEdgePairPolicy)
+    content_mismatch_review_enabled: bool = False
+    modes: dict[str, ModePolicyPreset] = field(default_factory=dict)
+
+
+__all__ = [
+    "FormatPolicyPreset",
+    "ModePolicyPreset",
+    "SeparatorWidthProfilePreset",
+]

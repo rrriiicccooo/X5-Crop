@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from ...formats import FORMATS, FormatSpec
 from ...policies.registry import get_detection_policy
-from ...policies.runtime_policy import DetectionPolicy
+from ...policies.runtime.policy import DetectionPolicy
 
 
 @dataclass(frozen=True)

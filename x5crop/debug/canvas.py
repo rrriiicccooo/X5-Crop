@@ -8,7 +8,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from ..domain import Box
-from ..runtime import AnalysisCache
+from ..cache import AnalysisCache
 
 
 FRAME_FILL_COLORS = (

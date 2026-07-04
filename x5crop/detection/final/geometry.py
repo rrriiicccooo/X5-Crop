@@ -5,11 +5,11 @@ from typing import Any
 
 import numpy as np
 
-from ...runtime_config import RuntimeConfig
+from ...runtime.config import RuntimeConfig
 from ...domain import Box, Detection
 from ...geometry.boxes import map_work_box, original_box_to_work
 from ...geometry.layout import work_gray
-from ...policies.runtime_final import ApprovedGeometryAdjustmentPolicy, EdgeBleedProtectionPolicy
+from ...policies.runtime.final import ApprovedGeometryAdjustmentPolicy, EdgeBleedProtectionPolicy
 from ...utils import clamp_float, clamp_int
 
 

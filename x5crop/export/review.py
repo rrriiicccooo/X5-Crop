@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from ..runtime_config import RuntimeConfig
+from ..runtime.config import RuntimeConfig
 
 
 def review_directory_for(output_dir: Path, config: RuntimeConfig) -> Path:

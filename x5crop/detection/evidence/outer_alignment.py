@@ -11,8 +11,8 @@ from ...domain import Box, Detection
 from ...geometry.boxes import box_cache_key, original_box_to_work
 from ...geometry.layout import work_gray
 from ...policies.registry import get_detection_policy
-from ...policies.runtime_policy import DetectionPolicy
-from ...runtime import AnalysisCache
+from ...policies.runtime.policy import DetectionPolicy
+from ...cache import AnalysisCache
 from ...utils import bbox_from_mask, box_from_dict, clamp_int
 from .evidence_cache_keys import detection_gap_cache_key
 

@@ -30,6 +30,9 @@ Current stable release: v4.2.8
   evidence / decision / final；outer proposal / correction 是 candidate proposal
   family，不再作为 detection 一级子层。PASS / REVIEW 属于 decision 层，
   finalization 只做 output-adjacent 调整。
+- source package layout 已对齐到显式边界：`entry`、`runtime`、`cache`、
+  `report`、`formats`、`detection.candidate.{plan,proposal,build,assessment,selection,extension}`
+  和 `policies.{formats,parameters,runtime,decision,assembly,reporting}`。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 
@@ -72,13 +75,16 @@ Current stable release: v4.2.8
   `detection/candidate/proposal/correction/`；outer 只作为 candidate proposal
   family 负责 proposal / correction，separator bands、outer-content alignment
   和 cache key 分别归入 evidence / detection cache 层。
+- 源码包边界进一步收敛：entry、runtime、cache、report、formats、candidate lifecycle
+  和 policies 子层均以真实 package 表达，不再依赖根层平铺文件或旧 policy
+  文件名前缀表达职责。
 - outer runtime policy 已收敛为 `proposal` 与 `correction` 两块：
   `proposal.base` 负责基础外框候选，`proposal.geometry` 统一管理 partial
   placement、separator geometry 与 broad-width gap profile variants；
   `correction.geometry_consistency` 合并原 short-axis 与 format-geometry retry，
   `correction.content_containment` 替代原 content-aligned retry 命名。
 - corrected outer 不再在 correction helper 内直接完成重建与评估；统一通过
-  `detection/candidate/corrected_outer.py` 重新 build detection、重算 evidence
+  `detection/candidate/build/corrected_outer.py` 重新 build detection、重算 evidence
   并重新 apply candidate assessment。outer correction 只改变候选输入，PASS /
   REVIEW 仍只由 candidate gate 和 final decision contract 决定。
 - separator-derived outer policy 不再由各 format 单独打开 local/full-width/broad-width profile；

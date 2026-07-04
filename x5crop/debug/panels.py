@@ -10,7 +10,7 @@ from ..domain import Box, Detection
 from ..geometry.separator_cache import cached_separator_evidence_crop
 from ..image.evidence import make_separator_evidence_gray
 from ..policies.registry import get_detection_policy
-from ..runtime import AnalysisCache
+from ..cache import AnalysisCache
 from .canvas import (
     FRAME_FILL_COLORS,
     add_panel_label,

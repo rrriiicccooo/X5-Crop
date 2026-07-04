@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from ...runtime_config import RuntimeConfig
+from ...runtime.config import RuntimeConfig
 from ...constants import (
     ANALYSIS_SOURCE_REVIEW_ONLY,
     REASON_CONTENT_ASPECT_CONFLICT,
@@ -23,7 +23,7 @@ from ...geometry.output_bleed import (
     output_bleed_parameters_for_detection,
 )
 from ...policies.registry import get_detection_policy
-from ...runtime import AnalysisCache
+from ...cache import AnalysisCache
 from ..evidence.content_evidence import content_evidence_detail
 from ..evidence.read_only import attach_read_only_diagnostics
 from ..evidence.risk import lucky_pass_risk_score_detail, overlap_bleed_risk_detail

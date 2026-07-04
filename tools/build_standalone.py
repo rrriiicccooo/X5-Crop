@@ -98,7 +98,7 @@ _x5_bootstrap()
 
 
 if __name__ == "__main__":
-    from x5crop.cli import main
+    from x5crop.entry.cli import main
 
     raise SystemExit(main())
 '''

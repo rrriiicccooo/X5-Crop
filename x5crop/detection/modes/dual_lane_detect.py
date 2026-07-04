@@ -11,9 +11,9 @@ from ...constants import (
     REASON_OUTER_CONTENT_BBOX_MISMATCH,
 )
 from ...domain import Box, Detection
-from ...runtime import AnalysisCache
-from ...runtime_config import RuntimeConfig
-from ..candidate.selection import calibrated_candidate_rank
+from ...cache import AnalysisCache
+from ...runtime.config import RuntimeConfig
+from ..candidate.selection.choose import calibrated_candidate_rank
 from ..candidate.proposal.outer.base import base_outer_candidates
 from .dual_lane_context import DualLaneDetectionContext
 from .dual_lane_split import translate_work_box
@@ -27,8 +27,8 @@ def detect_dual_lane(
     cache: AnalysisCache,
     context: DualLaneDetectionContext,
 ) -> Optional[Detection]:
-    from ..candidate.build import build_detection_for_outer
-    from ..candidate.candidate_assessment import apply_candidate_assessment_policy
+    from ..candidate.build.detection import build_detection_for_outer
+    from ..candidate.assessment.candidate import apply_candidate_assessment_policy
     from ..evidence.content_evidence import content_evidence_detail
     from ..evidence.outer_alignment import outer_content_alignment_detail
 

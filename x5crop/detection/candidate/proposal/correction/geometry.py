@@ -10,9 +10,9 @@ from .....domain import Box, Detection
 from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from .....geometry.boxes import original_box_to_work
 from .....policies.registry import get_detection_policy
-from .....policies.runtime_policy import DetectionPolicy
-from .....runtime import AnalysisCache
-from .....runtime_config import RuntimeConfig
+from .....policies.runtime.policy import DetectionPolicy
+from .....cache import AnalysisCache
+from .....runtime.config import RuntimeConfig
 from .....utils import box_from_dict, clamp_int
 from .policy import correction_axes_allowed, correction_family_available
 from .types import OuterCorrectionProposal

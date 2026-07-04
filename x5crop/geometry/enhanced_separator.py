@@ -7,7 +7,7 @@ import numpy as np
 
 from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
-from ..runtime import AnalysisCache
+from ..cache import AnalysisCache
 from ..utils import clamp_float
 from .boxes import box_cache_key
 from .gap_search import constrain_gap_to_geometry, find_gap

@@ -9,8 +9,8 @@ import numpy as np
 from ...domain import Box
 from ...formats import FormatSpec
 from ...geometry.boxes import box_cache_key
-from ...policies.runtime_content import ContentPolicy
-from ...runtime import AnalysisCache
+from ...policies.runtime.content import ContentPolicy
+from ...cache import AnalysisCache
 from ...utils import bbox_from_mask, runs_from_mask, sampled_percentile, smooth_1d
 from .content_evidence import _content_policy_for
 

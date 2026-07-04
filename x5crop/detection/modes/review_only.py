@@ -9,8 +9,8 @@ from ...domain import Box, Detection
 from ...formats import FormatSpec
 from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
-from ...policies.runtime_policy import DetectionPolicy
-from ...runtime_config import RuntimeConfig
+from ...policies.runtime.policy import DetectionPolicy
+from ...runtime.config import RuntimeConfig
 
 
 def review_only_detection(

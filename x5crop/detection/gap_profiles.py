@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from ..policies.runtime_policy import DetectionPolicy
+from ..policies.runtime.policy import DetectionPolicy
 
 
 STANDARD_GAP_PROFILE = "standard"

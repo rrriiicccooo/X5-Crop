@@ -6,10 +6,10 @@ import numpy as np
 
 from ...domain import Detection
 from ...formats import FORMATS
-from ...analysis_cache import make_analysis_cache
+from ...cache.analysis import make_analysis_cache
 from ...geometry.layout import work_gray
 from ...policies.registry import get_detection_policy
-from ...runtime import AnalysisCache
+from ...cache import AnalysisCache
 from .gap_diagnostics import gap_diagnostic_record
 
 

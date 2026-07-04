@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from ..formats import FORMAT_CHOICES, STRIP_CHOICES
-from .decision_contract import DetectionDecisionContract, decision_contract_for_policy
+from .decision.contract import DetectionDecisionContract, decision_contract_for_policy
 from .ids import decision_policy_id_for
 from .registry import get_detection_policy
-from .runtime_policy import DetectionPolicy
+from .runtime.policy import DetectionPolicy
 
 
 @dataclass(frozen=True)

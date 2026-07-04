@@ -6,7 +6,7 @@ from ...app_info import VERSION
 from ...domain import Detection
 from ...geometry.layout import work_gray
 from ...policies.registry import get_detection_policy
-from ...runtime import AnalysisCache
+from ...cache import AnalysisCache
 from .gap_diagnostics import gap_diagnostic_record
 
 

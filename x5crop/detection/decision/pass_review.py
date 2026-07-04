@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ...runtime_config import RuntimeConfig
+from ...runtime.config import RuntimeConfig
 from ...constants import (
     ANALYSIS_SOURCE_CONTENT,
     ANALYSIS_SOURCE_CONTENT_PRIMARY,
@@ -20,7 +20,7 @@ from ...constants import (
 )
 from ...domain import Detection
 from ...formats import FormatSpec
-from ...policies.decision_contract import DetectionDecisionContract, decision_contract_for
+from ...policies.decision.contract import DetectionDecisionContract, decision_contract_for
 
 
 REASON_NORMALIZATION_MAP = {

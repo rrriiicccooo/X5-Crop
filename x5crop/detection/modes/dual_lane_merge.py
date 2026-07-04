@@ -7,9 +7,9 @@ import numpy as np
 from ...constants import ANALYSIS_SOURCE_DUAL_LANE
 from ...domain import Box, Detection, Gap
 from ...geometry.boxes import map_work_box
-from ...runtime_config import RuntimeConfig
+from ...runtime.config import RuntimeConfig
 from ...utils import box_from_dict
-from ..candidate.safety_candidate import hard_safety_detection
+from ..candidate.proposal.safety import hard_safety_detection
 from .dual_lane_context import DualLaneDetectionContext
 
 

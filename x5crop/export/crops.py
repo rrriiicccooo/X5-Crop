@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import tifffile
 
-from ..runtime_config import RuntimeConfig
+from ..runtime.config import RuntimeConfig
 from ..domain import Detection, ImageProfile
 from ..image.crop_pixels import crop_array, validate_source_crop_pixels
 from ..io.tiff import tiff_write_kwargs, validate_written_tiff

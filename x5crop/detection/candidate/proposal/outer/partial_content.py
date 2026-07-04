@@ -4,7 +4,7 @@ import numpy as np
 
 from .....domain import Box, OuterCandidate
 from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from .....policies.runtime_policy import DetectionPolicy
+from .....policies.runtime.policy import DetectionPolicy
 from .....utils import bbox_from_mask, clamp_int
 from .common import unique_outer_candidates
 

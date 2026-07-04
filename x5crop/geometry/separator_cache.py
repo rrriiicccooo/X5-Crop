@@ -6,7 +6,7 @@ import numpy as np
 
 from ..domain import Box
 from ..image.evidence import make_separator_evidence_gray
-from ..runtime import AnalysisCache
+from ..cache import AnalysisCache
 from .boxes import box_cache_key, crop_work_outer, full_work_box, is_full_work_box
 from .detection_parameters import EdgeRefineProfileParameters, SeparatorProfileParameters
 from .separator_profile import edge_refine_profiles, separator_profile

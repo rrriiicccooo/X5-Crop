@@ -6,7 +6,7 @@ The user-facing ``X5_Crop.py`` launcher stays stable while the implementation
 lives in focused modules under :mod:`x5crop`.
 """
 
-from x5crop.cli import main
+from x5crop.entry.cli import main
 
 
 if __name__ == "__main__":

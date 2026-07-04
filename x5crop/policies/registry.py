@@ -3,8 +3,8 @@ from __future__ import annotations
 from functools import lru_cache
 
 from ..formats import STRIP_CHOICES
-from .runtime_policy import DetectionPolicy
-from .format_modules import import_format_module
+from .runtime.policy import DetectionPolicy
+from .formats.modules import import_format_module
 
 
 def _build_policy(format_id: str, strip_mode: str) -> DetectionPolicy:

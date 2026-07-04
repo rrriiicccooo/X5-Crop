@@ -6,7 +6,7 @@ from typing import Optional
 import numpy as np
 
 from ..domain import Detection
-from ..runtime import AnalysisCache
+from ..cache import AnalysisCache
 from .canvas import write_rgb_jpeg
 from .panels import make_debug_analysis_panel, make_debug_preview_rgb
 from .status import add_status_bar

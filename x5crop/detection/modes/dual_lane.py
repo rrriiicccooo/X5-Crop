@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import numpy as np
 
-from ...runtime_config import RuntimeConfig
+from ...runtime.config import RuntimeConfig
 from ...domain import Detection
-from ...policies.runtime_policy import DetectionPolicy
-from ...runtime import AnalysisCache
+from ...policies.runtime.policy import DetectionPolicy
+from ...cache import AnalysisCache
 from .dual_lane_context import build_dual_lane_context
 from .dual_lane_detect import detect_dual_lane
 from .dual_lane_merge import merge_dual_lane_detections

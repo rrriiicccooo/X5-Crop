@@ -4,19 +4,19 @@ from typing import Optional
 
 import numpy as np
 
-from ..runtime_config import RuntimeConfig
+from ..runtime.config import RuntimeConfig
 from ..domain import Detection
 from ..formats import FormatSpec
-from ..analysis_cache import make_analysis_cache
+from ..cache.analysis import make_analysis_cache
 from ..policies.registry import get_detection_policy
-from ..runtime import AnalysisCache
-from .candidate.run import calibrated_candidates_for_count
-from .candidate.counts import candidate_counts_for_format
+from ..cache import AnalysisCache
+from .candidate.plan.run import calibrated_candidates_for_count
+from .candidate.plan.counts import candidate_counts_for_format
 from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import review_only_detection
-from .candidate.safety_candidate import hard_safety_detection
-from .candidate.selection import select_detection_candidate
-from .candidate.outer_correction_candidates import outer_correction_candidate_extensions
+from .candidate.proposal.safety import hard_safety_detection
+from .candidate.selection.choose import select_detection_candidate
+from .candidate.extension.outer_correction import outer_correction_candidate_extensions
 
 
 def _attach_runtime_policy_detail(detection: Detection, policy) -> None:

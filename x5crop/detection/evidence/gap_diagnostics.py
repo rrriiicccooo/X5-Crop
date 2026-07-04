@@ -12,8 +12,8 @@ from ...geometry.detection_parameters import SeparatorProfileParameters
 from ...geometry.separator_cache import cached_separator_profile
 from ...geometry.separator_profile import interval_mean
 from ...policies.registry import get_detection_policy
-from ...policies.runtime_diagnostics import NearbySeparatorDiagnosticsPolicy
-from ...runtime import AnalysisCache
+from ...policies.runtime.diagnostics import NearbySeparatorDiagnosticsPolicy
+from ...cache import AnalysisCache
 from ...utils import clamp_float, clamp_int, runs_from_mask
 
 
