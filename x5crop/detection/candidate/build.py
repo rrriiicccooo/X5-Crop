@@ -25,7 +25,7 @@ from ...policies.registry import get_detection_policy
 from ...runtime import AnalysisCache
 from ...utils import clamp_int
 from ..gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE
-from ..outer.proposal.plan import outer_candidate_strategy
+from .proposal.outer.plan import outer_candidate_strategy
 from .partial import partial_edge_hint
 from .scoring import score_detection
 from ..evidence.separator import separator_width_profile_gaps_for_outer

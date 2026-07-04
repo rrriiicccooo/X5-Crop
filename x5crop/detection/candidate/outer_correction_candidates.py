@@ -14,9 +14,9 @@ from ..evidence.content_evidence import content_evidence_detail
 from ..evidence.outer_alignment import outer_content_alignment_detail
 from .corrected_outer import build_assessed_corrected_outer_candidate
 from .reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
-from ..outer.correction.content_containment import content_containment_correction_proposal
-from ..outer.correction.geometry import geometry_consistency_correction_proposal, geometry_consistency_model_detail
-from ..outer.correction.policy import correction_family_available
+from .proposal.correction.content_containment import content_containment_correction_proposal
+from .proposal.correction.geometry import geometry_consistency_correction_proposal, geometry_consistency_model_detail
+from .proposal.correction.policy import correction_family_available
 
 
 def _correction_skip_reason(family, detection: Detection, explicit_count: bool) -> str | None:

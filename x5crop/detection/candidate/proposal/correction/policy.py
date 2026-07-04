@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ....domain import Box, Detection
-from ....policies.runtime_outer import OuterCorrectionFamilyPolicy
+from .....domain import Box, Detection
+from .....policies.runtime_outer import OuterCorrectionFamilyPolicy
 
 
 def correction_family_available(

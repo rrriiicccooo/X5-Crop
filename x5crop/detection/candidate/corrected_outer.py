@@ -10,7 +10,7 @@ from ...formats import FormatSpec
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from ...runtime_config import RuntimeConfig
-from ..outer.correction.types import OuterCorrectionProposal
+from .proposal.correction.types import OuterCorrectionProposal
 
 
 def build_assessed_corrected_outer_candidate(

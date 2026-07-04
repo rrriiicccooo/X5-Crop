@@ -4,13 +4,13 @@ from typing import Optional
 
 import numpy as np
 
-from ....domain import Box, OuterCandidate
-from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from ....policies.registry import get_detection_policy
-from ....policies.runtime_policy import DetectionPolicy
-from ....runtime import AnalysisCache
-from ....utils import bbox_from_mask, clamp_int
-from ...cache_keys import edge_anchored_outer_cache_key
+from .....domain import Box, OuterCandidate
+from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from .....policies.registry import get_detection_policy
+from .....policies.runtime_policy import DetectionPolicy
+from .....runtime import AnalysisCache
+from .....utils import bbox_from_mask, clamp_int
+from ....cache_keys import edge_anchored_outer_cache_key
 from .common import unique_outer_candidates
 
 

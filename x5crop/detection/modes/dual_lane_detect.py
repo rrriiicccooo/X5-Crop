@@ -14,7 +14,7 @@ from ...domain import Box, Detection
 from ...runtime import AnalysisCache
 from ...runtime_config import RuntimeConfig
 from ..candidate.selection import calibrated_candidate_rank
-from ..outer.proposal.base import base_outer_candidates
+from ..candidate.proposal.outer.base import base_outer_candidates
 from .dual_lane_context import DualLaneDetectionContext
 from .dual_lane_split import translate_work_box
 

@@ -6,12 +6,12 @@ from typing import Optional
 
 import numpy as np
 
-from ....domain import OuterCandidate
-from ....formats import FormatSpec
-from ....policies.registry import get_detection_policy
-from ....policies.runtime_policy import DetectionPolicy
-from ....runtime import AnalysisCache
-from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE
+from .....domain import OuterCandidate
+from .....formats import FormatSpec
+from .....policies.registry import get_detection_policy
+from .....policies.runtime_policy import DetectionPolicy
+from .....runtime import AnalysisCache
+from ....gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE
 from .base import base_outer_candidates
 from .common import unique_outer_candidates
 from .partial_content import floating_content_position_candidates

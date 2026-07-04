@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from ....domain import Box, OuterCandidate
-from ....geometry.detection_parameters import OuterBoxDetectionParameters
-from ....geometry.outer_boxes import detect_mask_profile_outer, detect_outer, detect_outer_white_x
+from .....domain import Box, OuterCandidate
+from .....geometry.detection_parameters import OuterBoxDetectionParameters
+from .....geometry.outer_boxes import detect_mask_profile_outer, detect_outer, detect_outer_white_x
 from .common import unique_outer_candidates
 
 

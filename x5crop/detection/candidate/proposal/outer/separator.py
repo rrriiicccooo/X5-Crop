@@ -5,17 +5,17 @@ from typing import Optional
 
 import numpy as np
 
-from ....domain import Box, OuterCandidate
-from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from ....geometry.separator_cache import cached_separator_profile
-from ....policies.registry import get_detection_policy
-from ....policies.runtime_outer import SeparatorOuterBandPolicy, SeparatorOuterFamilyPolicy, SeparatorWidthProfilePolicy
-from ....policies.runtime_policy import DetectionPolicy
-from ....runtime import AnalysisCache
-from ....utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
-from ...cache_keys import separator_outer_cache_key
-from ...evidence.separator_bands import collect_separator_outer_bands, separator_outer_band_sequences
-from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE, is_broad_width_gap_profile
+from .....domain import Box, OuterCandidate
+from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from .....geometry.separator_cache import cached_separator_profile
+from .....policies.registry import get_detection_policy
+from .....policies.runtime_outer import SeparatorOuterBandPolicy, SeparatorOuterFamilyPolicy, SeparatorWidthProfilePolicy
+from .....policies.runtime_policy import DetectionPolicy
+from .....runtime import AnalysisCache
+from .....utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
+from ....cache_keys import separator_outer_cache_key
+from ....evidence.separator_bands import collect_separator_outer_bands, separator_outer_band_sequences
+from ....gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE, is_broad_width_gap_profile
 from .common import unique_outer_candidates
 
 

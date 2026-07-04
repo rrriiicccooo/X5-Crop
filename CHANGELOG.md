@@ -26,9 +26,10 @@ Current stable release: v4.2.8
 - active retry architecture 已退休；broad-width gap search profile、safety candidate 和 corrected outer 都作为候选计划或候选扩展统一 assessment。
 - separator-derived outer family 已通用化：标准 strip 的 full 默认启用 local、full-width 和 broad-width gap profile；partial 只有显式 count 时启用 extension variants，format 只提供 width / spacing / budget 参数。
 - candidate execution budget 将 “eligible” 与 “executed” 分开：可靠 primary separator 已通过 assessment 时，可跳过 full-width 和 broad-width gap profile；outer correction 还要求 outer alignment ok 才跳过。
-- detection 分层已对齐为 pipeline / modes / candidate / outer / evidence /
-  decision / final；corrected outer extension 属于 candidate lifecycle，PASS /
-  REVIEW 属于 decision 层，finalization 只做 output-adjacent 调整。
+- detection 分层已对齐为 pipeline / modes / candidate proposal lifecycle /
+  evidence / decision / final；outer proposal / correction 是 candidate proposal
+  family，不再作为 detection 一级子层。PASS / REVIEW 属于 decision 层，
+  finalization 只做 output-adjacent 调整。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 
@@ -67,10 +68,10 @@ Current stable release: v4.2.8
   analysis source 和 review reason 统一使用 `dual_lane` 命名，不再使用泛化的并行 lane 命名。
 - `review_only` mode 已推广为通用 mode detector 接口；`135-dual/partial` 只是
   该接口的当前使用者，不再通过 dual-lane detector 或旧的专用模块旁路。
-- outer 源码层级已拆为 `detection/outer/proposal/` 与
-  `detection/outer/correction/`；outer 只负责 proposal / correction，
-  separator bands、outer-content alignment 和 cache key 分别归入 evidence /
-  detection cache 层。
+- outer 源码层级已降入 `detection/candidate/proposal/outer/` 与
+  `detection/candidate/proposal/correction/`；outer 只作为 candidate proposal
+  family 负责 proposal / correction，separator bands、outer-content alignment
+  和 cache key 分别归入 evidence / detection cache 层。
 - outer runtime policy 已收敛为 `proposal` 与 `correction` 两块：
   `proposal.base` 负责基础外框候选，`proposal.geometry` 统一管理 partial
   placement、separator geometry 与 broad-width gap profile variants；
@@ -87,9 +88,9 @@ Current stable release: v4.2.8
   long-axis、short-axis 和 content-containment correction；partial 只有显式 count
   时可用 strict long-axis、short-axis 和 content-containment correction；partial auto 不生成
   corrected outer candidate。
-- outer correction proposal type 已归入 `detection/outer/correction/types.py`；
-  candidate 层只消费 `OuterCorrectionProposal`，outer correction 不再 import
-  candidate reassessment 类型。
+- outer correction proposal type 已归入
+  `detection/candidate/proposal/correction/types.py`；candidate 层只消费
+  `OuterCorrectionProposal`，outer correction 不再 import candidate reassessment 类型。
 - `outer_correction_extension` 现在只表示 standard-strip candidate lifecycle 允许
   corrected-candidate extension；实际开启面由 correction family 的 mode、strip mode
   和 partial 显式 count 门控决定。
@@ -100,7 +101,8 @@ Current stable release: v4.2.8
 - final PASS / REVIEW 实现已从 `detection/final/` 移到 `detection/decision/`；
   finalization 不再生成候选，只做 output bleed、approved geometry adjustment 和
   read-only diagnostics attachment。
-- separator-derived outer 已收敛为统一 `detection/outer/proposal/separator.py` 引擎；
+- separator-derived outer 已收敛为统一
+  `detection/candidate/proposal/outer/separator.py` 引擎；
   outer scope（local / full-width）与 gap search profile（standard / broad_width）
   组合生成候选；broad_width 不再作为 outer variant。full 默认启用全部
   separator-derived scope/profile 组合，partial 显式 count 才启用 extension profiles，
@@ -187,10 +189,10 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - Candidate execution budget separates eligibility from execution: reliable
   primary separator assessment may skip full-width and broad-width gap profile;
   outer correction also requires ok outer alignment before it skips.
-- Detection layering is aligned as pipeline / modes / candidate / outer /
-  evidence / decision / final. Corrected outer extension belongs to the
-  candidate lifecycle, PASS / REVIEW belongs to the decision layer, and
-  finalization is output-adjacent only.
+- Detection layering is aligned as pipeline / modes / candidate proposal
+  lifecycle / evidence / decision / final. Outer proposal / correction is a
+  candidate proposal family, not a top-level detection sublayer. PASS / REVIEW
+  belongs to the decision layer, and finalization is output-adjacent only.
 - New wrong PASS is unacceptable; conservative REVIEW and schema / reason diffs
   require explanation.
 - TIFF metadata, bit depth, ICC, resolution, and compression behavior remain unchanged.
@@ -233,12 +235,12 @@ Verified:
 - `review_only` mode is now a generic mode-detector interface; `135-dual/partial`
   is only the current user of that interface and no longer routes through the
   dual-lane detector or the old dedicated module.
-- Outer source layout is split into `detection/outer/proposal/` and
-  `detection/outer/correction/`; outer owns proposal / correction only, while
-  separator bands, outer-content alignment, and cache keys live in evidence /
-  detection cache layers.
+- Outer source layout now lives under `detection/candidate/proposal/outer/` and
+  `detection/candidate/proposal/correction/`; outer is a candidate proposal
+  family only, while separator bands, outer-content alignment, and cache keys
+  live in evidence / detection cache layers.
 - Separator-derived outer proposals are consolidated into the single
-  `detection/outer/proposal/separator.py` engine; outer scope (local /
+  `detection/candidate/proposal/outer/separator.py` engine; outer scope (local /
   full-width) and gap search profile (standard / broad_width) combine to
   generate candidates. `broad_width` is no longer an outer variant. Full strips
   enable all separator-derived scope/profile combinations, explicit-count
@@ -270,7 +272,7 @@ Verified:
   content-containment correction; auto-count partial strips do not generate
   corrected outer candidates.
 - The outer correction proposal type now lives in
-  `detection/outer/correction/types.py`; candidate code consumes
+  `detection/candidate/proposal/correction/types.py`; candidate code consumes
   `OuterCorrectionProposal` instead of outer correction importing candidate
   reassessment types.
 - Final PASS / REVIEW implementation lives under `detection/decision/`; final

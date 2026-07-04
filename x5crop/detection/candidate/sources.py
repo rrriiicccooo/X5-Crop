@@ -13,7 +13,7 @@ from ...policies.registry import get_detection_policy
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
 from ..evidence.content_evidence import content_evidence_detail
-from ..outer.proposal.plan import (
+from .proposal.outer.plan import (
     merge_outer_proposal_candidates,
     outer_candidate_strategy,
     outer_proposal_candidates,

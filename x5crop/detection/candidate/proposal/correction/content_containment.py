@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from ....domain import Detection
-from ....formats import FormatSpec
-from ....policies.registry import get_detection_policy
-from ....runtime import AnalysisCache
-from ....runtime_config import RuntimeConfig
-from ....utils import box_from_dict
-from ...evidence.outer_alignment import corrected_outer_from_alignment
+from .....domain import Detection
+from .....formats import FormatSpec
+from .....policies.registry import get_detection_policy
+from .....runtime import AnalysisCache
+from .....runtime_config import RuntimeConfig
+from .....utils import box_from_dict
+from ....evidence.outer_alignment import corrected_outer_from_alignment
 from .policy import correction_axes_allowed, correction_family_available
 from .types import OuterCorrectionProposal
 
