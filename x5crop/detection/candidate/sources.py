@@ -20,14 +20,14 @@ from ..outer.proposal.plan import (
     separator_full_width_outer_proposal_candidates,
     separator_width_profile_outer_proposal_candidates,
 )
-from .build import build_detection_for_outer
-from .counts import raw_detection_rank
-from .gap_profiles import (
+from ..gap_profiles import (
     BROAD_WIDTH_GAP_PROFILE,
     STANDARD_GAP_PROFILE,
     broad_width_gap_profile_detail,
     is_broad_width_gap_profile,
 )
+from .build import build_detection_for_outer
+from .counts import raw_detection_rank
 from .partial_holder import partial_safe_frame_content_detail, partial_safe_leading_content_detail
 from .separator_width_profile_plan import should_include_separator_width_profile_candidates
 from .separator_width_profile_selection import select_full_separator_width_profile_candidate
@@ -82,6 +82,7 @@ def detect_candidate_for_count(
                 candidate.strategy,
                 cache=cache,
                 gap_max_width_ratio_override=candidate_gap_override,
+                gap_search_profile=gap_profile,
                 policy=policy,
             )
             if is_broad_width_gap_profile(gap_profile):

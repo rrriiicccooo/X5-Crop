@@ -15,16 +15,18 @@ from ....runtime import AnalysisCache
 from ....utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 from ...cache_keys import separator_outer_cache_key
 from ...evidence.separator_bands import collect_separator_outer_bands, separator_outer_band_sequences
+from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE, is_broad_width_gap_profile
 from .common import unique_outer_candidates
 
 
 LOCAL_SEPARATOR_OUTER = "local"
 FULL_WIDTH_SEPARATOR_OUTER = "full_width"
-SEPARATOR_WIDTH_PROFILE_OUTER = "width_profile"
 
 
 @dataclass(frozen=True)
-class SeparatorOuterVariant:
+class SeparatorOuterPlan:
+    outer_scope: str
+    gap_search_profile: str
     name: str
     candidate_prefix: str
     full_width: bool
@@ -37,22 +39,22 @@ class SeparatorOuterVariant:
     spacing_max_ratio: float
     frame_error_max: float | None
     sequence_score_weight: float
-    use_width_profile: bool = False
+    uses_broad_width_profile: bool = False
 
 
-def separator_outer_variants_for_policy(
+def separator_outer_scopes_for_policy(
     policy: DetectionPolicy,
     strip_mode: str = "full",
     explicit_count: bool = True,
     safety_only: bool = False,
 ) -> tuple[str, ...]:
     separator_policy = policy.outer.proposal.geometry.separator
-    variants: list[str] = []
+    scopes: list[str] = []
     if _mode_active(separator_policy.local, strip_mode, explicit_count, safety_only):
-        variants.append(LOCAL_SEPARATOR_OUTER)
+        scopes.append(LOCAL_SEPARATOR_OUTER)
     if _mode_active(separator_policy.full_width, strip_mode, explicit_count, safety_only):
-        variants.append(FULL_WIDTH_SEPARATOR_OUTER)
-    return tuple(variants)
+        scopes.append(FULL_WIDTH_SEPARATOR_OUTER)
+    return tuple(scopes)
 
 
 def separator_derived_outer_candidates(
@@ -63,7 +65,8 @@ def separator_derived_outer_candidates(
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
     policy: Optional[DetectionPolicy] = None,
-    variants: tuple[str, ...] | None = None,
+    outer_scopes: tuple[str, ...] | None = None,
+    gap_search_profiles: tuple[str, ...] | None = None,
     explicit_count: bool = True,
 ) -> list[OuterCandidate]:
     policy = policy or get_detection_policy(fmt.name, strip_mode)
@@ -73,26 +76,171 @@ def separator_derived_outer_candidates(
     if aspect is None or aspect <= 0.0 or not base_candidates:
         return []
 
-    selected_variants = variants or separator_outer_variants_for_policy(policy, strip_mode, explicit_count)
+    selected_scopes = outer_scopes or separator_outer_scopes_for_policy(policy, strip_mode, explicit_count)
+    selected_gap_profiles = gap_search_profiles or (STANDARD_GAP_PROFILE,)
     candidates: list[OuterCandidate] = []
-    for variant_name in selected_variants:
-        variant = _variant_policy(variant_name, policy, fmt, count, strip_mode, explicit_count)
-        if variant is None:
-            continue
-        candidates.extend(
-            _separator_outer_candidates_for_variant(
-                gray_work,
-                base_candidates,
+    for outer_scope in selected_scopes:
+        for gap_search_profile in selected_gap_profiles:
+            plan = _scope_profile_plan(
+                outer_scope,
+                gap_search_profile,
+                policy,
                 fmt,
                 count,
                 strip_mode,
-                float(aspect),
-                variant,
-                cache,
-                policy,
+                explicit_count,
             )
-        )
+            if plan is None:
+                continue
+            candidates.extend(
+                _separator_outer_candidates_for_plan(
+                    gray_work,
+                    base_candidates,
+                    fmt,
+                    count,
+                    strip_mode,
+                    float(aspect),
+                    plan,
+                    cache,
+                    policy,
+                )
+            )
     return unique_outer_candidates(candidates)
+
+
+def _candidate_prefix(outer_scope: str, gap_search_profile: str) -> str | None:
+    if outer_scope == LOCAL_SEPARATOR_OUTER:
+        base = "separator_local"
+    elif outer_scope == FULL_WIDTH_SEPARATOR_OUTER:
+        base = "separator_full_width"
+    else:
+        return None
+    if is_broad_width_gap_profile(gap_search_profile):
+        return f"{base}_{BROAD_WIDTH_GAP_PROFILE}"
+    if gap_search_profile == STANDARD_GAP_PROFILE:
+        return base
+    return None
+
+
+def _broad_width_profile_available(
+    policy: DetectionPolicy,
+    count: int,
+    strip_mode: str,
+    explicit_count: bool,
+) -> bool:
+    separator_policy = policy.outer.proposal.geometry.separator
+    family = separator_policy.width_profile_family
+    width_policy = separator_policy.width_profile
+    required_count = int(width_policy.required_count)
+    return bool(
+        family.available_for(strip_mode, explicit_count)
+        and width_policy.mode != "off"
+        and (required_count <= 0 or count == required_count)
+    )
+
+
+def _width_profile_plan(
+    *,
+    outer_scope: str,
+    full_width: bool,
+    policy: DetectionPolicy,
+) -> SeparatorOuterPlan | None:
+    separator_policy = policy.outer.proposal.geometry.separator
+    family = separator_policy.width_profile_family
+    width_policy = separator_policy.width_profile
+    candidate_prefix = _candidate_prefix(outer_scope, BROAD_WIDTH_GAP_PROFILE)
+    if candidate_prefix is None:
+        return None
+    return SeparatorOuterPlan(
+        outer_scope=outer_scope,
+        gap_search_profile=BROAD_WIDTH_GAP_PROFILE,
+        name=f"{outer_scope}:{BROAD_WIDTH_GAP_PROFILE}",
+        candidate_prefix=candidate_prefix,
+        full_width=full_width,
+        margin_ratios=(0.0,),
+        source_candidate_count=max(1, int(width_policy.source_candidate_count)),
+        band_candidate_count=max(1, int(width_policy.band_candidate_count)),
+        sequence_candidate_count=max(1, int(width_policy.sequence_candidate_count)),
+        max_candidates=max(1, int(family.max_candidates or width_policy.max_candidates)),
+        spacing_min_ratio=float(width_policy.spacing_min_ratio),
+        spacing_max_ratio=float(width_policy.spacing_max_ratio),
+        frame_error_max=None,
+        sequence_score_weight=float(width_policy.sequence_score_weight),
+        uses_broad_width_profile=True,
+    )
+
+
+def _scope_profile_plan(
+    outer_scope: str,
+    gap_search_profile: str,
+    policy: DetectionPolicy,
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    explicit_count: bool,
+) -> SeparatorOuterPlan | None:
+    separator_policy = policy.outer.proposal.geometry.separator
+    band_policy = separator_policy.band
+    broad_width_profile = is_broad_width_gap_profile(gap_search_profile)
+    if broad_width_profile and not _broad_width_profile_available(policy, count, strip_mode, explicit_count):
+        return None
+    if outer_scope == LOCAL_SEPARATOR_OUTER:
+        family = separator_policy.local
+        if not family.available_for(strip_mode, explicit_count):
+            return None
+        if strip_mode == "full" and count != fmt.default_count:
+            return None
+        if broad_width_profile:
+            return _width_profile_plan(outer_scope=outer_scope, full_width=False, policy=policy)
+        candidate_prefix = _candidate_prefix(outer_scope, STANDARD_GAP_PROFILE)
+        if candidate_prefix is None:
+            return None
+        return SeparatorOuterPlan(
+            outer_scope=LOCAL_SEPARATOR_OUTER,
+            gap_search_profile=STANDARD_GAP_PROFILE,
+            name=f"{LOCAL_SEPARATOR_OUTER}:{STANDARD_GAP_PROFILE}",
+            candidate_prefix=candidate_prefix,
+            full_width=False,
+            margin_ratios=(0.0,),
+            source_candidate_count=max(1, int(band_policy.source_candidate_count)),
+            band_candidate_count=max(1, int(band_policy.band_candidate_count)),
+            sequence_candidate_count=max(1, int(band_policy.pair_candidate_count)),
+            max_candidates=max(1, int(family.max_candidates or band_policy.max_candidates)),
+            spacing_min_ratio=float(band_policy.spacing_min_ratio),
+            spacing_max_ratio=float(band_policy.spacing_max_ratio),
+            frame_error_max=float(band_policy.frame_error_max),
+            sequence_score_weight=0.02,
+        )
+    if outer_scope == FULL_WIDTH_SEPARATOR_OUTER:
+        family = separator_policy.full_width
+        geometry_policy = separator_policy.full_width_outer
+        if not family.available_for(strip_mode, explicit_count):
+            return None
+        expected_count = int(geometry_policy.required_count)
+        if expected_count > 0 and count != expected_count:
+            return None
+        if broad_width_profile:
+            return _width_profile_plan(outer_scope=outer_scope, full_width=True, policy=policy)
+        candidate_prefix = _candidate_prefix(outer_scope, STANDARD_GAP_PROFILE)
+        if candidate_prefix is None:
+            return None
+        return SeparatorOuterPlan(
+            outer_scope=FULL_WIDTH_SEPARATOR_OUTER,
+            gap_search_profile=STANDARD_GAP_PROFILE,
+            name=f"{FULL_WIDTH_SEPARATOR_OUTER}:{STANDARD_GAP_PROFILE}",
+            candidate_prefix=candidate_prefix,
+            full_width=True,
+            margin_ratios=tuple(float(value) for value in geometry_policy.margin_ratios),
+            source_candidate_count=max(1, int(geometry_policy.source_candidate_count)),
+            band_candidate_count=max(1, int(band_policy.band_candidate_count)),
+            sequence_candidate_count=max(1, int(geometry_policy.max_candidates)),
+            max_candidates=max(1, int(family.max_candidates or geometry_policy.max_candidates)),
+            spacing_min_ratio=float(band_policy.spacing_min_ratio),
+            spacing_max_ratio=float(band_policy.spacing_max_ratio),
+            frame_error_max=float(band_policy.frame_error_max),
+            sequence_score_weight=0.02,
+        )
+    return None
 
 
 def _mode_active(
@@ -108,99 +256,19 @@ def _mode_active(
     return family.phase == "primary" and family.mode in {"always", "conditional"}
 
 
-def _variant_policy(
-    variant_name: str,
-    policy: DetectionPolicy,
-    fmt: FormatSpec,
-    count: int,
-    strip_mode: str,
-    explicit_count: bool,
-) -> SeparatorOuterVariant | None:
-    separator_policy = policy.outer.proposal.geometry.separator
-    band_policy = separator_policy.band
-    if variant_name == LOCAL_SEPARATOR_OUTER:
-        family = separator_policy.local
-        if not family.available_for(strip_mode, explicit_count):
-            return None
-        if strip_mode == "full" and count != fmt.default_count:
-            return None
-        return SeparatorOuterVariant(
-            name=LOCAL_SEPARATOR_OUTER,
-            candidate_prefix="separator_local",
-            full_width=False,
-            margin_ratios=(0.0,),
-            source_candidate_count=max(1, int(band_policy.source_candidate_count)),
-            band_candidate_count=max(1, int(band_policy.band_candidate_count)),
-            sequence_candidate_count=max(1, int(band_policy.pair_candidate_count)),
-            max_candidates=max(1, int(family.max_candidates or band_policy.max_candidates)),
-            spacing_min_ratio=float(band_policy.spacing_min_ratio),
-            spacing_max_ratio=float(band_policy.spacing_max_ratio),
-            frame_error_max=float(band_policy.frame_error_max),
-            sequence_score_weight=0.02,
-        )
-    if variant_name == FULL_WIDTH_SEPARATOR_OUTER:
-        family = separator_policy.full_width
-        geometry_policy = separator_policy.full_width_outer
-        if not family.available_for(strip_mode, explicit_count):
-            return None
-        expected_count = int(geometry_policy.required_count)
-        if expected_count > 0 and count != expected_count:
-            return None
-        return SeparatorOuterVariant(
-            name=FULL_WIDTH_SEPARATOR_OUTER,
-            candidate_prefix="separator_full_width",
-            full_width=True,
-            margin_ratios=tuple(float(value) for value in geometry_policy.margin_ratios),
-            source_candidate_count=max(1, int(geometry_policy.source_candidate_count)),
-            band_candidate_count=max(1, int(band_policy.band_candidate_count)),
-            sequence_candidate_count=max(1, int(geometry_policy.max_candidates)),
-            max_candidates=max(1, int(family.max_candidates or geometry_policy.max_candidates)),
-            spacing_min_ratio=float(band_policy.spacing_min_ratio),
-            spacing_max_ratio=float(band_policy.spacing_max_ratio),
-            frame_error_max=float(band_policy.frame_error_max),
-            sequence_score_weight=0.02,
-        )
-    if variant_name == SEPARATOR_WIDTH_PROFILE_OUTER:
-        family = separator_policy.width_profile_family
-        width_policy = separator_policy.width_profile
-        required_count = int(width_policy.required_count)
-        if (
-            not family.available_for(strip_mode, explicit_count)
-            or width_policy.mode == "off"
-            or (required_count > 0 and count != required_count)
-        ):
-            return None
-        return SeparatorOuterVariant(
-            name=SEPARATOR_WIDTH_PROFILE_OUTER,
-            candidate_prefix="separator_width_profile",
-            full_width=True,
-            margin_ratios=(0.0,),
-            source_candidate_count=max(1, int(width_policy.source_candidate_count)),
-            band_candidate_count=max(1, int(width_policy.band_candidate_count)),
-            sequence_candidate_count=max(1, int(width_policy.sequence_candidate_count)),
-            max_candidates=max(1, int(family.max_candidates or width_policy.max_candidates)),
-            spacing_min_ratio=float(width_policy.spacing_min_ratio),
-            spacing_max_ratio=float(width_policy.spacing_max_ratio),
-            frame_error_max=None,
-            sequence_score_weight=float(width_policy.sequence_score_weight),
-            use_width_profile=True,
-        )
-    return None
-
-
-def _separator_outer_candidates_for_variant(
+def _separator_outer_candidates_for_plan(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
     fmt: FormatSpec,
     count: int,
     strip_mode: str,
     aspect: float,
-    variant: SeparatorOuterVariant,
+    plan: SeparatorOuterPlan,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> list[OuterCandidate]:
     if cache is not None:
-        candidate_key = separator_outer_cache_key(variant.name, base_candidates, fmt, count, strip_mode)
+        candidate_key = separator_outer_cache_key(plan.name, base_candidates, fmt, count, strip_mode)
         cached_candidates = cache.separator_outer_candidates.get(candidate_key)
         if cached_candidates is not None:
             return list(cached_candidates)
@@ -210,7 +278,7 @@ def _separator_outer_candidates_for_variant(
         [candidate for candidate in base_candidates if candidate.box.valid()],
         key=lambda candidate: candidate.box.width * candidate.box.height,
         reverse=True,
-    )[: variant.source_candidate_count]
+    )[: plan.source_candidate_count]
     candidates: list[OuterCandidate] = []
     expected_gaps = count - 1
     separator_policy = policy.outer.proposal.geometry.separator
@@ -220,7 +288,7 @@ def _separator_outer_candidates_for_variant(
         source_box = source.box.clamp(w, h)
         if not source_box.valid() or source_box.height <= 0:
             continue
-        outer = Box(0, source_box.top, w, source_box.bottom) if variant.full_width else source_box
+        outer = Box(0, source_box.top, w, source_box.bottom) if plan.full_width else source_box
         if not outer.valid() or outer.height <= 0 or outer.width <= 0:
             continue
         short_axis = float(outer.height)
@@ -228,7 +296,7 @@ def _separator_outer_candidates_for_variant(
         if frame_long <= 1.0:
             continue
 
-        if variant.use_width_profile:
+        if plan.uses_broad_width_profile:
             crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
             profile = _adaptive_separator_width_profile(crop, separator_policy.width_profile)
             bands, edge_margin = _collect_separator_width_profile_bands(
@@ -258,10 +326,10 @@ def _separator_outer_candidates_for_variant(
             float(count),
             aspect,
             band_policy,
-            variant,
+            plan,
         )
         for rank, (_sequence_rank, sequence, expected_ratio) in enumerate(
-            ranked_sequences[: variant.sequence_candidate_count],
+            ranked_sequences[: plan.sequence_candidate_count],
             start=1,
         ):
             first_band = sequence[0]
@@ -284,16 +352,16 @@ def _separator_outer_candidates_for_variant(
             proposed = Box(proposed_left, outer.top, proposed_right, outer.bottom).clamp(w, h)
             if not proposed.valid():
                 continue
-            ratio_suffix = f"_r{expected_ratio:.3f}" if not variant.use_width_profile else ""
+            ratio_suffix = f"_r{expected_ratio:.3f}" if not plan.uses_broad_width_profile else ""
             candidates.append(
                 OuterCandidate(
-                    f"{variant.candidate_prefix}_{source.name}_{rank}{ratio_suffix}",
+                    f"{plan.candidate_prefix}_{source.name}_{rank}{ratio_suffix}",
                     proposed,
                     "separator_outer",
                 )
             )
 
-    result = unique_outer_candidates(candidates)[: variant.max_candidates]
+    result = unique_outer_candidates(candidates)[: plan.max_candidates]
     if cache is not None:
         cache.separator_outer_candidates[candidate_key] = list(result)
     return result
@@ -307,14 +375,14 @@ def _rank_separator_sequences(
     count: float,
     aspect: float,
     band_policy: SeparatorOuterBandPolicy,
-    variant: SeparatorOuterVariant,
+    plan: SeparatorOuterPlan,
 ) -> list[tuple[float, tuple[dict[str, float], ...], float]]:
     candidate_bands = sorted(
         bands,
         key=lambda band: (-float(band["score"]), float(band["center"])),
-    )[: max(expected_gaps, variant.band_candidate_count)]
+    )[: max(expected_gaps, plan.band_candidate_count)]
     ranked: list[tuple[float, tuple[dict[str, float], ...], float]] = []
-    sequence_policy = _sequence_band_policy(band_policy, variant)
+    sequence_policy = _sequence_band_policy(band_policy, plan)
     for sequence in separator_outer_band_sequences(candidate_bands, expected_gaps, frame_long, sequence_policy):
         frame_widths: list[float] = []
         previous: Optional[dict[str, float]] = None
@@ -336,16 +404,16 @@ def _rank_separator_sequences(
         else:
             max_frame_error = 0.0
             mean_frame_error = 0.0
-        if variant.frame_error_max is not None and max_frame_error > variant.frame_error_max:
+        if plan.frame_error_max is not None and max_frame_error > plan.frame_error_max:
             continue
 
         separator_total = sum(float(band["width"]) for band in sequence)
         expected_ratio_base = count * aspect + separator_total / max(1.0, short_axis)
         sequence_score = sum(float(band["score"]) for band in sequence) / max(1, len(sequence))
-        for margin_ratio in variant.margin_ratios:
+        for margin_ratio in plan.margin_ratios:
             expected_ratio = expected_ratio_base + 2.0 * float(margin_ratio)
-            rank = mean_frame_error - variant.sequence_score_weight * sequence_score
-            if not variant.use_width_profile:
+            rank = mean_frame_error - plan.sequence_score_weight * sequence_score
+            if not plan.uses_broad_width_profile:
                 first_band = sequence[0]
                 last_band = sequence[-1]
                 margin = float(margin_ratio) * short_axis
@@ -360,21 +428,21 @@ def _rank_separator_sequences(
 
 def _sequence_band_policy(
     band_policy: SeparatorOuterBandPolicy,
-    variant: SeparatorOuterVariant,
+    plan: SeparatorOuterPlan,
 ) -> SeparatorOuterBandPolicy:
     return SeparatorOuterBandPolicy(
         min_score=band_policy.min_score,
         band_score=band_policy.band_score,
         min_width_ratio=band_policy.min_width_ratio,
         max_width_ratio=band_policy.max_width_ratio,
-        spacing_min_ratio=variant.spacing_min_ratio,
-        spacing_max_ratio=variant.spacing_max_ratio,
-        frame_error_max=variant.frame_error_max if variant.frame_error_max is not None else 999.0,
+        spacing_min_ratio=plan.spacing_min_ratio,
+        spacing_max_ratio=plan.spacing_max_ratio,
+        frame_error_max=plan.frame_error_max if plan.frame_error_max is not None else 999.0,
         edge_margin_ratio=band_policy.edge_margin_ratio,
         source_candidate_count=band_policy.source_candidate_count,
-        band_candidate_count=variant.band_candidate_count,
-        pair_candidate_count=variant.sequence_candidate_count,
-        max_candidates=variant.max_candidates,
+        band_candidate_count=plan.band_candidate_count,
+        pair_candidate_count=plan.sequence_candidate_count,
+        max_candidates=plan.max_candidates,
     )
 
 
@@ -444,7 +512,6 @@ def _collect_separator_width_profile_bands(
 __all__ = [
     "FULL_WIDTH_SEPARATOR_OUTER",
     "LOCAL_SEPARATOR_OUTER",
-    "SEPARATOR_WIDTH_PROFILE_OUTER",
     "separator_derived_outer_candidates",
-    "separator_outer_variants_for_policy",
+    "separator_outer_scopes_for_policy",
 ]

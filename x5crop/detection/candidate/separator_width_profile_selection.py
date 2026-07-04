@@ -7,6 +7,7 @@ import numpy as np
 from ...domain import Detection
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
+from ..gap_profiles import BROAD_WIDTH_GAP_PROFILE
 from ..evidence.content_evidence import content_evidence_detail
 from .scoring import detail_float
 
@@ -32,11 +33,15 @@ def select_full_separator_width_profile_candidate(
         )
     ):
         return None
+    def uses_broad_width_profile(detection: Detection) -> bool:
+        profile_detail = detection.detail.get("gap_search_profile", {})
+        return isinstance(profile_detail, dict) and str(profile_detail.get("profile", "")) == BROAD_WIDTH_GAP_PROFILE
+
     separator_width_profile_candidates = [
         detection
         for detection in candidates
         if str(detection.detail.get("outer_candidate_strategy", "")) == "separator_outer"
-        and str(detection.detail.get("outer_candidate", "")).startswith("separator_width_profile_")
+        and uses_broad_width_profile(detection)
     ]
     if not separator_width_profile_candidates:
         return None

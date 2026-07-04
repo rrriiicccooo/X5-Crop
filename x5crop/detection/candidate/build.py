@@ -24,6 +24,7 @@ from ...policies.runtime_policy import DetectionPolicy
 from ...policies.registry import get_detection_policy
 from ...runtime import AnalysisCache
 from ...utils import clamp_int
+from ..gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE
 from ..outer.proposal.plan import outer_candidate_strategy
 from .partial import partial_edge_hint
 from .scoring import score_detection
@@ -45,6 +46,7 @@ def build_detection_for_outer(
     cache: Optional[AnalysisCache] = None,
     allow_outer_refine: bool = True,
     gap_max_width_ratio_override: Optional[float] = None,
+    gap_search_profile: str = STANDARD_GAP_PROFILE,
     policy: Optional[DetectionPolicy] = None,
 ) -> Detection:
     policy = policy or get_detection_policy(fmt.name, strip_mode)
@@ -76,7 +78,7 @@ def build_detection_for_outer(
         )
         for i in range(1, count)
     ]
-    if candidate_strategy == "separator_outer" and outer_candidate_name.startswith("separator_width_profile_"):
+    if candidate_strategy == "separator_outer" and gap_search_profile == BROAD_WIDTH_GAP_PROFILE:
         separator_width_profile_gaps = separator_width_profile_gaps_for_outer(gray_work, outer, count, fmt, policy)
         if len(separator_width_profile_gaps) >= max(1, count - 1):
             gaps = separator_width_profile_gaps
@@ -287,6 +289,7 @@ def build_detection_for_outer(
             "broad_separator_width_gap_indexes": list(separator_width_evidence.get("broad_separator_width_gap_indexes", [])),
             "separator_width_min_px": float(separator_width_evidence.get("separator_width_min_px", 0.0) or 0.0),
             "gap_max_width_ratio_override": gap_max_width_ratio_override,
+            "gap_search_profile_id": str(gap_search_profile),
             "partial_edge_hint": partial_edge_hint(profile, origin, pitch, count, policy.partial_edge_hint) if strip_mode == "partial" else {},
             "gap_centers": [gap.center for gap in gaps],
             "gap_scores": [gap.score for gap in gaps],

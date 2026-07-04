@@ -10,9 +10,9 @@ from ...formats import FormatSpec
 from ...policies.registry import get_detection_policy
 from ...policies.runtime_policy import DetectionPolicy
 from ...runtime import AnalysisCache
+from ..gap_profiles import BROAD_WIDTH_GAP_PROFILE
 from .content_candidate import content_detection_for_count
 from .candidate_assessment import apply_candidate_assessment_policy
-from .gap_profiles import BROAD_WIDTH_GAP_PROFILE
 from .reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
 from .selection import is_partial_safe_auto_candidate
 from .separator_width_profile_plan import should_include_separator_width_profile_candidates

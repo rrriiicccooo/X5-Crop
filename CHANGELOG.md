@@ -101,9 +101,10 @@ Current stable release: v4.2.8
   finalization 不再生成候选，只做 output bleed、approved geometry adjustment 和
   read-only diagnostics attachment。
 - separator-derived outer 已收敛为统一 `detection/outer/proposal/separator.py` 引擎；
-  local、full-width 和 broad-width gap profile variants 共享 sequence / ranking /
-  candidate 输出逻辑；full 默认启用全部 separator-derived variants，partial 显式 count
-  才启用 extension variants，active code 不再保留独立 broad-width outer 分支。
+  outer scope（local / full-width）与 gap search profile（standard / broad_width）
+  组合生成候选；broad_width 不再作为 outer variant。full 默认启用全部
+  separator-derived scope/profile 组合，partial 显式 count 才启用 extension profiles，
+  active code 不再保留独立 broad-width outer 分支。
 - separator width 语义已降级为 gap search profile：`standard` 与 `broad_width`
   属于同一候选计划，最终 gap method 仍是普通 `detected` hard separator；
   broad width 只写入 `gap_search_profile`、`separator_width_evidence`、gate detail
@@ -113,7 +114,7 @@ Current stable release: v4.2.8
   candidate plan，所有候选统一经过 candidate assessment 与 final decision contract。
 - candidate execution budget 已加入 candidate lifecycle：primary separator candidate
   先经过 assessment；若 auto gate、content support、hard separator、confidence
-  margin 和 review reason 均证明可靠，则 extension profiles / outer variants
+  margin 和 review reason 均证明可靠，则 extension profiles / outer scope-profile combinations
   只记录 skipped detail；outer correction 还会确认 outer alignment ok
   后才跳过额外候选计算。
 - partial placement outer 已收敛到 `policy.outer.proposal.geometry.partial_placement`：标准
@@ -235,10 +236,11 @@ Verified:
   separator bands, outer-content alignment, and cache keys live in evidence /
   detection cache layers.
 - Separator-derived outer proposals are consolidated into the single
-  `detection/outer/proposal/separator.py` engine; local, full-width, and
-  broad-width gap profile variants share sequence, ranking, and candidate output
-  logic. Full strips enable all separator-derived variants, explicit-count
-  partial strips enable extension variants, and active code no longer keeps
+  `detection/outer/proposal/separator.py` engine; outer scope (local /
+  full-width) and gap search profile (standard / broad_width) combine to
+  generate candidates. `broad_width` is no longer an outer variant. Full strips
+  enable all separator-derived scope/profile combinations, explicit-count
+  partial strips enable extension profiles, and active code no longer keeps
   a separate broad-width outer branch.
 - Separator width semantics are downgraded to gap search profiles: `standard`
   and `broad_width` belong to the same candidate plan, final gap methods remain
@@ -250,7 +252,7 @@ Verified:
   content candidates, and safety candidates enter one candidate plan and pass
   through the same candidate assessment and final decision contract.
 - Candidate execution budget now assesses the primary separator candidate before
-  running extension profiles / outer variants; reliable primary results
+  running extension profiles / outer scope-profile combinations; reliable primary results
   record skipped detail instead of paying for extra candidate computation.
   Correction computation skips only after reliable selection and ok outer
   alignment.

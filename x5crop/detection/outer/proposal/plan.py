@@ -11,15 +11,16 @@ from ....formats import FormatSpec
 from ....policies.registry import get_detection_policy
 from ....policies.runtime_policy import DetectionPolicy
 from ....runtime import AnalysisCache
+from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE
 from .base import base_outer_candidates
 from .common import unique_outer_candidates
 from .partial_content import floating_content_position_candidates
 from .partial_edge import edge_anchored_outer_candidates
 from .separator import (
     FULL_WIDTH_SEPARATOR_OUTER,
-    SEPARATOR_WIDTH_PROFILE_OUTER,
+    LOCAL_SEPARATOR_OUTER,
     separator_derived_outer_candidates,
-    separator_outer_variants_for_policy,
+    separator_outer_scopes_for_policy,
 )
 
 
@@ -46,9 +47,9 @@ def outer_proposal_strategy_plan_for_policy(
     partial_placement = proposal_policy.geometry.partial_placement
     separator_mode = (
         "safety"
-        if safety_only and separator_outer_variants_for_policy(policy, strip_mode, explicit_count, safety_only=True)
+        if safety_only and separator_outer_scopes_for_policy(policy, strip_mode, explicit_count, safety_only=True)
         else "always"
-        if (not safety_only and separator_outer_variants_for_policy(policy, strip_mode, explicit_count, safety_only=False))
+        if (not safety_only and separator_outer_scopes_for_policy(policy, strip_mode, explicit_count, safety_only=False))
         else "off"
     )
     base = [
@@ -172,7 +173,8 @@ def outer_proposal_candidates(
             strip_mode,
             cache,
             policy,
-            variants=separator_outer_variants_for_policy(policy, strip_mode, explicit_count, safety_only=safety_only),
+            outer_scopes=separator_outer_scopes_for_policy(policy, strip_mode, explicit_count, safety_only=safety_only),
+            gap_search_profiles=(STANDARD_GAP_PROFILE,),
             explicit_count=explicit_count,
         )
     if safety_only:
@@ -199,7 +201,8 @@ def separator_full_width_outer_proposal_candidates(
         strip_mode,
         cache,
         policy,
-        variants=(FULL_WIDTH_SEPARATOR_OUTER,),
+        outer_scopes=(FULL_WIDTH_SEPARATOR_OUTER,),
+        gap_search_profiles=(STANDARD_GAP_PROFILE,),
         explicit_count=explicit_count,
     )
 
@@ -223,6 +226,7 @@ def separator_width_profile_outer_proposal_candidates(
         strip_mode,
         cache,
         policy,
-        variants=(SEPARATOR_WIDTH_PROFILE_OUTER,),
+        outer_scopes=(LOCAL_SEPARATOR_OUTER, FULL_WIDTH_SEPARATOR_OUTER),
+        gap_search_profiles=(BROAD_WIDTH_GAP_PROFILE,),
         explicit_count=explicit_count,
     )
