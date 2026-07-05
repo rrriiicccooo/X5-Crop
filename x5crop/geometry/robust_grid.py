@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import numpy as np
@@ -16,6 +17,37 @@ from .detection_parameters import HardGapTrustParameters, NearbySeparatorCorrect
 GridFit = tuple[int, float, float, float]
 
 
+@dataclass(frozen=True)
+class GridFitCandidate:
+    inliers: int
+    pitch: float
+    origin: float
+    median_residual: float
+
+    def rank_key(self, nominal_pitch: float) -> tuple[int, float, float, float]:
+        return (
+            self.inliers,
+            -self.median_residual,
+            -abs(self.pitch - nominal_pitch),
+            self.pitch,
+        )
+
+    def as_grid_fit(self) -> GridFit:
+        return (
+            int(self.inliers),
+            float(self.pitch),
+            float(self.origin),
+            float(self.median_residual),
+        )
+
+
+@dataclass(frozen=True)
+class GridFitAssessment:
+    accepted: bool
+    reason: str
+    residual_threshold: float
+
+
 def reliable_grid_anchor_gaps(gaps: list[Gap], config: RobustGridParameters) -> list[Gap]:
     return [gap for gap in gaps if gap.method in HARD_GAP_METHODS and gap.score >= config.reliable_min_score]
 
@@ -28,30 +60,64 @@ def grid_fit_tolerance(pitch: float, strip_mode: str, config: RobustGridParamete
     )
 
 
+def grid_fit_candidate_from_anchor_pair(
+    left: Gap,
+    right: Gap,
+    reliable: list[Gap],
+    nominal_pitch: float,
+    tolerance: float,
+    config: RobustGridParameters,
+) -> GridFitCandidate | None:
+    dk = right.index - left.index
+    if dk == 0:
+        return None
+    fit_pitch = (right.center - left.center) / float(dk)
+    if fit_pitch <= nominal_pitch * config.pitch_min_ratio or fit_pitch >= nominal_pitch * config.pitch_max_ratio:
+        return None
+    fit_origin = left.center - fit_pitch * left.index
+    residuals = [abs(gap.center - (fit_origin + fit_pitch * gap.index)) for gap in reliable]
+    inliers = sum(1 for value in residuals if value <= tolerance)
+    median_residual = float(np.median(np.array(residuals, dtype=np.float64))) if residuals else 0.0
+    return GridFitCandidate(
+        inliers=int(inliers),
+        pitch=float(fit_pitch),
+        origin=float(fit_origin),
+        median_residual=float(median_residual),
+    )
+
+
 def best_grid_fit(
     reliable: list[Gap],
     pitch: float,
     strip_mode: str,
     config: RobustGridParameters,
 ) -> GridFit | None:
-    best: GridFit | None = None
+    best: GridFitCandidate | None = None
     tolerance = grid_fit_tolerance(pitch, strip_mode, config)
     for a_i, a in enumerate(reliable):
         for b in reliable[a_i + 1:]:
-            dk = b.index - a.index
-            if dk == 0:
-                continue
-            cand_pitch = (b.center - a.center) / float(dk)
-            if cand_pitch <= pitch * config.pitch_min_ratio or cand_pitch >= pitch * config.pitch_max_ratio:
-                continue
-            cand_origin = a.center - cand_pitch * a.index
-            residuals = [abs(g.center - (cand_origin + cand_pitch * g.index)) for g in reliable]
-            inliers = sum(1 for value in residuals if value <= tolerance)
-            median_residual = float(np.median(np.array(residuals, dtype=np.float64))) if residuals else 0.0
-            rank = (inliers, -median_residual, -abs(cand_pitch - pitch), cand_pitch)
-            if best is None or rank > (best[0], -best[3], -abs(best[1] - pitch), best[1]):
-                best = (inliers, float(cand_pitch), float(cand_origin), median_residual)
-    return best
+            candidate = grid_fit_candidate_from_anchor_pair(a, b, reliable, pitch, tolerance, config)
+            if candidate is not None and (best is None or candidate.rank_key(pitch) > best.rank_key(pitch)):
+                best = candidate
+    return None if best is None else best.as_grid_fit()
+
+
+def grid_fit_assessment(
+    fit: GridFit,
+    nominal_pitch: float,
+    config: RobustGridParameters,
+) -> GridFitAssessment:
+    inlier_count, _fit_pitch, _fit_origin, median_residual = fit
+    residual_threshold = clamp_float(
+        nominal_pitch * config.reject_residual_ratio,
+        config.tolerance_min,
+        config.tolerance_max,
+    )
+    if inlier_count < config.min_reliable:
+        return GridFitAssessment(False, "too_few_inliers", residual_threshold)
+    if median_residual > residual_threshold:
+        return GridFitAssessment(False, "high_residual", residual_threshold)
+    return GridFitAssessment(True, "accepted", residual_threshold)
 
 
 def grid_predicted_center(
@@ -147,10 +213,16 @@ def apply_robust_grid(
     if best is None:
         return constrained, {"grid_used": False, "reliable_gaps": len(reliable), "grid_rejected": "no_pair_model"}
     inlier_count, fit_pitch, fit_origin, median_residual = best
-    if inlier_count < config.min_reliable:
-        return constrained, {"grid_used": False, "reliable_gaps": len(reliable), "grid_rejected": "too_few_inliers"}
-    if median_residual > clamp_float(pitch * config.reject_residual_ratio, config.tolerance_min, config.tolerance_max):
-        return constrained, {"grid_used": False, "reliable_gaps": len(reliable), "grid_rejected": "high_residual", "grid_residual": median_residual}
+    fit_assessment = grid_fit_assessment(best, pitch, config)
+    if not fit_assessment.accepted:
+        detail = {
+            "grid_used": False,
+            "reliable_gaps": len(reliable),
+            "grid_rejected": fit_assessment.reason,
+        }
+        if fit_assessment.reason == "high_residual":
+            detail["grid_residual"] = median_residual
+        return constrained, detail
     max_shift = clamp_float(
         pitch * (config.full_shift_ratio if strip_mode == "full" else config.partial_shift_ratio),
         config.shift_min,

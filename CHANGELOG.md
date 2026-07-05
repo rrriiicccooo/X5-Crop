@@ -239,9 +239,9 @@ Current stable release: v4.2.8
   refinement helpers，避免保留只做别名转发的 proposal refinement facade；
   `geometry/edge_pairs.py` 将 search limits、candidate generation、best-pair
   selection 和 replacement eligibility 分开；
-  `geometry/robust_grid.py` 将 reliable anchor selection、grid fit、predicted center
-  和 hard-gap protection / override adjustment 分开，方便继续审核 model evidence
-  何时可以移动 gap。
+  `geometry/robust_grid.py` 将 reliable anchor selection、grid fit candidate、
+  fit ranking、fit assessment、predicted center 和 hard-gap protection /
+  override adjustment 分开，方便继续审核 model evidence 何时可以移动 gap。
 - hard-gap trust 已做行为等价收敛：`geometry/gap_trust.py` 统一保存像素 signal、
   runtime hard-gap trust classifier 和 diagnostic hard-gap trust classifier；
   `detection/evidence/gap_diagnostics.py` 不再重复 trust 分类条件，只负责生成
@@ -435,8 +435,9 @@ Verified:
   candidate build owns cached edge/background profile retrieval, while
   `geometry/edge_pairs.py` consumes profile arrays and pure parameter objects;
   `geometry/robust_grid.py` separates reliable anchor
-  selection, grid fit, predicted center, and hard-gap protection / override
-  adjustment so model evidence movement can be reviewed directly. Grid-derived
+  selection, grid fit candidate generation, fit ranking, fit assessment,
+  predicted center, and hard-gap protection / override adjustment so model
+  evidence movement can be reviewed directly. Grid-derived
   outer-box calculation now lives in `detection.candidate.proposal.outer.grid_refine`;
   the separator gap lifecycle consumes grid detail and may rebuild gaps, but it
   does not own the outer-box adjustment rule.
