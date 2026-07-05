@@ -144,3 +144,9 @@ def collect_separator_outer_bands(
             }
         )
     return bands, edge_margin
+
+
+__all__ = [
+    "collect_separator_outer_bands",
+    "separator_outer_band_sequences",
+]

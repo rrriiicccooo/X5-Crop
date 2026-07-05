@@ -8,25 +8,24 @@ import numpy as np
 from ....domain import Box, Detection, Gap
 from ....formats import FormatSpec
 from ....geometry.boxes import map_work_box
-from ....geometry.edge_pairs import refine_gaps_by_edge_pairs
-from ....geometry.enhanced_separator import (
-    merge_enhanced_separator_gaps,
-    should_run_enhanced_separator_analysis,
-)
 from ....geometry.frame_fit import fit_frame_boxes_from_gaps, frame_boxes_from_gaps
-from ....geometry.gap_search import find_gap
 from ....geometry.layout import work_gray
-from ....geometry.nearby_separator import apply_nearby_separator_corrections
-from ....geometry.robust_grid import apply_robust_grid
 from ....geometry.separator_cache import cached_separator_profile
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ....utils import clamp_int
-from ...evidence.separator import separator_width_profile_gaps_for_outer
-from ...evidence.separator_width import separator_width_evidence_detail
 from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE
+from ...separator.correction import (
+    apply_edge_pair_separator_correction,
+    apply_grid_gap_model,
+    apply_nearby_separator_correction,
+    merge_enhanced_separator_proposals,
+    should_run_enhanced_separator_proposals,
+)
+from ...separator.evidence import separator_width_evidence_detail
+from ...separator.proposal import propose_separator_width_profile_gaps, propose_standard_separator_gaps
 from ..assessment.partial_edge import partial_edge_hint
 from ..assessment.scoring import score_detection
 from ..proposal.outer.plan import outer_candidate_strategy
@@ -66,20 +65,17 @@ def build_detection_for_outer(
     else:
         pitch = outer.width / float(max(1, count))
         origin = 0.0
-    gaps = [
-        find_gap(
-            profile,
-            origin + pitch * i,
-            pitch,
-            i,
-            fmt.name,
-            gap_max_width_ratio_override,
-            policy.separator.gap_search,
-        )
-        for i in range(1, count)
-    ]
+    gaps = propose_standard_separator_gaps(
+        profile,
+        origin,
+        pitch,
+        count,
+        fmt.name,
+        gap_max_width_ratio_override,
+        policy.separator.gap_search,
+    )
     if candidate_strategy == "separator_outer" and gap_search_profile == BROAD_WIDTH_GAP_PROFILE:
-        separator_width_profile_gaps = separator_width_profile_gaps_for_outer(gray_work, outer, count, fmt, policy)
+        separator_width_profile_gaps = propose_separator_width_profile_gaps(gray_work, outer, count, fmt, policy)
         if len(separator_width_profile_gaps) >= max(1, count - 1):
             gaps = separator_width_profile_gaps
     if (
@@ -94,7 +90,7 @@ def build_detection_for_outer(
         ]
     edge_refine_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     if strip_mode == "full" and count > 1:
-        gaps, edge_refine_detail = refine_gaps_by_edge_pairs(
+        gaps, edge_refine_detail = apply_edge_pair_separator_correction(
             crop,
             gaps,
             count,
@@ -104,7 +100,7 @@ def build_detection_for_outer(
             policy.separator.edge_pair,
             policy.separator.edge_refine_profile,
         )
-    gaps, grid_detail = apply_robust_grid(
+    gaps, grid_detail = apply_grid_gap_model(
         gaps,
         origin,
         pitch,
@@ -137,20 +133,17 @@ def build_detection_for_outer(
             profile = cached_separator_profile(cache, gray_work, outer, fmt.name, policy.separator.profile)
             pitch = outer.width / float(max(1, count))
             origin = 0.0
-            gaps = [
-                find_gap(
-                    profile,
-                    pitch * i,
-                    pitch,
-                    i,
-                    fmt.name,
-                    gap_max_width_ratio_override,
-                    policy.separator.gap_search,
-                )
-                for i in range(1, count)
-            ]
+            gaps = propose_standard_separator_gaps(
+                profile,
+                origin,
+                pitch,
+                count,
+                fmt.name,
+                gap_max_width_ratio_override,
+                policy.separator.gap_search,
+            )
             if strip_mode == "full" and count > 1:
-                gaps, edge_refine_detail = refine_gaps_by_edge_pairs(
+                gaps, edge_refine_detail = apply_edge_pair_separator_correction(
                     crop,
                     gaps,
                     count,
@@ -160,7 +153,7 @@ def build_detection_for_outer(
                     policy.separator.edge_pair,
                     policy.separator.edge_refine_profile,
                 )
-            gaps, grid_detail = apply_robust_grid(
+            gaps, grid_detail = apply_grid_gap_model(
                 gaps,
                 origin,
                 pitch,
@@ -181,8 +174,8 @@ def build_detection_for_outer(
         and not policy.separator.geometry_support.detected_geometry.enabled
     )
     if separator_analysis_allowed:
-        if should_run_enhanced_separator_analysis(config.analysis, gaps, count, policy.separator.enhanced):
-            gaps, separator_analysis_detail = merge_enhanced_separator_gaps(
+        if should_run_enhanced_separator_proposals(config.analysis, gaps, count, policy.separator.enhanced):
+            gaps, separator_analysis_detail = merge_enhanced_separator_proposals(
                 gray_work,
                 outer,
                 gaps,
@@ -207,7 +200,7 @@ def build_detection_for_outer(
         pre_correction_confidence, _pre_reasons, _pre_detail = score_detection(
             gray_work, outer, gaps, pre_correction_boxes, count, fmt, strip_mode, policy
         )
-        gaps, nearby_correction_detail = apply_nearby_separator_corrections(
+        gaps, nearby_correction_detail = apply_nearby_separator_correction(
             profile,
             gaps,
             origin,
