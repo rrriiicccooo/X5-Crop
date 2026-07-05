@@ -32,17 +32,96 @@ class EdgePairCandidate:
         )
 
 
-def edge_pair_can_replace_hard_gap(gap: Gap, edge_gap: Gap, pitch: float, params: EdgePairParameters) -> bool:
+@dataclass(frozen=True)
+class EdgePairReplacementAssessment:
+    ok: bool
+    reason: str
+    delta_px: float
+    shift_limit: float | None = None
+    min_quality: float | None = None
+    close_shift_limit: float | None = None
+
+    def detail(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "ok": bool(self.ok),
+            "reason": self.reason,
+            "delta_px": float(self.delta_px),
+        }
+        if self.shift_limit is not None:
+            out["shift_limit"] = float(self.shift_limit)
+        if self.min_quality is not None:
+            out["min_quality"] = float(self.min_quality)
+        if self.close_shift_limit is not None:
+            out["close_shift_limit"] = float(self.close_shift_limit)
+        return out
+
+
+def assess_edge_pair_hard_gap_replacement(
+    gap: Gap,
+    edge_gap: Gap,
+    pitch: float,
+    params: EdgePairParameters,
+) -> EdgePairReplacementAssessment:
     delta = abs(edge_gap.center - gap.center)
     if params.max_hard_shift_ratio <= 0.0:
-        return delta <= max(clamp_float(pitch * 0.001, 4.0, 20.0), edge_gap.width)
+        shift_limit = max(clamp_float(pitch * 0.001, 4.0, 20.0), edge_gap.width)
+        return EdgePairReplacementAssessment(
+            ok=delta <= shift_limit,
+            reason="hard_shift_ok" if delta <= shift_limit else "hard_shift_too_large",
+            delta_px=float(delta),
+            shift_limit=float(shift_limit),
+        )
     shift_limit = max(edge_gap.width * 2.0, clamp_float(pitch * params.max_hard_shift_ratio, 15.0, 220.0))
     if delta > shift_limit:
-        return False
+        return EdgePairReplacementAssessment(
+            ok=False,
+            reason="hard_shift_too_large",
+            delta_px=float(delta),
+            shift_limit=float(shift_limit),
+        )
     min_quality = max(params.min_quality_for_hard_gap, gap.score * params.hard_gap_quality_ratio)
     if edge_gap.score >= min_quality:
-        return True
-    return delta <= max(4.0, edge_gap.width * 1.5)
+        return EdgePairReplacementAssessment(
+            ok=True,
+            reason="hard_quality_ok",
+            delta_px=float(delta),
+            shift_limit=float(shift_limit),
+            min_quality=float(min_quality),
+        )
+    close_shift_limit = max(4.0, edge_gap.width * 1.5)
+    close_shift_ok = delta <= close_shift_limit
+    return EdgePairReplacementAssessment(
+        ok=close_shift_ok,
+        reason="hard_close_shift_ok" if close_shift_ok else "hard_quality_weak",
+        delta_px=float(delta),
+        shift_limit=float(shift_limit),
+        min_quality=float(min_quality),
+        close_shift_limit=float(close_shift_limit),
+    )
+
+
+def assess_edge_pair_replacement(
+    gap: Gap,
+    edge_gap: Gap,
+    pitch: float,
+    params: EdgePairParameters,
+) -> EdgePairReplacementAssessment:
+    delta = abs(edge_gap.center - gap.center)
+    if not is_hard_gap_method(gap.method):
+        ok = edge_gap.score >= params.min_quality_for_model_gap
+        return EdgePairReplacementAssessment(
+            ok=ok,
+            reason="model_quality_ok" if ok else "model_quality_weak",
+            delta_px=float(delta),
+            min_quality=float(params.min_quality_for_model_gap),
+        )
+    if gap.method in {GAP_DETECTED, GAP_ENHANCED_DETECTED}:
+        return assess_edge_pair_hard_gap_replacement(gap, edge_gap, pitch, params)
+    return EdgePairReplacementAssessment(
+        ok=True,
+        reason="edge_pair_refresh",
+        delta_px=float(delta),
+    )
 
 
 def edge_pair_search_limits(pitch: float, params: EdgePairParameters) -> tuple[int, int, int]:
@@ -112,14 +191,6 @@ def best_edge_pair_gap(
     )
 
 
-def edge_pair_can_replace_gap(gap: Gap, edge_gap: Gap, pitch: float, params: EdgePairParameters) -> bool:
-    if not is_hard_gap_method(gap.method):
-        return edge_gap.score >= params.min_quality_for_model_gap
-    if gap.method in {GAP_DETECTED, GAP_ENHANCED_DETECTED}:
-        return edge_pair_can_replace_hard_gap(gap, edge_gap, pitch, params)
-    return True
-
-
 def refine_gaps_with_edge_profiles(
     edge: np.ndarray,
     background: np.ndarray,
@@ -137,7 +208,7 @@ def refine_gaps_with_edge_profiles(
     window, min_gutter, max_gutter = edge_pair_search_limits(pitch, params)
     refined: list[Gap] = []
     accepted: list[dict[str, Any]] = []
-    rejected = 0
+    rejected: list[dict[str, Any]] = []
     for gap in gaps:
         edge_gap = best_edge_pair_gap(
             gap,
@@ -154,11 +225,20 @@ def refine_gaps_with_edge_profiles(
         )
         if edge_gap is None:
             refined.append(gap)
-            rejected += 1
+            rejected.append({"index": int(gap.index), "reason": "no_edge_pair_candidate", "kept_method": gap.method})
             continue
-        if not edge_pair_can_replace_gap(gap, edge_gap, pitch, params):
+        assessment = assess_edge_pair_replacement(gap, edge_gap, pitch, params)
+        if not assessment.ok:
             refined.append(gap)
-            rejected += 1
+            rejected_detail = {
+                "index": int(gap.index),
+                "center": float(edge_gap.center),
+                "width": float(edge_gap.width),
+                "score": float(edge_gap.score),
+                "kept_method": gap.method,
+            }
+            rejected_detail.update(assessment.detail())
+            rejected.append(rejected_detail)
             continue
         refined.append(edge_gap)
         accepted.append(
@@ -168,6 +248,7 @@ def refine_gaps_with_edge_profiles(
                 "width": float(edge_gap.width),
                 "score": float(edge_gap.score),
                 "replaced_method": gap.method,
+                "replacement": assessment.detail(),
             }
         )
     return refined, {
@@ -175,7 +256,8 @@ def refine_gaps_with_edge_profiles(
         "params": asdict(params),
         "accepted": accepted,
         "accepted_count": len(accepted),
-        "rejected_count": rejected,
+        "rejected": rejected[:8],
+        "rejected_count": len(rejected),
     }
 
 
@@ -194,9 +276,10 @@ def refine_gaps_by_edge_pairs(
 
 __all__ = [
     "EdgePairCandidate",
+    "EdgePairReplacementAssessment",
+    "assess_edge_pair_hard_gap_replacement",
+    "assess_edge_pair_replacement",
     "best_edge_pair_gap",
-    "edge_pair_can_replace_gap",
-    "edge_pair_can_replace_hard_gap",
     "edge_pair_candidates_for_gap",
     "edge_pair_search_limits",
     "refine_gaps_by_edge_pairs",

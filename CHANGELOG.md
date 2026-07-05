@@ -135,6 +135,9 @@ Current stable release: v4.2.8
   gap method 判断统一使用常量。
 - edge-pair refinement 已明确为 edge-pair gap correction：active detail key
   改为 `edge_pair_correction`，debug gap overlay 也改为消费 gap method 常量。
+- edge-pair replacement eligibility 已改为 `EdgePairReplacementAssessment`：
+  accepted / rejected 都记录 reason、delta、shift / quality limit；行为等价保留
+  旧布尔判断，不改变阈值。
 - edge-pair 参数边界已收紧：format preset 仍可用
   `SeparatorEdgePairPolicy` 表达语义，policy assembly 会在 runtime policy 中
   转换为 `EdgePairParameters`，`geometry/edge_pairs.py` 不再 duck-type
@@ -252,7 +255,7 @@ Current stable release: v4.2.8
 - separator refinement 已做行为等价拆分：candidate build 直接调用 geometry
   refinement helpers，避免保留只做别名转发的 proposal refinement facade；
   `geometry/edge_pairs.py` 将 search limits、candidate generation、best-pair
-  selection 和 replacement eligibility 分开；
+  selection 和 replacement assessment 分开；
   `geometry/robust_grid.py` 将 reliable anchor selection、grid fit candidate、
   fit ranking、fit assessment、predicted center 和 hard-gap protection /
   override adjustment 分开，方便继续审核 model evidence 何时可以移动 gap。
@@ -445,7 +448,9 @@ Verified:
 - Separator refinement is split without behavior changes: candidate build calls
   geometry refinement helpers directly instead of keeping a re-export-only
   proposal refinement facade; `geometry/edge_pairs.py` separates search limits,
-  typed candidate generation, best-pair selection, and replacement eligibility;
+  typed candidate generation, best-pair selection, and replacement assessment;
+  edge-pair accepted / rejected replacements now record reason, delta, shift,
+  and quality limits while preserving the previous boolean thresholds;
   candidate build owns cached edge/background profile retrieval, while
   `geometry/edge_pairs.py` consumes profile arrays and pure parameter objects;
   `geometry/robust_grid.py` separates reliable anchor
