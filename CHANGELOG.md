@@ -279,6 +279,8 @@ Current stable release: v4.2.8
   分开，candidate detail 可解释每个 gap 为什么没有被 nearby separator 修正。
 - separator refinement 已做行为等价拆分：candidate build 直接调用 geometry
   refinement helpers，避免保留只做别名转发的 proposal refinement facade；
+  edge-pair、enhanced 和 nearby wrapper 现在统一返回 `GapRefinementResult`，
+  但报告仍保留原有 detail key；
   `geometry/edge_pairs.py` 将 search limits、candidate generation、best-pair
   selection 和 replacement assessment 分开；
   `geometry/robust_grid.py` 将 reliable anchor selection、grid fit candidate、
@@ -570,7 +572,9 @@ Verified:
   `geometry/enhanced_separator.py` separates detected gap validation, enhanced
   promotion, and merge detail; `geometry/nearby_separator.py` separates search
   context, candidate ranking, stronger test, and geometry acceptance so separator
-  refinement thresholds can be reviewed directly. Runtime correction and
+  refinement thresholds can be reviewed directly. Edge-pair, enhanced, and nearby
+  wrappers now return a shared `GapRefinementResult` while report detail keys stay
+  compatible. Runtime correction and
   read-only diagnostics now share nearby search context, candidate ranking, and
   stronger-test detail; diagnostics keep only caching, profile retrieval, and
   display fields instead of duplicating nearby candidate search.

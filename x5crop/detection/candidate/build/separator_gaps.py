@@ -41,6 +41,43 @@ class SeparatorGapBuildResult:
     pre_nearby_gaps: Optional[list[Gap]]
 
 
+@dataclass(frozen=True)
+class GapRefinementResult:
+    family: str
+    gaps: list[Gap]
+    detail: dict[str, Any]
+    pre_refinement_gaps: Optional[list[Gap]] = None
+
+
+def _gap_refinement_result(
+    family: str,
+    gaps: list[Gap],
+    detail: dict[str, Any],
+    *,
+    pre_refinement_gaps: Optional[list[Gap]] = None,
+) -> GapRefinementResult:
+    result_detail = dict(detail)
+    result_detail.setdefault("family", family)
+    return GapRefinementResult(
+        family=family,
+        gaps=gaps,
+        detail=result_detail,
+        pre_refinement_gaps=pre_refinement_gaps,
+    )
+
+
+def _skipped_gap_refinement_result(
+    family: str,
+    gaps: list[Gap],
+    reason: str,
+) -> GapRefinementResult:
+    return _gap_refinement_result(
+        family,
+        gaps,
+        {"used": False, "reason": reason},
+    )
+
+
 def separator_origin_pitch(
     outer: Box,
     fmt: FormatSpec,
@@ -120,6 +157,38 @@ def initial_separator_gaps(
     return gaps, standard_gap_search_detail, separator_width_profile_gap_search_detail
 
 
+def apply_edge_pair_refinement(
+    outer: Box,
+    crop: np.ndarray,
+    gaps: list[Gap],
+    count: int,
+    strip_mode: str,
+    cache: Optional[AnalysisCache],
+    policy: DetectionPolicy,
+) -> GapRefinementResult:
+    edge_pair_refinement = _skipped_gap_refinement_result("edge_pair", gaps, "disabled")
+    if strip_mode == "full" and count > 1:
+        edge, background, _activity = cached_edge_refine_profiles(
+            cache,
+            crop,
+            outer,
+            policy.separator.edge_refine_profile,
+        )
+        refined_gaps, edge_pair_correction_detail = refine_gaps_with_edge_profiles(
+            edge,
+            background,
+            gaps,
+            count,
+            policy.separator.edge_pair,
+        )
+        edge_pair_refinement = _gap_refinement_result(
+            "edge_pair",
+            refined_gaps,
+            edge_pair_correction_detail,
+        )
+    return edge_pair_refinement
+
+
 def apply_primary_separator_refinements(
     gray_work: np.ndarray,
     outer: Box,
@@ -133,21 +202,16 @@ def apply_primary_separator_refinements(
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> tuple[list[Gap], dict[str, Any], dict[str, Any]]:
-    edge_pair_correction_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
-    if strip_mode == "full" and count > 1:
-        edge, background, _activity = cached_edge_refine_profiles(
-            cache,
-            crop,
-            outer,
-            policy.separator.edge_refine_profile,
-        )
-        gaps, edge_pair_correction_detail = refine_gaps_with_edge_profiles(
-            edge,
-            background,
-            gaps,
-            count,
-            policy.separator.edge_pair,
-        )
+    edge_pair_refinement = apply_edge_pair_refinement(
+        outer,
+        crop,
+        gaps,
+        count,
+        strip_mode,
+        cache,
+        policy,
+    )
+    gaps = edge_pair_refinement.gaps
     gaps, grid_detail = apply_robust_grid(
         gaps,
         origin,
@@ -160,7 +224,7 @@ def apply_primary_separator_refinements(
         policy.separator.nearby_correction,
         policy.separator.robust_grid,
     )
-    return gaps, edge_pair_correction_detail, grid_detail
+    return gaps, edge_pair_refinement.detail, grid_detail
 
 
 def apply_enhanced_gap_promotion(
@@ -176,17 +240,17 @@ def apply_enhanced_gap_promotion(
     config: RuntimeConfig,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
-) -> tuple[list[Gap], dict[str, Any]]:
-    detail: dict[str, Any] = {"used": False, "reason": "disabled"}
+) -> GapRefinementResult:
+    disabled = _skipped_gap_refinement_result("enhanced_gap_promotion", gaps, "disabled")
     promotion_allowed = (
         allow_enhanced_gap_promotion
         and strip_mode == "full"
         and not policy.separator.geometry_support.detected_geometry.enabled
     )
     if not promotion_allowed:
-        return gaps, detail
+        return disabled
     if should_run_enhanced_gap_promotion(config.analysis, gaps, count, policy.separator.enhanced):
-        return promote_enhanced_separator_gaps(
+        refined_gaps, detail = promote_enhanced_separator_gaps(
             gray_work,
             outer,
             gaps,
@@ -199,9 +263,14 @@ def apply_enhanced_gap_promotion(
             policy.separator.profile,
             policy.separator.enhanced,
         )
+        return _gap_refinement_result(
+            "enhanced_gap_promotion",
+            refined_gaps,
+            detail,
+        )
     if config.analysis == "auto":
-        detail = {"used": False, "reason": "auto_not_needed"}
-    return gaps, detail
+        return _skipped_gap_refinement_result("enhanced_gap_promotion", gaps, "auto_not_needed")
+    return disabled
 
 
 def apply_nearby_separator_refinement(
@@ -212,10 +281,10 @@ def apply_nearby_separator_refinement(
     origin: float,
     pitch: float,
     policy: DetectionPolicy,
-) -> tuple[list[Gap], dict[str, Any], Optional[list[Gap]]]:
-    detail: dict[str, Any] = {"used": False, "reason": "disabled"}
+) -> GapRefinementResult:
+    disabled = _skipped_gap_refinement_result("nearby_separator_correction", gaps, "disabled")
     if strip_mode != "full" or not policy.separator.nearby_correction.enabled:
-        return gaps, detail, None
+        return disabled
     pre_nearby_gaps = list(gaps)
     refined_gaps, detail = apply_nearby_separator_corrections(
         profile,
@@ -227,8 +296,17 @@ def apply_nearby_separator_refinement(
         policy.separator.nearby_correction,
     )
     if int(detail.get("accepted_count", 0) or 0) > 0:
-        return refined_gaps, detail, pre_nearby_gaps
-    return refined_gaps, detail, None
+        return _gap_refinement_result(
+            "nearby_separator_correction",
+            refined_gaps,
+            detail,
+            pre_refinement_gaps=pre_nearby_gaps,
+        )
+    return _gap_refinement_result(
+        "nearby_separator_correction",
+        refined_gaps,
+        detail,
+    )
 
 
 def build_primary_separator_gaps_for_outer(
@@ -329,7 +407,7 @@ def apply_late_separator_refinements(
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> SeparatorGapBuildResult:
-    gaps, enhanced_gap_promotion_detail = apply_enhanced_gap_promotion(
+    enhanced_gap_promotion = apply_enhanced_gap_promotion(
         gray_work,
         separator_gaps.outer,
         separator_gaps.gaps,
@@ -343,9 +421,9 @@ def apply_late_separator_refinements(
         cache,
         policy,
     )
-    gaps, nearby_correction_detail, pre_nearby_gaps = apply_nearby_separator_refinement(
+    nearby_correction = apply_nearby_separator_refinement(
         separator_gaps.profile,
-        gaps,
+        enhanced_gap_promotion.gaps,
         count,
         strip_mode,
         separator_gaps.origin,
@@ -357,14 +435,14 @@ def apply_late_separator_refinements(
         profile=separator_gaps.profile,
         origin=separator_gaps.origin,
         pitch=separator_gaps.pitch,
-        gaps=gaps,
+        gaps=nearby_correction.gaps,
         grid_detail=separator_gaps.grid_detail,
         standard_gap_search_detail=separator_gaps.standard_gap_search_detail,
         separator_width_profile_gap_search_detail=separator_gaps.separator_width_profile_gap_search_detail,
         edge_pair_correction_detail=separator_gaps.edge_pair_correction_detail,
-        enhanced_gap_promotion_detail=enhanced_gap_promotion_detail,
-        nearby_correction_detail=nearby_correction_detail,
-        pre_nearby_gaps=pre_nearby_gaps,
+        enhanced_gap_promotion_detail=enhanced_gap_promotion.detail,
+        nearby_correction_detail=nearby_correction.detail,
+        pre_nearby_gaps=nearby_correction.pre_refinement_gaps,
     )
 
 
@@ -410,7 +488,9 @@ def build_separator_gaps_for_outer(
 
 
 __all__ = [
+    "GapRefinementResult",
     "SeparatorGapBuildResult",
+    "apply_edge_pair_refinement",
     "apply_enhanced_gap_promotion",
     "apply_late_separator_refinements",
     "apply_nearby_separator_refinement",
