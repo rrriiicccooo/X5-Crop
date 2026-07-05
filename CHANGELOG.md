@@ -147,6 +147,11 @@ Current stable release: v4.2.8
   runtime hard-gap trust classifier 和 diagnostic hard-gap trust classifier；
   `detection/evidence/gap_diagnostics.py` 不再重复 trust 分类条件，只负责生成
   read-only diagnostic record。
+- enhanced / nearby separator refinement 已做行为等价拆分：
+  `geometry/enhanced_separator.py` 将 detected gap validation、enhanced promotion
+  和 merge detail 分开；`geometry/nearby_separator.py` 将 search context、
+  candidate ranking、stronger test 和 geometry acceptance 分开，方便继续人工审核
+  separator refinement 的阈值策略。
 - `.gitignore` 显式保留 `x5crop/detection/candidate/build/*.py`，避免源码层级被
   通用 `build/` 输出规则误隐藏。
 - candidate source orchestration 已去 retry 化：standard / broad-width gap profiles、
@@ -315,6 +320,11 @@ Verified:
   now owns pixel signals, the runtime hard-gap trust classifier, and the
   diagnostic hard-gap trust classifier; `detection/evidence/gap_diagnostics.py`
   records diagnostics without duplicating trust classification conditions.
+- Enhanced / nearby separator refinement is split without behavior changes:
+  `geometry/enhanced_separator.py` separates detected gap validation, enhanced
+  promotion, and merge detail; `geometry/nearby_separator.py` separates search
+  context, candidate ranking, stronger test, and geometry acceptance so separator
+  refinement thresholds can be reviewed directly.
 - `.gitignore` explicitly keeps `x5crop/detection/candidate/build/*.py` visible
   so source layers are not hidden by the generic `build/` output rule.
 - Candidate source orchestration no longer uses active retry control flow:

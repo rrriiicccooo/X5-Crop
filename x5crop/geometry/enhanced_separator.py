@@ -15,6 +15,31 @@ from .detection_parameters import EnhancedSeparatorParameters, GapSearchParamete
 from .separator_cache import cached_enhanced_separator_profile
 
 
+def enhanced_gap_fallback(index: int, expected: float, score: float) -> Gap:
+    return Gap(index, float(expected), score, "equal")
+
+
+def enhanced_gap_width(gap: Gap) -> float:
+    if gap.start is None or gap.end is None:
+        return 0.0
+    return abs(float(gap.end) - float(gap.start))
+
+
+def enhanced_gap_is_valid(gap: Gap, expected: float, pitch: float, config: EnhancedSeparatorParameters) -> bool:
+    if gap.method != "detected" or gap.score < config.min_score:
+        return False
+    width = enhanced_gap_width(gap)
+    if width <= 0 or width > clamp_float(pitch * config.max_width_ratio, config.max_width_min, config.max_width_max):
+        return False
+    if abs(gap.center - expected) > clamp_float(pitch * config.max_shift_ratio, config.max_shift_min, config.max_shift_max):
+        return False
+    return True
+
+
+def promote_enhanced_gap(gap: Gap, index: int) -> Gap:
+    return Gap(index, gap.center, gap.score, "enhanced-detected", gap.start, gap.end)
+
+
 def find_enhanced_gap(
     profile: np.ndarray,
     expected: float,
@@ -27,16 +52,9 @@ def find_enhanced_gap(
     gap = find_gap(profile, expected, pitch, index, gap_search=gap_search)
     if gap.method != "detected":
         return gap
-    if gap.score < config.min_score:
-        return Gap(index, float(expected), gap.score, "equal")
-    if gap.start is None or gap.end is None:
-        return Gap(index, float(expected), gap.score, "equal")
-    width = abs(float(gap.end) - float(gap.start))
-    if width <= 0 or width > clamp_float(pitch * config.max_width_ratio, config.max_width_min, config.max_width_max):
-        return Gap(index, float(expected), gap.score, "equal")
-    if abs(gap.center - expected) > clamp_float(pitch * config.max_shift_ratio, config.max_shift_min, config.max_shift_max):
-        return Gap(index, float(expected), gap.score, "equal")
-    return Gap(index, gap.center, gap.score, "enhanced-detected", gap.start, gap.end)
+    if not enhanced_gap_is_valid(gap, expected, pitch, config):
+        return enhanced_gap_fallback(index, expected, gap.score)
+    return promote_enhanced_gap(gap, index)
 
 
 def enhanced_separator_merge_cache_key(
@@ -69,6 +87,47 @@ def enhanced_separator_merge_cache_key(
     )
 
 
+def enhanced_separator_policy_key(
+    robust_grid: RobustGridParameters | None,
+    gap_search: GapSearchParameters | None,
+    profile_config: SeparatorProfileParameters | None,
+    enhanced_config: EnhancedSeparatorParameters | None,
+) -> tuple[Any, ...]:
+    return (
+        robust_grid or RobustGridParameters(),
+        gap_search or GapSearchParameters(),
+        profile_config or SeparatorProfileParameters(),
+        enhanced_config or EnhancedSeparatorParameters(),
+    )
+
+
+def merge_one_enhanced_gap(
+    profile: np.ndarray,
+    gap: Gap,
+    origin: float,
+    pitch: float,
+    gap_search: GapSearchParameters | None,
+    enhanced_config: EnhancedSeparatorParameters | None,
+) -> tuple[Gap, dict[str, Any] | None, dict[str, Any] | None]:
+    if gap.method in HARD_GAP_METHODS:
+        return gap, None, None
+    expected = origin + pitch * gap.index
+    enhanced = find_enhanced_gap(profile, expected, pitch, gap.index, gap_search, enhanced_config)
+    if enhanced.method == "enhanced-detected":
+        return enhanced, {
+            "index": int(gap.index),
+            "center": float(enhanced.center),
+            "score": float(enhanced.score),
+            "replaced_method": gap.method,
+        }, None
+    return gap, None, {
+        "index": int(gap.index),
+        "score": float(enhanced.score),
+        "method": enhanced.method,
+        "kept_method": gap.method,
+    }
+
+
 def merge_enhanced_separator_gaps(
     gray_work: np.ndarray,
     outer: Box,
@@ -88,12 +147,7 @@ def merge_enhanced_separator_gaps(
         return gaps, {"used": False, "reason": "empty_outer"}
     cache_key: Optional[tuple[Any, ...]] = None
     if cache is not None:
-        policy_key = (
-            robust_grid or RobustGridParameters(),
-            gap_search or GapSearchParameters(),
-            profile_config or SeparatorProfileParameters(),
-            enhanced_config or EnhancedSeparatorParameters(),
-        )
+        policy_key = enhanced_separator_policy_key(robust_grid, gap_search, profile_config, enhanced_config)
         cache_key = enhanced_separator_merge_cache_key(outer, gaps, origin, pitch, strip_mode, format_name, policy_key)
         cached = cache.enhanced_separator_merges.get(cache_key)
         if cached is not None:
@@ -104,31 +158,19 @@ def merge_enhanced_separator_gaps(
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
     for gap in gaps:
-        if gap.method in HARD_GAP_METHODS:
-            merged.append(gap)
-            continue
-        expected = origin + pitch * gap.index
-        enhanced = find_enhanced_gap(profile, expected, pitch, gap.index, gap_search, enhanced_config)
-        if enhanced.method == "enhanced-detected":
-            merged.append(enhanced)
-            accepted.append(
-                {
-                    "index": int(gap.index),
-                    "center": float(enhanced.center),
-                    "score": float(enhanced.score),
-                    "replaced_method": gap.method,
-                }
-            )
-        else:
-            merged.append(gap)
-            rejected.append(
-                {
-                    "index": int(gap.index),
-                    "score": float(enhanced.score),
-                    "method": enhanced.method,
-                    "kept_method": gap.method,
-                }
-            )
+        merged_gap, accepted_detail, rejected_detail = merge_one_enhanced_gap(
+            profile,
+            gap,
+            origin,
+            pitch,
+            gap_search,
+            enhanced_config,
+        )
+        merged.append(merged_gap)
+        if accepted_detail is not None:
+            accepted.append(accepted_detail)
+        if rejected_detail is not None:
+            rejected.append(rejected_detail)
     constrained = [
         constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, strip_mode, robust_grid)
         if gap.method == "enhanced-detected" else gap
