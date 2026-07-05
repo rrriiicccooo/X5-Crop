@@ -18,6 +18,7 @@ from ..runtime.separator import (
     SeparatorGeometrySupportModePolicy,
     SeparatorGeometrySupportPolicy,
     SeparatorPolicy,
+    SeparatorWidthProfilePolicy,
 )
 
 
@@ -86,6 +87,24 @@ def separator_geometry_support_policy(
     )
 
 
+def separator_width_profile_policy(
+    mode_preset: ModePolicyPreset,
+    params: FormatParameters,
+) -> SeparatorWidthProfilePolicy:
+    preset = mode_preset.separator_width_profile
+    family_mode = (
+        "conditional"
+        if mode_preset.detector_kind == "standard_strip" and bool(params.separator_width_profile_enabled)
+        else "off"
+    )
+    mode = preset.mode if preset.mode != "off" else family_mode
+    return SeparatorWidthProfilePolicy(
+        mode=mode,
+        required_count=0,
+        full_selection_enabled=bool(preset.full_selection_enabled),
+    )
+
+
 def separator_policy(
     preset: FormatPolicyPreset,
     mode_preset: ModePolicyPreset,
@@ -110,6 +129,7 @@ def separator_policy(
         ),
         separator_width_profile_max_width_ratio=float(separator_width_profile.max_width_ratio),
         separator_width_profile_confidence_cap=float(separator_width_profile.confidence_cap),
+        width_profile=separator_width_profile_policy(mode_preset, params),
         geometry_support_modes=mode_preset.separator_geometry_support_modes,
         geometry_support=separator_geometry_support_policy(mode_preset, params),
         edge_pair=preset.separator_edge_pair,
@@ -250,5 +270,6 @@ def separator_policy(
 __all__ = [
     'separator_gate_policy',
     'separator_geometry_support_policy',
+    'separator_width_profile_policy',
     'separator_policy',
 ]

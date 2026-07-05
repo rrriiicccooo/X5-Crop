@@ -9,8 +9,9 @@ from .....domain import Box, OuterCandidate
 from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from .....geometry.separator_cache import cached_separator_profile
 from .....policies.registry import get_detection_policy
-from .....policies.runtime.outer import SeparatorOuterBandPolicy, SeparatorOuterFamilyPolicy, SeparatorWidthProfilePolicy
+from .....policies.runtime.outer import SeparatorOuterBandPolicy, SeparatorOuterFamilyPolicy
 from .....policies.runtime.policy import DetectionPolicy
+from .....policies.runtime.separator import SeparatorWidthProfilePolicy
 from .....cache import AnalysisCache
 from .....utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 from ....cache_keys import separator_outer_cache_key
@@ -130,7 +131,7 @@ def _broad_width_profile_available(
 ) -> bool:
     separator_policy = policy.outer.proposal.geometry.separator
     family = separator_policy.width_profile_family
-    width_policy = separator_policy.width_profile
+    width_policy = policy.separator.width_profile
     required_count = int(width_policy.required_count)
     return bool(
         family.available_for(strip_mode, explicit_count)
@@ -147,7 +148,7 @@ def _width_profile_plan(
 ) -> SeparatorOuterPlan | None:
     separator_policy = policy.outer.proposal.geometry.separator
     family = separator_policy.width_profile_family
-    width_policy = separator_policy.width_profile
+    width_policy = policy.separator.width_profile
     candidate_prefix = _candidate_prefix(outer_scope, BROAD_WIDTH_GAP_PROFILE)
     if candidate_prefix is None:
         return None
@@ -298,12 +299,12 @@ def _separator_outer_candidates_for_plan(
 
         if plan.uses_broad_width_profile:
             crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-            profile = _adaptive_separator_width_profile(crop, separator_policy.width_profile)
+            profile = _adaptive_separator_width_profile(crop, policy.separator.width_profile)
             bands, edge_margin = _collect_separator_width_profile_bands(
                 profile,
                 short_axis,
                 float(outer.width),
-                separator_policy.width_profile,
+                policy.separator.width_profile,
             )
         else:
             profile = cached_separator_profile(cache, gray_work, outer, fmt.name, policy.separator.profile)

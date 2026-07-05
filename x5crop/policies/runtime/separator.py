@@ -70,6 +70,44 @@ class SeparatorGeometrySupportPolicy:
 
 
 @dataclass(frozen=True)
+class SeparatorWidthProfilePolicy:
+    mode: str = "off"
+    required_count: int = 0
+    threshold_ratio: float = 0.42
+    threshold_span_ratio: float = 0.12
+    profile_smooth_short_axis_ratio: float = 0.018
+    profile_smooth_min: int = 15
+    min_width_ratio: float = 0.030
+    min_width_min: int = 80
+    min_width_max: int = 520
+    max_width_ratio: float = 0.48
+    max_width_floor: int = 600
+    max_width_cap_ratio: float = 0.55
+    core_width_cap_ratio: float = 0.20
+    edge_margin_ratio: float = 0.18
+    edge_margin_min: float = 60.0
+    edge_margin_cap_ratio: float = 0.80
+    spacing_min_ratio: float = 0.82
+    spacing_max_ratio: float = 1.18
+    sequence_score_weight: float = 0.04
+    source_candidate_count: int = 2
+    band_candidate_count: int = 10
+    sequence_candidate_count: int = 4
+    max_candidates: int = 4
+    full_selection_enabled: bool = False
+    full_selection_strip_modes: tuple[str, ...] = ("full",)
+    full_selection_requires_required_count: bool = True
+    full_selection_requires_help: bool = True
+    full_selection_required_support: str = "ok"
+    full_selection_allow_equal_gaps: bool = False
+    full_selection_help_supports: tuple[str, ...] = ("aspect_conflict", "low_content")
+    full_selection_help_reasons: tuple[str, ...] = (
+        "content_aspect_conflict",
+        "separator_hard_evidence_weak",
+    )
+
+
+@dataclass(frozen=True)
 class SeparatorEdgePairPolicy:
     window_ratio: float = 0.070
     min_gutter_ratio: float = 0.003
@@ -89,6 +127,7 @@ class SeparatorPolicy:
     separator_width_profile_enabled: bool
     separator_width_profile_max_width_ratio: float
     separator_width_profile_confidence_cap: float = 0.995
+    width_profile: SeparatorWidthProfilePolicy = field(default_factory=SeparatorWidthProfilePolicy)
     geometry_support_modes: tuple[str, ...] = ()
     geometry_support: SeparatorGeometrySupportPolicy = field(default_factory=SeparatorGeometrySupportPolicy)
     edge_pair: SeparatorEdgePairPolicy = field(default_factory=SeparatorEdgePairPolicy)
@@ -110,4 +149,5 @@ __all__ = [
     "SeparatorGeometrySupportModePolicy",
     "SeparatorGeometrySupportPolicy",
     "SeparatorPolicy",
+    "SeparatorWidthProfilePolicy",
 ]

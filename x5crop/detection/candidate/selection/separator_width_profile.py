@@ -20,7 +20,7 @@ def select_full_separator_width_profile_candidate(
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> Optional[Detection]:
-    separator_width_profile = policy.outer.proposal.geometry.separator.width_profile
+    separator_width_profile = policy.separator.width_profile
     required_count = int(separator_width_profile.required_count)
     if (
         separator_width_profile.mode == "off"

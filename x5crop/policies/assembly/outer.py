@@ -24,21 +24,7 @@ from ..runtime.outer import (
     SeparatorOuterFamilyPolicy,
     SeparatorGeometryProposalPolicy,
     ShortAxisGeometryCorrectionPolicy,
-    SeparatorWidthProfilePolicy,
 )
-
-
-def separator_width_profile_outer_policy(
-    mode_preset: ModePolicyPreset,
-    family_mode: str,
-) -> SeparatorWidthProfilePolicy:
-    separator_width_profile = mode_preset.separator_width_profile
-    mode = separator_width_profile.mode if separator_width_profile.mode != "off" else family_mode
-    return SeparatorWidthProfilePolicy(
-        mode=mode,
-        required_count=0,
-        full_selection_enabled=separator_width_profile.full_selection_enabled,
-    )
 
 
 def separator_outer_family_policies(
@@ -240,7 +226,6 @@ def outer_policy(
                         margin_ratios=tuple(float(value) for value in separator_full_width.margin_ratios),
                         max_candidates=int(separator_full_width.max_candidates),
                     ),
-                    width_profile=separator_width_profile_outer_policy(mode_preset, width_profile_family.mode),
                 ),
                 grid_refine=GridOuterRefinePolicy(
                     shift_ratio=float(grid_refine.shift_ratio),
@@ -314,5 +299,4 @@ __all__ = [
     'outer_policy',
     'outer_correction_family_policies',
     'separator_outer_family_policies',
-    'separator_width_profile_outer_policy',
 ]

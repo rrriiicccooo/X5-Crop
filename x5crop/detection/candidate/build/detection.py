@@ -17,7 +17,7 @@ from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ....utils import clamp_int
 from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE
-from ..proposal.separator.correction import (
+from ..proposal.separator.refinement import (
     apply_edge_pair_separator_correction,
     apply_grid_gap_model,
     apply_nearby_separator_correction,

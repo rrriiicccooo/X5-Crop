@@ -8,7 +8,6 @@ from .....domain import Box, Gap
 from .....formats import FormatSpec
 from .....geometry.detection_parameters import GapSearchParameters
 from .....geometry.gap_search import find_gap
-from .....policies.registry import get_detection_policy
 from .....policies.runtime.policy import DetectionPolicy
 from .....utils import clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 
@@ -41,10 +40,9 @@ def propose_separator_width_profile_gaps(
     outer: Box,
     count: int,
     fmt: FormatSpec,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
 ) -> list[Gap]:
-    policy = policy or get_detection_policy(fmt.name, "full")
-    separator_width_profile = policy.outer.proposal.geometry.separator.width_profile
+    separator_width_profile = policy.separator.width_profile
     required_count = int(separator_width_profile.required_count)
     if (
         separator_width_profile.mode == "off"
