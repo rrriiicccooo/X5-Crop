@@ -100,6 +100,12 @@ class EdgePairReplacementAssessment:
         return out
 
 
+@dataclass(frozen=True)
+class EdgePairRefinementResult:
+    gaps: list[Gap]
+    detail: dict[str, Any]
+
+
 def assess_edge_pair_hard_gap_replacement(
     gap: Gap,
     edge_gap: Gap,
@@ -277,10 +283,10 @@ def refine_gaps_with_edge_profiles(
     gaps: list[Gap],
     count: int,
     edge_pair_parameters: Optional[EdgePairParameters] = None,
-) -> tuple[list[Gap], dict[str, Any]]:
+) -> EdgePairRefinementResult:
     width = len(edge)
     if count <= 1 or width <= 1 or background.size <= 0 or not gaps:
-        return gaps, {"used": False, "reason": "empty"}
+        return EdgePairRefinementResult(gaps, {"used": False, "reason": "empty"})
     pitch = width / float(max(1, count))
     if edge_pair_parameters is None:
         raise ValueError("edge_pair parameters are required")
@@ -338,20 +344,23 @@ def refine_gaps_with_edge_profiles(
                 "replacement": assessment.detail(),
             }
         )
-    return refined, {
-        "used": True,
-        "params": asdict(params),
-        "search_limits": {
-            "pitch": float(pitch),
-            "window_px": int(window),
-            "min_gutter_px": int(min_gutter),
-            "max_gutter_px": int(max_gutter),
+    return EdgePairRefinementResult(
+        refined,
+        {
+            "used": True,
+            "params": asdict(params),
+            "search_limits": {
+                "pitch": float(pitch),
+                "window_px": int(window),
+                "min_gutter_px": int(min_gutter),
+                "max_gutter_px": int(max_gutter),
+            },
+            "accepted": accepted,
+            "accepted_count": len(accepted),
+            "rejected": rejected[:8],
+            "rejected_count": len(rejected),
         },
-        "accepted": accepted,
-        "accepted_count": len(accepted),
-        "rejected": rejected[:8],
-        "rejected_count": len(rejected),
-    }
+    )
 
 
 def refine_gaps_by_edge_pairs(
@@ -360,15 +369,16 @@ def refine_gaps_by_edge_pairs(
     count: int,
     edge_pair_parameters: Optional[EdgePairParameters] = None,
     edge_refine_config: EdgeRefineProfileParameters | None = None,
-) -> tuple[list[Gap], dict[str, Any]]:
+) -> EdgePairRefinementResult:
     if crop.size == 0:
-        return gaps, {"used": False, "reason": "empty"}
+        return EdgePairRefinementResult(gaps, {"used": False, "reason": "empty"})
     edge, background, _activity = edge_refine_profiles(crop, edge_refine_config)
     return refine_gaps_with_edge_profiles(edge, background, gaps, count, edge_pair_parameters)
 
 
 __all__ = [
     "EdgePairCandidate",
+    "EdgePairRefinementResult",
     "EdgePairReplacementAssessment",
     "EdgePairSearchResult",
     "assess_edge_pair_hard_gap_replacement",

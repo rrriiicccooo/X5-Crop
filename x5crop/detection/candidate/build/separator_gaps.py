@@ -296,7 +296,7 @@ def apply_edge_pair_refinement(
             outer,
             policy.separator.edge_refine_profile,
         )
-        refined_gaps, edge_pair_correction_detail = refine_gaps_with_edge_profiles(
+        correction = refine_gaps_with_edge_profiles(
             edge,
             background,
             gaps,
@@ -305,8 +305,8 @@ def apply_edge_pair_refinement(
         )
         edge_pair_refinement = _gap_refinement_result(
             "edge_pair",
-            refined_gaps,
-            edge_pair_correction_detail,
+            correction.gaps,
+            correction.detail,
         )
     return edge_pair_refinement
 

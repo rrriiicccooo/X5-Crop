@@ -188,6 +188,9 @@ Current stable release: v4.2.8
 - edge-pair replacement eligibility 已改为 `EdgePairReplacementAssessment`：
   accepted / rejected 都记录 reason、delta、shift / quality limit；行为等价保留
   旧布尔判断，不改变阈值。
+- edge-pair batch refinement 已改为 `EdgePairRefinementResult`；
+  `refine_gaps_with_edge_profiles` / `refine_gaps_by_edge_pairs` 不再通过裸
+  tuple 返回 gaps/detail，report/detail 字段保持不变。
 - edge-pair 参数边界已收紧：format preset 仍可用
   `SeparatorEdgePairPolicy` 表达语义，policy assembly 会在 runtime policy 中
   转换为 `EdgePairParameters`，`geometry/edge_pairs.py` 不再 duck-type
@@ -566,6 +569,10 @@ Verified:
 - Nearby separator batch correction now uses `NearbySeparatorCorrectionResult`;
   `apply_nearby_separator_corrections` no longer returns gaps/detail through a
   raw tuple, while report/detail fields remain unchanged.
+- Edge-pair batch refinement now uses `EdgePairRefinementResult`;
+  `refine_gaps_with_edge_profiles` / `refine_gaps_by_edge_pairs` no longer
+  return gaps/detail through raw tuples, while report/detail fields remain
+  unchanged.
 - Grid-derived outer refine orchestration now lives in `build_detection_for_outer`:
   `separator_gaps.py` provides primary gap build and late separator refinements
   only, while candidate build decides whether to rebuild gaps with a refined
