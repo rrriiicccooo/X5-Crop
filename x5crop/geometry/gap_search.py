@@ -130,7 +130,7 @@ class DetectedGapCandidateSearchResult:
 @dataclass(frozen=True)
 class GapSearchResult:
     detected_gap: Optional[Gap]
-    fallback_score: float
+    model_gap_score: float
     reason: str
     detail: dict[str, Any] = field(default_factory=dict)
 

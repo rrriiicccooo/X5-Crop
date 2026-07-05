@@ -58,7 +58,9 @@ Current stable release: v4.2.8
   quality 权重已外显到 `GapSearchParameters`；默认值保持旧行为。
 - ordinary gap search 现在写出 `standard_gap_search` detail：每个 expected gap
   记录 search window、accepted / rejected run、selected detected gap 或 equal
-  fallback；旧的无 detail API 只包装同一套 assessment 逻辑，不再维护重复判断。
+  model gap；旧的无 detail API 只包装同一套 assessment 逻辑，不再维护重复判断。
+- standard separator proposal detail 使用 `model_gap_score` / `model_gap_count`
+  描述 equal model gap 证据，不再使用 fallback 语义命名；行为阈值不变。
 - 单个 expected gap proposal 已改为 `SeparatorGapProposal`；standard proposal
   不再用裸 tuple 传递 gap/detail，report detail 字段保持不变。
 - broad-width gap proposal 现在写出 `separator_width_profile_gap_search` detail：
@@ -73,9 +75,9 @@ Current stable release: v4.2.8
   segmented extreme、uniform soft、uniform support 和 column gradient，
   `combined_separator_profile_score` 是唯一组合点，smooth window 也可单独审核。
 - ordinary gap search 已拆成 hard-only `find_detected_gap`：它只返回
-  `GapSearchResult` 中的 detected hard gap、fallback score 和 reason；standard
+  `GapSearchResult` 中的 detected hard gap、model gap score 和 reason；standard
   separator proposal 负责在没有 hard gap 时调用 model proposal 生成 explicit
-  `equal` fallback。`GapSearchWindow` 承接 standard search window，避免裸
+  `equal` model gap。`GapSearchWindow` 承接 standard search window，避免裸
   tuple 传递；`GapSearchContext` 收束单个 expected gap 的 local profile、
   threshold、width limits 和 ranking context；band evidence measurement、
   prominence support 与 width-profile support 也已拆成可审核 helper，方便审核
@@ -473,7 +475,10 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   `too_narrow_separator_band` reason.
 - Ordinary gap search now writes `standard_gap_search` detail for each expected
   gap, including the search window, accepted / rejected runs, and selected
-  detected gap or equal fallback, without changing selection thresholds.
+  detected gap or equal model gap, without changing selection thresholds.
+- Standard separator proposal detail uses `model_gap_score` / `model_gap_count`
+  for equal model-gap evidence instead of fallback terminology; behavior
+  thresholds are unchanged.
 - Broad-width gap proposal now writes `separator_width_profile_gap_search`
   detail for each expected gap, including accepted / rejected width-profile runs
   and the selected detected gap, without changing selection thresholds; unused
@@ -557,8 +562,8 @@ Verified:
   evidence, uniform soft score, uniform support, column gradient signals, the
   combined scoring point, and the smoothing window; `geometry/gap_search.py`
   is now hard-only `find_detected_gap`, returning a `GapSearchResult` with a
-  detected hard gap or fallback score / reason. Standard separator proposal owns
-  the explicit `equal` fallback when no hard gap is found. `GapSearchWindow`
+  detected hard gap or model gap score / reason. Standard separator proposal
+  owns the explicit `equal` model gap when no hard gap is found. `GapSearchWindow`
   owns the standard search window, while width limits, thresholds, acceptance,
   and ranking context are grouped in `GapSearchContext`; band
   expansion, detected-candidate collection, best-candidate selection, band

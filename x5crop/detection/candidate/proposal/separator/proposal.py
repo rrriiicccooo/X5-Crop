@@ -67,13 +67,13 @@ def _propose_standard_separator_gap_with_detail(
     detail: dict[str, Any] = {
         "index": int(index),
         "reason": result.reason,
-        "fallback_score": float(result.fallback_score),
+        "model_gap_score": float(result.model_gap_score),
         "search": result.detail,
     }
     if result.detected_gap is not None:
         gap = result.detected_gap
     else:
-        gap = propose_equal_model_gap(index, expected, result.fallback_score)
+        gap = propose_equal_model_gap(index, expected, result.model_gap_score)
     detail.update(_selected_gap_detail(gap))
     return SeparatorGapProposal(gap=gap, detail=detail)
 
@@ -110,7 +110,7 @@ def _propose_standard_separator_gaps_with_detail(
             "count": int(count),
             "max_width_ratio_override": max_width_ratio_override,
             "detected_count": sum(1 for gap in gaps if is_detected_gap_method(gap.method)),
-            "fallback_count": sum(1 for gap in gaps if not is_detected_gap_method(gap.method)),
+            "model_gap_count": sum(1 for gap in gaps if not is_detected_gap_method(gap.method)),
             "entries": entries,
         },
     )

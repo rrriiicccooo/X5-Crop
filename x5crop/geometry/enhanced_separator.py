@@ -29,7 +29,7 @@ from .detection_parameters import (
 from .separator_cache import cached_enhanced_separator_profile
 
 
-def enhanced_gap_fallback(index: int, expected: float, score: float) -> Gap:
+def enhanced_equal_model_gap(index: int, expected: float, score: float) -> Gap:
     return equal_model_gap(index, expected, score)
 
 
@@ -184,24 +184,24 @@ def find_enhanced_gap_with_detail(
         "search": result.detail,
     }
     if gap is None:
-        fallback = enhanced_gap_fallback(index, expected, result.fallback_score)
+        model_gap = enhanced_equal_model_gap(index, expected, result.model_gap_score)
         base_detail.update(
             {
                 "promoted": False,
                 "detected_gap": None,
                 "validation": {"accepted": False, "reason": "no_detected_gap"},
-                "selected_gap": enhanced_gap_detail(fallback),
+                "selected_gap": enhanced_gap_detail(model_gap),
             }
         )
-        return EnhancedGapSearchResult(fallback, base_detail)
+        return EnhancedGapSearchResult(model_gap, base_detail)
     validation = enhanced_gap_validation(gap, expected, pitch, config)
     base_detail["detected_gap"] = enhanced_gap_detail(gap)
     base_detail["validation"] = validation.detail()
     if not validation.accepted:
-        fallback = enhanced_gap_fallback(index, expected, gap.score)
+        model_gap = enhanced_equal_model_gap(index, expected, gap.score)
         base_detail["promoted"] = False
-        base_detail["selected_gap"] = enhanced_gap_detail(fallback)
-        return EnhancedGapSearchResult(fallback, base_detail)
+        base_detail["selected_gap"] = enhanced_gap_detail(model_gap)
+        return EnhancedGapSearchResult(model_gap, base_detail)
     enhanced = promote_enhanced_gap(gap, index)
     base_detail["promoted"] = True
     base_detail["selected_gap"] = enhanced_gap_detail(enhanced)
