@@ -101,6 +101,10 @@ class FormatParameters(FormatParameterViews):
     gap_min_score: float = 0.22
     gap_peak_multiplier: float = 0.90
     gap_band_multiplier: float = 0.62
+    gap_band_min_score_multiplier: float = 0.86
+    gap_weak_prominence_min: float = 0.08
+    gap_weak_prominence_mean_override: float = 0.95
+    gap_quality_prominence_weight: float = 0.80
     constrain_full_shift_ratio: float = 0.045
     constrain_partial_shift_ratio: float = 0.12
     constrain_shift_min: float = 20.0

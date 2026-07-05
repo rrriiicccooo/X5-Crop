@@ -141,6 +141,10 @@ class GapSearchParameters:
     min_score: float = 0.22
     peak_multiplier: float = 0.90
     band_multiplier: float = 0.62
+    band_min_score_multiplier: float = 0.86
+    weak_prominence_min: float = 0.08
+    weak_prominence_mean_override: float = 0.95
+    quality_prominence_weight: float = 0.80
     separator_width_min_mean: float = 0.95
     separator_width_min_prominence: float = 0.02
 

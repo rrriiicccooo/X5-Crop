@@ -642,6 +642,10 @@ class FormatParameterViews:
             min_score=self.gap_min_score,
             peak_multiplier=self.gap_peak_multiplier,
             band_multiplier=self.gap_band_multiplier,
+            band_min_score_multiplier=self.gap_band_min_score_multiplier,
+            weak_prominence_min=self.gap_weak_prominence_min,
+            weak_prominence_mean_override=self.gap_weak_prominence_mean_override,
+            quality_prominence_weight=self.gap_quality_prominence_weight,
             separator_width_min_mean=self.separator_width_profile_min_mean,
             separator_width_min_prominence=self.separator_width_profile_min_prominence,
         )
