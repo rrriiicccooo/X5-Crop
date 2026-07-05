@@ -300,15 +300,17 @@ def _separator_outer_candidates_for_plan(
         if plan.uses_broad_width_profile:
             crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
             profile = separator_width_profile(crop, policy.separator.width_profile_search)
-            bands, edge_margin = collect_separator_width_bands(
+            band_collection = collect_separator_width_bands(
                 profile,
                 short_axis,
                 float(outer.width),
                 policy.separator.width_profile_search,
             )
+            bands = band_collection.bands
+            edge_margin = band_collection.edge_margin
         else:
             profile = cached_separator_profile(cache, gray_work, outer, policy.separator.profile)
-            bands, edge_margin = collect_separator_outer_bands(
+            band_collection = collect_separator_outer_bands(
                 profile,
                 short_axis,
                 float(outer.width),
@@ -316,6 +318,8 @@ def _separator_outer_candidates_for_plan(
                 policy.separator.gap_search,
                 separator_policy,
             )
+            bands = band_collection.bands
+            edge_margin = band_collection.edge_margin
 
         if profile.size <= 0 or len(bands) < expected_gaps:
             continue

@@ -33,6 +33,25 @@ class SeparatorWidthGapRun:
 
 
 @dataclass(frozen=True)
+class SeparatorWidthBounds:
+    min_width: int
+    max_width: int
+    max_core_width: float
+
+
+@dataclass(frozen=True)
+class SeparatorWidthBandCollection:
+    bands: list[SeparatorBand]
+    edge_margin: float
+
+
+@dataclass(frozen=True)
+class SeparatorWidthGapWindow:
+    lo: int
+    hi: int
+
+
+@dataclass(frozen=True)
 class SeparatorWidthGapAcceptance:
     accepted: bool
     reason: str
@@ -115,7 +134,7 @@ def separator_width_profile(
 def separator_width_bounds(
     short_axis: float,
     params: SeparatorWidthProfileSearchParameters | None = None,
-) -> tuple[int, int, float]:
+) -> SeparatorWidthBounds:
     params = params or SeparatorWidthProfileSearchParameters()
     min_width = clamp_int(
         short_axis * params.min_width_ratio,
@@ -128,7 +147,11 @@ def separator_width_bounds(
         max(params.max_width_floor, int(short_axis * params.max_width_cap_ratio)),
     )
     max_core_width = max(float(min_width), float(short_axis) * params.core_width_cap_ratio)
-    return min_width, max_width, max_core_width
+    return SeparatorWidthBounds(
+        min_width=int(min_width),
+        max_width=int(max_width),
+        max_core_width=float(max_core_width),
+    )
 
 
 def collect_separator_width_bands(
@@ -136,20 +159,20 @@ def collect_separator_width_bands(
     short_axis: float,
     coordinate_limit: float,
     params: SeparatorWidthProfileSearchParameters | None = None,
-) -> tuple[list[SeparatorBand], float]:
+) -> SeparatorWidthBandCollection:
     params = params or SeparatorWidthProfileSearchParameters()
     if profile.size <= 0:
-        return [], 0.0
+        return SeparatorWidthBandCollection([], 0.0)
     edge_margin = clamp_float(
         short_axis * params.edge_margin_ratio,
         params.edge_margin_min,
         max(params.edge_margin_min, short_axis * params.edge_margin_cap_ratio),
     )
-    min_width, max_width, _max_core_width = separator_width_bounds(short_axis, params)
+    bounds = separator_width_bounds(short_axis, params)
     bands: list[SeparatorBand] = []
     for run_start, run_end in runs_from_mask(profile >= params.threshold_ratio):
         width = int(run_end - run_start)
-        if width < min_width or width > max_width:
+        if width < bounds.min_width or width > bounds.max_width:
             continue
         center = (float(run_start) + float(run_end) - 1.0) * 0.5
         if center < edge_margin or center > coordinate_limit - edge_margin:
@@ -163,7 +186,7 @@ def collect_separator_width_bands(
                 score=float(profile[run_start:run_end].mean()),
             )
         )
-    return bands, edge_margin
+    return SeparatorWidthBandCollection(bands, float(edge_margin))
 
 
 def separator_width_gap_window(
@@ -171,7 +194,7 @@ def separator_width_gap_window(
     expected: float,
     pitch: float,
     params: SeparatorWidthProfileSearchParameters,
-) -> tuple[int, int]:
+) -> SeparatorWidthGapWindow:
     window = clamp_int(
         pitch * params.gap_window_ratio,
         params.gap_window_min,
@@ -179,7 +202,7 @@ def separator_width_gap_window(
     )
     lo = max(0, int(round(expected - window)))
     hi = min(profile_length, int(round(expected + window)))
-    return lo, hi
+    return SeparatorWidthGapWindow(lo=int(lo), hi=int(hi))
 
 
 def separator_width_gap_run(start: int, end: int) -> SeparatorWidthGapRun:
@@ -190,12 +213,11 @@ def separator_width_gap_run(start: int, end: int) -> SeparatorWidthGapRun:
 
 def separator_width_gap_run_acceptance(
     run: SeparatorWidthGapRun,
-    min_width: int,
-    max_width: int,
+    bounds: SeparatorWidthBounds,
 ) -> SeparatorWidthGapAcceptance:
-    if run.width < min_width:
+    if run.width < bounds.min_width:
         return SeparatorWidthGapAcceptance(False, "too_narrow")
-    if run.width > max_width:
+    if run.width > bounds.max_width:
         return SeparatorWidthGapAcceptance(False, "too_wide")
     return SeparatorWidthGapAcceptance(True, "accepted")
 
@@ -219,12 +241,11 @@ def separator_width_gap_candidate_assessment(
     end: int,
     expected: float,
     pitch: float,
-    min_width: int,
-    max_width: int,
+    bounds: SeparatorWidthBounds,
     params: SeparatorWidthProfileSearchParameters,
 ) -> SeparatorWidthGapCandidateAssessmentResult:
     run = separator_width_gap_run(start, end)
-    acceptance = separator_width_gap_run_acceptance(run, min_width, max_width)
+    acceptance = separator_width_gap_run_acceptance(run, bounds)
     mean_score = float(profile[run.start:run.end].mean()) if run.end > run.start else 0.0
     distance_penalty = abs(run.center - expected) / max(1.0, pitch)
     if not acceptance.accepted:
@@ -254,25 +275,22 @@ def separator_width_gap_candidate_assessment(
 
 def separator_width_gap_candidates_with_detail(
     profile: np.ndarray,
-    lo: int,
-    hi: int,
+    window: SeparatorWidthGapWindow,
     expected: float,
     pitch: float,
-    min_width: int,
-    max_width: int,
+    bounds: SeparatorWidthBounds,
     params: SeparatorWidthProfileSearchParameters,
 ) -> SeparatorWidthGapCandidateSearchResult:
     candidates: list[SeparatorWidthGapCandidate] = []
     evaluations: list[dict[str, Any]] = []
-    for run_start, run_end in runs_from_mask(profile[lo:hi] >= params.threshold_ratio):
+    for run_start, run_end in runs_from_mask(profile[window.lo:window.hi] >= params.threshold_ratio):
         assessment_result = separator_width_gap_candidate_assessment(
             profile,
-            lo + int(run_start),
-            lo + int(run_end),
+            window.lo + int(run_start),
+            window.lo + int(run_end),
             expected,
             pitch,
-            min_width,
-            max_width,
+            bounds,
             params,
         )
         evaluations.append(assessment_result.assessment.detail())
@@ -283,22 +301,18 @@ def separator_width_gap_candidates_with_detail(
 
 def best_separator_width_gap_candidate_with_detail(
     profile: np.ndarray,
-    lo: int,
-    hi: int,
+    window: SeparatorWidthGapWindow,
     expected: float,
     pitch: float,
-    min_width: int,
-    max_width: int,
+    bounds: SeparatorWidthBounds,
     params: SeparatorWidthProfileSearchParameters,
 ) -> SeparatorWidthGapBestCandidateResult:
     search = separator_width_gap_candidates_with_detail(
         profile,
-        lo,
-        hi,
+        window,
         expected,
         pitch,
-        min_width,
-        max_width,
+        bounds,
         params,
     )
     best: Optional[SeparatorWidthGapCandidate] = None
@@ -312,13 +326,13 @@ def separator_width_gap_from_candidate(
     index: int,
     candidate: SeparatorWidthGapCandidate,
     profile_length: int,
-    max_core_width: float,
+    bounds: SeparatorWidthBounds,
     params: SeparatorWidthProfileSearchParameters,
 ) -> Gap:
     start = candidate.start
     end = candidate.end
-    if (end - start) > max_core_width:
-        half_width = max_core_width * 0.5
+    if (end - start) > bounds.max_core_width:
+        half_width = bounds.max_core_width * 0.5
         start = int(round(max(0.0, candidate.center - half_width)))
         end = int(round(min(float(profile_length), candidate.center + half_width)))
     return Gap(
@@ -337,11 +351,8 @@ def separator_width_gap_search_detail(
     pitch: float,
     profile_length: int,
     short_axis: float,
-    min_width: int,
-    max_width: int,
-    max_core_width: float,
-    lo: int,
-    hi: int,
+    bounds: SeparatorWidthBounds,
+    window: SeparatorWidthGapWindow,
     evaluations: list[dict[str, Any]] | None = None,
     selected: SeparatorWidthGapCandidate | None = None,
 ) -> dict[str, Any]:
@@ -351,10 +362,10 @@ def separator_width_gap_search_detail(
         "pitch": float(pitch),
         "profile_length": int(profile_length),
         "short_axis": float(short_axis),
-        "window": {"lo": int(lo), "hi": int(hi)},
-        "min_width": int(min_width),
-        "max_width": int(max_width),
-        "max_core_width": float(max_core_width),
+        "window": {"lo": int(window.lo), "hi": int(window.hi)},
+        "min_width": int(bounds.min_width),
+        "max_width": int(bounds.max_width),
+        "max_core_width": float(bounds.max_core_width),
     }
     detail = attach_gap_run_evaluation_summary(detail, evaluations)
     if selected is not None:
@@ -386,16 +397,14 @@ def separator_width_gap_at_with_detail(
             "short_axis": float(short_axis),
         }
         return SeparatorWidthGapSearchResult(None, "empty_profile_or_pitch", detail)
-    min_width, max_width, max_core_width = separator_width_bounds(short_axis, params)
-    lo, hi = separator_width_gap_window(len(profile), expected, pitch, params)
+    bounds = separator_width_bounds(short_axis, params)
+    window = separator_width_gap_window(len(profile), expected, pitch, params)
     selection = best_separator_width_gap_candidate_with_detail(
         profile,
-        lo,
-        hi,
+        window,
         expected,
         pitch,
-        min_width,
-        max_width,
+        bounds,
         params,
     )
     detail = separator_width_gap_search_detail(
@@ -404,18 +413,15 @@ def separator_width_gap_at_with_detail(
         pitch,
         len(profile),
         short_axis,
-        min_width,
-        max_width,
-        max_core_width,
-        lo,
-        hi,
+        bounds,
+        window,
         selection.evaluations,
         selection.candidate,
     )
     if selection.candidate is None:
         return SeparatorWidthGapSearchResult(None, "no_width_profile_candidate", detail)
     return SeparatorWidthGapSearchResult(
-        separator_width_gap_from_candidate(index, selection.candidate, len(profile), max_core_width, params),
+        separator_width_gap_from_candidate(index, selection.candidate, len(profile), bounds, params),
         "detected",
         detail,
     )
@@ -423,10 +429,13 @@ def separator_width_gap_at_with_detail(
 
 __all__ = [
     "SeparatorWidthGapAcceptance",
+    "SeparatorWidthBandCollection",
     "SeparatorWidthGapBestCandidateResult",
+    "SeparatorWidthBounds",
     "SeparatorWidthGapCandidate",
     "SeparatorWidthGapCandidateAssessmentResult",
     "SeparatorWidthGapCandidateSearchResult",
+    "SeparatorWidthGapWindow",
     "SeparatorWidthGapRun",
     "SeparatorWidthGapRunAssessment",
     "SeparatorWidthGapSearchResult",

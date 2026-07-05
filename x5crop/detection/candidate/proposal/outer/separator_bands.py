@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from .....geometry.detection_parameters import GapSearchParameters
 from .....geometry.separator_band import SeparatorBand
 from .....policies.runtime.outer import SeparatorGeometryProposalPolicy, SeparatorOuterBandPolicy
 from .....utils import clamp_float, clamp_int, runs_from_mask
+
+
+@dataclass(frozen=True)
+class SeparatorOuterBandCollection:
+    bands: list[SeparatorBand]
+    edge_margin: float
 
 
 def separator_outer_band_sequences(
@@ -79,7 +87,7 @@ def collect_separator_outer_bands(
     band_policy: SeparatorOuterBandPolicy,
     gap_search_config: GapSearchParameters,
     separator_policy: SeparatorGeometryProposalPolicy,
-) -> tuple[list[SeparatorBand], float]:
+) -> SeparatorOuterBandCollection:
     peak_threshold = float(band_policy.min_score)
     band_threshold = max(band_policy.band_score, peak_threshold * 0.58)
     min_width = clamp_int(
@@ -144,10 +152,11 @@ def collect_separator_outer_bands(
                 oversized=bool(oversized_band),
             )
         )
-    return bands, edge_margin
+    return SeparatorOuterBandCollection(bands, float(edge_margin))
 
 
 __all__ = [
     "collect_separator_outer_bands",
+    "SeparatorOuterBandCollection",
     "separator_outer_band_sequences",
 ]

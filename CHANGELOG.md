@@ -114,6 +114,11 @@ Current stable release: v4.2.8
   `SeparatorWidthGapCandidateSearchResult` /
   `SeparatorWidthGapBestCandidateResult`；candidate / evaluations 不再通过裸
   tuple 传递，report/detail 字段保持不变。
+- broad-width width bounds、gap search window 和 band collection 已改为
+  `SeparatorWidthBounds` / `SeparatorWidthGapWindow` /
+  `SeparatorWidthBandCollection`；separator-derived outer band collection 已改为
+  `SeparatorOuterBandCollection`，不再通过裸 tuple 传递 bands / edge margin，
+  report/detail 字段保持不变。
 - width-profile 搜索参数与候选策略已拆开：geometry 只消费
   `SeparatorWidthProfileSearchParameters`，`SeparatorWidthProfilePolicy` 只保留
   mode / required count / candidate budget / full-selection 语义，report 同时输出
@@ -679,6 +684,11 @@ Verified:
   candidate search, and best-candidate selection; candidate / evaluation detail
   no longer travels through raw tuples, while report/detail fields remain
   unchanged.
+- Broad-width width bounds, gap-search window, and band collection now use
+  `SeparatorWidthBounds` / `SeparatorWidthGapWindow` /
+  `SeparatorWidthBandCollection`; separator-derived outer band collection now
+  uses `SeparatorOuterBandCollection`, so bands / edge margin no longer travel
+  through raw tuples while report/detail fields remain unchanged.
 - The unused `CandidateGateOutcome` gate placeholder type has been removed.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the
