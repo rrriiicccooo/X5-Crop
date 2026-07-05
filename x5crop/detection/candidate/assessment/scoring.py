@@ -15,6 +15,7 @@ from ....constants import (
     HARD_GAP_METHODS,
 )
 from ....domain import Box, Detection, Gap
+from ...evidence.separator_summary import separator_gate_detail_summary
 from ....formats import FormatSpec
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.content import ContentPolicy
@@ -33,18 +34,6 @@ class GapMethodEvidenceSummary:
     equal_model_gaps: int
     separator_support_gaps: int
     reliable_support_gaps: int
-
-
-@dataclass(frozen=True)
-class SeparatorGateDetailSummary:
-    expected_gaps: int
-    hard_separator_gaps: int
-    grid_model_gaps: int
-    equal_model_gaps: int
-
-    @property
-    def separator_support_gaps(self) -> int:
-        return self.hard_separator_gaps + self.grid_model_gaps
 
 
 def gap_method_evidence_summary(
@@ -71,15 +60,6 @@ def gap_method_evidence_summary(
         equal_model_gaps=equal_model_gaps,
         separator_support_gaps=separator_support_gaps,
         reliable_support_gaps=reliable_support_gaps,
-    )
-
-
-def separator_gate_detail_summary(hard_detail: dict[str, Any]) -> SeparatorGateDetailSummary:
-    return SeparatorGateDetailSummary(
-        expected_gaps=max(0, int(hard_detail.get("expected_gaps", 0) or 0)),
-        hard_separator_gaps=int(hard_detail.get("hard_gaps", 0) or 0),
-        grid_model_gaps=int(hard_detail.get("grid_gaps", 0) or 0),
-        equal_model_gaps=int(hard_detail.get("equal_gaps", 0) or 0),
     )
 
 
@@ -407,13 +387,11 @@ def score_detection(
 
 __all__ = [
     "GapMethodEvidenceSummary",
-    "SeparatorGateDetailSummary",
     "content_support_score",
     "detail_float",
     "gap_method_evidence_summary",
     "geometry_support_score",
     "hard_full_calibration_floor_applies",
-    "separator_gate_detail_summary",
     "separator_geometry_support_applies",
     "separator_support_score",
     "score_detection",

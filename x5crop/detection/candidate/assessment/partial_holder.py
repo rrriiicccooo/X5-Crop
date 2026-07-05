@@ -12,6 +12,7 @@ from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....utils import HARD_REVIEW_REASONS, clamp_int
+from ...evidence.separator_summary import separator_gate_detail_summary
 from ..proposal.separator.evidence import separator_width_evidence_detail, separator_width_requirement_detail
 
 
@@ -213,10 +214,11 @@ def partial_extra_holder_frames_gate_detail(
 ) -> dict[str, Any]:
     policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     holder = policy.partial_holder
-    expected = max(0, int(hard_detail.get("expected_gaps", 0) or 0))
-    hard = int(hard_detail.get("hard_gaps", 0) or 0)
-    equal = int(hard_detail.get("equal_gaps", 0) or 0)
-    grid = int(hard_detail.get("grid_gaps", 0) or 0)
+    separator_evidence = separator_gate_detail_summary(hard_detail)
+    expected = separator_evidence.expected_gaps
+    hard = separator_evidence.hard_separator_gaps
+    equal = separator_evidence.equal_model_gaps
+    grid = separator_evidence.grid_model_gaps
     width_cv_value = detection.detail.get("width_cv", None)
     width_cv = 1.0 if width_cv_value is None else float(width_cv_value)
     outer_area = float(detection.detail.get("outer_area_ratio", 1.0) or 1.0)

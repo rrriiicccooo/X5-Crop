@@ -10,10 +10,6 @@ from ...constants import (
     ANALYSIS_SOURCE_CONTENT_PRIMARY,
     ANALYSIS_SOURCE_HARD_SAFETY,
     ANALYSIS_SOURCE_REVIEW_ONLY,
-    GAP_CONTENT,
-    GAP_EQUAL,
-    GAP_GRID,
-    HARD_GAP_METHODS,
     REASON_AUTO_GATE_NOT_SATISFIED,
     REASON_CONTENT_ASPECT_CONFLICT,
     REASON_CONTENT_EVIDENCE_WEAK,
@@ -22,6 +18,7 @@ from ...constants import (
     REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
 )
 from ...domain import Detection
+from ..evidence.separator_summary import separator_summary_from_detection
 from ...formats import FormatSpec
 from ...policies.decision.contract import DetectionDecisionContract, decision_contract_for
 
@@ -65,45 +62,13 @@ def _float(value: Any, default: float = 0.0) -> float:
         return float(default)
 
 
-def _int(value: Any, default: int = 0) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return int(default)
-
-
-def _gap_method_count(detection: Detection, methods: set[str]) -> int:
-    return sum(1 for gap in detection.gaps if gap.method in methods)
-
-
 def normalized_review_reasons(reasons: list[str]) -> list[str]:
     normalized = [REASON_NORMALIZATION_MAP.get(str(reason), str(reason)) for reason in reasons]
     return sorted(set(reason for reason in normalized if reason))
 
 
 def _separator_summary(detection: Detection) -> dict[str, Any]:
-    assessment = _dict(detection.detail.get("candidate_assessment"))
-    hard_detail = _dict(assessment.get("separator_hard_evidence"))
-    expected = _int(hard_detail.get("expected_gaps"), max(0, int(detection.count) - 1))
-    hard = _int(hard_detail.get("hard_gaps"), _gap_method_count(detection, set(HARD_GAP_METHODS)))
-    grid = _int(hard_detail.get("grid_gaps"), _gap_method_count(detection, {GAP_GRID}))
-    equal = _int(hard_detail.get("equal_gaps"), _gap_method_count(detection, {GAP_EQUAL}))
-    content = _gap_method_count(detection, {GAP_CONTENT})
-    model = grid + equal + content
-    denominator = max(1, expected)
-    return {
-        "expected_gaps": expected,
-        "hard_gaps": hard,
-        "grid_gaps": grid,
-        "equal_gaps": equal,
-        "content_gaps": content,
-        "model_gaps": model,
-        "hard_gap_ratio": hard / float(denominator),
-        "model_gap_share": model / float(denominator),
-        "gate_reason": hard_detail.get("reason"),
-        "geometry_support_mode": hard_detail.get("separator_geometry_support_mode"),
-        "hard_detail": hard_detail,
-    }
+    return separator_summary_from_detection(detection).decision_summary()
 
 
 def evidence_summary_for(

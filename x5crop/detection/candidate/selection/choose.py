@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ....domain import Detection
+from ...evidence.separator_summary import separator_gate_detail_summary
 from ....formats import FormatSpec
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
@@ -60,6 +61,24 @@ def select_separator_review_candidate_on_content_mismatch(
     review_policy = policy.candidate_selection.content_mismatch_review
     best_assessment = best.detail.get("candidate_assessment", {})
     best_source = best_assessment.get("source") if isinstance(best_assessment, dict) else None
+
+    def separator_summary_for(candidate: Detection) -> tuple[int, int, int]:
+        candidate_assessment = candidate.detail.get("candidate_assessment", {})
+        if not isinstance(candidate_assessment, dict):
+            return 0, 0, 0
+        hard_detail = candidate_assessment.get("separator_hard_evidence", {})
+        if not isinstance(hard_detail, dict):
+            return 0, 0, 0
+        evidence = separator_gate_detail_summary(
+            hard_detail,
+            expected_default=max(1, best.count - 1),
+        )
+        return (
+            max(1, evidence.expected_gaps),
+            evidence.hard_separator_gaps,
+            evidence.equal_model_gaps,
+        )
+
     if (
         not review_policy.enabled
         or best.film_format != fmt.name
@@ -81,12 +100,7 @@ def select_separator_review_candidate_on_content_mismatch(
         candidate_assessment = candidate.detail.get("candidate_assessment", {})
         if not isinstance(candidate_assessment, dict) or candidate_assessment.get("source") != review_policy.candidate_source:
             continue
-        hard_detail = candidate_assessment.get("separator_hard_evidence", {})
-        if not isinstance(hard_detail, dict):
-            continue
-        expected = max(1, int(hard_detail.get("expected_gaps", best.count - 1) or best.count - 1))
-        hard = int(hard_detail.get("hard_gaps", 0) or 0)
-        equal = int(hard_detail.get("equal_gaps", 0) or 0)
+        expected, hard, equal = separator_summary_for(candidate)
         support = str(candidate_assessment.get("content_support", ""))
         min_hard = max(1, math.ceil(expected * review_policy.min_hard_ratio))
         if (
@@ -100,7 +114,7 @@ def select_separator_review_candidate_on_content_mismatch(
     return max(
         plausible,
         key=lambda candidate: (
-            int((candidate.detail.get("candidate_assessment", {}).get("separator_hard_evidence", {}) or {}).get("hard_gaps", 0) or 0),
+            separator_summary_for(candidate)[1],
             float((candidate.detail.get("candidate_assessment", {}) or {}).get("joint_score", 0.0) or 0.0),
             float(candidate.confidence),
         ),

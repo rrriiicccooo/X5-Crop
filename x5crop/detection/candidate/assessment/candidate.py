@@ -21,6 +21,7 @@ from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ....utils import HARD_REVIEW_REASONS
 from ...evidence.content_evidence import content_evidence_detail
+from ...evidence.separator_summary import separator_gate_detail_summary
 from .gates import assess_separator_gate
 from .partial_holder import partial_extra_holder_frames_gate_detail
 from .scoring import (
@@ -144,7 +145,7 @@ def apply_candidate_assessment_policy(
 
     outer_candidate_strategy = str(candidate.detail.get("outer_candidate_strategy", ""))
     if source == "separator" and outer_candidate_strategy == "edge_anchor_outer":
-        hard_count = int(separator_gate_detail.get("hard_gaps", 0) or 0)
+        hard_count = separator_gate_detail_summary(separator_gate_detail).hard_separator_gaps
         if hard_count <= 0:
             separator_gate_ok = False
             separator_gate_detail = dict(separator_gate_detail)
