@@ -80,6 +80,32 @@ class SeparatorGeometrySupportPolicy:
 
 
 @dataclass(frozen=True)
+class SeparatorModelGapProposalPolicy:
+    detected_geometry_equal_model_enabled: bool = False
+    detected_geometry_strip_modes: tuple[str, ...] = ("full",)
+    requires_default_count: bool = True
+    requires_standard_width_search: bool = True
+
+    def detected_geometry_equal_model_available(
+        self,
+        *,
+        strip_mode: str,
+        count: int,
+        default_count: int,
+        gap_max_width_ratio_override: float | None,
+    ) -> bool:
+        if not self.detected_geometry_equal_model_enabled:
+            return False
+        if strip_mode not in self.detected_geometry_strip_modes:
+            return False
+        if self.requires_default_count and int(count) != int(default_count):
+            return False
+        if self.requires_standard_width_search and gap_max_width_ratio_override is not None:
+            return False
+        return True
+
+
+@dataclass(frozen=True)
 class SeparatorWidthProfilePolicy:
     mode: str = "off"
     max_width_ratio: float = 0.060
@@ -114,6 +140,7 @@ class SeparatorEdgePairPolicy(EdgePairParameters):
 class SeparatorPolicy:
     gate: SeparatorGatePolicy
     hard_required_all_gaps: bool
+    model_gap_proposal: SeparatorModelGapProposalPolicy = field(default_factory=SeparatorModelGapProposalPolicy)
     width_profile: SeparatorWidthProfilePolicy = field(default_factory=SeparatorWidthProfilePolicy)
     width_profile_search: SeparatorWidthProfileSearchParameters = field(default_factory=SeparatorWidthProfileSearchParameters)
     geometry_support_modes: tuple[str, ...] = ()
@@ -136,6 +163,7 @@ __all__ = [
     "SeparatorGatePolicy",
     "SeparatorGeometrySupportModePolicy",
     "SeparatorGeometrySupportPolicy",
+    "SeparatorModelGapProposalPolicy",
     "SeparatorPolicy",
     "SeparatorWidthProfilePolicy",
 ]

@@ -20,6 +20,7 @@ from ..runtime.separator import (
     SeparatorGatePolicy,
     SeparatorGeometrySupportModePolicy,
     SeparatorGeometrySupportPolicy,
+    SeparatorModelGapProposalPolicy,
     SeparatorPolicy,
     SeparatorWidthProfilePolicy,
 )
@@ -96,6 +97,20 @@ def separator_geometry_support_policy(
     )
 
 
+def separator_model_gap_proposal_policy(
+    mode_preset: ModePolicyPreset,
+) -> SeparatorModelGapProposalPolicy:
+    return SeparatorModelGapProposalPolicy(
+        detected_geometry_equal_model_enabled=bool(
+            mode_preset.detector_kind == "standard_strip"
+            and "detected_geometry" in mode_preset.separator_geometry_support_modes
+        ),
+        detected_geometry_strip_modes=("full",),
+        requires_default_count=True,
+        requires_standard_width_search=True,
+    )
+
+
 def separator_width_profile_policy(
     mode_preset: ModePolicyPreset,
     params: FormatParameters,
@@ -164,6 +179,7 @@ def separator_policy(
     return SeparatorPolicy(
         gate=gate,
         hard_required_all_gaps=bool(gate.hard_required_all_gaps),
+        model_gap_proposal=separator_model_gap_proposal_policy(mode_preset),
         width_profile=separator_width_profile_policy(
             mode_preset,
             params,
@@ -317,6 +333,7 @@ __all__ = [
     'edge_pair_parameters_from_preset',
     'separator_gate_policy',
     'separator_geometry_support_policy',
+    'separator_model_gap_proposal_policy',
     'separator_width_profile_policy',
     'separator_width_profile_search_parameters',
     'separator_policy',

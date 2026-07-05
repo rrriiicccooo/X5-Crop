@@ -82,6 +82,9 @@ Current stable release: v4.2.8
   profile 等分模型归 `detection.candidate.proposal.separator.model`；
   build / safety / refinement / content candidate 路径不再手写 `"equal"` /
   `"grid"` / `"content"` method 字符串。
+- detected-geometry equal model 已迁入显式 `SeparatorPolicy.model_gap_proposal`；
+  gate 的 geometry-support policy 不再作为 gap proposal 开关，report policy detail
+  会单独输出 model-gap proposal 配置，方便人工审核 proposal 与 gate 边界。
 - separator profile / edge-refine / enhanced profile cache key 已从 format identity
   解耦，改为只使用 geometry box 与参数对象；nearby diagnostic cache key 补入
   diagnostic policy。
@@ -497,6 +500,10 @@ Verified:
   with profile equal-split proposal in `detection.candidate.proposal.separator.model`;
   build, safety, refinement, and content-candidate paths no longer hand-write
   `"equal"` / `"grid"` / `"content"` method strings.
+- Detected-geometry equal-model proposal now lives in explicit
+  `SeparatorPolicy.model_gap_proposal`; gate geometry-support policy no longer
+  doubles as a gap-proposal switch, and report policy detail exposes the model-gap
+  proposal config for review.
 - Separator refinement is split without behavior changes: candidate build calls
   geometry refinement helpers directly instead of keeping a re-export-only
   proposal refinement facade; `geometry/edge_pairs.py` separates search limits,

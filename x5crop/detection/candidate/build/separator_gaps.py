@@ -146,14 +146,19 @@ def initial_separator_gaps(
         if len(separator_width_profile_gaps) >= max(1, count - 1):
             gaps = separator_width_profile_gaps
             standard_gap_search_detail["overridden_by"] = "separator_width_profile"
-    if (
-        strip_mode == "full"
-        and policy.separator.geometry_support.detected_geometry.enabled
-        and count == fmt.default_count
-        and gap_max_width_ratio_override is None
+    model_gap_proposal = policy.separator.model_gap_proposal
+    if model_gap_proposal.detected_geometry_equal_model_available(
+        strip_mode=strip_mode,
+        count=count,
+        default_count=fmt.default_count,
+        gap_max_width_ratio_override=gap_max_width_ratio_override,
     ):
         gaps = propose_equal_model_gaps_from_profile(profile, origin, pitch, count)
         standard_gap_search_detail["overridden_by"] = "detected_geometry_equal_model"
+        standard_gap_search_detail["model_gap_proposal"] = {
+            "family": "detected_geometry_equal_model",
+            "policy_enabled": True,
+        }
     return gaps, standard_gap_search_detail, separator_width_profile_gap_search_detail
 
 
@@ -245,7 +250,7 @@ def apply_enhanced_gap_promotion(
     promotion_allowed = (
         allow_enhanced_gap_promotion
         and strip_mode == "full"
-        and not policy.separator.geometry_support.detected_geometry.enabled
+        and not policy.separator.model_gap_proposal.detected_geometry_equal_model_enabled
     )
     if not promotion_allowed:
         return disabled
