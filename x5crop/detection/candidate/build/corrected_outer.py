@@ -66,7 +66,7 @@ def build_assessed_corrected_outer_candidate(
     reassessed = apply_candidate_assessment_policy(gray, reassessed, config, fmt, "separator", cache, policy=policy)
     if gap_override is not None:
         profile_detail = broad_width_gap_profile_detail(
-            policy,
+            policy.separator,
             gap_override,
             preserved_through_outer_correction_candidate=True,
         )

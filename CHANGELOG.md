@@ -57,6 +57,8 @@ Current stable release: v4.2.8
 - nearby separator correction 只返回修正后的 gap evidence、correction detail 和
   pre-correction gaps；confidence cap / scoring 保留在 detection build 与
   assessment 消费层。
+- active gap search profile vocabulary 只保留 `standard` 与 `broad_width`；
+  `broad_width` profile detail helper 只消费 separator policy。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 

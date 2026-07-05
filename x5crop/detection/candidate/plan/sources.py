@@ -86,7 +86,7 @@ def detect_candidate_for_count(
                 policy=policy,
             )
             if is_broad_width_gap_profile(gap_profile):
-                gap_profile_detail = broad_width_gap_profile_detail(policy, candidate_gap_override)
+                gap_profile_detail = broad_width_gap_profile_detail(policy.separator, candidate_gap_override)
                 detection.detail["gap_search_profile"] = gap_profile_detail
                 detection.detail["separator_width_profile"] = gap_profile_detail
             candidates.append(detection)
