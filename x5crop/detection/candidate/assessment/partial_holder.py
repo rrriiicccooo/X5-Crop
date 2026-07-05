@@ -12,7 +12,7 @@ from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....utils import HARD_REVIEW_REASONS, clamp_int
-from ...separator.evidence import separator_width_evidence_detail
+from ..proposal.separator.evidence import separator_width_evidence_detail
 
 
 def partial_safe_broad_separator_width_gap_detail(

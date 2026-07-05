@@ -17,15 +17,15 @@ from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ....utils import clamp_int
 from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE
-from ...separator.correction import (
+from ..proposal.separator.correction import (
     apply_edge_pair_separator_correction,
     apply_grid_gap_model,
     apply_nearby_separator_correction,
     merge_enhanced_separator_proposals,
     should_run_enhanced_separator_proposals,
 )
-from ...separator.evidence import separator_width_evidence_detail
-from ...separator.proposal import propose_separator_width_profile_gaps, propose_standard_separator_gaps
+from ..proposal.separator.evidence import separator_width_evidence_detail
+from ..proposal.separator.proposal import propose_separator_width_profile_gaps, propose_standard_separator_gaps
 from ..assessment.partial_edge import partial_edge_hint
 from ..assessment.scoring import score_detection
 from ..proposal.outer.plan import outer_candidate_strategy

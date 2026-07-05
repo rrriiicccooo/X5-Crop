@@ -15,7 +15,7 @@ from .....cache import AnalysisCache
 from .....utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 from ....cache_keys import separator_outer_cache_key
 from ....gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE, is_broad_width_gap_profile
-from ....separator.bands import collect_separator_outer_bands, separator_outer_band_sequences
+from ..separator.bands import collect_separator_outer_bands, separator_outer_band_sequences
 from .common import unique_outer_candidates
 
 

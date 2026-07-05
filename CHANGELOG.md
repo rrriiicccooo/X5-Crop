@@ -37,9 +37,10 @@ Current stable release: v4.2.8
   TIFF / deskew 后的 base gray；`image.evidence` 只负责现有 content /
   separator / deskew analysis evidence。当前不保留 color contrast 或 heavy
   texture evidence 接口，未来如引入 OpenCV 等大依赖再重新评估。
-- Gap / Separator 族群已按 outer 的生命周期模型收敛入口：`detection.separator`
-  承接 separator proposal、correction、width evidence 和 separator-derived outer
-  band evidence；`geometry` 保留底层 profile/search/trust 数学能力。
+- Gap / Separator 族群已按 candidate proposal 模型收敛入口：
+  `detection.candidate.proposal.separator` 承接 separator proposal、correction、
+  width evidence 和 separator-derived outer band evidence；`geometry` 保留底层
+  profile/search/trust 数学能力。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 
@@ -202,14 +203,14 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - Candidate execution budget separates eligibility from execution: reliable
   primary separator assessment may skip full-width and broad-width gap profile;
   outer correction also requires ok outer alignment before it skips.
-- Detection layering is aligned as pipeline / modes / separator / candidate
-  proposal lifecycle / evidence / decision / final. Outer proposal / correction
-  is a candidate proposal family, not a top-level detection sublayer. PASS /
+- Detection layering is aligned as pipeline / modes / candidate proposal
+  lifecycle / evidence / decision / final. Outer / separator / content / safety
+  are candidate proposal families, not top-level detection sublayers. PASS /
   REVIEW belongs to the decision layer, and finalization is output-adjacent only.
 - The Gap / Separator logic family now follows the same lifecycle model as outer:
-  `detection.separator` owns separator proposal, correction, width evidence, and
-  separator-derived outer band evidence; `geometry` keeps the lower-level
-  profile/search/trust math.
+  `detection.candidate.proposal.separator` owns separator proposal, correction,
+  width evidence, and separator-derived outer band evidence; `geometry` keeps
+  the lower-level profile/search/trust math.
 - New wrong PASS is unacceptable; conservative REVIEW and schema / reason diffs
   require explanation.
 - TIFF metadata, bit depth, ICC, resolution, and compression behavior remain unchanged.
@@ -254,8 +255,9 @@ Verified:
   dual-lane detector or the old dedicated module.
 - Outer source layout now lives under `detection/candidate/proposal/outer/` and
   `detection/candidate/proposal/correction/`; outer is a candidate proposal
-  family only, while separator bands live in `detection.separator`; outer-content
-  alignment and cache keys live in evidence / detection cache layers.
+  family only, while separator bands live in
+  `detection/candidate/proposal/separator`; outer-content alignment and cache
+  keys live in evidence / detection cache layers.
 - Separator-derived outer proposals are consolidated into the single
   `detection/candidate/proposal/outer/separator.py` engine; outer scope (local /
   full-width) and gap search profile (standard / broad_width) combine to

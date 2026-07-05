@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from ...geometry.detection_parameters import GapSearchParameters
-from ...policies.runtime.outer import SeparatorGeometryProposalPolicy, SeparatorOuterBandPolicy
-from ...utils import clamp_float, clamp_int, runs_from_mask
+from .....geometry.detection_parameters import GapSearchParameters
+from .....policies.runtime.outer import SeparatorGeometryProposalPolicy, SeparatorOuterBandPolicy
+from .....utils import clamp_float, clamp_int, runs_from_mask
 
 
 def separator_outer_band_sequences(

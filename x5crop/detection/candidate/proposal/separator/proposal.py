@@ -4,13 +4,13 @@ from typing import Optional
 
 import numpy as np
 
-from ...domain import Box, Gap
-from ...formats import FormatSpec
-from ...geometry.detection_parameters import GapSearchParameters
-from ...geometry.gap_search import find_gap
-from ...policies.registry import get_detection_policy
-from ...policies.runtime.policy import DetectionPolicy
-from ...utils import clamp_int, runs_from_mask, sampled_percentile, smooth_1d
+from .....domain import Box, Gap
+from .....formats import FormatSpec
+from .....geometry.detection_parameters import GapSearchParameters
+from .....geometry.gap_search import find_gap
+from .....policies.registry import get_detection_policy
+from .....policies.runtime.policy import DetectionPolicy
+from .....utils import clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 
 
 def propose_standard_separator_gaps(

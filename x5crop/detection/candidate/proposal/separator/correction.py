@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from ...geometry.edge_pairs import refine_gaps_by_edge_pairs
-from ...geometry.enhanced_separator import merge_enhanced_separator_gaps, should_run_enhanced_separator_analysis
-from ...geometry.nearby_separator import apply_nearby_separator_corrections
-from ...geometry.robust_grid import apply_robust_grid
+from .....geometry.edge_pairs import refine_gaps_by_edge_pairs
+from .....geometry.enhanced_separator import merge_enhanced_separator_gaps, should_run_enhanced_separator_analysis
+from .....geometry.nearby_separator import apply_nearby_separator_corrections
+from .....geometry.robust_grid import apply_robust_grid
 
 
 apply_edge_pair_separator_correction = refine_gaps_by_edge_pairs
