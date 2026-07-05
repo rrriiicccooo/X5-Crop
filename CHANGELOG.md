@@ -52,10 +52,12 @@ Current stable release: v4.2.8
   常量，不再手写 method 字符串。
 - ordinary gap search 的 band threshold、弱 prominence 门槛和 detected-candidate
   quality 权重已外显到 `GapSearchParameters`；默认值保持旧行为。
-- ordinary gap search 已拆出 detected candidate collection、best-candidate
-  selection 和 explicit `equal` model-gap fallback；band evidence measurement、
-  prominence support 与 width-profile support 也已拆成可审核 helper，方便审核
-  hard separator 与 model gap 的边界。
+- ordinary gap search 已拆成 hard-only `find_detected_gap`：它只返回
+  `GapSearchResult` 中的 detected hard gap、fallback score 和 reason；standard
+  separator proposal 负责在没有 hard gap 时调用 model proposal 生成 explicit
+  `equal` fallback。band evidence measurement、prominence support 与
+  width-profile support 也已拆成可审核 helper，方便审核 hard separator 与 model
+  gap 的边界。
 - equal / grid / content model-gap proposal 已集中到 `geometry.model_gaps`，
   profile 等分模型归 `detection.candidate.proposal.separator.model`；
   build / safety / refinement / content candidate 路径不再手写 `"equal"` /
@@ -405,10 +407,12 @@ Verified:
 - Ordinary separator profile / gap search code is split without behavior changes:
   `geometry/separator_profile.py` separates vertical sampling, segmented extreme
   evidence, uniform soft score, and column gradient signals; `geometry/gap_search.py`
-  separates window, width limits, thresholds, band expansion, detected-candidate
-  collection, best-candidate selection, explicit `equal` model-gap fallback,
-  band evidence measurement, prominence support, and width-profile support so
-  ordinary separator detection can be reviewed step by step.
+  is now hard-only `find_detected_gap`, returning a `GapSearchResult` with a
+  detected hard gap or fallback score / reason. Standard separator proposal owns
+  the explicit `equal` fallback when no hard gap is found. Window, width limits,
+  thresholds, band expansion, detected-candidate collection, best-candidate
+  selection, band evidence measurement, prominence support, and width-profile
+  support are split so ordinary separator detection can be reviewed step by step.
 - Equal / grid / content model-gap proposal is centralized in `geometry.model_gaps`,
   with profile equal-split proposal in `detection.candidate.proposal.separator.model`;
   build, safety, refinement, and content-candidate paths no longer hand-write

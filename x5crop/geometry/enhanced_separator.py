@@ -11,9 +11,14 @@ from ..cache import AnalysisCache
 from ..utils import clamp_float
 from .boxes import box_cache_key
 from .gap_geometry import constrain_gap_to_geometry
-from .gap_search import find_gap
+from .gap_search import find_detected_gap
 from .model_gaps import equal_model_gap
-from .detection_parameters import EnhancedSeparatorParameters, GapSearchParameters, RobustGridParameters, SeparatorProfileParameters
+from .detection_parameters import (
+    EnhancedSeparatorParameters,
+    GapSearchParameters,
+    RobustGridParameters,
+    SeparatorProfileParameters,
+)
 from .separator_cache import cached_enhanced_separator_profile
 
 
@@ -51,9 +56,10 @@ def find_enhanced_gap(
     enhanced_config: EnhancedSeparatorParameters | None = None,
 ) -> Gap:
     config = enhanced_config or EnhancedSeparatorParameters()
-    gap = find_gap(profile, expected, pitch, index, gap_search=gap_search)
-    if gap.method != GAP_DETECTED:
-        return gap
+    result = find_detected_gap(profile, expected, pitch, index, gap_search=gap_search)
+    gap = result.detected_gap
+    if gap is None:
+        return enhanced_gap_fallback(index, expected, result.fallback_score)
     if not enhanced_gap_is_valid(gap, expected, pitch, config):
         return enhanced_gap_fallback(index, expected, gap.score)
     return promote_enhanced_gap(gap, index)

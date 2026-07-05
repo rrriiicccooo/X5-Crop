@@ -9,7 +9,6 @@ from ..constants import GAP_DETECTED
 from ..domain import Gap
 from ..utils import clamp_int, runs_from_mask
 from .detection_parameters import GapSearchParameters
-from .model_gaps import equal_model_gap
 
 
 @dataclass(frozen=True)
@@ -51,6 +50,13 @@ class DetectedGapBandEvidence:
     mean_score: float
     side_score: float
     prominence: float
+
+
+@dataclass(frozen=True)
+class GapSearchResult:
+    detected_gap: Optional[Gap]
+    fallback_score: float
+    reason: str
 
 
 def gap_search_window(
@@ -218,23 +224,23 @@ def detected_gap_from_candidate(index: int, candidate: DetectedGapCandidate) -> 
     return Gap(index, candidate.center, float(candidate.quality), candidate.method, candidate.start, candidate.end)
 
 
-def find_gap(
+def find_detected_gap(
     profile: np.ndarray,
     expected: float,
     pitch: float,
     index: int,
     max_width_ratio_override: Optional[float] = None,
     gap_search: GapSearchParameters | None = None,
-) -> Gap:
+) -> GapSearchResult:
     config = gap_search or GapSearchParameters()
     lo, hi = gap_search_window(len(profile), expected, pitch, config)
     if hi <= lo:
-        return equal_model_gap(index, expected, 0.0)
+        return GapSearchResult(None, 0.0, "empty_window")
     local = profile[lo:hi]
     local_max = float(local.max()) if local.size else 0.0
     min_score = config.min_score
     if local.size == 0 or local_max < min_score:
-        return equal_model_gap(index, expected, local_max)
+        return GapSearchResult(None, local_max, "below_min_score")
 
     limits = gap_width_limits(pitch, max_width_ratio_override, config)
     peak_threshold, band_threshold = gap_score_thresholds(local_max, config)
@@ -252,14 +258,19 @@ def find_gap(
         )
     )
     if candidate is not None:
-        return detected_gap_from_candidate(index, candidate)
+        return GapSearchResult(
+            detected_gap_from_candidate(index, candidate),
+            local_max,
+            "detected",
+        )
 
-    return equal_model_gap(index, expected, local_max)
+    return GapSearchResult(None, local_max, "no_detected_candidate")
 
 
 __all__ = [
     "DetectedGapCandidate",
     "DetectedGapBandEvidence",
+    "GapSearchResult",
     "GapWidthLimits",
     "best_detected_gap_candidate",
     "detected_gap_band_evidence",
@@ -267,7 +278,7 @@ __all__ = [
     "detected_gap_candidates",
     "detected_gap_from_candidate",
     "expanded_gap_band",
-    "find_gap",
+    "find_detected_gap",
     "gap_band_has_prominence",
     "gap_band_has_width_profile_support",
     "gap_score_thresholds",
