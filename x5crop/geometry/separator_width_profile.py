@@ -19,6 +19,23 @@ class SeparatorWidthGapCandidate:
     end: int
     center: float
 
+    def rank_key(self) -> tuple[float]:
+        return (self.score,)
+
+
+@dataclass(frozen=True)
+class SeparatorWidthGapRun:
+    start: int
+    end: int
+    width: int
+    center: float
+
+
+@dataclass(frozen=True)
+class SeparatorWidthGapAcceptance:
+    accepted: bool
+    reason: str
+
 
 def separator_width_profile(
     crop: np.ndarray,
@@ -114,6 +131,37 @@ def separator_width_gap_window(
     return lo, hi
 
 
+def separator_width_gap_run(start: int, end: int) -> SeparatorWidthGapRun:
+    width = int(end - start)
+    center = (float(start) + float(end) - 1.0) * 0.5
+    return SeparatorWidthGapRun(start=int(start), end=int(end), width=width, center=float(center))
+
+
+def separator_width_gap_run_acceptance(
+    run: SeparatorWidthGapRun,
+    min_width: int,
+    max_width: int,
+) -> SeparatorWidthGapAcceptance:
+    if run.width < min_width:
+        return SeparatorWidthGapAcceptance(False, "too_narrow")
+    if run.width > max_width:
+        return SeparatorWidthGapAcceptance(False, "too_wide")
+    return SeparatorWidthGapAcceptance(True, "accepted")
+
+
+def separator_width_gap_candidate_from_accepted_run(
+    profile: np.ndarray,
+    run: SeparatorWidthGapRun,
+    expected: float,
+    pitch: float,
+    params: SeparatorWidthProfileSearchParameters,
+) -> SeparatorWidthGapCandidate:
+    mean_score = float(profile[run.start:run.end].mean())
+    distance_penalty = abs(run.center - expected) / max(1.0, pitch)
+    score = mean_score - params.gap_distance_penalty_weight * distance_penalty
+    return SeparatorWidthGapCandidate(score=score, start=run.start, end=run.end, center=run.center)
+
+
 def separator_width_gap_candidate_from_run(
     profile: np.ndarray,
     start: int,
@@ -124,14 +172,11 @@ def separator_width_gap_candidate_from_run(
     max_width: int,
     params: SeparatorWidthProfileSearchParameters,
 ) -> Optional[SeparatorWidthGapCandidate]:
-    width = end - start
-    if width < min_width or width > max_width:
+    run = separator_width_gap_run(start, end)
+    acceptance = separator_width_gap_run_acceptance(run, min_width, max_width)
+    if not acceptance.accepted:
         return None
-    mean_score = float(profile[start:end].mean())
-    center = (start + end - 1) * 0.5
-    distance_penalty = abs(center - expected) / max(1.0, pitch)
-    score = mean_score - params.gap_distance_penalty_weight * distance_penalty
-    return SeparatorWidthGapCandidate(score=score, start=start, end=end, center=float(center))
+    return separator_width_gap_candidate_from_accepted_run(profile, run, expected, pitch, params)
 
 
 def best_separator_width_gap_candidate(
@@ -156,7 +201,7 @@ def best_separator_width_gap_candidate(
             max_width,
             params,
         )
-        if candidate is not None and (best is None or candidate.score > best.score):
+        if candidate is not None and (best is None or candidate.rank_key() > best.rank_key()):
             best = candidate
     return best
 
@@ -213,11 +258,16 @@ def separator_width_gap_at(
 
 
 __all__ = [
+    "SeparatorWidthGapAcceptance",
     "SeparatorWidthGapCandidate",
+    "SeparatorWidthGapRun",
     "best_separator_width_gap_candidate",
     "collect_separator_width_bands",
+    "separator_width_gap_candidate_from_accepted_run",
     "separator_width_gap_candidate_from_run",
     "separator_width_gap_from_candidate",
+    "separator_width_gap_run",
+    "separator_width_gap_run_acceptance",
     "separator_width_gap_window",
     "separator_width_bounds",
     "separator_width_gap_at",

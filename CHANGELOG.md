@@ -78,9 +78,10 @@ Current stable release: v4.2.8
   assessment 消费层。
 - active gap search profile vocabulary 只保留 `standard` 与 `broad_width`；
   `broad_width` profile detail helper 只消费 separator policy。
-- broad-width detected gap 生成已拆出 width-profile gap window、run scoring、
-  best candidate selection 和 core-width clipped detected-gap output；输出仍是
-  普通 `detected` hard gap，不引入独立 gap method。
+- broad-width detected gap 生成已拆出 width-profile gap window、run object、
+  width acceptance、candidate scoring / ranking、best candidate selection 和
+  core-width clipped detected-gap output；输出仍是普通 `detected` hard gap，
+  不引入独立 gap method。
 - width-profile 搜索参数与候选策略已拆开：geometry 只消费
   `SeparatorWidthProfileSearchParameters`，`SeparatorWidthProfilePolicy` 只保留
   mode / required count / candidate budget / full-selection 语义，report 同时输出
@@ -448,9 +449,9 @@ Verified:
   only, while candidate build decides whether to rebuild gaps with a refined
   outer between those stages.
 - Broad-width detected gap generation now separates the width-profile gap window,
-  run scoring, best candidate selection, and core-width clipped detected-gap
-  output. The output remains an ordinary `detected` hard gap and does not add a
-  separate gap method.
+  run object, width acceptance, candidate scoring / ranking, best candidate
+  selection, and core-width clipped detected-gap output. The output remains an
+  ordinary `detected` hard gap and does not add a separate gap method.
 - Width-profile search parameters and candidate strategy are split:
   geometry consumes only `SeparatorWidthProfileSearchParameters`, while
   `SeparatorWidthProfilePolicy` keeps mode / required count / candidate budget /
