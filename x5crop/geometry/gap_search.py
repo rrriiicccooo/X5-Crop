@@ -449,7 +449,7 @@ def find_detected_gap(
         return GapSearchResult(
             detected_gap_from_candidate(index, candidate),
             local_max,
-            "detected",
+            GAP_DETECTED,
             gap_search_detail(
                 index,
                 expected,

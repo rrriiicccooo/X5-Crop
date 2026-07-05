@@ -437,7 +437,7 @@ def separator_width_gap_at_with_detail(
         return SeparatorWidthGapSearchResult(None, "no_width_profile_candidate", detail)
     return SeparatorWidthGapSearchResult(
         separator_width_gap_from_candidate(index, selection.candidate, len(profile), bounds, params),
-        "detected",
+        GAP_DETECTED,
         detail,
     )
 

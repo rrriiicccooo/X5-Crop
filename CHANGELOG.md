@@ -167,6 +167,8 @@ Current stable release: v4.2.8
   refinement 不再需要从 detection evidence 层借 role 语义；full width-profile
   selection 不再把 non-equal gap 当成 hard gap；report key `detected_gaps` 保持
   兼容，但内部语义不再把 grid/content model support 命名成 hard detected evidence。
+- standard gap search 和 broad-width gap search 的成功 reason 现在复用
+  `GAP_DETECTED` 常量；active gap method literal 继续集中在 `constants.py`。
 - 未使用的 `CandidateGateOutcome` gate 占位类型已删除，减少无调用方接口。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
@@ -730,6 +732,9 @@ Verified:
   non-equal gaps as hard gaps. The report key `detected_gaps` stays compatible,
   but internal code no longer names grid/content model support as hard detected
   evidence.
+- Standard and broad-width gap search success reasons now reuse the
+  `GAP_DETECTED` constant, keeping active gap method literals centralized in
+  `constants.py`.
 - Runtime separator width-profile policy is consolidated: activation, max width
   ratio, and confidence cap now belong to `SeparatorPolicy.width_profile`, and
   top-level `SeparatorPolicy` no longer carries duplicate width-profile runtime
