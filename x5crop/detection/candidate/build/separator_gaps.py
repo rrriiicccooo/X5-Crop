@@ -12,7 +12,6 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE
-from ..proposal.outer.grid_refine import grid_refined_outer_box
 from ..proposal.separator.model import propose_equal_model_gaps_from_profile
 from ..proposal.separator.proposal import propose_separator_width_profile_gaps, propose_standard_separator_gaps
 from ..proposal.separator.refinement import (
@@ -205,21 +204,19 @@ def apply_nearby_separator_refinement(
     return refined_gaps, detail, None
 
 
-def build_separator_gaps_for_outer(
+def build_primary_separator_gaps_for_outer(
     gray_work: np.ndarray,
-    config: RuntimeConfig,
     fmt: FormatSpec,
     count: int,
     strip_mode: str,
     outer: Box,
     offset_fraction: float,
     candidate_strategy: str,
-    allow_enhanced_gap_promotion: bool,
     cache: Optional[AnalysisCache],
-    allow_outer_refine: bool,
     gap_max_width_ratio_override: Optional[float],
     gap_search_profile: str,
     policy: DetectionPolicy,
+    force_standard_gap_search: bool = False,
 ) -> SeparatorGapBuildResult:
     work_height, work_width = gray_work.shape
     crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
@@ -228,20 +225,30 @@ def build_separator_gaps_for_outer(
         crop = gray_work
     profile = cached_separator_profile(cache, gray_work, outer, policy.separator.profile)
     origin, pitch = separator_origin_pitch(outer, fmt, count, strip_mode, offset_fraction)
-    gaps = initial_separator_gaps(
-        gray_work,
-        outer,
-        profile,
-        fmt,
-        count,
-        strip_mode,
-        origin,
-        pitch,
-        candidate_strategy,
-        gap_search_profile,
-        gap_max_width_ratio_override,
-        policy,
-    )
+    if force_standard_gap_search:
+        gaps = propose_standard_separator_gaps(
+            profile,
+            origin,
+            pitch,
+            count,
+            gap_max_width_ratio_override,
+            policy.separator.gap_search,
+        )
+    else:
+        gaps = initial_separator_gaps(
+            gray_work,
+            outer,
+            profile,
+            fmt,
+            count,
+            strip_mode,
+            origin,
+            pitch,
+            candidate_strategy,
+            gap_search_profile,
+            gap_max_width_ratio_override,
+            policy,
+        )
     gaps, edge_pair_correction_detail, grid_detail = apply_primary_separator_refinements(
         gray_work,
         outer,
@@ -255,65 +262,6 @@ def build_separator_gaps_for_outer(
         cache,
         policy,
     )
-    if allow_outer_refine and strip_mode == "full":
-        refined_outer = grid_refined_outer_box(
-            outer,
-            grid_detail,
-            count,
-            pitch,
-            work_width,
-            policy.outer.proposal.geometry.grid_refine,
-        )
-        if refined_outer is not None:
-            outer = refined_outer
-            crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-            profile = cached_separator_profile(cache, gray_work, outer, policy.separator.profile)
-            origin, pitch = separator_origin_pitch(outer, fmt, count, strip_mode, offset_fraction)
-            gaps = propose_standard_separator_gaps(
-                profile,
-                origin,
-                pitch,
-                count,
-                gap_max_width_ratio_override,
-                policy.separator.gap_search,
-            )
-            gaps, edge_pair_correction_detail, grid_detail = apply_primary_separator_refinements(
-                gray_work,
-                outer,
-                crop,
-                profile,
-                gaps,
-                count,
-                strip_mode,
-                origin,
-                pitch,
-                cache,
-                policy,
-            )
-            grid_detail["outer_refined"] = True
-    gaps, enhanced_gap_promotion_detail = apply_enhanced_gap_promotion(
-        gray_work,
-        outer,
-        gaps,
-        fmt,
-        count,
-        strip_mode,
-        origin,
-        pitch,
-        allow_enhanced_gap_promotion,
-        config,
-        cache,
-        policy,
-    )
-    gaps, nearby_correction_detail, pre_nearby_gaps = apply_nearby_separator_refinement(
-        profile,
-        gaps,
-        count,
-        strip_mode,
-        origin,
-        pitch,
-        policy,
-    )
     return SeparatorGapBuildResult(
         outer=outer,
         profile=profile,
@@ -322,17 +270,108 @@ def build_separator_gaps_for_outer(
         gaps=gaps,
         grid_detail=grid_detail,
         edge_pair_correction_detail=edge_pair_correction_detail,
+        enhanced_gap_promotion_detail={"used": False, "reason": "pending_late_refinement"},
+        nearby_correction_detail={"used": False, "reason": "pending_late_refinement"},
+        pre_nearby_gaps=None,
+    )
+
+
+def apply_late_separator_refinements(
+    gray_work: np.ndarray,
+    config: RuntimeConfig,
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    separator_gaps: SeparatorGapBuildResult,
+    allow_enhanced_gap_promotion: bool,
+    cache: Optional[AnalysisCache],
+    policy: DetectionPolicy,
+) -> SeparatorGapBuildResult:
+    gaps, enhanced_gap_promotion_detail = apply_enhanced_gap_promotion(
+        gray_work,
+        separator_gaps.outer,
+        separator_gaps.gaps,
+        fmt,
+        count,
+        strip_mode,
+        separator_gaps.origin,
+        separator_gaps.pitch,
+        allow_enhanced_gap_promotion,
+        config,
+        cache,
+        policy,
+    )
+    gaps, nearby_correction_detail, pre_nearby_gaps = apply_nearby_separator_refinement(
+        separator_gaps.profile,
+        gaps,
+        count,
+        strip_mode,
+        separator_gaps.origin,
+        separator_gaps.pitch,
+        policy,
+    )
+    return SeparatorGapBuildResult(
+        outer=separator_gaps.outer,
+        profile=separator_gaps.profile,
+        origin=separator_gaps.origin,
+        pitch=separator_gaps.pitch,
+        gaps=gaps,
+        grid_detail=separator_gaps.grid_detail,
+        edge_pair_correction_detail=separator_gaps.edge_pair_correction_detail,
         enhanced_gap_promotion_detail=enhanced_gap_promotion_detail,
         nearby_correction_detail=nearby_correction_detail,
         pre_nearby_gaps=pre_nearby_gaps,
     )
 
 
+def build_separator_gaps_for_outer(
+    gray_work: np.ndarray,
+    config: RuntimeConfig,
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    outer: Box,
+    offset_fraction: float,
+    candidate_strategy: str,
+    allow_enhanced_gap_promotion: bool,
+    cache: Optional[AnalysisCache],
+    gap_max_width_ratio_override: Optional[float],
+    gap_search_profile: str,
+    policy: DetectionPolicy,
+) -> SeparatorGapBuildResult:
+    primary = build_primary_separator_gaps_for_outer(
+        gray_work,
+        fmt,
+        count,
+        strip_mode,
+        outer,
+        offset_fraction,
+        candidate_strategy,
+        cache,
+        gap_max_width_ratio_override,
+        gap_search_profile,
+        policy,
+    )
+    return apply_late_separator_refinements(
+        gray_work,
+        config,
+        fmt,
+        count,
+        strip_mode,
+        primary,
+        allow_enhanced_gap_promotion,
+        cache,
+        policy,
+    )
+
+
 __all__ = [
     "SeparatorGapBuildResult",
     "apply_enhanced_gap_promotion",
+    "apply_late_separator_refinements",
     "apply_nearby_separator_refinement",
     "apply_primary_separator_refinements",
+    "build_primary_separator_gaps_for_outer",
     "build_separator_gaps_for_outer",
     "initial_separator_gaps",
     "separator_origin_pitch",

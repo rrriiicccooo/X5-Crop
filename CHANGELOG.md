@@ -97,6 +97,9 @@ Current stable release: v4.2.8
 - grid-derived outer box 计算已从 separator gap lifecycle 移到
   `detection.candidate.proposal.outer.grid_refine`；separator lifecycle 只消费
   grid detail 并在需要时重新生成 gaps，不拥有 outer 修正规则。
+- grid-derived outer refine 的编排已上移到 `build_detection_for_outer`：
+  `separator_gaps.py` 只提供 primary gap build 与 late separator refinements，
+  candidate build 在两段之间决定是否用 refined outer 重新 build gaps。
 - enhanced separator 内部语义收敛为 enhanced gap promotion：active detail key
   改为 `enhanced_gap_promotion`，gate 从该 detail 读取 promotion count，内部
   gap method 判断统一使用常量。
@@ -404,6 +407,10 @@ Verified:
   outer-box calculation now lives in `detection.candidate.proposal.outer.grid_refine`;
   the separator gap lifecycle consumes grid detail and may rebuild gaps, but it
   does not own the outer-box adjustment rule.
+- Grid-derived outer refine orchestration now lives in `build_detection_for_outer`:
+  `separator_gaps.py` provides primary gap build and late separator refinements
+  only, while candidate build decides whether to rebuild gaps with a refined
+  outer between those stages.
 - Broad-width detected gap generation now separates the width-profile gap window,
   run scoring, best candidate selection, and core-width clipped detected-gap
   output. The output remains an ordinary `detected` hard gap and does not add a

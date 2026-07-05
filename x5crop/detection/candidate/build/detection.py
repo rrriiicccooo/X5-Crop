@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from typing import Optional
 
 import numpy as np
@@ -18,8 +18,13 @@ from ...gap_profiles import STANDARD_GAP_PROFILE
 from ..proposal.separator.evidence import separator_width_evidence_detail
 from ..assessment.partial_edge import partial_edge_hint
 from ..assessment.scoring import score_detection
+from ..proposal.outer.grid_refine import grid_refined_outer_box
 from ..proposal.outer.plan import outer_candidate_strategy
-from .separator_gaps import build_separator_gaps_for_outer
+from .separator_gaps import (
+    SeparatorGapBuildResult,
+    apply_late_separator_refinements,
+    build_primary_separator_gaps_for_outer,
+)
 
 
 def build_detection_for_outer(
@@ -44,7 +49,7 @@ def build_detection_for_outer(
     h, w = gray.shape
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     wh, ww = gray_work.shape
-    separator_gaps = build_separator_gaps_for_outer(
+    separator_gaps = _build_separator_gap_lifecycle(
         gray_work,
         config,
         fmt,
@@ -59,6 +64,7 @@ def build_detection_for_outer(
         gap_max_width_ratio_override,
         gap_search_profile,
         policy,
+        ww,
     )
     outer = separator_gaps.outer
     profile = separator_gaps.profile
@@ -168,3 +174,97 @@ def build_detection_for_outer(
     if pre_nearby_confidence is not None:
         detail["nearby_separator_correction_confidence_cap"] = float(pre_nearby_confidence)
     return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, confidence, reasons, detail)
+
+
+def _build_separator_gap_lifecycle(
+    gray_work: np.ndarray,
+    config: RuntimeConfig,
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    outer: Box,
+    offset_fraction: float,
+    candidate_strategy: str,
+    allow_enhanced_gap_promotion: bool,
+    cache: Optional[AnalysisCache],
+    allow_outer_refine: bool,
+    gap_max_width_ratio_override: Optional[float],
+    gap_search_profile: str,
+    policy: DetectionPolicy,
+    work_width: int,
+) -> SeparatorGapBuildResult:
+    separator_gaps = build_primary_separator_gaps_for_outer(
+        gray_work,
+        fmt,
+        count,
+        strip_mode,
+        outer,
+        offset_fraction,
+        candidate_strategy,
+        cache,
+        gap_max_width_ratio_override,
+        gap_search_profile,
+        policy,
+    )
+    if not allow_outer_refine or strip_mode != "full":
+        return apply_late_separator_refinements(
+            gray_work,
+            config,
+            fmt,
+            count,
+            strip_mode,
+            separator_gaps,
+            allow_enhanced_gap_promotion,
+            cache,
+            policy,
+        )
+
+    refined_outer = grid_refined_outer_box(
+        separator_gaps.outer,
+        separator_gaps.grid_detail,
+        count,
+        separator_gaps.pitch,
+        work_width,
+        policy.outer.proposal.geometry.grid_refine,
+    )
+    if refined_outer is None:
+        return apply_late_separator_refinements(
+            gray_work,
+            config,
+            fmt,
+            count,
+            strip_mode,
+            separator_gaps,
+            allow_enhanced_gap_promotion,
+            cache,
+            policy,
+        )
+
+    refined_separator_gaps = build_primary_separator_gaps_for_outer(
+        gray_work,
+        fmt,
+        count,
+        strip_mode,
+        refined_outer,
+        offset_fraction,
+        candidate_strategy,
+        cache,
+        gap_max_width_ratio_override,
+        gap_search_profile,
+        policy,
+        force_standard_gap_search=True,
+    )
+    grid_detail = dict(refined_separator_gaps.grid_detail)
+    grid_detail["outer_refined"] = True
+    refined_separator_gaps = replace(refined_separator_gaps, grid_detail=grid_detail)
+    return apply_late_separator_refinements(
+        gray_work,
+        config,
+        fmt,
+        count,
+        strip_mode,
+        refined_separator_gaps,
+        allow_enhanced_gap_promotion,
+        cache,
+        policy,
+    )
