@@ -86,6 +86,12 @@ class DetectedGapBandAssessment:
 
 
 @dataclass(frozen=True)
+class DetectedGapRunAssessment:
+    candidate: Optional[DetectedGapCandidate]
+    detail: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class GapSearchResult:
     detected_gap: Optional[Gap]
     fallback_score: float
@@ -177,37 +183,6 @@ def expanded_gap_band(
     return band_start, band_end
 
 
-def detected_gap_band_evidence(
-    local: np.ndarray,
-    lo: int,
-    band_start: int,
-    band_end: int,
-    limits: GapWidthLimits,
-) -> Optional[DetectedGapBandEvidence]:
-    band_width = band_end - band_start
-    if band_width < limits.min_width or band_width > limits.max_width:
-        return None
-
-    left_guard = local[max(0, band_start - limits.guard):band_start]
-    right_guard = local[band_end:min(len(local), band_end + limits.guard)]
-    if left_guard.size == 0 or right_guard.size == 0:
-        return None
-
-    mean_score = float(local[band_start:band_end].mean())
-    side_score = max(float(left_guard.mean()), float(right_guard.mean()))
-    prominence = mean_score - side_score
-    center = float(lo + (band_start + band_end - 1) / 2.0)
-    return DetectedGapBandEvidence(
-        center=center,
-        start=float(lo + band_start),
-        end=float(lo + band_end),
-        width=band_width,
-        mean_score=mean_score,
-        side_score=side_score,
-        prominence=prominence,
-    )
-
-
 def gap_band_has_prominence(evidence: DetectedGapBandEvidence, config: GapSearchParameters) -> bool:
     return (
         evidence.prominence >= config.weak_prominence_min
@@ -287,11 +262,11 @@ def detected_gap_candidate_from_evidence(
     return DetectedGapCandidate(distance, quality, evidence.mean_score, evidence.center, evidence.start, evidence.end)
 
 
-def detected_gap_candidate_assessment(
+def detected_gap_run_assessment(
     run_start: int,
     run_end: int,
     context: GapSearchContext,
-) -> tuple[Optional[DetectedGapCandidate], dict[str, Any]]:
+) -> DetectedGapRunAssessment:
     band_start, band_end = expanded_gap_band(
         context.local,
         run_start,
@@ -314,20 +289,11 @@ def detected_gap_candidate_assessment(
     }
     detail.update(assessment.detail())
     if not assessment.accepted or assessment.evidence is None:
-        return None, detail
+        return DetectedGapRunAssessment(None, detail)
     candidate = detected_gap_candidate_from_evidence(assessment.evidence, context)
     detail["distance"] = float(candidate.distance)
     detail["quality"] = float(candidate.quality)
-    return candidate, detail
-
-
-def detected_gap_candidate(
-    run_start: int,
-    run_end: int,
-    context: GapSearchContext,
-) -> Optional[DetectedGapCandidate]:
-    candidate, _detail = detected_gap_candidate_assessment(run_start, run_end, context)
-    return candidate
+    return DetectedGapRunAssessment(candidate, detail)
 
 
 def detected_gap_candidates_with_detail(
@@ -336,18 +302,11 @@ def detected_gap_candidates_with_detail(
     candidates: list[DetectedGapCandidate] = []
     evaluations: list[dict[str, Any]] = []
     for run_start, run_end in runs_from_mask(context.local >= context.peak_threshold):
-        candidate, detail = detected_gap_candidate_assessment(run_start, run_end, context)
-        evaluations.append(detail)
-        if candidate is not None:
-            candidates.append(candidate)
+        assessment = detected_gap_run_assessment(run_start, run_end, context)
+        evaluations.append(assessment.detail)
+        if assessment.candidate is not None:
+            candidates.append(assessment.candidate)
     return candidates, evaluations
-
-
-def detected_gap_candidates(
-    context: GapSearchContext,
-) -> list[DetectedGapCandidate]:
-    candidates, _evaluations = detected_gap_candidates_with_detail(context)
-    return candidates
 
 
 def best_detected_gap_candidate(candidates: list[DetectedGapCandidate]) -> Optional[DetectedGapCandidate]:
@@ -453,19 +412,17 @@ __all__ = [
     "DetectedGapBandAssessment",
     "DetectedGapCandidate",
     "DetectedGapBandEvidence",
+    "DetectedGapRunAssessment",
     "GapSearchContext",
     "GapSearchResult",
     "GapWidthLimits",
     "best_detected_gap_candidate",
     "detected_gap_acceptance",
     "detected_gap_band_assessment",
-    "detected_gap_band_evidence",
-    "detected_gap_candidate",
-    "detected_gap_candidate_assessment",
     "detected_gap_candidate_from_evidence",
-    "detected_gap_candidates",
     "detected_gap_candidates_with_detail",
     "detected_gap_from_candidate",
+    "detected_gap_run_assessment",
     "expanded_gap_band",
     "find_detected_gap",
     "gap_search_detail",

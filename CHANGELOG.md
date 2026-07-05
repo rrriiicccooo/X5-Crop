@@ -78,6 +78,9 @@ Current stable release: v4.2.8
   先由 `DetectedGapAcceptance` 判定 prominence / width-profile support 是否足够，
   再由 `DetectedGapCandidate` 负责 distance / quality / score 排序；行为阈值不变，
   但人工审核时可以分别看“能不能成为 hard gap”和“多个 hard gap 候选谁更好”。
+- standard detected gap search 的单个 run 已改为 `DetectedGapRunAssessment`；
+  不再保留未使用的 no-detail wrapper 或裸 tuple 返回，accepted / rejected run
+  detail 仍保持原字段。
 - equal / grid / content model-gap proposal 已集中到 `geometry.model_gaps`，
   profile 等分模型归 `detection.candidate.proposal.separator.model`；
   build / safety / refinement / content candidate 路径不再手写 `"equal"` /
@@ -504,6 +507,9 @@ Verified:
   `SeparatorPolicy.model_gap_proposal`; gate geometry-support policy no longer
   doubles as a gap-proposal switch, and report policy detail exposes the model-gap
   proposal config for review.
+- Standard detected-gap run evaluation now uses `DetectedGapRunAssessment`
+  instead of unused no-detail wrappers or raw tuple returns; accepted / rejected
+  run detail fields are unchanged.
 - Separator refinement is split without behavior changes: candidate build calls
   geometry refinement helpers directly instead of keeping a re-export-only
   proposal refinement facade; `geometry/edge_pairs.py` separates search limits,
