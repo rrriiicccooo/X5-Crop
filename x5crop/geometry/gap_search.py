@@ -59,6 +59,19 @@ class GapSearchResult:
     reason: str
 
 
+@dataclass(frozen=True)
+class GapSearchContext:
+    local: np.ndarray
+    lo: int
+    expected: float
+    pitch: float
+    limits: GapWidthLimits
+    peak_threshold: float
+    band_threshold: float
+    max_width_ratio_override: Optional[float]
+    config: GapSearchParameters
+
+
 def gap_search_window(
     profile_length: int,
     expected: float,
@@ -89,6 +102,30 @@ def gap_score_thresholds(local_max: float, config: GapSearchParameters) -> tuple
     peak_threshold = max(min_score, local_max * config.peak_multiplier)
     band_threshold = max(min_score * config.band_min_score_multiplier, local_max * config.band_multiplier)
     return peak_threshold, band_threshold
+
+
+def gap_search_context(
+    local: np.ndarray,
+    lo: int,
+    expected: float,
+    pitch: float,
+    local_max: float,
+    max_width_ratio_override: Optional[float],
+    config: GapSearchParameters,
+) -> GapSearchContext:
+    limits = gap_width_limits(pitch, max_width_ratio_override, config)
+    peak_threshold, band_threshold = gap_score_thresholds(local_max, config)
+    return GapSearchContext(
+        local=local,
+        lo=int(lo),
+        expected=float(expected),
+        pitch=float(pitch),
+        limits=limits,
+        peak_threshold=float(peak_threshold),
+        band_threshold=float(band_threshold),
+        max_width_ratio_override=max_width_ratio_override,
+        config=config,
+    )
 
 
 def expanded_gap_band(
@@ -159,55 +196,50 @@ def gap_band_has_width_profile_support(
 
 
 def detected_gap_candidate(
-    local: np.ndarray,
-    lo: int,
-    expected: float,
-    pitch: float,
     run_start: int,
     run_end: int,
-    limits: GapWidthLimits,
-    band_threshold: float,
-    max_width_ratio_override: Optional[float],
-    config: GapSearchParameters,
+    context: GapSearchContext,
 ) -> Optional[DetectedGapCandidate]:
-    band_start, band_end = expanded_gap_band(local, run_start, run_end, band_threshold, limits.max_width)
-    evidence = detected_gap_band_evidence(local, lo, band_start, band_end, limits)
+    band_start, band_end = expanded_gap_band(
+        context.local,
+        run_start,
+        run_end,
+        context.band_threshold,
+        context.limits.max_width,
+    )
+    evidence = detected_gap_band_evidence(
+        context.local,
+        context.lo,
+        band_start,
+        band_end,
+        context.limits,
+    )
     if evidence is None:
         return None
-    if not gap_band_has_prominence(evidence, config):
+    if not gap_band_has_prominence(evidence, context.config):
         return None
-    if not gap_band_has_width_profile_support(evidence, limits, max_width_ratio_override, config):
+    if not gap_band_has_width_profile_support(
+        evidence,
+        context.limits,
+        context.max_width_ratio_override,
+        context.config,
+    ):
         return None
 
-    distance = abs(evidence.center - expected) / max(1.0, pitch)
-    quality = evidence.mean_score + config.quality_prominence_weight * evidence.prominence
+    distance = abs(evidence.center - context.expected) / max(1.0, context.pitch)
+    quality = evidence.mean_score + context.config.quality_prominence_weight * evidence.prominence
     return DetectedGapCandidate(distance, quality, evidence.mean_score, evidence.center, evidence.start, evidence.end)
 
 
 def detected_gap_candidates(
-    local: np.ndarray,
-    lo: int,
-    expected: float,
-    pitch: float,
-    limits: GapWidthLimits,
-    peak_threshold: float,
-    band_threshold: float,
-    max_width_ratio_override: Optional[float],
-    config: GapSearchParameters,
+    context: GapSearchContext,
 ) -> list[DetectedGapCandidate]:
     candidates: list[DetectedGapCandidate] = []
-    for run_start, run_end in runs_from_mask(local >= peak_threshold):
+    for run_start, run_end in runs_from_mask(context.local >= context.peak_threshold):
         candidate = detected_gap_candidate(
-            local,
-            lo,
-            expected,
-            pitch,
             run_start,
             run_end,
-            limits,
-            band_threshold,
-            max_width_ratio_override,
-            config,
+            context,
         )
         if candidate is not None:
             candidates.append(candidate)
@@ -242,21 +274,16 @@ def find_detected_gap(
     if local.size == 0 or local_max < min_score:
         return GapSearchResult(None, local_max, "below_min_score")
 
-    limits = gap_width_limits(pitch, max_width_ratio_override, config)
-    peak_threshold, band_threshold = gap_score_thresholds(local_max, config)
-    candidate = best_detected_gap_candidate(
-        detected_gap_candidates(
-            local,
-            lo,
-            expected,
-            pitch,
-            limits,
-            peak_threshold,
-            band_threshold,
-            max_width_ratio_override,
-            config,
-        )
+    context = gap_search_context(
+        local,
+        lo,
+        expected,
+        pitch,
+        local_max,
+        max_width_ratio_override,
+        config,
     )
+    candidate = best_detected_gap_candidate(detected_gap_candidates(context))
     if candidate is not None:
         return GapSearchResult(
             detected_gap_from_candidate(index, candidate),
@@ -270,6 +297,7 @@ def find_detected_gap(
 __all__ = [
     "DetectedGapCandidate",
     "DetectedGapBandEvidence",
+    "GapSearchContext",
     "GapSearchResult",
     "GapWidthLimits",
     "best_detected_gap_candidate",
@@ -281,6 +309,7 @@ __all__ = [
     "find_detected_gap",
     "gap_band_has_prominence",
     "gap_band_has_width_profile_support",
+    "gap_search_context",
     "gap_score_thresholds",
     "gap_search_window",
     "gap_width_limits",
