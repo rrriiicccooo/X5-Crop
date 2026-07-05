@@ -12,7 +12,7 @@ from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....utils import HARD_REVIEW_REASONS, clamp_int
-from ..proposal.separator.evidence import separator_width_evidence_detail
+from ..proposal.separator.evidence import separator_width_evidence_detail, separator_width_requirement_detail
 
 
 def partial_safe_broad_separator_width_gap_detail(
@@ -30,6 +30,12 @@ def partial_safe_broad_separator_width_gap_detail(
             "broad_separator_width_gaps": 0,
             "min_broad_separator_width_gaps": min_required,
         }
+
+    existing_detail = detection.detail.get("separator_width_evidence")
+    if isinstance(existing_detail, dict) and bool(existing_detail.get("used", False)):
+        detail = separator_width_requirement_detail(existing_detail, min_required)
+        detail["used"] = True
+        return detail
 
     work_outer_detail = detection.detail.get("work_outer", {})
     short_axis = 0.0

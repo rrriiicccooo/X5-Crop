@@ -70,6 +70,9 @@ Current stable release: v4.2.8
 - broad-width detected gap 生成已拆出 width-profile gap window、run scoring、
   best candidate selection 和 core-width clipped detected-gap output；输出仍是
   普通 `detected` hard gap，不引入独立 gap method。
+- separator width evidence requirement 已收敛为 detail 消费：candidate build
+  生成 `separator_width_evidence`，partial-safe / gate 只根据各自 requirement
+  复核已有 evidence，不重新生成 separator evidence。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
 - grid-derived outer box 计算已从 separator gap lifecycle 移到
@@ -386,6 +389,10 @@ Verified:
   run scoring, best candidate selection, and core-width clipped detected-gap
   output. The output remains an ordinary `detected` hard gap and does not add a
   separate gap method.
+- Separator width evidence requirements are now detail consumers: candidate
+  build creates `separator_width_evidence`, while partial-safe / gate logic only
+  applies their own requirements to existing evidence instead of regenerating
+  separator evidence.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the
   diagnostic hard-gap trust classifier; `detection/evidence/gap_diagnostics.py`

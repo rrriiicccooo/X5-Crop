@@ -6,6 +6,22 @@ from .....constants import HARD_GAP_METHODS
 from .....domain import Gap
 
 
+def separator_width_requirement_detail(detail: dict[str, Any], min_required: int) -> dict[str, Any]:
+    result = dict(detail)
+    min_required = max(0, int(min_required))
+    count = int(
+        result.get(
+            "broad_separator_width_gaps",
+            result.get("separator_width_gap_count", 0),
+        ) or 0
+    )
+    result["min_broad_separator_width_gaps"] = min_required
+    if bool(result.get("used", False)):
+        ok = count >= min_required
+        result["reason"] = "ok" if ok else "too_few_broad_separator_width_gaps"
+    return result
+
+
 def separator_width_evidence_detail(
     gaps: list[Gap],
     short_axis: float,
@@ -40,10 +56,9 @@ def separator_width_evidence_detail(
             broad_scores.append(float(gap.score))
 
     count = len(broad_indexes)
-    ok = count >= min_required
-    return {
+    detail = {
         "used": True,
-        "reason": "ok" if ok else "too_few_broad_separator_width_gaps",
+        "reason": "ok",
         "separator_width_class": "broad" if count > 0 else "standard",
         "broad_separator_width_gaps": int(count),
         "min_broad_separator_width_gaps": int(min_required),
@@ -54,8 +69,10 @@ def separator_width_evidence_detail(
         "gap_widths": gap_widths,
         "broad_separator_width_scores": broad_scores,
     }
+    return separator_width_requirement_detail(detail, min_required)
 
 
 __all__ = [
     "separator_width_evidence_detail",
+    "separator_width_requirement_detail",
 ]
