@@ -138,31 +138,8 @@ def enhanced_gap_detail(gap: Gap) -> dict[str, Any]:
     }
 
 
-def enhanced_gap_is_valid(gap: Gap, expected: float, pitch: float, config: EnhancedSeparatorParameters) -> bool:
-    return enhanced_gap_validation(gap, expected, pitch, config).accepted
-
-
 def promote_enhanced_gap(gap: Gap, index: int) -> Gap:
     return Gap(index, gap.center, gap.score, GAP_ENHANCED_DETECTED, gap.start, gap.end)
-
-
-def find_enhanced_gap(
-    profile: np.ndarray,
-    expected: float,
-    pitch: float,
-    index: int,
-    gap_search: GapSearchParameters | None = None,
-    enhanced_config: EnhancedSeparatorParameters | None = None,
-) -> Gap:
-    result = find_enhanced_gap_with_detail(
-        profile,
-        expected,
-        pitch,
-        index,
-        gap_search,
-        enhanced_config,
-    )
-    return result.gap
 
 
 def find_enhanced_gap_with_detail(
