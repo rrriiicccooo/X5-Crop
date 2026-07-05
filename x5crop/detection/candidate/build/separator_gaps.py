@@ -17,7 +17,6 @@ from ....geometry.robust_grid import apply_robust_grid
 from ....geometry.separator_cache import cached_edge_refine_profiles, cached_separator_profile
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
-from ....runtime.config import RuntimeConfig
 from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE
 from ..proposal.separator.model import propose_equal_model_gaps_from_profile
 from ..proposal.separator.proposal import (
@@ -236,13 +235,12 @@ def apply_enhanced_gap_promotion(
     gray_work: np.ndarray,
     outer: Box,
     gaps: list[Gap],
-    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     origin: float,
     pitch: float,
     allow_enhanced_gap_promotion: bool,
-    config: RuntimeConfig,
+    analysis_mode: str,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> GapRefinementResult:
@@ -254,7 +252,7 @@ def apply_enhanced_gap_promotion(
     )
     if not promotion_allowed:
         return disabled
-    if should_run_enhanced_gap_promotion(config.analysis, gaps, count, policy.separator.enhanced):
+    if should_run_enhanced_gap_promotion(analysis_mode, gaps, count, policy.separator.enhanced):
         refined_gaps, detail = promote_enhanced_separator_gaps(
             gray_work,
             outer,
@@ -273,7 +271,7 @@ def apply_enhanced_gap_promotion(
             refined_gaps,
             detail,
         )
-    if config.analysis == "auto":
+    if analysis_mode == "auto":
         return _skipped_gap_refinement_result("enhanced_gap_promotion", gaps, "auto_not_needed")
     return disabled
 
@@ -403,8 +401,7 @@ def build_primary_separator_gaps_for_outer(
 
 def apply_late_separator_refinements(
     gray_work: np.ndarray,
-    config: RuntimeConfig,
-    fmt: FormatSpec,
+    analysis_mode: str,
     count: int,
     strip_mode: str,
     separator_gaps: SeparatorGapBuildResult,
@@ -416,13 +413,12 @@ def apply_late_separator_refinements(
         gray_work,
         separator_gaps.outer,
         separator_gaps.gaps,
-        fmt,
         count,
         strip_mode,
         separator_gaps.origin,
         separator_gaps.pitch,
         allow_enhanced_gap_promotion,
-        config,
+        analysis_mode,
         cache,
         policy,
     )
@@ -450,48 +446,6 @@ def apply_late_separator_refinements(
         pre_nearby_gaps=nearby_correction.pre_refinement_gaps,
     )
 
-
-def build_separator_gaps_for_outer(
-    gray_work: np.ndarray,
-    config: RuntimeConfig,
-    fmt: FormatSpec,
-    count: int,
-    strip_mode: str,
-    outer: Box,
-    offset_fraction: float,
-    candidate_strategy: str,
-    allow_enhanced_gap_promotion: bool,
-    cache: Optional[AnalysisCache],
-    gap_max_width_ratio_override: Optional[float],
-    gap_search_profile: str,
-    policy: DetectionPolicy,
-) -> SeparatorGapBuildResult:
-    primary = build_primary_separator_gaps_for_outer(
-        gray_work,
-        fmt,
-        count,
-        strip_mode,
-        outer,
-        offset_fraction,
-        candidate_strategy,
-        cache,
-        gap_max_width_ratio_override,
-        gap_search_profile,
-        policy,
-    )
-    return apply_late_separator_refinements(
-        gray_work,
-        config,
-        fmt,
-        count,
-        strip_mode,
-        primary,
-        allow_enhanced_gap_promotion,
-        cache,
-        policy,
-    )
-
-
 __all__ = [
     "GapRefinementResult",
     "SeparatorGapBuildResult",
@@ -501,7 +455,6 @@ __all__ = [
     "apply_nearby_separator_refinement",
     "apply_primary_separator_refinements",
     "build_primary_separator_gaps_for_outer",
-    "build_separator_gaps_for_outer",
     "initial_separator_gaps",
     "separator_origin_pitch",
 ]

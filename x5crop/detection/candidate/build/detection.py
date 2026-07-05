@@ -211,8 +211,7 @@ def _build_separator_gap_lifecycle(
     if not allow_outer_refine or strip_mode != "full":
         return apply_late_separator_refinements(
             gray_work,
-            config,
-            fmt,
+            config.analysis,
             count,
             strip_mode,
             separator_gaps,
@@ -232,8 +231,7 @@ def _build_separator_gap_lifecycle(
     if refined_outer is None:
         return apply_late_separator_refinements(
             gray_work,
-            config,
-            fmt,
+            config.analysis,
             count,
             strip_mode,
             separator_gaps,
@@ -261,8 +259,7 @@ def _build_separator_gap_lifecycle(
     refined_separator_gaps = replace(refined_separator_gaps, grid_detail=grid_detail)
     return apply_late_separator_refinements(
         gray_work,
-        config,
-        fmt,
+        config.analysis,
         count,
         strip_mode,
         refined_separator_gaps,
