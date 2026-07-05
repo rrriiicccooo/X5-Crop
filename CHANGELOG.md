@@ -101,6 +101,11 @@ Current stable release: v4.2.8
   gap 选择和 PASS / REVIEW 行为不变。
 - separator evidence summary 的内部方法从 `decision_summary()` 改为
   `evidence_detail()`；decision 层仍负责消费这些 evidence 并形成最终判定。
+- separator refinement wrappers 已从 `separator_gaps.py` 拆到
+  `separator_refinements.py`；edge-pair、robust-grid、enhanced 和 nearby
+  refinement 细节集中在 refinement 模块，`separator_gaps.py` 只保留 initial
+  source selection、primary build 和 late refinement attachment。report key、
+  gap 顺序、candidate assessment 和 PASS / REVIEW 行为不变。
 - content evidence 的 cached / uncached 路径现在共用
   `content_evidence_threshold()` 和 `content_frame_support_detail()`；
   threshold、support、frame_scores 和 successful cache 行为保持不变。
@@ -819,6 +824,12 @@ Verified:
 - Separator evidence summary now exposes `evidence_detail()` internally instead
   of `decision_summary()`; the decision layer remains the only consumer that
   turns this evidence into the final verdict.
+- Separator refinement wrappers moved from `separator_gaps.py` to
+  `separator_refinements.py`; edge-pair, robust-grid, enhanced, and nearby
+  refinement details now live in the refinement module while `separator_gaps.py`
+  keeps initial source selection, primary build, and late refinement attachment.
+  Report keys, gap order, candidate assessment, and PASS / REVIEW behavior are
+  unchanged.
 - Cached and uncached content evidence paths now share
   `content_evidence_threshold()` and `content_frame_support_detail()`; threshold,
   support, frame score, and successful cache behavior are unchanged.
