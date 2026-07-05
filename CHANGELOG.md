@@ -155,6 +155,9 @@ Current stable release: v4.2.8
   不再重复实现 nearby candidate 搜索。
 - nearby separator candidate 和 search result 已 typed 化；report/detail 边界仍输出
   原有 dict 字段，不改变 runtime correction 条件。
+- nearby separator batch correction 已改为 `NearbySeparatorCorrectionResult`；
+  `apply_nearby_separator_corrections` 不再通过裸 tuple 返回 gaps/detail，
+  report/detail 字段保持不变。
 - grid-derived outer box 计算已从 separator gap lifecycle 移到
   `detection.candidate.proposal.outer.grid_refine`；separator lifecycle 只消费
   grid detail 并在需要时重新生成 gaps，不拥有 outer 修正规则。
@@ -560,6 +563,9 @@ Verified:
 - Nearby separator candidate and search result handling are now typed internally,
   while report/detail boundaries keep the existing dict fields and runtime
   correction conditions.
+- Nearby separator batch correction now uses `NearbySeparatorCorrectionResult`;
+  `apply_nearby_separator_corrections` no longer returns gaps/detail through a
+  raw tuple, while report/detail fields remain unchanged.
 - Grid-derived outer refine orchestration now lives in `build_detection_for_outer`:
   `separator_gaps.py` provides primary gap build and late separator refinements
   only, while candidate build decides whether to rebuild gaps with a refined

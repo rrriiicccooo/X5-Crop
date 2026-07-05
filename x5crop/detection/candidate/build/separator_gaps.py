@@ -411,7 +411,7 @@ def apply_nearby_separator_refinement(
     if strip_mode != "full" or not policy.separator.nearby_correction.enabled:
         return disabled
     pre_nearby_gaps = list(gaps)
-    refined_gaps, detail = apply_nearby_separator_corrections(
+    correction = apply_nearby_separator_corrections(
         profile,
         gaps,
         origin,
@@ -420,6 +420,8 @@ def apply_nearby_separator_refinement(
         strip_mode,
         policy.separator.nearby_correction,
     )
+    refined_gaps = correction.gaps
+    detail = correction.detail
     if int(detail.get("accepted_count", 0) or 0) > 0:
         return _gap_refinement_result(
             "nearby_separator_correction",

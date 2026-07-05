@@ -94,6 +94,12 @@ class NearbySeparatorReplacementAssessment:
         }
 
 
+@dataclass(frozen=True)
+class NearbySeparatorCorrectionResult:
+    gaps: list[Gap]
+    detail: dict[str, Any]
+
+
 class NearbySeparatorSearchConfig(Protocol):
     window_ratio: float
     window_min: int
@@ -401,12 +407,12 @@ def apply_nearby_separator_corrections(
     count: int,
     strip_mode: str,
     correction_config: NearbySeparatorCorrectionParameters | None = None,
-) -> tuple[list[Gap], dict[str, Any]]:
+) -> NearbySeparatorCorrectionResult:
     config = correction_config or NearbySeparatorCorrectionParameters()
     if not config.enabled or strip_mode != "full" or count <= 1 or len(gaps) != count - 1:
-        return gaps, {"used": False, "reason": "not_applicable"}
+        return NearbySeparatorCorrectionResult(gaps, {"used": False, "reason": "not_applicable"})
     if profile.size == 0:
-        return gaps, {"used": False, "reason": "empty_profile"}
+        return NearbySeparatorCorrectionResult(gaps, {"used": False, "reason": "empty_profile"})
     original_cv = gap_width_cv(gaps, origin, pitch, count)
     corrected = list(gaps)
     accepted: list[dict[str, Any]] = []
@@ -462,15 +468,18 @@ def apply_nearby_separator_corrections(
                 after_cv,
             )
         )
-    return corrected, {
-        "used": True,
-        "reason": "ok",
-        "searched": searched[:8],
-        "searched_count": len(searched),
-        "accepted": accepted,
-        "accepted_count": len(accepted),
-        "rejected": rejected[:8],
-        "rejected_count": len(rejected),
-        "original_width_cv": float(original_cv),
-        "final_width_cv": float(gap_width_cv(corrected, origin, pitch, count)),
-    }
+    return NearbySeparatorCorrectionResult(
+        corrected,
+        {
+            "used": True,
+            "reason": "ok",
+            "searched": searched[:8],
+            "searched_count": len(searched),
+            "accepted": accepted,
+            "accepted_count": len(accepted),
+            "rejected": rejected[:8],
+            "rejected_count": len(rejected),
+            "original_width_cv": float(original_cv),
+            "final_width_cv": float(gap_width_cv(corrected, origin, pitch, count)),
+        },
+    )
