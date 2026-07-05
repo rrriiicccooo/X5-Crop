@@ -15,12 +15,12 @@ from ...geometry.gap_trust import (
     hard_gap_pixel_signals,
     hard_gap_width_ratio,
 )
+from ...geometry.nearby_separator import nearby_separator_search_detail
 from ...geometry.separator_cache import cached_separator_profile
-from ...geometry.separator_profile import interval_mean
 from ...policies.registry import get_detection_policy
 from ...policies.runtime.diagnostics import NearbySeparatorDiagnosticsPolicy
 from ...cache import AnalysisCache
-from ...utils import clamp_int, runs_from_mask
+from ...utils import clamp_int
 
 
 def gap_work_outer(detection: Detection, gap: Gap) -> Optional[Box]:
@@ -77,73 +77,24 @@ def nearby_separator_candidate_detail(
     profile = cached_separator_profile(cache, gray_work, work_outer, profile_policy)
     if profile.size == 0:
         return {"searched": False, "reason": "empty_profile"}
-
-    center = int(round(gap.center))
-    current_start = max(0, min(len(profile), int(round(start - work_outer.left))))
-    current_end = max(current_start + 1, min(len(profile), int(round(end - work_outer.left))))
-    window = clamp_int(
-        pitch * nearby_policy.window_ratio,
-        nearby_policy.window_min,
-        nearby_policy.window_max,
+    search_gap = Gap(
+        gap.index,
+        gap.center,
+        gap.score,
+        gap.method,
+        float(start - work_outer.left),
+        float(end - work_outer.left),
+        gap.lane_box,
     )
-    exclude = max(
-        nearby_policy.exclude_min,
-        clamp_int(
-            max(float(current_end - current_start), pitch * nearby_policy.exclude_ratio),
-            nearby_policy.exclude_min,
-            nearby_policy.exclude_max,
-        ),
-    )
-    lo = max(0, center - window)
-    hi = min(len(profile), center + window + 1)
-    current_score = interval_mean(profile, current_start, current_end)
-    threshold = max(0.22, float(np.percentile(profile[lo:hi], 82)) if hi > lo else 0.22)
-    candidates: list[dict[str, Any]] = []
-    for run_start, run_end in runs_from_mask(profile[lo:hi] >= threshold):
-        abs_start = lo + run_start
-        abs_end = lo + run_end
-        if abs_end <= abs_start:
-            continue
-        if abs_start < current_end + exclude and abs_end > current_start - exclude:
-            continue
-        width = abs_end - abs_start
-        if width > clamp_int(
-            pitch * nearby_policy.max_width_ratio,
-            nearby_policy.max_width_min,
-            nearby_policy.max_width_max,
-        ):
-            continue
-        score = interval_mean(profile, abs_start, abs_end)
-        candidate_center = (abs_start + abs_end - 1) / 2.0
-        candidates.append(
-            {
-                "center": float(candidate_center),
-                "absolute_center": float(work_outer.left + candidate_center),
-                "start": int(abs_start),
-                "end": int(abs_end),
-                "width_px": int(width),
-                "score": float(score),
-                "distance_px": float(candidate_center - gap.center),
-            }
-        )
-    candidates.sort(key=lambda item: (float(item["score"]), -abs(float(item["distance_px"]))), reverse=True)
-    best = candidates[0] if candidates else None
-    stronger = bool(
-        best
-        and float(best["score"])
-        >= max(
-            current_score + nearby_policy.detail_score_add,
-            current_score * nearby_policy.detail_score_multiplier,
-        )
-    )
-    detail = {
-        "searched": True,
-        "window_px": int(window),
-        "current_profile_score": float(current_score),
-        "candidate_count": len(candidates),
-        "stronger_found": stronger,
-        "best": best,
-    }
+    detail = nearby_separator_search_detail(
+        profile,
+        search_gap,
+        pitch,
+        nearby_policy,
+        score_add=nearby_policy.detail_score_add,
+        score_multiplier=nearby_policy.detail_score_multiplier,
+        absolute_center_offset=float(work_outer.left),
+    ) or {"searched": False, "reason": "empty_search_window"}
     if cache_key is not None and cache is not None:
         cache.nearby_separator_details[cache_key] = copy.deepcopy(detail)
     return detail

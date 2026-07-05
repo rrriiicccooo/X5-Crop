@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, Protocol
 
 import numpy as np
 
@@ -25,11 +25,23 @@ class NearbySeparatorSearchContext:
     threshold: float
 
 
+class NearbySeparatorSearchConfig(Protocol):
+    window_ratio: float
+    window_min: int
+    window_max: int
+    exclude_ratio: float
+    exclude_min: int
+    exclude_max: int
+    max_width_ratio: float
+    max_width_min: int
+    max_width_max: int
+
+
 def nearby_separator_search_context(
     profile: np.ndarray,
     gap: Gap,
     pitch: float,
-    config: NearbySeparatorCorrectionParameters,
+    config: NearbySeparatorSearchConfig,
 ) -> NearbySeparatorSearchContext | None:
     center = int(round(gap.center))
     current_start = max(0, min(len(profile), int(round(min(gap.start, gap.end)))))
@@ -63,7 +75,7 @@ def nearby_separator_candidates(
     profile: np.ndarray,
     gap: Gap,
     pitch: float,
-    config: NearbySeparatorCorrectionParameters,
+    config: NearbySeparatorSearchConfig,
     context: NearbySeparatorSearchContext,
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
@@ -80,12 +92,14 @@ def nearby_separator_candidates(
         score = interval_mean(profile, abs_start, abs_end)
         candidate_center = (abs_start + abs_end - 1) / 2.0
         distance = candidate_center - gap.center
-        if abs(distance) > clamp_float(
-            pitch * config.distance_ratio,
-            float(config.window_min),
-            float(config.window_max),
-        ):
-            continue
+        distance_ratio = getattr(config, "distance_ratio", None)
+        if distance_ratio is not None:
+            if abs(distance) > clamp_float(
+                pitch * float(distance_ratio),
+                float(config.window_min),
+                float(config.window_max),
+            ):
+                continue
         candidates.append(
             {
                 "center": float(candidate_center),
@@ -107,15 +121,50 @@ def nearby_separator_best_candidate(candidates: list[dict[str, Any]]) -> dict[st
 def nearby_separator_candidate_is_stronger(
     candidate: dict[str, Any] | None,
     current_score: float,
-    config: NearbySeparatorCorrectionParameters,
+    score_add: float,
+    score_multiplier: float,
 ) -> bool:
     return bool(
         candidate
         and float(candidate["score"]) >= max(
-            current_score + config.score_add,
-            current_score * config.score_multiplier,
+            current_score + score_add,
+            current_score * score_multiplier,
         )
     )
+
+
+def nearby_separator_search_detail(
+    profile: np.ndarray,
+    gap: Gap,
+    pitch: float,
+    config: NearbySeparatorSearchConfig,
+    *,
+    score_add: float,
+    score_multiplier: float,
+    absolute_center_offset: float | None = None,
+) -> dict[str, Any] | None:
+    context = nearby_separator_search_context(profile, gap, pitch, config)
+    if context is None:
+        return None
+    candidates = nearby_separator_candidates(profile, gap, pitch, config, context)
+    best = nearby_separator_best_candidate(candidates)
+    if best is not None and absolute_center_offset is not None:
+        best = dict(best)
+        best["absolute_center"] = float(absolute_center_offset + float(best["center"]))
+    stronger = nearby_separator_candidate_is_stronger(
+        best,
+        context.current_score,
+        score_add,
+        score_multiplier,
+    )
+    return {
+        "searched": True,
+        "window_px": int(context.window),
+        "current_profile_score": float(context.current_score),
+        "candidate_count": len(candidates),
+        "stronger_found": bool(stronger),
+        "best": best,
+    }
 
 
 def nearby_separator_replacement(
@@ -127,23 +176,19 @@ def nearby_separator_replacement(
     if not is_hard_gap_method(gap.method) or pitch <= 0 or gap.start is None or gap.end is None:
         return None
     config = correction_config or NearbySeparatorCorrectionParameters()
-    context = nearby_separator_search_context(profile, gap, pitch, config)
-    if context is None:
+    detail = nearby_separator_search_detail(
+        profile,
+        gap,
+        pitch,
+        config,
+        score_add=config.score_add,
+        score_multiplier=config.score_multiplier,
+    )
+    if detail is None or not detail.get("stronger_found"):
         return None
-    candidates = nearby_separator_candidates(profile, gap, pitch, config, context)
-    best = nearby_separator_best_candidate(candidates)
-    if not nearby_separator_candidate_is_stronger(best, context.current_score, config):
+    if detail.get("best") is None:
         return None
-    if best is None:
-        return None
-    return {
-        "searched": True,
-        "window_px": int(context.window),
-        "current_profile_score": float(context.current_score),
-        "candidate_count": len(candidates),
-        "stronger_found": True,
-        "best": best,
-    }
+    return detail
 
 
 def nearby_separator_gap_from_candidate(gap: Gap, candidate: dict[str, Any]) -> Gap:

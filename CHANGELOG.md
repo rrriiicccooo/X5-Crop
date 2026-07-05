@@ -120,6 +120,10 @@ Current stable release: v4.2.8
 - 未使用的 `CandidateGateOutcome` gate 占位类型已删除，减少无调用方接口。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
+- nearby separator search 已进一步集中到 `geometry/nearby_separator.py`：
+  runtime correction 和 read-only diagnostics 共用 search context、candidate
+  ranking、stronger-test detail；diagnostics 只保留缓存、profile 读取和展示字段，
+  不再重复实现 nearby candidate 搜索。
 - grid-derived outer box 计算已从 separator gap lifecycle 移到
   `detection.candidate.proposal.outer.grid_refine`；separator lifecycle 只消费
   grid detail 并在需要时重新生成 gaps，不拥有 outer 修正规则。
@@ -516,7 +520,10 @@ Verified:
   `geometry/enhanced_separator.py` separates detected gap validation, enhanced
   promotion, and merge detail; `geometry/nearby_separator.py` separates search
   context, candidate ranking, stronger test, and geometry acceptance so separator
-  refinement thresholds can be reviewed directly.
+  refinement thresholds can be reviewed directly. Runtime correction and
+  read-only diagnostics now share nearby search context, candidate ranking, and
+  stronger-test detail; diagnostics keep only caching, profile retrieval, and
+  display fields instead of duplicating nearby candidate search.
 - The separator refinement policy surface now exposes `enhanced.min_score` and
   `nearby_correction.width_cv_slack` from `FormatParameters` through runtime
   `SeparatorPolicy` and policy/report detail; defaults preserve existing behavior.
