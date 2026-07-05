@@ -53,6 +53,12 @@ class DetectedGapBandEvidence:
 
 
 @dataclass(frozen=True)
+class DetectedGapAcceptance:
+    accepted: bool
+    reason: str
+
+
+@dataclass(frozen=True)
 class GapSearchResult:
     detected_gap: Optional[Gap]
     fallback_score: float
@@ -195,6 +201,31 @@ def gap_band_has_width_profile_support(
     )
 
 
+def detected_gap_acceptance(
+    evidence: DetectedGapBandEvidence,
+    context: GapSearchContext,
+) -> DetectedGapAcceptance:
+    if not gap_band_has_prominence(evidence, context.config):
+        return DetectedGapAcceptance(False, "weak_prominence")
+    if not gap_band_has_width_profile_support(
+        evidence,
+        context.limits,
+        context.max_width_ratio_override,
+        context.config,
+    ):
+        return DetectedGapAcceptance(False, "width_profile_unsupported")
+    return DetectedGapAcceptance(True, "accepted")
+
+
+def detected_gap_candidate_from_evidence(
+    evidence: DetectedGapBandEvidence,
+    context: GapSearchContext,
+) -> DetectedGapCandidate:
+    distance = abs(evidence.center - context.expected) / max(1.0, context.pitch)
+    quality = evidence.mean_score + context.config.quality_prominence_weight * evidence.prominence
+    return DetectedGapCandidate(distance, quality, evidence.mean_score, evidence.center, evidence.start, evidence.end)
+
+
 def detected_gap_candidate(
     run_start: int,
     run_end: int,
@@ -216,19 +247,10 @@ def detected_gap_candidate(
     )
     if evidence is None:
         return None
-    if not gap_band_has_prominence(evidence, context.config):
+    acceptance = detected_gap_acceptance(evidence, context)
+    if not acceptance.accepted:
         return None
-    if not gap_band_has_width_profile_support(
-        evidence,
-        context.limits,
-        context.max_width_ratio_override,
-        context.config,
-    ):
-        return None
-
-    distance = abs(evidence.center - context.expected) / max(1.0, context.pitch)
-    quality = evidence.mean_score + context.config.quality_prominence_weight * evidence.prominence
-    return DetectedGapCandidate(distance, quality, evidence.mean_score, evidence.center, evidence.start, evidence.end)
+    return detected_gap_candidate_from_evidence(evidence, context)
 
 
 def detected_gap_candidates(
@@ -295,14 +317,17 @@ def find_detected_gap(
 
 
 __all__ = [
+    "DetectedGapAcceptance",
     "DetectedGapCandidate",
     "DetectedGapBandEvidence",
     "GapSearchContext",
     "GapSearchResult",
     "GapWidthLimits",
     "best_detected_gap_candidate",
+    "detected_gap_acceptance",
     "detected_gap_band_evidence",
     "detected_gap_candidate",
+    "detected_gap_candidate_from_evidence",
     "detected_gap_candidates",
     "detected_gap_from_candidate",
     "expanded_gap_band",

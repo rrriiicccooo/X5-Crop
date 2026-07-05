@@ -62,6 +62,10 @@ Current stable release: v4.2.8
   threshold、width limits 和 ranking context；band evidence measurement、
   prominence support 与 width-profile support 也已拆成可审核 helper，方便审核
   hard separator 与 model gap 的边界。
+- standard detected gap search 已进一步拆开 acceptance 与 ranking：band evidence
+  先由 `DetectedGapAcceptance` 判定 prominence / width-profile support 是否足够，
+  再由 `DetectedGapCandidate` 负责 distance / quality / score 排序；行为阈值不变，
+  但人工审核时可以分别看“能不能成为 hard gap”和“多个 hard gap 候选谁更好”。
 - equal / grid / content model-gap proposal 已集中到 `geometry.model_gaps`，
   profile 等分模型归 `detection.candidate.proposal.separator.model`；
   build / safety / refinement / content candidate 路径不再手写 `"equal"` /
