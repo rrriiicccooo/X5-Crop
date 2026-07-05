@@ -64,6 +64,24 @@ class SeparatorWidthGapRunAssessment:
 
 
 @dataclass(frozen=True)
+class SeparatorWidthGapCandidateAssessmentResult:
+    candidate: Optional[SeparatorWidthGapCandidate]
+    assessment: SeparatorWidthGapRunAssessment
+
+
+@dataclass(frozen=True)
+class SeparatorWidthGapCandidateSearchResult:
+    candidates: list[SeparatorWidthGapCandidate]
+    evaluations: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class SeparatorWidthGapBestCandidateResult:
+    candidate: Optional[SeparatorWidthGapCandidate]
+    evaluations: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
 class SeparatorWidthGapSearchResult:
     gap: Optional[Gap]
     reason: str
@@ -204,27 +222,33 @@ def separator_width_gap_candidate_assessment(
     min_width: int,
     max_width: int,
     params: SeparatorWidthProfileSearchParameters,
-) -> tuple[Optional[SeparatorWidthGapCandidate], SeparatorWidthGapRunAssessment]:
+) -> SeparatorWidthGapCandidateAssessmentResult:
     run = separator_width_gap_run(start, end)
     acceptance = separator_width_gap_run_acceptance(run, min_width, max_width)
     mean_score = float(profile[run.start:run.end].mean()) if run.end > run.start else 0.0
     distance_penalty = abs(run.center - expected) / max(1.0, pitch)
     if not acceptance.accepted:
-        return None, SeparatorWidthGapRunAssessment(
-            accepted=False,
+        return SeparatorWidthGapCandidateAssessmentResult(
+            candidate=None,
+            assessment=SeparatorWidthGapRunAssessment(
+                accepted=False,
+                reason=acceptance.reason,
+                run=run,
+                mean_score=mean_score,
+                distance_penalty=distance_penalty,
+            ),
+        )
+    candidate = separator_width_gap_candidate_from_accepted_run(profile, run, expected, pitch, params)
+    return SeparatorWidthGapCandidateAssessmentResult(
+        candidate=candidate,
+        assessment=SeparatorWidthGapRunAssessment(
+            accepted=True,
             reason=acceptance.reason,
             run=run,
             mean_score=mean_score,
             distance_penalty=distance_penalty,
-        )
-    candidate = separator_width_gap_candidate_from_accepted_run(profile, run, expected, pitch, params)
-    return candidate, SeparatorWidthGapRunAssessment(
-        accepted=True,
-        reason=acceptance.reason,
-        run=run,
-        mean_score=mean_score,
-        distance_penalty=distance_penalty,
-        candidate_score=float(candidate.score),
+            candidate_score=float(candidate.score),
+        ),
     )
 
 
@@ -237,11 +261,11 @@ def separator_width_gap_candidates_with_detail(
     min_width: int,
     max_width: int,
     params: SeparatorWidthProfileSearchParameters,
-) -> tuple[list[SeparatorWidthGapCandidate], list[dict[str, Any]]]:
+) -> SeparatorWidthGapCandidateSearchResult:
     candidates: list[SeparatorWidthGapCandidate] = []
     evaluations: list[dict[str, Any]] = []
     for run_start, run_end in runs_from_mask(profile[lo:hi] >= params.threshold_ratio):
-        candidate, assessment = separator_width_gap_candidate_assessment(
+        assessment_result = separator_width_gap_candidate_assessment(
             profile,
             lo + int(run_start),
             lo + int(run_end),
@@ -251,10 +275,10 @@ def separator_width_gap_candidates_with_detail(
             max_width,
             params,
         )
-        evaluations.append(assessment.detail())
-        if candidate is not None:
-            candidates.append(candidate)
-    return candidates, evaluations
+        evaluations.append(assessment_result.assessment.detail())
+        if assessment_result.candidate is not None:
+            candidates.append(assessment_result.candidate)
+    return SeparatorWidthGapCandidateSearchResult(candidates, evaluations)
 
 
 def best_separator_width_gap_candidate_with_detail(
@@ -266,8 +290,8 @@ def best_separator_width_gap_candidate_with_detail(
     min_width: int,
     max_width: int,
     params: SeparatorWidthProfileSearchParameters,
-) -> tuple[Optional[SeparatorWidthGapCandidate], list[dict[str, Any]]]:
-    candidates, evaluations = separator_width_gap_candidates_with_detail(
+) -> SeparatorWidthGapBestCandidateResult:
+    search = separator_width_gap_candidates_with_detail(
         profile,
         lo,
         hi,
@@ -278,10 +302,10 @@ def best_separator_width_gap_candidate_with_detail(
         params,
     )
     best: Optional[SeparatorWidthGapCandidate] = None
-    for candidate in candidates:
+    for candidate in search.candidates:
         if best is None or candidate.rank_key() > best.rank_key():
             best = candidate
-    return best, evaluations
+    return SeparatorWidthGapBestCandidateResult(best, search.evaluations)
 
 
 def separator_width_gap_from_candidate(
@@ -364,7 +388,7 @@ def separator_width_gap_at_with_detail(
         return SeparatorWidthGapSearchResult(None, "empty_profile_or_pitch", detail)
     min_width, max_width, max_core_width = separator_width_bounds(short_axis, params)
     lo, hi = separator_width_gap_window(len(profile), expected, pitch, params)
-    candidate, evaluations = best_separator_width_gap_candidate_with_detail(
+    selection = best_separator_width_gap_candidate_with_detail(
         profile,
         lo,
         hi,
@@ -385,13 +409,13 @@ def separator_width_gap_at_with_detail(
         max_core_width,
         lo,
         hi,
-        evaluations,
-        candidate,
+        selection.evaluations,
+        selection.candidate,
     )
-    if candidate is None:
+    if selection.candidate is None:
         return SeparatorWidthGapSearchResult(None, "no_width_profile_candidate", detail)
     return SeparatorWidthGapSearchResult(
-        separator_width_gap_from_candidate(index, candidate, len(profile), max_core_width, params),
+        separator_width_gap_from_candidate(index, selection.candidate, len(profile), max_core_width, params),
         "detected",
         detail,
     )
@@ -399,7 +423,10 @@ def separator_width_gap_at_with_detail(
 
 __all__ = [
     "SeparatorWidthGapAcceptance",
+    "SeparatorWidthGapBestCandidateResult",
     "SeparatorWidthGapCandidate",
+    "SeparatorWidthGapCandidateAssessmentResult",
+    "SeparatorWidthGapCandidateSearchResult",
     "SeparatorWidthGapRun",
     "SeparatorWidthGapRunAssessment",
     "SeparatorWidthGapSearchResult",

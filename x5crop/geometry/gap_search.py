@@ -112,6 +112,12 @@ class DetectedGapRunAssessment:
 
 
 @dataclass(frozen=True)
+class DetectedGapCandidateSearchResult:
+    candidates: list[DetectedGapCandidate]
+    evaluations: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
 class GapSearchResult:
     detected_gap: Optional[Gap]
     fallback_score: float
@@ -337,7 +343,7 @@ def detected_gap_run_assessment(
 
 def detected_gap_candidates_with_detail(
     context: GapSearchContext,
-) -> tuple[list[DetectedGapCandidate], list[dict[str, Any]]]:
+) -> DetectedGapCandidateSearchResult:
     candidates: list[DetectedGapCandidate] = []
     evaluations: list[dict[str, Any]] = []
     for run_start, run_end in runs_from_mask(context.local >= context.thresholds.peak):
@@ -345,7 +351,7 @@ def detected_gap_candidates_with_detail(
         evaluations.append(assessment.detail)
         if assessment.candidate is not None:
             candidates.append(assessment.candidate)
-    return candidates, evaluations
+    return DetectedGapCandidateSearchResult(candidates, evaluations)
 
 
 def best_detected_gap_candidate(candidates: list[DetectedGapCandidate]) -> Optional[DetectedGapCandidate]:
@@ -428,21 +434,31 @@ def find_detected_gap(
         max_width_ratio_override,
         config,
     )
-    candidates, evaluations = detected_gap_candidates_with_detail(context)
-    candidate = best_detected_gap_candidate(candidates)
+    candidate_search = detected_gap_candidates_with_detail(context)
+    candidate = best_detected_gap_candidate(candidate_search.candidates)
     if candidate is not None:
         return GapSearchResult(
             detected_gap_from_candidate(index, candidate),
             local_max,
             "detected",
-            gap_search_detail(index, expected, pitch, lo, hi, local_max, context, evaluations, candidate),
+            gap_search_detail(
+                index,
+                expected,
+                pitch,
+                lo,
+                hi,
+                local_max,
+                context,
+                candidate_search.evaluations,
+                candidate,
+            ),
         )
 
     return GapSearchResult(
         None,
         local_max,
         "no_detected_candidate",
-        gap_search_detail(index, expected, pitch, lo, hi, local_max, context, evaluations),
+        gap_search_detail(index, expected, pitch, lo, hi, local_max, context, candidate_search.evaluations),
     )
 
 
@@ -450,6 +466,7 @@ __all__ = [
     "DetectedGapAcceptance",
     "DetectedGapBandAssessment",
     "DetectedGapCandidate",
+    "DetectedGapCandidateSearchResult",
     "DetectedGapBandEvidence",
     "DetectedGapRunAssessment",
     "GapAcceptanceLimits",

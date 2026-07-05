@@ -83,6 +83,9 @@ Current stable release: v4.2.8
 - standard detected gap search 的单个 run 已改为 `DetectedGapRunAssessment`；
   不再保留未使用的 no-detail wrapper 或裸 tuple 返回，accepted / rejected run
   detail 仍保持原字段。
+- standard detected gap search 的 batch candidate search 已改为
+  `DetectedGapCandidateSearchResult`；candidates 与 evaluations 不再通过裸 tuple
+  返回，report/detail 字段保持不变。
 - `GapSearchContext` 已把 flat `GapSearchParameters` 解释成 threshold、
   acceptance 和 ranking 运行时切片；底层 run assessment 不再直接读取完整
   config，report detail 字段保持不变。
@@ -105,6 +108,12 @@ Current stable release: v4.2.8
   width acceptance、candidate scoring / ranking、best candidate selection 和
   core-width clipped detected-gap output；输出仍是普通 `detected` hard gap，
   不引入独立 gap method。
+- broad-width detected gap search 的单 run assessment、batch candidate search 和
+  best-candidate selection 已改为
+  `SeparatorWidthGapCandidateAssessmentResult` /
+  `SeparatorWidthGapCandidateSearchResult` /
+  `SeparatorWidthGapBestCandidateResult`；candidate / evaluations 不再通过裸
+  tuple 传递，report/detail 字段保持不变。
 - width-profile 搜索参数与候选策略已拆开：geometry 只消费
   `SeparatorWidthProfileSearchParameters`，`SeparatorWidthProfilePolicy` 只保留
   mode / required count / candidate budget / full-selection 语义，report 同时输出
@@ -539,6 +548,9 @@ Verified:
 - Standard detected-gap run evaluation now uses `DetectedGapRunAssessment`
   instead of unused no-detail wrappers or raw tuple returns; accepted / rejected
   run detail fields are unchanged.
+- Standard detected-gap batch candidate search now uses
+  `DetectedGapCandidateSearchResult`; candidates and evaluations no longer
+  return through a raw tuple, while report/detail fields remain unchanged.
 - `GapSearchContext` now interprets flat `GapSearchParameters` into threshold,
   acceptance, and ranking runtime slices; low-level run assessment no longer
   reads the full config directly, and report detail fields are unchanged.
@@ -660,6 +672,13 @@ Verified:
   gap proposals now return `SeparatorGapProfileProposal`, and candidate build
   consumes them through a profile dispatch entry while preserving the underlying
   search algorithms.
+- Broad-width detected-gap search now uses
+  `SeparatorWidthGapCandidateAssessmentResult` /
+  `SeparatorWidthGapCandidateSearchResult` /
+  `SeparatorWidthGapBestCandidateResult` for single-run assessment, batch
+  candidate search, and best-candidate selection; candidate / evaluation detail
+  no longer travels through raw tuples, while report/detail fields remain
+  unchanged.
 - The unused `CandidateGateOutcome` gate placeholder type has been removed.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the
