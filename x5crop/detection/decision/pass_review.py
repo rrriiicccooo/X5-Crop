@@ -68,7 +68,7 @@ def normalized_review_reasons(reasons: list[str]) -> list[str]:
 
 
 def _separator_summary(detection: Detection) -> dict[str, Any]:
-    return separator_summary_from_detection(detection).decision_summary()
+    return separator_summary_from_detection(detection).evidence_detail()
 
 
 def evidence_summary_for(

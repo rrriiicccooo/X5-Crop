@@ -69,7 +69,7 @@ class SeparatorGateDetailSummary:
     def model_gap_share(self) -> float:
         return self.model_gaps / float(max(1, self.expected_gaps))
 
-    def decision_summary(self) -> dict[str, Any]:
+    def evidence_detail(self) -> dict[str, Any]:
         return {
             "expected_gaps": self.expected_gaps,
             "hard_gaps": self.hard_separator_gaps,

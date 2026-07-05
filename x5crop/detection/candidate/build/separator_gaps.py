@@ -168,6 +168,7 @@ def standard_separator_gap_result(
         policy.separator.width_profile_search,
     )
     standard_gap_search_detail = dict(standard_gap_proposal.detail)
+    standard_gap_search_detail["selected_gap_source"] = STANDARD_GAP_PROFILE
     if forced:
         standard_gap_search_detail["forced"] = True
     return InitialSeparatorGapResult(
@@ -181,7 +182,7 @@ def separator_width_profile_gap_requested(candidate_strategy: str, gap_search_pr
     return candidate_strategy == "separator_outer" and gap_search_profile == BROAD_WIDTH_GAP_PROFILE
 
 
-def apply_separator_width_profile_gap_override(
+def select_separator_width_profile_gaps(
     result: InitialSeparatorGapResult,
     gray_work: np.ndarray,
     outer: Box,
@@ -210,7 +211,7 @@ def apply_separator_width_profile_gap_override(
     separator_width_profile_gaps = separator_width_profile_proposal.gaps
     if len(separator_width_profile_gaps) >= max(1, count - 1):
         gaps = separator_width_profile_gaps
-        standard_gap_search_detail["overridden_by"] = "separator_width_profile"
+        standard_gap_search_detail["selected_gap_source"] = BROAD_WIDTH_GAP_PROFILE
     return InitialSeparatorGapResult(
         gaps=gaps,
         standard_gap_search_detail=standard_gap_search_detail,
@@ -218,7 +219,7 @@ def apply_separator_width_profile_gap_override(
     )
 
 
-def apply_detected_geometry_equal_model_override(
+def select_detected_geometry_equal_model_gaps(
     result: InitialSeparatorGapResult,
     profile: np.ndarray,
     fmt: FormatSpec,
@@ -238,7 +239,7 @@ def apply_detected_geometry_equal_model_override(
     ):
         return result
     standard_gap_search_detail = dict(result.standard_gap_search_detail)
-    standard_gap_search_detail["overridden_by"] = "detected_geometry_equal_model"
+    standard_gap_search_detail["selected_gap_source"] = "detected_geometry_equal_model"
     standard_gap_search_detail["model_gap_proposal"] = {
         "family": "detected_geometry_equal_model",
         "policy_enabled": True,
@@ -275,7 +276,7 @@ def initial_separator_gaps(
         policy,
     )
     if separator_width_profile_gap_requested(candidate_strategy, gap_search_profile):
-        result = apply_separator_width_profile_gap_override(
+        result = select_separator_width_profile_gaps(
             result,
             gray_work,
             outer,
@@ -286,7 +287,7 @@ def initial_separator_gaps(
             gap_max_width_ratio_override,
             policy,
         )
-    return apply_detected_geometry_equal_model_override(
+    return select_detected_geometry_equal_model_gaps(
         result,
         profile,
         fmt,
