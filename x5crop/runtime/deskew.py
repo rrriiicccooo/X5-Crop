@@ -7,7 +7,7 @@ from ..domain import ImageProfile
 from ..formats import FormatSpec
 from ..geometry.layout import work_gray
 from ..image.deskew import choose_deskew_angle
-from ..image.evidence import make_gray_u8
+from ..image.gray import make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..policies.parameters.registry import format_parameters
 from ..utils import clamp_float
@@ -43,7 +43,7 @@ def apply_deskew(
         deskew_detail["skipped"] = "span_below_threshold"
     elif config.deskew_min_angle <= abs(angle) <= config.deskew_max_angle:
         arr = rotate_array_expand(arr, -angle, profile.axes)
-        gray = make_gray_u8(arr, profile.axes, profile.photometric)
+        gray = make_base_gray_u8(arr, profile.axes, profile.photometric)
         deskew_detail["applied"] = True
         warnings.append(f"deskew applied: {-angle:.4f} degrees")
     else:

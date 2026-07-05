@@ -14,7 +14,7 @@ from ..geometry.output_bleed import (
     output_bleed_parameters_for_detection,
     reapply_cached_output_bleed,
 )
-from ..image.evidence import make_gray_u8
+from ..image.gray import make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..io.tiff import read_tiff
 from ..policies.registry import get_detection_policy
@@ -171,7 +171,7 @@ def apply_cached_deskew(
         return arr, gray, False
     angle = float(deskew_detail.get("angle", 0.0))
     arr = rotate_array_expand(arr, -angle, axes)
-    gray = make_gray_u8(arr, axes, photometric)
+    gray = make_base_gray_u8(arr, axes, photometric)
     warnings.append(f"reused deskew: {-angle:.4f} degrees")
     return arr, gray, True
 

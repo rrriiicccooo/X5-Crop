@@ -33,6 +33,10 @@ Current stable release: v4.2.8
 - source package layout 已对齐到显式边界：`entry`、`runtime`、`cache`、
   `report`、`formats`、`detection.candidate.{plan,proposal,build,assessment,selection,extension}`
   和 `policies.{formats,parameters,runtime,decision,assembly,reporting}`。
+- 基础灰度入口已与证据灰度拆开：`image.gray.make_base_gray_u8` 只负责
+  TIFF / deskew 后的 base gray；`image.evidence` 只负责现有 content /
+  separator / deskew analysis evidence。当前不保留 color contrast 或 heavy
+  texture evidence 接口，未来如引入 OpenCV 等大依赖再重新评估。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 

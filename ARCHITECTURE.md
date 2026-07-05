@@ -121,7 +121,7 @@ finalization
 
 | 视角/族群 | 我们问的问题 | 已做工作 | 成果 | 当前状态 | 下一步接点 |
 |---|---|---|---|---|---|
-| Pre-detection | layout、deskew、evidence gray 是否只提供输入证据？ | 完成 layout/坐标映射、deskew angle selection、evidence gray、analysis cache / reuse 深审。 | 只生成 work-space 输入、deskew detail 和 evidence/cache；不生成候选、不评分、不 PASS / REVIEW。 | 完成 | 进入 Gap / Separator；separator cache 作为 gap evidence cache 继续审。 |
+| Pre-detection | layout、deskew、base gray、evidence gray 是否只提供输入证据？ | 完成 layout/坐标映射、deskew angle selection、base gray、evidence gray、analysis cache / reuse 深审。 | `base_gray`、work-space 输入、deskew detail 和 evidence/cache 分离；不生成候选、不评分、不 PASS / REVIEW。 | 完成 | 进入 Gap / Separator；separator cache 作为 gap evidence cache 继续审。 |
 | Policy activation | format/mode 是否只通过 policy 打开行为？ | 完成 format facts、runtime policy、decision contract 分层。 | format/mode isolation 基本稳定。 | 完成 | 新增格式或 mode 时复核。 |
 | Mode detector | standard、dual-lane、review-only 是否隔离？ | 审核 dual-lane 和 review-only 边界。 | review-only 成为通用保守模式。 | 完成 | 新 mode 必须声明 detector kind。 |
 | Outer proposal / correction | outer 是否只提出候选或修正候选？ | 完成 proposal/correction 拆分和 corrected candidate reassessment。 | outer 不再拥有 PASS / REVIEW 权限。 | 完成 | 后续只做新增逻辑复核。 |
@@ -199,7 +199,8 @@ REVIEW contract。
 |---|---|---|---|
 | Pre-detection | layout / coordinate mapping | `geometry/layout.py`, `geometry/boxes.py` | 已审：horizontal / vertical work-space 与 original-space 映射对称；坐标转换只改变视角，不改变裁切语义。 |
 | Pre-detection | deskew angle selection | `image/deskew.py`, `image/deskew_parameters.py`, `runtime/deskew.py` | 已审：deskew 只估角、旋转输入和写入质量 detail；deskew uncertainty 只能作为最终 REVIEW reason 的风险输入，不能直接 PASS。 |
-| Pre-detection | analysis / evidence gray | `image/evidence.py`, `cache/analysis.py` | 已审：content/separator evidence gray 和 analysis cache 只提供可复用证据输入；不隐藏原始 gray，不选择候选，不决定 PASS / REVIEW。 |
+| Pre-detection | base gray | `image/gray.py`, `io/tiff.py`, `runtime/deskew.py`, `runtime/analysis_reuse.py` | 已审：`make_base_gray_u8` 是唯一基础灰度入口，用于 TIFF 读取和 deskew 后重建灰度；不承担 content / separator 语义。 |
+| Pre-detection | analysis / evidence gray | `image/evidence.py`, `cache/analysis.py` | 已审：content/separator evidence gray 和 analysis cache 只提供可复用证据输入；不隐藏原始 gray，不选择候选，不决定 PASS / REVIEW；不保留 color contrast 或 heavy texture 预留接口。 |
 | Policy activation | format physical facts | `formats/` | count、aspect、family、physical risk 是否是事实层，不含 gate threshold。 |
 | Policy activation | format / mode policy presets | `policies/formats/format_*.py` | format/mode 是否只声明物理参数、gate profile 和 detector 差异；通用 detector capability 不应变成 format 专属算法开关。 |
 | Policy activation | runtime policy assembly | `policies/assembly/*`, `policies/runtime/*`, `policies/parameters/*` | preset、parameters、runtime policy 是否一一映射；默认字段不得让报告误以为逻辑已 active。 |
@@ -430,7 +431,7 @@ and decision detail, and cannot bypass the final PASS / REVIEW contract.
 | Logic family | Sub-logic | Main location | Review focus |
 |---|---|---|---|
 | Pre-detection | layout / coordinate mapping | `geometry/layout.py`, `geometry/boxes.py` | Reviewed: horizontal / vertical work-space mapping is symmetric and must not change crop semantics. |
-| Pre-detection | deskew and evidence gray | `image/deskew.py`, `image/evidence.py`, `cache/analysis.py` | Reviewed: preprocessing may shape input posture, evidence gray, and reusable cache detail, but must not choose candidates or decide PASS / REVIEW. |
+| Pre-detection | base gray, deskew, and evidence gray | `image/gray.py`, `image/deskew.py`, `image/evidence.py`, `cache/analysis.py` | Reviewed: preprocessing may shape base gray, input posture, evidence gray, and reusable cache detail, but must not choose candidates or decide PASS / REVIEW. No color-contrast or heavy-texture evidence interfaces are reserved. |
 | Policy activation | format facts and policy presets | `formats/`, `policies/formats/format_*.py` | Physical facts, thresholds, and detector differences must stay separate from universal capability activation. |
 | Policy activation | runtime and decision contracts | `policies/runtime/*`, `policies/decision/contract.py` | `DetectionPolicy` and `DetectionDecisionContract` must not drift semantically. |
 | Mode-specific detector | dual-lane and review-only paths | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_*.py`, `detection/modes/review_only.py`, `detection/candidate/proposal/safety.py` | Dedicated detectors and review-only paths must stay isolated, context-driven, and conservative. |

@@ -7,7 +7,7 @@ import numpy as np
 import tifffile
 
 from ..domain import ImageProfile
-from ..image.evidence import make_gray_u8
+from ..image.gray import make_base_gray_u8
 from ..utils import (
     enum_name,
     infer_axes,
@@ -84,7 +84,7 @@ def read_tiff(path: Path, page_index: int) -> tuple[np.ndarray, np.ndarray, Imag
         arr = page.asarray()
         axes = infer_axes(arr)
         profile = profile_from_page(page, tuple(int(x) for x in arr.shape), arr.dtype, axes)
-    gray = make_gray_u8(arr, axes, profile.photometric)
+    gray = make_base_gray_u8(arr, axes, profile.photometric)
     return arr, gray, profile, warnings
 
 
