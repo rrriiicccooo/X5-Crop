@@ -334,7 +334,7 @@ def apply_primary_separator_refinements(
         policy,
     )
     gaps = edge_pair_refinement.gaps
-    gaps, grid_detail = apply_robust_grid(
+    grid = apply_robust_grid(
         gaps,
         origin,
         pitch,
@@ -347,9 +347,9 @@ def apply_primary_separator_refinements(
         policy.separator.robust_grid,
     )
     return PrimarySeparatorRefinementResult(
-        gaps=gaps,
+        gaps=grid.gaps,
         edge_pair_correction_detail=edge_pair_refinement.detail,
-        grid_detail=grid_detail,
+        grid_detail=grid.detail,
     )
 
 

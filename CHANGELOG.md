@@ -149,6 +149,9 @@ Current stable release: v4.2.8
   evidence，不获得 hard separator 或 PASS / REVIEW 权限。
 - robust grid selected fit 已收敛为直接消费 `GridFitCandidate`；移除内部
   tuple fit 中转，report detail 字段保持不变。
+- robust grid per-gap adjustment 和 batch refinement 已改为
+  `GridGapAdjustmentResult` / `RobustGridResult`；`grid_adjusted_gap` 与
+  `apply_robust_grid` 不再通过裸 tuple 返回，report/detail 字段保持不变。
 - nearby separator search 已进一步集中到 `geometry/nearby_separator.py`：
   runtime correction 和 read-only diagnostics 共用 search context、candidate
   ranking、stronger-test detail；diagnostics 只保留缓存、profile 读取和展示字段，
@@ -573,6 +576,10 @@ Verified:
   `refine_gaps_with_edge_profiles` / `refine_gaps_by_edge_pairs` no longer
   return gaps/detail through raw tuples, while report/detail fields remain
   unchanged.
+- Robust-grid per-gap adjustment and batch refinement now use
+  `GridGapAdjustmentResult` / `RobustGridResult`; `grid_adjusted_gap` and
+  `apply_robust_grid` no longer return raw tuples, while report/detail fields
+  remain unchanged.
 - Grid-derived outer refine orchestration now lives in `build_detection_for_outer`:
   `separator_gaps.py` provides primary gap build and late separator refinements
   only, while candidate build decides whether to rebuild gaps with a refined
