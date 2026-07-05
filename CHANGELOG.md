@@ -95,6 +95,9 @@ Current stable release: v4.2.8
 - `GapSearchContext` 已把 flat `GapSearchParameters` 解释成 threshold、
   acceptance 和 ranking 运行时切片；底层 run assessment 不再直接读取完整
   config，report detail 字段保持不变。
+- content evidence 的 cached / uncached 路径现在共用
+  `content_evidence_threshold()` 和 `content_frame_support_detail()`；
+  threshold、support、frame_scores 和 successful cache 行为保持不变。
 - equal / grid / content model-gap proposal 已集中到 `geometry.model_gaps`，
   profile 等分模型归 `detection.candidate.proposal.separator.model`；
   build / safety / refinement / content candidate 路径不再手写 `"equal"` /
@@ -803,6 +806,9 @@ Verified:
 - Execution budget detail now records `action`, `reason`, `stage`, and reliability
   summary fields so reports can show primary-only, expanded-after-primary, and
   outer-correction skip decisions directly.
+- Cached and uncached content evidence paths now share
+  `content_evidence_threshold()` and `content_frame_support_detail()`; threshold,
+  support, frame score, and successful cache behavior are unchanged.
 - Corrected outer extension now runs inside the detection pipeline before final
   selection: proposal creates only corrected boxes, candidate code rebuilds and
   reassesses them, and finalization no longer creates candidates.
