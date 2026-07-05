@@ -312,7 +312,7 @@ def separator_gate_assessment(
     )
 
 
-def candidate_has_hard_separator_evidence(
+def assess_separator_gate(
     detection: Detection,
     threshold: float,
     policy: Optional[DetectionPolicy] = None,
@@ -348,5 +348,5 @@ __all__ = [
     "separator_gate_assessment",
     "separator_gate_detail",
     "separator_gate_evidence_from_detection",
-    "candidate_has_hard_separator_evidence",
+    "assess_separator_gate",
 ]

@@ -21,7 +21,7 @@ from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ....utils import HARD_REVIEW_REASONS
 from ...evidence.content_evidence import content_evidence_detail
-from .gates import candidate_has_hard_separator_evidence
+from .gates import assess_separator_gate
 from .partial_holder import partial_extra_holder_frames_gate_detail
 from .scoring import (
     content_support_score,
@@ -47,23 +47,50 @@ def apply_candidate_assessment_policy(
         detail=dict(detection.detail),
     )
     policy = policy or get_detection_policy(fmt.name, candidate.strip_mode)
-    hard_ok, hard_detail = candidate_has_hard_separator_evidence(candidate, config.confidence_threshold, policy)
+    separator_gate_ok, separator_gate_detail = assess_separator_gate(
+        candidate,
+        config.confidence_threshold,
+        policy,
+    )
     content_detail = content_evidence_detail(gray, candidate, cache, policy.content)
     scoring_policy = policy.scoring
-    floor_applies = hard_full_calibration_floor_applies(candidate, hard_detail, fmt, source, policy)
+    floor_applies = hard_full_calibration_floor_applies(
+        candidate,
+        separator_gate_detail,
+        fmt,
+        source,
+        policy,
+    )
     if floor_applies:
         gate_candidate = replace(
             candidate,
-            confidence=max(float(candidate.confidence), scoring_policy.hard_full_confidence_floor),
+            confidence=max(
+                float(candidate.confidence),
+                scoring_policy.hard_full_confidence_floor,
+            ),
         )
-        hard_ok, hard_detail = candidate_has_hard_separator_evidence(gate_candidate, config.confidence_threshold, policy)
-        hard_detail = dict(hard_detail)
-        hard_detail["calibrate_hard_full_confidence_floor_applied"] = True
-        hard_detail["calibrate_hard_full_confidence_floor"] = float(scoring_policy.hard_full_confidence_floor)
+        separator_gate_ok, separator_gate_detail = assess_separator_gate(
+            gate_candidate,
+            config.confidence_threshold,
+            policy,
+        )
+        separator_gate_detail = dict(separator_gate_detail)
+        separator_gate_detail["calibrate_hard_full_confidence_floor_applied"] = True
+        separator_gate_detail["calibrate_hard_full_confidence_floor"] = float(
+            scoring_policy.hard_full_confidence_floor
+        )
     content_score = content_support_score(content_detail, fmt.name, policy.content)
     geometry_score = geometry_support_score(candidate, content_detail, policy)
-    separator_score = separator_support_score(candidate, hard_detail, policy) if source == "separator" else 0.0
-    source_bias = scoring_policy.separator_source_bias if source == "separator" else 0.0
+    separator_score = (
+        separator_support_score(candidate, separator_gate_detail, policy)
+        if source == "separator"
+        else 0.0
+    )
+    source_bias = (
+        scoring_policy.separator_source_bias
+        if source == "separator"
+        else 0.0
+    )
     joint_score = (
         scoring_policy.geometry_weight * geometry_score
         + scoring_policy.content_weight * content_score
@@ -78,11 +105,11 @@ def apply_candidate_assessment_policy(
     detected_geometry_policy = policy.separator.geometry_support.detected_geometry
     stable_grid_policy = policy.separator.geometry_support.stable_grid
     detected_geometry_support = (
-        (not hard_ok)
+        (not separator_gate_ok)
         and detected_geometry_policy.enabled
     ) and separator_geometry_support_applies(
         candidate,
-        hard_detail,
+        separator_gate_detail,
         fmt,
         source,
         support,
@@ -95,7 +122,7 @@ def apply_candidate_assessment_policy(
         or not stable_grid_policy.enabled
         else separator_geometry_support_applies(
             candidate,
-            hard_detail,
+            separator_gate_detail,
             fmt,
             source,
             support,
@@ -104,29 +131,29 @@ def apply_candidate_assessment_policy(
         )
     )
     if detected_geometry_support or stable_grid_support:
-        hard_ok = True
-        hard_detail = dict(hard_detail)
-        hard_detail["ok"] = True
+        separator_gate_ok = True
+        separator_gate_detail = dict(separator_gate_detail)
+        separator_gate_detail["ok"] = True
         if detected_geometry_support:
-            hard_detail["reason"] = "separator_detected_geometry_support"
-            hard_detail["separator_geometry_support_mode"] = "detected_geometry"
+            separator_gate_detail["reason"] = "separator_detected_geometry_support"
+            separator_gate_detail["separator_geometry_support_mode"] = "detected_geometry"
         else:
-            hard_detail["reason"] = "separator_stable_grid_support"
-            hard_detail["separator_geometry_support_mode"] = "stable_grid"
+            separator_gate_detail["reason"] = "separator_stable_grid_support"
+            separator_gate_detail["separator_geometry_support_mode"] = "stable_grid"
         reasons = [reason for reason in reasons if reason != "outer_box_too_large"]
 
     outer_candidate_strategy = str(candidate.detail.get("outer_candidate_strategy", ""))
     if source == "separator" and outer_candidate_strategy == "edge_anchor_outer":
-        hard_count = int(hard_detail.get("hard_gaps", 0) or 0)
+        hard_count = int(separator_gate_detail.get("hard_gaps", 0) or 0)
         if hard_count <= 0:
-            hard_ok = False
-            hard_detail = dict(hard_detail)
-            hard_detail["ok"] = False
-            hard_detail["reason"] = "edge_anchor_needs_hard_separator"
-            hard_detail["edge_anchor_needs_hard_separator"] = True
+            separator_gate_ok = False
+            separator_gate_detail = dict(separator_gate_detail)
+            separator_gate_detail["ok"] = False
+            separator_gate_detail["reason"] = "edge_anchor_needs_hard_separator"
+            separator_gate_detail["edge_anchor_needs_hard_separator"] = True
             reasons.append("edge_anchor_separator_weak")
 
-    if source == "separator" and not hard_ok:
+    if source == "separator" and not separator_gate_ok:
         reasons.append(REASON_SEPARATOR_HARD_EVIDENCE_WEAK)
     if support == "aspect_conflict":
         reasons.append(REASON_CONTENT_ASPECT_CONFLICT)
@@ -143,7 +170,7 @@ def apply_candidate_assessment_policy(
     partial_safe_extra_frames = partial_extra_holder_frames_gate_detail(
         gray,
         candidate,
-        hard_detail,
+        separator_gate_detail,
         content_detail,
         fmt,
         source,
@@ -154,7 +181,9 @@ def apply_candidate_assessment_policy(
         policy,
     )
     partial_safe_extra_frames_ok = bool(partial_safe_extra_frames.get("ok", False))
-    partial_safe_disqualifiers = set(partial_safe_extra_frames.get("disqualifiers", []))
+    partial_safe_disqualifiers = set(
+        partial_safe_extra_frames.get("disqualifiers", [])
+    )
     partial_safe_blocks_auto = (
         policy.partial_holder.safe_extra_frames
         and policy.partial_holder.checks_leading_content
@@ -164,22 +193,28 @@ def apply_candidate_assessment_policy(
         and bool(partial_safe_extra_frames.get("used", False))
         and bool(
             partial_safe_disqualifiers.intersection(
-                {"too_few_broad_separator_width_gaps", "partial_outer_leading_content", "partial_frame_content_unstable"}
+                {
+                    "too_few_broad_separator_width_gaps",
+                    "partial_outer_leading_content",
+                    "partial_frame_content_unstable",
+                }
             )
         )
     )
     if partial_safe_blocks_auto:
-        hard_ok = False
-        hard_detail = dict(hard_detail)
-        hard_detail["ok"] = False
-        hard_detail["reason"] = "partial_safe_extra_frames_blocked"
-        hard_detail["partial_safe_extra_frames_blocked"] = sorted(partial_safe_disqualifiers)
+        separator_gate_ok = False
+        separator_gate_detail = dict(separator_gate_detail)
+        separator_gate_detail["ok"] = False
+        separator_gate_detail["reason"] = "partial_safe_extra_frames_blocked"
+        separator_gate_detail["partial_safe_extra_frames_blocked"] = sorted(
+            partial_safe_disqualifiers
+        )
         reasons.extend(sorted(partial_safe_disqualifiers))
     if partial_safe_extra_frames_ok:
-        hard_detail = dict(hard_detail)
-        hard_detail["ok"] = True
-        hard_detail["reason"] = "partial_safe_extra_frames_support"
-        hard_detail["partial_safe_extra_frames_support"] = True
+        separator_gate_detail = dict(separator_gate_detail)
+        separator_gate_detail["ok"] = True
+        separator_gate_detail["reason"] = "partial_safe_extra_frames_support"
+        separator_gate_detail["partial_safe_extra_frames_support"] = True
         reasons = [
             reason
             for reason in reasons
@@ -196,17 +231,27 @@ def apply_candidate_assessment_policy(
     hard_reasons = HARD_REVIEW_REASONS.intersection(reasons)
     auto_gate = False
     if source == "separator":
-        auto_gate = (hard_ok or partial_safe_extra_frames_ok) and support == "ok" and not hard_reasons
+        auto_gate = (
+            (separator_gate_ok or partial_safe_extra_frames_ok)
+            and support == "ok"
+            and not hard_reasons
+        )
     elif source == "content":
         auto_gate = False
 
     if not auto_gate:
-        cap = scoring_policy.no_auto_cap_partial if candidate.strip_mode == "partial" else scoring_policy.no_auto_cap_full
+        cap = (
+            scoring_policy.no_auto_cap_partial
+            if candidate.strip_mode == "partial"
+            else scoring_policy.no_auto_cap_full
+        )
         confidence = min(confidence, cap)
         reasons.append(REASON_AUTO_GATE_NOT_SATISFIED)
     else:
         confidence = max(confidence, config.confidence_threshold + min(0.10, joint_score * 0.08))
-    broad_width_count = int(hard_detail.get("broad_separator_width_gaps", 0) or 0)
+    broad_width_count = int(
+        separator_gate_detail.get("broad_separator_width_gaps", 0) or 0
+    )
     if source == "separator" and broad_width_count > 0:
         confidence = min(confidence, policy.separator.separator_width_profile_confidence_cap)
 
@@ -224,7 +269,7 @@ def apply_candidate_assessment_policy(
         "separator_score": float(separator_score),
         "content_score": float(content_score),
         "content_support": support,
-        "separator_hard_evidence": hard_detail,
+        "separator_hard_evidence": separator_gate_detail,
         "partial_extra_holder_frames": partial_safe_extra_frames,
         "partial_safe_extra_frames": partial_safe_extra_frames,
     }
