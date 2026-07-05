@@ -116,8 +116,9 @@ Current stable release: v4.2.8
   best-candidate selection 已改为
   `SeparatorWidthGapCandidateAssessmentResult` /
   `SeparatorWidthGapCandidateSearchResult` /
+  `best_separator_width_gap_candidate` /
   `SeparatorWidthGapBestCandidateResult`；candidate / evaluations 不再通过裸
-  tuple 传递，report/detail 字段保持不变。
+  tuple 或内联 selection loop 传递，report/detail 字段保持不变。
 - broad-width width bounds、gap search window 和 band collection 已改为
   `SeparatorWidthBounds` / `SeparatorWidthGapWindow` /
   `SeparatorWidthBandCollection`；separator-derived outer band collection 已改为
@@ -703,10 +704,11 @@ Verified:
 - Broad-width detected-gap search now uses
   `SeparatorWidthGapCandidateAssessmentResult` /
   `SeparatorWidthGapCandidateSearchResult` /
+  `best_separator_width_gap_candidate` /
   `SeparatorWidthGapBestCandidateResult` for single-run assessment, batch
   candidate search, and best-candidate selection; candidate / evaluation detail
-  no longer travels through raw tuples, while report/detail fields remain
-  unchanged.
+  no longer travels through raw tuples or inline selection loops, while
+  report/detail fields remain unchanged.
 - Broad-width width bounds, gap-search window, and band collection now use
   `SeparatorWidthBounds` / `SeparatorWidthGapWindow` /
   `SeparatorWidthBandCollection`; separator-derived outer band collection now

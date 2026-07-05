@@ -50,6 +50,10 @@ class SeparatorWidthGapWindow:
     lo: int
     hi: int
 
+    @property
+    def empty(self) -> bool:
+        return self.hi <= self.lo
+
 
 @dataclass(frozen=True)
 class SeparatorWidthGapAcceptance:
@@ -283,6 +287,8 @@ def separator_width_gap_candidates_with_detail(
 ) -> SeparatorWidthGapCandidateSearchResult:
     candidates: list[SeparatorWidthGapCandidate] = []
     evaluations: list[dict[str, Any]] = []
+    if window.empty:
+        return SeparatorWidthGapCandidateSearchResult(candidates, evaluations)
     for run_start, run_end in runs_from_mask(profile[window.lo:window.hi] >= params.threshold_ratio):
         assessment_result = separator_width_gap_candidate_assessment(
             profile,
@@ -297,6 +303,16 @@ def separator_width_gap_candidates_with_detail(
         if assessment_result.candidate is not None:
             candidates.append(assessment_result.candidate)
     return SeparatorWidthGapCandidateSearchResult(candidates, evaluations)
+
+
+def best_separator_width_gap_candidate(
+    candidates: list[SeparatorWidthGapCandidate],
+) -> SeparatorWidthGapCandidate | None:
+    best: Optional[SeparatorWidthGapCandidate] = None
+    for candidate in candidates:
+        if best is None or candidate.rank_key() > best.rank_key():
+            best = candidate
+    return best
 
 
 def best_separator_width_gap_candidate_with_detail(
@@ -315,11 +331,10 @@ def best_separator_width_gap_candidate_with_detail(
         bounds,
         params,
     )
-    best: Optional[SeparatorWidthGapCandidate] = None
-    for candidate in search.candidates:
-        if best is None or candidate.rank_key() > best.rank_key():
-            best = candidate
-    return SeparatorWidthGapBestCandidateResult(best, search.evaluations)
+    return SeparatorWidthGapBestCandidateResult(
+        best_separator_width_gap_candidate(search.candidates),
+        search.evaluations,
+    )
 
 
 def separator_width_gap_from_candidate(
@@ -439,6 +454,7 @@ __all__ = [
     "SeparatorWidthGapRun",
     "SeparatorWidthGapRunAssessment",
     "SeparatorWidthGapSearchResult",
+    "best_separator_width_gap_candidate",
     "best_separator_width_gap_candidate_with_detail",
     "collect_separator_width_bands",
     "separator_width_gap_candidate_from_accepted_run",
