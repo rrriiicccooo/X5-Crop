@@ -28,7 +28,7 @@ class AnalysisCache:
     preview_rgb_cache: dict[tuple[str, int], tuple[np.ndarray, float]] = field(default_factory=dict)
     panel_label_cache: dict[tuple[str, str, int], np.ndarray] = field(default_factory=dict)
     nearby_separator_details: dict[tuple[Any, ...], dict[str, Any]] = field(default_factory=dict)
-    enhanced_separator_merges: dict[tuple[Any, ...], tuple[list[Gap], dict[str, Any]]] = field(default_factory=dict)
+    enhanced_gap_promotions: dict[tuple[Any, ...], tuple[list[Gap], dict[str, Any]]] = field(default_factory=dict)
     content_mask_details: dict[tuple[Any, ...], dict[str, Any]] = field(default_factory=dict)
     content_profile_runs: dict[tuple[Any, ...], tuple[list[tuple[int, int]], dict[str, Any]]] = field(default_factory=dict)
     content_evidence_details: dict[tuple[Any, ...], dict[str, Any]] = field(default_factory=dict)

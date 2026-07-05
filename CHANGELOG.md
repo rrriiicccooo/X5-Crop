@@ -61,6 +61,9 @@ Current stable release: v4.2.8
   `broad_width` profile detail helper 只消费 separator policy。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
+- enhanced separator 内部语义收敛为 enhanced gap promotion：active detail key
+  改为 `enhanced_gap_promotion`，gate 从该 detail 读取 promotion count，内部
+  gap method 判断统一使用常量。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 

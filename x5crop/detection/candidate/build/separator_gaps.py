@@ -16,10 +16,10 @@ from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE
 from ..proposal.separator.proposal import propose_separator_width_profile_gaps, propose_standard_separator_gaps
 from ..proposal.separator.refinement import (
     apply_grid_gap_model,
-    merge_enhanced_separator_proposals,
+    promote_enhanced_separator_gaps_for_candidate,
     refine_with_edge_pairs,
     refine_with_nearby_separator,
-    should_run_enhanced_separator_proposals,
+    should_run_enhanced_gap_promotion_for_candidate,
 )
 
 
@@ -32,7 +32,7 @@ class SeparatorGapBuildResult:
     gaps: list[Gap]
     grid_detail: dict[str, Any]
     edge_refine_detail: dict[str, Any]
-    separator_analysis_detail: dict[str, Any]
+    enhanced_gap_promotion_detail: dict[str, Any]
     nearby_correction_detail: dict[str, Any]
     pre_nearby_gaps: Optional[list[Gap]]
 
@@ -163,7 +163,7 @@ def refine_outer_from_grid(
     return None
 
 
-def apply_enhanced_separator_analysis(
+def apply_enhanced_gap_promotion(
     gray_work: np.ndarray,
     outer: Box,
     gaps: list[Gap],
@@ -172,21 +172,21 @@ def apply_enhanced_separator_analysis(
     strip_mode: str,
     origin: float,
     pitch: float,
-    allow_separator_analysis: bool,
+    allow_enhanced_gap_promotion: bool,
     config: RuntimeConfig,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> tuple[list[Gap], dict[str, Any]]:
     detail: dict[str, Any] = {"used": False, "reason": "disabled"}
-    separator_analysis_allowed = (
-        allow_separator_analysis
+    promotion_allowed = (
+        allow_enhanced_gap_promotion
         and strip_mode == "full"
         and not policy.separator.geometry_support.detected_geometry.enabled
     )
-    if not separator_analysis_allowed:
+    if not promotion_allowed:
         return gaps, detail
-    if should_run_enhanced_separator_proposals(config.analysis, gaps, count, policy.separator.enhanced):
-        return merge_enhanced_separator_proposals(
+    if should_run_enhanced_gap_promotion_for_candidate(config.analysis, gaps, count, policy.separator.enhanced):
+        return promote_enhanced_separator_gaps_for_candidate(
             gray_work,
             outer,
             gaps,
@@ -240,7 +240,7 @@ def build_separator_gaps_for_outer(
     outer: Box,
     offset_fraction: float,
     candidate_strategy: str,
-    allow_separator_analysis: bool,
+    allow_enhanced_gap_promotion: bool,
     cache: Optional[AnalysisCache],
     allow_outer_refine: bool,
     gap_max_width_ratio_override: Optional[float],
@@ -310,7 +310,7 @@ def build_separator_gaps_for_outer(
                 policy,
             )
             grid_detail["outer_refined"] = True
-    gaps, separator_analysis_detail = apply_enhanced_separator_analysis(
+    gaps, enhanced_gap_promotion_detail = apply_enhanced_gap_promotion(
         gray_work,
         outer,
         gaps,
@@ -319,7 +319,7 @@ def build_separator_gaps_for_outer(
         strip_mode,
         origin,
         pitch,
-        allow_separator_analysis,
+        allow_enhanced_gap_promotion,
         config,
         cache,
         policy,
@@ -341,7 +341,7 @@ def build_separator_gaps_for_outer(
         gaps=gaps,
         grid_detail=grid_detail,
         edge_refine_detail=edge_refine_detail,
-        separator_analysis_detail=separator_analysis_detail,
+        enhanced_gap_promotion_detail=enhanced_gap_promotion_detail,
         nearby_correction_detail=nearby_correction_detail,
         pre_nearby_gaps=pre_nearby_gaps,
     )
@@ -349,7 +349,7 @@ def build_separator_gaps_for_outer(
 
 __all__ = [
     "SeparatorGapBuildResult",
-    "apply_enhanced_separator_analysis",
+    "apply_enhanced_gap_promotion",
     "apply_nearby_separator_refinement",
     "apply_primary_separator_refinements",
     "build_separator_gaps_for_outer",

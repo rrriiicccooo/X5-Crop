@@ -108,10 +108,10 @@ def candidate_has_hard_separator_evidence(
         if gap.method != GAP_GRID:
             break
         leading_grid_scores.append(float(gap.score))
-    separator_analysis = detection.detail.get("separator_analysis", {})
+    enhanced_gap_promotion = detection.detail.get("enhanced_gap_promotion", {})
     enhanced_accepted = (
-        int(separator_analysis.get("accepted_count", 0) or 0)
-        if isinstance(separator_analysis, dict)
+        int(enhanced_gap_promotion.get("accepted_count", 0) or 0)
+        if isinstance(enhanced_gap_promotion, dict)
         else 0
     )
     hard_adjacent_late = False
