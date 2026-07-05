@@ -15,6 +15,9 @@ from ..proposal.separator.proposal import (
 )
 
 
+DETECTED_GEOMETRY_EQUAL_MODEL_SOURCE = "detected_geometry_equal_model"
+
+
 @dataclass(frozen=True)
 class InitialSeparatorGapResult:
     gaps: list[Gap]
@@ -28,6 +31,36 @@ def skipped_separator_width_profile_gap_search_detail(reason: str = "not_request
         "profile": BROAD_WIDTH_GAP_PROFILE,
         "reason": reason,
     }
+
+
+def selected_gap_source_detail(
+    detail: dict[str, Any],
+    source: str,
+    extra: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    result = dict(detail)
+    result["selected_gap_source"] = source
+    if extra:
+        result.update(extra)
+    return result
+
+
+def with_selected_gap_source(
+    result: InitialSeparatorGapResult,
+    source: str,
+    *,
+    gaps: Optional[list[Gap]] = None,
+    extra_standard_detail: Optional[dict[str, Any]] = None,
+) -> InitialSeparatorGapResult:
+    return InitialSeparatorGapResult(
+        gaps=result.gaps if gaps is None else gaps,
+        standard_gap_search_detail=selected_gap_source_detail(
+            result.standard_gap_search_detail,
+            source,
+            extra_standard_detail,
+        ),
+        separator_width_profile_gap_search_detail=result.separator_width_profile_gap_search_detail,
+    )
 
 
 def standard_separator_gap_result(
@@ -55,8 +88,10 @@ def standard_separator_gap_result(
         policy.separator.width_profile,
         policy.separator.width_profile_search,
     )
-    standard_gap_search_detail = dict(standard_gap_proposal.detail)
-    standard_gap_search_detail["selected_gap_source"] = STANDARD_GAP_PROFILE
+    standard_gap_search_detail = selected_gap_source_detail(
+        standard_gap_proposal.detail,
+        STANDARD_GAP_PROFILE,
+    )
     if forced:
         standard_gap_search_detail["forced"] = True
     return InitialSeparatorGapResult(
@@ -68,6 +103,10 @@ def standard_separator_gap_result(
 
 def separator_width_profile_gap_requested(candidate_strategy: str, gap_search_profile: str) -> bool:
     return candidate_strategy == "separator_outer" and gap_search_profile == BROAD_WIDTH_GAP_PROFILE
+
+
+def separator_width_profile_source_complete(gaps: list[Gap], count: int) -> bool:
+    return len(gaps) >= max(1, count - 1)
 
 
 def select_separator_width_profile_gaps(
@@ -94,16 +133,33 @@ def select_separator_width_profile_gaps(
         policy.separator.width_profile,
         policy.separator.width_profile_search,
     )
-    gaps = result.gaps
-    standard_gap_search_detail = dict(result.standard_gap_search_detail)
     separator_width_profile_gaps = separator_width_profile_proposal.gaps
-    if len(separator_width_profile_gaps) >= max(1, count - 1):
-        gaps = separator_width_profile_gaps
-        standard_gap_search_detail["selected_gap_source"] = BROAD_WIDTH_GAP_PROFILE
+    selected_result = result
+    if separator_width_profile_source_complete(separator_width_profile_gaps, count):
+        selected_result = with_selected_gap_source(
+            result,
+            BROAD_WIDTH_GAP_PROFILE,
+            gaps=separator_width_profile_gaps,
+        )
     return InitialSeparatorGapResult(
-        gaps=gaps,
-        standard_gap_search_detail=standard_gap_search_detail,
+        gaps=selected_result.gaps,
+        standard_gap_search_detail=selected_result.standard_gap_search_detail,
         separator_width_profile_gap_search_detail=dict(separator_width_profile_proposal.detail),
+    )
+
+
+def detected_geometry_equal_model_source_available(
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    gap_max_width_ratio_override: Optional[float],
+    policy: DetectionPolicy,
+) -> bool:
+    return policy.separator.model_gap_proposal.detected_geometry_equal_model_available(
+        strip_mode=strip_mode,
+        count=count,
+        default_count=fmt.default_count,
+        gap_max_width_ratio_override=gap_max_width_ratio_override,
     )
 
 
@@ -118,24 +174,24 @@ def select_detected_geometry_equal_model_gaps(
     gap_max_width_ratio_override: Optional[float],
     policy: DetectionPolicy,
 ) -> InitialSeparatorGapResult:
-    model_gap_proposal = policy.separator.model_gap_proposal
-    if not model_gap_proposal.detected_geometry_equal_model_available(
-        strip_mode=strip_mode,
-        count=count,
-        default_count=fmt.default_count,
-        gap_max_width_ratio_override=gap_max_width_ratio_override,
+    if not detected_geometry_equal_model_source_available(
+        fmt,
+        count,
+        strip_mode,
+        gap_max_width_ratio_override,
+        policy,
     ):
         return result
-    standard_gap_search_detail = dict(result.standard_gap_search_detail)
-    standard_gap_search_detail["selected_gap_source"] = "detected_geometry_equal_model"
-    standard_gap_search_detail["model_gap_proposal"] = {
-        "family": "detected_geometry_equal_model",
-        "policy_enabled": True,
-    }
-    return InitialSeparatorGapResult(
+    return with_selected_gap_source(
+        result,
+        DETECTED_GEOMETRY_EQUAL_MODEL_SOURCE,
         gaps=propose_equal_model_gaps_from_profile(profile, origin, pitch, count),
-        standard_gap_search_detail=standard_gap_search_detail,
-        separator_width_profile_gap_search_detail=result.separator_width_profile_gap_search_detail,
+        extra_standard_detail={
+            "model_gap_proposal": {
+                "family": DETECTED_GEOMETRY_EQUAL_MODEL_SOURCE,
+                "policy_enabled": True,
+            }
+        },
     )
 
 
@@ -189,11 +245,16 @@ def initial_separator_gaps(
 
 
 __all__ = [
+    "DETECTED_GEOMETRY_EQUAL_MODEL_SOURCE",
     "InitialSeparatorGapResult",
+    "detected_geometry_equal_model_source_available",
     "initial_separator_gaps",
     "select_detected_geometry_equal_model_gaps",
     "select_separator_width_profile_gaps",
+    "selected_gap_source_detail",
+    "separator_width_profile_source_complete",
     "separator_width_profile_gap_requested",
     "skipped_separator_width_profile_gap_search_detail",
     "standard_separator_gap_result",
+    "with_selected_gap_source",
 ]
