@@ -41,10 +41,11 @@ Current stable release: v4.2.8
   `detection.candidate.proposal.separator` 承接 separator proposal、refinement、
   width evidence 和 separator-derived outer band evidence；`geometry` 保留底层
   profile/search/trust 数学能力；width profile 纯数学归
-  `geometry/separator_width_profile.py`，参数归 `SeparatorPolicy`，outer policy
-  只保留 separator-derived outer family / band 参数；broad-width gap proposal
-  的采样上限、搜索窗口、距离惩罚和基础分数已外显到 width profile policy
-  detail。
+  `geometry/separator_width_profile.py`，搜索参数归
+  `SeparatorPolicy.width_profile_search`，启用 / 候选 / selection 策略归
+  `SeparatorPolicy.width_profile`，outer policy 只保留 separator-derived outer
+  family / band 参数；broad-width gap proposal
+  的采样上限、搜索窗口、距离惩罚和基础分数已外显到 report detail。
 - gap method vocabulary 已统一由 `constants.py` 提供；candidate assessment、
   decision summary、risk diagnostics、read-only diagnostics 和 frame edge fitting
   只消费 `detected / edge-pair / enhanced-detected / grid / equal / content`
@@ -70,6 +71,10 @@ Current stable release: v4.2.8
 - broad-width detected gap 生成已拆出 width-profile gap window、run scoring、
   best candidate selection 和 core-width clipped detected-gap output；输出仍是
   普通 `detected` hard gap，不引入独立 gap method。
+- width-profile 搜索参数与候选策略已拆开：geometry 只消费
+  `SeparatorWidthProfileSearchParameters`，`SeparatorWidthProfilePolicy` 只保留
+  mode / required count / candidate budget / full-selection 语义，report 同时输出
+  综合 `width_profile` 视图和纯 `width_profile_search` 参数。
 - separator width evidence requirement 已收敛为 detail 消费：candidate build
   生成 `separator_width_evidence`，partial-safe / gate 只根据各自 requirement
   复核已有 evidence，不重新生成 separator evidence。
@@ -432,6 +437,11 @@ Verified:
   run scoring, best candidate selection, and core-width clipped detected-gap
   output. The output remains an ordinary `detected` hard gap and does not add a
   separate gap method.
+- Width-profile search parameters and candidate strategy are split:
+  geometry consumes only `SeparatorWidthProfileSearchParameters`, while
+  `SeparatorWidthProfilePolicy` keeps mode / required count / candidate budget /
+  full-selection semantics. Reports expose both the combined `width_profile`
+  view and the pure `width_profile_search` parameters.
 - Separator width evidence requirements are now detail consumers: candidate
   build creates `separator_width_evidence`, while partial-safe / gate logic only
   applies their own requirements to existing evidence instead of regenerating

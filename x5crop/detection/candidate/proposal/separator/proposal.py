@@ -5,7 +5,7 @@ from typing import Optional
 import numpy as np
 
 from .....domain import Box, Gap
-from .....geometry.detection_parameters import GapSearchParameters
+from .....geometry.detection_parameters import GapSearchParameters, SeparatorWidthProfileSearchParameters
 from .....geometry.gap_search import find_gap
 from .....geometry.separator_width_profile import separator_width_gap_at, separator_width_profile as make_separator_width_profile
 from .....policies.runtime.separator import SeparatorWidthProfilePolicy
@@ -37,6 +37,7 @@ def propose_separator_width_profile_gaps(
     outer: Box,
     count: int,
     width_profile_policy: SeparatorWidthProfilePolicy,
+    width_profile_search: SeparatorWidthProfileSearchParameters,
 ) -> list[Gap]:
     required_count = int(width_profile_policy.required_count)
     if (
@@ -49,12 +50,12 @@ def propose_separator_width_profile_gaps(
     crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
     if crop.size == 0:
         return []
-    width_profile = make_separator_width_profile(crop, width_profile_policy)
+    width_profile = make_separator_width_profile(crop, width_profile_search)
     pitch = outer.width / float(max(1, count))
     gaps: list[Gap] = []
     for index in range(1, count):
         expected = pitch * index
-        gap = separator_width_gap_at(width_profile, expected, pitch, index, float(outer.height), width_profile_policy)
+        gap = separator_width_gap_at(width_profile, expected, pitch, index, float(outer.height), width_profile_search)
         if gap is not None:
             gaps.append(gap)
     return gaps

@@ -80,6 +80,7 @@ def initial_separator_gaps(
             outer,
             count,
             policy.separator.width_profile,
+            policy.separator.width_profile_search,
         )
         if len(separator_width_profile_gaps) >= max(1, count - 1):
             gaps = separator_width_profile_gaps

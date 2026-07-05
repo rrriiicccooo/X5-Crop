@@ -9,6 +9,7 @@ from ...geometry.detection_parameters import (
     NearbySeparatorCorrectionParameters,
     RobustGridParameters,
     SeparatorProfileParameters,
+    SeparatorWidthProfileSearchParameters,
 )
 from .presets import FormatPolicyPreset, ModePolicyPreset
 from ..parameters.aggregate import FormatParameters
@@ -113,6 +114,10 @@ def separator_width_profile_policy(
     )
 
 
+def separator_width_profile_search_parameters() -> SeparatorWidthProfileSearchParameters:
+    return SeparatorWidthProfileSearchParameters()
+
+
 def edge_pair_parameters_from_preset(
     preset: FormatPolicyPreset,
 ) -> EdgePairParameters:
@@ -155,6 +160,7 @@ def separator_policy(
         separator_width_profile_max_width_ratio=float(separator_width_profile.max_width_ratio),
         separator_width_profile_confidence_cap=float(separator_width_profile.confidence_cap),
         width_profile=separator_width_profile_policy(mode_preset, params),
+        width_profile_search=separator_width_profile_search_parameters(),
         geometry_support_modes=mode_preset.separator_geometry_support_modes,
         geometry_support=separator_geometry_support_policy(mode_preset, params),
         edge_pair=edge_pair_parameters_from_preset(preset),
@@ -303,5 +309,6 @@ __all__ = [
     'separator_gate_policy',
     'separator_geometry_support_policy',
     'separator_width_profile_policy',
+    'separator_width_profile_search_parameters',
     'separator_policy',
 ]

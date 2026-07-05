@@ -80,7 +80,7 @@ class SeparatorGeometrySupportPolicy:
 
 
 @dataclass(frozen=True)
-class SeparatorWidthProfilePolicy(SeparatorWidthProfileSearchParameters):
+class SeparatorWidthProfilePolicy:
     mode: str = "off"
     required_count: int = 0
     spacing_min_ratio: float = 0.82
@@ -116,6 +116,7 @@ class SeparatorPolicy:
     separator_width_profile_max_width_ratio: float
     separator_width_profile_confidence_cap: float = 0.995
     width_profile: SeparatorWidthProfilePolicy = field(default_factory=SeparatorWidthProfilePolicy)
+    width_profile_search: SeparatorWidthProfileSearchParameters = field(default_factory=SeparatorWidthProfileSearchParameters)
     geometry_support_modes: tuple[str, ...] = ()
     geometry_support: SeparatorGeometrySupportPolicy = field(default_factory=SeparatorGeometrySupportPolicy)
     edge_pair: EdgePairParameters = field(default_factory=EdgePairParameters)
