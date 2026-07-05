@@ -99,16 +99,23 @@ def separator_geometry_support_policy(
 def separator_width_profile_policy(
     mode_preset: ModePolicyPreset,
     params: FormatParameters,
+    *,
+    enabled: bool,
 ) -> SeparatorWidthProfilePolicy:
     preset = mode_preset.separator_width_profile
     family_mode = (
         "conditional"
-        if mode_preset.detector_kind == "standard_strip" and bool(params.separator_width_profile_enabled)
+        if enabled and mode_preset.detector_kind == "standard_strip"
         else "off"
     )
     mode = preset.mode if preset.mode != "off" else family_mode
+    if not enabled:
+        mode = "off"
+    width_profile = params.separator_width_profile
     return SeparatorWidthProfilePolicy(
         mode=mode,
+        max_width_ratio=float(width_profile.max_width_ratio),
+        confidence_cap=float(width_profile.confidence_cap),
         required_count=0,
         full_selection_enabled=bool(preset.full_selection_enabled),
     )
@@ -143,6 +150,10 @@ def separator_policy(
 ) -> SeparatorPolicy:
     gate = separator_gate_policy(preset, params)
     separator_width_profile = params.separator_width_profile
+    separator_width_profile_enabled = bool(
+        (strip_mode == FULL and separator_width_profile.full_enabled)
+        or (strip_mode == PARTIAL and separator_width_profile.partial_enabled)
+    )
     hard_gap_trust = params.hard_gap_trust
     nearby_correction = params.nearby_separator_correction
     robust_grid = params.robust_grid
@@ -153,13 +164,11 @@ def separator_policy(
     return SeparatorPolicy(
         gate=gate,
         hard_required_all_gaps=bool(gate.hard_required_all_gaps),
-        separator_width_profile_enabled=bool(
-            (strip_mode == FULL and separator_width_profile.full_enabled)
-            or (strip_mode == PARTIAL and separator_width_profile.partial_enabled)
+        width_profile=separator_width_profile_policy(
+            mode_preset,
+            params,
+            enabled=separator_width_profile_enabled,
         ),
-        separator_width_profile_max_width_ratio=float(separator_width_profile.max_width_ratio),
-        separator_width_profile_confidence_cap=float(separator_width_profile.confidence_cap),
-        width_profile=separator_width_profile_policy(mode_preset, params),
         width_profile_search=separator_width_profile_search_parameters(),
         geometry_support_modes=mode_preset.separator_geometry_support_modes,
         geometry_support=separator_geometry_support_policy(mode_preset, params),

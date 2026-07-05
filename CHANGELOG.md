@@ -254,6 +254,9 @@ Current stable release: v4.2.8
   属于同一候选计划，最终 gap method 仍是普通 `detected` hard separator；
   broad width 只写入 `gap_search_profile`、`separator_width_evidence`、gate detail
   和 partial holder detail。
+- runtime separator width profile policy 已收拢：启用状态、max width ratio 和
+  confidence cap 归 `SeparatorPolicy.width_profile`，顶层 `SeparatorPolicy`
+  不再保留重复的 width-profile runtime 字段。
 - separator gap lifecycle 已从 `build_detection_for_outer` 抽到
   `detection/candidate/build/separator_gaps.py`：separator gap lifecycle 生成
   origin/pitch、standard/broad-width gaps、edge-pair、grid、enhanced 和 nearby
@@ -545,6 +548,10 @@ Verified:
   non-equal gaps as hard gaps. The report key `detected_gaps` stays compatible,
   but internal code no longer names grid/content model support as hard detected
   evidence.
+- Runtime separator width-profile policy is consolidated: activation, max width
+  ratio, and confidence cap now belong to `SeparatorPolicy.width_profile`, and
+  top-level `SeparatorPolicy` no longer carries duplicate width-profile runtime
+  fields.
 - The unused `CandidateGateOutcome` gate placeholder type has been removed.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the

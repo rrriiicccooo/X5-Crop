@@ -146,11 +146,11 @@ def detect_candidate_for_count(
         else []
     )
     separator_width_profile_gap_override = (
-        policy.separator.separator_width_profile_max_width_ratio
+        policy.separator.width_profile.max_width_ratio
         if (
             gap_max_width_ratio_override is None
             and should_include_separator_width_profile
-            and policy.separator.separator_width_profile_max_width_ratio > policy.separator.gap_search.max_width_ratio
+            and policy.separator.width_profile.max_width_ratio > policy.separator.gap_search.max_width_ratio
         )
         else None
     )

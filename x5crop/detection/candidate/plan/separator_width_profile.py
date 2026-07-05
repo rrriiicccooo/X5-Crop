@@ -11,8 +11,6 @@ def should_include_separator_width_profile_candidates(
     fmt: FormatSpec,
     explicit_count: bool,
 ) -> bool:
-    if not policy.separator.separator_width_profile_enabled:
-        return False
     family = policy.outer.proposal.geometry.separator.width_profile_family
     if not family.available_for(strip_mode, explicit_count):
         return False

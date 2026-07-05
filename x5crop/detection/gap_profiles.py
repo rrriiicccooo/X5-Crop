@@ -26,7 +26,7 @@ def broad_width_gap_profile_detail(
         "gap_max_width_ratio": float(
             gap_max_width_ratio
             if gap_max_width_ratio is not None
-            else separator.separator_width_profile_max_width_ratio
+            else separator.width_profile.max_width_ratio
         ),
     }
     if preserved_through_outer_correction_candidate:

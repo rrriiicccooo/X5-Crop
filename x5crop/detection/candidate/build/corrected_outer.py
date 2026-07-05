@@ -43,7 +43,7 @@ def build_assessed_corrected_outer_candidate(
         gap_override = float(
             broad_width_detail.get(
                 "gap_max_width_ratio",
-                policy.separator.separator_width_profile_max_width_ratio,
+                policy.separator.width_profile.max_width_ratio,
             )
         )
 
