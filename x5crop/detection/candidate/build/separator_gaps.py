@@ -11,8 +11,8 @@ from ....geometry.separator_cache import cached_edge_refine_profiles, cached_sep
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
-from ....utils import clamp_int
 from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE
+from ..proposal.outer.grid_refine import grid_refined_outer_box
 from ..proposal.separator.proposal import propose_separator_width_profile_gaps, propose_standard_separator_gaps
 from ..proposal.separator.refinement import (
     apply_grid_gap_model,
@@ -139,34 +139,6 @@ def apply_primary_separator_refinements(
     return gaps, edge_pair_correction_detail, grid_detail
 
 
-def refine_outer_from_grid(
-    outer: Box,
-    grid_detail: dict[str, Any],
-    count: int,
-    pitch: float,
-    work_width: int,
-    policy: DetectionPolicy,
-) -> Box | None:
-    if not bool(grid_detail.get("grid_used", False)):
-        return None
-    grid_refine = policy.outer.proposal.geometry.grid_refine
-    model_origin = float(grid_detail.get("grid_origin", 0.0))
-    model_pitch = float(grid_detail.get("grid_pitch", pitch))
-    proposed_left = int(round(outer.left + model_origin))
-    proposed_right = int(round(outer.left + model_origin + model_pitch * count))
-    max_shift = clamp_int(pitch * grid_refine.shift_ratio, grid_refine.shift_min, grid_refine.shift_max)
-    width_change = abs((proposed_right - proposed_left) - outer.width) / max(1.0, float(outer.width))
-    if (
-        proposed_right > proposed_left
-        and abs(proposed_left - outer.left) <= max_shift
-        and abs(proposed_right - outer.right) <= max_shift
-        and width_change <= grid_refine.max_width_change
-        and 0 <= proposed_left < proposed_right <= work_width
-    ):
-        return Box(proposed_left, outer.top, proposed_right, outer.bottom)
-    return None
-
-
 def apply_enhanced_gap_promotion(
     gray_work: np.ndarray,
     outer: Box,
@@ -286,7 +258,14 @@ def build_separator_gaps_for_outer(
         policy,
     )
     if allow_outer_refine and strip_mode == "full":
-        refined_outer = refine_outer_from_grid(outer, grid_detail, count, pitch, work_width, policy)
+        refined_outer = grid_refined_outer_box(
+            outer,
+            grid_detail,
+            count,
+            pitch,
+            work_width,
+            policy.outer.proposal.geometry.grid_refine,
+        )
         if refined_outer is not None:
             outer = refined_outer
             crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
@@ -358,6 +337,5 @@ __all__ = [
     "apply_primary_separator_refinements",
     "build_separator_gaps_for_outer",
     "initial_separator_gaps",
-    "refine_outer_from_grid",
     "separator_origin_pitch",
 ]

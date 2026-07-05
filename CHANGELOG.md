@@ -64,6 +64,9 @@ Current stable release: v4.2.8
   `broad_width` profile detail helper 只消费 separator policy。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
+- grid-derived outer box 计算已从 separator gap lifecycle 移到
+  `detection.candidate.proposal.outer.grid_refine`；separator lifecycle 只消费
+  grid detail 并在需要时重新生成 gaps，不拥有 outer 修正规则。
 - enhanced separator 内部语义收敛为 enhanced gap promotion：active detail key
   改为 `enhanced_gap_promotion`，gate 从该 detail 读取 promotion count，内部
   gap method 判断统一使用常量。
@@ -362,7 +365,10 @@ Verified:
   retrieval, while `geometry/edge_pairs.py` consumes profile arrays only;
   `geometry/robust_grid.py` separates reliable anchor
   selection, grid fit, predicted center, and hard-gap protection / override
-  adjustment so model evidence movement can be reviewed directly.
+  adjustment so model evidence movement can be reviewed directly. Grid-derived
+  outer-box calculation now lives in `detection.candidate.proposal.outer.grid_refine`;
+  the separator gap lifecycle consumes grid detail and may rebuild gaps, but it
+  does not own the outer-box adjustment rule.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the
   diagnostic hard-gap trust classifier; `detection/evidence/gap_diagnostics.py`
