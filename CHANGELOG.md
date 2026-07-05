@@ -40,8 +40,9 @@ Current stable release: v4.2.8
 - Gap / Separator 族群已按 candidate proposal 模型收敛入口：
   `detection.candidate.proposal.separator` 承接 separator proposal、refinement、
   width evidence 和 separator-derived outer band evidence；`geometry` 保留底层
-  profile/search/trust 数学能力；width profile 参数归 `SeparatorPolicy`，outer
-  policy 只保留 separator-derived outer family / band 参数。
+  profile/search/trust 数学能力；width profile 纯数学归
+  `geometry/separator_width_profile.py`，参数归 `SeparatorPolicy`，outer policy
+  只保留 separator-derived outer family / band 参数。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 

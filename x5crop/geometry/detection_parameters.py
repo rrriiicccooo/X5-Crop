@@ -180,6 +180,24 @@ class SeparatorProfileParameters:
 
 
 @dataclass(frozen=True)
+class SeparatorWidthProfileSearchParameters:
+    threshold_ratio: float = 0.42
+    threshold_span_ratio: float = 0.12
+    profile_smooth_short_axis_ratio: float = 0.018
+    profile_smooth_min: int = 15
+    min_width_ratio: float = 0.030
+    min_width_min: int = 80
+    min_width_max: int = 520
+    max_width_ratio: float = 0.48
+    max_width_floor: int = 600
+    max_width_cap_ratio: float = 0.55
+    core_width_cap_ratio: float = 0.20
+    edge_margin_ratio: float = 0.18
+    edge_margin_min: float = 60.0
+    edge_margin_cap_ratio: float = 0.80
+
+
+@dataclass(frozen=True)
 class EdgeRefineProfileParameters:
     top_ratio: float = 0.12
     bottom_ratio: float = 0.88
@@ -218,4 +236,5 @@ __all__ = [
     "OuterMaskProfileParameters",
     "RobustGridParameters",
     "SeparatorProfileParameters",
+    "SeparatorWidthProfileSearchParameters",
 ]

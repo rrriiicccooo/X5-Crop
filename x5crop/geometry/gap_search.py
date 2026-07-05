@@ -15,7 +15,6 @@ def find_gap(
     expected: float,
     pitch: float,
     index: int,
-    format_name: str,
     max_width_ratio_override: Optional[float] = None,
     gap_search: GapSearchParameters | None = None,
 ) -> Gap:

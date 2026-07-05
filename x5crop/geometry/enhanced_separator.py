@@ -20,12 +20,11 @@ def find_enhanced_gap(
     expected: float,
     pitch: float,
     index: int,
-    format_name: str,
     gap_search: GapSearchParameters | None = None,
     enhanced_config: EnhancedSeparatorParameters | None = None,
 ) -> Gap:
     config = enhanced_config or EnhancedSeparatorParameters()
-    gap = find_gap(profile, expected, pitch, index, format_name, gap_search=gap_search)
+    gap = find_gap(profile, expected, pitch, index, gap_search=gap_search)
     if gap.method != "detected":
         return gap
     if gap.score < config.min_score:
@@ -109,7 +108,7 @@ def merge_enhanced_separator_gaps(
             merged.append(gap)
             continue
         expected = origin + pitch * gap.index
-        enhanced = find_enhanced_gap(profile, expected, pitch, gap.index, format_name, gap_search, enhanced_config)
+        enhanced = find_enhanced_gap(profile, expected, pitch, gap.index, gap_search, enhanced_config)
         if enhanced.method == "enhanced-detected":
             merged.append(enhanced)
             accepted.append(

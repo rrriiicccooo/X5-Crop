@@ -8,12 +8,11 @@ import numpy as np
 from .....domain import Box, OuterCandidate
 from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from .....geometry.separator_cache import cached_separator_profile
+from .....geometry.separator_width_profile import collect_separator_width_bands, separator_width_profile
 from .....policies.registry import get_detection_policy
 from .....policies.runtime.outer import SeparatorOuterBandPolicy, SeparatorOuterFamilyPolicy
 from .....policies.runtime.policy import DetectionPolicy
-from .....policies.runtime.separator import SeparatorWidthProfilePolicy
 from .....cache import AnalysisCache
-from .....utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 from ....cache_keys import separator_outer_cache_key
 from ....gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE, is_broad_width_gap_profile
 from ..separator.bands import collect_separator_outer_bands, separator_outer_band_sequences
@@ -299,8 +298,8 @@ def _separator_outer_candidates_for_plan(
 
         if plan.uses_broad_width_profile:
             crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-            profile = _adaptive_separator_width_profile(crop, policy.separator.width_profile)
-            bands, edge_margin = _collect_separator_width_profile_bands(
+            profile = separator_width_profile(crop, policy.separator.width_profile)
+            bands, edge_margin = collect_separator_width_bands(
                 profile,
                 short_axis,
                 float(outer.width),
@@ -445,69 +444,6 @@ def _sequence_band_policy(
         pair_candidate_count=plan.sequence_candidate_count,
         max_candidates=plan.max_candidates,
     )
-
-
-def _adaptive_separator_width_profile(
-    crop: np.ndarray,
-    width_policy: SeparatorWidthProfilePolicy,
-) -> np.ndarray:
-    if crop.size == 0:
-        return np.array([], dtype=np.float32)
-    sample = crop[:: max(1, crop.shape[0] // 500), :: max(1, crop.shape[1] // 2000)]
-    p01, p99 = sampled_percentile(sample, [1, 99])
-    span = max(1.0, float(p99 - p01))
-    threshold = float(p01) + span * width_policy.threshold_span_ratio
-    profile = (crop <= threshold).mean(axis=0).astype(np.float32)
-    return smooth_1d(
-        profile,
-        max(
-            width_policy.profile_smooth_min,
-            int(round(crop.shape[0] * width_policy.profile_smooth_short_axis_ratio)),
-        ),
-    )
-
-
-def _collect_separator_width_profile_bands(
-    profile: np.ndarray,
-    short_axis: float,
-    coordinate_limit: float,
-    width_policy: SeparatorWidthProfilePolicy,
-) -> tuple[list[dict[str, float]], float]:
-    if profile.size <= 0:
-        return [], 0.0
-    edge_margin = clamp_float(
-        short_axis * width_policy.edge_margin_ratio,
-        width_policy.edge_margin_min,
-        max(width_policy.edge_margin_min, short_axis * width_policy.edge_margin_cap_ratio),
-    )
-    min_width = clamp_int(
-        short_axis * width_policy.min_width_ratio,
-        width_policy.min_width_min,
-        width_policy.min_width_max,
-    )
-    max_width = clamp_int(
-        short_axis * width_policy.max_width_ratio,
-        min_width + 1,
-        max(width_policy.max_width_floor, int(short_axis * width_policy.max_width_cap_ratio)),
-    )
-    bands: list[dict[str, float]] = []
-    for run_start, run_end in runs_from_mask(profile >= width_policy.threshold_ratio):
-        width = int(run_end - run_start)
-        if width < min_width or width > max_width:
-            continue
-        center = (float(run_start) + float(run_end) - 1.0) * 0.5
-        if center < edge_margin or center > coordinate_limit - edge_margin:
-            continue
-        bands.append(
-            {
-                "start": float(run_start),
-                "end": float(run_end),
-                "center": center,
-                "width": float(width),
-                "score": float(profile[run_start:run_end].mean()),
-            }
-        )
-    return bands, edge_margin
 
 
 __all__ = [
