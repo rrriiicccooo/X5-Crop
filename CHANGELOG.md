@@ -127,6 +127,9 @@ Current stable release: v4.2.8
 - nearby separator correction 只返回修正后的 gap evidence、correction detail 和
   pre-correction gaps；confidence cap / scoring 保留在 detection build 与
   assessment 消费层。
+- edge-pair / enhanced / nearby refinement 共用
+  `geometry/gap_refinement_detail.py` 组装 accepted / rejected / searched
+  batch detail 和 count；report/detail 字段与修正条件保持不变。
 - active gap search profile vocabulary 只保留 `standard` 与 `broad_width`；
   `broad_width` profile detail helper 只消费 separator policy。
 - broad-width detected gap 生成已拆出 width-profile gap window、run object、
@@ -659,6 +662,10 @@ Verified:
 - Edge-pair batch refinement now uses `EdgePairRefinementResult`; the active
   entrypoint is narrowed to `refine_gaps_with_edge_profiles` and no longer
   returns gaps/detail through raw tuples, while report/detail fields remain
+  unchanged.
+- Edge-pair, enhanced, and nearby refinements now share
+  `geometry/gap_refinement_detail.py` for accepted / rejected / searched batch
+  detail and counts, while report/detail fields and correction conditions remain
   unchanged.
 - Edge-pair search limits now use `EdgePairSearchLimits`, and the selected
   edge-pair gap is derived from the selected candidate through

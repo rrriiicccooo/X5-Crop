@@ -9,6 +9,7 @@ from ..domain import Gap
 from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float, clamp_int, runs_from_mask
 from .gap_geometry import gap_width_cv, local_gap_geometry_error
+from .gap_refinement_detail import gap_refinement_batch_detail
 from .detection_parameters import NearbySeparatorCorrectionParameters
 from .separator_profile import interval_mean
 
@@ -463,12 +464,11 @@ def apply_nearby_separator_corrections(
         {
             "used": True,
             "reason": "ok",
-            "searched": searched[:8],
-            "searched_count": len(searched),
-            "accepted": accepted,
-            "accepted_count": len(accepted),
-            "rejected": rejected[:8],
-            "rejected_count": len(rejected),
+            **gap_refinement_batch_detail(
+                searched=searched,
+                accepted=accepted,
+                rejected=rejected,
+            ),
             "original_width_cv": float(original_cv),
             "final_width_cv": float(gap_width_cv(corrected, origin, pitch, count)),
         },

@@ -11,6 +11,7 @@ from ..gap_methods import is_detected_or_enhanced_hard_gap_method, is_hard_gap_m
 from ..utils import clamp_float, clamp_int
 from .detection_parameters import EdgePairParameters
 from .edge_refine_profile import local_edge_peaks
+from .gap_refinement_detail import gap_refinement_batch_detail
 from .separator_profile import interval_mean
 
 
@@ -355,10 +356,7 @@ def refine_gaps_with_edge_profiles(
                 "min_gutter_px": int(search_limits.min_gutter),
                 "max_gutter_px": int(search_limits.max_gutter),
             },
-            "accepted": accepted,
-            "accepted_count": len(accepted),
-            "rejected": rejected[:8],
-            "rejected_count": len(rejected),
+            **gap_refinement_batch_detail(accepted=accepted, rejected=rejected),
         },
     )
 

@@ -18,6 +18,7 @@ from ..cache import AnalysisCache
 from ..utils import clamp_float
 from .boxes import box_cache_key
 from .gap_geometry import constrain_gap_to_geometry
+from .gap_refinement_detail import gap_refinement_batch_detail
 from .gap_search import find_detected_gap
 from .model_gaps import equal_model_gap
 from .detection_parameters import (
@@ -323,10 +324,7 @@ def promote_enhanced_separator_gaps(
     ]
     detail = {
         "used": True,
-        "accepted": accepted,
-        "rejected": rejected[:8],
-        "accepted_count": len(accepted),
-        "rejected_count": len(rejected),
+        **gap_refinement_batch_detail(accepted=accepted, rejected=rejected),
     }
     if cache_key is not None and cache is not None:
         cache.enhanced_gap_promotions[cache_key] = (list(constrained), copy.deepcopy(detail))
