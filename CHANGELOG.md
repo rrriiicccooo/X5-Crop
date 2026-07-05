@@ -184,6 +184,9 @@ Current stable release: v4.2.8
   不再重复实现 nearby candidate 搜索。
 - nearby separator candidate 和 search result 已 typed 化；report/detail 边界仍输出
   原有 dict 字段，不改变 runtime correction 条件。
+- hard-gap trust 现在直接消费 `NearbySeparatorReplacementAssessment` 并记录
+  `nearby_separator_assessment` detail；旧的 accepted-only replacement wrapper
+  已删除，nearby conflict 判断条件保持不变。
 - nearby separator batch correction 已改为 `NearbySeparatorCorrectionResult`；
   `apply_nearby_separator_corrections` 不再通过裸 tuple 返回 gaps/detail，
   report/detail 字段保持不变。
@@ -615,6 +618,10 @@ Verified:
 - Nearby separator candidate and search result handling are now typed internally,
   while report/detail boundaries keep the existing dict fields and runtime
   correction conditions.
+- Hard-gap trust now consumes `NearbySeparatorReplacementAssessment` directly
+  and records `nearby_separator_assessment` detail; the old accepted-only
+  replacement wrapper has been removed without changing nearby-conflict
+  conditions.
 - Nearby separator batch correction now uses `NearbySeparatorCorrectionResult`;
   `apply_nearby_separator_corrections` no longer returns gaps/detail through a
   raw tuple, while report/detail fields remain unchanged.

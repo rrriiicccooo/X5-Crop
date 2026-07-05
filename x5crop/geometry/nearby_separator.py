@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional, Protocol
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -258,16 +258,6 @@ def nearby_separator_search_detail(
         absolute_center_offset=absolute_center_offset,
     )
     return None if result is None else result.detail()
-
-
-def nearby_separator_replacement(
-    profile: np.ndarray,
-    gap: Gap,
-    pitch: float,
-    correction_config: NearbySeparatorCorrectionParameters | None = None,
-) -> Optional[dict[str, Any]]:
-    assessment = nearby_separator_replacement_assessment(profile, gap, pitch, correction_config)
-    return assessment.replacement if assessment.accepted else None
 
 
 def nearby_separator_replacement_assessment(

@@ -8,7 +8,7 @@ import numpy as np
 from ..domain import Box, Gap
 from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float, clamp_int
-from .nearby_separator import nearby_separator_replacement
+from .nearby_separator import nearby_separator_replacement_assessment
 from .detection_parameters import HardGapTrustParameters, NearbySeparatorCorrectionParameters
 
 
@@ -329,9 +329,10 @@ def light_hard_gap_trust(
     }
     nearby_conflict = False
     if profile is not None:
-        nearby = nearby_separator_replacement(profile, gap, pitch, nearby_correction)
-        if nearby is not None:
-            detail["nearby_separator_candidate"] = nearby
+        nearby_assessment = nearby_separator_replacement_assessment(profile, gap, pitch, nearby_correction)
+        detail["nearby_separator_assessment"] = nearby_assessment.detail(gap)
+        if nearby_assessment.replacement is not None:
+            detail["nearby_separator_candidate"] = nearby_assessment.replacement
             nearby_conflict = True
     if nearby_conflict:
         assessment = runtime_hard_gap_trust_assessment(
