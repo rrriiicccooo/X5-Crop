@@ -20,8 +20,20 @@ def is_direct_hard_gap_method(method: str) -> bool:
     return method in DIRECT_HARD_GAP_METHODS
 
 
+def is_detected_gap_method(method: str) -> bool:
+    return method == GAP_DETECTED
+
+
+def is_edge_pair_gap_method(method: str) -> bool:
+    return method == GAP_EDGE_PAIR
+
+
 def is_enhanced_hard_gap_method(method: str) -> bool:
     return method == GAP_ENHANCED_DETECTED
+
+
+def is_detected_or_enhanced_hard_gap_method(method: str) -> bool:
+    return is_detected_gap_method(method) or is_enhanced_hard_gap_method(method)
 
 
 def is_hard_gap_method(method: str) -> bool:
@@ -34,6 +46,14 @@ def is_model_gap_method(method: str) -> bool:
 
 def is_geometry_model_gap_method(method: str) -> bool:
     return method in GEOMETRY_MODEL_GAP_METHODS
+
+
+def is_grid_model_gap_method(method: str) -> bool:
+    return method == GAP_GRID
+
+
+def is_equal_model_gap_method(method: str) -> bool:
+    return method == GAP_EQUAL
 
 
 def is_content_model_gap_method(method: str) -> bool:
@@ -74,9 +94,14 @@ __all__ = [
     "gap_method_role",
     "gap_method_roles",
     "is_content_model_gap_method",
+    "is_detected_gap_method",
+    "is_detected_or_enhanced_hard_gap_method",
     "is_direct_hard_gap_method",
+    "is_edge_pair_gap_method",
     "is_enhanced_hard_gap_method",
+    "is_equal_model_gap_method",
     "is_geometry_model_gap_method",
+    "is_grid_model_gap_method",
     "is_hard_gap_method",
     "is_model_gap_method",
     "is_separator_support_gap_method",

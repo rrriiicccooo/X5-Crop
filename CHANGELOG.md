@@ -47,10 +47,13 @@ Current stable release: v4.2.8
   `SeparatorPolicy.width_profile`，outer policy 只保留 separator-derived outer
   family / band 参数；broad-width gap proposal
   的采样上限、搜索窗口、距离惩罚和基础分数已外显到 report detail。
-- gap method vocabulary 已统一由 `constants.py` 提供；candidate assessment、
-  decision summary、risk diagnostics、read-only diagnostics 和 frame edge fitting
-  只消费 `detected / edge-pair / enhanced-detected / grid / equal / content`
-  常量，不再手写 method 字符串。
+- gap method vocabulary 已统一由 `constants.py` 和 `gap_methods.py` 提供；
+  candidate assessment、decision summary、risk diagnostics、read-only diagnostics、
+  separator proposal / summary 和 frame edge fitting 通过 method family / concrete
+  predicate 消费 `detected / edge-pair / enhanced-detected / grid / equal / content`
+  语义，不再手写 method 字符串或散落具体 method 分类判断。
+- active `dark_band` reason 已退休；separator trust 继续记录亮暗像素证据，但
+  frame-border 风险使用中性的 `too_narrow_separator_band` reason。
 - ordinary gap search 的 band threshold、弱 prominence 门槛和 detected-candidate
   quality 权重已外显到 `GapSearchParameters`；默认值保持旧行为。
 - ordinary gap search 现在写出 `standard_gap_search` detail：每个 expected gap
@@ -455,6 +458,14 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   `detection.evidence.separator_width` owns width evidence summaries; separator-
   derived outer band evidence is consumed by outer proposal; `geometry` keeps
   the lower-level profile/search/trust math.
+- Gap method vocabulary is provided by `constants.py` and `gap_methods.py`;
+  candidate assessment, decision summary, risk/read-only diagnostics, separator
+  proposal / summary, and frame edge fitting consume method-family and concrete
+  predicates instead of hand-writing method strings or scattered concrete method
+  classification.
+- Active `dark_band` reasons are retired. Separator trust still records pixel
+  brightness evidence, but frame-border risk uses the neutral
+  `too_narrow_separator_band` reason.
 - Ordinary gap search now writes `standard_gap_search` detail for each expected
   gap, including the search window, accepted / rejected runs, and selected
   detected gap or equal fallback, without changing selection thresholds.

@@ -6,9 +6,14 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import GAP_DETECTED, GAP_ENHANCED_DETECTED
+from ..constants import GAP_ENHANCED_DETECTED
 from ..domain import Box, Gap
-from ..gap_methods import is_geometry_model_gap_method, is_hard_gap_method
+from ..gap_methods import (
+    is_detected_gap_method,
+    is_enhanced_hard_gap_method,
+    is_geometry_model_gap_method,
+    is_hard_gap_method,
+)
 from ..cache import AnalysisCache
 from ..utils import clamp_float
 from .boxes import box_cache_key
@@ -108,7 +113,7 @@ def enhanced_gap_validation(
             float(shift_limit),
         )
 
-    if gap.method != GAP_DETECTED:
+    if not is_detected_gap_method(gap.method):
         return result(False, "not_detected_gap")
     if gap.score < config.min_score:
         return result(False, "score_below_min")
@@ -266,7 +271,7 @@ def promote_one_enhanced_gap(
     )
     enhanced = search_result.gap
     detail = search_result.detail
-    if enhanced.method == GAP_ENHANCED_DETECTED:
+    if is_enhanced_hard_gap_method(enhanced.method):
         return EnhancedGapPromotionResult(
             enhanced,
             accepted_detail={
@@ -336,7 +341,7 @@ def promote_enhanced_separator_gaps(
             rejected.append(promotion.rejected_detail)
     constrained = [
         constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, strip_mode, robust_grid)
-        if gap.method == GAP_ENHANCED_DETECTED else gap
+        if is_enhanced_hard_gap_method(gap.method) else gap
         for gap in merged
     ]
     detail = {

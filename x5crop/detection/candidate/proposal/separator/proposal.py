@@ -5,8 +5,8 @@ from typing import Any, Optional
 
 import numpy as np
 
-from .....constants import GAP_DETECTED
 from .....domain import Box, Gap
+from .....gap_methods import is_detected_gap_method
 from .....geometry.detection_parameters import (
     GapSearchParameters,
     SeparatorWidthProfileSearchParameters,
@@ -109,8 +109,8 @@ def _propose_standard_separator_gaps_with_detail(
             "pitch": float(pitch),
             "count": int(count),
             "max_width_ratio_override": max_width_ratio_override,
-            "detected_count": sum(1 for gap in gaps if gap.method == GAP_DETECTED),
-            "fallback_count": sum(1 for gap in gaps if gap.method != GAP_DETECTED),
+            "detected_count": sum(1 for gap in gaps if is_detected_gap_method(gap.method)),
+            "fallback_count": sum(1 for gap in gaps if not is_detected_gap_method(gap.method)),
             "entries": entries,
         },
     )

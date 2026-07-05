@@ -4,13 +4,13 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import (
-    GAP_DETECTED,
-    GAP_EDGE_PAIR,
-    GAP_ENHANCED_DETECTED,
-)
 from ..domain import Box, Gap
-from ..gap_methods import is_geometry_model_gap_method
+from ..gap_methods import (
+    is_detected_gap_method,
+    is_edge_pair_gap_method,
+    is_enhanced_hard_gap_method,
+    is_geometry_model_gap_method,
+)
 from ..utils import clamp_float
 
 
@@ -75,11 +75,11 @@ def fit_cuts_by_geometry(cuts: list[float], outer: Box, count: int, pitch: Optio
 def frame_edge_weight(gap: Gap) -> float:
     if gap.width <= 0:
         return 0.0
-    if gap.method == GAP_EDGE_PAIR:
+    if is_edge_pair_gap_method(gap.method):
         return max(0.0, min(1.8, gap.score)) * 1.20
-    if gap.method == GAP_DETECTED:
+    if is_detected_gap_method(gap.method):
         return max(0.0, min(1.5, gap.score))
-    if gap.method == GAP_ENHANCED_DETECTED:
+    if is_enhanced_hard_gap_method(gap.method):
         return max(0.0, min(1.2, gap.score)) * 0.70
     return 0.0
 

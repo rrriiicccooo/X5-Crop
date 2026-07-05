@@ -182,7 +182,7 @@ def runtime_hard_gap_trust_assessment(
     if signals is not None:
         dark_separator_like = bool(flags.get("dark_separator_like", False))
         if width_ratio < config.frame_border_width_ratio and dark_separator_like:
-            return assessment("suspect_frame_border", "too_narrow_dark_band")
+            return assessment("suspect_frame_border", "too_narrow_separator_band")
         if hard_gap_is_narrow(gap, pitch, config) and (
             bool(flags.get("content_continuous", False))
             or bool(flags.get("weak_dark_gap", False))
@@ -246,7 +246,7 @@ def diagnostic_hard_gap_trust_assessment(
     if hard_gap_geometry_conflict(width_ratio, gap.score, model_delta_ratio, config):
         return assessment("geometry_conflict", "model_delta_or_score_conflict")
     if width_ratio < config.frame_border_width_ratio and dark_separator_like:
-        return assessment("suspect_frame_border", "too_narrow_dark_band")
+        return assessment("suspect_frame_border", "too_narrow_separator_band")
     if hard_gap_is_narrow(gap, pitch, config) and (
         bool(flags.get("content_continuous", False))
         or bool(flags.get("weak_dark_gap", False))

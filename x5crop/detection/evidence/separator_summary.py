@@ -1,20 +1,18 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from ...constants import (
-    GAP_CONTENT,
-    GAP_DETECTED,
-    GAP_EDGE_PAIR,
-    GAP_EQUAL,
-    GAP_GRID,
-)
 from ...domain import Detection, Gap
 from ...gap_methods import (
     is_content_model_gap_method,
+    is_detected_gap_method,
     is_direct_hard_gap_method,
+    is_edge_pair_gap_method,
     is_enhanced_hard_gap_method,
+    is_equal_model_gap_method,
+    is_grid_model_gap_method,
     is_hard_gap_method,
     is_separator_support_gap_method,
 )
@@ -98,8 +96,8 @@ def _int(value: Any, default: int = 0) -> int:
         return int(default)
 
 
-def _gap_method_count(detection: Detection, methods: set[str]) -> int:
-    return sum(1 for gap in detection.gaps if gap.method in methods)
+def _gap_method_count(detection: Detection, predicate: Callable[[str], bool]) -> int:
+    return sum(1 for gap in detection.gaps if predicate(gap.method))
 
 
 def gap_method_evidence_summary(
@@ -124,21 +122,21 @@ def gap_method_evidence_summary(
             direct_hard_gaps += 1
         if is_enhanced_hard_gap_method(method):
             enhanced_hard_gaps += 1
-        if method == GAP_GRID:
+        if is_grid_model_gap_method(method):
             grid_model_gaps += 1
             if leading_grid_open:
                 leading_grid_scores.append(float(gap.score))
         else:
             leading_grid_open = False
-        if method == GAP_EQUAL:
+        if is_equal_model_gap_method(method):
             equal_model_gaps += 1
         if is_content_model_gap_method(method):
             content_model_gaps += 1
         if is_hard_gap_method(method):
             hard_gap_indexes.append(int(gap.index))
-        if method == GAP_EDGE_PAIR:
+        if is_edge_pair_gap_method(method):
             edge_pair_scores.append(float(gap.score))
-        if method == GAP_DETECTED:
+        if is_detected_gap_method(method):
             detected_scores.append(float(gap.score))
         if is_separator_support_gap_method(method) and gap.score >= reliable_min_score:
             reliable_support_gaps += 1
@@ -190,9 +188,9 @@ def separator_summary_from_detection(detection: Detection) -> SeparatorGateDetai
         hard_detail,
         expected_default=max(0, int(detection.count) - 1),
         hard_default=sum(1 for gap in detection.gaps if is_hard_gap_method(gap.method)),
-        grid_default=_gap_method_count(detection, {GAP_GRID}),
-        equal_default=_gap_method_count(detection, {GAP_EQUAL}),
-        content_default=_gap_method_count(detection, {GAP_CONTENT}),
+        grid_default=_gap_method_count(detection, is_grid_model_gap_method),
+        equal_default=_gap_method_count(detection, is_equal_model_gap_method),
+        content_default=_gap_method_count(detection, is_content_model_gap_method),
     )
 
 

@@ -5,9 +5,9 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED
+from ..constants import GAP_EDGE_PAIR
 from ..domain import Gap
-from ..gap_methods import is_hard_gap_method
+from ..gap_methods import is_detected_or_enhanced_hard_gap_method, is_hard_gap_method
 from ..utils import clamp_float, clamp_int
 from .detection_parameters import EdgePairParameters, EdgeRefineProfileParameters
 from .edge_refine_profile import edge_refine_profiles, local_edge_peaks
@@ -165,7 +165,7 @@ def assess_edge_pair_replacement(
             delta_px=float(delta),
             min_quality=float(params.min_quality_for_model_gap),
         )
-    if gap.method in {GAP_DETECTED, GAP_ENHANCED_DETECTED}:
+    if is_detected_or_enhanced_hard_gap_method(gap.method):
         return assess_edge_pair_hard_gap_replacement(gap, edge_gap, pitch, params)
     return EdgePairReplacementAssessment(
         ok=True,
