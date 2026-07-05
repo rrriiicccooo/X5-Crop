@@ -178,6 +178,7 @@ def separator_policy(
             local_gain_ratio=float(nearby_correction.local_gain_ratio),
             local_gain_min=float(nearby_correction.local_gain_min),
             local_gain_max=float(nearby_correction.local_gain_max),
+            width_cv_slack=float(nearby_correction.width_cv_slack),
         ),
         robust_grid=RobustGridParameters(
             constrain_full_shift_ratio=float(robust_grid.constrain_full_shift_ratio),
@@ -224,6 +225,7 @@ def separator_policy(
             separator_width_min_prominence=float(gap_search.separator_width_min_prominence),
         ),
         enhanced=EnhancedSeparatorParameters(
+            min_score=float(enhanced.min_score),
             max_width_ratio=float(enhanced.max_width_ratio),
             max_width_min=float(enhanced.max_width_min),
             max_width_max=float(enhanced.max_width_max),

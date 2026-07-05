@@ -468,6 +468,7 @@ class FormatParameterViews:
     @property
     def enhanced_separator(self) -> EnhancedSeparatorParameters:
         return EnhancedSeparatorParameters(
+            min_score=self.enhanced_min_score,
             max_width_ratio=self.enhanced_max_width_ratio,
             max_width_min=self.enhanced_max_width_min,
             max_width_max=self.enhanced_max_width_max,
@@ -592,6 +593,7 @@ class FormatParameterViews:
             local_gain_ratio=self.nearby_local_gain_ratio,
             local_gain_min=self.nearby_local_gain_min,
             local_gain_max=self.nearby_local_gain_max,
+            width_cv_slack=self.nearby_width_cv_slack,
         )
 
     @property

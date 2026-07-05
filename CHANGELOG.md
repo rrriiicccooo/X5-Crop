@@ -152,6 +152,9 @@ Current stable release: v4.2.8
   和 merge detail 分开；`geometry/nearby_separator.py` 将 search context、
   candidate ranking、stronger test 和 geometry acceptance 分开，方便继续人工审核
   separator refinement 的阈值策略。
+- separator refinement 的 policy surface 已补齐：`enhanced.min_score` 和
+  `nearby_correction.width_cv_slack` 从 `FormatParameters` 显式流入 runtime
+  `SeparatorPolicy`，并出现在 policy/report detail 中；默认值保持旧行为。
 - `.gitignore` 显式保留 `x5crop/detection/candidate/build/*.py`，避免源码层级被
   通用 `build/` 输出规则误隐藏。
 - candidate source orchestration 已去 retry 化：standard / broad-width gap profiles、
@@ -325,6 +328,9 @@ Verified:
   promotion, and merge detail; `geometry/nearby_separator.py` separates search
   context, candidate ranking, stronger test, and geometry acceptance so separator
   refinement thresholds can be reviewed directly.
+- The separator refinement policy surface now exposes `enhanced.min_score` and
+  `nearby_correction.width_cv_slack` from `FormatParameters` through runtime
+  `SeparatorPolicy` and policy/report detail; defaults preserve existing behavior.
 - `.gitignore` explicitly keeps `x5crop/detection/candidate/build/*.py` visible
   so source layers are not hidden by the generic `build/` output rule.
 - Candidate source orchestration no longer uses active retry control flow:

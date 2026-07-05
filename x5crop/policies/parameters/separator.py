@@ -62,6 +62,7 @@ class NearbySeparatorCorrectionParameters:
     local_gain_ratio: float
     local_gain_min: float
     local_gain_max: float
+    width_cv_slack: float
 
 @dataclass(frozen=True)
 class RobustGridParameters:
@@ -111,6 +112,7 @@ class GapSearchParameters:
 
 @dataclass(frozen=True)
 class EnhancedSeparatorParameters:
+    min_score: float
     max_width_ratio: float
     max_width_min: float
     max_width_max: float

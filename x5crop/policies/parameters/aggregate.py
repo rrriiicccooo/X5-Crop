@@ -122,6 +122,7 @@ class FormatParameters(FormatParameterViews):
     nearby_local_gain_ratio: float = 0.006
     nearby_local_gain_min: float = 8.0
     nearby_local_gain_max: float = 40.0
+    nearby_width_cv_slack: float = 0.0015
     nearby_active_correction: bool = True
     robust_reliable_min_score: float = 0.28
     robust_min_reliable: int = 2
@@ -142,6 +143,7 @@ class FormatParameters(FormatParameterViews):
     robust_hard_protect_ratio: float = 0.006
     robust_hard_protect_min: float = 12.0
     robust_hard_protect_max: float = 40.0
+    enhanced_min_score: float = 0.34
     enhanced_max_width_ratio: float = 0.040
     enhanced_max_width_min: float = 3.0
     enhanced_max_width_max: float = 420.0
