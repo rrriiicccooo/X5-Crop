@@ -10,8 +10,9 @@ from ..domain import Box, Gap
 from ..cache import AnalysisCache
 from ..utils import clamp_float, clamp_int
 from .detection_parameters import EdgePairParameters, EdgeRefineProfileParameters
+from .edge_refine_profile import edge_refine_profiles, local_edge_peaks
 from .separator_cache import cached_edge_refine_profiles
-from .separator_profile import edge_refine_profiles, interval_mean, local_edge_peaks
+from .separator_profile import interval_mean
 
 
 def edge_pair_parameters_from_config(config: Any) -> EdgePairParameters:

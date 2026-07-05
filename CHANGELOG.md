@@ -66,6 +66,9 @@ Current stable release: v4.2.8
   gap method 判断统一使用常量。
 - edge-pair refinement 已明确为 edge-pair gap correction：active detail key
   改为 `edge_pair_correction`，debug gap overlay 也改为消费 gap method 常量。
+- edge-pair 专用 edge-refine profile 已从基础 `separator_profile.py` 拆出到
+  `geometry/edge_refine_profile.py`；基础 separator profile 只保留 separator
+  signal 与通用 profile helper。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 

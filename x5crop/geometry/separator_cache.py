@@ -9,7 +9,8 @@ from ..image.evidence import make_separator_evidence_gray
 from ..cache import AnalysisCache
 from .boxes import box_cache_key, crop_work_outer, full_work_box, is_full_work_box
 from .detection_parameters import EdgeRefineProfileParameters, SeparatorProfileParameters
-from .separator_profile import edge_refine_profiles, separator_profile
+from .edge_refine_profile import edge_refine_profiles
+from .separator_profile import separator_profile
 
 
 def cached_full_separator_evidence(cache: Optional[AnalysisCache], gray_work: np.ndarray) -> np.ndarray:
