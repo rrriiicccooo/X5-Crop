@@ -67,6 +67,9 @@ Current stable release: v4.2.8
   assessment 消费层。
 - active gap search profile vocabulary 只保留 `standard` 与 `broad_width`；
   `broad_width` profile detail helper 只消费 separator policy。
+- broad-width detected gap 生成已拆出 width-profile gap window、run scoring、
+  best candidate selection 和 core-width clipped detected-gap output；输出仍是
+  普通 `detected` hard gap，不引入独立 gap method。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
 - grid-derived outer box 计算已从 separator gap lifecycle 移到
@@ -379,6 +382,10 @@ Verified:
   outer-box calculation now lives in `detection.candidate.proposal.outer.grid_refine`;
   the separator gap lifecycle consumes grid detail and may rebuild gaps, but it
   does not own the outer-box adjustment rule.
+- Broad-width detected gap generation now separates the width-profile gap window,
+  run scoring, best candidate selection, and core-width clipped detected-gap
+  output. The output remains an ordinary `detected` hard gap and does not add a
+  separate gap method.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the
   diagnostic hard-gap trust classifier; `detection/evidence/gap_diagnostics.py`
