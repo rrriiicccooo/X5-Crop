@@ -246,9 +246,9 @@ Current stable release: v4.2.8
 - edge-pair replacement eligibility 已改为 `EdgePairReplacementAssessment`：
   accepted / rejected 都记录 reason、delta、shift / quality limit；行为等价保留
   旧布尔判断，不改变阈值。
-- edge-pair batch refinement 已改为 `EdgePairRefinementResult`；
-  `refine_gaps_with_edge_profiles` / `refine_gaps_by_edge_pairs` 不再通过裸
-  tuple 返回 gaps/detail，report/detail 字段保持不变。
+- edge-pair batch refinement 已改为 `EdgePairRefinementResult`；active
+  入口收敛为 `refine_gaps_with_edge_profiles`，不再通过裸 tuple 返回
+  gaps/detail，report/detail 字段保持不变。
 - edge-pair search limits 已改为 `EdgePairSearchLimits`；selected edge-pair gap
   由 `edge_pair_gap_from_candidate` 从 selected candidate 派生，避免重复 best
   selection，report/detail 字段保持不变。
@@ -656,9 +656,9 @@ Verified:
 - Nearby separator batch correction now uses `NearbySeparatorCorrectionResult`;
   `apply_nearby_separator_corrections` no longer returns gaps/detail through a
   raw tuple, while report/detail fields remain unchanged.
-- Edge-pair batch refinement now uses `EdgePairRefinementResult`;
-  `refine_gaps_with_edge_profiles` / `refine_gaps_by_edge_pairs` no longer
-  return gaps/detail through raw tuples, while report/detail fields remain
+- Edge-pair batch refinement now uses `EdgePairRefinementResult`; the active
+  entrypoint is narrowed to `refine_gaps_with_edge_profiles` and no longer
+  returns gaps/detail through raw tuples, while report/detail fields remain
   unchanged.
 - Edge-pair search limits now use `EdgePairSearchLimits`, and the selected
   edge-pair gap is derived from the selected candidate through

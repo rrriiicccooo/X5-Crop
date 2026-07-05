@@ -9,8 +9,8 @@ from ..constants import GAP_EDGE_PAIR
 from ..domain import Gap
 from ..gap_methods import is_detected_or_enhanced_hard_gap_method, is_hard_gap_method
 from ..utils import clamp_float, clamp_int
-from .detection_parameters import EdgePairParameters, EdgeRefineProfileParameters
-from .edge_refine_profile import edge_refine_profiles, local_edge_peaks
+from .detection_parameters import EdgePairParameters
+from .edge_refine_profile import local_edge_peaks
 from .separator_profile import interval_mean
 
 
@@ -243,16 +243,6 @@ def edge_pair_gap_from_candidate(
     )
 
 
-def best_edge_pair_gap(
-    gap: Gap,
-    candidates: list[EdgePairCandidate],
-) -> Gap | None:
-    candidate = best_edge_pair_candidate(candidates)
-    if candidate is None:
-        return None
-    return edge_pair_gap_from_candidate(gap, candidate)
-
-
 def best_edge_pair_candidate(candidates: list[EdgePairCandidate]) -> EdgePairCandidate | None:
     if not candidates:
         return None
@@ -373,19 +363,6 @@ def refine_gaps_with_edge_profiles(
     )
 
 
-def refine_gaps_by_edge_pairs(
-    crop: np.ndarray,
-    gaps: list[Gap],
-    count: int,
-    edge_pair_parameters: Optional[EdgePairParameters] = None,
-    edge_refine_config: EdgeRefineProfileParameters | None = None,
-) -> EdgePairRefinementResult:
-    if crop.size == 0:
-        return EdgePairRefinementResult(gaps, {"used": False, "reason": "empty"})
-    edge, background, _activity = edge_refine_profiles(crop, edge_refine_config)
-    return refine_gaps_with_edge_profiles(edge, background, gaps, count, edge_pair_parameters)
-
-
 __all__ = [
     "EdgePairCandidate",
     "EdgePairRefinementResult",
@@ -395,11 +372,9 @@ __all__ = [
     "assess_edge_pair_hard_gap_replacement",
     "assess_edge_pair_replacement",
     "best_edge_pair_candidate",
-    "best_edge_pair_gap",
     "edge_pair_gap_from_candidate",
     "edge_pair_candidates_for_gap",
     "edge_pair_search_result_for_gap",
     "edge_pair_search_limits",
-    "refine_gaps_by_edge_pairs",
     "refine_gaps_with_edge_profiles",
 ]
