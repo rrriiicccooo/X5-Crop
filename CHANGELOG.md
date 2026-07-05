@@ -131,6 +131,11 @@ Current stable release: v4.2.8
   `detection/candidate/build/separator_gaps.py`：candidate build 现在先生成
   origin/pitch、standard/broad-width gaps、edge-pair、grid、enhanced 和 nearby
   refinement 结果，再由 `detection.py` 负责 frame fit、score 和 detail assembly。
+- 普通 separator profile / gap search 已做行为等价拆分：
+  `geometry/separator_profile.py` 将中段采样、分段极端亮/暗、uniform soft score
+  和列向梯度分开；`geometry/gap_search.py` 将 window、width limits、thresholds、
+  band expansion 和 detected-candidate ranking 分开，方便人工审核普通 separator
+  是如何被看见的。
 - `.gitignore` 显式保留 `x5crop/detection/candidate/build/*.py`，避免源码层级被
   通用 `build/` 输出规则误隐藏。
 - candidate source orchestration 已去 retry 化：standard / broad-width gap profiles、
@@ -283,6 +288,11 @@ Verified:
   origin/pitch, standard/broad-width gaps, edge-pair, grid, enhanced, and nearby
   refinement results before `detection.py` handles frame fit, scoring, and
   detail assembly.
+- Ordinary separator profile / gap search code is split without behavior changes:
+  `geometry/separator_profile.py` separates vertical sampling, segmented extreme
+  evidence, uniform soft score, and column gradient signals; `geometry/gap_search.py`
+  separates window, width limits, thresholds, band expansion, and detected-candidate
+  ranking so ordinary separator detection can be reviewed step by step.
 - `.gitignore` explicitly keeps `x5crop/detection/candidate/build/*.py` visible
   so source layers are not hidden by the generic `build/` output rule.
 - Candidate source orchestration no longer uses active retry control flow:

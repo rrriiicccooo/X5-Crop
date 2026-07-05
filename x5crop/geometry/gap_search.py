@@ -10,6 +10,92 @@ from ..utils import clamp_float, clamp_int, runs_from_mask
 from .detection_parameters import GapSearchParameters, RobustGridParameters
 
 
+def gap_search_window(
+    profile_length: int,
+    expected: float,
+    pitch: float,
+    config: GapSearchParameters,
+) -> tuple[int, int]:
+    radius = clamp_int(pitch * config.radius_ratio, config.radius_min, config.radius_max)
+    lo = max(1, int(round(expected)) - radius)
+    hi = min(profile_length - 1, int(round(expected)) + radius + 1)
+    return lo, hi
+
+
+def gap_width_limits(
+    pitch: float,
+    max_width_ratio_override: Optional[float],
+    config: GapSearchParameters,
+) -> tuple[int, int, int, int]:
+    normal_max_gap_w = clamp_int(pitch * config.max_width_ratio, config.max_width_min, config.max_width_max)
+    max_width_ratio = config.max_width_ratio if max_width_ratio_override is None else max_width_ratio_override
+    max_gap_w = clamp_int(pitch * max_width_ratio, config.max_width_min, config.max_width_max)
+    min_gap_w = clamp_int(pitch * config.min_width_ratio, config.min_width_min, config.min_width_max)
+    guard_w = clamp_int(pitch * config.guard_ratio, config.guard_min, config.guard_max)
+    return normal_max_gap_w, max_gap_w, min_gap_w, guard_w
+
+
+def gap_score_thresholds(local_max: float, config: GapSearchParameters) -> tuple[float, float]:
+    min_score = config.min_score
+    peak_threshold = max(min_score, local_max * config.peak_multiplier)
+    band_threshold = max(min_score * 0.86, local_max * config.band_multiplier)
+    return peak_threshold, band_threshold
+
+
+def expanded_gap_band(
+    local: np.ndarray,
+    run_start: int,
+    run_end: int,
+    band_threshold: float,
+    max_width: int,
+) -> tuple[int, int]:
+    band_start, band_end = run_start, run_end
+    while band_start > 0 and local[band_start - 1] >= band_threshold and (band_end - (band_start - 1)) <= max_width:
+        band_start -= 1
+    while band_end < len(local) and local[band_end] >= band_threshold and ((band_end + 1) - band_start) <= max_width:
+        band_end += 1
+    return band_start, band_end
+
+
+def detected_gap_candidate(
+    local: np.ndarray,
+    lo: int,
+    expected: float,
+    pitch: float,
+    run_start: int,
+    run_end: int,
+    limits: tuple[int, int, int, int],
+    band_threshold: float,
+    max_width_ratio_override: Optional[float],
+    config: GapSearchParameters,
+) -> Optional[tuple[float, float, float, float, float, float, str]]:
+    normal_max_gap_w, max_gap_w, min_gap_w, guard_w = limits
+    band_start, band_end = expanded_gap_band(local, run_start, run_end, band_threshold, max_gap_w)
+    band_width = band_end - band_start
+    if band_width < min_gap_w or band_width > max_gap_w:
+        return None
+
+    left_guard = local[max(0, band_start - guard_w):band_start]
+    right_guard = local[band_end:min(len(local), band_end + guard_w)]
+    if left_guard.size == 0 or right_guard.size == 0:
+        return None
+    mean_score = float(local[band_start:band_end].mean())
+    side_score = max(float(left_guard.mean()), float(right_guard.mean()))
+    prominence = mean_score - side_score
+    if prominence < 0.08 and mean_score < 0.95:
+        return None
+    if max_width_ratio_override is not None and band_width > normal_max_gap_w:
+        if mean_score < config.separator_width_min_mean or prominence < config.separator_width_min_prominence:
+            return None
+
+    center = float(lo + (band_start + band_end - 1) / 2.0)
+    start = float(lo + band_start)
+    end = float(lo + band_end)
+    distance = abs(center - expected) / max(1.0, pitch)
+    quality = mean_score + 0.8 * prominence
+    return distance, -quality, -mean_score, center, start, end, "detected"
+
+
 def find_gap(
     profile: np.ndarray,
     expected: float,
@@ -19,9 +105,7 @@ def find_gap(
     gap_search: GapSearchParameters | None = None,
 ) -> Gap:
     config = gap_search or GapSearchParameters()
-    radius = clamp_int(pitch * config.radius_ratio, config.radius_min, config.radius_max)
-    lo = max(1, int(round(expected)) - radius)
-    hi = min(len(profile) - 1, int(round(expected)) + radius + 1)
+    lo, hi = gap_search_window(len(profile), expected, pitch, config)
     if hi <= lo:
         return Gap(index, float(expected), 0.0, "equal")
     local = profile[lo:hi]
@@ -30,44 +114,25 @@ def find_gap(
     if local.size == 0 or local_max < min_score:
         return Gap(index, float(expected), local_max, "equal")
 
-    normal_max_gap_w = clamp_int(pitch * config.max_width_ratio, config.max_width_min, config.max_width_max)
-    max_width_ratio = config.max_width_ratio if max_width_ratio_override is None else max_width_ratio_override
-    max_gap_w = clamp_int(pitch * max_width_ratio, config.max_width_min, config.max_width_max)
-    min_gap_w = clamp_int(pitch * config.min_width_ratio, config.min_width_min, config.min_width_max)
-    guard_w = clamp_int(pitch * config.guard_ratio, config.guard_min, config.guard_max)
-    peak_threshold = max(min_score, local_max * config.peak_multiplier)
-    band_threshold = max(min_score * 0.86, local_max * config.band_multiplier)
+    limits = gap_width_limits(pitch, max_width_ratio_override, config)
+    peak_threshold, band_threshold = gap_score_thresholds(local_max, config)
     candidates: list[tuple[float, float, float, float, float, float, str]] = []
 
     for run_start, run_end in runs_from_mask(local >= peak_threshold):
-        band_start, band_end = run_start, run_end
-        while band_start > 0 and local[band_start - 1] >= band_threshold and (band_end - (band_start - 1)) <= max_gap_w:
-            band_start -= 1
-        while band_end < len(local) and local[band_end] >= band_threshold and ((band_end + 1) - band_start) <= max_gap_w:
-            band_end += 1
-        band_width = band_end - band_start
-        if band_width < min_gap_w or band_width > max_gap_w:
-            continue
-
-        left_guard = local[max(0, band_start - guard_w):band_start]
-        right_guard = local[band_end:min(len(local), band_end + guard_w)]
-        if left_guard.size == 0 or right_guard.size == 0:
-            continue
-        mean_score = float(local[band_start:band_end].mean())
-        side_score = max(float(left_guard.mean()), float(right_guard.mean()))
-        prominence = mean_score - side_score
-        if prominence < 0.08 and mean_score < 0.95:
-            continue
-        if max_width_ratio_override is not None and band_width > normal_max_gap_w:
-            if mean_score < config.separator_width_min_mean or prominence < config.separator_width_min_prominence:
-                continue
-
-        center = float(lo + (band_start + band_end - 1) / 2.0)
-        start = float(lo + band_start)
-        end = float(lo + band_end)
-        distance = abs(center - expected) / max(1.0, pitch)
-        quality = mean_score + 0.8 * prominence
-        candidates.append((distance, -quality, -mean_score, center, start, end, "detected"))
+        candidate = detected_gap_candidate(
+            local,
+            lo,
+            expected,
+            pitch,
+            run_start,
+            run_end,
+            limits,
+            band_threshold,
+            max_width_ratio_override,
+            config,
+        )
+        if candidate is not None:
+            candidates.append(candidate)
 
     if candidates:
         _, neg_quality, _, center, start, end, method = sorted(candidates)[0]
