@@ -7,6 +7,13 @@ import numpy as np
 
 from ....domain import Box, Gap
 from ....formats import FormatSpec
+from ....geometry.edge_pairs import refine_gaps_with_edge_profiles
+from ....geometry.enhanced_separator import (
+    promote_enhanced_separator_gaps,
+    should_run_enhanced_gap_promotion,
+)
+from ....geometry.nearby_separator import apply_nearby_separator_corrections
+from ....geometry.robust_grid import apply_robust_grid
 from ....geometry.separator_cache import cached_edge_refine_profiles, cached_separator_profile
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
@@ -14,13 +21,6 @@ from ....runtime.config import RuntimeConfig
 from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE
 from ..proposal.separator.model import propose_equal_model_gaps_from_profile
 from ..proposal.separator.proposal import propose_separator_width_profile_gaps, propose_standard_separator_gaps
-from ..proposal.separator.refinement import (
-    apply_grid_gap_model,
-    promote_enhanced_separator_gaps_for_candidate,
-    refine_with_edge_profiles,
-    refine_with_nearby_separator,
-    should_run_enhanced_gap_promotion_for_candidate,
-)
 
 
 @dataclass(frozen=True)
@@ -114,14 +114,14 @@ def apply_primary_separator_refinements(
             outer,
             policy.separator.edge_refine_profile,
         )
-        gaps, edge_pair_correction_detail = refine_with_edge_profiles(
+        gaps, edge_pair_correction_detail = refine_gaps_with_edge_profiles(
             edge,
             background,
             gaps,
             count,
             policy.separator.edge_pair,
         )
-    gaps, grid_detail = apply_grid_gap_model(
+    gaps, grid_detail = apply_robust_grid(
         gaps,
         origin,
         pitch,
@@ -158,8 +158,8 @@ def apply_enhanced_gap_promotion(
     )
     if not promotion_allowed:
         return gaps, detail
-    if should_run_enhanced_gap_promotion_for_candidate(config.analysis, gaps, count, policy.separator.enhanced):
-        return promote_enhanced_separator_gaps_for_candidate(
+    if should_run_enhanced_gap_promotion(config.analysis, gaps, count, policy.separator.enhanced):
+        return promote_enhanced_separator_gaps(
             gray_work,
             outer,
             gaps,
@@ -190,7 +190,7 @@ def apply_nearby_separator_refinement(
     if strip_mode != "full" or not policy.separator.nearby_correction.enabled:
         return gaps, detail, None
     pre_nearby_gaps = list(gaps)
-    refined_gaps, detail = refine_with_nearby_separator(
+    refined_gaps, detail = apply_nearby_separator_corrections(
         profile,
         gaps,
         origin,
