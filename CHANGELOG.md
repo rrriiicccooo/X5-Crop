@@ -105,6 +105,10 @@ Current stable release: v4.2.8
   gap method 判断统一使用常量。
 - edge-pair refinement 已明确为 edge-pair gap correction：active detail key
   改为 `edge_pair_correction`，debug gap overlay 也改为消费 gap method 常量。
+- edge-pair 参数边界已收紧：format preset 仍可用
+  `SeparatorEdgePairPolicy` 表达语义，policy assembly 会在 runtime policy 中
+  转换为 `EdgePairParameters`，`geometry/edge_pairs.py` 不再 duck-type
+  policy-like 对象。
 - edge-pair 专用 edge-refine profile 已从基础 `separator_profile.py` 拆出到
   `geometry/edge_refine_profile.py`；基础 separator profile 只保留 separator
   signal 与通用 profile helper。
@@ -389,6 +393,10 @@ Verified:
   origin/pitch, standard/broad-width gaps, edge-pair, grid, enhanced, and nearby
   refinement results before `detection.py` handles frame fit, scoring, and
   detail assembly.
+- Edge-pair parameter ownership is tightened: format presets may still use
+  `SeparatorEdgePairPolicy` for semantic declaration, policy assembly converts
+  those presets into `EdgePairParameters`, and `geometry/edge_pairs.py` no
+  longer duck-types policy-like objects.
 - Ordinary separator profile / gap search code is split without behavior changes:
   `geometry/separator_profile.py` separates vertical sampling, segmented extreme
   evidence, uniform soft score, and column gradient signals; `geometry/gap_search.py`
@@ -405,7 +413,7 @@ Verified:
   proposal refinement facade; `geometry/edge_pairs.py` separates search limits,
   typed candidate generation, best-pair selection, and replacement eligibility;
   candidate build owns cached edge/background profile retrieval, while
-  `geometry/edge_pairs.py` consumes profile arrays only;
+  `geometry/edge_pairs.py` consumes profile arrays and pure parameter objects;
   `geometry/robust_grid.py` separates reliable anchor
   selection, grid fit, predicted center, and hard-gap protection / override
   adjustment so model evidence movement can be reviewed directly. Grid-derived

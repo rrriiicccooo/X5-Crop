@@ -11,6 +11,7 @@ from ...constants import (
     GAP_GRID,
 )
 from ...geometry.detection_parameters import (
+    EdgePairParameters,
     EdgeRefineProfileParameters,
     EnhancedSeparatorParameters,
     GapSearchParameters,
@@ -103,16 +104,8 @@ class SeparatorWidthProfilePolicy(SeparatorWidthProfileSearchParameters):
 
 
 @dataclass(frozen=True)
-class SeparatorEdgePairPolicy:
-    window_ratio: float = 0.070
-    min_gutter_ratio: float = 0.003
-    max_gutter_ratio: float = 0.040
-    min_strength: float = 0.45
-    min_background: float = 0.64
-    min_quality_for_model_gap: float = 1.05
-    min_quality_for_hard_gap: float = 0.70
-    hard_gap_quality_ratio: float = 0.95
-    max_hard_shift_ratio: float = 0.040
+class SeparatorEdgePairPolicy(EdgePairParameters):
+    """Format preset type for edge-pair parameters."""
 
 
 @dataclass(frozen=True)
@@ -125,7 +118,7 @@ class SeparatorPolicy:
     width_profile: SeparatorWidthProfilePolicy = field(default_factory=SeparatorWidthProfilePolicy)
     geometry_support_modes: tuple[str, ...] = ()
     geometry_support: SeparatorGeometrySupportPolicy = field(default_factory=SeparatorGeometrySupportPolicy)
-    edge_pair: SeparatorEdgePairPolicy = field(default_factory=SeparatorEdgePairPolicy)
+    edge_pair: EdgePairParameters = field(default_factory=EdgePairParameters)
     hard_gap_trust: HardGapTrustParameters = field(default_factory=HardGapTrustParameters)
     nearby_correction: NearbySeparatorCorrectionParameters = field(default_factory=NearbySeparatorCorrectionParameters)
     robust_grid: RobustGridParameters = field(default_factory=RobustGridParameters)

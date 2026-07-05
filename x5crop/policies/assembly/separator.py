@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ...geometry.detection_parameters import (
+    EdgePairParameters,
     EdgeRefineProfileParameters,
     EnhancedSeparatorParameters,
     GapSearchParameters,
@@ -112,6 +113,23 @@ def separator_width_profile_policy(
     )
 
 
+def edge_pair_parameters_from_preset(
+    preset: FormatPolicyPreset,
+) -> EdgePairParameters:
+    edge_pair = preset.separator_edge_pair
+    return EdgePairParameters(
+        window_ratio=float(edge_pair.window_ratio),
+        min_gutter_ratio=float(edge_pair.min_gutter_ratio),
+        max_gutter_ratio=float(edge_pair.max_gutter_ratio),
+        min_strength=float(edge_pair.min_strength),
+        min_background=float(edge_pair.min_background),
+        min_quality_for_model_gap=float(edge_pair.min_quality_for_model_gap),
+        min_quality_for_hard_gap=float(edge_pair.min_quality_for_hard_gap),
+        hard_gap_quality_ratio=float(edge_pair.hard_gap_quality_ratio),
+        max_hard_shift_ratio=float(edge_pair.max_hard_shift_ratio),
+    )
+
+
 def separator_policy(
     preset: FormatPolicyPreset,
     mode_preset: ModePolicyPreset,
@@ -139,7 +157,7 @@ def separator_policy(
         width_profile=separator_width_profile_policy(mode_preset, params),
         geometry_support_modes=mode_preset.separator_geometry_support_modes,
         geometry_support=separator_geometry_support_policy(mode_preset, params),
-        edge_pair=preset.separator_edge_pair,
+        edge_pair=edge_pair_parameters_from_preset(preset),
         hard_gap_trust=HardGapTrustParameters(
             guard_ratio=float(hard_gap_trust.guard_ratio),
             guard_min=int(hard_gap_trust.guard_min),
@@ -281,6 +299,7 @@ def separator_policy(
     )
 
 __all__ = [
+    'edge_pair_parameters_from_preset',
     'separator_gate_policy',
     'separator_geometry_support_policy',
     'separator_width_profile_policy',

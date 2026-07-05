@@ -31,22 +31,6 @@ class EdgePairCandidate:
         )
 
 
-def edge_pair_parameters_from_config(config: Any) -> EdgePairParameters:
-    if isinstance(config, EdgePairParameters):
-        return config
-    return EdgePairParameters(
-        window_ratio=float(getattr(config, "window_ratio")),
-        min_gutter_ratio=float(getattr(config, "min_gutter_ratio")),
-        max_gutter_ratio=float(getattr(config, "max_gutter_ratio")),
-        min_strength=float(getattr(config, "min_strength")),
-        min_background=float(getattr(config, "min_background")),
-        min_quality_for_model_gap=float(getattr(config, "min_quality_for_model_gap")),
-        min_quality_for_hard_gap=float(getattr(config, "min_quality_for_hard_gap")),
-        hard_gap_quality_ratio=float(getattr(config, "hard_gap_quality_ratio")),
-        max_hard_shift_ratio=float(getattr(config, "max_hard_shift_ratio")),
-    )
-
-
 def edge_pair_can_replace_hard_gap(gap: Gap, edge_gap: Gap, pitch: float, params: EdgePairParameters) -> bool:
     delta = abs(edge_gap.center - gap.center)
     if params.max_hard_shift_ratio <= 0.0:
@@ -140,15 +124,15 @@ def refine_gaps_with_edge_profiles(
     background: np.ndarray,
     gaps: list[Gap],
     count: int,
-    edge_pair_config: Optional[Any] = None,
+    edge_pair_parameters: Optional[EdgePairParameters] = None,
 ) -> tuple[list[Gap], dict[str, Any]]:
     width = len(edge)
     if count <= 1 or width <= 1 or background.size <= 0 or not gaps:
         return gaps, {"used": False, "reason": "empty"}
     pitch = width / float(max(1, count))
-    if edge_pair_config is None:
-        raise ValueError("edge_pair config is required")
-    params = edge_pair_parameters_from_config(edge_pair_config)
+    if edge_pair_parameters is None:
+        raise ValueError("edge_pair parameters are required")
+    params = edge_pair_parameters
     window, min_gutter, max_gutter = edge_pair_search_limits(pitch, params)
     refined: list[Gap] = []
     accepted: list[dict[str, Any]] = []
@@ -198,13 +182,13 @@ def refine_gaps_by_edge_pairs(
     crop: np.ndarray,
     gaps: list[Gap],
     count: int,
-    edge_pair_config: Optional[Any] = None,
+    edge_pair_parameters: Optional[EdgePairParameters] = None,
     edge_refine_config: EdgeRefineProfileParameters | None = None,
 ) -> tuple[list[Gap], dict[str, Any]]:
     if crop.size == 0:
         return gaps, {"used": False, "reason": "empty"}
     edge, background, _activity = edge_refine_profiles(crop, edge_refine_config)
-    return refine_gaps_with_edge_profiles(edge, background, gaps, count, edge_pair_config)
+    return refine_gaps_with_edge_profiles(edge, background, gaps, count, edge_pair_parameters)
 
 
 __all__ = [
@@ -213,7 +197,6 @@ __all__ = [
     "edge_pair_can_replace_gap",
     "edge_pair_can_replace_hard_gap",
     "edge_pair_candidates_for_gap",
-    "edge_pair_parameters_from_config",
     "edge_pair_search_limits",
     "refine_gaps_by_edge_pairs",
     "refine_gaps_with_edge_profiles",

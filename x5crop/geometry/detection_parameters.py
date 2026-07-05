@@ -226,15 +226,15 @@ class EdgeRefineProfileParameters:
 
 @dataclass(frozen=True)
 class EdgePairParameters:
-    window_ratio: float
-    min_gutter_ratio: float
-    max_gutter_ratio: float
-    min_strength: float
-    min_background: float
-    min_quality_for_model_gap: float
-    min_quality_for_hard_gap: float
-    hard_gap_quality_ratio: float
-    max_hard_shift_ratio: float
+    window_ratio: float = 0.070
+    min_gutter_ratio: float = 0.003
+    max_gutter_ratio: float = 0.040
+    min_strength: float = 0.45
+    min_background: float = 0.64
+    min_quality_for_model_gap: float = 1.05
+    min_quality_for_hard_gap: float = 0.70
+    hard_gap_quality_ratio: float = 0.95
+    max_hard_shift_ratio: float = 0.040
 
 
 __all__ = [
