@@ -10,7 +10,8 @@ from ..domain import Box, Gap
 from ..cache import AnalysisCache
 from ..utils import clamp_float
 from .boxes import box_cache_key
-from .gap_search import constrain_gap_to_geometry, find_gap
+from .gap_geometry import constrain_gap_to_geometry
+from .gap_search import find_gap
 from .detection_parameters import EnhancedSeparatorParameters, GapSearchParameters, RobustGridParameters, SeparatorProfileParameters
 from .separator_cache import cached_enhanced_separator_profile
 

@@ -8,7 +8,7 @@ import numpy as np
 from ..constants import HARD_GAP_METHODS
 from ..domain import Gap
 from ..utils import clamp_float, clamp_int, runs_from_mask
-from .gap_search import gap_width_cv, local_gap_geometry_error
+from .gap_geometry import gap_width_cv, local_gap_geometry_error
 from .detection_parameters import NearbySeparatorCorrectionParameters
 from .separator_profile import interval_mean
 

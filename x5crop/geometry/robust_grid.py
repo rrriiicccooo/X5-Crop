@@ -7,7 +7,7 @@ import numpy as np
 from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
 from ..utils import clamp_float
-from .gap_search import constrain_gap_to_geometry
+from .gap_geometry import constrain_gap_to_geometry
 from .gap_trust import light_hard_gap_trust
 from .detection_parameters import HardGapTrustParameters, NearbySeparatorCorrectionParameters, RobustGridParameters
 

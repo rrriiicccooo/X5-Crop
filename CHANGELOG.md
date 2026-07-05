@@ -69,6 +69,9 @@ Current stable release: v4.2.8
 - edge-pair 专用 edge-refine profile 已从基础 `separator_profile.py` 拆出到
   `geometry/edge_refine_profile.py`；基础 separator profile 只保留 separator
   signal 与通用 profile helper。
+- standard gap search 已与 gap geometry helper 拆开：`geometry/gap_search.py`
+  只负责 profile window / width / threshold / candidate ranking；
+  `geometry/gap_geometry.py` 负责 gap 几何约束、width CV 和局部几何误差。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 

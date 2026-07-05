@@ -1,13 +1,44 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
 
-from ..constants import GAP_DETECTED, GAP_EQUAL, HARD_GAP_METHODS
+from ..constants import GAP_DETECTED, GAP_EQUAL
 from ..domain import Gap
-from ..utils import clamp_float, clamp_int, runs_from_mask
-from .detection_parameters import GapSearchParameters, RobustGridParameters
+from ..utils import clamp_int, runs_from_mask
+from .detection_parameters import GapSearchParameters
+
+
+@dataclass(frozen=True)
+class GapWidthLimits:
+    normal_max: int
+    max_width: int
+    min_width: int
+    guard: int
+
+
+@dataclass(frozen=True)
+class DetectedGapCandidate:
+    distance: float
+    quality: float
+    mean_score: float
+    center: float
+    start: float
+    end: float
+    method: str = GAP_DETECTED
+
+    def rank_key(self) -> tuple[float, float, float, float, float, float, str]:
+        return (
+            self.distance,
+            -self.quality,
+            -self.mean_score,
+            self.center,
+            self.start,
+            self.end,
+            self.method,
+        )
 
 
 def gap_search_window(
@@ -26,13 +57,13 @@ def gap_width_limits(
     pitch: float,
     max_width_ratio_override: Optional[float],
     config: GapSearchParameters,
-) -> tuple[int, int, int, int]:
+) -> GapWidthLimits:
     normal_max_gap_w = clamp_int(pitch * config.max_width_ratio, config.max_width_min, config.max_width_max)
     max_width_ratio = config.max_width_ratio if max_width_ratio_override is None else max_width_ratio_override
     max_gap_w = clamp_int(pitch * max_width_ratio, config.max_width_min, config.max_width_max)
     min_gap_w = clamp_int(pitch * config.min_width_ratio, config.min_width_min, config.min_width_max)
     guard_w = clamp_int(pitch * config.guard_ratio, config.guard_min, config.guard_max)
-    return normal_max_gap_w, max_gap_w, min_gap_w, guard_w
+    return GapWidthLimits(normal_max_gap_w, max_gap_w, min_gap_w, guard_w)
 
 
 def gap_score_thresholds(local_max: float, config: GapSearchParameters) -> tuple[float, float]:
@@ -64,19 +95,18 @@ def detected_gap_candidate(
     pitch: float,
     run_start: int,
     run_end: int,
-    limits: tuple[int, int, int, int],
+    limits: GapWidthLimits,
     band_threshold: float,
     max_width_ratio_override: Optional[float],
     config: GapSearchParameters,
-) -> Optional[tuple[float, float, float, float, float, float, str]]:
-    normal_max_gap_w, max_gap_w, min_gap_w, guard_w = limits
-    band_start, band_end = expanded_gap_band(local, run_start, run_end, band_threshold, max_gap_w)
+) -> Optional[DetectedGapCandidate]:
+    band_start, band_end = expanded_gap_band(local, run_start, run_end, band_threshold, limits.max_width)
     band_width = band_end - band_start
-    if band_width < min_gap_w or band_width > max_gap_w:
+    if band_width < limits.min_width or band_width > limits.max_width:
         return None
 
-    left_guard = local[max(0, band_start - guard_w):band_start]
-    right_guard = local[band_end:min(len(local), band_end + guard_w)]
+    left_guard = local[max(0, band_start - limits.guard):band_start]
+    right_guard = local[band_end:min(len(local), band_end + limits.guard)]
     if left_guard.size == 0 or right_guard.size == 0:
         return None
     mean_score = float(local[band_start:band_end].mean())
@@ -84,7 +114,7 @@ def detected_gap_candidate(
     prominence = mean_score - side_score
     if prominence < config.weak_prominence_min and mean_score < config.weak_prominence_mean_override:
         return None
-    if max_width_ratio_override is not None and band_width > normal_max_gap_w:
+    if max_width_ratio_override is not None and band_width > limits.normal_max:
         if mean_score < config.separator_width_min_mean or prominence < config.separator_width_min_prominence:
             return None
 
@@ -93,7 +123,7 @@ def detected_gap_candidate(
     end = float(lo + band_end)
     distance = abs(center - expected) / max(1.0, pitch)
     quality = mean_score + config.quality_prominence_weight * prominence
-    return distance, -quality, -mean_score, center, start, end, GAP_DETECTED
+    return DetectedGapCandidate(distance, quality, mean_score, center, start, end)
 
 
 def find_gap(
@@ -116,7 +146,7 @@ def find_gap(
 
     limits = gap_width_limits(pitch, max_width_ratio_override, config)
     peak_threshold, band_threshold = gap_score_thresholds(local_max, config)
-    candidates: list[tuple[float, float, float, float, float, float, str]] = []
+    candidates: list[DetectedGapCandidate] = []
 
     for run_start, run_end in runs_from_mask(local >= peak_threshold):
         candidate = detected_gap_candidate(
@@ -135,56 +165,19 @@ def find_gap(
             candidates.append(candidate)
 
     if candidates:
-        _, neg_quality, _, center, start, end, method = sorted(candidates)[0]
-        return Gap(index, center, float(-neg_quality), method, start, end)
+        candidate = min(candidates, key=lambda item: item.rank_key())
+        return Gap(index, candidate.center, float(candidate.quality), candidate.method, candidate.start, candidate.end)
 
     return Gap(index, float(expected), local_max, GAP_EQUAL)
 
 
-def constrain_gap_to_geometry(
-    gap: Gap,
-    expected: float,
-    pitch: float,
-    strip_mode: str,
-    robust_grid: RobustGridParameters | None = None,
-) -> Gap:
-    if gap.method not in HARD_GAP_METHODS:
-        return Gap(gap.index, float(expected), gap.score, GAP_EQUAL)
-    config = robust_grid or RobustGridParameters()
-    max_shift = clamp_float(
-        pitch * (config.constrain_full_shift_ratio if strip_mode == "full" else config.constrain_partial_shift_ratio),
-        config.constrain_shift_min,
-        config.constrain_shift_max,
-    )
-    shift = max(-max_shift, min(max_shift, gap.center - expected))
-    center = float(expected + shift)
-    method = gap.method
-    if gap.start is not None and gap.end is not None:
-        delta = center - float(gap.center)
-        start = float(gap.start + delta)
-        end = float(gap.end + delta)
-    else:
-        start = None
-        end = None
-    return Gap(gap.index, center, gap.score, method, start, end)
-
-
-def gap_width_cv(gaps: list[Gap], origin: float, pitch: float, count: int) -> float:
-    if count <= 1:
-        return 0.0
-    cuts = [float(origin)] + [float(gap.center) for gap in gaps] + [float(origin + pitch * count)]
-    widths = np.diff(np.array(cuts, dtype=np.float64))
-    if widths.size != count or np.any(widths <= 1):
-        return 1.0
-    return float(widths.std() / max(1.0, widths.mean()))
-
-
-def local_gap_geometry_error(gaps: list[Gap], gap_index: int, origin: float, pitch: float, count: int) -> float:
-    if count <= 1 or gap_index < 1 or gap_index >= count:
-        return 0.0
-    cuts = [float(origin)] + [float(gap.center) for gap in gaps] + [float(origin + pitch * count)]
-    left_w = cuts[gap_index] - cuts[gap_index - 1]
-    right_w = cuts[gap_index + 1] - cuts[gap_index]
-    if left_w <= 1 or right_w <= 1:
-        return float("inf")
-    return abs(left_w - pitch) + abs(right_w - pitch)
+__all__ = [
+    "DetectedGapCandidate",
+    "GapWidthLimits",
+    "detected_gap_candidate",
+    "expanded_gap_band",
+    "find_gap",
+    "gap_score_thresholds",
+    "gap_search_window",
+    "gap_width_limits",
+]
