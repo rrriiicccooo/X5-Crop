@@ -9,12 +9,18 @@ from ...constants import HARD_GAP_METHODS, MODEL_GAP_METHODS
 from ...domain import Box, Detection, Gap
 from ...geometry.boxes import box_cache_key
 from ...geometry.detection_parameters import SeparatorProfileParameters
+from ...geometry.gap_trust import (
+    classify_diagnostic_hard_gap_trust,
+    hard_gap_dark_separator_like,
+    hard_gap_pixel_signals,
+    hard_gap_width_ratio,
+)
 from ...geometry.separator_cache import cached_separator_profile
 from ...geometry.separator_profile import interval_mean
 from ...policies.registry import get_detection_policy
 from ...policies.runtime.diagnostics import NearbySeparatorDiagnosticsPolicy
 from ...cache import AnalysisCache
-from ...utils import clamp_float, clamp_int, runs_from_mask
+from ...utils import clamp_int, runs_from_mask
 
 
 def gap_work_outer(detection: Detection, gap: Gap) -> Optional[Box]:
@@ -189,29 +195,20 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
         start, end = center - half, center + half + 1
     start = max(work_outer.left, min(work_outer.right, start))
     end = max(start + 1, min(work_outer.right, end))
-    guard = clamp_int(
-        max(float(end - start), pitch * hard_gap_trust_policy.guard_ratio),
-        hard_gap_trust_policy.guard_min,
-        hard_gap_trust_policy.guard_max,
+    signal_gap = Gap(
+        gap.index,
+        gap.center,
+        gap.score,
+        gap.method,
+        float(start - work_outer.left),
+        float(end - work_outer.left),
+        gap.lane_box,
     )
-    left_start = max(work_outer.left, start - guard)
-    right_end = min(work_outer.right, end + guard)
-    core = gray_work[work_outer.top:work_outer.bottom, start:end]
-    left = gray_work[work_outer.top:work_outer.bottom, left_start:start]
-    right = gray_work[work_outer.top:work_outer.bottom, end:right_end]
-    if core.size == 0:
+    signals = hard_gap_pixel_signals(gray_work, work_outer, signal_gap, pitch, hard_gap_trust_policy)
+    if signals is None:
         record["signals"] = {"available": False}
         return record
 
-    core_mean = float(core.mean())
-    core_content = float((core < hard_gap_trust_policy.core_content_threshold).mean())
-    core_dark = float((core < hard_gap_trust_policy.core_dark_threshold).mean())
-    core_activity = float(core.std() / 255.0)
-    left_content = float((left < hard_gap_trust_policy.core_content_threshold).mean()) if left.size else 0.0
-    right_content = float((right < hard_gap_trust_policy.core_content_threshold).mean()) if right.size else 0.0
-    side_content = min(left_content, right_content)
-    side_balance = abs(left_content - right_content)
-    continuity = min(core_content, side_content)
     nearby = nearby_separator_candidate_detail(
         gray_work,
         work_outer,
@@ -226,80 +223,50 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
     )
     record["signals"] = {
         "available": True,
-        "core_mean": core_mean,
-        "core_content": core_content,
-        "core_dark": core_dark,
-        "core_activity": core_activity,
-        "left_content": left_content,
-        "right_content": right_content,
-        "side_content": side_content,
-        "side_balance": side_balance,
-        "continuity": continuity,
-        "window": {"start": int(start), "end": int(end), "guard": int(guard)},
+        "core_mean": signals.core_mean,
+        "core_content": signals.core_content,
+        "core_dark": signals.core_dark,
+        "core_activity": signals.core_activity,
+        "left_content": signals.left_content,
+        "right_content": signals.right_content,
+        "side_content": signals.side_content,
+        "side_balance": signals.side_balance,
+        "continuity": signals.continuity,
+        "window": {"start": int(signals.start), "end": int(signals.end), "guard": int(signals.guard)},
     }
     record["nearby_separator_candidate"] = nearby
 
-    narrow_hard = gap.method in HARD_GAP_METHODS and 0.0 < gap.width <= clamp_float(
-        pitch * hard_gap_trust_policy.narrow_ratio,
-        hard_gap_trust_policy.narrow_min,
-        hard_gap_trust_policy.narrow_max,
-    )
-    width_ratio = float(gap.width) / max(1.0, float(pitch))
+    width_ratio = hard_gap_width_ratio(gap, pitch)
     model_delta_ratio = abs(float(gap.center - expected)) / max(1.0, float(pitch))
-    content_continuous = (
-        continuity >= hard_gap_trust_policy.continuity_min
-        and core_activity >= hard_gap_trust_policy.activity_min
-    )
-    dark_separator_like = (
-        core_mean <= hard_gap_trust_policy.dark_mean_max
-        and core_dark >= hard_gap_trust_policy.dark_fraction_min
-        and core_activity <= hard_gap_trust_policy.dark_activity_max
-    )
-    weak_dark_gap = (
-        core_mean >= hard_gap_trust_policy.weak_mean_min
-        and core_content >= hard_gap_trust_policy.weak_content_min
-    )
     if gap.method in HARD_GAP_METHODS:
-        if bool(nearby.get("stronger_found", False)):
-            record["hard_trust"] = "nearby_separator_conflict"
-        elif model_delta_ratio >= hard_gap_trust_policy.model_delta_ratio and (
-            width_ratio < hard_gap_trust_policy.geometry_width_ratio
-            or gap.score < hard_gap_trust_policy.model_conflict_score
-        ):
-            record["hard_trust"] = "geometry_conflict"
-        elif width_ratio < hard_gap_trust_policy.frame_border_width_ratio and dark_separator_like:
-            record["hard_trust"] = "suspect_frame_border"
-        elif narrow_hard and (content_continuous or weak_dark_gap):
-            record["hard_trust"] = "suspect_internal_edge"
-        elif narrow_hard:
-            record["hard_trust"] = "narrow_but_ok"
-        elif (
-            dark_separator_like
-            or core_content <= hard_gap_trust_policy.strong_core_content_max
-            or gap.score >= hard_gap_trust_policy.strong_min_score
-        ):
-            record["hard_trust"] = "strong_separator"
-        else:
-            record["hard_trust"] = "weak_or_ambiguous_separator"
+        record["hard_trust"] = classify_diagnostic_hard_gap_trust(
+            gap,
+            pitch,
+            hard_gap_trust_policy,
+            width_ratio=width_ratio,
+            model_delta_ratio=model_delta_ratio,
+            nearby_separator_conflict=bool(nearby.get("stronger_found", False)),
+            signals=signals,
+        )
     elif gap.method in MODEL_GAP_METHODS:
-        if dark_separator_like:
+        if hard_gap_dark_separator_like(signals, hard_gap_trust_policy):
             overlap_risk = "none"
         elif (
-            continuity >= overlap_policy.strong_continuity
-            and core_activity >= overlap_policy.strong_activity
-            and core_mean >= overlap_policy.mean_min
+            signals.continuity >= overlap_policy.strong_continuity
+            and signals.core_activity >= overlap_policy.strong_activity
+            and signals.core_mean >= overlap_policy.mean_min
         ):
             overlap_risk = "strong"
         elif (
-            continuity >= overlap_policy.medium_continuity
-            and core_activity >= overlap_policy.medium_activity
-            and core_mean >= overlap_policy.mean_min
+            signals.continuity >= overlap_policy.medium_continuity
+            and signals.core_activity >= overlap_policy.medium_activity
+            and signals.core_mean >= overlap_policy.mean_min
         ):
             overlap_risk = "medium"
         elif (
-            continuity >= overlap_policy.weak_continuity
-            and core_activity >= overlap_policy.weak_activity
-            and core_mean >= overlap_policy.mean_min
+            signals.continuity >= overlap_policy.weak_continuity
+            and signals.core_activity >= overlap_policy.weak_activity
+            and signals.core_mean >= overlap_policy.mean_min
         ):
             overlap_risk = "weak"
         else:
