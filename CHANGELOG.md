@@ -75,7 +75,8 @@ Current stable release: v4.2.8
 - ordinary gap search 已拆成 hard-only `find_detected_gap`：它只返回
   `GapSearchResult` 中的 detected hard gap、fallback score 和 reason；standard
   separator proposal 负责在没有 hard gap 时调用 model proposal 生成 explicit
-  `equal` fallback。`GapSearchContext` 收束单个 expected gap 的 local profile、
+  `equal` fallback。`GapSearchWindow` 承接 standard search window，避免裸
+  tuple 传递；`GapSearchContext` 收束单个 expected gap 的 local profile、
   threshold、width limits 和 ranking context；band evidence measurement、
   prominence support 与 width-profile support 也已拆成可审核 helper，方便审核
   hard separator 与 model gap 的边界。
@@ -553,8 +554,9 @@ Verified:
   combined scoring point, and the smoothing window; `geometry/gap_search.py`
   is now hard-only `find_detected_gap`, returning a `GapSearchResult` with a
   detected hard gap or fallback score / reason. Standard separator proposal owns
-  the explicit `equal` fallback when no hard gap is found. Window, width limits,
-  thresholds, and ranking context are grouped in `GapSearchContext`; band
+  the explicit `equal` fallback when no hard gap is found. `GapSearchWindow`
+  owns the standard search window, while width limits, thresholds, acceptance,
+  and ranking context are grouped in `GapSearchContext`; band
   expansion, detected-candidate collection, best-candidate selection, band
   evidence measurement, prominence support, and width-profile support are split
   so ordinary separator detection can be reviewed step by step.

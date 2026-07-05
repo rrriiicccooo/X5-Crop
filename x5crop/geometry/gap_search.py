@@ -41,6 +41,16 @@ class GapRankingWeights:
 
 
 @dataclass(frozen=True)
+class GapSearchWindow:
+    lo: int
+    hi: int
+
+    @property
+    def empty(self) -> bool:
+        return self.hi <= self.lo
+
+
+@dataclass(frozen=True)
 class DetectedGapCandidate:
     distance: float
     quality: float
@@ -143,11 +153,11 @@ def gap_search_window(
     expected: float,
     pitch: float,
     config: GapSearchParameters,
-) -> tuple[int, int]:
+) -> GapSearchWindow:
     radius = clamp_int(pitch * config.radius_ratio, config.radius_min, config.radius_max)
     lo = max(1, int(round(expected)) - radius)
     hi = min(profile_length - 1, int(round(expected)) + radius + 1)
-    return lo, hi
+    return GapSearchWindow(int(lo), int(hi))
 
 
 def gap_width_limits(
@@ -368,8 +378,7 @@ def gap_search_detail(
     index: int,
     expected: float,
     pitch: float,
-    lo: int,
-    hi: int,
+    window: GapSearchWindow,
     local_max: float,
     context: GapSearchContext | None,
     evaluations: list[dict[str, Any]] | None = None,
@@ -379,7 +388,7 @@ def gap_search_detail(
         "index": int(index),
         "expected": float(expected),
         "pitch": float(pitch),
-        "window": {"lo": int(lo), "hi": int(hi), "local_max": float(local_max)},
+        "window": {"lo": int(window.lo), "hi": int(window.hi), "local_max": float(local_max)},
     }
     if context is not None:
         detail["window"].update(
@@ -416,18 +425,18 @@ def find_detected_gap(
     gap_search: GapSearchParameters | None = None,
 ) -> GapSearchResult:
     config = gap_search or GapSearchParameters()
-    lo, hi = gap_search_window(len(profile), expected, pitch, config)
-    if hi <= lo:
-        return GapSearchResult(None, 0.0, "empty_window", gap_search_detail(index, expected, pitch, lo, hi, 0.0, None))
-    local = profile[lo:hi]
+    window = gap_search_window(len(profile), expected, pitch, config)
+    if window.empty:
+        return GapSearchResult(None, 0.0, "empty_window", gap_search_detail(index, expected, pitch, window, 0.0, None))
+    local = profile[window.lo:window.hi]
     local_max = float(local.max()) if local.size else 0.0
     min_score = config.min_score
     if local.size == 0 or local_max < min_score:
-        return GapSearchResult(None, local_max, "below_min_score", gap_search_detail(index, expected, pitch, lo, hi, local_max, None))
+        return GapSearchResult(None, local_max, "below_min_score", gap_search_detail(index, expected, pitch, window, local_max, None))
 
     context = gap_search_context(
         local,
-        lo,
+        window.lo,
         expected,
         pitch,
         local_max,
@@ -445,8 +454,7 @@ def find_detected_gap(
                 index,
                 expected,
                 pitch,
-                lo,
-                hi,
+                window,
                 local_max,
                 context,
                 candidate_search.evaluations,
@@ -458,7 +466,7 @@ def find_detected_gap(
         None,
         local_max,
         "no_detected_candidate",
-        gap_search_detail(index, expected, pitch, lo, hi, local_max, context, candidate_search.evaluations),
+        gap_search_detail(index, expected, pitch, window, local_max, context, candidate_search.evaluations),
     )
 
 
@@ -474,6 +482,7 @@ __all__ = [
     "GapScoreThresholds",
     "GapSearchContext",
     "GapSearchResult",
+    "GapSearchWindow",
     "GapWidthLimits",
     "best_detected_gap_candidate",
     "detected_gap_acceptance",
