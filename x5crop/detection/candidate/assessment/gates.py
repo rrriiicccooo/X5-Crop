@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from ....constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_GRID, HARD_GAP_METHODS
 from ....domain import Detection
+from ...evidence.separator_summary import gap_method_evidence_summary
 from ....formats import FORMATS
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
@@ -192,9 +193,8 @@ def separator_gate_leading_grid_failure_assessment(
 
 
 def separator_gate_evidence_from_detection(detection: Detection) -> SeparatorGateEvidence:
-    actual = int(detection.detail.get("actual_detected_gaps", 0))
+    raw_gap_evidence = gap_method_evidence_summary(detection.gaps, reliable_min_score=0.0)
     broad_width = int(detection.detail.get("broad_separator_width_gaps", 0))
-    enhanced = int(detection.detail.get("enhanced_detected_gaps", 0))
     width_evidence = detection.detail.get("separator_width_evidence", {})
     broad_width_scores = (
         list(width_evidence.get("broad_separator_width_scores", []))
@@ -203,12 +203,12 @@ def separator_gate_evidence_from_detection(detection: Detection) -> SeparatorGat
     )
     return SeparatorGateEvidence(
         expected_gaps=max(0, int(detection.count) - 1),
-        actual_detected_gaps=actual,
+        actual_detected_gaps=raw_gap_evidence.direct_hard_gaps,
         broad_separator_width_gaps=broad_width,
-        enhanced_detected_gaps=enhanced,
-        grid_gaps=int(detection.detail.get("grid_gaps", 0)),
-        equal_gaps=int(detection.detail.get("equal_gaps", 0)),
-        hard_gaps=actual + enhanced,
+        enhanced_detected_gaps=raw_gap_evidence.enhanced_hard_gaps,
+        grid_gaps=raw_gap_evidence.grid_model_gaps,
+        equal_gaps=raw_gap_evidence.equal_model_gaps,
+        hard_gaps=raw_gap_evidence.hard_separator_gaps,
         hard_gap_indexes=hard_gap_indexes_from_gaps(detection),
         edge_pair_scores=[
             float(gap.score)
