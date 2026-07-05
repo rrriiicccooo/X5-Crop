@@ -3,36 +3,37 @@ from __future__ import annotations
 import numpy as np
 
 from .....geometry.detection_parameters import GapSearchParameters
+from .....geometry.separator_band import SeparatorBand
 from .....policies.runtime.outer import SeparatorGeometryProposalPolicy, SeparatorOuterBandPolicy
 from .....utils import clamp_float, clamp_int, runs_from_mask
 
 
 def separator_outer_band_sequences(
-    bands: list[dict[str, float]],
+    bands: list[SeparatorBand],
     expected_gaps: int,
     frame_long: float,
     band_policy: SeparatorOuterBandPolicy,
-) -> list[tuple[dict[str, float], ...]]:
-    ordered = sorted(bands, key=lambda band: float(band["center"]))
+) -> list[tuple[SeparatorBand, ...]]:
+    ordered = sorted(bands, key=lambda band: float(band.center))
     if expected_gaps <= 0 or len(ordered) < expected_gaps:
         return []
     if expected_gaps == 1:
         return [(band,) for band in ordered]
     if expected_gaps == 2:
-        pairs: list[tuple[float, tuple[dict[str, float], dict[str, float]]]] = []
+        pairs: list[tuple[float, tuple[SeparatorBand, SeparatorBand]]] = []
         for left_index, left in enumerate(ordered[:-1]):
             for right in ordered[left_index + 1:]:
-                inner_width = float(right["start"]) - float(left["end"])
+                inner_width = float(right.start) - float(left.end)
                 if inner_width <= 0:
                     continue
-                spacing = float(right["center"]) - float(left["center"])
+                spacing = float(right.center) - float(left.center)
                 spacing_ratio = spacing / max(1.0, frame_long)
                 if (
                     spacing_ratio < band_policy.spacing_min_ratio
                     or spacing_ratio > band_policy.spacing_max_ratio
                 ):
                     continue
-                score = 0.5 * (float(left["score"]) + float(right["score"]))
+                score = 0.5 * (float(left.score) + float(right.score))
                 geometry_error = abs(spacing_ratio - 1.0)
                 pairs.append((geometry_error - 0.02 * score, (left, right)))
         return [
@@ -41,9 +42,9 @@ def separator_outer_band_sequences(
                 : max(expected_gaps, int(band_policy.pair_candidate_count) * 3)
             ]
         ]
-    sequences: list[tuple[dict[str, float], ...]] = []
+    sequences: list[tuple[SeparatorBand, ...]] = []
 
-    def extend(start_index: int, selected: list[dict[str, float]]) -> None:
+    def extend(start_index: int, selected: list[SeparatorBand]) -> None:
         remaining = expected_gaps - len(selected)
         if remaining <= 0:
             sequences.append(tuple(selected))
@@ -53,10 +54,10 @@ def separator_outer_band_sequences(
         for index in range(start_index, max_start + 1):
             band = ordered[index]
             if last is not None:
-                inner_width = float(band["start"]) - float(last["end"])
+                inner_width = float(band.start) - float(last.end)
                 if inner_width <= 0:
                     continue
-                spacing = float(band["center"]) - float(last["center"])
+                spacing = float(band.center) - float(last.center)
                 spacing_ratio = spacing / max(1.0, frame_long)
                 if (
                     spacing_ratio < band_policy.spacing_min_ratio
@@ -78,7 +79,7 @@ def collect_separator_outer_bands(
     band_policy: SeparatorOuterBandPolicy,
     gap_search_config: GapSearchParameters,
     separator_policy: SeparatorGeometryProposalPolicy,
-) -> tuple[list[dict[str, float]], float]:
+) -> tuple[list[SeparatorBand], float]:
     peak_threshold = float(band_policy.min_score)
     band_threshold = max(band_policy.band_score, peak_threshold * 0.58)
     min_width = clamp_int(
@@ -102,7 +103,7 @@ def collect_separator_outer_bands(
         max(60.0, short_axis * 0.80),
     )
 
-    bands: list[dict[str, float]] = []
+    bands: list[SeparatorBand] = []
     for run_start, run_end in runs_from_mask(profile >= peak_threshold):
         band_start, band_end = int(run_start), int(run_end)
         while band_start > 0 and profile[band_start - 1] >= band_threshold and (band_end - (band_start - 1)) <= max_width:
@@ -130,18 +131,18 @@ def collect_separator_outer_bands(
         if mean_score < gap_search_config.min_score or (prominence < 0.02 and mean_score < 0.88):
             continue
         bands.append(
-            {
-                "start": float(band_start),
-                "end": float(band_end),
-                "center": float(center),
-                "width": float(width),
-                "score": float(
+            SeparatorBand(
+                start=float(band_start),
+                end=float(band_end),
+                center=float(center),
+                width=float(width),
+                score=float(
                     mean_score
                     + 0.8 * prominence
                     - (separator_policy.separator_outer_oversized_band_score_penalty if oversized_band else 0.0)
                 ),
-                "oversized": float(1.0 if oversized_band else 0.0),
-            }
+                oversized=bool(oversized_band),
+            )
         )
     return bands, edge_margin
 

@@ -72,6 +72,9 @@ Current stable release: v4.2.8
 - standard gap search 已与 gap geometry helper 拆开：`geometry/gap_search.py`
   只负责 profile window / width / threshold / candidate ranking；
   `geometry/gap_geometry.py` 负责 gap 几何约束、width CV 和局部几何误差。
+- separator-derived outer band 与 broad-width band 已统一为
+  `geometry.separator_band.SeparatorBand`；outer proposal 不再消费裸 dict band，
+  宽度只作为同一 separator band 的属性和 evidence detail。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 

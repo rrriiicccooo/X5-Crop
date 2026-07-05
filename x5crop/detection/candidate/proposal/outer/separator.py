@@ -8,6 +8,7 @@ import numpy as np
 from .....domain import Box, OuterCandidate
 from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from .....geometry.separator_cache import cached_separator_profile
+from .....geometry.separator_band import SeparatorBand
 from .....geometry.separator_width_profile import collect_separator_width_bands, separator_width_profile
 from .....policies.registry import get_detection_policy
 from .....policies.runtime.outer import SeparatorOuterBandPolicy, SeparatorOuterFamilyPolicy
@@ -334,15 +335,15 @@ def _separator_outer_candidates_for_plan(
         ):
             first_band = sequence[0]
             last_band = sequence[-1]
-            separator_total = sum(float(band["width"]) for band in sequence)
+            separator_total = sum(float(band.width) for band in sequence)
             margin = max(
                 0.0,
                 (expected_ratio - (float(count) * aspect + separator_total / max(1.0, short_axis)))
                 * short_axis
                 * 0.5,
             )
-            proposed_left = int(round(float(outer.left) + float(first_band["start"]) - frame_long - margin))
-            proposed_right = int(round(float(outer.left) + float(last_band["end"]) + frame_long + margin))
+            proposed_left = int(round(float(outer.left) + float(first_band.start) - frame_long - margin))
+            proposed_right = int(round(float(outer.left) + float(last_band.end) + frame_long + margin))
             if proposed_right <= proposed_left:
                 continue
             left_loss = max(0, -proposed_left)
@@ -368,7 +369,7 @@ def _separator_outer_candidates_for_plan(
 
 
 def _rank_separator_sequences(
-    bands: list[dict[str, float]],
+    bands: list[SeparatorBand],
     expected_gaps: int,
     frame_long: float,
     short_axis: float,
@@ -376,20 +377,20 @@ def _rank_separator_sequences(
     aspect: float,
     band_policy: SeparatorOuterBandPolicy,
     plan: SeparatorOuterPlan,
-) -> list[tuple[float, tuple[dict[str, float], ...], float]]:
+) -> list[tuple[float, tuple[SeparatorBand, ...], float]]:
     candidate_bands = sorted(
         bands,
-        key=lambda band: (-float(band["score"]), float(band["center"])),
+        key=lambda band: (-float(band.score), float(band.center)),
     )[: max(expected_gaps, plan.band_candidate_count)]
-    ranked: list[tuple[float, tuple[dict[str, float], ...], float]] = []
+    ranked: list[tuple[float, tuple[SeparatorBand, ...], float]] = []
     sequence_policy = _sequence_band_policy(band_policy, plan)
     for sequence in separator_outer_band_sequences(candidate_bands, expected_gaps, frame_long, sequence_policy):
         frame_widths: list[float] = []
-        previous: Optional[dict[str, float]] = None
+        previous: Optional[SeparatorBand] = None
         valid = True
         for band in sequence:
             if previous is not None:
-                inner_width = float(band["start"]) - float(previous["end"])
+                inner_width = float(band.start) - float(previous.end)
                 if inner_width <= 0:
                     valid = False
                     break
@@ -407,9 +408,9 @@ def _rank_separator_sequences(
         if plan.frame_error_max is not None and max_frame_error > plan.frame_error_max:
             continue
 
-        separator_total = sum(float(band["width"]) for band in sequence)
+        separator_total = sum(float(band.width) for band in sequence)
         expected_ratio_base = count * aspect + separator_total / max(1.0, short_axis)
-        sequence_score = sum(float(band["score"]) for band in sequence) / max(1, len(sequence))
+        sequence_score = sum(float(band.score) for band in sequence) / max(1, len(sequence))
         for margin_ratio in plan.margin_ratios:
             expected_ratio = expected_ratio_base + 2.0 * float(margin_ratio)
             rank = mean_frame_error - plan.sequence_score_weight * sequence_score
@@ -417,8 +418,8 @@ def _rank_separator_sequences(
                 first_band = sequence[0]
                 last_band = sequence[-1]
                 margin = float(margin_ratio) * short_axis
-                proposed_width = float(last_band["end"]) + frame_long + margin - (
-                    float(first_band["start"]) - frame_long - margin
+                proposed_width = float(last_band.end) + frame_long + margin - (
+                    float(first_band.start) - frame_long - margin
                 )
                 actual_ratio = proposed_width / max(1.0, short_axis)
                 rank += abs(actual_ratio - expected_ratio)

@@ -8,6 +8,7 @@ from ..constants import GAP_DETECTED
 from ..domain import Gap
 from ..utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 from .detection_parameters import SeparatorWidthProfileSearchParameters
+from .separator_band import SeparatorBand
 
 
 def separator_width_profile(
@@ -58,7 +59,7 @@ def collect_separator_width_bands(
     short_axis: float,
     coordinate_limit: float,
     params: SeparatorWidthProfileSearchParameters | None = None,
-) -> tuple[list[dict[str, float]], float]:
+) -> tuple[list[SeparatorBand], float]:
     params = params or SeparatorWidthProfileSearchParameters()
     if profile.size <= 0:
         return [], 0.0
@@ -68,7 +69,7 @@ def collect_separator_width_bands(
         max(params.edge_margin_min, short_axis * params.edge_margin_cap_ratio),
     )
     min_width, max_width, _max_core_width = separator_width_bounds(short_axis, params)
-    bands: list[dict[str, float]] = []
+    bands: list[SeparatorBand] = []
     for run_start, run_end in runs_from_mask(profile >= params.threshold_ratio):
         width = int(run_end - run_start)
         if width < min_width or width > max_width:
@@ -77,13 +78,13 @@ def collect_separator_width_bands(
         if center < edge_margin or center > coordinate_limit - edge_margin:
             continue
         bands.append(
-            {
-                "start": float(run_start),
-                "end": float(run_end),
-                "center": center,
-                "width": float(width),
-                "score": float(profile[run_start:run_end].mean()),
-            }
+            SeparatorBand(
+                start=float(run_start),
+                end=float(run_end),
+                center=center,
+                width=float(width),
+                score=float(profile[run_start:run_end].mean()),
+            )
         )
     return bands, edge_margin
 
