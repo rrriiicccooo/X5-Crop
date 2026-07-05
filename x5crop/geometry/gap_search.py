@@ -9,6 +9,7 @@ from ..constants import GAP_DETECTED
 from ..domain import Gap
 from ..utils import clamp_int, runs_from_mask
 from .detection_parameters import GapSearchParameters
+from .gap_search_detail import attach_gap_run_evaluation_summary
 
 
 @dataclass(frozen=True)
@@ -388,14 +389,7 @@ def gap_search_detail(
                 "max_width_ratio_override": context.max_width_ratio_override,
             }
         )
-    evaluations = evaluations or []
-    accepted = [item for item in evaluations if bool(item.get("accepted", False))]
-    rejected = [item for item in evaluations if not bool(item.get("accepted", False))]
-    detail["evaluated_run_count"] = len(evaluations)
-    detail["accepted_count"] = len(accepted)
-    detail["rejected_count"] = len(rejected)
-    detail["accepted"] = accepted[:8]
-    detail["rejected"] = rejected[:8]
+    detail = attach_gap_run_evaluation_summary(detail, evaluations)
     if selected is not None:
         detail["selected"] = {
             "center": float(selected.center),

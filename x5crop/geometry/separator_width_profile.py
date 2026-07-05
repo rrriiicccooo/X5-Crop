@@ -9,6 +9,7 @@ from ..constants import GAP_DETECTED
 from ..domain import Gap
 from ..utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 from .detection_parameters import SeparatorWidthProfileSearchParameters
+from .gap_search_detail import attach_gap_run_evaluation_summary
 from .separator_band import SeparatorBand
 
 
@@ -360,9 +361,6 @@ def separator_width_gap_search_detail(
     evaluations: list[dict[str, Any]] | None = None,
     selected: SeparatorWidthGapCandidate | None = None,
 ) -> dict[str, Any]:
-    evaluations = evaluations or []
-    accepted = [item for item in evaluations if bool(item.get("accepted", False))]
-    rejected = [item for item in evaluations if not bool(item.get("accepted", False))]
     detail: dict[str, Any] = {
         "index": int(index),
         "expected": float(expected),
@@ -373,12 +371,8 @@ def separator_width_gap_search_detail(
         "min_width": int(min_width),
         "max_width": int(max_width),
         "max_core_width": float(max_core_width),
-        "evaluated_run_count": len(evaluations),
-        "accepted_count": len(accepted),
-        "rejected_count": len(rejected),
-        "accepted": accepted[:8],
-        "rejected": rejected[:8],
     }
+    detail = attach_gap_run_evaluation_summary(detail, evaluations)
     if selected is not None:
         detail["selected"] = {
             "center": float(selected.center),

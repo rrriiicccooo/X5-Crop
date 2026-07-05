@@ -59,6 +59,8 @@ Current stable release: v4.2.8
 - broad-width gap proposal 现在写出 `separator_width_profile_gap_search` detail：
   每个 expected gap 记录 width-profile accepted / rejected run、selected detected
   gap 和 summary reason；旧的无 detail API 只包装同一套 assessment 逻辑。
+- standard / broad-width gap search 共用 `geometry/gap_search_detail.py` 生成
+  accepted / rejected run summary；detail 字段保持不变。
 - nearby separator correction 现在写出 searched assessment：每个 gap 都记录
   no-candidate / candidate-not-stronger / geometry-rejected / accepted 等原因；
   旧 replacement API 只包装同一套 assessment 逻辑，不改变修正条件。
@@ -400,6 +402,9 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - Broad-width gap proposal now writes `separator_width_profile_gap_search`
   detail for each expected gap, including accepted / rejected width-profile runs
   and the selected detected gap, without changing selection thresholds.
+- Standard and broad-width gap search now share
+  `geometry/gap_search_detail.py` for accepted / rejected run summaries; detail
+  fields remain unchanged.
 - Nearby separator correction now records searched assessment for each gap,
   including no-candidate, not-stronger, geometry-rejected, and accepted outcomes,
   without changing correction thresholds.
