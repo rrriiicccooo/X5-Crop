@@ -55,6 +55,14 @@ class PrimarySeparatorRefinementResult:
 
 
 @dataclass(frozen=True)
+class LateSeparatorRefinementResult:
+    gaps: list[Gap]
+    enhanced_gap_promotion_detail: dict[str, Any]
+    nearby_correction_detail: dict[str, Any]
+    pre_nearby_gaps: Optional[list[Gap]]
+
+
+@dataclass(frozen=True)
 class GapRefinementResult:
     family: str
     gaps: list[Gap]
@@ -426,6 +434,46 @@ def apply_nearby_separator_refinement(
     )
 
 
+def apply_late_separator_refinement_chain(
+    gray_work: np.ndarray,
+    analysis_mode: str,
+    count: int,
+    strip_mode: str,
+    separator_gaps: SeparatorGapBuildResult,
+    allow_enhanced_gap_promotion: bool,
+    cache: Optional[AnalysisCache],
+    policy: DetectionPolicy,
+) -> LateSeparatorRefinementResult:
+    enhanced_gap_promotion = apply_enhanced_gap_promotion(
+        gray_work,
+        separator_gaps.outer,
+        separator_gaps.gaps,
+        count,
+        strip_mode,
+        separator_gaps.origin,
+        separator_gaps.pitch,
+        allow_enhanced_gap_promotion,
+        analysis_mode,
+        cache,
+        policy,
+    )
+    nearby_correction = apply_nearby_separator_refinement(
+        separator_gaps.profile,
+        enhanced_gap_promotion.gaps,
+        count,
+        strip_mode,
+        separator_gaps.origin,
+        separator_gaps.pitch,
+        policy,
+    )
+    return LateSeparatorRefinementResult(
+        gaps=nearby_correction.gaps,
+        enhanced_gap_promotion_detail=enhanced_gap_promotion.detail,
+        nearby_correction_detail=nearby_correction.detail,
+        pre_nearby_gaps=nearby_correction.pre_refinement_gaps,
+    )
+
+
 def build_primary_separator_gaps_for_outer(
     gray_work: np.ndarray,
     fmt: FormatSpec,
@@ -513,26 +561,14 @@ def apply_late_separator_refinements(
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> SeparatorGapBuildResult:
-    enhanced_gap_promotion = apply_enhanced_gap_promotion(
+    late_refinement = apply_late_separator_refinement_chain(
         gray_work,
-        separator_gaps.outer,
-        separator_gaps.gaps,
-        count,
-        strip_mode,
-        separator_gaps.origin,
-        separator_gaps.pitch,
-        allow_enhanced_gap_promotion,
         analysis_mode,
-        cache,
-        policy,
-    )
-    nearby_correction = apply_nearby_separator_refinement(
-        separator_gaps.profile,
-        enhanced_gap_promotion.gaps,
         count,
         strip_mode,
-        separator_gaps.origin,
-        separator_gaps.pitch,
+        separator_gaps,
+        allow_enhanced_gap_promotion,
+        cache,
         policy,
     )
     return SeparatorGapBuildResult(
@@ -540,23 +576,25 @@ def apply_late_separator_refinements(
         profile=separator_gaps.profile,
         origin=separator_gaps.origin,
         pitch=separator_gaps.pitch,
-        gaps=nearby_correction.gaps,
+        gaps=late_refinement.gaps,
         grid_detail=separator_gaps.grid_detail,
         standard_gap_search_detail=separator_gaps.standard_gap_search_detail,
         separator_width_profile_gap_search_detail=separator_gaps.separator_width_profile_gap_search_detail,
         edge_pair_correction_detail=separator_gaps.edge_pair_correction_detail,
-        enhanced_gap_promotion_detail=enhanced_gap_promotion.detail,
-        nearby_correction_detail=nearby_correction.detail,
-        pre_nearby_gaps=nearby_correction.pre_refinement_gaps,
+        enhanced_gap_promotion_detail=late_refinement.enhanced_gap_promotion_detail,
+        nearby_correction_detail=late_refinement.nearby_correction_detail,
+        pre_nearby_gaps=late_refinement.pre_nearby_gaps,
     )
 
 __all__ = [
     "GapRefinementResult",
     "InitialSeparatorGapResult",
+    "LateSeparatorRefinementResult",
     "PrimarySeparatorRefinementResult",
     "SeparatorGapBuildResult",
     "apply_edge_pair_refinement",
     "apply_enhanced_gap_promotion",
+    "apply_late_separator_refinement_chain",
     "apply_late_separator_refinements",
     "apply_nearby_separator_refinement",
     "apply_primary_separator_refinements",
