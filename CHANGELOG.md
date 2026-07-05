@@ -40,8 +40,8 @@ Current stable release: v4.2.8
 - Gap / Separator 族群已按 candidate proposal 模型收敛入口：
   `detection.candidate.proposal.separator` 承接 separator proposal；
   `detection.evidence.separator_width` 承接 width evidence summary；
-  separator-derived outer band evidence 归 outer proposal 消费；`geometry` 保留底层
-  profile/search/trust 数学能力；width profile 纯数学归
+  separator-derived outer band helper 已归回 `detection.candidate.proposal.outer`；
+  `geometry` 保留底层 profile/search/trust 数学能力；width profile 纯数学归
   `geometry/separator_width_profile.py`，搜索参数归
   `SeparatorPolicy.width_profile_search`，启用 / 候选 / selection 策略归
   `SeparatorPolicy.width_profile`，outer policy 只保留 separator-derived outer
@@ -467,8 +467,8 @@ Verified:
   dual-lane detector or the old dedicated module.
 - Outer source layout now lives under `detection/candidate/proposal/outer/` and
   `detection/candidate/proposal/correction/`; outer is a candidate proposal
-  family only, while separator bands live in
-  `detection/candidate/proposal/separator`; outer-content alignment and cache
+  family only, with separator-derived outer band helpers kept inside the outer
+  proposal package; outer-content alignment and cache
   keys live in evidence / detection cache layers.
 - Separator-derived outer proposals are consolidated into the single
   `detection/candidate/proposal/outer/separator.py` engine; outer scope (local /
