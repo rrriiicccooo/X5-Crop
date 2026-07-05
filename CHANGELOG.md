@@ -366,10 +366,12 @@ Current stable release: v4.2.8
   fit ranking、fit assessment、predicted center 和 hard-gap protection /
   override adjustment 分开，方便继续审核 model evidence 何时可以移动 gap。
 - hard-gap trust 已做行为等价收敛：`geometry/gap_trust.py` 统一保存像素 signal、
-  runtime hard-gap trust classifier 和 diagnostic hard-gap trust classifier；
+  runtime hard-gap trust assessment 和 diagnostic hard-gap trust assessment；
   `detection/evidence/gap_diagnostics.py` 不再重复 trust 分类条件，只负责生成
-  read-only diagnostic record；runtime / diagnostic classifier 现在输出同一类
+  read-only diagnostic record；runtime / diagnostic assessment 现在输出同一类
   assessment detail，记录 trust label、reason、width / model delta 和 signal flags。
+- hard-gap trust 只保留 `HardGapTrustAssessment` detail-first 接口；未使用的
+  string-only classifier wrapper 已删除。
 - enhanced / nearby separator refinement 已做行为等价拆分：
   `geometry/enhanced_separator.py` 将 detected gap validation、enhanced promotion
   和 merge detail 分开；`geometry/nearby_separator.py` 将 search context、
@@ -740,11 +742,13 @@ Verified:
   through raw tuples while report/detail fields remain unchanged.
 - The unused `CandidateGateOutcome` gate placeholder type has been removed.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
-  now owns pixel signals, the runtime hard-gap trust classifier, and the
-  diagnostic hard-gap trust classifier; `detection/evidence/gap_diagnostics.py`
+  now owns pixel signals, the runtime hard-gap trust assessment, and the
+  diagnostic hard-gap trust assessment; `detection/evidence/gap_diagnostics.py`
   records diagnostics without duplicating trust classification conditions. Runtime
-  and diagnostic classifiers now expose matching assessment detail with trust
+  and diagnostic assessment now expose matching detail with trust
   label, reason, width / model delta, and signal flags.
+- Hard-gap trust now keeps only the `HardGapTrustAssessment` detail-first
+  interface; unused string-only classifier wrappers have been removed.
 - Enhanced / nearby separator refinement is split without behavior changes:
   `geometry/enhanced_separator.py` separates detected gap validation, enhanced
   promotion, and merge detail; `geometry/nearby_separator.py` separates search

@@ -195,27 +195,6 @@ def runtime_hard_gap_trust_assessment(
     return assessment("weak_or_ambiguous_separator", "no_strong_runtime_trust_rule")
 
 
-def classify_runtime_hard_gap_trust(
-    gap: Gap,
-    pitch: float,
-    config: HardGapTrustParameters,
-    *,
-    width_ratio: float,
-    model_delta_ratio: float | None = None,
-    nearby_separator_conflict: bool = False,
-    signals: HardGapPixelSignals | None = None,
-) -> str:
-    return runtime_hard_gap_trust_assessment(
-        gap,
-        pitch,
-        config,
-        width_ratio=width_ratio,
-        model_delta_ratio=model_delta_ratio,
-        nearby_separator_conflict=nearby_separator_conflict,
-        signals=signals,
-    ).trust
-
-
 def diagnostic_hard_gap_trust_assessment(
     gap: Gap,
     pitch: float,
@@ -257,27 +236,6 @@ def diagnostic_hard_gap_trust_assessment(
     if dark_separator_like or signals.core_content <= config.strong_core_content_max or gap.score >= config.strong_min_score:
         return assessment("strong_separator", "dark_or_low_content_or_high_score")
     return assessment("weak_or_ambiguous_separator", "no_strong_diagnostic_trust_rule")
-
-
-def classify_diagnostic_hard_gap_trust(
-    gap: Gap,
-    pitch: float,
-    config: HardGapTrustParameters,
-    *,
-    width_ratio: float,
-    model_delta_ratio: float,
-    nearby_separator_conflict: bool,
-    signals: HardGapPixelSignals,
-) -> str:
-    return diagnostic_hard_gap_trust_assessment(
-        gap,
-        pitch,
-        config,
-        width_ratio=width_ratio,
-        model_delta_ratio=model_delta_ratio,
-        nearby_separator_conflict=nearby_separator_conflict,
-        signals=signals,
-    ).trust
 
 
 def runtime_signal_detail(signals: HardGapPixelSignals) -> dict[str, Any]:
