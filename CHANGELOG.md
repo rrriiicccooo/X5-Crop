@@ -359,6 +359,9 @@ Current stable release: v4.2.8
   refinement helpers，避免保留只做别名转发的 proposal refinement facade；
   edge-pair、enhanced 和 nearby wrapper 现在统一返回 `GapRefinementResult`，
   但报告仍保留原有 detail key；
+  refinement wrapper detail 现在统一补齐 family / pending / skipped detail；
+  skipped reason 区分 not-full、single-frame、policy disabled、auto not needed
+  和 detected-geometry model 已启用等情况，方便人工审核没运行的原因；
   `geometry/edge_pairs.py` 将 search limits、candidate generation、best-pair
   selection 和 replacement assessment 分开，并在 detail 中写出 search limits、
   candidate count、selected candidate 和 replacement assessment；
@@ -760,7 +763,10 @@ Verified:
   context, candidate ranking, stronger test, and geometry acceptance so separator
   refinement thresholds can be reviewed directly. Edge-pair, enhanced, and nearby
   wrappers now return a shared `GapRefinementResult` while report detail keys stay
-  compatible. Edge-pair detail now records search limits, candidate count,
+  compatible. Refinement wrapper detail now shares family / pending / skipped
+  detail assembly and skipped reasons distinguish not-full, single-frame, policy
+  disabled, auto-not-needed, and detected-geometry model cases. Edge-pair detail
+  now records search limits, candidate count,
   selected candidate, and replacement assessment. Runtime correction and
   read-only diagnostics now share nearby search context, candidate ranking, and
   stronger-test detail; diagnostics keep only caching, profile retrieval, and
