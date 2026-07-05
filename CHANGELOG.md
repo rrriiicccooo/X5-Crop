@@ -106,6 +106,11 @@ Current stable release: v4.2.8
   refinement 细节集中在 refinement 模块，`separator_gaps.py` 只保留 initial
   source selection、primary build 和 late refinement attachment。report key、
   gap 顺序、candidate assessment 和 PASS / REVIEW 行为不变。
+- initial separator source selection 已从 `separator_gaps.py` 拆到
+  `separator_sources.py`；standard、broad-width 和 detected-geometry model
+  source selection 细节集中在 source 模块，`separator_gaps.py` 现在只负责
+  lifecycle result assembly。report key、gap 顺序、candidate assessment 和
+  PASS / REVIEW 行为不变。
 - content evidence 的 cached / uncached 路径现在共用
   `content_evidence_threshold()` 和 `content_frame_support_detail()`；
   threshold、support、frame_scores 和 successful cache 行为保持不变。
@@ -830,6 +835,11 @@ Verified:
   keeps initial source selection, primary build, and late refinement attachment.
   Report keys, gap order, candidate assessment, and PASS / REVIEW behavior are
   unchanged.
+- Initial separator source selection moved from `separator_gaps.py` to
+  `separator_sources.py`; standard, broad-width, and detected-geometry model
+  source-selection details now live in the source module while
+  `separator_gaps.py` owns lifecycle result assembly. Report keys, gap order,
+  candidate assessment, and PASS / REVIEW behavior are unchanged.
 - Cached and uncached content evidence paths now share
   `content_evidence_threshold()` and `content_frame_support_detail()`; threshold,
   support, frame score, and successful cache behavior are unchanged.
