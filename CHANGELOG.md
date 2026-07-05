@@ -173,6 +173,9 @@ Current stable release: v4.2.8
 - robust grid detail 已补充 reliable anchors、fit candidates、selected fit、
   fit assessment 和 per-gap adjustment action；grid 仍只生成 / 调整 model gap
   evidence，不获得 hard separator 或 PASS / REVIEW 权限。
+- robust grid detail 现在显式标记 `family=robust_grid`、
+  `evidence_kind=grid_model_gap` 和 `model_gap_method=grid`；无 gap 输入也会
+  写出 `grid_rejected=no_gaps`，方便人工审核 grid 只是 model evidence。
 - robust grid selected fit 已收敛为直接消费 `GridFitCandidate`；移除内部
   tuple fit 中转，report detail 字段保持不变。
 - robust grid per-gap adjustment 和 batch refinement 已改为
@@ -644,6 +647,9 @@ Verified:
   `GridGapAdjustmentResult` / `RobustGridResult`; `grid_adjusted_gap` and
   `apply_robust_grid` no longer return raw tuples, while report/detail fields
   remain unchanged.
+- Robust-grid detail now explicitly records `family=robust_grid`,
+  `evidence_kind=grid_model_gap`, and `model_gap_method=grid`; empty input now
+  records `grid_rejected=no_gaps`, keeping grid visibly model evidence.
 - Grid-derived outer refine orchestration now lives in `build_detection_for_outer`:
   `separator_gaps.py` provides primary gap build and late separator refinements
   only, while candidate build decides whether to rebuild gaps with a refined

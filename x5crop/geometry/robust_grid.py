@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
+from ..constants import GAP_GRID
 from ..domain import Box, Gap
 from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float
@@ -15,6 +16,8 @@ from .detection_parameters import HardGapTrustParameters, NearbySeparatorCorrect
 
 
 GRID_DETAIL_LIMIT = 12
+ROBUST_GRID_FAMILY = "robust_grid"
+ROBUST_GRID_EVIDENCE_KIND = "grid_model_gap"
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,20 @@ class GridGapAdjustmentResult:
 class RobustGridResult:
     gaps: list[Gap]
     detail: dict[str, Any]
+
+
+def robust_grid_rejected_detail(
+    gaps: list[Gap],
+    reason: str,
+) -> dict[str, Any]:
+    return {
+        "family": ROBUST_GRID_FAMILY,
+        "evidence_kind": ROBUST_GRID_EVIDENCE_KIND,
+        "model_gap_method": GAP_GRID,
+        "grid_used": False,
+        "grid_rejected": reason,
+        "input_gap_count": int(len(gaps)),
+    }
 
 
 def grid_anchor_detail(gap: Gap) -> dict[str, Any]:
@@ -290,6 +307,9 @@ def robust_grid_base_detail(
 ) -> dict[str, Any]:
     tolerance = grid_fit_tolerance(pitch, strip_mode, config)
     detail: dict[str, Any] = {
+        "family": ROBUST_GRID_FAMILY,
+        "evidence_kind": ROBUST_GRID_EVIDENCE_KIND,
+        "model_gap_method": GAP_GRID,
         "input_gap_count": int(len(gaps)),
         "constrained_gap_count": int(len(constrained)),
         "reliable_gaps": int(len(reliable)),
@@ -319,7 +339,7 @@ def apply_robust_grid(
     robust_grid: RobustGridParameters | None = None,
 ) -> RobustGridResult:
     if not gaps:
-        return RobustGridResult(gaps, {"grid_used": False})
+        return RobustGridResult(gaps, robust_grid_rejected_detail(gaps, "no_gaps"))
     config = robust_grid or RobustGridParameters()
     constrained = [constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, strip_mode, config) for gap in gaps]
     reliable = reliable_grid_anchor_gaps(constrained, config)
