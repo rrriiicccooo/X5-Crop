@@ -218,6 +218,9 @@ Current stable release: v4.2.8
 - edge-pair batch refinement 已改为 `EdgePairRefinementResult`；
   `refine_gaps_with_edge_profiles` / `refine_gaps_by_edge_pairs` 不再通过裸
   tuple 返回 gaps/detail，report/detail 字段保持不变。
+- edge-pair search limits 已改为 `EdgePairSearchLimits`；selected edge-pair gap
+  由 `edge_pair_gap_from_candidate` 从 selected candidate 派生，避免重复 best
+  selection，report/detail 字段保持不变。
 - edge-pair 参数边界已收紧：format preset 仍可用
   `SeparatorEdgePairPolicy` 表达语义，policy assembly 会在 runtime policy 中
   转换为 `EdgePairParameters`，`geometry/edge_pairs.py` 不再 duck-type
@@ -612,6 +615,10 @@ Verified:
   `refine_gaps_with_edge_profiles` / `refine_gaps_by_edge_pairs` no longer
   return gaps/detail through raw tuples, while report/detail fields remain
   unchanged.
+- Edge-pair search limits now use `EdgePairSearchLimits`, and the selected
+  edge-pair gap is derived from the selected candidate through
+  `edge_pair_gap_from_candidate`, avoiding duplicate best-candidate selection
+  while report/detail fields remain unchanged.
 - Robust-grid per-gap adjustment and batch refinement now use
   `GridGapAdjustmentResult` / `RobustGridResult`; `grid_adjusted_gap` and
   `apply_robust_grid` no longer return raw tuples, while report/detail fields

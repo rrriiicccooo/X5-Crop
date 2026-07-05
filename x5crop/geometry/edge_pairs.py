@@ -52,6 +52,13 @@ class EdgePairCandidate:
 
 
 @dataclass(frozen=True)
+class EdgePairSearchLimits:
+    window: int
+    min_gutter: int
+    max_gutter: int
+
+
+@dataclass(frozen=True)
 class EdgePairSearchResult:
     gap: Gap
     candidates: list[EdgePairCandidate]
@@ -174,11 +181,11 @@ def assess_edge_pair_replacement(
     )
 
 
-def edge_pair_search_limits(pitch: float, params: EdgePairParameters) -> tuple[int, int, int]:
+def edge_pair_search_limits(pitch: float, params: EdgePairParameters) -> EdgePairSearchLimits:
     window = clamp_int(pitch * params.window_ratio, 8, 520)
     min_gutter = clamp_int(pitch * params.min_gutter_ratio, 2, 40)
     max_gutter = max(min_gutter + 1, clamp_int(pitch * params.max_gutter_ratio, 8, 420))
-    return window, min_gutter, max_gutter
+    return EdgePairSearchLimits(int(window), int(min_gutter), int(max_gutter))
 
 
 def edge_pair_candidates_for_gap(
@@ -187,23 +194,21 @@ def edge_pair_candidates_for_gap(
     gap: Gap,
     pitch: float,
     params: EdgePairParameters,
-    window: int,
-    min_gutter: int,
-    max_gutter: int,
+    limits: EdgePairSearchLimits,
 ) -> list[EdgePairCandidate]:
     width = len(edge)
     x0 = int(round(gap.center))
-    lo = max(1, x0 - window)
-    hi = min(width - 1, x0 + window)
+    lo = max(1, x0 - limits.window)
+    hi = min(width - 1, x0 + limits.window)
     peaks = local_edge_peaks(edge, lo, hi, params.min_strength)
     candidates: list[EdgePairCandidate] = []
     for i, a in enumerate(peaks):
         for b in peaks[i + 1:]:
             gutter_w = b - a
-            if gutter_w < min_gutter or gutter_w > max_gutter:
+            if gutter_w < limits.min_gutter or gutter_w > limits.max_gutter:
                 continue
             center = (a + b) / 2.0
-            if abs(center - x0) > window:
+            if abs(center - x0) > limits.window:
                 continue
             bg_between = interval_mean(background, a, b + 1)
             if bg_between < params.min_background:
@@ -223,13 +228,10 @@ def edge_pair_candidates_for_gap(
     return candidates
 
 
-def best_edge_pair_gap(
+def edge_pair_gap_from_candidate(
     gap: Gap,
-    candidates: list[EdgePairCandidate],
-) -> Gap | None:
-    candidate = best_edge_pair_candidate(candidates)
-    if candidate is None:
-        return None
+    candidate: EdgePairCandidate,
+) -> Gap:
     center = (candidate.left + candidate.right) / 2.0
     return Gap(
         gap.index,
@@ -239,6 +241,16 @@ def best_edge_pair_gap(
         float(candidate.left),
         float(candidate.right + 1),
     )
+
+
+def best_edge_pair_gap(
+    gap: Gap,
+    candidates: list[EdgePairCandidate],
+) -> Gap | None:
+    candidate = best_edge_pair_candidate(candidates)
+    if candidate is None:
+        return None
+    return edge_pair_gap_from_candidate(gap, candidate)
 
 
 def best_edge_pair_candidate(candidates: list[EdgePairCandidate]) -> EdgePairCandidate | None:
@@ -253,9 +265,7 @@ def edge_pair_search_result_for_gap(
     gap: Gap,
     pitch: float,
     params: EdgePairParameters,
-    window: int,
-    min_gutter: int,
-    max_gutter: int,
+    limits: EdgePairSearchLimits,
 ) -> EdgePairSearchResult:
     candidates = edge_pair_candidates_for_gap(
         edge,
@@ -263,12 +273,14 @@ def edge_pair_search_result_for_gap(
         gap,
         pitch,
         params,
-        window,
-        min_gutter,
-        max_gutter,
+        limits,
     )
     selected_candidate = best_edge_pair_candidate(candidates)
-    selected_gap = best_edge_pair_gap(gap, candidates)
+    selected_gap = (
+        None
+        if selected_candidate is None
+        else edge_pair_gap_from_candidate(gap, selected_candidate)
+    )
     return EdgePairSearchResult(
         gap=gap,
         candidates=candidates,
@@ -291,7 +303,7 @@ def refine_gaps_with_edge_profiles(
     if edge_pair_parameters is None:
         raise ValueError("edge_pair parameters are required")
     params = edge_pair_parameters
-    window, min_gutter, max_gutter = edge_pair_search_limits(pitch, params)
+    search_limits = edge_pair_search_limits(pitch, params)
     refined: list[Gap] = []
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
@@ -302,9 +314,7 @@ def refine_gaps_with_edge_profiles(
             gap,
             pitch,
             params,
-            window,
-            min_gutter,
-            max_gutter,
+            search_limits,
         )
         edge_gap = search.selected_gap
         if edge_gap is None:
@@ -351,9 +361,9 @@ def refine_gaps_with_edge_profiles(
             "params": asdict(params),
             "search_limits": {
                 "pitch": float(pitch),
-                "window_px": int(window),
-                "min_gutter_px": int(min_gutter),
-                "max_gutter_px": int(max_gutter),
+                "window_px": int(search_limits.window),
+                "min_gutter_px": int(search_limits.min_gutter),
+                "max_gutter_px": int(search_limits.max_gutter),
             },
             "accepted": accepted,
             "accepted_count": len(accepted),
@@ -380,11 +390,13 @@ __all__ = [
     "EdgePairCandidate",
     "EdgePairRefinementResult",
     "EdgePairReplacementAssessment",
+    "EdgePairSearchLimits",
     "EdgePairSearchResult",
     "assess_edge_pair_hard_gap_replacement",
     "assess_edge_pair_replacement",
     "best_edge_pair_candidate",
     "best_edge_pair_gap",
+    "edge_pair_gap_from_candidate",
     "edge_pair_candidates_for_gap",
     "edge_pair_search_result_for_gap",
     "edge_pair_search_limits",
