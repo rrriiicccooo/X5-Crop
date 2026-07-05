@@ -31,6 +31,23 @@ class SeparatorGapProfileProposal:
     detail: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class SeparatorGapProposal:
+    gap: Gap
+    detail: dict[str, Any]
+
+
+def _selected_gap_detail(gap: Gap, *, include_width: bool = False) -> dict[str, Any]:
+    detail: dict[str, Any] = {
+        "selected_method": gap.method,
+        "selected_center": float(gap.center),
+        "selected_score": float(gap.score),
+    }
+    if include_width:
+        detail["selected_width"] = float(gap.width)
+    return detail
+
+
 def _propose_standard_separator_gap_with_detail(
     profile: np.ndarray,
     expected: float,
@@ -38,7 +55,7 @@ def _propose_standard_separator_gap_with_detail(
     index: int,
     max_width_ratio_override: Optional[float],
     gap_search: GapSearchParameters,
-) -> tuple[Gap, dict[str, Any]]:
+) -> SeparatorGapProposal:
     result = find_detected_gap(
         profile,
         expected,
@@ -55,15 +72,10 @@ def _propose_standard_separator_gap_with_detail(
     }
     if result.detected_gap is not None:
         gap = result.detected_gap
-        detail["selected_method"] = gap.method
-        detail["selected_center"] = float(gap.center)
-        detail["selected_score"] = float(gap.score)
-        return gap, detail
-    gap = propose_equal_model_gap(index, expected, result.fallback_score)
-    detail["selected_method"] = gap.method
-    detail["selected_center"] = float(gap.center)
-    detail["selected_score"] = float(gap.score)
-    return gap, detail
+    else:
+        gap = propose_equal_model_gap(index, expected, result.fallback_score)
+    detail.update(_selected_gap_detail(gap))
+    return SeparatorGapProposal(gap=gap, detail=detail)
 
 
 def _propose_standard_separator_gaps_with_detail(
@@ -77,7 +89,7 @@ def _propose_standard_separator_gaps_with_detail(
     gaps: list[Gap] = []
     entries: list[dict[str, Any]] = []
     for index in range(1, count):
-        gap, detail = _propose_standard_separator_gap_with_detail(
+        proposal = _propose_standard_separator_gap_with_detail(
             profile,
             origin + pitch * index,
             pitch,
@@ -85,8 +97,8 @@ def _propose_standard_separator_gaps_with_detail(
             max_width_ratio_override,
             gap_search,
         )
-        gaps.append(gap)
-        entries.append(detail)
+        gaps.append(proposal.gap)
+        entries.append(proposal.detail)
     return SeparatorGapProfileProposal(
         profile=STANDARD_GAP_PROFILE,
         gaps=gaps,
@@ -167,10 +179,7 @@ def _propose_separator_width_profile_gaps_with_detail(
         gap = result.gap
         if gap is not None:
             gaps.append(gap)
-            entry["selected_method"] = gap.method
-            entry["selected_center"] = float(gap.center)
-            entry["selected_score"] = float(gap.score)
-            entry["selected_width"] = float(gap.width)
+            entry.update(_selected_gap_detail(gap, include_width=True))
         entries.append(entry)
     expected_count = max(0, int(count) - 1)
     detected_count = int(len(gaps))
@@ -233,6 +242,7 @@ def propose_separator_gap_profile_gaps_with_detail(
 
 
 __all__ = [
+    "SeparatorGapProposal",
     "SeparatorGapProfileProposal",
     "propose_separator_gap_profile_gaps_with_detail",
 ]

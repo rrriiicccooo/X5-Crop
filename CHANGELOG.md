@@ -56,6 +56,8 @@ Current stable release: v4.2.8
 - ordinary gap search 现在写出 `standard_gap_search` detail：每个 expected gap
   记录 search window、accepted / rejected run、selected detected gap 或 equal
   fallback；旧的无 detail API 只包装同一套 assessment 逻辑，不再维护重复判断。
+- 单个 expected gap proposal 已改为 `SeparatorGapProposal`；standard proposal
+  不再用裸 tuple 传递 gap/detail，report detail 字段保持不变。
 - broad-width gap proposal 现在写出 `separator_width_profile_gap_search` detail：
   每个 expected gap 记录 width-profile accepted / rejected run、selected detected
   gap 和 summary reason；未使用的无 detail wrapper 已删除。
@@ -564,6 +566,9 @@ Verified:
 - Initial separator gap proposal now uses `InitialSeparatorGapResult`; standard
   proposal, broad-width override, and detected-geometry model override are
   chained through separate helpers while report/detail fields remain unchanged.
+- Single expected-gap proposal now uses `SeparatorGapProposal`; standard
+  proposal no longer passes gap/detail through a raw tuple, while report detail
+  fields remain unchanged.
 - Primary separator refinement now uses `PrimarySeparatorRefinementResult`;
   edge-pair correction and robust-grid detail no longer pass through a raw tuple.
 - Late separator refinement now uses `LateSeparatorRefinementResult`; enhanced
