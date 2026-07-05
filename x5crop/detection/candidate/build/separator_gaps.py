@@ -18,11 +18,10 @@ from ....geometry.separator_cache import cached_edge_refine_profiles, cached_sep
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
-from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE
+from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE
 from ..proposal.separator.model import propose_equal_model_gaps_from_profile
 from ..proposal.separator.proposal import (
-    propose_separator_width_profile_gaps_with_detail,
-    propose_standard_separator_gaps_with_detail,
+    propose_separator_gap_profile_gaps_with_detail,
 )
 
 
@@ -71,22 +70,37 @@ def initial_separator_gaps(
     gap_max_width_ratio_override: Optional[float],
     policy: DetectionPolicy,
 ) -> tuple[list[Gap], dict[str, Any], dict[str, Any]]:
-    standard_gap_proposal = propose_standard_separator_gaps_with_detail(
+    standard_gap_proposal = propose_separator_gap_profile_gaps_with_detail(
+        gray_work,
+        outer,
         profile,
         origin,
         pitch,
         count,
+        STANDARD_GAP_PROFILE,
         gap_max_width_ratio_override,
         policy.separator.gap_search,
+        policy.separator.width_profile,
+        policy.separator.width_profile_search,
     )
     gaps = standard_gap_proposal.gaps
     standard_gap_search_detail = dict(standard_gap_proposal.detail)
-    separator_width_profile_gap_search_detail: dict[str, Any] = {"used": False, "reason": "not_requested"}
+    separator_width_profile_gap_search_detail: dict[str, Any] = {
+        "used": False,
+        "profile": BROAD_WIDTH_GAP_PROFILE,
+        "reason": "not_requested",
+    }
     if candidate_strategy == "separator_outer" and gap_search_profile == BROAD_WIDTH_GAP_PROFILE:
-        separator_width_profile_proposal = propose_separator_width_profile_gaps_with_detail(
+        separator_width_profile_proposal = propose_separator_gap_profile_gaps_with_detail(
             gray_work,
             outer,
+            profile,
+            origin,
+            pitch,
             count,
+            BROAD_WIDTH_GAP_PROFILE,
+            gap_max_width_ratio_override,
+            policy.separator.gap_search,
             policy.separator.width_profile,
             policy.separator.width_profile_search,
         )
@@ -239,18 +253,27 @@ def build_primary_separator_gaps_for_outer(
     profile = cached_separator_profile(cache, gray_work, outer, policy.separator.profile)
     origin, pitch = separator_origin_pitch(outer, fmt, count, strip_mode, offset_fraction)
     if force_standard_gap_search:
-        standard_gap_proposal = propose_standard_separator_gaps_with_detail(
+        standard_gap_proposal = propose_separator_gap_profile_gaps_with_detail(
+            gray_work,
+            outer,
             profile,
             origin,
             pitch,
             count,
+            STANDARD_GAP_PROFILE,
             gap_max_width_ratio_override,
             policy.separator.gap_search,
+            policy.separator.width_profile,
+            policy.separator.width_profile_search,
         )
         gaps = standard_gap_proposal.gaps
         standard_gap_search_detail = dict(standard_gap_proposal.detail)
         standard_gap_search_detail["forced"] = True
-        separator_width_profile_gap_search_detail = {"used": False, "reason": "not_requested"}
+        separator_width_profile_gap_search_detail = {
+            "used": False,
+            "profile": BROAD_WIDTH_GAP_PROFILE,
+            "reason": "not_requested",
+        }
     else:
         gaps, standard_gap_search_detail, separator_width_profile_gap_search_detail = initial_separator_gaps(
             gray_work,

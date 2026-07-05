@@ -257,6 +257,9 @@ Current stable release: v4.2.8
 - runtime separator width profile policy 已收拢：启用状态、max width ratio 和
   confidence cap 归 `SeparatorPolicy.width_profile`，顶层 `SeparatorPolicy`
   不再保留重复的 width-profile runtime 字段。
+- separator gap profile proposal contract 已统一：standard 和 broad-width
+  gap proposal 都返回 `SeparatorGapProfileProposal`，candidate build 通过
+  profile dispatch 入口消费，底层搜索算法保持不变。
 - separator gap lifecycle 已从 `build_detection_for_outer` 抽到
   `detection/candidate/build/separator_gaps.py`：separator gap lifecycle 生成
   origin/pitch、standard/broad-width gaps、edge-pair、grid、enhanced 和 nearby
@@ -552,6 +555,10 @@ Verified:
   ratio, and confidence cap now belong to `SeparatorPolicy.width_profile`, and
   top-level `SeparatorPolicy` no longer carries duplicate width-profile runtime
   fields.
+- Separator gap-profile proposal contract is unified: standard and broad-width
+  gap proposals now return `SeparatorGapProfileProposal`, and candidate build
+  consumes them through a profile dispatch entry while preserving the underlying
+  search algorithms.
 - The unused `CandidateGateOutcome` gate placeholder type has been removed.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the
