@@ -21,6 +21,26 @@ class GapWidthLimits:
 
 
 @dataclass(frozen=True)
+class GapScoreThresholds:
+    min_score: float
+    peak: float
+    band: float
+
+
+@dataclass(frozen=True)
+class GapAcceptanceLimits:
+    weak_prominence_min: float
+    weak_prominence_mean_override: float
+    separator_width_min_mean: float
+    separator_width_min_prominence: float
+
+
+@dataclass(frozen=True)
+class GapRankingWeights:
+    quality_prominence_weight: float
+
+
+@dataclass(frozen=True)
 class DetectedGapCandidate:
     distance: float
     quality: float
@@ -106,10 +126,10 @@ class GapSearchContext:
     expected: float
     pitch: float
     limits: GapWidthLimits
-    peak_threshold: float
-    band_threshold: float
+    thresholds: GapScoreThresholds
+    acceptance: GapAcceptanceLimits
+    ranking: GapRankingWeights
     max_width_ratio_override: Optional[float]
-    config: GapSearchParameters
 
 
 def gap_search_window(
@@ -137,11 +157,30 @@ def gap_width_limits(
     return GapWidthLimits(normal_max_gap_w, max_gap_w, min_gap_w, guard_w)
 
 
-def gap_score_thresholds(local_max: float, config: GapSearchParameters) -> tuple[float, float]:
+def gap_score_thresholds(local_max: float, config: GapSearchParameters) -> GapScoreThresholds:
     min_score = config.min_score
     peak_threshold = max(min_score, local_max * config.peak_multiplier)
     band_threshold = max(min_score * config.band_min_score_multiplier, local_max * config.band_multiplier)
-    return peak_threshold, band_threshold
+    return GapScoreThresholds(
+        min_score=float(min_score),
+        peak=float(peak_threshold),
+        band=float(band_threshold),
+    )
+
+
+def gap_acceptance_limits(config: GapSearchParameters) -> GapAcceptanceLimits:
+    return GapAcceptanceLimits(
+        weak_prominence_min=float(config.weak_prominence_min),
+        weak_prominence_mean_override=float(config.weak_prominence_mean_override),
+        separator_width_min_mean=float(config.separator_width_min_mean),
+        separator_width_min_prominence=float(config.separator_width_min_prominence),
+    )
+
+
+def gap_ranking_weights(config: GapSearchParameters) -> GapRankingWeights:
+    return GapRankingWeights(
+        quality_prominence_weight=float(config.quality_prominence_weight),
+    )
 
 
 def gap_search_context(
@@ -154,17 +193,17 @@ def gap_search_context(
     config: GapSearchParameters,
 ) -> GapSearchContext:
     limits = gap_width_limits(pitch, max_width_ratio_override, config)
-    peak_threshold, band_threshold = gap_score_thresholds(local_max, config)
+    thresholds = gap_score_thresholds(local_max, config)
     return GapSearchContext(
         local=local,
         lo=int(lo),
         expected=float(expected),
         pitch=float(pitch),
         limits=limits,
-        peak_threshold=float(peak_threshold),
-        band_threshold=float(band_threshold),
+        thresholds=thresholds,
+        acceptance=gap_acceptance_limits(config),
+        ranking=gap_ranking_weights(config),
         max_width_ratio_override=max_width_ratio_override,
-        config=config,
     )
 
 
@@ -183,10 +222,10 @@ def expanded_gap_band(
     return band_start, band_end
 
 
-def gap_band_has_prominence(evidence: DetectedGapBandEvidence, config: GapSearchParameters) -> bool:
+def gap_band_has_prominence(evidence: DetectedGapBandEvidence, limits: GapAcceptanceLimits) -> bool:
     return (
-        evidence.prominence >= config.weak_prominence_min
-        or evidence.mean_score >= config.weak_prominence_mean_override
+        evidence.prominence >= limits.weak_prominence_min
+        or evidence.mean_score >= limits.weak_prominence_mean_override
     )
 
 
@@ -194,13 +233,13 @@ def gap_band_has_width_profile_support(
     evidence: DetectedGapBandEvidence,
     limits: GapWidthLimits,
     max_width_ratio_override: Optional[float],
-    config: GapSearchParameters,
+    acceptance: GapAcceptanceLimits,
 ) -> bool:
     if max_width_ratio_override is None or evidence.width <= limits.normal_max:
         return True
     return (
-        evidence.mean_score >= config.separator_width_min_mean
-        and evidence.prominence >= config.separator_width_min_prominence
+        evidence.mean_score >= acceptance.separator_width_min_mean
+        and evidence.prominence >= acceptance.separator_width_min_prominence
     )
 
 
@@ -208,13 +247,13 @@ def detected_gap_acceptance(
     evidence: DetectedGapBandEvidence,
     context: GapSearchContext,
 ) -> DetectedGapAcceptance:
-    if not gap_band_has_prominence(evidence, context.config):
+    if not gap_band_has_prominence(evidence, context.acceptance):
         return DetectedGapAcceptance(False, "weak_prominence")
     if not gap_band_has_width_profile_support(
         evidence,
         context.limits,
         context.max_width_ratio_override,
-        context.config,
+        context.acceptance,
     ):
         return DetectedGapAcceptance(False, "width_profile_unsupported")
     return DetectedGapAcceptance(True, "accepted")
@@ -258,7 +297,7 @@ def detected_gap_candidate_from_evidence(
     context: GapSearchContext,
 ) -> DetectedGapCandidate:
     distance = abs(evidence.center - context.expected) / max(1.0, context.pitch)
-    quality = evidence.mean_score + context.config.quality_prominence_weight * evidence.prominence
+    quality = evidence.mean_score + context.ranking.quality_prominence_weight * evidence.prominence
     return DetectedGapCandidate(distance, quality, evidence.mean_score, evidence.center, evidence.start, evidence.end)
 
 
@@ -271,7 +310,7 @@ def detected_gap_run_assessment(
         context.local,
         run_start,
         run_end,
-        context.band_threshold,
+        context.thresholds.band,
         context.limits.max_width,
     )
     assessment = detected_gap_band_assessment(
@@ -301,7 +340,7 @@ def detected_gap_candidates_with_detail(
 ) -> tuple[list[DetectedGapCandidate], list[dict[str, Any]]]:
     candidates: list[DetectedGapCandidate] = []
     evaluations: list[dict[str, Any]] = []
-    for run_start, run_end in runs_from_mask(context.local >= context.peak_threshold):
+    for run_start, run_end in runs_from_mask(context.local >= context.thresholds.peak):
         assessment = detected_gap_run_assessment(run_start, run_end, context)
         evaluations.append(assessment.detail)
         if assessment.candidate is not None:
@@ -339,8 +378,8 @@ def gap_search_detail(
     if context is not None:
         detail["window"].update(
             {
-                "peak_threshold": float(context.peak_threshold),
-                "band_threshold": float(context.band_threshold),
+                "peak_threshold": float(context.thresholds.peak),
+                "band_threshold": float(context.thresholds.band),
                 "min_width": int(context.limits.min_width),
                 "max_width": int(context.limits.max_width),
                 "normal_max_width": int(context.limits.normal_max),
@@ -413,6 +452,9 @@ __all__ = [
     "DetectedGapCandidate",
     "DetectedGapBandEvidence",
     "DetectedGapRunAssessment",
+    "GapAcceptanceLimits",
+    "GapRankingWeights",
+    "GapScoreThresholds",
     "GapSearchContext",
     "GapSearchResult",
     "GapWidthLimits",
@@ -425,9 +467,11 @@ __all__ = [
     "detected_gap_run_assessment",
     "expanded_gap_band",
     "find_detected_gap",
+    "gap_acceptance_limits",
     "gap_search_detail",
     "gap_band_has_prominence",
     "gap_band_has_width_profile_support",
+    "gap_ranking_weights",
     "gap_search_context",
     "gap_score_thresholds",
     "gap_search_window",

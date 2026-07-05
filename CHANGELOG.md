@@ -81,6 +81,9 @@ Current stable release: v4.2.8
 - standard detected gap search 的单个 run 已改为 `DetectedGapRunAssessment`；
   不再保留未使用的 no-detail wrapper 或裸 tuple 返回，accepted / rejected run
   detail 仍保持原字段。
+- `GapSearchContext` 已把 flat `GapSearchParameters` 解释成 threshold、
+  acceptance 和 ranking 运行时切片；底层 run assessment 不再直接读取完整
+  config，report detail 字段保持不变。
 - equal / grid / content model-gap proposal 已集中到 `geometry.model_gaps`，
   profile 等分模型归 `detection.candidate.proposal.separator.model`；
   build / safety / refinement / content candidate 路径不再手写 `"equal"` /
@@ -510,6 +513,9 @@ Verified:
 - Standard detected-gap run evaluation now uses `DetectedGapRunAssessment`
   instead of unused no-detail wrappers or raw tuple returns; accepted / rejected
   run detail fields are unchanged.
+- `GapSearchContext` now interprets flat `GapSearchParameters` into threshold,
+  acceptance, and ranking runtime slices; low-level run assessment no longer
+  reads the full config directly, and report detail fields are unchanged.
 - Separator refinement is split without behavior changes: candidate build calls
   geometry refinement helpers directly instead of keeping a re-export-only
   proposal refinement facade; `geometry/edge_pairs.py` separates search limits,
