@@ -21,7 +21,7 @@ from ....runtime.config import RuntimeConfig
 from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE
 from ..proposal.separator.model import propose_equal_model_gaps_from_profile
 from ..proposal.separator.proposal import (
-    propose_separator_width_profile_gaps,
+    propose_separator_width_profile_gaps_with_detail,
     propose_standard_separator_gaps_with_detail,
 )
 
@@ -35,6 +35,7 @@ class SeparatorGapBuildResult:
     gaps: list[Gap]
     grid_detail: dict[str, Any]
     standard_gap_search_detail: dict[str, Any]
+    separator_width_profile_gap_search_detail: dict[str, Any]
     edge_pair_correction_detail: dict[str, Any]
     enhanced_gap_promotion_detail: dict[str, Any]
     nearby_correction_detail: dict[str, Any]
@@ -69,7 +70,7 @@ def initial_separator_gaps(
     gap_search_profile: str,
     gap_max_width_ratio_override: Optional[float],
     policy: DetectionPolicy,
-) -> tuple[list[Gap], dict[str, Any]]:
+) -> tuple[list[Gap], dict[str, Any], dict[str, Any]]:
     standard_gap_proposal = propose_standard_separator_gaps_with_detail(
         profile,
         origin,
@@ -80,14 +81,17 @@ def initial_separator_gaps(
     )
     gaps = standard_gap_proposal.gaps
     standard_gap_search_detail = dict(standard_gap_proposal.detail)
+    separator_width_profile_gap_search_detail: dict[str, Any] = {"used": False, "reason": "not_requested"}
     if candidate_strategy == "separator_outer" and gap_search_profile == BROAD_WIDTH_GAP_PROFILE:
-        separator_width_profile_gaps = propose_separator_width_profile_gaps(
+        separator_width_profile_proposal = propose_separator_width_profile_gaps_with_detail(
             gray_work,
             outer,
             count,
             policy.separator.width_profile,
             policy.separator.width_profile_search,
         )
+        separator_width_profile_gaps = separator_width_profile_proposal.gaps
+        separator_width_profile_gap_search_detail = dict(separator_width_profile_proposal.detail)
         if len(separator_width_profile_gaps) >= max(1, count - 1):
             gaps = separator_width_profile_gaps
             standard_gap_search_detail["overridden_by"] = "separator_width_profile"
@@ -99,7 +103,7 @@ def initial_separator_gaps(
     ):
         gaps = propose_equal_model_gaps_from_profile(profile, origin, pitch, count)
         standard_gap_search_detail["overridden_by"] = "detected_geometry_equal_model"
-    return gaps, standard_gap_search_detail
+    return gaps, standard_gap_search_detail, separator_width_profile_gap_search_detail
 
 
 def apply_primary_separator_refinements(
@@ -246,8 +250,9 @@ def build_primary_separator_gaps_for_outer(
         gaps = standard_gap_proposal.gaps
         standard_gap_search_detail = dict(standard_gap_proposal.detail)
         standard_gap_search_detail["forced"] = True
+        separator_width_profile_gap_search_detail = {"used": False, "reason": "not_requested"}
     else:
-        gaps, standard_gap_search_detail = initial_separator_gaps(
+        gaps, standard_gap_search_detail, separator_width_profile_gap_search_detail = initial_separator_gaps(
             gray_work,
             outer,
             profile,
@@ -282,6 +287,7 @@ def build_primary_separator_gaps_for_outer(
         gaps=gaps,
         grid_detail=grid_detail,
         standard_gap_search_detail=standard_gap_search_detail,
+        separator_width_profile_gap_search_detail=separator_width_profile_gap_search_detail,
         edge_pair_correction_detail=edge_pair_correction_detail,
         enhanced_gap_promotion_detail={"used": False, "reason": "pending_late_refinement"},
         nearby_correction_detail={"used": False, "reason": "pending_late_refinement"},
@@ -331,6 +337,7 @@ def apply_late_separator_refinements(
         gaps=gaps,
         grid_detail=separator_gaps.grid_detail,
         standard_gap_search_detail=separator_gaps.standard_gap_search_detail,
+        separator_width_profile_gap_search_detail=separator_gaps.separator_width_profile_gap_search_detail,
         edge_pair_correction_detail=separator_gaps.edge_pair_correction_detail,
         enhanced_gap_promotion_detail=enhanced_gap_promotion_detail,
         nearby_correction_detail=nearby_correction_detail,

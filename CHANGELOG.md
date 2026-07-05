@@ -55,6 +55,9 @@ Current stable release: v4.2.8
 - ordinary gap search 现在写出 `standard_gap_search` detail：每个 expected gap
   记录 search window、accepted / rejected run、selected detected gap 或 equal
   fallback；旧的无 detail API 只包装同一套 assessment 逻辑，不再维护重复判断。
+- broad-width gap proposal 现在写出 `separator_width_profile_gap_search` detail：
+  每个 expected gap 记录 width-profile accepted / rejected run、selected detected
+  gap 和 summary reason；旧的无 detail API 只包装同一套 assessment 逻辑。
 - separator profile signal 组合已显式化：`SeparatorProfileSignals` 承载
   segmented extreme、uniform soft、uniform support 和 column gradient，
   `combined_separator_profile_score` 是唯一组合点，smooth window 也可单独审核。
@@ -255,6 +258,10 @@ Current stable release: v4.2.8
   和列向梯度分开；`geometry/gap_search.py` 将 window、width limits、thresholds、
   band expansion、detected-candidate ranking 和 standard search detail 分开，
   方便人工审核普通 separator 是如何被看见或拒绝的。
+- broad-width gap proposal 已补齐 detail：`geometry/separator_width_profile.py`
+  将 width run assessment、best-candidate selection 和 detail assembly 分开，
+  candidate detail 记录 `separator_width_profile_gap_search`，方便人工审核宽
+  separator 是如何被看见或拒绝的。
 - separator refinement 已做行为等价拆分：candidate build 直接调用 geometry
   refinement helpers，避免保留只做别名转发的 proposal refinement facade；
   `geometry/edge_pairs.py` 将 search limits、candidate generation、best-pair
@@ -368,6 +375,9 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - Ordinary gap search now writes `standard_gap_search` detail for each expected
   gap, including the search window, accepted / rejected runs, and selected
   detected gap or equal fallback, without changing selection thresholds.
+- Broad-width gap proposal now writes `separator_width_profile_gap_search`
+  detail for each expected gap, including accepted / rejected width-profile runs
+  and the selected detected gap, without changing selection thresholds.
 - New wrong PASS is unacceptable; conservative REVIEW and schema / reason diffs
   require explanation.
 - TIFF metadata, bit depth, ICC, resolution, and compression behavior remain unchanged.

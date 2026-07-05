@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 
@@ -35,6 +35,38 @@ class SeparatorWidthGapRun:
 class SeparatorWidthGapAcceptance:
     accepted: bool
     reason: str
+
+
+@dataclass(frozen=True)
+class SeparatorWidthGapRunAssessment:
+    accepted: bool
+    reason: str
+    run: SeparatorWidthGapRun
+    mean_score: float = 0.0
+    distance_penalty: float = 0.0
+    candidate_score: float | None = None
+
+    def detail(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "accepted": bool(self.accepted),
+            "reason": self.reason,
+            "start": int(self.run.start),
+            "end": int(self.run.end),
+            "width": int(self.run.width),
+            "center": float(self.run.center),
+            "mean_score": float(self.mean_score),
+            "distance_penalty": float(self.distance_penalty),
+        }
+        if self.candidate_score is not None:
+            out["candidate_score"] = float(self.candidate_score)
+        return out
+
+
+@dataclass(frozen=True)
+class SeparatorWidthGapSearchResult:
+    gap: Optional[Gap]
+    reason: str
+    detail: dict[str, Any]
 
 
 def separator_width_profile(
@@ -179,6 +211,68 @@ def separator_width_gap_candidate_from_run(
     return separator_width_gap_candidate_from_accepted_run(profile, run, expected, pitch, params)
 
 
+def separator_width_gap_candidate_assessment(
+    profile: np.ndarray,
+    start: int,
+    end: int,
+    expected: float,
+    pitch: float,
+    min_width: int,
+    max_width: int,
+    params: SeparatorWidthProfileSearchParameters,
+) -> tuple[Optional[SeparatorWidthGapCandidate], SeparatorWidthGapRunAssessment]:
+    run = separator_width_gap_run(start, end)
+    acceptance = separator_width_gap_run_acceptance(run, min_width, max_width)
+    mean_score = float(profile[run.start:run.end].mean()) if run.end > run.start else 0.0
+    distance_penalty = abs(run.center - expected) / max(1.0, pitch)
+    if not acceptance.accepted:
+        return None, SeparatorWidthGapRunAssessment(
+            accepted=False,
+            reason=acceptance.reason,
+            run=run,
+            mean_score=mean_score,
+            distance_penalty=distance_penalty,
+        )
+    candidate = separator_width_gap_candidate_from_accepted_run(profile, run, expected, pitch, params)
+    return candidate, SeparatorWidthGapRunAssessment(
+        accepted=True,
+        reason=acceptance.reason,
+        run=run,
+        mean_score=mean_score,
+        distance_penalty=distance_penalty,
+        candidate_score=float(candidate.score),
+    )
+
+
+def separator_width_gap_candidates_with_detail(
+    profile: np.ndarray,
+    lo: int,
+    hi: int,
+    expected: float,
+    pitch: float,
+    min_width: int,
+    max_width: int,
+    params: SeparatorWidthProfileSearchParameters,
+) -> tuple[list[SeparatorWidthGapCandidate], list[dict[str, Any]]]:
+    candidates: list[SeparatorWidthGapCandidate] = []
+    evaluations: list[dict[str, Any]] = []
+    for run_start, run_end in runs_from_mask(profile[lo:hi] >= params.threshold_ratio):
+        candidate, assessment = separator_width_gap_candidate_assessment(
+            profile,
+            lo + int(run_start),
+            lo + int(run_end),
+            expected,
+            pitch,
+            min_width,
+            max_width,
+            params,
+        )
+        evaluations.append(assessment.detail())
+        if candidate is not None:
+            candidates.append(candidate)
+    return candidates, evaluations
+
+
 def best_separator_width_gap_candidate(
     profile: np.ndarray,
     lo: int,
@@ -189,21 +283,44 @@ def best_separator_width_gap_candidate(
     max_width: int,
     params: SeparatorWidthProfileSearchParameters,
 ) -> Optional[SeparatorWidthGapCandidate]:
-    best: Optional[SeparatorWidthGapCandidate] = None
-    for run_start, run_end in runs_from_mask(profile[lo:hi] >= params.threshold_ratio):
-        candidate = separator_width_gap_candidate_from_run(
-            profile,
-            lo + int(run_start),
-            lo + int(run_end),
-            expected,
-            pitch,
-            min_width,
-            max_width,
-            params,
-        )
-        if candidate is not None and (best is None or candidate.rank_key() > best.rank_key()):
-            best = candidate
+    best, _evaluations = best_separator_width_gap_candidate_with_detail(
+        profile,
+        lo,
+        hi,
+        expected,
+        pitch,
+        min_width,
+        max_width,
+        params,
+    )
     return best
+
+
+def best_separator_width_gap_candidate_with_detail(
+    profile: np.ndarray,
+    lo: int,
+    hi: int,
+    expected: float,
+    pitch: float,
+    min_width: int,
+    max_width: int,
+    params: SeparatorWidthProfileSearchParameters,
+) -> tuple[Optional[SeparatorWidthGapCandidate], list[dict[str, Any]]]:
+    candidates, evaluations = separator_width_gap_candidates_with_detail(
+        profile,
+        lo,
+        hi,
+        expected,
+        pitch,
+        min_width,
+        max_width,
+        params,
+    )
+    best: Optional[SeparatorWidthGapCandidate] = None
+    for candidate in candidates:
+        if best is None or candidate.rank_key() > best.rank_key():
+            best = candidate
+    return best, evaluations
 
 
 def separator_width_gap_from_candidate(
@@ -229,20 +346,71 @@ def separator_width_gap_from_candidate(
     )
 
 
-def separator_width_gap_at(
+def separator_width_gap_search_detail(
+    index: int,
+    expected: float,
+    pitch: float,
+    profile_length: int,
+    short_axis: float,
+    min_width: int,
+    max_width: int,
+    max_core_width: float,
+    lo: int,
+    hi: int,
+    evaluations: list[dict[str, Any]] | None = None,
+    selected: SeparatorWidthGapCandidate | None = None,
+) -> dict[str, Any]:
+    evaluations = evaluations or []
+    accepted = [item for item in evaluations if bool(item.get("accepted", False))]
+    rejected = [item for item in evaluations if not bool(item.get("accepted", False))]
+    detail: dict[str, Any] = {
+        "index": int(index),
+        "expected": float(expected),
+        "pitch": float(pitch),
+        "profile_length": int(profile_length),
+        "short_axis": float(short_axis),
+        "window": {"lo": int(lo), "hi": int(hi)},
+        "min_width": int(min_width),
+        "max_width": int(max_width),
+        "max_core_width": float(max_core_width),
+        "evaluated_run_count": len(evaluations),
+        "accepted_count": len(accepted),
+        "rejected_count": len(rejected),
+        "accepted": accepted[:8],
+        "rejected": rejected[:8],
+    }
+    if selected is not None:
+        detail["selected"] = {
+            "center": float(selected.center),
+            "start": int(selected.start),
+            "end": int(selected.end),
+            "width": int(selected.end - selected.start),
+            "score": float(selected.score),
+        }
+    return detail
+
+
+def separator_width_gap_at_with_detail(
     profile: np.ndarray,
     expected: float,
     pitch: float,
     index: int,
     short_axis: float,
     params: SeparatorWidthProfileSearchParameters | None = None,
-) -> Optional[Gap]:
+) -> SeparatorWidthGapSearchResult:
     params = params or SeparatorWidthProfileSearchParameters()
     if profile.size <= 0 or pitch <= 0:
-        return None
+        detail = {
+            "index": int(index),
+            "expected": float(expected),
+            "pitch": float(pitch),
+            "profile_length": int(profile.size),
+            "short_axis": float(short_axis),
+        }
+        return SeparatorWidthGapSearchResult(None, "empty_profile_or_pitch", detail)
     min_width, max_width, max_core_width = separator_width_bounds(short_axis, params)
     lo, hi = separator_width_gap_window(len(profile), expected, pitch, params)
-    candidate = best_separator_width_gap_candidate(
+    candidate, evaluations = best_separator_width_gap_candidate_with_detail(
         profile,
         lo,
         hi,
@@ -252,24 +420,60 @@ def separator_width_gap_at(
         max_width,
         params,
     )
+    detail = separator_width_gap_search_detail(
+        index,
+        expected,
+        pitch,
+        len(profile),
+        short_axis,
+        min_width,
+        max_width,
+        max_core_width,
+        lo,
+        hi,
+        evaluations,
+        candidate,
+    )
     if candidate is None:
-        return None
-    return separator_width_gap_from_candidate(index, candidate, len(profile), max_core_width, params)
+        return SeparatorWidthGapSearchResult(None, "no_width_profile_candidate", detail)
+    return SeparatorWidthGapSearchResult(
+        separator_width_gap_from_candidate(index, candidate, len(profile), max_core_width, params),
+        "detected",
+        detail,
+    )
+
+
+def separator_width_gap_at(
+    profile: np.ndarray,
+    expected: float,
+    pitch: float,
+    index: int,
+    short_axis: float,
+    params: SeparatorWidthProfileSearchParameters | None = None,
+) -> Optional[Gap]:
+    return separator_width_gap_at_with_detail(profile, expected, pitch, index, short_axis, params).gap
 
 
 __all__ = [
     "SeparatorWidthGapAcceptance",
     "SeparatorWidthGapCandidate",
     "SeparatorWidthGapRun",
+    "SeparatorWidthGapRunAssessment",
+    "SeparatorWidthGapSearchResult",
     "best_separator_width_gap_candidate",
+    "best_separator_width_gap_candidate_with_detail",
     "collect_separator_width_bands",
     "separator_width_gap_candidate_from_accepted_run",
+    "separator_width_gap_candidate_assessment",
     "separator_width_gap_candidate_from_run",
+    "separator_width_gap_candidates_with_detail",
     "separator_width_gap_from_candidate",
     "separator_width_gap_run",
     "separator_width_gap_run_acceptance",
+    "separator_width_gap_search_detail",
     "separator_width_gap_window",
     "separator_width_bounds",
     "separator_width_gap_at",
+    "separator_width_gap_at_with_detail",
     "separator_width_profile",
 ]
