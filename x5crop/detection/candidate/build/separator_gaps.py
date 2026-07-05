@@ -7,14 +7,12 @@ import numpy as np
 
 from ....domain import Box, Gap
 from ....formats import FormatSpec
-from ....geometry.frame_fit import frame_boxes_from_gaps
 from ....geometry.separator_cache import cached_separator_profile
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ....utils import clamp_int
 from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE
-from ..assessment.scoring import score_detection
 from ..proposal.separator.proposal import propose_separator_width_profile_gaps, propose_standard_separator_gaps
 from ..proposal.separator.refinement import (
     apply_grid_gap_model,
@@ -36,7 +34,7 @@ class SeparatorGapBuildResult:
     edge_refine_detail: dict[str, Any]
     separator_analysis_detail: dict[str, Any]
     nearby_correction_detail: dict[str, Any]
-    confidence_cap_after_nearby: Optional[float]
+    pre_nearby_gaps: Optional[list[Gap]]
 
 
 def separator_origin_pitch(
@@ -209,46 +207,19 @@ def apply_enhanced_separator_analysis(
 
 
 def apply_nearby_separator_refinement(
-    gray_work: np.ndarray,
-    outer: Box,
     profile: np.ndarray,
     gaps: list[Gap],
-    fmt: FormatSpec,
     count: int,
     strip_mode: str,
     origin: float,
     pitch: float,
-    work_width: int,
-    work_height: int,
-    config: RuntimeConfig,
     policy: DetectionPolicy,
-) -> tuple[list[Gap], dict[str, Any], Optional[float]]:
+) -> tuple[list[Gap], dict[str, Any], Optional[list[Gap]]]:
     detail: dict[str, Any] = {"used": False, "reason": "disabled"}
-    confidence_cap: Optional[float] = None
     if strip_mode != "full" or not policy.separator.nearby_correction.enabled:
-        return gaps, detail, confidence_cap
-    pre_correction_boxes = frame_boxes_from_gaps(
-        outer,
-        gaps,
-        count,
-        work_width,
-        work_height,
-        config.bleed_x,
-        config.bleed_y,
-        origin=origin,
-        pitch=pitch,
-    )
-    pre_correction_confidence, _pre_reasons, _pre_detail = score_detection(
-        gray_work,
-        outer,
-        gaps,
-        pre_correction_boxes,
-        count,
-        fmt,
-        strip_mode,
-        policy,
-    )
-    gaps, detail = refine_with_nearby_separator(
+        return gaps, detail, None
+    pre_nearby_gaps = list(gaps)
+    refined_gaps, detail = refine_with_nearby_separator(
         profile,
         gaps,
         origin,
@@ -258,8 +229,8 @@ def apply_nearby_separator_refinement(
         policy.separator.nearby_correction,
     )
     if int(detail.get("accepted_count", 0) or 0) > 0:
-        confidence_cap = float(pre_correction_confidence)
-    return gaps, detail, confidence_cap
+        return refined_gaps, detail, pre_nearby_gaps
+    return refined_gaps, detail, None
 
 
 def build_separator_gaps_for_outer(
@@ -357,19 +328,13 @@ def build_separator_gaps_for_outer(
         cache,
         policy,
     )
-    gaps, nearby_correction_detail, confidence_cap_after_nearby = apply_nearby_separator_refinement(
-        gray_work,
-        outer,
+    gaps, nearby_correction_detail, pre_nearby_gaps = apply_nearby_separator_refinement(
         profile,
         gaps,
-        fmt,
         count,
         strip_mode,
         origin,
         pitch,
-        work_width,
-        work_height,
-        config,
         policy,
     )
     return SeparatorGapBuildResult(
@@ -382,7 +347,7 @@ def build_separator_gaps_for_outer(
         edge_refine_detail=edge_refine_detail,
         separator_analysis_detail=separator_analysis_detail,
         nearby_correction_detail=nearby_correction_detail,
-        confidence_cap_after_nearby=confidence_cap_after_nearby,
+        pre_nearby_gaps=pre_nearby_gaps,
     )
 
 

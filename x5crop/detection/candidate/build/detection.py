@@ -102,7 +102,29 @@ def build_detection_for_outer(
             int(policy.separator.gate.min_broad_separator_width_gaps_for_auto),
         ),
     )
-    if separator_gaps.confidence_cap_after_nearby is not None:
+    pre_nearby_confidence = None
+    if separator_gaps.pre_nearby_gaps is not None:
+        pre_nearby_boxes_work = frame_boxes_from_gaps(
+            outer,
+            separator_gaps.pre_nearby_gaps,
+            count,
+            ww,
+            wh,
+            config.bleed_x,
+            config.bleed_y,
+            origin=origin,
+            pitch=pitch,
+        )
+        pre_nearby_confidence, _pre_nearby_reasons, _pre_nearby_detail = score_detection(
+            gray_work,
+            outer,
+            separator_gaps.pre_nearby_gaps,
+            pre_nearby_boxes_work,
+            count,
+            fmt,
+            strip_mode,
+            policy,
+        )
         geometry_confidence, _geometry_reasons, _geometry_detail = score_detection(
             gray_work,
             outer,
@@ -143,6 +165,6 @@ def build_detection_for_outer(
             "gap_methods": [gap.method for gap in gaps],
         }
     )
-    if separator_gaps.confidence_cap_after_nearby is not None:
-        detail["nearby_separator_correction_confidence_cap"] = float(separator_gaps.confidence_cap_after_nearby)
+    if pre_nearby_confidence is not None:
+        detail["nearby_separator_correction_confidence_cap"] = float(pre_nearby_confidence)
     return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, confidence, reasons, detail)
