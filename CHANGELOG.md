@@ -52,6 +52,9 @@ Current stable release: v4.2.8
   常量，不再手写 method 字符串。
 - ordinary gap search 的 band threshold、弱 prominence 门槛和 detected-candidate
   quality 权重已外显到 `GapSearchParameters`；默认值保持旧行为。
+- separator profile signal 组合已显式化：`SeparatorProfileSignals` 承载
+  segmented extreme、uniform soft、uniform support 和 column gradient，
+  `combined_separator_profile_score` 是唯一组合点，smooth window 也可单独审核。
 - ordinary gap search 已拆成 hard-only `find_detected_gap`：它只返回
   `GapSearchResult` 中的 detected hard gap、fallback score 和 reason；standard
   separator proposal 负责在没有 hard gap 时调用 model proposal 生成 explicit
@@ -406,7 +409,8 @@ Verified:
   longer duck-types policy-like objects.
 - Ordinary separator profile / gap search code is split without behavior changes:
   `geometry/separator_profile.py` separates vertical sampling, segmented extreme
-  evidence, uniform soft score, and column gradient signals; `geometry/gap_search.py`
+  evidence, uniform soft score, uniform support, column gradient signals, the
+  combined scoring point, and the smoothing window; `geometry/gap_search.py`
   is now hard-only `find_detected_gap`, returning a `GapSearchResult` with a
   detected hard gap or fallback score / reason. Standard separator proposal owns
   the explicit `equal` fallback when no hard gap is found. Window, width limits,

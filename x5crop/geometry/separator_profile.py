@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from ..utils import smooth_1d
 from .detection_parameters import SeparatorProfileParameters
+
+
+@dataclass(frozen=True)
+class SeparatorProfileSignals:
+    extreme_score: np.ndarray
+    soft_score: np.ndarray
+    uniform_score: np.ndarray
+    gradient_score: np.ndarray
 
 
 def vertical_profile_sample(crop: np.ndarray, top_ratio: float, bottom_ratio: float) -> np.ndarray:
@@ -29,7 +39,12 @@ def segmented_extreme_separator_score(
         white = (part >= config.light_threshold).mean(axis=0).astype(np.float32)
         profiles.append(np.maximum(black, white))
     if not profiles:
-        profiles.append(((middle <= config.dark_threshold) | (middle >= config.light_threshold)).mean(axis=0).astype(np.float32))
+        fallback = (
+            ((middle <= config.dark_threshold) | (middle >= config.light_threshold))
+            .mean(axis=0)
+            .astype(np.float32)
+        )
+        profiles.append(fallback)
 
     stack = np.stack(profiles, axis=0)
     average_extreme = stack.mean(axis=0).astype(np.float32)
@@ -54,6 +69,40 @@ def column_gradient_score(middle_f: np.ndarray) -> np.ndarray:
     return np.abs(np.diff(middle_f, axis=1, prepend=middle_f[:, :1])).mean(axis=0) / 255.0
 
 
+def separator_profile_signals(
+    middle: np.ndarray,
+    config: SeparatorProfileParameters,
+) -> SeparatorProfileSignals:
+    middle_f = middle.astype(np.float32, copy=False)
+    extreme_score = segmented_extreme_separator_score(middle, config)
+    soft_score, uniform_score = uniform_soft_separator_score(middle_f, config)
+    gradient_score = column_gradient_score(middle_f)
+    return SeparatorProfileSignals(
+        extreme_score=extreme_score,
+        soft_score=soft_score,
+        uniform_score=uniform_score,
+        gradient_score=gradient_score,
+    )
+
+
+def combined_separator_profile_score(
+    signals: SeparatorProfileSignals,
+    config: SeparatorProfileParameters,
+) -> np.ndarray:
+    weighted_extreme = signals.extreme_score * (
+        config.uniform_base + config.uniform_weight * signals.uniform_score
+    )
+    score = np.maximum(weighted_extreme, signals.soft_score)
+    return np.maximum(
+        score,
+        np.clip(signals.gradient_score, 0.0, 1.0) * config.gradient_weight,
+    )
+
+
+def separator_profile_smooth_window(width: int, config: SeparatorProfileParameters) -> int:
+    return max(config.smooth_min, int(round(width * config.smooth_ratio)))
+
+
 def separator_profile(
     crop: np.ndarray,
     config: SeparatorProfileParameters | None = None,
@@ -63,13 +112,9 @@ def separator_profile(
     if h <= 0 or w <= 0:
         return np.zeros(0, dtype=np.float32)
     middle = vertical_profile_sample(crop, config.top_ratio, config.bottom_ratio)
-    middle_f = middle.astype(np.float32, copy=False)
-    extreme_score = segmented_extreme_separator_score(middle, config)
-    soft_score, uniform_score = uniform_soft_separator_score(middle_f, config)
-    gradient = column_gradient_score(middle_f)
-    score = np.maximum(extreme_score * (config.uniform_base + config.uniform_weight * uniform_score), soft_score)
-    score = np.maximum(score, np.clip(gradient, 0.0, 1.0) * config.gradient_weight)
-    return smooth_1d(score.astype(np.float32), max(config.smooth_min, int(round(w * config.smooth_ratio))))
+    signals = separator_profile_signals(middle, config)
+    score = combined_separator_profile_score(signals, config)
+    return smooth_1d(score.astype(np.float32), separator_profile_smooth_window(w, config))
 
 
 def interval_mean(profile: np.ndarray, start: int, end: int) -> float:
@@ -78,3 +123,17 @@ def interval_mean(profile: np.ndarray, start: int, end: int) -> float:
     if end <= start:
         return 0.0
     return float(profile[start:end].mean())
+
+
+__all__ = [
+    "SeparatorProfileSignals",
+    "column_gradient_score",
+    "combined_separator_profile_score",
+    "interval_mean",
+    "segmented_extreme_separator_score",
+    "separator_profile",
+    "separator_profile_signals",
+    "separator_profile_smooth_window",
+    "uniform_soft_separator_score",
+    "vertical_profile_sample",
+]
