@@ -79,6 +79,10 @@ Current stable release: v4.2.8
 - leading grid failure gate 已拆出 leading grid score、late hard-gap sequence
   和 enhanced promotion guard helper；最终 reason 保持
   `leading_grid_separator_failure`。
+- separator gate 已新增 `SeparatorGateEvidence` 摘要对象，集中汇总
+  hard / model / width / leading-grid evidence；各 gate profile 只消费该摘要
+  和 policy 参数，输出 detail key 保持不变。
+- 未使用的 `CandidateGateOutcome` gate 占位类型已删除，减少无调用方接口。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
 - grid-derived outer box 计算已从 separator gap lifecycle 移到
@@ -406,6 +410,10 @@ Verified:
 - The leading-grid failure gate now separates leading grid scores, late hard-gap
   sequence checks, and enhanced promotion guard helpers. The final reason remains
   `leading_grid_separator_failure`.
+- The separator gate now builds a `SeparatorGateEvidence` summary for hard,
+  model, width, and leading-grid evidence. Gate profiles consume that summary
+  plus policy parameters, while output detail keys remain unchanged.
+- The unused `CandidateGateOutcome` gate placeholder type has been removed.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the
   diagnostic hard-gap trust classifier; `detection/evidence/gap_diagnostics.py`

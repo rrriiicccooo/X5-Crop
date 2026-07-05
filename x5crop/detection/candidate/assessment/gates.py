@@ -12,32 +12,48 @@ from ....policies.runtime.separator import LeadingGridFailurePolicy, SeparatorGa
 
 
 @dataclass(frozen=True)
-class CandidateGateOutcome:
-    name: str
-    ok: bool
-    reason: str
-    detail: dict[str, Any]
+class SeparatorGateEvidence:
+    expected_gaps: int
+    actual_detected_gaps: int
+    broad_separator_width_gaps: int
+    enhanced_detected_gaps: int
+    grid_gaps: int
+    equal_gaps: int
+    hard_gaps: int
+    hard_gap_indexes: list[int]
+    edge_pair_scores: list[float]
+    detected_scores: list[float]
+    broad_separator_width_scores: list[Any]
+    leading_grid_scores: list[float]
+    enhanced_separator_accepted_count: int
 
 
 def separator_gate_min_hard_with_equal_cap_assessment(
-    expected: int,
-    hard: int,
-    equal: int,
+    evidence: SeparatorGateEvidence,
     gate: SeparatorGatePolicy,
 ) -> tuple[bool, str]:
-    needed = min(expected, gate.needed_hard_max)
-    ok = hard >= needed and equal <= max(gate.max_equal_gaps_floor, expected // 2)
+    needed = min(evidence.expected_gaps, gate.needed_hard_max)
+    ok = (
+        evidence.hard_gaps >= needed
+        and (
+            evidence.equal_gaps
+            <= max(gate.max_equal_gaps_floor, evidence.expected_gaps // 2)
+        )
+    )
     return ok, "separator_min_hard_support" if ok else "separator_min_hard_support_weak"
 
 
 def separator_gate_geometry_support_assessment(
     detection: Detection,
     threshold: float,
-    equal: int,
-    expected: int,
+    evidence: SeparatorGateEvidence,
     gate: SeparatorGatePolicy,
 ) -> tuple[bool, str]:
-    ok = bool(gate.allow_geometry_support) and detection.confidence >= threshold and equal <= expected
+    ok = (
+        bool(gate.allow_geometry_support)
+        and detection.confidence >= threshold
+        and evidence.equal_gaps <= evidence.expected_gaps
+    )
     return ok, "separator_geometry_support" if ok else "separator_geometry_support_weak"
 
 
@@ -69,20 +85,33 @@ def separator_gate_edge_pair_support_assessment(
 
 def separator_gate_all_internal_gaps_hard_assessment(
     detection: Detection,
-    expected: int,
-    hard: int,
-    broad_width: int,
-    edge_pair_scores: list[float],
+    evidence: SeparatorGateEvidence,
     gate: SeparatorGatePolicy,
 ) -> tuple[bool, str]:
-    needed = max(1, expected if gate.hard_required_all_gaps else min(expected, 1))
-    ok = hard >= needed
-    reason = "separator_all_internal_gaps_hard_support" if ok else "separator_all_internal_gaps_hard_support_weak"
+    needed = max(
+        1,
+        evidence.expected_gaps
+        if gate.hard_required_all_gaps
+        else min(evidence.expected_gaps, 1),
+    )
+    ok = evidence.hard_gaps >= needed
+    reason = (
+        "separator_all_internal_gaps_hard_support"
+        if ok
+        else "separator_all_internal_gaps_hard_support_weak"
+    )
     if ok and separator_gate_needs_full_strip_supplemental_checks(detection):
-        broad_ok, broad_reason = separator_gate_broad_width_support_assessment(broad_width, gate)
+        broad_ok, broad_reason = separator_gate_broad_width_support_assessment(
+            evidence.broad_separator_width_gaps,
+            gate,
+        )
         if not broad_ok:
             return False, broad_reason
-        edge_ok, edge_reason = separator_gate_edge_pair_support_assessment(broad_width, edge_pair_scores, gate)
+        edge_ok, edge_reason = separator_gate_edge_pair_support_assessment(
+            evidence.broad_separator_width_gaps,
+            evidence.edge_pair_scores,
+            gate,
+        )
         if not edge_ok:
             return False, edge_reason
     return ok, reason
@@ -123,30 +152,96 @@ def enhanced_gap_promotion_accepted_count(detection: Detection) -> int:
 
 def separator_gate_leading_grid_failure_assessment(
     detection: Detection,
-    expected: int,
-    hard_indexes: list[int],
-    leading_grid_scores: list[float],
-    enhanced_accepted: int,
+    evidence: SeparatorGateEvidence,
     policy: LeadingGridFailurePolicy,
 ) -> bool:
     return (
         policy.enabled
         and detection.strip_mode == "full"
-        and expected >= policy.min_expected_gaps
-        and len(leading_grid_scores) >= policy.leading_count
+        and evidence.expected_gaps >= policy.min_expected_gaps
+        and len(evidence.leading_grid_scores) >= policy.leading_count
         and all(
             score < policy.low_score
-            for score in leading_grid_scores[:policy.leading_count]
+            for score in evidence.leading_grid_scores[:policy.leading_count]
         )
         and sum(
             1
-            for score in leading_grid_scores[:policy.leading_count]
+            for score in evidence.leading_grid_scores[:policy.leading_count]
             if score < policy.very_low_score
         ) >= policy.very_low_count
-        and enhanced_accepted == 0
-        and len(hard_indexes) <= policy.max_hard_gaps
-        and hard_gap_indexes_are_adjacent_late(hard_indexes)
+        and evidence.enhanced_separator_accepted_count == 0
+        and len(evidence.hard_gap_indexes) <= policy.max_hard_gaps
+        and hard_gap_indexes_are_adjacent_late(evidence.hard_gap_indexes)
     )
+
+
+def separator_gate_evidence_from_detection(detection: Detection) -> SeparatorGateEvidence:
+    actual = int(detection.detail.get("actual_detected_gaps", 0))
+    broad_width = int(detection.detail.get("broad_separator_width_gaps", 0))
+    enhanced = int(detection.detail.get("enhanced_detected_gaps", 0))
+    width_evidence = detection.detail.get("separator_width_evidence", {})
+    broad_width_scores = (
+        list(width_evidence.get("broad_separator_width_scores", []))
+        if isinstance(width_evidence, dict)
+        else []
+    )
+    return SeparatorGateEvidence(
+        expected_gaps=max(0, int(detection.count) - 1),
+        actual_detected_gaps=actual,
+        broad_separator_width_gaps=broad_width,
+        enhanced_detected_gaps=enhanced,
+        grid_gaps=int(detection.detail.get("grid_gaps", 0)),
+        equal_gaps=int(detection.detail.get("equal_gaps", 0)),
+        hard_gaps=actual + enhanced,
+        hard_gap_indexes=hard_gap_indexes_from_gaps(detection),
+        edge_pair_scores=[
+            float(gap.score)
+            for gap in detection.gaps
+            if gap.method == GAP_EDGE_PAIR
+        ],
+        detected_scores=[
+            float(gap.score)
+            for gap in detection.gaps
+            if gap.method == GAP_DETECTED
+        ],
+        broad_separator_width_scores=broad_width_scores,
+        leading_grid_scores=leading_grid_scores_from_gaps(detection),
+        enhanced_separator_accepted_count=enhanced_gap_promotion_accepted_count(
+            detection
+        ),
+    )
+
+
+def separator_gate_detail(
+    evidence: SeparatorGateEvidence,
+    ok: bool,
+    reason: str,
+    detection: Detection,
+    gate: SeparatorGatePolicy,
+    policy: DetectionPolicy,
+    leading_grid_failure: bool,
+) -> dict[str, Any]:
+    return {
+        "ok": ok,
+        "reason": reason,
+        "expected_gaps": evidence.expected_gaps,
+        "hard_gaps": evidence.hard_gaps,
+        "actual_detected_gaps": evidence.actual_detected_gaps,
+        "broad_separator_width_gaps": evidence.broad_separator_width_gaps,
+        "enhanced_detected_gaps": evidence.enhanced_detected_gaps,
+        "grid_gaps": evidence.grid_gaps,
+        "equal_gaps": evidence.equal_gaps,
+        "hard_gap_indexes": evidence.hard_gap_indexes,
+        "edge_pair_scores": evidence.edge_pair_scores,
+        "detected_scores": evidence.detected_scores,
+        "broad_separator_width_scores": evidence.broad_separator_width_scores,
+        "leading_grid_scores": evidence.leading_grid_scores,
+        "enhanced_separator_accepted_count": evidence.enhanced_separator_accepted_count,
+        "leading_grid_separator_failure": bool(leading_grid_failure),
+        "separator_confidence": float(detection.confidence),
+        "separator_gate_profile": gate.profile,
+        "policy_id": policy.policy_id,
+    }
 
 
 def candidate_has_hard_separator_evidence(
@@ -156,43 +251,14 @@ def candidate_has_hard_separator_evidence(
 ) -> tuple[bool, dict[str, Any]]:
     policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
     gate = policy.separator.gate
-    leading_grid_policy = gate.leading_grid_failure
-    expected = max(0, int(detection.count) - 1)
-    actual = int(detection.detail.get("actual_detected_gaps", 0))
-    broad_width = int(detection.detail.get("broad_separator_width_gaps", 0))
-    enhanced = int(detection.detail.get("enhanced_detected_gaps", 0))
-    grid = int(detection.detail.get("grid_gaps", 0))
-    equal = int(detection.detail.get("equal_gaps", 0))
-    hard = actual + enhanced
-    hard_indexes = hard_gap_indexes_from_gaps(detection)
-    edge_pair_scores = [
-        float(gap.score)
-        for gap in detection.gaps
-        if gap.method == GAP_EDGE_PAIR
-    ]
-    detected_scores = [
-        float(gap.score)
-        for gap in detection.gaps
-        if gap.method == GAP_DETECTED
-    ]
-    width_evidence = detection.detail.get("separator_width_evidence", {})
-    broad_width_scores = (
-        list(width_evidence.get("broad_separator_width_scores", []))
-        if isinstance(width_evidence, dict)
-        else []
-    )
-    leading_grid_scores = leading_grid_scores_from_gaps(detection)
-    enhanced_accepted = enhanced_gap_promotion_accepted_count(detection)
+    evidence = separator_gate_evidence_from_detection(detection)
     leading_grid_failure = separator_gate_leading_grid_failure_assessment(
         detection,
-        expected,
-        hard_indexes,
-        leading_grid_scores,
-        enhanced_accepted,
-        leading_grid_policy,
+        evidence,
+        gate.leading_grid_failure,
     )
 
-    if expected == 0:
+    if evidence.expected_gaps == 0:
         ok = detection.confidence >= threshold
         reason = "single_frame_no_separator_needed" if ok else "single_frame_low_confidence"
     elif detection.confidence < threshold:
@@ -202,44 +268,34 @@ def candidate_has_hard_separator_evidence(
         ok = False
         reason = "leading_grid_separator_failure"
     elif gate.profile == "min_hard_with_equal_cap":
-        ok, reason = separator_gate_min_hard_with_equal_cap_assessment(expected, hard, equal, gate)
+        ok, reason = separator_gate_min_hard_with_equal_cap_assessment(evidence, gate)
     elif gate.profile == "geometry_support":
-        ok, reason = separator_gate_geometry_support_assessment(detection, threshold, equal, expected, gate)
+        ok, reason = separator_gate_geometry_support_assessment(
+            detection,
+            threshold,
+            evidence,
+            gate,
+        )
     else:
         ok, reason = separator_gate_all_internal_gaps_hard_assessment(
             detection,
-            expected,
-            hard,
-            broad_width,
-            edge_pair_scores,
+            evidence,
             gate,
         )
 
-    return ok, {
-        "ok": ok,
-        "reason": reason,
-        "expected_gaps": expected,
-        "hard_gaps": hard,
-        "actual_detected_gaps": actual,
-        "broad_separator_width_gaps": broad_width,
-        "enhanced_detected_gaps": enhanced,
-        "grid_gaps": grid,
-        "equal_gaps": equal,
-        "hard_gap_indexes": hard_indexes,
-        "edge_pair_scores": edge_pair_scores,
-        "detected_scores": detected_scores,
-        "broad_separator_width_scores": broad_width_scores,
-        "leading_grid_scores": leading_grid_scores,
-        "enhanced_separator_accepted_count": enhanced_accepted,
-        "leading_grid_separator_failure": bool(leading_grid_failure),
-        "separator_confidence": float(detection.confidence),
-        "separator_gate_profile": gate.profile,
-        "policy_id": policy.policy_id,
-    }
+    return ok, separator_gate_detail(
+        evidence,
+        ok,
+        reason,
+        detection,
+        gate,
+        policy,
+        leading_grid_failure,
+    )
 
 
 __all__ = [
-    "CandidateGateOutcome",
+    "SeparatorGateEvidence",
     "enhanced_gap_promotion_accepted_count",
     "hard_gap_indexes_are_adjacent_late",
     "hard_gap_indexes_from_gaps",
@@ -251,5 +307,7 @@ __all__ = [
     "separator_gate_leading_grid_failure_assessment",
     "separator_gate_min_hard_with_equal_cap_assessment",
     "separator_gate_needs_full_strip_supplemental_checks",
+    "separator_gate_detail",
+    "separator_gate_evidence_from_detection",
     "candidate_has_hard_separator_evidence",
 ]
