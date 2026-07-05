@@ -26,6 +26,55 @@ class NearbySeparatorSearchContext:
 
 
 @dataclass(frozen=True)
+class NearbySeparatorCandidate:
+    center: float
+    start: int
+    end: int
+    width_px: int
+    score: float
+    distance_px: float
+
+    def rank_key(self) -> tuple[float, float]:
+        return (float(self.score), -abs(float(self.distance_px)))
+
+    def detail(self, *, absolute_center_offset: float | None = None) -> dict[str, Any]:
+        detail = {
+            "center": float(self.center),
+            "start": int(self.start),
+            "end": int(self.end),
+            "width_px": int(self.width_px),
+            "score": float(self.score),
+            "distance_px": float(self.distance_px),
+        }
+        if absolute_center_offset is not None:
+            detail["absolute_center"] = float(absolute_center_offset + float(self.center))
+        return detail
+
+
+@dataclass(frozen=True)
+class NearbySeparatorSearchResult:
+    context: NearbySeparatorSearchContext
+    candidates: list[NearbySeparatorCandidate]
+    best_candidate: NearbySeparatorCandidate | None
+    stronger_found: bool
+    absolute_center_offset: float | None = None
+
+    def detail(self) -> dict[str, Any]:
+        return {
+            "searched": True,
+            "window_px": int(self.context.window),
+            "current_profile_score": float(self.context.current_score),
+            "candidate_count": len(self.candidates),
+            "stronger_found": bool(self.stronger_found),
+            "best": (
+                None
+                if self.best_candidate is None
+                else self.best_candidate.detail(absolute_center_offset=self.absolute_center_offset)
+            ),
+        }
+
+
+@dataclass(frozen=True)
 class NearbySeparatorReplacementAssessment:
     accepted: bool
     reason: str
@@ -97,8 +146,8 @@ def nearby_separator_candidates(
     pitch: float,
     config: NearbySeparatorSearchConfig,
     context: NearbySeparatorSearchContext,
-) -> list[dict[str, Any]]:
-    candidates: list[dict[str, Any]] = []
+) -> list[NearbySeparatorCandidate]:
+    candidates: list[NearbySeparatorCandidate] = []
     for run_start, run_end in runs_from_mask(profile[context.lo:context.hi] >= context.threshold):
         abs_start = context.lo + run_start
         abs_end = context.lo + run_end
@@ -121,35 +170,65 @@ def nearby_separator_candidates(
             ):
                 continue
         candidates.append(
-            {
-                "center": float(candidate_center),
-                "start": int(abs_start),
-                "end": int(abs_end),
-                "width_px": int(width),
-                "score": float(score),
-                "distance_px": float(distance),
-            }
+            NearbySeparatorCandidate(
+                center=float(candidate_center),
+                start=int(abs_start),
+                end=int(abs_end),
+                width_px=int(width),
+                score=float(score),
+                distance_px=float(distance),
+            )
         )
-    candidates.sort(key=lambda item: (float(item["score"]), -abs(float(item["distance_px"]))), reverse=True)
+    candidates.sort(key=lambda item: item.rank_key(), reverse=True)
     return candidates
 
 
-def nearby_separator_best_candidate(candidates: list[dict[str, Any]]) -> dict[str, Any] | None:
+def nearby_separator_best_candidate(candidates: list[NearbySeparatorCandidate]) -> NearbySeparatorCandidate | None:
     return candidates[0] if candidates else None
 
 
 def nearby_separator_candidate_is_stronger(
-    candidate: dict[str, Any] | None,
+    candidate: NearbySeparatorCandidate | None,
     current_score: float,
     score_add: float,
     score_multiplier: float,
 ) -> bool:
     return bool(
         candidate
-        and float(candidate["score"]) >= max(
+        and float(candidate.score) >= max(
             current_score + score_add,
             current_score * score_multiplier,
         )
+    )
+
+
+def nearby_separator_search_result(
+    profile: np.ndarray,
+    gap: Gap,
+    pitch: float,
+    config: NearbySeparatorSearchConfig,
+    *,
+    score_add: float,
+    score_multiplier: float,
+    absolute_center_offset: float | None = None,
+) -> NearbySeparatorSearchResult | None:
+    context = nearby_separator_search_context(profile, gap, pitch, config)
+    if context is None:
+        return None
+    candidates = nearby_separator_candidates(profile, gap, pitch, config, context)
+    best = nearby_separator_best_candidate(candidates)
+    stronger = nearby_separator_candidate_is_stronger(
+        best,
+        context.current_score,
+        score_add,
+        score_multiplier,
+    )
+    return NearbySeparatorSearchResult(
+        context=context,
+        candidates=candidates,
+        best_candidate=best,
+        stronger_found=bool(stronger),
+        absolute_center_offset=absolute_center_offset,
     )
 
 
@@ -163,28 +242,16 @@ def nearby_separator_search_detail(
     score_multiplier: float,
     absolute_center_offset: float | None = None,
 ) -> dict[str, Any] | None:
-    context = nearby_separator_search_context(profile, gap, pitch, config)
-    if context is None:
-        return None
-    candidates = nearby_separator_candidates(profile, gap, pitch, config, context)
-    best = nearby_separator_best_candidate(candidates)
-    if best is not None and absolute_center_offset is not None:
-        best = dict(best)
-        best["absolute_center"] = float(absolute_center_offset + float(best["center"]))
-    stronger = nearby_separator_candidate_is_stronger(
-        best,
-        context.current_score,
-        score_add,
-        score_multiplier,
+    result = nearby_separator_search_result(
+        profile,
+        gap,
+        pitch,
+        config,
+        score_add=score_add,
+        score_multiplier=score_multiplier,
+        absolute_center_offset=absolute_center_offset,
     )
-    return {
-        "searched": True,
-        "window_px": int(context.window),
-        "current_profile_score": float(context.current_score),
-        "candidate_count": len(candidates),
-        "stronger_found": bool(stronger),
-        "best": best,
-    }
+    return None if result is None else result.detail()
 
 
 def nearby_separator_replacement(
@@ -225,7 +292,7 @@ def nearby_separator_replacement_assessment(
             {"searched": False, "reason": "missing_gap_span"},
         )
     config = correction_config or NearbySeparatorCorrectionParameters()
-    detail = nearby_separator_search_detail(
+    result = nearby_separator_search_result(
         profile,
         gap,
         pitch,
@@ -233,13 +300,14 @@ def nearby_separator_replacement_assessment(
         score_add=config.score_add,
         score_multiplier=config.score_multiplier,
     )
-    if detail is None:
+    if result is None:
         return NearbySeparatorReplacementAssessment(
             False,
             "empty_search_window",
             None,
             {"searched": False, "reason": "empty_search_window"},
         )
+    detail = result.detail()
     if detail.get("best") is None:
         return NearbySeparatorReplacementAssessment(False, "no_candidate", None, detail)
     if not detail.get("stronger_found"):

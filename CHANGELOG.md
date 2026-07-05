@@ -140,6 +140,8 @@ Current stable release: v4.2.8
   runtime correction 和 read-only diagnostics 共用 search context、candidate
   ranking、stronger-test detail；diagnostics 只保留缓存、profile 读取和展示字段，
   不再重复实现 nearby candidate 搜索。
+- nearby separator candidate 和 search result 已 typed 化；report/detail 边界仍输出
+  原有 dict 字段，不改变 runtime correction 条件。
 - grid-derived outer box 计算已从 separator gap lifecycle 移到
   `detection.candidate.proposal.outer.grid_refine`；separator lifecycle 只消费
   grid detail 并在需要时重新生成 gaps，不拥有 outer 修正规则。
@@ -515,6 +517,9 @@ Verified:
   calls `geometry.edge_pairs`, `geometry.robust_grid`,
   `geometry.enhanced_separator`, and `geometry.nearby_separator` directly instead
   of keeping `proposal/separator/refinement.py` as a re-export-only layer.
+- Nearby separator candidate and search result handling are now typed internally,
+  while report/detail boundaries keep the existing dict fields and runtime
+  correction conditions.
 - Grid-derived outer refine orchestration now lives in `build_detection_for_outer`:
   `separator_gaps.py` provides primary gap build and late separator refinements
   only, while candidate build decides whether to rebuild gaps with a refined
