@@ -5,10 +5,11 @@ from typing import Optional
 
 import numpy as np
 
-from ..constants import GAP_DETECTED, GAP_EQUAL
+from ..constants import GAP_DETECTED
 from ..domain import Gap
 from ..utils import clamp_int, runs_from_mask
 from .detection_parameters import GapSearchParameters
+from .model_gaps import equal_model_gap
 
 
 @dataclass(frozen=True)
@@ -166,10 +167,6 @@ def detected_gap_from_candidate(index: int, candidate: DetectedGapCandidate) -> 
     return Gap(index, candidate.center, float(candidate.quality), candidate.method, candidate.start, candidate.end)
 
 
-def equal_model_gap(index: int, expected: float, score: float) -> Gap:
-    return Gap(index, float(expected), float(score), GAP_EQUAL)
-
-
 def find_gap(
     profile: np.ndarray,
     expected: float,
@@ -216,7 +213,6 @@ __all__ = [
     "detected_gap_candidate",
     "detected_gap_candidates",
     "detected_gap_from_candidate",
-    "equal_model_gap",
     "expanded_gap_band",
     "find_gap",
     "gap_score_thresholds",

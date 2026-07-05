@@ -12,12 +12,13 @@ from ..utils import clamp_float
 from .boxes import box_cache_key
 from .gap_geometry import constrain_gap_to_geometry
 from .gap_search import find_gap
+from .model_gaps import equal_model_gap
 from .detection_parameters import EnhancedSeparatorParameters, GapSearchParameters, RobustGridParameters, SeparatorProfileParameters
 from .separator_cache import cached_enhanced_separator_profile
 
 
 def enhanced_gap_fallback(index: int, expected: float, score: float) -> Gap:
-    return Gap(index, float(expected), score, GAP_EQUAL)
+    return equal_model_gap(index, expected, score)
 
 
 def enhanced_gap_width(gap: Gap) -> float:

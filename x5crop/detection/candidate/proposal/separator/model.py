@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from .....domain import Gap
-from .....geometry.gap_search import equal_model_gap
+from .....geometry.model_gaps import equal_model_gap
 
 
 def profile_score_at(profile: np.ndarray, position: float) -> float:

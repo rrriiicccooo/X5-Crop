@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..constants import GAP_EQUAL, HARD_GAP_METHODS
+from ..constants import HARD_GAP_METHODS
 from ..domain import Gap
 from ..utils import clamp_float
 from .detection_parameters import RobustGridParameters
+from .model_gaps import equal_model_gap
 
 
 def constrain_gap_to_geometry(
@@ -16,7 +17,7 @@ def constrain_gap_to_geometry(
     robust_grid: RobustGridParameters | None = None,
 ) -> Gap:
     if gap.method not in HARD_GAP_METHODS:
-        return Gap(gap.index, float(expected), gap.score, GAP_EQUAL)
+        return equal_model_gap(gap.index, expected, gap.score)
     config = robust_grid or RobustGridParameters()
     max_shift = clamp_float(
         pitch * (config.constrain_full_shift_ratio if strip_mode == "full" else config.constrain_partial_shift_ratio),

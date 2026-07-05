@@ -9,8 +9,8 @@ from ....domain import Box, Detection
 from ....formats import FormatSpec
 from ....geometry.boxes import map_work_box
 from ....geometry.frame_fit import frame_boxes_from_gaps
-from ....geometry.gap_search import equal_model_gap
 from ....geometry.layout import work_gray
+from ....geometry.model_gaps import equal_model_gap
 from ....runtime.config import RuntimeConfig
 
 
