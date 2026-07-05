@@ -51,6 +51,9 @@ Current stable release: v4.2.8
   常量，不再手写 method 字符串。
 - ordinary gap search 的 band threshold、弱 prominence 门槛和 detected-candidate
   quality 权重已外显到 `GapSearchParameters`；默认值保持旧行为。
+- ordinary gap search 已拆出 detected candidate collection、best-candidate
+  selection 和 explicit `equal` model-gap fallback，方便审核 hard separator
+  与 model gap 的边界。
 - separator profile / edge-refine / enhanced profile cache key 已从 format identity
   解耦，改为只使用 geometry box 与参数对象；nearby diagnostic cache key 补入
   diagnostic policy。
@@ -348,8 +351,9 @@ Verified:
 - Ordinary separator profile / gap search code is split without behavior changes:
   `geometry/separator_profile.py` separates vertical sampling, segmented extreme
   evidence, uniform soft score, and column gradient signals; `geometry/gap_search.py`
-  separates window, width limits, thresholds, band expansion, and detected-candidate
-  ranking so ordinary separator detection can be reviewed step by step.
+  separates window, width limits, thresholds, band expansion, detected-candidate
+  collection, best-candidate selection, and explicit `equal` model-gap fallback
+  so ordinary separator detection can be reviewed step by step.
 - Separator refinement is split without behavior changes: the candidate proposal
   layer now uses `refine_with_edge_pairs` / `refine_with_nearby_separator` naming
   so gap refinement is not described as final correction; `geometry/edge_pairs.py`

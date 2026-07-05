@@ -126,28 +126,18 @@ def detected_gap_candidate(
     return DetectedGapCandidate(distance, quality, mean_score, center, start, end)
 
 
-def find_gap(
-    profile: np.ndarray,
+def detected_gap_candidates(
+    local: np.ndarray,
+    lo: int,
     expected: float,
     pitch: float,
-    index: int,
-    max_width_ratio_override: Optional[float] = None,
-    gap_search: GapSearchParameters | None = None,
-) -> Gap:
-    config = gap_search or GapSearchParameters()
-    lo, hi = gap_search_window(len(profile), expected, pitch, config)
-    if hi <= lo:
-        return Gap(index, float(expected), 0.0, GAP_EQUAL)
-    local = profile[lo:hi]
-    local_max = float(local.max()) if local.size else 0.0
-    min_score = config.min_score
-    if local.size == 0 or local_max < min_score:
-        return Gap(index, float(expected), local_max, GAP_EQUAL)
-
-    limits = gap_width_limits(pitch, max_width_ratio_override, config)
-    peak_threshold, band_threshold = gap_score_thresholds(local_max, config)
+    limits: GapWidthLimits,
+    peak_threshold: float,
+    band_threshold: float,
+    max_width_ratio_override: Optional[float],
+    config: GapSearchParameters,
+) -> list[DetectedGapCandidate]:
     candidates: list[DetectedGapCandidate] = []
-
     for run_start, run_end in runs_from_mask(local >= peak_threshold):
         candidate = detected_gap_candidate(
             local,
@@ -163,18 +153,70 @@ def find_gap(
         )
         if candidate is not None:
             candidates.append(candidate)
+    return candidates
 
-    if candidates:
-        candidate = min(candidates, key=lambda item: item.rank_key())
-        return Gap(index, candidate.center, float(candidate.quality), candidate.method, candidate.start, candidate.end)
 
-    return Gap(index, float(expected), local_max, GAP_EQUAL)
+def best_detected_gap_candidate(candidates: list[DetectedGapCandidate]) -> Optional[DetectedGapCandidate]:
+    if not candidates:
+        return None
+    return min(candidates, key=lambda item: item.rank_key())
+
+
+def detected_gap_from_candidate(index: int, candidate: DetectedGapCandidate) -> Gap:
+    return Gap(index, candidate.center, float(candidate.quality), candidate.method, candidate.start, candidate.end)
+
+
+def equal_model_gap(index: int, expected: float, score: float) -> Gap:
+    return Gap(index, float(expected), float(score), GAP_EQUAL)
+
+
+def find_gap(
+    profile: np.ndarray,
+    expected: float,
+    pitch: float,
+    index: int,
+    max_width_ratio_override: Optional[float] = None,
+    gap_search: GapSearchParameters | None = None,
+) -> Gap:
+    config = gap_search or GapSearchParameters()
+    lo, hi = gap_search_window(len(profile), expected, pitch, config)
+    if hi <= lo:
+        return equal_model_gap(index, expected, 0.0)
+    local = profile[lo:hi]
+    local_max = float(local.max()) if local.size else 0.0
+    min_score = config.min_score
+    if local.size == 0 or local_max < min_score:
+        return equal_model_gap(index, expected, local_max)
+
+    limits = gap_width_limits(pitch, max_width_ratio_override, config)
+    peak_threshold, band_threshold = gap_score_thresholds(local_max, config)
+    candidate = best_detected_gap_candidate(
+        detected_gap_candidates(
+            local,
+            lo,
+            expected,
+            pitch,
+            limits,
+            peak_threshold,
+            band_threshold,
+            max_width_ratio_override,
+            config,
+        )
+    )
+    if candidate is not None:
+        return detected_gap_from_candidate(index, candidate)
+
+    return equal_model_gap(index, expected, local_max)
 
 
 __all__ = [
     "DetectedGapCandidate",
     "GapWidthLimits",
+    "best_detected_gap_candidate",
     "detected_gap_candidate",
+    "detected_gap_candidates",
+    "detected_gap_from_candidate",
+    "equal_model_gap",
     "expanded_gap_band",
     "find_gap",
     "gap_score_thresholds",
