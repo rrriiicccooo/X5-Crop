@@ -14,7 +14,6 @@ from .model_gaps import grid_model_gap
 from .detection_parameters import HardGapTrustParameters, NearbySeparatorCorrectionParameters, RobustGridParameters
 
 
-GridFit = tuple[int, float, float, float]
 GRID_DETAIL_LIMIT = 12
 
 
@@ -31,14 +30,6 @@ class GridFitCandidate:
             -self.median_residual,
             -abs(self.pitch - nominal_pitch),
             self.pitch,
-        )
-
-    def as_grid_fit(self) -> GridFit:
-        return (
-            int(self.inliers),
-            float(self.pitch),
-            float(self.origin),
-            float(self.median_residual),
         )
 
     def detail(self, nominal_pitch: float) -> dict[str, Any]:
@@ -113,16 +104,6 @@ def grid_fit_candidate_from_anchor_pair(
     )
 
 
-def best_grid_fit(
-    reliable: list[Gap],
-    pitch: float,
-    strip_mode: str,
-    config: RobustGridParameters,
-) -> GridFit | None:
-    best = best_grid_fit_candidate(reliable, pitch, strip_mode, config)
-    return None if best is None else best.as_grid_fit()
-
-
 def grid_fit_candidates(
     reliable: list[Gap],
     pitch: float,
@@ -171,19 +152,18 @@ def grid_fit_candidate_details(
 
 
 def grid_fit_assessment(
-    fit: GridFit,
+    fit: GridFitCandidate,
     nominal_pitch: float,
     config: RobustGridParameters,
 ) -> GridFitAssessment:
-    inlier_count, _fit_pitch, _fit_origin, median_residual = fit
     residual_threshold = clamp_float(
         nominal_pitch * config.reject_residual_ratio,
         config.tolerance_min,
         config.tolerance_max,
     )
-    if inlier_count < config.min_reliable:
+    if fit.inliers < config.min_reliable:
         return GridFitAssessment(False, "too_few_inliers", residual_threshold)
-    if median_residual > residual_threshold:
+    if fit.median_residual > residual_threshold:
         return GridFitAssessment(False, "high_residual", residual_threshold)
     return GridFitAssessment(True, "accepted", residual_threshold)
 
@@ -345,13 +325,11 @@ def apply_robust_grid(
         candidates=candidates,
     )
     best_candidate = best_grid_fit_candidate_from_candidates(candidates, pitch)
-    best = None if best_candidate is None else best_candidate.as_grid_fit()
-    if best is None:
+    if best_candidate is None:
         detail.update({"grid_used": False, "grid_rejected": "no_pair_model"})
         return constrained, detail
-    inlier_count, fit_pitch, fit_origin, median_residual = best
-    fit_assessment = grid_fit_assessment(best, pitch, config)
-    detail["selected_fit"] = best_candidate.detail(pitch) if best_candidate is not None else None
+    fit_assessment = grid_fit_assessment(best_candidate, pitch, config)
+    detail["selected_fit"] = best_candidate.detail(pitch)
     detail["fit_assessment"] = fit_assessment.detail()
     if not fit_assessment.accepted:
         detail.update({
@@ -359,7 +337,7 @@ def apply_robust_grid(
             "grid_rejected": fit_assessment.reason,
         })
         if fit_assessment.reason == "high_residual":
-            detail["grid_residual"] = median_residual
+            detail["grid_residual"] = float(best_candidate.median_residual)
         return constrained, detail
     max_shift = clamp_float(
         pitch * (config.full_shift_ratio if strip_mode == "full" else config.partial_shift_ratio),
@@ -371,13 +349,13 @@ def apply_robust_grid(
         config.hard_protect_min,
         config.hard_protect_max,
     )
-    allow_hard_protection = median_residual > hard_protection_residual_threshold
+    allow_hard_protection = best_candidate.median_residual > hard_protection_residual_threshold
     adjusted: list[Gap] = []
     protected_hard: list[dict[str, Any]] = []
     overridden_hard: list[dict[str, Any]] = []
     adjustments: list[dict[str, Any]] = []
     for gap in constrained:
-        predicted = grid_predicted_center(fit_origin, fit_pitch, gap, origin, pitch, max_shift)
+        predicted = grid_predicted_center(best_candidate.origin, best_candidate.pitch, gap, origin, pitch, max_shift)
         adjusted_gap, protected, overridden, adjustment_detail = grid_adjusted_gap(
             gap,
             predicted,
@@ -398,10 +376,10 @@ def apply_robust_grid(
             overridden_hard.append(overridden)
     detail.update({
         "grid_used": True,
-        "grid_inliers": int(inlier_count),
-        "grid_pitch": float(fit_pitch),
-        "grid_origin": float(fit_origin),
-        "grid_residual": median_residual,
+        "grid_inliers": int(best_candidate.inliers),
+        "grid_pitch": float(best_candidate.pitch),
+        "grid_origin": float(best_candidate.origin),
+        "grid_residual": float(best_candidate.median_residual),
         "hard_protection_residual_threshold": float(hard_protection_residual_threshold),
         "hard_protection_allowed": bool(allow_hard_protection),
         "protected_hard_gaps": protected_hard,

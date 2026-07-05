@@ -136,6 +136,8 @@ Current stable release: v4.2.8
 - robust grid detail 已补充 reliable anchors、fit candidates、selected fit、
   fit assessment 和 per-gap adjustment action；grid 仍只生成 / 调整 model gap
   evidence，不获得 hard separator 或 PASS / REVIEW 权限。
+- robust grid selected fit 已收敛为直接消费 `GridFitCandidate`；移除内部
+  tuple fit 中转，report detail 字段保持不变。
 - nearby separator search 已进一步集中到 `geometry/nearby_separator.py`：
   runtime correction 和 read-only diagnostics 共用 search context、candidate
   ranking、stronger-test detail；diagnostics 只保留缓存、profile 读取和展示字段，
@@ -510,6 +512,8 @@ Verified:
   outer-box calculation now lives in `detection.candidate.proposal.outer.grid_refine`;
   the separator gap lifecycle consumes grid detail and may rebuild gaps, but it
   does not own the outer-box adjustment rule.
+- Robust grid selected fit now consumes `GridFitCandidate` directly; the
+  internal tuple fit bridge is removed while report detail fields stay unchanged.
 - Enhanced gap promotion now records hard-gap search, detected gap, validation,
   and final selected gap in accepted / rejected detail while preserving the same
   promotion conditions.
