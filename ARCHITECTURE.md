@@ -89,6 +89,59 @@ finalization
   report/debug attachment
 ```
 
+### 人工审核进度台账
+
+本台账用于回顾已经从哪些视角审核过项目、形成了什么成果、还剩哪些逻辑族群未深审。
+它记录人工审核进度，不替代版本历史；行为或源码变化仍记录在 `CHANGELOG.md`。
+
+状态词：
+
+- `完成`: 结构和逻辑都已审，并已实施必要清理。
+- `结构完成，逻辑待审`: 边界已清理，但算法或规则还没有逐项审核。
+- `进行中`: 当前正在人工审核。
+- `未开始`: 尚未进入该族群。
+- `持续复核`: 每次相关逻辑改动后都要回看。
+
+#### 视角审核台账
+
+| 视角/族群 | 我们问的问题 | 已做工作 | 成果 | 当前状态 | 下一步接点 |
+|---|---|---|---|---|---|
+| 源码结构视角 | 项目分哪些层，文件是否在正确位置？ | 重组 entry、runtime、cache、report、formats、policies 和 candidate 包。 | `entry/runtime/cache/report/formats/policies/candidate` 分层。 | 完成 | 只在新增层级时复核。 |
+| 运行流程视角 | TIFF 从读取到输出如何流动？ | 明确 entry、runtime、workflow、detection、decision、finalization、export/report/debug 的顺序。 | `entry -> runtime -> workflow -> detection -> decision -> finalization -> export/report/debug`。 | 完成 | 行为链路变化时更新流程图。 |
+| 极致干净视角 | 是否有跨层依赖、旧文件、漏网文件或语义残留？ | 多轮检查未使用文件、层级漏网、foundation coupling 和文档一致性。 | 基础层不反向依赖 runtime、policy 或 detection。 | 持续复核 | 最终命名清理阶段统一处理旧名残留。 |
+| Policy 视角 | format facts、runtime policy 和 decision contract 是否混在一起？ | 拆分 policy formats、parameters、runtime、decision、assembly、reporting。 | `formats/parameters/runtime/decision/assembly/reporting` 分离。 | 完成 | 每次新增 policy 字段时跑 consistency 并更新说明。 |
+| Candidate 生命周期视角 | 候选如何生成、评估、扩展和选择？ | 去 retry 化，建立 plan、proposal、build、assessment、selection、extension。 | candidate plan、assessment、selection、extension 边界清楚。 | 完成 | 只在候选来源新增时复核 execution budget。 |
+| Outer 视角 | outer 是 proposal 还是 correction，是否越权 PASS？ | 拆分 outer proposal/correction，corrected outer 回到 candidate reassessment。 | proposal/correction 分离，outer 不决定 PASS / REVIEW。 | 完成 | 后续只复核新增 proposal 是否走 plan。 |
+| Wide / Dark / Retry 视角 | wide、dark、retry、fallback 是否是真正概念？ | 收敛 wide/dark 为 separator width evidence，retry 为 candidate plan，fallback 为 safety candidate。 | width evidence、candidate plan、safety candidate。 | 完成 | 最终命名清理时清除旧 detail 双写。 |
+| Debug / Report 视角 | 人类如何复盘候选、gate 和 policy？ | 保留三联 Debug Analysis，report 保留 candidate/gate/policy detail。 | 三联图和 report detail 作为人工审核 surface。 | 持续复核 | 每改一个逻辑族群都检查解释力。 |
+| 逻辑族群视角 | 检测逻辑本身有哪些族群，哪些已审？ | 建立 Detection / Gate / Risk 人工审核索引，outer 已完成，Gap / Separator 已开始。 | 当前接点明确为 Gap / Separator。 | 进行中 | 从 `separator_profile` / `find_gap` 继续。 |
+| Git / 验证视角 | 改动是否验证、提交和同步？ | 跑静态检查、policy consistency、standalone、样片 smoke，并提交推送。 | 最新结构已推送到 `main`。 | 完成 | 每次源码或文档改动后按范围验证。 |
+
+#### 逻辑族群审核进度
+
+| 视角/族群 | 我们问的问题 | 已做工作 | 成果 | 当前状态 | 下一步接点 |
+|---|---|---|---|---|---|
+| Pre-detection | layout、deskew、evidence gray 是否只提供输入证据？ | 审过结构和基础层归属。 | 输入层不拥有 PASS / REVIEW 语义。 | 结构完成，逻辑待审 | 之后逐项看 layout、deskew、evidence gray。 |
+| Policy activation | format/mode 是否只通过 policy 打开行为？ | 完成 format facts、runtime policy、decision contract 分层。 | format/mode isolation 基本稳定。 | 完成 | 新增格式或 mode 时复核。 |
+| Mode detector | standard、dual-lane、review-only 是否隔离？ | 审核 dual-lane 和 review-only 边界。 | review-only 成为通用保守模式。 | 完成 | 新 mode 必须声明 detector kind。 |
+| Outer proposal / correction | outer 是否只提出候选或修正候选？ | 完成 proposal/correction 拆分和 corrected candidate reassessment。 | outer 不再拥有 PASS / REVIEW 权限。 | 完成 | 后续只做新增逻辑复核。 |
+| Gap / Separator | separator、geometry、content gap 证据如何分类和消费？ | 已完成族群分类，尚未逐项深审。 | 当前 hard gap 只有 `detected / edge-pair / enhanced-detected`。 | 进行中 | 从 `separator_profile` / `find_gap` 开始。 |
+| Content | content evidence 是否只验证或挑战候选？ | 尚未进入深审。 | 暂无最终结论。 | 未开始 | Gap / Separator 稳定后开始。 |
+| Candidate build / frame geometry | outer -> gaps -> frames 的中间 detail 是否完整？ | 结构已归入 candidate build 和 geometry。 | build 层边界清楚。 | 未开始 | Content 后审核 frame fit 与 geometry detail。 |
+| Scoring | separator/content/geometry 分数是否只辅助 gate？ | 尚未进入深审。 | 暂无最终结论。 | 未开始 | build/frame geometry 后审核。 |
+| Gate | separator/content/geometry/partial/auto gate 是否清楚？ | 结构已归入 assessment。 | gate 位置清楚，但规则未逐项审。 | 未开始 | Scoring 后审核。 |
+| Risk | lucky pass、overlap、competition 等是否只拉回 REVIEW？ | 架构上已从 retry/rescue 中拆出。 | risk 不应救回 PASS。 | 未开始 | Gate 后审核。 |
+| Decision | 最终 PASS / REVIEW 是否唯一落在 decision contract？ | 已完成结构迁移和边界清理。 | final decision 层位置清楚。 | 结构完成，逻辑待审 | Risk 后逐项审 reason 和 cap。 |
+| Finalization | 输出几何处理是否不生成新候选？ | 已完成 finalization 边界清理。 | finalization 只做 output-adjacent work。 | 结构完成，逻辑待审 | Decision 后审 output bleed / geometry adjustment。 |
+| Audit visibility | report/debug 是否足以解释变化？ | 建立三联 Debug Analysis 和 report detail 方向。 | 审核 surface 已存在。 | 持续复核 | 每完成一个逻辑族群都回看。 |
+
+维护规则：
+
+- 每完成一个逻辑族群审核，同时更新本台账和下方人工审核索引。
+- 每次实施代码变更后，只在 `CHANGELOG.md` 记录行为或结构变化，不复制本台账。
+- `AGENTS.md` 只在 handoff 需要时记录当前接点，不放完整台账。
+- 最终命名清理单独作为最后阶段，不穿插在每个逻辑族群中执行。
+
 ### 命名和 API 规则
 
 - `*Options`: 文件探测前的入口参数，例如 `CliOptions`。
