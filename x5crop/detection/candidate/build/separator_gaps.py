@@ -375,7 +375,7 @@ def apply_enhanced_gap_promotion(
     if not promotion_allowed:
         return disabled
     if should_run_enhanced_gap_promotion(analysis_mode, gaps, count, policy.separator.enhanced):
-        refined_gaps, detail = promote_enhanced_separator_gaps(
+        promotion = promote_enhanced_separator_gaps(
             gray_work,
             outer,
             gaps,
@@ -390,8 +390,8 @@ def apply_enhanced_gap_promotion(
         )
         return _gap_refinement_result(
             "enhanced_gap_promotion",
-            refined_gaps,
-            detail,
+            promotion.gaps,
+            promotion.detail,
         )
     if analysis_mode == "auto":
         return _skipped_gap_refinement_result("enhanced_gap_promotion", gaps, "auto_not_needed")

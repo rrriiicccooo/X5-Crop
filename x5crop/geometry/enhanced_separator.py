@@ -58,6 +58,25 @@ class EnhancedGapValidation:
         }
 
 
+@dataclass(frozen=True)
+class EnhancedGapSearchResult:
+    gap: Gap
+    detail: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class EnhancedGapPromotionResult:
+    gap: Gap
+    accepted_detail: Optional[dict[str, Any]] = None
+    rejected_detail: Optional[dict[str, Any]] = None
+
+
+@dataclass(frozen=True)
+class EnhancedGapPromotionBatchResult:
+    gaps: list[Gap]
+    detail: dict[str, Any]
+
+
 def enhanced_gap_validation(
     gap: Gap,
     expected: float,
@@ -130,7 +149,7 @@ def find_enhanced_gap(
     gap_search: GapSearchParameters | None = None,
     enhanced_config: EnhancedSeparatorParameters | None = None,
 ) -> Gap:
-    gap, _detail = find_enhanced_gap_with_detail(
+    result = find_enhanced_gap_with_detail(
         profile,
         expected,
         pitch,
@@ -138,7 +157,7 @@ def find_enhanced_gap(
         gap_search,
         enhanced_config,
     )
-    return gap
+    return result.gap
 
 
 def find_enhanced_gap_with_detail(
@@ -148,7 +167,7 @@ def find_enhanced_gap_with_detail(
     index: int,
     gap_search: GapSearchParameters | None = None,
     enhanced_config: EnhancedSeparatorParameters | None = None,
-) -> tuple[Gap, dict[str, Any]]:
+) -> EnhancedGapSearchResult:
     config = enhanced_config or EnhancedSeparatorParameters()
     result = find_detected_gap(profile, expected, pitch, index, gap_search=gap_search)
     gap = result.detected_gap
@@ -169,7 +188,7 @@ def find_enhanced_gap_with_detail(
                 "selected_gap": enhanced_gap_detail(fallback),
             }
         )
-        return fallback, base_detail
+        return EnhancedGapSearchResult(fallback, base_detail)
     validation = enhanced_gap_validation(gap, expected, pitch, config)
     base_detail["detected_gap"] = enhanced_gap_detail(gap)
     base_detail["validation"] = validation.detail()
@@ -177,11 +196,11 @@ def find_enhanced_gap_with_detail(
         fallback = enhanced_gap_fallback(index, expected, gap.score)
         base_detail["promoted"] = False
         base_detail["selected_gap"] = enhanced_gap_detail(fallback)
-        return fallback, base_detail
+        return EnhancedGapSearchResult(fallback, base_detail)
     enhanced = promote_enhanced_gap(gap, index)
     base_detail["promoted"] = True
     base_detail["selected_gap"] = enhanced_gap_detail(enhanced)
-    return enhanced, base_detail
+    return EnhancedGapSearchResult(enhanced, base_detail)
 
 
 def enhanced_gap_promotion_cache_key(
@@ -233,11 +252,11 @@ def promote_one_enhanced_gap(
     pitch: float,
     gap_search: GapSearchParameters | None,
     enhanced_config: EnhancedSeparatorParameters | None,
-) -> tuple[Gap, dict[str, Any] | None, dict[str, Any] | None]:
+) -> EnhancedGapPromotionResult:
     if is_hard_gap_method(gap.method):
-        return gap, None, None
+        return EnhancedGapPromotionResult(gap)
     expected = origin + pitch * gap.index
-    enhanced, detail = find_enhanced_gap_with_detail(
+    search_result = find_enhanced_gap_with_detail(
         profile,
         expected,
         pitch,
@@ -245,24 +264,32 @@ def promote_one_enhanced_gap(
         gap_search,
         enhanced_config,
     )
+    enhanced = search_result.gap
+    detail = search_result.detail
     if enhanced.method == GAP_ENHANCED_DETECTED:
-        return enhanced, {
+        return EnhancedGapPromotionResult(
+            enhanced,
+            accepted_detail={
+                "index": int(gap.index),
+                "center": float(enhanced.center),
+                "score": float(enhanced.score),
+                "replaced_method": gap.method,
+                "search": detail,
+                "validation": detail.get("validation", {}),
+            },
+        )
+    return EnhancedGapPromotionResult(
+        gap,
+        rejected_detail={
             "index": int(gap.index),
-            "center": float(enhanced.center),
             "score": float(enhanced.score),
-            "replaced_method": gap.method,
+            "method": enhanced.method,
+            "kept_method": gap.method,
+            "reason": detail.get("validation", {}).get("reason", detail.get("search_reason")),
             "search": detail,
             "validation": detail.get("validation", {}),
-        }, None
-    return gap, None, {
-        "index": int(gap.index),
-        "score": float(enhanced.score),
-        "method": enhanced.method,
-        "kept_method": gap.method,
-        "reason": detail.get("validation", {}).get("reason", detail.get("search_reason")),
-        "search": detail,
-        "validation": detail.get("validation", {}),
-    }
+        },
+    )
 
 
 def promote_enhanced_separator_gaps(
@@ -277,10 +304,10 @@ def promote_enhanced_separator_gaps(
     gap_search: GapSearchParameters | None = None,
     profile_config: SeparatorProfileParameters | None = None,
     enhanced_config: EnhancedSeparatorParameters | None = None,
-) -> tuple[list[Gap], dict[str, Any]]:
+) -> EnhancedGapPromotionBatchResult:
     crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
     if crop.size == 0 or outer.width <= 0 or outer.height <= 0:
-        return gaps, {"used": False, "reason": "empty_outer"}
+        return EnhancedGapPromotionBatchResult(gaps, {"used": False, "reason": "empty_outer"})
     cache_key: Optional[tuple[Any, ...]] = None
     if cache is not None:
         policy_key = enhanced_gap_promotion_policy_key(robust_grid, gap_search, profile_config, enhanced_config)
@@ -288,13 +315,13 @@ def promote_enhanced_separator_gaps(
         cached = cache.enhanced_gap_promotions.get(cache_key)
         if cached is not None:
             cached_gaps, cached_detail = cached
-            return list(cached_gaps), copy.deepcopy(cached_detail)
+            return EnhancedGapPromotionBatchResult(list(cached_gaps), copy.deepcopy(cached_detail))
     profile = cached_enhanced_separator_profile(cache, gray_work, outer, profile_config)
     merged: list[Gap] = []
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
     for gap in gaps:
-        merged_gap, accepted_detail, rejected_detail = promote_one_enhanced_gap(
+        promotion = promote_one_enhanced_gap(
             profile,
             gap,
             origin,
@@ -302,11 +329,11 @@ def promote_enhanced_separator_gaps(
             gap_search,
             enhanced_config,
         )
-        merged.append(merged_gap)
-        if accepted_detail is not None:
-            accepted.append(accepted_detail)
-        if rejected_detail is not None:
-            rejected.append(rejected_detail)
+        merged.append(promotion.gap)
+        if promotion.accepted_detail is not None:
+            accepted.append(promotion.accepted_detail)
+        if promotion.rejected_detail is not None:
+            rejected.append(promotion.rejected_detail)
     constrained = [
         constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, strip_mode, robust_grid)
         if gap.method == GAP_ENHANCED_DETECTED else gap
@@ -321,7 +348,7 @@ def promote_enhanced_separator_gaps(
     }
     if cache_key is not None and cache is not None:
         cache.enhanced_gap_promotions[cache_key] = (list(constrained), copy.deepcopy(detail))
-    return constrained, detail
+    return EnhancedGapPromotionBatchResult(constrained, detail)
 
 
 def should_run_enhanced_gap_promotion(

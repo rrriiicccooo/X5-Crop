@@ -174,6 +174,10 @@ Current stable release: v4.2.8
 - enhanced separator 内部语义收敛为 enhanced gap promotion：active detail key
   改为 `enhanced_gap_promotion`，gate 从该 detail 读取 promotion count，内部
   gap method 判断统一使用常量。
+- enhanced gap promotion 内部返回契约已类型化为 `EnhancedGapSearchResult`、
+  `EnhancedGapPromotionResult` 和 `EnhancedGapPromotionBatchResult`；单次搜索、
+  单 gap promotion 与 batch promotion 不再通过裸 tuple 传递，report/detail
+  字段保持不变。
 - enhanced gap promotion 现在在 accepted / rejected detail 中记录 hard-gap search、
   detected gap、validation 和最终 selected gap；promotion 条件保持不变。
 - edge-pair refinement 已明确为 edge-pair gap correction：active detail key
@@ -575,6 +579,10 @@ Verified:
   promotion, nearby correction, final gaps, and pre-nearby gaps are collected
   before rebuilding `SeparatorGapBuildResult`, while report/detail fields remain
   unchanged.
+- Enhanced gap promotion internals now use `EnhancedGapSearchResult`,
+  `EnhancedGapPromotionResult`, and `EnhancedGapPromotionBatchResult`; single
+  search, single-gap promotion, and batch promotion no longer pass through raw
+  tuples, while report/detail fields remain unchanged.
 - Broad-width detected gap generation now separates the width-profile gap window,
   run object, width acceptance, candidate scoring / ranking, best candidate
   selection, and core-width clipped detected-gap output. The output remains an
