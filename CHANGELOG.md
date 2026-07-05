@@ -164,6 +164,8 @@ Current stable release: v4.2.8
 - initial separator gap proposal 已改为 `InitialSeparatorGapResult`；standard
   proposal、broad-width override 和 detected-geometry model override 由独立
   helper 串联，report/detail 字段保持不变。
+- primary separator refinement 已改为 `PrimarySeparatorRefinementResult`；
+  edge-pair correction 与 robust-grid detail 不再通过裸 tuple 传递。
 - enhanced separator 内部语义收敛为 enhanced gap promotion：active detail key
   改为 `enhanced_gap_promotion`，gate 从该 detail 读取 promotion count，内部
   gap method 判断统一使用常量。
@@ -559,6 +561,8 @@ Verified:
 - Initial separator gap proposal now uses `InitialSeparatorGapResult`; standard
   proposal, broad-width override, and detected-geometry model override are
   chained through separate helpers while report/detail fields remain unchanged.
+- Primary separator refinement now uses `PrimarySeparatorRefinementResult`;
+  edge-pair correction and robust-grid detail no longer pass through a raw tuple.
 - Broad-width detected gap generation now separates the width-profile gap window,
   run object, width acceptance, candidate scoring / ranking, best candidate
   selection, and core-width clipped detected-gap output. The output remains an

@@ -48,6 +48,13 @@ class InitialSeparatorGapResult:
 
 
 @dataclass(frozen=True)
+class PrimarySeparatorRefinementResult:
+    gaps: list[Gap]
+    edge_pair_correction_detail: dict[str, Any]
+    grid_detail: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class GapRefinementResult:
     family: str
     gaps: list[Gap]
@@ -308,7 +315,7 @@ def apply_primary_separator_refinements(
     pitch: float,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
-) -> tuple[list[Gap], dict[str, Any], dict[str, Any]]:
+) -> PrimarySeparatorRefinementResult:
     edge_pair_refinement = apply_edge_pair_refinement(
         outer,
         crop,
@@ -331,7 +338,11 @@ def apply_primary_separator_refinements(
         policy.separator.nearby_correction,
         policy.separator.robust_grid,
     )
-    return gaps, edge_pair_refinement.detail, grid_detail
+    return PrimarySeparatorRefinementResult(
+        gaps=gaps,
+        edge_pair_correction_detail=edge_pair_refinement.detail,
+        grid_detail=grid_detail,
+    )
 
 
 def apply_enhanced_gap_promotion(
@@ -463,13 +474,12 @@ def build_primary_separator_gaps_for_outer(
             gap_max_width_ratio_override,
             policy,
         )
-    gaps = initial_gaps.gaps
-    gaps, edge_pair_correction_detail, grid_detail = apply_primary_separator_refinements(
+    primary_refinement = apply_primary_separator_refinements(
         gray_work,
         outer,
         crop,
         profile,
-        gaps,
+        initial_gaps.gaps,
         count,
         strip_mode,
         origin,
@@ -482,11 +492,11 @@ def build_primary_separator_gaps_for_outer(
         profile=profile,
         origin=origin,
         pitch=pitch,
-        gaps=gaps,
-        grid_detail=grid_detail,
+        gaps=primary_refinement.gaps,
+        grid_detail=primary_refinement.grid_detail,
         standard_gap_search_detail=initial_gaps.standard_gap_search_detail,
         separator_width_profile_gap_search_detail=initial_gaps.separator_width_profile_gap_search_detail,
-        edge_pair_correction_detail=edge_pair_correction_detail,
+        edge_pair_correction_detail=primary_refinement.edge_pair_correction_detail,
         enhanced_gap_promotion_detail={"used": False, "reason": "pending_late_refinement"},
         nearby_correction_detail={"used": False, "reason": "pending_late_refinement"},
         pre_nearby_gaps=None,
@@ -543,6 +553,7 @@ def apply_late_separator_refinements(
 __all__ = [
     "GapRefinementResult",
     "InitialSeparatorGapResult",
+    "PrimarySeparatorRefinementResult",
     "SeparatorGapBuildResult",
     "apply_edge_pair_refinement",
     "apply_enhanced_gap_promotion",
