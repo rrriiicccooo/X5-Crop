@@ -9,8 +9,8 @@ from ...domain import Detection
 from ...geometry.layout import work_gray
 from ...policies.registry import get_detection_policy
 from ...cache import AnalysisCache
+from ...gap_methods import gap_method_roles
 from .gap_diagnostics import gap_diagnostic_record
-from .separator_summary import gap_method_roles
 
 
 def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> None:

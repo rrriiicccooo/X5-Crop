@@ -5,8 +5,8 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...constants import HARD_GAP_METHODS, MODEL_GAP_METHODS
 from ...domain import Box, Detection, Gap
+from ...gap_methods import gap_method_role, is_hard_gap_method, is_model_gap_method
 from ...geometry.boxes import box_cache_key
 from ...geometry.detection_parameters import SeparatorProfileParameters
 from ...geometry.gap_trust import (
@@ -21,7 +21,6 @@ from ...policies.registry import get_detection_policy
 from ...policies.runtime.diagnostics import NearbySeparatorDiagnosticsPolicy
 from ...cache import AnalysisCache
 from ...utils import clamp_int, runs_from_mask
-from .separator_summary import gap_method_role
 
 
 def gap_work_outer(detection: Detection, gap: Gap) -> Optional[Box]:
@@ -50,7 +49,7 @@ def nearby_separator_candidate_detail(
     cache: Optional[AnalysisCache] = None,
     profile_policy: Optional[SeparatorProfileParameters] = None,
 ) -> dict[str, Any]:
-    if gap.method not in HARD_GAP_METHODS or pitch <= 0:
+    if not is_hard_gap_method(gap.method) or pitch <= 0:
         return {"searched": False, "reason": "not_hard_gap"}
     cache_key: Optional[tuple[Any, ...]] = None
     if cache is not None:
@@ -237,7 +236,7 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
 
     width_ratio = hard_gap_width_ratio(gap, pitch)
     model_delta_ratio = abs(float(gap.center - expected)) / max(1.0, float(pitch))
-    if gap.method in HARD_GAP_METHODS:
+    if is_hard_gap_method(gap.method):
         record["hard_trust"] = classify_diagnostic_hard_gap_trust(
             gap,
             pitch,
@@ -247,7 +246,7 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
             nearby_separator_conflict=bool(nearby.get("stronger_found", False)),
             signals=signals,
         )
-    elif gap.method in MODEL_GAP_METHODS:
+    elif is_model_gap_method(gap.method):
         if hard_gap_dark_separator_like(signals, hard_gap_trust_policy):
             overlap_risk = "none"
         elif (

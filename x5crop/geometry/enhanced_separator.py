@@ -5,8 +5,9 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import GAP_DETECTED, GAP_ENHANCED_DETECTED, GAP_EQUAL, GAP_GRID, HARD_GAP_METHODS
+from ..constants import GAP_DETECTED, GAP_ENHANCED_DETECTED
 from ..domain import Box, Gap
+from ..gap_methods import is_geometry_model_gap_method, is_hard_gap_method
 from ..cache import AnalysisCache
 from ..utils import clamp_float
 from .boxes import box_cache_key
@@ -115,7 +116,7 @@ def promote_one_enhanced_gap(
     gap_search: GapSearchParameters | None,
     enhanced_config: EnhancedSeparatorParameters | None,
 ) -> tuple[Gap, dict[str, Any] | None, dict[str, Any] | None]:
-    if gap.method in HARD_GAP_METHODS:
+    if is_hard_gap_method(gap.method):
         return gap, None, None
     expected = origin + pitch * gap.index
     enhanced = find_enhanced_gap(profile, expected, pitch, gap.index, gap_search, enhanced_config)
@@ -207,7 +208,7 @@ def should_run_enhanced_gap_promotion(
     expected = max(0, count - 1)
     if expected <= 0:
         return False
-    hard = [gap for gap in gaps if gap.method in HARD_GAP_METHODS]
-    model_only = [gap for gap in gaps if gap.method in {GAP_EQUAL, GAP_GRID}]
+    hard = [gap for gap in gaps if is_hard_gap_method(gap.method)]
+    geometry_model_present = any(is_geometry_model_gap_method(gap.method) for gap in gaps)
     low_score_hard = any(gap.score < config.auto_low_score for gap in hard)
-    return len(hard) < expected or bool(model_only) or low_score_hard
+    return len(hard) < expected or geometry_model_present or low_score_hard

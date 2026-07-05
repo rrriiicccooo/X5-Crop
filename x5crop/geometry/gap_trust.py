@@ -5,8 +5,8 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
+from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float, clamp_int
 from .nearby_separator import nearby_separator_replacement
 from .detection_parameters import HardGapTrustParameters, NearbySeparatorCorrectionParameters
@@ -124,7 +124,7 @@ def classify_runtime_hard_gap_trust(
     nearby_separator_conflict: bool = False,
     signals: HardGapPixelSignals | None = None,
 ) -> str:
-    if gap.method not in HARD_GAP_METHODS or pitch <= 0:
+    if not is_hard_gap_method(gap.method) or pitch <= 0:
         return "not_hard_gap"
     if nearby_separator_conflict:
         return "nearby_separator_conflict"
@@ -155,7 +155,7 @@ def classify_diagnostic_hard_gap_trust(
     nearby_separator_conflict: bool,
     signals: HardGapPixelSignals,
 ) -> str:
-    if gap.method not in HARD_GAP_METHODS:
+    if not is_hard_gap_method(gap.method):
         return "not_hard_gap"
     dark_separator_like = hard_gap_dark_separator_like(signals, config)
     if nearby_separator_conflict:
@@ -196,7 +196,7 @@ def light_hard_gap_trust(
     hard_gap_trust: HardGapTrustParameters | None = None,
     nearby_correction: NearbySeparatorCorrectionParameters | None = None,
 ) -> tuple[str, dict[str, Any]]:
-    if gap.method not in HARD_GAP_METHODS or pitch <= 0:
+    if not is_hard_gap_method(gap.method) or pitch <= 0:
         return "not_hard_gap", {"reason": "not_hard_gap"}
     trust_config = hard_gap_trust or HardGapTrustParameters()
     width_ratio = hard_gap_width_ratio(gap, pitch)

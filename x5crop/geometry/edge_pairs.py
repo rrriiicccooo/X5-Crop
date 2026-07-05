@@ -5,8 +5,9 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED, HARD_GAP_METHODS
+from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED
 from ..domain import Gap
+from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float, clamp_int
 from .detection_parameters import EdgePairParameters, EdgeRefineProfileParameters
 from .edge_refine_profile import edge_refine_profiles, local_edge_peaks
@@ -112,7 +113,7 @@ def best_edge_pair_gap(
 
 
 def edge_pair_can_replace_gap(gap: Gap, edge_gap: Gap, pitch: float, params: EdgePairParameters) -> bool:
-    if gap.method not in HARD_GAP_METHODS:
+    if not is_hard_gap_method(gap.method):
         return edge_gap.score >= params.min_quality_for_model_gap
     if gap.method in {GAP_DETECTED, GAP_ENHANCED_DETECTED}:
         return edge_pair_can_replace_hard_gap(gap, edge_gap, pitch, params)

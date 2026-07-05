@@ -111,11 +111,12 @@ Current stable release: v4.2.8
   `GapMethodEvidenceSummary` 统一服务 raw gap scoring 与 width-profile selection，
   并为 `SeparatorGateEvidence` 和 lucky-pass risk 提供 hard/model 计数；
   `SeparatorGateDetailSummary` 统一服务 scoring、partial holder、candidate
-  selection 和 final decision 中的 gate detail 消费；`gap_method_role(s)` 统一
-  diagnostics / read-only diagnostics 的 method role vocabulary；full
-  width-profile selection 不再把 non-equal gap 当成 hard gap；report key
-  `detected_gaps` 保持兼容，但内部语义不再把 grid/content model support 命名成
-  hard detected evidence。
+  selection 和 final decision 中的 gate detail 消费；新增中性 `gap_methods.py`
+  统一 hard / geometry-model / content-model / separator-support family 与
+  diagnostics / read-only diagnostics 的 method role vocabulary，geometry
+  refinement 不再需要从 detection evidence 层借 role 语义；full width-profile
+  selection 不再把 non-equal gap 当成 hard gap；report key `detected_gaps` 保持
+  兼容，但内部语义不再把 grid/content model support 命名成 hard detected evidence。
 - 未使用的 `CandidateGateOutcome` gate 占位类型已删除，减少无调用方接口。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
@@ -498,11 +499,14 @@ Verified:
   feeds raw gap scoring, width-profile selection, and hard/model counts for
   `SeparatorGateEvidence` and lucky-pass risk, while
   `SeparatorGateDetailSummary` feeds scoring, partial holder, candidate
-  selection, and final decision gate-detail consumption. `gap_method_role(s)`
-  centralizes the method-role vocabulary for diagnostics / read-only
-  diagnostics. Full width-profile selection no longer treats non-equal gaps as
-  hard gaps. The report key `detected_gaps` stays compatible, but internal code
-  no longer names grid/content model support as hard detected evidence.
+  selection, and final decision gate-detail consumption. The neutral
+  `gap_methods.py` module now owns hard / geometry-model / content-model /
+  separator-support family checks and diagnostics / read-only diagnostics
+  method-role vocabulary, so geometry refinement does not borrow role semantics
+  from detection evidence. Full width-profile selection no longer treats
+  non-equal gaps as hard gaps. The report key `detected_gaps` stays compatible,
+  but internal code no longer names grid/content model support as hard detected
+  evidence.
 - The unused `CandidateGateOutcome` gate placeholder type has been removed.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the

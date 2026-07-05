@@ -5,8 +5,8 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import HARD_GAP_METHODS
 from ..domain import Gap
+from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float, clamp_int, runs_from_mask
 from .gap_geometry import gap_width_cv, local_gap_geometry_error
 from .detection_parameters import NearbySeparatorCorrectionParameters
@@ -124,7 +124,7 @@ def nearby_separator_replacement(
     pitch: float,
     correction_config: NearbySeparatorCorrectionParameters | None = None,
 ) -> Optional[dict[str, Any]]:
-    if gap.method not in HARD_GAP_METHODS or pitch <= 0 or gap.start is None or gap.end is None:
+    if not is_hard_gap_method(gap.method) or pitch <= 0 or gap.start is None or gap.end is None:
         return None
     config = correction_config or NearbySeparatorCorrectionParameters()
     context = nearby_separator_search_context(profile, gap, pitch, config)

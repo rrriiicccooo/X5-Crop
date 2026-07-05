@@ -8,10 +8,9 @@ from ..constants import (
     GAP_DETECTED,
     GAP_EDGE_PAIR,
     GAP_ENHANCED_DETECTED,
-    GAP_EQUAL,
-    GAP_GRID,
 )
 from ..domain import Box, Gap
+from ..gap_methods import is_geometry_model_gap_method
 from ..utils import clamp_float
 
 
@@ -160,7 +159,7 @@ def fit_boxes_by_edge_evidence(
         if right_edges[i] is not None:
             candidates.append((float(right_edges[i][0]) - target, float(right_edges[i][1])))
         weak_boundary = any(
-            0 <= gi < len(gaps) and gaps[gi].method in {GAP_EQUAL, GAP_GRID}
+            0 <= gi < len(gaps) and is_geometry_model_gap_method(gaps[gi].method)
             for gi in (i - 1, i)
         )
         base_width = float(base_right) - float(base_left)

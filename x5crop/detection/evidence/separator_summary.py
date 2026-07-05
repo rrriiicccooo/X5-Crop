@@ -5,14 +5,17 @@ from typing import Any
 
 from ...constants import (
     GAP_CONTENT,
-    GAP_DETECTED,
-    GAP_EDGE_PAIR,
-    GAP_ENHANCED_DETECTED,
     GAP_EQUAL,
     GAP_GRID,
-    HARD_GAP_METHODS,
 )
 from ...domain import Detection, Gap
+from ...gap_methods import (
+    is_content_model_gap_method,
+    is_direct_hard_gap_method,
+    is_enhanced_hard_gap_method,
+    is_hard_gap_method,
+    is_separator_support_gap_method,
+)
 
 
 @dataclass(frozen=True)
@@ -97,17 +100,17 @@ def gap_method_evidence_summary(
     gaps: list[Gap],
     reliable_min_score: float,
 ) -> GapMethodEvidenceSummary:
-    direct_hard_gaps = sum(1 for gap in gaps if gap.method in {GAP_DETECTED, GAP_EDGE_PAIR})
-    enhanced_hard_gaps = sum(1 for gap in gaps if gap.method == GAP_ENHANCED_DETECTED)
+    direct_hard_gaps = sum(1 for gap in gaps if is_direct_hard_gap_method(gap.method))
+    enhanced_hard_gaps = sum(1 for gap in gaps if is_enhanced_hard_gap_method(gap.method))
     hard_separator_gaps = direct_hard_gaps + enhanced_hard_gaps
     grid_model_gaps = sum(1 for gap in gaps if gap.method == GAP_GRID)
     equal_model_gaps = sum(1 for gap in gaps if gap.method == GAP_EQUAL)
-    content_model_gaps = sum(1 for gap in gaps if gap.method == GAP_CONTENT)
+    content_model_gaps = sum(1 for gap in gaps if is_content_model_gap_method(gap.method))
     separator_support_gaps = hard_separator_gaps + grid_model_gaps
     reliable_support_gaps = sum(
         1
         for gap in gaps
-        if gap.method in HARD_GAP_METHODS.union({GAP_GRID})
+        if is_separator_support_gap_method(gap.method)
         and gap.score >= reliable_min_score
     )
     return GapMethodEvidenceSummary(
@@ -120,29 +123,6 @@ def gap_method_evidence_summary(
         separator_support_gaps=separator_support_gaps,
         reliable_support_gaps=reliable_support_gaps,
     )
-
-
-def gap_method_role(method: str) -> str:
-    if method == GAP_ENHANCED_DETECTED:
-        return "separator_evidence_enhanced"
-    if method in {GAP_DETECTED, GAP_EDGE_PAIR}:
-        return "separator_evidence"
-    if method in {GAP_GRID, GAP_EQUAL}:
-        return "geometry_model"
-    if method == GAP_CONTENT:
-        return "content_model"
-    return "unknown"
-
-
-def gap_method_roles() -> dict[str, str]:
-    return {
-        GAP_DETECTED: gap_method_role(GAP_DETECTED),
-        GAP_EDGE_PAIR: gap_method_role(GAP_EDGE_PAIR),
-        GAP_ENHANCED_DETECTED: gap_method_role(GAP_ENHANCED_DETECTED),
-        GAP_GRID: gap_method_role(GAP_GRID),
-        GAP_EQUAL: gap_method_role(GAP_EQUAL),
-        GAP_CONTENT: gap_method_role(GAP_CONTENT),
-    }
 
 
 def separator_gate_detail_summary(
@@ -173,7 +153,7 @@ def separator_summary_from_detection(detection: Detection) -> SeparatorGateDetai
     return separator_gate_detail_summary(
         hard_detail,
         expected_default=max(0, int(detection.count) - 1),
-        hard_default=_gap_method_count(detection, set(HARD_GAP_METHODS)),
+        hard_default=sum(1 for gap in detection.gaps if is_hard_gap_method(gap.method)),
         grid_default=_gap_method_count(detection, {GAP_GRID}),
         equal_default=_gap_method_count(detection, {GAP_EQUAL}),
         content_default=_gap_method_count(detection, {GAP_CONTENT}),
@@ -183,8 +163,6 @@ def separator_summary_from_detection(detection: Detection) -> SeparatorGateDetai
 __all__ = [
     "GapMethodEvidenceSummary",
     "SeparatorGateDetailSummary",
-    "gap_method_role",
-    "gap_method_roles",
     "gap_method_evidence_summary",
     "separator_gate_detail_summary",
     "separator_summary_from_detection",

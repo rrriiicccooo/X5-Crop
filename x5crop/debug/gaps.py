@@ -4,8 +4,9 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED, GAP_EQUAL, GAP_GRID, HARD_GAP_METHODS
+from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED, GAP_EQUAL, GAP_GRID
 from ..domain import Box, Detection, Gap
+from ..gap_methods import is_hard_gap_method
 from ..policies.registry import get_detection_policy
 from ..utils import clamp_float
 from .canvas import (
@@ -28,7 +29,7 @@ def gap_mark_box(detection: Detection, gap: Gap) -> Optional[Box]:
         )
     except Exception:
         return None
-    if gap.method in HARD_GAP_METHODS and gap.start is not None and gap.end is not None:
+    if is_hard_gap_method(gap.method) and gap.start is not None and gap.end is not None:
         start = int(round(work_outer.left + min(gap.start, gap.end)))
         end = int(round(work_outer.left + max(gap.start, gap.end)))
         if end <= start:
@@ -84,21 +85,21 @@ def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> Non
         GAP_EQUAL: (190, 80, 255),
     }
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
-    detected_centers = [gap.center for gap in detection.gaps if gap.method in HARD_GAP_METHODS]
+    detected_centers = [gap.center for gap in detection.gaps if is_hard_gap_method(gap.method)]
     overlap_tolerance = clamp_float(
         pitch * debug_gap.overlap_tolerance_ratio,
         debug_gap.overlap_tolerance_min,
         debug_gap.overlap_tolerance_max,
     )
     for gap in detection.gaps:
-        if gap.method not in HARD_GAP_METHODS:
+        if not is_hard_gap_method(gap.method):
             continue
         mark = gap_mark_box(detection, gap)
         if mark is not None:
             color = gap_colors.get(gap.method, (255, 255, 255))
             draw_preview_mark(rgb, mark, scale, color, debug_gap.hard_line_width)
     for gap in detection.gaps:
-        if gap.method in HARD_GAP_METHODS:
+        if is_hard_gap_method(gap.method):
             continue
         if any(abs(gap.center - center) <= overlap_tolerance for center in detected_centers):
             continue

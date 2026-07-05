@@ -5,8 +5,8 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import HARD_GAP_METHODS
 from ..domain import Box, Gap
+from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float
 from .gap_geometry import constrain_gap_to_geometry
 from .gap_trust import light_hard_gap_trust
@@ -49,7 +49,7 @@ class GridFitAssessment:
 
 
 def reliable_grid_anchor_gaps(gaps: list[Gap], config: RobustGridParameters) -> list[Gap]:
-    return [gap for gap in gaps if gap.method in HARD_GAP_METHODS and gap.score >= config.reliable_min_score]
+    return [gap for gap in gaps if is_hard_gap_method(gap.method) and gap.score >= config.reliable_min_score]
 
 
 def grid_fit_tolerance(pitch: float, strip_mode: str, config: RobustGridParameters) -> float:
@@ -155,7 +155,7 @@ def grid_adjusted_gap(
         hard_gap_trust=hard_gap_trust,
         nearby_correction=nearby_correction,
     )
-    if gap.method in HARD_GAP_METHODS and abs(gap.center - predicted) <= clamp_float(
+    if is_hard_gap_method(gap.method) and abs(gap.center - predicted) <= clamp_float(
         pitch * config.hard_keep_ratio,
         config.hard_keep_min,
         config.hard_keep_max,
@@ -175,7 +175,7 @@ def grid_adjusted_gap(
         }
         return gap, protected, None
     overridden = None
-    if gap.method in HARD_GAP_METHODS:
+    if is_hard_gap_method(gap.method):
         overridden = {
             "index": int(gap.index),
             "method": gap.method,
