@@ -4,6 +4,7 @@ from typing import Any, Optional
 
 import numpy as np
 
+from ...constants import GAP_EQUAL, GAP_GRID
 from ...domain import Detection
 from ...formats import FORMATS
 from ...cache.analysis import make_analysis_cache
@@ -64,7 +65,7 @@ def lucky_pass_risk_score_detail(
         for name in ("suspect_internal_edge", "suspect_frame_border", "nearby_separator_conflict", "geometry_conflict")
     )
     strong_overlap_models = int(overlap_risk_counts.get("strong", 0))
-    grid_or_equal = sum(1 for gap in detection.gaps if gap.method in {"grid", "equal"})
+    grid_or_equal = sum(1 for gap in detection.gaps if gap.method in {GAP_GRID, GAP_EQUAL})
     width_cv = float(detection.detail.get("width_cv", 0.0) or 0.0)
     components: dict[str, float] = {}
     if grid_or_equal >= policy.model_gap_support_min:

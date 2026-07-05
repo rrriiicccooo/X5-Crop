@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from ....constants import HARD_GAP_METHODS
+from ....constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_GRID, HARD_GAP_METHODS
 from ....domain import Detection
 from ....formats import FORMATS
 from ....policies.registry import get_detection_policy
@@ -90,12 +90,12 @@ def candidate_has_hard_separator_evidence(
     edge_pair_scores = [
         float(gap.score)
         for gap in detection.gaps
-        if gap.method == "edge-pair"
+        if gap.method == GAP_EDGE_PAIR
     ]
     detected_scores = [
         float(gap.score)
         for gap in detection.gaps
-        if gap.method == "detected"
+        if gap.method == GAP_DETECTED
     ]
     width_evidence = detection.detail.get("separator_width_evidence", {})
     broad_width_scores = (
@@ -105,7 +105,7 @@ def candidate_has_hard_separator_evidence(
     )
     leading_grid_scores: list[float] = []
     for gap in detection.gaps:
-        if gap.method != "grid":
+        if gap.method != GAP_GRID:
             break
         leading_grid_scores.append(float(gap.score))
     separator_analysis = detection.detail.get("separator_analysis", {})

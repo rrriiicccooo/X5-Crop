@@ -4,6 +4,7 @@ from typing import Optional
 
 import numpy as np
 
+from ....constants import GAP_EQUAL
 from ....domain import Detection
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
@@ -63,7 +64,7 @@ def select_full_separator_width_profile_candidate(
         support = str(content_detail.get("support", ""))
         if support != separator_width_profile.full_selection_required_support:
             continue
-        hard_gaps = sum(1 for gap in detection.gaps if gap.method != "equal")
+        hard_gaps = sum(1 for gap in detection.gaps if gap.method != GAP_EQUAL)
         equal_gaps = int(detection.detail.get("equal_gaps", 0) or 0)
         if hard_gaps < max(1, detection.count - 1):
             continue

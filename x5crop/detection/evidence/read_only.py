@@ -3,6 +3,14 @@ from __future__ import annotations
 import numpy as np
 
 from ...app_info import VERSION
+from ...constants import (
+    GAP_CONTENT,
+    GAP_DETECTED,
+    GAP_EDGE_PAIR,
+    GAP_ENHANCED_DETECTED,
+    GAP_EQUAL,
+    GAP_GRID,
+)
 from ...domain import Detection
 from ...geometry.layout import work_gray
 from ...policies.registry import get_detection_policy
@@ -38,12 +46,12 @@ def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: 
         )
     )
     method_roles = {
-        "detected": "separator_evidence",
-        "edge-pair": "separator_evidence",
-        "enhanced-detected": "separator_evidence_enhanced",
-        "grid": "geometry_model",
-        "equal": "geometry_model",
-        "content": "content_model",
+        GAP_DETECTED: "separator_evidence",
+        GAP_EDGE_PAIR: "separator_evidence",
+        GAP_ENHANCED_DETECTED: "separator_evidence_enhanced",
+        GAP_GRID: "geometry_model",
+        GAP_EQUAL: "geometry_model",
+        GAP_CONTENT: "content_model",
     }
     detection.detail["diagnostics"] = {
         "version": VERSION,

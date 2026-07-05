@@ -43,6 +43,10 @@ Current stable release: v4.2.8
   profile/search/trust 数学能力；width profile 纯数学归
   `geometry/separator_width_profile.py`，参数归 `SeparatorPolicy`，outer policy
   只保留 separator-derived outer family / band 参数。
+- gap method vocabulary 已统一由 `constants.py` 提供；candidate assessment、
+  decision summary、risk diagnostics、read-only diagnostics 和 frame edge fitting
+  只消费 `detected / edge-pair / enhanced-detected / grid / equal / content`
+  常量，不再手写 method 字符串。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 

@@ -4,6 +4,13 @@ from typing import Any, Optional
 
 import numpy as np
 
+from ..constants import (
+    GAP_DETECTED,
+    GAP_EDGE_PAIR,
+    GAP_ENHANCED_DETECTED,
+    GAP_EQUAL,
+    GAP_GRID,
+)
 from ..domain import Box, Gap
 from ..utils import clamp_float
 
@@ -69,11 +76,11 @@ def fit_cuts_by_geometry(cuts: list[float], outer: Box, count: int, pitch: Optio
 def frame_edge_weight(gap: Gap) -> float:
     if gap.width <= 0:
         return 0.0
-    if gap.method == "edge-pair":
+    if gap.method == GAP_EDGE_PAIR:
         return max(0.0, min(1.8, gap.score)) * 1.20
-    if gap.method == "detected":
+    if gap.method == GAP_DETECTED:
         return max(0.0, min(1.5, gap.score))
-    if gap.method == "enhanced-detected":
+    if gap.method == GAP_ENHANCED_DETECTED:
         return max(0.0, min(1.2, gap.score)) * 0.70
     return 0.0
 
@@ -153,7 +160,7 @@ def fit_boxes_by_edge_evidence(
         if right_edges[i] is not None:
             candidates.append((float(right_edges[i][0]) - target, float(right_edges[i][1])))
         weak_boundary = any(
-            0 <= gi < len(gaps) and gaps[gi].method in {"equal", "grid"}
+            0 <= gi < len(gaps) and gaps[gi].method in {GAP_EQUAL, GAP_GRID}
             for gi in (i - 1, i)
         )
         base_width = float(base_right) - float(base_left)

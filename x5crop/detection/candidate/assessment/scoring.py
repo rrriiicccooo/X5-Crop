@@ -5,7 +5,14 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ....constants import HARD_GAP_METHODS
+from ....constants import (
+    GAP_DETECTED,
+    GAP_EDGE_PAIR,
+    GAP_ENHANCED_DETECTED,
+    GAP_EQUAL,
+    GAP_GRID,
+    HARD_GAP_METHODS,
+)
 from ....domain import Box, Detection, Gap
 from ....formats import FormatSpec
 from ....policies.registry import get_detection_policy
@@ -195,16 +202,16 @@ def score_detection(
     base_score = policy.scoring.base_detection
     separator_gate = policy.separator.gate
     expected_gaps = max(0, count - 1)
-    actual_detected = sum(1 for gap in gaps if gap.method in {"detected", "edge-pair"})
-    enhanced_detected = sum(1 for gap in gaps if gap.method == "enhanced-detected")
-    grid_gaps = sum(1 for gap in gaps if gap.method == "grid")
+    actual_detected = sum(1 for gap in gaps if gap.method in {GAP_DETECTED, GAP_EDGE_PAIR})
+    enhanced_detected = sum(1 for gap in gaps if gap.method == GAP_ENHANCED_DETECTED)
+    grid_gaps = sum(1 for gap in gaps if gap.method == GAP_GRID)
     hard_detected = actual_detected + enhanced_detected
     detected = hard_detected + grid_gaps
-    equal = sum(1 for gap in gaps if gap.method == "equal")
+    equal = sum(1 for gap in gaps if gap.method == GAP_EQUAL)
     reliable = sum(
         1
         for gap in gaps
-        if gap.method in HARD_GAP_METHODS.union({"grid"})
+        if gap.method in HARD_GAP_METHODS.union({GAP_GRID})
         and gap.score >= policy.separator.robust_grid.reliable_min_score
     )
     widths = np.array([box.width for box in boxes if box.valid()], dtype=np.float64)

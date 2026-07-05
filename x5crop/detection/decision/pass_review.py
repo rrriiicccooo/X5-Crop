@@ -10,6 +10,9 @@ from ...constants import (
     ANALYSIS_SOURCE_CONTENT_PRIMARY,
     ANALYSIS_SOURCE_HARD_SAFETY,
     ANALYSIS_SOURCE_REVIEW_ONLY,
+    GAP_CONTENT,
+    GAP_EQUAL,
+    GAP_GRID,
     HARD_GAP_METHODS,
     REASON_AUTO_GATE_NOT_SATISFIED,
     REASON_CONTENT_ASPECT_CONFLICT,
@@ -83,9 +86,9 @@ def _separator_summary(detection: Detection) -> dict[str, Any]:
     hard_detail = _dict(assessment.get("separator_hard_evidence"))
     expected = _int(hard_detail.get("expected_gaps"), max(0, int(detection.count) - 1))
     hard = _int(hard_detail.get("hard_gaps"), _gap_method_count(detection, set(HARD_GAP_METHODS)))
-    grid = _int(hard_detail.get("grid_gaps"), _gap_method_count(detection, {"grid"}))
-    equal = _int(hard_detail.get("equal_gaps"), _gap_method_count(detection, {"equal"}))
-    content = _gap_method_count(detection, {"content"})
+    grid = _int(hard_detail.get("grid_gaps"), _gap_method_count(detection, {GAP_GRID}))
+    equal = _int(hard_detail.get("equal_gaps"), _gap_method_count(detection, {GAP_EQUAL}))
+    content = _gap_method_count(detection, {GAP_CONTENT})
     model = grid + equal + content
     denominator = max(1, expected)
     return {
