@@ -237,6 +237,7 @@ def grid_adjusted_gap(
         "input_score": float(gap.score),
         "input_width_px": float(gap.width),
         "trust": trust,
+        "trust_detail": trust_detail,
         "keep_limit": float(keep_limit),
     }
     if is_hard_gap_method(gap.method) and abs(gap.center - predicted) <= keep_limit:
@@ -257,7 +258,6 @@ def grid_adjusted_gap(
             "trust_detail": trust_detail,
         }
         detail["action"] = "protect_strong_hard_gap"
-        detail["trust_detail"] = trust_detail
         detail["output_method"] = gap.method
         detail["output_center"] = float(gap.center)
         return gap, protected, None, detail
@@ -275,7 +275,6 @@ def grid_adjusted_gap(
             "trust_detail": trust_detail,
         }
         detail["action"] = "override_hard_with_grid_model"
-        detail["trust_detail"] = trust_detail
     else:
         detail["action"] = "replace_model_with_grid_model"
     adjusted = grid_model_gap(gap.index, predicted, gap.score)

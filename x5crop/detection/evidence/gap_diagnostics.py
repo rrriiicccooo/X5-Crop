@@ -10,7 +10,7 @@ from ...gap_methods import gap_method_role, is_hard_gap_method, is_model_gap_met
 from ...geometry.boxes import box_cache_key
 from ...geometry.detection_parameters import SeparatorProfileParameters
 from ...geometry.gap_trust import (
-    classify_diagnostic_hard_gap_trust,
+    diagnostic_hard_gap_trust_assessment,
     hard_gap_dark_separator_like,
     hard_gap_pixel_signals,
     hard_gap_width_ratio,
@@ -188,7 +188,7 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
     width_ratio = hard_gap_width_ratio(gap, pitch)
     model_delta_ratio = abs(float(gap.center - expected)) / max(1.0, float(pitch))
     if is_hard_gap_method(gap.method):
-        record["hard_trust"] = classify_diagnostic_hard_gap_trust(
+        trust_assessment = diagnostic_hard_gap_trust_assessment(
             gap,
             pitch,
             hard_gap_trust_policy,
@@ -197,6 +197,8 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
             nearby_separator_conflict=bool(nearby.get("stronger_found", False)),
             signals=signals,
         )
+        record["hard_trust"] = trust_assessment.trust
+        record["hard_trust_detail"] = trust_assessment.detail()
     elif is_model_gap_method(gap.method):
         if hard_gap_dark_separator_like(signals, hard_gap_trust_policy):
             overlap_risk = "none"

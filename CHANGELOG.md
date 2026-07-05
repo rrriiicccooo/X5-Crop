@@ -281,7 +281,8 @@ Current stable release: v4.2.8
 - hard-gap trust 已做行为等价收敛：`geometry/gap_trust.py` 统一保存像素 signal、
   runtime hard-gap trust classifier 和 diagnostic hard-gap trust classifier；
   `detection/evidence/gap_diagnostics.py` 不再重复 trust 分类条件，只负责生成
-  read-only diagnostic record。
+  read-only diagnostic record；runtime / diagnostic classifier 现在输出同一类
+  assessment detail，记录 trust label、reason、width / model delta 和 signal flags。
 - enhanced / nearby separator refinement 已做行为等价拆分：
   `geometry/enhanced_separator.py` 将 detected gap validation、enhanced promotion
   和 merge detail 分开；`geometry/nearby_separator.py` 将 search context、
@@ -548,7 +549,9 @@ Verified:
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the
   diagnostic hard-gap trust classifier; `detection/evidence/gap_diagnostics.py`
-  records diagnostics without duplicating trust classification conditions.
+  records diagnostics without duplicating trust classification conditions. Runtime
+  and diagnostic classifiers now expose matching assessment detail with trust
+  label, reason, width / model delta, and signal flags.
 - Enhanced / nearby separator refinement is split without behavior changes:
   `geometry/enhanced_separator.py` separates detected gap validation, enhanced
   promotion, and merge detail; `geometry/nearby_separator.py` separates search
