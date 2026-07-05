@@ -58,6 +58,9 @@ Current stable release: v4.2.8
 - broad-width gap proposal 现在写出 `separator_width_profile_gap_search` detail：
   每个 expected gap 记录 width-profile accepted / rejected run、selected detected
   gap 和 summary reason；旧的无 detail API 只包装同一套 assessment 逻辑。
+- nearby separator correction 现在写出 searched assessment：每个 gap 都记录
+  no-candidate / candidate-not-stronger / geometry-rejected / accepted 等原因；
+  旧 replacement API 只包装同一套 assessment 逻辑，不改变修正条件。
 - separator profile signal 组合已显式化：`SeparatorProfileSignals` 承载
   segmented extreme、uniform soft、uniform support 和 column gradient，
   `combined_separator_profile_score` 是唯一组合点，smooth window 也可单独审核。
@@ -262,6 +265,9 @@ Current stable release: v4.2.8
   将 width run assessment、best-candidate selection 和 detail assembly 分开，
   candidate detail 记录 `separator_width_profile_gap_search`，方便人工审核宽
   separator 是如何被看见或拒绝的。
+- nearby separator correction 已补齐 searched detail：`geometry/nearby_separator.py`
+  将 replacement assessment、stronger-candidate search 和 geometry acceptance
+  分开，candidate detail 可解释每个 gap 为什么没有被 nearby separator 修正。
 - separator refinement 已做行为等价拆分：candidate build 直接调用 geometry
   refinement helpers，避免保留只做别名转发的 proposal refinement facade；
   `geometry/edge_pairs.py` 将 search limits、candidate generation、best-pair
@@ -378,6 +384,9 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - Broad-width gap proposal now writes `separator_width_profile_gap_search`
   detail for each expected gap, including accepted / rejected width-profile runs
   and the selected detected gap, without changing selection thresholds.
+- Nearby separator correction now records searched assessment for each gap,
+  including no-candidate, not-stronger, geometry-rejected, and accepted outcomes,
+  without changing correction thresholds.
 - New wrong PASS is unacceptable; conservative REVIEW and schema / reason diffs
   require explanation.
 - TIFF metadata, bit depth, ICC, resolution, and compression behavior remain unchanged.

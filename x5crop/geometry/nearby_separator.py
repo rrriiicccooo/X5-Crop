@@ -25,6 +25,26 @@ class NearbySeparatorSearchContext:
     threshold: float
 
 
+@dataclass(frozen=True)
+class NearbySeparatorReplacementAssessment:
+    accepted: bool
+    reason: str
+    replacement: dict[str, Any] | None
+    search_detail: dict[str, Any]
+
+    def detail(self, gap: Gap) -> dict[str, Any]:
+        return {
+            "index": int(gap.index),
+            "reason": self.reason,
+            "accepted": bool(self.accepted),
+            "searched": bool(self.search_detail.get("searched", False)),
+            "stronger_found": bool(self.search_detail.get("stronger_found", False)),
+            "candidate_count": int(self.search_detail.get("candidate_count", 0) or 0),
+            "best": self.search_detail.get("best"),
+            "search": self.search_detail,
+        }
+
+
 class NearbySeparatorSearchConfig(Protocol):
     window_ratio: float
     window_min: int
@@ -173,8 +193,37 @@ def nearby_separator_replacement(
     pitch: float,
     correction_config: NearbySeparatorCorrectionParameters | None = None,
 ) -> Optional[dict[str, Any]]:
-    if not is_hard_gap_method(gap.method) or pitch <= 0 or gap.start is None or gap.end is None:
-        return None
+    assessment = nearby_separator_replacement_assessment(profile, gap, pitch, correction_config)
+    return assessment.replacement if assessment.accepted else None
+
+
+def nearby_separator_replacement_assessment(
+    profile: np.ndarray,
+    gap: Gap,
+    pitch: float,
+    correction_config: NearbySeparatorCorrectionParameters | None = None,
+) -> NearbySeparatorReplacementAssessment:
+    if not is_hard_gap_method(gap.method):
+        return NearbySeparatorReplacementAssessment(
+            False,
+            "not_hard_gap",
+            None,
+            {"searched": False, "reason": "not_hard_gap"},
+        )
+    if pitch <= 0:
+        return NearbySeparatorReplacementAssessment(
+            False,
+            "invalid_pitch",
+            None,
+            {"searched": False, "reason": "invalid_pitch"},
+        )
+    if gap.start is None or gap.end is None:
+        return NearbySeparatorReplacementAssessment(
+            False,
+            "missing_gap_span",
+            None,
+            {"searched": False, "reason": "missing_gap_span"},
+        )
     config = correction_config or NearbySeparatorCorrectionParameters()
     detail = nearby_separator_search_detail(
         profile,
@@ -184,11 +233,18 @@ def nearby_separator_replacement(
         score_add=config.score_add,
         score_multiplier=config.score_multiplier,
     )
-    if detail is None or not detail.get("stronger_found"):
-        return None
+    if detail is None:
+        return NearbySeparatorReplacementAssessment(
+            False,
+            "empty_search_window",
+            None,
+            {"searched": False, "reason": "empty_search_window"},
+        )
     if detail.get("best") is None:
-        return None
-    return detail
+        return NearbySeparatorReplacementAssessment(False, "no_candidate", None, detail)
+    if not detail.get("stronger_found"):
+        return NearbySeparatorReplacementAssessment(False, "candidate_not_stronger", None, detail)
+    return NearbySeparatorReplacementAssessment(True, "stronger_candidate", detail, detail)
 
 
 def nearby_separator_gap_from_candidate(gap: Gap, candidate: dict[str, Any]) -> Gap:
@@ -287,8 +343,11 @@ def apply_nearby_separator_corrections(
     corrected = list(gaps)
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
+    searched: list[dict[str, Any]] = []
     for pos, gap in enumerate(list(corrected)):
-        replacement = nearby_separator_replacement(profile, gap, pitch, config)
+        assessment = nearby_separator_replacement_assessment(profile, gap, pitch, config)
+        searched.append(assessment.detail(gap))
+        replacement = assessment.replacement
         if replacement is None:
             continue
         best = replacement["best"]
@@ -337,6 +396,9 @@ def apply_nearby_separator_corrections(
         )
     return corrected, {
         "used": True,
+        "reason": "ok",
+        "searched": searched[:8],
+        "searched_count": len(searched),
         "accepted": accepted,
         "accepted_count": len(accepted),
         "rejected": rejected[:8],
