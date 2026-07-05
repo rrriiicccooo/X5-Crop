@@ -31,6 +31,50 @@ class EdgePairCandidate:
             self.right,
         )
 
+    def detail(self) -> dict[str, Any]:
+        center = (int(self.left) + int(self.right)) / 2.0
+        return {
+            "left": int(self.left),
+            "right": int(self.right),
+            "center": float(center),
+            "width": int(self.right - self.left + 1),
+            "distance": float(self.distance),
+            "quality": float(self.quality),
+            "background_score": float(self.background_score),
+            "rank_key": [
+                float(self.distance),
+                float(-self.quality),
+                float(-self.background_score),
+                int(self.left),
+                int(self.right),
+            ],
+        }
+
+
+@dataclass(frozen=True)
+class EdgePairSearchResult:
+    gap: Gap
+    candidates: list[EdgePairCandidate]
+    selected_candidate: EdgePairCandidate | None
+    selected_gap: Gap | None
+
+    def detail(self, *, candidate_limit: int = 5) -> dict[str, Any]:
+        return {
+            "index": int(self.gap.index),
+            "input_method": self.gap.method,
+            "input_center": float(self.gap.center),
+            "candidate_count": len(self.candidates),
+            "selected": (
+                None
+                if self.selected_candidate is None
+                else self.selected_candidate.detail()
+            ),
+            "candidates": [
+                candidate.detail()
+                for candidate in sorted(self.candidates, key=lambda item: item.rank_key())[:candidate_limit]
+            ],
+        }
+
 
 @dataclass(frozen=True)
 class EdgePairReplacementAssessment:
@@ -177,9 +221,9 @@ def best_edge_pair_gap(
     gap: Gap,
     candidates: list[EdgePairCandidate],
 ) -> Gap | None:
-    if not candidates:
+    candidate = best_edge_pair_candidate(candidates)
+    if candidate is None:
         return None
-    candidate = min(candidates, key=lambda item: item.rank_key())
     center = (candidate.left + candidate.right) / 2.0
     return Gap(
         gap.index,
@@ -188,6 +232,42 @@ def best_edge_pair_gap(
         GAP_EDGE_PAIR,
         float(candidate.left),
         float(candidate.right + 1),
+    )
+
+
+def best_edge_pair_candidate(candidates: list[EdgePairCandidate]) -> EdgePairCandidate | None:
+    if not candidates:
+        return None
+    return min(candidates, key=lambda item: item.rank_key())
+
+
+def edge_pair_search_result_for_gap(
+    edge: np.ndarray,
+    background: np.ndarray,
+    gap: Gap,
+    pitch: float,
+    params: EdgePairParameters,
+    window: int,
+    min_gutter: int,
+    max_gutter: int,
+) -> EdgePairSearchResult:
+    candidates = edge_pair_candidates_for_gap(
+        edge,
+        background,
+        gap,
+        pitch,
+        params,
+        window,
+        min_gutter,
+        max_gutter,
+    )
+    selected_candidate = best_edge_pair_candidate(candidates)
+    selected_gap = best_edge_pair_gap(gap, candidates)
+    return EdgePairSearchResult(
+        gap=gap,
+        candidates=candidates,
+        selected_candidate=selected_candidate,
+        selected_gap=selected_gap,
     )
 
 
@@ -210,22 +290,27 @@ def refine_gaps_with_edge_profiles(
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
     for gap in gaps:
-        edge_gap = best_edge_pair_gap(
+        search = edge_pair_search_result_for_gap(
+            edge,
+            background,
             gap,
-            edge_pair_candidates_for_gap(
-                edge,
-                background,
-                gap,
-                pitch,
-                params,
-                window,
-                min_gutter,
-                max_gutter,
-            ),
+            pitch,
+            params,
+            window,
+            min_gutter,
+            max_gutter,
         )
+        edge_gap = search.selected_gap
         if edge_gap is None:
             refined.append(gap)
-            rejected.append({"index": int(gap.index), "reason": "no_edge_pair_candidate", "kept_method": gap.method})
+            rejected.append(
+                {
+                    "index": int(gap.index),
+                    "reason": "no_edge_pair_candidate",
+                    "kept_method": gap.method,
+                    "search": search.detail(),
+                }
+            )
             continue
         assessment = assess_edge_pair_replacement(gap, edge_gap, pitch, params)
         if not assessment.ok:
@@ -236,6 +321,7 @@ def refine_gaps_with_edge_profiles(
                 "width": float(edge_gap.width),
                 "score": float(edge_gap.score),
                 "kept_method": gap.method,
+                "search": search.detail(),
             }
             rejected_detail.update(assessment.detail())
             rejected.append(rejected_detail)
@@ -248,12 +334,19 @@ def refine_gaps_with_edge_profiles(
                 "width": float(edge_gap.width),
                 "score": float(edge_gap.score),
                 "replaced_method": gap.method,
+                "search": search.detail(),
                 "replacement": assessment.detail(),
             }
         )
     return refined, {
         "used": True,
         "params": asdict(params),
+        "search_limits": {
+            "pitch": float(pitch),
+            "window_px": int(window),
+            "min_gutter_px": int(min_gutter),
+            "max_gutter_px": int(max_gutter),
+        },
         "accepted": accepted,
         "accepted_count": len(accepted),
         "rejected": rejected[:8],
@@ -277,10 +370,13 @@ def refine_gaps_by_edge_pairs(
 __all__ = [
     "EdgePairCandidate",
     "EdgePairReplacementAssessment",
+    "EdgePairSearchResult",
     "assess_edge_pair_hard_gap_replacement",
     "assess_edge_pair_replacement",
+    "best_edge_pair_candidate",
     "best_edge_pair_gap",
     "edge_pair_candidates_for_gap",
+    "edge_pair_search_result_for_gap",
     "edge_pair_search_limits",
     "refine_gaps_by_edge_pairs",
     "refine_gaps_with_edge_profiles",

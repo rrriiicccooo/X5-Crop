@@ -282,7 +282,8 @@ Current stable release: v4.2.8
   edge-pair、enhanced 和 nearby wrapper 现在统一返回 `GapRefinementResult`，
   但报告仍保留原有 detail key；
   `geometry/edge_pairs.py` 将 search limits、candidate generation、best-pair
-  selection 和 replacement assessment 分开；
+  selection 和 replacement assessment 分开，并在 detail 中写出 search limits、
+  candidate count、selected candidate 和 replacement assessment；
   `geometry/robust_grid.py` 将 reliable anchor selection、grid fit candidate、
   fit ranking、fit assessment、predicted center 和 hard-gap protection /
   override adjustment 分开，方便继续审核 model evidence 何时可以移动 gap。
@@ -574,7 +575,8 @@ Verified:
   context, candidate ranking, stronger test, and geometry acceptance so separator
   refinement thresholds can be reviewed directly. Edge-pair, enhanced, and nearby
   wrappers now return a shared `GapRefinementResult` while report detail keys stay
-  compatible. Runtime correction and
+  compatible. Edge-pair detail now records search limits, candidate count,
+  selected candidate, and replacement assessment. Runtime correction and
   read-only diagnostics now share nearby search context, candidate ranking, and
   stronger-test detail; diagnostics keep only caching, profile retrieval, and
   display fields instead of duplicating nearby candidate search.
