@@ -127,6 +127,12 @@ Current stable release: v4.2.8
   属于同一候选计划，最终 gap method 仍是普通 `detected` hard separator；
   broad width 只写入 `gap_search_profile`、`separator_width_evidence`、gate detail
   和 partial holder detail。
+- separator gap lifecycle 已从 `build_detection_for_outer` 抽到
+  `detection/candidate/build/separator_gaps.py`：candidate build 现在先生成
+  origin/pitch、standard/broad-width gaps、edge-pair、grid、enhanced 和 nearby
+  refinement 结果，再由 `detection.py` 负责 frame fit、score 和 detail assembly。
+- `.gitignore` 显式保留 `x5crop/detection/candidate/build/*.py`，避免源码层级被
+  通用 `build/` 输出规则误隐藏。
 - candidate source orchestration 已去 retry 化：standard / broad-width gap profiles、
   separator-derived outer、content candidate 和 safety candidate 都进入一次性
   candidate plan，所有候选统一经过 candidate assessment 与 final decision contract。
@@ -272,6 +278,13 @@ Verified:
   ordinary `detected` hard separators, and broad-width support is reported
   through `gap_search_profile`, `separator_width_evidence`, gate detail, and
   partial-holder detail.
+- Separator gap lifecycle is extracted from `build_detection_for_outer` into
+  `detection/candidate/build/separator_gaps.py`: candidate build now produces
+  origin/pitch, standard/broad-width gaps, edge-pair, grid, enhanced, and nearby
+  refinement results before `detection.py` handles frame fit, scoring, and
+  detail assembly.
+- `.gitignore` explicitly keeps `x5crop/detection/candidate/build/*.py` visible
+  so source layers are not hidden by the generic `build/` output rule.
 - Candidate source orchestration no longer uses active retry control flow:
   standard / broad-width gap profiles, separator-derived outers,
   content candidates, and safety candidates enter one candidate plan and pass

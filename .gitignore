@@ -17,6 +17,8 @@ venv/
 
 # Build and release outputs
 build/
+!x5crop/detection/candidate/build/
+!x5crop/detection/candidate/build/*.py
 dist/
 release/
 *.spec.bak

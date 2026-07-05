@@ -1,0 +1,395 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Optional
+
+import numpy as np
+
+from ....domain import Box, Gap
+from ....formats import FormatSpec
+from ....geometry.frame_fit import frame_boxes_from_gaps
+from ....geometry.separator_cache import cached_separator_profile
+from ....policies.runtime.policy import DetectionPolicy
+from ....cache import AnalysisCache
+from ....runtime.config import RuntimeConfig
+from ....utils import clamp_int
+from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE
+from ..assessment.scoring import score_detection
+from ..proposal.separator.proposal import propose_separator_width_profile_gaps, propose_standard_separator_gaps
+from ..proposal.separator.refinement import (
+    apply_edge_pair_separator_correction,
+    apply_grid_gap_model,
+    apply_nearby_separator_correction,
+    merge_enhanced_separator_proposals,
+    should_run_enhanced_separator_proposals,
+)
+
+
+@dataclass(frozen=True)
+class SeparatorGapBuildResult:
+    outer: Box
+    profile: np.ndarray
+    origin: float
+    pitch: float
+    gaps: list[Gap]
+    grid_detail: dict[str, Any]
+    edge_refine_detail: dict[str, Any]
+    separator_analysis_detail: dict[str, Any]
+    nearby_correction_detail: dict[str, Any]
+    confidence_cap_after_nearby: Optional[float]
+
+
+def separator_origin_pitch(
+    outer: Box,
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    offset_fraction: float,
+) -> tuple[float, float]:
+    if strip_mode == "partial" and count < fmt.default_count:
+        pitch = outer.width / float(max(1, fmt.default_count))
+        total_width = pitch * count
+        origin = max(0.0, min(float(outer.width) - total_width, (float(outer.width) - total_width) * offset_fraction))
+        return float(origin), float(pitch)
+    return 0.0, float(outer.width / float(max(1, count)))
+
+
+def initial_separator_gaps(
+    gray_work: np.ndarray,
+    outer: Box,
+    profile: np.ndarray,
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    origin: float,
+    pitch: float,
+    candidate_strategy: str,
+    gap_search_profile: str,
+    gap_max_width_ratio_override: Optional[float],
+    policy: DetectionPolicy,
+) -> list[Gap]:
+    gaps = propose_standard_separator_gaps(
+        profile,
+        origin,
+        pitch,
+        count,
+        gap_max_width_ratio_override,
+        policy.separator.gap_search,
+    )
+    if candidate_strategy == "separator_outer" and gap_search_profile == BROAD_WIDTH_GAP_PROFILE:
+        separator_width_profile_gaps = propose_separator_width_profile_gaps(gray_work, outer, count, policy)
+        if len(separator_width_profile_gaps) >= max(1, count - 1):
+            gaps = separator_width_profile_gaps
+    if (
+        strip_mode == "full"
+        and policy.separator.geometry_support.detected_geometry.enabled
+        and count == fmt.default_count
+        and gap_max_width_ratio_override is None
+    ):
+        gaps = [
+            Gap(i, origin + pitch * i, float(profile[min(len(profile) - 1, max(0, int(round(origin + pitch * i))))]), "equal")
+            for i in range(1, count)
+        ]
+    return gaps
+
+
+def apply_primary_separator_refinements(
+    gray_work: np.ndarray,
+    outer: Box,
+    crop: np.ndarray,
+    profile: np.ndarray,
+    gaps: list[Gap],
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    origin: float,
+    pitch: float,
+    cache: Optional[AnalysisCache],
+    policy: DetectionPolicy,
+) -> tuple[list[Gap], dict[str, Any], dict[str, Any]]:
+    edge_refine_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
+    if strip_mode == "full" and count > 1:
+        gaps, edge_refine_detail = apply_edge_pair_separator_correction(
+            crop,
+            gaps,
+            count,
+            fmt.name,
+            cache,
+            outer,
+            policy.separator.edge_pair,
+            policy.separator.edge_refine_profile,
+        )
+    gaps, grid_detail = apply_grid_gap_model(
+        gaps,
+        origin,
+        pitch,
+        strip_mode,
+        fmt.name,
+        profile,
+        gray_work,
+        outer,
+        policy.separator.hard_gap_trust,
+        policy.separator.nearby_correction,
+        policy.separator.robust_grid,
+    )
+    return gaps, edge_refine_detail, grid_detail
+
+
+def refine_outer_from_grid(
+    outer: Box,
+    grid_detail: dict[str, Any],
+    count: int,
+    pitch: float,
+    work_width: int,
+    policy: DetectionPolicy,
+) -> Box | None:
+    if not bool(grid_detail.get("grid_used", False)):
+        return None
+    grid_refine = policy.outer.proposal.geometry.grid_refine
+    model_origin = float(grid_detail.get("grid_origin", 0.0))
+    model_pitch = float(grid_detail.get("grid_pitch", pitch))
+    proposed_left = int(round(outer.left + model_origin))
+    proposed_right = int(round(outer.left + model_origin + model_pitch * count))
+    max_shift = clamp_int(pitch * grid_refine.shift_ratio, grid_refine.shift_min, grid_refine.shift_max)
+    width_change = abs((proposed_right - proposed_left) - outer.width) / max(1.0, float(outer.width))
+    if (
+        proposed_right > proposed_left
+        and abs(proposed_left - outer.left) <= max_shift
+        and abs(proposed_right - outer.right) <= max_shift
+        and width_change <= grid_refine.max_width_change
+        and 0 <= proposed_left < proposed_right <= work_width
+    ):
+        return Box(proposed_left, outer.top, proposed_right, outer.bottom)
+    return None
+
+
+def apply_enhanced_separator_analysis(
+    gray_work: np.ndarray,
+    outer: Box,
+    gaps: list[Gap],
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    origin: float,
+    pitch: float,
+    allow_separator_analysis: bool,
+    config: RuntimeConfig,
+    cache: Optional[AnalysisCache],
+    policy: DetectionPolicy,
+) -> tuple[list[Gap], dict[str, Any]]:
+    detail: dict[str, Any] = {"used": False, "reason": "disabled"}
+    separator_analysis_allowed = (
+        allow_separator_analysis
+        and strip_mode == "full"
+        and not policy.separator.geometry_support.detected_geometry.enabled
+    )
+    if not separator_analysis_allowed:
+        return gaps, detail
+    if should_run_enhanced_separator_proposals(config.analysis, gaps, count, policy.separator.enhanced):
+        return merge_enhanced_separator_proposals(
+            gray_work,
+            outer,
+            gaps,
+            origin,
+            pitch,
+            strip_mode,
+            fmt.name,
+            cache,
+            policy.separator.robust_grid,
+            policy.separator.gap_search,
+            policy.separator.profile,
+            policy.separator.enhanced,
+        )
+    if config.analysis == "auto":
+        detail = {"used": False, "reason": "auto_not_needed"}
+    return gaps, detail
+
+
+def apply_nearby_separator_refinement(
+    gray_work: np.ndarray,
+    outer: Box,
+    profile: np.ndarray,
+    gaps: list[Gap],
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    origin: float,
+    pitch: float,
+    work_width: int,
+    work_height: int,
+    config: RuntimeConfig,
+    policy: DetectionPolicy,
+) -> tuple[list[Gap], dict[str, Any], Optional[float]]:
+    detail: dict[str, Any] = {"used": False, "reason": "disabled"}
+    confidence_cap: Optional[float] = None
+    if strip_mode != "full" or not policy.separator.nearby_correction.enabled:
+        return gaps, detail, confidence_cap
+    pre_correction_boxes = frame_boxes_from_gaps(
+        outer,
+        gaps,
+        count,
+        work_width,
+        work_height,
+        config.bleed_x,
+        config.bleed_y,
+        origin=origin,
+        pitch=pitch,
+    )
+    pre_correction_confidence, _pre_reasons, _pre_detail = score_detection(
+        gray_work,
+        outer,
+        gaps,
+        pre_correction_boxes,
+        count,
+        fmt,
+        strip_mode,
+        policy,
+    )
+    gaps, detail = apply_nearby_separator_correction(
+        profile,
+        gaps,
+        origin,
+        pitch,
+        count,
+        strip_mode,
+        policy.separator.nearby_correction,
+    )
+    if int(detail.get("accepted_count", 0) or 0) > 0:
+        confidence_cap = float(pre_correction_confidence)
+    return gaps, detail, confidence_cap
+
+
+def build_separator_gaps_for_outer(
+    gray_work: np.ndarray,
+    config: RuntimeConfig,
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    outer: Box,
+    offset_fraction: float,
+    candidate_strategy: str,
+    allow_separator_analysis: bool,
+    cache: Optional[AnalysisCache],
+    allow_outer_refine: bool,
+    gap_max_width_ratio_override: Optional[float],
+    gap_search_profile: str,
+    policy: DetectionPolicy,
+) -> SeparatorGapBuildResult:
+    work_height, work_width = gray_work.shape
+    crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
+    if crop.size == 0 or outer.width <= 0:
+        outer = Box(0, 0, work_width, work_height)
+        crop = gray_work
+    profile = cached_separator_profile(cache, gray_work, outer, fmt.name, policy.separator.profile)
+    origin, pitch = separator_origin_pitch(outer, fmt, count, strip_mode, offset_fraction)
+    gaps = initial_separator_gaps(
+        gray_work,
+        outer,
+        profile,
+        fmt,
+        count,
+        strip_mode,
+        origin,
+        pitch,
+        candidate_strategy,
+        gap_search_profile,
+        gap_max_width_ratio_override,
+        policy,
+    )
+    gaps, edge_refine_detail, grid_detail = apply_primary_separator_refinements(
+        gray_work,
+        outer,
+        crop,
+        profile,
+        gaps,
+        fmt,
+        count,
+        strip_mode,
+        origin,
+        pitch,
+        cache,
+        policy,
+    )
+    if allow_outer_refine and strip_mode == "full":
+        refined_outer = refine_outer_from_grid(outer, grid_detail, count, pitch, work_width, policy)
+        if refined_outer is not None:
+            outer = refined_outer
+            crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
+            profile = cached_separator_profile(cache, gray_work, outer, fmt.name, policy.separator.profile)
+            origin, pitch = separator_origin_pitch(outer, fmt, count, strip_mode, offset_fraction)
+            gaps = propose_standard_separator_gaps(
+                profile,
+                origin,
+                pitch,
+                count,
+                gap_max_width_ratio_override,
+                policy.separator.gap_search,
+            )
+            gaps, edge_refine_detail, grid_detail = apply_primary_separator_refinements(
+                gray_work,
+                outer,
+                crop,
+                profile,
+                gaps,
+                fmt,
+                count,
+                strip_mode,
+                origin,
+                pitch,
+                cache,
+                policy,
+            )
+            grid_detail["outer_refined"] = True
+    gaps, separator_analysis_detail = apply_enhanced_separator_analysis(
+        gray_work,
+        outer,
+        gaps,
+        fmt,
+        count,
+        strip_mode,
+        origin,
+        pitch,
+        allow_separator_analysis,
+        config,
+        cache,
+        policy,
+    )
+    gaps, nearby_correction_detail, confidence_cap_after_nearby = apply_nearby_separator_refinement(
+        gray_work,
+        outer,
+        profile,
+        gaps,
+        fmt,
+        count,
+        strip_mode,
+        origin,
+        pitch,
+        work_width,
+        work_height,
+        config,
+        policy,
+    )
+    return SeparatorGapBuildResult(
+        outer=outer,
+        profile=profile,
+        origin=origin,
+        pitch=pitch,
+        gaps=gaps,
+        grid_detail=grid_detail,
+        edge_refine_detail=edge_refine_detail,
+        separator_analysis_detail=separator_analysis_detail,
+        nearby_correction_detail=nearby_correction_detail,
+        confidence_cap_after_nearby=confidence_cap_after_nearby,
+    )
+
+
+__all__ = [
+    "SeparatorGapBuildResult",
+    "apply_enhanced_separator_analysis",
+    "apply_nearby_separator_refinement",
+    "apply_primary_separator_refinements",
+    "build_separator_gaps_for_outer",
+    "initial_separator_gaps",
+    "refine_outer_from_grid",
+    "separator_origin_pitch",
+]
