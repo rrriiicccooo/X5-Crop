@@ -10,6 +10,7 @@ from ....domain import Box, Detection, Gap
 from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ....geometry.boxes import map_work_box
 from ....geometry.layout import work_gray
+from ....geometry.model_gaps import content_model_gap
 from ....image.evidence import make_content_evidence_gray
 from ....policies.runtime.content import ContentPolicy
 from ....cache import AnalysisCache
@@ -93,7 +94,15 @@ def content_detection_for_count(
         left_box = raw_boxes[index - 1]
         right_box = raw_boxes[index]
         center = (float(left_box.right) + float(right_box.left)) * 0.5 - float(outer.left)
-        gaps.append(Gap(index, center, 0.0, "content", float(left_box.right - outer.left), float(right_box.left - outer.left)))
+        gaps.append(
+            content_model_gap(
+                index,
+                center,
+                0.0,
+                float(left_box.right - outer.left),
+                float(right_box.left - outer.left),
+            )
+        )
 
     means: list[float] = []
     coverages: list[float] = []
