@@ -42,6 +42,17 @@ class DetectedGapCandidate:
         )
 
 
+@dataclass(frozen=True)
+class DetectedGapBandEvidence:
+    center: float
+    start: float
+    end: float
+    width: int
+    mean_score: float
+    side_score: float
+    prominence: float
+
+
 def gap_search_window(
     profile_length: int,
     expected: float,
@@ -89,6 +100,58 @@ def expanded_gap_band(
     return band_start, band_end
 
 
+def detected_gap_band_evidence(
+    local: np.ndarray,
+    lo: int,
+    band_start: int,
+    band_end: int,
+    limits: GapWidthLimits,
+) -> Optional[DetectedGapBandEvidence]:
+    band_width = band_end - band_start
+    if band_width < limits.min_width or band_width > limits.max_width:
+        return None
+
+    left_guard = local[max(0, band_start - limits.guard):band_start]
+    right_guard = local[band_end:min(len(local), band_end + limits.guard)]
+    if left_guard.size == 0 or right_guard.size == 0:
+        return None
+
+    mean_score = float(local[band_start:band_end].mean())
+    side_score = max(float(left_guard.mean()), float(right_guard.mean()))
+    prominence = mean_score - side_score
+    center = float(lo + (band_start + band_end - 1) / 2.0)
+    return DetectedGapBandEvidence(
+        center=center,
+        start=float(lo + band_start),
+        end=float(lo + band_end),
+        width=band_width,
+        mean_score=mean_score,
+        side_score=side_score,
+        prominence=prominence,
+    )
+
+
+def gap_band_has_prominence(evidence: DetectedGapBandEvidence, config: GapSearchParameters) -> bool:
+    return (
+        evidence.prominence >= config.weak_prominence_min
+        or evidence.mean_score >= config.weak_prominence_mean_override
+    )
+
+
+def gap_band_has_width_profile_support(
+    evidence: DetectedGapBandEvidence,
+    limits: GapWidthLimits,
+    max_width_ratio_override: Optional[float],
+    config: GapSearchParameters,
+) -> bool:
+    if max_width_ratio_override is None or evidence.width <= limits.normal_max:
+        return True
+    return (
+        evidence.mean_score >= config.separator_width_min_mean
+        and evidence.prominence >= config.separator_width_min_prominence
+    )
+
+
 def detected_gap_candidate(
     local: np.ndarray,
     lo: int,
@@ -102,29 +165,17 @@ def detected_gap_candidate(
     config: GapSearchParameters,
 ) -> Optional[DetectedGapCandidate]:
     band_start, band_end = expanded_gap_band(local, run_start, run_end, band_threshold, limits.max_width)
-    band_width = band_end - band_start
-    if band_width < limits.min_width or band_width > limits.max_width:
+    evidence = detected_gap_band_evidence(local, lo, band_start, band_end, limits)
+    if evidence is None:
+        return None
+    if not gap_band_has_prominence(evidence, config):
+        return None
+    if not gap_band_has_width_profile_support(evidence, limits, max_width_ratio_override, config):
         return None
 
-    left_guard = local[max(0, band_start - limits.guard):band_start]
-    right_guard = local[band_end:min(len(local), band_end + limits.guard)]
-    if left_guard.size == 0 or right_guard.size == 0:
-        return None
-    mean_score = float(local[band_start:band_end].mean())
-    side_score = max(float(left_guard.mean()), float(right_guard.mean()))
-    prominence = mean_score - side_score
-    if prominence < config.weak_prominence_min and mean_score < config.weak_prominence_mean_override:
-        return None
-    if max_width_ratio_override is not None and band_width > limits.normal_max:
-        if mean_score < config.separator_width_min_mean or prominence < config.separator_width_min_prominence:
-            return None
-
-    center = float(lo + (band_start + band_end - 1) / 2.0)
-    start = float(lo + band_start)
-    end = float(lo + band_end)
-    distance = abs(center - expected) / max(1.0, pitch)
-    quality = mean_score + config.quality_prominence_weight * prominence
-    return DetectedGapCandidate(distance, quality, mean_score, center, start, end)
+    distance = abs(evidence.center - expected) / max(1.0, pitch)
+    quality = evidence.mean_score + config.quality_prominence_weight * evidence.prominence
+    return DetectedGapCandidate(distance, quality, evidence.mean_score, evidence.center, evidence.start, evidence.end)
 
 
 def detected_gap_candidates(
@@ -208,13 +259,17 @@ def find_gap(
 
 __all__ = [
     "DetectedGapCandidate",
+    "DetectedGapBandEvidence",
     "GapWidthLimits",
     "best_detected_gap_candidate",
+    "detected_gap_band_evidence",
     "detected_gap_candidate",
     "detected_gap_candidates",
     "detected_gap_from_candidate",
     "expanded_gap_band",
     "find_gap",
+    "gap_band_has_prominence",
+    "gap_band_has_width_profile_support",
     "gap_score_thresholds",
     "gap_search_window",
     "gap_width_limits",
