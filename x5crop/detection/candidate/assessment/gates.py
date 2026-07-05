@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from ....constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_GRID, HARD_GAP_METHODS
 from ....domain import Detection
 from ...evidence.separator_summary import gap_method_evidence_summary
 from ....formats import FORMATS
@@ -134,23 +133,6 @@ def separator_gate_all_internal_gaps_hard_assessment(
     return ok, reason
 
 
-def leading_grid_scores_from_gaps(detection: Detection) -> list[float]:
-    scores: list[float] = []
-    for gap in detection.gaps:
-        if gap.method != GAP_GRID:
-            break
-        scores.append(float(gap.score))
-    return scores
-
-
-def hard_gap_indexes_from_gaps(detection: Detection) -> list[int]:
-    return [
-        int(gap.index)
-        for gap in detection.gaps
-        if gap.method in HARD_GAP_METHODS
-    ]
-
-
 def hard_gap_indexes_are_adjacent_late(hard_indexes: list[int]) -> bool:
     if not hard_indexes:
         return False
@@ -209,19 +191,11 @@ def separator_gate_evidence_from_detection(detection: Detection) -> SeparatorGat
         grid_gaps=raw_gap_evidence.grid_model_gaps,
         equal_gaps=raw_gap_evidence.equal_model_gaps,
         hard_gaps=raw_gap_evidence.hard_separator_gaps,
-        hard_gap_indexes=hard_gap_indexes_from_gaps(detection),
-        edge_pair_scores=[
-            float(gap.score)
-            for gap in detection.gaps
-            if gap.method == GAP_EDGE_PAIR
-        ],
-        detected_scores=[
-            float(gap.score)
-            for gap in detection.gaps
-            if gap.method == GAP_DETECTED
-        ],
+        hard_gap_indexes=list(raw_gap_evidence.hard_gap_indexes),
+        edge_pair_scores=list(raw_gap_evidence.edge_pair_scores),
+        detected_scores=list(raw_gap_evidence.detected_scores),
         broad_separator_width_scores=broad_width_scores,
-        leading_grid_scores=leading_grid_scores_from_gaps(detection),
+        leading_grid_scores=list(raw_gap_evidence.leading_grid_scores),
         enhanced_separator_accepted_count=enhanced_gap_promotion_accepted_count(
             detection
         ),
@@ -336,8 +310,6 @@ __all__ = [
     "SeparatorGateEvidence",
     "enhanced_gap_promotion_accepted_count",
     "hard_gap_indexes_are_adjacent_late",
-    "hard_gap_indexes_from_gaps",
-    "leading_grid_scores_from_gaps",
     "separator_gate_all_internal_gaps_hard_assessment",
     "separator_gate_broad_width_support_assessment",
     "separator_gate_edge_pair_support_assessment",

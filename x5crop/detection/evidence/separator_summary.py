@@ -5,6 +5,8 @@ from typing import Any
 
 from ...constants import (
     GAP_CONTENT,
+    GAP_DETECTED,
+    GAP_EDGE_PAIR,
     GAP_EQUAL,
     GAP_GRID,
 )
@@ -28,6 +30,10 @@ class GapMethodEvidenceSummary:
     content_model_gaps: int
     separator_support_gaps: int
     reliable_support_gaps: int
+    hard_gap_indexes: tuple[int, ...]
+    edge_pair_scores: tuple[float, ...]
+    detected_scores: tuple[float, ...]
+    leading_grid_scores: tuple[float, ...]
 
     @property
     def geometry_model_gaps(self) -> int:
@@ -100,19 +106,45 @@ def gap_method_evidence_summary(
     gaps: list[Gap],
     reliable_min_score: float,
 ) -> GapMethodEvidenceSummary:
-    direct_hard_gaps = sum(1 for gap in gaps if is_direct_hard_gap_method(gap.method))
-    enhanced_hard_gaps = sum(1 for gap in gaps if is_enhanced_hard_gap_method(gap.method))
+    direct_hard_gaps = 0
+    enhanced_hard_gaps = 0
+    grid_model_gaps = 0
+    equal_model_gaps = 0
+    content_model_gaps = 0
+    reliable_support_gaps = 0
+    hard_gap_indexes: list[int] = []
+    edge_pair_scores: list[float] = []
+    detected_scores: list[float] = []
+    leading_grid_scores: list[float] = []
+    leading_grid_open = True
+
+    for gap in gaps:
+        method = gap.method
+        if is_direct_hard_gap_method(method):
+            direct_hard_gaps += 1
+        if is_enhanced_hard_gap_method(method):
+            enhanced_hard_gaps += 1
+        if method == GAP_GRID:
+            grid_model_gaps += 1
+            if leading_grid_open:
+                leading_grid_scores.append(float(gap.score))
+        else:
+            leading_grid_open = False
+        if method == GAP_EQUAL:
+            equal_model_gaps += 1
+        if is_content_model_gap_method(method):
+            content_model_gaps += 1
+        if is_hard_gap_method(method):
+            hard_gap_indexes.append(int(gap.index))
+        if method == GAP_EDGE_PAIR:
+            edge_pair_scores.append(float(gap.score))
+        if method == GAP_DETECTED:
+            detected_scores.append(float(gap.score))
+        if is_separator_support_gap_method(method) and gap.score >= reliable_min_score:
+            reliable_support_gaps += 1
+
     hard_separator_gaps = direct_hard_gaps + enhanced_hard_gaps
-    grid_model_gaps = sum(1 for gap in gaps if gap.method == GAP_GRID)
-    equal_model_gaps = sum(1 for gap in gaps if gap.method == GAP_EQUAL)
-    content_model_gaps = sum(1 for gap in gaps if is_content_model_gap_method(gap.method))
     separator_support_gaps = hard_separator_gaps + grid_model_gaps
-    reliable_support_gaps = sum(
-        1
-        for gap in gaps
-        if is_separator_support_gap_method(gap.method)
-        and gap.score >= reliable_min_score
-    )
     return GapMethodEvidenceSummary(
         direct_hard_gaps=direct_hard_gaps,
         enhanced_hard_gaps=enhanced_hard_gaps,
@@ -122,6 +154,10 @@ def gap_method_evidence_summary(
         content_model_gaps=content_model_gaps,
         separator_support_gaps=separator_support_gaps,
         reliable_support_gaps=reliable_support_gaps,
+        hard_gap_indexes=tuple(hard_gap_indexes),
+        edge_pair_scores=tuple(edge_pair_scores),
+        detected_scores=tuple(detected_scores),
+        leading_grid_scores=tuple(leading_grid_scores),
     )
 
 
