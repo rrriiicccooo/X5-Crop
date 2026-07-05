@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...constants import HARD_GAP_METHODS
 from ...domain import Gap
+from ...gap_methods import is_hard_gap_method
 
 
 def separator_width_requirement_detail(detail: dict[str, Any], min_required: int) -> dict[str, Any]:
@@ -51,7 +51,7 @@ def separator_width_evidence_detail(
     for gap in gaps:
         width = float(gap.width)
         gap_widths.append(width)
-        if gap.method in HARD_GAP_METHODS and width >= min_width:
+        if is_hard_gap_method(gap.method) and width >= min_width:
             broad_indexes.append(int(gap.index))
             broad_scores.append(float(gap.score))
 

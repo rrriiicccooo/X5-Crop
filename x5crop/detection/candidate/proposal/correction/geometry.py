@@ -5,9 +5,9 @@ from typing import Any, Optional
 
 import numpy as np
 
-from .....constants import HARD_GAP_METHODS
 from .....domain import Box, Detection
 from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from .....gap_methods import is_hard_gap_method
 from .....geometry.boxes import original_box_to_work
 from .....policies.registry import get_detection_policy
 from .....policies.runtime.policy import DetectionPolicy
@@ -101,11 +101,11 @@ def geometry_consistency_model_detail(gray: np.ndarray, detection: Detection, co
     if not outer.valid() or outer.height <= 0:
         return {"used": False, "reason": "invalid_outer"}
 
-    hard_gaps = [gap for gap in detection.gaps if gap.method in HARD_GAP_METHODS]
+    hard_gaps = [gap for gap in detection.gaps if is_hard_gap_method(gap.method)]
     measured_widths: list[float] = []
     complete_measured = True
     for gap in detection.gaps:
-        if gap.method not in HARD_GAP_METHODS or gap.start is None or gap.end is None:
+        if not is_hard_gap_method(gap.method) or gap.start is None or gap.end is None:
             complete_measured = False
             continue
         measured_widths.append(max(0.0, float(gap.end) - float(gap.start)))
@@ -170,7 +170,7 @@ def corrected_outer_from_long_axis_geometry(
 
     gap_widths: list[float] = []
     for gap in detection.gaps:
-        if gap.method not in HARD_GAP_METHODS or gap.start is None or gap.end is None:
+        if not is_hard_gap_method(gap.method) or gap.start is None or gap.end is None:
             return None
         gap_widths.append(max(0.0, float(gap.end) - float(gap.start)))
 

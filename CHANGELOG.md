@@ -150,6 +150,9 @@ Current stable release: v4.2.8
   并为 `SeparatorGateEvidence` 和 lucky-pass risk 提供 hard/model 计数；现在还
   集中提供 hard-gap indexes、edge-pair scores、detected scores 和
   leading-grid scores，separator gate 不再自己重扫 gap method；
+  `separator_width`、`outer_alignment` 和 outer geometry correction 也不再直接
+  import `HARD_GAP_METHODS`，统一通过 `is_hard_gap_method()` 消费 hard-family
+  语义；
   `SeparatorGateDetailSummary` 统一服务 scoring、partial holder、candidate
   selection 和 final decision 中的 gate detail 消费；新增中性 `gap_methods.py`
   统一 hard / geometry-model / content-model / separator-support family 与
@@ -663,7 +666,10 @@ Verified:
   feeds raw gap scoring, width-profile selection, and hard/model counts for
   `SeparatorGateEvidence` and lucky-pass risk. It also centralizes hard-gap
   indexes, edge-pair scores, detected scores, and leading-grid scores, so the
-  separator gate no longer rescans gap methods itself, while
+  separator gate no longer rescans gap methods itself. `separator_width`,
+  `outer_alignment`, and outer geometry correction also consume hard-family
+  semantics through `is_hard_gap_method()` instead of importing
+  `HARD_GAP_METHODS` directly, while
   `SeparatorGateDetailSummary` feeds scoring, partial holder, candidate
   selection, and final decision gate-detail consumption. The neutral
   `gap_methods.py` module now owns hard / geometry-model / content-model /

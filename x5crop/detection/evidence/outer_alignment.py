@@ -6,8 +6,8 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...constants import HARD_GAP_METHODS
 from ...domain import Box, Detection
+from ...gap_methods import is_hard_gap_method
 from ...geometry.boxes import box_cache_key, original_box_to_work
 from ...geometry.layout import work_gray
 from ...policies.registry import get_detection_policy
@@ -106,8 +106,8 @@ def outer_content_alignment_detail(
     edge_hard_anchors = (
         detection.strip_mode == "full"
         and len(detection.gaps) >= 2
-        and detection.gaps[0].method in HARD_GAP_METHODS
-        and detection.gaps[-1].method in HARD_GAP_METHODS
+        and is_hard_gap_method(detection.gaps[0].method)
+        and is_hard_gap_method(detection.gaps[-1].method)
     )
     white_edge_slack = (
         edge_hard_anchors
