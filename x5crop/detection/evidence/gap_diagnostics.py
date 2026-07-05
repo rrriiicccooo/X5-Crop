@@ -46,7 +46,6 @@ def nearby_separator_candidate_detail(
     start: int,
     end: int,
     nearby_policy: NearbySeparatorDiagnosticsPolicy,
-    format_name: str,
     cache: Optional[AnalysisCache] = None,
     profile_policy: Optional[SeparatorProfileParameters] = None,
 ) -> dict[str, Any]:
@@ -55,9 +54,9 @@ def nearby_separator_candidate_detail(
     cache_key: Optional[tuple[Any, ...]] = None
     if cache is not None:
         cache_key = (
-            str(format_name),
             "nearby_separator",
             profile_policy or SeparatorProfileParameters(),
+            nearby_policy,
             box_cache_key(work_outer),
             int(gap.index),
             str(gap.method),
@@ -75,7 +74,7 @@ def nearby_separator_candidate_detail(
     crop = gray_work[work_outer.top:work_outer.bottom, work_outer.left:work_outer.right]
     if crop.size == 0:
         return {"searched": False, "reason": "empty_outer"}
-    profile = cached_separator_profile(cache, gray_work, work_outer, format_name, profile_policy)
+    profile = cached_separator_profile(cache, gray_work, work_outer, profile_policy)
     if profile.size == 0:
         return {"searched": False, "reason": "empty_profile"}
 
@@ -217,7 +216,6 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
         start,
         end,
         nearby_policy,
-        detection.film_format,
         cache,
         policy.separator.profile,
     )

@@ -51,6 +51,9 @@ Current stable release: v4.2.8
   常量，不再手写 method 字符串。
 - ordinary gap search 的 band threshold、弱 prominence 门槛和 detected-candidate
   quality 权重已外显到 `GapSearchParameters`；默认值保持旧行为。
+- separator profile / edge-refine / enhanced profile cache key 已从 format identity
+  解耦，改为只使用 geometry box 与参数对象；nearby diagnostic cache key 补入
+  diagnostic policy。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 

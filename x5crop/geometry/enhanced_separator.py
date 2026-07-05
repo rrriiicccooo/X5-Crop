@@ -63,11 +63,9 @@ def enhanced_separator_merge_cache_key(
     origin: float,
     pitch: float,
     strip_mode: str,
-    format_name: str,
     policy_key: tuple[Any, ...] = (),
 ) -> tuple[Any, ...]:
     return (
-        str(format_name),
         str(strip_mode),
         policy_key,
         box_cache_key(outer),
@@ -135,7 +133,6 @@ def merge_enhanced_separator_gaps(
     origin: float,
     pitch: float,
     strip_mode: str,
-    format_name: str,
     cache: Optional[AnalysisCache] = None,
     robust_grid: RobustGridParameters | None = None,
     gap_search: GapSearchParameters | None = None,
@@ -148,12 +145,12 @@ def merge_enhanced_separator_gaps(
     cache_key: Optional[tuple[Any, ...]] = None
     if cache is not None:
         policy_key = enhanced_separator_policy_key(robust_grid, gap_search, profile_config, enhanced_config)
-        cache_key = enhanced_separator_merge_cache_key(outer, gaps, origin, pitch, strip_mode, format_name, policy_key)
+        cache_key = enhanced_separator_merge_cache_key(outer, gaps, origin, pitch, strip_mode, policy_key)
         cached = cache.enhanced_separator_merges.get(cache_key)
         if cached is not None:
             cached_gaps, cached_detail = cached
             return list(cached_gaps), copy.deepcopy(cached_detail)
-    profile = cached_enhanced_separator_profile(cache, gray_work, outer, format_name, profile_config)
+    profile = cached_enhanced_separator_profile(cache, gray_work, outer, profile_config)
     merged: list[Gap] = []
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []

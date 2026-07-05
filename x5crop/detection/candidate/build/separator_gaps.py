@@ -118,7 +118,6 @@ def apply_primary_separator_refinements(
             crop,
             gaps,
             count,
-            fmt.name,
             cache,
             outer,
             policy.separator.edge_pair,
@@ -198,7 +197,6 @@ def apply_enhanced_separator_analysis(
             origin,
             pitch,
             strip_mode,
-            fmt.name,
             cache,
             policy.separator.robust_grid,
             policy.separator.gap_search,
@@ -285,7 +283,7 @@ def build_separator_gaps_for_outer(
     if crop.size == 0 or outer.width <= 0:
         outer = Box(0, 0, work_width, work_height)
         crop = gray_work
-    profile = cached_separator_profile(cache, gray_work, outer, fmt.name, policy.separator.profile)
+    profile = cached_separator_profile(cache, gray_work, outer, policy.separator.profile)
     origin, pitch = separator_origin_pitch(outer, fmt, count, strip_mode, offset_fraction)
     gaps = initial_separator_gaps(
         gray_work,
@@ -320,7 +318,7 @@ def build_separator_gaps_for_outer(
         if refined_outer is not None:
             outer = refined_outer
             crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-            profile = cached_separator_profile(cache, gray_work, outer, fmt.name, policy.separator.profile)
+            profile = cached_separator_profile(cache, gray_work, outer, policy.separator.profile)
             origin, pitch = separator_origin_pitch(outer, fmt, count, strip_mode, offset_fraction)
             gaps = propose_standard_separator_gaps(
                 profile,

@@ -306,7 +306,7 @@ def _separator_outer_candidates_for_plan(
                 policy.separator.width_profile,
             )
         else:
-            profile = cached_separator_profile(cache, gray_work, outer, fmt.name, policy.separator.profile)
+            profile = cached_separator_profile(cache, gray_work, outer, policy.separator.profile)
             bands, edge_margin = collect_separator_outer_bands(
                 profile,
                 short_axis,

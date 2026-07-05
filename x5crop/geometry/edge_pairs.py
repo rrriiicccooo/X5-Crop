@@ -107,7 +107,6 @@ def refine_gaps_by_edge_pairs(
     crop: np.ndarray,
     gaps: list[Gap],
     count: int,
-    format_name: str,
     cache: Optional[AnalysisCache] = None,
     outer: Optional[Box] = None,
     edge_pair_config: Optional[Any] = None,
@@ -117,7 +116,7 @@ def refine_gaps_by_edge_pairs(
     if count <= 1 or w <= 1 or not gaps:
         return gaps, {"used": False, "reason": "empty"}
     edge, background, _activity = (
-        cached_edge_refine_profiles(cache, crop, outer, format_name, edge_refine_config)
+        cached_edge_refine_profiles(cache, crop, outer, edge_refine_config)
         if outer is not None
         else edge_refine_profiles(crop, edge_refine_config)
     )
@@ -163,7 +162,6 @@ def refine_gaps_by_edge_pairs(
         )
     return refined, {
         "used": True,
-        "format": format_name,
         "params": asdict(params),
         "accepted": accepted,
         "accepted_count": len(accepted),
