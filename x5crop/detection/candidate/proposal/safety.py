@@ -5,10 +5,11 @@ from dataclasses import asdict
 import numpy as np
 
 from ....constants import ANALYSIS_SOURCE_HARD_SAFETY
-from ....domain import Box, Detection, Gap
+from ....domain import Box, Detection
 from ....formats import FormatSpec
 from ....geometry.boxes import map_work_box
 from ....geometry.frame_fit import frame_boxes_from_gaps
+from ....geometry.gap_search import equal_model_gap
 from ....geometry.layout import work_gray
 from ....runtime.config import RuntimeConfig
 
@@ -20,7 +21,7 @@ def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSp
     outer = Box(0, 0, ww, wh)
     if count > 1:
         pitch = ww / float(count)
-        gaps = [Gap(i, pitch * i, 0.0, "equal") for i in range(1, count)]
+        gaps = [equal_model_gap(i, pitch * i, 0.0) for i in range(1, count)]
     else:
         pitch = float(ww)
         gaps = []

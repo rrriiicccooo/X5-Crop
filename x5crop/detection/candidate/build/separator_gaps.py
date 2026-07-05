@@ -13,6 +13,7 @@ from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE
 from ..proposal.outer.grid_refine import grid_refined_outer_box
+from ..proposal.separator.model import propose_equal_model_gaps_from_profile
 from ..proposal.separator.proposal import propose_separator_width_profile_gaps, propose_standard_separator_gaps
 from ..proposal.separator.refinement import (
     apply_grid_gap_model,
@@ -89,10 +90,7 @@ def initial_separator_gaps(
         and count == fmt.default_count
         and gap_max_width_ratio_override is None
     ):
-        gaps = [
-            Gap(i, origin + pitch * i, float(profile[min(len(profile) - 1, max(0, int(round(origin + pitch * i))))]), "equal")
-            for i in range(1, count)
-        ]
+        gaps = propose_equal_model_gaps_from_profile(profile, origin, pitch, count)
     return gaps
 
 
