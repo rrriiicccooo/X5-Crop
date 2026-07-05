@@ -59,6 +59,8 @@ Current stable release: v4.2.8
   assessment 消费层。
 - active gap search profile vocabulary 只保留 `standard` 与 `broad_width`；
   `broad_width` profile detail helper 只消费 separator policy。
+- robust grid model gap refinement 已移除未使用的 format identity 参数；
+  primary separator refinement 不再接收完整 `FormatSpec`。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 

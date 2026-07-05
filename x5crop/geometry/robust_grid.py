@@ -128,7 +128,6 @@ def apply_robust_grid(
     origin: float,
     pitch: float,
     strip_mode: str,
-    format_name: str,
     profile: Optional[np.ndarray] = None,
     gray_work: Optional[np.ndarray] = None,
     outer: Optional[Box] = None,
