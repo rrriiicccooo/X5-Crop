@@ -3,8 +3,27 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from ...constants import GAP_CONTENT, GAP_EQUAL, GAP_GRID, HARD_GAP_METHODS
-from ...domain import Detection
+from ...constants import (
+    GAP_CONTENT,
+    GAP_DETECTED,
+    GAP_EDGE_PAIR,
+    GAP_ENHANCED_DETECTED,
+    GAP_EQUAL,
+    GAP_GRID,
+    HARD_GAP_METHODS,
+)
+from ...domain import Detection, Gap
+
+
+@dataclass(frozen=True)
+class GapMethodEvidenceSummary:
+    direct_hard_gaps: int
+    enhanced_hard_gaps: int
+    hard_separator_gaps: int
+    grid_model_gaps: int
+    equal_model_gaps: int
+    separator_support_gaps: int
+    reliable_support_gaps: int
 
 
 @dataclass(frozen=True)
@@ -65,6 +84,33 @@ def _gap_method_count(detection: Detection, methods: set[str]) -> int:
     return sum(1 for gap in detection.gaps if gap.method in methods)
 
 
+def gap_method_evidence_summary(
+    gaps: list[Gap],
+    reliable_min_score: float,
+) -> GapMethodEvidenceSummary:
+    direct_hard_gaps = sum(1 for gap in gaps if gap.method in {GAP_DETECTED, GAP_EDGE_PAIR})
+    enhanced_hard_gaps = sum(1 for gap in gaps if gap.method == GAP_ENHANCED_DETECTED)
+    hard_separator_gaps = direct_hard_gaps + enhanced_hard_gaps
+    grid_model_gaps = sum(1 for gap in gaps if gap.method == GAP_GRID)
+    equal_model_gaps = sum(1 for gap in gaps if gap.method == GAP_EQUAL)
+    separator_support_gaps = hard_separator_gaps + grid_model_gaps
+    reliable_support_gaps = sum(
+        1
+        for gap in gaps
+        if gap.method in HARD_GAP_METHODS.union({GAP_GRID})
+        and gap.score >= reliable_min_score
+    )
+    return GapMethodEvidenceSummary(
+        direct_hard_gaps=direct_hard_gaps,
+        enhanced_hard_gaps=enhanced_hard_gaps,
+        hard_separator_gaps=hard_separator_gaps,
+        grid_model_gaps=grid_model_gaps,
+        equal_model_gaps=equal_model_gaps,
+        separator_support_gaps=separator_support_gaps,
+        reliable_support_gaps=reliable_support_gaps,
+    )
+
+
 def separator_gate_detail_summary(
     hard_detail: dict[str, Any],
     *,
@@ -101,7 +147,9 @@ def separator_summary_from_detection(detection: Detection) -> SeparatorGateDetai
 
 
 __all__ = [
+    "GapMethodEvidenceSummary",
     "SeparatorGateDetailSummary",
+    "gap_method_evidence_summary",
     "separator_gate_detail_summary",
     "separator_summary_from_detection",
 ]

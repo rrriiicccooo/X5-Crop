@@ -1,21 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
 from typing import Any, Optional
 
 import numpy as np
 
-from ....constants import (
-    GAP_DETECTED,
-    GAP_EDGE_PAIR,
-    GAP_ENHANCED_DETECTED,
-    GAP_EQUAL,
-    GAP_GRID,
-    HARD_GAP_METHODS,
-)
 from ....domain import Box, Detection, Gap
-from ...evidence.separator_summary import separator_gate_detail_summary
+from ...evidence.separator_summary import (
+    gap_method_evidence_summary,
+    separator_gate_detail_summary,
+)
 from ....formats import FormatSpec
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.content import ContentPolicy
@@ -23,44 +17,6 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import SeparatorGeometrySupportModePolicy
 from ....policies.separator_gate_profiles import SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
 from ....utils import sampled_percentile
-
-
-@dataclass(frozen=True)
-class GapMethodEvidenceSummary:
-    direct_hard_gaps: int
-    enhanced_hard_gaps: int
-    hard_separator_gaps: int
-    grid_model_gaps: int
-    equal_model_gaps: int
-    separator_support_gaps: int
-    reliable_support_gaps: int
-
-
-def gap_method_evidence_summary(
-    gaps: list[Gap],
-    reliable_min_score: float,
-) -> GapMethodEvidenceSummary:
-    direct_hard_gaps = sum(1 for gap in gaps if gap.method in {GAP_DETECTED, GAP_EDGE_PAIR})
-    enhanced_hard_gaps = sum(1 for gap in gaps if gap.method == GAP_ENHANCED_DETECTED)
-    hard_separator_gaps = direct_hard_gaps + enhanced_hard_gaps
-    grid_model_gaps = sum(1 for gap in gaps if gap.method == GAP_GRID)
-    equal_model_gaps = sum(1 for gap in gaps if gap.method == GAP_EQUAL)
-    separator_support_gaps = hard_separator_gaps + grid_model_gaps
-    reliable_support_gaps = sum(
-        1
-        for gap in gaps
-        if gap.method in HARD_GAP_METHODS.union({GAP_GRID})
-        and gap.score >= reliable_min_score
-    )
-    return GapMethodEvidenceSummary(
-        direct_hard_gaps=direct_hard_gaps,
-        enhanced_hard_gaps=enhanced_hard_gaps,
-        hard_separator_gaps=hard_separator_gaps,
-        grid_model_gaps=grid_model_gaps,
-        equal_model_gaps=equal_model_gaps,
-        separator_support_gaps=separator_support_gaps,
-        reliable_support_gaps=reliable_support_gaps,
-    )
 
 
 def content_support_score(
@@ -386,10 +342,8 @@ def score_detection(
     return float(max(0.0, min(1.0, confidence))), sorted(set(reasons)), detail
 
 __all__ = [
-    "GapMethodEvidenceSummary",
     "content_support_score",
     "detail_float",
-    "gap_method_evidence_summary",
     "geometry_support_score",
     "hard_full_calibration_floor_applies",
     "separator_geometry_support_applies",

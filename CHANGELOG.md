@@ -108,10 +108,12 @@ Current stable release: v4.2.8
   重命名为 `assess_separator_gate`；调用方局部变量同步改为
   `separator_gate_ok/detail`，report key 保持 `separator_hard_evidence` 不变。
 - separator evidence 消费已集中到 `detection/evidence/separator_summary.py`：
-  `GapMethodEvidenceSummary` 继续服务 raw gap scoring，`SeparatorGateDetailSummary`
-  统一服务 scoring、partial holder、candidate selection 和 final decision 中的
-  gate detail 消费；report key `detected_gaps` 保持兼容，但内部语义不再把
-  grid/content model support 命名成 hard detected evidence。
+  `GapMethodEvidenceSummary` 统一服务 raw gap scoring 与 width-profile selection，
+  `SeparatorGateDetailSummary` 统一服务 scoring、partial holder、candidate
+  selection 和 final decision 中的 gate detail 消费；full width-profile
+  selection 不再把 non-equal gap 当成 hard gap；report key `detected_gaps`
+  保持兼容，但内部语义不再把 grid/content model support 命名成 hard detected
+  evidence。
 - 未使用的 `CandidateGateOutcome` gate 占位类型已删除，减少无调用方接口。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
@@ -490,11 +492,13 @@ Verified:
   locals now use `separator_gate_ok/detail`, while the report key remains
   `separator_hard_evidence`.
 - Separator evidence consumption is centralized in
-  `detection/evidence/separator_summary.py`: `GapMethodEvidenceSummary` remains
-  the raw gap scoring summary, while `SeparatorGateDetailSummary` now feeds
-  scoring, partial holder, candidate selection, and final decision gate-detail
-  consumption. The report key `detected_gaps` stays compatible, but internal
-  code no longer names grid/content model support as hard detected evidence.
+  `detection/evidence/separator_summary.py`: `GapMethodEvidenceSummary` now
+  feeds raw gap scoring and width-profile selection, while
+  `SeparatorGateDetailSummary` feeds scoring, partial holder, candidate
+  selection, and final decision gate-detail consumption. Full width-profile
+  selection no longer treats non-equal gaps as hard gaps. The report key
+  `detected_gaps` stays compatible, but internal code no longer names
+  grid/content model support as hard detected evidence.
 - The unused `CandidateGateOutcome` gate placeholder type has been removed.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the

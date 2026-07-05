@@ -4,11 +4,11 @@ from typing import Optional
 
 import numpy as np
 
-from ....constants import GAP_EQUAL
 from ....domain import Detection
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ...evidence.content_evidence import content_evidence_detail
+from ...evidence.separator_summary import gap_method_evidence_summary
 from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE
 from ..assessment.scoring import detail_float
 
@@ -64,9 +64,13 @@ def select_full_separator_width_profile_candidate(
         support = str(content_detail.get("support", ""))
         if support != separator_width_profile.full_selection_required_support:
             continue
-        hard_gaps = sum(1 for gap in detection.gaps if gap.method != GAP_EQUAL)
-        equal_gaps = int(detection.detail.get("equal_gaps", 0) or 0)
-        if hard_gaps < max(1, detection.count - 1):
+        gap_evidence = gap_method_evidence_summary(
+            detection.gaps,
+            policy.separator.robust_grid.reliable_min_score,
+        )
+        separator_support_gaps = gap_evidence.separator_support_gaps
+        equal_gaps = gap_evidence.equal_model_gaps
+        if separator_support_gaps < max(1, detection.count - 1):
             continue
         if equal_gaps > 0 and not separator_width_profile.full_selection_allow_equal_gaps:
             continue
@@ -76,7 +80,7 @@ def select_full_separator_width_profile_candidate(
             (
                 (
                     1 if detection.confidence >= threshold else 0,
-                    hard_gaps,
+                    separator_support_gaps,
                     median_coverage,
                     float(detection.confidence),
                     -width_cv,
