@@ -9,6 +9,7 @@ from ..domain import Box, Gap
 from ..utils import clamp_float
 from .gap_geometry import constrain_gap_to_geometry
 from .gap_trust import light_hard_gap_trust
+from .model_gaps import grid_model_gap
 from .detection_parameters import HardGapTrustParameters, NearbySeparatorCorrectionParameters, RobustGridParameters
 
 
@@ -120,7 +121,7 @@ def grid_adjusted_gap(
             "trust": trust,
             "trust_detail": trust_detail,
         }
-    return Gap(gap.index, predicted, gap.score, "grid"), None, overridden
+    return grid_model_gap(gap.index, predicted, gap.score), None, overridden
 
 
 def apply_robust_grid(
