@@ -129,6 +129,9 @@ Current stable release: v4.2.8
 - 未使用的 `CandidateGateOutcome` gate 占位类型已删除，减少无调用方接口。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
+- robust grid detail 已补充 reliable anchors、fit candidates、selected fit、
+  fit assessment 和 per-gap adjustment action；grid 仍只生成 / 调整 model gap
+  evidence，不获得 hard separator 或 PASS / REVIEW 权限。
 - nearby separator search 已进一步集中到 `geometry/nearby_separator.py`：
   runtime correction 和 read-only diagnostics 共用 search context、candidate
   ranking、stronger-test detail；diagnostics 只保留缓存、profile 读取和展示字段，

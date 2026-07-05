@@ -15,6 +15,7 @@ from .detection_parameters import HardGapTrustParameters, NearbySeparatorCorrect
 
 
 GridFit = tuple[int, float, float, float]
+GRID_DETAIL_LIMIT = 12
 
 
 @dataclass(frozen=True)
@@ -40,12 +41,38 @@ class GridFitCandidate:
             float(self.median_residual),
         )
 
+    def detail(self, nominal_pitch: float) -> dict[str, Any]:
+        return {
+            "inliers": int(self.inliers),
+            "pitch": float(self.pitch),
+            "origin": float(self.origin),
+            "median_residual": float(self.median_residual),
+            "pitch_delta": float(self.pitch - nominal_pitch),
+        }
+
 
 @dataclass(frozen=True)
 class GridFitAssessment:
     accepted: bool
     reason: str
     residual_threshold: float
+
+    def detail(self) -> dict[str, Any]:
+        return {
+            "accepted": bool(self.accepted),
+            "reason": self.reason,
+            "residual_threshold": float(self.residual_threshold),
+        }
+
+
+def grid_anchor_detail(gap: Gap) -> dict[str, Any]:
+    return {
+        "index": int(gap.index),
+        "method": gap.method,
+        "center": float(gap.center),
+        "score": float(gap.score),
+        "width_px": float(gap.width),
+    }
 
 
 def reliable_grid_anchor_gaps(gaps: list[Gap], config: RobustGridParameters) -> list[Gap]:
@@ -92,14 +119,55 @@ def best_grid_fit(
     strip_mode: str,
     config: RobustGridParameters,
 ) -> GridFit | None:
-    best: GridFitCandidate | None = None
+    best = best_grid_fit_candidate(reliable, pitch, strip_mode, config)
+    return None if best is None else best.as_grid_fit()
+
+
+def grid_fit_candidates(
+    reliable: list[Gap],
+    pitch: float,
+    strip_mode: str,
+    config: RobustGridParameters,
+) -> list[GridFitCandidate]:
+    candidates: list[GridFitCandidate] = []
     tolerance = grid_fit_tolerance(pitch, strip_mode, config)
     for a_i, a in enumerate(reliable):
         for b in reliable[a_i + 1:]:
             candidate = grid_fit_candidate_from_anchor_pair(a, b, reliable, pitch, tolerance, config)
-            if candidate is not None and (best is None or candidate.rank_key(pitch) > best.rank_key(pitch)):
-                best = candidate
-    return None if best is None else best.as_grid_fit()
+            if candidate is not None:
+                candidates.append(candidate)
+    return candidates
+
+
+def best_grid_fit_candidate(
+    reliable: list[Gap],
+    pitch: float,
+    strip_mode: str,
+    config: RobustGridParameters,
+) -> GridFitCandidate | None:
+    return best_grid_fit_candidate_from_candidates(
+        grid_fit_candidates(reliable, pitch, strip_mode, config),
+        pitch,
+    )
+
+
+def best_grid_fit_candidate_from_candidates(
+    candidates: list[GridFitCandidate],
+    nominal_pitch: float,
+) -> GridFitCandidate | None:
+    best: GridFitCandidate | None = None
+    for candidate in candidates:
+        if best is None or candidate.rank_key(nominal_pitch) > best.rank_key(nominal_pitch):
+            best = candidate
+    return best
+
+
+def grid_fit_candidate_details(
+    candidates: list[GridFitCandidate],
+    nominal_pitch: float,
+) -> list[dict[str, Any]]:
+    ranked = sorted(candidates, key=lambda item: item.rank_key(nominal_pitch), reverse=True)
+    return [candidate.detail(nominal_pitch) for candidate in ranked[:GRID_DETAIL_LIMIT]]
 
 
 def grid_fit_assessment(
@@ -144,7 +212,7 @@ def grid_adjusted_gap(
     hard_gap_trust: HardGapTrustParameters | None,
     nearby_correction: NearbySeparatorCorrectionParameters | None,
     config: RobustGridParameters,
-) -> tuple[Gap, dict[str, Any] | None, dict[str, Any] | None]:
+) -> tuple[Gap, dict[str, Any] | None, dict[str, Any] | None, dict[str, Any]]:
     trust, trust_detail = light_hard_gap_trust(
         gap,
         pitch,
@@ -155,12 +223,27 @@ def grid_adjusted_gap(
         hard_gap_trust=hard_gap_trust,
         nearby_correction=nearby_correction,
     )
-    if is_hard_gap_method(gap.method) and abs(gap.center - predicted) <= clamp_float(
+    keep_limit = clamp_float(
         pitch * config.hard_keep_ratio,
         config.hard_keep_min,
         config.hard_keep_max,
-    ):
-        return gap, None, None
+    )
+    detail: dict[str, Any] = {
+        "index": int(gap.index),
+        "input_method": gap.method,
+        "input_center": float(gap.center),
+        "predicted": float(predicted),
+        "delta_px": float(gap.center - predicted),
+        "input_score": float(gap.score),
+        "input_width_px": float(gap.width),
+        "trust": trust,
+        "keep_limit": float(keep_limit),
+    }
+    if is_hard_gap_method(gap.method) and abs(gap.center - predicted) <= keep_limit:
+        detail["action"] = "keep_hard_near_prediction"
+        detail["output_method"] = gap.method
+        detail["output_center"] = float(gap.center)
+        return gap, None, None, detail
     if allow_hard_protection and trust == "strong_separator":
         protected = {
             "index": int(gap.index),
@@ -173,7 +256,11 @@ def grid_adjusted_gap(
             "trust": trust,
             "trust_detail": trust_detail,
         }
-        return gap, protected, None
+        detail["action"] = "protect_strong_hard_gap"
+        detail["trust_detail"] = trust_detail
+        detail["output_method"] = gap.method
+        detail["output_center"] = float(gap.center)
+        return gap, protected, None, detail
     overridden = None
     if is_hard_gap_method(gap.method):
         overridden = {
@@ -187,7 +274,43 @@ def grid_adjusted_gap(
             "trust": trust,
             "trust_detail": trust_detail,
         }
-    return grid_model_gap(gap.index, predicted, gap.score), None, overridden
+        detail["action"] = "override_hard_with_grid_model"
+        detail["trust_detail"] = trust_detail
+    else:
+        detail["action"] = "replace_model_with_grid_model"
+    adjusted = grid_model_gap(gap.index, predicted, gap.score)
+    detail["output_method"] = adjusted.method
+    detail["output_center"] = float(adjusted.center)
+    return adjusted, None, overridden, detail
+
+
+def robust_grid_base_detail(
+    gaps: list[Gap],
+    constrained: list[Gap],
+    reliable: list[Gap],
+    origin: float,
+    pitch: float,
+    strip_mode: str,
+    config: RobustGridParameters,
+    *,
+    candidates: list[GridFitCandidate] | None = None,
+) -> dict[str, Any]:
+    tolerance = grid_fit_tolerance(pitch, strip_mode, config)
+    detail: dict[str, Any] = {
+        "input_gap_count": int(len(gaps)),
+        "constrained_gap_count": int(len(constrained)),
+        "reliable_gaps": int(len(reliable)),
+        "min_reliable": int(config.min_reliable),
+        "origin": float(origin),
+        "nominal_pitch": float(pitch),
+        "strip_mode": strip_mode,
+        "fit_tolerance": float(tolerance),
+        "reliable_anchors": [grid_anchor_detail(gap) for gap in reliable[:GRID_DETAIL_LIMIT]],
+    }
+    if candidates is not None:
+        detail["fit_candidate_count"] = int(len(candidates))
+        detail["fit_candidates"] = grid_fit_candidate_details(candidates, pitch)
+    return detail
 
 
 def apply_robust_grid(
@@ -207,19 +330,35 @@ def apply_robust_grid(
     config = robust_grid or RobustGridParameters()
     constrained = [constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, strip_mode, config) for gap in gaps]
     reliable = reliable_grid_anchor_gaps(constrained, config)
+    detail = robust_grid_base_detail(gaps, constrained, reliable, origin, pitch, strip_mode, config)
     if len(reliable) < config.min_reliable:
-        return constrained, {"grid_used": False, "reliable_gaps": len(reliable)}
-    best = best_grid_fit(reliable, pitch, strip_mode, config)
+        detail.update({"grid_used": False, "grid_rejected": "too_few_reliable_anchors"})
+        return constrained, detail
+    candidates = grid_fit_candidates(reliable, pitch, strip_mode, config)
+    detail = robust_grid_base_detail(
+        gaps,
+        constrained,
+        reliable,
+        origin,
+        pitch,
+        strip_mode,
+        config,
+        candidates=candidates,
+    )
+    best_candidate = best_grid_fit_candidate_from_candidates(candidates, pitch)
+    best = None if best_candidate is None else best_candidate.as_grid_fit()
     if best is None:
-        return constrained, {"grid_used": False, "reliable_gaps": len(reliable), "grid_rejected": "no_pair_model"}
+        detail.update({"grid_used": False, "grid_rejected": "no_pair_model"})
+        return constrained, detail
     inlier_count, fit_pitch, fit_origin, median_residual = best
     fit_assessment = grid_fit_assessment(best, pitch, config)
+    detail["selected_fit"] = best_candidate.detail(pitch) if best_candidate is not None else None
+    detail["fit_assessment"] = fit_assessment.detail()
     if not fit_assessment.accepted:
-        detail = {
+        detail.update({
             "grid_used": False,
-            "reliable_gaps": len(reliable),
             "grid_rejected": fit_assessment.reason,
-        }
+        })
         if fit_assessment.reason == "high_residual":
             detail["grid_residual"] = median_residual
         return constrained, detail
@@ -237,9 +376,10 @@ def apply_robust_grid(
     adjusted: list[Gap] = []
     protected_hard: list[dict[str, Any]] = []
     overridden_hard: list[dict[str, Any]] = []
+    adjustments: list[dict[str, Any]] = []
     for gap in constrained:
         predicted = grid_predicted_center(fit_origin, fit_pitch, gap, origin, pitch, max_shift)
-        adjusted_gap, protected, overridden = grid_adjusted_gap(
+        adjusted_gap, protected, overridden, adjustment_detail = grid_adjusted_gap(
             gap,
             predicted,
             pitch,
@@ -252,13 +392,13 @@ def apply_robust_grid(
             config,
         )
         adjusted.append(adjusted_gap)
+        adjustments.append(adjustment_detail)
         if protected is not None:
             protected_hard.append(protected)
         if overridden is not None:
             overridden_hard.append(overridden)
-    return adjusted, {
+    detail.update({
         "grid_used": True,
-        "reliable_gaps": len(reliable),
         "grid_inliers": int(inlier_count),
         "grid_pitch": float(fit_pitch),
         "grid_origin": float(fit_origin),
@@ -267,4 +407,7 @@ def apply_robust_grid(
         "hard_protection_allowed": bool(allow_hard_protection),
         "protected_hard_gaps": protected_hard,
         "overridden_hard_gaps": overridden_hard,
-    }
+        "gap_adjustments": adjustments[:GRID_DETAIL_LIMIT],
+        "gap_adjustment_count": int(len(adjustments)),
+    })
+    return adjusted, detail
