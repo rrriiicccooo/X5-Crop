@@ -7,7 +7,7 @@ import numpy as np
 
 from ....domain import Box, Gap
 from ....formats import FormatSpec
-from ....geometry.separator_cache import cached_separator_profile
+from ....geometry.separator_cache import cached_edge_refine_profiles, cached_separator_profile
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
@@ -17,7 +17,7 @@ from ..proposal.separator.proposal import propose_separator_width_profile_gaps, 
 from ..proposal.separator.refinement import (
     apply_grid_gap_model,
     promote_enhanced_separator_gaps_for_candidate,
-    refine_with_edge_pairs,
+    refine_with_edge_profiles,
     refine_with_nearby_separator,
     should_run_enhanced_gap_promotion_for_candidate,
 )
@@ -111,14 +111,18 @@ def apply_primary_separator_refinements(
 ) -> tuple[list[Gap], dict[str, Any], dict[str, Any]]:
     edge_pair_correction_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     if strip_mode == "full" and count > 1:
-        gaps, edge_pair_correction_detail = refine_with_edge_pairs(
+        edge, background, _activity = cached_edge_refine_profiles(
+            cache,
             crop,
+            outer,
+            policy.separator.edge_refine_profile,
+        )
+        gaps, edge_pair_correction_detail = refine_with_edge_profiles(
+            edge,
+            background,
             gaps,
             count,
-            cache,
-            outer,
             policy.separator.edge_pair,
-            policy.separator.edge_refine_profile,
         )
     gaps, grid_detail = apply_grid_gap_model(
         gaps,

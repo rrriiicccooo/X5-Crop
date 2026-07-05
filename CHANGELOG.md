@@ -69,6 +69,9 @@ Current stable release: v4.2.8
 - edge-pair 专用 edge-refine profile 已从基础 `separator_profile.py` 拆出到
   `geometry/edge_refine_profile.py`；基础 separator profile 只保留 separator
   signal 与通用 profile helper。
+- edge-pair correction 已与 runtime cache 解耦：candidate build 负责取得 cached
+  edge/background profile，`geometry/edge_pairs.py` 只消费 profile arrays 并返回
+  gap correction detail。
 - standard gap search 已与 gap geometry helper 拆开：`geometry/gap_search.py`
   只负责 profile window / width / threshold / candidate ranking；
   `geometry/gap_geometry.py` 负责 gap 几何约束、width CV 和局部几何误差。
@@ -350,8 +353,10 @@ Verified:
 - Separator refinement is split without behavior changes: the candidate proposal
   layer now uses `refine_with_edge_pairs` / `refine_with_nearby_separator` naming
   so gap refinement is not described as final correction; `geometry/edge_pairs.py`
-  separates search limits, candidate generation, best-pair selection, and
-  replacement eligibility; `geometry/robust_grid.py` separates reliable anchor
+  separates search limits, typed candidate generation, best-pair selection, and
+  replacement eligibility; candidate build owns cached edge/background profile
+  retrieval, while `geometry/edge_pairs.py` consumes profile arrays only;
+  `geometry/robust_grid.py` separates reliable anchor
   selection, grid fit, predicted center, and hard-gap protection / override
   adjustment so model evidence movement can be reviewed directly.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
