@@ -7,6 +7,7 @@ import numpy as np
 
 from ....cache import AnalysisCache
 from ....domain import Box, Gap
+from ....geometry.detection_parameters import EnhancedSeparatorParameters
 from ....geometry.edge_pairs import refine_gaps_with_edge_profiles
 from ....geometry.enhanced_separator import (
     promote_enhanced_separator_gaps,
@@ -90,6 +91,14 @@ def pending_gap_refinement_detail(family: str) -> dict[str, Any]:
     )
 
 
+def edge_pair_refinement_skip_reason(count: int, strip_mode: str) -> Optional[str]:
+    if strip_mode != "full":
+        return "not_full_strip"
+    if count <= 1:
+        return "single_frame"
+    return None
+
+
 def apply_edge_pair_refinement(
     outer: Box,
     crop: np.ndarray,
@@ -99,10 +108,9 @@ def apply_edge_pair_refinement(
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> GapRefinementResult:
-    if strip_mode != "full":
-        return _skipped_gap_refinement_result(EDGE_PAIR_REFINEMENT_FAMILY, gaps, "not_full_strip")
-    if count <= 1:
-        return _skipped_gap_refinement_result(EDGE_PAIR_REFINEMENT_FAMILY, gaps, "single_frame")
+    skip_reason = edge_pair_refinement_skip_reason(count, strip_mode)
+    if skip_reason is not None:
+        return _skipped_gap_refinement_result(EDGE_PAIR_REFINEMENT_FAMILY, gaps, skip_reason)
     edge, background, _activity = cached_edge_refine_profiles(
         cache,
         crop,
@@ -165,6 +173,29 @@ def apply_primary_separator_refinements(
     )
 
 
+def enhanced_gap_promotion_skip_reason(
+    *,
+    allow_enhanced_gap_promotion: bool,
+    strip_mode: str,
+    analysis_mode: str,
+    gaps: list[Gap],
+    count: int,
+    detected_geometry_equal_model_enabled: bool,
+    enhanced_config: EnhancedSeparatorParameters,
+) -> Optional[str]:
+    if not allow_enhanced_gap_promotion:
+        return "disabled"
+    if strip_mode != "full":
+        return "not_full_strip"
+    if detected_geometry_equal_model_enabled:
+        return "detected_geometry_equal_model_enabled"
+    if should_run_enhanced_gap_promotion(analysis_mode, gaps, count, enhanced_config):
+        return None
+    if analysis_mode == "auto":
+        return "auto_not_needed"
+    return "disabled"
+
+
 def apply_enhanced_gap_promotion(
     gray_work: np.ndarray,
     outer: Box,
@@ -178,38 +209,43 @@ def apply_enhanced_gap_promotion(
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> GapRefinementResult:
-    if not allow_enhanced_gap_promotion:
-        return _skipped_gap_refinement_result(ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY, gaps, "disabled")
+    skip_reason = enhanced_gap_promotion_skip_reason(
+        allow_enhanced_gap_promotion=allow_enhanced_gap_promotion,
+        strip_mode=strip_mode,
+        analysis_mode=analysis_mode,
+        gaps=gaps,
+        count=count,
+        detected_geometry_equal_model_enabled=policy.separator.model_gap_proposal.detected_geometry_equal_model_enabled,
+        enhanced_config=policy.separator.enhanced,
+    )
+    if skip_reason is not None:
+        return _skipped_gap_refinement_result(ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY, gaps, skip_reason)
+    promotion = promote_enhanced_separator_gaps(
+        gray_work,
+        outer,
+        gaps,
+        origin,
+        pitch,
+        strip_mode,
+        cache,
+        policy.separator.robust_grid,
+        policy.separator.gap_search,
+        policy.separator.profile,
+        policy.separator.enhanced,
+    )
+    return _gap_refinement_result(
+        ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY,
+        promotion.gaps,
+        promotion.detail,
+    )
+
+
+def nearby_separator_refinement_skip_reason(strip_mode: str, enabled: bool) -> Optional[str]:
     if strip_mode != "full":
-        return _skipped_gap_refinement_result(ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY, gaps, "not_full_strip")
-    if policy.separator.model_gap_proposal.detected_geometry_equal_model_enabled:
-        return _skipped_gap_refinement_result(
-            ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY,
-            gaps,
-            "detected_geometry_equal_model_enabled",
-        )
-    if should_run_enhanced_gap_promotion(analysis_mode, gaps, count, policy.separator.enhanced):
-        promotion = promote_enhanced_separator_gaps(
-            gray_work,
-            outer,
-            gaps,
-            origin,
-            pitch,
-            strip_mode,
-            cache,
-            policy.separator.robust_grid,
-            policy.separator.gap_search,
-            policy.separator.profile,
-            policy.separator.enhanced,
-        )
-        return _gap_refinement_result(
-            ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY,
-            promotion.gaps,
-            promotion.detail,
-        )
-    if analysis_mode == "auto":
-        return _skipped_gap_refinement_result(ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY, gaps, "auto_not_needed")
-    return _skipped_gap_refinement_result(ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY, gaps, "disabled")
+        return "not_full_strip"
+    if not enabled:
+        return "disabled"
+    return None
 
 
 def apply_nearby_separator_refinement(
@@ -221,10 +257,12 @@ def apply_nearby_separator_refinement(
     pitch: float,
     policy: DetectionPolicy,
 ) -> GapRefinementResult:
-    if strip_mode != "full":
-        return _skipped_gap_refinement_result(NEARBY_SEPARATOR_CORRECTION_REFINEMENT_FAMILY, gaps, "not_full_strip")
-    if not policy.separator.nearby_correction.enabled:
-        return _skipped_gap_refinement_result(NEARBY_SEPARATOR_CORRECTION_REFINEMENT_FAMILY, gaps, "disabled")
+    skip_reason = nearby_separator_refinement_skip_reason(
+        strip_mode,
+        policy.separator.nearby_correction.enabled,
+    )
+    if skip_reason is not None:
+        return _skipped_gap_refinement_result(NEARBY_SEPARATOR_CORRECTION_REFINEMENT_FAMILY, gaps, skip_reason)
     pre_nearby_gaps = list(gaps)
     correction = apply_nearby_separator_corrections(
         profile,
@@ -308,5 +346,8 @@ __all__ = [
     "apply_late_separator_refinement_chain",
     "apply_nearby_separator_refinement",
     "apply_primary_separator_refinements",
+    "edge_pair_refinement_skip_reason",
+    "enhanced_gap_promotion_skip_reason",
+    "nearby_separator_refinement_skip_reason",
     "pending_gap_refinement_detail",
 ]
