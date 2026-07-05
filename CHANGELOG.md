@@ -136,6 +136,13 @@ Current stable release: v4.2.8
   和列向梯度分开；`geometry/gap_search.py` 将 window、width limits、thresholds、
   band expansion 和 detected-candidate ranking 分开，方便人工审核普通 separator
   是如何被看见的。
+- separator refinement 已做行为等价拆分：candidate proposal 层使用
+  `refine_with_edge_pairs` / `refine_with_nearby_separator` 命名，避免把 gap
+  refinement 表述成 final correction；`geometry/edge_pairs.py` 将 search limits、
+  candidate generation、best-pair selection 和 replacement eligibility 分开；
+  `geometry/robust_grid.py` 将 reliable anchor selection、grid fit、predicted center
+  和 hard-gap protection / override adjustment 分开，方便继续审核 model evidence
+  何时可以移动 gap。
 - `.gitignore` 显式保留 `x5crop/detection/candidate/build/*.py`，避免源码层级被
   通用 `build/` 输出规则误隐藏。
 - candidate source orchestration 已去 retry 化：standard / broad-width gap profiles、
@@ -293,6 +300,13 @@ Verified:
   evidence, uniform soft score, and column gradient signals; `geometry/gap_search.py`
   separates window, width limits, thresholds, band expansion, and detected-candidate
   ranking so ordinary separator detection can be reviewed step by step.
+- Separator refinement is split without behavior changes: the candidate proposal
+  layer now uses `refine_with_edge_pairs` / `refine_with_nearby_separator` naming
+  so gap refinement is not described as final correction; `geometry/edge_pairs.py`
+  separates search limits, candidate generation, best-pair selection, and
+  replacement eligibility; `geometry/robust_grid.py` separates reliable anchor
+  selection, grid fit, predicted center, and hard-gap protection / override
+  adjustment so model evidence movement can be reviewed directly.
 - `.gitignore` explicitly keeps `x5crop/detection/candidate/build/*.py` visible
   so source layers are not hidden by the generic `build/` output rule.
 - Candidate source orchestration no longer uses active retry control flow:

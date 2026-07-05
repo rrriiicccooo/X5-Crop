@@ -17,10 +17,10 @@ from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE
 from ..assessment.scoring import score_detection
 from ..proposal.separator.proposal import propose_separator_width_profile_gaps, propose_standard_separator_gaps
 from ..proposal.separator.refinement import (
-    apply_edge_pair_separator_correction,
     apply_grid_gap_model,
-    apply_nearby_separator_correction,
     merge_enhanced_separator_proposals,
+    refine_with_edge_pairs,
+    refine_with_nearby_separator,
     should_run_enhanced_separator_proposals,
 )
 
@@ -109,7 +109,7 @@ def apply_primary_separator_refinements(
 ) -> tuple[list[Gap], dict[str, Any], dict[str, Any]]:
     edge_refine_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     if strip_mode == "full" and count > 1:
-        gaps, edge_refine_detail = apply_edge_pair_separator_correction(
+        gaps, edge_refine_detail = refine_with_edge_pairs(
             crop,
             gaps,
             count,
@@ -245,7 +245,7 @@ def apply_nearby_separator_refinement(
         strip_mode,
         policy,
     )
-    gaps, detail = apply_nearby_separator_correction(
+    gaps, detail = refine_with_nearby_separator(
         profile,
         gaps,
         origin,

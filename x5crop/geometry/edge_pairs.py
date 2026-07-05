@@ -43,6 +43,66 @@ def edge_pair_can_replace_hard_gap(gap: Gap, edge_gap: Gap, pitch: float, params
     return delta <= max(4.0, edge_gap.width * 1.5)
 
 
+def edge_pair_search_limits(pitch: float, params: EdgePairParameters) -> tuple[int, int, int]:
+    window = clamp_int(pitch * params.window_ratio, 8, 520)
+    min_gutter = clamp_int(pitch * params.min_gutter_ratio, 2, 40)
+    max_gutter = max(min_gutter + 1, clamp_int(pitch * params.max_gutter_ratio, 8, 420))
+    return window, min_gutter, max_gutter
+
+
+def edge_pair_candidates_for_gap(
+    edge: np.ndarray,
+    background: np.ndarray,
+    gap: Gap,
+    pitch: float,
+    params: EdgePairParameters,
+    window: int,
+    min_gutter: int,
+    max_gutter: int,
+) -> list[tuple[float, float, float, int, int]]:
+    width = len(edge)
+    x0 = int(round(gap.center))
+    lo = max(1, x0 - window)
+    hi = min(width - 1, x0 + window)
+    peaks = local_edge_peaks(edge, lo, hi, params.min_strength)
+    candidates: list[tuple[float, float, float, int, int]] = []
+    for i, a in enumerate(peaks):
+        for b in peaks[i + 1:]:
+            gutter_w = b - a
+            if gutter_w < min_gutter or gutter_w > max_gutter:
+                continue
+            center = (a + b) / 2.0
+            if abs(center - x0) > window:
+                continue
+            bg_between = interval_mean(background, a, b + 1)
+            if bg_between < params.min_background:
+                continue
+            strength = (float(edge[a]) + float(edge[b])) / 2.0
+            quality = strength + 0.6 * bg_between
+            distance = abs(center - x0) / max(1.0, pitch)
+            candidates.append((distance, -quality, -bg_between, int(a), int(b)))
+    return candidates
+
+
+def best_edge_pair_gap(
+    gap: Gap,
+    candidates: list[tuple[float, float, float, int, int]],
+) -> Gap | None:
+    if not candidates:
+        return None
+    _distance, neg_quality, _neg_bg, a, b = sorted(candidates)[0]
+    center = (a + b) / 2.0
+    return Gap(gap.index, float(center), float(-neg_quality), "edge-pair", float(a), float(b + 1))
+
+
+def edge_pair_can_replace_gap(gap: Gap, edge_gap: Gap, pitch: float, params: EdgePairParameters) -> bool:
+    if gap.method not in HARD_GAP_METHODS:
+        return edge_gap.score >= params.min_quality_for_model_gap
+    if gap.method in {"detected", "enhanced-detected"}:
+        return edge_pair_can_replace_hard_gap(gap, edge_gap, pitch, params)
+    return True
+
+
 def refine_gaps_by_edge_pairs(
     crop: np.ndarray,
     gaps: list[Gap],
@@ -65,45 +125,29 @@ def refine_gaps_by_edge_pairs(
     if edge_pair_config is None:
         raise ValueError("edge_pair config is required")
     params = edge_pair_parameters_from_config(edge_pair_config)
-    window = clamp_int(pitch * params.window_ratio, 8, 520)
-    min_gutter = clamp_int(pitch * params.min_gutter_ratio, 2, 40)
-    max_gutter = max(min_gutter + 1, clamp_int(pitch * params.max_gutter_ratio, 8, 420))
+    window, min_gutter, max_gutter = edge_pair_search_limits(pitch, params)
     refined: list[Gap] = []
     accepted: list[dict[str, Any]] = []
     rejected = 0
     for gap in gaps:
-        x0 = int(round(gap.center))
-        lo = max(1, x0 - window)
-        hi = min(w - 1, x0 + window)
-        peaks = local_edge_peaks(edge, lo, hi, params.min_strength)
-        candidates: list[tuple[float, float, float, int, int]] = []
-        for i, a in enumerate(peaks):
-            for b in peaks[i + 1:]:
-                gutter_w = b - a
-                if gutter_w < min_gutter or gutter_w > max_gutter:
-                    continue
-                center = (a + b) / 2.0
-                if abs(center - x0) > window:
-                    continue
-                bg_between = interval_mean(background, a, b + 1)
-                if bg_between < params.min_background:
-                    continue
-                strength = (float(edge[a]) + float(edge[b])) / 2.0
-                quality = strength + 0.6 * bg_between
-                distance = abs(center - x0) / max(1.0, pitch)
-                candidates.append((distance, -quality, -bg_between, int(a), int(b)))
-        if not candidates:
+        edge_gap = best_edge_pair_gap(
+            gap,
+            edge_pair_candidates_for_gap(
+                edge,
+                background,
+                gap,
+                pitch,
+                params,
+                window,
+                min_gutter,
+                max_gutter,
+            ),
+        )
+        if edge_gap is None:
             refined.append(gap)
             rejected += 1
             continue
-        _distance, neg_quality, _neg_bg, a, b = sorted(candidates)[0]
-        center = (a + b) / 2.0
-        edge_gap = Gap(gap.index, float(center), float(-neg_quality), "edge-pair", float(a), float(b + 1))
-        if gap.method not in HARD_GAP_METHODS and edge_gap.score < params.min_quality_for_model_gap:
-            refined.append(gap)
-            rejected += 1
-            continue
-        if gap.method in {"detected", "enhanced-detected"} and not edge_pair_can_replace_hard_gap(gap, edge_gap, pitch, params):
+        if not edge_pair_can_replace_gap(gap, edge_gap, pitch, params):
             refined.append(gap)
             rejected += 1
             continue

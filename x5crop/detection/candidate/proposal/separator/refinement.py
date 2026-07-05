@@ -6,17 +6,17 @@ from .....geometry.nearby_separator import apply_nearby_separator_corrections
 from .....geometry.robust_grid import apply_robust_grid
 
 
-apply_edge_pair_separator_correction = refine_gaps_by_edge_pairs
-apply_nearby_separator_correction = apply_nearby_separator_corrections
+refine_with_edge_pairs = refine_gaps_by_edge_pairs
+refine_with_nearby_separator = apply_nearby_separator_corrections
 apply_grid_gap_model = apply_robust_grid
 merge_enhanced_separator_proposals = merge_enhanced_separator_gaps
 should_run_enhanced_separator_proposals = should_run_enhanced_separator_analysis
 
 
 __all__ = [
-    "apply_edge_pair_separator_correction",
     "apply_grid_gap_model",
-    "apply_nearby_separator_correction",
     "merge_enhanced_separator_proposals",
+    "refine_with_edge_pairs",
+    "refine_with_nearby_separator",
     "should_run_enhanced_separator_proposals",
 ]
