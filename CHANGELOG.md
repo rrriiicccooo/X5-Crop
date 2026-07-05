@@ -149,6 +149,8 @@ Current stable release: v4.2.8
 - enhanced separator 内部语义收敛为 enhanced gap promotion：active detail key
   改为 `enhanced_gap_promotion`，gate 从该 detail 读取 promotion count，内部
   gap method 判断统一使用常量。
+- enhanced gap promotion 现在在 accepted / rejected detail 中记录 hard-gap search、
+  detected gap、validation 和最终 selected gap；promotion 条件保持不变。
 - edge-pair refinement 已明确为 edge-pair gap correction：active detail key
   改为 `edge_pair_correction`，debug gap overlay 也改为消费 gap method 常量。
 - edge-pair replacement eligibility 已改为 `EdgePairReplacementAssessment`：
@@ -506,6 +508,9 @@ Verified:
   outer-box calculation now lives in `detection.candidate.proposal.outer.grid_refine`;
   the separator gap lifecycle consumes grid detail and may rebuild gaps, but it
   does not own the outer-box adjustment rule.
+- Enhanced gap promotion now records hard-gap search, detected gap, validation,
+  and final selected gap in accepted / rejected detail while preserving the same
+  promotion conditions.
 - The pure separator-refinement facade has been removed: candidate build now
   calls `geometry.edge_pairs`, `geometry.robust_grid`,
   `geometry.enhanced_separator`, and `geometry.nearby_separator` directly instead

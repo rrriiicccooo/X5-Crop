@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import numpy as np
@@ -33,15 +34,88 @@ def enhanced_gap_width(gap: Gap) -> float:
     return abs(float(gap.end) - float(gap.start))
 
 
-def enhanced_gap_is_valid(gap: Gap, expected: float, pitch: float, config: EnhancedSeparatorParameters) -> bool:
-    if gap.method != GAP_DETECTED or gap.score < config.min_score:
-        return False
+@dataclass(frozen=True)
+class EnhancedGapValidation:
+    accepted: bool
+    reason: str
+    score: float
+    min_score: float
+    width: float
+    max_width: float
+    shift_px: float
+    shift_limit: float
+
+    def detail(self) -> dict[str, Any]:
+        return {
+            "accepted": bool(self.accepted),
+            "reason": self.reason,
+            "score": float(self.score),
+            "min_score": float(self.min_score),
+            "width": float(self.width),
+            "max_width": float(self.max_width),
+            "shift_px": float(self.shift_px),
+            "shift_limit": float(self.shift_limit),
+        }
+
+
+def enhanced_gap_validation(
+    gap: Gap,
+    expected: float,
+    pitch: float,
+    config: EnhancedSeparatorParameters,
+) -> EnhancedGapValidation:
     width = enhanced_gap_width(gap)
-    if width <= 0 or width > clamp_float(pitch * config.max_width_ratio, config.max_width_min, config.max_width_max):
-        return False
-    if abs(gap.center - expected) > clamp_float(pitch * config.max_shift_ratio, config.max_shift_min, config.max_shift_max):
-        return False
-    return True
+    max_width = clamp_float(
+        pitch * config.max_width_ratio,
+        config.max_width_min,
+        config.max_width_max,
+    )
+    shift = abs(float(gap.center) - float(expected))
+    shift_limit = clamp_float(
+        pitch * config.max_shift_ratio,
+        config.max_shift_min,
+        config.max_shift_max,
+    )
+
+    def result(accepted: bool, reason: str) -> EnhancedGapValidation:
+        return EnhancedGapValidation(
+            bool(accepted),
+            reason,
+            float(gap.score),
+            float(config.min_score),
+            float(width),
+            float(max_width),
+            float(shift),
+            float(shift_limit),
+        )
+
+    if gap.method != GAP_DETECTED:
+        return result(False, "not_detected_gap")
+    if gap.score < config.min_score:
+        return result(False, "score_below_min")
+    if width <= 0:
+        return result(False, "missing_gap_span")
+    if width > max_width:
+        return result(False, "width_too_wide")
+    if shift > shift_limit:
+        return result(False, "shift_too_large")
+    return result(True, "accepted")
+
+
+def enhanced_gap_detail(gap: Gap) -> dict[str, Any]:
+    return {
+        "index": int(gap.index),
+        "center": float(gap.center),
+        "score": float(gap.score),
+        "method": gap.method,
+        "start": None if gap.start is None else float(gap.start),
+        "end": None if gap.end is None else float(gap.end),
+        "width": float(enhanced_gap_width(gap)),
+    }
+
+
+def enhanced_gap_is_valid(gap: Gap, expected: float, pitch: float, config: EnhancedSeparatorParameters) -> bool:
+    return enhanced_gap_validation(gap, expected, pitch, config).accepted
 
 
 def promote_enhanced_gap(gap: Gap, index: int) -> Gap:
@@ -56,14 +130,58 @@ def find_enhanced_gap(
     gap_search: GapSearchParameters | None = None,
     enhanced_config: EnhancedSeparatorParameters | None = None,
 ) -> Gap:
+    gap, _detail = find_enhanced_gap_with_detail(
+        profile,
+        expected,
+        pitch,
+        index,
+        gap_search,
+        enhanced_config,
+    )
+    return gap
+
+
+def find_enhanced_gap_with_detail(
+    profile: np.ndarray,
+    expected: float,
+    pitch: float,
+    index: int,
+    gap_search: GapSearchParameters | None = None,
+    enhanced_config: EnhancedSeparatorParameters | None = None,
+) -> tuple[Gap, dict[str, Any]]:
     config = enhanced_config or EnhancedSeparatorParameters()
     result = find_detected_gap(profile, expected, pitch, index, gap_search=gap_search)
     gap = result.detected_gap
+    base_detail: dict[str, Any] = {
+        "index": int(index),
+        "expected": float(expected),
+        "pitch": float(pitch),
+        "search_reason": result.reason,
+        "search": result.detail,
+    }
     if gap is None:
-        return enhanced_gap_fallback(index, expected, result.fallback_score)
-    if not enhanced_gap_is_valid(gap, expected, pitch, config):
-        return enhanced_gap_fallback(index, expected, gap.score)
-    return promote_enhanced_gap(gap, index)
+        fallback = enhanced_gap_fallback(index, expected, result.fallback_score)
+        base_detail.update(
+            {
+                "promoted": False,
+                "detected_gap": None,
+                "validation": {"accepted": False, "reason": "no_detected_gap"},
+                "selected_gap": enhanced_gap_detail(fallback),
+            }
+        )
+        return fallback, base_detail
+    validation = enhanced_gap_validation(gap, expected, pitch, config)
+    base_detail["detected_gap"] = enhanced_gap_detail(gap)
+    base_detail["validation"] = validation.detail()
+    if not validation.accepted:
+        fallback = enhanced_gap_fallback(index, expected, gap.score)
+        base_detail["promoted"] = False
+        base_detail["selected_gap"] = enhanced_gap_detail(fallback)
+        return fallback, base_detail
+    enhanced = promote_enhanced_gap(gap, index)
+    base_detail["promoted"] = True
+    base_detail["selected_gap"] = enhanced_gap_detail(enhanced)
+    return enhanced, base_detail
 
 
 def enhanced_gap_promotion_cache_key(
@@ -119,19 +237,31 @@ def promote_one_enhanced_gap(
     if is_hard_gap_method(gap.method):
         return gap, None, None
     expected = origin + pitch * gap.index
-    enhanced = find_enhanced_gap(profile, expected, pitch, gap.index, gap_search, enhanced_config)
+    enhanced, detail = find_enhanced_gap_with_detail(
+        profile,
+        expected,
+        pitch,
+        gap.index,
+        gap_search,
+        enhanced_config,
+    )
     if enhanced.method == GAP_ENHANCED_DETECTED:
         return enhanced, {
             "index": int(gap.index),
             "center": float(enhanced.center),
             "score": float(enhanced.score),
             "replaced_method": gap.method,
+            "search": detail,
+            "validation": detail.get("validation", {}),
         }, None
     return gap, None, {
         "index": int(gap.index),
         "score": float(enhanced.score),
         "method": enhanced.method,
         "kept_method": gap.method,
+        "reason": detail.get("validation", {}).get("reason", detail.get("search_reason")),
+        "search": detail,
+        "validation": detail.get("validation", {}),
     }
 
 
