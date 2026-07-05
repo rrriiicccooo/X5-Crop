@@ -161,6 +161,9 @@ Current stable release: v4.2.8
   candidate build 在两段之间决定是否用 refined outer 重新 build gaps。
 - separator gap lifecycle 不再接收完整 `RuntimeConfig`，late refinement 只消费
   `analysis_mode`；未使用的 `build_separator_gaps_for_outer` 包装入口已删除。
+- initial separator gap proposal 已改为 `InitialSeparatorGapResult`；standard
+  proposal、broad-width override 和 detected-geometry model override 由独立
+  helper 串联，report/detail 字段保持不变。
 - enhanced separator 内部语义收敛为 enhanced gap promotion：active detail key
   改为 `enhanced_gap_promotion`，gate 从该 detail 读取 promotion count，内部
   gap method 判断统一使用常量。
@@ -553,6 +556,9 @@ Verified:
 - The separator gap lifecycle no longer accepts the full `RuntimeConfig`; late
   refinement consumes only `analysis_mode`, and the unused
   `build_separator_gaps_for_outer` wrapper has been removed.
+- Initial separator gap proposal now uses `InitialSeparatorGapResult`; standard
+  proposal, broad-width override, and detected-geometry model override are
+  chained through separate helpers while report/detail fields remain unchanged.
 - Broad-width detected gap generation now separates the width-profile gap window,
   run object, width acceptance, candidate scoring / ranking, best candidate
   selection, and core-width clipped detected-gap output. The output remains an

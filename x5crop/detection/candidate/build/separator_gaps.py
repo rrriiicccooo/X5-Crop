@@ -41,6 +41,13 @@ class SeparatorGapBuildResult:
 
 
 @dataclass(frozen=True)
+class InitialSeparatorGapResult:
+    gaps: list[Gap]
+    standard_gap_search_detail: dict[str, Any]
+    separator_width_profile_gap_search_detail: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class GapRefinementResult:
     family: str
     gaps: list[Gap]
@@ -92,20 +99,26 @@ def separator_origin_pitch(
     return 0.0, float(outer.width / float(max(1, count)))
 
 
-def initial_separator_gaps(
+def skipped_separator_width_profile_gap_search_detail(reason: str = "not_requested") -> dict[str, Any]:
+    return {
+        "used": False,
+        "profile": BROAD_WIDTH_GAP_PROFILE,
+        "reason": reason,
+    }
+
+
+def standard_separator_gap_result(
     gray_work: np.ndarray,
     outer: Box,
     profile: np.ndarray,
-    fmt: FormatSpec,
     count: int,
-    strip_mode: str,
     origin: float,
     pitch: float,
-    candidate_strategy: str,
-    gap_search_profile: str,
     gap_max_width_ratio_override: Optional[float],
     policy: DetectionPolicy,
-) -> tuple[list[Gap], dict[str, Any], dict[str, Any]]:
+    *,
+    forced: bool = False,
+) -> InitialSeparatorGapResult:
     standard_gap_proposal = propose_separator_gap_profile_gaps_with_detail(
         gray_work,
         outer,
@@ -119,46 +132,136 @@ def initial_separator_gaps(
         policy.separator.width_profile,
         policy.separator.width_profile_search,
     )
-    gaps = standard_gap_proposal.gaps
     standard_gap_search_detail = dict(standard_gap_proposal.detail)
-    separator_width_profile_gap_search_detail: dict[str, Any] = {
-        "used": False,
-        "profile": BROAD_WIDTH_GAP_PROFILE,
-        "reason": "not_requested",
-    }
-    if candidate_strategy == "separator_outer" and gap_search_profile == BROAD_WIDTH_GAP_PROFILE:
-        separator_width_profile_proposal = propose_separator_gap_profile_gaps_with_detail(
-            gray_work,
-            outer,
-            profile,
-            origin,
-            pitch,
-            count,
-            BROAD_WIDTH_GAP_PROFILE,
-            gap_max_width_ratio_override,
-            policy.separator.gap_search,
-            policy.separator.width_profile,
-            policy.separator.width_profile_search,
-        )
-        separator_width_profile_gaps = separator_width_profile_proposal.gaps
-        separator_width_profile_gap_search_detail = dict(separator_width_profile_proposal.detail)
-        if len(separator_width_profile_gaps) >= max(1, count - 1):
-            gaps = separator_width_profile_gaps
-            standard_gap_search_detail["overridden_by"] = "separator_width_profile"
+    if forced:
+        standard_gap_search_detail["forced"] = True
+    return InitialSeparatorGapResult(
+        gaps=standard_gap_proposal.gaps,
+        standard_gap_search_detail=standard_gap_search_detail,
+        separator_width_profile_gap_search_detail=skipped_separator_width_profile_gap_search_detail(),
+    )
+
+
+def separator_width_profile_gap_requested(candidate_strategy: str, gap_search_profile: str) -> bool:
+    return candidate_strategy == "separator_outer" and gap_search_profile == BROAD_WIDTH_GAP_PROFILE
+
+
+def apply_separator_width_profile_gap_override(
+    result: InitialSeparatorGapResult,
+    gray_work: np.ndarray,
+    outer: Box,
+    profile: np.ndarray,
+    count: int,
+    origin: float,
+    pitch: float,
+    gap_max_width_ratio_override: Optional[float],
+    policy: DetectionPolicy,
+) -> InitialSeparatorGapResult:
+    separator_width_profile_proposal = propose_separator_gap_profile_gaps_with_detail(
+        gray_work,
+        outer,
+        profile,
+        origin,
+        pitch,
+        count,
+        BROAD_WIDTH_GAP_PROFILE,
+        gap_max_width_ratio_override,
+        policy.separator.gap_search,
+        policy.separator.width_profile,
+        policy.separator.width_profile_search,
+    )
+    gaps = result.gaps
+    standard_gap_search_detail = dict(result.standard_gap_search_detail)
+    separator_width_profile_gaps = separator_width_profile_proposal.gaps
+    if len(separator_width_profile_gaps) >= max(1, count - 1):
+        gaps = separator_width_profile_gaps
+        standard_gap_search_detail["overridden_by"] = "separator_width_profile"
+    return InitialSeparatorGapResult(
+        gaps=gaps,
+        standard_gap_search_detail=standard_gap_search_detail,
+        separator_width_profile_gap_search_detail=dict(separator_width_profile_proposal.detail),
+    )
+
+
+def apply_detected_geometry_equal_model_override(
+    result: InitialSeparatorGapResult,
+    profile: np.ndarray,
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    origin: float,
+    pitch: float,
+    gap_max_width_ratio_override: Optional[float],
+    policy: DetectionPolicy,
+) -> InitialSeparatorGapResult:
     model_gap_proposal = policy.separator.model_gap_proposal
-    if model_gap_proposal.detected_geometry_equal_model_available(
+    if not model_gap_proposal.detected_geometry_equal_model_available(
         strip_mode=strip_mode,
         count=count,
         default_count=fmt.default_count,
         gap_max_width_ratio_override=gap_max_width_ratio_override,
     ):
-        gaps = propose_equal_model_gaps_from_profile(profile, origin, pitch, count)
-        standard_gap_search_detail["overridden_by"] = "detected_geometry_equal_model"
-        standard_gap_search_detail["model_gap_proposal"] = {
-            "family": "detected_geometry_equal_model",
-            "policy_enabled": True,
-        }
-    return gaps, standard_gap_search_detail, separator_width_profile_gap_search_detail
+        return result
+    standard_gap_search_detail = dict(result.standard_gap_search_detail)
+    standard_gap_search_detail["overridden_by"] = "detected_geometry_equal_model"
+    standard_gap_search_detail["model_gap_proposal"] = {
+        "family": "detected_geometry_equal_model",
+        "policy_enabled": True,
+    }
+    return InitialSeparatorGapResult(
+        gaps=propose_equal_model_gaps_from_profile(profile, origin, pitch, count),
+        standard_gap_search_detail=standard_gap_search_detail,
+        separator_width_profile_gap_search_detail=result.separator_width_profile_gap_search_detail,
+    )
+
+
+def initial_separator_gaps(
+    gray_work: np.ndarray,
+    outer: Box,
+    profile: np.ndarray,
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    origin: float,
+    pitch: float,
+    candidate_strategy: str,
+    gap_search_profile: str,
+    gap_max_width_ratio_override: Optional[float],
+    policy: DetectionPolicy,
+) -> InitialSeparatorGapResult:
+    result = standard_separator_gap_result(
+        gray_work,
+        outer,
+        profile,
+        count,
+        origin,
+        pitch,
+        gap_max_width_ratio_override,
+        policy,
+    )
+    if separator_width_profile_gap_requested(candidate_strategy, gap_search_profile):
+        result = apply_separator_width_profile_gap_override(
+            result,
+            gray_work,
+            outer,
+            profile,
+            count,
+            origin,
+            pitch,
+            gap_max_width_ratio_override,
+            policy,
+        )
+    return apply_detected_geometry_equal_model_override(
+        result,
+        profile,
+        fmt,
+        count=count,
+        strip_mode=strip_mode,
+        origin=origin,
+        pitch=pitch,
+        gap_max_width_ratio_override=gap_max_width_ratio_override,
+        policy=policy,
+    )
 
 
 def apply_edge_pair_refinement(
@@ -334,29 +437,19 @@ def build_primary_separator_gaps_for_outer(
     profile = cached_separator_profile(cache, gray_work, outer, policy.separator.profile)
     origin, pitch = separator_origin_pitch(outer, fmt, count, strip_mode, offset_fraction)
     if force_standard_gap_search:
-        standard_gap_proposal = propose_separator_gap_profile_gaps_with_detail(
+        initial_gaps = standard_separator_gap_result(
             gray_work,
             outer,
             profile,
+            count,
             origin,
             pitch,
-            count,
-            STANDARD_GAP_PROFILE,
             gap_max_width_ratio_override,
-            policy.separator.gap_search,
-            policy.separator.width_profile,
-            policy.separator.width_profile_search,
+            policy,
+            forced=True,
         )
-        gaps = standard_gap_proposal.gaps
-        standard_gap_search_detail = dict(standard_gap_proposal.detail)
-        standard_gap_search_detail["forced"] = True
-        separator_width_profile_gap_search_detail = {
-            "used": False,
-            "profile": BROAD_WIDTH_GAP_PROFILE,
-            "reason": "not_requested",
-        }
     else:
-        gaps, standard_gap_search_detail, separator_width_profile_gap_search_detail = initial_separator_gaps(
+        initial_gaps = initial_separator_gaps(
             gray_work,
             outer,
             profile,
@@ -370,6 +463,7 @@ def build_primary_separator_gaps_for_outer(
             gap_max_width_ratio_override,
             policy,
         )
+    gaps = initial_gaps.gaps
     gaps, edge_pair_correction_detail, grid_detail = apply_primary_separator_refinements(
         gray_work,
         outer,
@@ -390,8 +484,8 @@ def build_primary_separator_gaps_for_outer(
         pitch=pitch,
         gaps=gaps,
         grid_detail=grid_detail,
-        standard_gap_search_detail=standard_gap_search_detail,
-        separator_width_profile_gap_search_detail=separator_width_profile_gap_search_detail,
+        standard_gap_search_detail=initial_gaps.standard_gap_search_detail,
+        separator_width_profile_gap_search_detail=initial_gaps.separator_width_profile_gap_search_detail,
         edge_pair_correction_detail=edge_pair_correction_detail,
         enhanced_gap_promotion_detail={"used": False, "reason": "pending_late_refinement"},
         nearby_correction_detail={"used": False, "reason": "pending_late_refinement"},
@@ -448,6 +542,7 @@ def apply_late_separator_refinements(
 
 __all__ = [
     "GapRefinementResult",
+    "InitialSeparatorGapResult",
     "SeparatorGapBuildResult",
     "apply_edge_pair_refinement",
     "apply_enhanced_gap_promotion",
