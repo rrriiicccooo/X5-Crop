@@ -22,8 +22,17 @@ class GapMethodEvidenceSummary:
     hard_separator_gaps: int
     grid_model_gaps: int
     equal_model_gaps: int
+    content_model_gaps: int
     separator_support_gaps: int
     reliable_support_gaps: int
+
+    @property
+    def geometry_model_gaps(self) -> int:
+        return self.grid_model_gaps + self.equal_model_gaps
+
+    @property
+    def model_gaps(self) -> int:
+        return self.geometry_model_gaps + self.content_model_gaps
 
 
 @dataclass(frozen=True)
@@ -93,6 +102,7 @@ def gap_method_evidence_summary(
     hard_separator_gaps = direct_hard_gaps + enhanced_hard_gaps
     grid_model_gaps = sum(1 for gap in gaps if gap.method == GAP_GRID)
     equal_model_gaps = sum(1 for gap in gaps if gap.method == GAP_EQUAL)
+    content_model_gaps = sum(1 for gap in gaps if gap.method == GAP_CONTENT)
     separator_support_gaps = hard_separator_gaps + grid_model_gaps
     reliable_support_gaps = sum(
         1
@@ -106,9 +116,33 @@ def gap_method_evidence_summary(
         hard_separator_gaps=hard_separator_gaps,
         grid_model_gaps=grid_model_gaps,
         equal_model_gaps=equal_model_gaps,
+        content_model_gaps=content_model_gaps,
         separator_support_gaps=separator_support_gaps,
         reliable_support_gaps=reliable_support_gaps,
     )
+
+
+def gap_method_role(method: str) -> str:
+    if method == GAP_ENHANCED_DETECTED:
+        return "separator_evidence_enhanced"
+    if method in {GAP_DETECTED, GAP_EDGE_PAIR}:
+        return "separator_evidence"
+    if method in {GAP_GRID, GAP_EQUAL}:
+        return "geometry_model"
+    if method == GAP_CONTENT:
+        return "content_model"
+    return "unknown"
+
+
+def gap_method_roles() -> dict[str, str]:
+    return {
+        GAP_DETECTED: gap_method_role(GAP_DETECTED),
+        GAP_EDGE_PAIR: gap_method_role(GAP_EDGE_PAIR),
+        GAP_ENHANCED_DETECTED: gap_method_role(GAP_ENHANCED_DETECTED),
+        GAP_GRID: gap_method_role(GAP_GRID),
+        GAP_EQUAL: gap_method_role(GAP_EQUAL),
+        GAP_CONTENT: gap_method_role(GAP_CONTENT),
+    }
 
 
 def separator_gate_detail_summary(
@@ -149,6 +183,8 @@ def separator_summary_from_detection(detection: Detection) -> SeparatorGateDetai
 __all__ = [
     "GapMethodEvidenceSummary",
     "SeparatorGateDetailSummary",
+    "gap_method_role",
+    "gap_method_roles",
     "gap_method_evidence_summary",
     "separator_gate_detail_summary",
     "separator_summary_from_detection",

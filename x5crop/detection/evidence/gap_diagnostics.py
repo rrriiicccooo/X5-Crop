@@ -21,6 +21,7 @@ from ...policies.registry import get_detection_policy
 from ...policies.runtime.diagnostics import NearbySeparatorDiagnosticsPolicy
 from ...cache import AnalysisCache
 from ...utils import clamp_int, runs_from_mask
+from .separator_summary import gap_method_role
 
 
 def gap_work_outer(detection: Detection, gap: Gap) -> Optional[Box]:
@@ -159,7 +160,7 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
     origin = float(detection.detail.get("origin", 0.0) or 0.0)
     expected = origin + pitch * float(gap.index) if pitch > 0 else float(gap.center)
-    role = "separator_evidence" if gap.method in HARD_GAP_METHODS else "geometry_model"
+    role = gap_method_role(gap.method)
     record: dict[str, Any] = {
         "index": int(gap.index),
         "method": gap.method,

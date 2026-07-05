@@ -4,7 +4,6 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...constants import GAP_EQUAL, GAP_GRID
 from ...domain import Detection
 from ...formats import FORMATS
 from ...cache.analysis import make_analysis_cache
@@ -12,6 +11,7 @@ from ...geometry.layout import work_gray
 from ...policies.registry import get_detection_policy
 from ...cache import AnalysisCache
 from .gap_diagnostics import gap_diagnostic_record
+from .separator_summary import gap_method_evidence_summary
 
 
 def overlap_bleed_risk_detail(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> dict[str, Any]:
@@ -65,12 +65,13 @@ def lucky_pass_risk_score_detail(
         for name in ("suspect_internal_edge", "suspect_frame_border", "nearby_separator_conflict", "geometry_conflict")
     )
     strong_overlap_models = int(overlap_risk_counts.get("strong", 0))
-    grid_or_equal = sum(1 for gap in detection.gaps if gap.method in {GAP_GRID, GAP_EQUAL})
+    gap_evidence = gap_method_evidence_summary(detection.gaps, reliable_min_score=0.0)
+    geometry_model_gaps = gap_evidence.geometry_model_gaps
     width_cv = float(detection.detail.get("width_cv", 0.0) or 0.0)
     components: dict[str, float] = {}
-    if grid_or_equal >= policy.model_gap_support_min:
+    if geometry_model_gaps >= policy.model_gap_support_min:
         components["model_gap_support"] = policy.model_gap_support_weight
-    elif grid_or_equal == 1:
+    elif geometry_model_gaps == 1:
         components["minor_model_gap_support"] = policy.minor_model_gap_support_weight
     if strong_hard <= policy.limited_strong_hard_max:
         components["limited_strong_hard_evidence"] = policy.limited_strong_hard_weight
@@ -80,7 +81,7 @@ def lucky_pass_risk_score_detail(
         components["suspicious_hard_gap"] = policy.suspicious_hard_weight
     if strong_overlap_models >= 1:
         components["strong_overlap_model_gap"] = policy.strong_overlap_weight
-    if grid_or_equal >= policy.model_gap_support_min and suspicious_hard >= 1 and strong_overlap_models >= 1:
+    if geometry_model_gaps >= policy.model_gap_support_min and suspicious_hard >= 1 and strong_overlap_models >= 1:
         components["model_suspicion_overlap_combo"] = policy.combo_weight
     if width_cv >= policy.unstable_width_cv:
         components["unstable_widths"] = policy.unstable_width_weight
@@ -88,7 +89,7 @@ def lucky_pass_risk_score_detail(
         components["mild_width_instability"] = policy.mild_width_weight
     if strong_hard >= policy.strong_hard_credit_min:
         components["strong_hard_evidence_credit"] = policy.strong_hard_credit
-    if width_cv < policy.stable_width_cv and grid_or_equal >= policy.stable_model_gap_min:
+    if width_cv < policy.stable_width_cv and geometry_model_gaps >= policy.stable_model_gap_min:
         components["stable_global_geometry_credit"] = policy.stable_geometry_credit
     risk_score = max(0.0, min(1.0, sum(components.values())))
     risk_threshold = policy.risk_threshold
@@ -105,6 +106,6 @@ def lucky_pass_risk_score_detail(
         "strong_hard_gaps": int(strong_hard),
         "suspicious_hard_gaps": int(suspicious_hard),
         "strong_overlap_model_gaps": int(strong_overlap_models),
-        "model_gap_count": int(grid_or_equal),
+        "model_gap_count": int(geometry_model_gaps),
         "width_cv": float(width_cv),
     }
