@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import math
 from typing import Any, Optional
 
@@ -21,6 +22,44 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import SeparatorGeometrySupportModePolicy
 from ....policies.separator_gate_profiles import SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
 from ....utils import sampled_percentile
+
+
+@dataclass(frozen=True)
+class GapMethodEvidenceSummary:
+    direct_hard_gaps: int
+    enhanced_hard_gaps: int
+    hard_separator_gaps: int
+    grid_model_gaps: int
+    equal_model_gaps: int
+    separator_support_gaps: int
+    reliable_support_gaps: int
+
+
+def gap_method_evidence_summary(
+    gaps: list[Gap],
+    reliable_min_score: float,
+) -> GapMethodEvidenceSummary:
+    direct_hard_gaps = sum(1 for gap in gaps if gap.method in {GAP_DETECTED, GAP_EDGE_PAIR})
+    enhanced_hard_gaps = sum(1 for gap in gaps if gap.method == GAP_ENHANCED_DETECTED)
+    hard_separator_gaps = direct_hard_gaps + enhanced_hard_gaps
+    grid_model_gaps = sum(1 for gap in gaps if gap.method == GAP_GRID)
+    equal_model_gaps = sum(1 for gap in gaps if gap.method == GAP_EQUAL)
+    separator_support_gaps = hard_separator_gaps + grid_model_gaps
+    reliable_support_gaps = sum(
+        1
+        for gap in gaps
+        if gap.method in HARD_GAP_METHODS.union({GAP_GRID})
+        and gap.score >= reliable_min_score
+    )
+    return GapMethodEvidenceSummary(
+        direct_hard_gaps=direct_hard_gaps,
+        enhanced_hard_gaps=enhanced_hard_gaps,
+        hard_separator_gaps=hard_separator_gaps,
+        grid_model_gaps=grid_model_gaps,
+        equal_model_gaps=equal_model_gaps,
+        separator_support_gaps=separator_support_gaps,
+        reliable_support_gaps=reliable_support_gaps,
+    )
 
 
 def content_support_score(
@@ -203,17 +242,9 @@ def score_detection(
     base_score = policy.scoring.base_detection
     separator_gate = policy.separator.gate
     expected_gaps = max(0, count - 1)
-    actual_detected = sum(1 for gap in gaps if gap.method in {GAP_DETECTED, GAP_EDGE_PAIR})
-    enhanced_detected = sum(1 for gap in gaps if gap.method == GAP_ENHANCED_DETECTED)
-    grid_gaps = sum(1 for gap in gaps if gap.method == GAP_GRID)
-    hard_detected = actual_detected + enhanced_detected
-    detected = hard_detected + grid_gaps
-    equal = sum(1 for gap in gaps if gap.method == GAP_EQUAL)
-    reliable = sum(
-        1
-        for gap in gaps
-        if gap.method in HARD_GAP_METHODS.union({GAP_GRID})
-        and gap.score >= policy.separator.robust_grid.reliable_min_score
+    gap_evidence = gap_method_evidence_summary(
+        gaps,
+        policy.separator.robust_grid.reliable_min_score,
     )
     widths = np.array([box.width for box in boxes if box.valid()], dtype=np.float64)
     width_cv = float(widths.std() / max(1.0, widths.mean())) if widths.size else 1.0
@@ -221,7 +252,7 @@ def score_detection(
     p01, p50, p99 = sampled_percentile(gray_work, [1, 50, 99])
     contrast = float(p99 - p01)
 
-    gap_conf = 1.0 if expected_gaps == 0 else detected / float(expected_gaps)
+    gap_conf = 1.0 if expected_gaps == 0 else gap_evidence.separator_support_gaps / float(expected_gaps)
     width_conf = max(0.0, min(1.0, 1.0 - width_cv / base_score.width_cv_norm))
     outer_conf = 1.0 if base_score.outer_min_area <= outer_area <= base_score.outer_max_area else base_score.outer_uncertain_confidence
     contrast_conf = 1.0 if contrast >= base_score.contrast_min else max(base_score.contrast_floor, contrast / base_score.contrast_min)
@@ -232,8 +263,17 @@ def score_detection(
     enough_profile_separator_evidence = (
         not uses_min_hard_equal_cap
         or expected_gaps <= 1
-        or (hard_detected >= separator_gate.score_min_hard_gaps and equal <= max(separator_gate.score_max_equal_gaps_floor, expected_gaps // 2))
-        or (actual_detected >= 1 and enhanced_detected >= 2 and equal <= max(separator_gate.score_max_equal_gaps_floor, expected_gaps // 2))
+        or (
+            gap_evidence.hard_separator_gaps >= separator_gate.score_min_hard_gaps
+            and gap_evidence.equal_model_gaps
+            <= max(separator_gate.score_max_equal_gaps_floor, expected_gaps // 2)
+        )
+        or (
+            gap_evidence.direct_hard_gaps >= 1
+            and gap_evidence.enhanced_hard_gaps >= 2
+            and gap_evidence.equal_model_gaps
+            <= max(separator_gate.score_max_equal_gaps_floor, expected_gaps // 2)
+        )
     )
 
     confidence = (
@@ -249,12 +289,23 @@ def score_detection(
         and len(boxes) == count
         and (
             width_cv <= base_score.full_width_cv
-            or (uses_min_hard_equal_cap and separator_gate.allow_full_detected_geometry and detected == expected_gaps)
+            or (
+                uses_min_hard_equal_cap
+                and separator_gate.allow_full_detected_geometry
+                and gap_evidence.separator_support_gaps == expected_gaps
+            )
         )
         and base_score.full_outer_min_area <= outer_area <= base_score.outer_max_area
         and outer_area <= base_score.outer_too_large
         and enough_profile_separator_evidence
-        and (uses_min_hard_equal_cap or geometry_support_allowed or (reliable >= expected_gaps and equal == 0))
+        and (
+            uses_min_hard_equal_cap
+            or geometry_support_allowed
+            or (
+                gap_evidence.reliable_support_gaps >= expected_gaps
+                and gap_evidence.equal_model_gaps == 0
+            )
+        )
     )
     if full_geometry_ok:
         geometry_floor = (
@@ -264,11 +315,19 @@ def score_detection(
         )
         confidence = max(confidence, geometry_floor)
     reasons: list[str] = []
-    if expected_gaps and detected < max(1, expected_gaps // 2) and not full_geometry_ok:
+    if expected_gaps and gap_evidence.separator_support_gaps < max(1, expected_gaps // 2) and not full_geometry_ok:
         reasons.append("weak_separators")
-    if equal >= max(2, expected_gaps // 2 + 1) and not full_geometry_ok:
+    if gap_evidence.equal_model_gaps >= max(2, expected_gaps // 2 + 1) and not full_geometry_ok:
         reasons.append("mostly_equal_split")
-    if uses_min_hard_equal_cap and expected_gaps >= 3 and hard_detected < 2 and not (actual_detected >= 1 and enhanced_detected >= 2):
+    if (
+        uses_min_hard_equal_cap
+        and expected_gaps >= 3
+        and gap_evidence.hard_separator_gaps < 2
+        and not (
+            gap_evidence.direct_hard_gaps >= 1
+            and gap_evidence.enhanced_hard_gaps >= 2
+        )
+    ):
         reasons.append("too_few_detected_separators")
     if width_cv > base_score.unstable_width_cv:
         reasons.append("unstable_frame_width")
@@ -276,7 +335,7 @@ def score_detection(
         reasons.append("outer_box_uncertain")
     if outer_area > base_score.outer_too_large:
         reasons.append("outer_box_too_large")
-    if fmt.family == "120" and detected < expected_gaps:
+    if fmt.family == "120" and gap_evidence.separator_support_gaps < expected_gaps:
         reasons.append(base_score.family_separator_uncertain_reason)
     if contrast < base_score.contrast_min:
         reasons.append("low_contrast")
@@ -297,22 +356,22 @@ def score_detection(
         reasons.append("partial_strip_count_candidate")
 
     if uses_min_hard_equal_cap and expected_gaps >= 3:
-        if hard_detected < 1:
+        if gap_evidence.hard_separator_gaps < 1:
             confidence = min(confidence, separator_gate.low_hard_confidence_cap)
-        elif hard_detected < 2 and enhanced_detected < 2:
+        elif gap_evidence.hard_separator_gaps < 2 and gap_evidence.enhanced_hard_gaps < 2:
             confidence = min(confidence, separator_gate.low_hard_confidence_cap)
-        elif equal >= max(2, expected_gaps // 2 + 1):
+        elif gap_evidence.equal_model_gaps >= max(2, expected_gaps // 2 + 1):
             confidence = min(confidence, separator_gate.mostly_equal_confidence_cap)
     if outer_area > base_score.outer_too_large:
         confidence = min(confidence, base_score.outer_too_large_cap)
 
     detail = {
-        "detected_gaps": detected,
-        "actual_detected_gaps": actual_detected,
-        "enhanced_detected_gaps": enhanced_detected,
-        "grid_gaps": grid_gaps,
-        "reliable_gaps": reliable,
-        "equal_gaps": equal,
+        "detected_gaps": gap_evidence.separator_support_gaps,
+        "actual_detected_gaps": gap_evidence.direct_hard_gaps,
+        "enhanced_detected_gaps": gap_evidence.enhanced_hard_gaps,
+        "grid_gaps": gap_evidence.grid_model_gaps,
+        "reliable_gaps": gap_evidence.reliable_support_gaps,
+        "equal_gaps": gap_evidence.equal_model_gaps,
         "width_cv": width_cv,
         "outer_area_ratio": outer_area,
         "image_quality": {
@@ -328,8 +387,10 @@ def score_detection(
     return float(max(0.0, min(1.0, confidence))), sorted(set(reasons)), detail
 
 __all__ = [
+    "GapMethodEvidenceSummary",
     "content_support_score",
     "detail_float",
+    "gap_method_evidence_summary",
     "geometry_support_score",
     "hard_full_calibration_floor_applies",
     "separator_geometry_support_applies",
