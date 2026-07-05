@@ -114,14 +114,14 @@ finalization
 | Outer 视角 | outer 是 proposal 还是 correction，是否越权 PASS？ | 拆分 outer proposal/correction，corrected outer 回到 candidate reassessment。 | proposal/correction 分离，outer 不决定 PASS / REVIEW。 | 完成 | 后续只复核新增 proposal 是否走 plan。 |
 | Wide / Dark / Retry 视角 | wide、dark、retry、fallback 是否是真正概念？ | 收敛 wide/dark 为 separator width evidence，retry 为 candidate plan，fallback 为 safety candidate。 | width evidence、candidate plan、safety candidate。 | 完成 | 最终命名清理时清除旧 detail 双写。 |
 | Debug / Report 视角 | 人类如何复盘候选、gate 和 policy？ | 保留三联 Debug Analysis，report 保留 candidate/gate/policy detail。 | 三联图和 report detail 作为人工审核 surface。 | 持续复核 | 每改一个逻辑族群都检查解释力。 |
-| 逻辑族群视角 | 检测逻辑本身有哪些族群，哪些已审？ | 建立 Detection / Gate / Risk 人工审核索引，outer 已完成，Gap / Separator 已开始。 | 当前接点明确为 Gap / Separator。 | 进行中 | 从 `separator_profile` / `find_gap` 继续。 |
+| 逻辑族群视角 | 检测逻辑本身有哪些族群，哪些已审？ | 建立 Detection / Gate / Risk 人工审核索引，Pre-detection 和 outer 已完成，Gap / Separator 已开始。 | 当前接点明确为 Gap / Separator。 | 进行中 | 从 `separator_profile` / `find_gap` 继续。 |
 | Git / 验证视角 | 改动是否验证、提交和同步？ | 跑静态检查、policy consistency、standalone、样片 smoke，并提交推送。 | 最新结构已推送到 `main`。 | 完成 | 每次源码或文档改动后按范围验证。 |
 
 #### 逻辑族群审核进度
 
 | 视角/族群 | 我们问的问题 | 已做工作 | 成果 | 当前状态 | 下一步接点 |
 |---|---|---|---|---|---|
-| Pre-detection | layout、deskew、evidence gray 是否只提供输入证据？ | 审过结构和基础层归属。 | 输入层不拥有 PASS / REVIEW 语义。 | 结构完成，逻辑待审 | 之后逐项看 layout、deskew、evidence gray。 |
+| Pre-detection | layout、deskew、evidence gray 是否只提供输入证据？ | 完成 layout/坐标映射、deskew angle selection、evidence gray、analysis cache / reuse 深审。 | 只生成 work-space 输入、deskew detail 和 evidence/cache；不生成候选、不评分、不 PASS / REVIEW。 | 完成 | 进入 Gap / Separator；separator cache 作为 gap evidence cache 继续审。 |
 | Policy activation | format/mode 是否只通过 policy 打开行为？ | 完成 format facts、runtime policy、decision contract 分层。 | format/mode isolation 基本稳定。 | 完成 | 新增格式或 mode 时复核。 |
 | Mode detector | standard、dual-lane、review-only 是否隔离？ | 审核 dual-lane 和 review-only 边界。 | review-only 成为通用保守模式。 | 完成 | 新 mode 必须声明 detector kind。 |
 | Outer proposal / correction | outer 是否只提出候选或修正候选？ | 完成 proposal/correction 拆分和 corrected candidate reassessment。 | outer 不再拥有 PASS / REVIEW 权限。 | 完成 | 后续只做新增逻辑复核。 |
@@ -197,9 +197,9 @@ REVIEW contract。
 
 | 逻辑族群 | 子逻辑 | 主要位置 | 人工审核重点 |
 |---|---|---|---|
-| Pre-detection | layout / coordinate mapping | `geometry/layout.py`, `geometry/boxes.py` | horizontal / vertical 的 work-space 与 original-space 映射是否一致；不得让坐标转换改变裁切语义。 |
-| Pre-detection | deskew angle selection | `image/deskew.py`, `image/deskew_parameters.py` | deskew 只能改变输入姿态和质量 detail；不应直接决定 PASS / REVIEW。 |
-| Pre-detection | analysis / evidence gray | `image/evidence.py` | separator/content evidence gray 只能作为证据图和检测输入；不得隐藏真实灰度上下文。 |
+| Pre-detection | layout / coordinate mapping | `geometry/layout.py`, `geometry/boxes.py` | 已审：horizontal / vertical work-space 与 original-space 映射对称；坐标转换只改变视角，不改变裁切语义。 |
+| Pre-detection | deskew angle selection | `image/deskew.py`, `image/deskew_parameters.py`, `runtime/deskew.py` | 已审：deskew 只估角、旋转输入和写入质量 detail；deskew uncertainty 只能作为最终 REVIEW reason 的风险输入，不能直接 PASS。 |
+| Pre-detection | analysis / evidence gray | `image/evidence.py`, `cache/analysis.py` | 已审：content/separator evidence gray 和 analysis cache 只提供可复用证据输入；不隐藏原始 gray，不选择候选，不决定 PASS / REVIEW。 |
 | Policy activation | format physical facts | `formats/` | count、aspect、family、physical risk 是否是事实层，不含 gate threshold。 |
 | Policy activation | format / mode policy presets | `policies/formats/format_*.py` | format/mode 是否只声明物理参数、gate profile 和 detector 差异；通用 detector capability 不应变成 format 专属算法开关。 |
 | Policy activation | runtime policy assembly | `policies/assembly/*`, `policies/runtime/*`, `policies/parameters/*` | preset、parameters、runtime policy 是否一一映射；默认字段不得让报告误以为逻辑已 active。 |
@@ -429,8 +429,8 @@ and decision detail, and cannot bypass the final PASS / REVIEW contract.
 
 | Logic family | Sub-logic | Main location | Review focus |
 |---|---|---|---|
-| Pre-detection | layout / coordinate mapping | `geometry/layout.py`, `geometry/boxes.py` | Horizontal / vertical work-space mapping must not change crop semantics. |
-| Pre-detection | deskew and evidence gray | `image/deskew.py`, `image/evidence.py` | Preprocessing may shape evidence but must not decide PASS / REVIEW. |
+| Pre-detection | layout / coordinate mapping | `geometry/layout.py`, `geometry/boxes.py` | Reviewed: horizontal / vertical work-space mapping is symmetric and must not change crop semantics. |
+| Pre-detection | deskew and evidence gray | `image/deskew.py`, `image/evidence.py`, `cache/analysis.py` | Reviewed: preprocessing may shape input posture, evidence gray, and reusable cache detail, but must not choose candidates or decide PASS / REVIEW. |
 | Policy activation | format facts and policy presets | `formats/`, `policies/formats/format_*.py` | Physical facts, thresholds, and detector differences must stay separate from universal capability activation. |
 | Policy activation | runtime and decision contracts | `policies/runtime/*`, `policies/decision/contract.py` | `DetectionPolicy` and `DetectionDecisionContract` must not drift semantically. |
 | Mode-specific detector | dual-lane and review-only paths | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_*.py`, `detection/modes/review_only.py`, `detection/candidate/proposal/safety.py` | Dedicated detectors and review-only paths must stay isolated, context-driven, and conservative. |
