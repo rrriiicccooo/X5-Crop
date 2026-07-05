@@ -28,6 +28,13 @@ class SeparatorGateEvidence:
     enhanced_separator_accepted_count: int
 
 
+@dataclass(frozen=True)
+class SeparatorGateAssessment:
+    ok: bool
+    reason: str
+    leading_grid_failure: bool = False
+
+
 def separator_gate_min_hard_with_equal_cap_assessment(
     evidence: SeparatorGateEvidence,
     gate: SeparatorGatePolicy,
@@ -214,16 +221,14 @@ def separator_gate_evidence_from_detection(detection: Detection) -> SeparatorGat
 
 def separator_gate_detail(
     evidence: SeparatorGateEvidence,
-    ok: bool,
-    reason: str,
+    assessment: SeparatorGateAssessment,
     detection: Detection,
     gate: SeparatorGatePolicy,
     policy: DetectionPolicy,
-    leading_grid_failure: bool,
 ) -> dict[str, Any]:
     return {
-        "ok": ok,
-        "reason": reason,
+        "ok": assessment.ok,
+        "reason": assessment.reason,
         "expected_gaps": evidence.expected_gaps,
         "hard_gaps": evidence.hard_gaps,
         "actual_detected_gaps": evidence.actual_detected_gaps,
@@ -237,21 +242,19 @@ def separator_gate_detail(
         "broad_separator_width_scores": evidence.broad_separator_width_scores,
         "leading_grid_scores": evidence.leading_grid_scores,
         "enhanced_separator_accepted_count": evidence.enhanced_separator_accepted_count,
-        "leading_grid_separator_failure": bool(leading_grid_failure),
+        "leading_grid_separator_failure": bool(assessment.leading_grid_failure),
         "separator_confidence": float(detection.confidence),
         "separator_gate_profile": gate.profile,
         "policy_id": policy.policy_id,
     }
 
 
-def candidate_has_hard_separator_evidence(
+def separator_gate_assessment(
     detection: Detection,
     threshold: float,
-    policy: Optional[DetectionPolicy] = None,
-) -> tuple[bool, dict[str, Any]]:
-    policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
-    gate = policy.separator.gate
-    evidence = separator_gate_evidence_from_detection(detection)
+    evidence: SeparatorGateEvidence,
+    gate: SeparatorGatePolicy,
+) -> SeparatorGateAssessment:
     leading_grid_failure = separator_gate_leading_grid_failure_assessment(
         detection,
         evidence,
@@ -260,7 +263,11 @@ def candidate_has_hard_separator_evidence(
 
     if evidence.expected_gaps == 0:
         ok = detection.confidence >= threshold
-        reason = "single_frame_no_separator_needed" if ok else "single_frame_low_confidence"
+        reason = (
+            "single_frame_no_separator_needed"
+            if ok
+            else "single_frame_low_confidence"
+        )
     elif detection.confidence < threshold:
         ok = False
         reason = "separator_below_threshold"
@@ -283,18 +290,34 @@ def candidate_has_hard_separator_evidence(
             gate,
         )
 
-    return ok, separator_gate_detail(
+    return SeparatorGateAssessment(
+        ok=ok,
+        reason=reason,
+        leading_grid_failure=leading_grid_failure,
+    )
+
+
+def candidate_has_hard_separator_evidence(
+    detection: Detection,
+    threshold: float,
+    policy: Optional[DetectionPolicy] = None,
+) -> tuple[bool, dict[str, Any]]:
+    policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
+    gate = policy.separator.gate
+    evidence = separator_gate_evidence_from_detection(detection)
+    assessment = separator_gate_assessment(detection, threshold, evidence, gate)
+
+    return assessment.ok, separator_gate_detail(
         evidence,
-        ok,
-        reason,
+        assessment,
         detection,
         gate,
         policy,
-        leading_grid_failure,
     )
 
 
 __all__ = [
+    "SeparatorGateAssessment",
     "SeparatorGateEvidence",
     "enhanced_gap_promotion_accepted_count",
     "hard_gap_indexes_are_adjacent_late",
@@ -307,6 +330,7 @@ __all__ = [
     "separator_gate_leading_grid_failure_assessment",
     "separator_gate_min_hard_with_equal_cap_assessment",
     "separator_gate_needs_full_strip_supplemental_checks",
+    "separator_gate_assessment",
     "separator_gate_detail",
     "separator_gate_evidence_from_detection",
     "candidate_has_hard_separator_evidence",

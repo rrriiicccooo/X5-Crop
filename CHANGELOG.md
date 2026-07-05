@@ -82,6 +82,9 @@ Current stable release: v4.2.8
 - separator gate 已新增 `SeparatorGateEvidence` 摘要对象，集中汇总
   hard / model / width / leading-grid evidence；各 gate profile 只消费该摘要
   和 policy 参数，输出 detail key 保持不变。
+- separator gate dispatch 已收敛到 `SeparatorGateAssessment`：single-frame、
+  confidence threshold、leading-grid failure 和 gate profile 选择统一在该 helper
+  中完成，外层入口只负责 evidence -> assessment -> detail。
 - 未使用的 `CandidateGateOutcome` gate 占位类型已删除，减少无调用方接口。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
@@ -413,6 +416,10 @@ Verified:
 - The separator gate now builds a `SeparatorGateEvidence` summary for hard,
   model, width, and leading-grid evidence. Gate profiles consume that summary
   plus policy parameters, while output detail keys remain unchanged.
+- Separator gate dispatch now goes through `SeparatorGateAssessment`: single-frame,
+  confidence threshold, leading-grid failure, and gate-profile selection are
+  handled by that helper, while the outer entry only performs evidence ->
+  assessment -> detail.
 - The unused `CandidateGateOutcome` gate placeholder type has been removed.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the
