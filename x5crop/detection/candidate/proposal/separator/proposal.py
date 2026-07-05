@@ -8,7 +8,7 @@ from .....domain import Box, Gap
 from .....geometry.detection_parameters import GapSearchParameters
 from .....geometry.gap_search import find_gap
 from .....geometry.separator_width_profile import separator_width_gap_at, separator_width_profile as make_separator_width_profile
-from .....policies.runtime.policy import DetectionPolicy
+from .....policies.runtime.separator import SeparatorWidthProfilePolicy
 
 
 def propose_standard_separator_gaps(
@@ -36,9 +36,8 @@ def propose_separator_width_profile_gaps(
     gray_work: np.ndarray,
     outer: Box,
     count: int,
-    policy: DetectionPolicy,
+    width_profile_policy: SeparatorWidthProfilePolicy,
 ) -> list[Gap]:
-    width_profile_policy = policy.separator.width_profile
     required_count = int(width_profile_policy.required_count)
     if (
         width_profile_policy.mode == "off"

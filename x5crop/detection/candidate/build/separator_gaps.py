@@ -77,7 +77,12 @@ def initial_separator_gaps(
         policy.separator.gap_search,
     )
     if candidate_strategy == "separator_outer" and gap_search_profile == BROAD_WIDTH_GAP_PROFILE:
-        separator_width_profile_gaps = propose_separator_width_profile_gaps(gray_work, outer, count, policy)
+        separator_width_profile_gaps = propose_separator_width_profile_gaps(
+            gray_work,
+            outer,
+            count,
+            policy.separator.width_profile,
+        )
         if len(separator_width_profile_gaps) >= max(1, count - 1):
             gaps = separator_width_profile_gaps
     if (

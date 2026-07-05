@@ -42,7 +42,9 @@ Current stable release: v4.2.8
   width evidence 和 separator-derived outer band evidence；`geometry` 保留底层
   profile/search/trust 数学能力；width profile 纯数学归
   `geometry/separator_width_profile.py`，参数归 `SeparatorPolicy`，outer policy
-  只保留 separator-derived outer family / band 参数。
+  只保留 separator-derived outer family / band 参数；broad-width gap proposal
+  的采样上限、搜索窗口、距离惩罚和基础分数已外显到 width profile policy
+  detail。
 - gap method vocabulary 已统一由 `constants.py` 提供；candidate assessment、
   decision summary、risk diagnostics、read-only diagnostics 和 frame edge fitting
   只消费 `detected / edge-pair / enhanced-detected / grid / equal / content`

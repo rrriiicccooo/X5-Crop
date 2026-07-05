@@ -4,6 +4,7 @@ from typing import Optional
 
 import numpy as np
 
+from ..constants import GAP_DETECTED
 from ..domain import Gap
 from ..utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 from .detection_parameters import SeparatorWidthProfileSearchParameters
@@ -16,7 +17,10 @@ def separator_width_profile(
     params = params or SeparatorWidthProfileSearchParameters()
     if crop.size == 0:
         return np.array([], dtype=np.float32)
-    sample = crop[:: max(1, crop.shape[0] // 500), :: max(1, crop.shape[1] // 2000)]
+    sample = crop[
+        :: max(1, crop.shape[0] // max(1, int(params.sample_short_axis_max))),
+        :: max(1, crop.shape[1] // max(1, int(params.sample_long_axis_max))),
+    ]
     p01, p99 = sampled_percentile(sample, [1, 99])
     span = max(1.0, float(p99 - p01))
     threshold = float(p01) + span * params.threshold_span_ratio
@@ -96,7 +100,11 @@ def separator_width_gap_at(
     if profile.size <= 0 or pitch <= 0:
         return None
     min_width, max_width, max_core_width = separator_width_bounds(short_axis, params)
-    window = clamp_int(pitch * 0.28, 260, max(300, int(pitch * 0.38)))
+    window = clamp_int(
+        pitch * params.gap_window_ratio,
+        params.gap_window_min,
+        max(params.gap_window_floor, int(pitch * params.gap_window_cap_ratio)),
+    )
     lo = max(0, int(round(expected - window)))
     hi = min(len(profile), int(round(expected + window)))
     best: Optional[tuple[float, int, int]] = None
@@ -109,7 +117,7 @@ def separator_width_gap_at(
         mean_score = float(profile[start:end].mean())
         center = (start + end - 1) * 0.5
         distance_penalty = abs(center - expected) / max(1.0, pitch)
-        score = mean_score - 0.35 * distance_penalty
+        score = mean_score - params.gap_distance_penalty_weight * distance_penalty
         if best is None or score > best[0]:
             best = (score, start, end)
     if best is None:
@@ -120,7 +128,7 @@ def separator_width_gap_at(
         half_width = max_core_width * 0.5
         start = int(round(max(0.0, center - half_width)))
         end = int(round(min(float(len(profile)), center + half_width)))
-    return Gap(index, float(center), float(1.0 + max(0.0, score)), "detected", float(start), float(end))
+    return Gap(index, float(center), float(params.gap_score_base + max(0.0, score)), GAP_DETECTED, float(start), float(end))
 
 
 __all__ = [

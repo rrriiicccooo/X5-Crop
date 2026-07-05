@@ -183,6 +183,8 @@ class SeparatorProfileParameters:
 class SeparatorWidthProfileSearchParameters:
     threshold_ratio: float = 0.42
     threshold_span_ratio: float = 0.12
+    sample_short_axis_max: int = 500
+    sample_long_axis_max: int = 2000
     profile_smooth_short_axis_ratio: float = 0.018
     profile_smooth_min: int = 15
     min_width_ratio: float = 0.030
@@ -195,6 +197,12 @@ class SeparatorWidthProfileSearchParameters:
     edge_margin_ratio: float = 0.18
     edge_margin_min: float = 60.0
     edge_margin_cap_ratio: float = 0.80
+    gap_window_ratio: float = 0.28
+    gap_window_min: int = 260
+    gap_window_floor: int = 300
+    gap_window_cap_ratio: float = 0.38
+    gap_distance_penalty_weight: float = 0.35
+    gap_score_base: float = 1.0
 
 
 @dataclass(frozen=True)
