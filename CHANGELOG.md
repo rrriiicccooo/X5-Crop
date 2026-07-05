@@ -85,6 +85,9 @@ Current stable release: v4.2.8
 - separator gate dispatch 已收敛到 `SeparatorGateAssessment`：single-frame、
   confidence threshold、leading-grid failure 和 gate profile 选择统一在该 helper
   中完成，外层入口只负责 evidence -> assessment -> detail。
+- separator gate profile vocabulary 已集中到中性 policy vocabulary 模块，format
+  presets、默认参数、scoring 和 gate dispatch 共享同一组常量；policy assembly
+  会拒绝未知 profile，不再隐式回落到 strict profile。
 - 未使用的 `CandidateGateOutcome` gate 占位类型已删除，减少无调用方接口。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
@@ -420,6 +423,10 @@ Verified:
   confidence threshold, leading-grid failure, and gate-profile selection are
   handled by that helper, while the outer entry only performs evidence ->
   assessment -> detail.
+- Separator gate profile vocabulary is centralized in a neutral policy vocabulary
+  module. Format presets, defaults, scoring, and gate dispatch share the same
+  constants, and policy assembly rejects unknown profiles instead of implicitly
+  falling back to the strict profile.
 - The unused `CandidateGateOutcome` gate placeholder type has been removed.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the

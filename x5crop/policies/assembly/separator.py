@@ -12,6 +12,7 @@ from ...geometry.detection_parameters import (
 from .presets import FormatPolicyPreset, ModePolicyPreset
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import FULL, PARTIAL
+from ..separator_gate_profiles import SEPARATOR_GATE_PROFILES
 from ..runtime.separator import (
     LeadingGridFailurePolicy,
     SeparatorGatePolicy,
@@ -26,6 +27,12 @@ def separator_gate_policy(
     preset: FormatPolicyPreset,
     params: FormatParameters,
 ) -> SeparatorGatePolicy:
+    if preset.separator_gate_profile not in SEPARATOR_GATE_PROFILES:
+        supported = ", ".join(SEPARATOR_GATE_PROFILES)
+        raise ValueError(
+            f"Unsupported separator gate profile: {preset.separator_gate_profile!r}; "
+            f"expected one of {supported}"
+        )
     gate = params.separator_gate
     leading_grid = params.leading_grid_failure
     return SeparatorGatePolicy(

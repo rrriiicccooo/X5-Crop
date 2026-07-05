@@ -19,6 +19,7 @@ from ....policies.registry import get_detection_policy
 from ....policies.runtime.content import ContentPolicy
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import SeparatorGeometrySupportModePolicy
+from ....policies.separator_gate_profiles import SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
 from ....utils import sampled_percentile
 
 
@@ -224,7 +225,9 @@ def score_detection(
     width_conf = max(0.0, min(1.0, 1.0 - width_cv / base_score.width_cv_norm))
     outer_conf = 1.0 if base_score.outer_min_area <= outer_area <= base_score.outer_max_area else base_score.outer_uncertain_confidence
     contrast_conf = 1.0 if contrast >= base_score.contrast_min else max(base_score.contrast_floor, contrast / base_score.contrast_min)
-    uses_min_hard_equal_cap = separator_gate.profile == "min_hard_with_equal_cap"
+    uses_min_hard_equal_cap = (
+        separator_gate.profile == SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
+    )
     geometry_support_allowed = separator_gate.allow_geometry_support and bool(policy.separator.geometry_support_modes)
     enough_profile_separator_evidence = (
         not uses_min_hard_equal_cap

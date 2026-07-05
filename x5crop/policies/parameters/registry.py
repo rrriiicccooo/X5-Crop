@@ -4,6 +4,7 @@ from typing import Any
 
 from ...formats import FORMAT_CHOICES
 from ..formats.modules import import_format_module
+from ..separator_gate_profiles import SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD
 from .aggregate import FormatParameters
 
 
@@ -13,7 +14,7 @@ def base_medium_format_parameters(format_name: str, **overrides: Any) -> FormatP
         "content_profile_min_run_ratio": 0.18,
         "separator_model_grid_credit": 0.18,
         "separator_model_equal_credit": 0.04,
-        "separator_gate_profile": "all_internal_gaps_hard",
+        "separator_gate_profile": SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD,
         "nearby_score_multiplier": 1.28,
         "calibrate_separator_weight": 0.36,
         "calibrate_geometry_weight": 0.32,

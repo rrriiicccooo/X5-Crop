@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..separator_gate_profiles import SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT
 from ..runtime.base import FULL, PARTIAL, FrameFitPolicy
 from ..runtime.separator import SeparatorEdgePairPolicy
 from ..assembly.factory import build_policy_from_preset
@@ -16,7 +17,7 @@ def parameters() -> FormatParameters:
         content_profile_min_run_ratio=0.16,
         separator_model_grid_credit=0.25,
         separator_model_equal_credit=0.08,
-        separator_gate_profile="geometry_support",
+        separator_gate_profile=SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT,
         separator_width_profile_enabled=True,
         separator_width_profile_max_width_ratio=0.100,
         nearby_active_correction=False,
@@ -41,7 +42,7 @@ def parameters() -> FormatParameters:
 FORMAT_POLICY_PRESET = FormatPolicyPreset(
     format_id=FORMAT_ID,
     parameters=parameters,
-    separator_gate_profile="geometry_support",
+    separator_gate_profile=SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT,
     separator_edge_pair=SeparatorEdgePairPolicy(
         0.090, 0.003, 0.060, 0.46, 0.66, 1.05, 0.70, 0.95, 0.040
     ),

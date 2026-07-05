@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..separator_gate_profiles import SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
 from .outer import OuterMaskProfile
 from .views import FormatParameterViews
 
@@ -288,7 +289,7 @@ class FormatParameters(FormatParameterViews):
     calibrate_hard_full_confidence_floor: float = 0.0
     separator_model_grid_credit: float = 0.35
     separator_model_equal_credit: float = 0.12
-    separator_gate_profile: str = "min_hard_with_equal_cap"
+    separator_gate_profile: str = SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
     separator_gate_needed_hard_max: int = 2
     separator_gate_max_equal_gaps_floor: int = 2
     separator_allow_geometry_support: bool = True

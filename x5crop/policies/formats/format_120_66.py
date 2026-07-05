@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ..separator_gate_profiles import SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD
 from ..runtime.base import FULL, PARTIAL, FrameFitPolicy
 from ..runtime.separator import SeparatorEdgePairPolicy
 from ..assembly.factory import build_policy_from_preset
@@ -41,7 +42,7 @@ def parameters() -> FormatParameters:
 FORMAT_POLICY_PRESET = FormatPolicyPreset(
     format_id=FORMAT_ID,
     parameters=parameters,
-    separator_gate_profile="all_internal_gaps_hard",
+    separator_gate_profile=SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD,
     separator_edge_pair=SeparatorEdgePairPolicy(
         0.100, 0.001, 0.080, 0.24, 0.02, 0.28, 0.30, 0.95, 0.030
     ),

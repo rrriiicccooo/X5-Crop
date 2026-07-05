@@ -8,7 +8,16 @@ from ....domain import Detection
 from ....formats import FORMATS
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
-from ....policies.runtime.separator import LeadingGridFailurePolicy, SeparatorGatePolicy
+from ....policies.separator_gate_profiles import (
+    SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD,
+    SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT,
+    SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP,
+    SEPARATOR_GATE_PROFILES,
+)
+from ....policies.runtime.separator import (
+    LeadingGridFailurePolicy,
+    SeparatorGatePolicy,
+)
 
 
 @dataclass(frozen=True)
@@ -274,20 +283,26 @@ def separator_gate_assessment(
     elif leading_grid_failure:
         ok = False
         reason = "leading_grid_separator_failure"
-    elif gate.profile == "min_hard_with_equal_cap":
+    elif gate.profile == SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP:
         ok, reason = separator_gate_min_hard_with_equal_cap_assessment(evidence, gate)
-    elif gate.profile == "geometry_support":
+    elif gate.profile == SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT:
         ok, reason = separator_gate_geometry_support_assessment(
             detection,
             threshold,
             evidence,
             gate,
         )
-    else:
+    elif gate.profile == SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD:
         ok, reason = separator_gate_all_internal_gaps_hard_assessment(
             detection,
             evidence,
             gate,
+        )
+    else:
+        supported = ", ".join(SEPARATOR_GATE_PROFILES)
+        raise ValueError(
+            f"Unsupported separator gate profile: {gate.profile!r}; "
+            f"expected one of {supported}"
         )
 
     return SeparatorGateAssessment(
