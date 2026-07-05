@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import HARD_GAP_METHODS
+from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED, HARD_GAP_METHODS
 from ..domain import Box, Gap
 from ..cache import AnalysisCache
 from ..utils import clamp_float, clamp_int
@@ -92,13 +92,13 @@ def best_edge_pair_gap(
         return None
     _distance, neg_quality, _neg_bg, a, b = sorted(candidates)[0]
     center = (a + b) / 2.0
-    return Gap(gap.index, float(center), float(-neg_quality), "edge-pair", float(a), float(b + 1))
+    return Gap(gap.index, float(center), float(-neg_quality), GAP_EDGE_PAIR, float(a), float(b + 1))
 
 
 def edge_pair_can_replace_gap(gap: Gap, edge_gap: Gap, pitch: float, params: EdgePairParameters) -> bool:
     if gap.method not in HARD_GAP_METHODS:
         return edge_gap.score >= params.min_quality_for_model_gap
-    if gap.method in {"detected", "enhanced-detected"}:
+    if gap.method in {GAP_DETECTED, GAP_ENHANCED_DETECTED}:
         return edge_pair_can_replace_hard_gap(gap, edge_gap, pitch, params)
     return True
 

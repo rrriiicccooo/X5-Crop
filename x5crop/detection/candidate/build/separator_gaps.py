@@ -31,7 +31,7 @@ class SeparatorGapBuildResult:
     pitch: float
     gaps: list[Gap]
     grid_detail: dict[str, Any]
-    edge_refine_detail: dict[str, Any]
+    edge_pair_correction_detail: dict[str, Any]
     enhanced_gap_promotion_detail: dict[str, Any]
     nearby_correction_detail: dict[str, Any]
     pre_nearby_gaps: Optional[list[Gap]]
@@ -109,9 +109,9 @@ def apply_primary_separator_refinements(
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> tuple[list[Gap], dict[str, Any], dict[str, Any]]:
-    edge_refine_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
+    edge_pair_correction_detail: dict[str, Any] = {"used": False, "reason": "disabled"}
     if strip_mode == "full" and count > 1:
-        gaps, edge_refine_detail = refine_with_edge_pairs(
+        gaps, edge_pair_correction_detail = refine_with_edge_pairs(
             crop,
             gaps,
             count,
@@ -132,7 +132,7 @@ def apply_primary_separator_refinements(
         policy.separator.nearby_correction,
         policy.separator.robust_grid,
     )
-    return gaps, edge_refine_detail, grid_detail
+    return gaps, edge_pair_correction_detail, grid_detail
 
 
 def refine_outer_from_grid(
@@ -268,7 +268,7 @@ def build_separator_gaps_for_outer(
         gap_max_width_ratio_override,
         policy,
     )
-    gaps, edge_refine_detail, grid_detail = apply_primary_separator_refinements(
+    gaps, edge_pair_correction_detail, grid_detail = apply_primary_separator_refinements(
         gray_work,
         outer,
         crop,
@@ -296,7 +296,7 @@ def build_separator_gaps_for_outer(
                 gap_max_width_ratio_override,
                 policy.separator.gap_search,
             )
-            gaps, edge_refine_detail, grid_detail = apply_primary_separator_refinements(
+            gaps, edge_pair_correction_detail, grid_detail = apply_primary_separator_refinements(
                 gray_work,
                 outer,
                 crop,
@@ -340,7 +340,7 @@ def build_separator_gaps_for_outer(
         pitch=pitch,
         gaps=gaps,
         grid_detail=grid_detail,
-        edge_refine_detail=edge_refine_detail,
+        edge_pair_correction_detail=edge_pair_correction_detail,
         enhanced_gap_promotion_detail=enhanced_gap_promotion_detail,
         nearby_correction_detail=nearby_correction_detail,
         pre_nearby_gaps=pre_nearby_gaps,

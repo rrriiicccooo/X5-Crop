@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import HARD_GAP_METHODS
+from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED, GAP_EQUAL, GAP_GRID, HARD_GAP_METHODS
 from ..domain import Box, Detection, Gap
 from ..policies.registry import get_detection_policy
 from ..utils import clamp_float
@@ -77,11 +77,11 @@ def gap_tick_boxes(detection: Detection, gap: Gap, debug_gap: Any) -> list[Box]:
 def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> None:
     debug_gap = get_detection_policy(detection.film_format, detection.strip_mode).diagnostics.debug_gap_overlay
     gap_colors = {
-        "detected": (255, 0, 0),
-        "edge-pair": (255, 0, 0),
-        "enhanced-detected": (255, 140, 0),
-        "grid": (255, 220, 30),
-        "equal": (190, 80, 255),
+        GAP_DETECTED: (255, 0, 0),
+        GAP_EDGE_PAIR: (255, 0, 0),
+        GAP_ENHANCED_DETECTED: (255, 140, 0),
+        GAP_GRID: (255, 220, 30),
+        GAP_EQUAL: (190, 80, 255),
     }
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
     detected_centers = [gap.center for gap in detection.gaps if gap.method in HARD_GAP_METHODS]

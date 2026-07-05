@@ -64,6 +64,8 @@ Current stable release: v4.2.8
 - enhanced separator 内部语义收敛为 enhanced gap promotion：active detail key
   改为 `enhanced_gap_promotion`，gate 从该 detail 读取 promotion count，内部
   gap method 判断统一使用常量。
+- edge-pair refinement 已明确为 edge-pair gap correction：active detail key
+  改为 `edge_pair_correction`，debug gap overlay 也改为消费 gap method 常量。
 - 新增错误 PASS 不可接受；保守 REVIEW 和 schema / reason diff 必须解释。
 - TIFF metadata、位深、ICC、resolution 和 compression 行为保持不变。
 

@@ -149,7 +149,7 @@ def build_detection_for_outer(
             "grid": separator_gaps.grid_detail,
             "grid_residual": separator_gaps.grid_detail.get("grid_residual"),
             "grid_used": bool(separator_gaps.grid_detail.get("grid_used", False)),
-            "edge_refine": separator_gaps.edge_refine_detail,
+            "edge_pair_correction": separator_gaps.edge_pair_correction_detail,
             "frame_size_fit": frame_size_detail,
             "enhanced_gap_promotion": separator_gaps.enhanced_gap_promotion_detail,
             "nearby_separator_correction": separator_gaps.nearby_correction_detail,
