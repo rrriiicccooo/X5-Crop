@@ -370,6 +370,8 @@ Current stable release: v4.2.8
   `detection/evidence/gap_diagnostics.py` 不再重复 trust 分类条件，只负责生成
   read-only diagnostic record；runtime / diagnostic assessment 现在输出同一类
   assessment detail，记录 trust label、reason、width / model delta 和 signal flags。
+- runtime / diagnostic hard-gap trust assessment 现在共用 `HardGapTrustContext`
+  和 `hard_gap_trust_assessment_result()` 组装 detail；判断顺序和阈值保持不变。
 - hard-gap trust 只保留 `HardGapTrustAssessment` detail-first 接口；未使用的
   string-only classifier wrapper 已删除。
 - enhanced / nearby separator refinement 已做行为等价拆分：
@@ -747,6 +749,9 @@ Verified:
   records diagnostics without duplicating trust classification conditions. Runtime
   and diagnostic assessment now expose matching detail with trust
   label, reason, width / model delta, and signal flags.
+- Runtime and diagnostic hard-gap trust assessments now share
+  `HardGapTrustContext` and `hard_gap_trust_assessment_result()` for detail
+  assembly; branch order and thresholds are unchanged.
 - Hard-gap trust now keeps only the `HardGapTrustAssessment` detail-first
   interface; unused string-only classifier wrappers have been removed.
 - Enhanced / nearby separator refinement is split without behavior changes:

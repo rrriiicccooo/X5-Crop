@@ -61,6 +61,14 @@ class HardGapTrustAssessment:
         }
 
 
+@dataclass(frozen=True)
+class HardGapTrustContext:
+    width_ratio: float
+    model_delta_ratio: float | None
+    nearby_separator_conflict: bool
+    signal_flags: dict[str, bool]
+
+
 def hard_gap_width_ratio(gap: Gap, pitch: float) -> float:
     return float(gap.width) / max(1.0, float(pitch))
 
@@ -151,6 +159,37 @@ def hard_gap_signal_flags(
     }
 
 
+def hard_gap_trust_context(
+    config: HardGapTrustParameters,
+    *,
+    width_ratio: float,
+    model_delta_ratio: float | None = None,
+    nearby_separator_conflict: bool = False,
+    signals: HardGapPixelSignals | None = None,
+) -> HardGapTrustContext:
+    return HardGapTrustContext(
+        width_ratio=float(width_ratio),
+        model_delta_ratio=model_delta_ratio,
+        nearby_separator_conflict=bool(nearby_separator_conflict),
+        signal_flags=hard_gap_signal_flags(signals, config),
+    )
+
+
+def hard_gap_trust_assessment_result(
+    context: HardGapTrustContext,
+    trust: str,
+    reason: str,
+) -> HardGapTrustAssessment:
+    return HardGapTrustAssessment(
+        trust=trust,
+        reason=reason,
+        width_ratio=context.width_ratio,
+        model_delta_ratio=context.model_delta_ratio,
+        nearby_separator_conflict=context.nearby_separator_conflict,
+        signal_flags=context.signal_flags,
+    )
+
+
 def runtime_hard_gap_trust_assessment(
     gap: Gap,
     pitch: float,
@@ -161,17 +200,16 @@ def runtime_hard_gap_trust_assessment(
     nearby_separator_conflict: bool = False,
     signals: HardGapPixelSignals | None = None,
 ) -> HardGapTrustAssessment:
-    flags = hard_gap_signal_flags(signals, config)
+    context = hard_gap_trust_context(
+        config,
+        width_ratio=width_ratio,
+        model_delta_ratio=model_delta_ratio,
+        nearby_separator_conflict=nearby_separator_conflict,
+        signals=signals,
+    )
 
     def assessment(trust: str, reason: str) -> HardGapTrustAssessment:
-        return HardGapTrustAssessment(
-            trust=trust,
-            reason=reason,
-            width_ratio=width_ratio,
-            model_delta_ratio=model_delta_ratio,
-            nearby_separator_conflict=nearby_separator_conflict,
-            signal_flags=flags,
-        )
+        return hard_gap_trust_assessment_result(context, trust, reason)
 
     if not is_hard_gap_method(gap.method) or pitch <= 0:
         return assessment("not_hard_gap", "not_hard_gap_or_invalid_pitch")
@@ -180,6 +218,7 @@ def runtime_hard_gap_trust_assessment(
     if model_delta_ratio is not None and hard_gap_geometry_conflict(width_ratio, gap.score, model_delta_ratio, config):
         return assessment("geometry_conflict", "model_delta_or_score_conflict")
     if signals is not None:
+        flags = context.signal_flags
         dark_separator_like = bool(flags.get("dark_separator_like", False))
         if width_ratio < config.frame_border_width_ratio and dark_separator_like:
             return assessment("suspect_frame_border", "too_narrow_separator_band")
@@ -205,20 +244,20 @@ def diagnostic_hard_gap_trust_assessment(
     nearby_separator_conflict: bool,
     signals: HardGapPixelSignals,
 ) -> HardGapTrustAssessment:
-    flags = hard_gap_signal_flags(signals, config)
+    context = hard_gap_trust_context(
+        config,
+        width_ratio=width_ratio,
+        model_delta_ratio=model_delta_ratio,
+        nearby_separator_conflict=nearby_separator_conflict,
+        signals=signals,
+    )
 
     def assessment(trust: str, reason: str) -> HardGapTrustAssessment:
-        return HardGapTrustAssessment(
-            trust=trust,
-            reason=reason,
-            width_ratio=width_ratio,
-            model_delta_ratio=model_delta_ratio,
-            nearby_separator_conflict=nearby_separator_conflict,
-            signal_flags=flags,
-        )
+        return hard_gap_trust_assessment_result(context, trust, reason)
 
     if not is_hard_gap_method(gap.method):
         return assessment("not_hard_gap", "not_hard_gap")
+    flags = context.signal_flags
     dark_separator_like = bool(flags.get("dark_separator_like", False))
     if nearby_separator_conflict:
         return assessment("nearby_separator_conflict", "nearby_separator_candidate_stronger")
