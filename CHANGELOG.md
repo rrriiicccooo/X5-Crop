@@ -107,10 +107,11 @@ Current stable release: v4.2.8
 - separator gate active entry 已从旧的 `candidate_has_hard_separator_evidence`
   重命名为 `assess_separator_gate`；调用方局部变量同步改为
   `separator_gate_ok/detail`，report key 保持 `separator_hard_evidence` 不变。
-- candidate scoring 已新增 `GapMethodEvidenceSummary`，先明确 direct hard、
-  enhanced hard、grid model、equal model、separator support 和 reliable support
-  计数，再计算 confidence / reason；report key `detected_gaps` 保持兼容，但
-  内部语义不再把 grid model support 命名成 hard detected evidence。
+- candidate scoring 已新增 `GapMethodEvidenceSummary` 和
+  `SeparatorGateDetailSummary`，先明确 direct hard、enhanced hard、grid model、
+  equal model、separator support、reliable support 与 gate detail 计数，再计算
+  confidence / reason；report key `detected_gaps` 保持兼容，但内部语义不再把
+  grid model support 命名成 hard detected evidence。
 - 未使用的 `CandidateGateOutcome` gate 占位类型已删除，减少无调用方接口。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
@@ -488,11 +489,12 @@ Verified:
   `candidate_has_hard_separator_evidence` to `assess_separator_gate`; caller
   locals now use `separator_gate_ok/detail`, while the report key remains
   `separator_hard_evidence`.
-- Candidate scoring now builds a `GapMethodEvidenceSummary` before confidence /
-  reason calculation. Direct hard, enhanced hard, grid model, equal model,
-  separator support, and reliable support counts are named separately; the
-  report key `detected_gaps` stays compatible, but the internal scoring code no
-  longer names grid model support as hard detected evidence.
+- Candidate scoring now builds `GapMethodEvidenceSummary` and
+  `SeparatorGateDetailSummary` objects before confidence / reason calculation.
+  Direct hard, enhanced hard, grid model, equal model, separator support,
+  reliable support, and gate-detail counts are named separately; the report key
+  `detected_gaps` stays compatible, but the internal scoring code no longer
+  names grid model support as hard detected evidence.
 - The unused `CandidateGateOutcome` gate placeholder type has been removed.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the

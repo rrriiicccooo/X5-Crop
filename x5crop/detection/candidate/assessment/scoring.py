@@ -35,6 +35,18 @@ class GapMethodEvidenceSummary:
     reliable_support_gaps: int
 
 
+@dataclass(frozen=True)
+class SeparatorGateDetailSummary:
+    expected_gaps: int
+    hard_separator_gaps: int
+    grid_model_gaps: int
+    equal_model_gaps: int
+
+    @property
+    def separator_support_gaps(self) -> int:
+        return self.hard_separator_gaps + self.grid_model_gaps
+
+
 def gap_method_evidence_summary(
     gaps: list[Gap],
     reliable_min_score: float,
@@ -59,6 +71,15 @@ def gap_method_evidence_summary(
         equal_model_gaps=equal_model_gaps,
         separator_support_gaps=separator_support_gaps,
         reliable_support_gaps=reliable_support_gaps,
+    )
+
+
+def separator_gate_detail_summary(hard_detail: dict[str, Any]) -> SeparatorGateDetailSummary:
+    return SeparatorGateDetailSummary(
+        expected_gaps=max(0, int(hard_detail.get("expected_gaps", 0) or 0)),
+        hard_separator_gaps=int(hard_detail.get("hard_gaps", 0) or 0),
+        grid_model_gaps=int(hard_detail.get("grid_gaps", 0) or 0),
+        equal_model_gaps=int(hard_detail.get("equal_gaps", 0) or 0),
     )
 
 
@@ -132,21 +153,22 @@ def separator_support_score(
 ) -> float:
     policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
     support_policy = policy.scoring.separator_support
-    expected = max(0, int(hard_detail.get("expected_gaps", 0)))
-    if expected == 0:
+    evidence = separator_gate_detail_summary(hard_detail)
+    if evidence.expected_gaps == 0:
         return (
             1.0
             if detection.confidence >= support_policy.no_expected_confidence_threshold
             else min(support_policy.no_expected_confidence_cap, detection.confidence)
         )
-    hard = int(hard_detail.get("hard_gaps", 0))
-    grid = int(hard_detail.get("grid_gaps", 0))
-    equal = int(hard_detail.get("equal_gaps", 0))
-    hard_ratio = min(1.0, hard / float(max(1, expected)))
+    hard_ratio = min(1.0, evidence.hard_separator_gaps / float(max(1, evidence.expected_gaps)))
     model_ratio = min(
         1.0,
-        (hard + support_policy.model_grid_credit * grid + support_policy.model_equal_credit * equal)
-        / float(max(1, expected)),
+        (
+            evidence.hard_separator_gaps
+            + support_policy.model_grid_credit * evidence.grid_model_gaps
+            + support_policy.model_equal_credit * evidence.equal_model_gaps
+        )
+        / float(max(1, evidence.expected_gaps)),
     )
     return max(
         0.0,
@@ -177,9 +199,7 @@ def hard_full_calibration_floor_applies(
 ) -> bool:
     policy = policy or get_detection_policy(fmt.name, candidate.strip_mode)
     base_score = policy.scoring.base_detection
-    expected = max(0, int(hard_detail.get("expected_gaps", 0) or 0))
-    hard = int(hard_detail.get("hard_gaps", 0) or 0)
-    equal = int(hard_detail.get("equal_gaps", 0) or 0)
+    evidence = separator_gate_detail_summary(hard_detail)
     width_cv = detail_float(candidate.detail, "width_cv", 1.0)
     return (
         source == "separator"
@@ -187,9 +207,9 @@ def hard_full_calibration_floor_applies(
         and candidate.strip_mode == "full"
         and candidate.count == fmt.default_count
         and len(candidate.frames) == candidate.count
-        and expected > 0
-        and hard >= expected
-        and equal == 0
+        and evidence.expected_gaps > 0
+        and evidence.hard_separator_gaps >= evidence.expected_gaps
+        and evidence.equal_model_gaps == 0
         and width_cv <= base_score.full_width_cv
     )
 
@@ -203,24 +223,23 @@ def separator_geometry_support_applies(
     joint_score: float,
     mode_policy: SeparatorGeometrySupportModePolicy,
 ) -> bool:
-    expected = max(0, int(hard_detail.get("expected_gaps", 0) or 0))
-    hard = int(hard_detail.get("hard_gaps", 0) or 0)
-    grid = int(hard_detail.get("grid_gaps", 0) or 0)
-    equal = int(hard_detail.get("equal_gaps", 0) or 0)
+    evidence = separator_gate_detail_summary(hard_detail)
     width_cv = detail_float(candidate.detail, "width_cv", 1.0)
     outer_area = detail_float(candidate.detail, "outer_area_ratio", 1.0)
-    min_hard = int(math.ceil(expected * mode_policy.min_hard_ratio))
-    model_gap_count = hard + (grid if mode_policy.allow_grid else 0)
+    min_hard = int(math.ceil(evidence.expected_gaps * mode_policy.min_hard_ratio))
+    support_gap_count = evidence.hard_separator_gaps + (
+        evidence.grid_model_gaps if mode_policy.allow_grid else 0
+    )
     return (
         mode_policy.enabled
         and source == "separator"
         and candidate.strip_mode == "full"
         and candidate.count == fmt.default_count
         and len(candidate.frames) == candidate.count
-        and expected > 0
-        and hard >= min_hard
-        and model_gap_count >= expected
-        and equal <= mode_policy.max_equal_gaps
+        and evidence.expected_gaps > 0
+        and evidence.hard_separator_gaps >= min_hard
+        and support_gap_count >= evidence.expected_gaps
+        and evidence.equal_model_gaps <= mode_policy.max_equal_gaps
         and width_cv <= mode_policy.max_width_cv
         and support == mode_policy.required_content_support
         and joint_score >= mode_policy.min_joint_score
@@ -388,11 +407,13 @@ def score_detection(
 
 __all__ = [
     "GapMethodEvidenceSummary",
+    "SeparatorGateDetailSummary",
     "content_support_score",
     "detail_float",
     "gap_method_evidence_summary",
     "geometry_support_score",
     "hard_full_calibration_floor_applies",
+    "separator_gate_detail_summary",
     "separator_geometry_support_applies",
     "separator_support_score",
     "score_detection",
