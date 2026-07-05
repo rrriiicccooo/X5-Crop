@@ -52,6 +52,9 @@ Current stable release: v4.2.8
   常量，不再手写 method 字符串。
 - ordinary gap search 的 band threshold、弱 prominence 门槛和 detected-candidate
   quality 权重已外显到 `GapSearchParameters`；默认值保持旧行为。
+- ordinary gap search 现在写出 `standard_gap_search` detail：每个 expected gap
+  记录 search window、accepted / rejected run、selected detected gap 或 equal
+  fallback；旧的无 detail API 只包装同一套 assessment 逻辑，不再维护重复判断。
 - separator profile signal 组合已显式化：`SeparatorProfileSignals` 承载
   segmented extreme、uniform soft、uniform support 和 column gradient，
   `combined_separator_profile_score` 是唯一组合点，smooth window 也可单独审核。
@@ -250,8 +253,8 @@ Current stable release: v4.2.8
 - 普通 separator profile / gap search 已做行为等价拆分：
   `geometry/separator_profile.py` 将中段采样、分段极端亮/暗、uniform soft score
   和列向梯度分开；`geometry/gap_search.py` 将 window、width limits、thresholds、
-  band expansion 和 detected-candidate ranking 分开，方便人工审核普通 separator
-  是如何被看见的。
+  band expansion、detected-candidate ranking 和 standard search detail 分开，
+  方便人工审核普通 separator 是如何被看见或拒绝的。
 - separator refinement 已做行为等价拆分：candidate build 直接调用 geometry
   refinement helpers，避免保留只做别名转发的 proposal refinement facade；
   `geometry/edge_pairs.py` 将 search limits、candidate generation、best-pair
@@ -362,6 +365,9 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   `detection.candidate.proposal.separator` owns separator proposal, correction,
   width evidence, and separator-derived outer band evidence; `geometry` keeps
   the lower-level profile/search/trust math.
+- Ordinary gap search now writes `standard_gap_search` detail for each expected
+  gap, including the search window, accepted / rejected runs, and selected
+  detected gap or equal fallback, without changing selection thresholds.
 - New wrong PASS is unacceptable; conservative REVIEW and schema / reason diffs
   require explanation.
 - TIFF metadata, bit depth, ICC, resolution, and compression behavior remain unchanged.

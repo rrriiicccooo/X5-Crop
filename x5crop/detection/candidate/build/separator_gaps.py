@@ -20,7 +20,10 @@ from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE
 from ..proposal.separator.model import propose_equal_model_gaps_from_profile
-from ..proposal.separator.proposal import propose_separator_width_profile_gaps, propose_standard_separator_gaps
+from ..proposal.separator.proposal import (
+    propose_separator_width_profile_gaps,
+    propose_standard_separator_gaps_with_detail,
+)
 
 
 @dataclass(frozen=True)
@@ -31,6 +34,7 @@ class SeparatorGapBuildResult:
     pitch: float
     gaps: list[Gap]
     grid_detail: dict[str, Any]
+    standard_gap_search_detail: dict[str, Any]
     edge_pair_correction_detail: dict[str, Any]
     enhanced_gap_promotion_detail: dict[str, Any]
     nearby_correction_detail: dict[str, Any]
@@ -65,8 +69,8 @@ def initial_separator_gaps(
     gap_search_profile: str,
     gap_max_width_ratio_override: Optional[float],
     policy: DetectionPolicy,
-) -> list[Gap]:
-    gaps = propose_standard_separator_gaps(
+) -> tuple[list[Gap], dict[str, Any]]:
+    standard_gap_proposal = propose_standard_separator_gaps_with_detail(
         profile,
         origin,
         pitch,
@@ -74,6 +78,8 @@ def initial_separator_gaps(
         gap_max_width_ratio_override,
         policy.separator.gap_search,
     )
+    gaps = standard_gap_proposal.gaps
+    standard_gap_search_detail = dict(standard_gap_proposal.detail)
     if candidate_strategy == "separator_outer" and gap_search_profile == BROAD_WIDTH_GAP_PROFILE:
         separator_width_profile_gaps = propose_separator_width_profile_gaps(
             gray_work,
@@ -84,6 +90,7 @@ def initial_separator_gaps(
         )
         if len(separator_width_profile_gaps) >= max(1, count - 1):
             gaps = separator_width_profile_gaps
+            standard_gap_search_detail["overridden_by"] = "separator_width_profile"
     if (
         strip_mode == "full"
         and policy.separator.geometry_support.detected_geometry.enabled
@@ -91,7 +98,8 @@ def initial_separator_gaps(
         and gap_max_width_ratio_override is None
     ):
         gaps = propose_equal_model_gaps_from_profile(profile, origin, pitch, count)
-    return gaps
+        standard_gap_search_detail["overridden_by"] = "detected_geometry_equal_model"
+    return gaps, standard_gap_search_detail
 
 
 def apply_primary_separator_refinements(
@@ -227,7 +235,7 @@ def build_primary_separator_gaps_for_outer(
     profile = cached_separator_profile(cache, gray_work, outer, policy.separator.profile)
     origin, pitch = separator_origin_pitch(outer, fmt, count, strip_mode, offset_fraction)
     if force_standard_gap_search:
-        gaps = propose_standard_separator_gaps(
+        standard_gap_proposal = propose_standard_separator_gaps_with_detail(
             profile,
             origin,
             pitch,
@@ -235,8 +243,11 @@ def build_primary_separator_gaps_for_outer(
             gap_max_width_ratio_override,
             policy.separator.gap_search,
         )
+        gaps = standard_gap_proposal.gaps
+        standard_gap_search_detail = dict(standard_gap_proposal.detail)
+        standard_gap_search_detail["forced"] = True
     else:
-        gaps = initial_separator_gaps(
+        gaps, standard_gap_search_detail = initial_separator_gaps(
             gray_work,
             outer,
             profile,
@@ -270,6 +281,7 @@ def build_primary_separator_gaps_for_outer(
         pitch=pitch,
         gaps=gaps,
         grid_detail=grid_detail,
+        standard_gap_search_detail=standard_gap_search_detail,
         edge_pair_correction_detail=edge_pair_correction_detail,
         enhanced_gap_promotion_detail={"used": False, "reason": "pending_late_refinement"},
         nearby_correction_detail={"used": False, "reason": "pending_late_refinement"},
@@ -318,6 +330,7 @@ def apply_late_separator_refinements(
         pitch=separator_gaps.pitch,
         gaps=gaps,
         grid_detail=separator_gaps.grid_detail,
+        standard_gap_search_detail=separator_gaps.standard_gap_search_detail,
         edge_pair_correction_detail=separator_gaps.edge_pair_correction_detail,
         enhanced_gap_promotion_detail=enhanced_gap_promotion_detail,
         nearby_correction_detail=nearby_correction_detail,
