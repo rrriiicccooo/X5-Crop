@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .....constants import HARD_GAP_METHODS
-from .....domain import Gap
+from ...constants import HARD_GAP_METHODS
+from ...domain import Gap
 
 
 def separator_width_requirement_detail(detail: dict[str, Any], min_required: int) -> dict[str, Any]:

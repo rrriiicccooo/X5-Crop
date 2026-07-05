@@ -14,8 +14,8 @@ from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
+from ...evidence.separator_width import separator_width_evidence_detail
 from ...gap_profiles import STANDARD_GAP_PROFILE
-from ..proposal.separator.evidence import separator_width_evidence_detail
 from ..assessment.partial_edge import partial_edge_hint
 from ..assessment.scoring import score_detection
 from ..proposal.outer.grid_refine import grid_refined_outer_box

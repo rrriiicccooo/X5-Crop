@@ -38,8 +38,9 @@ Current stable release: v4.2.8
   separator / deskew analysis evidence。当前不保留 color contrast 或 heavy
   texture evidence 接口，未来如引入 OpenCV 等大依赖再重新评估。
 - Gap / Separator 族群已按 candidate proposal 模型收敛入口：
-  `detection.candidate.proposal.separator` 承接 separator proposal、refinement、
-  width evidence 和 separator-derived outer band evidence；`geometry` 保留底层
+  `detection.candidate.proposal.separator` 承接 separator proposal；
+  `detection.evidence.separator_width` 承接 width evidence summary；
+  separator-derived outer band evidence 归 outer proposal 消费；`geometry` 保留底层
   profile/search/trust 数学能力；width profile 纯数学归
   `geometry/separator_width_profile.py`，搜索参数归
   `SeparatorPolicy.width_profile_search`，启用 / 候选 / selection 策略归
@@ -95,9 +96,10 @@ Current stable release: v4.2.8
   `SeparatorWidthProfileSearchParameters`，`SeparatorWidthProfilePolicy` 只保留
   mode / required count / candidate budget / full-selection 语义，report 同时输出
   综合 `width_profile` 视图和纯 `width_profile_search` 参数。
-- separator width evidence requirement 已收敛为 detail 消费：candidate build
-  生成 `separator_width_evidence`，partial-safe / gate 只根据各自 requirement
-  复核已有 evidence，不重新生成 separator evidence。
+- separator width evidence requirement 已收敛为 detail 消费：
+  `detection/evidence/separator_width.py` 生成和复核 `separator_width_evidence`
+  summary；candidate build 只挂载 detail，partial-safe / gate 只根据各自
+  requirement 复核已有 evidence，不重新生成 separator evidence。
 - `all_internal_gaps_hard` gate 已拆出 full/default-count supplemental
   broad-width requirement 与 edge-pair min-score helper；失败 reason 保持原语义，
   成功 reason 仍归主 hard-gap profile。
@@ -388,8 +390,9 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   are candidate proposal families, not top-level detection sublayers. PASS /
   REVIEW belongs to the decision layer, and finalization is output-adjacent only.
 - The Gap / Separator logic family now follows the same lifecycle model as outer:
-  `detection.candidate.proposal.separator` owns separator proposal, correction,
-  width evidence, and separator-derived outer band evidence; `geometry` keeps
+  `detection.candidate.proposal.separator` owns separator proposal;
+  `detection.evidence.separator_width` owns width evidence summaries; separator-
+  derived outer band evidence is consumed by outer proposal; `geometry` keeps
   the lower-level profile/search/trust math.
 - Ordinary gap search now writes `standard_gap_search` detail for each expected
   gap, including the search window, accepted / rejected runs, and selected
@@ -515,10 +518,11 @@ Verified:
   `SeparatorWidthProfilePolicy` keeps mode / required count / candidate budget /
   full-selection semantics. Reports expose both the combined `width_profile`
   view and the pure `width_profile_search` parameters.
-- Separator width evidence requirements are now detail consumers: candidate
-  build creates `separator_width_evidence`, while partial-safe / gate logic only
-  applies their own requirements to existing evidence instead of regenerating
-  separator evidence.
+- Separator width evidence requirements are now detail consumers:
+  `detection/evidence/separator_width.py` creates and updates
+  `separator_width_evidence` summaries; candidate build attaches that detail,
+  while partial-safe / gate logic only applies their own requirements to
+  existing evidence instead of regenerating separator evidence.
 - The `all_internal_gaps_hard` gate now separates full/default-count
   supplemental broad-width and edge-pair min-score helpers. Failure reasons keep
   their existing semantics, while successful decisions still report the main
