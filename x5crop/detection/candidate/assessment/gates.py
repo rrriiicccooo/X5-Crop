@@ -41,6 +41,32 @@ def separator_gate_geometry_support_assessment(
     return ok, "separator_geometry_support" if ok else "separator_geometry_support_weak"
 
 
+def separator_gate_needs_full_strip_supplemental_checks(detection: Detection) -> bool:
+    return detection.strip_mode == "full" and detection.count == FORMATS[detection.film_format].default_count
+
+
+def separator_gate_broad_width_support_assessment(
+    broad_width: int,
+    gate: SeparatorGatePolicy,
+) -> tuple[bool, str]:
+    ok = broad_width >= gate.min_broad_separator_width_gaps_for_auto
+    return ok, "separator_broad_width_support" if ok else "separator_broad_width_support_weak"
+
+
+def separator_gate_edge_pair_support_assessment(
+    broad_width: int,
+    edge_pair_scores: list[float],
+    gate: SeparatorGatePolicy,
+) -> tuple[bool, str]:
+    edge_min = (
+        gate.edge_pair_min_score_with_broad_width
+        if broad_width > 0
+        else gate.edge_pair_min_score_without_broad_width
+    )
+    ok = not edge_pair_scores or min(edge_pair_scores) >= edge_min
+    return ok, "separator_edge_pair_support" if ok else "separator_edge_pair_support_weak"
+
+
 def separator_gate_all_internal_gaps_hard_assessment(
     detection: Detection,
     expected: int,
@@ -52,18 +78,13 @@ def separator_gate_all_internal_gaps_hard_assessment(
     needed = max(1, expected if gate.hard_required_all_gaps else min(expected, 1))
     ok = hard >= needed
     reason = "separator_all_internal_gaps_hard_support" if ok else "separator_all_internal_gaps_hard_support_weak"
-    if ok and detection.strip_mode == "full" and detection.count == FORMATS[detection.film_format].default_count:
-        if broad_width < gate.min_broad_separator_width_gaps_for_auto:
-            ok = False
-            reason = "separator_broad_width_support_weak"
-        edge_min = (
-            gate.edge_pair_min_score_with_broad_width
-            if broad_width > 0
-            else gate.edge_pair_min_score_without_broad_width
-        )
-        if ok and edge_pair_scores and min(edge_pair_scores) < edge_min:
-            ok = False
-            reason = "separator_edge_pair_support_weak"
+    if ok and separator_gate_needs_full_strip_supplemental_checks(detection):
+        broad_ok, broad_reason = separator_gate_broad_width_support_assessment(broad_width, gate)
+        if not broad_ok:
+            return False, broad_reason
+        edge_ok, edge_reason = separator_gate_edge_pair_support_assessment(broad_width, edge_pair_scores, gate)
+        if not edge_ok:
+            return False, edge_reason
     return ok, reason
 
 
@@ -181,7 +202,10 @@ def candidate_has_hard_separator_evidence(
 __all__ = [
     "CandidateGateOutcome",
     "separator_gate_all_internal_gaps_hard_assessment",
+    "separator_gate_broad_width_support_assessment",
+    "separator_gate_edge_pair_support_assessment",
     "separator_gate_geometry_support_assessment",
     "separator_gate_min_hard_with_equal_cap_assessment",
+    "separator_gate_needs_full_strip_supplemental_checks",
     "candidate_has_hard_separator_evidence",
 ]

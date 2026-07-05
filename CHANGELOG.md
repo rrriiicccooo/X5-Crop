@@ -73,6 +73,9 @@ Current stable release: v4.2.8
 - separator width evidence requirement 已收敛为 detail 消费：candidate build
   生成 `separator_width_evidence`，partial-safe / gate 只根据各自 requirement
   复核已有 evidence，不重新生成 separator evidence。
+- `all_internal_gaps_hard` gate 已拆出 full/default-count supplemental
+  broad-width requirement 与 edge-pair min-score helper；失败 reason 保持原语义，
+  成功 reason 仍归主 hard-gap profile。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
 - grid-derived outer box 计算已从 separator gap lifecycle 移到
@@ -393,6 +396,10 @@ Verified:
   build creates `separator_width_evidence`, while partial-safe / gate logic only
   applies their own requirements to existing evidence instead of regenerating
   separator evidence.
+- The `all_internal_gaps_hard` gate now separates full/default-count
+  supplemental broad-width and edge-pair min-score helpers. Failure reasons keep
+  their existing semantics, while successful decisions still report the main
+  hard-gap profile.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the
   diagnostic hard-gap trust classifier; `detection/evidence/gap_diagnostics.py`
