@@ -195,23 +195,6 @@ def separator_width_gap_candidate_from_accepted_run(
     return SeparatorWidthGapCandidate(score=score, start=run.start, end=run.end, center=run.center)
 
 
-def separator_width_gap_candidate_from_run(
-    profile: np.ndarray,
-    start: int,
-    end: int,
-    expected: float,
-    pitch: float,
-    min_width: int,
-    max_width: int,
-    params: SeparatorWidthProfileSearchParameters,
-) -> Optional[SeparatorWidthGapCandidate]:
-    run = separator_width_gap_run(start, end)
-    acceptance = separator_width_gap_run_acceptance(run, min_width, max_width)
-    if not acceptance.accepted:
-        return None
-    return separator_width_gap_candidate_from_accepted_run(profile, run, expected, pitch, params)
-
-
 def separator_width_gap_candidate_assessment(
     profile: np.ndarray,
     start: int,
@@ -272,29 +255,6 @@ def separator_width_gap_candidates_with_detail(
         if candidate is not None:
             candidates.append(candidate)
     return candidates, evaluations
-
-
-def best_separator_width_gap_candidate(
-    profile: np.ndarray,
-    lo: int,
-    hi: int,
-    expected: float,
-    pitch: float,
-    min_width: int,
-    max_width: int,
-    params: SeparatorWidthProfileSearchParameters,
-) -> Optional[SeparatorWidthGapCandidate]:
-    best, _evaluations = best_separator_width_gap_candidate_with_detail(
-        profile,
-        lo,
-        hi,
-        expected,
-        pitch,
-        min_width,
-        max_width,
-        params,
-    )
-    return best
 
 
 def best_separator_width_gap_candidate_with_detail(
@@ -437,29 +397,16 @@ def separator_width_gap_at_with_detail(
     )
 
 
-def separator_width_gap_at(
-    profile: np.ndarray,
-    expected: float,
-    pitch: float,
-    index: int,
-    short_axis: float,
-    params: SeparatorWidthProfileSearchParameters | None = None,
-) -> Optional[Gap]:
-    return separator_width_gap_at_with_detail(profile, expected, pitch, index, short_axis, params).gap
-
-
 __all__ = [
     "SeparatorWidthGapAcceptance",
     "SeparatorWidthGapCandidate",
     "SeparatorWidthGapRun",
     "SeparatorWidthGapRunAssessment",
     "SeparatorWidthGapSearchResult",
-    "best_separator_width_gap_candidate",
     "best_separator_width_gap_candidate_with_detail",
     "collect_separator_width_bands",
     "separator_width_gap_candidate_from_accepted_run",
     "separator_width_gap_candidate_assessment",
-    "separator_width_gap_candidate_from_run",
     "separator_width_gap_candidates_with_detail",
     "separator_width_gap_from_candidate",
     "separator_width_gap_run",
@@ -467,7 +414,6 @@ __all__ = [
     "separator_width_gap_search_detail",
     "separator_width_gap_window",
     "separator_width_bounds",
-    "separator_width_gap_at",
     "separator_width_gap_at_with_detail",
     "separator_width_profile",
 ]
