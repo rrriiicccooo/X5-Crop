@@ -2,6 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ...constants import (
+    GAP_CONTENT,
+    GAP_DETECTED,
+    GAP_EDGE_PAIR,
+    GAP_ENHANCED_DETECTED,
+    GAP_EQUAL,
+    GAP_GRID,
+)
 from ...geometry.detection_parameters import (
     EdgeRefineProfileParameters,
     EnhancedSeparatorParameters,
@@ -125,8 +133,8 @@ class SeparatorPolicy:
     enhanced: EnhancedSeparatorParameters = field(default_factory=EnhancedSeparatorParameters)
     profile: SeparatorProfileParameters = field(default_factory=SeparatorProfileParameters)
     edge_refine_profile: EdgeRefineProfileParameters = field(default_factory=EdgeRefineProfileParameters)
-    hard_methods: tuple[str, ...] = ("detected", "edge_pair", "enhanced_detected")
-    model_methods: tuple[str, ...] = ("grid", "equal", "content")
+    hard_methods: tuple[str, ...] = (GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED)
+    model_methods: tuple[str, ...] = (GAP_GRID, GAP_EQUAL, GAP_CONTENT)
 
 
 __all__ = [

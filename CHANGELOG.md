@@ -155,6 +155,9 @@ Current stable release: v4.2.8
 - separator refinement 的 policy surface 已补齐：`enhanced.min_score` 和
   `nearby_correction.width_cv_slack` 从 `FormatParameters` 显式流入 runtime
   `SeparatorPolicy`，并出现在 policy/report detail 中；默认值保持旧行为。
+- separator method vocabulary 已对齐：runtime `SeparatorPolicy.hard_methods`
+  使用真实 gap method `detected / edge-pair / enhanced-detected`，
+  `model_methods` 使用 `grid / equal / content`，并在 policy/report detail 中可见。
 - `.gitignore` 显式保留 `x5crop/detection/candidate/build/*.py`，避免源码层级被
   通用 `build/` 输出规则误隐藏。
 - candidate source orchestration 已去 retry 化：standard / broad-width gap profiles、
@@ -331,6 +334,10 @@ Verified:
 - The separator refinement policy surface now exposes `enhanced.min_score` and
   `nearby_correction.width_cv_slack` from `FormatParameters` through runtime
   `SeparatorPolicy` and policy/report detail; defaults preserve existing behavior.
+- Separator method vocabulary is aligned: runtime `SeparatorPolicy.hard_methods`
+  uses real gap methods `detected / edge-pair / enhanced-detected`,
+  `model_methods` uses `grid / equal / content`, and both are visible in
+  policy/report detail.
 - `.gitignore` explicitly keeps `x5crop/detection/candidate/build/*.py` visible
   so source layers are not hidden by the generic `build/` output rule.
 - Candidate source orchestration no longer uses active retry control flow:
