@@ -8,7 +8,7 @@ from ....domain import Detection
 from ....formats import FORMATS
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
-from ....policies.runtime.separator import SeparatorGatePolicy
+from ....policies.runtime.separator import LeadingGridFailurePolicy, SeparatorGatePolicy
 
 
 @dataclass(frozen=True)
@@ -88,6 +88,67 @@ def separator_gate_all_internal_gaps_hard_assessment(
     return ok, reason
 
 
+def leading_grid_scores_from_gaps(detection: Detection) -> list[float]:
+    scores: list[float] = []
+    for gap in detection.gaps:
+        if gap.method != GAP_GRID:
+            break
+        scores.append(float(gap.score))
+    return scores
+
+
+def hard_gap_indexes_from_gaps(detection: Detection) -> list[int]:
+    return [
+        int(gap.index)
+        for gap in detection.gaps
+        if gap.method in HARD_GAP_METHODS
+    ]
+
+
+def hard_gap_indexes_are_adjacent_late(hard_indexes: list[int]) -> bool:
+    if not hard_indexes:
+        return False
+    expected_sequence = list(
+        range(max(hard_indexes) - len(hard_indexes) + 1, max(hard_indexes) + 1)
+    )
+    return hard_indexes == expected_sequence and min(hard_indexes) >= 4
+
+
+def enhanced_gap_promotion_accepted_count(detection: Detection) -> int:
+    enhanced_gap_promotion = detection.detail.get("enhanced_gap_promotion", {})
+    if not isinstance(enhanced_gap_promotion, dict):
+        return 0
+    return int(enhanced_gap_promotion.get("accepted_count", 0) or 0)
+
+
+def separator_gate_leading_grid_failure_assessment(
+    detection: Detection,
+    expected: int,
+    hard_indexes: list[int],
+    leading_grid_scores: list[float],
+    enhanced_accepted: int,
+    policy: LeadingGridFailurePolicy,
+) -> bool:
+    return (
+        policy.enabled
+        and detection.strip_mode == "full"
+        and expected >= policy.min_expected_gaps
+        and len(leading_grid_scores) >= policy.leading_count
+        and all(
+            score < policy.low_score
+            for score in leading_grid_scores[:policy.leading_count]
+        )
+        and sum(
+            1
+            for score in leading_grid_scores[:policy.leading_count]
+            if score < policy.very_low_score
+        ) >= policy.very_low_count
+        and enhanced_accepted == 0
+        and len(hard_indexes) <= policy.max_hard_gaps
+        and hard_gap_indexes_are_adjacent_late(hard_indexes)
+    )
+
+
 def candidate_has_hard_separator_evidence(
     detection: Detection,
     threshold: float,
@@ -103,11 +164,7 @@ def candidate_has_hard_separator_evidence(
     grid = int(detection.detail.get("grid_gaps", 0))
     equal = int(detection.detail.get("equal_gaps", 0))
     hard = actual + enhanced
-    hard_indexes = [
-        int(gap.index)
-        for gap in detection.gaps
-        if gap.method in HARD_GAP_METHODS
-    ]
+    hard_indexes = hard_gap_indexes_from_gaps(detection)
     edge_pair_scores = [
         float(gap.score)
         for gap in detection.gaps
@@ -124,33 +181,15 @@ def candidate_has_hard_separator_evidence(
         if isinstance(width_evidence, dict)
         else []
     )
-    leading_grid_scores: list[float] = []
-    for gap in detection.gaps:
-        if gap.method != GAP_GRID:
-            break
-        leading_grid_scores.append(float(gap.score))
-    enhanced_gap_promotion = detection.detail.get("enhanced_gap_promotion", {})
-    enhanced_accepted = (
-        int(enhanced_gap_promotion.get("accepted_count", 0) or 0)
-        if isinstance(enhanced_gap_promotion, dict)
-        else 0
-    )
-    hard_adjacent_late = False
-    if hard_indexes:
-        expected_sequence = list(
-            range(max(hard_indexes) - len(hard_indexes) + 1, max(hard_indexes) + 1)
-        )
-        hard_adjacent_late = hard_indexes == expected_sequence and min(hard_indexes) >= 4
-    leading_grid_failure = (
-        leading_grid_policy.enabled
-        and detection.strip_mode == "full"
-        and expected >= leading_grid_policy.min_expected_gaps
-        and len(leading_grid_scores) >= leading_grid_policy.leading_count
-        and all(score < leading_grid_policy.low_score for score in leading_grid_scores[:leading_grid_policy.leading_count])
-        and sum(1 for score in leading_grid_scores[:leading_grid_policy.leading_count] if score < leading_grid_policy.very_low_score) >= leading_grid_policy.very_low_count
-        and enhanced_accepted == 0
-        and len(hard_indexes) <= leading_grid_policy.max_hard_gaps
-        and hard_adjacent_late
+    leading_grid_scores = leading_grid_scores_from_gaps(detection)
+    enhanced_accepted = enhanced_gap_promotion_accepted_count(detection)
+    leading_grid_failure = separator_gate_leading_grid_failure_assessment(
+        detection,
+        expected,
+        hard_indexes,
+        leading_grid_scores,
+        enhanced_accepted,
+        leading_grid_policy,
     )
 
     if expected == 0:
@@ -201,10 +240,15 @@ def candidate_has_hard_separator_evidence(
 
 __all__ = [
     "CandidateGateOutcome",
+    "enhanced_gap_promotion_accepted_count",
+    "hard_gap_indexes_are_adjacent_late",
+    "hard_gap_indexes_from_gaps",
+    "leading_grid_scores_from_gaps",
     "separator_gate_all_internal_gaps_hard_assessment",
     "separator_gate_broad_width_support_assessment",
     "separator_gate_edge_pair_support_assessment",
     "separator_gate_geometry_support_assessment",
+    "separator_gate_leading_grid_failure_assessment",
     "separator_gate_min_hard_with_equal_cap_assessment",
     "separator_gate_needs_full_strip_supplemental_checks",
     "candidate_has_hard_separator_evidence",

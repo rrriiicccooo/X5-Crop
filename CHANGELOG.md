@@ -76,6 +76,9 @@ Current stable release: v4.2.8
 - `all_internal_gaps_hard` gate 已拆出 full/default-count supplemental
   broad-width requirement 与 edge-pair min-score helper；失败 reason 保持原语义，
   成功 reason 仍归主 hard-gap profile。
+- leading grid failure gate 已拆出 leading grid score、late hard-gap sequence
+  和 enhanced promotion guard helper；最终 reason 保持
+  `leading_grid_separator_failure`。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
   primary separator refinement 不再接收完整 `FormatSpec`。
 - grid-derived outer box 计算已从 separator gap lifecycle 移到
@@ -400,6 +403,9 @@ Verified:
   supplemental broad-width and edge-pair min-score helpers. Failure reasons keep
   their existing semantics, while successful decisions still report the main
   hard-gap profile.
+- The leading-grid failure gate now separates leading grid scores, late hard-gap
+  sequence checks, and enhanced promotion guard helpers. The final reason remains
+  `leading_grid_separator_failure`.
 - Hard-gap trust is centralized without behavior changes: `geometry/gap_trust.py`
   now owns pixel signals, the runtime hard-gap trust classifier, and the
   diagnostic hard-gap trust classifier; `detection/evidence/gap_diagnostics.py`
