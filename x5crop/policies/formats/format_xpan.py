@@ -1,28 +1,18 @@
 from __future__ import annotations
 
-from ..separator_gate_profiles import SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD
-from ..runtime.base import FULL, PARTIAL, FrameFitPolicy
-from ..runtime.separator import SeparatorEdgePairPolicy
-from ..assembly.factory import build_policy_from_preset
-from ..assembly.presets import FormatPolicyPreset, ModePolicyPreset
+from ..assembly.format_presets import build_policy_from_format
 from ..parameters.aggregate import FormatParameters
+from ..parameters.registry import base_format_parameters
 
 FORMAT_ID = "xpan"
 
 
 def parameters() -> FormatParameters:
-    return FormatParameters(
+    return base_format_parameters(
         FORMAT_ID,
         outer_align_long_margin_ratio=0.008,
         outer_align_long_margin_cap_ratio=0.012,
         content_profile_min_run_ratio=0.24,
-        separator_model_grid_credit=0.20,
-        separator_model_equal_credit=0.06,
-        separator_gate_profile=SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD,
-        partial_auto_include_default_count=True,
-        nearby_active_refinement=False,
-        lucky_pass_risk_enabled=False,
-        leading_grid_failure_enabled=False,
         separator_outer_min_score=0.66,
         separator_outer_band_score=0.44,
         separator_outer_spacing_min_ratio=0.86,
@@ -39,43 +29,13 @@ def parameters() -> FormatParameters:
     )
 
 
-FORMAT_POLICY_PRESET = FormatPolicyPreset(
-    format_id=FORMAT_ID,
-    parameters=parameters,
-    separator_gate_profile=SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD,
-    separator_edge_pair=SeparatorEdgePairPolicy(
-        0.060, 0.002, 0.035, 0.45, 0.64, 1.03, 0.70, 0.95, 0.035
-    ),
-    modes={
-        FULL: ModePolicyPreset(
-            role="panoramic_full_strip_separator_guarded",
-            notes=("panoramic full strips remain conservative and separator-driven",),
-            frame_fit=FrameFitPolicy(
-                name="panoramic_strip_frame_fit",
-                edge_evidence=True,
-                geometry_fallback=True,
-                min_edge_samples=2,
-                nominal_min_ratio=0.70,
-                nominal_max_ratio=1.12,
-                inlier_tolerance_ratio=0.035,
-            ),
-        ),
-        PARTIAL: ModePolicyPreset(
-            role="panoramic_partial_strip_edge_guarded",
-            notes=("partial panoramic strips may include the default count but still need separator/content/geometry gates",),
-            diagnostics_overlap_bleed=True,
-        ),
-    },
-)
-
-
 def build_policy(strip_mode: str):
-    return build_policy_from_preset(FORMAT_POLICY_PRESET, strip_mode)
+    return build_policy_from_format(FORMAT_ID, parameters, strip_mode)
 
 
 def full_policy():
-    return build_policy(FULL)
+    return build_policy("full")
 
 
 def partial_policy():
-    return build_policy(PARTIAL)
+    return build_policy("partial")

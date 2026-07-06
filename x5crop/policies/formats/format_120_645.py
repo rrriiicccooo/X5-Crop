@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-from ..separator_gate_profiles import SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD
-from ..runtime.base import FULL, PARTIAL, FrameFitPolicy
-from ..runtime.separator import SeparatorEdgePairPolicy
-from ..assembly.factory import build_policy_from_preset
-from ..assembly.presets import FormatPolicyPreset, ModePolicyPreset
+from ..assembly.format_presets import build_policy_from_format
 from ..parameters.aggregate import FormatParameters
 from ..parameters.registry import base_medium_format_parameters
 
@@ -29,44 +25,13 @@ def parameters() -> FormatParameters:
     )
 
 
-FORMAT_POLICY_PRESET = FormatPolicyPreset(
-    format_id=FORMAT_ID,
-    parameters=parameters,
-    separator_gate_profile=SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD,
-    separator_edge_pair=SeparatorEdgePairPolicy(
-        0.075, 0.001, 0.055, 0.32, 0.20, 0.58, 0.50, 0.95, 0.035
-    ),
-    modes={
-        FULL: ModePolicyPreset(
-            role="medium_format_full_strip_separator_guarded",
-            notes=("medium-format full strips use separator policy without square holder gates",),
-            frame_fit=FrameFitPolicy(
-                name="medium_rectangle_frame_fit",
-                edge_evidence=True,
-                geometry_fallback=True,
-                min_edge_samples=2,
-                nominal_min_ratio=0.70,
-                nominal_max_ratio=1.15,
-                inlier_tolerance_ratio=0.040,
-            ),
-            diagnostics_overlap_bleed=True,
-        ),
-        PARTIAL: ModePolicyPreset(
-            role="medium_format_partial_strip_edge_guarded",
-            notes=("medium-format partial strips use conservative partial edge policy",),
-            diagnostics_overlap_bleed=True,
-        ),
-    },
-)
-
-
 def build_policy(strip_mode: str):
-    return build_policy_from_preset(FORMAT_POLICY_PRESET, strip_mode)
+    return build_policy_from_format(FORMAT_ID, parameters, strip_mode)
 
 
 def full_policy():
-    return build_policy(FULL)
+    return build_policy("full")
 
 
 def partial_policy():
-    return build_policy(PARTIAL)
+    return build_policy("partial")

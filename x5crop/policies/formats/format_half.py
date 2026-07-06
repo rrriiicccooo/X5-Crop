@@ -1,28 +1,17 @@
 from __future__ import annotations
 
-from ..separator_gate_profiles import SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT
-from ..runtime.base import FULL, PARTIAL, FrameFitPolicy
-from ..runtime.separator import SeparatorEdgePairPolicy
-from ..assembly.factory import build_policy_from_preset
-from ..assembly.presets import FormatPolicyPreset, ModePolicyPreset
+from ..assembly.format_presets import build_policy_from_format
 from ..parameters.aggregate import FormatParameters
+from ..parameters.registry import base_format_parameters
 
 FORMAT_ID = "half"
 
 
 def parameters() -> FormatParameters:
-    return FormatParameters(
+    return base_format_parameters(
         FORMAT_ID,
-        score_full_width_cv=0.008,
         content_profile_min_run_ratio=0.16,
-        separator_model_grid_credit=0.25,
-        separator_model_equal_credit=0.08,
-        separator_gate_profile=SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT,
-        separator_width_profile_enabled=True,
         separator_width_profile_max_width_ratio=0.100,
-        nearby_active_refinement=False,
-        lucky_pass_risk_enabled=False,
-        leading_grid_failure_enabled=False,
         separator_outer_min_score=0.68,
         separator_outer_band_score=0.48,
         separator_outer_spacing_min_ratio=0.90,
@@ -39,46 +28,13 @@ def parameters() -> FormatParameters:
     )
 
 
-FORMAT_POLICY_PRESET = FormatPolicyPreset(
-    format_id=FORMAT_ID,
-    parameters=parameters,
-    separator_gate_profile=SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT,
-    separator_edge_pair=SeparatorEdgePairPolicy(
-        0.090, 0.003, 0.060, 0.46, 0.66, 1.05, 0.70, 0.95, 0.040
-    ),
-    content_mismatch_review_enabled=True,
-    modes={
-        FULL: ModePolicyPreset(
-            role="dense_full_strip_geometry_supported",
-            notes=("dense full strips can use stable grid or detected geometry support without borrowing medium-format holder gates",),
-            frame_fit=FrameFitPolicy(
-                name="dense_half_frame_fit",
-                edge_evidence=True,
-                geometry_fallback=True,
-                min_edge_samples=4,
-                nominal_min_ratio=0.78,
-                nominal_max_ratio=1.08,
-                inlier_tolerance_ratio=0.030,
-            ),
-            separator_geometry_support_modes=("detected_geometry", "stable_grid"),
-            diagnostics_overlap_bleed=True,
-        ),
-        PARTIAL: ModePolicyPreset(
-            role="dense_partial_strip_edge_guarded",
-            notes=("partial safe extra frames require explicit separator/content/geometry support",),
-            diagnostics_overlap_bleed=True,
-        ),
-    },
-)
-
-
 def build_policy(strip_mode: str):
-    return build_policy_from_preset(FORMAT_POLICY_PRESET, strip_mode)
+    return build_policy_from_format(FORMAT_ID, parameters, strip_mode)
 
 
 def full_policy():
-    return build_policy(FULL)
+    return build_policy("full")
 
 
 def partial_policy():
-    return build_policy(PARTIAL)
+    return build_policy("partial")

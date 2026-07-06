@@ -35,6 +35,11 @@ Current stable release: v4.2.8
 - source package layout 已对齐到显式边界：`entry`、`runtime`、`cache`、
   `report`、`formats`、`detection.candidate.{plan,proposal,build,assessment,selection,extension}`
   和 `policies.{formats,parameters,runtime,decision,assembly,reporting}`。
+- format policy 入口已收紧：`policies/formats/format_*.py` 只保留
+  format-specific parameter overrides 和标准 build 入口；gate profile、frame fit、
+  review-only、diagnostics、edge-pair preset 和 mode role 由
+  `policies.assembly.format_presets` 集中生成。14 个 format/mode 的 active
+  runtime policy detail 与迁移前完全一致。
 - 基础能力层已进一步收紧：`geometry` / `image` / `io` 不再承载 runtime cache、
   detection detail、finalization risk 或 `strip_mode` 语义；separator profile /
   enhanced promotion cache adapter 迁入 `cache/separator.py`，output bleed 迁入
@@ -270,10 +275,9 @@ Current stable release: v4.2.8
 - edge-pair search limits 已改为 `EdgePairSearchLimits`；selected edge-pair gap
   由 `edge_pair_gap_from_candidate` 从 selected candidate 派生，避免重复 best
   selection，report/detail 字段保持不变。
-- edge-pair 参数边界已收紧：format preset 仍可用
-  `SeparatorEdgePairPolicy` 表达语义，policy assembly 会在 runtime policy 中
-  转换为 `EdgePairParameters`，`geometry/edge_pairs.py` 不再 duck-type
-  policy-like 对象。
+- edge-pair 参数边界已收紧：runtime preset assembly 集中使用
+  `SeparatorEdgePairPolicy` 表达语义，并在 runtime policy 中转换为
+  `EdgePairParameters`；`geometry/edge_pairs.py` 不再 duck-type policy-like 对象。
 - edge-pair 专用 edge-refine profile 已从基础 `separator_profile.py` 拆出到
   `geometry/edge_refine_profile.py`；基础 separator profile 只保留 separator
   signal 与通用 profile helper。
@@ -523,6 +527,11 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   lifecycle / evidence / decision / final. Outer / separator / content / safety
   are candidate proposal families, not top-level detection sublayers. PASS /
   REVIEW belongs to the decision layer, and finalization is output-adjacent only.
+- Format policy entry points are tightened: `policies/formats/format_*.py` now
+  keep only format-specific parameter overrides and standard build entry points;
+  gate profiles, frame fit, review-only, diagnostics, edge-pair presets, and mode
+  roles are generated centrally by `policies.assembly.format_presets`. Active
+  runtime policy detail is unchanged for all 14 format/mode pairs.
 - Foundation-layer ownership is tightened further: `geometry` / `image` / `io`
   no longer own runtime cache, detection detail, finalization risk, or
   `strip_mode` semantics. Separator profile / enhanced-promotion cache adapters
@@ -628,10 +637,10 @@ Verified:
   origin/pitch, width-aware gaps, edge-pair, grid, enhanced, and nearby
   refinement results before `detection.py` handles frame fit, scoring, and
   detail assembly.
-- Edge-pair parameter ownership is tightened: format presets may still use
-  `SeparatorEdgePairPolicy` for semantic declaration, policy assembly converts
-  those presets into `EdgePairParameters`, and `geometry/edge_pairs.py` no
-  longer duck-types policy-like objects.
+- Edge-pair parameter ownership is tightened: runtime preset assembly now uses
+  `SeparatorEdgePairPolicy` for semantic declaration, converts it into
+  `EdgePairParameters`, and `geometry/edge_pairs.py` no longer duck-types
+  policy-like objects.
 - Ordinary separator profile / gap search code is split without behavior changes:
   `geometry/separator_profile.py` separates vertical sampling, segmented extreme
   evidence, uniform soft score, uniform support, column gradient signals, the
