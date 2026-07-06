@@ -101,13 +101,11 @@ def separator_model_gap_proposal_policy(
     mode_preset: ModePolicyPreset,
 ) -> SeparatorModelGapProposalPolicy:
     return SeparatorModelGapProposalPolicy(
-        detected_geometry_equal_model_enabled=bool(
-            mode_preset.detector_kind == "standard_strip"
-            and "detected_geometry" in mode_preset.separator_geometry_support_modes
-        ),
-        detected_geometry_strip_modes=("full",),
+        geometry_equal_model_enabled=bool(mode_preset.detector_kind == "standard_strip"),
+        geometry_equal_model_strip_modes=("full",),
         requires_default_count=True,
         requires_standard_width_search=True,
+        requires_incomplete_hard_gaps=True,
     )
 
 
@@ -132,7 +130,6 @@ def separator_width_profile_policy(
         max_width_ratio=float(width_profile.max_width_ratio),
         confidence_cap=float(width_profile.confidence_cap),
         required_count=0,
-        full_selection_enabled=bool(preset.full_selection_enabled),
     )
 
 

@@ -71,6 +71,10 @@ Current stable release: v4.2.8
   描述 equal model gap 证据，不再使用 fallback 语义命名；行为阈值不变。
 - 单个 expected gap proposal 已改为 `SeparatorGapProposal`；standard proposal
   不再用裸 tuple 传递 gap/detail，report detail 字段保持不变。
+- `geometry_equal_model` 现在是 standard-strip full / default-count 通用的
+  model-gap source；只有初始 `width_aware` proposal 的 hard separator evidence
+  不完整时才会被选中。hard separator 完整时它只作为 skipped detail 可见，
+  不替换真实 separator。
 - observed-width gap proposal 现在写出 `separator_width_profile_gap_search` detail：
   每个 expected gap 记录 width-profile accepted / rejected run、selected detected
   gap、相对 physical width prior 的 selected width relation 和 summary reason；
@@ -106,7 +110,7 @@ Current stable release: v4.2.8
   config，report detail 字段保持不变。
 - separator gap lifecycle 的 report detail 不再使用 override 语义：
   `standard_gap_search` 现在记录 `selected_gap_source`，用于说明最终采用
-  standard hard search、observed width search 或 detected-geometry model source；候选生成、
+  standard hard search、observed width search 或 `geometry_equal_model` source；候选生成、
   gap 选择和 PASS / REVIEW 行为不变。
 - separator evidence summary 的内部方法从 `decision_summary()` 改为
   `evidence_detail()`；decision 层仍负责消费这些 evidence 并形成最终判定。
@@ -116,7 +120,7 @@ Current stable release: v4.2.8
   source selection、primary build 和 late refinement attachment。report key、
   gap 顺序、candidate assessment 和 PASS / REVIEW 行为不变。
 - initial separator source selection 已从 `separator_gaps.py` 拆到
-  `separator_sources.py`；standard、broad-width 和 detected-geometry model
+  `separator_sources.py`；standard、observed-width 和 `geometry_equal_model`
   source selection 细节集中在 source 模块，`separator_gaps.py` 现在只负责
   lifecycle result assembly。report key、gap 顺序、candidate assessment 和
   PASS / REVIEW 行为不变。
@@ -127,9 +131,10 @@ Current stable release: v4.2.8
   profile 等分模型归 `detection.candidate.proposal.separator.model`；
   build / safety / refinement / content candidate 路径不再手写 `"equal"` /
   `"grid"` / `"content"` method 字符串。
-- detected-geometry equal model 已迁入显式 `SeparatorPolicy.model_gap_proposal`；
+- `geometry_equal_model` 已迁入显式 `SeparatorPolicy.model_gap_proposal`；
   gate 的 geometry-support policy 不再作为 gap proposal 开关，report policy detail
-  会单独输出 model-gap proposal 配置，方便人工审核 proposal 与 gate 边界。
+  会单独输出 model-gap proposal 配置；该 source 由 standard-strip/full/default-count
+  与 incomplete hard-gap evidence 共同约束，方便人工审核 proposal 与 gate 边界。
 - separator profile / edge-refine / enhanced profile cache key 已从 format identity
   解耦，改为只使用 geometry box 与参数对象；nearby diagnostic cache key 补入
   diagnostic policy。
@@ -236,7 +241,7 @@ Current stable release: v4.2.8
 - separator gap lifecycle 不再接收完整 `RuntimeConfig`，late refinement 只消费
   `analysis_mode`；未使用的 `build_separator_gaps_for_outer` 包装入口已删除。
 - initial separator gap proposal 已改为 `InitialSeparatorGapResult`；standard
-  proposal、broad-width override 和 detected-geometry model override 由独立
+  proposal、observed-width search 和 `geometry_equal_model` source 由独立
   helper 串联，report/detail 字段保持不变。
 - primary separator refinement 已改为 `PrimarySeparatorRefinementResult`；
   edge-pair correction 与 robust-grid detail 不再通过裸 tuple 传递。
@@ -398,7 +403,7 @@ Current stable release: v4.2.8
   但报告仍保留原有 detail key；
   refinement wrapper detail 现在统一补齐 family / pending / skipped detail；
   skipped reason 区分 not-full、single-frame、policy disabled、auto not needed
-  和 detected-geometry model 已启用等情况，方便人工审核没运行的原因；
+  和 `geometry_equal_model_selected` 等情况，方便人工审核没运行的原因；
   `geometry/edge_pairs.py` 将 search limits、candidate generation、best-pair
   selection 和 replacement assessment 分开，并在 detail 中写出 search limits、
   candidate count、selected candidate 和 replacement assessment；
@@ -544,6 +549,11 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - Standard separator proposal detail uses `model_gap_score` / `model_gap_count`
   for equal model-gap evidence instead of fallback terminology; behavior
   thresholds are unchanged.
+- `geometry_equal_model` is now a universal model-gap source for standard-strip
+  full / default-count candidates. It is selected only when the initial
+  `width_aware` proposal has incomplete hard separator evidence; when hard
+  separators are complete, it remains visible as skipped detail instead of
+  replacing real separators.
 - Observed-width gap proposal now writes `separator_width_profile_gap_search`
   detail for each expected gap, including accepted / rejected width-profile runs,
   the selected detected gap, and the selected width relation to the physical
@@ -638,10 +648,11 @@ Verified:
   with profile equal-split proposal in `detection.candidate.proposal.separator.model`;
   build, safety, refinement, and content-candidate paths no longer hand-write
   `"equal"` / `"grid"` / `"content"` method strings.
-- Detected-geometry equal-model proposal now lives in explicit
+- `geometry_equal_model` now lives in explicit
   `SeparatorPolicy.model_gap_proposal`; gate geometry-support policy no longer
   doubles as a gap-proposal switch, and report policy detail exposes the model-gap
-  proposal config for review.
+  proposal config. The source is constrained by standard-strip/full/default-count
+  scope and incomplete hard-gap evidence.
 - Standard detected-gap run evaluation now uses `DetectedGapRunAssessment`
   instead of unused no-detail wrappers or raw tuple returns; accepted / rejected
   run detail fields are unchanged.
@@ -712,7 +723,7 @@ Verified:
   refinement consumes only `analysis_mode`, and the unused
   `build_separator_gaps_for_outer` wrapper has been removed.
 - Initial separator gap proposal now uses `InitialSeparatorGapResult`; standard
-  proposal, broad-width override, and detected-geometry model override are
+  proposal, observed-width search, and `geometry_equal_model` source are
   chained through separate helpers while report/detail fields remain unchanged.
 - Single expected-gap proposal now uses `SeparatorGapProposal`; standard
   proposal no longer passes gap/detail through a raw tuple, while report detail
@@ -828,7 +839,7 @@ Verified:
   wrappers now return a shared `GapRefinementResult` while report detail keys stay
   compatible. Refinement wrapper detail now shares family / pending / skipped
   detail assembly and skipped reasons distinguish not-full, single-frame, policy
-  disabled, auto-not-needed, and detected-geometry model cases. Edge-pair detail
+  disabled, auto-not-needed, and `geometry_equal_model_selected` cases. Edge-pair detail
   now records search limits, candidate count,
   selected candidate, and replacement assessment. Runtime refinement and
   read-only diagnostics now share nearby search context, candidate ranking, and
@@ -857,7 +868,7 @@ Verified:
   outer-correction skip decisions directly.
 - Separator gap lifecycle report detail now uses `selected_gap_source` instead
   of override wording to describe whether standard hard search, observed width
-  search, or detected-geometry model source supplied the final initial gaps; candidate
+  search, or `geometry_equal_model` source supplied the final initial gaps; candidate
   generation, gap selection, and PASS / REVIEW behavior are unchanged.
 - Separator evidence summary now exposes `evidence_detail()` internally instead
   of `decision_summary()`; the decision layer remains the only consumer that
@@ -869,7 +880,7 @@ Verified:
   Report keys, gap order, candidate assessment, and PASS / REVIEW behavior are
   unchanged.
 - Initial separator source selection moved from `separator_gaps.py` to
-  `separator_sources.py`; standard, broad-width, and detected-geometry model
+  `separator_sources.py`; standard, observed-width, and `geometry_equal_model`
   source-selection details now live in the source module while
   `separator_gaps.py` owns lifecycle result assembly. Report keys, gap order,
   candidate assessment, and PASS / REVIEW behavior are unchanged.

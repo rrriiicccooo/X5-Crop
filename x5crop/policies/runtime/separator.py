@@ -81,28 +81,35 @@ class SeparatorGeometrySupportPolicy:
 
 @dataclass(frozen=True)
 class SeparatorModelGapProposalPolicy:
-    detected_geometry_equal_model_enabled: bool = False
-    detected_geometry_strip_modes: tuple[str, ...] = ("full",)
+    geometry_equal_model_enabled: bool = False
+    geometry_equal_model_strip_modes: tuple[str, ...] = ("full",)
     requires_default_count: bool = True
     requires_standard_width_search: bool = True
+    requires_incomplete_hard_gaps: bool = True
 
-    def detected_geometry_equal_model_available(
+    def geometry_equal_model_block_reason(
         self,
         *,
         strip_mode: str,
         count: int,
         default_count: int,
         gap_max_width_ratio_override: float | None,
-    ) -> bool:
-        if not self.detected_geometry_equal_model_enabled:
-            return False
-        if strip_mode not in self.detected_geometry_strip_modes:
-            return False
+        expected_gaps: int,
+        hard_gaps: int,
+    ) -> str | None:
+        if not self.geometry_equal_model_enabled:
+            return "policy_disabled"
+        if strip_mode not in self.geometry_equal_model_strip_modes:
+            return "strip_mode_not_enabled"
         if self.requires_default_count and int(count) != int(default_count):
-            return False
+            return "non_default_count"
         if self.requires_standard_width_search and gap_max_width_ratio_override is not None:
-            return False
-        return True
+            return "width_override_active"
+        if int(expected_gaps) <= 0:
+            return "single_frame"
+        if self.requires_incomplete_hard_gaps and int(hard_gaps) >= int(expected_gaps):
+            return "hard_gaps_complete"
+        return None
 
 
 @dataclass(frozen=True)
@@ -118,17 +125,6 @@ class SeparatorWidthProfilePolicy:
     band_candidate_count: int = 10
     sequence_candidate_count: int = 4
     max_candidates: int = 4
-    full_selection_enabled: bool = False
-    full_selection_strip_modes: tuple[str, ...] = ("full",)
-    full_selection_requires_required_count: bool = True
-    full_selection_requires_help: bool = True
-    full_selection_required_support: str = "ok"
-    full_selection_allow_equal_gaps: bool = False
-    full_selection_help_supports: tuple[str, ...] = ("aspect_conflict", "low_content")
-    full_selection_help_reasons: tuple[str, ...] = (
-        "content_aspect_conflict",
-        "separator_hard_evidence_weak",
-    )
 
 
 @dataclass(frozen=True)

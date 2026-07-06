@@ -73,14 +73,6 @@ def _separator_detail(policy: "DetectionPolicy") -> dict[str, Any]:
             "band_candidate_count",
             "sequence_candidate_count",
             "max_candidates",
-            "full_selection_enabled",
-            "full_selection_strip_modes",
-            "full_selection_requires_required_count",
-            "full_selection_requires_help",
-            "full_selection_required_support",
-            "full_selection_allow_equal_gaps",
-            "full_selection_help_supports",
-            "full_selection_help_reasons",
         ),
     )
     return {

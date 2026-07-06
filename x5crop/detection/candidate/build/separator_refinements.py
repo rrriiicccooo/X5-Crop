@@ -235,15 +235,15 @@ def enhanced_gap_promotion_skip_reason(
     analysis_mode: str,
     gaps: list[Gap],
     count: int,
-    detected_geometry_equal_model_enabled: bool,
+    geometry_equal_model_selected: bool,
     enhanced_config: EnhancedSeparatorParameters,
 ) -> Optional[str]:
     if not allow_enhanced_gap_promotion:
         return "disabled"
     if strip_mode != "full":
         return "not_full_strip"
-    if detected_geometry_equal_model_enabled:
-        return "detected_geometry_equal_model_enabled"
+    if geometry_equal_model_selected:
+        return "geometry_equal_model_selected"
     if should_run_enhanced_gap_promotion(analysis_mode, gaps, count, enhanced_config):
         return None
     if analysis_mode == "auto":
@@ -261,6 +261,7 @@ def apply_enhanced_gap_promotion(
     pitch: float,
     allow_enhanced_gap_promotion: bool,
     analysis_mode: str,
+    geometry_equal_model_selected: bool,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> GapRefinementResult:
@@ -270,7 +271,7 @@ def apply_enhanced_gap_promotion(
         analysis_mode=analysis_mode,
         gaps=gaps,
         count=count,
-        detected_geometry_equal_model_enabled=policy.separator.model_gap_proposal.detected_geometry_equal_model_enabled,
+        geometry_equal_model_selected=geometry_equal_model_selected,
         enhanced_config=policy.separator.enhanced,
     )
     if skip_reason is not None:
@@ -359,6 +360,7 @@ def apply_late_separator_refinement_chain(
     origin: float,
     pitch: float,
     allow_enhanced_gap_promotion: bool,
+    geometry_equal_model_selected: bool,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> LateSeparatorRefinementResult:
@@ -372,6 +374,7 @@ def apply_late_separator_refinement_chain(
         pitch,
         allow_enhanced_gap_promotion,
         analysis_mode,
+        geometry_equal_model_selected,
         cache,
         policy,
     )

@@ -63,7 +63,6 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
             ),
             separator_width_profile=SeparatorWidthProfilePreset(
                 mode="conditional",
-                full_selection_enabled=True,
                 separator_outer_allow_oversized_band=True,
             ),
             diagnostics_overlap_bleed=True,
@@ -76,7 +75,6 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
             ),
             separator_width_profile=SeparatorWidthProfilePreset(
                 mode="conditional",
-                full_selection_enabled=True,
                 separator_outer_allow_oversized_band=True,
             ),
             diagnostics_overlap_bleed=True,

@@ -17,7 +17,13 @@ from .separator_refinements import (
     apply_primary_separator_refinements,
     pending_gap_refinement_detail,
 )
-from .separator_sources import initial_separator_gaps, standard_separator_gap_result
+from .separator_sources import (
+    GEOMETRY_EQUAL_MODEL_SOURCE,
+    initial_separator_gaps,
+    model_gap_proposal_detail,
+    standard_separator_gap_result,
+    with_model_gap_proposal_detail,
+)
 
 
 @dataclass(frozen=True)
@@ -83,6 +89,17 @@ def build_primary_separator_gaps_for_outer(
             policy,
             forced=True,
         )
+        model_detail = model_gap_proposal_detail(
+            initial_gaps,
+            fmt,
+            count,
+            strip_mode,
+            gap_max_width_ratio_override,
+            policy,
+        )
+        model_detail["available"] = False
+        model_detail["reason"] = "forced_standard_gap_search"
+        initial_gaps = with_model_gap_proposal_detail(initial_gaps, model_detail)
     else:
         initial_gaps = initial_separator_gaps(
             gray_work,
@@ -135,6 +152,9 @@ def apply_late_separator_refinements(
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> SeparatorGapBuildResult:
+    geometry_equal_model_selected = (
+        separator_gaps.standard_gap_search_detail.get("selected_gap_source") == GEOMETRY_EQUAL_MODEL_SOURCE
+    )
     late_refinement = apply_late_separator_refinement_chain(
         gray_work,
         analysis_mode,
@@ -146,6 +166,7 @@ def apply_late_separator_refinements(
         separator_gaps.origin,
         separator_gaps.pitch,
         allow_enhanced_gap_promotion,
+        geometry_equal_model_selected,
         cache,
         policy,
     )

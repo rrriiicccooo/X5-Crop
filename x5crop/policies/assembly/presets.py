@@ -14,7 +14,6 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class SeparatorWidthProfilePreset:
     mode: str = "off"
-    full_selection_enabled: bool = False
     separator_outer_allow_oversized_band: bool = False
     separator_outer_oversized_band_max_ratio: float = 0.45
     separator_outer_oversized_band_score_penalty: float = 0.08

@@ -15,7 +15,7 @@ from ..proposal.separator.proposal import (
 )
 
 
-DETECTED_GEOMETRY_EQUAL_MODEL_SOURCE = "detected_geometry_equal_model"
+GEOMETRY_EQUAL_MODEL_SOURCE = "geometry_equal_model"
 
 
 @dataclass(frozen=True)
@@ -106,22 +106,53 @@ def standard_separator_gap_result(
     )
 
 
-def detected_geometry_equal_model_source_available(
+def model_gap_proposal_detail(
+    result: InitialSeparatorGapResult,
     fmt: FormatSpec,
     count: int,
     strip_mode: str,
     gap_max_width_ratio_override: Optional[float],
     policy: DetectionPolicy,
-) -> bool:
-    return policy.separator.model_gap_proposal.detected_geometry_equal_model_available(
+) -> dict[str, Any]:
+    expected_gaps = max(0, int(count) - 1)
+    hard_gaps = int(result.standard_gap_search_detail.get("detected_count", 0) or 0)
+    model_policy = policy.separator.model_gap_proposal
+    block_reason = model_policy.geometry_equal_model_block_reason(
         strip_mode=strip_mode,
         count=count,
         default_count=fmt.default_count,
         gap_max_width_ratio_override=gap_max_width_ratio_override,
+        expected_gaps=expected_gaps,
+        hard_gaps=hard_gaps,
+    )
+    return {
+        "family": GEOMETRY_EQUAL_MODEL_SOURCE,
+        "policy_enabled": bool(model_policy.geometry_equal_model_enabled),
+        "available": block_reason is None,
+        "reason": "available" if block_reason is None else block_reason,
+        "expected_gaps": int(expected_gaps),
+        "hard_gaps": int(hard_gaps),
+        "strip_modes": list(model_policy.geometry_equal_model_strip_modes),
+        "requires_default_count": bool(model_policy.requires_default_count),
+        "requires_standard_width_search": bool(model_policy.requires_standard_width_search),
+        "requires_incomplete_hard_gaps": bool(model_policy.requires_incomplete_hard_gaps),
+    }
+
+
+def with_model_gap_proposal_detail(
+    result: InitialSeparatorGapResult,
+    detail: dict[str, Any],
+) -> InitialSeparatorGapResult:
+    standard_detail = dict(result.standard_gap_search_detail)
+    standard_detail["model_gap_proposal"] = detail
+    return InitialSeparatorGapResult(
+        gaps=result.gaps,
+        standard_gap_search_detail=standard_detail,
+        separator_width_profile_gap_search_detail=result.separator_width_profile_gap_search_detail,
     )
 
 
-def select_detected_geometry_equal_model_gaps(
+def select_geometry_equal_model_gaps(
     result: InitialSeparatorGapResult,
     profile: np.ndarray,
     fmt: FormatSpec,
@@ -132,22 +163,25 @@ def select_detected_geometry_equal_model_gaps(
     gap_max_width_ratio_override: Optional[float],
     policy: DetectionPolicy,
 ) -> InitialSeparatorGapResult:
-    if not detected_geometry_equal_model_source_available(
+    model_detail = model_gap_proposal_detail(
+        result,
         fmt,
         count,
         strip_mode,
         gap_max_width_ratio_override,
         policy,
-    ):
+    )
+    result = with_model_gap_proposal_detail(result, model_detail)
+    if not bool(model_detail.get("available", False)):
         return result
     return with_selected_gap_source(
         result,
-        DETECTED_GEOMETRY_EQUAL_MODEL_SOURCE,
+        GEOMETRY_EQUAL_MODEL_SOURCE,
         gaps=propose_equal_model_gaps_from_profile(profile, origin, pitch, count),
         extra_standard_detail={
             "model_gap_proposal": {
-                "family": DETECTED_GEOMETRY_EQUAL_MODEL_SOURCE,
-                "policy_enabled": True,
+                **model_detail,
+                "selected": True,
             }
         },
     )
@@ -176,7 +210,7 @@ def initial_separator_gaps(
         gap_max_width_ratio_override,
         policy,
     )
-    return select_detected_geometry_equal_model_gaps(
+    return select_geometry_equal_model_gaps(
         result,
         profile,
         fmt,
@@ -190,13 +224,14 @@ def initial_separator_gaps(
 
 
 __all__ = [
-    "DETECTED_GEOMETRY_EQUAL_MODEL_SOURCE",
+    "GEOMETRY_EQUAL_MODEL_SOURCE",
     "InitialSeparatorGapResult",
-    "detected_geometry_equal_model_source_available",
     "initial_separator_gaps",
-    "select_detected_geometry_equal_model_gaps",
+    "model_gap_proposal_detail",
+    "select_geometry_equal_model_gaps",
     "selected_gap_source_detail",
     "skipped_separator_width_profile_gap_search_detail",
     "standard_separator_gap_result",
+    "with_model_gap_proposal_detail",
     "with_selected_gap_source",
 ]
