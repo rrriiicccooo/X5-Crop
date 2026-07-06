@@ -47,7 +47,8 @@ Current stable release: v4.2.8
   signal tolerance 和 search budget 字段；count inclusion、gate supplemental
   checks、scoring calibration、risk enablement、partial-holder requirements 和
   refinement numeric profile 迁入 `policies/assembly/profile_defaults.py`。
-  关键 runtime policy 字段迁移前后保持一致。
+  `FormatPhysicalSpec` 作为 `FormatSpec` 的物理语义别名暴露；关键 runtime
+  policy 字段迁移前后保持一致。
 - 基础能力层已进一步收紧：`geometry` / `image` / `io` 不再承载 runtime cache、
   detection detail、finalization risk 或 `strip_mode` 语义；separator profile /
   enhanced promotion cache adapter 迁入 `cache/separator.py`，output bleed 迁入

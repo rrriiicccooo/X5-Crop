@@ -149,7 +149,7 @@ finalization
 
 - `*Options`: 文件探测前的入口参数，例如 `CliOptions`。
 - `*Config`: 已解析运行配置，例如 `RuntimeConfig`。
-- `*Spec`: 物理事实或格式规格，例如 `FormatSpec`。
+- `*Spec`: 物理事实或格式规格，例如 `FormatPhysicalSpec / FormatSpec`。
 - `*Parameters`: 数值参数和低层执行参数。
 - `*Policy`: format / mode 行为、gate、decision 或 output 规则。
 - `*Assessment`: candidate 阶段评估结果；不得表达最终裁切决定。
@@ -204,7 +204,7 @@ REVIEW contract。
 | Pre-detection | deskew angle selection | `image/deskew.py`, `image/deskew_parameters.py`, `runtime/deskew.py` | 已审：deskew 只估角、旋转输入和写入质量 detail；deskew uncertainty 只能作为最终 REVIEW reason 的风险输入，不能直接 PASS。 |
 | Pre-detection | base gray | `image/gray.py`, `io/tiff.py`, `runtime/deskew.py`, `runtime/analysis_reuse.py` | 已审：`make_base_gray_u8` 是唯一基础灰度入口，用于 TIFF 读取和 deskew 后重建灰度；不承担 content / separator 语义。 |
 | Pre-detection | analysis / evidence gray | `image/evidence.py`, `cache/analysis.py` | 已审：content/separator evidence gray 和 analysis cache 只提供可复用证据输入；不隐藏原始 gray，不选择候选，不决定 PASS / REVIEW；不保留 color contrast 或 heavy texture 预留接口。 |
-| Policy activation | format physical facts | `formats/` | count、aspect、family、physical risk 是否是事实层，不含 gate threshold。 |
+| Policy activation | format physical facts | `formats/` | `FormatPhysicalSpec / FormatSpec` 中的 count、aspect、family、physical risk 是否是事实层，不含 gate threshold。 |
 | Policy activation | format parameter overrides | `policies/formats/format_*.py`, `policies/parameters/ownership.py` | format 文件是否只声明 physical tolerance、signal tolerance 和 search budget 覆盖；`ownership.py` 将 override 拆为 `FormatToleranceProfile`、`FormatSignalToleranceProfile` 和 `SearchBudgetPolicy`，并拒绝 scoring、gate、risk、algorithm switch 或 runtime preset 字段。 |
 | Policy activation | runtime policy assembly | `policies/assembly/*`, `policies/assembly/profile_defaults.py`, `policies/runtime/*`, `policies/parameters/*` | assembly 是否从 format id、物理 facts、受限参数覆盖和分层 policy profile 生成 runtime preset；count inclusion、gate supplemental checks、scoring calibration、risk enablement、partial-holder requirements 和 refinement numeric profile 不应再藏在 format defaults 里。 |
 | Policy activation | final decision contract | `policies/decision/contract.py`, `policies/decision/overrides.py` | runtime `DetectionPolicy` 与 final `DetectionDecisionContract` 的证据门槛不能语义漂移。 |

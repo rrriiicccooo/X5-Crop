@@ -37,6 +37,9 @@ class FormatSpec:
     known_physical_risks: tuple[str, ...]
 
 
+FormatPhysicalSpec = FormatSpec
+
+
 def expected_separator_count(format_id: str, default_count: int) -> int:
     if format_id == FormatId.DUAL_LANE.value:
         return 10
@@ -205,6 +208,7 @@ __all__ = [
     "LAYOUT_CHOICES",
     "STRIP_CHOICES",
     "FormatId",
+    "FormatPhysicalSpec",
     "FormatSpec",
     "StripMode",
     "expected_separator_count",
