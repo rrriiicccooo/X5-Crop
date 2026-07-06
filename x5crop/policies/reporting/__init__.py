@@ -99,7 +99,6 @@ def _separator_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "nearby_refinement": _plain(separator.nearby_refinement),
         "robust_grid": _plain(separator.robust_grid),
         "gap_search": _plain(separator.gap_search),
-        "enhanced": _plain(separator.enhanced),
         "hard_methods": list(separator.hard_methods),
         "model_methods": list(separator.model_methods),
         "gate": _plain(separator.gate),

@@ -27,7 +27,7 @@ def apply_deskew(
     if config.deskew == "off":
         return arr, gray, deskew_detail
 
-    angle, angle_detail = choose_deskew_angle(gray, config.layout, config.analysis, deskew)
+    angle, angle_detail = choose_deskew_angle(gray, config.layout, config.deskew_fallback, deskew)
     deskew_detail.update(angle_detail)
     deskew_detail["angle"] = angle
     deskew_work_width = float(work_gray(gray, config.layout).shape[1])

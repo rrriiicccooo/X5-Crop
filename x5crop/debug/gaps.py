@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED, GAP_EQUAL, GAP_GRID
+from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_EQUAL, GAP_GRID
 from ..domain import Box, Detection, Gap
 from ..gap_methods import is_hard_gap_method
 from ..policies.registry import get_detection_policy
@@ -80,7 +80,6 @@ def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> Non
     gap_colors = {
         GAP_DETECTED: (255, 0, 0),
         GAP_EDGE_PAIR: (255, 0, 0),
-        GAP_ENHANCED_DETECTED: (255, 140, 0),
         GAP_GRID: (255, 220, 30),
         GAP_EQUAL: (190, 80, 255),
     }

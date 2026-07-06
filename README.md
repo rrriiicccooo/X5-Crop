@@ -255,6 +255,12 @@ python3 X5_Crop.py . --format 135 --strip partial --report
 python3 X5_Crop.py . --format 135 --strip full --deskew off
 ```
 
+关闭 deskew fallback：
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --deskew-fallback off
+```
+
 关闭并行：
 
 ```bash
@@ -487,6 +493,12 @@ Disable deskew:
 
 ```bash
 python3 X5_Crop.py . --format 135 --strip full --deskew off
+```
+
+Disable deskew fallback:
+
+```bash
+python3 X5_Crop.py . --format 135 --strip full --deskew-fallback off
 ```
 
 ### Uninstall

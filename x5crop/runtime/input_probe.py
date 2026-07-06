@@ -71,7 +71,7 @@ def runtime_config_from_options(options: CliOptions) -> tuple[RuntimeConfig, lis
         bleed_x=bleed_x,
         bleed_y=bleed_y,
         deskew=options.deskew,
-        analysis=options.analysis,
+        deskew_fallback=options.deskew_fallback,
         deskew_min_angle=options.deskew_min_angle,
         deskew_max_angle=options.deskew_max_angle,
         confidence_threshold=options.confidence_threshold,

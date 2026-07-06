@@ -37,7 +37,6 @@ def build_detection_for_outer(
     offset_fraction: float = 0.0,
     outer_candidate_name: str = "unknown",
     outer_candidate_strategy_name: str | None = None,
-    allow_enhanced_gap_promotion: bool = True,
     cache: Optional[AnalysisCache] = None,
     allow_outer_refine: bool = True,
     gap_max_width_ratio_override: Optional[float] = None,
@@ -59,7 +58,6 @@ def build_detection_for_outer(
         strip_mode,
         outer,
         offset_fraction,
-        allow_enhanced_gap_promotion,
         cache,
         allow_outer_refine,
         gap_max_width_ratio_override,
@@ -160,7 +158,6 @@ def build_detection_for_outer(
             "separator_width_profile_gap_search": separator_gaps.separator_width_profile_gap_search_detail,
             "edge_pair_correction": separator_gaps.edge_pair_correction_detail,
             "frame_size_fit": frame_size_detail,
-            "enhanced_gap_promotion": separator_gaps.enhanced_gap_promotion_detail,
             "nearby_separator_refinement": separator_gaps.nearby_refinement_detail,
             "separator_width_evidence": separator_width_evidence,
             "broad_separator_width_gaps": int(separator_width_evidence.get("broad_separator_width_gaps", 0) or 0),
@@ -187,7 +184,6 @@ def _build_separator_gap_lifecycle(
     strip_mode: str,
     outer: Box,
     offset_fraction: float,
-    allow_enhanced_gap_promotion: bool,
     cache: Optional[AnalysisCache],
     allow_outer_refine: bool,
     gap_max_width_ratio_override: Optional[float],
@@ -210,13 +206,9 @@ def _build_separator_gap_lifecycle(
     )
     if not allow_outer_refine or strip_mode != "full":
         return apply_late_separator_refinements(
-            gray_work,
-            config.analysis,
             count,
             strip_mode,
             separator_gaps,
-            allow_enhanced_gap_promotion,
-            cache,
             policy,
             explicit_count=explicit_count,
         )
@@ -231,13 +223,9 @@ def _build_separator_gap_lifecycle(
     )
     if refined_outer is None:
         return apply_late_separator_refinements(
-            gray_work,
-            config.analysis,
             count,
             strip_mode,
             separator_gaps,
-            allow_enhanced_gap_promotion,
-            cache,
             policy,
             explicit_count=explicit_count,
         )
@@ -259,13 +247,9 @@ def _build_separator_gap_lifecycle(
     grid_detail["outer_refined"] = True
     refined_separator_gaps = replace(refined_separator_gaps, grid_detail=grid_detail)
     return apply_late_separator_refinements(
-        gray_work,
-        config.analysis,
         count,
         strip_mode,
         refined_separator_gaps,
-        allow_enhanced_gap_promotion,
-        cache,
         policy,
         explicit_count=explicit_count,
     )

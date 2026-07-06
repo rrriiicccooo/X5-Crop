@@ -7,9 +7,9 @@ from pathlib import Path
 
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, SUMMARY_CSV_NAME, VERSION
 from ..formats import (
-    ANALYSIS_CHOICES,
     COMPRESSION_CHOICES,
     DESKEW_CHOICES,
+    DESKEW_FALLBACK_CHOICES,
     FORMAT_CHOICES,
     FORMATS,
     LAYOUT_CHOICES,
@@ -31,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--bleed-x", type=int, default=None, help="Long-axis bleed override; default 20, or 50 when overlap/continuous-content risk is detected. Horizontal scans: left/right. Vertical scans: top/bottom.")
     parser.add_argument("--bleed-y", type=int, default=None, help="Short-axis bleed override; default 10. Horizontal scans: top/bottom. Vertical scans: left/right.")
     parser.add_argument("--deskew", choices=DESKEW_CHOICES, default="auto", help="Deskew strip before detection/export.")
-    parser.add_argument("--analysis", choices=ANALYSIS_CHOICES, default="auto", help="Enhanced analysis for separator assist and deskew angle selection. auto runs enhanced separator only on weak separator evidence and enhanced deskew only when base deskew quality is weak; always enables enhanced passes; off disables enhanced analysis.")
+    parser.add_argument("--deskew-fallback", choices=DESKEW_FALLBACK_CHOICES, default="auto", help="Fallback edge fitting for deskew angle selection. auto runs the fallback only when base deskew quality is weak; always evaluates it; off disables the fallback.")
     parser.add_argument("--compression", choices=COMPRESSION_CHOICES, default="same", help="TIFF output compression: same for known lossless source compression, or none.")
     parser.add_argument("--deskew-min-angle", type=float, default=0.03, help="Minimum absolute deskew angle in degrees.")
     parser.add_argument("--deskew-max-angle", type=float, default=2.0, help="Maximum absolute deskew angle in degrees.")
@@ -87,7 +87,7 @@ def options_from_args(args: argparse.Namespace) -> CliOptions:
         bleed_x=(None if args.bleed_x is None else int(args.bleed_x)),
         bleed_y=(None if args.bleed_y is None else int(args.bleed_y)),
         deskew=str(args.deskew),
-        analysis=str(args.analysis),
+        deskew_fallback=str(args.deskew_fallback),
         deskew_min_angle=float(args.deskew_min_angle),
         deskew_max_angle=float(args.deskew_max_angle),
         confidence_threshold=float(args.confidence_threshold),

@@ -35,7 +35,7 @@ def print_run_header(config: RuntimeConfig, files: list[Path]) -> None:
     if config.dry_run:
         mode_parts.append("dry run")
     print("; ".join(mode_parts))
-    print(f"threshold: {config.confidence_threshold:.2f}; analysis: {config.analysis}")
+    print(f"threshold: {config.confidence_threshold:.2f}; deskew fallback: {config.deskew_fallback}")
     if len(files) > 1 and config.jobs > 1:
         print(f"parallel: {config.jobs} workers")
     if config.output_dir is not None:

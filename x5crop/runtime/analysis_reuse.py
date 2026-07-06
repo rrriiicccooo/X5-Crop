@@ -45,7 +45,7 @@ def config_cache_signature(config: RuntimeConfig) -> dict[str, Any]:
         "count": int(config.count),
         "page": int(config.page),
         "deskew": config.deskew,
-        "analysis": config.analysis,
+        "deskew_fallback": config.deskew_fallback,
         "deskew_min_angle": float(config.deskew_min_angle),
         "deskew_max_angle": float(config.deskew_max_angle),
         "confidence_threshold": float(config.confidence_threshold),

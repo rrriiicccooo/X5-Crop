@@ -4,7 +4,6 @@ from .constants import (
     GAP_CONTENT,
     GAP_DETECTED,
     GAP_EDGE_PAIR,
-    GAP_ENHANCED_DETECTED,
     GAP_EQUAL,
     GAP_GRID,
     HARD_GAP_METHODS,
@@ -26,14 +25,6 @@ def is_detected_gap_method(method: str) -> bool:
 
 def is_edge_pair_gap_method(method: str) -> bool:
     return method == GAP_EDGE_PAIR
-
-
-def is_enhanced_hard_gap_method(method: str) -> bool:
-    return method == GAP_ENHANCED_DETECTED
-
-
-def is_detected_or_enhanced_hard_gap_method(method: str) -> bool:
-    return is_detected_gap_method(method) or is_enhanced_hard_gap_method(method)
 
 
 def is_hard_gap_method(method: str) -> bool:
@@ -65,8 +56,6 @@ def is_separator_support_gap_method(method: str) -> bool:
 
 
 def gap_method_role(method: str) -> str:
-    if is_enhanced_hard_gap_method(method):
-        return "separator_evidence_enhanced"
     if is_direct_hard_gap_method(method):
         return "separator_evidence"
     if is_geometry_model_gap_method(method):
@@ -80,7 +69,6 @@ def gap_method_roles() -> dict[str, str]:
     return {
         GAP_DETECTED: gap_method_role(GAP_DETECTED),
         GAP_EDGE_PAIR: gap_method_role(GAP_EDGE_PAIR),
-        GAP_ENHANCED_DETECTED: gap_method_role(GAP_ENHANCED_DETECTED),
         GAP_GRID: gap_method_role(GAP_GRID),
         GAP_EQUAL: gap_method_role(GAP_EQUAL),
         GAP_CONTENT: gap_method_role(GAP_CONTENT),
@@ -95,10 +83,8 @@ __all__ = [
     "gap_method_roles",
     "is_content_model_gap_method",
     "is_detected_gap_method",
-    "is_detected_or_enhanced_hard_gap_method",
     "is_direct_hard_gap_method",
     "is_edge_pair_gap_method",
-    "is_enhanced_hard_gap_method",
     "is_equal_model_gap_method",
     "is_geometry_model_gap_method",
     "is_grid_model_gap_method",

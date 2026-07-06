@@ -19,7 +19,7 @@ class RuntimeConfig:
     bleed_x: int
     bleed_y: int
     deskew: str
-    analysis: str
+    deskew_fallback: str
     deskew_min_angle: float
     deskew_max_angle: float
     confidence_threshold: float

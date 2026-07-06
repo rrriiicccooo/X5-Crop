@@ -1,17 +1,9 @@
 from __future__ import annotations
 
-from ...constants import (
-    GAP_CONTENT,
-    GAP_DETECTED,
-    GAP_EDGE_PAIR,
-    GAP_ENHANCED_DETECTED,
-    GAP_EQUAL,
-    GAP_GRID,
-)
+from ...constants import GAP_DETECTED, GAP_EDGE_PAIR
 from ...geometry.detection_parameters import (
     EdgePairParameters,
     EdgeRefineProfileParameters,
-    EnhancedSeparatorParameters,
     GapSearchParameters,
     HardGapTrustParameters,
     NearbySeparatorRefinementParameters,
@@ -168,23 +160,14 @@ def separator_refinement_policy(
             phase="primary",
             strip_modes=standard_strip_modes,
             requires_explicit_count_for_partial=True,
-            target_gap_methods=(GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED),
-        ),
-        enhanced_promotion=SeparatorRefinementFamilyPolicy(
-            mode="conditional",
-            phase="late",
-            strip_modes=standard_strip_modes,
-            requires_explicit_count_for_partial=True,
-            target_gap_methods=(GAP_GRID, GAP_EQUAL, GAP_CONTENT),
-            requires_geometry_equal_not_selected=True,
-            analysis_modes=("auto", "always"),
+            target_gap_methods=(GAP_DETECTED, GAP_EDGE_PAIR),
         ),
         nearby=SeparatorRefinementFamilyPolicy(
             mode="conditional",
             phase="late",
             strip_modes=standard_strip_modes,
             requires_explicit_count_for_partial=True,
-            target_gap_methods=(GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED),
+            target_gap_methods=(GAP_DETECTED, GAP_EDGE_PAIR),
         ),
     )
 
@@ -222,7 +205,6 @@ def separator_policy(
     nearby_refinement = nearby_separator_refinement_parameters(FORMATS[preset.format_id], params)
     robust_grid = params.robust_grid
     gap_search = params.gap_search
-    enhanced = params.enhanced_separator
     profile = params.separator_profile
     edge_refine = params.edge_refine_profile
     return SeparatorPolicy(
@@ -333,16 +315,6 @@ def separator_policy(
             quality_prominence_weight=float(gap_search.quality_prominence_weight),
             separator_width_min_mean=float(gap_search.separator_width_min_mean),
             separator_width_min_prominence=float(gap_search.separator_width_min_prominence),
-        ),
-        enhanced=EnhancedSeparatorParameters(
-            min_score=float(enhanced.min_score),
-            max_width_ratio=float(enhanced.max_width_ratio),
-            max_width_min=float(enhanced.max_width_min),
-            max_width_max=float(enhanced.max_width_max),
-            max_shift_ratio=float(enhanced.max_shift_ratio),
-            max_shift_min=float(enhanced.max_shift_min),
-            max_shift_max=float(enhanced.max_shift_max),
-            auto_low_score=float(enhanced.auto_low_score),
         ),
         profile=SeparatorProfileParameters(
             top_ratio=float(profile.top_ratio),

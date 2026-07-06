@@ -10,7 +10,7 @@ from ..utils import (
 )
 
 
-def make_analysis_gray(gray: np.ndarray) -> np.ndarray:
+def make_deskew_fallback_gray(gray: np.ndarray) -> np.ndarray:
     data = gray.astype(np.float32)
     lo, hi = sampled_percentile(data, [0.5, 99.5])
     if hi <= lo:
@@ -20,14 +20,14 @@ def make_analysis_gray(gray: np.ndarray) -> np.ndarray:
     gx = np.abs(np.diff(shadow_lift, axis=1, prepend=shadow_lift[:, :1]))
     gy = np.abs(np.diff(shadow_lift, axis=0, prepend=shadow_lift[:1, :]))
     edge = np.clip((gx + gy) * 2.0, 0.0, 1.0)
-    enhanced = np.clip(shadow_lift * 0.82 + edge * 0.18, 0.0, 1.0)
+    fallback = np.clip(shadow_lift * 0.82 + edge * 0.18, 0.0, 1.0)
     extreme = ((gray < 35) | (gray > 235)).mean(axis=0)
     activity = (gx + gy).mean(axis=0)
     gutter_cols = (extreme >= 0.82) & (activity <= 0.10)
     for start, end in runs_from_mask(gutter_cols):
         if end - start <= max(3, gray.shape[1] // 14):
-            enhanced[:, start:end] = stretched[:, start:end]
-    return (enhanced * 255.0 + 0.5).astype(np.uint8)
+            fallback[:, start:end] = stretched[:, start:end]
+    return (fallback * 255.0 + 0.5).astype(np.uint8)
 
 
 def make_separator_evidence_gray(gray: np.ndarray) -> np.ndarray:

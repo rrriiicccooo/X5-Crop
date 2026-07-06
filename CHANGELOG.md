@@ -28,7 +28,15 @@ Current stable release: v4.2.8
 - separator-derived outer family 已通用化：标准 strip 的 full 默认启用 local / full-width scope；partial 只有显式 count 时启用 extension scope。separator 宽度由单一 `width_aware` proposal 同时解释 standard theoretical width 与 observed width evidence，format 只提供 width / spacing / budget 参数。
 - observed width profile 是中性的实测宽度证据，不是 broad-only profile：standard hard search 找不到时，它可以补充比 physical width prior 更窄、匹配或更宽的 detected separator，并在 detail 中记录 selected width relation；broad separator width 仍只是 gate / partial-safety 消费的 evidence summary。
 - separator width profile 的 format 覆盖只保留物理宽度容忍度；`120-66` 不再单独放松 separator pixel signal mean / prominence。separator 信号阈值属于全局 / 自适应 evidence 参数，不属于 format 物理事实。
-- separator refinement family 已通用化：edge-pair、enhanced promotion 和 nearby refinement 由 `SeparatorPolicy.refinement` 统一声明 mode / phase / strip-mode / partial 显式 count 条件；standard strip 的 full 全部 eligible，partial 只有显式 count eligible，dual-lane / review-only 不进入普通 refinement。report detail 统一写出 `family`、`phase`、`eligible` 和 `skipped_reason`。
+- separator enhanced promotion 已退休；active hard gap method 只有 `detected` 和
+  `edge-pair`。separator refinement family 只保留 edge-pair 和 nearby
+  refinement，由 `SeparatorPolicy.refinement` 统一声明 mode / phase /
+  strip-mode / partial 显式 count 条件；standard strip 的 full 全部 eligible，
+  partial 只有显式 count eligible，dual-lane / review-only 不进入普通 refinement。
+  report detail 统一写出 `family`、`phase`、`eligible` 和 `skipped_reason`。
+- 旧 `--analysis` 增强开关已退休；deskew 的二次边缘拟合保留为
+  `--deskew-fallback {auto,always,off}`。该 fallback 只服务 deskew angle
+  selection，不再影响 separator proposal / refinement。
 - candidate execution budget 将 “eligible” 与 “executed” 分开：可靠 primary separator 已通过 assessment 时，可跳过 full-width / outer-scope extension；outer correction 还要求 outer alignment ok 才跳过。
 - detection 分层已对齐为 pipeline / modes / candidate proposal lifecycle /
   evidence / decision / final；outer proposal / correction 是 candidate proposal
@@ -53,14 +61,14 @@ Current stable release: v4.2.8
   `FormatPhysicalSpec` 作为 `FormatSpec` 的物理语义别名暴露；关键 runtime
   policy 字段迁移前后保持一致。
 - 基础能力层已进一步收紧：`geometry` / `image` / `io` 不再承载 runtime cache、
-  detection detail、finalization risk 或 `strip_mode` 语义；separator profile /
-  enhanced promotion cache adapter 迁入 `cache/separator.py`，output bleed 迁入
+  detection detail、finalization risk 或 `strip_mode` 语义；separator profile 和
+  edge-refine cache adapter 保持在 `cache/separator.py`，output bleed 迁入
   `detection/final/output_bleed.py`；TIFF I/O 只返回 array/profile/warnings，base
   gray 由 runtime/cache 调用 `image.gray.make_base_gray_u8` 生成。
 - 基础灰度入口已与证据灰度拆开：`image.gray.make_base_gray_u8` 只负责
   TIFF / deskew 后的 base gray；`image.evidence` 只负责现有 content /
-  separator / deskew analysis evidence。当前不保留 color contrast 或 heavy
-  texture evidence 接口，未来如引入 OpenCV 等大依赖再重新评估。
+  separator evidence 和 deskew fallback gray。当前不保留 color contrast 或
+  heavy texture evidence 接口，未来如引入 OpenCV 等大依赖再重新评估。
 - Gap / Separator 族群已按 candidate proposal 模型收敛入口：
   `detection.candidate.proposal.separator` 承接 separator proposal；
   `detection.evidence.separator_width` 承接 width evidence summary；
@@ -75,8 +83,8 @@ Current stable release: v4.2.8
 - gap method vocabulary 已统一由 `constants.py` 和 `gap_methods.py` 提供；
   candidate assessment、decision summary、risk diagnostics、read-only diagnostics、
   separator proposal / summary 和 frame edge fitting 通过 method family / concrete
-  predicate 消费 `detected / edge-pair / enhanced-detected / grid / equal / content`
-  语义，不再手写 method 字符串或散落具体 method 分类判断。
+  predicate 消费 `detected / edge-pair / grid / equal / content` 语义，不再手写
+  method 字符串或散落具体 method 分类判断。
 - active `dark_band` reason 已退休；separator trust 继续记录亮暗像素证据，但
   frame-border 风险使用中性的 `too_narrow_separator_band` reason。
 - ordinary gap search 的 band threshold、弱 prominence 门槛和 detected-candidate
@@ -532,6 +540,12 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   that is narrower than, matches, or is broader than the physical width prior,
   and detail records the selected width relation. Broad separator width remains
   only an evidence summary consumed by gate / partial-safety checks.
+- Separator enhanced promotion is retired. Active hard gap methods are now only
+  `detected` and `edge-pair`; separator refinement keeps edge-pair and nearby
+  refinement only.
+- The old `--analysis` enhancement switch is retired. Deskew's second-pass edge
+  fitting is now `--deskew-fallback {auto,always,off}` and affects only deskew
+  angle selection, not separator proposal or refinement.
 - Candidate execution budget separates eligibility from execution: reliable
   primary separator assessment may skip full-width / outer-scope extension;
   outer correction also requires ok outer alignment before it skips.
@@ -546,11 +560,10 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   runtime policy detail is unchanged for all 14 format/mode pairs.
 - Foundation-layer ownership is tightened further: `geometry` / `image` / `io`
   no longer own runtime cache, detection detail, finalization risk, or
-  `strip_mode` semantics. Separator profile / enhanced-promotion cache adapters
-  moved to `cache/separator.py`, output bleed moved to
-  `detection/final/output_bleed.py`, and TIFF I/O now returns only
-  array/profile/warnings while runtime/cache callers create base gray through
-  `image.gray.make_base_gray_u8`.
+  `strip_mode` semantics. Separator profile and edge-refine cache adapters stay
+  in `cache/separator.py`, output bleed moved to `detection/final/output_bleed.py`,
+  and TIFF I/O now returns only array/profile/warnings while runtime/cache callers
+  create base gray through `image.gray.make_base_gray_u8`.
 - The Gap / Separator logic family now follows the same lifecycle model as outer:
   `detection.candidate.proposal.separator` owns separator proposal;
   `detection.evidence.separator_width` owns width evidence summaries; separator-
@@ -560,7 +573,8 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   candidate assessment, decision summary, risk/read-only diagnostics, separator
   proposal / summary, and frame edge fitting consume method-family and concrete
   predicates instead of hand-writing method strings or scattered concrete method
-  classification.
+  classification. Active method ids are `detected`, `edge-pair`, `grid`, `equal`,
+  and `content`.
 - Active `dark_band` reasons are retired. Separator trust still records pixel
   brightness evidence, but frame-border risk uses the neutral
   `too_narrow_separator_band` reason.

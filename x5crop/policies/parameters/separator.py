@@ -115,17 +115,6 @@ class GapSearchParameters:
     separator_width_min_prominence: float
 
 @dataclass(frozen=True)
-class EnhancedSeparatorParameters:
-    min_score: float
-    max_width_ratio: float
-    max_width_min: float
-    max_width_max: float
-    max_shift_ratio: float
-    max_shift_min: float
-    max_shift_max: float
-    auto_low_score: float
-
-@dataclass(frozen=True)
 class SeparatorProfileParameters:
     top_ratio: float
     bottom_ratio: float
@@ -197,7 +186,6 @@ __all__ = [
     'NearbySeparatorRefinementParameters',
     'RobustGridParameters',
     'GapSearchParameters',
-    'EnhancedSeparatorParameters',
     'SeparatorProfileParameters',
     'EdgeRefineProfileParameters',
     'HardGapTrustParameters',

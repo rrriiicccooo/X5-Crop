@@ -17,7 +17,7 @@ class DeskewParameters:
     residual_min: float
     residual_height_ratio: float
     auto_quality_ok: float
-    enhanced_quality_gain: float
+    fallback_quality_gain: float
     fit_min_points: int
     fit_tolerance_min: float
     fit_tolerance_multiplier: float

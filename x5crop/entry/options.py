@@ -18,7 +18,7 @@ class CliOptions:
     bleed_x: Optional[int]
     bleed_y: Optional[int]
     deskew: str
-    analysis: str
+    deskew_fallback: str
     deskew_min_angle: float
     deskew_max_angle: float
     confidence_threshold: float

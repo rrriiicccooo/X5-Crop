@@ -6,14 +6,12 @@ from ...constants import (
     GAP_CONTENT,
     GAP_DETECTED,
     GAP_EDGE_PAIR,
-    GAP_ENHANCED_DETECTED,
     GAP_EQUAL,
     GAP_GRID,
 )
 from ...geometry.detection_parameters import (
     EdgePairParameters,
     EdgeRefineProfileParameters,
-    EnhancedSeparatorParameters,
     GapSearchParameters,
     HardGapTrustParameters,
     NearbySeparatorRefinementParameters,
@@ -140,8 +138,6 @@ class SeparatorRefinementFamilyPolicy:
     strip_modes: tuple[str, ...] = (FULL,)
     requires_explicit_count_for_partial: bool = True
     target_gap_methods: tuple[str, ...] = ()
-    requires_geometry_equal_not_selected: bool = False
-    analysis_modes: tuple[str, ...] = ()
 
     def available_for(self, strip_mode: str, explicit_count: bool) -> bool:
         if self.mode == "off":
@@ -169,14 +165,10 @@ class SeparatorRefinementFamilyPolicy:
             return "partial_requires_explicit_count"
         return None
 
-    def analysis_mode_allowed(self, analysis_mode: str) -> bool:
-        return not self.analysis_modes or analysis_mode in self.analysis_modes
-
 
 @dataclass(frozen=True)
 class SeparatorRefinementPolicy:
     edge_pair: SeparatorRefinementFamilyPolicy = field(default_factory=SeparatorRefinementFamilyPolicy)
-    enhanced_promotion: SeparatorRefinementFamilyPolicy = field(default_factory=SeparatorRefinementFamilyPolicy)
     nearby: SeparatorRefinementFamilyPolicy = field(default_factory=SeparatorRefinementFamilyPolicy)
 
 
@@ -195,10 +187,9 @@ class SeparatorPolicy:
     nearby_refinement: NearbySeparatorRefinementParameters = field(default_factory=NearbySeparatorRefinementParameters)
     robust_grid: RobustGridParameters = field(default_factory=RobustGridParameters)
     gap_search: GapSearchParameters = field(default_factory=GapSearchParameters)
-    enhanced: EnhancedSeparatorParameters = field(default_factory=EnhancedSeparatorParameters)
     profile: SeparatorProfileParameters = field(default_factory=SeparatorProfileParameters)
     edge_refine_profile: EdgeRefineProfileParameters = field(default_factory=EdgeRefineProfileParameters)
-    hard_methods: tuple[str, ...] = (GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED)
+    hard_methods: tuple[str, ...] = (GAP_DETECTED, GAP_EDGE_PAIR)
     model_methods: tuple[str, ...] = (GAP_GRID, GAP_EQUAL, GAP_CONTENT)
 
 

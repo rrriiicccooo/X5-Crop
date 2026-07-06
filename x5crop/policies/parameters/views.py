@@ -44,7 +44,6 @@ from .scoring import (
 )
 from .separator import (
     EdgeRefineProfileParameters,
-    EnhancedSeparatorParameters,
     GapSearchParameters,
     HardGapTrustParameters,
     LeadingGridFailureParameters,
@@ -330,7 +329,7 @@ class FormatParameterViews:
             residual_min=self.deskew_residual_min,
             residual_height_ratio=self.deskew_residual_height_ratio,
             auto_quality_ok=self.deskew_auto_quality_ok,
-            enhanced_quality_gain=self.deskew_enhanced_quality_gain,
+            fallback_quality_gain=self.deskew_fallback_quality_gain,
             fit_min_points=self.deskew_fit_min_points,
             fit_tolerance_min=self.deskew_fit_tolerance_min,
             fit_tolerance_multiplier=self.deskew_fit_tolerance_multiplier,
@@ -463,19 +462,6 @@ class FormatParameterViews:
             outer_weight=self.geometry_support_outer_weight,
             aspect_weight=self.geometry_support_aspect_weight,
             count_weight=self.geometry_support_count_weight,
-        )
-
-    @property
-    def enhanced_separator(self) -> EnhancedSeparatorParameters:
-        return EnhancedSeparatorParameters(
-            min_score=self.enhanced_min_score,
-            max_width_ratio=self.enhanced_max_width_ratio,
-            max_width_min=self.enhanced_max_width_min,
-            max_width_max=self.enhanced_max_width_max,
-            max_shift_ratio=self.enhanced_shift_ratio,
-            max_shift_min=self.enhanced_shift_min,
-            max_shift_max=self.enhanced_shift_max,
-            auto_low_score=self.enhanced_auto_low_score,
         )
 
     @property

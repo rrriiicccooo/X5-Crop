@@ -8,7 +8,6 @@ from ..domain import Box, Gap
 from ..gap_methods import (
     is_detected_gap_method,
     is_edge_pair_gap_method,
-    is_enhanced_hard_gap_method,
     is_geometry_model_gap_method,
 )
 from ..utils import clamp_float
@@ -79,8 +78,6 @@ def frame_edge_weight(gap: Gap) -> float:
         return max(0.0, min(1.8, gap.score)) * 1.20
     if is_detected_gap_method(gap.method):
         return max(0.0, min(1.5, gap.score))
-    if is_enhanced_hard_gap_method(gap.method):
-        return max(0.0, min(1.2, gap.score)) * 0.70
     return 0.0
 
 

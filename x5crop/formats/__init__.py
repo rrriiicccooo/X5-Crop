@@ -184,7 +184,7 @@ FORMAT_CHOICES = tuple(FORMATS.keys())
 LAYOUT_CHOICES = ("auto", "horizontal", "vertical")
 STRIP_CHOICES = ("full", "partial")
 DESKEW_CHOICES = ("off", "auto")
-ANALYSIS_CHOICES = ("off", "auto", "always")
+DESKEW_FALLBACK_CHOICES = ("off", "auto", "always")
 COMPRESSION_CHOICES = ("none", "same")
 CONTENT_ASPECTS_HORIZONTAL = {
     key: spec.horizontal_content_aspect
@@ -199,10 +199,10 @@ def format_spec(format_id: str | FormatId) -> FormatSpec:
 
 
 __all__ = [
-    "ANALYSIS_CHOICES",
     "COMPRESSION_CHOICES",
     "CONTENT_ASPECTS_HORIZONTAL",
     "DESKEW_CHOICES",
+    "DESKEW_FALLBACK_CHOICES",
     "FORMAT_CHOICES",
     "FORMATS",
     "LAYOUT_CHOICES",

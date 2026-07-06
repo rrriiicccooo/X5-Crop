@@ -7,7 +7,7 @@ import numpy as np
 
 from ..geometry.layout import work_gray
 from ..utils import bbox_from_mask
-from .evidence import make_analysis_gray
+from .evidence import make_deskew_fallback_gray
 from .deskew_parameters import DeskewParameters
 
 def fit_line(
@@ -116,21 +116,21 @@ def deskew_quality(detail: dict[str, Any]) -> float:
 def choose_deskew_angle(
     gray: np.ndarray,
     layout: str,
-    analysis: str,
+    deskew_fallback: str,
     deskew: DeskewParameters,
 ) -> tuple[float, dict[str, Any]]:
     base_angle, base_detail = fit_edge_angle(gray, layout, deskew)
     base_detail["source"] = "base"
-    if analysis == "off":
+    if deskew_fallback == "off":
         return base_angle, base_detail
-    if analysis == "auto" and deskew_quality(base_detail) >= deskew.auto_quality_ok:
-        base_detail["enhanced_candidate"] = {"skipped": "auto_base_quality_ok"}
+    if deskew_fallback == "auto" and deskew_quality(base_detail) >= deskew.auto_quality_ok:
+        base_detail["fallback_candidate"] = {"skipped": "auto_base_quality_ok"}
         return base_angle, base_detail
-    enhanced_gray = make_analysis_gray(gray)
-    enhanced_angle, enhanced_detail = fit_edge_angle(enhanced_gray, layout, deskew)
-    enhanced_detail["source"] = "enhanced"
-    if deskew_quality(enhanced_detail) > deskew_quality(base_detail) + deskew.enhanced_quality_gain:
-        enhanced_detail["base_candidate"] = base_detail
-        return enhanced_angle, enhanced_detail
-    base_detail["enhanced_candidate"] = enhanced_detail
+    fallback_gray = make_deskew_fallback_gray(gray)
+    fallback_angle, fallback_detail = fit_edge_angle(fallback_gray, layout, deskew)
+    fallback_detail["source"] = "fallback"
+    if deskew_quality(fallback_detail) > deskew_quality(base_detail) + deskew.fallback_quality_gain:
+        fallback_detail["base_candidate"] = base_detail
+        return fallback_angle, fallback_detail
+    base_detail["fallback_candidate"] = fallback_detail
     return base_angle, base_detail

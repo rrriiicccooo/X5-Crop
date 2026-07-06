@@ -179,18 +179,6 @@ class GapSearchParameters:
 
 
 @dataclass(frozen=True)
-class EnhancedSeparatorParameters:
-    min_score: float = 0.34
-    max_width_ratio: float = 0.040
-    max_width_min: float = 3.0
-    max_width_max: float = 420.0
-    max_shift_ratio: float = 0.035
-    max_shift_min: float = 4.0
-    max_shift_max: float = 420.0
-    auto_low_score: float = 0.34
-
-
-@dataclass(frozen=True)
 class SeparatorProfileParameters:
     top_ratio: float = 0.10
     bottom_ratio: float = 0.90
@@ -270,7 +258,6 @@ class EdgePairParameters:
 __all__ = [
     "EdgePairParameters",
     "EdgeRefineProfileParameters",
-    "EnhancedSeparatorParameters",
     "GapSearchParameters",
     "HardGapTrustParameters",
     "GapGeometryConstraintParameters",

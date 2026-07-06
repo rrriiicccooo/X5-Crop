@@ -147,14 +147,6 @@ class FormatParameters(FormatParameterViews):
     robust_hard_protect_ratio: float = 0.006
     robust_hard_protect_min: float = 12.0
     robust_hard_protect_max: float = 40.0
-    enhanced_min_score: float = 0.34
-    enhanced_max_width_ratio: float = 0.040
-    enhanced_max_width_min: float = 3.0
-    enhanced_max_width_max: float = 420.0
-    enhanced_shift_ratio: float = 0.035
-    enhanced_shift_min: float = 4.0
-    enhanced_shift_max: float = 420.0
-    enhanced_auto_low_score: float = 0.34
     separator_profile_top_ratio: float = 0.10
     separator_profile_bottom_ratio: float = 0.90
     separator_profile_segments: int = 5
@@ -349,7 +341,7 @@ class FormatParameters(FormatParameterViews):
     deskew_residual_min: float = 3.0
     deskew_residual_height_ratio: float = 0.003
     deskew_auto_quality_ok: float = 8.0
-    deskew_enhanced_quality_gain: float = 3.0
+    deskew_fallback_quality_gain: float = 3.0
     deskew_fit_min_points: int = 4
     deskew_fit_tolerance_min: float = 2.0
     deskew_fit_tolerance_multiplier: float = 3.0

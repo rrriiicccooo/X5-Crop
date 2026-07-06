@@ -223,12 +223,6 @@ def score_detection(
             and gap_evidence.equal_model_gaps
             <= max(separator_gate.score_max_equal_gaps_floor, expected_gaps // 2)
         )
-        or (
-            gap_evidence.direct_hard_gaps >= 1
-            and gap_evidence.enhanced_hard_gaps >= 2
-            and gap_evidence.equal_model_gaps
-            <= max(separator_gate.score_max_equal_gaps_floor, expected_gaps // 2)
-        )
     )
 
     confidence = (
@@ -278,10 +272,6 @@ def score_detection(
         uses_min_hard_equal_cap
         and expected_gaps >= 3
         and gap_evidence.hard_separator_gaps < 2
-        and not (
-            gap_evidence.direct_hard_gaps >= 1
-            and gap_evidence.enhanced_hard_gaps >= 2
-        )
     ):
         reasons.append("too_few_detected_separators")
     if width_cv > base_score.unstable_width_cv:
@@ -313,7 +303,7 @@ def score_detection(
     if uses_min_hard_equal_cap and expected_gaps >= 3:
         if gap_evidence.hard_separator_gaps < 1:
             confidence = min(confidence, separator_gate.low_hard_confidence_cap)
-        elif gap_evidence.hard_separator_gaps < 2 and gap_evidence.enhanced_hard_gaps < 2:
+        elif gap_evidence.hard_separator_gaps < 2:
             confidence = min(confidence, separator_gate.low_hard_confidence_cap)
         elif gap_evidence.equal_model_gaps >= max(2, expected_gaps // 2 + 1):
             confidence = min(confidence, separator_gate.mostly_equal_confidence_cap)
@@ -323,7 +313,6 @@ def score_detection(
     detail = {
         "detected_gaps": gap_evidence.separator_support_gaps,
         "actual_detected_gaps": gap_evidence.direct_hard_gaps,
-        "enhanced_detected_gaps": gap_evidence.enhanced_hard_gaps,
         "grid_gaps": gap_evidence.grid_model_gaps,
         "reliable_gaps": gap_evidence.reliable_support_gaps,
         "equal_gaps": gap_evidence.equal_model_gaps,

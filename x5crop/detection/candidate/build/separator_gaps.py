@@ -11,14 +11,12 @@ from ....cache.separator import cached_separator_profile
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from .separator_refinements import (
-    ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY,
     NEARBY_SEPARATOR_REFINEMENT_FAMILY,
     apply_late_separator_refinement_chain,
     apply_primary_separator_refinements,
     pending_gap_refinement_detail,
 )
 from .separator_sources import (
-    GEOMETRY_EQUAL_MODEL_SOURCE,
     initial_separator_gaps,
     model_gap_proposal_detail,
     standard_separator_gap_result,
@@ -37,7 +35,6 @@ class SeparatorGapBuildResult:
     standard_gap_search_detail: dict[str, Any]
     separator_width_profile_gap_search_detail: dict[str, Any]
     edge_pair_correction_detail: dict[str, Any]
-    enhanced_gap_promotion_detail: dict[str, Any]
     nearby_refinement_detail: dict[str, Any]
     pre_nearby_gaps: Optional[list[Gap]]
 
@@ -139,41 +136,27 @@ def build_primary_separator_gaps_for_outer(
         standard_gap_search_detail=initial_gaps.standard_gap_search_detail,
         separator_width_profile_gap_search_detail=initial_gaps.separator_width_profile_gap_search_detail,
         edge_pair_correction_detail=primary_refinement.edge_pair_correction_detail,
-        enhanced_gap_promotion_detail=pending_gap_refinement_detail(ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY),
         nearby_refinement_detail=pending_gap_refinement_detail(NEARBY_SEPARATOR_REFINEMENT_FAMILY),
         pre_nearby_gaps=None,
     )
 
 
 def apply_late_separator_refinements(
-    gray_work: np.ndarray,
-    analysis_mode: str,
     count: int,
     strip_mode: str,
     separator_gaps: SeparatorGapBuildResult,
-    allow_enhanced_gap_promotion: bool,
-    cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
     *,
     explicit_count: bool,
 ) -> SeparatorGapBuildResult:
-    geometry_equal_model_selected = (
-        separator_gaps.standard_gap_search_detail.get("selected_gap_source") == GEOMETRY_EQUAL_MODEL_SOURCE
-    )
     late_refinement = apply_late_separator_refinement_chain(
-        gray_work,
-        analysis_mode,
         count,
         strip_mode,
         explicit_count,
-        separator_gaps.outer,
         separator_gaps.profile,
         separator_gaps.gaps,
         separator_gaps.origin,
         separator_gaps.pitch,
-        allow_enhanced_gap_promotion,
-        geometry_equal_model_selected,
-        cache,
         policy,
     )
     return SeparatorGapBuildResult(
@@ -186,7 +169,6 @@ def apply_late_separator_refinements(
         standard_gap_search_detail=separator_gaps.standard_gap_search_detail,
         separator_width_profile_gap_search_detail=separator_gaps.separator_width_profile_gap_search_detail,
         edge_pair_correction_detail=separator_gaps.edge_pair_correction_detail,
-        enhanced_gap_promotion_detail=late_refinement.enhanced_gap_promotion_detail,
         nearby_refinement_detail=late_refinement.nearby_refinement_detail,
         pre_nearby_gaps=late_refinement.pre_nearby_gaps,
     )
