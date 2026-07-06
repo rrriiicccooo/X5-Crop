@@ -184,7 +184,7 @@ schema 的 decision policy detail。
 | 子包 | 职责 |
 |---|---|
 | `policies.formats` | format-specific physical tolerance、signal tolerance 和 search budget overrides；不得声明 scoring、gate、risk、detector、diagnostics 或 runtime preset。 |
-| `policies.parameters` | 数值参数对象、format parameter registry 和 override ownership validator。 |
+| `policies.parameters` | 数值参数对象、format parameter registry 和 override ownership validator；format override 会被拆成 `FormatToleranceProfile`、`FormatSignalToleranceProfile` 和 `SearchBudgetPolicy`。 |
 | `policies.runtime` | runtime `DetectionPolicy` 及其子 policy dataclass。 |
 | `policies.decision` | final PASS / REVIEW decision contract 和少量 override。 |
 | `policies.assembly` | 从 format id、物理 facts、受限参数覆盖和 policy profile defaults 组装 runtime policy preset。 |
@@ -205,7 +205,7 @@ REVIEW contract。
 | Pre-detection | base gray | `image/gray.py`, `io/tiff.py`, `runtime/deskew.py`, `runtime/analysis_reuse.py` | 已审：`make_base_gray_u8` 是唯一基础灰度入口，用于 TIFF 读取和 deskew 后重建灰度；不承担 content / separator 语义。 |
 | Pre-detection | analysis / evidence gray | `image/evidence.py`, `cache/analysis.py` | 已审：content/separator evidence gray 和 analysis cache 只提供可复用证据输入；不隐藏原始 gray，不选择候选，不决定 PASS / REVIEW；不保留 color contrast 或 heavy texture 预留接口。 |
 | Policy activation | format physical facts | `formats/` | count、aspect、family、physical risk 是否是事实层，不含 gate threshold。 |
-| Policy activation | format parameter overrides | `policies/formats/format_*.py`, `policies/parameters/ownership.py` | format 文件是否只声明 physical tolerance、signal tolerance 和 search budget 覆盖；`ownership.py` 会拒绝 scoring、gate、risk、algorithm switch 或 runtime preset 字段。 |
+| Policy activation | format parameter overrides | `policies/formats/format_*.py`, `policies/parameters/ownership.py` | format 文件是否只声明 physical tolerance、signal tolerance 和 search budget 覆盖；`ownership.py` 将 override 拆为 `FormatToleranceProfile`、`FormatSignalToleranceProfile` 和 `SearchBudgetPolicy`，并拒绝 scoring、gate、risk、algorithm switch 或 runtime preset 字段。 |
 | Policy activation | runtime policy assembly | `policies/assembly/*`, `policies/assembly/profile_defaults.py`, `policies/runtime/*`, `policies/parameters/*` | assembly 是否从 format id、物理 facts、受限参数覆盖和分层 policy profile 生成 runtime preset；count inclusion、gate supplemental checks、scoring calibration、risk enablement、partial-holder requirements 和 refinement numeric profile 不应再藏在 format defaults 里。 |
 | Policy activation | final decision contract | `policies/decision/contract.py`, `policies/decision/overrides.py` | runtime `DetectionPolicy` 与 final `DetectionDecisionContract` 的证据门槛不能语义漂移。 |
 | Mode-specific detector | dual-lane detector | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_context.py`, `detection/modes/dual_lane_split.py`, `detection/modes/dual_lane_detect.py`, `detection/modes/dual_lane_merge.py` | `135-dual/full` 是否独立于普通 135 strip；入口是否只调度，policy/spec context、lane split / lane detect / lane merge 是否可解释。 |
@@ -422,7 +422,7 @@ REVIEW must be present in report schema decision policy detail.
 | Subpackage | Responsibility |
 |---|---|
 | `policies.formats` | Format-specific physical tolerance, signal tolerance, and search-budget overrides; they must not declare scoring, gates, risks, detectors, diagnostics, or runtime presets. |
-| `policies.parameters` | Numeric parameter objects, format parameter registry, and override ownership validator. |
+| `policies.parameters` | Numeric parameter objects, format parameter registry, and override ownership validator; format overrides are split into `FormatToleranceProfile`, `FormatSignalToleranceProfile`, and `SearchBudgetPolicy`. |
 | `policies.runtime` | Runtime `DetectionPolicy` and child policy dataclasses. |
 | `policies.decision` | Final PASS / REVIEW decision contract and narrow overrides. |
 | `policies.assembly` | Build runtime policy presets from format id, physical facts, constrained parameter overrides, and layered policy profile defaults. |
@@ -441,7 +441,7 @@ and decision detail, and cannot bypass the final PASS / REVIEW contract.
 |---|---|---|---|
 | Pre-detection | layout / coordinate mapping | `geometry/layout.py`, `geometry/boxes.py` | Reviewed: horizontal / vertical work-space mapping is symmetric and must not change crop semantics. |
 | Pre-detection | base gray, deskew, and evidence gray | `image/gray.py`, `image/deskew.py`, `image/evidence.py`, `cache/analysis.py` | Reviewed: preprocessing may shape base gray, input posture, evidence gray, and reusable cache detail, but must not choose candidates or decide PASS / REVIEW. No color-contrast or heavy-texture evidence interfaces are reserved. |
-| Policy activation | format facts and parameter overrides | `formats/`, `policies/formats/format_*.py`, `policies/parameters/ownership.py` | Physical facts, physical tolerance, signal tolerance, and search-budget overrides must stay separate from scoring, gate, risk, detector/runtime presets, diagnostics, and universal capability activation. Format override ownership is enforced by `ownership.py`. |
+| Policy activation | format facts and parameter overrides | `formats/`, `policies/formats/format_*.py`, `policies/parameters/ownership.py` | Physical facts, physical tolerance, signal tolerance, and search-budget overrides must stay separate from scoring, gate, risk, detector/runtime presets, diagnostics, and universal capability activation. Format override ownership is enforced by `ownership.py`, which splits overrides into `FormatToleranceProfile`, `FormatSignalToleranceProfile`, and `SearchBudgetPolicy`. |
 | Policy activation | layered policy profile defaults | `policies/assembly/profile_defaults.py`, `policies/assembly/*` | Count inclusion, gate supplemental checks, scoring calibration, risk enablement, partial-holder requirements, and refinement numeric profiles belong to assembly policy profiles, not format source defaults. |
 | Policy activation | runtime and decision contracts | `policies/runtime/*`, `policies/decision/contract.py` | `DetectionPolicy` and `DetectionDecisionContract` must not drift semantically. |
 | Mode-specific detector | dual-lane and review-only paths | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_*.py`, `detection/modes/review_only.py`, `detection/candidate/proposal/safety.py` | Dedicated detectors and review-only paths must stay isolated, context-driven, and conservative. |

@@ -1,5 +1,50 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any
+
+
+ParameterItems = tuple[tuple[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class FormatToleranceProfile:
+    items: ParameterItems = ()
+
+    def as_dict(self) -> dict[str, Any]:
+        return dict(self.items)
+
+
+@dataclass(frozen=True)
+class FormatSignalToleranceProfile:
+    items: ParameterItems = ()
+
+    def as_dict(self) -> dict[str, Any]:
+        return dict(self.items)
+
+
+@dataclass(frozen=True)
+class SearchBudgetPolicy:
+    items: ParameterItems = ()
+
+    def as_dict(self) -> dict[str, Any]:
+        return dict(self.items)
+
+
+@dataclass(frozen=True)
+class FormatParameterOverrideLayers:
+    tolerance: FormatToleranceProfile = FormatToleranceProfile()
+    signal_tolerance: FormatSignalToleranceProfile = FormatSignalToleranceProfile()
+    search_budget: SearchBudgetPolicy = SearchBudgetPolicy()
+
+    def as_dict(self) -> dict[str, Any]:
+        merged: dict[str, Any] = {}
+        merged.update(self.tolerance.as_dict())
+        merged.update(self.signal_tolerance.as_dict())
+        merged.update(self.search_budget.as_dict())
+        return merged
+
+
 FORMAT_TOLERANCE_PARAMETER_FIELDS = frozenset(
     {
         "gap_max_width_max",
@@ -49,7 +94,11 @@ FORMAT_PARAMETER_OVERRIDE_FIELDS = frozenset(
 )
 
 
-def validate_format_parameter_overrides(overrides: dict[str, object]) -> None:
+def _layer_items(overrides: dict[str, Any], fields: frozenset[str]) -> ParameterItems:
+    return tuple((key, overrides[key]) for key in overrides if key in fields)
+
+
+def split_format_parameter_overrides(overrides: dict[str, Any]) -> FormatParameterOverrideLayers:
     invalid = sorted(set(overrides) - FORMAT_PARAMETER_OVERRIDE_FIELDS)
     if invalid:
         joined = ", ".join(invalid)
@@ -57,6 +106,21 @@ def validate_format_parameter_overrides(overrides: dict[str, object]) -> None:
             "Format modules may only override physical tolerance, signal tolerance, "
             f"or search budget parameters; invalid override(s): {joined}"
         )
+    return FormatParameterOverrideLayers(
+        tolerance=FormatToleranceProfile(
+            _layer_items(overrides, FORMAT_TOLERANCE_PARAMETER_FIELDS)
+        ),
+        signal_tolerance=FormatSignalToleranceProfile(
+            _layer_items(overrides, FORMAT_SIGNAL_TOLERANCE_PARAMETER_FIELDS)
+        ),
+        search_budget=SearchBudgetPolicy(
+            _layer_items(overrides, FORMAT_SEARCH_BUDGET_PARAMETER_FIELDS)
+        ),
+    )
+
+
+def validate_format_parameter_overrides(overrides: dict[str, Any]) -> None:
+    split_format_parameter_overrides(overrides)
 
 
 __all__ = [
@@ -64,5 +128,10 @@ __all__ = [
     "FORMAT_SEARCH_BUDGET_PARAMETER_FIELDS",
     "FORMAT_SIGNAL_TOLERANCE_PARAMETER_FIELDS",
     "FORMAT_TOLERANCE_PARAMETER_FIELDS",
+    "FormatParameterOverrideLayers",
+    "FormatSignalToleranceProfile",
+    "FormatToleranceProfile",
+    "SearchBudgetPolicy",
+    "split_format_parameter_overrides",
     "validate_format_parameter_overrides",
 ]

@@ -5,12 +5,12 @@ from typing import Any
 from ...formats import FORMAT_CHOICES
 from ..formats.modules import import_format_module
 from .aggregate import FormatParameters
-from .ownership import validate_format_parameter_overrides
+from .ownership import split_format_parameter_overrides
 
 
 def base_format_parameters(format_name: str, **overrides: Any) -> FormatParameters:
-    validate_format_parameter_overrides(overrides)
-    return FormatParameters(format_name, **overrides)
+    layers = split_format_parameter_overrides(overrides)
+    return FormatParameters(format_name, **layers.as_dict())
 
 
 def base_medium_format_parameters(format_name: str, **overrides: Any) -> FormatParameters:

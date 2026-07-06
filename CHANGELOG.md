@@ -42,10 +42,12 @@ Current stable release: v4.2.8
   `policies.assembly.format_presets` 集中生成。14 个 format/mode 的 active
   runtime policy detail 与迁移前完全一致。
 - format parameter ownership 已进一步收紧：`policies/parameters/ownership.py`
-  限制 format 文件只能覆盖 physical tolerance、signal tolerance 和 search
-  budget 字段；count inclusion、gate supplemental checks、scoring calibration、
-  risk enablement、partial-holder requirements 和 refinement numeric profile
-  迁入 `policies/assembly/profile_defaults.py`。关键 runtime policy 字段迁移前后保持一致。
+  将 format override 拆成 `FormatToleranceProfile`、`FormatSignalToleranceProfile`
+  和 `SearchBudgetPolicy`，并限制 format 文件只能覆盖 physical tolerance、
+  signal tolerance 和 search budget 字段；count inclusion、gate supplemental
+  checks、scoring calibration、risk enablement、partial-holder requirements 和
+  refinement numeric profile 迁入 `policies/assembly/profile_defaults.py`。
+  关键 runtime policy 字段迁移前后保持一致。
 - 基础能力层已进一步收紧：`geometry` / `image` / `io` 不再承载 runtime cache、
   detection detail、finalization risk 或 `strip_mode` 语义；separator profile /
   enhanced promotion cache adapter 迁入 `cache/separator.py`，output bleed 迁入
