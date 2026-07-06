@@ -86,15 +86,12 @@ def _separator_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     return {
         "gate_profile": separator.gate.profile,
         "hard_required_all_gaps": separator.hard_required_all_gaps,
-        "gap_search_profiles": {
-            "standard": {
+        "separator_proposal": {
+            "width_aware": {
                 "enabled": True,
                 "max_width_ratio": separator.gap_search.max_width_ratio,
-            },
-            "broad_width": {
-                "enabled": separator.width_profile.mode != "off",
-                "max_width_ratio": separator.width_profile.max_width_ratio,
-                "confidence_cap": separator.width_profile.confidence_cap,
+                "physical_width_prior": separator.width_profile.mode != "off",
+                "observed_width_profile": separator.width_profile.mode != "off",
             },
         },
         "width_profile": {**width_profile_search, **width_profile_policy},

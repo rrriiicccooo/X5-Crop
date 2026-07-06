@@ -50,7 +50,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
         FULL: ModePolicyPreset(
             role="square_full_strip_separator_width_profile_guarded",
             notes=(
-                "separator width profile outer candidates may compete, but full mode does not inherit partial extra-holder tolerance",
+                "width-aware separator evidence may use broad observed bands, but full mode does not inherit partial extra-holder tolerance",
             ),
             frame_fit=FrameFitPolicy(
                 name="medium_square_frame_fit",
@@ -71,7 +71,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
         PARTIAL: ModePolicyPreset(
             role="square_partial_strip_separator_width_profile_edge_guarded",
             notes=(
-                "separator width profile outer candidates must still pass separator/content/geometry gates",
+                "width-aware separator evidence must still pass separator/content/geometry gates",
                 "safe extra holder frames require broad separator width evidence and stable frame content",
             ),
             separator_width_profile=SeparatorWidthProfilePreset(

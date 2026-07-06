@@ -23,9 +23,9 @@ Current stable release: v4.2.8
 - V4.5.4 / V4.7 reference reports 是 historical baseline，不再是必须 0 diff 的 oracle。
 - 自动 PASS 必须由 outer、separator、geometry、content 和 risk 组合证据解释。
 - weak grid、equal、content-only、safety candidate 或 partial edge 不可信的候选默认进入 REVIEW。
-- active retry architecture 已退休；broad-width gap search profile、safety candidate 和 corrected outer 都作为候选计划或候选扩展统一 assessment。
-- separator-derived outer family 已通用化：标准 strip 的 full 默认启用 local、full-width 和 broad-width gap profile；partial 只有显式 count 时启用 extension variants，format 只提供 width / spacing / budget 参数。
-- candidate execution budget 将 “eligible” 与 “executed” 分开：可靠 primary separator 已通过 assessment 时，可跳过 full-width 和 broad-width gap profile；outer correction 还要求 outer alignment ok 才跳过。
+- active retry architecture 已退休；safety candidate 和 corrected outer 都作为候选计划或候选扩展统一 assessment。
+- separator-derived outer family 已通用化：标准 strip 的 full 默认启用 local / full-width scope；partial 只有显式 count 时启用 extension scope。separator 宽度由单一 `width_aware` proposal 同时解释 standard theoretical width 与 observed width evidence，format 只提供 width / spacing / budget 参数。
+- candidate execution budget 将 “eligible” 与 “executed” 分开：可靠 primary separator 已通过 assessment 时，可跳过 full-width / outer-scope extension；outer correction 还要求 outer alignment ok 才跳过。
 - detection 分层已对齐为 pipeline / modes / candidate proposal lifecycle /
   evidence / decision / final；outer proposal / correction 是 candidate proposal
   family，不再作为 detection 一级子层。PASS / REVIEW 属于 decision 层，
@@ -48,10 +48,11 @@ Current stable release: v4.2.8
   separator-derived outer band helper 已归回 `detection.candidate.proposal.outer`；
   `geometry` 保留底层 profile/search/trust 数学能力；width profile 纯数学归
   `geometry/separator_width_profile.py`，搜索参数归
-  `SeparatorPolicy.width_profile_search`，启用 / 候选 / selection 策略归
+  `SeparatorPolicy.width_profile_search`，启用 / 宽度上限 / confidence cap 归
   `SeparatorPolicy.width_profile`，outer policy 只保留 separator-derived outer
-  family / band 参数；broad-width gap proposal
-  的采样上限、搜索窗口、距离惩罚和基础分数已外显到 report detail。
+  family / band 参数；独立 `broad_width` gap profile 已收敛进单一
+  `width_aware` separator proposal，physical width prior、observed width search、
+  采样上限、搜索窗口、距离惩罚和基础分数都写入 report detail。
 - gap method vocabulary 已统一由 `constants.py` 和 `gap_methods.py` 提供；
   candidate assessment、decision summary、risk diagnostics、read-only diagnostics、
   separator proposal / summary 和 frame edge fitting 通过 method family / concrete
@@ -102,7 +103,7 @@ Current stable release: v4.2.8
   config，report detail 字段保持不变。
 - separator gap lifecycle 的 report detail 不再使用 override 语义：
   `standard_gap_search` 现在记录 `selected_gap_source`，用于说明最终采用
-  `standard`、`broad_width` 或 detected-geometry model source；候选生成、
+  standard hard search、observed width search 或 detected-geometry model source；候选生成、
   gap 选择和 PASS / REVIEW 行为不变。
 - separator evidence summary 的内部方法从 `decision_summary()` 改为
   `evidence_detail()`；decision 层仍负责消费这些 evidence 并形成最终判定。
@@ -135,12 +136,13 @@ Current stable release: v4.2.8
 - edge-pair / enhanced / nearby refinement 共用
   `geometry/gap_refinement_detail.py` 组装 accepted / rejected / searched
   batch detail 和 count；report/detail 字段与修正条件保持不变。
-- active gap search profile vocabulary 只保留 `standard` 与 `broad_width`；
-  `broad_width` profile detail helper 只消费 separator policy。
+- active gap search profile vocabulary 只保留 `width_aware`；standard hard
+  search、physical width prior 和 observed width profile 在同一个 separator
+  proposal 内完成。
 - broad-width detected gap 生成已拆出 width-profile gap window、run object、
   width acceptance、candidate scoring / ranking、best candidate selection 和
   core-width clipped detected-gap output；输出仍是普通 `detected` hard gap，
-  不引入独立 gap method。
+  不引入独立 gap method，也不再生成独立 `broad_width` candidate profile。
 - broad-width detected gap search 的单 run assessment、batch candidate search 和
   best-candidate selection 已改为
   `SeparatorWidthGapCandidateAssessmentResult` /
@@ -327,7 +329,7 @@ Current stable release: v4.2.8
   文件名前缀表达职责。
 - outer runtime policy 已收敛为 `proposal` 与 `correction` 两块：
   `proposal.base` 负责基础外框候选，`proposal.geometry` 统一管理 partial
-  placement、separator geometry 与 broad-width gap profile variants；
+  placement、separator geometry 与 width-aware separator evidence；
   `correction.geometry_consistency` 合并原 short-axis 与 format-geometry retry，
   `correction.content_containment` 替代原 content-aligned retry 命名。
 - corrected outer 不再在 correction helper 内直接完成重建与评估；统一通过
@@ -355,24 +357,23 @@ Current stable release: v4.2.8
   finalization 不再生成候选，只做 output bleed、approved geometry adjustment 和
   read-only diagnostics attachment。
 - separator-derived outer 已收敛为统一
-  `detection/candidate/proposal/outer/separator.py` 引擎；
-  outer scope（local / full-width）与 gap search profile（standard / broad_width）
-  组合生成候选；broad_width 不再作为 outer variant。full 默认启用全部
-  separator-derived scope/profile 组合，partial 显式 count 才启用 extension profiles，
-  active code 不再保留独立 broad-width outer 分支。
-- separator width 语义已降级为 gap search profile：`standard` 与 `broad_width`
-  属于同一候选计划，最终 gap method 仍是普通 `detected` hard separator；
-  broad width 只写入 `gap_search_profile`、`separator_width_evidence`、gate detail
-  和 partial holder detail。
+  `detection/candidate/proposal/outer/separator.py` 引擎；outer scope（local /
+  full-width）生成候选，标准理论宽度与 observed width bands 都作为同一
+  width-aware separator evidence 被消费；broad width 不再作为 outer variant 或
+  独立 gap profile。full 默认启用 separator-derived scopes，partial 显式 count
+  才启用 extension scopes。
+- separator width 语义已收敛进单一 `width_aware` proposal：最终 gap method
+  仍是普通 `detected` hard separator；broad width 只写入 `gap_search_profile`、
+  `separator_width_evidence`、gate detail 和 partial holder detail。
 - runtime separator width profile policy 已收拢：启用状态、max width ratio 和
   confidence cap 归 `SeparatorPolicy.width_profile`，顶层 `SeparatorPolicy`
   不再保留重复的 width-profile runtime 字段。
-- separator gap profile proposal contract 已统一：standard 和 broad-width
-  gap proposal 都返回 `SeparatorGapProfileProposal`，candidate build 通过
-  profile dispatch 入口消费，底层搜索算法保持不变。
+- separator gap profile proposal contract 已统一为单一 `width_aware`
+  `SeparatorGapProfileProposal`；candidate build 通过同一个入口消费 standard
+  hard search、physical width prior 和 observed width search detail。
 - separator gap lifecycle 已从 `build_detection_for_outer` 抽到
   `detection/candidate/build/separator_gaps.py`：separator gap lifecycle 生成
-  origin/pitch、standard/broad-width gaps、edge-pair、grid、enhanced 和 nearby
+  origin/pitch、width-aware gaps、edge-pair、grid、enhanced 和 nearby
   refinement 结果，再由 `detection.py` 负责编排 refined-outer rebuild、frame fit、
   score 和 detail assembly。
 - 普通 separator profile / gap search 已做行为等价拆分：
@@ -422,12 +423,12 @@ Current stable release: v4.2.8
   `model_methods` 使用 `grid / equal / content`，并在 policy/report detail 中可见。
 - `.gitignore` 显式保留 `x5crop/detection/candidate/build/*.py`，避免源码层级被
   通用 `build/` 输出规则误隐藏。
-- candidate source orchestration 已去 retry 化：standard / broad-width gap profiles、
+- candidate source orchestration 已去 retry 化：width-aware separator、
   separator-derived outer、content candidate 和 safety candidate 都进入一次性
   candidate plan，所有候选统一经过 candidate assessment 与 final decision contract。
 - candidate execution budget 已加入 candidate lifecycle：primary separator candidate
   先经过 assessment；若 auto gate、content support、hard separator、confidence
-  margin 和 review reason 均证明可靠，则 extension profiles / outer scope-profile combinations
+  margin 和 review reason 均证明可靠，则 outer-scope extension
   只记录 skipped detail；outer correction 还会确认 outer alignment ok
   后才跳过额外候选计算。
 - execution budget detail 增加 `action`、`reason`、`stage` 和可靠性摘要，方便
@@ -491,14 +492,15 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   content, and risk evidence.
 - Weak grid, equal, content-only, safety, or untrusted partial-edge candidates
   default to REVIEW.
-- Active retry architecture is retired; broad-width gap search profiles, safety
-  candidates, and corrected outers are assessed as candidate-plan entries or
-  candidate extensions.
+- Active retry architecture is retired; safety candidates and corrected outers
+  are assessed as candidate-plan entries or candidate extensions.
 - Separator-derived outer families are generalized: standard full strips enable
-  local, full-width, and broad-width gap profile variants; partial strips enable
-  extension variants only when count is explicit.
+  local / full-width scopes, and partial strips enable extension scopes only
+  when count is explicit. Separator width is explained by the single
+  `width_aware` proposal, which combines standard theoretical width and observed
+  width evidence.
 - Candidate execution budget separates eligibility from execution: reliable
-  primary separator assessment may skip full-width and broad-width gap profile;
+  primary separator assessment may skip full-width / outer-scope extension;
   outer correction also requires ok outer alignment before it skips.
 - Detection layering is aligned as pipeline / modes / candidate proposal
   lifecycle / evidence / decision / final. Outer / separator / content / safety
@@ -589,19 +591,16 @@ Verified:
   keys live in evidence / detection cache layers.
 - Separator-derived outer proposals are consolidated into the single
   `detection/candidate/proposal/outer/separator.py` engine; outer scope (local /
-  full-width) and gap search profile (standard / broad_width) combine to
-  generate candidates. `broad_width` is no longer an outer variant. Full strips
-  enable all separator-derived scope/profile combinations, explicit-count
-  partial strips enable extension profiles, and active code no longer keeps
-  a separate broad-width outer branch.
-- Separator width semantics are downgraded to gap search profiles: `standard`
-  and `broad_width` belong to the same candidate plan, final gap methods remain
-  ordinary `detected` hard separators, and broad-width support is reported
-  through `gap_search_profile`, `separator_width_evidence`, gate detail, and
-  partial-holder detail.
+  full-width) generates candidates, while standard theoretical width and
+  observed width bands are consumed as one width-aware separator evidence stream.
+  Broad width is no longer an outer variant or independent gap profile.
+- Separator width semantics are folded into the single `width_aware` proposal:
+  final gap methods remain ordinary `detected` hard separators, and broad-width
+  support is reported through `gap_search_profile`, `separator_width_evidence`,
+  gate detail, and partial-holder detail.
 - Separator gap lifecycle is extracted from `build_detection_for_outer` into
   `detection/candidate/build/separator_gaps.py`: candidate build now produces
-  origin/pitch, standard/broad-width gaps, edge-pair, grid, enhanced, and nearby
+  origin/pitch, width-aware gaps, edge-pair, grid, enhanced, and nearby
   refinement results before `detection.py` handles frame fit, scoring, and
   detail assembly.
 - Edge-pair parameter ownership is tightened: format presets may still use
@@ -830,11 +829,11 @@ Verified:
 - `.gitignore` explicitly keeps `x5crop/detection/candidate/build/*.py` visible
   so source layers are not hidden by the generic `build/` output rule.
 - Candidate source orchestration no longer uses active retry control flow:
-  standard / broad-width gap profiles, separator-derived outers,
+  width-aware separator proposals, separator-derived outers,
   content candidates, and safety candidates enter one candidate plan and pass
   through the same candidate assessment and final decision contract.
 - Candidate execution budget now assesses the primary separator candidate before
-  running extension profiles / outer scope-profile combinations; reliable primary results
+  running outer-scope extension; reliable primary results
   record skipped detail instead of paying for extra candidate computation.
   Correction computation skips only after reliable selection and ok outer
   alignment.
@@ -842,8 +841,8 @@ Verified:
   summary fields so reports can show primary-only, expanded-after-primary, and
   outer-correction skip decisions directly.
 - Separator gap lifecycle report detail now uses `selected_gap_source` instead
-  of override wording to describe whether `standard`, `broad_width`, or
-  detected-geometry model source supplied the final initial gaps; candidate
+  of override wording to describe whether standard hard search, observed width
+  search, or detected-geometry model source supplied the final initial gaps; candidate
   generation, gap selection, and PASS / REVIEW behavior are unchanged.
 - Separator evidence summary now exposes `evidence_detail()` internally instead
   of `decision_summary()`; the decision layer remains the only consumer that

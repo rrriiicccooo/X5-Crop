@@ -44,7 +44,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
     modes={
         FULL: ModePolicyPreset(
             role="wide_medium_format_full_separator_guarded",
-            notes=("wide medium-format full strips can use separator width profile candidates and tight short-axis correction",),
+            notes=("wide medium-format full strips can use width-aware separator evidence and tight short-axis correction",),
             frame_fit=FrameFitPolicy(
                 name="medium_wide_frame_fit",
                 edge_evidence=True,

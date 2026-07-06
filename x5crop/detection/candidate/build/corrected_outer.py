@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Optional
 
 import numpy as np
 
@@ -24,28 +23,9 @@ def build_assessed_corrected_outer_candidate(
 ) -> Detection:
     from ...evidence.content_evidence import content_evidence_detail
     from ...evidence.outer_alignment import outer_content_alignment_detail
-    from ...gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE, broad_width_gap_profile_detail
+    from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE, width_aware_gap_profile_detail
     from ..assessment.candidate import apply_candidate_assessment_policy
     from .detection import build_detection_for_outer
-
-    gap_override: Optional[float] = None
-    gap_profile = STANDARD_GAP_PROFILE
-    gap_search_profile = detection.detail.get("gap_search_profile")
-    separator_width_profile = detection.detail.get("separator_width_profile")
-    broad_width_detail = gap_search_profile if isinstance(gap_search_profile, dict) else separator_width_profile
-    if (
-        corrected.preserve_separator_width_profile
-        and isinstance(broad_width_detail, dict)
-        and bool(broad_width_detail.get("used", False))
-        and str(broad_width_detail.get("profile", BROAD_WIDTH_GAP_PROFILE)) == BROAD_WIDTH_GAP_PROFILE
-    ):
-        gap_profile = BROAD_WIDTH_GAP_PROFILE
-        gap_override = float(
-            broad_width_detail.get(
-                "gap_max_width_ratio",
-                policy.separator.width_profile.max_width_ratio,
-            )
-        )
 
     reassessed = build_detection_for_outer(
         gray,
@@ -59,19 +39,17 @@ def build_assessed_corrected_outer_candidate(
         corrected.strategy,
         cache=cache,
         allow_outer_refine=False,
-        gap_max_width_ratio_override=gap_override,
-        gap_search_profile=gap_profile,
+        gap_max_width_ratio_override=None,
+        gap_search_profile=WIDTH_AWARE_GAP_PROFILE,
         policy=policy,
     )
     reassessed = apply_candidate_assessment_policy(gray, reassessed, config, fmt, "separator", cache, policy=policy)
-    if gap_override is not None:
-        profile_detail = broad_width_gap_profile_detail(
-            policy.separator,
-            gap_override,
-            preserved_through_outer_correction_candidate=True,
-        )
-        reassessed.detail["gap_search_profile"] = profile_detail
-        reassessed.detail["separator_width_profile"] = profile_detail
+    profile_detail = width_aware_gap_profile_detail(policy.separator)
+    profile_detail["preserved_through_outer_correction_candidate"] = bool(
+        corrected.preserve_separator_width_profile
+    )
+    reassessed.detail["gap_search_profile"] = profile_detail
+    reassessed.detail["separator_width_profile"] = profile_detail
 
     reassessed_alignment = outer_content_alignment_detail(gray, reassessed, cache, policy=policy)
     reassessed_content = content_evidence_detail(gray, reassessed, cache, policy.content)

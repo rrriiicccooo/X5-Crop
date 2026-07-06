@@ -11,7 +11,7 @@ from .....formats import FormatSpec
 from .....policies.registry import get_detection_policy
 from .....policies.runtime.policy import DetectionPolicy
 from .....cache import AnalysisCache
-from ....gap_profiles import BROAD_WIDTH_GAP_PROFILE, STANDARD_GAP_PROFILE
+from ....gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from .base import base_outer_candidates
 from .common import unique_outer_candidates
 from .partial_content import floating_content_position_candidates
@@ -174,7 +174,7 @@ def outer_proposal_candidates(
             cache,
             policy,
             outer_scopes=separator_outer_scopes_for_policy(policy, strip_mode, explicit_count, safety_only=safety_only),
-            gap_search_profiles=(STANDARD_GAP_PROFILE,),
+            gap_search_profiles=(WIDTH_AWARE_GAP_PROFILE,),
             explicit_count=explicit_count,
         )
     if safety_only:
@@ -202,31 +202,6 @@ def separator_full_width_outer_proposal_candidates(
         cache,
         policy,
         outer_scopes=(FULL_WIDTH_SEPARATOR_OUTER,),
-        gap_search_profiles=(STANDARD_GAP_PROFILE,),
-        explicit_count=explicit_count,
-    )
-
-
-def separator_width_profile_outer_proposal_candidates(
-    gray_work: np.ndarray,
-    base_candidates: list[OuterCandidate],
-    fmt: FormatSpec,
-    count: int,
-    strip_mode: str,
-    cache: Optional[AnalysisCache] = None,
-    policy: Optional[DetectionPolicy] = None,
-    explicit_count: bool = True,
-) -> list[OuterCandidate]:
-    policy = policy or get_detection_policy(fmt.name, strip_mode)
-    return separator_derived_outer_candidates(
-        gray_work,
-        base_candidates,
-        fmt,
-        count,
-        strip_mode,
-        cache,
-        policy,
-        outer_scopes=(LOCAL_SEPARATOR_OUTER, FULL_WIDTH_SEPARATOR_OUTER),
-        gap_search_profiles=(BROAD_WIDTH_GAP_PROFILE,),
+        gap_search_profiles=(WIDTH_AWARE_GAP_PROFILE,),
         explicit_count=explicit_count,
     )

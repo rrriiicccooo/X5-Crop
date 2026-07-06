@@ -111,6 +111,55 @@ class SeparatorWidthGapSearchResult:
     detail: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class SeparatorPhysicalWidthPrior:
+    used: bool
+    reason: str
+    ideal_width: float = 0.0
+    total_separator_width: float = 0.0
+    theoretical_frame_width: float = 0.0
+
+    def detail(self) -> dict[str, Any]:
+        return {
+            "used": bool(self.used),
+            "reason": self.reason,
+            "ideal_width": float(self.ideal_width),
+            "total_separator_width": float(self.total_separator_width),
+            "theoretical_frame_width": float(self.theoretical_frame_width),
+        }
+
+
+def separator_physical_width_prior(
+    long_axis: float,
+    short_axis: float,
+    count: int,
+    frame_aspect: float | None,
+) -> SeparatorPhysicalWidthPrior:
+    if count <= 1:
+        return SeparatorPhysicalWidthPrior(False, "single_frame")
+    if frame_aspect is None or frame_aspect <= 0.0:
+        return SeparatorPhysicalWidthPrior(False, "missing_frame_aspect")
+    if long_axis <= 0.0 or short_axis <= 0.0:
+        return SeparatorPhysicalWidthPrior(False, "invalid_outer_geometry")
+    frame_width = float(short_axis) * float(frame_aspect)
+    total_separator_width = float(long_axis) - float(count) * frame_width
+    if total_separator_width <= 0.0:
+        return SeparatorPhysicalWidthPrior(
+            False,
+            "frames_exceed_outer_width",
+            0.0,
+            total_separator_width,
+            frame_width,
+        )
+    return SeparatorPhysicalWidthPrior(
+        True,
+        "ok",
+        total_separator_width / float(count - 1),
+        total_separator_width,
+        frame_width,
+    )
+
+
 def separator_width_profile(
     crop: np.ndarray,
     params: SeparatorWidthProfileSearchParameters | None = None,
@@ -232,10 +281,18 @@ def separator_width_gap_candidate_from_accepted_run(
     expected: float,
     pitch: float,
     params: SeparatorWidthProfileSearchParameters,
+    prior: SeparatorPhysicalWidthPrior | None = None,
 ) -> SeparatorWidthGapCandidate:
     mean_score = float(profile[run.start:run.end].mean())
     distance_penalty = abs(run.center - expected) / max(1.0, pitch)
-    score = mean_score - params.gap_distance_penalty_weight * distance_penalty
+    width_prior_penalty = 0.0
+    if prior is not None and prior.used and prior.ideal_width > 0.0:
+        width_prior_penalty = abs(float(run.width) - float(prior.ideal_width)) / max(1.0, float(prior.ideal_width))
+    score = (
+        mean_score
+        - params.gap_distance_penalty_weight * distance_penalty
+        - params.gap_width_prior_penalty_weight * width_prior_penalty
+    )
     return SeparatorWidthGapCandidate(score=score, start=run.start, end=run.end, center=run.center)
 
 
@@ -247,6 +304,7 @@ def separator_width_gap_candidate_assessment(
     pitch: float,
     bounds: SeparatorWidthBounds,
     params: SeparatorWidthProfileSearchParameters,
+    prior: SeparatorPhysicalWidthPrior | None = None,
 ) -> SeparatorWidthGapCandidateAssessmentResult:
     run = separator_width_gap_run(start, end)
     acceptance = separator_width_gap_run_acceptance(run, bounds)
@@ -263,7 +321,7 @@ def separator_width_gap_candidate_assessment(
                 distance_penalty=distance_penalty,
             ),
         )
-    candidate = separator_width_gap_candidate_from_accepted_run(profile, run, expected, pitch, params)
+    candidate = separator_width_gap_candidate_from_accepted_run(profile, run, expected, pitch, params, prior)
     return SeparatorWidthGapCandidateAssessmentResult(
         candidate=candidate,
         assessment=SeparatorWidthGapRunAssessment(
@@ -284,6 +342,7 @@ def separator_width_gap_candidates_with_detail(
     pitch: float,
     bounds: SeparatorWidthBounds,
     params: SeparatorWidthProfileSearchParameters,
+    prior: SeparatorPhysicalWidthPrior | None = None,
 ) -> SeparatorWidthGapCandidateSearchResult:
     candidates: list[SeparatorWidthGapCandidate] = []
     evaluations: list[dict[str, Any]] = []
@@ -298,6 +357,7 @@ def separator_width_gap_candidates_with_detail(
             pitch,
             bounds,
             params,
+            prior,
         )
         evaluations.append(assessment_result.assessment.detail())
         if assessment_result.candidate is not None:
@@ -322,6 +382,7 @@ def best_separator_width_gap_candidate_with_detail(
     pitch: float,
     bounds: SeparatorWidthBounds,
     params: SeparatorWidthProfileSearchParameters,
+    prior: SeparatorPhysicalWidthPrior | None = None,
 ) -> SeparatorWidthGapBestCandidateResult:
     search = separator_width_gap_candidates_with_detail(
         profile,
@@ -330,6 +391,7 @@ def best_separator_width_gap_candidate_with_detail(
         pitch,
         bounds,
         params,
+        prior,
     )
     return SeparatorWidthGapBestCandidateResult(
         best_separator_width_gap_candidate(search.candidates),
@@ -368,6 +430,7 @@ def separator_width_gap_search_detail(
     short_axis: float,
     bounds: SeparatorWidthBounds,
     window: SeparatorWidthGapWindow,
+    prior: SeparatorPhysicalWidthPrior | None = None,
     evaluations: list[dict[str, Any]] | None = None,
     selected: SeparatorWidthGapCandidate | None = None,
 ) -> dict[str, Any]:
@@ -381,6 +444,11 @@ def separator_width_gap_search_detail(
         "min_width": int(bounds.min_width),
         "max_width": int(bounds.max_width),
         "max_core_width": float(bounds.max_core_width),
+        "physical_width_prior": (
+            prior.detail()
+            if prior is not None
+            else SeparatorPhysicalWidthPrior(False, "not_provided").detail()
+        ),
     }
     detail = attach_gap_run_evaluation_summary(detail, evaluations)
     if selected is not None:
@@ -400,6 +468,7 @@ def separator_width_gap_at_with_detail(
     pitch: float,
     index: int,
     short_axis: float,
+    prior: SeparatorPhysicalWidthPrior | None = None,
     params: SeparatorWidthProfileSearchParameters | None = None,
 ) -> SeparatorWidthGapSearchResult:
     params = params or SeparatorWidthProfileSearchParameters()
@@ -410,6 +479,11 @@ def separator_width_gap_at_with_detail(
             "pitch": float(pitch),
             "profile_length": int(profile.size),
             "short_axis": float(short_axis),
+            "physical_width_prior": (
+                prior.detail()
+                if prior is not None
+                else SeparatorPhysicalWidthPrior(False, "not_provided").detail()
+            ),
         }
         return SeparatorWidthGapSearchResult(None, "empty_profile_or_pitch", detail)
     bounds = separator_width_bounds(short_axis, params)
@@ -421,6 +495,7 @@ def separator_width_gap_at_with_detail(
         pitch,
         bounds,
         params,
+        prior,
     )
     detail = separator_width_gap_search_detail(
         index,
@@ -430,6 +505,7 @@ def separator_width_gap_at_with_detail(
         short_axis,
         bounds,
         window,
+        prior,
         selection.evaluations,
         selection.candidate,
     )
@@ -454,6 +530,7 @@ __all__ = [
     "SeparatorWidthGapRun",
     "SeparatorWidthGapRunAssessment",
     "SeparatorWidthGapSearchResult",
+    "SeparatorPhysicalWidthPrior",
     "best_separator_width_gap_candidate",
     "best_separator_width_gap_candidate_with_detail",
     "collect_separator_width_bands",
@@ -467,5 +544,6 @@ __all__ = [
     "separator_width_gap_window",
     "separator_width_bounds",
     "separator_width_gap_at_with_detail",
+    "separator_physical_width_prior",
     "separator_width_profile",
 ]

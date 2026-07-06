@@ -15,7 +15,7 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ...evidence.separator_width import separator_width_evidence_detail
-from ...gap_profiles import STANDARD_GAP_PROFILE
+from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ..assessment.partial_edge import partial_edge_hint
 from ..assessment.scoring import score_detection
 from ..proposal.outer.grid_refine import grid_refined_outer_box
@@ -41,9 +41,11 @@ def build_detection_for_outer(
     cache: Optional[AnalysisCache] = None,
     allow_outer_refine: bool = True,
     gap_max_width_ratio_override: Optional[float] = None,
-    gap_search_profile: str = STANDARD_GAP_PROFILE,
+    gap_search_profile: str = WIDTH_AWARE_GAP_PROFILE,
     policy: Optional[DetectionPolicy] = None,
 ) -> Detection:
+    if gap_search_profile != WIDTH_AWARE_GAP_PROFILE:
+        raise ValueError(f"Unsupported separator gap search profile: {gap_search_profile!r}")
     policy = policy or get_detection_policy(fmt.name, strip_mode)
     candidate_strategy = outer_candidate_strategy_name or outer_candidate_strategy(outer_candidate_name)
     h, w = gray.shape
@@ -57,12 +59,10 @@ def build_detection_for_outer(
         strip_mode,
         outer,
         offset_fraction,
-        candidate_strategy,
         allow_enhanced_gap_promotion,
         cache,
         allow_outer_refine,
         gap_max_width_ratio_override,
-        gap_search_profile,
         policy,
         ww,
     )
@@ -186,12 +186,10 @@ def _build_separator_gap_lifecycle(
     strip_mode: str,
     outer: Box,
     offset_fraction: float,
-    candidate_strategy: str,
     allow_enhanced_gap_promotion: bool,
     cache: Optional[AnalysisCache],
     allow_outer_refine: bool,
     gap_max_width_ratio_override: Optional[float],
-    gap_search_profile: str,
     policy: DetectionPolicy,
     work_width: int,
 ) -> SeparatorGapBuildResult:
@@ -202,10 +200,8 @@ def _build_separator_gap_lifecycle(
         strip_mode,
         outer,
         offset_fraction,
-        candidate_strategy,
         cache,
         gap_max_width_ratio_override,
-        gap_search_profile,
         policy,
     )
     if not allow_outer_refine or strip_mode != "full":
@@ -247,10 +243,8 @@ def _build_separator_gap_lifecycle(
         strip_mode,
         refined_outer,
         offset_fraction,
-        candidate_strategy,
         cache,
         gap_max_width_ratio_override,
-        gap_search_profile,
         policy,
         force_standard_gap_search=True,
     )

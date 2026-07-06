@@ -155,15 +155,6 @@ class SeparatorFullWidthCompetitionPolicy:
 
 
 @dataclass(frozen=True)
-class SeparatorWidthProfileCandidatePolicy:
-    include_full_default_count: bool = True
-    full_strip_modes: tuple[str, ...] = ("full",)
-    full_requires_default_count: bool = True
-    partial_strip_modes: tuple[str, ...] = ("partial",)
-    include_partial_candidates: bool = True
-
-
-@dataclass(frozen=True)
 class CandidateExecutionBudgetPolicy:
     stop_after_reliable_primary: bool = True
     skip_outer_correction_after_reliable_selection: bool = True
@@ -197,7 +188,6 @@ class CandidatePlanPolicy:
     separator_full_width_competition: SeparatorFullWidthCompetitionPolicy = field(
         default_factory=SeparatorFullWidthCompetitionPolicy
     )
-    separator_width_profile: SeparatorWidthProfileCandidatePolicy = field(default_factory=SeparatorWidthProfileCandidatePolicy)
     execution_budget: CandidateExecutionBudgetPolicy = field(default_factory=CandidateExecutionBudgetPolicy)
     outer_correction_extension: OuterCorrectionCandidateExtensionPolicy = field(
         default_factory=OuterCorrectionCandidateExtensionPolicy
@@ -220,6 +210,5 @@ __all__ = [
     "ScoringPolicy",
     "SelectionPolicy",
     "SeparatorFullWidthCompetitionPolicy",
-    "SeparatorWidthProfileCandidatePolicy",
     "SeparatorSupportScorePolicy",
 ]

@@ -58,10 +58,8 @@ def build_primary_separator_gaps_for_outer(
     strip_mode: str,
     outer: Box,
     offset_fraction: float,
-    candidate_strategy: str,
     cache: Optional[AnalysisCache],
     gap_max_width_ratio_override: Optional[float],
-    gap_search_profile: str,
     policy: DetectionPolicy,
     force_standard_gap_search: bool = False,
 ) -> SeparatorGapBuildResult:
@@ -75,6 +73,7 @@ def build_primary_separator_gaps_for_outer(
     if force_standard_gap_search:
         initial_gaps = standard_separator_gap_result(
             gray_work,
+            fmt,
             outer,
             profile,
             count,
@@ -94,8 +93,6 @@ def build_primary_separator_gaps_for_outer(
             strip_mode,
             origin,
             pitch,
-            candidate_strategy,
-            gap_search_profile,
             gap_max_width_ratio_override,
             policy,
         )
