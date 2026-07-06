@@ -21,6 +21,7 @@ from ...geometry.detection_parameters import (
     SeparatorProfileParameters,
     SeparatorWidthProfileSearchParameters,
 )
+from .base import FULL, PARTIAL
 
 
 @dataclass(frozen=True)
@@ -133,12 +134,60 @@ class SeparatorEdgePairPolicy(EdgePairParameters):
 
 
 @dataclass(frozen=True)
+class SeparatorRefinementFamilyPolicy:
+    mode: str = "off"
+    phase: str = "primary"
+    strip_modes: tuple[str, ...] = (FULL,)
+    requires_explicit_count_for_partial: bool = True
+    target_gap_methods: tuple[str, ...] = ()
+    requires_geometry_equal_not_selected: bool = False
+    analysis_modes: tuple[str, ...] = ()
+
+    def available_for(self, strip_mode: str, explicit_count: bool) -> bool:
+        if self.mode == "off":
+            return False
+        if strip_mode not in self.strip_modes:
+            return False
+        if (
+            strip_mode == PARTIAL
+            and self.requires_explicit_count_for_partial
+            and not explicit_count
+        ):
+            return False
+        return True
+
+    def block_reason(self, strip_mode: str, explicit_count: bool) -> str | None:
+        if self.mode == "off":
+            return "policy_disabled"
+        if strip_mode not in self.strip_modes:
+            return "strip_mode_not_enabled"
+        if (
+            strip_mode == PARTIAL
+            and self.requires_explicit_count_for_partial
+            and not explicit_count
+        ):
+            return "partial_requires_explicit_count"
+        return None
+
+    def analysis_mode_allowed(self, analysis_mode: str) -> bool:
+        return not self.analysis_modes or analysis_mode in self.analysis_modes
+
+
+@dataclass(frozen=True)
+class SeparatorRefinementPolicy:
+    edge_pair: SeparatorRefinementFamilyPolicy = field(default_factory=SeparatorRefinementFamilyPolicy)
+    enhanced_promotion: SeparatorRefinementFamilyPolicy = field(default_factory=SeparatorRefinementFamilyPolicy)
+    nearby: SeparatorRefinementFamilyPolicy = field(default_factory=SeparatorRefinementFamilyPolicy)
+
+
+@dataclass(frozen=True)
 class SeparatorPolicy:
     gate: SeparatorGatePolicy
     hard_required_all_gaps: bool
     model_gap_proposal: SeparatorModelGapProposalPolicy = field(default_factory=SeparatorModelGapProposalPolicy)
     width_profile: SeparatorWidthProfilePolicy = field(default_factory=SeparatorWidthProfilePolicy)
     width_profile_search: SeparatorWidthProfileSearchParameters = field(default_factory=SeparatorWidthProfileSearchParameters)
+    refinement: SeparatorRefinementPolicy = field(default_factory=SeparatorRefinementPolicy)
     geometry_support_modes: tuple[str, ...] = ()
     geometry_support: SeparatorGeometrySupportPolicy = field(default_factory=SeparatorGeometrySupportPolicy)
     edge_pair: EdgePairParameters = field(default_factory=EdgePairParameters)
@@ -161,5 +210,7 @@ __all__ = [
     "SeparatorGeometrySupportPolicy",
     "SeparatorModelGapProposalPolicy",
     "SeparatorPolicy",
+    "SeparatorRefinementFamilyPolicy",
+    "SeparatorRefinementPolicy",
     "SeparatorWidthProfilePolicy",
 ]

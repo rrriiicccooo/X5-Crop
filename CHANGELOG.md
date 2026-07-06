@@ -27,6 +27,7 @@ Current stable release: v4.2.8
 - active retry architecture 已退休；safety candidate 和 corrected outer 都作为候选计划或候选扩展统一 assessment。
 - separator-derived outer family 已通用化：标准 strip 的 full 默认启用 local / full-width scope；partial 只有显式 count 时启用 extension scope。separator 宽度由单一 `width_aware` proposal 同时解释 standard theoretical width 与 observed width evidence，format 只提供 width / spacing / budget 参数。
 - observed width profile 是中性的实测宽度证据，不是 broad-only profile：standard hard search 找不到时，它可以补充比 physical width prior 更窄、匹配或更宽的 detected separator，并在 detail 中记录 selected width relation；broad separator width 仍只是 gate / partial-safety 消费的 evidence summary。
+- separator refinement family 已通用化：edge-pair、enhanced promotion 和 nearby refinement 由 `SeparatorPolicy.refinement` 统一声明 mode / phase / strip-mode / partial 显式 count 条件；standard strip 的 full 全部 eligible，partial 只有显式 count eligible，dual-lane / review-only 不进入普通 refinement。report detail 统一写出 `family`、`phase`、`eligible` 和 `skipped_reason`。
 - candidate execution budget 将 “eligible” 与 “executed” 分开：可靠 primary separator 已通过 assessment 时，可跳过 full-width / outer-scope extension；outer correction 还要求 outer alignment ok 才跳过。
 - detection 分层已对齐为 pipeline / modes / candidate proposal lifecycle /
   evidence / decision / final；outer proposal / correction 是 candidate proposal

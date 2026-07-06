@@ -89,6 +89,7 @@ def _separator_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "width_profile": {**width_profile_search, **width_profile_policy},
         "width_profile_search": width_profile_search,
         "model_gap_proposal": _plain(separator.model_gap_proposal),
+        "refinement": _plain(separator.refinement),
         "geometry_support_modes": list(separator.geometry_support_modes),
         "geometry_support": _plain(separator.geometry_support),
         "profile": _plain(separator.profile),

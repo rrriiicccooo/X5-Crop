@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+from ...constants import (
+    GAP_CONTENT,
+    GAP_DETECTED,
+    GAP_EDGE_PAIR,
+    GAP_ENHANCED_DETECTED,
+    GAP_EQUAL,
+    GAP_GRID,
+)
 from ...geometry.detection_parameters import (
     EdgePairParameters,
     EdgeRefineProfileParameters,
@@ -22,6 +30,8 @@ from ..runtime.separator import (
     SeparatorGeometrySupportPolicy,
     SeparatorModelGapProposalPolicy,
     SeparatorPolicy,
+    SeparatorRefinementFamilyPolicy,
+    SeparatorRefinementPolicy,
     SeparatorWidthProfilePolicy,
 )
 
@@ -137,6 +147,39 @@ def separator_width_profile_search_parameters() -> SeparatorWidthProfileSearchPa
     return SeparatorWidthProfileSearchParameters()
 
 
+def separator_refinement_policy(
+    mode_preset: ModePolicyPreset,
+) -> SeparatorRefinementPolicy:
+    if mode_preset.detector_kind != "standard_strip":
+        return SeparatorRefinementPolicy()
+    standard_strip_modes = (FULL, PARTIAL)
+    return SeparatorRefinementPolicy(
+        edge_pair=SeparatorRefinementFamilyPolicy(
+            mode="conditional",
+            phase="primary",
+            strip_modes=standard_strip_modes,
+            requires_explicit_count_for_partial=True,
+            target_gap_methods=(GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED),
+        ),
+        enhanced_promotion=SeparatorRefinementFamilyPolicy(
+            mode="conditional",
+            phase="late",
+            strip_modes=standard_strip_modes,
+            requires_explicit_count_for_partial=True,
+            target_gap_methods=(GAP_GRID, GAP_EQUAL, GAP_CONTENT),
+            requires_geometry_equal_not_selected=True,
+            analysis_modes=("auto", "always"),
+        ),
+        nearby=SeparatorRefinementFamilyPolicy(
+            mode="conditional",
+            phase="late",
+            strip_modes=standard_strip_modes,
+            requires_explicit_count_for_partial=True,
+            target_gap_methods=(GAP_DETECTED, GAP_EDGE_PAIR, GAP_ENHANCED_DETECTED),
+        ),
+    )
+
+
 def edge_pair_parameters_from_preset(
     preset: FormatPolicyPreset,
 ) -> EdgePairParameters:
@@ -183,6 +226,7 @@ def separator_policy(
             enabled=separator_width_profile_enabled,
         ),
         width_profile_search=separator_width_profile_search_parameters(),
+        refinement=separator_refinement_policy(mode_preset),
         geometry_support_modes=mode_preset.separator_geometry_support_modes,
         geometry_support=separator_geometry_support_policy(mode_preset, params),
         edge_pair=edge_pair_parameters_from_preset(preset),
@@ -331,6 +375,7 @@ __all__ = [
     'separator_gate_policy',
     'separator_geometry_support_policy',
     'separator_model_gap_proposal_policy',
+    'separator_refinement_policy',
     'separator_width_profile_policy',
     'separator_width_profile_search_parameters',
     'separator_policy',

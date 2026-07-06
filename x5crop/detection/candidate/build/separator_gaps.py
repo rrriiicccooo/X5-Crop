@@ -67,6 +67,8 @@ def build_primary_separator_gaps_for_outer(
     cache: Optional[AnalysisCache],
     gap_max_width_ratio_override: Optional[float],
     policy: DetectionPolicy,
+    *,
+    explicit_count: bool,
     force_standard_gap_search: bool = False,
 ) -> SeparatorGapBuildResult:
     work_height, work_width = gray_work.shape
@@ -121,6 +123,7 @@ def build_primary_separator_gaps_for_outer(
         initial_gaps.gaps,
         count,
         strip_mode,
+        explicit_count,
         origin,
         pitch,
         cache,
@@ -151,6 +154,8 @@ def apply_late_separator_refinements(
     allow_enhanced_gap_promotion: bool,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
+    *,
+    explicit_count: bool,
 ) -> SeparatorGapBuildResult:
     geometry_equal_model_selected = (
         separator_gaps.standard_gap_search_detail.get("selected_gap_source") == GEOMETRY_EQUAL_MODEL_SOURCE
@@ -160,6 +165,7 @@ def apply_late_separator_refinements(
         analysis_mode,
         count,
         strip_mode,
+        explicit_count,
         separator_gaps.outer,
         separator_gaps.profile,
         separator_gaps.gaps,

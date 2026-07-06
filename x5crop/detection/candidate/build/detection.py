@@ -65,6 +65,7 @@ def build_detection_for_outer(
         gap_max_width_ratio_override,
         policy,
         ww,
+        explicit_count=bool(config.count_override is not None),
     )
     outer = separator_gaps.outer
     profile = separator_gaps.profile
@@ -192,6 +193,8 @@ def _build_separator_gap_lifecycle(
     gap_max_width_ratio_override: Optional[float],
     policy: DetectionPolicy,
     work_width: int,
+    *,
+    explicit_count: bool,
 ) -> SeparatorGapBuildResult:
     separator_gaps = build_primary_separator_gaps_for_outer(
         gray_work,
@@ -203,6 +206,7 @@ def _build_separator_gap_lifecycle(
         cache,
         gap_max_width_ratio_override,
         policy,
+        explicit_count=explicit_count,
     )
     if not allow_outer_refine or strip_mode != "full":
         return apply_late_separator_refinements(
@@ -214,6 +218,7 @@ def _build_separator_gap_lifecycle(
             allow_enhanced_gap_promotion,
             cache,
             policy,
+            explicit_count=explicit_count,
         )
 
     refined_outer = grid_refined_outer_box(
@@ -234,6 +239,7 @@ def _build_separator_gap_lifecycle(
             allow_enhanced_gap_promotion,
             cache,
             policy,
+            explicit_count=explicit_count,
         )
 
     refined_separator_gaps = build_primary_separator_gaps_for_outer(
@@ -246,6 +252,7 @@ def _build_separator_gap_lifecycle(
         cache,
         gap_max_width_ratio_override,
         policy,
+        explicit_count=explicit_count,
         force_standard_gap_search=True,
     )
     grid_detail = dict(refined_separator_gaps.grid_detail)
@@ -260,4 +267,5 @@ def _build_separator_gap_lifecycle(
         allow_enhanced_gap_promotion,
         cache,
         policy,
+        explicit_count=explicit_count,
     )

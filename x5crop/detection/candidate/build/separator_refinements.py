@@ -19,6 +19,7 @@ from ....geometry.enhanced_separator import should_run_enhanced_gap_promotion
 from ....geometry.nearby_separator import apply_nearby_separator_refinement as refine_nearby_separator_gaps
 from ....geometry.robust_grid import apply_robust_grid
 from ....policies.runtime.policy import DetectionPolicy
+from ....policies.runtime.separator import SeparatorRefinementFamilyPolicy
 
 
 EDGE_PAIR_REFINEMENT_FAMILY = "edge_pair"
@@ -53,9 +54,33 @@ class GapRefinementResult:
 def _gap_refinement_detail(
     family: str,
     detail: dict[str, Any],
+    family_policy: Optional[SeparatorRefinementFamilyPolicy] = None,
+    *,
+    eligible: Optional[bool] = None,
+    skipped_reason: Optional[str] = None,
 ) -> dict[str, Any]:
     result_detail = dict(detail)
     result_detail.setdefault("family", family)
+    if family_policy is not None:
+        result_detail.setdefault("phase", family_policy.phase)
+        result_detail.setdefault("mode", family_policy.mode)
+        result_detail.setdefault("strip_modes", list(family_policy.strip_modes))
+        result_detail.setdefault(
+            "requires_explicit_count_for_partial",
+            bool(family_policy.requires_explicit_count_for_partial),
+        )
+        result_detail.setdefault("target_gap_methods", list(family_policy.target_gap_methods))
+        if family_policy.analysis_modes:
+            result_detail.setdefault("analysis_modes", list(family_policy.analysis_modes))
+    if eligible is not None:
+        result_detail.setdefault("eligible", bool(eligible))
+    if skipped_reason is not None:
+        result_detail.setdefault("skipped_reason", skipped_reason)
+        result_detail.setdefault("reason", skipped_reason)
+    if "accepted" in result_detail:
+        result_detail.setdefault("accepted_count", len(result_detail.get("accepted") or []))
+    if "rejected" in result_detail:
+        result_detail.setdefault("rejected_count", len(result_detail.get("rejected") or []))
     return result_detail
 
 
@@ -64,12 +89,21 @@ def _gap_refinement_result(
     gaps: list[Gap],
     detail: dict[str, Any],
     *,
+    family_policy: Optional[SeparatorRefinementFamilyPolicy] = None,
+    eligible: bool = True,
+    skipped_reason: Optional[str] = None,
     pre_refinement_gaps: Optional[list[Gap]] = None,
 ) -> GapRefinementResult:
     return GapRefinementResult(
         family=family,
         gaps=gaps,
-        detail=_gap_refinement_detail(family, detail),
+        detail=_gap_refinement_detail(
+            family,
+            detail,
+            family_policy,
+            eligible=eligible,
+            skipped_reason=skipped_reason,
+        ),
         pre_refinement_gaps=pre_refinement_gaps,
     )
 
@@ -78,11 +112,17 @@ def _skipped_gap_refinement_result(
     family: str,
     gaps: list[Gap],
     reason: str,
+    *,
+    family_policy: Optional[SeparatorRefinementFamilyPolicy] = None,
+    eligible: bool = False,
 ) -> GapRefinementResult:
     return _gap_refinement_result(
         family,
         gaps,
         {"used": False, "reason": reason},
+        family_policy=family_policy,
+        eligible=eligible,
+        skipped_reason=reason,
     )
 
 
@@ -90,6 +130,8 @@ def pending_gap_refinement_detail(family: str) -> dict[str, Any]:
     return _gap_refinement_detail(
         family,
         {"used": False, "reason": LATE_REFINEMENT_PENDING_REASON},
+        eligible=False,
+        skipped_reason=LATE_REFINEMENT_PENDING_REASON,
     )
 
 
@@ -143,9 +185,15 @@ def robust_grid_execution_parameters_for_strip_mode(
     )
 
 
-def edge_pair_refinement_skip_reason(count: int, strip_mode: str) -> Optional[str]:
-    if strip_mode != "full":
-        return "not_full_strip"
+def edge_pair_refinement_skip_reason(
+    count: int,
+    strip_mode: str,
+    explicit_count: bool,
+    family_policy: SeparatorRefinementFamilyPolicy,
+) -> Optional[str]:
+    family_block_reason = family_policy.block_reason(strip_mode, explicit_count)
+    if family_block_reason is not None:
+        return family_block_reason
     if count <= 1:
         return "single_frame"
     return None
@@ -157,12 +205,19 @@ def apply_edge_pair_refinement(
     gaps: list[Gap],
     count: int,
     strip_mode: str,
+    explicit_count: bool,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> GapRefinementResult:
-    skip_reason = edge_pair_refinement_skip_reason(count, strip_mode)
+    family_policy = policy.separator.refinement.edge_pair
+    skip_reason = edge_pair_refinement_skip_reason(count, strip_mode, explicit_count, family_policy)
     if skip_reason is not None:
-        return _skipped_gap_refinement_result(EDGE_PAIR_REFINEMENT_FAMILY, gaps, skip_reason)
+        return _skipped_gap_refinement_result(
+            EDGE_PAIR_REFINEMENT_FAMILY,
+            gaps,
+            skip_reason,
+            family_policy=family_policy,
+        )
     edge, background, _activity = cached_edge_refine_profiles(
         cache,
         crop,
@@ -180,6 +235,7 @@ def apply_edge_pair_refinement(
         EDGE_PAIR_REFINEMENT_FAMILY,
         correction.gaps,
         correction.detail,
+        family_policy=family_policy,
     )
 
 
@@ -191,6 +247,7 @@ def apply_primary_separator_refinements(
     gaps: list[Gap],
     count: int,
     strip_mode: str,
+    explicit_count: bool,
     origin: float,
     pitch: float,
     cache: Optional[AnalysisCache],
@@ -202,6 +259,7 @@ def apply_primary_separator_refinements(
         gaps,
         count,
         strip_mode,
+        explicit_count,
         cache,
         policy,
     )
@@ -232,18 +290,23 @@ def enhanced_gap_promotion_skip_reason(
     *,
     allow_enhanced_gap_promotion: bool,
     strip_mode: str,
+    explicit_count: bool,
     analysis_mode: str,
     gaps: list[Gap],
     count: int,
     geometry_equal_model_selected: bool,
     enhanced_config: EnhancedSeparatorParameters,
+    family_policy: SeparatorRefinementFamilyPolicy,
 ) -> Optional[str]:
     if not allow_enhanced_gap_promotion:
         return "disabled"
-    if strip_mode != "full":
-        return "not_full_strip"
-    if geometry_equal_model_selected:
+    family_block_reason = family_policy.block_reason(strip_mode, explicit_count)
+    if family_block_reason is not None:
+        return family_block_reason
+    if family_policy.requires_geometry_equal_not_selected and geometry_equal_model_selected:
         return "geometry_equal_model_selected"
+    if not family_policy.analysis_mode_allowed(analysis_mode):
+        return "analysis_mode_not_enabled"
     if should_run_enhanced_gap_promotion(analysis_mode, gaps, count, enhanced_config):
         return None
     if analysis_mode == "auto":
@@ -257,6 +320,7 @@ def apply_enhanced_gap_promotion(
     gaps: list[Gap],
     count: int,
     strip_mode: str,
+    explicit_count: bool,
     origin: float,
     pitch: float,
     allow_enhanced_gap_promotion: bool,
@@ -265,17 +329,26 @@ def apply_enhanced_gap_promotion(
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> GapRefinementResult:
+    family_policy = policy.separator.refinement.enhanced_promotion
     skip_reason = enhanced_gap_promotion_skip_reason(
         allow_enhanced_gap_promotion=allow_enhanced_gap_promotion,
         strip_mode=strip_mode,
+        explicit_count=explicit_count,
         analysis_mode=analysis_mode,
         gaps=gaps,
         count=count,
         geometry_equal_model_selected=geometry_equal_model_selected,
         enhanced_config=policy.separator.enhanced,
+        family_policy=family_policy,
     )
     if skip_reason is not None:
-        return _skipped_gap_refinement_result(ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY, gaps, skip_reason)
+        return _skipped_gap_refinement_result(
+            ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY,
+            gaps,
+            skip_reason,
+            family_policy=family_policy,
+            eligible=skip_reason == "auto_not_needed",
+        )
     robust_grid_parameters = robust_grid_execution_parameters_for_strip_mode(
         policy.separator.robust_grid,
         strip_mode,
@@ -298,12 +371,19 @@ def apply_enhanced_gap_promotion(
         ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY,
         promotion.gaps,
         promotion.detail,
+        family_policy=family_policy,
     )
 
 
-def nearby_separator_refinement_skip_reason(strip_mode: str, enabled: bool) -> Optional[str]:
-    if strip_mode != "full":
-        return "not_full_strip"
+def nearby_separator_refinement_skip_reason(
+    strip_mode: str,
+    explicit_count: bool,
+    enabled: bool,
+    family_policy: SeparatorRefinementFamilyPolicy,
+) -> Optional[str]:
+    family_block_reason = family_policy.block_reason(strip_mode, explicit_count)
+    if family_block_reason is not None:
+        return family_block_reason
     if not enabled:
         return "disabled"
     return None
@@ -314,16 +394,25 @@ def apply_nearby_separator_refinement(
     gaps: list[Gap],
     count: int,
     strip_mode: str,
+    explicit_count: bool,
     origin: float,
     pitch: float,
     policy: DetectionPolicy,
 ) -> GapRefinementResult:
+    family_policy = policy.separator.refinement.nearby
     skip_reason = nearby_separator_refinement_skip_reason(
         strip_mode,
+        explicit_count,
         policy.separator.nearby_refinement.enabled,
+        family_policy,
     )
     if skip_reason is not None:
-        return _skipped_gap_refinement_result(NEARBY_SEPARATOR_REFINEMENT_FAMILY, gaps, skip_reason)
+        return _skipped_gap_refinement_result(
+            NEARBY_SEPARATOR_REFINEMENT_FAMILY,
+            gaps,
+            skip_reason,
+            family_policy=family_policy,
+        )
     pre_nearby_gaps = list(gaps)
     refinement = refine_nearby_separator_gaps(
         profile,
@@ -340,12 +429,14 @@ def apply_nearby_separator_refinement(
             NEARBY_SEPARATOR_REFINEMENT_FAMILY,
             refined_gaps,
             detail,
+            family_policy=family_policy,
             pre_refinement_gaps=pre_nearby_gaps,
         )
     return _gap_refinement_result(
         NEARBY_SEPARATOR_REFINEMENT_FAMILY,
         refined_gaps,
         detail,
+        family_policy=family_policy,
     )
 
 
@@ -354,6 +445,7 @@ def apply_late_separator_refinement_chain(
     analysis_mode: str,
     count: int,
     strip_mode: str,
+    explicit_count: bool,
     outer: Box,
     profile: np.ndarray,
     gaps: list[Gap],
@@ -370,6 +462,7 @@ def apply_late_separator_refinement_chain(
         gaps,
         count,
         strip_mode,
+        explicit_count,
         origin,
         pitch,
         allow_enhanced_gap_promotion,
@@ -383,6 +476,7 @@ def apply_late_separator_refinement_chain(
         enhanced_gap_promotion.gaps,
         count,
         strip_mode,
+        explicit_count,
         origin,
         pitch,
         policy,

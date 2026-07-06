@@ -18,7 +18,6 @@ def _format_behavior_parameter_defaults(format_name: str) -> dict[str, Any]:
         "120-67",
     }:
         defaults.update(
-            nearby_active_refinement=False,
             lucky_pass_risk_enabled=False,
             leading_grid_failure_enabled=False,
         )
