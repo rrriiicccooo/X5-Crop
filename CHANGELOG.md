@@ -22,6 +22,7 @@ Current stable release: v4.2.8
 - V4.9 是 evidence-governed policy reset，不是检测阈值放宽版本。
 - V4.5.4 / V4.7 reference reports 是 historical baseline，不再是必须 0 diff 的 oracle。
 - 自动 PASS 必须由 outer、separator、geometry、content 和 risk 组合证据解释。
+- evidence independence contract 已加入 candidate assessment：当 separator-derived outer 依赖 observed width-profile gap 时，必须再由 standard hard gap、content ok 和 geometry ok 交叉确认；否则进入 REVIEW，避免循环论证。
 - weak grid、equal、content-only、safety candidate 或 partial edge 不可信的候选默认进入 REVIEW。
 - active retry architecture 已退休；safety candidate 和 corrected outer 都作为候选计划或候选扩展统一 assessment。
 - separator-derived outer family 已通用化：标准 strip 的 full 默认启用 local / full-width scope；partial 只有显式 count 时启用 extension scope。separator 宽度由单一 `width_aware` proposal 同时解释 standard theoretical width 与 observed width evidence，format 只提供 width / spacing / budget 参数。
@@ -490,6 +491,9 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - V4.5.4 / V4.7 reference reports are historical baselines, not required 0-diff oracles.
 - Automatic PASS must be explained by combined outer, separator, geometry,
   content, and risk evidence.
+- Candidate assessment now enforces an evidence-independence contract: when a
+  separator-derived outer uses observed width-profile gaps, automatic PASS also
+  requires independent standard hard-gap, content, and geometry validation.
 - Weak grid, equal, content-only, safety, or untrusted partial-edge candidates
   default to REVIEW.
 - Active retry architecture is retired; safety candidates and corrected outers

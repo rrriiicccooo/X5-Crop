@@ -167,6 +167,20 @@ class CandidateExecutionBudgetPolicy:
 
 
 @dataclass(frozen=True)
+class EvidenceIndependencePolicy:
+    enabled: bool = True
+    dependent_outer_strategies: tuple[str, ...] = ("separator_outer",)
+    dependent_gap_sources: tuple[str, ...] = ("observed_width_profile",)
+    max_dependent_gap_count_without_validation: int = 0
+    min_standard_detected_gaps: int = 1
+    require_content_support: str = "ok"
+    min_content_score: float = 0.72
+    min_geometry_score: float = 0.72
+    max_width_cv: float = 0.040
+    review_reason: str = "evidence_dependency_cycle_risk"
+
+
+@dataclass(frozen=True)
 class OuterCorrectionCandidateExtensionPolicy:
     enabled: bool = True
 
@@ -189,6 +203,7 @@ class CandidatePlanPolicy:
         default_factory=SeparatorFullWidthCompetitionPolicy
     )
     execution_budget: CandidateExecutionBudgetPolicy = field(default_factory=CandidateExecutionBudgetPolicy)
+    evidence_independence: EvidenceIndependencePolicy = field(default_factory=EvidenceIndependencePolicy)
     outer_correction_extension: OuterCorrectionCandidateExtensionPolicy = field(
         default_factory=OuterCorrectionCandidateExtensionPolicy
     )
@@ -200,6 +215,7 @@ __all__ = [
     "CandidatePlanPolicy",
     "ContentCandidatePlanPolicy",
     "ContentMismatchReviewSelectionPolicy",
+    "EvidenceIndependencePolicy",
     "GatePolicy",
     "GeometrySupportScorePolicy",
     "OuterCorrectionCandidateExtensionPolicy",

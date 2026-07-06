@@ -22,6 +22,7 @@ from ....runtime.config import RuntimeConfig
 from ....utils import HARD_REVIEW_REASONS
 from ...evidence.content_evidence import content_evidence_detail
 from ...evidence.separator_summary import separator_gate_detail_summary
+from .evidence_independence import evidence_independence_detail
 from .gates import assess_separator_gate
 from .partial_holder import partial_extra_holder_frames_gate_detail
 from .scoring import (
@@ -229,12 +230,32 @@ def apply_candidate_assessment_policy(
                 "outer_box_uncertain",
             }
         ]
+    independence_detail = evidence_independence_detail(
+        candidate,
+        source=source,
+        content_support=support,
+        content_score=content_score,
+        geometry_score=geometry_score,
+        policy=policy.candidate_plan.evidence_independence,
+    )
+    evidence_independence_ok = bool(independence_detail.get("ok", True))
+    if source == "separator":
+        separator_gate_detail = dict(separator_gate_detail)
+        separator_gate_detail["evidence_independence"] = independence_detail
+    if not evidence_independence_ok:
+        reasons.append(
+            str(
+                independence_detail.get("reason")
+                or policy.candidate_plan.evidence_independence.review_reason
+            )
+        )
     hard_reasons = HARD_REVIEW_REASONS.intersection(reasons)
     auto_gate = False
     if source == "separator":
         auto_gate = (
             (separator_gate_ok or partial_safe_extra_frames_ok)
             and support == "ok"
+            and evidence_independence_ok
             and not hard_reasons
         )
     elif source == "content":
@@ -271,6 +292,7 @@ def apply_candidate_assessment_policy(
         "content_score": float(content_score),
         "content_support": support,
         "separator_hard_evidence": separator_gate_detail,
+        "evidence_independence": independence_detail,
         "partial_extra_holder_frames": partial_safe_extra_frames,
         "partial_safe_extra_frames": partial_safe_extra_frames,
     }
