@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ...formats import FORMATS
+from .profile_defaults import partial_count_parameters
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import (
     FULL,
@@ -23,7 +24,7 @@ def count_policy(fmt_id: str, strip_mode: str, params: FormatParameters) -> Coun
     fmt = FORMATS[fmt_id]
     if strip_mode == FULL:
         return CountPolicy(fixed_count=None, auto_counts=(fmt.default_count,))
-    partial = params.partial_counts
+    partial = partial_count_parameters(fmt, params)
     return CountPolicy(
         fixed_count=None,
         auto_counts=tuple(reversed(fmt.allowed_counts)),

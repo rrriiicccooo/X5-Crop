@@ -19,6 +19,13 @@ from ...geometry.detection_parameters import (
     SeparatorProfileParameters,
     SeparatorWidthProfileSearchParameters,
 )
+from ...formats import FORMATS
+from .profile_defaults import (
+    leading_grid_failure_parameters,
+    nearby_separator_refinement_parameters,
+    separator_gate_parameters,
+    separator_geometry_support_parameters,
+)
 from .presets import FormatPolicyPreset, ModePolicyPreset
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import FULL, PARTIAL
@@ -46,8 +53,9 @@ def separator_gate_policy(
             f"Unsupported separator gate profile: {preset.separator_gate_profile!r}; "
             f"expected one of {supported}"
         )
-    gate = params.separator_gate
-    leading_grid = params.leading_grid_failure
+    fmt = FORMATS[preset.format_id]
+    gate = separator_gate_parameters(fmt, params)
+    leading_grid = leading_grid_failure_parameters(fmt, params)
     return SeparatorGatePolicy(
         profile=preset.separator_gate_profile,
         needed_hard_max=int(gate.needed_hard_max),
@@ -75,12 +83,13 @@ def separator_gate_policy(
 
 
 def separator_geometry_support_policy(
+    preset: FormatPolicyPreset,
     mode_preset: ModePolicyPreset,
     params: FormatParameters,
 ) -> SeparatorGeometrySupportPolicy:
     if not mode_preset.separator_geometry_support_modes:
         return SeparatorGeometrySupportPolicy()
-    support = params.separator_geometry_support
+    support = separator_geometry_support_parameters(FORMATS[preset.format_id], params)
     mode_policy = SeparatorGeometrySupportModePolicy(
         enabled=True,
         min_hard_ratio=float(support.detected_geometry_min_hard_ratio),
@@ -210,7 +219,7 @@ def separator_policy(
         or (strip_mode == PARTIAL and separator_width_profile.partial_enabled)
     )
     hard_gap_trust = params.hard_gap_trust
-    nearby_refinement = params.nearby_separator_refinement
+    nearby_refinement = nearby_separator_refinement_parameters(FORMATS[preset.format_id], params)
     robust_grid = params.robust_grid
     gap_search = params.gap_search
     enhanced = params.enhanced_separator
@@ -228,7 +237,7 @@ def separator_policy(
         width_profile_search=separator_width_profile_search_parameters(),
         refinement=separator_refinement_policy(mode_preset),
         geometry_support_modes=mode_preset.separator_geometry_support_modes,
-        geometry_support=separator_geometry_support_policy(mode_preset, params),
+        geometry_support=separator_geometry_support_policy(preset, mode_preset, params),
         edge_pair=edge_pair_parameters_from_preset(preset),
         hard_gap_trust=HardGapTrustParameters(
             guard_ratio=float(hard_gap_trust.guard_ratio),

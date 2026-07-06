@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from ...formats import FormatSpec
 from .presets import ModePolicyPreset
+from .profile_defaults import lucky_pass_risk_parameters
 from ..parameters.aggregate import FormatParameters
 from ..runtime.diagnostics import (
     DebugGapOverlayPolicy,
@@ -37,11 +39,15 @@ def finalization_policy(params: FormatParameters) -> FinalizationPolicy:
     )
 
 
-def diagnostics_policy(mode_preset: ModePolicyPreset, params: FormatParameters) -> RuntimeDiagnosticsPolicy:
+def diagnostics_policy(
+    fmt: FormatSpec,
+    mode_preset: ModePolicyPreset,
+    params: FormatParameters,
+) -> RuntimeDiagnosticsPolicy:
     debug_gap = params.debug_gap_overlay
     nearby = params.nearby_separator_diagnostics
     overlap = params.diagnostic_overlap_risk
-    lucky = params.lucky_pass_risk
+    lucky = lucky_pass_risk_parameters(fmt, params)
     return RuntimeDiagnosticsPolicy(
         overlap_bleed_risk=OverlapBleedRiskPolicy(
             enabled=mode_preset.diagnostics_overlap_bleed,

@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 from .presets import FormatPolicyPreset, ModePolicyPreset
+from .profile_defaults import (
+    base_detection_score_parameters,
+    partial_holder_parameters,
+    scoring_calibration_parameters,
+    separator_support_score_parameters,
+)
+from ...formats import FormatSpec
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import FULL, PARTIAL
 from ..runtime.candidate import (
@@ -19,10 +26,19 @@ from ..runtime.candidate import (
 )
 
 
-def partial_holder_policy(strip_mode: str, params: FormatParameters) -> PartialHolderPolicy:
-    holder = params.partial_holder
+def partial_holder_policy(
+    fmt: FormatSpec,
+    mode_preset: ModePolicyPreset,
+    strip_mode: str,
+    params: FormatParameters,
+) -> PartialHolderPolicy:
+    holder = partial_holder_parameters(fmt, params)
+    if mode_preset.detector_kind == "review_only":
+        holder_enabled = False
+    else:
+        holder_enabled = bool(holder.enabled)
     content_evidence = params.content_evidence
-    partial_safe = strip_mode == PARTIAL and bool(holder.enabled)
+    partial_safe = strip_mode == PARTIAL and holder_enabled
     return PartialHolderPolicy(
         safe_extra_frames=partial_safe,
         requires_broad_separator_width_gaps=(int(holder.min_broad_separator_width_gaps) if partial_safe else 0),
@@ -51,12 +67,12 @@ def partial_holder_policy(strip_mode: str, params: FormatParameters) -> PartialH
     )
 
 
-def scoring_policy(params: FormatParameters) -> ScoringPolicy:
-    calibration = params.scoring_calibration
+def scoring_policy(fmt: FormatSpec, params: FormatParameters) -> ScoringPolicy:
+    calibration = scoring_calibration_parameters(fmt, params)
     competition = params.candidate_competition
-    base_score = params.base_detection_score
+    base_score = base_detection_score_parameters(fmt, params)
     geometry_support = params.geometry_support_score
-    separator_support = params.separator_support_score
+    separator_support = separator_support_score_parameters(fmt, params)
     return ScoringPolicy(
         hard_full_confidence_floor=float(calibration.hard_full_confidence_floor),
         geometry_weight=float(calibration.geometry_weight),
@@ -93,8 +109,8 @@ def scoring_policy(params: FormatParameters) -> ScoringPolicy:
         ),
         geometry_support=GeometrySupportScorePolicy(
             width_cv_norm=float(geometry_support.width_cv_norm),
-            outer_min_area=float(geometry_support.outer_min_area),
-            outer_max_area=float(geometry_support.outer_max_area),
+            outer_min_area=float(base_score.outer_min_area),
+            outer_max_area=float(base_score.outer_too_large),
             outer_uncertain_score=float(geometry_support.outer_uncertain_score),
             aspect_norm=float(geometry_support.aspect_norm),
             no_aspect_score=float(geometry_support.no_aspect_score),

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from ..assembly.format_presets import build_policy_from_format
 from ..parameters.aggregate import FormatParameters
+from ..parameters.registry import base_format_parameters
 
 FORMAT_ID = "135"
 
 
 def parameters() -> FormatParameters:
-    return FormatParameters(
+    return base_format_parameters(
         FORMAT_ID,
         separator_outer_min_score=0.72,
         separator_outer_band_score=0.52,
