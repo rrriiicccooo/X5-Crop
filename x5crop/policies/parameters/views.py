@@ -48,7 +48,7 @@ from .separator import (
     GapSearchParameters,
     HardGapTrustParameters,
     LeadingGridFailureParameters,
-    NearbySeparatorCorrectionParameters,
+    NearbySeparatorRefinementParameters,
     RobustGridParameters,
     SeparatorGateParameters,
     SeparatorGeometrySupportParameters,
@@ -575,9 +575,9 @@ class FormatParameterViews:
         )
 
     @property
-    def nearby_separator_correction(self) -> NearbySeparatorCorrectionParameters:
-        return NearbySeparatorCorrectionParameters(
-            enabled=self.nearby_active_correction,
+    def nearby_separator_refinement(self) -> NearbySeparatorRefinementParameters:
+        return NearbySeparatorRefinementParameters(
+            enabled=self.nearby_active_refinement,
             window_ratio=self.nearby_window_ratio,
             window_min=self.nearby_window_min,
             window_max=self.nearby_window_max,

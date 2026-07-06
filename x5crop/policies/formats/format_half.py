@@ -20,7 +20,7 @@ def parameters() -> FormatParameters:
         separator_gate_profile=SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT,
         separator_width_profile_enabled=True,
         separator_width_profile_max_width_ratio=0.100,
-        nearby_active_correction=False,
+        nearby_active_refinement=False,
         lucky_pass_risk_enabled=False,
         leading_grid_failure_enabled=False,
         separator_outer_min_score=0.68,

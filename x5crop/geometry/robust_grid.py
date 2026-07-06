@@ -12,7 +12,7 @@ from ..utils import clamp_float
 from .gap_geometry import constrain_gap_to_geometry
 from .gap_trust import light_hard_gap_trust
 from .model_gaps import grid_model_gap
-from .detection_parameters import HardGapTrustParameters, NearbySeparatorCorrectionParameters, RobustGridParameters
+from .detection_parameters import HardGapTrustParameters, NearbySeparatorRefinementParameters, RobustGridExecutionParameters
 
 
 GRID_DETAIL_LIMIT = 12
@@ -87,6 +87,20 @@ def robust_grid_rejected_detail(
     }
 
 
+def robust_grid_rejected_result(
+    gaps: list[Gap],
+    detail: dict[str, Any],
+    reason: str,
+    *,
+    grid_residual: float | None = None,
+) -> RobustGridResult:
+    rejected_detail = dict(detail)
+    rejected_detail.update({"grid_used": False, "grid_rejected": reason})
+    if grid_residual is not None:
+        rejected_detail["grid_residual"] = float(grid_residual)
+    return RobustGridResult(gaps, rejected_detail)
+
+
 def grid_anchor_detail(gap: Gap) -> dict[str, Any]:
     return {
         "index": int(gap.index),
@@ -97,13 +111,13 @@ def grid_anchor_detail(gap: Gap) -> dict[str, Any]:
     }
 
 
-def reliable_grid_anchor_gaps(gaps: list[Gap], config: RobustGridParameters) -> list[Gap]:
+def reliable_grid_anchor_gaps(gaps: list[Gap], config: RobustGridExecutionParameters) -> list[Gap]:
     return [gap for gap in gaps if is_hard_gap_method(gap.method) and gap.score >= config.reliable_min_score]
 
 
-def grid_fit_tolerance(pitch: float, strip_mode: str, config: RobustGridParameters) -> float:
+def grid_fit_tolerance(pitch: float, config: RobustGridExecutionParameters) -> float:
     return clamp_float(
-        pitch * (config.full_tolerance_ratio if strip_mode == "full" else config.partial_tolerance_ratio),
+        pitch * config.fit_tolerance_ratio,
         config.tolerance_min,
         config.tolerance_max,
     )
@@ -115,7 +129,7 @@ def grid_fit_candidate_from_anchor_pair(
     reliable: list[Gap],
     nominal_pitch: float,
     tolerance: float,
-    config: RobustGridParameters,
+    config: RobustGridExecutionParameters,
 ) -> GridFitCandidate | None:
     dk = right.index - left.index
     if dk == 0:
@@ -138,29 +152,16 @@ def grid_fit_candidate_from_anchor_pair(
 def grid_fit_candidates(
     reliable: list[Gap],
     pitch: float,
-    strip_mode: str,
-    config: RobustGridParameters,
+    config: RobustGridExecutionParameters,
 ) -> list[GridFitCandidate]:
     candidates: list[GridFitCandidate] = []
-    tolerance = grid_fit_tolerance(pitch, strip_mode, config)
+    tolerance = grid_fit_tolerance(pitch, config)
     for a_i, a in enumerate(reliable):
         for b in reliable[a_i + 1:]:
             candidate = grid_fit_candidate_from_anchor_pair(a, b, reliable, pitch, tolerance, config)
             if candidate is not None:
                 candidates.append(candidate)
     return candidates
-
-
-def best_grid_fit_candidate(
-    reliable: list[Gap],
-    pitch: float,
-    strip_mode: str,
-    config: RobustGridParameters,
-) -> GridFitCandidate | None:
-    return best_grid_fit_candidate_from_candidates(
-        grid_fit_candidates(reliable, pitch, strip_mode, config),
-        pitch,
-    )
 
 
 def best_grid_fit_candidate_from_candidates(
@@ -185,7 +186,7 @@ def grid_fit_candidate_details(
 def grid_fit_assessment(
     fit: GridFitCandidate,
     nominal_pitch: float,
-    config: RobustGridParameters,
+    config: RobustGridExecutionParameters,
 ) -> GridFitAssessment:
     residual_threshold = clamp_float(
         nominal_pitch * config.reject_residual_ratio,
@@ -221,8 +222,8 @@ def grid_adjusted_gap(
     gray_work: Optional[np.ndarray],
     outer: Optional[Box],
     hard_gap_trust: HardGapTrustParameters | None,
-    nearby_correction: NearbySeparatorCorrectionParameters | None,
-    config: RobustGridParameters,
+    nearby_refinement: NearbySeparatorRefinementParameters | None,
+    config: RobustGridExecutionParameters,
 ) -> GridGapAdjustmentResult:
     trust, trust_detail = light_hard_gap_trust(
         gap,
@@ -232,7 +233,7 @@ def grid_adjusted_gap(
         gray_work=gray_work,
         outer=outer,
         hard_gap_trust=hard_gap_trust,
-        nearby_correction=nearby_correction,
+        nearby_refinement=nearby_refinement,
     )
     keep_limit = clamp_float(
         pitch * config.hard_keep_ratio,
@@ -300,12 +301,11 @@ def robust_grid_base_detail(
     reliable: list[Gap],
     origin: float,
     pitch: float,
-    strip_mode: str,
-    config: RobustGridParameters,
+    config: RobustGridExecutionParameters,
     *,
     candidates: list[GridFitCandidate] | None = None,
 ) -> dict[str, Any]:
-    tolerance = grid_fit_tolerance(pitch, strip_mode, config)
+    tolerance = grid_fit_tolerance(pitch, config)
     detail: dict[str, Any] = {
         "family": ROBUST_GRID_FAMILY,
         "evidence_kind": ROBUST_GRID_EVIDENCE_KIND,
@@ -316,7 +316,6 @@ def robust_grid_base_detail(
         "min_reliable": int(config.min_reliable),
         "origin": float(origin),
         "nominal_pitch": float(pitch),
-        "strip_mode": strip_mode,
         "fit_tolerance": float(tolerance),
         "reliable_anchors": [grid_anchor_detail(gap) for gap in reliable[:GRID_DETAIL_LIMIT]],
     }
@@ -330,51 +329,51 @@ def apply_robust_grid(
     gaps: list[Gap],
     origin: float,
     pitch: float,
-    strip_mode: str,
     profile: Optional[np.ndarray] = None,
     gray_work: Optional[np.ndarray] = None,
     outer: Optional[Box] = None,
     hard_gap_trust: HardGapTrustParameters | None = None,
-    nearby_correction: NearbySeparatorCorrectionParameters | None = None,
-    robust_grid: RobustGridParameters | None = None,
+    nearby_refinement: NearbySeparatorRefinementParameters | None = None,
+    robust_grid: RobustGridExecutionParameters | None = None,
 ) -> RobustGridResult:
     if not gaps:
         return RobustGridResult(gaps, robust_grid_rejected_detail(gaps, "no_gaps"))
-    config = robust_grid or RobustGridParameters()
-    constrained = [constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, strip_mode, config) for gap in gaps]
+    config = robust_grid or RobustGridExecutionParameters()
+    constrained = [constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, config.constrain) for gap in gaps]
     reliable = reliable_grid_anchor_gaps(constrained, config)
-    detail = robust_grid_base_detail(gaps, constrained, reliable, origin, pitch, strip_mode, config)
+    detail = robust_grid_base_detail(gaps, constrained, reliable, origin, pitch, config)
     if len(reliable) < config.min_reliable:
-        detail.update({"grid_used": False, "grid_rejected": "too_few_reliable_anchors"})
-        return RobustGridResult(constrained, detail)
-    candidates = grid_fit_candidates(reliable, pitch, strip_mode, config)
+        return robust_grid_rejected_result(constrained, detail, "too_few_reliable_anchors")
+    candidates = grid_fit_candidates(reliable, pitch, config)
     detail = robust_grid_base_detail(
         gaps,
         constrained,
         reliable,
         origin,
         pitch,
-        strip_mode,
         config,
         candidates=candidates,
     )
     best_candidate = best_grid_fit_candidate_from_candidates(candidates, pitch)
     if best_candidate is None:
-        detail.update({"grid_used": False, "grid_rejected": "no_pair_model"})
-        return RobustGridResult(constrained, detail)
+        return robust_grid_rejected_result(constrained, detail, "no_pair_model")
     fit_assessment = grid_fit_assessment(best_candidate, pitch, config)
     detail["selected_fit"] = best_candidate.detail(pitch)
     detail["fit_assessment"] = fit_assessment.detail()
     if not fit_assessment.accepted:
-        detail.update({
-            "grid_used": False,
-            "grid_rejected": fit_assessment.reason,
-        })
-        if fit_assessment.reason == "high_residual":
-            detail["grid_residual"] = float(best_candidate.median_residual)
-        return RobustGridResult(constrained, detail)
+        rejected_residual = (
+            best_candidate.median_residual
+            if fit_assessment.reason == "high_residual"
+            else None
+        )
+        return robust_grid_rejected_result(
+            constrained,
+            detail,
+            fit_assessment.reason,
+            grid_residual=rejected_residual,
+        )
     max_shift = clamp_float(
-        pitch * (config.full_shift_ratio if strip_mode == "full" else config.partial_shift_ratio),
+        pitch * config.shift_ratio,
         config.shift_min,
         config.shift_max,
     )
@@ -399,7 +398,7 @@ def apply_robust_grid(
             gray_work,
             outer,
             hard_gap_trust,
-            nearby_correction,
+            nearby_refinement,
             config,
         )
         adjusted.append(adjustment.gap)

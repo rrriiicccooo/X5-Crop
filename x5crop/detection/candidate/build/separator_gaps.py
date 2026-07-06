@@ -7,12 +7,12 @@ import numpy as np
 
 from ....domain import Box, Gap
 from ....formats import FormatSpec
-from ....geometry.separator_cache import cached_separator_profile
+from ....cache.separator import cached_separator_profile
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from .separator_refinements import (
     ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY,
-    NEARBY_SEPARATOR_CORRECTION_REFINEMENT_FAMILY,
+    NEARBY_SEPARATOR_REFINEMENT_FAMILY,
     apply_late_separator_refinement_chain,
     apply_primary_separator_refinements,
     pending_gap_refinement_detail,
@@ -32,7 +32,7 @@ class SeparatorGapBuildResult:
     separator_width_profile_gap_search_detail: dict[str, Any]
     edge_pair_correction_detail: dict[str, Any]
     enhanced_gap_promotion_detail: dict[str, Any]
-    nearby_correction_detail: dict[str, Any]
+    nearby_refinement_detail: dict[str, Any]
     pre_nearby_gaps: Optional[list[Gap]]
 
 
@@ -123,7 +123,7 @@ def build_primary_separator_gaps_for_outer(
         separator_width_profile_gap_search_detail=initial_gaps.separator_width_profile_gap_search_detail,
         edge_pair_correction_detail=primary_refinement.edge_pair_correction_detail,
         enhanced_gap_promotion_detail=pending_gap_refinement_detail(ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY),
-        nearby_correction_detail=pending_gap_refinement_detail(NEARBY_SEPARATOR_CORRECTION_REFINEMENT_FAMILY),
+        nearby_refinement_detail=pending_gap_refinement_detail(NEARBY_SEPARATOR_REFINEMENT_FAMILY),
         pre_nearby_gaps=None,
     )
 
@@ -163,7 +163,7 @@ def apply_late_separator_refinements(
         separator_width_profile_gap_search_detail=separator_gaps.separator_width_profile_gap_search_detail,
         edge_pair_correction_detail=separator_gaps.edge_pair_correction_detail,
         enhanced_gap_promotion_detail=late_refinement.enhanced_gap_promotion_detail,
-        nearby_correction_detail=late_refinement.nearby_correction_detail,
+        nearby_refinement_detail=late_refinement.nearby_refinement_detail,
         pre_nearby_gaps=late_refinement.pre_nearby_gaps,
     )
 

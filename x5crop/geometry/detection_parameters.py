@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -77,7 +77,7 @@ class HardGapTrustParameters:
 
 
 @dataclass(frozen=True)
-class NearbySeparatorCorrectionParameters:
+class NearbySeparatorRefinementParameters:
     enabled: bool = True
     window_ratio: float = 0.040
     window_min: int = 16
@@ -95,6 +95,35 @@ class NearbySeparatorCorrectionParameters:
     local_gain_min: float = 8.0
     local_gain_max: float = 40.0
     width_cv_slack: float = 0.0015
+
+
+@dataclass(frozen=True)
+class GapGeometryConstraintParameters:
+    shift_ratio: float = 0.045
+    shift_min: float = 20.0
+    shift_max: float = 520.0
+
+
+@dataclass(frozen=True)
+class RobustGridExecutionParameters:
+    constrain: GapGeometryConstraintParameters = field(default_factory=GapGeometryConstraintParameters)
+    reliable_min_score: float = 0.28
+    min_reliable: int = 2
+    pitch_min_ratio: float = 0.70
+    pitch_max_ratio: float = 1.30
+    fit_tolerance_ratio: float = 0.040
+    tolerance_min: float = 4.0
+    tolerance_max: float = 520.0
+    reject_residual_ratio: float = 0.045
+    shift_ratio: float = 0.035
+    shift_min: float = 20.0
+    shift_max: float = 520.0
+    hard_keep_ratio: float = 0.025
+    hard_keep_min: float = 3.0
+    hard_keep_max: float = 180.0
+    hard_protect_ratio: float = 0.006
+    hard_protect_min: float = 12.0
+    hard_protect_max: float = 40.0
 
 
 @dataclass(frozen=True)
@@ -243,9 +272,11 @@ __all__ = [
     "EnhancedSeparatorParameters",
     "GapSearchParameters",
     "HardGapTrustParameters",
-    "NearbySeparatorCorrectionParameters",
+    "GapGeometryConstraintParameters",
+    "NearbySeparatorRefinementParameters",
     "OuterBoxDetectionParameters",
     "OuterMaskProfileParameters",
+    "RobustGridExecutionParameters",
     "RobustGridParameters",
     "SeparatorProfileParameters",
     "SeparatorWidthProfileSearchParameters",

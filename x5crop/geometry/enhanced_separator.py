@@ -1,33 +1,29 @@
 from __future__ import annotations
 
-import copy
 from dataclasses import dataclass
 from typing import Any, Optional
 
 import numpy as np
 
 from ..constants import GAP_ENHANCED_DETECTED
-from ..domain import Box, Gap
+from ..domain import Gap
 from ..gap_methods import (
     is_detected_gap_method,
     is_enhanced_hard_gap_method,
     is_geometry_model_gap_method,
     is_hard_gap_method,
 )
-from ..cache import AnalysisCache
 from ..utils import clamp_float
-from .boxes import box_cache_key
 from .gap_geometry import constrain_gap_to_geometry
 from .gap_refinement_detail import gap_refinement_batch_detail
 from .gap_search import find_detected_gap
 from .model_gaps import equal_model_gap
 from .detection_parameters import (
     EnhancedSeparatorParameters,
+    GapGeometryConstraintParameters,
     GapSearchParameters,
-    RobustGridParameters,
-    SeparatorProfileParameters,
+    RobustGridExecutionParameters,
 )
-from .separator_cache import cached_enhanced_separator_profile
 
 
 def enhanced_equal_model_gap(index: int, expected: float, score: float) -> Gap:
@@ -186,48 +182,6 @@ def find_enhanced_gap_with_detail(
     return EnhancedGapSearchResult(enhanced, base_detail)
 
 
-def enhanced_gap_promotion_cache_key(
-    outer: Box,
-    gaps: list[Gap],
-    origin: float,
-    pitch: float,
-    strip_mode: str,
-    policy_key: tuple[Any, ...] = (),
-) -> tuple[Any, ...]:
-    return (
-        str(strip_mode),
-        policy_key,
-        box_cache_key(outer),
-        round(float(origin), 4),
-        round(float(pitch), 4),
-        tuple(
-            (
-                int(gap.index),
-                str(gap.method),
-                round(float(gap.center), 4),
-                round(float(gap.score), 6),
-                None if gap.start is None else round(float(gap.start), 4),
-                None if gap.end is None else round(float(gap.end), 4),
-            )
-            for gap in gaps
-        ),
-    )
-
-
-def enhanced_gap_promotion_policy_key(
-    robust_grid: RobustGridParameters | None,
-    gap_search: GapSearchParameters | None,
-    profile_config: SeparatorProfileParameters | None,
-    enhanced_config: EnhancedSeparatorParameters | None,
-) -> tuple[Any, ...]:
-    return (
-        robust_grid or RobustGridParameters(),
-        gap_search or GapSearchParameters(),
-        profile_config or SeparatorProfileParameters(),
-        enhanced_config or EnhancedSeparatorParameters(),
-    )
-
-
 def promote_one_enhanced_gap(
     profile: np.ndarray,
     gap: Gap,
@@ -276,30 +230,17 @@ def promote_one_enhanced_gap(
 
 
 def promote_enhanced_separator_gaps(
-    gray_work: np.ndarray,
-    outer: Box,
+    profile: np.ndarray,
     gaps: list[Gap],
     origin: float,
     pitch: float,
-    strip_mode: str,
-    cache: Optional[AnalysisCache] = None,
-    robust_grid: RobustGridParameters | None = None,
+    gap_geometry: GapGeometryConstraintParameters | None = None,
+    robust_grid: RobustGridExecutionParameters | None = None,
     gap_search: GapSearchParameters | None = None,
-    profile_config: SeparatorProfileParameters | None = None,
     enhanced_config: EnhancedSeparatorParameters | None = None,
 ) -> EnhancedGapPromotionBatchResult:
-    crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-    if crop.size == 0 or outer.width <= 0 or outer.height <= 0:
-        return EnhancedGapPromotionBatchResult(gaps, {"used": False, "reason": "empty_outer"})
-    cache_key: Optional[tuple[Any, ...]] = None
-    if cache is not None:
-        policy_key = enhanced_gap_promotion_policy_key(robust_grid, gap_search, profile_config, enhanced_config)
-        cache_key = enhanced_gap_promotion_cache_key(outer, gaps, origin, pitch, strip_mode, policy_key)
-        cached = cache.enhanced_gap_promotions.get(cache_key)
-        if cached is not None:
-            cached_gaps, cached_detail = cached
-            return EnhancedGapPromotionBatchResult(list(cached_gaps), copy.deepcopy(cached_detail))
-    profile = cached_enhanced_separator_profile(cache, gray_work, outer, profile_config)
+    if profile.size == 0:
+        return EnhancedGapPromotionBatchResult(gaps, {"used": False, "reason": "empty_profile"})
     merged: list[Gap] = []
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
@@ -317,8 +258,9 @@ def promote_enhanced_separator_gaps(
             accepted.append(promotion.accepted_detail)
         if promotion.rejected_detail is not None:
             rejected.append(promotion.rejected_detail)
+    geometry = gap_geometry or (robust_grid.constrain if robust_grid is not None else GapGeometryConstraintParameters())
     constrained = [
-        constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, strip_mode, robust_grid)
+        constrain_gap_to_geometry(gap, origin + pitch * gap.index, pitch, geometry)
         if is_enhanced_hard_gap_method(gap.method) else gap
         for gap in merged
     ]
@@ -326,8 +268,6 @@ def promote_enhanced_separator_gaps(
         "used": True,
         **gap_refinement_batch_detail(accepted=accepted, rejected=rejected),
     }
-    if cache_key is not None and cache is not None:
-        cache.enhanced_gap_promotions[cache_key] = (list(constrained), copy.deepcopy(detail))
     return EnhancedGapPromotionBatchResult(constrained, detail)
 
 

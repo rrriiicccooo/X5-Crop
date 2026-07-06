@@ -128,7 +128,7 @@ class FormatParameters(FormatParameterViews):
     nearby_local_gain_min: float = 8.0
     nearby_local_gain_max: float = 40.0
     nearby_width_cv_slack: float = 0.0015
-    nearby_active_correction: bool = True
+    nearby_active_refinement: bool = True
     robust_reliable_min_score: float = 0.28
     robust_min_reliable: int = 2
     robust_pitch_min_ratio: float = 0.70

@@ -160,7 +160,7 @@ def build_detection_for_outer(
             "edge_pair_correction": separator_gaps.edge_pair_correction_detail,
             "frame_size_fit": frame_size_detail,
             "enhanced_gap_promotion": separator_gaps.enhanced_gap_promotion_detail,
-            "nearby_separator_correction": separator_gaps.nearby_correction_detail,
+            "nearby_separator_refinement": separator_gaps.nearby_refinement_detail,
             "separator_width_evidence": separator_width_evidence,
             "broad_separator_width_gaps": int(separator_width_evidence.get("broad_separator_width_gaps", 0) or 0),
             "broad_separator_width_gap_indexes": list(separator_width_evidence.get("broad_separator_width_gap_indexes", [])),
@@ -174,7 +174,7 @@ def build_detection_for_outer(
         }
     )
     if pre_nearby_confidence is not None:
-        detail["nearby_separator_correction_confidence_cap"] = float(pre_nearby_confidence)
+        detail["nearby_separator_refinement_confidence_cap"] = float(pre_nearby_confidence)
     return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, confidence, reasons, detail)
 
 

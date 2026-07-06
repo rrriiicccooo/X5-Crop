@@ -7,7 +7,7 @@ from PIL import Image, ImageDraw
 
 from ..detection_detail import RISK_SUMMARY, decision_summary, detail_dict, policy_id_from_detail
 from ..domain import Box, Detection
-from ..geometry.separator_cache import cached_separator_evidence_crop
+from ..cache.separator import cached_separator_evidence_crop
 from ..image.evidence import make_separator_evidence_gray
 from ..policies.registry import get_detection_policy
 from ..cache import AnalysisCache
@@ -224,4 +224,3 @@ def stack_debug_panels(panels: list[np.ndarray], horizontal: bool) -> np.ndarray
         canvas[y:y + h, :w] = panel
         y += h + gap
     return canvas
-

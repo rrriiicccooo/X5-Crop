@@ -10,7 +10,7 @@ from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float, clamp_int, runs_from_mask
 from .gap_geometry import gap_width_cv, local_gap_geometry_error
 from .gap_refinement_detail import gap_refinement_batch_detail
-from .detection_parameters import NearbySeparatorCorrectionParameters
+from .detection_parameters import NearbySeparatorRefinementParameters
 from .separator_profile import interval_mean
 
 
@@ -96,7 +96,7 @@ class NearbySeparatorReplacementAssessment:
 
 
 @dataclass(frozen=True)
-class NearbySeparatorCorrectionResult:
+class NearbySeparatorRefinementResult:
     gaps: list[Gap]
     detail: dict[str, Any]
 
@@ -265,7 +265,7 @@ def nearby_separator_replacement_assessment(
     profile: np.ndarray,
     gap: Gap,
     pitch: float,
-    correction_config: NearbySeparatorCorrectionParameters | None = None,
+    refinement_config: NearbySeparatorRefinementParameters | None = None,
 ) -> NearbySeparatorReplacementAssessment:
     if not is_hard_gap_method(gap.method):
         return NearbySeparatorReplacementAssessment(
@@ -288,7 +288,7 @@ def nearby_separator_replacement_assessment(
             None,
             {"searched": False, "reason": "missing_gap_span"},
         )
-    config = correction_config or NearbySeparatorCorrectionParameters()
+    config = refinement_config or NearbySeparatorRefinementParameters()
     result = nearby_separator_search_result(
         profile,
         gap,
@@ -378,7 +378,7 @@ def nearby_separator_geometry_is_better(
     after_cv: float,
     original_cv: float,
     pitch: float,
-    config: NearbySeparatorCorrectionParameters,
+    config: NearbySeparatorRefinementParameters,
 ) -> bool:
     local_gain = before_local - after_local
     local_ok = local_gain >= clamp_float(
@@ -390,20 +390,19 @@ def nearby_separator_geometry_is_better(
     return local_ok and cv_ok
 
 
-def apply_nearby_separator_corrections(
+def apply_nearby_separator_refinement(
     profile: np.ndarray,
     gaps: list[Gap],
     origin: float,
     pitch: float,
     count: int,
-    strip_mode: str,
-    correction_config: NearbySeparatorCorrectionParameters | None = None,
-) -> NearbySeparatorCorrectionResult:
-    config = correction_config or NearbySeparatorCorrectionParameters()
-    if not config.enabled or strip_mode != "full" or count <= 1 or len(gaps) != count - 1:
-        return NearbySeparatorCorrectionResult(gaps, {"used": False, "reason": "not_applicable"})
+    refinement_config: NearbySeparatorRefinementParameters | None = None,
+) -> NearbySeparatorRefinementResult:
+    config = refinement_config or NearbySeparatorRefinementParameters()
+    if not config.enabled or count <= 1 or len(gaps) != count - 1:
+        return NearbySeparatorRefinementResult(gaps, {"used": False, "reason": "not_applicable"})
     if profile.size == 0:
-        return NearbySeparatorCorrectionResult(gaps, {"used": False, "reason": "empty_profile"})
+        return NearbySeparatorRefinementResult(gaps, {"used": False, "reason": "empty_profile"})
     original_cv = gap_width_cv(gaps, origin, pitch, count)
     corrected = list(gaps)
     accepted: list[dict[str, Any]] = []
@@ -459,7 +458,7 @@ def apply_nearby_separator_corrections(
                 after_cv,
             )
         )
-    return NearbySeparatorCorrectionResult(
+    return NearbySeparatorRefinementResult(
         corrected,
         {
             "used": True,

@@ -33,6 +33,11 @@ Current stable release: v4.2.8
 - source package layout 已对齐到显式边界：`entry`、`runtime`、`cache`、
   `report`、`formats`、`detection.candidate.{plan,proposal,build,assessment,selection,extension}`
   和 `policies.{formats,parameters,runtime,decision,assembly,reporting}`。
+- 基础能力层已进一步收紧：`geometry` / `image` / `io` 不再承载 runtime cache、
+  detection detail、finalization risk 或 `strip_mode` 语义；separator profile /
+  enhanced promotion cache adapter 迁入 `cache/separator.py`，output bleed 迁入
+  `detection/final/output_bleed.py`；TIFF I/O 只返回 array/profile/warnings，base
+  gray 由 runtime/cache 调用 `image.gray.make_base_gray_u8` 生成。
 - 基础灰度入口已与证据灰度拆开：`image.gray.make_base_gray_u8` 只负责
   TIFF / deskew 后的 base gray；`image.evidence` 只负责现有 content /
   separator / deskew analysis evidence。当前不保留 color contrast 或 heavy
@@ -68,9 +73,9 @@ Current stable release: v4.2.8
   gap 和 summary reason；未使用的无 detail wrapper 已删除。
 - standard / broad-width gap search 共用 `geometry/gap_search_detail.py` 生成
   accepted / rejected run summary；detail 字段保持不变。
-- nearby separator correction 现在写出 searched assessment：每个 gap 都记录
+- nearby separator refinement 现在写出 searched assessment：每个 gap 都记录
   no-candidate / candidate-not-stronger / geometry-rejected / accepted 等原因；
-  旧 replacement API 只包装同一套 assessment 逻辑，不改变修正条件。
+  旧 replacement API 只包装同一套 assessment 逻辑，不改变 refinement 条件。
 - separator profile signal 组合已显式化：`SeparatorProfileSignals` 承载
   segmented extreme、uniform soft、uniform support 和 column gradient，
   `combined_separator_profile_score` 是唯一组合点，smooth window 也可单独审核。
@@ -124,8 +129,8 @@ Current stable release: v4.2.8
 - separator profile / edge-refine / enhanced profile cache key 已从 format identity
   解耦，改为只使用 geometry box 与参数对象；nearby diagnostic cache key 补入
   diagnostic policy。
-- nearby separator correction 只返回修正后的 gap evidence、correction detail 和
-  pre-correction gaps；confidence cap / scoring 保留在 detection build 与
+- nearby separator refinement 只返回 refinement 后的 gap evidence、refinement
+  detail 和 pre-refinement gaps；confidence cap / scoring 保留在 detection build 与
   assessment 消费层。
 - edge-pair / enhanced / nearby refinement 共用
   `geometry/gap_refinement_detail.py` 组装 accepted / rejected / searched
@@ -206,16 +211,16 @@ Current stable release: v4.2.8
   `GridGapAdjustmentResult` / `RobustGridResult`；`grid_adjusted_gap` 与
   `apply_robust_grid` 不再通过裸 tuple 返回，report/detail 字段保持不变。
 - nearby separator search 已进一步集中到 `geometry/nearby_separator.py`：
-  runtime correction 和 read-only diagnostics 共用 search context、candidate
+  runtime refinement 和 read-only diagnostics 共用 search context、candidate
   ranking、stronger-test detail；diagnostics 只保留缓存、profile 读取和展示字段，
   不再重复实现 nearby candidate 搜索。
 - nearby separator candidate 和 search result 已 typed 化；report/detail 边界仍输出
-  原有 dict 字段，不改变 runtime correction 条件。
+  原有 dict 字段，不改变 runtime refinement 条件。
 - hard-gap trust 现在直接消费 `NearbySeparatorReplacementAssessment` 并记录
   `nearby_separator_assessment` detail；旧的 accepted-only replacement wrapper
   已删除，nearby conflict 判断条件保持不变。
-- nearby separator batch correction 已改为 `NearbySeparatorCorrectionResult`；
-  `apply_nearby_separator_corrections` 不再通过裸 tuple 返回 gaps/detail，
+- nearby separator batch refinement 已改为 `NearbySeparatorRefinementResult`；
+  `apply_nearby_separator_refinement` 不再通过裸 tuple 返回 gaps/detail，
   report/detail 字段保持不变。
 - grid-derived outer box 计算已从 separator gap lifecycle 移到
   `detection.candidate.proposal.outer.grid_refine`；separator lifecycle 只消费
@@ -231,7 +236,7 @@ Current stable release: v4.2.8
 - primary separator refinement 已改为 `PrimarySeparatorRefinementResult`；
   edge-pair correction 与 robust-grid detail 不再通过裸 tuple 传递。
 - late separator refinement 已改为 `LateSeparatorRefinementResult`；enhanced
-  promotion、nearby correction、最终 gaps 和 pre-nearby gaps 先被统一收束，
+  promotion、nearby refinement、最终 gaps 和 pre-nearby gaps 先被统一收束，
   再重建 `SeparatorGapBuildResult`，report/detail 字段保持不变。
 - enhanced separator 内部语义收敛为 enhanced gap promotion：active detail key
   改为 `enhanced_gap_promotion`，gate 从该 detail 读取 promotion count，内部
@@ -379,9 +384,9 @@ Current stable release: v4.2.8
   将 width run assessment、best-candidate selection 和 detail assembly 分开，
   candidate detail 记录 `separator_width_profile_gap_search`，方便人工审核宽
   separator 是如何被看见或拒绝的。
-- nearby separator correction 已补齐 searched detail：`geometry/nearby_separator.py`
+- nearby separator refinement 已补齐 searched detail：`geometry/nearby_separator.py`
   将 replacement assessment、stronger-candidate search 和 geometry acceptance
-  分开，candidate detail 可解释每个 gap 为什么没有被 nearby separator 修正。
+  分开，candidate detail 可解释每个 gap 为什么没有执行 nearby refinement。
 - separator refinement 已做行为等价拆分：candidate build 直接调用 geometry
   refinement helpers，避免保留只做别名转发的 proposal refinement facade；
   edge-pair、enhanced 和 nearby wrapper 现在统一返回 `GapRefinementResult`，
@@ -410,7 +415,7 @@ Current stable release: v4.2.8
   candidate ranking、stronger test 和 geometry acceptance 分开，方便继续人工审核
   separator refinement 的阈值策略。
 - separator refinement 的 policy surface 已补齐：`enhanced.min_score` 和
-  `nearby_correction.width_cv_slack` 从 `FormatParameters` 显式流入 runtime
+  `nearby_refinement.width_cv_slack` 从 `FormatParameters` 显式流入 runtime
   `SeparatorPolicy`，并出现在 policy/report detail 中；默认值保持旧行为。
 - separator method vocabulary 已对齐：runtime `SeparatorPolicy.hard_methods`
   使用真实 gap method `detected / edge-pair / enhanced-detected`，
@@ -499,6 +504,13 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   lifecycle / evidence / decision / final. Outer / separator / content / safety
   are candidate proposal families, not top-level detection sublayers. PASS /
   REVIEW belongs to the decision layer, and finalization is output-adjacent only.
+- Foundation-layer ownership is tightened further: `geometry` / `image` / `io`
+  no longer own runtime cache, detection detail, finalization risk, or
+  `strip_mode` semantics. Separator profile / enhanced-promotion cache adapters
+  moved to `cache/separator.py`, output bleed moved to
+  `detection/final/output_bleed.py`, and TIFF I/O now returns only
+  array/profile/warnings while runtime/cache callers create base gray through
+  `image.gray.make_base_gray_u8`.
 - The Gap / Separator logic family now follows the same lifecycle model as outer:
   `detection.candidate.proposal.separator` owns separator proposal;
   `detection.evidence.separator_width` owns width evidence summaries; separator-
@@ -525,9 +537,9 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - Standard and broad-width gap search now share
   `geometry/gap_search_detail.py` for accepted / rejected run summaries; detail
   fields remain unchanged.
-- Nearby separator correction now records searched assessment for each gap,
+- Nearby separator refinement now records searched assessment for each gap,
   including no-candidate, not-stronger, geometry-rejected, and accepted outcomes,
-  without changing correction thresholds.
+  without changing refinement thresholds.
 - New wrong PASS is unacceptable; conservative REVIEW and schema / reason diffs
   require explanation.
 - TIFF metadata, bit depth, ICC, resolution, and compression behavior remain unchanged.
@@ -651,13 +663,13 @@ Verified:
   of keeping `proposal/separator/refinement.py` as a re-export-only layer.
 - Nearby separator candidate and search result handling are now typed internally,
   while report/detail boundaries keep the existing dict fields and runtime
-  correction conditions.
+  refinement conditions.
 - Hard-gap trust now consumes `NearbySeparatorReplacementAssessment` directly
   and records `nearby_separator_assessment` detail; the old accepted-only
   replacement wrapper has been removed without changing nearby-conflict
   conditions.
-- Nearby separator batch correction now uses `NearbySeparatorCorrectionResult`;
-  `apply_nearby_separator_corrections` no longer returns gaps/detail through a
+- Nearby separator batch refinement now uses `NearbySeparatorRefinementResult`;
+  `apply_nearby_separator_refinement` no longer returns gaps/detail through a
   raw tuple, while report/detail fields remain unchanged.
 - Edge-pair batch refinement now uses `EdgePairRefinementResult`; the active
   entrypoint is narrowed to `refine_gaps_with_edge_profiles` and no longer
@@ -665,7 +677,7 @@ Verified:
   unchanged.
 - Edge-pair, enhanced, and nearby refinements now share
   `geometry/gap_refinement_detail.py` for accepted / rejected / searched batch
-  detail and counts, while report/detail fields and correction conditions remain
+  detail and counts, while report/detail fields and refinement conditions remain
   unchanged.
 - Edge-pair search limits now use `EdgePairSearchLimits`, and the selected
   edge-pair gap is derived from the selected candidate through
@@ -694,7 +706,7 @@ Verified:
 - Primary separator refinement now uses `PrimarySeparatorRefinementResult`;
   edge-pair correction and robust-grid detail no longer pass through a raw tuple.
 - Late separator refinement now uses `LateSeparatorRefinementResult`; enhanced
-  promotion, nearby correction, final gaps, and pre-nearby gaps are collected
+  promotion, nearby refinement, final gaps, and pre-nearby gaps are collected
   before rebuilding `SeparatorGapBuildResult`, while report/detail fields remain
   unchanged.
 - Enhanced gap promotion internals now use `EnhancedGapSearchResult`,
@@ -804,12 +816,12 @@ Verified:
   detail assembly and skipped reasons distinguish not-full, single-frame, policy
   disabled, auto-not-needed, and detected-geometry model cases. Edge-pair detail
   now records search limits, candidate count,
-  selected candidate, and replacement assessment. Runtime correction and
+  selected candidate, and replacement assessment. Runtime refinement and
   read-only diagnostics now share nearby search context, candidate ranking, and
   stronger-test detail; diagnostics keep only caching, profile retrieval, and
   display fields instead of duplicating nearby candidate search.
 - The separator refinement policy surface now exposes `enhanced.min_score` and
-  `nearby_correction.width_cv_slack` from `FormatParameters` through runtime
+  `nearby_refinement.width_cv_slack` from `FormatParameters` through runtime
   `SeparatorPolicy` and policy/report detail; defaults preserve existing behavior.
 - Separator method vocabulary is aligned: runtime `SeparatorPolicy.hard_methods`
   uses real gap methods `detected / edge-pair / enhanced-detected`,

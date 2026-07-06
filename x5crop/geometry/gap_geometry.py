@@ -5,7 +5,7 @@ import numpy as np
 from ..domain import Gap
 from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float
-from .detection_parameters import RobustGridParameters
+from .detection_parameters import GapGeometryConstraintParameters
 from .model_gaps import equal_model_gap
 
 
@@ -13,16 +13,15 @@ def constrain_gap_to_geometry(
     gap: Gap,
     expected: float,
     pitch: float,
-    strip_mode: str,
-    robust_grid: RobustGridParameters | None = None,
+    parameters: GapGeometryConstraintParameters | None = None,
 ) -> Gap:
     if not is_hard_gap_method(gap.method):
         return equal_model_gap(gap.index, expected, gap.score)
-    config = robust_grid or RobustGridParameters()
+    config = parameters or GapGeometryConstraintParameters()
     max_shift = clamp_float(
-        pitch * (config.constrain_full_shift_ratio if strip_mode == "full" else config.constrain_partial_shift_ratio),
-        config.constrain_shift_min,
-        config.constrain_shift_max,
+        pitch * config.shift_ratio,
+        config.shift_min,
+        config.shift_max,
     )
     shift = max(-max_shift, min(max_shift, gap.center - expected))
     center = float(expected + shift)

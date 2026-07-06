@@ -15,7 +15,7 @@ def parameters() -> FormatParameters:
         FORMAT_ID,
         separator_gate_profile=SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD,
         separator_width_profile_enabled=False,
-        nearby_active_correction=False,
+        nearby_active_refinement=False,
         lucky_pass_risk_enabled=False,
         leading_grid_failure_enabled=False,
         separator_width_profile_partial_enabled=False,

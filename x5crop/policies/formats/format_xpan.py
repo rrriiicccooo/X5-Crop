@@ -20,7 +20,7 @@ def parameters() -> FormatParameters:
         separator_model_equal_credit=0.06,
         separator_gate_profile=SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD,
         partial_auto_include_default_count=True,
-        nearby_active_correction=False,
+        nearby_active_refinement=False,
         lucky_pass_risk_enabled=False,
         leading_grid_failure_enabled=False,
         separator_outer_min_score=0.66,

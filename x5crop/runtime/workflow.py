@@ -18,7 +18,8 @@ from ..domain import ProcessResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from ..export.paths import output_directory_for
 from ..formats import FORMATS
-from ..geometry.output_bleed import detection_bleed_parameters
+from ..detection.final.output_bleed import detection_bleed_parameters
+from ..image.gray import make_base_gray_u8
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..policies.registry import get_detection_policy
 from ..report.outputs import write_report_outputs_for_result
@@ -40,7 +41,8 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     if cached_result is not None:
         return _finish_result(cached_result, config)
 
-    arr, gray, profile, page_warnings = read_tiff(input_file, config.page)
+    arr, profile, page_warnings = read_tiff(input_file, config.page)
+    gray = make_base_gray_u8(arr, profile.axes, profile.photometric)
     _extend_unique(warnings, page_warnings)
     source_arr = arr
     config = runtime_for_profile(config, profile)

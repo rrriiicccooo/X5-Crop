@@ -16,7 +16,7 @@ from ...geometry.detection_parameters import (
     EnhancedSeparatorParameters,
     GapSearchParameters,
     HardGapTrustParameters,
-    NearbySeparatorCorrectionParameters,
+    NearbySeparatorRefinementParameters,
     RobustGridParameters,
     SeparatorProfileParameters,
     SeparatorWidthProfileSearchParameters,
@@ -147,7 +147,7 @@ class SeparatorPolicy:
     geometry_support: SeparatorGeometrySupportPolicy = field(default_factory=SeparatorGeometrySupportPolicy)
     edge_pair: EdgePairParameters = field(default_factory=EdgePairParameters)
     hard_gap_trust: HardGapTrustParameters = field(default_factory=HardGapTrustParameters)
-    nearby_correction: NearbySeparatorCorrectionParameters = field(default_factory=NearbySeparatorCorrectionParameters)
+    nearby_refinement: NearbySeparatorRefinementParameters = field(default_factory=NearbySeparatorRefinementParameters)
     robust_grid: RobustGridParameters = field(default_factory=RobustGridParameters)
     gap_search: GapSearchParameters = field(default_factory=GapSearchParameters)
     enhanced: EnhancedSeparatorParameters = field(default_factory=EnhancedSeparatorParameters)

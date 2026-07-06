@@ -7,7 +7,7 @@ import numpy as np
 
 from .....domain import Box, OuterCandidate
 from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from .....geometry.separator_cache import cached_separator_profile
+from .....cache.separator import cached_separator_profile
 from .....geometry.separator_band import SeparatorBand
 from .....geometry.separator_width_profile import collect_separator_width_bands, separator_width_profile
 from .....policies.registry import get_detection_policy

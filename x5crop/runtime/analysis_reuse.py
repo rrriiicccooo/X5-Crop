@@ -9,7 +9,7 @@ import numpy as np
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
 from ..domain import Box, Detection, Gap, ImageProfile, ProcessResult
 from ..export.crops import write_crops
-from ..geometry.output_bleed import (
+from ..detection.final.output_bleed import (
     AxisBleedParameters,
     output_bleed_parameters_for_detection,
     reapply_cached_output_bleed,
@@ -195,7 +195,8 @@ def result_from_reusable_analysis(
         warnings.append("cached status is needs_review; skipped export")
         return result_from_cached_record(input_file, cached_record, profile, warnings)
 
-    arr, gray, profile, page_warnings = read_tiff(input_file, config.page)
+    arr, profile, page_warnings = read_tiff(input_file, config.page)
+    gray = make_base_gray_u8(arr, profile.axes, profile.photometric)
     warnings.extend(warning for warning in page_warnings if warning not in warnings)
     source_arr = arr
     detection = detection_from_record(cached_record)

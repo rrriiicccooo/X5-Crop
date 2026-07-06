@@ -6,7 +6,7 @@ from ...geometry.detection_parameters import (
     EnhancedSeparatorParameters,
     GapSearchParameters,
     HardGapTrustParameters,
-    NearbySeparatorCorrectionParameters,
+    NearbySeparatorRefinementParameters,
     RobustGridParameters,
     SeparatorProfileParameters,
     SeparatorWidthProfileSearchParameters,
@@ -170,7 +170,7 @@ def separator_policy(
         or (strip_mode == PARTIAL and separator_width_profile.partial_enabled)
     )
     hard_gap_trust = params.hard_gap_trust
-    nearby_correction = params.nearby_separator_correction
+    nearby_refinement = params.nearby_separator_refinement
     robust_grid = params.robust_grid
     gap_search = params.gap_search
     enhanced = params.enhanced_separator
@@ -217,24 +217,24 @@ def separator_policy(
             continuity_min=float(hard_gap_trust.continuity_min),
             activity_min=float(hard_gap_trust.activity_min),
         ),
-        nearby_correction=NearbySeparatorCorrectionParameters(
-            enabled=bool(nearby_correction.enabled),
-            window_ratio=float(nearby_correction.window_ratio),
-            window_min=int(nearby_correction.window_min),
-            window_max=int(nearby_correction.window_max),
-            exclude_ratio=float(nearby_correction.exclude_ratio),
-            exclude_min=int(nearby_correction.exclude_min),
-            exclude_max=int(nearby_correction.exclude_max),
-            max_width_ratio=float(nearby_correction.max_width_ratio),
-            max_width_min=int(nearby_correction.max_width_min),
-            max_width_max=int(nearby_correction.max_width_max),
-            distance_ratio=float(nearby_correction.distance_ratio),
-            score_add=float(nearby_correction.score_add),
-            score_multiplier=float(nearby_correction.score_multiplier),
-            local_gain_ratio=float(nearby_correction.local_gain_ratio),
-            local_gain_min=float(nearby_correction.local_gain_min),
-            local_gain_max=float(nearby_correction.local_gain_max),
-            width_cv_slack=float(nearby_correction.width_cv_slack),
+        nearby_refinement=NearbySeparatorRefinementParameters(
+            enabled=bool(nearby_refinement.enabled),
+            window_ratio=float(nearby_refinement.window_ratio),
+            window_min=int(nearby_refinement.window_min),
+            window_max=int(nearby_refinement.window_max),
+            exclude_ratio=float(nearby_refinement.exclude_ratio),
+            exclude_min=int(nearby_refinement.exclude_min),
+            exclude_max=int(nearby_refinement.exclude_max),
+            max_width_ratio=float(nearby_refinement.max_width_ratio),
+            max_width_min=int(nearby_refinement.max_width_min),
+            max_width_max=int(nearby_refinement.max_width_max),
+            distance_ratio=float(nearby_refinement.distance_ratio),
+            score_add=float(nearby_refinement.score_add),
+            score_multiplier=float(nearby_refinement.score_multiplier),
+            local_gain_ratio=float(nearby_refinement.local_gain_ratio),
+            local_gain_min=float(nearby_refinement.local_gain_min),
+            local_gain_max=float(nearby_refinement.local_gain_max),
+            width_cv_slack=float(nearby_refinement.width_cv_slack),
         ),
         robust_grid=RobustGridParameters(
             constrain_full_shift_ratio=float(robust_grid.constrain_full_shift_ratio),

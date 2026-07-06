@@ -9,7 +9,7 @@ from ..domain import Box, Gap
 from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float, clamp_int
 from .nearby_separator import nearby_separator_replacement_assessment
-from .detection_parameters import HardGapTrustParameters, NearbySeparatorCorrectionParameters
+from .detection_parameters import HardGapTrustParameters, NearbySeparatorRefinementParameters
 
 
 @dataclass(frozen=True)
@@ -119,7 +119,7 @@ def hard_gap_pixel_signals(
     )
 
 
-def hard_gap_dark_separator_like(signals: HardGapPixelSignals, config: HardGapTrustParameters) -> bool:
+def hard_gap_tonal_separator_like(signals: HardGapPixelSignals, config: HardGapTrustParameters) -> bool:
     return (
         signals.core_mean <= config.dark_mean_max
         and signals.core_dark >= config.dark_fraction_min
@@ -127,7 +127,7 @@ def hard_gap_dark_separator_like(signals: HardGapPixelSignals, config: HardGapTr
     )
 
 
-def hard_gap_weak_dark_gap(signals: HardGapPixelSignals, config: HardGapTrustParameters) -> bool:
+def hard_gap_low_contrast_tonal_gap(signals: HardGapPixelSignals, config: HardGapTrustParameters) -> bool:
     return signals.core_mean >= config.weak_mean_min and signals.core_content >= config.weak_content_min
 
 
@@ -153,8 +153,8 @@ def hard_gap_signal_flags(
     if signals is None:
         return {}
     return {
-        "dark_separator_like": hard_gap_dark_separator_like(signals, config),
-        "weak_dark_gap": hard_gap_weak_dark_gap(signals, config),
+        "tonal_separator_like": hard_gap_tonal_separator_like(signals, config),
+        "low_contrast_tonal_gap": hard_gap_low_contrast_tonal_gap(signals, config),
         "content_continuous": hard_gap_content_continuous(signals, config),
     }
 
@@ -219,14 +219,14 @@ def runtime_hard_gap_trust_assessment(
         return assessment("geometry_conflict", "model_delta_or_score_conflict")
     if signals is not None:
         flags = context.signal_flags
-        dark_separator_like = bool(flags.get("dark_separator_like", False))
-        if width_ratio < config.frame_border_width_ratio and dark_separator_like:
+        tonal_separator_like = bool(flags.get("tonal_separator_like", False))
+        if width_ratio < config.frame_border_width_ratio and tonal_separator_like:
             return assessment("suspect_frame_border", "too_narrow_separator_band")
         if hard_gap_is_narrow(gap, pitch, config) and (
             bool(flags.get("content_continuous", False))
-            or bool(flags.get("weak_dark_gap", False))
+            or bool(flags.get("low_contrast_tonal_gap", False))
         ):
-            return assessment("suspect_internal_edge", "narrow_content_continuity_or_weak_dark")
+            return assessment("suspect_internal_edge", "narrow_content_continuity_or_low_contrast_tonal")
     if gap.score >= config.strong_min_score and config.strong_width_min <= width_ratio <= config.strong_width_max:
         return assessment("strong_separator", "score_and_width_in_strong_range")
     if gap.score >= config.narrow_ok_score and config.narrow_ok_width_min <= width_ratio < config.narrow_ok_width_max:
@@ -258,22 +258,22 @@ def diagnostic_hard_gap_trust_assessment(
     if not is_hard_gap_method(gap.method):
         return assessment("not_hard_gap", "not_hard_gap")
     flags = context.signal_flags
-    dark_separator_like = bool(flags.get("dark_separator_like", False))
+    tonal_separator_like = bool(flags.get("tonal_separator_like", False))
     if nearby_separator_conflict:
         return assessment("nearby_separator_conflict", "nearby_separator_candidate_stronger")
     if hard_gap_geometry_conflict(width_ratio, gap.score, model_delta_ratio, config):
         return assessment("geometry_conflict", "model_delta_or_score_conflict")
-    if width_ratio < config.frame_border_width_ratio and dark_separator_like:
+    if width_ratio < config.frame_border_width_ratio and tonal_separator_like:
         return assessment("suspect_frame_border", "too_narrow_separator_band")
     if hard_gap_is_narrow(gap, pitch, config) and (
         bool(flags.get("content_continuous", False))
-        or bool(flags.get("weak_dark_gap", False))
+        or bool(flags.get("low_contrast_tonal_gap", False))
     ):
-        return assessment("suspect_internal_edge", "narrow_content_continuity_or_weak_dark")
+        return assessment("suspect_internal_edge", "narrow_content_continuity_or_low_contrast_tonal")
     if hard_gap_is_narrow(gap, pitch, config):
         return assessment("narrow_but_ok", "narrow_without_content_continuity")
-    if dark_separator_like or signals.core_content <= config.strong_core_content_max or gap.score >= config.strong_min_score:
-        return assessment("strong_separator", "dark_or_low_content_or_high_score")
+    if tonal_separator_like or signals.core_content <= config.strong_core_content_max or gap.score >= config.strong_min_score:
+        return assessment("strong_separator", "tonal_or_low_content_or_high_score")
     return assessment("weak_or_ambiguous_separator", "no_strong_diagnostic_trust_rule")
 
 
@@ -305,7 +305,7 @@ def light_hard_gap_trust(
     gray_work: Optional[np.ndarray] = None,
     outer: Optional[Box] = None,
     hard_gap_trust: HardGapTrustParameters | None = None,
-    nearby_correction: NearbySeparatorCorrectionParameters | None = None,
+    nearby_refinement: NearbySeparatorRefinementParameters | None = None,
 ) -> tuple[str, dict[str, Any]]:
     trust_config = hard_gap_trust or HardGapTrustParameters()
     if not is_hard_gap_method(gap.method) or pitch <= 0:
@@ -326,7 +326,7 @@ def light_hard_gap_trust(
     }
     nearby_conflict = False
     if profile is not None:
-        nearby_assessment = nearby_separator_replacement_assessment(profile, gap, pitch, nearby_correction)
+        nearby_assessment = nearby_separator_replacement_assessment(profile, gap, pitch, nearby_refinement)
         detail["nearby_separator_assessment"] = nearby_assessment.detail(gap)
         if nearby_assessment.replacement is not None:
             detail["nearby_separator_candidate"] = nearby_assessment.replacement

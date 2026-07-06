@@ -15,7 +15,7 @@ from ...constants import (
 )
 from ...domain import Detection
 from ...formats import FormatSpec
-from ...geometry.output_bleed import (
+from .output_bleed import (
     AxisBleedParameters,
     apply_output_bleed,
     detection_bleed_parameters,

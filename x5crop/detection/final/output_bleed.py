@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from ..domain import Box, Detection
-from .boxes import map_work_box, original_box_to_work
+from ...domain import Box, Detection
+from ...geometry.boxes import map_work_box, original_box_to_work
 
 
 class OutputBleedPolicy(Protocol):

@@ -106,7 +106,7 @@ def _separator_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "edge_refine_profile": _plain(separator.edge_refine_profile),
         "edge_pair": _plain(separator.edge_pair),
         "hard_gap_trust": _plain(separator.hard_gap_trust),
-        "nearby_correction": _plain(separator.nearby_correction),
+        "nearby_refinement": _plain(separator.nearby_refinement),
         "robust_grid": _plain(separator.robust_grid),
         "gap_search": _plain(separator.gap_search),
         "enhanced": _plain(separator.enhanced),

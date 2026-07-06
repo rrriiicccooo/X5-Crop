@@ -6,22 +6,24 @@ from typing import Any, Optional
 import numpy as np
 
 from ....cache import AnalysisCache
+from ....cache.separator import cached_edge_refine_profiles, cached_promote_enhanced_separator_gaps
 from ....domain import Box, Gap
-from ....geometry.detection_parameters import EnhancedSeparatorParameters
-from ....geometry.edge_pairs import refine_gaps_with_edge_profiles
-from ....geometry.enhanced_separator import (
-    promote_enhanced_separator_gaps,
-    should_run_enhanced_gap_promotion,
+from ....geometry.detection_parameters import (
+    EnhancedSeparatorParameters,
+    GapGeometryConstraintParameters,
+    RobustGridExecutionParameters,
+    RobustGridParameters,
 )
-from ....geometry.nearby_separator import apply_nearby_separator_corrections
+from ....geometry.edge_pairs import refine_gaps_with_edge_profiles
+from ....geometry.enhanced_separator import should_run_enhanced_gap_promotion
+from ....geometry.nearby_separator import apply_nearby_separator_refinement as refine_nearby_separator_gaps
 from ....geometry.robust_grid import apply_robust_grid
-from ....geometry.separator_cache import cached_edge_refine_profiles
 from ....policies.runtime.policy import DetectionPolicy
 
 
 EDGE_PAIR_REFINEMENT_FAMILY = "edge_pair"
 ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY = "enhanced_gap_promotion"
-NEARBY_SEPARATOR_CORRECTION_REFINEMENT_FAMILY = "nearby_separator_correction"
+NEARBY_SEPARATOR_REFINEMENT_FAMILY = "nearby_separator_refinement"
 LATE_REFINEMENT_PENDING_REASON = "pending_late_refinement"
 
 
@@ -36,7 +38,7 @@ class PrimarySeparatorRefinementResult:
 class LateSeparatorRefinementResult:
     gaps: list[Gap]
     enhanced_gap_promotion_detail: dict[str, Any]
-    nearby_correction_detail: dict[str, Any]
+    nearby_refinement_detail: dict[str, Any]
     pre_nearby_gaps: Optional[list[Gap]]
 
 
@@ -88,6 +90,56 @@ def pending_gap_refinement_detail(family: str) -> dict[str, Any]:
     return _gap_refinement_detail(
         family,
         {"used": False, "reason": LATE_REFINEMENT_PENDING_REASON},
+    )
+
+
+def gap_geometry_parameters_for_strip_mode(
+    parameters: RobustGridParameters,
+    strip_mode: str,
+) -> GapGeometryConstraintParameters:
+    shift_ratio = (
+        parameters.constrain_full_shift_ratio
+        if strip_mode == "full"
+        else parameters.constrain_partial_shift_ratio
+    )
+    return GapGeometryConstraintParameters(
+        shift_ratio=float(shift_ratio),
+        shift_min=float(parameters.constrain_shift_min),
+        shift_max=float(parameters.constrain_shift_max),
+    )
+
+
+def robust_grid_execution_parameters_for_strip_mode(
+    parameters: RobustGridParameters,
+    strip_mode: str,
+) -> RobustGridExecutionParameters:
+    return RobustGridExecutionParameters(
+        constrain=gap_geometry_parameters_for_strip_mode(parameters, strip_mode),
+        reliable_min_score=float(parameters.reliable_min_score),
+        min_reliable=int(parameters.min_reliable),
+        pitch_min_ratio=float(parameters.pitch_min_ratio),
+        pitch_max_ratio=float(parameters.pitch_max_ratio),
+        fit_tolerance_ratio=(
+            float(parameters.full_tolerance_ratio)
+            if strip_mode == "full"
+            else float(parameters.partial_tolerance_ratio)
+        ),
+        tolerance_min=float(parameters.tolerance_min),
+        tolerance_max=float(parameters.tolerance_max),
+        reject_residual_ratio=float(parameters.reject_residual_ratio),
+        shift_ratio=(
+            float(parameters.full_shift_ratio)
+            if strip_mode == "full"
+            else float(parameters.partial_shift_ratio)
+        ),
+        shift_min=float(parameters.shift_min),
+        shift_max=float(parameters.shift_max),
+        hard_keep_ratio=float(parameters.hard_keep_ratio),
+        hard_keep_min=float(parameters.hard_keep_min),
+        hard_keep_max=float(parameters.hard_keep_max),
+        hard_protect_ratio=float(parameters.hard_protect_ratio),
+        hard_protect_min=float(parameters.hard_protect_min),
+        hard_protect_max=float(parameters.hard_protect_max),
     )
 
 
@@ -154,17 +206,20 @@ def apply_primary_separator_refinements(
         policy,
     )
     gaps = edge_pair_refinement.gaps
+    robust_grid_parameters = robust_grid_execution_parameters_for_strip_mode(
+        policy.separator.robust_grid,
+        strip_mode,
+    )
     grid = apply_robust_grid(
         gaps,
         origin,
         pitch,
-        strip_mode,
         profile,
         gray_work,
         outer,
         policy.separator.hard_gap_trust,
-        policy.separator.nearby_correction,
-        policy.separator.robust_grid,
+        policy.separator.nearby_refinement,
+        robust_grid_parameters,
     )
     return PrimarySeparatorRefinementResult(
         gaps=grid.gaps,
@@ -220,7 +275,11 @@ def apply_enhanced_gap_promotion(
     )
     if skip_reason is not None:
         return _skipped_gap_refinement_result(ENHANCED_GAP_PROMOTION_REFINEMENT_FAMILY, gaps, skip_reason)
-    promotion = promote_enhanced_separator_gaps(
+    robust_grid_parameters = robust_grid_execution_parameters_for_strip_mode(
+        policy.separator.robust_grid,
+        strip_mode,
+    )
+    promotion = cached_promote_enhanced_separator_gaps(
         gray_work,
         outer,
         gaps,
@@ -228,7 +287,8 @@ def apply_enhanced_gap_promotion(
         pitch,
         strip_mode,
         cache,
-        policy.separator.robust_grid,
+        robust_grid_parameters.constrain,
+        robust_grid_parameters,
         policy.separator.gap_search,
         policy.separator.profile,
         policy.separator.enhanced,
@@ -259,31 +319,30 @@ def apply_nearby_separator_refinement(
 ) -> GapRefinementResult:
     skip_reason = nearby_separator_refinement_skip_reason(
         strip_mode,
-        policy.separator.nearby_correction.enabled,
+        policy.separator.nearby_refinement.enabled,
     )
     if skip_reason is not None:
-        return _skipped_gap_refinement_result(NEARBY_SEPARATOR_CORRECTION_REFINEMENT_FAMILY, gaps, skip_reason)
+        return _skipped_gap_refinement_result(NEARBY_SEPARATOR_REFINEMENT_FAMILY, gaps, skip_reason)
     pre_nearby_gaps = list(gaps)
-    correction = apply_nearby_separator_corrections(
+    refinement = refine_nearby_separator_gaps(
         profile,
         gaps,
         origin,
         pitch,
         count,
-        strip_mode,
-        policy.separator.nearby_correction,
+        policy.separator.nearby_refinement,
     )
-    refined_gaps = correction.gaps
-    detail = correction.detail
+    refined_gaps = refinement.gaps
+    detail = refinement.detail
     if int(detail.get("accepted_count", 0) or 0) > 0:
         return _gap_refinement_result(
-            NEARBY_SEPARATOR_CORRECTION_REFINEMENT_FAMILY,
+            NEARBY_SEPARATOR_REFINEMENT_FAMILY,
             refined_gaps,
             detail,
             pre_refinement_gaps=pre_nearby_gaps,
         )
     return _gap_refinement_result(
-        NEARBY_SEPARATOR_CORRECTION_REFINEMENT_FAMILY,
+        NEARBY_SEPARATOR_REFINEMENT_FAMILY,
         refined_gaps,
         detail,
     )
@@ -316,7 +375,7 @@ def apply_late_separator_refinement_chain(
         cache,
         policy,
     )
-    nearby_correction = apply_nearby_separator_refinement(
+    nearby_refinement = apply_nearby_separator_refinement(
         profile,
         enhanced_gap_promotion.gaps,
         count,
@@ -326,10 +385,10 @@ def apply_late_separator_refinement_chain(
         policy,
     )
     return LateSeparatorRefinementResult(
-        gaps=nearby_correction.gaps,
+        gaps=nearby_refinement.gaps,
         enhanced_gap_promotion_detail=enhanced_gap_promotion.detail,
-        nearby_correction_detail=nearby_correction.detail,
-        pre_nearby_gaps=nearby_correction.pre_refinement_gaps,
+        nearby_refinement_detail=nearby_refinement.detail,
+        pre_nearby_gaps=nearby_refinement.pre_refinement_gaps,
     )
 
 
@@ -339,7 +398,7 @@ __all__ = [
     "GapRefinementResult",
     "LATE_REFINEMENT_PENDING_REASON",
     "LateSeparatorRefinementResult",
-    "NEARBY_SEPARATOR_CORRECTION_REFINEMENT_FAMILY",
+    "NEARBY_SEPARATOR_REFINEMENT_FAMILY",
     "PrimarySeparatorRefinementResult",
     "apply_edge_pair_refinement",
     "apply_enhanced_gap_promotion",
@@ -348,6 +407,8 @@ __all__ = [
     "apply_primary_separator_refinements",
     "edge_pair_refinement_skip_reason",
     "enhanced_gap_promotion_skip_reason",
+    "gap_geometry_parameters_for_strip_mode",
     "nearby_separator_refinement_skip_reason",
     "pending_gap_refinement_detail",
+    "robust_grid_execution_parameters_for_strip_mode",
 ]

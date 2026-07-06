@@ -45,7 +45,7 @@ class SeparatorWidthProfileParameters:
     confidence_cap: float
 
 @dataclass(frozen=True)
-class NearbySeparatorCorrectionParameters:
+class NearbySeparatorRefinementParameters:
     enabled: bool
     window_ratio: float
     window_min: int
@@ -194,7 +194,7 @@ __all__ = [
     'LeadingGridFailureParameters',
     'SeparatorGeometrySupportParameters',
     'SeparatorWidthProfileParameters',
-    'NearbySeparatorCorrectionParameters',
+    'NearbySeparatorRefinementParameters',
     'RobustGridParameters',
     'GapSearchParameters',
     'EnhancedSeparatorParameters',

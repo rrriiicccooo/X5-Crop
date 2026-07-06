@@ -19,7 +19,7 @@ def base_medium_format_parameters(format_name: str, **overrides: Any) -> FormatP
         "calibrate_separator_weight": 0.36,
         "calibrate_geometry_weight": 0.32,
         "calibrate_content_weight": 0.32,
-        "nearby_active_correction": False,
+        "nearby_active_refinement": False,
         "lucky_pass_risk_enabled": False,
         "leading_grid_failure_enabled": False,
     }

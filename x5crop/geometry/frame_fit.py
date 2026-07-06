@@ -235,7 +235,7 @@ def fit_frame_boxes_from_gaps(
         config,
     )
     detail = dict(detail)
-    detail["policy"] = {
+    detail["parameters"] = {
         "name": config.name,
         "edge_evidence": bool(config.edge_evidence),
         "geometry_fallback": bool(config.geometry_fallback),

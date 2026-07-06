@@ -1,16 +1,28 @@
 from __future__ import annotations
 
+import copy
 from typing import Any, Optional
 
 import numpy as np
 
-from ..domain import Box
+from . import AnalysisCache
+from ..domain import Box, Gap
+from ..geometry.boxes import box_cache_key, crop_work_outer, full_work_box, is_full_work_box
+from ..geometry.detection_parameters import (
+    EdgeRefineProfileParameters,
+    EnhancedSeparatorParameters,
+    GapGeometryConstraintParameters,
+    GapSearchParameters,
+    RobustGridExecutionParameters,
+    SeparatorProfileParameters,
+)
+from ..geometry.edge_refine_profile import edge_refine_profiles
+from ..geometry.enhanced_separator import (
+    EnhancedGapPromotionBatchResult,
+    promote_enhanced_separator_gaps,
+)
+from ..geometry.separator_profile import separator_profile
 from ..image.evidence import make_separator_evidence_gray
-from ..cache import AnalysisCache
-from .boxes import box_cache_key, crop_work_outer, full_work_box, is_full_work_box
-from .detection_parameters import EdgeRefineProfileParameters, SeparatorProfileParameters
-from .edge_refine_profile import edge_refine_profiles
-from .separator_profile import separator_profile
 
 
 def cached_full_separator_evidence(cache: Optional[AnalysisCache], gray_work: np.ndarray) -> np.ndarray:
@@ -121,3 +133,101 @@ def cached_edge_refine_profiles(
         profiles = edge_refine_profiles(crop_work_outer(cache.gray_work, outer), edge_refine_config)
         cache.edge_refine_profiles[key] = profiles
     return profiles
+
+
+def enhanced_gap_promotion_cache_key(
+    outer: Box,
+    gaps: list[Gap],
+    origin: float,
+    pitch: float,
+    mode_key: str,
+    policy_key: tuple[Any, ...] = (),
+) -> tuple[Any, ...]:
+    return (
+        str(mode_key),
+        policy_key,
+        box_cache_key(outer),
+        round(float(origin), 4),
+        round(float(pitch), 4),
+        tuple(
+            (
+                int(gap.index),
+                str(gap.method),
+                round(float(gap.center), 4),
+                round(float(gap.score), 6),
+                None if gap.start is None else round(float(gap.start), 4),
+                None if gap.end is None else round(float(gap.end), 4),
+            )
+            for gap in gaps
+        ),
+    )
+
+
+def enhanced_gap_promotion_policy_key(
+    robust_grid: RobustGridExecutionParameters | None,
+    gap_search: GapSearchParameters | None,
+    profile_config: SeparatorProfileParameters | None,
+    enhanced_config: EnhancedSeparatorParameters | None,
+) -> tuple[Any, ...]:
+    return (
+        robust_grid or RobustGridExecutionParameters(),
+        gap_search or GapSearchParameters(),
+        profile_config or SeparatorProfileParameters(),
+        enhanced_config or EnhancedSeparatorParameters(),
+    )
+
+
+def cached_promote_enhanced_separator_gaps(
+    gray_work: np.ndarray,
+    outer: Box,
+    gaps: list[Gap],
+    origin: float,
+    pitch: float,
+    mode_key: str,
+    cache: Optional[AnalysisCache],
+    gap_geometry: GapGeometryConstraintParameters,
+    robust_grid: RobustGridExecutionParameters | None = None,
+    gap_search: GapSearchParameters | None = None,
+    profile_config: SeparatorProfileParameters | None = None,
+    enhanced_config: EnhancedSeparatorParameters | None = None,
+) -> EnhancedGapPromotionBatchResult:
+    if not outer.valid() or outer.width <= 0 or outer.height <= 0:
+        return EnhancedGapPromotionBatchResult(gaps, {"used": False, "reason": "empty_outer"})
+    cache_key: Optional[tuple[Any, ...]] = None
+    if cache is not None:
+        policy_key = enhanced_gap_promotion_policy_key(robust_grid, gap_search, profile_config, enhanced_config)
+        cache_key = enhanced_gap_promotion_cache_key(outer, gaps, origin, pitch, mode_key, policy_key)
+        cached = cache.enhanced_gap_promotions.get(cache_key)
+        if cached is not None:
+            cached_gaps, cached_detail = cached
+            return EnhancedGapPromotionBatchResult(list(cached_gaps), copy.deepcopy(cached_detail))
+
+    profile = cached_enhanced_separator_profile(cache, gray_work, outer, profile_config)
+    result = promote_enhanced_separator_gaps(
+        profile,
+        gaps,
+        origin,
+        pitch,
+        gap_geometry,
+        robust_grid,
+        gap_search,
+        enhanced_config,
+    )
+    if cache_key is not None and cache is not None:
+        cache.enhanced_gap_promotions[cache_key] = (list(result.gaps), copy.deepcopy(result.detail))
+    return result
+
+
+__all__ = [
+    "cached_edge_refine_profiles",
+    "cached_enhanced_separator_profile",
+    "cached_full_separator_evidence",
+    "cached_promote_enhanced_separator_gaps",
+    "cached_separator_evidence_crop",
+    "cached_separator_profile",
+    "edge_refine_profile_cache_key",
+    "enhanced_gap_promotion_cache_key",
+    "enhanced_gap_promotion_policy_key",
+    "separator_profile_cache_key",
+    "separator_profile_full_cache_key",
+]

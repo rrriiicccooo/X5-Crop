@@ -11,12 +11,12 @@ from ...geometry.boxes import box_cache_key
 from ...geometry.detection_parameters import SeparatorProfileParameters
 from ...geometry.gap_trust import (
     diagnostic_hard_gap_trust_assessment,
-    hard_gap_dark_separator_like,
     hard_gap_pixel_signals,
+    hard_gap_tonal_separator_like,
     hard_gap_width_ratio,
 )
 from ...geometry.nearby_separator import nearby_separator_search_detail
-from ...geometry.separator_cache import cached_separator_profile
+from ...cache.separator import cached_separator_profile
 from ...policies.registry import get_detection_policy
 from ...policies.runtime.diagnostics import NearbySeparatorDiagnosticsPolicy
 from ...cache import AnalysisCache
@@ -200,7 +200,7 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
         record["hard_trust"] = trust_assessment.trust
         record["hard_trust_detail"] = trust_assessment.detail()
     elif is_model_gap_method(gap.method):
-        if hard_gap_dark_separator_like(signals, hard_gap_trust_policy):
+        if hard_gap_tonal_separator_like(signals, hard_gap_trust_policy):
             overlap_risk = "none"
         elif (
             signals.continuity >= overlap_policy.strong_continuity
