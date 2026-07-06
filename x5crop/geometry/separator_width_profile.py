@@ -129,6 +129,19 @@ class SeparatorPhysicalWidthPrior:
         }
 
 
+def separator_width_relation_to_prior(
+    width: float,
+    prior: SeparatorPhysicalWidthPrior | None,
+) -> str:
+    if prior is None or not prior.used or prior.ideal_width <= 0.0:
+        return "prior_unavailable"
+    if int(round(float(width))) == int(round(float(prior.ideal_width))):
+        return "matches_prior"
+    if float(width) < float(prior.ideal_width):
+        return "narrower_than_prior"
+    return "broader_than_prior"
+
+
 def separator_physical_width_prior(
     long_axis: float,
     short_axis: float,
@@ -452,13 +465,18 @@ def separator_width_gap_search_detail(
     }
     detail = attach_gap_run_evaluation_summary(detail, evaluations)
     if selected is not None:
-        detail["selected"] = {
+        selected_width = int(selected.end - selected.start)
+        selected_detail: dict[str, Any] = {
             "center": float(selected.center),
             "start": int(selected.start),
             "end": int(selected.end),
-            "width": int(selected.end - selected.start),
+            "width": int(selected_width),
             "score": float(selected.score),
+            "width_relation_to_prior": separator_width_relation_to_prior(selected_width, prior),
         }
+        if prior is not None and prior.used and prior.ideal_width > 0.0:
+            selected_detail["width_delta_to_prior"] = float(selected_width) - float(prior.ideal_width)
+        detail["selected"] = selected_detail
     return detail
 
 
@@ -542,6 +560,7 @@ __all__ = [
     "separator_width_gap_run_acceptance",
     "separator_width_gap_search_detail",
     "separator_width_gap_window",
+    "separator_width_relation_to_prior",
     "separator_width_bounds",
     "separator_width_gap_at_with_detail",
     "separator_physical_width_prior",

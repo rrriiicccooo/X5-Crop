@@ -26,6 +26,7 @@ Current stable release: v4.2.8
 - weak grid、equal、content-only、safety candidate 或 partial edge 不可信的候选默认进入 REVIEW。
 - active retry architecture 已退休；safety candidate 和 corrected outer 都作为候选计划或候选扩展统一 assessment。
 - separator-derived outer family 已通用化：标准 strip 的 full 默认启用 local / full-width scope；partial 只有显式 count 时启用 extension scope。separator 宽度由单一 `width_aware` proposal 同时解释 standard theoretical width 与 observed width evidence，format 只提供 width / spacing / budget 参数。
+- observed width profile 是中性的实测宽度证据，不是 broad-only profile：standard hard search 找不到时，它可以补充比 physical width prior 更窄、匹配或更宽的 detected separator，并在 detail 中记录 selected width relation；broad separator width 仍只是 gate / partial-safety 消费的 evidence summary。
 - candidate execution budget 将 “eligible” 与 “executed” 分开：可靠 primary separator 已通过 assessment 时，可跳过 full-width / outer-scope extension；outer correction 还要求 outer alignment ok 才跳过。
 - detection 分层已对齐为 pipeline / modes / candidate proposal lifecycle /
   evidence / decision / final；outer proposal / correction 是 candidate proposal
@@ -70,10 +71,11 @@ Current stable release: v4.2.8
   描述 equal model gap 证据，不再使用 fallback 语义命名；行为阈值不变。
 - 单个 expected gap proposal 已改为 `SeparatorGapProposal`；standard proposal
   不再用裸 tuple 传递 gap/detail，report detail 字段保持不变。
-- broad-width gap proposal 现在写出 `separator_width_profile_gap_search` detail：
+- observed-width gap proposal 现在写出 `separator_width_profile_gap_search` detail：
   每个 expected gap 记录 width-profile accepted / rejected run、selected detected
-  gap 和 summary reason；未使用的无 detail wrapper 已删除。
-- standard / broad-width gap search 共用 `geometry/gap_search_detail.py` 生成
+  gap、相对 physical width prior 的 selected width relation 和 summary reason；
+  未使用的无 detail wrapper 已删除。
+- standard / observed-width gap search 共用 `geometry/gap_search_detail.py` 生成
   accepted / rejected run summary；detail 字段保持不变。
 - nearby separator refinement 现在写出 searched assessment：每个 gap 都记录
   no-candidate / candidate-not-stronger / geometry-rejected / accepted 等原因；
@@ -140,18 +142,18 @@ Current stable release: v4.2.8
 - active gap search profile vocabulary 只保留 `width_aware`；standard hard
   search、physical width prior 和 observed width profile 在同一个 separator
   proposal 内完成。
-- broad-width detected gap 生成已拆出 width-profile gap window、run object、
+- observed-width detected gap 生成已拆出 width-profile gap window、run object、
   width acceptance、candidate scoring / ranking、best candidate selection 和
   core-width clipped detected-gap output；输出仍是普通 `detected` hard gap，
   不引入独立 gap method，也不再生成独立 `broad_width` candidate profile。
-- broad-width detected gap search 的单 run assessment、batch candidate search 和
+- observed-width detected gap search 的单 run assessment、batch candidate search 和
   best-candidate selection 已改为
   `SeparatorWidthGapCandidateAssessmentResult` /
   `SeparatorWidthGapCandidateSearchResult` /
   `best_separator_width_gap_candidate` /
   `SeparatorWidthGapBestCandidateResult`；candidate / evaluations 不再通过裸
   tuple 或内联 selection loop 传递，report/detail 字段保持不变。
-- broad-width width bounds、gap search window 和 band collection 已改为
+- observed-width bounds、gap search window 和 band collection 已改为
   `SeparatorWidthBounds` / `SeparatorWidthGapWindow` /
   `SeparatorWidthBandCollection`；separator-derived outer band collection 已改为
   `SeparatorOuterBandCollection`，不再通过裸 tuple 传递 bands / edge margin，
@@ -197,7 +199,7 @@ Current stable release: v4.2.8
   refinement 不再需要从 detection evidence 层借 role 语义；full width-profile
   selection 不再把 non-equal gap 当成 hard gap；report key `detected_gaps` 保持
   兼容，但内部语义不再把 grid/content model support 命名成 hard detected evidence。
-- standard gap search 和 broad-width gap search 的成功 reason 现在复用
+- standard gap search 和 observed-width gap search 的成功 reason 现在复用
   `GAP_DETECTED` 常量；active gap method literal 继续集中在 `constants.py`。
 - 未使用的 `CandidateGateOutcome` gate 占位类型已删除，减少无调用方接口。
 - robust grid model gap refinement 已移除未使用的 format identity 参数；
@@ -359,10 +361,11 @@ Current stable release: v4.2.8
   read-only diagnostics attachment。
 - separator-derived outer 已收敛为统一
   `detection/candidate/proposal/outer/separator.py` 引擎；outer scope（local /
-  full-width）生成候选，标准理论宽度与 observed width bands 都作为同一
-  width-aware separator evidence 被消费；broad width 不再作为 outer variant 或
-  独立 gap profile。full 默认启用 separator-derived scopes，partial 显式 count
-  才启用 extension scopes。
+  full-width）生成候选，标准理论宽度与 observed measured-width bands 都作为同一
+  width-aware separator evidence 被消费；observed measured-width bands 可比
+  physical prior 更窄、匹配或更宽；broad width 不再作为 outer variant 或独立
+  gap profile。full 默认启用 separator-derived scopes，partial 显式 count 才启用
+  extension scopes。
 - separator width 语义已收敛进单一 `width_aware` proposal：最终 gap method
   仍是普通 `detected` hard separator；broad width 只写入 `gap_search_profile`、
   `separator_width_evidence`、gate detail 和 partial holder detail。
@@ -503,6 +506,11 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   when count is explicit. Separator width is explained by the single
   `width_aware` proposal, which combines standard theoretical width and observed
   width evidence.
+- Observed width profile is neutral measured-width evidence, not a broad-only
+  profile: when standard hard search misses, it may supply a detected separator
+  that is narrower than, matches, or is broader than the physical width prior,
+  and detail records the selected width relation. Broad separator width remains
+  only an evidence summary consumed by gate / partial-safety checks.
 - Candidate execution budget separates eligibility from execution: reliable
   primary separator assessment may skip full-width / outer-scope extension;
   outer correction also requires ok outer alignment before it skips.
@@ -536,11 +544,12 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - Standard separator proposal detail uses `model_gap_score` / `model_gap_count`
   for equal model-gap evidence instead of fallback terminology; behavior
   thresholds are unchanged.
-- Broad-width gap proposal now writes `separator_width_profile_gap_search`
-  detail for each expected gap, including accepted / rejected width-profile runs
-  and the selected detected gap, without changing selection thresholds; unused
-  no-detail wrappers have been removed.
-- Standard and broad-width gap search now share
+- Observed-width gap proposal now writes `separator_width_profile_gap_search`
+  detail for each expected gap, including accepted / rejected width-profile runs,
+  the selected detected gap, and the selected width relation to the physical
+  width prior, without changing selection thresholds; unused no-detail wrappers
+  have been removed.
+- Standard and observed-width gap search now share
   `geometry/gap_search_detail.py` for accepted / rejected run summaries; detail
   fields remain unchanged.
 - Nearby separator refinement now records searched assessment for each gap,
@@ -596,7 +605,9 @@ Verified:
 - Separator-derived outer proposals are consolidated into the single
   `detection/candidate/proposal/outer/separator.py` engine; outer scope (local /
   full-width) generates candidates, while standard theoretical width and
-  observed width bands are consumed as one width-aware separator evidence stream.
+  observed measured-width bands are consumed as one width-aware separator
+  evidence stream. Observed measured-width bands may be narrower than, match, or
+  be broader than the physical prior.
   Broad width is no longer an outer variant or independent gap profile.
 - Separator width semantics are folded into the single `width_aware` proposal:
   final gap methods remain ordinary `detected` hard separators, and broad-width
@@ -773,7 +784,7 @@ Verified:
   non-equal gaps as hard gaps. The report key `detected_gaps` stays compatible,
   but internal code no longer names grid/content model support as hard detected
   evidence.
-- Standard and broad-width gap search success reasons now reuse the
+- Standard and observed-width gap search success reasons now reuse the
   `GAP_DETECTED` constant, keeping active gap method literals centralized in
   `constants.py`.
 - Runtime separator width-profile policy is consolidated: activation, max width

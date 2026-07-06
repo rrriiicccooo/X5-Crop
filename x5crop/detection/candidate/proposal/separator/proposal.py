@@ -47,6 +47,36 @@ def _selected_gap_detail(gap: Gap, *, include_width: bool = False) -> dict[str, 
     return detail
 
 
+def _observed_width_selection_detail(width_search_detail: dict[str, Any]) -> dict[str, Any]:
+    selected = width_search_detail.get("selected")
+    if not isinstance(selected, dict):
+        return {}
+    detail: dict[str, Any] = {
+        "selected_observed_width": selected.get("width"),
+        "selected_width_relation_to_prior": selected.get("width_relation_to_prior"),
+    }
+    if "width_delta_to_prior" in selected:
+        detail["selected_width_delta_to_prior"] = selected.get("width_delta_to_prior")
+    return detail
+
+
+def _observed_width_relation_counts(entries: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {
+        "narrower_than_prior": 0,
+        "matches_prior": 0,
+        "broader_than_prior": 0,
+        "prior_unavailable": 0,
+    }
+    for entry in entries:
+        if entry.get("selected_source") != "observed_width_profile":
+            continue
+        relation = entry.get("selected_width_relation_to_prior")
+        if relation not in counts:
+            relation = "prior_unavailable"
+        counts[relation] += 1
+    return counts
+
+
 def _propose_standard_separator_gap_with_detail(
     profile: np.ndarray,
     width_profile: np.ndarray,
@@ -101,10 +131,12 @@ def _propose_standard_separator_gap_with_detail(
         gap = width_result.gap
         detail["reason"] = width_result.reason
         detail["selected_source"] = "observed_width_profile"
+        detail["selected_source_role"] = "measured_width_gap"
+        detail.update(_observed_width_selection_detail(width_result.detail))
     else:
         gap = propose_equal_model_gap(index, expected, standard_result.model_gap_score)
         detail["selected_source"] = "equal_model"
-    detail.update(_selected_gap_detail(gap))
+    detail.update(_selected_gap_detail(gap, include_width=detail.get("selected_source") == "observed_width_profile"))
     return SeparatorGapProposal(gap=gap, detail=detail)
 
 
@@ -162,12 +194,15 @@ def _propose_standard_separator_gaps_with_detail(
             "count": int(count),
             "max_width_ratio_override": max_width_ratio_override,
             "physical_width_prior": physical_width_prior.detail(),
+            "observed_width_profile_role": "measured_width_gap_when_standard_missing",
+            "observed_width_profile_scope": "narrower_matching_or_broader_than_physical_prior",
             "observed_width_profile_used": bool(width_profile.size > 0 and width_profile_policy.mode != "off"),
             "detected_count": sum(1 for gap in gaps if is_detected_gap_method(gap.method)),
             "model_gap_count": sum(1 for gap in gaps if not is_detected_gap_method(gap.method)),
             "observed_width_selected_count": sum(
                 1 for entry in entries if entry.get("selected_source") == "observed_width_profile"
             ),
+            "observed_width_relation_counts": _observed_width_relation_counts(entries),
             "entries": entries,
         },
     )

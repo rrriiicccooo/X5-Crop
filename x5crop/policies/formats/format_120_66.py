@@ -50,7 +50,7 @@ FORMAT_POLICY_PRESET = FormatPolicyPreset(
         FULL: ModePolicyPreset(
             role="square_full_strip_separator_width_profile_guarded",
             notes=(
-                "width-aware separator evidence may use broad observed bands, but full mode does not inherit partial extra-holder tolerance",
+                "width-aware separator evidence may use measured-width bands, including broad bands, but full mode does not inherit partial extra-holder tolerance",
             ),
             frame_fit=FrameFitPolicy(
                 name="medium_square_frame_fit",
