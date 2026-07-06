@@ -8,12 +8,16 @@ import numpy as np
 from ...domain import Box, Detection
 from ...formats import CONTENT_ASPECTS_HORIZONTAL
 from ...geometry.boxes import original_box_to_work
-from ...image.evidence import make_content_evidence_gray
-from ...policies.registry import get_detection_policy
 from ...policies.runtime.content import ContentEvidencePolicy, ContentPolicy
 from ...cache import AnalysisCache
-from ...utils import sampled_percentile
 from .evidence_cache_keys import content_detail_cache_key
+from .content_signal import (
+    CACHED_CONTENT_SIGNAL_COMPOSITE,
+    content_evidence_threshold,
+    content_policy_cache_key,
+    content_signal_from_gray,
+    resolve_content_policy,
+)
 
 
 def expected_content_aspect(format_name: str, layout: str) -> Optional[float]:
@@ -23,32 +27,6 @@ def expected_content_aspect(format_name: str, layout: str) -> Optional[float]:
     if layout == "vertical":
         return 1.0 / aspect
     return aspect
-
-
-def _content_policy_for(
-    format_name: str,
-    strip_mode: str = "full",
-    content_policy: Optional[ContentPolicy] = None,
-) -> ContentPolicy:
-    return content_policy or get_detection_policy(format_name, strip_mode).content
-
-
-def _content_policy_key(content_policy: ContentPolicy) -> tuple[Any, ...]:
-    return (content_policy,)
-
-
-def content_evidence_threshold(
-    evidence: np.ndarray,
-    evidence_params: ContentEvidencePolicy,
-) -> float:
-    outer_p70 = float(sampled_percentile(evidence, [evidence_params.percentile])[0])
-    return max(
-        evidence_params.threshold_min,
-        min(
-            evidence_params.threshold_max,
-            outer_p70 * evidence_params.threshold_multiplier,
-        ),
-    )
 
 
 def content_frame_support_detail(
@@ -102,7 +80,11 @@ def content_frame_support_detail(
         )
 
     if not frame_scores:
-        return {"used": False, "reason": "no_valid_frames"}
+        return {
+            "used": False,
+            "evidence_role": "content_support_assessment",
+            "reason": "no_valid_frames",
+        }
 
     median_mean = float(np.median(np.array(means, dtype=np.float32))) if means else 0.0
     min_mean = float(min(means)) if means else 0.0
@@ -118,6 +100,7 @@ def content_frame_support_detail(
 
     return {
         "used": True,
+        "evidence_role": "content_support_assessment",
         "support": support,
         "composite": composite,
         "threshold": threshold,
@@ -136,7 +119,7 @@ def content_evidence_detail(
     cache: Optional[AnalysisCache] = None,
     content_policy: Optional[ContentPolicy] = None,
 ) -> dict[str, Any]:
-    content_policy = _content_policy_for(detection.film_format, detection.strip_mode, content_policy)
+    content_policy = resolve_content_policy(detection.film_format, detection.strip_mode, content_policy)
     if cache is not None and cache.layout == detection.layout:
         return content_evidence_detail_from_cache(gray, detection, cache, content_policy)
     evidence_params = content_policy.evidence
@@ -149,18 +132,18 @@ def content_evidence_detail(
     if source_crop.size == 0:
         return {"used": False, "reason": "empty_outer"}
 
-    evidence = make_content_evidence_gray(source_crop).astype(np.float32) / 255.0
-    threshold = content_evidence_threshold(evidence, evidence_params)
+    signal = content_signal_from_gray(source_crop)
+    threshold = content_evidence_threshold(signal.evidence_float, evidence_params)
     expected_aspect = expected_content_aspect(detection.film_format, detection.layout)
     return content_frame_support_detail(
-        evidence,
+        signal.evidence_float,
         outer,
         detection.frames,
         gray.shape,
         threshold=threshold,
         expected_aspect=expected_aspect,
         evidence_params=evidence_params,
-        composite="gradient+neighbor_texture+local_contrast+tonal_presence",
+        composite=signal.composite,
     )
 
 
@@ -170,10 +153,10 @@ def content_evidence_detail_from_cache(
     cache: AnalysisCache,
     content_policy: Optional[ContentPolicy] = None,
 ) -> dict[str, Any]:
-    content_policy = _content_policy_for(detection.film_format, detection.strip_mode, content_policy)
+    content_policy = resolve_content_policy(detection.film_format, detection.strip_mode, content_policy)
     evidence_params = content_policy.evidence
     source_h, source_w = gray.shape
-    detail_key = content_detail_cache_key(detection, source_w, source_h, _content_policy_key(content_policy))
+    detail_key = content_detail_cache_key(detection, source_w, source_h, content_policy_cache_key(content_policy))
     cached = cache.content_evidence_details.get(detail_key)
     if cached is not None:
         return copy.deepcopy(cached)
@@ -200,7 +183,7 @@ def content_evidence_detail_from_cache(
         threshold=threshold,
         expected_aspect=expected_aspect,
         evidence_params=evidence_params,
-        composite="cached_gradient+neighbor_texture+local_contrast+tonal_presence",
+        composite=CACHED_CONTENT_SIGNAL_COMPOSITE,
     )
     if bool(detail.get("used", False)):
         cache.content_evidence_details[detail_key] = copy.deepcopy(detail)

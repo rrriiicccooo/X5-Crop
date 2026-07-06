@@ -41,6 +41,9 @@ class ContentMaskPolicy:
 
 @dataclass(frozen=True)
 class ContentCandidatePolicy:
+    review_only: bool = True
+    proposal_role: str = "weak_content_model_proposal"
+    model_gap_evidence_kind: str = "content_model_gap"
     expected_width_min_px: float = 8.0
     coverage_weight: float = 0.38
     mean_weight: float = 0.30
@@ -60,8 +63,6 @@ class ContentCandidatePolicy:
 
 @dataclass(frozen=True)
 class ContentPolicy:
-    can_auto_pass_alone: bool
-    required_support_for_auto: str = "ok"
     validates_candidates: bool = True
     evidence: ContentEvidencePolicy = field(default_factory=ContentEvidencePolicy)
     profile: ContentProfilePolicy = field(default_factory=ContentProfilePolicy)

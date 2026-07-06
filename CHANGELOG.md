@@ -24,6 +24,10 @@ Current stable release: v4.2.8
 - 自动 PASS 必须由 outer、separator、geometry、content 和 risk 组合证据解释。
 - evidence independence contract 已加入 candidate assessment：当 separator-derived outer 依赖 observed width-profile gap 时，必须再由 standard hard gap、content ok 和 geometry ok 交叉确认；否则进入 REVIEW，避免循环论证。
 - weak grid、equal、content-only、safety candidate 或 partial edge 不可信的候选默认进入 REVIEW。
+- Content 是 soft evidence + weak proposal family：`content_signal` 只生成内容证据图，
+  `content_regions` 只生成 bbox / run hints，`content_evidence` 只验证已有
+  frame boxes，content candidate 只生成 content-model gaps，并在 policy/detail 中
+  明确 `review_only` contract。
 - active retry architecture 已退休；safety candidate 和 corrected outer 都作为候选计划或候选扩展统一 assessment。
 - separator-derived outer family 已通用化：标准 strip 的 full 默认启用 local / full-width scope；partial 只有显式 count 时启用 extension scope。separator 宽度由单一 `width_aware` proposal 同时解释 standard theoretical width 与 observed width evidence，format 只提供 width / spacing / budget 参数。
 - observed width profile 是中性的实测宽度证据，不是 broad-only profile：standard hard search 找不到时，它可以补充比 physical width prior 更窄、匹配或更宽的 detected separator，并在 detail 中记录 selected width relation；broad separator width 仍只是 gate / partial-safety 消费的 evidence summary。
@@ -154,9 +158,12 @@ Current stable release: v4.2.8
   source selection 细节集中在 source 模块，`separator_gaps.py` 现在只负责
   lifecycle result assembly。report key、gap 顺序、candidate assessment 和
   PASS / REVIEW 行为不变。
-- content evidence 的 cached / uncached 路径现在共用
-  `content_evidence_threshold()` 和 `content_frame_support_detail()`；
-  threshold、support、frame_scores 和 successful cache 行为保持不变。
+- Content 族群已拆成 `content_signal.py`、`content_regions.py`、
+  `content_evidence.py` 和 `candidate/proposal/content.py`：signal 只生成内容证据图，
+  region 只生成 bbox / run hints，evidence 只验证已有 frame boxes，content
+  proposal 只生成 review-only weak candidate 和 content-model gaps。cached /
+  uncached 路径继续共用 threshold 与 frame support summary helper；threshold、
+  support、frame_scores 和 successful cache 行为保持不变。
 - equal / grid / content model-gap proposal 已集中到 `geometry.model_gaps`，
   profile 等分模型归 `detection.candidate.proposal.separator.model`；
   build / safety / refinement / content candidate 路径不再手写 `"equal"` /
@@ -411,7 +418,7 @@ Current stable release: v4.2.8
   hard search、physical width prior 和 observed width search detail。
 - separator gap lifecycle 已从 `build_detection_for_outer` 抽到
   `detection/candidate/build/separator_gaps.py`：separator gap lifecycle 生成
-  origin/pitch、width-aware gaps、edge-pair、grid、enhanced 和 nearby
+  origin/pitch、width-aware gaps、edge-pair、grid 和 nearby
   refinement 结果，再由 `detection.py` 负责编排 refined-outer rebuild、frame fit、
   score 和 detail assembly。
 - 普通 separator profile / gap search 已做行为等价拆分：
@@ -428,7 +435,7 @@ Current stable release: v4.2.8
   分开，candidate detail 可解释每个 gap 为什么没有执行 nearby refinement。
 - separator refinement 已做行为等价拆分：candidate build 直接调用 geometry
   refinement helpers，避免保留只做别名转发的 proposal refinement facade；
-  edge-pair、enhanced 和 nearby wrapper 现在统一返回 `GapRefinementResult`，
+  edge-pair 和 nearby wrapper 现在统一返回 `GapRefinementResult`，
   但报告仍保留原有 detail key；
   refinement wrapper detail 现在统一补齐 family / pending / skipped detail；
   skipped reason 区分 not-full、single-frame、policy disabled、auto not needed
@@ -448,16 +455,16 @@ Current stable release: v4.2.8
   和 `hard_gap_trust_assessment_result()` 组装 detail；判断顺序和阈值保持不变。
 - hard-gap trust 只保留 `HardGapTrustAssessment` detail-first 接口；未使用的
   string-only classifier wrapper 已删除。
-- enhanced / nearby separator refinement 已做行为等价拆分：
-  `geometry/enhanced_separator.py` 将 detected gap validation、enhanced promotion
-  和 merge detail 分开；`geometry/nearby_separator.py` 将 search context、
-  candidate ranking、stronger test 和 geometry acceptance 分开，方便继续人工审核
-  separator refinement 的阈值策略。
-- separator refinement 的 policy surface 已补齐：`enhanced.min_score` 和
-  `nearby_refinement.width_cv_slack` 从 `FormatParameters` 显式流入 runtime
+- enhanced separator promotion 已退休；active separator refinement 只保留
+  edge-pair 和 nearby。`geometry/edge_pairs.py` 将 edge-pair search、candidate
+  ranking、replacement assessment 和 model-gap promotion detail 分开；
+  `geometry/nearby_separator.py` 将 search context、candidate ranking、stronger
+  test 和 geometry acceptance 分开，方便继续人工审核 separator refinement 的阈值策略。
+- separator refinement 的 policy surface 已补齐：edge-pair family eligibility 与
+  `nearby_refinement.width_cv_slack` 从 `FormatParameters` / runtime preset 显式流入
   `SeparatorPolicy`，并出现在 policy/report detail 中；默认值保持旧行为。
 - separator method vocabulary 已对齐：runtime `SeparatorPolicy.hard_methods`
-  使用真实 gap method `detected / edge-pair / enhanced-detected`，
+  使用真实 gap method `detected / edge-pair`，
   `model_methods` 使用 `grid / equal / content`，并在 policy/report detail 中可见。
 - `.gitignore` 显式保留 `x5crop/detection/candidate/build/*.py`，避免源码层级被
   通用 `build/` 输出规则误隐藏。
@@ -533,6 +540,11 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   requires independent standard hard-gap, content, and geometry validation.
 - Weak grid, equal, content-only, safety, or untrusted partial-edge candidates
   default to REVIEW.
+- Content is a soft-evidence and weak-proposal family: `content_signal` only
+  creates the content evidence image, `content_regions` only creates bbox / run
+  hints, `content_evidence` only validates existing frame boxes, and content
+  candidates only create content-model gaps with an explicit `review_only`
+  policy/detail contract.
 - Active retry architecture is retired; safety candidates and corrected outers
   are assessed as candidate-plan entries or candidate extensions.
 - Separator-derived outer families are generalized: standard full strips enable
@@ -670,7 +682,7 @@ Verified:
   gate detail, and partial-holder detail.
 - Separator gap lifecycle is extracted from `build_detection_for_outer` into
   `detection/candidate/build/separator_gaps.py`: candidate build now produces
-  origin/pitch, width-aware gaps, edge-pair, grid, enhanced, and nearby
+  origin/pitch, width-aware gaps, edge-pair, grid, and nearby
   refinement results before `detection.py` handles frame fit, scoring, and
   detail assembly.
 - Edge-pair parameter ownership is tightened: runtime preset assembly now uses
@@ -745,7 +757,7 @@ Verified:
   entrypoint is narrowed to `refine_gaps_with_edge_profiles` and no longer
   returns gaps/detail through raw tuples, while report/detail fields remain
   unchanged.
-- Edge-pair, enhanced, and nearby refinements now share
+- Edge-pair and nearby refinements now share
   `geometry/gap_refinement_detail.py` for accepted / rejected / searched batch
   detail and counts, while report/detail fields and refinement conditions remain
   unchanged.
@@ -876,25 +888,27 @@ Verified:
   assembly; branch order and thresholds are unchanged.
 - Hard-gap trust now keeps only the `HardGapTrustAssessment` detail-first
   interface; unused string-only classifier wrappers have been removed.
-- Enhanced / nearby separator refinement is split without behavior changes:
-  `geometry/enhanced_separator.py` separates detected gap validation, enhanced
-  promotion, and merge detail; `geometry/nearby_separator.py` separates search
-  context, candidate ranking, stronger test, and geometry acceptance so separator
-  refinement thresholds can be reviewed directly. Edge-pair, enhanced, and nearby
-  wrappers now return a shared `GapRefinementResult` while report detail keys stay
-  compatible. Refinement wrapper detail now shares family / pending / skipped
-  detail assembly and skipped reasons distinguish not-full, single-frame, policy
-  disabled, auto-not-needed, and `geometry_equal_model_selected` cases. Edge-pair detail
+- Edge-pair / nearby separator refinement is split without behavior changes:
+  `geometry/edge_pairs.py` separates edge-pair search limits, candidate generation,
+  best-pair selection, replacement assessment, and model-gap promotion detail;
+  `geometry/nearby_separator.py` separates search context, candidate ranking,
+  stronger test, and geometry acceptance so separator refinement thresholds can
+  be reviewed directly. Edge-pair and nearby wrappers now return a shared
+  `GapRefinementResult` while report detail keys stay compatible. Refinement
+  wrapper detail now shares family / pending / skipped detail assembly and
+  skipped reasons distinguish not-full, single-frame, policy disabled,
+  auto-not-needed, and `geometry_equal_model_selected` cases. Edge-pair detail
   now records search limits, candidate count,
   selected candidate, and replacement assessment. Runtime refinement and
   read-only diagnostics now share nearby search context, candidate ranking, and
   stronger-test detail; diagnostics keep only caching, profile retrieval, and
   display fields instead of duplicating nearby candidate search.
-- The separator refinement policy surface now exposes `enhanced.min_score` and
-  `nearby_refinement.width_cv_slack` from `FormatParameters` through runtime
-  `SeparatorPolicy` and policy/report detail; defaults preserve existing behavior.
+- The separator refinement policy surface now exposes edge-pair family
+  eligibility and `nearby_refinement.width_cv_slack` from `FormatParameters` /
+  runtime presets through `SeparatorPolicy` and policy/report detail; defaults
+  preserve existing behavior.
 - Separator method vocabulary is aligned: runtime `SeparatorPolicy.hard_methods`
-  uses real gap methods `detected / edge-pair / enhanced-detected`,
+  uses real gap methods `detected / edge-pair`,
   `model_methods` uses `grid / equal / content`, and both are visible in
   policy/report detail.
 - `.gitignore` explicitly keeps `x5crop/detection/candidate/build/*.py` visible
@@ -919,7 +933,7 @@ Verified:
   of `decision_summary()`; the decision layer remains the only consumer that
   turns this evidence into the final verdict.
 - Separator refinement wrappers moved from `separator_gaps.py` to
-  `separator_refinements.py`; edge-pair, robust-grid, enhanced, and nearby
+  `separator_refinements.py`; edge-pair, robust-grid, and nearby
   refinement details now live in the refinement module while `separator_gaps.py`
   keeps initial source selection, primary build, and late refinement attachment.
   Report keys, gap order, candidate assessment, and PASS / REVIEW behavior are
@@ -929,9 +943,13 @@ Verified:
   source-selection details now live in the source module while
   `separator_gaps.py` owns lifecycle result assembly. Report keys, gap order,
   candidate assessment, and PASS / REVIEW behavior are unchanged.
-- Cached and uncached content evidence paths now share
-  `content_evidence_threshold()` and `content_frame_support_detail()`; threshold,
-  support, frame score, and successful cache behavior are unchanged.
+- Content logic is split into `content_signal.py`, `content_regions.py`,
+  `content_evidence.py`, and `candidate/proposal/content.py`: signal creates
+  the content evidence image, regions create bbox / run hints, evidence
+  validates existing frame boxes, and content proposal creates review-only weak
+  candidates with content-model gaps. Cached and uncached content evidence paths
+  still share threshold and frame-support summary helpers; threshold, support,
+  frame score, and successful cache behavior are unchanged.
 - Corrected outer extension now runs inside the detection pipeline before final
   selection: proposal creates only corrected boxes, candidate code rebuilds and
   reassesses them, and finalization no longer creates candidates.

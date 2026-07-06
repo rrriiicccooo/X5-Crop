@@ -17,7 +17,6 @@ def content_policy(params: FormatParameters) -> ContentPolicy:
     candidate = params.content_candidate
     support = params.content_support
     return ContentPolicy(
-        can_auto_pass_alone=False,
         evidence=ContentEvidencePolicy(
             percentile=float(evidence.percentile),
             threshold_multiplier=float(evidence.threshold_multiplier),
@@ -49,6 +48,9 @@ def content_policy(params: FormatParameters) -> ContentPolicy:
             outer_expand_ratio=float(mask.outer_expand_ratio),
         ),
         candidate=ContentCandidatePolicy(
+            review_only=True,
+            proposal_role="weak_content_model_proposal",
+            model_gap_evidence_kind="content_model_gap",
             expected_width_min_px=float(candidate.expected_width_min_px),
             coverage_weight=float(candidate.coverage_weight),
             mean_weight=float(candidate.mean_weight),
