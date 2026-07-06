@@ -37,6 +37,8 @@ Current stable release: v4.2.8
 - 旧 `--analysis` 增强开关已退休；deskew 的二次边缘拟合保留为
   `--deskew-fallback {auto,always,off}`。该 fallback 只服务 deskew angle
   selection，不再影响 separator proposal / refinement。
+- report / detail 中旧的 `analysis_source` 字段已改为 `candidate_source`；
+  它描述候选来源，不再复用含糊的 analysis 语义。
 - candidate execution budget 将 “eligible” 与 “executed” 分开：可靠 primary separator 已通过 assessment 时，可跳过 full-width / outer-scope extension；outer correction 还要求 outer alignment ok 才跳过。
 - detection 分层已对齐为 pipeline / modes / candidate proposal lifecycle /
   evidence / decision / final；outer proposal / correction 是 candidate proposal
@@ -546,6 +548,8 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - The old `--analysis` enhancement switch is retired. Deskew's second-pass edge
   fitting is now `--deskew-fallback {auto,always,off}` and affects only deskew
   angle selection, not separator proposal or refinement.
+- The old report/detail `analysis_source` field is now `candidate_source`
+  because it describes candidate origin, not an analysis mode.
 - Candidate execution budget separates eligibility from execution: reliable
   primary separator assessment may skip full-width / outer-scope extension;
   outer correction also requires ok outer alignment before it skips.

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-ANALYSIS_SOURCE_SEPARATOR = "separator_candidate"
-ANALYSIS_SOURCE_CONTENT = "content_candidate"
-ANALYSIS_SOURCE_CONTENT_PRIMARY = "content_primary"
-ANALYSIS_SOURCE_HARD_SAFETY = "hard_safety"
-ANALYSIS_SOURCE_REVIEW_ONLY = "review_only_mode"
-ANALYSIS_SOURCE_DUAL_LANE = "dual_lane_strip"
+CANDIDATE_SOURCE_SEPARATOR = "separator_candidate"
+CANDIDATE_SOURCE_CONTENT = "content_candidate"
+CANDIDATE_SOURCE_CONTENT_PRIMARY = "content_primary"
+CANDIDATE_SOURCE_HARD_SAFETY = "hard_safety"
+CANDIDATE_SOURCE_REVIEW_ONLY = "review_only_mode"
+CANDIDATE_SOURCE_DUAL_LANE = "dual_lane_strip"
 
 GAP_DETECTED = "detected"
 GAP_EDGE_PAIR = "edge-pair"

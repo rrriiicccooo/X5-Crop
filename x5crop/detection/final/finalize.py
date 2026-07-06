@@ -7,7 +7,7 @@ import numpy as np
 
 from ...runtime.config import RuntimeConfig
 from ...constants import (
-    ANALYSIS_SOURCE_REVIEW_ONLY,
+    CANDIDATE_SOURCE_REVIEW_ONLY,
     REASON_CONTENT_ASPECT_CONFLICT,
     REASON_CONTENT_EVIDENCE_WEAK,
     REASON_LUCKY_PASS_RISK,
@@ -62,7 +62,7 @@ def finalize_detection(
         else {"used": False, "reason": policy.finalization.outer_alignment_disabled_reason}
     )
     detection.detail["outer_content_alignment"] = outer_alignment
-    review_only_mode = detection.detail.get("analysis_source") == ANALYSIS_SOURCE_REVIEW_ONLY
+    review_only_mode = detection.detail.get("candidate_source") == CANDIDATE_SOURCE_REVIEW_ONLY
 
     outer_correction_detail = detection.detail.get("outer_correction", {})
     suppress_outer_mismatch = bool(

@@ -6,10 +6,10 @@ import numpy as np
 
 from ...runtime.config import RuntimeConfig
 from ...constants import (
-    ANALYSIS_SOURCE_CONTENT,
-    ANALYSIS_SOURCE_CONTENT_PRIMARY,
-    ANALYSIS_SOURCE_HARD_SAFETY,
-    ANALYSIS_SOURCE_REVIEW_ONLY,
+    CANDIDATE_SOURCE_CONTENT,
+    CANDIDATE_SOURCE_CONTENT_PRIMARY,
+    CANDIDATE_SOURCE_HARD_SAFETY,
+    CANDIDATE_SOURCE_REVIEW_ONLY,
     REASON_AUTO_GATE_NOT_SATISFIED,
     REASON_CONTENT_ASPECT_CONFLICT,
     REASON_CONTENT_EVIDENCE_WEAK,
@@ -183,7 +183,7 @@ def risk_summary_for(
     assessment = _dict(detection.detail.get("candidate_assessment"))
     competition = _dict(detection.detail.get("candidate_competition"))
     lucky = _dict(detection.detail.get("lucky_pass_risk_score"))
-    source = str(assessment.get("source") or detection.detail.get("analysis_source") or "")
+    source = str(assessment.get("source") or detection.detail.get("candidate_source") or "")
     margin_raw = competition.get("margin_to_second")
     margin = None if margin_raw is None else _float(margin_raw)
     partial_edge_safe = bool(evidence["partial_edge"]["ok"])
@@ -196,10 +196,10 @@ def risk_summary_for(
         )
     )
     return {
-        "content_only_evidence": source in {ANALYSIS_SOURCE_CONTENT, ANALYSIS_SOURCE_CONTENT_PRIMARY, "content"},
+        "content_only_evidence": source in {CANDIDATE_SOURCE_CONTENT, CANDIDATE_SOURCE_CONTENT_PRIMARY, "content"},
         "safety_or_review_only": (
-            detection.detail.get("analysis_source") == ANALYSIS_SOURCE_HARD_SAFETY
-            or detection.detail.get("analysis_source") == ANALYSIS_SOURCE_REVIEW_ONLY
+            detection.detail.get("candidate_source") == CANDIDATE_SOURCE_HARD_SAFETY
+            or detection.detail.get("candidate_source") == CANDIDATE_SOURCE_REVIEW_ONLY
         ),
         "outer_content_mismatch": not bool(evidence["outer"]["ok"]),
         "overlap_risk": bool(lucky.get("risk", False)),

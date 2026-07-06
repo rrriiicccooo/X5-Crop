@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 import numpy as np
 
-from ....constants import ANALYSIS_SOURCE_HARD_SAFETY
+from ....constants import CANDIDATE_SOURCE_HARD_SAFETY
 from ....domain import Box, Detection
 from ....formats import FormatSpec
 from ....geometry.boxes import map_work_box
@@ -40,7 +40,7 @@ def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSp
         0.0,
         ["hard_safety_no_candidates", "needs_manual_review"],
         {
-            "analysis_source": ANALYSIS_SOURCE_HARD_SAFETY,
+            "candidate_source": CANDIDATE_SOURCE_HARD_SAFETY,
             "safety_candidate_kind": "review_only_safety_equal_split",
             "changes_pass_review": False,
             "layout": config.layout,

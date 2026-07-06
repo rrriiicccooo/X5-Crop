@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ....constants import ANALYSIS_SOURCE_CONTENT_PRIMARY
+from ....constants import CANDIDATE_SOURCE_CONTENT_PRIMARY
 from ....domain import Box, Detection, Gap
 from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ....geometry.boxes import map_work_box
@@ -147,7 +147,7 @@ def content_detection_for_count(
         reasons.append("content_confidence_low")
 
     detail = {
-        "analysis_source": ANALYSIS_SOURCE_CONTENT_PRIMARY,
+        "candidate_source": CANDIDATE_SOURCE_CONTENT_PRIMARY,
         "candidate_count": count,
         "offset_fraction": float(offset_fraction),
         "layout": config.layout,

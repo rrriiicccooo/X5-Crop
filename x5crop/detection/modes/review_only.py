@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 import numpy as np
 
-from ...constants import ANALYSIS_SOURCE_REVIEW_ONLY
+from ...constants import CANDIDATE_SOURCE_REVIEW_ONLY
 from ...domain import Box, Detection
 from ...formats import FormatSpec
 from ...geometry.boxes import map_work_box
@@ -35,7 +35,7 @@ def review_only_detection(
         0.0,
         list(review_reasons),
         {
-            "analysis_source": ANALYSIS_SOURCE_REVIEW_ONLY,
+            "candidate_source": CANDIDATE_SOURCE_REVIEW_ONLY,
             "candidate_count": 0,
             "layout": config.layout,
             "work_outer": asdict(outer),

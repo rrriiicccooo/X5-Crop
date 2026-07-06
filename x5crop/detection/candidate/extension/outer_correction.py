@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ....constants import ANALYSIS_SOURCE_HARD_SAFETY
+from ....constants import CANDIDATE_SOURCE_HARD_SAFETY
 from ....domain import Detection
 from ....formats import FormatSpec
 from ....policies.runtime.policy import DetectionPolicy
@@ -84,7 +84,7 @@ def outer_correction_candidate_extensions(
     cache: AnalysisCache,
     policy: DetectionPolicy,
 ) -> list[Detection]:
-    if detection.detail.get("analysis_source") == ANALYSIS_SOURCE_HARD_SAFETY:
+    if detection.detail.get("candidate_source") == CANDIDATE_SOURCE_HARD_SAFETY:
         return []
     if not bool(policy.candidate_plan.outer_correction_extension.enabled):
         return []

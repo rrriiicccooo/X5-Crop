@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 import numpy as np
 
-from ...constants import ANALYSIS_SOURCE_DUAL_LANE
+from ...constants import CANDIDATE_SOURCE_DUAL_LANE
 from ...domain import Box, Detection, Gap
 from ...geometry.boxes import map_work_box
 from ...runtime.config import RuntimeConfig
@@ -134,7 +134,7 @@ def _dual_lane_detail(
         for index, detection in enumerate(lane_detections, start=1)
     ]
     return {
-        "analysis_source": ANALYSIS_SOURCE_DUAL_LANE,
+        "candidate_source": CANDIDATE_SOURCE_DUAL_LANE,
         "layout": config.layout,
         "candidate_count": context.total_count,
         "work_outer": asdict(combined_work_outer),

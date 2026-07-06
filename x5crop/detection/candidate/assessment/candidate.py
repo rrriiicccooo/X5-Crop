@@ -6,8 +6,8 @@ from typing import Optional
 import numpy as np
 
 from ....constants import (
-    ANALYSIS_SOURCE_CONTENT,
-    ANALYSIS_SOURCE_SEPARATOR,
+    CANDIDATE_SOURCE_CONTENT,
+    CANDIDATE_SOURCE_SEPARATOR,
     REASON_AUTO_GATE_NOT_SATISFIED,
     REASON_CONTENT_ASPECT_CONFLICT,
     REASON_CONTENT_EVIDENCE_WEAK,
@@ -279,8 +279,8 @@ def apply_candidate_assessment_policy(
 
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
     candidate.review_reasons = sorted(set(reasons))
-    candidate.detail["analysis_source"] = (
-        ANALYSIS_SOURCE_SEPARATOR if source == "separator" else ANALYSIS_SOURCE_CONTENT
+    candidate.detail["candidate_source"] = (
+        CANDIDATE_SOURCE_SEPARATOR if source == "separator" else CANDIDATE_SOURCE_CONTENT
     )
     candidate.detail["content_evidence"] = content_detail
     candidate.detail["candidate_assessment"] = {
