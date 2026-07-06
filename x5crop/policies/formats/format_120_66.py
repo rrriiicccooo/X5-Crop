@@ -12,8 +12,6 @@ def parameters() -> FormatParameters:
         FORMAT_ID,
         gap_max_width_max=720,
         separator_width_profile_max_width_ratio=0.140,
-        separator_width_profile_min_mean=0.90,
-        separator_width_profile_min_prominence=0.015,
         short_axis_geometry_correction_min_error=0.24,
         partial_edge_ratio_extras=(0.06, 0.10),
         partial_edge_max_candidates=6,

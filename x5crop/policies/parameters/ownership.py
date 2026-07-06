@@ -16,7 +16,7 @@ class FormatToleranceProfile:
 
 
 @dataclass(frozen=True)
-class FormatSignalToleranceProfile:
+class FormatContentProfileTolerance:
     items: ParameterItems = ()
 
     def as_dict(self) -> dict[str, Any]:
@@ -34,13 +34,15 @@ class SearchBudgetPolicy:
 @dataclass(frozen=True)
 class FormatParameterOverrideLayers:
     tolerance: FormatToleranceProfile = FormatToleranceProfile()
-    signal_tolerance: FormatSignalToleranceProfile = FormatSignalToleranceProfile()
+    content_profile_tolerance: FormatContentProfileTolerance = (
+        FormatContentProfileTolerance()
+    )
     search_budget: SearchBudgetPolicy = SearchBudgetPolicy()
 
     def as_dict(self) -> dict[str, Any]:
         merged: dict[str, Any] = {}
         merged.update(self.tolerance.as_dict())
-        merged.update(self.signal_tolerance.as_dict())
+        merged.update(self.content_profile_tolerance.as_dict())
         merged.update(self.search_budget.as_dict())
         return merged
 
@@ -66,11 +68,9 @@ FORMAT_TOLERANCE_PARAMETER_FIELDS = frozenset(
     }
 )
 
-FORMAT_SIGNAL_TOLERANCE_PARAMETER_FIELDS = frozenset(
+FORMAT_CONTENT_PROFILE_TOLERANCE_PARAMETER_FIELDS = frozenset(
     {
         "content_profile_min_run_ratio",
-        "separator_width_profile_min_mean",
-        "separator_width_profile_min_prominence",
     }
 )
 
@@ -89,7 +89,7 @@ FORMAT_SEARCH_BUDGET_PARAMETER_FIELDS = frozenset(
 
 FORMAT_PARAMETER_OVERRIDE_FIELDS = frozenset(
     FORMAT_TOLERANCE_PARAMETER_FIELDS
-    | FORMAT_SIGNAL_TOLERANCE_PARAMETER_FIELDS
+    | FORMAT_CONTENT_PROFILE_TOLERANCE_PARAMETER_FIELDS
     | FORMAT_SEARCH_BUDGET_PARAMETER_FIELDS
 )
 
@@ -103,15 +103,15 @@ def split_format_parameter_overrides(overrides: dict[str, Any]) -> FormatParamet
     if invalid:
         joined = ", ".join(invalid)
         raise ValueError(
-            "Format modules may only override physical tolerance, signal tolerance, "
-            f"or search budget parameters; invalid override(s): {joined}"
+            "Format modules may only override physical tolerance, content profile "
+            f"tolerance, or search budget parameters; invalid override(s): {joined}"
         )
     return FormatParameterOverrideLayers(
         tolerance=FormatToleranceProfile(
             _layer_items(overrides, FORMAT_TOLERANCE_PARAMETER_FIELDS)
         ),
-        signal_tolerance=FormatSignalToleranceProfile(
-            _layer_items(overrides, FORMAT_SIGNAL_TOLERANCE_PARAMETER_FIELDS)
+        content_profile_tolerance=FormatContentProfileTolerance(
+            _layer_items(overrides, FORMAT_CONTENT_PROFILE_TOLERANCE_PARAMETER_FIELDS)
         ),
         search_budget=SearchBudgetPolicy(
             _layer_items(overrides, FORMAT_SEARCH_BUDGET_PARAMETER_FIELDS)
@@ -124,12 +124,12 @@ def validate_format_parameter_overrides(overrides: dict[str, Any]) -> None:
 
 
 __all__ = [
+    "FORMAT_CONTENT_PROFILE_TOLERANCE_PARAMETER_FIELDS",
     "FORMAT_PARAMETER_OVERRIDE_FIELDS",
     "FORMAT_SEARCH_BUDGET_PARAMETER_FIELDS",
-    "FORMAT_SIGNAL_TOLERANCE_PARAMETER_FIELDS",
     "FORMAT_TOLERANCE_PARAMETER_FIELDS",
+    "FormatContentProfileTolerance",
     "FormatParameterOverrideLayers",
-    "FormatSignalToleranceProfile",
     "FormatToleranceProfile",
     "SearchBudgetPolicy",
     "split_format_parameter_overrides",
