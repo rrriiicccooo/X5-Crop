@@ -66,6 +66,18 @@ def _gap_refinement_detail(
             bool(family_policy.requires_explicit_count_for_partial),
         )
         result_detail.setdefault("target_gap_methods", list(family_policy.target_gap_methods))
+        if family_policy.model_promotion_gap_methods:
+            result_detail.setdefault(
+                "model_promotion_gap_methods",
+                list(family_policy.model_promotion_gap_methods),
+            )
+            result_detail.setdefault(
+                "evidence_roles",
+                {
+                    "hard_gap_refresh": list(family_policy.target_gap_methods),
+                    "model_gap_promotion": list(family_policy.model_promotion_gap_methods),
+                },
+            )
     if eligible is not None:
         result_detail.setdefault("eligible", bool(eligible))
     if skipped_reason is not None:

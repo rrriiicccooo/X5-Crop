@@ -182,6 +182,25 @@ def assess_edge_pair_replacement(
     )
 
 
+def edge_pair_replacement_role(gap: Gap) -> str:
+    if not is_hard_gap_method(gap.method):
+        return "model_gap_promotion"
+    if is_detected_gap_method(gap.method):
+        return "hard_gap_refresh"
+    return "edge_pair_refresh"
+
+
+def edge_pair_replacement_evidence_role_detail(gap: Gap, edge_gap: Gap) -> dict[str, Any]:
+    role = edge_pair_replacement_role(gap)
+    return {
+        "replacement_role": role,
+        "source_method": gap.method,
+        "result_method": edge_gap.method,
+        "promoted_from_model_gap": bool(role == "model_gap_promotion"),
+        "refreshed_hard_gap": bool(role in {"hard_gap_refresh", "edge_pair_refresh"}),
+    }
+
+
 def edge_pair_search_limits(pitch: float, params: EdgePairParameters) -> EdgePairSearchLimits:
     window = clamp_int(pitch * params.window_ratio, 8, 520)
     min_gutter = clamp_int(pitch * params.min_gutter_ratio, 2, 40)
@@ -330,26 +349,31 @@ def refine_gaps_with_edge_profiles(
                 "kept_method": gap.method,
                 "search": search.detail(),
             }
+            rejected_detail.update(edge_pair_replacement_evidence_role_detail(gap, edge_gap))
             rejected_detail.update(assessment.detail())
             rejected.append(rejected_detail)
             continue
         refined.append(edge_gap)
-        accepted.append(
-            {
-                "index": int(gap.index),
-                "center": float(edge_gap.center),
-                "width": float(edge_gap.width),
-                "score": float(edge_gap.score),
-                "replaced_method": gap.method,
-                "search": search.detail(),
-                "replacement": assessment.detail(),
-            }
-        )
+        accepted_detail = {
+            "index": int(gap.index),
+            "center": float(edge_gap.center),
+            "width": float(edge_gap.width),
+            "score": float(edge_gap.score),
+            "replaced_method": gap.method,
+            "search": search.detail(),
+            "replacement": assessment.detail(),
+        }
+        accepted_detail.update(edge_pair_replacement_evidence_role_detail(gap, edge_gap))
+        accepted.append(accepted_detail)
+    model_promotion_count = sum(1 for item in accepted if item.get("promoted_from_model_gap"))
+    hard_refresh_count = sum(1 for item in accepted if item.get("refreshed_hard_gap"))
     return EdgePairRefinementResult(
         refined,
         {
             "used": True,
             "params": asdict(params),
+            "model_gap_promotion_count": int(model_promotion_count),
+            "hard_gap_refresh_count": int(hard_refresh_count),
             "search_limits": {
                 "pitch": float(pitch),
                 "window_px": int(search_limits.window),
@@ -372,6 +396,8 @@ __all__ = [
     "best_edge_pair_candidate",
     "edge_pair_gap_from_candidate",
     "edge_pair_candidates_for_gap",
+    "edge_pair_replacement_evidence_role_detail",
+    "edge_pair_replacement_role",
     "edge_pair_search_result_for_gap",
     "edge_pair_search_limits",
     "refine_gaps_with_edge_profiles",

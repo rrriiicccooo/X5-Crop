@@ -138,6 +138,7 @@ class SeparatorRefinementFamilyPolicy:
     strip_modes: tuple[str, ...] = (FULL,)
     requires_explicit_count_for_partial: bool = True
     target_gap_methods: tuple[str, ...] = ()
+    model_promotion_gap_methods: tuple[str, ...] = ()
 
     def available_for(self, strip_mode: str, explicit_count: bool) -> bool:
         if self.mode == "off":

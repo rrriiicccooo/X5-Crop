@@ -34,6 +34,9 @@ Current stable release: v4.2.8
   strip-mode / partial 显式 count 条件；standard strip 的 full 全部 eligible，
   partial 只有显式 count eligible，dual-lane / review-only 不进入普通 refinement。
   report detail 统一写出 `family`、`phase`、`eligible` 和 `skipped_reason`。
+  edge-pair refinement 现在显式区分 hard-gap refresh 与 model-gap promotion；
+  若 equal / grid / content model gap 被独立 edge-pair 证据升级为 hard
+  `edge-pair`，report 会写出 source / result method、promotion role 和 promotion count。
 - 旧 `--analysis` 增强开关已退休；deskew 的二次边缘拟合保留为
   `--deskew-fallback {auto,always,off}`。该 fallback 只服务 deskew angle
   selection，不再影响 separator proposal / refinement。
@@ -142,7 +145,7 @@ Current stable release: v4.2.8
 - separator evidence summary 的内部方法从 `decision_summary()` 改为
   `evidence_detail()`；decision 层仍负责消费这些 evidence 并形成最终判定。
 - separator refinement wrappers 已从 `separator_gaps.py` 拆到
-  `separator_refinements.py`；edge-pair、robust-grid、enhanced 和 nearby
+  `separator_refinements.py`；edge-pair、robust-grid 和 nearby
   refinement 细节集中在 refinement 模块，`separator_gaps.py` 只保留 initial
   source selection、primary build 和 late refinement attachment。report key、
   gap 顺序、candidate assessment 和 PASS / REVIEW 行为不变。
@@ -168,7 +171,7 @@ Current stable release: v4.2.8
 - nearby separator refinement 只返回 refinement 后的 gap evidence、refinement
   detail 和 pre-refinement gaps；confidence cap / scoring 保留在 detection build 与
   assessment 消费层。
-- edge-pair / enhanced / nearby refinement 共用
+- edge-pair / nearby refinement 共用
   `geometry/gap_refinement_detail.py` 组装 accepted / rejected / searched
   batch detail 和 count；report/detail 字段与修正条件保持不变。
 - active gap search profile vocabulary 只保留 `width_aware`；standard hard
@@ -544,7 +547,10 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   only an evidence summary consumed by gate / partial-safety checks.
 - Separator enhanced promotion is retired. Active hard gap methods are now only
   `detected` and `edge-pair`; separator refinement keeps edge-pair and nearby
-  refinement only.
+  refinement only. Edge-pair refinement now explicitly separates hard-gap
+  refresh from model-gap promotion; when independent edge-pair evidence promotes
+  an equal / grid / content model gap to hard `edge-pair`, report detail records
+  the source / result method, promotion role, and promotion count.
 - The old `--analysis` enhancement switch is retired. Deskew's second-pass edge
   fitting is now `--deskew-fallback {auto,always,off}` and affects only deskew
   angle selection, not separator proposal or refinement.

@@ -200,6 +200,7 @@ def separator_gate_detail(
         "reason": assessment.reason,
         "expected_gaps": evidence.expected_gaps,
         "hard_gaps": evidence.hard_gaps,
+        "separator_support_count": evidence.hard_gaps + evidence.grid_gaps,
         "actual_detected_gaps": evidence.actual_detected_gaps,
         "broad_separator_width_gaps": evidence.broad_separator_width_gaps,
         "grid_gaps": evidence.grid_gaps,

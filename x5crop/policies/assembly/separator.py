@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...constants import GAP_DETECTED, GAP_EDGE_PAIR
+from ...constants import GAP_CONTENT, GAP_DETECTED, GAP_EDGE_PAIR, GAP_EQUAL, GAP_GRID
 from ...geometry.detection_parameters import (
     EdgePairParameters,
     EdgeRefineProfileParameters,
@@ -161,6 +161,7 @@ def separator_refinement_policy(
             strip_modes=standard_strip_modes,
             requires_explicit_count_for_partial=True,
             target_gap_methods=(GAP_DETECTED, GAP_EDGE_PAIR),
+            model_promotion_gap_methods=(GAP_GRID, GAP_EQUAL, GAP_CONTENT),
         ),
         nearby=SeparatorRefinementFamilyPolicy(
             mode="conditional",
