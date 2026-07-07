@@ -9,7 +9,7 @@ from .....cache import AnalysisCache
 from .....runtime.config import RuntimeConfig
 from .....utils import box_from_dict
 from ....evidence.outer_alignment import corrected_outer_from_alignment
-from .policy import correction_axes_allowed, correction_family_available
+from .constraints import correction_axes_allowed
 from .types import OuterCorrectionProposal
 
 
@@ -19,13 +19,13 @@ def content_containment_correction_proposal(
     detection: Detection,
     alignment: dict[str, Any],
     cache: AnalysisCache,
-    explicit_count: bool,
+    eligible_families: set[str],
 ) -> Optional[OuterCorrectionProposal]:
     del config, cache
+    if "content_containment" not in eligible_families:
+        return None
     policy = get_detection_policy(fmt.name, detection.strip_mode)
     family = policy.outer.correction.content_containment.family
-    if not correction_family_available(family, detection, explicit_count):
-        return None
     corrected_outer = corrected_outer_from_alignment(alignment, detection.count, policy)
     if corrected_outer is None:
         return None

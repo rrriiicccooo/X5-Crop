@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 import unittest
 
@@ -55,6 +56,45 @@ class SourceNamingContractTest(unittest.TestCase):
                 for term in banned:
                     if term in text:
                         offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
+    def test_physical_layer_does_not_read_candidate_assessment_or_decision_terms(self) -> None:
+        banned = (
+            "candidate_assessment",
+            "auto_gate",
+            "PASS",
+            "REVIEW",
+            "correction_family_available",
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "physical"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
+    def test_physical_layer_does_not_import_candidate_or_decision_packages(self) -> None:
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "physical"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ImportFrom):
+                    continue
+                module = node.module or ""
+                if (
+                    module.startswith("candidate")
+                    or module.startswith("decision")
+                    or module.startswith("x5crop.detection.candidate")
+                    or module.startswith("x5crop.detection.decision")
+                ):
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {module}")
 
         self.assertEqual(offenders, [])
 

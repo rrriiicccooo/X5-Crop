@@ -8,6 +8,7 @@ from ....constants import CANDIDATE_SOURCE_HARD_SAFETY
 from ....domain import Detection
 from ....formats import FormatSpec
 from ....policies.runtime.policy import DetectionPolicy
+from ....policies.runtime.outer import OuterCorrectionFamilyPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ...evidence.content.frame_support import content_evidence_detail
@@ -16,21 +17,48 @@ from .corrected_outer import build_assessed_corrected_outer_candidate
 from ..plan.reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
 from ...physical.outer.correction.content_containment import content_containment_correction_proposal
 from ...physical.outer.correction.geometry import geometry_consistency_correction_proposal, geometry_consistency_model_detail
-from ...physical.outer.correction.policy import correction_family_available
 
 
-def _correction_skip_reason(family, detection: Detection, explicit_count: bool) -> str | None:
+def _candidate_assessment_detail(detection: Detection) -> dict[str, Any]:
+    assessment = detection.detail.get("candidate_assessment", {})
+    return dict(assessment) if isinstance(assessment, dict) else {}
+
+
+def _candidate_is_separator_assessed(detection: Detection) -> bool:
+    return _candidate_assessment_detail(detection).get("source") == "separator"
+
+
+def _candidate_separator_hard_evidence_ok(detection: Detection) -> bool:
+    hard_detail = _candidate_assessment_detail(detection).get("separator_hard_evidence", {})
+    return isinstance(hard_detail, dict) and bool(hard_detail.get("ok", False))
+
+
+def _correction_skip_reason(
+    name: str,
+    family: OuterCorrectionFamilyPolicy,
+    detection: Detection,
+    explicit_count: bool,
+) -> str | None:
     if family.mode == "off":
         return "mode_off"
     if detection.strip_mode not in family.strip_modes:
         return "strip_mode_not_enabled"
     if detection.strip_mode == "partial" and family.requires_explicit_count_for_partial and not explicit_count:
         return "partial_requires_explicit_count"
-    if family.requires_separator_assessment:
-        assessment = detection.detail.get("candidate_assessment", {})
-        if not isinstance(assessment, dict) or assessment.get("source") != "separator":
-            return "requires_separator_assessment"
+    if family.requires_separator_assessment and not _candidate_is_separator_assessed(detection):
+        return "requires_separator_assessment"
+    if name == "short_axis_geometry" and not _candidate_separator_hard_evidence_ok(detection):
+        return "requires_separator_hard_evidence"
     return None
+
+
+def _correction_family_eligible_for_candidate(
+    name: str,
+    family: OuterCorrectionFamilyPolicy,
+    detection: Detection,
+    explicit_count: bool,
+) -> bool:
+    return _correction_skip_reason(name, family, detection, explicit_count) is None
 
 
 def _outer_correction_plan_detail(
@@ -47,15 +75,16 @@ def _outer_correction_plan_detail(
     eligible = [
         name
         for name, family in families.items()
-        if correction_family_available(family, detection, explicit_count)
+        if _correction_family_eligible_for_candidate(name, family, detection, explicit_count)
     ]
     skipped = {
         name: reason
         for name, family in families.items()
-        if (reason := _correction_skip_reason(family, detection, explicit_count)) is not None
+        if (reason := _correction_skip_reason(name, family, detection, explicit_count)) is not None
     }
     return {
         "count_explicit": bool(explicit_count),
+        "eligibility_owner": "candidate.extension",
         "eligible_families": eligible,
         "skipped_reasons": skipped,
     }
@@ -144,7 +173,7 @@ def outer_correction_candidate_extensions(
         content_detail,
         outer_alignment,
         cache,
-        explicit_count,
+        set(correction_plan["eligible_families"]),
     )
     if proposal is not None:
         reassessed = build_assessed_corrected_outer_candidate(gray, config, fmt, detection, proposal, cache, policy)
@@ -165,7 +194,14 @@ def outer_correction_candidate_extensions(
         return extensions
 
     if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
-        proposal = content_containment_correction_proposal(config, fmt, detection, outer_alignment, cache, explicit_count)
+        proposal = content_containment_correction_proposal(
+            config,
+            fmt,
+            detection,
+            outer_alignment,
+            cache,
+            set(correction_plan["eligible_families"]),
+        )
         if proposal is not None:
             reassessed = build_assessed_corrected_outer_candidate(gray, config, fmt, detection, proposal, cache, policy)
             reassessed.detail["candidate_plan"] = {

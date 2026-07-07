@@ -1,21 +1,7 @@
 from __future__ import annotations
 
-from .....domain import Box, Detection
+from .....domain import Box
 from .....policies.runtime.outer import OuterCorrectionFamilyPolicy
-
-
-def correction_family_available(
-    family: OuterCorrectionFamilyPolicy,
-    detection: Detection,
-    explicit_count: bool,
-) -> bool:
-    if not family.available_for(detection.strip_mode, explicit_count):
-        return False
-    if family.requires_separator_assessment:
-        assessment = detection.detail.get("candidate_assessment", {})
-        if not isinstance(assessment, dict) or assessment.get("source") != "separator":
-            return False
-    return True
 
 
 def correction_axes_allowed(
@@ -32,4 +18,4 @@ def correction_axes_allowed(
     return bool(changed_axes) and changed_axes.issubset(allowed)
 
 
-__all__ = ["correction_axes_allowed", "correction_family_available"]
+__all__ = ["correction_axes_allowed"]

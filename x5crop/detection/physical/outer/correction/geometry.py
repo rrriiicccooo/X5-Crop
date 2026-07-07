@@ -14,7 +14,7 @@ from .....policies.runtime.policy import DetectionPolicy
 from .....cache import AnalysisCache
 from .....runtime.config import RuntimeConfig
 from .....utils import box_from_dict, clamp_int
-from .policy import correction_axes_allowed, correction_family_available
+from .constraints import correction_axes_allowed
 from .types import OuterCorrectionProposal
 
 
@@ -25,19 +25,12 @@ def corrected_outer_for_short_axis_geometry(
     detection: Detection,
     content_detail: dict[str, Any],
     cache: AnalysisCache,
-    explicit_count: bool,
     policy: Optional[DetectionPolicy] = None,
 ) -> Optional[Box]:
     policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     short_axis = policy.outer.correction.geometry_consistency.short_axis
     family = short_axis.family
-    if not short_axis.enabled or not correction_family_available(family, detection, explicit_count):
-        return None
-    candidate = detection.detail.get("candidate_assessment", {})
-    if not isinstance(candidate, dict) or candidate.get("source") != "separator":
-        return None
-    hard_detail = candidate.get("separator_hard_evidence", {})
-    if not isinstance(hard_detail, dict) or not bool(hard_detail.get("ok", False)):
+    if not short_axis.enabled:
         return None
     if str(content_detail.get("support", "")) != "aspect_conflict":
         return None
@@ -141,13 +134,12 @@ def corrected_outer_from_long_axis_geometry(
     geometry_detail: dict[str, Any],
     alignment: dict[str, Any],
     cache: AnalysisCache,
-    explicit_count: bool,
     policy: Optional[DetectionPolicy] = None,
 ) -> Optional[Box]:
     policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     long_axis = policy.outer.correction.geometry_consistency.long_axis
     family = long_axis.family
-    if not long_axis.enabled or not correction_family_available(family, detection, explicit_count):
+    if not long_axis.enabled:
         return None
     if not bool(geometry_detail.get("used", False)):
         return None
@@ -243,29 +235,31 @@ def geometry_consistency_correction_proposal(
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
-    explicit_count: bool,
+    eligible_families: set[str],
 ) -> Optional[OuterCorrectionProposal]:
     policy = get_detection_policy(fmt.name, detection.strip_mode)
-    corrected_outer = corrected_outer_for_short_axis_geometry(
-        gray,
-        config,
-        fmt,
-        detection,
-        content_detail,
-        cache,
-        explicit_count,
-        policy=policy,
-    )
-    if corrected_outer is not None:
-        return OuterCorrectionProposal(
-            box=corrected_outer,
-            name="geometry_consistency_short_axis_outer",
-            strategy="geometry_consistency_correction",
-            source_reason="short_axis_aspect_conflict",
-            original_outer_work_box=detection.detail.get("work_outer"),
-            suppress_outer_mismatch=True,
-            detail={"correction_kind": "short_axis"},
+    if "short_axis_geometry" in eligible_families:
+        corrected_outer = corrected_outer_for_short_axis_geometry(
+            gray,
+            config,
+            fmt,
+            detection,
+            content_detail,
+            cache,
+            policy=policy,
         )
+        if corrected_outer is not None:
+            return OuterCorrectionProposal(
+                box=corrected_outer,
+                name="geometry_consistency_short_axis_outer",
+                strategy="geometry_consistency_correction",
+                source_reason="short_axis_aspect_conflict",
+                original_outer_work_box=detection.detail.get("work_outer"),
+                suppress_outer_mismatch=True,
+                detail={"correction_kind": "short_axis"},
+            )
+    if "long_axis_geometry" not in eligible_families:
+        return None
 
     geometry_detail = geometry_consistency_model_detail(gray, detection, config, fmt, cache)
     detection.detail["geometry_consistency_model"] = geometry_detail
@@ -276,7 +270,6 @@ def geometry_consistency_correction_proposal(
         geometry_detail,
         outer_alignment,
         cache,
-        explicit_count,
         policy=policy,
     )
     if corrected_outer is None:
