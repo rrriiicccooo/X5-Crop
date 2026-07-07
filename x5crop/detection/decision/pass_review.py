@@ -21,12 +21,8 @@ def _detail_list(value: Any) -> list[Any]:
 def _candidate_reason_inputs_before_decision(detection: Detection) -> dict[str, Any]:
     assessment = detection.detail.get("candidate_assessment", {})
     assessment = dict(assessment) if isinstance(assessment, dict) else {}
-    blockers = normalized_review_reasons(
-        [str(reason) for reason in _detail_list(assessment.get("blockers"))]
-    )
-    diagnostics = normalized_review_reasons(
-        [str(reason) for reason in _detail_list(assessment.get("diagnostics"))]
-    )
+    blockers = [str(reason) for reason in _detail_list(assessment.get("blockers"))]
+    diagnostics = [str(reason) for reason in _detail_list(assessment.get("diagnostics"))]
     normalized_candidate_reasons = normalized_review_reasons(
         list(detection.review_reasons)
     )
@@ -102,7 +98,7 @@ def apply_final_decision_policy(
         )
     if not bool(evidence["content"]["ok"]):
         add_reason(
-            policy.decision.content_only_evidence_reason,
+            policy.decision.content_evidence_insufficient_reason,
             bucket="content",
             signal="content_not_ok",
         )

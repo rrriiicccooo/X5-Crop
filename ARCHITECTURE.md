@@ -136,6 +136,8 @@ candidate plan
 - build 只生成未评分 Detection；assessment 和 decision 才消费证据。
 - candidate assessment 的 reason 只能作为候选 blockers / diagnostics；最终用户可见
   `review_reasons` 只由 decision contract 生成。
+- `content_only_evidence` 只表示 candidate source 主要依赖 content；content containment /
+  content harm 失败使用 `content_evidence_insufficient`，不能复用 content-only reason。
 - candidate selection 只能记录 `selection_risk_inputs`、selection override 和 competition
   detail；它不能提前追加 final-looking review reason，也不能提前执行 decision cap。
 - content mismatch selector 属于 candidate selection；它只能读取 candidate-level reasons 并
@@ -401,7 +403,9 @@ Candidate selection records `selection_risk_inputs`, selection override, and
 competition detail only; it must not append final-looking review reasons or apply
 decision caps. The content mismatch selector is a candidate-selection rule: it
 reads candidate-level reasons and may choose a more credible candidate, but it is
-not a review policy and does not create final review reasons. Dual-lane lane
+not a review policy and does not create final review reasons. `content_only_evidence`
+means the candidate source relies mainly on content; failed content containment
+or content-harm checks use `content_evidence_insufficient` instead. Dual-lane lane
 content / outer-alignment checks belong to
 `candidate.assessment`; `candidate.plan` selects lane candidates and calls the
 assessment helper. Lane-candidate caps are recorded in
