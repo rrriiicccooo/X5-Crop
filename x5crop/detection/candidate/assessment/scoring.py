@@ -51,11 +51,15 @@ def content_support_score(
     del format_name, content_policy
     if not bool(detail.get("used", False)):
         return 0.0
+    has_containment_fields = (
+        "content_containment_ok" in detail
+        or "content_harm_risk" in detail
+    )
     containment_ok = bool(detail.get("content_containment_ok", False))
     harm_risk = bool(detail.get("content_harm_risk", True))
+    if has_containment_fields:
+        return 1.0 if containment_ok and not harm_risk else 0.0
     support = str(detail.get("support", ""))
-    if containment_ok and not harm_risk:
-        return 1.0
     if support == "ok":
         return 1.0
     return 0.0

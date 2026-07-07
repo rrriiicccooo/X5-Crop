@@ -184,6 +184,23 @@ class PhysicalScoringContractTest(unittest.TestCase):
             0.40,
         )
 
+    def test_content_support_score_prefers_explicit_harm_risk_over_legacy_support(self) -> None:
+        policy = get_detection_policy("120-66", "full").content
+        containment = {
+            "used": True,
+            "support": "ok",
+            "content_containment_ok": False,
+            "content_harm_risk": True,
+            "median_mean": 0.20,
+            "median_coverage": 0.40,
+            "max_aspect_error": 0.40,
+        }
+
+        self.assertEqual(
+            content_support_score(containment, "120-66", policy),
+            0.0,
+        )
+
     def test_broad_separator_width_does_not_cap_confidence_by_itself(self) -> None:
         gray = np.zeros((100, 300), dtype=np.uint8)
         gray[:, ::2] = 255
