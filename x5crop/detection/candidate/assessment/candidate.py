@@ -33,7 +33,7 @@ from .gate_support import (
     separator_geometry_support_applies,
 )
 from .gates import assess_separator_gate
-from .partial_holder import partial_extra_holder_frames_gate_detail
+from .partial_holder import partial_safe_extra_frames_gate_detail
 from .scoring import (
     content_quality_score,
     content_support_score,
@@ -257,7 +257,7 @@ def apply_candidate_assessment_policy(
     confidence = max(float(candidate.confidence), joint_score)
     if floor_applies:
         confidence = max(confidence, scoring_policy.hard_full_confidence_floor)
-    partial_safe_extra_frames = partial_extra_holder_frames_gate_detail(
+    partial_safe_extra_frames = partial_safe_extra_frames_gate_detail(
         gray,
         candidate,
         separator_gate_detail,
@@ -413,7 +413,6 @@ def apply_candidate_assessment_policy(
         "content_containment": containment_detail,
         "separator_hard_evidence": separator_gate_detail,
         "evidence_independence": independence_detail,
-        "partial_extra_holder_frames": partial_safe_extra_frames,
         "partial_safe_extra_frames": partial_safe_extra_frames,
     }
     return candidate

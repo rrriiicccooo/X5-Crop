@@ -5,9 +5,11 @@ from pathlib import Path
 
 import numpy as np
 
+from x5crop.detection.decision.final_decision import _apply_decision_tail_reasons
 from x5crop.detection.decision.pass_review import apply_final_decision_policy
 from x5crop.domain import Box, Detection
 from x5crop.formats import format_spec
+from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.decision.contract import decision_contract_for
 from x5crop.runtime.config import RuntimeConfig
 
@@ -109,6 +111,79 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertIn("decision_confidence_caps", decided.detail["decision_summary"])
         self.assertIn("final_review_reasons_added", decided.detail["decision_summary"])
         self.assertNotIn("review_reasons_added", decided.detail["decision_summary"])
+
+    def test_decision_tail_reasons_update_added_summary(self) -> None:
+        detection = Detection(
+            film_format="135",
+            layout="horizontal",
+            strip_mode="partial",
+            count=1,
+            outer=Box(10, 10, 90, 90),
+            frames=[Box(10, 10, 90, 90)],
+            gaps=[],
+            confidence=0.83,
+            review_reasons=["evidence_combination_insufficient"],
+            detail={
+                "partial_best": True,
+                "decision_reason_inputs": [],
+                "decision_summary": {
+                    "final_review_reasons_added": ["evidence_combination_insufficient"],
+                    "final_review_reasons": ["evidence_combination_insufficient"],
+                    "decision_reason_inputs": [],
+                },
+            },
+        )
+        config = RuntimeConfig(
+            input_path=Path("synthetic.tif"),
+            output_dir=None,
+            film_format="135",
+            layout_auto=False,
+            layout="horizontal",
+            strip_mode="partial",
+            count=1,
+            count_override=1,
+            page=0,
+            bleed_x=0,
+            bleed_y=0,
+            deskew="off",
+            deskew_fallback="off",
+            deskew_min_angle=-2.0,
+            deskew_max_angle=2.0,
+            confidence_threshold=0.85,
+            review_dir=None,
+            copy_review_files=False,
+            export_review=False,
+            diagnostics=False,
+            compression="auto",
+            debug=False,
+            debug_analysis=False,
+            dry_run=True,
+            overwrite=True,
+            report=True,
+            debug_errors=False,
+            reuse_analysis=False,
+            jobs=1,
+        )
+
+        _apply_decision_tail_reasons(
+            detection,
+            config,
+            get_detection_policy("135", "partial"),
+            {},
+        )
+
+        self.assertEqual(
+            detection.detail["final_review_reasons"],
+            ["evidence_combination_insufficient", "partial_edge_uncertain"],
+        )
+        self.assertEqual(
+            detection.detail["decision_summary"]["final_review_reasons_added"],
+            ["evidence_combination_insufficient", "partial_edge_uncertain"],
+        )
+        self.assertEqual(
+            detection.detail["decision_summary"]["decision_reason_inputs"][0]["signal"],
+            "partial_best",
+        )
 
 
 if __name__ == "__main__":

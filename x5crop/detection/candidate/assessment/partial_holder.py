@@ -239,7 +239,7 @@ def partial_safe_frame_content_detail(
     }
 
 
-def partial_extra_holder_frames_gate_detail(
+def partial_safe_extra_frames_gate_detail(
     gray: np.ndarray,
     detection: Detection,
     hard_detail: dict[str, Any],
@@ -353,7 +353,7 @@ def partial_extra_holder_frames_gate_detail(
 
 
 __all__ = [
-    "partial_extra_holder_frames_gate_detail",
+    "partial_safe_extra_frames_gate_detail",
     "partial_safe_frame_content_detail",
     "partial_safe_leading_content_detail",
     "partial_safe_holder_edge_disambiguation_detail",

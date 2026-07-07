@@ -11,7 +11,7 @@ from x5crop.detection.candidate.assessment.gate_support import (
     separator_geometry_support_applies,
 )
 from x5crop.detection.candidate.assessment.content_candidate import content_candidate_confidence_and_reasons
-from x5crop.detection.candidate.assessment.partial_holder import partial_extra_holder_frames_gate_detail
+from x5crop.detection.candidate.assessment.partial_holder import partial_safe_extra_frames_gate_detail
 from x5crop.detection.candidate.assessment.scoring import (
     content_quality_score,
     content_support_score,
@@ -604,7 +604,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
         }
 
-        detail = partial_extra_holder_frames_gate_detail(
+        detail = partial_safe_extra_frames_gate_detail(
             np.zeros((100, 300), dtype=np.uint8),
             detection,
             {"expected_gaps": 2, "hard_gaps": 1, "grid_gaps": 1, "equal_gaps": 0},
@@ -858,7 +858,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
         }
 
-        detail = partial_extra_holder_frames_gate_detail(
+        detail = partial_safe_extra_frames_gate_detail(
             np.zeros((100, 300), dtype=np.uint8),
             detection,
             {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0},

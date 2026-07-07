@@ -53,7 +53,7 @@ def apply_detection_decision(
         else {"used": False, "reason": policy.decision.outer_alignment_disabled_reason}
     )
     detection.detail["outer_content_alignment"] = outer_alignment
-    _apply_pre_decision_review_caps(
+    _apply_decision_confidence_caps(
         gray,
         detection,
         config,
@@ -80,7 +80,7 @@ def apply_detection_decision(
     )
 
 
-def _apply_pre_decision_review_caps(
+def _apply_decision_confidence_caps(
     gray: np.ndarray,
     detection: Detection,
     config: RuntimeConfig,
@@ -158,12 +158,14 @@ def _apply_decision_tail_reasons(
     deskew_detail: dict[str, Any],
 ) -> None:
     if detection.confidence < config.confidence_threshold:
+        tail_reasons: list[str] = []
         reason_inputs = detection.detail.setdefault("decision_reason_inputs", [])
         if not isinstance(reason_inputs, list):
             reason_inputs = []
             detection.detail["decision_reason_inputs"] = reason_inputs
 
         def append_tail_reason(reason: str, signal: str) -> None:
+            tail_reasons.append(reason)
             detection.review_reasons.append(reason)
             reason_inputs.append(
                 {
@@ -192,6 +194,12 @@ def _apply_decision_tail_reasons(
         detection.detail["final_review_reasons"] = list(detection.review_reasons)
         decision_summary = detection.detail.get("decision_summary", {})
         if isinstance(decision_summary, dict):
+            added = decision_summary.get("final_review_reasons_added", [])
+            if not isinstance(added, list):
+                added = []
+            decision_summary["final_review_reasons_added"] = normalized_review_reasons(
+                [*added, *tail_reasons]
+            )
             decision_summary["final_review_reasons"] = list(detection.review_reasons)
             decision_summary["decision_reason_inputs"] = reason_inputs
 

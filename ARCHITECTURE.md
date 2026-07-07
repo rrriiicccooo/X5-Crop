@@ -172,7 +172,7 @@ candidate plan
 - `candidate_assessment.blockers`、`candidate_assessment.diagnostics` 和
   `candidate_assessment.auto_gate_inputs` 是 report/debug 的候选级解释，不是最终裁决。
 - `decision_reason_inputs`、`final_review_reasons_added` 和 `final_review_reasons` 是最终
-  PASS / REVIEW 的解释入口。
+  PASS / REVIEW 的解释入口；decision tail reason 也必须进入这些 final summary 字段。
 
 字段命名必须反映物理语义。`width_cv` 只能作为 generic diagnostic 或 separator / gap
 几何测量；照片宽度证据使用 `photo_width_*`。

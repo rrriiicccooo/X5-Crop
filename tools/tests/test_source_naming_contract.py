@@ -190,6 +190,23 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_candidate_assessment_uses_canonical_detail_names(self) -> None:
+        banned = (
+            "partial_extra_holder_frames",
+            "partial_extra_holder_frames_gate_detail",
+            "_apply_pre_decision_review_caps",
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_format_policy_modules_expose_only_unified_build_entry(self) -> None:
         banned = (
             "def full_policy",
