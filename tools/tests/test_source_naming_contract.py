@@ -294,6 +294,28 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn('assessment["auto_gate"] = False', text)
         self.assertIn("apply_safety_candidate_assessment", text)
 
+    def test_safety_candidate_detail_uses_candidate_and_decision_names(self) -> None:
+        banned = (
+            "SAFETY_CANDIDATE_REVIEW_ONLY_REASON",
+            "safety_candidate_review_only",
+            "review_only_safety_equal_split",
+            "changes_pass_review",
+            '"review_only": True',
+        )
+        offenders: list[str] = []
+        for path in (
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "assessment" / "safety.py",
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "proposal" / "safety.py",
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan" / "sources.py",
+            PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "read_only.py",
+        ):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_decision_package_marker_does_not_reexport_runtime_helpers(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "__init__.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))

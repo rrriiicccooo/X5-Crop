@@ -7,6 +7,7 @@ from ...constants import (
     CANDIDATE_SOURCE_CONTENT_PRIMARY,
     CANDIDATE_SOURCE_HARD_SAFETY,
     CANDIDATE_SOURCE_REVIEW_ONLY,
+    CANDIDATE_SOURCE_SAFETY,
 )
 from ...domain import Detection
 from ...policies.decision.contract import DetectionDecisionContract
@@ -52,7 +53,8 @@ def risk_summary_for(
     return {
         "content_only_evidence": source in {CANDIDATE_SOURCE_CONTENT, CANDIDATE_SOURCE_CONTENT_PRIMARY, "content"},
         "safety_or_review_only": (
-            detection.detail.get("candidate_source") == CANDIDATE_SOURCE_HARD_SAFETY
+            source == CANDIDATE_SOURCE_SAFETY
+            or detection.detail.get("candidate_source") == CANDIDATE_SOURCE_HARD_SAFETY
             or detection.detail.get("candidate_source") == CANDIDATE_SOURCE_REVIEW_ONLY
         ),
         "outer_content_mismatch": not bool(evidence["outer"]["ok"]),

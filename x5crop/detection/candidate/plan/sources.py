@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ....constants import CANDIDATE_SOURCE_SEPARATOR
+from ....constants import CANDIDATE_SOURCE_SAFETY, CANDIDATE_SOURCE_SEPARATOR
 from ....domain import Detection, OuterCandidate
 from ....formats import FormatSpec
 from ....geometry.layout import work_gray
@@ -311,10 +311,10 @@ def detect_safety_outer_proposal_candidate_for_count(
             for candidate in outer_candidates
         ]
     best.detail["candidate_plan"] = {
-        "source": "safety_candidate",
+        "source": CANDIDATE_SOURCE_SAFETY,
         "gap_profiles": [WIDTH_AWARE_GAP_PROFILE],
         "gap_search_profiles": [WIDTH_AWARE_GAP_PROFILE],
         "outer_candidate_count": int(len(outer_candidates)),
-        "review_only": True,
+        "auto_pass_eligible": False,
     }
     return best

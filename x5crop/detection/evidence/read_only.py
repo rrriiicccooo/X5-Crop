@@ -46,7 +46,7 @@ def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: 
         "diagnostic_only": True,
         "changes_output": False,
         "changes_confidence": False,
-        "changes_pass_review": False,
+        "changes_final_decision": False,
         "purpose": "observe hard-gap trust, model-gap overlap risk, and evidence/model roles without changing crop output",
         "method_roles": method_roles,
         "gap_diagnostics": gap_records,

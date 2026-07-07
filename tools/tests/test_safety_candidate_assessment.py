@@ -3,15 +3,16 @@ from __future__ import annotations
 import unittest
 
 from x5crop.detection.candidate.assessment.safety import (
-    SAFETY_CANDIDATE_REVIEW_ONLY_REASON,
+    SAFETY_CANDIDATE_AUTO_GATE_BLOCKER,
     apply_safety_candidate_assessment,
 )
+from x5crop.constants import CANDIDATE_SOURCE_SAFETY
 from x5crop.domain import Box, Detection
 from x5crop.policies.registry import get_detection_policy
 
 
 class SafetyCandidateAssessmentTest(unittest.TestCase):
-    def test_safety_candidate_review_only_contract_is_candidate_assessment_detail(self) -> None:
+    def test_safety_candidate_auto_gate_blocker_is_candidate_assessment_detail(self) -> None:
         policy = get_detection_policy("135", "full")
         detection = Detection(
             film_format="135",
@@ -39,18 +40,22 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
         )
 
         self.assertAlmostEqual(detection.confidence, 0.84)
-        self.assertEqual(detection.review_reasons, [SAFETY_CANDIDATE_REVIEW_ONLY_REASON])
+        self.assertEqual(detection.review_reasons, [SAFETY_CANDIDATE_AUTO_GATE_BLOCKER])
         assessment = detection.detail["candidate_assessment"]
         self.assertFalse(assessment["auto_gate"])
-        self.assertEqual(assessment["source"], "safety_candidate")
-        self.assertEqual(assessment["auto_gate_inputs"]["source"], "safety_candidate")
-        self.assertEqual(detection.detail["safety_candidate"]["review_only"], True)
+        self.assertEqual(assessment["source"], CANDIDATE_SOURCE_SAFETY)
+        self.assertEqual(assessment["auto_gate_inputs"]["source"], CANDIDATE_SOURCE_SAFETY)
+        self.assertEqual(detection.detail["safety_candidate"]["auto_pass_eligible"], False)
+        self.assertEqual(
+            detection.detail["safety_candidate"]["candidate_blocker"],
+            SAFETY_CANDIDATE_AUTO_GATE_BLOCKER,
+        )
         self.assertEqual(
             detection.detail["candidate_confidence_caps"],
             [
                 {
                     "owner": "candidate.assessment",
-                    "reason": SAFETY_CANDIDATE_REVIEW_ONLY_REASON,
+                    "reason": SAFETY_CANDIDATE_AUTO_GATE_BLOCKER,
                     "cap_value": 0.84,
                     "confidence_before": 0.96,
                     "confidence_after": 0.84,
