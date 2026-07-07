@@ -87,7 +87,7 @@ def merge_dual_lane_detections(
         frames,
         gaps,
         float(max(0.0, min(1.0, confidence))),
-        normalized_candidate_reasons(mode_reasons),
+        [],
         _dual_lane_detail(
             config,
             context,
@@ -147,6 +147,7 @@ def _dual_lane_detail(
         for index, detection in enumerate(lane_detections, start=1)
     ]
     return {
+        "candidate_reasons": sorted(set(mode_reasons)),
         "candidate_source": CANDIDATE_SOURCE_DUAL_LANE,
         "mode_diagnostics": sorted(set(mode_reasons)),
         "layout": config.layout,

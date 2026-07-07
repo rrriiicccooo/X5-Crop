@@ -142,9 +142,9 @@ candidate plan
   `candidate_auto_gate` 和 `decision_contract_gate` 这类职责名，不能把 finalization
   写成裁决 gate。
 - candidate / mode 候选阶段读取或更新候选级原因必须经过
-  `detection.candidate.reasons`；底层 `Detection.review_reasons` 只是 decision
-  覆盖前的临时兼容存储，不允许在 candidate 或 mode 子层直接 append 成
-  final-looking reason。
+  `detection.candidate.reasons`，并写入 `Detection.detail["candidate_reasons"]`；
+  candidate / mode 子层不能把候选原因写进 `Detection.review_reasons`。
+  `Detection.review_reasons` 只用于 decision 之后的最终用户可见原因。
 - `content_only_evidence` 只表示 candidate source 主要依赖 content；content containment /
   content harm 失败使用 `content_evidence_insufficient`，不能复用 content-only reason。
 - `overlap_risk` 和 `lucky_pass_risk` 是不同 final risk reason：前者来自 overlap /
@@ -440,9 +440,10 @@ Policy/report-visible gate stage names use `candidate_blocker_gate`,
 named as a decision gate.
 Candidate and mode-stage code must read or update candidate-level reasons
 through `detection.candidate.reasons`; the underlying
-`Detection.review_reasons` field is temporary compatibility storage before
-decision overwrites it, not a place for candidate or mode sublayers to append
-final-looking reasons directly.
+`Detection.detail["candidate_reasons"]` field stores candidate-level reasons.
+Candidate and mode sublayers must not write those candidate reasons into
+`Detection.review_reasons`; that field is reserved for final user-visible
+reasons after the decision step.
 Candidate selection records `selection_risk_inputs`, selection override, and
 competition detail only; it must not append final-looking review reasons or apply
 decision caps. The content mismatch selector is a candidate-selection rule: it

@@ -6,6 +6,7 @@ from x5crop.detection.candidate.assessment.safety import (
     SAFETY_CANDIDATE_AUTO_GATE_BLOCKER,
     apply_safety_candidate_assessment,
 )
+from x5crop.detection.candidate.reasons import candidate_reasons
 from x5crop.constants import CANDIDATE_SOURCE_SAFETY
 from x5crop.domain import Box, Detection
 from x5crop.policies.registry import get_detection_policy
@@ -40,7 +41,8 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
         )
 
         self.assertAlmostEqual(detection.confidence, 0.84)
-        self.assertEqual(detection.review_reasons, [SAFETY_CANDIDATE_AUTO_GATE_BLOCKER])
+        self.assertEqual(detection.review_reasons, [])
+        self.assertEqual(candidate_reasons(detection), [SAFETY_CANDIDATE_AUTO_GATE_BLOCKER])
         assessment = detection.detail["candidate_assessment"]
         self.assertFalse(assessment["auto_gate"])
         self.assertEqual(assessment["source"], CANDIDATE_SOURCE_SAFETY)

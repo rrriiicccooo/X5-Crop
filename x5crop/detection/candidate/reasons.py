@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ...domain import Detection
+from ..detail import CANDIDATE_REASONS, candidate_reasons_from_detail
 
 
 def normalized_candidate_reasons(reasons: list[str]) -> list[str]:
@@ -8,11 +9,11 @@ def normalized_candidate_reasons(reasons: list[str]) -> list[str]:
 
 
 def candidate_reasons(detection: Detection) -> list[str]:
-    return list(detection.review_reasons)
+    return candidate_reasons_from_detail(detection)
 
 
 def set_candidate_reasons(detection: Detection, reasons: list[str]) -> None:
-    detection.review_reasons = normalized_candidate_reasons(reasons)
+    detection.detail[CANDIDATE_REASONS] = normalized_candidate_reasons(reasons)
 
 
 def add_candidate_reasons(detection: Detection, reasons: list[str]) -> None:

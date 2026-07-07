@@ -94,10 +94,14 @@ def apply_candidate_assessment_policy(
     cache: Optional[AnalysisCache] = None,
     policy: Optional[DetectionPolicy] = None,
 ) -> Detection:
+    candidate_detail = dict(detection.detail)
+    initial_candidate_reasons = candidate_reasons(detection)
+    if initial_candidate_reasons:
+        candidate_detail["candidate_reasons"] = initial_candidate_reasons
     candidate = replace(
         detection,
-        review_reasons=candidate_reasons(detection),
-        detail=dict(detection.detail),
+        review_reasons=[],
+        detail=candidate_detail,
     )
     policy = policy or get_detection_policy(fmt.name, candidate.strip_mode)
     if source == "separator":

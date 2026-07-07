@@ -10,6 +10,7 @@ from x5crop.constants import REASON_CONTENT_ASPECT_CONFLICT
 from x5crop.detection.candidate.assessment.dual_lane import (
     apply_dual_lane_content_assessment,
 )
+from x5crop.detection.candidate.reasons import candidate_reasons
 from x5crop.domain import Box, Detection
 
 
@@ -49,7 +50,8 @@ class DualLaneAssessmentTest(unittest.TestCase):
             )
 
         self.assertEqual(detection.confidence, 0.82)
-        self.assertEqual(detection.review_reasons, [REASON_CONTENT_ASPECT_CONFLICT])
+        self.assertEqual(detection.review_reasons, [])
+        self.assertEqual(candidate_reasons(detection), [REASON_CONTENT_ASPECT_CONFLICT])
         self.assertEqual(
             detection.detail["candidate_confidence_caps"],
             [

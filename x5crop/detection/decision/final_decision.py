@@ -21,7 +21,10 @@ from ..evidence.risk import (
     lucky_pass_risk_score_detail,
     overlap_bleed_risk_detail,
 )
-from .contract_applier import apply_decision_contract
+from .contract_applier import (
+    apply_decision_contract,
+    sync_candidate_competition_decision_fields,
+)
 from .reasons import (
     add_final_review_reason,
     final_review_reasons,
@@ -85,6 +88,7 @@ def apply_detection_decision(
     _apply_low_confidence_context_reasons(detection, config, policy, deskew_detail)
     status = _decision_status_for(detection, config.confidence_threshold)
     _sync_decision_summary_status(detection, status)
+    sync_candidate_competition_decision_fields(detection, status)
     return FinalDecisionResult(
         detection=detection,
         status=status,
@@ -227,6 +231,10 @@ def _apply_low_confidence_context_reasons(
             )
             decision_summary["final_review_reasons"] = final_reasons
             decision_summary["decision_reason_inputs"] = reason_inputs
+        sync_candidate_competition_decision_fields(
+            detection,
+            _decision_status_for(detection, config.confidence_threshold),
+        )
 
 
 def _decision_status_for(detection: Detection, confidence_threshold: float) -> str:

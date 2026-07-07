@@ -318,15 +318,30 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_candidate_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
+        banned = (
+            ".review_reasons.append",
+            ".review_reasons =",
+            "review_reasons=candidate_reasons",
+            "review_reasons=merged_candidate_reasons",
+            "review_reasons=normalized_candidate_reasons",
+        )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "candidate"
         self.assertTrue(source_root.is_dir())
         for path in source_root.rglob("*.py"):
             text = path.read_text(encoding="utf-8")
-            if ".review_reasons.append" in text:
-                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
 
         self.assertEqual(offenders, [])
+
+    def test_candidate_reason_helper_does_not_write_final_reason_field(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "reasons.py"
+        text = path.read_text(encoding="utf-8")
+
+        self.assertNotIn("detection.review_reasons =", text)
+        self.assertIn('detection.detail[CANDIDATE_REASONS]', text)
 
     def test_content_mismatch_selector_uses_candidate_selection_names(self) -> None:
         banned = (
@@ -365,13 +380,20 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_mode_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
+        banned = (
+            ".review_reasons.append",
+            ".review_reasons =",
+            "review_reasons=normalized_candidate_reasons",
+            "review_reasons=candidate_reasons",
+        )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "modes"
         self.assertTrue(source_root.is_dir())
         for path in source_root.rglob("*.py"):
             text = path.read_text(encoding="utf-8")
-            if ".review_reasons.append" in text or ".review_reasons =" in text:
-                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
 
         self.assertEqual(offenders, [])
 

@@ -7,6 +7,7 @@ import numpy as np
 from ...runtime.config import RuntimeConfig
 from ...domain import Detection
 from ...formats import FormatSpec
+from ..detail import candidate_reasons_from_detail
 from ..confidence_caps import apply_confidence_cap
 from ...policies.decision.contract import decision_contract_for
 from .evidence_summary import evidence_summary_for
@@ -28,7 +29,7 @@ def _candidate_reason_inputs_before_decision(detection: Detection) -> dict[str, 
     blockers = [str(reason) for reason in _detail_list(assessment.get("blockers"))]
     diagnostics = [str(reason) for reason in _detail_list(assessment.get("diagnostics"))]
     normalized_candidate_reasons = normalized_final_review_reasons(
-        list(detection.review_reasons)
+        candidate_reasons_from_detail(detection)
     )
     return {
         "blockers": blockers,
@@ -40,6 +41,25 @@ def _candidate_reason_inputs_before_decision(detection: Detection) -> dict[str, 
             detection.detail.get("selection_risk_inputs")
         ),
     }
+
+
+def sync_candidate_competition_decision_fields(detection: Detection, status: str) -> None:
+    competition = detection.detail.get("candidate_competition")
+    if not isinstance(competition, dict):
+        return
+    final_reasons = final_review_reasons(detection)
+    selected = competition.get("selected_candidate")
+    if isinstance(selected, dict):
+        selected["final_confidence"] = float(detection.confidence)
+        selected["final_review_reasons"] = list(final_reasons)
+        selected["decision_status"] = status
+    top = competition.get("top_candidates")
+    if isinstance(top, list):
+        for candidate in top:
+            if isinstance(candidate, dict) and bool(candidate.get("selected", False)):
+                candidate["final_confidence"] = float(detection.confidence)
+                candidate["final_review_reasons"] = list(final_reasons)
+                candidate["decision_status"] = status
 
 
 def apply_decision_contract(
@@ -164,20 +184,10 @@ def apply_decision_contract(
     detection.detail["candidate_diagnostics_before_decision"] = candidate_reason_inputs["diagnostics"]
     set_final_review_reasons(detection, final_reasons)
     final_reasons = final_review_reasons(detection)
-    competition = detection.detail.get("candidate_competition")
-    if isinstance(competition, dict):
-        selected = competition.get("selected_candidate")
-        if isinstance(selected, dict):
-            selected["final_confidence"] = float(detection.confidence)
-            selected["final_review_reasons"] = list(detection.review_reasons)
-            selected["decision_status"] = "approved_auto" if passed else "needs_review"
-        top = competition.get("top_candidates")
-        if isinstance(top, list):
-            for candidate in top:
-                if isinstance(candidate, dict) and bool(candidate.get("selected", False)):
-                    candidate["final_confidence"] = float(detection.confidence)
-                    candidate["final_review_reasons"] = list(detection.review_reasons)
-                    candidate["decision_status"] = "approved_auto" if passed else "needs_review"
+    sync_candidate_competition_decision_fields(
+        detection,
+        "approved_auto" if passed else "needs_review",
+    )
     detail = {
         "policy_id": policy.policy_id,
         "schema_version": policy.schema_version,

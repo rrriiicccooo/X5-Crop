@@ -7,6 +7,7 @@ from ..domain import Detection
 
 CANDIDATE_COMPETITION = "candidate_competition"
 CANDIDATE_ASSESSMENT = "candidate_assessment"
+CANDIDATE_REASONS = "candidate_reasons"
 CONTENT_EVIDENCE = "content_evidence"
 DECISION_POLICY_DETAIL = "decision_policy_detail"
 DECISION_SUMMARY = "decision_summary"
@@ -32,6 +33,13 @@ def candidate_competition(detection: Detection) -> dict[str, Any]:
 
 def candidate_assessment(detection: Detection) -> dict[str, Any]:
     return detail_dict(detection, CANDIDATE_ASSESSMENT)
+
+
+def candidate_reasons_from_detail(detection: Detection) -> list[str]:
+    reasons = detection.detail.get(CANDIDATE_REASONS)
+    if isinstance(reasons, list):
+        return [str(reason) for reason in reasons if reason]
+    return list(detection.review_reasons)
 
 
 def decision_summary(detection: Detection) -> dict[str, Any]:
@@ -64,6 +72,7 @@ def policy_id_from_detail(detection: Detection) -> str:
 __all__ = [
     "CANDIDATE_COMPETITION",
     "CANDIDATE_ASSESSMENT",
+    "CANDIDATE_REASONS",
     "CONTENT_EVIDENCE",
     "DECISION_POLICY_DETAIL",
     "DECISION_SUMMARY",
@@ -78,6 +87,7 @@ __all__ = [
     "RUNTIME_POLICY_DETAIL",
     "candidate_competition",
     "candidate_assessment",
+    "candidate_reasons_from_detail",
     "decision_summary",
     "detail_dict",
     "final_review_reasons_from_detail",

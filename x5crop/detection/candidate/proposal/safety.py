@@ -38,8 +38,9 @@ def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSp
         boxes,
         gaps,
         0.0,
-        ["hard_safety_no_candidates", "needs_manual_review"],
+        [],
         {
+            "candidate_reasons": ["hard_safety_no_candidates", "needs_manual_review"],
             "candidate_source": CANDIDATE_SOURCE_HARD_SAFETY,
             "safety_candidate_kind": "hard_safety_equal_split",
             "changes_final_decision": False,

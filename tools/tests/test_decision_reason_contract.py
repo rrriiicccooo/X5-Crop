@@ -98,8 +98,9 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            review_reasons=["content_coverage_weak"],
+            review_reasons=[],
             detail={
+                "candidate_reasons": ["content_coverage_weak"],
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
@@ -160,8 +161,9 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            review_reasons=[SAFETY_CANDIDATE_AUTO_GATE_BLOCKER],
+            review_reasons=[],
             detail={
+                "candidate_reasons": [SAFETY_CANDIDATE_AUTO_GATE_BLOCKER],
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
@@ -298,7 +300,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            review_reasons=[REASON_LUCKY_PASS_RISK],
+            review_reasons=[],
             detail={
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
@@ -507,8 +509,9 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            review_reasons=[SAFETY_CANDIDATE_AUTO_GATE_BLOCKER],
+            review_reasons=[],
             detail={
+                "candidate_reasons": [SAFETY_CANDIDATE_AUTO_GATE_BLOCKER],
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
@@ -821,6 +824,22 @@ class DecisionReasonContractTest(unittest.TestCase):
                     "final_review_reasons": ["evidence_combination_insufficient"],
                     "decision_reason_inputs": [],
                 },
+                "candidate_competition": {
+                    "selected_candidate": {
+                        "selected": True,
+                        "final_confidence": 0.83,
+                        "final_review_reasons": ["evidence_combination_insufficient"],
+                        "decision_status": "needs_review",
+                    },
+                    "top_candidates": [
+                        {
+                            "selected": True,
+                            "final_confidence": 0.83,
+                            "final_review_reasons": ["evidence_combination_insufficient"],
+                            "decision_status": "needs_review",
+                        }
+                    ],
+                },
             },
         )
         config = RuntimeConfig(
@@ -877,6 +896,16 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertEqual(
             detection.detail["decision_summary"]["decision_reason_inputs"][0]["bucket"],
             "low_confidence_context",
+        )
+        selected = detection.detail["candidate_competition"]["selected_candidate"]
+        self.assertEqual(
+            selected["final_review_reasons"],
+            ["evidence_combination_insufficient", "outer_candidate_disagreement"],
+        )
+        self.assertEqual(selected["decision_status"], "needs_review")
+        self.assertEqual(
+            detection.detail["candidate_competition"]["top_candidates"][0]["final_review_reasons"],
+            ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
 
     def test_low_confidence_context_reasons_do_not_create_high_confidence_review(self) -> None:
