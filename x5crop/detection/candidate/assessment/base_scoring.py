@@ -187,7 +187,13 @@ def base_detection_assessment(
         policy.separator.robust_grid.reliable_min_score,
     )
     width_metrics = _candidate_width_metrics(gaps, boxes, origin, pitch, count)
-    width_cv = float(width_metrics["width_cv"])
+    photo_width_cv = width_metrics.get("photo_width_cv")
+    photo_width_within_full_limit = (
+        True if photo_width_cv is None else float(photo_width_cv) <= base_score.full_width_cv
+    )
+    photo_width_tight = (
+        False if photo_width_cv is None else float(photo_width_cv) <= base_score.geometry_floor_tight_cv
+    )
     photo_width_stability = _photo_width_stability_profile(width_metrics, base_score)
     outer_area = float(outer.width * outer.height) / max(1.0, float(gray_work.shape[0] * gray_work.shape[1]))
     outer_area_profile = _outer_area_profile(outer_area, base_score)
@@ -225,7 +231,7 @@ def base_detection_assessment(
         and count == fmt.default_count
         and len(boxes) == count
         and (
-            width_cv <= base_score.full_width_cv
+            photo_width_within_full_limit
             or (
                 uses_min_hard_equal_cap
                 and separator_gate.allow_full_detected_geometry
@@ -247,7 +253,7 @@ def base_detection_assessment(
     if full_geometry_ok:
         geometry_floor = (
             base_score.geometry_floor_high
-            if (uses_min_hard_equal_cap or geometry_support_allowed) and width_cv <= base_score.geometry_floor_tight_cv
+            if (uses_min_hard_equal_cap or geometry_support_allowed) and photo_width_tight
             else base_score.geometry_floor_low
         )
         confidence = max(confidence, geometry_floor)

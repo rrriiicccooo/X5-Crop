@@ -4,6 +4,10 @@ import numpy as np
 
 from x5crop.detection.candidate.assessment.base_scoring import base_detection_assessment
 from x5crop.detection.candidate.assessment.evidence_independence import evidence_independence_detail
+from x5crop.detection.candidate.assessment.gate_support import (
+    hard_full_calibration_floor_applies,
+    separator_geometry_support_applies,
+)
 from x5crop.detection.candidate.assessment.partial_holder import partial_extra_holder_frames_gate_detail
 from x5crop.detection.decision.pass_review import evidence_summary_for
 from x5crop.detection.evidence.risk import lucky_width_instability_components
@@ -14,6 +18,7 @@ from x5crop.policies.decision.contract import decision_contract_for
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.runtime.candidate import EvidenceIndependencePolicy
 from x5crop.policies.runtime.diagnostics import LuckyPassRiskPolicy
+from x5crop.policies.runtime.separator import SeparatorGeometrySupportModePolicy
 
 
 class PhysicalScoringContractTest(unittest.TestCase):
@@ -370,6 +375,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             detail={
                 "outer_candidate_strategy": "separator_outer",
                 "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
                 "standard_gap_search": {
                     "entries": [
                         {"selected_source": "standard_detected"},
@@ -393,6 +399,143 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertFalse(detail["content_quality_ok"])
         self.assertEqual(detail["content_score_role"], "quality_diagnostic_not_hard_gate")
         self.assertTrue(detail["ok"])
+
+    def test_frame_box_width_fallback_does_not_validate_evidence_independence(self) -> None:
+        detection = Detection(
+            film_format="120-66",
+            layout="horizontal",
+            strip_mode="full",
+            count=3,
+            outer=Box(0, 0, 300, 100),
+            frames=[
+                Box(0, 0, 80, 100),
+                Box(95, 0, 205, 100),
+                Box(220, 0, 300, 100),
+            ],
+            gaps=[
+                Gap(1, 100.0, 1.0, GAP_DETECTED, 95.0, 105.0),
+                Gap(2, 200.0, 1.0, GAP_DETECTED, 195.0, 205.0),
+            ],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "outer_candidate_strategy": "separator_outer",
+                "width_cv": 0.0,
+                "width_cv_source": "frame_boxes",
+                "standard_gap_search": {
+                    "entries": [
+                        {"selected_source": "standard_detected"},
+                        {"selected_source": "observed_width_profile"},
+                    ],
+                },
+            },
+        )
+
+        detail = evidence_independence_detail(
+            detection,
+            source="separator",
+            content_support="ok",
+            content_score=0.90,
+            geometry_score=0.90,
+            policy=EvidenceIndependencePolicy(),
+        )
+
+        self.assertTrue(detail["requires_validation"])
+        self.assertFalse(detail["ok"])
+        self.assertFalse(detail["photo_width_stability"]["used"])
+        self.assertEqual(detail["photo_width_stability"]["role"], "diagnostic_until_photo_edges")
+
+    def test_gate_support_checks_only_photo_edge_width_when_available(self) -> None:
+        fmt = format_spec("120-66")
+        policy = get_detection_policy("120-66", "full")
+        hard_detail = {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0}
+        mode_policy = SeparatorGeometrySupportModePolicy(
+            enabled=True,
+            min_hard_ratio=0.50,
+            allow_grid=True,
+            max_equal_gaps=0,
+            required_content_support="ok",
+            min_joint_score=0.70,
+            max_width_cv=0.040,
+            max_outer_area_ratio=0.99,
+        )
+        frame_fallback_candidate = Detection(
+            film_format="120-66",
+            layout="horizontal",
+            strip_mode="full",
+            count=3,
+            outer=Box(0, 0, 300, 100),
+            frames=[
+                Box(0, 0, 80, 100),
+                Box(95, 0, 205, 100),
+                Box(220, 0, 300, 100),
+            ],
+            gaps=[],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "width_cv": 0.20,
+                "width_cv_source": "frame_boxes",
+                "outer_area_ratio": 0.80,
+            },
+        )
+        unstable_photo_candidate = Detection(
+            film_format="120-66",
+            layout="horizontal",
+            strip_mode="full",
+            count=3,
+            outer=Box(0, 0, 300, 100),
+            frames=frame_fallback_candidate.frames,
+            gaps=[],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "width_cv": 0.20,
+                "width_cv_source": "photo_edges",
+                "outer_area_ratio": 0.80,
+            },
+        )
+
+        self.assertTrue(
+            hard_full_calibration_floor_applies(
+                frame_fallback_candidate,
+                hard_detail,
+                fmt,
+                "separator",
+                policy,
+            )
+        )
+        self.assertFalse(
+            hard_full_calibration_floor_applies(
+                unstable_photo_candidate,
+                hard_detail,
+                fmt,
+                "separator",
+                policy,
+            )
+        )
+        self.assertTrue(
+            separator_geometry_support_applies(
+                frame_fallback_candidate,
+                hard_detail,
+                fmt,
+                "separator",
+                "ok",
+                0.90,
+                mode_policy,
+            )
+        )
+        self.assertFalse(
+            separator_geometry_support_applies(
+                unstable_photo_candidate,
+                hard_detail,
+                fmt,
+                "separator",
+                "ok",
+                0.90,
+                mode_policy,
+            )
+        )
 
     def test_partial_holder_does_not_treat_frame_box_width_as_photo_instability(self) -> None:
         policy = get_detection_policy("120-66", "partial")

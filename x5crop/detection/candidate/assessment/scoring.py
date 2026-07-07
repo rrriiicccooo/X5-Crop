@@ -1,25 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Optional
-
-import numpy as np
+from typing import Optional
 
 from ....domain import Detection
+from ...evidence.photo_width import photo_width_cv_from_detail
 from ...evidence.separator_summary import separator_gate_detail_summary
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.content import ContentPolicy
 from ....policies.runtime.policy import DetectionPolicy
-
-
-def _optional_detail_float(detail: dict[str, Any], key: str) -> float | None:
-    value = detail.get(key)
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
 
 def content_support_score(
     detail: dict[str, Any],
@@ -62,24 +50,30 @@ def geometry_support_score(
 ) -> float:
     policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
     geometry_policy = policy.scoring.geometry_support
-    width_cv = _optional_detail_float(detection.detail, "width_cv")
-    if width_cv is None:
-        widths = np.array([box.width for box in detection.frames if box.valid()], dtype=np.float64)
-        width_cv = float(widths.std() / max(1.0, widths.mean())) if widths.size else 1.0
-    width_score = max(0.0, min(1.0, 1.0 - width_cv / geometry_policy.width_cv_norm))
+    photo_width_cv = photo_width_cv_from_detail(detection.detail)
+    width_score = (
+        max(0.0, min(1.0, 1.0 - photo_width_cv / geometry_policy.width_cv_norm))
+        if photo_width_cv is not None
+        else None
+    )
     outer_area = float(detection.detail.get("outer_area_ratio", 0.70))
     outer_score = 1.0 if geometry_policy.outer_min_area <= outer_area <= geometry_policy.outer_max_area else geometry_policy.outer_uncertain_score
     aspect_error = content_detail.get("max_aspect_error")
     aspect_score = geometry_policy.no_aspect_score if aspect_error is None else max(0.0, min(1.0, 1.0 - float(aspect_error) / geometry_policy.aspect_norm))
     count_score = 1.0 if len(detection.frames) == detection.count else 0.0
+    weighted_scores = [
+        (geometry_policy.outer_weight, outer_score),
+        (geometry_policy.aspect_weight, aspect_score),
+        (geometry_policy.count_weight, count_score),
+    ]
+    if width_score is not None:
+        weighted_scores.append((geometry_policy.width_weight, width_score))
+    weight_total = max(1e-6, sum(weight for weight, _score in weighted_scores))
     return max(
         0.0,
         min(
             1.0,
-            geometry_policy.width_weight * width_score
-            + geometry_policy.outer_weight * outer_score
-            + geometry_policy.aspect_weight * aspect_score
-            + geometry_policy.count_weight * count_score,
+            sum(weight * score for weight, score in weighted_scores) / weight_total,
         ),
     )
 

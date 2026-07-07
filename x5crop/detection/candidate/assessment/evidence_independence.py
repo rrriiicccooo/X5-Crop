@@ -4,6 +4,7 @@ from typing import Any
 
 from ....domain import Detection
 from ....policies.runtime.candidate import EvidenceIndependencePolicy
+from ...evidence.photo_width import photo_width_stability_detail
 
 
 def _dict(value: Any) -> dict[str, Any]:
@@ -55,13 +56,18 @@ def evidence_independence_detail(
         and dependent_gap_count > int(policy.max_dependent_gap_count_without_validation)
     )
     standard_detected_gaps = gap_source_count(separator_detail, ("standard_detected",))
-    width_cv = _float(detection.detail.get("width_cv"), 1.0)
+    photo_width_stability = photo_width_stability_detail(
+        detection.detail,
+        float(policy.max_width_cv),
+        used_role="evidence_independence_geometry_check",
+    )
     standard_ok = standard_detected_gaps >= int(policy.min_standard_detected_gaps)
     content_ok = content_support == policy.require_content_support
     content_quality_ok = float(content_score) >= float(policy.min_content_score)
     geometry_ok = (
         float(geometry_score) >= float(policy.min_geometry_score)
-        and width_cv <= float(policy.max_width_cv)
+        and bool(photo_width_stability.get("used", False))
+        and bool(photo_width_stability.get("ok", False))
     )
     ok = (
         True
@@ -93,8 +99,10 @@ def evidence_independence_detail(
         "content_score_role": "quality_diagnostic_not_hard_gate",
         "geometry_score": float(geometry_score),
         "min_geometry_score": float(policy.min_geometry_score),
-        "width_cv": float(width_cv),
+        "width_cv": _float(detection.detail.get("width_cv"), 1.0),
+        "width_cv_source": str(detection.detail.get("width_cv_source") or "unknown"),
         "max_width_cv": float(policy.max_width_cv),
+        "photo_width_stability": photo_width_stability,
         "geometry_ok": bool(geometry_ok),
     }
 

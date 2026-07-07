@@ -12,6 +12,7 @@ from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....utils import HARD_REVIEW_REASONS, clamp_int
+from ...evidence.photo_width import photo_width_stability_detail
 from ...evidence.separator_summary import separator_gate_detail_summary
 from ...evidence.separator_width import separator_width_evidence_detail, separator_width_requirement_detail
 
@@ -294,14 +295,11 @@ def partial_extra_holder_frames_gate_detail(
         disqualifiers.append("holder_edge_disambiguation_weak")
     if equal > holder.max_equal_gaps:
         disqualifiers.append("equal_gap_used")
-    photo_width_stability = {
-        "used": width_cv_source == "photo_edges",
-        "role": "photo_width_gate" if width_cv_source == "photo_edges" else "diagnostic_until_photo_edges",
-        "width_cv": float(width_cv),
-        "width_cv_source": width_cv_source,
-        "max_width_cv": float(holder.max_width_cv),
-        "unstable": bool(width_cv_source == "photo_edges" and width_cv > holder.max_width_cv),
-    }
+    photo_width_stability = photo_width_stability_detail(
+        detection.detail,
+        float(holder.max_width_cv),
+        used_role="photo_width_gate",
+    )
     if bool(photo_width_stability["unstable"]):
         disqualifiers.append("photo_width_unstable")
     if joint_score < holder.min_joint_score:

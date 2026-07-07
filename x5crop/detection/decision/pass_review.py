@@ -19,6 +19,10 @@ from ...constants import (
     REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
 )
 from ...domain import Detection
+from ..evidence.photo_width import (
+    photo_width_stability_detail,
+    photo_width_within_limit,
+)
 from ..evidence.separator_summary import separator_summary_from_detection
 from ...formats import FormatSpec
 from ...policies.decision.contract import DetectionDecisionContract, decision_contract_for
@@ -91,20 +95,13 @@ def evidence_summary_for(
     content_score = _float(assessment.get("content_score"), 0.0)
     width_cv = _float(detection.detail.get("width_cv"), 1.0)
     width_cv_source = str(detection.detail.get("width_cv_source") or "unknown")
-    photo_width_gate_used = width_cv_source == "photo_edges"
-    photo_width_ok = (
-        width_cv <= policy.evidence.max_width_cv_ratio
-        if photo_width_gate_used
-        else True
+    photo_width_stability = photo_width_stability_detail(
+        detection.detail,
+        policy.evidence.max_width_cv_ratio,
+        used_role="photo_width_gate",
     )
-    photo_width_stability = {
-        "used": bool(photo_width_gate_used),
-        "role": "photo_width_gate" if photo_width_gate_used else "diagnostic_until_photo_edges",
-        "width_cv": width_cv,
-        "width_cv_source": width_cv_source,
-        "max_width_cv_ratio": policy.evidence.max_width_cv_ratio,
-        "ok": bool(photo_width_ok),
-    }
+    photo_width_stability["max_width_cv_ratio"] = policy.evidence.max_width_cv_ratio
+    photo_width_ok = bool(photo_width_stability.get("ok", True))
     content_support = str(content_detail.get("support", assessment.get("content_support", "")))
     content_containment_ok = bool(
         content_detail.get("content_containment_ok", content_support == "ok")
@@ -123,10 +120,10 @@ def evidence_summary_for(
         policy.evidence.allow_geometry_supported_separator
         and geometry_support_mode in {"detected_geometry", "stable_grid"}
         and hard_ratio >= policy.evidence.geometry_supported_min_hard_ratio
-        and (
-            width_cv <= policy.evidence.geometry_supported_max_width_cv_ratio
-            if photo_width_gate_used
-            else True
+        and photo_width_within_limit(
+            detection.detail,
+            policy.evidence.geometry_supported_max_width_cv_ratio,
+            unavailable_ok=True,
         )
         and int(separator["equal_gaps"]) <= policy.evidence.max_equal_gap_count
         and content_containment_ok

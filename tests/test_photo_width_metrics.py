@@ -4,6 +4,7 @@ import numpy as np
 
 from x5crop.detection.candidate.assessment.base_scoring import base_detection_assessment
 from x5crop.detection.candidate.assessment.scoring import geometry_support_score
+from x5crop.detection.candidate.plan.counts import raw_detection_rank
 from x5crop.domain import Detection, Gap
 from x5crop.domain import Box
 from x5crop.formats import format_spec
@@ -98,6 +99,68 @@ class PhotoWidthMetricsTest(unittest.TestCase):
         )
 
         self.assertGreater(score, 0.90)
+
+    def test_geometry_support_ignores_frame_box_width_fallback(self) -> None:
+        detection = Detection(
+            film_format="120-645",
+            layout="horizontal",
+            strip_mode="full",
+            count=4,
+            outer=Box(0, 10, 445, 110),
+            frames=[
+                Box(0, 10, 80, 110),
+                Box(105, 10, 250, 110),
+                Box(260, 10, 320, 110),
+                Box(343, 10, 445, 110),
+            ],
+            gaps=[],
+            confidence=0.0,
+            review_reasons=[],
+            detail={
+                "width_cv": 0.20,
+                "width_cv_source": "frame_boxes",
+                "frame_box_width_cv": 0.20,
+                "outer_area_ratio": 0.74,
+            },
+        )
+
+        score = geometry_support_score(
+            detection,
+            {"used": False, "support": "unknown", "max_aspect_error": None},
+        )
+
+        self.assertGreater(score, 0.90)
+
+    def test_raw_detection_rank_does_not_reward_frame_box_width_fallback(self) -> None:
+        stable_frame_boxes = Detection(
+            film_format="120-645",
+            layout="horizontal",
+            strip_mode="full",
+            count=4,
+            outer=Box(0, 0, 400, 100),
+            frames=[],
+            gaps=[],
+            confidence=0.82,
+            review_reasons=[],
+            detail={"width_cv": 0.0, "width_cv_source": "frame_boxes"},
+        )
+        unstable_frame_boxes = Detection(
+            film_format="120-645",
+            layout="horizontal",
+            strip_mode="full",
+            count=4,
+            outer=Box(0, 0, 400, 100),
+            frames=[],
+            gaps=[],
+            confidence=0.82,
+            review_reasons=[],
+            detail={"width_cv": 0.20, "width_cv_source": "frame_boxes"},
+        )
+
+        self.assertEqual(
+            raw_detection_rank(stable_frame_boxes, 0.85),
+            raw_detection_rank(unstable_frame_boxes, 0.85),
+        )
 
 
 if __name__ == "__main__":

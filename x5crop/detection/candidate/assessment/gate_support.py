@@ -8,6 +8,7 @@ from ....formats import FormatSpec
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import SeparatorGeometrySupportModePolicy
+from ...evidence.photo_width import photo_width_within_limit
 from ...evidence.separator_summary import separator_gate_detail_summary
 
 
@@ -31,7 +32,6 @@ def hard_full_calibration_floor_applies(
     policy = policy or get_detection_policy(fmt.name, candidate.strip_mode)
     base_score = policy.scoring.base_detection
     evidence = separator_gate_detail_summary(hard_detail)
-    width_cv = detail_float(candidate.detail, "width_cv", 1.0)
     return (
         source == "separator"
         and policy.scoring.hard_full_confidence_floor > 0.0
@@ -41,7 +41,11 @@ def hard_full_calibration_floor_applies(
         and evidence.expected_gaps > 0
         and evidence.hard_separator_gaps >= evidence.expected_gaps
         and evidence.equal_model_gaps == 0
-        and width_cv <= base_score.full_width_cv
+        and photo_width_within_limit(
+            candidate.detail,
+            base_score.full_width_cv,
+            unavailable_ok=True,
+        )
     )
 
 
@@ -55,7 +59,6 @@ def separator_geometry_support_applies(
     mode_policy: SeparatorGeometrySupportModePolicy,
 ) -> bool:
     evidence = separator_gate_detail_summary(hard_detail)
-    width_cv = detail_float(candidate.detail, "width_cv", 1.0)
     outer_area = detail_float(candidate.detail, "outer_area_ratio", 1.0)
     min_hard = int(math.ceil(evidence.expected_gaps * mode_policy.min_hard_ratio))
     support_gap_count = evidence.hard_separator_gaps + (
@@ -71,7 +74,11 @@ def separator_geometry_support_applies(
         and evidence.hard_separator_gaps >= min_hard
         and support_gap_count >= evidence.expected_gaps
         and evidence.equal_model_gaps <= mode_policy.max_equal_gaps
-        and width_cv <= mode_policy.max_width_cv
+        and photo_width_within_limit(
+            candidate.detail,
+            mode_policy.max_width_cv,
+            unavailable_ok=True,
+        )
         and support == mode_policy.required_content_support
         and joint_score >= mode_policy.min_joint_score
         and outer_area <= mode_policy.max_outer_area_ratio

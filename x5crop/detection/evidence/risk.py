@@ -11,6 +11,7 @@ from ...geometry.layout import work_gray
 from ...policies.registry import get_detection_policy
 from ...cache import AnalysisCache
 from .gap_diagnostics import gap_diagnostic_record
+from .photo_width import photo_width_cv_from_detail
 from .separator_summary import gap_method_evidence_summary
 
 
@@ -113,6 +114,7 @@ def lucky_pass_risk_score_detail(
     geometry_model_gaps = gap_evidence.geometry_model_gaps
     width_cv = _detail_float(detection.detail, "width_cv", 0.0)
     width_cv_source = str(detection.detail.get("width_cv_source") or "unknown")
+    photo_width_cv = photo_width_cv_from_detail(detection.detail)
     components: dict[str, float] = {}
     if geometry_model_gaps >= policy.model_gap_support_min:
         components["model_gap_support"] = policy.model_gap_support_weight
@@ -136,7 +138,11 @@ def lucky_pass_risk_score_detail(
     components.update(width_components)
     if strong_hard >= policy.strong_hard_credit_min:
         components["strong_hard_evidence_credit"] = policy.strong_hard_credit
-    if width_cv < policy.stable_width_cv and geometry_model_gaps >= policy.stable_model_gap_min:
+    if (
+        photo_width_cv is not None
+        and photo_width_cv < policy.stable_width_cv
+        and geometry_model_gaps >= policy.stable_model_gap_min
+    ):
         components["stable_global_geometry_credit"] = policy.stable_geometry_credit
     risk_score = max(0.0, min(1.0, sum(components.values())))
     risk_threshold = policy.risk_threshold
