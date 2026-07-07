@@ -10,15 +10,15 @@ from x5crop.detection.candidate.assessment.gate_support import (
     hard_full_calibration_floor_applies,
     separator_geometry_support_applies,
 )
+from x5crop.detection.candidate.assessment.content_candidate import content_candidate_confidence_and_reasons
 from x5crop.detection.candidate.assessment.partial_holder import partial_extra_holder_frames_gate_detail
 from x5crop.detection.candidate.assessment.scoring import (
     content_quality_score,
     content_support_score,
     geometry_support_score,
 )
-from x5crop.detection.decision.pass_review import evidence_summary_for
+from x5crop.detection.decision.evidence_summary import evidence_summary_for
 from x5crop.detection.evidence.risk import lucky_photo_width_instability_components
-from x5crop.detection.guidance.content_model import content_candidate_confidence_and_reasons
 from x5crop.domain import Box, Detection, Gap
 from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED

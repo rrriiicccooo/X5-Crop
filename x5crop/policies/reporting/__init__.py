@@ -154,6 +154,7 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "scoring": _scoring_detail(policy),
         "selection": _selection_detail(policy),
         "candidate_plan": _plain(policy.candidate_plan),
+        "decision": _plain(policy.decision),
         "finalization": _plain(policy.finalization),
         "output": _plain(policy.output),
         "diagnostics": _runtime_diagnostics_detail(policy),

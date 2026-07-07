@@ -15,18 +15,9 @@ class ApprovedGeometryAdjustmentPolicy:
 
 @dataclass(frozen=True)
 class FinalizationPolicy:
-    align_outer_to_content: bool = True
     apply_output_bleed: bool = True
     apply_approved_geometry_adjustment: bool = True
     approved_geometry_adjustment: ApprovedGeometryAdjustmentPolicy = field(default_factory=ApprovedGeometryAdjustmentPolicy)
-    outer_alignment_disabled_reason: str = "disabled_by_policy"
-    likely_partial_review_reason: str = "likely_partial_strip"
-    outer_candidate_disagreement_review_reason: str = "outer_candidate_disagreement"
-    deskew_uncertain_review_reason: str = "deskew_uncertain"
-    content_aspect_conflict_cap: float = 0.82
-    content_low_confidence_cap: float = 0.84
-    outer_mismatch_cap: float = 0.84
-    lucky_pass_risk_cap: float = 0.84
 
 
 @dataclass(frozen=True)

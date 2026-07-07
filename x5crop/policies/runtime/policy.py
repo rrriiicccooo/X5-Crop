@@ -21,6 +21,7 @@ from .diagnostics import (
     ReportPolicy,
     RuntimeDiagnosticsPolicy,
 )
+from .decision import RuntimeDecisionPolicy
 from .final import (
     FinalizationPolicy,
     OutputPolicy,
@@ -52,6 +53,7 @@ class DetectionPolicy:
     scoring: ScoringPolicy
     candidate_selection: SelectionPolicy
     candidate_plan: CandidatePlanPolicy
+    decision: RuntimeDecisionPolicy
     finalization: FinalizationPolicy
     output: OutputPolicy = field(default_factory=OutputPolicy)
     diagnostics: RuntimeDiagnosticsPolicy = field(default_factory=RuntimeDiagnosticsPolicy)

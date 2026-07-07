@@ -77,10 +77,10 @@ class FormatParameters(FormatParameterViews):
     content_runs_incomplete_cap: float = 0.84
     content_weak_coverage_cap: float = 0.82
     content_aspect_uncertain_cap: float = 0.82
-    post_content_aspect_conflict_cap: float = 0.82
-    post_content_low_confidence_cap: float = 0.84
-    post_outer_mismatch_cap: float = 0.84
-    post_lucky_pass_risk_cap: float = 0.84
+    decision_content_aspect_conflict_cap: float = 0.82
+    decision_content_low_confidence_cap: float = 0.84
+    decision_outer_mismatch_cap: float = 0.84
+    decision_lucky_pass_risk_cap: float = 0.84
     gap_radius_ratio: float = 0.16
     gap_radius_min: int = 6
     gap_radius_max: int = 900

@@ -18,10 +18,8 @@ from ..runtime.final import (
 
 
 def finalization_policy(params: FormatParameters) -> FinalizationPolicy:
-    finalization = params.finalization
     approved_adjustment = params.approved_geometry_adjustment
     return FinalizationPolicy(
-        align_outer_to_content=True,
         apply_output_bleed=True,
         apply_approved_geometry_adjustment=True,
         approved_geometry_adjustment=ApprovedGeometryAdjustmentPolicy(
@@ -32,10 +30,6 @@ def finalization_policy(params: FormatParameters) -> FinalizationPolicy:
             min_ext_min=int(approved_adjustment.min_ext_min),
             min_ext_max=int(approved_adjustment.min_ext_max),
         ),
-        content_aspect_conflict_cap=float(finalization.content_aspect_conflict_cap),
-        content_low_confidence_cap=float(finalization.content_low_confidence_cap),
-        outer_mismatch_cap=float(finalization.outer_mismatch_cap),
-        lucky_pass_risk_cap=float(finalization.lucky_pass_risk_cap),
     )
 
 

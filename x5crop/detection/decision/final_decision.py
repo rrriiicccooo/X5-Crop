@@ -21,7 +21,8 @@ from ..evidence.content.containment import content_containment_detail
 from ..evidence.content.frame_support import content_evidence_detail
 from ..evidence.outer_alignment import outer_content_alignment_detail
 from ..evidence.risk import lucky_pass_risk_score_detail
-from .pass_review import apply_final_decision_policy, normalized_review_reasons
+from .pass_review import apply_final_decision_policy
+from .reasons import normalized_review_reasons
 
 
 @dataclass
@@ -51,8 +52,8 @@ def apply_detection_decision(
     detection.detail["content_containment"] = content_detail
     outer_alignment = (
         outer_content_alignment_detail(gray, detection, analysis_cache, policy=policy)
-        if policy.finalization.align_outer_to_content
-        else {"used": False, "reason": policy.finalization.outer_alignment_disabled_reason}
+        if policy.decision.align_outer_to_content
+        else {"used": False, "reason": policy.decision.outer_alignment_disabled_reason}
     )
     detection.detail["outer_content_alignment"] = outer_alignment
     _apply_pre_decision_review_caps(
@@ -96,10 +97,10 @@ def _apply_pre_decision_review_caps(
     if not review_only_mode and bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
         if support == "aspect_conflict":
-            detection.confidence = min(detection.confidence, policy.finalization.content_aspect_conflict_cap)
+            detection.confidence = min(detection.confidence, policy.decision.content_aspect_conflict_cap)
             detection.review_reasons.append(REASON_CONTENT_ASPECT_CONFLICT)
         elif support == "low_content" and detection.confidence >= config.confidence_threshold:
-            detection.confidence = min(detection.confidence, policy.finalization.content_low_confidence_cap)
+            detection.confidence = min(detection.confidence, policy.decision.content_low_confidence_cap)
             detection.review_reasons.append(REASON_CONTENT_EVIDENCE_WEAK)
     if (
         not review_only_mode
@@ -107,7 +108,7 @@ def _apply_pre_decision_review_caps(
         and bool(outer_alignment.get("used", False))
         and not bool(outer_alignment.get("ok", True))
     ):
-        detection.confidence = min(detection.confidence, policy.finalization.outer_mismatch_cap)
+        detection.confidence = min(detection.confidence, policy.decision.outer_mismatch_cap)
         detection.review_reasons.append(REASON_OUTER_CONTENT_BBOX_MISMATCH)
     lucky_pass_risk = lucky_pass_risk_score_detail(
         gray,
@@ -117,7 +118,7 @@ def _apply_pre_decision_review_caps(
     )
     detection.detail["lucky_pass_risk_score"] = lucky_pass_risk
     if bool(lucky_pass_risk.get("risk", False)):
-        detection.confidence = min(detection.confidence, policy.finalization.lucky_pass_risk_cap)
+        detection.confidence = min(detection.confidence, policy.decision.lucky_pass_risk_cap)
         detection.review_reasons.append(REASON_LUCKY_PASS_RISK)
 
 
@@ -137,11 +138,11 @@ def _apply_decision_tail_reasons(
 ) -> None:
     if detection.confidence < config.confidence_threshold:
         if detection.detail.get("partial_best"):
-            detection.review_reasons.append(policy.finalization.likely_partial_review_reason)
+            detection.review_reasons.append(policy.decision.likely_partial_review_reason)
         if float(detection.detail.get("outer_area_spread_ratio", 0.0)) >= 0.20:
-            detection.review_reasons.append(policy.finalization.outer_candidate_disagreement_review_reason)
+            detection.review_reasons.append(policy.decision.outer_candidate_disagreement_review_reason)
         if deskew_detail.get("skipped") == "angle_out_of_range" or deskew_detail.get("reason"):
-            detection.review_reasons.append(policy.finalization.deskew_uncertain_review_reason)
+            detection.review_reasons.append(policy.decision.deskew_uncertain_review_reason)
         detection.review_reasons = normalized_review_reasons(detection.review_reasons)
 
 

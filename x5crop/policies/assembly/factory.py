@@ -10,6 +10,7 @@ from .candidate import (
 )
 from .common import count_policy, gate_policy, partial_frame_fit, report_policy
 from .content import content_policy
+from .decision import runtime_decision_policy
 from .finalization import diagnostics_policy, finalization_policy
 from .outer import outer_policy
 from .presets import FormatPolicyPreset
@@ -48,6 +49,7 @@ def build_policy_from_preset(
         scoring=scoring_policy(fmt, params),
         candidate_selection=selection_policy(preset, strip_mode, params),
         candidate_plan=candidate_plan_policy(mode_preset, strip_mode, params),
+        decision=runtime_decision_policy(params),
         finalization=finalization_policy(params),
         diagnostics=diagnostics_policy(fmt, mode_preset, params),
         report=report_policy(),

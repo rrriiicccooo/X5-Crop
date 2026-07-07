@@ -118,6 +118,36 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_finalization_policy_does_not_own_decision_caps_or_reasons(self) -> None:
+        from x5crop.policies.runtime.final import FinalizationPolicy
+
+        banned = {
+            "content_aspect_conflict_cap",
+            "content_low_confidence_cap",
+            "outer_mismatch_cap",
+            "lucky_pass_risk_cap",
+            "likely_partial_review_reason",
+            "outer_candidate_disagreement_review_reason",
+            "deskew_uncertain_review_reason",
+        }
+        self.assertTrue(banned.isdisjoint(FinalizationPolicy.__dataclass_fields__))
+
+    def test_guidance_layer_does_not_own_final_candidate_scoring(self) -> None:
+        banned = (
+            "content_candidate_confidence_and_reasons",
+            "review_reasons",
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "guidance"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
 
 if __name__ == "__main__":
     unittest.main()

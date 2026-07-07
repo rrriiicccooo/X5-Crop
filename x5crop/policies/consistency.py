@@ -62,6 +62,26 @@ def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsist
             contract.decision.review_confidence_cap,
         ),
         (
+            "decision.content_aspect_conflict_cap",
+            policy.decision.content_aspect_conflict_cap,
+            contract.decision.content_aspect_conflict_cap,
+        ),
+        (
+            "decision.content_low_confidence_cap",
+            policy.decision.content_low_confidence_cap,
+            contract.decision.content_low_confidence_cap,
+        ),
+        (
+            "decision.outer_mismatch_cap",
+            policy.decision.outer_mismatch_cap,
+            contract.decision.outer_mismatch_cap,
+        ),
+        (
+            "decision.lucky_pass_risk_cap",
+            policy.decision.lucky_pass_risk_cap,
+            contract.decision.lucky_pass_risk_cap,
+        ),
+        (
             "evidence.allow_geometry_supported_separator",
             bool(policy.separator.geometry_support_modes),
             contract.evidence.allow_geometry_supported_separator,

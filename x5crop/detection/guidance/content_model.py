@@ -134,61 +134,6 @@ def content_candidate_signal_stats(
     return median_mean, median_coverage
 
 
-def content_candidate_confidence_and_reasons(
-    *,
-    placement: str,
-    runs_count: int,
-    selected_run_count: int,
-    count: int,
-    strip_mode: str,
-    median_mean: float,
-    median_coverage: float,
-    max_aspect_error: float,
-    confidence_threshold: float,
-    candidate_policy,
-) -> tuple[float, list[str], dict]:
-    run_conf = min(1.0, selected_run_count / float(max(1, count)))
-    coverage_conf = min(1.0, median_coverage / candidate_policy.coverage_norm)
-    mean_conf = min(1.0, median_mean / candidate_policy.mean_norm)
-    aspect_conf = max(0.0, min(1.0, 1.0 - max_aspect_error / candidate_policy.aspect_norm))
-    confidence = (
-        candidate_policy.coverage_weight * coverage_conf
-        + candidate_policy.mean_weight * mean_conf
-        + candidate_policy.run_weight * run_conf
-        + candidate_policy.aspect_weight * aspect_conf
-    )
-    reasons: list[str] = []
-    if placement != "content_runs":
-        confidence = min(confidence, candidate_policy.grid_fallback_cap)
-        reasons.append("content_grid_fallback")
-    if runs_count != count:
-        confidence = min(confidence, candidate_policy.run_mismatch_cap)
-        reasons.append("content_run_count_mismatch")
-    if run_conf < 1.0:
-        confidence = min(confidence, candidate_policy.runs_incomplete_cap)
-        reasons.append("content_runs_incomplete")
-    if median_coverage < candidate_policy.weak_coverage:
-        confidence = min(confidence, candidate_policy.weak_coverage_cap)
-        reasons.append("content_coverage_weak")
-    if max_aspect_error > candidate_policy.aspect_uncertain:
-        confidence = min(confidence, candidate_policy.aspect_uncertain_cap)
-        reasons.append("content_aspect_uncertain")
-    if confidence < confidence_threshold and not reasons:
-        reasons.append("content_confidence_low")
-    detail = {
-        "run_conf": run_conf,
-        "coverage_conf": coverage_conf,
-        "mean_conf": mean_conf,
-        "aspect_conf": aspect_conf,
-        "partial_candidate_role": (
-            "content_guidance_not_count_risk"
-            if strip_mode == "partial"
-            else "content_guidance"
-        ),
-    }
-    return float(confidence), reasons, detail
-
-
 def content_detection_for_count(
     gray: np.ndarray,
     config: RuntimeConfig,
@@ -242,18 +187,6 @@ def content_detection_for_count(
     median_mean, median_coverage = content_candidate_signal_stats(evidence_float, raw_boxes, mask_threshold)
     aspect_errors = [abs((box.width / max(1.0, float(box.height))) - expected_aspect) / expected_aspect for box in raw_boxes]
     max_aspect_error = float(max(aspect_errors)) if aspect_errors else 1.0
-    confidence, reasons, confidence_detail = content_candidate_confidence_and_reasons(
-        placement=placement,
-        runs_count=len(runs),
-        selected_run_count=len(selected_runs),
-        count=count,
-        strip_mode=strip_mode,
-        median_mean=median_mean,
-        median_coverage=median_coverage,
-        max_aspect_error=max_aspect_error,
-        confidence_threshold=config.confidence_threshold,
-        candidate_policy=candidate_policy,
-    )
 
     detail = {
         "proposal_family": CONTENT_PROPOSAL_FAMILY,
@@ -283,8 +216,8 @@ def content_detection_for_count(
             "median_mean": median_mean,
             "median_coverage": median_coverage,
             "max_aspect_error": max_aspect_error,
+            "selected_run_count": len(selected_runs),
             "raw_boxes": [asdict(box) for box in raw_boxes],
-            **confidence_detail,
             **run_detail,
         },
         "gap_centers": [gap.center for gap in gaps],
@@ -299,7 +232,7 @@ def content_detection_for_count(
         outer_original,
         boxes,
         gaps,
-        float(max(0.0, min(1.0, confidence))),
-        sorted(set(reasons)),
+        0.0,
+        [],
         detail,
     )

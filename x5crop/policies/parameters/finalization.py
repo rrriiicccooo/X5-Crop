@@ -27,13 +27,6 @@ class PartialHolderParameters:
     min_frame_coverage: float
 
 @dataclass(frozen=True)
-class FinalizationParameters:
-    content_aspect_conflict_cap: float
-    content_low_confidence_cap: float
-    outer_mismatch_cap: float
-    lucky_pass_risk_cap: float
-
-@dataclass(frozen=True)
 class ApprovedGeometryAdjustmentParameters:
     long_limit_ratio: float
     long_limit_min: int
@@ -44,6 +37,5 @@ class ApprovedGeometryAdjustmentParameters:
 
 __all__ = [
     'PartialHolderParameters',
-    'FinalizationParameters',
     'ApprovedGeometryAdjustmentParameters',
 ]

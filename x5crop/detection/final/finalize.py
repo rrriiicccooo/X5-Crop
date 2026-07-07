@@ -19,7 +19,6 @@ from ...policies.registry import get_detection_policy
 from ...cache import AnalysisCache
 from ..evidence.read_only import attach_read_only_diagnostics
 from ..evidence.risk import overlap_bleed_risk_detail
-from ..decision.final_decision import apply_detection_decision
 from .geometry import (
     apply_approved_geometry_adjustment,
     apply_edge_bleed_protection,
@@ -31,31 +30,18 @@ class DetectionFinalizationResult:
     detection: Detection
     status: str
     output_config: RuntimeConfig
-    content_detail: dict[str, Any]
-    outer_alignment: dict[str, Any]
 
 
 def finalize_detection(
     gray: np.ndarray,
     detection: Detection,
+    status: str,
     config: RuntimeConfig,
     fmt: FormatSpec,
     analysis_cache: AnalysisCache,
-    deskew_detail: dict[str, Any],
 ) -> DetectionFinalizationResult:
     policy = get_detection_policy(fmt.name, detection.strip_mode)
     detection_bleed = detection_bleed_parameters(policy.output)
-    decision = apply_detection_decision(
-        gray,
-        detection,
-        config,
-        fmt,
-        analysis_cache,
-        deskew_detail,
-        policy,
-    )
-    detection = decision.detection
-    status = decision.status
     if policy.finalization.apply_approved_geometry_adjustment:
         apply_approved_geometry_adjustment(
             detection,
@@ -84,6 +70,4 @@ def finalize_detection(
         detection=detection,
         status=status,
         output_config=output_config,
-        content_detail=decision.content_detail,
-        outer_alignment=decision.outer_alignment,
     )

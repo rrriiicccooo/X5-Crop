@@ -12,6 +12,7 @@ from .config import RuntimeConfig
 from .deskew import apply_deskew
 from .profile import runtime_for_profile
 from ..debug.outputs import write_debug_outputs
+from ..detection.decision import apply_detection_decision
 from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
 from ..domain import ProcessResult
@@ -54,13 +55,23 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     detection_bleed = detection_bleed_parameters(policy.output)
     detection_config = replace(config, bleed_x=detection_bleed.long_axis, bleed_y=detection_bleed.short_axis)
     detection = choose_detection(gray, detection_config, fmt, analysis_cache)
-    finalization = finalize_detection(
+    selected_policy = get_detection_policy(fmt.name, detection.strip_mode)
+    decision = apply_detection_decision(
         gray,
         detection,
         config,
         fmt,
         analysis_cache,
         deskew_detail,
+        selected_policy,
+    )
+    finalization = finalize_detection(
+        gray,
+        decision.detection,
+        decision.status,
+        config,
+        fmt,
+        analysis_cache,
     )
     detection = finalization.detection
     status = finalization.status

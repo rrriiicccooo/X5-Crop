@@ -25,6 +25,7 @@ from ...evidence.content.containment import content_containment_detail
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.separator_summary import separator_gate_detail_summary
 from .base_scoring import apply_base_detection_scoring
+from .content_candidate import content_candidate_assessment_from_proposal
 from .evidence_independence import evidence_independence_detail
 from .gate_support import (
     hard_full_calibration_floor_applies,
@@ -75,6 +76,17 @@ def apply_candidate_assessment_policy(
             fmt,
             policy,
         )
+    elif source == "content":
+        proposal_confidence, proposal_reasons, proposal_detail = content_candidate_assessment_from_proposal(
+            candidate,
+            config,
+            policy.content,
+        )
+        candidate.confidence = max(float(candidate.confidence), float(proposal_confidence))
+        candidate.review_reasons = sorted(set([*candidate.review_reasons, *proposal_reasons]))
+        content_primary = candidate.detail.get("content_primary")
+        if isinstance(content_primary, dict):
+            content_primary["candidate_assessment"] = proposal_detail
     separator_gate_ok, separator_gate_detail = assess_separator_gate(
         candidate,
         config.confidence_threshold,

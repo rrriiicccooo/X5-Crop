@@ -127,8 +127,8 @@ def outer_correction_candidate_extensions(
     detection.detail["content_evidence"] = content_detail
     outer_alignment = (
         outer_content_alignment_detail(gray, detection, cache, policy=policy)
-        if policy.finalization.align_outer_to_content
-        else {"used": False, "reason": policy.finalization.outer_alignment_disabled_reason}
+        if policy.decision.align_outer_to_content
+        else {"used": False, "reason": policy.decision.outer_alignment_disabled_reason}
     )
     detection.detail["outer_content_alignment"] = outer_alignment
     reliable_selection = candidate_is_reliable_for_execution_budget(detection, config.confidence_threshold, policy)

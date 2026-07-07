@@ -37,6 +37,7 @@ X5_Crop.py / launchers
   -> runtime config and input probe
   -> workflow
   -> detection
+  -> decision
   -> finalization
   -> export / report / debug
 ```
@@ -47,7 +48,7 @@ X5_Crop.py / launchers
 | `x5crop.entry` | CLI 和交互入口，只生成入口选项。 |
 | `x5crop.runtime.config` | 将入口选项、输入、layout 和 policy 绑定成 `RuntimeConfig`。 |
 | `x5crop.runtime.input_probe` / `runtime.app` | 探测 TIFF、解析 layout、打印启动摘要、调度 worker。 |
-| `x5crop.runtime.workflow` | 单图编排 read -> preprocess -> detect -> finalization -> export/report/debug。 |
+| `x5crop.runtime.workflow` | 单图编排 read -> preprocess -> detect -> decision -> finalization -> export/report/debug。 |
 | launchers | 只负责找到 Python、进入交互流程或 diagnostics 流程。 |
 
 入口不拥有检测策略；workflow 不承载 format-specific 实现。
@@ -60,7 +61,8 @@ X5_Crop.py / launchers
 |---|---|---|
 | Format facts | `x5crop.formats` | format identity、family、count、aspect 和物理事实集中定义。 |
 | Runtime policy | `x5crop.policies.runtime` / `policies.assembly` | format / mode 行为由 policy profile 和 assembly 显式生成。 |
-| Final decision policy | `x5crop.policies.decision` | final PASS / REVIEW 门槛从 active runtime policy 派生，只保留少量不可推导 override。 |
+| Runtime decision policy | `policies.runtime.decision` | decision 前置证据、confidence cap 和 tail review reasons。 |
+| Final decision contract | `x5crop.policies.decision` | final PASS / REVIEW 门槛从 active runtime policy 派生，只保留少量不可推导 override。 |
 | Foundation capability | `x5crop.geometry` / `x5crop.image` / `x5crop.io` | 只提供 box、gap、profile、deskew、pixel transform、TIFF I/O 等能力。 |
 | Cache adapters | `x5crop.cache` | 只复用 analysis、profile、evidence 结果，不生成候选或决策。 |
 | Detection behavior | `x5crop.detection` | 生成候选、证据、assessment、selection、decision 和 finalization。 |
@@ -115,7 +117,7 @@ candidate plan
 | `detection.pipeline` | orchestration：候选计划、候选池、扩展和 selection。 |
 | `detection.modes` | dual-lane、review-only 等 mode routing；dual-lane 只负责拆 lane 和合并 lane 结果。 |
 | `detection.physical` | outer proposal / correction、separator proposal / model、photo-size model。 |
-| `detection.guidance` | content outer hints、content separator hints、review-only content-model candidate。 |
+| `detection.guidance` | content outer hints、content separator hints 和 content-model proposal raw metrics。 |
 | `detection.evidence` | separator、content、geometry、outer alignment、risk 和只读 diagnostics evidence；不读取 assessment。 |
 | `detection.candidate.plan` | count、offset、candidate source、execution budget 和 dual-lane lane candidate lifecycle。 |
 | `detection.candidate.build` | outer -> separator gaps -> frames -> unscored `Detection`。 |
@@ -128,8 +130,9 @@ candidate plan
 关键审核点：
 
 - outer 和 separator 是 physical structure；content 是 guidance + evidence。
-- content 可提示 search center，可生成 review-only content-model candidate；不能生成 hard gap、
-  不能直接修 physical result、不能决定 PASS / REVIEW。
+- content 可提示 search center，可生成 content-model proposal；content candidate 的 confidence /
+  review reasons 属于 candidate assessment。content 不能生成 hard gap、不能直接修 physical result、
+  不能决定 PASS / REVIEW。
 - build 只生成未评分 Detection；assessment 和 decision 才消费证据。
 - corrected candidate 必须重新 build、重新 assessment，再回到候选池统一 selection。
 - physical correction 不读取 candidate assessment；是否尝试 correction 属于 candidate extension。
@@ -178,7 +181,8 @@ format fact、runtime capability 和 final decision 必须分开：
 
 format 文件不能声明 scoring、gate、risk、detector、diagnostics 或 runtime preset。影响
 final PASS / REVIEW 的参数必须进入 decision policy detail；影响 runtime 检测路径但不直接
-决定 PASS / REVIEW 的参数必须进入 runtime policy detail。
+决定 PASS / REVIEW 的参数必须进入 runtime policy detail。`finalization` policy 只保留输出相邻
+几何、bleed 和 diagnostics attachment；confidence cap 和 review reason 不属于 finalization。
 
 ### 8. Format / Mode 组合视角
 
@@ -290,6 +294,7 @@ X5_Crop.py / launchers
   -> runtime config and input probe
   -> workflow
   -> detection
+  -> decision
   -> finalization
   -> export / report / debug
 ```
@@ -368,11 +373,12 @@ means evidence strength. Photo-width hard reasons may consume only
 
 ### 7. Policy Perspective
 
-Format facts, runtime capability, and final decision policy remain separate.
+Format facts, runtime capability, runtime decision policy, and final decision
+contract remain separate.
 Format files may provide physical tolerance, content profile tolerance, and
 search-budget overrides only. Runtime path parameters must appear in runtime
 policy detail; final PASS / REVIEW parameters must appear in decision policy
-detail.
+detail. Finalization policy is output-adjacent only.
 
 ### 8. Format / Mode Composition Perspective
 

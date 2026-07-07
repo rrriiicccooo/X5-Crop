@@ -18,9 +18,9 @@ from .diagnostics import (
     LuckyPassRiskParameters,
     NearbySeparatorDiagnosticsParameters,
 )
+from .decision import DecisionReviewParameters
 from .finalization import (
     ApprovedGeometryAdjustmentParameters,
-    FinalizationParameters,
     PartialHolderParameters,
 )
 from .outer import (
@@ -500,12 +500,12 @@ class FormatParameterViews:
         )
 
     @property
-    def finalization(self) -> FinalizationParameters:
-        return FinalizationParameters(
-            content_aspect_conflict_cap=self.post_content_aspect_conflict_cap,
-            content_low_confidence_cap=self.post_content_low_confidence_cap,
-            outer_mismatch_cap=self.post_outer_mismatch_cap,
-            lucky_pass_risk_cap=self.post_lucky_pass_risk_cap,
+    def decision_review(self) -> DecisionReviewParameters:
+        return DecisionReviewParameters(
+            content_aspect_conflict_cap=self.decision_content_aspect_conflict_cap,
+            content_low_confidence_cap=self.decision_content_low_confidence_cap,
+            outer_mismatch_cap=self.decision_outer_mismatch_cap,
+            lucky_pass_risk_cap=self.decision_lucky_pass_risk_cap,
         )
 
     @property
