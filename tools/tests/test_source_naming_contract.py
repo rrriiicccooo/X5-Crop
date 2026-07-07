@@ -287,6 +287,17 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_mode_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "modes"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            if ".review_reasons.append" in text or ".review_reasons =" in text:
+                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+
+        self.assertEqual(offenders, [])
+
     def test_dual_lane_plan_delegates_content_assessment(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan" / "dual_lane.py"
         text = path.read_text(encoding="utf-8")

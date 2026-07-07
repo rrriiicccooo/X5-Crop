@@ -9,6 +9,11 @@ from ...domain import Box, Detection, Gap
 from ...geometry.boxes import map_work_box
 from ...runtime.config import RuntimeConfig
 from ...utils import box_from_dict
+from ..candidate.reasons import (
+    add_candidate_reason,
+    candidate_reasons,
+    normalized_candidate_reasons,
+)
 from ..candidate.proposal.safety import hard_safety_detection
 from .dual_lane_context import DualLaneDetectionContext
 
@@ -20,8 +25,7 @@ def dual_lane_review_detection(
     mode_reason: str,
 ) -> Detection:
     detection = hard_safety_detection(gray, config, context.format_spec)
-    detection.review_reasons.append(mode_reason)
-    detection.review_reasons = sorted(set(detection.review_reasons))
+    add_candidate_reason(detection, mode_reason)
     mode_diagnostics = detection.detail.setdefault("mode_diagnostics", [])
     if isinstance(mode_diagnostics, list):
         mode_diagnostics.append(mode_reason)
@@ -58,7 +62,13 @@ def merge_dual_lane_detections(
 
     lane_confidences = [float(detection.confidence) for detection in confirmed_lanes]
     confidence = min(lane_confidences)
-    mode_reasons = sorted(set(reason for detection in confirmed_lanes for reason in detection.review_reasons))
+    mode_reasons = normalized_candidate_reasons(
+        [
+            reason
+            for detection in confirmed_lanes
+            for reason in candidate_reasons(detection)
+        ]
+    )
     if any(conf < config.confidence_threshold for conf in lane_confidences):
         confidence = min(confidence, 0.84)
         mode_reasons.append("dual_lane_below_threshold")
@@ -77,7 +87,7 @@ def merge_dual_lane_detections(
         frames,
         gaps,
         float(max(0.0, min(1.0, confidence))),
-        sorted(set(mode_reasons)),
+        normalized_candidate_reasons(mode_reasons),
         _dual_lane_detail(
             config,
             context,
@@ -128,7 +138,7 @@ def _dual_lane_detail(
             "total_format": context.format_id,
             "total_count": context.total_count,
             "confidence": float(detection.confidence),
-            "candidate_reasons": list(detection.review_reasons),
+            "candidate_reasons": candidate_reasons(detection),
             "work_outer": detection.detail.get("work_outer"),
             "content_evidence": detection.detail.get("content_evidence", {}),
             "outer_content_alignment": detection.detail.get("outer_content_alignment", {}),
