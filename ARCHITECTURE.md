@@ -1,306 +1,192 @@
 # X5 Crop 架构说明 / Architecture Guide
 
-本文件是开发者架构地图，范围限定为源码分层、policy 行为边界、format / mode
-隔离规则和验证要求。使用说明见 `README.md`，版本摘要见 `CHANGELOG.md`，
-Codex 协作规则见 `AGENTS.md`。
+本文件是当前源码清洁审核和后续结构变更的主导架构契约。它定义源码层级、policy
+所有权、候选和决策边界、format / mode 隔离规则，以及必须通过的验证门槛。
 
-This file is the developer architecture map. It covers source layers, policy
-ownership, format / mode isolation, and verification requirements. For usage,
-read `README.md`; for version history, read `CHANGELOG.md`; for Codex rules,
-read `AGENTS.md`.
+本文件不记录版本流水、人工审核台账或用户操作说明。版本变化见 `CHANGELOG.md`；
+用户手册见 `README.md`；Codex 协作规则和当前 handoff 见 `AGENTS.md`。
+
+This file is the active architecture contract for source cleanup and future
+structural changes. It defines source layers, policy ownership, candidate and
+decision boundaries, format / mode isolation, and required verification gates.
+
+It is not a changelog, audit ledger, or user manual. Version history belongs in
+`CHANGELOG.md`; usage belongs in `README.md`; Codex coordination and handoff
+belong in `AGENTS.md`.
 
 ## 中文说明
 
-### 架构目标
+### 1. 架构命题
 
-V4.9 是 evidence-governed policy reset。目标不是提高自动通过数量，而是让自动裁切
+V4.9 是 evidence-governed policy reset。目标不是增加自动 PASS 数量，而是让自动裁切
 只发生在 outer、separator、geometry、content 和 risk 证据能够共同解释时。
 
-架构原则：
+架构判断：
 
-- 入口精简，运行配置明确。
-- workflow 只承担单图和批处理编排。
-- format physical facts 与 policy decision rules 分离。
-- detection 生成证据、候选和候选选择；decision 子层裁定最终 PASS / REVIEW。
-- geometry / image / io 提供底层能力，不拥有候选或决策语义。
-- report / debug / export 只消费稳定结果，不反向参与候选选择。
-- developer tools 位于 `tools/`，不进入 runtime package。
+- 自动 PASS 不是高分结果，而是证据契约结果。
+- 新增错误 PASS 不可接受；更保守的 REVIEW 可以接受，但必须可解释。
+- format physical facts、runtime policy、candidate evidence 和 final decision
+  必须分层表达。
+- 检测能力可以通用化；默认启用必须由 format / mode policy 显式控制。
+- TIFF metadata、位深、ICC、resolution 和压缩行为属于输出契约，不能被检测重构改变。
 
-### 分层边界
+### 2. 不可破坏的边界
+
+| 领域 | 唯一职责 |
+|---|---|
+| Format facts | `x5crop.formats` 定义格式身份、family、张数、aspect 和物理事实。 |
+| Runtime policy | `x5crop.policies` 定义 format / mode 行为、gate、risk、diagnostics、output 和 policy detail。 |
+| Foundation | `x5crop.geometry`、`x5crop.image`、`x5crop.io` 提供 box、gap、profile、deskew、pixel transform 和 TIFF I/O 等底层能力。 |
+| Detection | `x5crop.detection` 生成候选、证据、候选评估、候选选择和最终 PASS / REVIEW 输入。 |
+| Decision | `x5crop.detection.decision` 按 decision contract 产生最终 `PASS` / `REVIEW`。 |
+| Finalization | `x5crop.detection.final` 只做 output-adjacent geometry、bleed、cap 和只读 diagnostics attachment。 |
+| Output surfaces | `x5crop.export`、`x5crop.report`、`x5crop.debug` 只消费稳定结果。 |
+| Tools | `tools/` 承担 standalone build、reference compare 和 safety classification；不进入 runtime package。 |
+
+基础层规则：
+
+- `geometry` / `image` / `io` 不得依赖 runtime、cache、workflow、detection、debug、
+  report 或 policy registry。
+- 基础层不得读取 `Detection.detail`、risk detail 或 PASS / REVIEW 语义。
+- 基础层不得接收 `strip_mode` 字符串；上层必须先解析为普通参数对象。
+- cache adapter 属于 `x5crop.cache`；纯数学和像素能力留在 foundation。
+
+### 3. 运行所有权地图
 
 | 层级 | 主要职责 |
 |---|---|
 | `X5_Crop.py` | 开发入口；Release 构建生成单文件发布版。 |
-| `x5crop.entry` / `x5crop.runtime.config` | CLI 解析、入口参数契约、运行配置契约。 |
-| `x5crop.entry.interactive` / launchers | 交互式菜单；平台启动器只负责找到 Python 并进入交互模式。 |
-| `x5crop.runtime.input_probe` / `x5crop.runtime.app` | 输入 TIFF 探测、layout 解析、启动摘要、worker 调度。 |
-| `x5crop.runtime.workflow` | read -> deskew -> detect -> finalization -> export -> report/debug 编排。 |
-| `x5crop.formats` | format identity、physical spec、count/aspect facts 和 CLI choices 的唯一入口。 |
-| `x5crop.policies` | runtime policy、decision contract、format 参数覆盖、runtime preset assembly 和 policy detail 序列化。 |
-| `x5crop.cache` | analysis cache 和 profile/evidence cache adapters；只复用计算结果，不生成候选或决策。 |
-| `x5crop.geometry` / `x5crop.image` / `x5crop.io` | box、gap、separator profile、deskew、pixel transform、TIFF I/O 等纯底层能力。 |
-| `x5crop.detection` | detection pipeline、mode detector、candidate lifecycle / proposals、evidence、decision 和 finalization。 |
-| `x5crop.runtime.analysis_reuse` / `x5crop.export` / `x5crop.report` / `x5crop.debug` | 历史结果复用、TIFF 输出、结果组装、报告 schema、报告写入和 Debug Analysis。 |
-| `tools` | standalone build、reference compare、safety classification 等开发工具。 |
+| `x5crop.entry` | CLI 和交互入口；只形成入口选项。 |
+| `x5crop.runtime.config` | 将入口选项、输入、layout 和运行参数解析为 `RuntimeConfig`。 |
+| `x5crop.runtime.input_probe` / `x5crop.runtime.app` | 探测 TIFF、解析 layout、打印启动摘要、调度 worker。 |
+| `x5crop.runtime.workflow` | 单图流程编排：read -> preprocess -> detect -> finalization -> export/report/debug。 |
+| `x5crop.formats` | format identity、physical spec、count/aspect facts 和 CLI choices 的单一入口。 |
+| `x5crop.policies` | runtime policy、decision contract、format 参数覆盖、preset assembly 和 policy detail serialization。 |
+| `x5crop.cache` | analysis、profile、evidence cache adapters；只复用计算结果，不产生候选或决策。 |
+| `x5crop.detection` | detector mode、physical proposal、content guidance、candidate lifecycle、evidence、decision 和 finalization。 |
+| `x5crop.report` / `x5crop.debug` / `x5crop.export` | 报告、Debug Analysis 和 TIFF 输出；不反向参与选择。 |
 
-依赖方向应从入口和工作流流向基础层。`geometry` / `image` / `io` 不得反向依赖
-cache、workflow、detection、debug、report、runtime 或 policy registry；不得读取
-`Detection.detail`、risk detail 或 PASS / REVIEW 语义；不得接收 `strip_mode` 字符串。
-mode / policy 必须由上层解析成普通参数对象后再传入基础层。
+依赖方向应从入口、runtime 和 workflow 流向 policy、detection 和 foundation。任何反向依赖、
+隐式 global state 或 format-name if/else 都需要被重新审查。
 
-### Detection 子层和运行流程
+### 4. Detection 子层
 
-`workflow` 只编排 read -> preprocess -> detect -> finalize -> export/report/debug。
-`x5crop.detection` 内部固定按下列职责分层：
+`workflow` 只负责调度；检测语义必须留在 `x5crop.detection` 内部。
 
-| 子层 | 主要职责 |
+| 子层 | 职责边界 |
 |---|---|
-| `detection.pipeline` | 构建候选计划、收集候选、触发候选扩展、统一 selection。 |
-| `detection.modes` | dual-lane、review-only 等 mode-specific detector。 |
-| `detection.physical` | holder physical structure：outer proposal / correction、separator gap proposal / model、separator-derived outer。 |
-| `detection.guidance` | content-derived guidance：content outer hint、separator search hint 和 review-only content-model candidate。 |
-| `detection.evidence` | separator、content、geometry、outer alignment、risk 等 evidence detail；只验证或解释候选。 |
-| `detection.candidate.plan` | count、offset、candidate source、execution budget。 |
-| `detection.candidate.proposal` | safety / review-only 等非物理候选入口；不得重新拥有 outer / separator / content 算法。 |
-| `detection.candidate.build` | 将 physical proposal + guidance hint 变成 Detection：outer -> separator gap lifecycle -> frames。 |
-| `detection.candidate.assessment` | scoring、gate、candidate-level review reasons 和 auto_gate。 |
-| `detection.candidate.selection` | 多候选竞争并选择 best candidate。 |
-| `detection.candidate.extension` | 将需要复评的 corrected proposal 追加回候选池；不直接 PASS / REVIEW。 |
+| `detection.pipeline` | 候选计划、候选池、扩展和 selection 的 orchestration。 |
+| `detection.modes` | dual-lane、review-only 等 mode detector。 |
+| `detection.physical` | holder physical structure：outer proposal / correction、separator proposal / model。 |
+| `detection.guidance` | content-derived guidance：outer hints、separator hints、review-only content-model candidate。 |
+| `detection.evidence` | separator、content、geometry、outer alignment、risk 和只读 diagnostics evidence。 |
+| `detection.candidate.plan` | count、offset、candidate source 和 execution budget。 |
+| `detection.candidate.proposal` | safety、review-only 等非物理候选入口。 |
+| `detection.candidate.build` | outer -> separator gaps -> frames -> unscored `Detection`。 |
+| `detection.candidate.assessment` | scoring、gate、candidate-level review reasons 和 auto gate。 |
+| `detection.candidate.selection` | 多候选竞争和 selected candidate。 |
+| `detection.candidate.extension` | corrected outer、content-guided separator 等 reassessed candidates。 |
 | `detection.decision` | final evidence summary、risk summary、PASS / REVIEW 和 reason normalization。 |
-| `detection.final` | output bleed、approved geometry adjustment、read-only diagnostics attachment。 |
+| `detection.final` | output bleed、approved geometry adjustment 和 read-only diagnostics attachment。 |
 
-运行语义是：
+关键规则：
 
-```text
-workflow
-  read / preprocess / detect / finalize / export
+- outer 和 separator 是 physical holder structure；content 是 guidance + evidence。
+- content 可以提示 search center 或生成 review-only content-model candidate；不能生成 hard gap，
+  不能修 physical result，不能直接 PASS / REVIEW。
+- candidate build 不评分、不最终裁决；assessment 和 decision 才能消费证据形成 gate 结果。
+- corrected candidate 必须重新 build、重新 assessment，再回到候选池统一 selection。
 
-detection pipeline
-  build candidate plan
-  build physical proposals and guidance hints
-  build detections from proposals and hints
-  assess candidates
-  extend candidates when primary evidence is weak or conflict evidence appears
-  select candidate
+### 5. Policy 和决策模型
 
-decision
-  evidence summary
-  review risk
-  PASS / REVIEW
+`DetectionPolicy` 是 runtime 能力和参数的组合面。它连接 detector、count、outer、
+separator、content、scoring、selection、candidate extension、diagnostics、report 和
+output。
 
-finalization
-  output bleed
-  approved geometry adjustment
-  report/debug attachment
-```
+`DetectionDecisionContract` 是最终 PASS / REVIEW 的 public decision policy contract。
+它必须从 active `DetectionPolicy` 派生；`policies/decision/overrides.py` 只保存无法从
+runtime policy 直接推导的最终证据门槛。
 
-### 人工审核进度台账
-
-本台账用于回顾已经从哪些视角审核过项目、形成了什么成果、还剩哪些逻辑族群未深审。
-它记录人工审核进度，不替代版本历史；行为或源码变化仍记录在 `CHANGELOG.md`。
-
-状态词：
-
-- `完成`: 结构和逻辑都已审，并已实施必要清理。
-- `结构完成，逻辑待审`: 边界已清理，但算法或规则还没有逐项审核。
-- `进行中`: 当前正在人工审核。
-- `未开始`: 尚未进入该族群。
-- `持续复核`: 每次相关逻辑改动后都要回看。
-
-#### 视角审核台账
-
-| 视角/族群 | 我们问的问题 | 已做工作 | 成果 | 当前状态 | 下一步接点 |
-|---|---|---|---|---|---|
-| 源码结构视角 | 项目分哪些层，文件是否在正确位置？ | 重组 entry、runtime、cache、report、formats、policies、detection physical / guidance / evidence 和 candidate 包。 | `entry/runtime/cache/report/formats/policies/detection.physical/detection.guidance/detection.evidence/detection.candidate` 分层。 | 完成 | 只在新增层级时复核。 |
-| 运行流程视角 | TIFF 从读取到输出如何流动？ | 明确 entry、runtime、workflow、detection、decision、finalization、export/report/debug 的顺序。 | `entry -> runtime -> workflow -> detection -> decision -> finalization -> export/report/debug`。 | 完成 | 行为链路变化时更新流程图。 |
-| 极致干净视角 | 是否有跨层依赖、旧文件、漏网文件或语义残留？ | 多轮检查未使用文件、层级漏网、foundation coupling 和文档一致性。 | 基础层不反向依赖 runtime、policy 或 detection；cache adapters 与 finalization detail 已上移。 | 持续复核 | 最终命名清理阶段统一处理旧名残留。 |
-| Policy 视角 | format facts、runtime policy 和 decision contract 是否混在一起？ | 拆分 policy formats、parameters、runtime、decision、assembly、reporting。 | `formats/parameters/runtime/decision/assembly/reporting` 分离。 | 完成 | 每次新增 policy 字段时跑 consistency 并更新说明。 |
-| Candidate 生命周期视角 | 候选如何生成、评估、扩展和选择？ | 去 retry 化，建立 plan、proposal、build、assessment、selection、extension。 | candidate plan、assessment、selection、extension 边界清楚。 | 完成 | 只在候选来源新增时复核 execution budget。 |
-| Outer 视角 | outer 是 proposal 还是 correction，是否越权 PASS？ | 拆分 outer proposal/correction，corrected outer 回到 candidate reassessment。 | proposal/correction 分离，outer 不决定 PASS / REVIEW。 | 完成 | 后续只复核新增 proposal 是否走 plan。 |
-| Wide / Dark / Retry 视角 | wide、dark、retry、fallback 是否是真正概念？ | 收敛 wide/dark 为 separator width evidence，retry 为 candidate plan，fallback 为 safety candidate。 | width evidence、candidate plan、safety candidate。 | 完成 | 最终命名清理时清除旧 detail 双写。 |
-| Debug / Report 视角 | 人类如何复盘候选、gate 和 policy？ | 保留三联 Debug Analysis，report 保留 candidate/gate/policy detail。 | 三联图和 report detail 作为人工审核 surface。 | 持续复核 | 每改一个逻辑族群都检查解释力。 |
-| 逻辑族群视角 | 检测逻辑本身有哪些族群，哪些已审？ | 建立 Detection / Gate / Risk 人工审核索引，Pre-detection、outer、Gap / Separator 结构、Content 结构和 Candidate build / frame geometry 边界已完成；outer / separator 已归入 physical，Content 已归入 guidance + evidence。 | 当前接点明确为 scoring / gate consumer。 | 进行中 | 审核 content score、selection conflict、base scoring 与 gate。 |
-| Git / 验证视角 | 改动是否验证、提交和同步？ | 跑静态检查、policy consistency、standalone、样片 smoke，并提交推送。 | 最新结构已推送到 `main`。 | 完成 | 每次源码或文档改动后按范围验证。 |
-
-#### 逻辑族群审核进度
-
-| 视角/族群 | 我们问的问题 | 已做工作 | 成果 | 当前状态 | 下一步接点 |
-|---|---|---|---|---|---|
-| Pre-detection | layout、deskew、base gray、evidence gray 是否只提供输入证据？ | 完成 layout/坐标映射、deskew angle selection、base gray、evidence gray、analysis cache / reuse 深审。 | `base_gray`、work-space 输入、deskew detail 和 evidence/cache 分离；I/O 不生成 gray；不生成候选、不评分、不 PASS / REVIEW。 | 完成 | 进入 Gap / Separator；`cache/separator.py` 作为 cache adapter 继续复核。 |
-| Policy activation | format/mode 是否只通过 policy 打开行为？ | 完成 format facts、runtime policy、decision contract 分层。 | format/mode isolation 基本稳定。 | 完成 | 新增格式或 mode 时复核。 |
-| Mode detector | standard、dual-lane、review-only 是否隔离？ | 审核 dual-lane 和 review-only 边界。 | review-only 成为通用保守模式。 | 完成 | 新 mode 必须声明 detector kind。 |
-| Outer proposal / correction | outer 是否只提出候选或修正候选？ | 完成 proposal/correction 拆分和 corrected candidate reassessment。 | outer 不再拥有 PASS / REVIEW 权限。 | 完成 | 后续只做新增逻辑复核。 |
-| Gap / Separator | separator、geometry、content gap 证据如何分类和消费？ | 已完成族群分类，并按 physical 模型建立 `detection.physical.separator` proposal / model 入口；candidate build 层已抽出 separator gap lifecycle helper；普通 separator profile / gap search、edge-pair / nearby refinement、robust grid refinement 和 hard-gap trust 分类已拆成可审核 helper；ordinary detected gap search 已把 band evidence、acceptance 和 ranking 分开，并把每个 expected gap 的 window、accepted / rejected run 和 selected hard/equal method 写入 detail；observed width search 已把 run、width acceptance、candidate scoring 和 ranking 分开，并把每个 expected gap 的 width-profile accepted / rejected run 和 selected detected gap 写入 detail；standard hard search、physical width prior 与 observed width search 已收敛进单一 `width_aware` proposal；edge-pair refinement 已显式区分 hard-gap refresh 与 model-gap promotion；nearby refinement 已把 searched / stronger / geometry accepted-rejected 分开；separator enhanced promotion 已退休；assessment / decision / diagnostics / frame edge fitting 消费层已统一使用 `gap_methods.py` 的 gap method vocabulary 和 concrete predicate；ordinary gap search 与 observed width search 的关键搜索参数已外显；profile / edge-refine cache adapter 已上移到 `cache/separator.py`；nearby refinement 不在 separator build 中调用 scoring。 | separator 只提出或修正 gap evidence；当前 hard gap 只有 `detected / edge-pair`；model gap 为 `grid / equal / content`；outer -> gaps 与 gaps -> frames 的职责已拆开；nearby refinement 前后 gap lifecycle 由 candidate build 交给 detection build / assessment 消费；profile signal、gap search acceptance、gap search candidate ranking、width-aware proposal detail、observed width run acceptance、shared run evaluation detail、edge-pair replacement / promotion、nearby replacement assessment、grid fit / adjustment、runtime / diagnostic hard-gap trust、gap method 消费 vocabulary、ordinary gap search 参数、observed width search 参数和 cache key ownership 可分段审核。 | 进行中 | 继续审 separator refinement 阈值策略是否还能合并、收窄或推广。 |
-| Content | content evidence 是否只验证、挑战或引导 physical proposal？ | 完成 ContentSignal / ContentRegion / ContentEvidence / ContentGuidance 分层；content-model detail 明确写出 weak proposal、content-model gap 和 review-only contract；content-guided separator seed 已接入 candidate plan extension；content outer edge/floating guidance 已从 physical outer 层迁出。 | Content 生成 soft evidence、region hint、review-only content-model candidate，也可生成 outer / separator search hints；真实 hard gap 仍由 separator proposal 产生，content 不修 physical result、不 PASS / REVIEW。 | 结构完成，consumer 待审 | 审核 content score、selection conflict、frame geometry 与 hard-separator contract。 |
-| Candidate build / frame geometry | outer -> gaps -> frames 的中间 detail 是否完整？ | 完成 build / assessment 边界清理；`build_detection_for_outer` 只消费 separator gap lifecycle 与 guidance hints，生成 work-space outer、frame boxes、gap/refinement/frame-fit detail 和未评分 Detection；base confidence / review reasons 已迁入 `candidate.assessment.scoring`；corrected outer reassessment 已迁入 `candidate.extension`。 | build 层不评分、不 PASS / REVIEW；hint 只改变 separator search center，不改变最终决策；raw rank 和 gate 需要的 base scoring 由 assessment 显式应用。 | 完成 | 进入 Scoring / Gate 深审。 |
-| Scoring | separator/content/geometry 分数是否只辅助 gate？ | 已把 separator base scoring 从 build 层迁入 assessment 层，保留原公式和 execution budget 行为。 | scoring 归属清楚，但规则未逐项审。 | 进行中 | 审核 base score、content score、separator score 与 gate 的关系。 |
-| Gate | separator/content/geometry/partial/auto gate 是否清楚？ | 结构已归入 assessment。 | gate 位置清楚，但规则未逐项审。 | 未开始 | Scoring 后审核。 |
-| Risk | lucky pass、overlap、competition 等是否只拉回 REVIEW？ | 架构上已从 retry/rescue 中拆出。 | risk 不应救回 PASS。 | 未开始 | Gate 后审核。 |
-| Decision | 最终 PASS / REVIEW 是否唯一落在 decision contract？ | 已完成结构迁移和边界清理。 | final decision 层位置清楚。 | 结构完成，逻辑待审 | Risk 后逐项审 reason 和 cap。 |
-| Finalization | 输出几何处理是否不生成新候选？ | 已完成 finalization 边界清理。 | finalization 只做 output-adjacent work。 | 结构完成，逻辑待审 | Decision 后审 output bleed / geometry adjustment。 |
-| Audit visibility | report/debug 是否足以解释变化？ | 建立三联 Debug Analysis 和 report detail 方向。 | 审核 surface 已存在。 | 持续复核 | 每完成一个逻辑族群都回看。 |
-
-维护规则：
-
-- 每完成一个逻辑族群审核，同时更新本台账和下方人工审核索引。
-- 每次实施代码变更后，只在 `CHANGELOG.md` 记录行为或结构变化，不复制本台账。
-- `AGENTS.md` 只在 handoff 需要时记录当前接点，不放完整台账。
-- 最终命名清理单独作为最后阶段，不穿插在每个逻辑族群中执行。
-
-### 命名和 API 规则
-
-- `*Options`: 文件探测前的入口参数，例如 `CliOptions`。
-- `*Config`: 已解析运行配置，例如 `RuntimeConfig`。
-- `*Spec`: 物理事实或格式规格，例如 `FormatPhysicalSpec / FormatSpec`。
-- `*Parameters`: 数值参数和低层执行参数。
-- `*Policy`: format / mode 行为、gate、decision 或 output 规则。
-- `*Assessment`: candidate 阶段评估结果；不得表达最终裁切决定。
-- `*Decision*`: 最终 PASS / REVIEW 语义。
-- `*Result`: 已完成流程的返回对象。
-
-当前 module、class、function、policy id 和架构标签应使用语义命名。版本号只应出现在
-`VERSION` / `APP_VERSION`、release history、artifact 名、historical archive path
-和 machine schema value 中。
-
-### Policy 和决策模型
-
-`DetectionDecisionContract` 是 public decision policy contract，包含：
-
-- `ModePolicy`: full / partial count、outer、stop condition、edge trust。
-- `EvidencePolicy`: outer / separator / geometry / content 的最低组合证据。
-- `RiskPolicy`: overlap、outer-content mismatch、candidate competition、partial edge uncertainty 等 REVIEW 风险。
-- `CandidatePolicy`: content-only、safety、weak-grid、equal-gap 候选的默认保守行为。
-- `DecisionPolicy`: PASS / REVIEW reason id 和 confidence cap。
-- `OutputPolicy`: TIFF metadata/export 行为和输出 bleed。
-- `DecisionDiagnosticsPolicy`: decision/report 中记录的 diagnostics 和 overlay 说明。
-
-runtime `DetectionPolicy` 仍用于 evidence generation wiring。它连接 detector、count、
-outer、separator、content、scoring、candidate plan / extension、selection、
-finalization、diagnostics、report 和 output 等 runtime 能力。`DetectionDecisionContract` 必须通过
-active `DetectionPolicy` 派生；`policies/decision/overrides.py` 只保存不能从 runtime policy
-直接推导的 final evidence threshold。影响最终 PASS / REVIEW 的参数必须进入 report
-schema 的 decision policy detail。
-
-`x5crop.policies` 内部按职责分包：
+`x5crop.policies` 所有权：
 
 | 子包 | 职责 |
 |---|---|
-| `policies.formats` | format-specific physical tolerance、content profile tolerance 和 search budget overrides；不得声明 separator pixel signal threshold、scoring、gate、risk、detector、diagnostics 或 runtime preset。 |
-| `policies.parameters` | 数值参数对象、format parameter registry 和 override ownership validator；format override 会被拆成 `FormatToleranceProfile`、`FormatContentProfileTolerance` 和 `SearchBudgetPolicy`。 |
+| `policies.formats` | format-specific physical tolerance、content profile tolerance 和 search budget overrides。不得声明 scoring、gate、risk、detector、diagnostics 或 runtime preset。 |
+| `policies.parameters` | 数值参数对象、format parameter registry 和 override ownership validator。 |
 | `policies.runtime` | runtime `DetectionPolicy` 及其子 policy dataclass。 |
-| `policies.decision` | final PASS / REVIEW decision contract 和少量 override。 |
-| `policies.assembly` | 从 format id、物理 facts、受限参数覆盖和 policy profile defaults 组装 runtime policy preset。 |
+| `policies.decision` | final decision contract 和少量 final evidence overrides。 |
+| `policies.assembly` | 从 format id、物理 facts、受限参数覆盖和 profile defaults 组装 runtime policy。 |
 | `policies.reporting` | policy detail serialization；只负责报告可见性。 |
 | `policies.registry` / `consistency` / `ids` | public lookup、consistency smoke 和 schema / policy id。 |
 
-### Detection / Gate / Risk 人工审核索引
+影响最终 PASS / REVIEW 的参数必须进入 report 的 decision policy detail。影响 runtime
+检测路径但不直接决定 PASS / REVIEW 的参数必须进入 runtime policy detail。
 
-本索引用于按检测逻辑族群人工审核，不按源码目录或运行顺序切分。`主要位置` 路径默认
-相对 `x5crop/`。审核目标是确认每个逻辑只在合适的 format / mode 被 policy 启用，
-生成的 evidence、gate、risk 和 decision detail 可解释，并且不会绕过最终 PASS /
-REVIEW contract。
+### 6. 决策权
 
-| 逻辑族群 | 子逻辑 | 主要位置 | 人工审核重点 |
-|---|---|---|---|
-| Pre-detection | layout / coordinate mapping | `geometry/layout.py`, `geometry/boxes.py` | 已审：horizontal / vertical work-space 与 original-space 映射对称；坐标转换只改变视角，不改变裁切语义。 |
-| Pre-detection | deskew angle selection | `image/deskew.py`, `image/deskew_parameters.py`, `runtime/deskew.py` | 已审：deskew 只估角、旋转输入和写入质量 detail；deskew uncertainty 只能作为最终 REVIEW reason 的风险输入，不能直接 PASS。 |
-| Pre-detection | base gray | `image/gray.py`, `io/tiff.py`, `runtime/deskew.py`, `runtime/analysis_reuse.py` | 已审：`make_base_gray_u8` 是唯一基础灰度入口，用于 TIFF 读取和 deskew 后重建灰度；不承担 content / separator 语义。 |
-| Pre-detection | evidence gray / deskew fallback gray | `image/evidence.py`, `cache/analysis.py` | 已审：content/separator evidence gray、deskew fallback gray 和 analysis cache 只提供可复用证据输入；不隐藏原始 gray，不选择候选，不决定 PASS / REVIEW；不保留 color contrast 或 heavy texture 预留接口。 |
-| Policy activation | format physical facts | `formats/` | `FormatPhysicalSpec / FormatSpec` 中的 count、aspect、family、physical risk 是否是事实层，不含 gate threshold。 |
-| Policy activation | format parameter overrides | `policies/formats/format_*.py`, `policies/parameters/ownership.py` | format 文件是否只声明 physical tolerance、content profile tolerance 和 search budget 覆盖；separator pixel signal threshold 不得按 format 覆盖；`ownership.py` 将 override 拆为 `FormatToleranceProfile`、`FormatContentProfileTolerance` 和 `SearchBudgetPolicy`，并拒绝 scoring、gate、risk、algorithm switch 或 runtime preset 字段。 |
-| Policy activation | runtime policy assembly | `policies/assembly/*`, `policies/assembly/profile_defaults.py`, `policies/runtime/*`, `policies/parameters/*` | assembly 是否从 format id、物理 facts、受限参数覆盖和分层 policy profile 生成 runtime preset；count inclusion、gate supplemental checks、scoring calibration、risk enablement、partial-holder requirements 和 refinement numeric profile 不应再藏在 format defaults 里。 |
-| Policy activation | final decision contract | `policies/decision/contract.py`, `policies/decision/overrides.py` | runtime `DetectionPolicy` 与 final `DetectionDecisionContract` 的证据门槛不能语义漂移。 |
-| Mode-specific detector | dual-lane detector | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_context.py`, `detection/modes/dual_lane_split.py`, `detection/modes/dual_lane_detect.py`, `detection/modes/dual_lane_merge.py` | `135-dual/full` 是否独立于普通 135 strip；入口是否只调度，policy/spec context、lane split / lane detect / lane merge 是否可解释。 |
-| Mode-specific detector | review-only mode | `detection/modes/review_only.py`, `detection/candidate/proposal/safety.py` | review-only 或 hard safety 必须保持 review-only，不得因为 confidence 偶然过线而 PASS。 |
-| Physical outer | base outer | `geometry/outer_boxes.py`, `detection/physical/outer/base.py` | 基础 holder outer 是否只提出 physical outer proposal，不承担评分或通过。 |
-| Content guidance | partial content-position outer hints | `detection/guidance/content_outer_edge.py`, `detection/guidance/content_outer_floating.py`, `detection/physical/outer/plan.py` | 标准 partial 若内容不铺满片夹，content guidance 可提出 edge-anchored 或 floating 两种位置 hint；proposal plan 先尝试 edge，edge 候选达到 trust 门槛时跳过 floating；hint 必须回到 physical outer candidate 并继续经过 separator/content/geometry gate，`135-dual/partial` 仍由 review-only mode 接管。 |
-| Physical outer | separator-derived outer | `detection/physical/outer/separator.py`, `detection/physical/outer/separator_bands.py` | separator-derived outer 是否只按 `outer_scope`（local / full-width）生成候选，并在同一 width-aware separator evidence 中消费标准理论宽度与 observed measured-width bands（可比 physical prior 更窄、匹配或更宽）；broad separator width 是 evidence detail，不是 outer variant 或独立 gap profile；标准 strip 的 full 全部 eligible，partial 只有显式 count 时 eligible extension scopes；candidate execution budget 可在可靠 primary 结果后跳过 extension 执行。 |
-| Physical outer | grid-refined outer | `detection/physical/outer/grid_refine.py`, `detection/candidate/build/detection.py` | grid-derived outer box 计算属于 physical outer helper；candidate build 在 primary separator gaps 与 late separator refinements 之间决定是否用 refined outer 重建 gaps；separator gap lifecycle 不拥有 outer box 修正规则。 |
-| Physical outer | proposal plan | `detection/physical/outer/plan.py` | candidate 层只能通过 physical outer proposal plan 获取和合并 outer candidates；不得直接依赖 base/common/separator 内部 helper 或 variant 常量。 |
-| Physical outer correction | geometry consistency correction | `detection/physical/outer/correction/geometry.py`, `detection/physical/outer/correction/types.py` | long-axis / short-axis 是否由 `OuterCorrectionFamilyPolicy` 控制开启面、修正轴和 partial 显式 count 门控；outer correction 只提出 `OuterCorrectionProposal`，不直接 PASS / REVIEW。 |
-| Physical outer correction | content containment correction | `detection/evidence/outer_alignment.py`, `detection/physical/outer/correction/content_containment.py`, `detection/physical/outer/correction/types.py` | 内容边缘证据只能触发 corrected outer proposal；full 和显式 count partial 可用，auto-count partial 不启用，修正后的候选必须重新 build detection 并重新 assessment。 |
-| Corrected candidate | corrected outer reassessment | `detection/candidate/extension/corrected_outer.py` | corrected outer 重新 build detection、重算 evidence 并重新 candidate assessment；candidate extension 负责“怎么重新算”，build 包不承载 assessed candidate orchestration。 |
-| Candidate extension | outer correction candidate extension | `detection/pipeline.py`, `detection/candidate/extension/outer_correction.py`, `detection/physical/outer/correction/*` | correction 顺序固定为 geometry consistency 再 content containment；candidate plan 记录 eligible / skipped / attempted family；可靠 selection 且 outer alignment ok 时可跳过 correction 计算，并写出 execution budget action / reason；pipeline 只把 reassessed corrected outer 追加回候选池，不能绕过最终 decision / gate。 |
-| Gap / separator | separator profile | `geometry/separator_profile.py`, `geometry/edge_refine_profile.py` | 基础 separator profile 只生成一维 separator signal；`SeparatorProfileSignals` 明确承载 segmented extreme、uniform soft、uniform support 和 column gradient，`combined_separator_profile_score` 负责唯一组合点，smooth window 独立可审；edge-refine profile 已拆为 edge-pair correction 专用证据，edge peak search 单独可审。 |
-| Gap / separator | separator cache | `cache/separator.py`, `detection/evidence/evidence_cache_keys.py`, `detection/cache_keys.py` | profile / edge-refine cache key 只包含 box 与参数对象；cache adapter 归 `x5crop.cache`，`geometry` 只保留纯 profile / search / refinement 算法；layout 由 `AnalysisCache` 作用域承担，format identity 不进入底层 cache key；diagnostic cache key 必须包含实际影响搜索的 diagnostic policy。 |
-| Physical separator | separator proposal | `detection/physical/separator/proposal.py`, `detection/physical/separator/model.py`, `geometry/model_gaps.py`, `geometry/gap_search.py`, `geometry/gap_search_detail.py`, `geometry/gap_geometry.py`, `geometry/separator_band.py`, `geometry/separator_width_profile.py` | width-aware separator proposal 是否只提出 physical gap evidence；每个 expected gap 先按理论均匀排布得到 origin / pitch / physical width prior，再执行普通 hard-gap search，并在同一 proposal 内按需读取 observed width profile 作为实测宽度证据；standard hard gap 优先，observed width gap 只在 standard missing 时补充，并可记录相对 physical prior 更窄、匹配或更宽，最后才生成 explicit equal model gap。`gap_search.py` 只负责 hard detected search，`separator_width_profile.py` 只负责宽度 profile 数学、band collection 和 observed width candidate search；两者都不选择最终 candidate、不 PASS / REVIEW。`SeparatorGapProposal` 承接单 gap 与 detail，`SeparatorGapProfileProposal` 现在表示单一 `width_aware` profile；detail 记录 standard search、observed width search、physical width prior、selected source、selected width relation 和 model gap fallback。broad separator width 只作为 `separator_width_evidence`、gate detail 和 partial-holder detail 消费，不再是独立 gap profile 或 candidate family。 |
-| Gap / separator | hard-gap trust | `geometry/gap_trust.py`, `geometry/nearby_separator.py`, `detection/evidence/gap_diagnostics.py` | hard gap 可信度是否能区分真实片间空隙、frame border、content edge；像素 signal、runtime trust assessment 和 diagnostic trust assessment 已集中在 `geometry/gap_trust.py`；runtime / diagnostic assessment 共用 `HardGapTrustContext` 与 `hard_gap_trust_assessment_result()` 组装 `HardGapTrustAssessment` detail，记录 trust label、reason、width / model delta 和 signal flags，不保留 string-only classifier wrapper；nearby candidate search / ranking / stronger detail 由 `geometry/nearby_separator.py` 提供，runtime hard-gap trust 和 refinement 都直接消费 `NearbySeparatorReplacementAssessment`，不保留 accepted-only replacement wrapper；runtime refinement detail 记录每个 gap 的 searched / no-candidate / not-stronger / geometry rejection / accepted，不改变 refinement 条件；diagnostics 只负责采样、缓存和记录，不重复搜索或分类规则。 |
-| Gap / separator | separator refinement | `geometry/edge_refine_profile.py`, `geometry/edge_pairs.py`, `geometry/nearby_separator.py`, `geometry/gap_refinement_detail.py`, `policies/runtime/separator.py`, `policies/assembly/separator.py`, `detection/candidate/build/separator_refinements.py`, `detection/candidate/build/separator_gaps.py`, `detection/candidate/build/detection.py` | edge-pair / nearby 只能修正或补充 gap evidence；不得直接 PASS；candidate build 直接调用 geometry refinement helpers，不保留只做别名转发的 proposal refinement facade；`SeparatorPolicy.refinement` 用统一 `SeparatorRefinementPolicy` 声明 edge-pair 和 nearby refinement family 的 mode、phase、strip modes、partial 显式 count 要求与 target gap methods；edge-pair 额外声明 `model_promotion_gap_methods`，明确它可用独立 edge-pair 证据把 equal / grid / content model proposal promotion 成 hard `edge-pair`；nearby 仍只 refresh hard gap；standard strip 的 full 全部 eligible，partial 只有显式 count 才 eligible，dual-lane / review-only 不进入普通 refinement；`separator_refinements.py` 承接 edge-pair、robust-grid 和 nearby refinement wrappers，`separator_gaps.py` 只编排 initial source selection、primary build 和 late refinement attachment；candidate build 用 `PrimarySeparatorRefinementResult` 承接 edge-pair correction 与 robust-grid detail，用统一 `GapRefinementResult` 承接 edge-pair 和 nearby wrapper 输出，detail 继续写入 report key，并统一补齐 `family`、`phase`、`eligible`、`skipped_reason`、accepted / rejected count 和 family policy visibility；edge-pair 已明确为 gap refinement，detail key 为 `edge_pair_correction`，并已拆成 edge-refine profile、profile cache owner、`EdgePairSearchLimits`、typed candidate generation、best-pair selection、`edge_pair_gap_from_candidate`、replacement assessment 和 batch refinement result；edge-pair detail 现在记录 search limits、candidate count、ranked selected candidate、replacement assessment、source / result method、replacement role、`promoted_from_model_gap`、`model_gap_promotion_count` 和 `hard_gap_refresh_count`，方便人工审核是否过度替换；policy assembly 通过集中 runtime preset 生成 `EdgePairParameters`，`geometry/edge_pairs.py` 只消费 profile arrays 和基础参数对象；separator enhanced promotion 已退休，`enhanced-detected` 不再是 active gap method；nearby 已拆成 search context、typed candidate、typed search result、stronger test、replacement assessment、batch refinement result 和 geometry acceptance，并只把 refinement detail 与 pre-refinement gaps 交给 detection build；edge-pair / nearby 共用 `gap_refinement_batch_detail()` 组装 accepted / rejected / searched batch detail 和 count；confidence cap / scoring 保留在 candidate assessment 消费层；refinement helper 只消费 `gap_methods.py` 的 method family vocabulary，不 import detection evidence。 |
-| Gap / separator | robust grid model gaps | `geometry/gap_geometry.py`, `geometry/robust_grid.py`, `geometry/model_gaps.py`, `detection/candidate/build/separator_gaps.py` | grid 只能补模型证据；weak grid 不得单独获得 auto PASS；candidate build 直接调用 robust grid helper；grid 已拆成 reliable anchor selection、fit candidate generation、fit ranking、fit assessment、predicted center 和 hard-gap protection / override adjustment；selected fit 和 assessment 直接消费 `GridFitCandidate`，per-gap adjustment 用 `GridGapAdjustmentResult` 承接，batch refinement 用 `RobustGridResult` 承接，不再经过裸 tuple 中转；runtime detail 明确写出 `family=robust_grid`、`evidence_kind=grid_model_gap`、`model_gap_method=grid`、rejection reason、reliable anchors、fit candidates、selected fit、fit assessment 和每个 gap 的 keep / protect / override / model action，方便审核 grid 如何覆盖弱 hard gap；`grid_model_gap` 统一生成 grid method identity；gap geometry helper 只提供几何约束，不寻找 separator；robust grid 不接收 format identity 或 `strip_mode`，candidate build 先解析出 `RobustGridExecutionParameters`，geometry 只消费 gaps、origin/pitch 和参数对象，并通过 `gap_methods.py` 判断 hard evidence family。 |
-| Gap / separator | gap method consumers | `constants.py`, `gap_methods.py`, `detection/evidence/separator_summary.py`, `detection/candidate/assessment/*`, `detection/candidate/selection/*`, `detection/decision/pass_review.py`, `detection/evidence/*`, `geometry/frame_fit.py`, `debug/gaps.py` | `constants.py` 只声明真实 method id；`gap_methods.py` 统一 hard / geometry-model / content-model / separator-support family、具体 method predicate 和 diagnostics role vocabulary；`separator_summary.py` 只做 gap-method evidence summary。assessment、selection、decision、risk/read-only diagnostics、frame edge fitting、debug gap overlay、standard gap search 和 observed-width gap search 不重新手写 separator / model method 字符串；业务消费者不直接 import `HARD_GAP_METHODS`，统一通过 `is_hard_gap_method()` 读取 hard-family 语义；detected、edge-pair、grid、equal、content 等具体分类通过 `gap_methods.py` predicate 消费，proposal 成功 reason 使用同一 method id 常量；raw gap 消费通过 `GapMethodEvidenceSummary` 明确区分 hard separator、grid model、equal model、content model、geometry model 和 separator support，并集中提供 hard-gap indexes、edge-pair scores、detected scores 和 leading-grid scores；width-profile selection、separator gate 与 lucky-pass risk 不再自己重数或重命名 gap method；separator gate detail 消费通过 `SeparatorGateDetailSummary` 明确区分 expected、hard separator、grid model、equal model 和 content model，避免把 grid/content model support 误读成真实 detected hard gap。 |
-| Gap / separator | width-aware profile planning | `detection/gap_profiles.py`, `detection/candidate/plan/sources.py`, `detection/physical/separator/proposal.py` | active gap search profile vocabulary 只有 `width_aware`；standard search、physical width prior 和 observed width profile 在同一个 separator proposal 内完成，candidate plan 不再生成独立 `broad_width` profile 候选。execution budget 仍可在 reliable primary 后跳过 full-width / outer-scope extension，但不是跳过另一个 gap profile。 |
-| Gap / separator | observed width profile and broad width evidence | `detection/physical/separator/proposal.py`, `detection/evidence/separator_width.py`, `geometry/separator_band.py`, `geometry/separator_width_profile.py` | observed width profile 是中性的实测宽度搜索，可选出比 physical prior 更窄、匹配或更宽的普通 `detected` hard gap；宽 separator 只是其中一种后续 width detail 和 gate / partial safety evidence。observed width search 记录 accepted / rejected width run、selected detected gap、physical width prior、selected width relation 和 summary reason，不生成独立 gap method、candidate family 或 selection bypass。`separator_width_evidence` 由 candidate build 生成一次，`detection/evidence/separator_width.py` 负责 summary detail，gate / partial-safe 只消费 detail。 |
-| Gap / separator | separator gap lifecycle in candidate build | `detection/candidate/build/separator_gaps.py`, `detection/candidate/build/separator_sources.py`, `detection/candidate/build/separator_refinements.py`, `detection/candidate/build/detection.py` | `build_detection_for_outer` 是否只消费 separator gap lifecycle 结果去生成 frames 和 detail，不生成 base confidence / review reasons；separator lifecycle 已拆成 primary width-aware gap build（origin/pitch、standard hard search、observed width search、edge-pair、grid）和 late nearby refinement；initial gap source selection 已拆到 `separator_sources.py`，用 `InitialSeparatorGapResult` 承接 width-aware gap result 和 `geometry_equal_model` source selection，不再裸 tuple 传递；`standard_gap_search` detail 记录 `selected_gap_source` 而不是 override 语义；`separator_gaps.py` 不再持有 source-selection 或 refinement 细节，只负责组装 `SeparatorGapBuildResult`；primary refinement 用 `PrimarySeparatorRefinementResult` 承接 edge-pair 与 grid 输出；late refinement 用 `LateSeparatorRefinementResult` 承接 nearby refinement、最终 gaps 和 pre-nearby gaps；late refinement 不消费 runtime config；grid-derived outer refine 由 candidate build 在两段之间重新 build，不由 separator lifecycle 决定 PASS / REVIEW 或 outer 修正规则；base scoring 和 nearby confidence cap 由 candidate assessment 消费 build detail 后统一应用。 |
-| Gap diagnostics | gap diagnostics | `detection/evidence/gap_diagnostics.py` | diagnostic-only evidence 是否只解释 risk，不直接参与 candidate selection。 |
-| Content evidence | content signal | `image/evidence.py`, `detection/evidence/content/signal.py` | content signal 只生成 content evidence gray、float signal、threshold 和 policy/cache key helper；不生成候选、不评分、不 PASS / REVIEW。 |
-| Content evidence | content frame support | `detection/evidence/content/frame_support.py` | `ok / weak / low_content / aspect_conflict` 是否符合照片内容和 aspect；cached / uncached 路径共用 signal threshold 与 frame support summary helper，坐标转换和缓存归各自入口处理。 |
-| Content evidence | content region hints | `detection/evidence/content/regions.py` | content bbox 和 content runs 只能作为 guidance 输入；run selection、mask threshold 和 bbox detail 可审，但不得绕过 separator gate 或直接修 physical result。 |
-| Content guidance | content-model candidate | `detection/guidance/content_model.py`, `geometry/model_gaps.py`, `policies/runtime/content.py` | content-model candidate 只能生成 content-model gap 和 weak proposal；`ContentCandidatePolicy.review_only=True`，detail 写出 `proposal_role=weak_content_model_proposal`、`content_gap_evidence_kind=content_model_gap` 和 `decision_contract=review_only`。 |
-| Content guidance | content-guided separator search | `detection/guidance/content_separator.py`, `detection/physical/separator/hints.py`, `detection/physical/separator/proposal.py`, `detection/candidate/plan/run.py` | content bbox / runs 可生成 separator search hints；hint 只移动 separator search center，不能生成 hard gap，不能生成 content-based equal gap，不能绕过 candidate assessment。若 content-guided separator candidate 没有真实 hard separator，assessment 必须拉回 REVIEW。 |
-| Content | content support score | `detection/candidate/assessment/scoring.py` | content score 权重和 gate multiplier 是否不压倒 separator / geometry。 |
-| Content | content mismatch review | `detection/candidate/selection/choose.py` | content 与 separator 候选冲突时是否倾向 review，而不是选择看似更高分的错误候选。 |
-| Candidate | count / offset plan | `detection/candidate/plan/counts.py` | full / partial 的 count、offset、默认 count inclusion 是否符合片夹物理目标。 |
-| Candidate | candidate source orchestration | `detection/candidate/plan/run.py`, `detection/candidate/plan/sources.py`, `detection/candidate/plan/reliability.py`, `detection/physical/*`, `detection/guidance/*`, `detection/candidate/proposal/safety.py` | physical outer / separator、content guidance、safety candidate 和 content-model candidate 是否由同一个 candidate plan 声明；primary width-aware separator 是否先 assessment，只有不可靠时才执行 full-width / content-guided / outer-scope extension；selection 是否只发生在 assessment 后。 |
-| Candidate | build detection for outer | `detection/candidate/build/detection.py`, `detection/candidate/build/separator_gaps.py` | outer -> separator gap lifecycle -> frame boxes 的中间 detail 是否完整可审；gap lifecycle、frame assembly 与 assessment scoring 分开。 |
-| Candidate | frame fit | `geometry/frame_fit.py` | frame boxes 是否以 gaps 为核心，edge / geometry fit 只能保守微调。 |
-| Candidate scoring | base confidence | `detection/candidate/assessment/scoring.py` | gap、width、outer、contrast 权重是否不会让弱证据误过线。 |
-| Candidate scoring | geometry support score | `detection/candidate/assessment/scoring.py` | width_cv、outer area、aspect、count 是否与实际裁切稳定性一致。 |
-| Candidate scoring | separator support score | `detection/candidate/assessment/scoring.py`, `detection/evidence/separator_summary.py` | hard/grid/equal 的信用是否符合 hard > model 的原则；raw gap scoring 和 width-profile selection 使用 `GapMethodEvidenceSummary`，gate-detail scoring 使用 `SeparatorGateDetailSummary`；`detected_gaps` 是兼容 report 字段，active detail 另写 `separator_support_count = hard_separator_gaps + grid_model_gaps`，不得把 grid/content model gap 命名为 hard detected evidence。 |
-| Candidate scoring | joint score | `detection/candidate/assessment/candidate.py` | geometry/content/separator 合分是否只辅助 gate，不替代 gate。 |
-| Candidate scoring | hard full confidence floor | `detection/candidate/assessment/scoring.py` | full 默认张数且 hard gaps 完整时抬 confidence 是否只用于可信完整片条。 |
-| Gate | separator gate | `detection/candidate/assessment/gates.py`, `detection/evidence/separator_summary.py`, `policies/separator_gate_profiles.py`, `policies/assembly/separator.py` | gate profile 是否与 format/mode policy 一致；gate profile vocabulary 集中在中性 policy vocabulary 模块，assembly 会校验未知 profile；`assess_separator_gate()` 是 active entry，`SeparatorGateEvidence` 统一汇总 hard / model / width / leading-grid evidence，其中 hard/model 计数来自 `GapMethodEvidenceSummary`；`SeparatorGateAssessment` 统一负责 single-frame / threshold / leading-grid / profile dispatch，detail serializer 只输出既有 report keys。 |
-| Gate | `min_hard_with_equal_cap` | `detection/candidate/assessment/gates.py` | 135 类策略允许少量 model/equal 时，hard gap 下限是否足够。 |
-| Gate | `all_internal_gaps_hard` | `detection/candidate/assessment/gates.py` | 120 / xpan 等 strict policy 是否要求内部 gap 足够硬；full/default-count supplemental checks 将 broad-width requirement 和 edge-pair min score 拆成独立 gate helper，成功 reason 保持主 profile。 |
-| Gate | `geometry_support` | `detection/candidate/assessment/gates.py`, `detection/candidate/assessment/scoring.py` | half/full 的 stable grid / detected geometry 支持是否不借用到其它 format。 |
-| Gate | leading grid failure | `detection/candidate/assessment/gates.py` | 前段 grid 弱、hard gap 偏后时是否阻止 lucky pass；leading grid scores 和 late adjacent hard-gap sequence 已拆成独立 helper，最终 reason 保持 `leading_grid_separator_failure`。 |
-| Gate | partial safe extra frames | `detection/candidate/assessment/partial_holder.py` | partial 多扫 holder 时是否只消费已有 broad separator width evidence、low leading content、stable frame content，并按 holder requirement 复核，不重新生成 separator evidence。 |
-| Gate | evidence independence | `detection/candidate/assessment/evidence_independence.py`, `detection/candidate/assessment/candidate.py` | proposal 可以互相启发，但 auto PASS 必须有独立证据确认。若 outer 来自 `separator_outer` 且 separator gap 实际选用了 `observed_width_profile`，则必须同时有 standard hard gap、content ok 和 geometry ok；否则写入 `evidence_dependency_cycle_risk` 并关闭 auto gate，避免用 separator-derived outer 再证明同一套 separator evidence。 |
-| Gate | auto gate | `detection/candidate/assessment/candidate.py` | `auto_gate=True` 是否同时满足 separator/content/geometry/mode-specific 证据且无 hard review reason。 |
-| Candidate plan | width-aware separator profile | `detection/gap_profiles.py`, `detection/candidate/plan/sources.py`, `detection/candidate/plan/reliability.py` | `width_aware` 是否是唯一 active gap search profile；execution budget 可在 reliable primary 后跳过更贵的 outer-scope extension，并在 detail 中写出 action / reason / stage；不得退回失败补救式 retry。 |
-| Candidate plan | safety outer proposal | `detection/candidate/proposal/safety.py`, `detection/candidate/source_policy.py`, `detection/candidate/plan/sources.py` | safety candidate 只能提供 review-only 安全结果，不应绕开 hard evidence 或 auto gate。 |
-| Candidate plan | separator width evidence visibility | `detection/evidence/separator_width.py`, `detection/physical/separator/proposal.py` | broad separator width 是否只进入 evidence / gate / report detail，不再拥有独立 candidate selection。 |
-| Candidate plan | partial stop | `detection/candidate/plan/run.py` | partial safe auto 后提前停止是否不会跳过必要的 review evidence。 |
-| Risk | overlap bleed risk | `detection/evidence/risk.py`, `gap_diagnostics.py` | gap 附近叠片/连续内容风险是否进入 REVIEW 或 output bleed。 |
-| Risk | lucky pass risk | `detection/evidence/risk.py`, `detection/evidence/separator_summary.py` | model/equal/grid 支撑的假 PASS 是否被拉回 REVIEW；geometry model-gap 计数必须来自 `GapMethodEvidenceSummary`，risk 层只做 REVIEW 风险计算。 |
-| Risk | outer-content mismatch | `detection/evidence/outer_alignment.py`, `detection/decision/pass_review.py` | outer 与内容 bbox 不一致时是否压 confidence / 加 review reason。 |
-| Risk | candidate competition close | `detection/candidate/selection/choose.py`, `detection/decision/pass_review.py` | 第一、第二候选接近时是否 review，partial safe 情况的豁免是否合理。 |
-| Risk | content-only / safety risk | `detection/candidate/assessment/candidate.py`, `detection/decision/pass_review.py` | content-only、safety、review-only 是否保持 conservative review-only。 |
-| Risk | partial edge uncertain | `detection/candidate/assessment/partial_holder.py`, `detection/decision/pass_review.py` | partial 边缘不可信时是否必须 REVIEW。 |
-| Finalization | edge bleed protection | `detection/final/geometry.py` | 输出前 edge bleed 保护是否只做安全几何调整，不改变 decision 证据。 |
-| Finalization | approved geometry adjustment | `detection/final/geometry.py` | PASS 前几何微调是否仅在已通过候选上执行。 |
-| Finalization | output-adjacent caps and bleed | `detection/final/finalize.py` | content low/aspect conflict、lucky pass、outer mismatch 的 confidence cap 和 output bleed 是否不生成新候选。 |
-| Decision | final PASS / REVIEW | `detection/decision/pass_review.py` | 最终裁决是否唯一落在 decision contract；review reason normalization 是否稳定。 |
-| Audit visibility | read-only diagnostics | `detection/evidence/read_only.py` | 只写解释性 diagnostics，不改变 confidence、candidate 或 status。 |
-| Audit visibility | report sections | `report/schema.py`, `report/sections.py` | candidate table、gate records、selected candidate 是否足以人工复盘。 |
-| Audit visibility | debug panels | `debug/*`, `policies/runtime/diagnostics.py` | 三联图默认保持可读；更丰富证据进入 report/detail 而非挤满首屏。 |
-| Audit visibility | policy reporting | `policies/reporting/__init__.py` | report 中应区分 active policy、默认值、format/mode role 和 diagnostics detail。 |
+自动 PASS 至少需要：
 
-建议人工审核顺序：先看 width-aware separator proposal、nearby separator refinement、`lucky pass risk`，
-再依次看 outer、gap/content、candidate scoring、gate、final decision。任何行为修改都应
-同步检查 report/debug 是否能解释变化。
+- 候选来源符合当前 format / mode policy。
+- separator、geometry、content 和 outer evidence 共同支持候选。
+- gate profile、partial-holder requirements 和 mode-specific checks 通过。
+- risk 层没有将候选拉回 REVIEW。
+- final decision contract 允许该候选自动通过。
 
-### 必须隔离的行为
+保守规则：
+
+- score 只能辅助 gate，不能替代 gate。
+- risk 只能拉回 REVIEW 或限制输出，不能救回 PASS。
+- weak grid、equal、content-only、safety、review-only、untrusted partial-edge 或 evidence
+  dependency cycle 不能获得自动 PASS 权限。
+- separator-derived outer 若依赖 observed width-profile gaps，自动 PASS 必须再由
+  standard hard gap、content ok 和 geometry ok 独立确认。
+
+### 7. 必须隔离的行为
 
 - 135 full 的完整片条假设不能推广给其它 format。
 - 135-dual full 使用 dual-lane detector；135-dual partial 保守复核。
 - half geometry support 是通用 capability，但默认只给 `half/full` 开启。
-- width-aware separator proposal 是通用 separator 宽度证据入口；120-66 只拥有更宽的 width 参数、square-frame gate、broad separator width evidence 要求和 strict-holder checks。
-- outer correction 是通用 corrected-candidate capability；format 只能提供 aspect、margin、shrink/expand 和 gate 参数，不能拥有独立 correction 算法开关。
-- weak grid、equal、content-only、safety 或不可信 partial-edge 证据不能获得自动 PASS 权限。
+- `width_aware` 是唯一 active separator gap profile；observed width 是中性实测宽度证据，
+  不是 broad-only profile。
+- 120-66 的 broad-width、square-frame、separator-derived outer 和 strict-holder 风险模型
+  只能由 120-66 相关 policy 默认启用，不能默认推广给其它 format。
+- outer correction 是通用 corrected-candidate capability；format 只能调物理参数和 gate，
+  不能拥有独立 correction algorithm switch。
+- partial-holder policy 可以表达更多 holder safety requirement；默认严格行为不得被推广给
+  half / xpan / 645。
 
-### 数据和报告契约
+### 8. 数据和报告契约
 
-- `CliOptions` 是文件探测前的用户选项；`RuntimeConfig` 是绑定输入和 layout 后的运行配置。
-- `OuterCandidate.strategy` 是 candidate kind 契约；runtime 不应靠 name prefix 推断行为。
-- `Detection` 和 `ProcessResult` 是 report、debug 和 export 的稳定输入。
-- report row 顶层包含 `version` 和 `policy_id`。
-- V4.9 使用 `v4_9_policy_schema_1`，包含 evidence、risk、decision policy 和 selected candidate detail。
-- V4.5.4 / V4.7 reports 是 historical reference，不再是必须 0 diff 的 oracle。
-  新增错误 PASS 不可接受；保守 REVIEW 和 schema/reason diff 必须解释。
+- `CliOptions` 是文件探测前的用户选项。
+- `RuntimeConfig` 是绑定输入、layout 和 policy 后的运行配置。
+- `Detection` 是检测阶段的稳定候选结果。
+- `ProcessResult` 是 report、debug 和 export 的稳定输入。
+- report row 顶层必须包含 `version`、`policy_id` 和 `report_schema`。
+- V4.9 使用 `v4_9_policy_schema_1`，包含 evidence、risk、decision policy 和 selected
+  candidate detail。
+- V4.5.4 / V4.7 reports 是 historical reference，不再是 mandatory 0-diff oracle。
+  新增 wrong PASS 不可接受；保守 REVIEW、schema diff 和 reason diff 必须解释。
 
-### 验证要求
+### 9. 清洁编辑规则
 
-结构或 policy 改动后至少运行：
+- 一个概念只能有一个长期 owner；兼容 adapter 必须窄、短、可删除。
+- 新命名必须语义化，不使用 format 号、版本号或历史实现名表达当前职责。
+- 版本号只应出现在 version constants、release history、artifact 名、archive path 和
+  machine schema value 中。
+- `pipeline.py`、`workflow.py`、`common.py` 和 public re-export 只能保留必要 orchestration
+  或兼容面；新实现应进入职责明确的子模块。
+- `ARCHITECTURE.md` 只保留当前架构契约；历史迁移细节写入 `CHANGELOG.md`，当前交接写入
+  `AGENTS.md`。
+
+### 10. 验证门槛
+
+文档-only 变更至少运行：
+
+```bash
+git diff --check
+```
+
+源码或 policy 变更至少运行：
 
 ```bash
 python3 -m compileall -q X5_Crop.py x5crop
@@ -311,10 +197,9 @@ git diff --check
 python3 X5_Crop.py --version
 ```
 
-如果 checkout 展开了 `tools/`，同时编译 `tools/regression/*.py`。Release build 工具
-改动还应运行 `tools/build_standalone.py`，并对生成的单文件执行 `--version` smoke。
+如果 checkout 展开了 `tools/`，同时编译 `tools/regression/*.py`。
 
-检测行为改动使用 reference classifier：
+检测行为变更使用 reference classifier：
 
 ```bash
 python3 -m tools.regression.reference_classify --candidate-root <root>
@@ -331,7 +216,7 @@ frame_boxes
 gaps
 ```
 
-常用 reference sets：
+关键 reference sets：
 
 ```text
 Test/135/4.5.4/split_report.jsonl
@@ -347,164 +232,196 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 
 ## English Guide
 
-### Architecture Goal
+### 1. Architecture Thesis
 
 V4.9 is an evidence-governed policy reset. Its goal is not to increase automatic
 PASS count, but to export crops automatically only when outer, separator,
-geometry, content, and risk evidence jointly explain the decision.
+geometry, content, and risk evidence jointly explain the result.
 
-Principles:
+Architectural stance:
 
-- Keep entry points thin and runtime configuration explicit.
-- Keep workflow as orchestration only.
-- Separate format physical facts from policy decision rules.
-- Let detection own evidence, candidates, and final PASS / REVIEW.
-- Keep geometry / image / io as lower-level capabilities without candidate or decision semantics.
-- Let report / debug / export consume stable results only.
-- Keep developer tools under `tools/`, outside the runtime package.
+- Automatic PASS is a contract result, not a high-score result.
+- New wrong PASS is unacceptable; more conservative REVIEW is acceptable when explained.
+- Format physical facts, runtime policy, candidate evidence, and final decision
+  must stay separate.
+- Capabilities may be generalized; default enablement must remain explicit in
+  format / mode policy.
+- TIFF metadata, bit depth, ICC, resolution, and compression behavior are output
+  contracts and must not change during detection refactors.
 
-### Layer Boundaries
+### 2. Non-Breakable Boundaries
+
+| Area | Sole responsibility |
+|---|---|
+| Format facts | `x5crop.formats` defines format identity, family, counts, aspect, and physical facts. |
+| Runtime policy | `x5crop.policies` defines format / mode behavior, gates, risks, diagnostics, output, and policy detail. |
+| Foundation | `x5crop.geometry`, `x5crop.image`, and `x5crop.io` provide boxes, gaps, profiles, deskew, pixel transforms, and TIFF I/O. |
+| Detection | `x5crop.detection` creates candidates, evidence, candidate assessment, selection, and final decision inputs. |
+| Decision | `x5crop.detection.decision` produces final `PASS` / `REVIEW` from the decision contract. |
+| Finalization | `x5crop.detection.final` handles output-adjacent geometry, bleed, caps, and read-only diagnostics attachment. |
+| Output surfaces | `x5crop.export`, `x5crop.report`, and `x5crop.debug` consume stable results only. |
+| Tools | `tools/` handles standalone build, reference comparison, and safety classification outside the runtime package. |
+
+Foundation rules:
+
+- `geometry` / `image` / `io` must not depend on runtime, cache, workflow,
+  detection, debug, report, or the policy registry.
+- Foundation layers must not read `Detection.detail`, risk detail, or PASS /
+  REVIEW semantics.
+- Foundation layers must not accept `strip_mode` strings; upper layers must pass
+  ordinary parameter objects.
+- Cache adapters belong in `x5crop.cache`; pure math and pixel capability stay in
+  foundation layers.
+
+### 3. Runtime Ownership Map
 
 | Layer | Responsibility |
 |---|---|
 | `X5_Crop.py` | Development entry; Release builds produce the standalone script. |
-| `x5crop.entry` / `x5crop.runtime.config` | CLI parsing, entry option contract, runtime configuration contract. |
-| `x5crop.entry.interactive` / launchers | Interactive menu; platform launchers only locate Python and enter interactive mode. |
-| `x5crop.runtime.input_probe` / `x5crop.runtime.app` | TIFF input probing, layout resolution, startup summary, worker dispatch. |
-| `x5crop.runtime.workflow` | read -> deskew -> detect -> finalization -> export -> report/debug orchestration. |
-| `x5crop.formats` | Single source of truth for format identity, physical specs, counts/aspects, and CLI choices. |
-| `x5crop.policies` | Runtime policy, decision contract, format parameter overrides, runtime preset assembly, and policy detail serialization. |
-| `x5crop.cache` | Analysis cache and profile/evidence cache adapters; it reuses computations but does not create candidates or decisions. |
-| `x5crop.geometry` / `x5crop.image` / `x5crop.io` | Pure lower-level capabilities for boxes, gaps, separator profiles, deskew, pixel transforms, and TIFF I/O. |
-| `x5crop.detection` | Detection pipeline, mode detectors, physical holder structure proposals, content guidance, candidate lifecycle, evidence, decision, and finalization. |
-| `x5crop.runtime.analysis_reuse` / `x5crop.export` / `x5crop.report` / `x5crop.debug` | Historical result reuse, TIFF output, result assembly, report schema, report writing, Debug Analysis. |
-| `tools` | Standalone build, reference compare, safety classification, and other developer tools. |
+| `x5crop.entry` | CLI and interactive entry; produces entry options only. |
+| `x5crop.runtime.config` | Resolves entry options, input, layout, and runtime settings into `RuntimeConfig`. |
+| `x5crop.runtime.input_probe` / `x5crop.runtime.app` | Probes TIFF input, resolves layout, prints startup summary, and dispatches workers. |
+| `x5crop.runtime.workflow` | Orchestrates one image: read -> preprocess -> detect -> finalization -> export/report/debug. |
+| `x5crop.formats` | Single entry for format identity, physical specs, count/aspect facts, and CLI choices. |
+| `x5crop.policies` | Runtime policy, decision contract, format overrides, preset assembly, and policy detail serialization. |
+| `x5crop.cache` | Analysis, profile, and evidence cache adapters; they reuse results but do not create candidates or decisions. |
+| `x5crop.detection` | Detector modes, physical proposals, content guidance, candidate lifecycle, evidence, decision, and finalization. |
+| `x5crop.report` / `x5crop.debug` / `x5crop.export` | Reports, Debug Analysis, and TIFF output; they do not feed back into selection. |
 
-Dependencies should flow from entry/workflow toward foundation layers.
-`geometry` / `image` / `io` must not depend back on cache, workflow, detection,
-debug, report, runtime, or the policy registry; must not read `Detection.detail`,
-risk detail, or PASS / REVIEW semantics; and must not accept `strip_mode`
-strings. Mode/policy differences must be resolved by upper layers into ordinary
-parameter objects before foundation helpers run.
+Dependencies should flow from entry, runtime, and workflow toward policy,
+detection, and foundation layers. Reverse dependencies, implicit global state,
+or format-name conditionals require review.
 
-### Naming And API Rules
+### 4. Detection Sublayers
 
-- `*Options`: entry options before file probing.
-- `*Config`: resolved runtime configuration.
-- `*Spec`: physical facts or format specifications.
-- `*Parameters`: numeric or low-level execution parameters.
-- `*Policy`: format / mode behavior, gates, decisions, or output rules.
-- `*Assessment`: candidate-stage evaluation.
-- `*Decision*`: final PASS / REVIEW semantics.
-- `*Result`: completed process return objects.
+`workflow` schedules the work; detection semantics must remain inside
+`x5crop.detection`.
 
-Current module, class, function, policy id, and architecture names should be
-semantic. Version tags belong only in version constants, release history,
-artifact names, archive paths, and machine schema values.
+| Sublayer | Boundary |
+|---|---|
+| `detection.pipeline` | Candidate plan, candidate pool, extension, and selection orchestration. |
+| `detection.modes` | Mode detectors such as dual-lane and review-only. |
+| `detection.physical` | Holder physical structure: outer proposal / correction and separator proposal / model. |
+| `detection.guidance` | Content-derived guidance: outer hints, separator hints, review-only content-model candidates. |
+| `detection.evidence` | Separator, content, geometry, outer alignment, risk, and read-only diagnostics evidence. |
+| `detection.candidate.plan` | Count, offset, candidate source, and execution budget. |
+| `detection.candidate.proposal` | Non-physical candidate entries such as safety and review-only. |
+| `detection.candidate.build` | outer -> separator gaps -> frames -> unscored `Detection`. |
+| `detection.candidate.assessment` | Scoring, gates, candidate-level review reasons, and auto gate. |
+| `detection.candidate.selection` | Candidate competition and selected candidate. |
+| `detection.candidate.extension` | Reassessed candidates such as corrected outer and content-guided separator. |
+| `detection.decision` | Final evidence summary, risk summary, PASS / REVIEW, and reason normalization. |
+| `detection.final` | Output bleed, approved geometry adjustment, and read-only diagnostics attachment. |
 
-### Policy And Decision Model
+Rules:
 
-`DetectionDecisionContract` is the public decision policy contract:
+- Outer and separator are physical holder structure; content is guidance + evidence.
+- Content may guide search centers or create review-only content-model candidates,
+  but it must not create hard gaps, mutate physical results, or decide PASS /
+  REVIEW.
+- Candidate build does not score or decide; assessment and decision consume evidence.
+- Corrected candidates must be rebuilt, reassessed, and returned to the shared
+  candidate pool before selection.
 
-- `ModePolicy`: full / partial count, outer, stop condition, edge trust.
-- `EvidencePolicy`: minimum combined outer / separator / geometry / content evidence.
-- `RiskPolicy`: review risks such as overlap, outer-content mismatch, competition, partial-edge uncertainty.
-- `CandidatePolicy`: conservative defaults for content-only, safety, weak-grid, and equal-gap candidates.
-- `DecisionPolicy`: PASS / REVIEW reason ids and confidence caps.
-- `OutputPolicy`: TIFF metadata/export behavior and output bleed.
-- `DecisionDiagnosticsPolicy`: diagnostics and overlay details recorded in decision/report.
+### 5. Policy And Decision Model
 
-Runtime `DetectionPolicy` remains the evidence-generation wiring surface.
-`DetectionDecisionContract` must be derived from the active `DetectionPolicy`;
-`policies/decision/overrides.py` only stores final evidence thresholds that cannot be
-directly inferred from runtime policy. Any parameter that affects final PASS /
-REVIEW must be present in report schema decision policy detail.
+`DetectionPolicy` is the runtime capability and parameter surface. It wires
+detector, count, outer, separator, content, scoring, selection, candidate
+extension, diagnostics, report, and output.
 
-`x5crop.policies` is internally split by ownership:
+`DetectionDecisionContract` is the public final PASS / REVIEW contract. It must
+be derived from the active `DetectionPolicy`; `policies/decision/overrides.py`
+stores only final evidence thresholds that cannot be inferred directly from
+runtime policy.
+
+`x5crop.policies` ownership:
 
 | Subpackage | Responsibility |
 |---|---|
-| `policies.formats` | Format-specific physical tolerance, content profile tolerance, and search-budget overrides; they must not declare separator pixel signal thresholds, scoring, gates, risks, detectors, diagnostics, or runtime presets. |
-| `policies.parameters` | Numeric parameter objects, format parameter registry, and override ownership validator; format overrides are split into `FormatToleranceProfile`, `FormatContentProfileTolerance`, and `SearchBudgetPolicy`. |
+| `policies.formats` | Format-specific physical tolerance, content profile tolerance, and search-budget overrides. They must not declare scoring, gates, risks, detectors, diagnostics, or runtime presets. |
+| `policies.parameters` | Numeric parameter objects, format parameter registry, and override ownership validation. |
 | `policies.runtime` | Runtime `DetectionPolicy` and child policy dataclasses. |
-| `policies.decision` | Final PASS / REVIEW decision contract and narrow overrides. |
-| `policies.assembly` | Build runtime policy presets from format id, physical facts, constrained parameter overrides, and layered policy profile defaults. |
+| `policies.decision` | Final decision contract and narrow final evidence overrides. |
+| `policies.assembly` | Builds runtime policy from format id, physical facts, constrained overrides, and profile defaults. |
 | `policies.reporting` | Policy detail serialization for report visibility only. |
-| `policies.registry` / `consistency` / `ids` | Public lookup, consistency smoke, and schema / policy ids. |
+| `policies.registry` / `consistency` / `ids` | Public lookup, consistency smoke, schema id, and policy id. |
 
-### Detection / Gate / Risk Review Index
+Parameters that affect final PASS / REVIEW must appear in report decision-policy
+detail. Parameters that affect runtime detection paths must appear in runtime
+policy detail.
 
-Use this index for manual review by detector logic family rather than by source
-directory or execution order. Paths in `Main location` are relative to `x5crop/`
-unless stated otherwise. The goal is to verify that each behavior is enabled only
-by the intended format/mode policy, produces explainable evidence, gates, risks,
-and decision detail, and cannot bypass the final PASS / REVIEW contract.
+### 6. Decision Authority
 
-| Logic family | Sub-logic | Main location | Review focus |
-|---|---|---|---|
-| Pre-detection | layout / coordinate mapping | `geometry/layout.py`, `geometry/boxes.py` | Reviewed: horizontal / vertical work-space mapping is symmetric and must not change crop semantics. |
-| Pre-detection | base gray, deskew, and evidence gray | `image/gray.py`, `image/deskew.py`, `image/evidence.py`, `cache/analysis.py` | Reviewed: preprocessing may shape base gray, input posture, evidence gray, and reusable cache detail, but must not choose candidates or decide PASS / REVIEW. No color-contrast or heavy-texture evidence interfaces are reserved. |
-| Policy activation | format facts and parameter overrides | `formats/`, `policies/formats/format_*.py`, `policies/parameters/ownership.py` | Physical facts, physical tolerance, content profile tolerance, and search-budget overrides must stay separate from scoring, gate, risk, detector/runtime presets, diagnostics, and universal capability activation. Separator pixel signal thresholds must not be format-specific. Format override ownership is enforced by `ownership.py`, which splits overrides into `FormatToleranceProfile`, `FormatContentProfileTolerance`, and `SearchBudgetPolicy`. |
-| Policy activation | layered policy profile defaults | `policies/assembly/profile_defaults.py`, `policies/assembly/*` | Count inclusion, gate supplemental checks, scoring calibration, risk enablement, partial-holder requirements, and refinement numeric profiles belong to assembly policy profiles, not format source defaults. |
-| Policy activation | runtime and decision contracts | `policies/runtime/*`, `policies/decision/contract.py` | `DetectionPolicy` and `DetectionDecisionContract` must not drift semantically. |
-| Mode-specific detector | dual-lane and review-only paths | `detection/modes/dual_lane.py`, `detection/modes/dual_lane_*.py`, `detection/modes/review_only.py`, `detection/candidate/proposal/safety.py` | Dedicated detectors and review-only paths must stay isolated, context-driven, and conservative. |
-| Physical outer | base and separator-derived outer | `detection/physical/outer/*`, `geometry/outer_boxes.py` | Physical outer proposals only propose boxes. Separator-derived proposals vary only by outer scope (local / full-width) and consume standard theoretical width plus observed measured-width bands, which may be narrower than, match, or be broader than the physical prior, through the same width-aware separator evidence. Broad separator width is evidence detail, not an outer variant or independent gap profile. Full makes separator-derived scopes eligible, while partial makes extension scopes eligible only when count is explicit. Candidate execution budget may skip extension execution after a reliable primary result. |
-| Content guidance | partial content-position outer hints | `detection/guidance/content_outer_edge.py`, `detection/guidance/content_outer_floating.py`, `detection/physical/outer/plan.py` | Standard partial mode can use content guidance for edge-anchored or floating outer hints. Those hints must return to the physical outer plan and still pass separator/content/geometry gates; they do not own PASS / REVIEW. |
-| Physical outer | grid-refined outer | `detection/physical/outer/grid_refine.py`, `detection/candidate/build/detection.py` | Grid-derived outer box calculation belongs to a physical outer helper; candidate build applies it between primary separator gaps and late separator refinements, while the separator lifecycle does not own the outer-box adjustment rule. |
-| Physical outer correction | geometry consistency and content containment correction | `detection/physical/outer/correction/geometry.py`, `detection/physical/outer/correction/content_containment.py`, `detection/physical/outer/correction/types.py`, `detection/evidence/outer_alignment.py` | Outer correction families declare mode, allowed axes, evidence requirements, and explicit-count partial gating. They emit `OuterCorrectionProposal` boxes only and do not own PASS / REVIEW. |
-| Corrected candidate | corrected outer reassessment | `detection/candidate/extension/corrected_outer.py` | Candidate extension rebuilds detection, recomputes evidence, and reapplies candidate assessment for any corrected outer; raw build helpers remain build-only. |
-| Candidate extension | outer correction candidate extension | `detection/pipeline.py`, `detection/candidate/extension/outer_correction.py`, `detection/physical/outer/correction/*` | The pipeline appends reassessed corrected outer candidates back into the candidate pool before selection; candidate detail records eligible, skipped, attempted correction families, and execution budget action / reason. Reliable selected candidates may skip correction computation only when outer alignment is also ok. |
-| Gap / separator | profile, cache, proposal, hard trust, refinement, grid model | `gap_methods.py`, `cache/separator.py`, `geometry/separator_*`, `geometry/model_gaps.py`, `geometry/edge_refine_profile.py`, `geometry/gap_search.py`, `geometry/gap_search_detail.py`, `geometry/gap_geometry.py`, `geometry/gap_trust.py`, `geometry/nearby_separator.py`, `detection/evidence/separator_width.py`, `detection/physical/separator/*`, `detection/candidate/build/separator_sources.py`, `detection/candidate/build/separator_gaps.py`, `detection/candidate/build/separator_refinements.py` | Hard evidence must stay stronger than model/equal/grid/content evidence, and cache keys must include policy-relevant context. Separator proposal creates gap evidence; geometry refinement helpers adjust it; neither can PASS / REVIEW. `SeparatorPolicy.refinement` owns edge-pair / nearby family eligibility, while geometry owns only pure search/refinement math; edge-pair policy detail separates hard-gap refresh methods from model-promotion methods, and nearby remains hard-gap only. Cache adapters live in `x5crop.cache`, while geometry only owns pure profile/search/refinement algorithms. Base separator profile generation, explicit `SeparatorProfileSignals`, combined profile scoring, explicit equal / grid / content model-gap generation, edge-pair edge-refine profile generation, hard-only gap-search band evidence measurement, shared run evaluation summary detail, `SeparatorGapProposal` for single expected-gap proposals, the single `width_aware` `SeparatorGapProfileProposal`, standard detected candidate search result contracts, physical width prior detail, observed width candidate search contracts, width evidence requirement detail, typed separator bands, gap geometry metrics, edge-pair / nearby / grid result contracts, shared runtime / diagnostic hard-gap trust context, and centralized gap method family vocabulary are split into small helpers for review. Candidate build directly calls geometry refinement helpers, owns cached edge/background profile retrieval, and attaches separator width evidence summary from `detection/evidence/separator_width.py`. Width profile math lives in `geometry/separator_width_profile.py`; search parameters live under `SeparatorPolicy.width_profile_search`, while activation, max width, confidence cap, and evidence visibility live under `SeparatorPolicy.width_profile`; outer policy only owns separator-derived outer family/band parameters. |
-| Gap / separator | width-aware proposal and width evidence | `detection/gap_profiles.py`, `detection/candidate/plan/sources.py`, `detection/physical/separator/proposal.py`, `detection/evidence/separator_width.py`, `geometry/separator_width_profile.py` | `width_aware` is the only active gap search profile. Standard hard-gap search, physical width prior, and observed width profile search run inside the same separator proposal; observed width is neutral measured-width evidence and may be narrower than, match, or be broader than the physical prior. Candidate plan no longer creates an independent `broad_width` profile candidate. Broad separator width remains ordinary `detected` hard-gap width detail plus gate / partial-safety evidence, and it cannot bypass normal candidate assessment. |
-| Gap / separator | separator gap lifecycle in candidate build | `detection/candidate/build/separator_gaps.py`, `detection/candidate/build/separator_sources.py`, `detection/candidate/build/separator_refinements.py`, `detection/candidate/build/detection.py` | `build_detection_for_outer` consumes separator gap lifecycle output for frame building and detail writing only; base scoring lives in candidate assessment. The lifecycle is split into primary width-aware gap build (origin/pitch, standard hard search, observed width search, edge-pair, grid) and late nearby refinement; initial gap source selection lives in `separator_sources.py` and uses `InitialSeparatorGapResult` instead of raw tuple passing; `geometry_equal_model` is a universal full/default-count model source for standard strips, but it is selected only when hard separator evidence is incomplete; `standard_gap_search` detail records `selected_gap_source` rather than override semantics; `separator_gaps.py` owns lifecycle result assembly, while `separator_refinements.py` owns edge-pair, robust-grid, and nearby wrappers. |
-| Content evidence / guidance | signal, region hints, frame support, content-model candidate, content-guided separator search | `image/evidence.py`, `detection/evidence/content/signal.py`, `detection/evidence/content/regions.py`, `detection/evidence/content/frame_support.py`, `detection/guidance/content_model.py`, `detection/guidance/content_separator.py`, `detection/physical/separator/hints.py` | Content validates or challenges candidates and can guide physical proposal search. It cannot auto-pass alone. `content/signal.py` owns content evidence gray / float signal and threshold helpers; `content/regions.py` owns bbox/run hints; `content/frame_support.py` assesses existing frame boxes; `guidance/content_model.py` creates review-only content-model candidates; `guidance/content_separator.py` creates separator search hints only. Content-guided separator candidates still require real hard separator evidence in candidate assessment. |
-| Candidate | count/offset, source orchestration, build, frame fit | `detection/candidate/plan/counts.py`, `detection/candidate/plan/run.py`, `detection/candidate/plan/sources.py`, `detection/physical/*`, `detection/guidance/*`, `detection/candidate/proposal/safety.py`, `detection/gap_profiles.py`, `detection/candidate/plan/reliability.py`, `detection/candidate/build/detection.py`, `detection/candidate/build/separator_gaps.py`, `geometry/frame_fit.py` | Candidate lifecycle must keep all intermediate evidence in `Detection.detail`; primary width-aware separator candidates are assessed before full-width / content-guided / outer-scope extension executes, and separator gap lifecycle stays separate from frame assembly and scoring. Gap hints may move separator search centers, but model fallback remains geometry-based and PASS / REVIEW stays in assessment / decision. |
-| Scoring | base confidence, geometry/content/separator scores, joint score, hard-full floor | `gap_methods.py`, `detection/candidate/assessment/scoring.py`, `detection/candidate/assessment/candidate.py`, `detection/evidence/separator_summary.py` | Scores support gates; they do not replace separator/content/geometry requirements. `gap_methods.py` owns method family vocabulary; `GapMethodEvidenceSummary` separates raw gap method evidence before base scoring, width-profile selection, and lucky-pass risk; `SeparatorGateDetailSummary` separates expected, hard separator, grid model, equal model, and content model counts before gate-detail scoring / decision consumption, so model support is not presented as hard detected evidence. |
-| Gate | separator gate profiles and geometry support | `detection/candidate/assessment/gates.py`, `detection/candidate/assessment/scoring.py`, `detection/evidence/separator_summary.py`, `policies/separator_gate_profiles.py`, `policies/assembly/separator.py` | Separator gate profile names are a single neutral policy vocabulary and are validated during policy assembly; unknown profiles cannot silently fall back to strict mode. `assess_separator_gate()` is the active gate entry. `SeparatorGateEvidence` summarizes hard/model/width/leading-grid evidence before profile evaluation, with method-family counts, hard-gap indexes, edge-pair scores, detected scores, and leading-grid scores coming from `GapMethodEvidenceSummary`; `SeparatorGateAssessment` owns single-frame, threshold, leading-grid, and gate-profile dispatch. `min_hard_with_equal_cap`, `all_internal_gaps_hard`, and `geometry_support` must match format/mode policy; full/default-count supplemental broad-width and edge-pair checks stay separate from the main hard-gap profile, and leading-grid failure is split into explicit leading-score and late-hard-gap helpers. |
-| Gate | partial safe extra frames, evidence independence, and auto gate | `detection/candidate/assessment/partial_holder.py`, `detection/candidate/assessment/evidence_independence.py`, `detection/candidate/assessment/candidate.py` | Partial edge safety consumes existing broad separator width, content, and frame evidence, applies holder-specific requirements, and still requires no hard review reason. Evidence independence blocks circular proof: when a separator-derived outer relies on observed width-profile gaps, auto PASS requires independent standard hard-gap, content, and geometry validation. |
-| Candidate plan | width-aware separator, content-guided separator, safety candidate, partial stop | `detection/candidate/plan/run.py`, `detection/candidate/plan/sources.py`, `detection/gap_profiles.py`, `detection/candidate/plan/reliability.py` | Candidate plan families are declared together, but there is only one active gap profile: `width_aware`. Execution budget may stop after a reliable primary candidate and reports action / reason / stage; no source can bypass hard evidence. Content-guided separator is an extension family, not a content-only auto-pass path. |
-| Risk | overlap bleed, lucky pass, outer-content mismatch, close competition | `detection/evidence/risk.py`, `detection/evidence/gap_diagnostics.py`, `detection/evidence/separator_summary.py`, `detection/evidence/outer_alignment.py`, `detection/candidate/selection/choose.py`, `detection/decision/pass_review.py` | Risk logic should pull suspicious PASS candidates back to REVIEW or safer output bleed. Lucky-pass model-gap counts come from `GapMethodEvidenceSummary`; risk code does not hand-write separator/model method groups. |
-| Risk | content-only, safety, review-only, partial-edge uncertainty | `detection/candidate/assessment/candidate.py`, `detection/candidate/proposal/safety.py`, `detection/decision/pass_review.py` | Conservative REVIEW-only paths must stay review-only unless the decision contract changes. |
-| Finalization | edge bleed protection, approved geometry adjustment, caps | `detection/final/finalize.py`, `detection/final/geometry.py` | Output-adjacent geometry changes must preserve evidence/risk detail and safety caps without generating candidates. |
-| Final decision | PASS / REVIEW, reason normalization, decision detail | `detection/decision/pass_review.py` | Final status must be decided only by the decision contract. |
-| Audit visibility | read-only diagnostics, report sections, debug panels, policy reporting | `detection/evidence/read_only.py`, `report/schema.py`, `report/sections.py`, `debug/*`, `policies/reporting/__init__.py` | Reports and Debug Analysis explain behavior without feeding back into candidate selection. |
+Automatic PASS requires:
 
-Recommended manual review order: start with width-aware separator proposal,
-nearby separator refinement, and `lucky pass risk`; then review outer, gap/content, candidate
-scoring, gates, and final decision. Any behavior change must also prove that
-report/debug output explains the change.
+- Candidate source allowed by the current format / mode policy.
+- Separator, geometry, content, and outer evidence jointly support the candidate.
+- Gate profile, partial-holder requirements, and mode-specific checks pass.
+- Risk does not pull the candidate back to REVIEW.
+- Final decision contract permits automatic export.
 
-### Behavior That Must Stay Isolated
+Conservative rules:
+
+- Scores support gates; they do not replace gates.
+- Risk can pull to REVIEW or limit output, but it cannot rescue PASS.
+- Weak grid, equal, content-only, safety, review-only, untrusted partial-edge, or
+  evidence-dependency-cycle cases cannot gain automatic PASS authority.
+- If a separator-derived outer relies on observed width-profile gaps, automatic
+  PASS also requires independent standard hard-gap, content, and geometry validation.
+
+### 7. Behaviors That Must Stay Isolated
 
 - 135 full-strip assumptions must not leak into other formats.
 - 135-dual full uses the dual-lane detector; 135-dual partial stays conservative.
-- Half-frame geometry support is generic, but currently enabled only for
-  `half/full`.
-- Separator width profile is a universal separator-width evidence capability.
-  120-66 keeps only its broader width parameters, square-frame gate, broad-width
-  evidence requirements, and strict-holder checks. Separator signal thresholds
-  are global/adaptive evidence parameters, not format overrides.
-- Outer correction is a universal corrected-candidate capability; formats may tune
-  aspect, margins, shrink/expand limits, and gates, but must not own separate
-  correction algorithm switches.
-- Weak grid, equal, content-only, safety, or untrusted partial-edge evidence
-  must not gain automatic PASS authority.
+- Half-frame geometry support is generic, but currently enabled only for `half/full`.
+- `width_aware` is the only active separator gap profile; observed width is
+  neutral measured-width evidence, not a broad-only profile.
+- 120-66 broad-width, square-frame, separator-derived outer, and strict-holder
+  risk modeling must be enabled by 120-66 policy only and must not become default
+  behavior for other formats.
+- Outer correction is a generic corrected-candidate capability; formats may tune
+  physical parameters and gates, but must not own separate correction algorithm
+  switches.
+- Partial-holder policy may express richer holder safety requirements; strict
+  defaults must not be promoted to half / xpan / 645.
 
-### Data And Report Contracts
+### 8. Data And Report Contracts
 
-- `CliOptions` records user options before file probing; `RuntimeConfig` records
-  resolved input/layout runtime configuration.
-- `OuterCandidate.strategy` is the candidate-kind contract.
-- `Detection` and `ProcessResult` are stable report/debug/export inputs.
-- Report rows include top-level `version` and `policy_id`.
-- V4.9 uses `v4_9_policy_schema_1` with evidence, risk, decision policy, and selected candidate detail.
+- `CliOptions` records user options before file probing.
+- `RuntimeConfig` records input, layout, and policy-bound runtime configuration.
+- `Detection` is the stable detection-stage candidate result.
+- `ProcessResult` is the stable input for report, debug, and export.
+- Report rows must include top-level `version`, `policy_id`, and `report_schema`.
+- V4.9 uses `v4_9_policy_schema_1` with evidence, risk, decision policy, and
+  selected candidate detail.
 - V4.5.4 / V4.7 reports are historical references, not mandatory 0-diff oracles.
-  New wrong PASS is unacceptable; conservative REVIEW and schema/reason diffs
-  require explanation.
+  New wrong PASS is unacceptable; conservative REVIEW, schema diffs, and reason
+  diffs require explanation.
 
-### Verification
+### 9. Clean Editing Rules
 
-After structure or policy changes, run:
+- One concept may have only one long-term owner; compatibility adapters must be
+  narrow, temporary, and easy to delete.
+- New names must be semantic. Do not encode current responsibility with format
+  numbers, version numbers, or historical implementation names.
+- Version tags belong only in version constants, release history, artifact names,
+  archive paths, and machine schema values.
+- `pipeline.py`, `workflow.py`, `common.py`, and public re-exports should keep
+  only necessary orchestration or compatibility surfaces; new implementation
+  belongs in focused submodules.
+- `ARCHITECTURE.md` keeps the current architecture contract only. Historical
+  migration detail belongs in `CHANGELOG.md`; current handoff belongs in
+  `AGENTS.md`.
+
+### 10. Verification Gates
+
+For documentation-only changes, run at least:
+
+```bash
+git diff --check
+```
+
+For source or policy changes, run at least:
 
 ```bash
 python3 -m compileall -q X5_Crop.py x5crop
@@ -515,12 +432,36 @@ git diff --check
 python3 X5_Crop.py --version
 ```
 
-If `tools/` is expanded, also compile `tools/regression/*.py`. For detector
-behavior changes, classify reference reports with:
+If `tools/` is expanded, also compile `tools/regression/*.py`.
+
+For detector behavior changes, use the reference classifier:
 
 ```bash
 python3 -m tools.regression.reference_classify --candidate-root <root>
 ```
 
-The acceptance target is 0 `unacceptable_wrong_pass` and 0 unexplained
+Core fields:
+
+```text
+status
+confidence
+review_reasons
+outer_box
+frame_boxes
+gaps
+```
+
+Key reference sets:
+
+```text
+Test/135/4.5.4/split_report.jsonl
+Test/new_135/4.5.4/split_report.jsonl
+Test/120/66/4.5.4/split_report.jsonl
+Test/120/66/4.5.4_partial/split_report.jsonl
+Test/120/67/4.5.4/split_report.jsonl
+Test/半格/full/4.5.4/split_report.jsonl
+Test/半格/partial/4.5.4_partial/split_report.jsonl
+```
+
+Acceptance centers on 0 `unacceptable_wrong_pass` and 0 unexplained
 `risky_regression`.

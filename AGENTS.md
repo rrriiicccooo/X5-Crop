@@ -188,11 +188,12 @@ unless the edit changes commands or release behavior.
 
 ## Current Handoff
 
-Date: 2026-07-05
+Date: 2026-07-07
 Computer: primary macOS machine
 Branch: main
-Latest documentation state: root documents have distinct responsibilities;
-`ARCHITECTURE.md` is the single architecture guide and no `docs/` mirror is kept.
+Latest documentation state: root documents have distinct responsibilities.
+`ARCHITECTURE.md` is the single architecture contract and current source-cleanup
+guide; no `docs/` mirror is kept.
 
 Current state:
 
@@ -205,6 +206,8 @@ Current state:
 - Detailed source layering and policy boundaries live in `ARCHITECTURE.md`.
 - Version history and validation summaries live in `CHANGELOG.md`.
 - User setup and usage live in `README.md` and `快速启动_Quick_Start.md`.
+- Documentation changes must meet the standing extreme cleanliness and elegance
+  bar: concise, current, structurally clear, and non-overlapping.
 
 Recent verified baseline:
 
