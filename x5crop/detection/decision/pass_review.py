@@ -14,6 +14,34 @@ from .reasons import normalized_review_reasons
 from .risk_summary import risk_summary_for
 
 
+def _detail_list(value: Any) -> list[Any]:
+    return list(value) if isinstance(value, list) else []
+
+
+def _candidate_reason_inputs_before_decision(detection: Detection) -> dict[str, Any]:
+    assessment = detection.detail.get("candidate_assessment", {})
+    assessment = dict(assessment) if isinstance(assessment, dict) else {}
+    blockers = normalized_review_reasons(
+        [str(reason) for reason in _detail_list(assessment.get("blockers"))]
+    )
+    diagnostics = normalized_review_reasons(
+        [str(reason) for reason in _detail_list(assessment.get("diagnostics"))]
+    )
+    normalized_candidate_reasons = normalized_review_reasons(
+        list(detection.review_reasons)
+    )
+    return {
+        "blockers": blockers,
+        "diagnostics": diagnostics,
+        "normalized_candidate_reasons": normalized_candidate_reasons,
+        "auto_gate": bool(assessment.get("auto_gate", False)),
+        "auto_gate_inputs": assessment.get("auto_gate_inputs", {}),
+        "selection_risk_inputs": _detail_list(
+            detection.detail.get("selection_risk_inputs")
+        ),
+    }
+
+
 def apply_final_decision_policy(
     gray: np.ndarray,
     detection: Detection,
@@ -126,23 +154,24 @@ def apply_final_decision_policy(
             reason="final_review",
         )
         decision_caps.append(cap_detail)
-    detection.detail["candidate_review_reasons_before_decision"] = normalized_review_reasons(
-        list(detection.review_reasons)
-    )
+    candidate_reason_inputs = _candidate_reason_inputs_before_decision(detection)
+    detection.detail["candidate_reason_inputs_before_decision"] = candidate_reason_inputs
+    detection.detail["candidate_blockers_before_decision"] = candidate_reason_inputs["blockers"]
+    detection.detail["candidate_diagnostics_before_decision"] = candidate_reason_inputs["diagnostics"]
     detection.review_reasons = final_reasons
     competition = detection.detail.get("candidate_competition")
     if isinstance(competition, dict):
         selected = competition.get("selected_candidate")
         if isinstance(selected, dict):
-            selected["confidence"] = float(detection.confidence)
-            selected["review_reasons"] = list(detection.review_reasons)
+            selected["final_confidence"] = float(detection.confidence)
+            selected["final_review_reasons"] = list(detection.review_reasons)
             selected["decision_status"] = "approved_auto" if passed else "needs_review"
         top = competition.get("top_candidates")
         if isinstance(top, list):
             for candidate in top:
                 if isinstance(candidate, dict) and bool(candidate.get("selected", False)):
-                    candidate["confidence"] = float(detection.confidence)
-                    candidate["review_reasons"] = list(detection.review_reasons)
+                    candidate["final_confidence"] = float(detection.confidence)
+                    candidate["final_review_reasons"] = list(detection.review_reasons)
                     candidate["decision_status"] = "approved_auto" if passed else "needs_review"
     detail = {
         "policy_id": policy.policy_id,
@@ -153,6 +182,7 @@ def apply_final_decision_policy(
         "final_review_reasons": final_reasons,
         "decision_reason_inputs": reason_inputs,
         "decision_confidence_caps": decision_caps,
+        "candidate_reason_inputs_before_decision": candidate_reason_inputs,
         "evidence_summary": evidence,
         "risk_summary": risk,
         "decision_policy_detail": policy.report_detail(),

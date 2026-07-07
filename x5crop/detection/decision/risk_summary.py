@@ -35,9 +35,15 @@ def risk_summary_for(
     margin_raw = competition.get("margin_to_second")
     margin = None if margin_raw is None else _float(margin_raw)
     partial_edge_safe = bool(evidence["partial_edge"]["ok"])
+    partial_full_conflict = bool(competition.get("partial_full_conflict", False))
     close_competition = (
-        margin is not None
-        and margin < policy.risk.candidate_close_margin
+        (
+            (
+                margin is not None
+                and margin < policy.risk.candidate_close_margin
+            )
+            or partial_full_conflict
+        )
         and not (
             partial_edge_safe
             and policy.risk.suppress_close_competition_when_partial_edge_safe
@@ -53,6 +59,8 @@ def risk_summary_for(
         "overlap_risk": bool(lucky.get("risk", False)),
         "candidate_competition_close": bool(close_competition),
         "candidate_margin_to_second": margin,
+        "partial_full_conflict": bool(partial_full_conflict),
+        "selection_risk_inputs": detection.detail.get("selection_risk_inputs", []),
         "partial_edge_uncertain": bool(
             detection.strip_mode == "partial"
             and policy.evidence.partial_requires_safe_edge

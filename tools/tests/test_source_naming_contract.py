@@ -207,6 +207,37 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_selection_risk_is_not_named_as_candidate_review_reason(self) -> None:
+        banned = (
+            "candidate_review_reasons_before_decision",
+            "candidate_competition_uncertain",
+            "content_candidate_review_reasons",
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
+    def test_candidate_selection_summary_uses_candidate_reason_names(self) -> None:
+        path = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "selection"
+            / "choose.py"
+        )
+        text = path.read_text(encoding="utf-8")
+
+        self.assertNotIn('"review_reasons"', text)
+        self.assertIn('"candidate_reasons"', text)
+
     def test_decision_package_marker_does_not_reexport_runtime_helpers(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "__init__.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))

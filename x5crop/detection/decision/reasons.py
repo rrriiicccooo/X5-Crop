@@ -30,7 +30,6 @@ REASON_NORMALIZATION_MAP = {
     "outer_box_uncertain": "outer_content_mismatch",
     "photo_width_unstable": "geometry_unstable",
     "unstable_frame_width": "geometry_unstable",
-    "candidate_competition_uncertain": "candidate_competition_close",
     "partial_too_ambiguous": "partial_edge_uncertain",
     "likely_partial_strip": "partial_edge_uncertain",
     "partial_outer_leading_content": "partial_edge_uncertain",

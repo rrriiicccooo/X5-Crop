@@ -121,6 +121,28 @@ def select_separator_review_candidate_on_content_mismatch(
     )
 
 
+def _candidate_summary(candidate: Detection) -> dict:
+    assessment = candidate.detail.get("candidate_assessment", {})
+    assessment = dict(assessment) if isinstance(assessment, dict) else {}
+    return {
+        "format": candidate.film_format,
+        "count": int(candidate.count),
+        "strip_mode": candidate.strip_mode,
+        "confidence": float(candidate.confidence),
+        "candidate_reasons": list(candidate.review_reasons),
+        "candidate_blockers": list(assessment.get("blockers", []))
+        if isinstance(assessment.get("blockers"), list)
+        else [],
+        "candidate_diagnostics": list(assessment.get("diagnostics", []))
+        if isinstance(assessment.get("diagnostics"), list)
+        else [],
+        "candidate_assessment": assessment,
+        "candidate_plan": candidate.detail.get("candidate_plan", {}),
+        "gap_search_profile": candidate.detail.get("gap_search_profile", {}),
+        "separator_width_profile": candidate.detail.get("separator_width_profile", {}),
+    }
+
+
 def select_detection_candidate(
     candidates: list[Detection],
     fmt: FormatSpec,
@@ -139,11 +161,9 @@ def select_detection_candidate(
     )
     if separator_review_on_mismatch is not None and separator_review_on_mismatch.confidence < threshold:
         override_reason = policy.candidate_selection.content_mismatch_review.override_reason
-        separator_review_on_mismatch.review_reasons.append(override_reason)
-        separator_review_on_mismatch.review_reasons = sorted(set(separator_review_on_mismatch.review_reasons))
         separator_review_on_mismatch.detail["content_candidate_mismatch"] = {
             "content_candidate_confidence": float(best.confidence),
-            "content_candidate_review_reasons": list(best.review_reasons),
+            "content_candidate_reasons": list(best.review_reasons),
             "content_candidate_assessment": best.detail.get("candidate_assessment", {}),
         }
         best = separator_review_on_mismatch
@@ -154,32 +174,14 @@ def select_detection_candidate(
         {
             "rank": index,
             "selected": candidate is best,
-            "format": candidate.film_format,
-            "count": int(candidate.count),
-            "strip_mode": candidate.strip_mode,
-            "confidence": float(candidate.confidence),
-            "review_reasons": list(candidate.review_reasons),
-            "candidate_assessment": candidate.detail.get("candidate_assessment", {}),
-            "candidate_plan": candidate.detail.get("candidate_plan", {}),
-            "gap_search_profile": candidate.detail.get("gap_search_profile", {}),
-            "separator_width_profile": candidate.detail.get("separator_width_profile", {}),
+            **_candidate_summary(candidate),
         }
         for index, candidate in enumerate(candidates[: selected_policy.candidate_selection.top_n], start=1)
     ]
     best.detail["candidate_competition"] = {
         "candidate_count": len(candidates),
         "formats": [fmt.name],
-        "selected_candidate": {
-            "format": best.film_format,
-            "count": int(best.count),
-            "strip_mode": best.strip_mode,
-            "confidence": float(best.confidence),
-            "review_reasons": list(best.review_reasons),
-            "candidate_assessment": best.detail.get("candidate_assessment", {}),
-            "candidate_plan": best.detail.get("candidate_plan", {}),
-            "gap_search_profile": best.detail.get("gap_search_profile", {}),
-            "separator_width_profile": best.detail.get("separator_width_profile", {}),
-        },
+        "selected_candidate": _candidate_summary(best),
         "selection_override": selection_override,
         "top_candidates": competition,
     }
@@ -202,9 +204,29 @@ def select_detection_candidate(
             and not best_partial_safe
             and (second_close or partial_full_conflict)
         ):
-            best.confidence = min(best.confidence, selected_policy.candidate_selection.confidence_cap)
-            best.review_reasons.append("candidate_competition_uncertain")
-            best.review_reasons = sorted(set(best.review_reasons))
+            risk_inputs = best.detail.setdefault("selection_risk_inputs", [])
+            if not isinstance(risk_inputs, list):
+                risk_inputs = []
+                best.detail["selection_risk_inputs"] = risk_inputs
+            risk_input = {
+                "bucket": "candidate_selection",
+                "signal": (
+                    "partial_full_conflict"
+                    if partial_full_conflict and not second_close
+                    else "candidate_competition_close"
+                ),
+                "margin_to_second": float(margin),
+                "close_margin": float(selected_policy.candidate_selection.close_margin),
+                "partial_full_conflict": bool(partial_full_conflict),
+                "recommended_final_review_reason": "candidate_competition_close",
+            }
+            risk_inputs.append(risk_input)
+            best.detail["candidate_competition"]["selection_risk_inputs"] = list(risk_inputs)
+        best.detail["candidate_competition"]["second_candidate_close"] = bool(second_close)
+        best.detail["candidate_competition"]["partial_full_conflict"] = bool(partial_full_conflict)
+        best.detail["candidate_competition"]["close_margin"] = float(
+            selected_policy.candidate_selection.close_margin
+        )
     return best
 
 

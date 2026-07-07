@@ -189,6 +189,12 @@ def decision_policy_for(detection_policy: DetectionPolicy) -> DecisionPolicy:
     )
 
 
+def risk_policy_for(detection_policy: DetectionPolicy) -> RiskPolicy:
+    return RiskPolicy(
+        candidate_close_margin=float(detection_policy.candidate_selection.close_margin),
+    )
+
+
 def output_policy_for(detection_policy: DetectionPolicy) -> OutputPolicy:
     output = detection_policy.output
     return OutputPolicy(
@@ -223,7 +229,7 @@ def decision_contract_for_policy(detection_policy: DetectionPolicy) -> Detection
             detection_policy.strip_mode,
             detection_policy,
         ),
-        risk=RiskPolicy(),
+        risk=risk_policy_for(detection_policy),
         decision=decision_policy_for(detection_policy),
         output=output_policy_for(detection_policy),
         diagnostics=diagnostics_policy_for(detection_policy),
@@ -251,4 +257,5 @@ __all__ = [
     "diagnostics_policy_for",
     "evidence_policy_for",
     "output_policy_for",
+    "risk_policy_for",
 ]
