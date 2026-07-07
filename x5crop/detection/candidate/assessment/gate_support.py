@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+import math
+from typing import Any, Optional
+
+from ....domain import Detection
+from ....formats import FormatSpec
+from ....policies.registry import get_detection_policy
+from ....policies.runtime.policy import DetectionPolicy
+from ....policies.runtime.separator import SeparatorGeometrySupportModePolicy
+from ...evidence.separator_summary import separator_gate_detail_summary
+
+
+def detail_float(detail: dict[str, Any], key: str, default: float) -> float:
+    value = detail.get(key, None)
+    if value is None:
+        return float(default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def hard_full_calibration_floor_applies(
+    candidate: Detection,
+    hard_detail: dict[str, Any],
+    fmt: FormatSpec,
+    source: str,
+    policy: Optional[DetectionPolicy] = None,
+) -> bool:
+    policy = policy or get_detection_policy(fmt.name, candidate.strip_mode)
+    base_score = policy.scoring.base_detection
+    evidence = separator_gate_detail_summary(hard_detail)
+    width_cv = detail_float(candidate.detail, "width_cv", 1.0)
+    return (
+        source == "separator"
+        and policy.scoring.hard_full_confidence_floor > 0.0
+        and candidate.strip_mode == "full"
+        and candidate.count == fmt.default_count
+        and len(candidate.frames) == candidate.count
+        and evidence.expected_gaps > 0
+        and evidence.hard_separator_gaps >= evidence.expected_gaps
+        and evidence.equal_model_gaps == 0
+        and width_cv <= base_score.full_width_cv
+    )
+
+
+def separator_geometry_support_applies(
+    candidate: Detection,
+    hard_detail: dict[str, Any],
+    fmt: FormatSpec,
+    source: str,
+    support: str,
+    joint_score: float,
+    mode_policy: SeparatorGeometrySupportModePolicy,
+) -> bool:
+    evidence = separator_gate_detail_summary(hard_detail)
+    width_cv = detail_float(candidate.detail, "width_cv", 1.0)
+    outer_area = detail_float(candidate.detail, "outer_area_ratio", 1.0)
+    min_hard = int(math.ceil(evidence.expected_gaps * mode_policy.min_hard_ratio))
+    support_gap_count = evidence.hard_separator_gaps + (
+        evidence.grid_model_gaps if mode_policy.allow_grid else 0
+    )
+    return (
+        mode_policy.enabled
+        and source == "separator"
+        and candidate.strip_mode == "full"
+        and candidate.count == fmt.default_count
+        and len(candidate.frames) == candidate.count
+        and evidence.expected_gaps > 0
+        and evidence.hard_separator_gaps >= min_hard
+        and support_gap_count >= evidence.expected_gaps
+        and evidence.equal_model_gaps <= mode_policy.max_equal_gaps
+        and width_cv <= mode_policy.max_width_cv
+        and support == mode_policy.required_content_support
+        and joint_score >= mode_policy.min_joint_score
+        and outer_area <= mode_policy.max_outer_area_ratio
+    )
+
+
+__all__ = [
+    "detail_float",
+    "hard_full_calibration_floor_applies",
+    "separator_geometry_support_applies",
+]

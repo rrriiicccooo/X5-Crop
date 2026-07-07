@@ -23,7 +23,7 @@ from ...physical.outer.plan import (
 )
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE, width_aware_gap_profile_detail
 from ..build.detection import build_detection_for_outer
-from ..assessment.scoring import apply_base_detection_scoring
+from ..assessment.base_scoring import apply_base_detection_scoring
 from .counts import raw_detection_rank
 from ..assessment.partial_holder import partial_safe_frame_content_detail, partial_safe_leading_content_detail
 from .source_policy import separator_full_width_can_compete, separator_outer_gap_max_width_override

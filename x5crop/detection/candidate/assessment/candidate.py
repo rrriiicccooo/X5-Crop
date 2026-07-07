@@ -23,15 +23,18 @@ from ....runtime.config import RuntimeConfig
 from ....utils import HARD_REVIEW_REASONS
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.separator_summary import separator_gate_detail_summary
+from .base_scoring import apply_base_detection_scoring
 from .evidence_independence import evidence_independence_detail
+from .gate_support import (
+    hard_full_calibration_floor_applies,
+    separator_geometry_support_applies,
+)
 from .gates import assess_separator_gate
 from .partial_holder import partial_extra_holder_frames_gate_detail
 from .scoring import (
-    apply_base_detection_scoring,
     content_support_score,
     geometry_support_score,
-    hard_full_calibration_floor_applies,
-    separator_geometry_support_applies,
+    joint_support_score,
     separator_support_score,
 )
 
@@ -99,18 +102,13 @@ def apply_candidate_assessment_policy(
         if source == "separator"
         else 0.0
     )
-    source_bias = (
-        scoring_policy.separator_source_bias
-        if source == "separator"
-        else 0.0
+    joint_score = joint_support_score(
+        geometry_score=geometry_score,
+        content_score=content_score,
+        separator_score=separator_score,
+        source=source,
+        policy=policy,
     )
-    joint_score = (
-        scoring_policy.geometry_weight * geometry_score
-        + scoring_policy.content_weight * content_score
-        + scoring_policy.separator_weight * separator_score
-        + source_bias
-    )
-    joint_score = max(0.0, min(1.0, joint_score))
     support = str(content_detail.get("support", ""))
     reasons = list(candidate.review_reasons)
     if floor_applies:
