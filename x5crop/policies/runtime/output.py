@@ -13,6 +13,7 @@ class EdgeBleedProtectionPolicy:
 
 @dataclass(frozen=True)
 class OutputPolicy:
+    apply_output_bleed: bool = True
     detection_long_axis_bleed: int = 0
     detection_short_axis_bleed: int = 0
     output_long_axis_bleed_default: int = 20

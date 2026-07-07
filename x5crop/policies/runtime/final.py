@@ -15,7 +15,6 @@ class ApprovedGeometryAdjustmentPolicy:
 
 @dataclass(frozen=True)
 class FinalizationPolicy:
-    apply_output_bleed: bool = True
     apply_approved_geometry_adjustment: bool = True
     approved_geometry_adjustment: ApprovedGeometryAdjustmentPolicy = field(default_factory=ApprovedGeometryAdjustmentPolicy)
 

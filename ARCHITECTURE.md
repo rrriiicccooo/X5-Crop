@@ -261,10 +261,10 @@ format fact、runtime capability 和 final decision 必须分开：
 format 文件不能声明 scoring、gate、risk、detector、diagnostics 或 runtime preset。影响
 final PASS / REVIEW 的参数必须进入 decision policy detail；影响 runtime 检测路径但不直接
 决定 PASS / REVIEW 的参数必须进入 runtime policy detail。`finalization` policy 只保留最终
-输出前的 approved geometry adjustment / attachment 开关；runtime output policy 拥有 detection
-bleed、output bleed 和 edge-bleed protection。runtime risk policy 只保留生成 final risk
-evidence 的参数；diagnostics policy 与 report policy 单独装配，confidence cap 和 review reason
-不属于 finalization。
+输出前的 approved geometry adjustment / attachment 开关；runtime output policy 拥有 output
+bleed 的执行开关、detection bleed、output bleed 和 edge-bleed protection。runtime risk
+policy 只保留生成 final risk evidence 的参数；diagnostics policy 与 report policy 单独装配，
+confidence cap 和 review reason 不属于 finalization。
 format policy module 的唯一构建入口是 `build_policy(strip_mode)`；`full_policy()` /
 `partial_policy()` 这类 mode-specific convenience helper 不再保留。
 
@@ -547,10 +547,11 @@ Format files may provide physical tolerance, content profile tolerance, and
 search-budget overrides only. Runtime path parameters must appear in runtime
 policy detail; final PASS / REVIEW parameters must appear in decision policy
 detail. Finalization policy owns approved geometry adjustment / attachment
-switches before export; runtime output policy owns detection bleed, output bleed,
-and edge-bleed protection. Runtime risk policy only owns parameters for final
-risk evidence. Diagnostics and report policies are assembled separately. The only
-policy-construction entry in a format module is `build_policy(strip_mode)`;
+switches before export; runtime output policy owns the output-bleed execution
+switch, detection bleed, output bleed, and edge-bleed protection. Runtime risk
+policy only owns parameters for final risk evidence. Diagnostics and report
+policies are assembled separately. The only policy-construction entry in a
+format module is `build_policy(strip_mode)`;
 mode-specific convenience helpers such as `full_policy()` / `partial_policy()`
 are not kept.
 

@@ -132,6 +132,7 @@ class SourceNamingContractTest(unittest.TestCase):
         from x5crop.policies.runtime.final import FinalizationPolicy
 
         banned = {
+            "apply_output_bleed",
             "content_aspect_conflict_cap",
             "content_low_confidence_cap",
             "outer_mismatch_cap",
@@ -163,6 +164,7 @@ class SourceNamingContractTest(unittest.TestCase):
         )
 
         self.assertIn("edge_bleed_protection", OutputPolicy.__dataclass_fields__)
+        self.assertIn("apply_output_bleed", OutputPolicy.__dataclass_fields__)
         self.assertIn("guard_ratio", EdgeBleedProtectionPolicy.__dataclass_fields__)
 
     def test_finalization_assembly_does_not_own_diagnostics_policy(self) -> None:

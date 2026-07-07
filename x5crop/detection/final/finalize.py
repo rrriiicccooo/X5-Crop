@@ -51,7 +51,7 @@ def finalize_detection(
     base_bleed = AxisBleedParameters(long_axis=int(config.bleed_x), short_axis=int(config.bleed_y))
     output_bleed = output_bleed_parameters_for_detection(base_bleed, detection, policy.output)
     output_config = replace(config, bleed_x=output_bleed.long_axis, bleed_y=output_bleed.short_axis)
-    if policy.finalization.apply_output_bleed:
+    if policy.output.apply_output_bleed:
         apply_output_bleed(detection, detection_bleed, output_bleed, gray.shape[1], gray.shape[0])
         apply_edge_bleed_protection(
             detection,
