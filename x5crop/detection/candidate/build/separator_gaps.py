@@ -34,7 +34,6 @@ class SeparatorGapBuildResult:
     gaps: list[Gap]
     grid_detail: dict[str, Any]
     standard_gap_search_detail: dict[str, Any]
-    separator_width_profile_gap_search_detail: dict[str, Any]
     edge_pair_correction_detail: dict[str, Any]
     nearby_refinement_detail: dict[str, Any]
     pre_nearby_gaps: Optional[list[Gap]]
@@ -137,7 +136,6 @@ def build_primary_separator_gaps_for_outer(
         gaps=primary_refinement.gaps,
         grid_detail=primary_refinement.grid_detail,
         standard_gap_search_detail=initial_gaps.standard_gap_search_detail,
-        separator_width_profile_gap_search_detail=initial_gaps.separator_width_profile_gap_search_detail,
         edge_pair_correction_detail=primary_refinement.edge_pair_correction_detail,
         nearby_refinement_detail=pending_gap_refinement_detail(NEARBY_SEPARATOR_REFINEMENT_FAMILY),
         pre_nearby_gaps=None,
@@ -170,7 +168,6 @@ def apply_nearby_separator_refinements(
         gaps=nearby_refinement.gaps,
         grid_detail=separator_gaps.grid_detail,
         standard_gap_search_detail=separator_gaps.standard_gap_search_detail,
-        separator_width_profile_gap_search_detail=separator_gaps.separator_width_profile_gap_search_detail,
         edge_pair_correction_detail=separator_gaps.edge_pair_correction_detail,
         nearby_refinement_detail=nearby_refinement.nearby_refinement_detail,
         pre_nearby_gaps=nearby_refinement.pre_nearby_gaps,

@@ -208,6 +208,8 @@ candidate plan
   裸 Detection 才 fallback 到 `Detection.review_reasons`。
 - active detail 使用 `primary`、`extension`、`supplemental`、`nearby_separator_refinement`
   等职责命名，不用 `late` / `auxiliary` 表达含糊流程阶段。
+- candidate / report 可见的 gap 搜索详情只使用 `gap_search_profile`；
+  `separator_width_profile` 只保留给底层几何宽度计算语义，不作为 runtime detail 别名。
 
 ### 6. Scoring / Gate 视角
 
@@ -532,6 +534,9 @@ package. Output-facing report/debug/export/finalization code reads final reasons
 through `final_review_reasons_from_detail()`, preferring
 `decision_summary.final_review_reasons` and falling back to
 `Detection.review_reasons` only for bare detections.
+Candidate/report-visible gap-search detail uses `gap_search_profile` only;
+`separator_width_profile` is reserved for low-level width-profile geometry, not
+as a runtime-detail alias.
 
 ### 6. Scoring / Gate Perspective
 

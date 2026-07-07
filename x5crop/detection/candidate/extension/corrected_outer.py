@@ -52,10 +52,9 @@ def build_assessed_corrected_outer_candidate(
     reassessed = apply_candidate_assessment_policy(gray, reassessed, config, fmt, "separator", cache, policy=policy)
     profile_detail = width_aware_gap_profile_detail(policy.separator)
     profile_detail["preserved_through_outer_correction_candidate"] = bool(
-        corrected.preserve_separator_width_profile
+        corrected.preserve_gap_search_profile
     )
     reassessed.detail["gap_search_profile"] = profile_detail
-    reassessed.detail["separator_width_profile"] = profile_detail
 
     reassessed_alignment = outer_content_alignment_detail(gray, reassessed, cache, policy=policy)
     reassessed_content = content_evidence_detail(gray, reassessed, cache, policy.content)

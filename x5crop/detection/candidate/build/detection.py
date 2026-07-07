@@ -127,7 +127,6 @@ def build_detection_for_outer(
             "grid_residual": separator_gaps.grid_detail.get("grid_residual"),
             "grid_used": bool(separator_gaps.grid_detail.get("grid_used", False)),
             "standard_gap_search": separator_gaps.standard_gap_search_detail,
-            "separator_width_profile_gap_search": separator_gaps.separator_width_profile_gap_search_detail,
             "separator_gap_hints": (
                 separator_gap_hints.summary()
                 if separator_gap_hints is not None

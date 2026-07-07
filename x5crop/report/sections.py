@@ -31,7 +31,6 @@ def selected_candidate(detection: Detection) -> dict[str, Any]:
         "candidate_assessment": candidate_assessment(detection),
         "candidate_plan": detection.detail.get("candidate_plan", {}),
         "gap_search_profile": detection.detail.get("gap_search_profile", {}),
-        "separator_width_profile": detection.detail.get("separator_width_profile", {}),
     }
 
 

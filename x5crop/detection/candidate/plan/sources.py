@@ -101,7 +101,6 @@ def detect_candidate_for_count(
             )
             gap_profile_detail = width_aware_gap_profile_detail(policy.separator)
             detection.detail["gap_search_profile"] = gap_profile_detail
-            detection.detail["separator_width_profile"] = gap_profile_detail
             candidates.append(detection)
 
     append_detections_for_outer_candidates(outer_candidates, gap_max_width_ratio_override, WIDTH_AWARE_GAP_PROFILE)
@@ -188,7 +187,6 @@ def detect_candidate_for_count(
         "separator_full_width_eligible": bool(separator_full_width_family.available_for(strip_mode, explicit_count)),
         "separator_full_width_included": bool(should_try_separator_full_width),
         "width_aware_proposal": True,
-        "separator_width_profile_merged": True,
     }
     return best
 
@@ -241,7 +239,6 @@ def detect_content_guided_separator_candidate_for_count(
     )
     gap_profile_detail = width_aware_gap_profile_detail(policy.separator)
     detection.detail["gap_search_profile"] = gap_profile_detail
-    detection.detail["separator_width_profile"] = gap_profile_detail
     detection.detail["candidate_source"] = CANDIDATE_SOURCE_SEPARATOR
     detection.detail["content_guided_separator"] = seed_result.seed.detail
     detection.detail["candidate_plan"] = {

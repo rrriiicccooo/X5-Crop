@@ -13,7 +13,7 @@ class OuterCorrectionProposal:
     strategy: str
     source_reason: str
     original_outer_work_box: Any
-    preserve_separator_width_profile: bool = False
+    preserve_gap_search_profile: bool = False
     suppress_outer_mismatch: bool = False
     detail: dict[str, Any] = field(default_factory=dict)
 

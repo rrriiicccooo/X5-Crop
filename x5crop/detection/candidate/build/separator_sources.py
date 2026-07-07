@@ -23,15 +23,6 @@ GEOMETRY_EQUAL_MODEL_SOURCE = "geometry_equal_model"
 class InitialSeparatorGapResult:
     gaps: list[Gap]
     standard_gap_search_detail: dict[str, Any]
-    separator_width_profile_gap_search_detail: dict[str, Any]
-
-
-def skipped_separator_width_profile_gap_search_detail(reason: str = "not_requested") -> dict[str, Any]:
-    return {
-        "used": False,
-        "profile": WIDTH_AWARE_GAP_PROFILE,
-        "reason": reason,
-    }
 
 
 def selected_gap_source_detail(
@@ -60,7 +51,6 @@ def with_selected_gap_source(
             source,
             extra_standard_detail,
         ),
-        separator_width_profile_gap_search_detail=result.separator_width_profile_gap_search_detail,
     )
 
 
@@ -103,9 +93,6 @@ def standard_separator_gap_result(
     return InitialSeparatorGapResult(
         gaps=standard_gap_proposal.gaps,
         standard_gap_search_detail=standard_gap_search_detail,
-        separator_width_profile_gap_search_detail=skipped_separator_width_profile_gap_search_detail(
-            "merged_into_width_aware_proposal"
-        ),
     )
 
 
@@ -151,7 +138,6 @@ def with_model_gap_proposal_detail(
     return InitialSeparatorGapResult(
         gaps=result.gaps,
         standard_gap_search_detail=standard_detail,
-        separator_width_profile_gap_search_detail=result.separator_width_profile_gap_search_detail,
     )
 
 
@@ -233,7 +219,6 @@ __all__ = [
     "model_gap_proposal_detail",
     "select_geometry_equal_model_gaps",
     "selected_gap_source_detail",
-    "skipped_separator_width_profile_gap_search_detail",
     "standard_separator_gap_result",
     "with_model_gap_proposal_detail",
     "with_selected_gap_source",

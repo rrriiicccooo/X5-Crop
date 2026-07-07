@@ -59,6 +59,33 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_candidate_and_report_detail_use_gap_search_profile_not_separator_width_profile(self) -> None:
+        banned = (
+            'detail["separator_width_profile"]',
+            '.get("separator_width_profile"',
+            '"separator_width_profile":',
+            '"separator_width_profile_gap_search"',
+            "separator_width_profile_gap_search_detail",
+            "skipped_separator_width_profile_gap_search_detail",
+            "separator_width_profile_merged",
+            "preserve_separator_width_profile",
+        )
+        offenders: list[str] = []
+        paths = (
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate",
+            PROJECT_ROOT / "x5crop" / "detection" / "physical" / "outer" / "correction",
+            PROJECT_ROOT / "x5crop" / "report",
+        )
+        for root in paths:
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_physical_layer_does_not_read_candidate_assessment_or_decision_terms(self) -> None:
         banned = (
             "candidate_assessment",
