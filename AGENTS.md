@@ -30,7 +30,7 @@ https://github.com/rrriiicccooo/X5-Crop
 - `快速启动_Quick_Start.md`: Release quick-start guide.
 - `README.md`: complete user manual for setup, launchers, Debug Analysis,
   outputs, review folders, and common command-line use.
-- `ARCHITECTURE.md`: developer source map, policy ownership, format/mode
+- `ARCHITECTURE.md`: source-audit perspectives, policy ownership, format/mode
   isolation, and verification boundaries.
 - `CHANGELOG.md`: version summaries, behavior changes, validation notes, and
   rollback context.
@@ -147,11 +147,12 @@ macOS installer behavior:
 
 ## Regression Priorities
 
-When detection changes are made, prefer V4.9 classification with
-`python3 -m tools.regression.reference_classify --candidate-root <root>`. Use
-`python3 -m tools.regression.compare` when raw field diffs are needed.
+When detection changes are made, use V4.9 classification with
+`python3 -m tools.regression.reference_classify --candidate-root <root>` or
+raw comparison with `python3 -m tools.regression.compare` to locate changes.
+Reference diffs are audit material, not historical-parity blockers.
 
-Core fields to protect:
+Common fields to inspect:
 
 ```text
 status
@@ -162,13 +163,13 @@ frame_boxes
 gaps
 ```
 
-Key local sets:
+Key local reference sets:
 
-- `Test/135` full: core safety baseline.
+- `Test/135` full: 135 full reference examples.
 - `Test/new_135` full: wide 135 spacing examples.
 - `Test/半格/full` and `Test/半格/partial`: half-frame gate and partial behavior.
 - `Test/120/66` full/partial: wide-separator / separator-derived outer behavior.
-- `Test/120/67` full: 120-67 baseline.
+- `Test/120/67` full: 120-67 reference examples.
 
 For source or policy changes, also run:
 
@@ -193,18 +194,18 @@ Date: 2026-07-07
 Computer: primary macOS machine
 Branch: main
 Latest documentation state: root documents have distinct responsibilities.
-`ARCHITECTURE.md` is the single architecture contract and current source-cleanup
-guide; no `docs/` mirror is kept.
+`ARCHITECTURE.md` is the single source-audit perspective guide for current
+cleanup work; no `docs/` mirror is kept.
 
 Current state:
 
 - Active script is `X5_Crop.py` V4.9.
-- V4.9 is an evidence-governed policy reset over the V4.7 source layout, not
-  a detector-loosening release.
+- V4.9 is the active development line over the V4.7 source layout.
 - Source layout is layered: thin entry, explicit `entry/`, `runtime/`,
   `cache/`, `formats/`, `report/`, `detection/candidate/*`, and `policies/*`
   subpackages, split geometry helpers, and explicit debug/export/tool surfaces.
-- Detailed source layering and policy boundaries live in `ARCHITECTURE.md`.
+- Source-audit perspectives, source layering, and policy boundaries live in
+  `ARCHITECTURE.md`.
 - Version history and validation summaries live in `CHANGELOG.md`.
 - User setup and usage live in `README.md` and `快速启动_Quick_Start.md`.
 - Documentation changes must meet the standing extreme cleanliness and elegance
@@ -216,8 +217,8 @@ Recent verified baseline:
 - Full py_compile across the V4.9 package passed.
 - `git diff --check` passed.
 - Decision contract policy smoke passed for 14 format / strip-mode combinations.
-- Seven local V4.5.4 reference sets produced 0 `unacceptable_wrong_pass` and 0
-  `risky_regression` with `python3 -m tools.regression.reference_classify`.
-- V4.9 no longer treats V4.5.4 as a mandatory 0-diff oracle; conservative
-  REVIEW and schema/reason diffs must be explained, while new wrong PASS is
-  unacceptable.
+- Seven local V4.5.4 reference sets have been used as comparison material for
+  locating changes.
+- V4.9 no longer treats V4.5.4 or V4.7 as a field-parity oracle. In the current
+  project phase, any historical reference diff can be accepted; diffs should be
+  used to locate and explain changes, not to block acceptance by themselves.
