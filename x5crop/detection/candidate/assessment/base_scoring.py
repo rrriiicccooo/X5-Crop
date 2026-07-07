@@ -164,7 +164,6 @@ def base_detection_assessment(
     gap_conf = 1.0 if expected_gaps == 0 else gap_evidence.separator_support_count / float(expected_gaps)
     width_conf = max(0.0, min(1.0, 1.0 - width_cv / base_score.width_cv_norm))
     outer_conf = 1.0 if base_score.outer_min_area <= outer_area <= base_score.outer_max_area else base_score.outer_uncertain_confidence
-    contrast_conf = 1.0 if contrast >= base_score.contrast_min else max(base_score.contrast_floor, contrast / base_score.contrast_min)
     uses_min_hard_equal_cap = (
         separator_gate.profile == SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
     )
@@ -179,12 +178,15 @@ def base_detection_assessment(
         )
     )
 
+    confidence_weight = max(
+        1e-6,
+        base_score.gap_weight + base_score.width_weight + base_score.outer_weight,
+    )
     confidence = (
         base_score.gap_weight * gap_conf
         + base_score.width_weight * width_conf
         + base_score.outer_weight * outer_conf
-        + base_score.contrast_weight * contrast_conf
-    )
+    ) / confidence_weight
 
     full_geometry_ok = (
         strip_mode == "full"
@@ -232,8 +234,6 @@ def base_detection_assessment(
         reasons.append("photo_width_unstable")
     if fmt.family == "120" and gap_evidence.separator_support_count < expected_gaps:
         reasons.append(base_score.family_separator_uncertain_reason)
-    if contrast < base_score.contrast_min:
-        reasons.append("low_contrast")
     if len(boxes) != count:
         reasons.append("frame_count_mismatch")
     if confidence < base_score.low_confidence_floor and not reasons:
@@ -273,6 +273,9 @@ def base_detection_assessment(
             "p50": float(p50),
             "p99": float(p99),
             "range_1_99": contrast,
+            "contrast_ok": bool(contrast >= base_score.image_quality_contrast_min),
+            "min_contrast": float(base_score.image_quality_contrast_min),
+            "role": "diagnostic_not_crop_gate",
         },
         "contrast_1_99": contrast,
         "full_geometry_ok": full_geometry_ok,

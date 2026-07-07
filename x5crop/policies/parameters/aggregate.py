@@ -253,13 +253,11 @@ class FormatParameters(FormatParameterViews):
     score_gap_weight: float = 0.40
     score_width_weight: float = 0.30
     score_outer_weight: float = 0.20
-    score_contrast_weight: float = 0.10
     score_outer_min_area: float = 0.35
     score_outer_max_area: float = 0.995
     score_outer_too_large: float = 0.94
     score_outer_uncertain_confidence: float = 0.45
-    score_contrast_min: float = 35.0
-    score_contrast_floor: float = 0.35
+    image_quality_contrast_min: float = 35.0
     score_full_width_cv: float = 0.040
     score_geometry_floor_tight_cv: float = 0.006
     score_geometry_floor_high: float = 0.92

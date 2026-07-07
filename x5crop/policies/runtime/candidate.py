@@ -61,13 +61,11 @@ class BaseDetectionScorePolicy:
     gap_weight: float = 0.40
     width_weight: float = 0.30
     outer_weight: float = 0.20
-    contrast_weight: float = 0.10
     outer_min_area: float = 0.35
     outer_max_area: float = 0.995
     outer_too_large: float = 0.94
     outer_uncertain_confidence: float = 0.45
-    contrast_min: float = 35.0
-    contrast_floor: float = 0.35
+    image_quality_contrast_min: float = 35.0
     full_width_cv: float = 0.040
     geometry_floor_tight_cv: float = 0.006
     geometry_floor_high: float = 0.92

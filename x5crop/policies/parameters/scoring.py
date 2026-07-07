@@ -20,13 +20,11 @@ class BaseDetectionScoreParameters:
     gap_weight: float
     width_weight: float
     outer_weight: float
-    contrast_weight: float
     outer_min_area: float
     outer_max_area: float
     outer_too_large: float
     outer_uncertain_confidence: float
-    contrast_min: float
-    contrast_floor: float
+    image_quality_contrast_min: float
     full_width_cv: float
     geometry_floor_tight_cv: float
     geometry_floor_high: float

@@ -49,6 +49,36 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertEqual(detail["outer_area_profile"]["status"], "above_profile")
         self.assertEqual(detail["outer_area_profile"]["role"], "diagnostic_until_final_alignment")
 
+    def test_low_global_contrast_is_image_quality_detail_not_crop_failure(self) -> None:
+        gray = np.full((100, 100), 128, dtype=np.uint8)
+        outer = Box(0, 0, 100, 100)
+        gaps = [
+            Gap(1, 32.0, 1.0, GAP_DETECTED, 28.0, 36.0),
+            Gap(2, 68.0, 1.0, GAP_DETECTED, 64.0, 72.0),
+        ]
+        boxes = [
+            Box(0, 0, 28, 100),
+            Box(36, 0, 64, 100),
+            Box(72, 0, 100, 100),
+        ]
+
+        confidence, reasons, detail = base_detection_assessment(
+            gray,
+            outer,
+            gaps,
+            boxes,
+            3,
+            format_spec("120-645"),
+            "full",
+            origin=0.0,
+            pitch=100.0 / 3.0,
+        )
+
+        self.assertGreater(confidence, 0.82)
+        self.assertNotIn("low_contrast", reasons)
+        self.assertFalse(detail["image_quality"]["contrast_ok"])
+        self.assertEqual(detail["image_quality"]["role"], "diagnostic_not_crop_gate")
+
     def test_safe_outer_overcut_and_low_content_quality_do_not_fail_final_evidence(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = Detection(
