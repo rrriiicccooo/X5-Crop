@@ -266,7 +266,7 @@ candidate plan
   映射为 `candidate_competition_close`。
 - overlap / lucky-pass 这类 final risk evidence 必须在 decision 阶段生成；finalization
   只能消费已有 risk detail 做 output bleed，不能在 PASS / REVIEW 之后补充裁决输入。
-- `decision_reason_inputs`、`final_review_reasons_added` 和 `final_review_reasons` 是最终
+- `decision_reason_inputs`、`decision_generated_review_reasons` 和 `final_review_reasons` 是最终
   PASS / REVIEW 的解释入口；low-confidence context reason 也必须进入这些 final summary 字段。
 - decision 子层读取或更新最终原因必须经过 `detection.decision.reasons`；`review_reasons`
   字段在 decision 后才是用户可见 final reason，不允许绕过 helper 直接追加。

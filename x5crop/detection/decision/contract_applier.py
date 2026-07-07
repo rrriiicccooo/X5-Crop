@@ -235,8 +235,6 @@ def apply_decision_contract(
     status = _decision_status_for(detection, config.confidence_threshold, final_reasons)
     candidate_reason_inputs = _candidate_reason_inputs_before_decision(detection)
     detection.detail["candidate_reason_inputs_before_decision"] = candidate_reason_inputs
-    detection.detail["candidate_blockers_before_decision"] = candidate_reason_inputs["blockers"]
-    detection.detail["candidate_diagnostics_before_decision"] = candidate_reason_inputs["diagnostics"]
     set_final_review_reasons(detection, final_reasons)
     final_reasons = final_review_reasons(detection)
     sync_candidate_competition_decision_fields(detection, status)
@@ -245,7 +243,7 @@ def apply_decision_contract(
         "schema_version": policy.schema_version,
         "pass": status == "approved_auto",
         "status": status,
-        "final_review_reasons_added": reasons,
+        "decision_generated_review_reasons": reasons,
         "final_review_reasons": final_reasons,
         "decision_reason_inputs": reason_inputs,
         "decision_confidence_caps": decision_caps,

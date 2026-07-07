@@ -147,8 +147,11 @@ class DecisionReasonContractTest(unittest.TestCase):
             "candidate_auto_gate_failed",
         )
         self.assertIn("decision_confidence_caps", decided.detail["decision_summary"])
-        self.assertIn("final_review_reasons_added", decided.detail["decision_summary"])
+        self.assertIn("decision_generated_review_reasons", decided.detail["decision_summary"])
+        self.assertNotIn("final_review_reasons_added", decided.detail["decision_summary"])
         self.assertNotIn("review_reasons_added", decided.detail["decision_summary"])
+        self.assertNotIn("candidate_blockers_before_decision", decided.detail)
+        self.assertNotIn("candidate_diagnostics_before_decision", decided.detail)
 
     def test_safety_candidate_blocker_is_explained_by_decision_risk(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
@@ -855,7 +858,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             selected_with_diagnostic.detail["content_candidate_mismatch"],
         )
 
-    def test_low_confidence_context_reasons_update_added_summary(self) -> None:
+    def test_low_confidence_context_reasons_update_generated_summary(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = Detection(
             film_format="135",
@@ -915,9 +918,10 @@ class DecisionReasonContractTest(unittest.TestCase):
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
         self.assertEqual(
-            decided.detail["decision_summary"]["final_review_reasons_added"],
+            decided.detail["decision_summary"]["decision_generated_review_reasons"],
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
+        self.assertNotIn("final_review_reasons_added", decided.detail["decision_summary"])
         decision_signals = [
             item["signal"] for item in decided.detail["decision_summary"]["decision_reason_inputs"]
         ]

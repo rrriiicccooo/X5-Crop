@@ -631,6 +631,16 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn("add_final_review_reason", text)
         self.assertNotIn("review_reasons.append", text)
 
+    def test_decision_summary_uses_generated_not_added_reason_field(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "contract_applier.py"
+        text = path.read_text(encoding="utf-8")
+
+        self.assertIn("decision_generated_review_reasons", text)
+        self.assertNotIn("final_review_reasons_added", text)
+        self.assertNotIn("review_reasons_added", text)
+        self.assertNotIn("candidate_blockers_before_decision", text)
+        self.assertNotIn("candidate_diagnostics_before_decision", text)
+
     def test_finalization_does_not_generate_decision_risk_evidence(self) -> None:
         banned = (
             "overlap_bleed_risk_detail",
