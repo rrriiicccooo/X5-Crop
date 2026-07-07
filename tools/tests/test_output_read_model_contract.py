@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import unittest
 
 from x5crop.debug.status import debug_status_parts
+from x5crop.detection.detail import candidate_reasons_from_detail
 from x5crop.domain import Box, Detection, ImageProfile
 from x5crop.export.actions import copy_for_review_if_needed
 from x5crop.report.result_builder import result_from_detection
@@ -59,14 +60,14 @@ class OutputReadModelContractTest(unittest.TestCase):
                     "final_review_reasons": ["outer_content_mismatch"],
                 }
             },
-            ["candidate_level_legacy_reason"],
+            ["candidate_level_stale_reason"],
         )
 
         status, detail, _color = debug_status_parts(detection, 0.85)
 
         self.assertEqual(status, "REVIEW")
         self.assertIn("outer_content_mismatch", detail)
-        self.assertNotIn("candidate_level_legacy_reason", detail)
+        self.assertNotIn("candidate_level_stale_reason", detail)
 
         warnings: list[str] = []
         config = SimpleNamespace(
@@ -83,7 +84,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
 
         self.assertIn("outer_content_mismatch", warnings[0])
-        self.assertNotIn("candidate_level_legacy_reason", warnings[0])
+        self.assertNotIn("candidate_level_stale_reason", warnings[0])
 
         schema = report_schema_for_detection(detection)
         self.assertEqual(schema["result"]["review_reasons"], ["outer_content_mismatch"])
@@ -112,6 +113,11 @@ class OutputReadModelContractTest(unittest.TestCase):
             [],
         )
         self.assertEqual(result.review_reasons, ["outer_content_mismatch"])
+
+    def test_candidate_reasons_do_not_fallback_to_final_review_reasons(self) -> None:
+        detection = _detection(review_reasons=["outer_content_mismatch"])
+
+        self.assertEqual(candidate_reasons_from_detail(detection), [])
 
     def test_report_schema_uses_diagnostics_section_not_finalization(self) -> None:
         schema = report_schema_for_detection(_detection())

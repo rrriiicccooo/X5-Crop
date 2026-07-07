@@ -39,7 +39,7 @@ def candidate_reasons_from_detail(detection: Detection) -> list[str]:
     reasons = detection.detail.get(CANDIDATE_REASONS)
     if isinstance(reasons, list):
         return [str(reason) for reason in reasons if reason]
-    return list(detection.review_reasons)
+    return []
 
 
 def decision_summary(detection: Detection) -> dict[str, Any]:
