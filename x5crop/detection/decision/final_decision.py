@@ -19,7 +19,11 @@ from ..evidence.content.frame_support import content_evidence_detail
 from ..evidence.outer_alignment import outer_content_alignment_detail
 from ..evidence.risk import lucky_pass_risk_score_detail
 from .pass_review import apply_final_decision_policy
-from .reasons import normalized_review_reasons
+from .reasons import (
+    add_final_review_reason,
+    final_review_reasons,
+    normalized_final_review_reasons,
+)
 
 
 @dataclass
@@ -167,7 +171,7 @@ def _apply_low_confidence_context_reasons(
 
         def append_context_reason(reason: str, signal: str) -> None:
             low_confidence_context_reasons.append(reason)
-            detection.review_reasons.append(reason)
+            add_final_review_reason(detection, reason)
             reason_inputs.append(
                 {
                     "bucket": "low_confidence_context",
@@ -186,17 +190,17 @@ def _apply_low_confidence_context_reasons(
                 policy.decision.deskew_uncertain_review_reason,
                 "deskew_uncertain",
             )
-        detection.review_reasons = normalized_review_reasons(detection.review_reasons)
-        detection.detail["final_review_reasons"] = list(detection.review_reasons)
+        final_reasons = final_review_reasons(detection)
+        detection.detail["final_review_reasons"] = final_reasons
         decision_summary = detection.detail.get("decision_summary", {})
         if isinstance(decision_summary, dict):
             added = decision_summary.get("final_review_reasons_added", [])
             if not isinstance(added, list):
                 added = []
-            decision_summary["final_review_reasons_added"] = normalized_review_reasons(
+            decision_summary["final_review_reasons_added"] = normalized_final_review_reasons(
                 [*added, *low_confidence_context_reasons]
             )
-            decision_summary["final_review_reasons"] = list(detection.review_reasons)
+            decision_summary["final_review_reasons"] = final_reasons
             decision_summary["decision_reason_inputs"] = reason_inputs
 
 

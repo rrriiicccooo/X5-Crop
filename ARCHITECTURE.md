@@ -204,6 +204,8 @@ candidate plan
   映射为 `candidate_competition_close`。
 - `decision_reason_inputs`、`final_review_reasons_added` 和 `final_review_reasons` 是最终
   PASS / REVIEW 的解释入口；low-confidence context reason 也必须进入这些 final summary 字段。
+- decision 子层读取或更新最终原因必须经过 `detection.decision.reasons`；`review_reasons`
+  字段在 decision 后才是用户可见 final reason，不允许绕过 helper 直接追加。
 - `approved_auto` 必须同时满足 confidence 达到阈值且 `final_review_reasons` 为空；
   workflow / finalization 不能只根据 confidence 推导最终状态。
 
@@ -463,6 +465,9 @@ means evidence strength. Photo-width hard reasons may consume only
 auto-gate inputs, and candidate confidence caps are assessment detail; decision
 reason inputs, final-review reason fields, and decision confidence caps are
 final decision detail.
+Decision sublayers must read or update final reasons through
+`detection.decision.reasons`; after the decision step, `review_reasons` is the
+user-visible final reason field, so decision code must not append to it directly.
 
 ### 7. Policy Perspective
 

@@ -10,7 +10,11 @@ from ...formats import FormatSpec
 from ..confidence_caps import apply_confidence_cap
 from ...policies.decision.contract import decision_contract_for
 from .evidence_summary import evidence_summary_for
-from .reasons import normalized_review_reasons
+from .reasons import (
+    final_review_reasons,
+    normalized_final_review_reasons,
+    set_final_review_reasons,
+)
 from .risk_summary import risk_summary_for
 
 
@@ -23,7 +27,7 @@ def _candidate_reason_inputs_before_decision(detection: Detection) -> dict[str, 
     assessment = dict(assessment) if isinstance(assessment, dict) else {}
     blockers = [str(reason) for reason in _detail_list(assessment.get("blockers"))]
     diagnostics = [str(reason) for reason in _detail_list(assessment.get("diagnostics"))]
-    normalized_candidate_reasons = normalized_review_reasons(
+    normalized_candidate_reasons = normalized_final_review_reasons(
         list(detection.review_reasons)
     )
     return {
@@ -139,8 +143,8 @@ def apply_final_decision_policy(
             signal="below_threshold",
         )
 
-    reasons = normalized_review_reasons(reasons)
-    final_reasons = sorted(set(reasons))
+    reasons = normalized_final_review_reasons(reasons)
+    final_reasons = list(reasons)
     passed = detection.confidence >= config.confidence_threshold and not final_reasons
     decision_caps = detection.detail.setdefault("decision_confidence_caps", [])
     if not isinstance(decision_caps, list):
@@ -158,7 +162,8 @@ def apply_final_decision_policy(
     detection.detail["candidate_reason_inputs_before_decision"] = candidate_reason_inputs
     detection.detail["candidate_blockers_before_decision"] = candidate_reason_inputs["blockers"]
     detection.detail["candidate_diagnostics_before_decision"] = candidate_reason_inputs["diagnostics"]
-    detection.review_reasons = final_reasons
+    set_final_review_reasons(detection, final_reasons)
+    final_reasons = final_review_reasons(detection)
     competition = detection.detail.get("candidate_competition")
     if isinstance(competition, dict):
         selected = competition.get("selected_candidate")

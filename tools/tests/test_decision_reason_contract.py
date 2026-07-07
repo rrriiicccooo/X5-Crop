@@ -13,7 +13,7 @@ from x5crop.detection.decision.final_decision import (
     apply_detection_decision,
 )
 from x5crop.detection.decision.pass_review import apply_final_decision_policy
-from x5crop.detection.decision.reasons import normalized_review_reasons
+from x5crop.detection.decision.reasons import normalized_final_review_reasons
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, Detection
 from x5crop.formats import format_spec
@@ -322,7 +322,10 @@ class DecisionReasonContractTest(unittest.TestCase):
             outer_alignment,
         )
 
-        self.assertEqual(normalized_review_reasons([REASON_LUCKY_PASS_RISK]), ["lucky_pass_risk"])
+        self.assertEqual(
+            normalized_final_review_reasons([REASON_LUCKY_PASS_RISK]),
+            ["lucky_pass_risk"],
+        )
         self.assertEqual(decided.review_reasons, ["lucky_pass_risk"])
         self.assertFalse(decided.detail["risk_summary"]["overlap_risk"])
         self.assertTrue(decided.detail["risk_summary"]["lucky_pass_risk"])

@@ -335,6 +335,19 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(import_from_nodes, [])
 
+    def test_decision_layer_routes_final_reason_mutation_through_reason_helper(self) -> None:
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "decision"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            if path.name == "reasons.py":
+                continue
+            text = path.read_text(encoding="utf-8")
+            if ".review_reasons.append" in text:
+                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+
+        self.assertEqual(offenders, [])
+
     def test_low_confidence_context_reasons_do_not_use_tail_or_post_check_names(self) -> None:
         banned = (
             "_apply_decision_" "tail_reasons",

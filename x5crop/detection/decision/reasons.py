@@ -9,9 +9,10 @@ from ...constants import (
     REASON_OUTER_CONTENT_BBOX_MISMATCH,
     REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
 )
+from ...domain import Detection
 
 
-REASON_NORMALIZATION_MAP = {
+FINAL_REVIEW_REASON_REDUCTION_MAP = {
     REASON_AUTO_GATE_NOT_SATISFIED: "evidence_combination_insufficient",
     REASON_SEPARATOR_HARD_EVIDENCE_WEAK: "separator_evidence_incomplete",
     REASON_CONTENT_EVIDENCE_WEAK: "content_evidence_insufficient",
@@ -38,12 +39,30 @@ REASON_NORMALIZATION_MAP = {
 }
 
 
-def normalized_review_reasons(reasons: list[str]) -> list[str]:
-    normalized = [REASON_NORMALIZATION_MAP.get(str(reason), str(reason)) for reason in reasons]
+def normalized_final_review_reasons(reasons: list[str]) -> list[str]:
+    normalized = [
+        FINAL_REVIEW_REASON_REDUCTION_MAP.get(str(reason), str(reason))
+        for reason in reasons
+    ]
     return sorted(set(reason for reason in normalized if reason))
 
 
+def final_review_reasons(detection: Detection) -> list[str]:
+    return list(detection.review_reasons)
+
+
+def set_final_review_reasons(detection: Detection, reasons: list[str]) -> None:
+    detection.review_reasons = normalized_final_review_reasons(reasons)
+
+
+def add_final_review_reason(detection: Detection, reason: str) -> None:
+    set_final_review_reasons(detection, [*final_review_reasons(detection), reason])
+
+
 __all__ = [
-    "REASON_NORMALIZATION_MAP",
-    "normalized_review_reasons",
+    "FINAL_REVIEW_REASON_REDUCTION_MAP",
+    "add_final_review_reason",
+    "final_review_reasons",
+    "normalized_final_review_reasons",
+    "set_final_review_reasons",
 ]
