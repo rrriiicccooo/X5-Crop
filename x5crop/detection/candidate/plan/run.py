@@ -12,6 +12,7 @@ from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ...guidance.content_model import content_detection_for_count
 from ..assessment.candidate import apply_candidate_assessment_policy
+from ..assessment.safety import apply_safety_candidate_assessment
 from .reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
 from ..selection.choose import is_partial_safe_auto_candidate
 from .source_policy import safety_candidate_outer_proposals_enabled
@@ -196,25 +197,11 @@ def calibrated_candidates_for_count(
         )
         if safety_proposal is not None:
             safety_candidate = apply_candidate_assessment_policy(gray, safety_proposal, config, fmt, "separator", cache, policy=policy)
-            safety_cap = policy.scoring.no_auto_cap_partial if strip_mode == "partial" else policy.scoring.no_auto_cap_full
-            safety_candidate.confidence = min(
-                safety_candidate.confidence,
-                safety_cap,
-                max(0.0, config.confidence_threshold - 0.01),
+            apply_safety_candidate_assessment(
+                safety_candidate,
+                confidence_threshold=config.confidence_threshold,
+                policy=policy,
             )
-            safety_candidate.review_reasons.append("safety_candidate_review_only")
-            safety_candidate.review_reasons = sorted(set(safety_candidate.review_reasons))
-            assessment = safety_candidate.detail.get("candidate_assessment", {})
-            if isinstance(assessment, dict):
-                assessment["auto_gate"] = False
-                assessment["source"] = "safety_candidate"
-            safety_candidate.detail["safety_candidate"] = {
-                "used": True,
-                "review_only": True,
-                "separator_local_mode": policy.outer.proposal.geometry.separator.local.mode,
-                "separator_full_width_mode": policy.outer.proposal.geometry.separator.full_width.mode,
-                "strategies": list(policy.candidate_plan.safety_candidate.strategies),
-            }
             candidates.append(safety_candidate)
     partial_safe_auto = is_partial_safe_auto_candidate(separator_gate_candidate, config.confidence_threshold)
     if partial_safe_auto and policy.candidate_plan.partial_stop.stop_after_safe_auto:

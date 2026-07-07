@@ -141,6 +141,8 @@ candidate plan
 - dual-lane lane content / outer-alignment checks 属于 `candidate.assessment`；`candidate.plan`
   只选择 lane candidate 并调用 assessment helper；lane candidate 限分写入
   `candidate_confidence_caps`。
+- safety candidate 的 review-only contract、candidate cap 和 auto-gate 改写属于
+  `candidate.assessment`；`candidate.plan` 只生成 safety candidate 并调用 assessment helper。
 - candidate table / selected candidate 的候选级原因字段使用 `candidate_reasons`、
   `candidate_blockers` 和 `candidate_diagnostics`；最终原因字段使用 `final_review_reasons`。
 - candidate plan / execution budget 的可靠性细节也使用 `candidate_reasons` 和
@@ -395,7 +397,10 @@ competition detail only; it must not append final-looking review reasons or appl
 decision caps. Dual-lane lane content / outer-alignment checks belong to
 `candidate.assessment`; `candidate.plan` selects lane candidates and calls the
 assessment helper. Lane-candidate caps are recorded in
-`candidate_confidence_caps`. Candidate table / selected-candidate detail uses
+`candidate_confidence_caps`. Safety-candidate review-only contract, candidate
+cap, and auto-gate rewrite also belong to `candidate.assessment`; `candidate.plan`
+only builds the safety candidate and calls the assessment helper. Candidate table
+/ selected-candidate detail uses
 `candidate_reasons`, `candidate_blockers`, and `candidate_diagnostics` for
 candidate-level explanations. Candidate plan / execution-budget detail also uses
 `candidate_reasons` and `candidate_reasons_ok`, not final-looking

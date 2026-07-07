@@ -10,27 +10,9 @@ from ....constants import (
 )
 from ....domain import Detection
 from ....policies.runtime.policy import DetectionPolicy
-from ...confidence_caps import apply_confidence_cap
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.outer_alignment import outer_content_alignment_detail
-
-
-def _apply_dual_lane_candidate_cap(
-    detection: Detection,
-    cap: float,
-    reason: str,
-) -> None:
-    detection.confidence, cap_detail = apply_confidence_cap(
-        detection.confidence,
-        cap,
-        owner="candidate.assessment",
-        reason=reason,
-    )
-    confidence_caps = detection.detail.setdefault("candidate_confidence_caps", [])
-    if not isinstance(confidence_caps, list):
-        confidence_caps = []
-        detection.detail["candidate_confidence_caps"] = confidence_caps
-    confidence_caps.append(cap_detail)
+from .confidence_caps import apply_candidate_confidence_cap
 
 
 def apply_dual_lane_content_assessment(
@@ -48,13 +30,13 @@ def apply_dual_lane_content_assessment(
     if bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
         if support == "aspect_conflict":
-            _apply_dual_lane_candidate_cap(detection, 0.82, REASON_CONTENT_ASPECT_CONFLICT)
+            apply_candidate_confidence_cap(detection, 0.82, REASON_CONTENT_ASPECT_CONFLICT)
             detection.review_reasons.append(REASON_CONTENT_ASPECT_CONFLICT)
         elif support in {"low_content", "weak"} and detection.confidence >= confidence_threshold:
-            _apply_dual_lane_candidate_cap(detection, 0.84, REASON_CONTENT_EVIDENCE_WEAK)
+            apply_candidate_confidence_cap(detection, 0.84, REASON_CONTENT_EVIDENCE_WEAK)
             detection.review_reasons.append(REASON_CONTENT_EVIDENCE_WEAK)
     if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
-        _apply_dual_lane_candidate_cap(detection, 0.84, REASON_OUTER_CONTENT_BBOX_MISMATCH)
+        apply_candidate_confidence_cap(detection, 0.84, REASON_OUTER_CONTENT_BBOX_MISMATCH)
         detection.review_reasons.append(REASON_OUTER_CONTENT_BBOX_MISMATCH)
 
     detection.review_reasons = sorted(set(detection.review_reasons))

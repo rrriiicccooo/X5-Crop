@@ -261,6 +261,16 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn("REASON_CONTENT_ASPECT_CONFLICT", text)
         self.assertIn("apply_dual_lane_content_assessment", text)
 
+    def test_candidate_plan_delegates_safety_candidate_assessment(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan" / "run.py"
+        text = path.read_text(encoding="utf-8")
+
+        self.assertNotIn("safety_candidate.confidence = min", text)
+        self.assertNotIn("safety_candidate.review_reasons.append", text)
+        self.assertNotIn('"safety_candidate_review_only"', text)
+        self.assertNotIn('assessment["auto_gate"] = False', text)
+        self.assertIn("apply_safety_candidate_assessment", text)
+
     def test_decision_package_marker_does_not_reexport_runtime_helpers(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "__init__.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
