@@ -362,6 +362,21 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_candidate_plan_uses_gap_search_profiles_detail_name(self) -> None:
+        banned = (
+            '"gap_profiles":',
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_candidate_policy_uses_blocker_names_for_candidate_gate_inputs(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "candidate.py"
         text = path.read_text(encoding="utf-8")

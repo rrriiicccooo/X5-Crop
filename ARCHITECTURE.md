@@ -239,6 +239,8 @@ candidate plan
   `utils` 不承载 candidate-specific blocker list，也不用 hard review reason 命名。
 - candidate-plan policy 中阻断 candidate auto gate 的字段必须叫 blocker，不叫 review
   reason；final review reason 只属于 decision contract。
+- candidate-plan detail 中 gap search family 只用 `gap_search_profiles` 表达；旧
+  `gap_profiles` 别名不再作为 runtime/report 可见字段出现。
 - content-only、safety 和 review-only candidate 是否进入最终 REVIEW 由 source-derived
   `risk_summary` 和 decision contract applier 表达；decision policy 不保留未被裁决消费的
   review-only 布尔开关。
@@ -563,6 +565,8 @@ generic utilities, and must not be named as hard review reasons.
 Candidate-plan policy fields that block candidate auto gate use blocker naming,
 not review-reason naming; final review reasons belong only to the decision
 contract.
+Candidate-plan detail exposes gap search families only as `gap_search_profiles`;
+the old `gap_profiles` alias is not a runtime/report field.
 Final risk evidence such as overlap and lucky-pass risk is attached before the
 final decision. `x5crop.output` and finalization may consume that detail for
 output bleed, but must not generate PASS / REVIEW inputs after the decision

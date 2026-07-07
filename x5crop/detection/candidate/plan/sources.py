@@ -170,7 +170,6 @@ def detect_candidate_for_count(
             _outer_candidate_report_detail(candidate)
             for candidate in outer_candidates
         ]
-    gap_profiles = [WIDTH_AWARE_GAP_PROFILE]
     best.detail["candidate_plan"] = {
         "source": "separator",
         "count_explicit": bool(explicit_count),
@@ -181,8 +180,7 @@ def detect_candidate_for_count(
         ),
         "extension_outer_enabled": bool(include_extension_outer),
         "supplemental_outer_enabled": bool(include_supplemental_outer),
-        "gap_profiles": gap_profiles,
-        "gap_search_profiles": gap_profiles,
+        "gap_search_profiles": [WIDTH_AWARE_GAP_PROFILE],
         "outer_candidate_count": int(len(outer_candidates)),
         "separator_full_width_eligible": bool(separator_full_width_family.available_for(strip_mode, explicit_count)),
         "separator_full_width_included": bool(should_try_separator_full_width),
@@ -247,7 +245,6 @@ def detect_content_guided_separator_candidate_for_count(
         "proposal_family": "content_guided_separator",
         "content_seeded": True,
         "evidence_contract": "separator_evidence_required",
-        "gap_profiles": [WIDTH_AWARE_GAP_PROFILE],
         "gap_search_profiles": [WIDTH_AWARE_GAP_PROFILE],
         "content_guidance": seed_result.seed.gap_hints.summary(),
     }
@@ -309,7 +306,6 @@ def detect_safety_outer_proposal_candidate_for_count(
         ]
     best.detail["candidate_plan"] = {
         "source": CANDIDATE_SOURCE_SAFETY,
-        "gap_profiles": [WIDTH_AWARE_GAP_PROFILE],
         "gap_search_profiles": [WIDTH_AWARE_GAP_PROFILE],
         "outer_candidate_count": int(len(outer_candidates)),
         "auto_pass_eligible": False,
