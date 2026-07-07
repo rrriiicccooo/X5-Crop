@@ -31,7 +31,7 @@ https://github.com/rrriiicccooo/X5-Crop
 - `README.md`: complete user manual for setup, launchers, Debug Analysis,
   outputs, review folders, and common command-line use.
 - `ARCHITECTURE.md`: source-audit perspectives, policy ownership, format/mode
-  isolation, and verification boundaries.
+  composition, and verification boundaries.
 - `CHANGELOG.md`: version summaries, behavior changes, validation notes, and
   rollback context.
 - `AGENTS.md`: Codex coordination rules and current handoff only.

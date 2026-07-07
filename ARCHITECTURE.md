@@ -20,7 +20,7 @@ version history lives in `CHANGELOG.md`; Codex coordination and handoff live in
 |---|---|
 | `快速启动_Quick_Start.md` | Release 用户的最短安装、摆放、启动和输出说明。 |
 | `README.md` | 完整用户手册：下载、依赖、启动器、format、partial、Debug Analysis、输出、命令行和卸载。 |
-| `ARCHITECTURE.md` | 源码审核视角、层级边界、policy 所有权、format / mode 隔离和验证边界。 |
+| `ARCHITECTURE.md` | 源码审核视角、层级边界、policy 所有权、format / mode 组合和验证边界。 |
 | `CHANGELOG.md` | 版本级变化、验证记录、发布策略和回滚线索。 |
 | `AGENTS.md` | Codex 规则、当前 handoff、同步要求和仓库级约束。 |
 
@@ -180,24 +180,33 @@ format 文件不能声明 scoring、gate、risk、detector、diagnostics 或 run
 final PASS / REVIEW 的参数必须进入 decision policy detail；影响 runtime 检测路径但不直接
 决定 PASS / REVIEW 的参数必须进入 runtime policy detail。
 
-### 8. Format / Mode 隔离视角
+### 8. Format / Mode 组合视角
 
-项目允许共享能力，但默认行为不能无意推广：
+format / mode 不再被审核为互相隔离的行为围栏。当前代码更接近一组可组合的能力：
+format 提供物理事实和参数范围，mode 提供执行姿态，policy assembly 决定能力如何启用，
+evidence / decision 决定结果如何解释。
 
-- 135 full 的完整片条假设不能推广给其它 format。
-- 135-dual full 使用 dual-lane detector；135-dual partial 保守复核。
-- half geometry support 是通用 capability，但默认只给 `half/full` 开启。
-- 120-66 的 broad-width、square-frame、separator-derived outer 和 strict-holder 风险模型
-  只能由 120-66 相关 policy 默认启用。
-- 120-66 partial 的额外安全检查是 holder-edge disambiguation；active reason 不应把
-  “宽 separator”写成唯一物理身份。
-- outer correction 是通用 corrected-candidate capability；format 只能调物理参数和 gate，
-  不能拥有独立 correction algorithm switch。
-- partial-holder policy 可以表达更多 holder safety requirement；严格默认值不得推广给
-  half / xpan / 645。
+审核时应区分：
 
-看到 format 名称时，先判断它是不是物理事实、参数 override、policy enablement 或历史命名残留；
-不要把这几类混成一个开关。
+| 问题 | 应归属的层 |
+|---|---|
+| 这是什么片夹或画幅？ | `x5crop.formats` 的 physical facts。 |
+| 这个能力是否可用？ | runtime policy capability。 |
+| 这个 format / mode 默认怎样启用能力？ | policy assembly / preset。 |
+| 这个能力如何计算证据？ | detection / geometry / image 的对应 owner。 |
+| 这个证据如何影响结果？ | assessment、decision、risk 和 report detail。 |
+
+当前审核口径：
+
+- format 名称不是算法边界。看到 format 名称时，先判断它是物理事实、参数 override、
+  preset 选择、report label，还是历史命名残留。
+- 能力可以跨 format / mode 共享；关键是 owner、输入参数、启用条件和报告 detail 是否清楚。
+- 旧的 “某能力只能属于某 format” 表述不再作为架构规则。它只能作为历史迁移线索。
+- format-specific 数值应表达物理尺寸、容忍度、search budget 或证据解释，不应隐藏独立算法分支。
+- mode-specific detector 应表达执行姿态，例如 standard、dual-lane、review-only，而不是把
+  format 物理事实复制成第二套行为体系。
+- 当一个能力从单一 format 推广为共享 capability，文档应记录新的 owner 和 policy
+  enablement，而不是保留旧的 format 隔离语言。
 
 ### 9. Report / Debug 视角
 
@@ -263,7 +272,7 @@ Root documentation has non-overlapping roles:
 |---|---|
 | `快速启动_Quick_Start.md` | Short Release-user install, placement, launch, and output guide. |
 | `README.md` | Complete user manual: download, dependencies, launchers, formats, partial mode, Debug Analysis, output, CLI, uninstall. |
-| `ARCHITECTURE.md` | Source-audit perspectives, layer boundaries, policy ownership, format / mode isolation, and verification boundaries. |
+| `ARCHITECTURE.md` | Source-audit perspectives, layer boundaries, policy ownership, format / mode composition, and verification boundaries. |
 | `CHANGELOG.md` | Version-level changes, validation records, release policy, and rollback context. |
 | `AGENTS.md` | Codex rules, current handoff, sync requirements, and repository constraints. |
 
@@ -365,14 +374,40 @@ search-budget overrides only. Runtime path parameters must appear in runtime
 policy detail; final PASS / REVIEW parameters must appear in decision policy
 detail.
 
-### 8. Format / Mode Isolation Perspective
+### 8. Format / Mode Composition Perspective
 
-Capabilities may be shared, but default behavior must not leak across formats:
-135 full assumptions stay with 135 full; 135-dual full uses dual-lane detection;
-half geometry support defaults only to `half/full`; 120-66 broad-width,
-square-frame, separator-derived outer, and strict-holder behavior stay behind
-120-66 policy; strict partial-holder defaults are not promoted to half / xpan /
-645.
+Format / mode review is no longer a list of isolated behavior fences. The current
+code is closer to composable capability: format supplies physical facts and
+parameter ranges, mode supplies execution posture, policy assembly decides how
+capabilities are enabled, and evidence / decision layers explain the result.
+
+Review should separate:
+
+| Question | Owning layer |
+|---|---|
+| What holder or frame family is this? | Physical facts in `x5crop.formats`. |
+| Is this capability available? | Runtime policy capability. |
+| How does this format / mode enable the capability by default? | Policy assembly / preset. |
+| How is the evidence computed? | The relevant detection / geometry / image owner. |
+| How does the evidence affect the result? | Assessment, decision, risk, and report detail. |
+
+Current review stance:
+
+- Format names are not algorithm boundaries. When a format name appears, first
+  decide whether it is a physical fact, parameter override, preset choice,
+  report label, or historical naming residue.
+- Capabilities may be shared across formats and modes when owner, inputs,
+  enablement, and report detail are explicit.
+- Old statements that a capability can belong only to one format are historical
+  migration clues, not architecture rules.
+- Format-specific numbers should express physical size, tolerance, search budget,
+  or evidence interpretation. They should not hide independent algorithm branches.
+- Mode-specific detectors describe execution posture, such as standard,
+  dual-lane, or review-only; they should not duplicate format physical facts as a
+  second behavior system.
+- When a capability moves from one format to a shared capability, documentation
+  should record the new owner and policy enablement instead of preserving old
+  isolation wording.
 
 ### 9. Report / Debug Perspective
 
