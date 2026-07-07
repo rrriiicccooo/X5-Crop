@@ -8,6 +8,10 @@ from x5crop.detection.physical.photo_size import (
     photo_size_consistency_from_separator_bands,
 )
 from x5crop.geometry.separator_band import SeparatorBand
+from x5crop.geometry.separator_width_profile import (
+    separator_width_relation_to_theory,
+    theoretical_separator_width,
+)
 
 
 class PhotoSizePhysicalModelTests(unittest.TestCase):
@@ -69,6 +73,22 @@ class PhotoSizePhysicalModelTests(unittest.TestCase):
         self.assertFalse(detail["used"])
         self.assertEqual(detail["reason"], "incomplete_separator_edges")
         self.assertEqual(detail["target_photo_width"], 96.0)
+
+    def test_separator_width_theory_is_descriptive_not_a_prior(self) -> None:
+        theory = theoretical_separator_width(
+            long_axis=445.0,
+            short_axis=100.0,
+            count=4,
+            frame_aspect=1.0,
+        )
+        detail = theory.detail()
+
+        self.assertTrue(detail["used"])
+        self.assertEqual(detail["reason"], "ok")
+        self.assertEqual(detail["mean_separator_width_if_even"], 15.0)
+        self.assertEqual(detail["target_photo_width"], 100.0)
+        self.assertEqual(separator_width_relation_to_theory(10.0, theory), "narrower_than_theory")
+        self.assertEqual(separator_width_relation_to_theory(20.0, theory), "broader_than_theory")
 
 
 if __name__ == "__main__":

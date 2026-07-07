@@ -81,7 +81,7 @@ def _separator_detail(policy: "DetectionPolicy") -> dict[str, Any]:
             "width_aware": {
                 "enabled": True,
                 "max_width_ratio": separator.gap_search.max_width_ratio,
-                "physical_width_prior": separator.width_profile.mode != "off",
+                "theoretical_separator_width": separator.width_profile.mode != "off",
                 "observed_width_profile": separator.width_profile.mode != "off",
             },
         },

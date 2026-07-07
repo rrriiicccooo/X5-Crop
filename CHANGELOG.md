@@ -290,6 +290,10 @@ Key boundaries:
 - Outer proposal detail now travels with `OuterCandidate` into
   `outer_candidate_detail` and candidate tables; candidate build no longer
   recomputes side-boundary evidence by candidate name.
+- Separator width detail now uses `theoretical_separator_width` instead of
+  prior / ideal wording. The value describes the evenly distributed separator
+  width implied by outer geometry, count, and aspect; observed width may be
+  narrower, similar, or wider without becoming a stability penalty.
 - Scoring / gate / partial-holder / decision-contract width-stability policy
   fields now use `photo_width_*` names; plain `width_cv` remains a generic
   diagnostic aggregate or separator / gap geometry measurement wording.

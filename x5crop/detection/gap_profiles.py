@@ -13,7 +13,7 @@ def width_aware_gap_profile_detail(separator: SeparatorPolicy) -> dict[str, Any]
         "used": True,
         "profile": WIDTH_AWARE_GAP_PROFILE,
         "standard_profile": True,
-        "physical_width_prior": separator.width_profile.mode != "off",
+        "theoretical_separator_width": separator.width_profile.mode != "off",
         "observed_width_profile": separator.width_profile.mode != "off",
     }
 

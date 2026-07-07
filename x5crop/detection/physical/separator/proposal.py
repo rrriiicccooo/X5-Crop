@@ -13,10 +13,10 @@ from ....geometry.detection_parameters import (
 )
 from ....geometry.gap_search import find_detected_gap
 from ....geometry.separator_width_profile import (
-    SeparatorPhysicalWidthPrior,
-    separator_physical_width_prior,
     separator_width_gap_at_with_detail,
     separator_width_profile as make_separator_width_profile,
+    TheoreticalSeparatorWidth,
+    theoretical_separator_width,
 )
 from ....policies.runtime.separator import SeparatorWidthProfilePolicy
 from ....utils import clamp_int
@@ -56,26 +56,26 @@ def _observed_width_selection_detail(width_search_detail: dict[str, Any]) -> dic
         return {}
     detail: dict[str, Any] = {
         "selected_observed_width": selected.get("width"),
-        "selected_width_relation_to_prior": selected.get("width_relation_to_prior"),
+        "selected_width_relation_to_theory": selected.get("width_relation_to_theory"),
     }
-    if "width_delta_to_prior" in selected:
-        detail["selected_width_delta_to_prior"] = selected.get("width_delta_to_prior")
+    if "width_delta_to_theory" in selected:
+        detail["selected_width_delta_to_theory"] = selected.get("width_delta_to_theory")
     return detail
 
 
 def _observed_width_relation_counts(entries: list[dict[str, Any]]) -> dict[str, int]:
     counts = {
-        "narrower_than_prior": 0,
-        "matches_prior": 0,
-        "broader_than_prior": 0,
-        "prior_unavailable": 0,
+        "narrower_than_theory": 0,
+        "matches_theory": 0,
+        "broader_than_theory": 0,
+        "theory_unavailable": 0,
     }
     for entry in entries:
         if entry.get("selected_source") != "observed_width_profile":
             continue
-        relation = entry.get("selected_width_relation_to_prior")
+        relation = entry.get("selected_width_relation_to_theory")
         if relation not in counts:
-            relation = "prior_unavailable"
+            relation = "theory_unavailable"
         counts[relation] += 1
     return counts
 
@@ -129,7 +129,7 @@ def _propose_standard_separator_gap_with_detail(
     pitch: float,
     index: int,
     short_axis: float,
-    physical_width_prior: SeparatorPhysicalWidthPrior,
+    separator_width_theory: TheoreticalSeparatorWidth,
     max_width_ratio_override: Optional[float],
     gap_search: GapSearchParameters,
     width_profile_policy: SeparatorWidthProfilePolicy,
@@ -150,7 +150,7 @@ def _propose_standard_separator_gap_with_detail(
             pitch,
             index,
             short_axis,
-            physical_width_prior,
+            separator_width_theory,
             width_profile_search,
         )
         if width_profile_policy.mode != "off"
@@ -163,7 +163,7 @@ def _propose_standard_separator_gap_with_detail(
         "standard_expected_center": float(model_expected),
         "search_expected_center": float(search_expected),
         "model_gap_score": float(standard_result.model_gap_score),
-        "physical_width_prior": physical_width_prior.detail(),
+        "theoretical_separator_width": separator_width_theory.detail(),
         "standard_search": standard_result.detail,
         "observed_width_search": (
             width_result.detail
@@ -207,7 +207,7 @@ def _propose_standard_separator_gaps_with_detail(
         if width_profile_policy.mode != "off" and crop.size > 0 and outer.valid()
         else np.array([], dtype=np.float32)
     )
-    physical_width_prior = separator_physical_width_prior(
+    separator_width_theory = theoretical_separator_width(
         float(outer.width),
         float(outer.height),
         count,
@@ -234,7 +234,7 @@ def _propose_standard_separator_gaps_with_detail(
             pitch,
             index,
             float(outer.height),
-            physical_width_prior,
+            separator_width_theory,
             max_width_ratio_override,
             gap_search,
             width_profile_policy,
@@ -261,7 +261,7 @@ def _propose_standard_separator_gaps_with_detail(
             "pitch": float(pitch),
             "count": int(count),
             "max_width_ratio_override": max_width_ratio_override,
-            "physical_width_prior": physical_width_prior.detail(),
+            "theoretical_separator_width": separator_width_theory.detail(),
             "photo_size_consistency": photo_size_consistency.detail(),
             "gap_hint_guidance": (
                 {
@@ -275,7 +275,7 @@ def _propose_standard_separator_gaps_with_detail(
                 else {"used": False, "reason": "no_gap_hints"}
             ),
             "observed_width_profile_role": "measured_width_gap_when_standard_missing",
-            "observed_width_profile_scope": "narrower_matching_or_broader_than_physical_prior",
+            "observed_width_profile_scope": "narrower_matching_or_broader_than_theoretical_mean",
             "observed_width_profile_used": bool(width_profile.size > 0 and width_profile_policy.mode != "off"),
             "detected_count": sum(1 for gap in gaps if is_detected_gap_method(gap.method)),
             "model_gap_count": sum(1 for gap in gaps if not is_detected_gap_method(gap.method)),
