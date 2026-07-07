@@ -3,6 +3,7 @@ import unittest
 
 import numpy as np
 
+from x5crop.constants import REASON_AUTO_GATE_NOT_SATISFIED
 from x5crop.detection.candidate.assessment.candidate import apply_candidate_assessment_policy
 from x5crop.detection.candidate.assessment.base_scoring import base_detection_assessment
 from x5crop.detection.candidate.assessment.evidence_independence import evidence_independence_detail
@@ -17,6 +18,7 @@ from x5crop.detection.candidate.assessment.scoring import (
     content_support_score,
     geometry_support_score,
 )
+from x5crop.detection.candidate.reasons import candidate_reasons
 from x5crop.detection.decision.evidence_summary import evidence_summary_for
 from x5crop.detection.evidence.risk import lucky_photo_width_instability_components
 from x5crop.domain import Box, Detection, Gap
@@ -286,6 +288,82 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 "broad_separator_width_gaps"
             ],
             2,
+        )
+
+    def test_auto_gate_result_is_not_structured_candidate_blocker(self) -> None:
+        gray = np.zeros((100, 300), dtype=np.uint8)
+        policy = get_detection_policy("135", "full")
+        detection = Detection(
+            film_format="135",
+            layout="horizontal",
+            strip_mode="full",
+            count=3,
+            outer=Box(0, 0, 300, 100),
+            frames=[
+                Box(0, 0, 90, 100),
+                Box(105, 0, 195, 100),
+                Box(210, 0, 300, 100),
+            ],
+            gaps=[],
+            confidence=0.10,
+            review_reasons=[],
+            detail={
+                "outer_candidate_strategy": "base_outer",
+                "outer_area_ratio": 0.80,
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+            },
+        )
+        config = RuntimeConfig(
+            input_path=Path("synthetic.tif"),
+            output_dir=None,
+            film_format="135",
+            layout_auto=False,
+            layout="horizontal",
+            strip_mode="full",
+            count=3,
+            count_override=3,
+            page=0,
+            bleed_x=0,
+            bleed_y=0,
+            deskew="off",
+            deskew_fallback="off",
+            deskew_min_angle=-2.0,
+            deskew_max_angle=2.0,
+            confidence_threshold=0.85,
+            review_dir=None,
+            copy_review_files=False,
+            export_review=False,
+            compression="none",
+            debug=False,
+            debug_analysis=False,
+            dry_run=True,
+            diagnostics=False,
+            overwrite=True,
+            report=False,
+            debug_errors=False,
+            reuse_analysis=False,
+            jobs=1,
+        )
+
+        assessed = apply_candidate_assessment_policy(
+            gray,
+            detection,
+            config,
+            format_spec("135"),
+            "separator",
+            policy=policy,
+        )
+
+        assessment = assessed.detail["candidate_assessment"]
+        self.assertFalse(assessment["auto_gate"])
+        self.assertIn(REASON_AUTO_GATE_NOT_SATISFIED, candidate_reasons(assessed))
+        self.assertNotIn(REASON_AUTO_GATE_NOT_SATISFIED, assessment["blockers"])
+        self.assertNotIn(REASON_AUTO_GATE_NOT_SATISFIED, assessment["diagnostics"])
+        self.assertNotIn(
+            REASON_AUTO_GATE_NOT_SATISFIED,
+            assessment["auto_gate_inputs"]["candidate_blockers"],
         )
 
     def test_partial_three_frame_hard_separator_is_not_intrinsically_ambiguous(self) -> None:

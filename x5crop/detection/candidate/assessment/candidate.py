@@ -392,7 +392,14 @@ def apply_candidate_assessment_policy(
         reasons.append(REASON_AUTO_GATE_NOT_SATISFIED)
     else:
         confidence = max(confidence, config.confidence_threshold + min(0.10, joint_score * 0.08))
-    candidate_blockers, candidate_diagnostics = _candidate_reason_buckets(reasons)
+    structured_reason_inputs = [
+        reason
+        for reason in reasons
+        if reason != REASON_AUTO_GATE_NOT_SATISFIED
+    ]
+    candidate_blockers, candidate_diagnostics = _candidate_reason_buckets(
+        structured_reason_inputs
+    )
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
     set_candidate_reasons(candidate, reasons)
     candidate.detail["candidate_source"] = (

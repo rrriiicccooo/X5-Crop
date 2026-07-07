@@ -139,6 +139,8 @@ candidate plan
   `base_candidate_scoring`，不能反写到 build detail。
 - candidate assessment 的 reason 只能作为候选 blockers / diagnostics；最终用户可见
   `review_reasons` 只由 decision contract 生成。
+- `candidate_assessment.blockers` 只记录阻断 auto gate 的输入原因；`auto_gate_not_satisfied`
+  是 gate 结果/legacy candidate reason，不能作为结构化 blocker。
 - decision 的 `candidate_reason_inputs_before_decision` 只保留候选 blockers /
   diagnostics 作为主模型；旧 reason 归并读模型必须显式命名为
   `legacy_reduced_candidate_reasons`。
@@ -233,6 +235,9 @@ candidate plan
   decision cap 分别归 assessment / decision。
 - `candidate_assessment.blockers`、`candidate_assessment.diagnostics` 和
   `candidate_assessment.auto_gate_inputs` 是 report/debug 的候选级解释，不是最终裁决。
+- `auto_gate_not_satisfied` 可以保留在 legacy/internal `candidate_reasons` 中，但不能出现在
+  `candidate_assessment.blockers` / `diagnostics`；decision 通过 `auto_gate=false`
+  映射最终 `evidence_combination_insufficient`。
 - `legacy_reduced_candidate_reasons` 只是旧候选原因的 internal/read-model reducer；
   不能作为 candidate assessment 或 final review reason 的主要业务字段。
 - candidate auto-gate blocking vocabulary belongs to `candidate.assessment`；通用
