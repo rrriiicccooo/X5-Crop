@@ -191,7 +191,7 @@ def content_detection_for_count(
     detail = {
         "proposal_family": CONTENT_PROPOSAL_FAMILY,
         "proposal_role": candidate_policy.proposal_role,
-        "candidate_contract": "review_only" if candidate_policy.review_only else "assessment_required",
+        "candidate_contract": candidate_policy.candidate_contract,
         "content_gap_evidence_kind": candidate_policy.model_gap_evidence_kind,
         "candidate_source": CANDIDATE_SOURCE_CONTENT_PRIMARY,
         "candidate_count": count,
@@ -202,7 +202,7 @@ def content_detection_for_count(
         "content_primary": {
             "used": True,
             "proposal_role": candidate_policy.proposal_role,
-            "candidate_contract": "review_only" if candidate_policy.review_only else "assessment_required",
+            "candidate_contract": candidate_policy.candidate_contract,
             "region_roles": {
                 "bbox": CONTENT_BBOX_HINT_ROLE,
                 "runs": CONTENT_RUN_HINT_ROLE,

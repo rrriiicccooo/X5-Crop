@@ -48,7 +48,7 @@ def content_policy(params: FormatParameters) -> ContentPolicy:
             outer_expand_ratio=float(mask.outer_expand_ratio),
         ),
         candidate=ContentCandidatePolicy(
-            review_only=True,
+            candidate_contract="content_guidance_assessment_required",
             proposal_role="weak_content_model_proposal",
             model_gap_evidence_kind="content_model_gap",
             expected_width_min_px=float(candidate.expected_width_min_px),

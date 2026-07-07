@@ -41,7 +41,7 @@ class ContentMaskPolicy:
 
 @dataclass(frozen=True)
 class ContentCandidatePolicy:
-    review_only: bool = True
+    candidate_contract: str = "content_guidance_assessment_required"
     proposal_role: str = "weak_content_model_proposal"
     model_gap_evidence_kind: str = "content_model_gap"
     expected_width_min_px: float = 8.0

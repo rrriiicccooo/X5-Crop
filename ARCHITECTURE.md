@@ -156,6 +156,8 @@ candidate plan
 - content mismatch selector 属于 candidate selection；它只能读取 candidate-level
   diagnostics / blockers 并选择更可信的候选，不能命名为 review policy 或生成最终
   review reason。
+- content-model proposal 的 contract 使用 `content_guidance_assessment_required` 这类
+  guidance / assessment 语义；不能把 content proposal 命名成 review-only 裁决。
 - dual-lane lane content / outer-alignment checks 属于 `candidate.assessment`；`candidate.plan`
   只选择 lane candidate 并调用 assessment helper；lane candidate 限分写入
   `candidate_confidence_caps`。
@@ -467,7 +469,10 @@ reads candidate-level diagnostics / blockers and may choose a more credible
 candidate, but it is not a review policy and does not create final review
 reasons. `content_only_evidence` means the candidate source relies mainly on
 content; failed content containment or content-harm checks use
-`content_evidence_insufficient` instead. Dual-lane lane
+`content_evidence_insufficient` instead. Content-model proposal contracts use
+guidance / assessment language such as
+`content_guidance_assessment_required`; they are not named as review-only
+decisions. Dual-lane lane
 content / outer-alignment checks belong to
 `candidate.assessment`; `candidate.plan` selects lane candidates and calls the
 assessment helper. Lane-candidate caps are recorded in

@@ -234,6 +234,25 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertTrue(banned.isdisjoint(RiskPolicy.__dataclass_fields__))
 
+    def test_content_candidate_policy_does_not_use_final_review_only_terms(self) -> None:
+        offenders: list[str] = []
+        banned = (
+            "review_only",
+            '"review_only"',
+            '"assessment_required"',
+        )
+        for path in (
+            PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "content.py",
+            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "content.py",
+            PROJECT_ROOT / "x5crop" / "detection" / "guidance" / "content_model.py",
+        ):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_decision_contract_does_not_own_output_or_diagnostics_policy(self) -> None:
         from x5crop.policies.decision.contract import DetectionDecisionContract
 
