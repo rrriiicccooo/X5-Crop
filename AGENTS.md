@@ -39,8 +39,10 @@ https://github.com/rrriiicccooo/X5-Crop
 Do not duplicate long content across these documents. Link to the right document
 instead.
 
-Documentation style must be professional, concise, and restrained. Avoid
-colloquial phrasing, duplicated historical detail, and cross-document overlap.
+Documentation quality bar is extreme cleanliness and elegance. Every document
+change must leave the docs professional, concise, structurally clear, current,
+and non-overlapping. Treat this as a standing acceptance criterion; do not wait
+for the user to restate it.
 
 ## Current Scope
 
