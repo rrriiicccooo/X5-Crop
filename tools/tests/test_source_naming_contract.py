@@ -323,6 +323,27 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(import_from_nodes, [])
 
+    def test_decision_post_check_reasons_are_not_named_as_tail(self) -> None:
+        banned = (
+            "_apply_decision_" "tail_reasons",
+            "decision" "_tail",
+            "tail review" " reasons",
+            "decision-tail" " reasons",
+        )
+        offenders: list[str] = []
+        for path in (
+            PROJECT_ROOT / "x5crop" / "detection" / "decision" / "final_decision.py",
+            PROJECT_ROOT / "tools" / "tests" / "test_decision_reason_contract.py",
+            PROJECT_ROOT / "ARCHITECTURE.md",
+            PROJECT_ROOT / "CHANGELOG.md",
+        ):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_policy_assembly_does_not_use_reported_physical_risk_strings(self) -> None:
         banned = (
             "known_physical_risks",

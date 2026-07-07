@@ -7,7 +7,7 @@ import numpy as np
 
 from x5crop.constants import CANDIDATE_SOURCE_SAFETY
 from x5crop.detection.candidate.assessment.safety import SAFETY_CANDIDATE_AUTO_GATE_BLOCKER
-from x5crop.detection.decision.final_decision import _apply_decision_tail_reasons
+from x5crop.detection.decision.final_decision import _apply_decision_post_check_reasons
 from x5crop.detection.decision.pass_review import apply_final_decision_policy
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, Detection
@@ -203,7 +203,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
         self.assertEqual(
             decided.review_reasons,
-            ["content_only_evidence", "evidence_combination_insufficient"],
+            ["evidence_combination_insufficient"],
         )
         self.assertEqual(
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
@@ -337,7 +337,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             selected.detail["candidate_competition"]["second_candidate_close"]
         )
 
-    def test_decision_tail_reasons_update_added_summary(self) -> None:
+    def test_decision_post_check_reasons_update_added_summary(self) -> None:
         detection = Detection(
             film_format="135",
             layout="horizontal",
@@ -390,7 +390,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             jobs=1,
         )
 
-        _apply_decision_tail_reasons(
+        _apply_decision_post_check_reasons(
             detection,
             config,
             get_detection_policy("135", "partial"),
@@ -408,6 +408,10 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertEqual(
             detection.detail["decision_summary"]["decision_reason_inputs"][0]["signal"],
             "partial_best",
+        )
+        self.assertEqual(
+            detection.detail["decision_summary"]["decision_reason_inputs"][0]["bucket"],
+            "decision_post_check",
         )
 
 

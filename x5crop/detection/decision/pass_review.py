@@ -78,7 +78,7 @@ def apply_final_decision_policy(
         )
     if risk["safety_or_review_only"]:
         add_reason(
-            policy.decision.content_only_evidence_reason,
+            policy.decision.decision_insufficient_reason,
             bucket="risk",
             signal="safety_or_review_only",
         )
