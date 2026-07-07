@@ -245,6 +245,8 @@ class SourceNamingContractTest(unittest.TestCase):
             "ContentMismatchReviewSelectionPolicy",
             "content_mismatch_review",
             "required_review_reason",
+            "required_candidate_reason",
+            "content_candidate_reasons",
             "select_separator_review_candidate_on_content_mismatch",
             "separator_review_on_mismatch",
         )

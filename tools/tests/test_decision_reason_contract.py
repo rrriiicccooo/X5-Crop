@@ -605,6 +605,100 @@ class DecisionReasonContractTest(unittest.TestCase):
             selected.detail["candidate_competition"]["second_candidate_close"]
         )
 
+    def test_content_mismatch_selection_uses_candidate_diagnostics(self) -> None:
+        fmt = format_spec("half")
+        policy = get_detection_policy("half", "full")
+
+        def content_candidate(*, diagnostics: list[str], reasons: list[str]) -> Detection:
+            return Detection(
+                film_format="half",
+                layout="horizontal",
+                strip_mode="full",
+                count=fmt.default_count,
+                outer=Box(0, 0, 1200, 100),
+                frames=[],
+                gaps=[],
+                confidence=0.90,
+                review_reasons=reasons,
+                detail={
+                    "candidate_assessment": {
+                        "source": "content",
+                        "joint_score": 0.90,
+                        "diagnostics": diagnostics,
+                        "blockers": [],
+                    },
+                },
+            )
+
+        separator_candidate = Detection(
+            film_format="half",
+            layout="horizontal",
+            strip_mode="full",
+            count=fmt.default_count,
+            outer=Box(0, 0, 1200, 100),
+            frames=[],
+            gaps=[],
+            confidence=0.84,
+            review_reasons=[],
+            detail={
+                "candidate_assessment": {
+                    "source": "separator",
+                    "joint_score": 0.84,
+                    "content_support": "ok",
+                    "diagnostics": [],
+                    "blockers": [],
+                    "separator_hard_evidence": {
+                        "expected_gaps": fmt.default_count - 1,
+                        "hard_gaps": 6,
+                        "equal_gaps": 0,
+                    },
+                },
+            },
+        )
+
+        selected_without_diagnostic = select_detection_candidate(
+            [
+                content_candidate(
+                    diagnostics=[],
+                    reasons=["content_run_count_mismatch"],
+                ),
+                separator_candidate,
+            ],
+            fmt,
+            threshold=0.85,
+            policy=policy,
+        )
+        self.assertEqual(
+            selected_without_diagnostic.detail["candidate_assessment"]["source"],
+            "content",
+        )
+        self.assertNotIn("content_candidate_mismatch", selected_without_diagnostic.detail)
+
+        selected_with_diagnostic = select_detection_candidate(
+            [
+                content_candidate(
+                    diagnostics=["content_run_count_mismatch"],
+                    reasons=[],
+                ),
+                separator_candidate,
+            ],
+            fmt,
+            threshold=0.85,
+            policy=policy,
+        )
+        self.assertEqual(
+            selected_with_diagnostic.detail["candidate_assessment"]["source"],
+            "separator",
+        )
+        self.assertEqual(
+            selected_with_diagnostic.detail["content_candidate_mismatch"]["content_candidate_diagnostics"],
+            ["content_run_count_mismatch"],
+        )
+        self.assertNotIn(
+            "content_candidate_reasons",
+            selected_with_diagnostic.detail["content_candidate_mismatch"],
+        )
+
     def test_low_confidence_context_reasons_update_added_summary(self) -> None:
         detection = Detection(
             film_format="135",

@@ -104,7 +104,7 @@ class ContentMismatchCandidateSelectionPolicy:
     strip_modes: tuple[str, ...] = ("full",)
     require_default_count: bool = True
     required_best_source: str = "content"
-    required_candidate_reason: str = "content_run_count_mismatch"
+    required_candidate_diagnostic: str = "content_run_count_mismatch"
     candidate_source: str = "separator"
     min_hard_ratio: float = 0.50
     max_equal_gaps: int = 0

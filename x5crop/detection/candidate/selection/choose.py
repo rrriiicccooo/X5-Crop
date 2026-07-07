@@ -17,6 +17,16 @@ class SelectionResult:
     candidates: tuple[Detection, ...]
 
 
+def _candidate_assessment(candidate: Detection) -> dict:
+    assessment = candidate.detail.get("candidate_assessment", {})
+    return dict(assessment) if isinstance(assessment, dict) else {}
+
+
+def _candidate_detail_list(candidate: Detection, key: str) -> list:
+    value = _candidate_assessment(candidate).get(key)
+    return list(value) if isinstance(value, list) else []
+
+
 def calibrated_candidate_rank(detection: Detection, threshold: float) -> tuple[int, float, int, float]:
     candidate = detection.detail.get("candidate_assessment", {})
     joint = float(candidate.get("joint_score", 0.0)) if isinstance(candidate, dict) else 0.0
@@ -59,13 +69,11 @@ def select_separator_candidate_for_content_mismatch(
     policy: DetectionPolicy,
 ) -> Optional[Detection]:
     mismatch_policy = policy.candidate_selection.content_mismatch_candidate
-    best_assessment = best.detail.get("candidate_assessment", {})
-    best_source = best_assessment.get("source") if isinstance(best_assessment, dict) else None
+    best_assessment = _candidate_assessment(best)
+    best_source = best_assessment.get("source")
 
     def separator_summary_for(candidate: Detection) -> tuple[int, int, int]:
-        candidate_assessment = candidate.detail.get("candidate_assessment", {})
-        if not isinstance(candidate_assessment, dict):
-            return 0, 0, 0
+        candidate_assessment = _candidate_assessment(candidate)
         hard_detail = candidate_assessment.get("separator_hard_evidence", {})
         if not isinstance(hard_detail, dict):
             return 0, 0, 0
@@ -85,7 +93,8 @@ def select_separator_candidate_for_content_mismatch(
         or best.strip_mode not in mismatch_policy.strip_modes
         or (mismatch_policy.require_default_count and best.count != fmt.default_count)
         or best_source != mismatch_policy.required_best_source
-        or mismatch_policy.required_candidate_reason not in best.review_reasons
+        or mismatch_policy.required_candidate_diagnostic
+        not in _candidate_detail_list(best, "diagnostics")
     ):
         return None
     plausible: list[Detection] = []
@@ -97,11 +106,8 @@ def select_separator_candidate_for_content_mismatch(
             or candidate.count != best.count
         ):
             continue
-        candidate_assessment = candidate.detail.get("candidate_assessment", {})
-        if (
-            not isinstance(candidate_assessment, dict)
-            or candidate_assessment.get("source") != mismatch_policy.candidate_source
-        ):
+        candidate_assessment = _candidate_assessment(candidate)
+        if candidate_assessment.get("source") != mismatch_policy.candidate_source:
             continue
         expected, hard, equal = separator_summary_for(candidate)
         support = str(candidate_assessment.get("content_support", ""))
@@ -125,8 +131,7 @@ def select_separator_candidate_for_content_mismatch(
 
 
 def _candidate_summary(candidate: Detection) -> dict:
-    assessment = candidate.detail.get("candidate_assessment", {})
-    assessment = dict(assessment) if isinstance(assessment, dict) else {}
+    assessment = _candidate_assessment(candidate)
     return {
         "format": candidate.film_format,
         "count": int(candidate.count),
@@ -166,7 +171,8 @@ def select_detection_candidate(
         override_reason = policy.candidate_selection.content_mismatch_candidate.override_reason
         separator_candidate_on_mismatch.detail["content_candidate_mismatch"] = {
             "content_candidate_confidence": float(best.confidence),
-            "content_candidate_reasons": list(best.review_reasons),
+            "content_candidate_diagnostics": _candidate_detail_list(best, "diagnostics"),
+            "content_candidate_blockers": _candidate_detail_list(best, "blockers"),
             "content_candidate_assessment": best.detail.get("candidate_assessment", {}),
         }
         best = separator_candidate_on_mismatch
