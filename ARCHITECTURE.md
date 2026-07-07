@@ -158,6 +158,11 @@ candidate plan
   只用于 decision 之后的最终用户可见原因。
 - `content_only_evidence` 只表示 candidate source 主要依赖 content；content containment /
   content harm 失败使用 `content_evidence_insufficient`，不能复用 content-only reason。
+- decision `risk_summary.candidate_source_detail` 同时记录 `candidate_assessment.source`
+  和顶层 `candidate_source`；content-only risk 读取候选评估来源，safety / review-only
+  risk 读取对应候选来源，不能再混成一个模糊 source。
+- decision `evidence_summary.content` 中，`content_score_role` 表示 content containment
+  support；`content_quality_score_role` 只表示 quality diagnostic，不是 hard gate。
 - `overlap_risk` 和 `lucky_pass_risk` 是不同 final risk reason：前者来自 overlap /
   output-bleed 物理诊断，后者来自证据组合可能侥幸通过的 decision risk。两者不能互相借名。
 - candidate selection 只能记录 `selection_risk_inputs`、selection override 和 competition
@@ -496,7 +501,12 @@ reads candidate-level diagnostics / blockers and may choose a more credible
 candidate, but it is not a review policy and does not create final review
 reasons. `content_only_evidence` means the candidate source relies mainly on
 content; failed content containment or content-harm checks use
-`content_evidence_insufficient` instead. Content-model proposal contracts use
+`content_evidence_insufficient` instead. Decision risk summaries expose
+`candidate_source_detail` with both `candidate_assessment.source` and top-level
+`candidate_source`, so content-only risk and safety / review-only risk keep
+separate source ownership. Decision content summaries use `content_score_role`
+for content-containment support and `content_quality_score_role` for quality
+diagnostics, which are not hard gates. Content-model proposal contracts use
 guidance / assessment language such as
 `content_guidance_assessment_required`; they are not named as review-only
 decisions. Dual-lane lane

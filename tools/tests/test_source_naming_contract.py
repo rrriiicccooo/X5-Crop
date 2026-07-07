@@ -643,6 +643,13 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn("candidate_blockers_before_decision", text)
         self.assertNotIn("candidate_diagnostics_before_decision", text)
 
+    def test_decision_content_quality_score_role_is_not_generic_score_role(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "evidence_summary.py"
+        text = path.read_text(encoding="utf-8")
+
+        self.assertIn('"content_quality_score_role"', text)
+        self.assertNotIn('"score_role": "quality_diagnostic_not_hard_gate"', text)
+
     def test_finalization_does_not_generate_decision_risk_evidence(self) -> None:
         banned = (
             "overlap_bleed_risk_detail",

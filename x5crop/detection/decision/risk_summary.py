@@ -13,6 +13,22 @@ from ...domain import Detection
 from ...policies.decision.contract import DetectionDecisionContract
 
 
+_CONTENT_EVIDENCE_CANDIDATE_SOURCES = frozenset(
+    {
+        CANDIDATE_SOURCE_CONTENT,
+        CANDIDATE_SOURCE_CONTENT_PRIMARY,
+        "content",
+    }
+)
+
+_NON_AUTO_CANDIDATE_SOURCES = frozenset(
+    {
+        CANDIDATE_SOURCE_HARD_SAFETY,
+        CANDIDATE_SOURCE_REVIEW_ONLY,
+    }
+)
+
+
 def _dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
@@ -33,7 +49,14 @@ def risk_summary_for(
     competition = _dict(detection.detail.get("candidate_competition"))
     lucky = _dict(detection.detail.get("lucky_pass_risk_score"))
     overlap_bleed = _dict(detection.detail.get("overlap_bleed_risk"))
-    source = str(assessment.get("source") or detection.detail.get("candidate_source") or "")
+    assessment_source = str(assessment.get("source") or "")
+    candidate_source = str(detection.detail.get("candidate_source") or "")
+    source = assessment_source or candidate_source
+    content_only_evidence = source in _CONTENT_EVIDENCE_CANDIDATE_SOURCES
+    safety_or_review_only = (
+        assessment_source == CANDIDATE_SOURCE_SAFETY
+        or candidate_source in _NON_AUTO_CANDIDATE_SOURCES
+    )
     margin_raw = competition.get("margin_to_second")
     margin = None if margin_raw is None else _float(margin_raw)
     partial_edge_safe = bool(evidence["partial_edge"]["ok"])
@@ -52,12 +75,20 @@ def risk_summary_for(
         )
     )
     return {
-        "content_only_evidence": source in {CANDIDATE_SOURCE_CONTENT, CANDIDATE_SOURCE_CONTENT_PRIMARY, "content"},
-        "safety_or_review_only": (
-            source == CANDIDATE_SOURCE_SAFETY
-            or detection.detail.get("candidate_source") == CANDIDATE_SOURCE_HARD_SAFETY
-            or detection.detail.get("candidate_source") == CANDIDATE_SOURCE_REVIEW_ONLY
-        ),
+        "candidate_source_detail": {
+            "assessment_source": assessment_source,
+            "candidate_source": candidate_source,
+            "content_only_evidence_source": source if content_only_evidence else "",
+            "safety_or_review_only_source": (
+                assessment_source
+                if assessment_source == CANDIDATE_SOURCE_SAFETY
+                else candidate_source
+                if candidate_source in _NON_AUTO_CANDIDATE_SOURCES
+                else ""
+            ),
+        },
+        "content_only_evidence": content_only_evidence,
+        "safety_or_review_only": safety_or_review_only,
         "outer_content_mismatch": not bool(evidence["outer"]["ok"]),
         "overlap_risk": bool(overlap_bleed.get("risk", False)),
         "overlap_bleed_risk": overlap_bleed,

@@ -8,11 +8,18 @@ from unittest.mock import patch
 import numpy as np
 
 from x5crop.cache.analysis import make_analysis_cache
-from x5crop.constants import CANDIDATE_SOURCE_SAFETY, REASON_LUCKY_PASS_RISK
+from x5crop.constants import (
+    CANDIDATE_SOURCE_CONTENT,
+    CANDIDATE_SOURCE_HARD_SAFETY,
+    CANDIDATE_SOURCE_SAFETY,
+    CANDIDATE_SOURCE_SEPARATOR,
+    REASON_LUCKY_PASS_RISK,
+)
 from x5crop.detection.candidate.assessment.safety import SAFETY_CANDIDATE_AUTO_GATE_BLOCKER
 from x5crop.detection.decision.final_decision import apply_detection_decision
 from x5crop.detection.decision.contract_applier import apply_decision_contract
 from x5crop.detection.decision.reasons import normalized_final_review_reasons
+from x5crop.detection.decision.risk_summary import risk_summary_for
 from x5crop.detection.modes.review_only import review_only_detection
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, Detection
@@ -209,6 +216,78 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertEqual(
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
             ["safety_or_review_only", "candidate_auto_gate_failed"],
+        )
+
+    def test_risk_summary_separates_assessment_source_from_candidate_source(self) -> None:
+        policy = decision_contract_for("135", "full")
+        evidence = {
+            "outer": {"ok": True},
+            "partial_edge": {"ok": True},
+        }
+
+        content_detection = Detection(
+            film_format="135",
+            layout="horizontal",
+            strip_mode="full",
+            count=1,
+            outer=Box(10, 10, 90, 90),
+            frames=[Box(10, 10, 90, 90)],
+            gaps=[],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "candidate_source": CANDIDATE_SOURCE_SEPARATOR,
+                "candidate_assessment": {
+                    "source": CANDIDATE_SOURCE_CONTENT,
+                    "auto_gate": False,
+                },
+            },
+        )
+
+        content_risk = risk_summary_for(content_detection, evidence, policy)
+
+        self.assertTrue(content_risk["content_only_evidence"])
+        self.assertFalse(content_risk["safety_or_review_only"])
+        self.assertEqual(
+            content_risk["candidate_source_detail"],
+            {
+                "assessment_source": CANDIDATE_SOURCE_CONTENT,
+                "candidate_source": CANDIDATE_SOURCE_SEPARATOR,
+                "content_only_evidence_source": CANDIDATE_SOURCE_CONTENT,
+                "safety_or_review_only_source": "",
+            },
+        )
+
+        hard_safety_detection = Detection(
+            film_format="135",
+            layout="horizontal",
+            strip_mode="full",
+            count=1,
+            outer=Box(10, 10, 90, 90),
+            frames=[Box(10, 10, 90, 90)],
+            gaps=[],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "candidate_source": CANDIDATE_SOURCE_HARD_SAFETY,
+                "candidate_assessment": {
+                    "source": "separator",
+                    "auto_gate": False,
+                },
+            },
+        )
+
+        hard_safety_risk = risk_summary_for(hard_safety_detection, evidence, policy)
+
+        self.assertFalse(hard_safety_risk["content_only_evidence"])
+        self.assertTrue(hard_safety_risk["safety_or_review_only"])
+        self.assertEqual(
+            hard_safety_risk["candidate_source_detail"]["content_only_evidence_source"],
+            "",
+        )
+        self.assertEqual(
+            hard_safety_risk["candidate_source_detail"]["safety_or_review_only_source"],
+            CANDIDATE_SOURCE_HARD_SAFETY,
         )
 
     def test_review_only_mode_diagnostics_wait_for_final_decision(self) -> None:

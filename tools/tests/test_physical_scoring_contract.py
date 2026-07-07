@@ -522,7 +522,10 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertFalse(evidence["outer"]["area_ok"])
         self.assertTrue(evidence["content"]["ok"])
         self.assertFalse(evidence["content"]["quality_ok"])
-        self.assertEqual(evidence["content"]["score_role"], "quality_diagnostic_not_hard_gate")
+        self.assertEqual(
+            evidence["content"]["content_quality_score_role"],
+            "quality_diagnostic_not_hard_gate",
+        )
 
     def test_geometry_support_score_does_not_penalize_raw_outer_area(self) -> None:
         frames = [

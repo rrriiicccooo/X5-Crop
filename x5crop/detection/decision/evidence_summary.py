@@ -180,7 +180,7 @@ def evidence_summary_for(
             "content_score_role": assessment.get("content_score_role", "content_containment_support"),
             "content_quality_score": content_quality_score,
             "quality_ok": bool(content_quality_ok),
-            "score_role": "quality_diagnostic_not_hard_gate",
+            "content_quality_score_role": "quality_diagnostic_not_hard_gate",
             "min_content_score": policy.evidence.min_content_score,
             "detail": content_detail,
         },
