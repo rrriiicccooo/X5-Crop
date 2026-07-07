@@ -108,13 +108,17 @@ def apply_final_decision_policy(
             bucket="risk",
             signal="candidate_competition_close",
         )
-    if risk["overlap_risk"] and (
-        policy.risk.review_on_overlap_risk or policy.risk.review_on_lucky_pass_risk
-    ):
+    if risk["overlap_risk"] and policy.risk.review_on_overlap_risk:
         add_reason(
             policy.decision.overlap_risk_reason,
             bucket="risk",
-            signal="overlap_or_lucky_pass_risk",
+            signal="overlap_bleed_risk",
+        )
+    if risk["lucky_pass_risk"] and policy.risk.review_on_lucky_pass_risk:
+        add_reason(
+            policy.decision.lucky_pass_risk_reason,
+            bucket="risk",
+            signal="lucky_pass_risk",
         )
     if risk["partial_edge_uncertain"]:
         add_reason(

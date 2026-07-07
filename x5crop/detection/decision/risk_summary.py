@@ -32,6 +32,7 @@ def risk_summary_for(
     assessment = _dict(detection.detail.get("candidate_assessment"))
     competition = _dict(detection.detail.get("candidate_competition"))
     lucky = _dict(detection.detail.get("lucky_pass_risk_score"))
+    overlap_bleed = _dict(detection.detail.get("overlap_bleed_risk"))
     source = str(assessment.get("source") or detection.detail.get("candidate_source") or "")
     margin_raw = competition.get("margin_to_second")
     margin = None if margin_raw is None else _float(margin_raw)
@@ -58,7 +59,10 @@ def risk_summary_for(
             or detection.detail.get("candidate_source") == CANDIDATE_SOURCE_REVIEW_ONLY
         ),
         "outer_content_mismatch": not bool(evidence["outer"]["ok"]),
-        "overlap_risk": bool(lucky.get("risk", False)),
+        "overlap_risk": bool(overlap_bleed.get("risk", False)),
+        "overlap_bleed_risk": overlap_bleed,
+        "lucky_pass_risk": bool(lucky.get("risk", False)),
+        "lucky_pass_risk_detail": lucky,
         "candidate_competition_close": bool(close_competition),
         "candidate_margin_to_second": margin,
         "partial_full_conflict": bool(partial_full_conflict),
@@ -68,7 +72,6 @@ def risk_summary_for(
             and policy.evidence.partial_requires_safe_edge
             and not partial_edge_safe
         ),
-        "lucky_pass_risk": lucky,
     }
 
 

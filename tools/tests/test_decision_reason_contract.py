@@ -6,19 +6,63 @@ from pathlib import Path
 import numpy as np
 
 from x5crop.cache.analysis import make_analysis_cache
-from x5crop.constants import CANDIDATE_SOURCE_SAFETY
+from x5crop.constants import CANDIDATE_SOURCE_SAFETY, REASON_LUCKY_PASS_RISK
 from x5crop.detection.candidate.assessment.safety import SAFETY_CANDIDATE_AUTO_GATE_BLOCKER
 from x5crop.detection.decision.final_decision import (
     _apply_decision_post_check_reasons,
     apply_detection_decision,
 )
 from x5crop.detection.decision.pass_review import apply_final_decision_policy
+from x5crop.detection.decision.reasons import normalized_review_reasons
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, Detection
 from x5crop.formats import format_spec
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.decision.contract import decision_contract_for
 from x5crop.runtime.config import RuntimeConfig
+
+
+def _decision_test_config(*, threshold: float = 0.85) -> RuntimeConfig:
+    return RuntimeConfig(
+        input_path=Path("synthetic.tif"),
+        output_dir=None,
+        film_format="135",
+        layout_auto=False,
+        layout="horizontal",
+        strip_mode="full",
+        count=1,
+        count_override=1,
+        page=0,
+        bleed_x=0,
+        bleed_y=0,
+        deskew="off",
+        deskew_fallback="off",
+        deskew_min_angle=-2.0,
+        deskew_max_angle=2.0,
+        confidence_threshold=threshold,
+        review_dir=None,
+        copy_review_files=False,
+        export_review=False,
+        diagnostics=False,
+        compression="auto",
+        debug=False,
+        debug_analysis=False,
+        dry_run=True,
+        overwrite=True,
+        report=True,
+        debug_errors=False,
+        reuse_analysis=False,
+        jobs=1,
+    )
+
+
+def _content_ok_detail() -> dict[str, bool | str]:
+    return {
+        "used": True,
+        "support": "ok",
+        "content_containment_ok": True,
+        "content_harm_risk": False,
+    }
 
 
 class DecisionReasonContractTest(unittest.TestCase):
@@ -60,43 +104,8 @@ class DecisionReasonContractTest(unittest.TestCase):
                 },
             },
         )
-        config = RuntimeConfig(
-            input_path=Path("synthetic.tif"),
-            output_dir=None,
-            film_format="135",
-            layout_auto=False,
-            layout="horizontal",
-            strip_mode="full",
-            count=1,
-            count_override=1,
-            page=0,
-            bleed_x=0,
-            bleed_y=0,
-            deskew="off",
-            deskew_fallback="off",
-            deskew_min_angle=-2.0,
-            deskew_max_angle=2.0,
-            confidence_threshold=0.85,
-            review_dir=None,
-            copy_review_files=False,
-            export_review=False,
-            diagnostics=False,
-            compression="auto",
-            debug=False,
-            debug_analysis=False,
-            dry_run=True,
-            overwrite=True,
-            report=True,
-            debug_errors=False,
-            reuse_analysis=False,
-            jobs=1,
-        )
-        content_detail = {
-            "used": True,
-            "support": "ok",
-            "content_containment_ok": True,
-            "content_harm_risk": False,
-        }
+        config = _decision_test_config()
+        content_detail = _content_ok_detail()
         outer_alignment = {"used": True, "ok": True}
 
         decided = apply_final_decision_policy(
@@ -157,43 +166,8 @@ class DecisionReasonContractTest(unittest.TestCase):
                 },
             },
         )
-        config = RuntimeConfig(
-            input_path=Path("synthetic.tif"),
-            output_dir=None,
-            film_format="135",
-            layout_auto=False,
-            layout="horizontal",
-            strip_mode="full",
-            count=1,
-            count_override=1,
-            page=0,
-            bleed_x=0,
-            bleed_y=0,
-            deskew="off",
-            deskew_fallback="off",
-            deskew_min_angle=-2.0,
-            deskew_max_angle=2.0,
-            confidence_threshold=0.85,
-            review_dir=None,
-            copy_review_files=False,
-            export_review=False,
-            diagnostics=False,
-            compression="auto",
-            debug=False,
-            debug_analysis=False,
-            dry_run=True,
-            overwrite=True,
-            report=True,
-            debug_errors=False,
-            reuse_analysis=False,
-            jobs=1,
-        )
-        content_detail = {
-            "used": True,
-            "support": "ok",
-            "content_containment_ok": True,
-            "content_harm_risk": False,
-        }
+        config = _decision_test_config()
+        content_detail = _content_ok_detail()
         outer_alignment = {"used": True, "ok": True}
 
         decided = apply_final_decision_policy(
@@ -301,6 +275,126 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertEqual(
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
             ["content_not_ok"],
+        )
+
+    def test_lucky_pass_risk_is_distinct_final_reason(self) -> None:
+        gray = np.zeros((100, 100), dtype=np.uint8)
+        detection = Detection(
+            film_format="135",
+            layout="horizontal",
+            strip_mode="full",
+            count=1,
+            outer=Box(10, 10, 90, 90),
+            frames=[Box(10, 10, 90, 90)],
+            gaps=[],
+            confidence=0.90,
+            review_reasons=[REASON_LUCKY_PASS_RISK],
+            detail={
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+                "lucky_pass_risk_score": {
+                    "used": True,
+                    "risk": True,
+                    "reason": "lucky_pass_risk",
+                },
+                "candidate_assessment": {
+                    "source": "separator",
+                    "auto_gate": True,
+                    "geometry_score": 1.0,
+                    "content_score": 1.0,
+                    "content_quality_score": 1.0,
+                    "blockers": [],
+                    "diagnostics": [],
+                },
+            },
+        )
+        config = _decision_test_config()
+        content_detail = _content_ok_detail()
+        outer_alignment = {"used": True, "ok": True}
+
+        decided = apply_final_decision_policy(
+            gray,
+            detection,
+            config,
+            format_spec("135"),
+            content_detail,
+            outer_alignment,
+        )
+
+        self.assertEqual(normalized_review_reasons([REASON_LUCKY_PASS_RISK]), ["lucky_pass_risk"])
+        self.assertEqual(decided.review_reasons, ["lucky_pass_risk"])
+        self.assertFalse(decided.detail["risk_summary"]["overlap_risk"])
+        self.assertTrue(decided.detail["risk_summary"]["lucky_pass_risk"])
+        self.assertEqual(
+            decided.detail["risk_summary"]["lucky_pass_risk_detail"]["reason"],
+            "lucky_pass_risk",
+        )
+        self.assertEqual(
+            [item["signal"] for item in decided.detail["decision_reason_inputs"]],
+            ["lucky_pass_risk"],
+        )
+
+    def test_overlap_bleed_risk_is_distinct_from_lucky_pass_risk(self) -> None:
+        gray = np.zeros((100, 100), dtype=np.uint8)
+        detection = Detection(
+            film_format="135",
+            layout="horizontal",
+            strip_mode="full",
+            count=1,
+            outer=Box(10, 10, 90, 90),
+            frames=[Box(10, 10, 90, 90)],
+            gaps=[],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+                "overlap_bleed_risk": {
+                    "used": True,
+                    "risk": True,
+                    "reason": "diagnostic_overlap_risk",
+                },
+                "lucky_pass_risk_score": {
+                    "used": True,
+                    "risk": False,
+                    "reason": "ok",
+                },
+                "candidate_assessment": {
+                    "source": "separator",
+                    "auto_gate": True,
+                    "geometry_score": 1.0,
+                    "content_score": 1.0,
+                    "content_quality_score": 1.0,
+                    "blockers": [],
+                    "diagnostics": [],
+                },
+            },
+        )
+        config = _decision_test_config()
+        content_detail = _content_ok_detail()
+        outer_alignment = {"used": True, "ok": True}
+
+        decided = apply_final_decision_policy(
+            gray,
+            detection,
+            config,
+            format_spec("135"),
+            content_detail,
+            outer_alignment,
+        )
+
+        self.assertEqual(decided.review_reasons, ["overlap_risk"])
+        self.assertTrue(decided.detail["risk_summary"]["overlap_risk"])
+        self.assertFalse(decided.detail["risk_summary"]["lucky_pass_risk"])
+        self.assertEqual(
+            decided.detail["risk_summary"]["overlap_bleed_risk"]["reason"],
+            "diagnostic_overlap_risk",
+        )
+        self.assertEqual(
+            [item["signal"] for item in decided.detail["decision_reason_inputs"]],
+            ["overlap_bleed_risk"],
         )
 
     def test_final_status_requires_no_review_reasons_with_low_threshold(self) -> None:

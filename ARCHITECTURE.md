@@ -138,6 +138,8 @@ candidate plan
   `review_reasons` 只由 decision contract 生成。
 - `content_only_evidence` 只表示 candidate source 主要依赖 content；content containment /
   content harm 失败使用 `content_evidence_insufficient`，不能复用 content-only reason。
+- `overlap_risk` 和 `lucky_pass_risk` 是不同 final risk reason：前者来自 overlap /
+  output-bleed 物理诊断，后者来自证据组合可能侥幸通过的 decision risk。两者不能互相借名。
 - candidate selection 只能记录 `selection_risk_inputs`、selection override 和 competition
   detail；它不能提前追加 final-looking review reason，也不能提前执行 decision cap。
 - content mismatch selector 属于 candidate selection；它只能读取 candidate-level reasons 并

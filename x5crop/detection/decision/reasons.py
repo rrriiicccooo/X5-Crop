@@ -17,7 +17,7 @@ REASON_NORMALIZATION_MAP = {
     REASON_CONTENT_EVIDENCE_WEAK: "content_evidence_insufficient",
     REASON_CONTENT_ASPECT_CONFLICT: "outer_content_mismatch",
     REASON_OUTER_CONTENT_BBOX_MISMATCH: "outer_content_mismatch",
-    REASON_LUCKY_PASS_RISK: "overlap_risk",
+    REASON_LUCKY_PASS_RISK: "lucky_pass_risk",
     REASON_EVIDENCE_DEPENDENCY_CYCLE_RISK: "evidence_dependency_cycle_risk",
     "weak_separators": "separator_evidence_incomplete",
     "mostly_equal_split": "separator_evidence_incomplete",

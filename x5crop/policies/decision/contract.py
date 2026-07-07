@@ -72,6 +72,7 @@ class DecisionPolicy:
     outer_content_mismatch_reason: str = "outer_content_mismatch"
     candidate_competition_close_reason: str = "candidate_competition_close"
     overlap_risk_reason: str = "overlap_risk"
+    lucky_pass_risk_reason: str = "lucky_pass_risk"
     content_only_evidence_reason: str = "content_only_evidence"
     content_evidence_insufficient_reason: str = "content_evidence_insufficient"
     partial_edge_uncertain_reason: str = "partial_edge_uncertain"
