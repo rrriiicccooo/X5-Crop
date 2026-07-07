@@ -170,7 +170,7 @@ def content_guided_separator_seed_for_count(
         "used": True,
         "proposal_family": CONTENT_GUIDED_SEPARATOR_FAMILY,
         "proposal_role": guidance_policy.proposal_role,
-        "decision_contract": "separator_evidence_required",
+        "evidence_contract": "separator_evidence_required",
         "signal_source": signal_source,
         "outer": asdict(outer),
         "expected_frame_aspect": expected_aspect,

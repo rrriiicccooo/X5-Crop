@@ -149,7 +149,7 @@ def apply_final_decision_policy(
         "schema_version": policy.schema_version,
         "pass": bool(passed),
         "status": "approved_auto" if passed else "needs_review",
-        "review_reasons_added": reasons,
+        "final_review_reasons_added": reasons,
         "final_review_reasons": final_reasons,
         "decision_reason_inputs": reason_inputs,
         "decision_confidence_caps": decision_caps,

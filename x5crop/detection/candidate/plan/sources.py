@@ -249,7 +249,7 @@ def detect_content_guided_separator_candidate_for_count(
         "source_candidate": "separator",
         "proposal_family": "content_guided_separator",
         "content_seeded": True,
-        "decision_contract": "separator_evidence_required",
+        "evidence_contract": "separator_evidence_required",
         "gap_profiles": [WIDTH_AWARE_GAP_PROFILE],
         "gap_search_profiles": [WIDTH_AWARE_GAP_PROFILE],
         "content_guidance": seed_result.seed.gap_hints.summary(),

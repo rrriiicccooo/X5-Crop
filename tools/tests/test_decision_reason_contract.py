@@ -107,6 +107,8 @@ class DecisionReasonContractTest(unittest.TestCase):
             "candidate_auto_gate_failed",
         )
         self.assertIn("decision_confidence_caps", decided.detail["decision_summary"])
+        self.assertIn("final_review_reasons_added", decided.detail["decision_summary"])
+        self.assertNotIn("review_reasons_added", decided.detail["decision_summary"])
 
 
 if __name__ == "__main__":

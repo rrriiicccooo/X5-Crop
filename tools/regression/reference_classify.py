@@ -66,9 +66,12 @@ def reason_summary(row: dict[str, Any]) -> str:
     if isinstance(detail, dict):
         decision = detail.get("decision_summary", {})
         if isinstance(decision, dict):
-            added = decision.get("review_reasons_added", [])
+            added = decision.get("final_review_reasons_added", [])
             if isinstance(added, list) and added:
                 return ",".join(str(reason) for reason in added[:6])
+            final = decision.get("final_review_reasons", [])
+            if isinstance(final, list) and final:
+                return ",".join(str(reason) for reason in final[:6])
     return "none"
 
 

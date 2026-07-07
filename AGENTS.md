@@ -168,7 +168,7 @@ Key local reference sets:
 - `Test/135` full: 135 full reference examples.
 - `Test/new_135` full: wide 135 spacing examples.
 - `Test/半格/full` and `Test/半格/partial`: half-frame gate and partial behavior.
-- `Test/120/66` full/partial: wide-separator / separator-derived outer behavior.
+- `Test/120/66` full/partial: broad separator width / separator-derived outer behavior.
 - `Test/120/67` full: 120-67 reference examples.
 
 For source or policy changes, also run:

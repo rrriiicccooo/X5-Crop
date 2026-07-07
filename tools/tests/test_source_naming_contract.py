@@ -136,9 +136,41 @@ class SourceNamingContractTest(unittest.TestCase):
         banned = (
             "content_candidate_confidence_and_reasons",
             "review_reasons",
+            "decision_contract",
+            "policy_allows_auto",
         )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "guidance"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
+    def test_evidence_layer_does_not_name_evidence_as_final_decision_input(self) -> None:
+        banned = (
+            "used_for_decision",
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "evidence"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
+    def test_candidate_plan_does_not_name_source_contract_as_final_decision(self) -> None:
+        banned = (
+            "decision_contract",
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan"
         self.assertTrue(source_root.is_dir())
         for path in source_root.rglob("*.py"):
             text = path.read_text(encoding="utf-8")
