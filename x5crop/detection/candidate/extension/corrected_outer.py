@@ -70,7 +70,7 @@ def build_assessed_corrected_outer_candidate(
         "reassessed_content_support": reassessed_content.get("support"),
         "candidate_reassessment": {
             "used": True,
-            "owner": "candidate",
+            "owner": "candidate.extension",
             "source": "separator",
         },
     }

@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 import unittest
 
 import numpy as np
@@ -11,7 +12,10 @@ from x5crop.detection.candidate.assessment.gate_support import (
     hard_full_calibration_floor_applies,
     separator_geometry_support_applies,
 )
-from x5crop.detection.candidate.assessment.content_candidate import content_candidate_confidence_and_reasons
+from x5crop.detection.candidate.assessment.content_candidate import (
+    content_candidate_assessment_from_proposal,
+    content_candidate_confidence_and_reasons,
+)
 from x5crop.detection.candidate.assessment.partial_holder import partial_safe_extra_frames_gate_detail
 from x5crop.detection.candidate.assessment.scoring import (
     content_quality_score,
@@ -428,6 +432,37 @@ class PhysicalScoringContractTest(unittest.TestCase):
 
         self.assertNotIn("partial_strip_count_candidate", reasons)
         self.assertEqual(detail["partial_candidate_role"], "content_guidance_not_count_risk")
+
+    def test_content_candidate_assessment_uses_candidate_assessment_owner(self) -> None:
+        detection = Detection(
+            film_format="135",
+            layout="horizontal",
+            strip_mode="partial",
+            count=3,
+            outer=Box(0, 0, 300, 100),
+            frames=[],
+            gaps=[],
+            confidence=0.0,
+            review_reasons=[],
+            detail={
+                "content_primary": {
+                    "placement": "content_runs",
+                    "usable_run_count": 3,
+                    "selected_run_count": 3,
+                    "median_mean": 0.20,
+                    "median_coverage": 0.40,
+                    "max_aspect_error": 0.01,
+                }
+            },
+        )
+
+        _confidence, _reasons, detail = content_candidate_assessment_from_proposal(
+            detection,
+            SimpleNamespace(confidence_threshold=0.85),
+            get_detection_policy("135", "partial").content,
+        )
+
+        self.assertEqual(detail["owner"], "candidate.assessment")
 
     def test_safe_outer_overcut_and_low_content_quality_do_not_fail_final_evidence(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)

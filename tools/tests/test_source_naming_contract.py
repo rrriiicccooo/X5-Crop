@@ -393,6 +393,8 @@ class SourceNamingContractTest(unittest.TestCase):
             "HARD_REVIEW_REASONS",
             "hard_review_reason_present",
             '"hard_reasons"',
+            '"owner": "candidate_assessment"',
+            '"owner": "candidate"',
         )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop"

@@ -118,7 +118,7 @@ def content_candidate_assessment_from_proposal(
     return confidence, reasons, {
         **detail,
         "used": True,
-        "owner": "candidate_assessment",
+        "owner": "candidate.assessment",
     }
 
 
