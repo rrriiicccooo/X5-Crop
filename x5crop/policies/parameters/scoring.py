@@ -19,11 +19,9 @@ class BaseDetectionScoreParameters:
     width_cv_norm: float
     gap_weight: float
     width_weight: float
-    outer_weight: float
     outer_min_area: float
     outer_max_area: float
     outer_too_large: float
-    outer_uncertain_confidence: float
     image_quality_contrast_min: float
     full_width_cv: float
     geometry_floor_tight_cv: float
@@ -35,7 +33,6 @@ class BaseDetectionScoreParameters:
     partial_one_cap: float
     partial_two_35mm_cap: float
     partial_general_cap: float
-    outer_too_large_cap: float
 
 @dataclass(frozen=True)
 class SeparatorSupportScoreParameters:

@@ -154,8 +154,8 @@ runtime policy 直接推导的最终证据门槛。
 - score 只能辅助 gate，不能替代 gate。
 - score 应把物理事实变成数值偏好：照片影像区域尺寸一致、separator 可解释、真实内容完整
   包含应加分；separator 宽度不均和安全空 frame 不应被误读成照片尺寸不稳或内容损伤。
-- base confidence 只能由 crop-geometry 证据组成。全局 contrast 这类 image-quality
-  signal 只用于诊断，不参与 base confidence。
+- base confidence 只能由 separator/gap support 和 photo-width stability 组成。
+  raw outer area 与全局 contrast 都只用于诊断或后续 final contract，不参与 base confidence。
 - width-instability risk 只能把 `photo_edges` 来源的宽度 CV 当成照片尺寸证据；
   `frame_boxes` fallback 只能作为弱 geometry detail。
 - risk 只能拉回 REVIEW 或限制输出，不能救回 PASS。
@@ -416,8 +416,9 @@ Conservative rules:
   regions, explainable separators, and intact real content should score higher;
   separator width variation and safe empty frames must not be mistaken for photo
   size instability or content harm.
-- Base confidence may only use crop-geometry evidence. Global contrast and
-  similar image-quality signals are diagnostics, not base confidence inputs.
+- Base confidence may only use separator/gap support and photo-width stability.
+  Raw outer area and global contrast are diagnostics or final-contract inputs,
+  not base confidence inputs.
 - Width-instability risk may treat width CV as photo-size evidence only when the
   source is `photo_edges`; `frame_boxes` fallback is weak geometry detail.
 - Risk can pull to REVIEW or limit output, but it cannot rescue PASS.

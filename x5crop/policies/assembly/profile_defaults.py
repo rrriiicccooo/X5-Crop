@@ -71,13 +71,11 @@ def base_detection_score_parameters(fmt: FormatSpec, params: FormatParameters) -
             score,
             outer_max_area=1.0,
             outer_too_large=1.0,
-            outer_too_large_cap=0.86,
         )
     elif _has_physical_risk(fmt, "short_axis_correction_can_overtrust_holder"):
         score = replace(
             score,
             outer_too_large=0.995,
-            outer_too_large_cap=0.86,
         )
     return score
 

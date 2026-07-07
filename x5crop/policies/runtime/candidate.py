@@ -60,11 +60,9 @@ class BaseDetectionScorePolicy:
     width_cv_norm: float = 0.030
     gap_weight: float = 0.40
     width_weight: float = 0.30
-    outer_weight: float = 0.20
     outer_min_area: float = 0.35
     outer_max_area: float = 0.995
     outer_too_large: float = 0.94
-    outer_uncertain_confidence: float = 0.45
     image_quality_contrast_min: float = 35.0
     full_width_cv: float = 0.040
     geometry_floor_tight_cv: float = 0.006
@@ -76,7 +74,6 @@ class BaseDetectionScorePolicy:
     partial_one_cap: float = 0.78
     partial_two_35mm_cap: float = 0.82
     partial_general_cap: float = 0.84
-    outer_too_large_cap: float = 0.82
     family_separator_uncertain_reason: str = "separator_evidence_incomplete"
 
 

@@ -49,6 +49,47 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertEqual(detail["outer_area_profile"]["status"], "above_profile")
         self.assertEqual(detail["outer_area_profile"]["role"], "diagnostic_until_final_alignment")
 
+    def test_raw_outer_area_does_not_change_base_confidence(self) -> None:
+        gray = np.zeros((100, 100), dtype=np.uint8)
+        gray[:, ::2] = 255
+        gaps = [
+            Gap(1, 32.0, 1.0, GAP_DETECTED, 28.0, 36.0),
+            Gap(2, 68.0, 1.0, GAP_DETECTED, 64.0, 72.0),
+        ]
+        boxes = [
+            Box(0, 0, 28, 100),
+            Box(36, 0, 64, 100),
+            Box(72, 0, 100, 100),
+        ]
+        fmt = format_spec("120-645")
+
+        profile_confidence, _, profile_detail = base_detection_assessment(
+            gray,
+            Box(0, 0, 90, 100),
+            gaps,
+            boxes,
+            3,
+            fmt,
+            "full",
+            origin=0.0,
+            pitch=100.0 / 3.0,
+        )
+        overcut_confidence, _, overcut_detail = base_detection_assessment(
+            gray,
+            Box(0, 0, 100, 100),
+            gaps,
+            boxes,
+            3,
+            fmt,
+            "full",
+            origin=0.0,
+            pitch=100.0 / 3.0,
+        )
+
+        self.assertEqual(profile_detail["outer_area_profile"]["status"], "ok")
+        self.assertEqual(overcut_detail["outer_area_profile"]["status"], "above_profile")
+        self.assertAlmostEqual(profile_confidence, overcut_confidence)
+
     def test_low_global_contrast_is_image_quality_detail_not_crop_failure(self) -> None:
         gray = np.full((100, 100), 128, dtype=np.uint8)
         outer = Box(0, 0, 100, 100)

@@ -163,7 +163,6 @@ def base_detection_assessment(
 
     gap_conf = 1.0 if expected_gaps == 0 else gap_evidence.separator_support_count / float(expected_gaps)
     width_conf = max(0.0, min(1.0, 1.0 - width_cv / base_score.width_cv_norm))
-    outer_conf = 1.0 if base_score.outer_min_area <= outer_area <= base_score.outer_max_area else base_score.outer_uncertain_confidence
     uses_min_hard_equal_cap = (
         separator_gate.profile == SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
     )
@@ -180,12 +179,11 @@ def base_detection_assessment(
 
     confidence_weight = max(
         1e-6,
-        base_score.gap_weight + base_score.width_weight + base_score.outer_weight,
+        base_score.gap_weight + base_score.width_weight,
     )
     confidence = (
         base_score.gap_weight * gap_conf
         + base_score.width_weight * width_conf
-        + base_score.outer_weight * outer_conf
     ) / confidence_weight
 
     full_geometry_ok = (

@@ -252,11 +252,9 @@ class FormatParameters(FormatParameterViews):
     score_width_cv_norm: float = 0.030
     score_gap_weight: float = 0.40
     score_width_weight: float = 0.30
-    score_outer_weight: float = 0.20
     score_outer_min_area: float = 0.35
     score_outer_max_area: float = 0.995
     score_outer_too_large: float = 0.94
-    score_outer_uncertain_confidence: float = 0.45
     image_quality_contrast_min: float = 35.0
     score_full_width_cv: float = 0.040
     score_geometry_floor_tight_cv: float = 0.006
@@ -271,7 +269,6 @@ class FormatParameters(FormatParameterViews):
     score_partial_one_cap: float = 0.78
     score_partial_two_35mm_cap: float = 0.82
     score_partial_general_cap: float = 0.84
-    score_outer_too_large_cap: float = 0.82
     score_low_confidence_floor: float = 0.85
     score_gate_allow_full_detected_geometry: bool = True
     score_gate_allow_geometry_support: bool = True

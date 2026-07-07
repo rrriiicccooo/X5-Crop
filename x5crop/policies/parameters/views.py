@@ -417,11 +417,9 @@ class FormatParameterViews:
             width_cv_norm=self.score_width_cv_norm,
             gap_weight=self.score_gap_weight,
             width_weight=self.score_width_weight,
-            outer_weight=self.score_outer_weight,
             outer_min_area=self.score_outer_min_area,
             outer_max_area=self.score_outer_max_area,
             outer_too_large=self.score_outer_too_large,
-            outer_uncertain_confidence=self.score_outer_uncertain_confidence,
             image_quality_contrast_min=self.image_quality_contrast_min,
             full_width_cv=self.score_full_width_cv,
             geometry_floor_tight_cv=self.score_geometry_floor_tight_cv,
@@ -433,7 +431,6 @@ class FormatParameterViews:
             partial_one_cap=self.score_partial_one_cap,
             partial_two_35mm_cap=self.score_partial_two_35mm_cap,
             partial_general_cap=self.score_partial_general_cap,
-            outer_too_large_cap=self.score_outer_too_large_cap,
         )
 
     @property
