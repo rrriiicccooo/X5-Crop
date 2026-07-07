@@ -55,13 +55,8 @@ def set_final_review_reasons(detection: Detection, reasons: list[str]) -> None:
     detection.review_reasons = normalized_final_review_reasons(reasons)
 
 
-def add_final_review_reason(detection: Detection, reason: str) -> None:
-    set_final_review_reasons(detection, [*final_review_reasons(detection), reason])
-
-
 __all__ = [
     "FINAL_REVIEW_REASON_REDUCTION_MAP",
-    "add_final_review_reason",
     "final_review_reasons",
     "normalized_final_review_reasons",
     "set_final_review_reasons",

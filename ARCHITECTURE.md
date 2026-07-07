@@ -146,6 +146,8 @@ candidate plan
   `legacy_reduced_candidate_reasons`。
 - low-confidence context reasons，例如 outer candidate disagreement 和 deskew uncertainty，
   属于 decision contract input；不能在 `final_decision` 中事后补写 `decision_summary`。
+- final review reasons 只能由 decision contract 一次性 set；decision layer 不保留
+  add/append-style final reason helper。
 - policy / report 可见的 gate stage 名必须使用 `candidate_blocker_gate`、
   `candidate_auto_gate` 和 `decision_contract_gate` 这类职责名，不能把 finalization
   写成裁决 gate。
