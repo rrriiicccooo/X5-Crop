@@ -45,7 +45,7 @@ def overlap_bleed_risk_detail(gray: np.ndarray, detection: Detection, cache: Opt
     }
 
 
-def lucky_width_instability_components(
+def lucky_photo_width_instability_components(
     width_cv: float,
     width_cv_source: str,
     policy,
@@ -53,19 +53,19 @@ def lucky_width_instability_components(
     if width_cv_source != "photo_edges":
         return {}, {
             "used": False,
-            "reason": "width_source_not_photo_edges",
+            "reason": "photo_width_source_not_photo_edges",
             "width_cv": float(width_cv),
             "width_cv_source": width_cv_source,
         }
-    if width_cv >= policy.unstable_width_cv:
-        return {"unstable_widths": policy.unstable_width_weight}, {
+    if width_cv >= policy.unstable_photo_width_cv:
+        return {"unstable_photo_widths": policy.unstable_photo_width_weight}, {
             "used": True,
             "reason": "unstable_photo_widths",
             "width_cv": float(width_cv),
             "width_cv_source": width_cv_source,
         }
-    if width_cv >= policy.mild_width_cv:
-        return {"mild_width_instability": policy.mild_width_weight}, {
+    if width_cv >= policy.mild_photo_width_cv:
+        return {"mild_photo_width_instability": policy.mild_photo_width_weight}, {
             "used": True,
             "reason": "mild_photo_width_instability",
             "width_cv": float(width_cv),
@@ -130,7 +130,7 @@ def lucky_pass_risk_score_detail(
         components["strong_overlap_model_gap"] = policy.strong_overlap_weight
     if geometry_model_gaps >= policy.model_gap_support_min and suspicious_hard >= 1 and strong_overlap_models >= 1:
         components["model_suspicion_overlap_combo"] = policy.combo_weight
-    width_components, width_detail = lucky_width_instability_components(
+    width_components, width_detail = lucky_photo_width_instability_components(
         width_cv,
         width_cv_source,
         policy,
@@ -140,10 +140,10 @@ def lucky_pass_risk_score_detail(
         components["strong_hard_evidence_credit"] = policy.strong_hard_credit
     if (
         photo_width_cv is not None
-        and photo_width_cv < policy.stable_width_cv
+        and photo_width_cv < policy.stable_photo_width_cv
         and geometry_model_gaps >= policy.stable_model_gap_min
     ):
-        components["stable_global_geometry_credit"] = policy.stable_geometry_credit
+        components["stable_photo_width_geometry_credit"] = policy.stable_photo_width_geometry_credit
     risk_score = max(0.0, min(1.0, sum(components.values())))
     risk_threshold = policy.risk_threshold
     risk = risk_score >= risk_threshold
@@ -162,12 +162,12 @@ def lucky_pass_risk_score_detail(
         "model_gap_count": int(geometry_model_gaps),
         "width_cv": float(width_cv),
         "width_cv_source": width_cv_source,
-        "width_instability": width_detail,
+        "photo_width_instability": width_detail,
     }
 
 
 __all__ = [
     "lucky_pass_risk_score_detail",
-    "lucky_width_instability_components",
+    "lucky_photo_width_instability_components",
     "overlap_bleed_risk_detail",
 ]

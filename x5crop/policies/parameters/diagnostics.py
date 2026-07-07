@@ -54,15 +54,15 @@ class LuckyPassRiskParameters:
     suspicious_hard_weight: float
     strong_overlap_weight: float
     combo_weight: float
-    unstable_width_cv: float
-    unstable_width_weight: float
-    mild_width_cv: float
-    mild_width_weight: float
+    unstable_photo_width_cv: float
+    unstable_photo_width_weight: float
+    mild_photo_width_cv: float
+    mild_photo_width_weight: float
     strong_hard_credit_min: int
     strong_hard_credit: float
-    stable_width_cv: float
+    stable_photo_width_cv: float
     stable_model_gap_min: int
-    stable_geometry_credit: float
+    stable_photo_width_geometry_credit: float
     risk_threshold: float
 
 

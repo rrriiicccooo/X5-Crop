@@ -10,7 +10,7 @@ from x5crop.detection.candidate.assessment.gate_support import (
 )
 from x5crop.detection.candidate.assessment.partial_holder import partial_extra_holder_frames_gate_detail
 from x5crop.detection.decision.pass_review import evidence_summary_for
-from x5crop.detection.evidence.risk import lucky_width_instability_components
+from x5crop.detection.evidence.risk import lucky_photo_width_instability_components
 from x5crop.domain import Box, Detection, Gap
 from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED
@@ -268,15 +268,15 @@ class PhysicalScoringContractTest(unittest.TestCase):
             "diagnostic_until_photo_edges",
         )
 
-    def test_lucky_pass_width_instability_requires_photo_edge_width_source(self) -> None:
+    def test_lucky_pass_photo_width_instability_requires_photo_edge_width_source(self) -> None:
         policy = LuckyPassRiskPolicy()
 
-        fallback_components, fallback_detail = lucky_width_instability_components(
+        fallback_components, fallback_detail = lucky_photo_width_instability_components(
             0.020,
             "frame_boxes",
             policy,
         )
-        photo_components, photo_detail = lucky_width_instability_components(
+        photo_components, photo_detail = lucky_photo_width_instability_components(
             0.020,
             "photo_edges",
             policy,
@@ -284,8 +284,8 @@ class PhysicalScoringContractTest(unittest.TestCase):
 
         self.assertEqual(fallback_components, {})
         self.assertFalse(fallback_detail["used"])
-        self.assertEqual(fallback_detail["reason"], "width_source_not_photo_edges")
-        self.assertIn("unstable_widths", photo_components)
+        self.assertEqual(fallback_detail["reason"], "photo_width_source_not_photo_edges")
+        self.assertIn("unstable_photo_widths", photo_components)
         self.assertTrue(photo_detail["used"])
 
     def test_partial_holder_uses_holder_edge_disambiguation_reason(self) -> None:

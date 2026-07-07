@@ -42,7 +42,7 @@ def photo_width_stability_detail(
         return {
             "used": False,
             "role": unavailable_role,
-            "reason": "width_source_not_photo_edges",
+            "reason": "photo_width_source_not_photo_edges",
             "width_cv": width_cv,
             "photo_width_cv": None,
             "width_cv_source": source,
