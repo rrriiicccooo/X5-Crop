@@ -167,6 +167,8 @@ candidate plan
   `candidate_reasons_ok`；不把候选级阻断条件写成 final-looking `review_reasons`。
 - special mode detail 使用 `mode_diagnostics` 和 `candidate_reasons` 记录模式级诊断；
   不在 mode detail 中输出 final-looking `review_reasons` 字段。
+  review-only mode 也不在构造出的 `Detection.review_reasons` 写最终 reason；
+  它只写 candidate / mode diagnostics，最终 REVIEW 原因由 decision contract 生成。
 - close competition 的阈值只有一个来源：runtime candidate selection policy。decision
   contract 读取同一个阈值生成最终 `candidate_competition_close` reason 和 cap。
 - guidance 和 candidate plan detail 只能写 `candidate_contract` / `evidence_contract` 这类
@@ -225,6 +227,9 @@ candidate plan
 - content-only、safety 和 review-only candidate 是否进入最终 REVIEW 由 source-derived
   `risk_summary` 和 decision contract applier 表达；decision policy 不保留未被裁决消费的
   review-only 布尔开关。
+- decision contract 只承载 format/mode、evidence、risk 和 PASS / REVIEW decision
+  参数；output bleed、debug panels 和 report sections 留在 runtime output /
+  diagnostics / report policy，不挂在 decision contract 下。
 - `selection_risk_inputs` 是候选竞争阶段的风险证据，不是最终裁决；只有 decision 可以把它
   映射为 `candidate_competition_close`。
 - overlap / lucky-pass 这类 final risk evidence 必须在 decision 阶段生成；finalization
@@ -468,7 +473,10 @@ Candidate table
 candidate-level explanations. Candidate plan / execution-budget detail also uses
 `candidate_reasons` and `candidate_reasons_ok`, not final-looking
 `review_reasons`. Special-mode detail uses `mode_diagnostics` and
-`candidate_reasons`. Final reasons use `final_review_reasons`.
+`candidate_reasons`. Review-only mode also leaves `Detection.review_reasons`
+empty at construction time; it records candidate / mode diagnostics and lets the
+decision contract generate the final REVIEW reasons. Final reasons use
+`final_review_reasons`.
 Close-competition uses one threshold source: the runtime candidate selection
 policy, which the decision contract consumes to produce the final
 `candidate_competition_close` reason and cap.
@@ -513,6 +521,10 @@ reason inputs, final-review reason fields, and decision confidence caps are
 final decision detail. Content-only, safety, and review-only candidate outcomes
 are expressed by source-derived `risk_summary` plus the decision contract
 applier, not by unused review-only flags in decision policy.
+The decision contract carries only format/mode, evidence, risk, and PASS /
+REVIEW decision parameters; output bleed, debug panels, and report sections
+remain in runtime output / diagnostics / report policy instead of decision
+contract.
 Candidate auto-gate blocker vocabulary belongs to `candidate.assessment`, not to
 generic utilities, and must not be named as hard review reasons.
 Candidate-plan policy fields that block candidate auto gate use blocker naming,

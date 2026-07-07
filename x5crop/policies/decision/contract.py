@@ -77,42 +77,6 @@ class DecisionPolicy:
 
 
 @dataclass(frozen=True)
-class OutputPolicy:
-    preserve_tiff_metadata: bool = True
-    detection_long_axis_bleed: int = 0
-    detection_short_axis_bleed: int = 0
-    output_long_axis_bleed_default: int = 20
-    output_short_axis_bleed_default: int = 10
-    overlap_risk_long_axis_bleed: int = 50
-
-
-@dataclass(frozen=True)
-class DecisionDiagnosticsPolicy:
-    debug_panels: tuple[str, ...] = (
-        "original_gray",
-        "debug_boxes",
-        "separator_evidence",
-    )
-    panel_titles: dict[str, str] | None = None
-    hard_gap_color: str = "red"
-    model_gap_color: str = "yellow_or_purple"
-    risk_gap_color: str = "cyan_or_magenta"
-    overlay_line_width_policy: str = "hard/model/diagnostic widths are policy-owned"
-
-    def title_for(self, panel_id: str) -> str:
-        titles = self.panel_titles or {
-            "original_gray": "Original gray context",
-            "debug_boxes": "Debug boxes",
-            "separator_evidence": "Separator evidence",
-            "frame_geometry": "Frame geometry",
-            "outer_candidates": "Outer candidates",
-            "selected_candidate": "Selected candidate",
-            "risk_review": "Risk / review overlay",
-        }
-        return titles.get(panel_id, panel_id.replace("_", " ").title())
-
-
-@dataclass(frozen=True)
 class DetectionDecisionContract:
     policy_id: str
     schema_version: str
@@ -121,8 +85,6 @@ class DetectionDecisionContract:
     evidence: EvidencePolicy
     risk: RiskPolicy
     decision: DecisionPolicy
-    output: OutputPolicy
-    diagnostics: DecisionDiagnosticsPolicy
 
     def report_detail(self) -> dict[str, Any]:
         from ..reporting import decision_contract_report_detail
@@ -193,27 +155,6 @@ def risk_policy_for(detection_policy: DetectionPolicy) -> RiskPolicy:
     )
 
 
-def output_policy_for(detection_policy: DetectionPolicy) -> OutputPolicy:
-    output = detection_policy.output
-    return OutputPolicy(
-        detection_long_axis_bleed=output.detection_long_axis_bleed,
-        detection_short_axis_bleed=output.detection_short_axis_bleed,
-        output_long_axis_bleed_default=output.output_long_axis_bleed_default,
-        output_short_axis_bleed_default=output.output_short_axis_bleed_default,
-        overlap_risk_long_axis_bleed=output.overlap_risk_long_axis_bleed,
-    )
-
-
-def diagnostics_policy_for(detection_policy: DetectionPolicy) -> DecisionDiagnosticsPolicy:
-    diagnostics = detection_policy.diagnostics
-    return DecisionDiagnosticsPolicy(
-        debug_panels=diagnostics.debug_panels,
-        panel_titles={
-            panel.panel_id: panel.title for panel in diagnostics.debug_panel_titles
-        },
-    )
-
-
 def decision_contract_for_policy(detection_policy: DetectionPolicy) -> DetectionDecisionContract:
     spec = format_spec(detection_policy.format_id)
     policy_id = decision_policy_id_for(detection_policy.format_id, detection_policy.strip_mode)
@@ -229,8 +170,6 @@ def decision_contract_for_policy(detection_policy: DetectionPolicy) -> Detection
         ),
         risk=risk_policy_for(detection_policy),
         decision=decision_policy_for(detection_policy),
-        output=output_policy_for(detection_policy),
-        diagnostics=diagnostics_policy_for(detection_policy),
     )
 
 
@@ -244,16 +183,12 @@ __all__ = [
     "REPORT_SCHEMA_VERSION",
     "DetectionDecisionContract",
     "DecisionPolicy",
-    "DecisionDiagnosticsPolicy",
     "EvidencePolicy",
     "ModePolicy",
-    "OutputPolicy",
     "RiskPolicy",
     "decision_contract_for",
     "decision_contract_for_policy",
     "decision_policy_for",
-    "diagnostics_policy_for",
     "evidence_policy_for",
-    "output_policy_for",
     "risk_policy_for",
 ]

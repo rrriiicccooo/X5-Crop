@@ -45,7 +45,6 @@ def _issue(
 
 def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsistencyIssue]:
     contract = decision_contract_for_policy(policy)
-    output = policy.output
     checks: list[tuple[str, object, object]] = [
         ("decision.policy_id", decision_policy_id_for(policy.format_id, policy.strip_mode), contract.policy_id),
         ("schema_version", policy.report.schema_version, contract.schema_version),
@@ -90,32 +89,6 @@ def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsist
             "evidence.partial_requires_safe_edge",
             policy.strip_mode == "partial",
             contract.evidence.partial_requires_safe_edge,
-        ),
-        ("diagnostics.debug_panels", policy.diagnostics.debug_panels, contract.diagnostics.debug_panels),
-        (
-            "output.detection_long_axis_bleed",
-            output.detection_long_axis_bleed,
-            contract.output.detection_long_axis_bleed,
-        ),
-        (
-            "output.detection_short_axis_bleed",
-            output.detection_short_axis_bleed,
-            contract.output.detection_short_axis_bleed,
-        ),
-        (
-            "output.output_long_axis_bleed_default",
-            output.output_long_axis_bleed_default,
-            contract.output.output_long_axis_bleed_default,
-        ),
-        (
-            "output.output_short_axis_bleed_default",
-            output.output_short_axis_bleed_default,
-            contract.output.output_short_axis_bleed_default,
-        ),
-        (
-            "output.overlap_risk_long_axis_bleed",
-            output.overlap_risk_long_axis_bleed,
-            contract.output.overlap_risk_long_axis_bleed,
         ),
     ]
     return [

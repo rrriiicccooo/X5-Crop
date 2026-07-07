@@ -16,6 +16,7 @@ from x5crop.detection.decision.final_decision import (
 )
 from x5crop.detection.decision.contract_applier import apply_decision_contract
 from x5crop.detection.decision.reasons import normalized_final_review_reasons
+from x5crop.detection.modes.review_only import review_only_detection
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, Detection
 from x5crop.formats import format_spec
@@ -74,6 +75,8 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertNotIn("candidate_policy", detail)
         self.assertIn("risk_policy", detail)
         self.assertIn("decision_policy", detail)
+        self.assertNotIn("output_policy", detail)
+        self.assertNotIn("diagnostics_policy", detail)
         self.assertNotIn(
             "content_only_candidates_review_only",
             detail["risk_policy"],
@@ -207,6 +210,56 @@ class DecisionReasonContractTest(unittest.TestCase):
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
             ["safety_or_review_only", "candidate_auto_gate_failed"],
         )
+
+    def test_review_only_mode_diagnostics_wait_for_final_decision(self) -> None:
+        gray = np.zeros((100, 100), dtype=np.uint8)
+        fmt = format_spec("135-dual")
+        config = replace(
+            _decision_test_config(),
+            film_format="135-dual",
+            strip_mode="partial",
+            count=fmt.default_count,
+            count_override=None,
+        )
+        policy = get_detection_policy("135-dual", "partial")
+        detection = review_only_detection(
+            gray,
+            config,
+            fmt,
+            policy,
+        )
+
+        self.assertEqual(detection.review_reasons, [])
+        mode_reasons = [policy.detector.review_only.reason, "needs_manual_review"]
+        self.assertEqual(
+            detection.detail["candidate_reasons"],
+            mode_reasons,
+        )
+        self.assertEqual(
+            detection.detail["mode_diagnostics"],
+            mode_reasons,
+        )
+
+        decided = apply_decision_contract(
+            gray,
+            detection,
+            config,
+            fmt,
+            _content_ok_detail(),
+            {"used": True, "ok": True},
+        )
+
+        self.assertIn("evidence_combination_insufficient", decided.review_reasons)
+        self.assertIn("separator_evidence_incomplete", decided.review_reasons)
+        self.assertIn(
+            "evidence_combination_insufficient",
+            decided.detail["candidate_reason_inputs_before_decision"]["normalized_candidate_reasons"],
+        )
+        decision_signals = [
+            item["signal"] for item in decided.detail["decision_reason_inputs"]
+        ]
+        self.assertIn("safety_or_review_only", decision_signals)
+        self.assertIn("separator_not_ok", decision_signals)
 
     def test_content_evidence_failure_is_not_content_only_reason(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)

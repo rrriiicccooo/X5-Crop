@@ -208,6 +208,16 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertTrue(banned.isdisjoint(RiskPolicy.__dataclass_fields__))
 
+    def test_decision_contract_does_not_own_output_or_diagnostics_policy(self) -> None:
+        from x5crop.policies.decision.contract import DetectionDecisionContract
+
+        banned = {
+            "output",
+            "diagnostics",
+        }
+
+        self.assertTrue(banned.isdisjoint(DetectionDecisionContract.__dataclass_fields__))
+
     def test_decision_contract_applier_uses_current_names(self) -> None:
         banned = (
             "apply_final_decision_policy",

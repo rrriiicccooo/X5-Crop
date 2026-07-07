@@ -187,20 +187,6 @@ def _format_spec_detail(contract: "DetectionDecisionContract") -> dict[str, Any]
     }
 
 
-def _decision_diagnostics_detail(contract: "DetectionDecisionContract") -> dict[str, Any]:
-    diagnostics = contract.diagnostics
-    return {
-        "debug_panels": list(diagnostics.debug_panels),
-        "panel_titles": {
-            panel_id: diagnostics.title_for(panel_id) for panel_id in diagnostics.debug_panels
-        },
-        "hard_gap_color": diagnostics.hard_gap_color,
-        "model_gap_color": diagnostics.model_gap_color,
-        "risk_gap_color": diagnostics.risk_gap_color,
-        "overlay_line_width_policy": diagnostics.overlay_line_width_policy,
-    }
-
-
 def decision_contract_report_detail(contract: "DetectionDecisionContract") -> dict[str, Any]:
     return {
         "policy_id": contract.policy_id,
@@ -210,6 +196,4 @@ def decision_contract_report_detail(contract: "DetectionDecisionContract") -> di
         "evidence_policy": asdict(contract.evidence),
         "risk_policy": asdict(contract.risk),
         "decision_policy": asdict(contract.decision),
-        "output_policy": asdict(contract.output),
-        "diagnostics_policy": _decision_diagnostics_detail(contract),
     }

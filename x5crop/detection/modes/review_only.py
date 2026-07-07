@@ -33,8 +33,9 @@ def review_only_detection(
         [],
         [],
         0.0,
-        list(mode_diagnostics),
+        [],
         {
+            "candidate_reasons": list(mode_diagnostics),
             "candidate_source": CANDIDATE_SOURCE_REVIEW_ONLY,
             "candidate_count": 0,
             "mode_diagnostics": list(mode_diagnostics),
