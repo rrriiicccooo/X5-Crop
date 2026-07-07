@@ -241,6 +241,8 @@ candidate plan
   因为最终 PASS 只属于 decision contract。
 - read-only diagnostics 用 `effects` 结构声明 output / confidence / decision 副作用；
   不在低层 detail 中使用 `changes_final_decision` 这类 final-looking 字段。
+- read-only diagnostics 的风险观察使用 evidence 命名，例如 `single_anchor_evidence_risk`；
+  不能用 `pass` 表达最终裁决风险，最终 PASS / REVIEW 只属于 decision contract。
 - candidate-plan policy 中阻断 candidate auto gate 的字段必须叫 blocker，不叫 review
   reason；final review reason 只属于 decision contract。
 - candidate-plan detail 中 gap search family 只用 `gap_search_profiles` 表达；旧

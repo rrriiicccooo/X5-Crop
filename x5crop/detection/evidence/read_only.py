@@ -32,7 +32,7 @@ def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: 
     )
     strong_overlap_models = int(overlap_risk_counts.get("strong", 0))
     lucky_policy = get_detection_policy(detection.film_format, detection.strip_mode).risk.lucky_pass
-    single_anchor_pass_risk = (
+    single_anchor_evidence_risk = (
         lucky_policy.enabled
         and detection.strip_mode == "full"
         and (
@@ -60,6 +60,6 @@ def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: 
             "suspect_hard_gaps": int(hard_counts.get("suspect_internal_edge", 0)),
             "suspicious_hard_gaps": int(suspicious_hard),
             "strong_hard_gaps": int(strong_hard),
-            "single_anchor_pass_risk": bool(single_anchor_pass_risk),
+            "single_anchor_evidence_risk": bool(single_anchor_evidence_risk),
         },
     }

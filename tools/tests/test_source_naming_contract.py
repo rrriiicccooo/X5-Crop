@@ -597,6 +597,8 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertIn('"output": False', text)
         self.assertIn('"confidence": False', text)
         self.assertIn('"decision": False', text)
+        self.assertIn("single_anchor_evidence_risk", text)
+        self.assertNotIn("single_anchor_pass_risk", text)
         self.assertNotIn("changes_output", text)
         self.assertNotIn("changes_confidence", text)
         self.assertNotIn("changes_final_decision", text)
