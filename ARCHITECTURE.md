@@ -172,6 +172,9 @@ candidate plan
   review reason。
 - content-model proposal 的 contract 使用 `content_guidance_assessment_required` 这类
   guidance / assessment 语义；不能把 content proposal 命名成 review-only 裁决。
+- content candidate assessment 里的 content-run / grid-fallback / aspect observations
+  叫 diagnostics；它们可以进入 internal `candidate_reasons` read model，但不能用
+  `content_candidate_*_reasons` 这类 final-looking 命名。
 - dual-lane lane content / outer-alignment checks 属于 `candidate.assessment`；`candidate.plan`
   只选择 lane candidate 并调用 assessment helper；lane candidate 限分写入
   `candidate_confidence_caps`。
@@ -509,7 +512,9 @@ for content-containment support and `content_quality_score_role` for quality
 diagnostics, which are not hard gates. Content-model proposal contracts use
 guidance / assessment language such as
 `content_guidance_assessment_required`; they are not named as review-only
-decisions. Dual-lane lane
+decisions. Content-candidate assessment observations use diagnostic naming for
+content-run, grid-fallback, and aspect details; `content_candidate_*_reasons`
+is not an active naming pattern. Dual-lane lane
 content / outer-alignment checks belong to
 `candidate.assessment`; `candidate.plan` selects lane candidates and calls the
 assessment helper. Lane-candidate caps are recorded in

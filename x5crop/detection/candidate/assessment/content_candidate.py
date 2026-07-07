@@ -8,7 +8,7 @@ from ....policies.runtime.content import ContentCandidatePolicy, ContentPolicy
 from ....runtime.config import RuntimeConfig
 
 
-def content_candidate_confidence_and_reasons(
+def content_candidate_confidence_and_diagnostics(
     *,
     placement: str,
     runs_count: int,
@@ -32,7 +32,7 @@ def content_candidate_confidence_and_reasons(
         + candidate_policy.aspect_weight * aspect_conf
     )
     confidence_caps: list[dict[str, Any]] = []
-    reasons: list[str] = []
+    diagnostics: list[str] = []
     if placement != "content_runs":
         confidence, cap_detail = apply_confidence_cap(
             confidence,
@@ -41,7 +41,7 @@ def content_candidate_confidence_and_reasons(
             reason="content_grid_fallback",
         )
         confidence_caps.append(cap_detail)
-        reasons.append("content_grid_fallback")
+        diagnostics.append("content_grid_fallback")
     if runs_count != count:
         confidence, cap_detail = apply_confidence_cap(
             confidence,
@@ -50,7 +50,7 @@ def content_candidate_confidence_and_reasons(
             reason="content_run_count_mismatch",
         )
         confidence_caps.append(cap_detail)
-        reasons.append("content_run_count_mismatch")
+        diagnostics.append("content_run_count_mismatch")
     if run_conf < 1.0:
         confidence, cap_detail = apply_confidence_cap(
             confidence,
@@ -59,7 +59,7 @@ def content_candidate_confidence_and_reasons(
             reason="content_runs_incomplete",
         )
         confidence_caps.append(cap_detail)
-        reasons.append("content_runs_incomplete")
+        diagnostics.append("content_runs_incomplete")
     if median_coverage < candidate_policy.weak_coverage:
         confidence, cap_detail = apply_confidence_cap(
             confidence,
@@ -68,7 +68,7 @@ def content_candidate_confidence_and_reasons(
             reason="content_coverage_weak",
         )
         confidence_caps.append(cap_detail)
-        reasons.append("content_coverage_weak")
+        diagnostics.append("content_coverage_weak")
     if max_aspect_error > candidate_policy.aspect_uncertain:
         confidence, cap_detail = apply_confidence_cap(
             confidence,
@@ -77,9 +77,9 @@ def content_candidate_confidence_and_reasons(
             reason="content_aspect_uncertain",
         )
         confidence_caps.append(cap_detail)
-        reasons.append("content_aspect_uncertain")
-    if confidence < confidence_threshold and not reasons:
-        reasons.append("content_confidence_low")
+        diagnostics.append("content_aspect_uncertain")
+    if confidence < confidence_threshold and not diagnostics:
+        diagnostics.append("content_confidence_low")
     detail = {
         "run_conf": run_conf,
         "coverage_conf": coverage_conf,
@@ -92,7 +92,7 @@ def content_candidate_confidence_and_reasons(
         ),
         "confidence_caps": confidence_caps,
     }
-    return float(confidence), reasons, detail
+    return float(confidence), diagnostics, detail
 
 
 def content_candidate_assessment_from_proposal(
@@ -103,7 +103,7 @@ def content_candidate_assessment_from_proposal(
     proposal = detection.detail.get("content_primary", {})
     if not isinstance(proposal, dict):
         return 0.0, ["content_confidence_low"], {"used": False, "reason": "missing_content_proposal"}
-    confidence, reasons, detail = content_candidate_confidence_and_reasons(
+    confidence, diagnostics, detail = content_candidate_confidence_and_diagnostics(
         placement=str(proposal.get("placement", "")),
         runs_count=int(proposal.get("usable_run_count", 0)),
         selected_run_count=int(proposal.get("selected_run_count", 0)),
@@ -115,7 +115,7 @@ def content_candidate_assessment_from_proposal(
         confidence_threshold=float(config.confidence_threshold),
         candidate_policy=policy.candidate,
     )
-    return confidence, reasons, {
+    return confidence, diagnostics, {
         **detail,
         "used": True,
         "owner": "candidate.assessment",
@@ -124,5 +124,5 @@ def content_candidate_assessment_from_proposal(
 
 __all__ = [
     "content_candidate_assessment_from_proposal",
-    "content_candidate_confidence_and_reasons",
+    "content_candidate_confidence_and_diagnostics",
 ]

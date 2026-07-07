@@ -327,6 +327,24 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_content_candidate_assessment_uses_diagnostic_naming(self) -> None:
+        banned = (
+            "content_candidate_confidence_and_reasons",
+            "proposal_reasons",
+        )
+        offenders: list[str] = []
+        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                if path == Path(__file__).resolve():
+                    continue
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_evidence_layer_does_not_name_evidence_as_final_decision_input(self) -> None:
         banned = (
             "used_for_decision",

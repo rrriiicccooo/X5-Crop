@@ -14,7 +14,7 @@ from x5crop.detection.candidate.assessment.gate_support import (
 )
 from x5crop.detection.candidate.assessment.content_candidate import (
     content_candidate_assessment_from_proposal,
-    content_candidate_confidence_and_reasons,
+    content_candidate_confidence_and_diagnostics,
 )
 from x5crop.detection.candidate.assessment.partial_holder import partial_safe_extra_frames_gate_detail
 from x5crop.detection.candidate.assessment.scoring import (
@@ -416,8 +416,8 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertNotIn("partial_strip_count_candidate", reasons)
         self.assertEqual(detail["partial_count_assessment"]["reason"], "single_frame_partial")
 
-    def test_content_partial_candidate_does_not_emit_partial_count_reason(self) -> None:
-        _confidence, reasons, detail = content_candidate_confidence_and_reasons(
+    def test_content_partial_candidate_diagnostics_do_not_emit_partial_count_reason(self) -> None:
+        _confidence, diagnostics, detail = content_candidate_confidence_and_diagnostics(
             placement="content_runs",
             runs_count=3,
             selected_run_count=3,
@@ -430,7 +430,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             candidate_policy=get_detection_policy("135", "partial").content.candidate,
         )
 
-        self.assertNotIn("partial_strip_count_candidate", reasons)
+        self.assertNotIn("partial_strip_count_candidate", diagnostics)
         self.assertEqual(detail["partial_candidate_role"], "content_guidance_not_count_risk")
 
     def test_content_candidate_assessment_uses_candidate_assessment_owner(self) -> None:
@@ -456,7 +456,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             },
         )
 
-        _confidence, _reasons, detail = content_candidate_assessment_from_proposal(
+        _confidence, _diagnostics, detail = content_candidate_assessment_from_proposal(
             detection,
             SimpleNamespace(confidence_threshold=0.85),
             get_detection_policy("135", "partial").content,

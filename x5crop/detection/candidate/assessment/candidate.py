@@ -114,7 +114,7 @@ def apply_candidate_assessment_policy(
             policy,
         )
     elif source == "content":
-        proposal_confidence, proposal_reasons, proposal_detail = content_candidate_assessment_from_proposal(
+        proposal_confidence, proposal_diagnostics, proposal_detail = content_candidate_assessment_from_proposal(
             candidate,
             config,
             policy.content,
@@ -122,7 +122,7 @@ def apply_candidate_assessment_policy(
         candidate.confidence = max(float(candidate.confidence), float(proposal_confidence))
         set_candidate_reasons(
             candidate,
-            merged_candidate_reasons(candidate, proposal_reasons),
+            merged_candidate_reasons(candidate, proposal_diagnostics),
         )
         content_primary = candidate.detail.get("content_primary")
         if isinstance(content_primary, dict):
