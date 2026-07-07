@@ -140,6 +140,8 @@ candidate plan
   detail；它不能提前追加 final-looking review reason，也不能提前执行 decision cap。
 - candidate table / selected candidate 的候选级原因字段使用 `candidate_reasons`、
   `candidate_blockers` 和 `candidate_diagnostics`；最终原因字段使用 `final_review_reasons`。
+- special mode detail 使用 `mode_diagnostics` 和 `candidate_reasons` 记录模式级诊断；
+  不在 mode detail 中输出 final-looking `review_reasons` 字段。
 - close competition 的阈值只有一个来源：runtime candidate selection policy。decision
   contract 读取同一个阈值生成最终 `candidate_competition_close` reason 和 cap。
 - guidance 和 candidate plan detail 只能写 `candidate_contract` / `evidence_contract` 这类
@@ -387,7 +389,8 @@ Candidate selection records `selection_risk_inputs`, selection override, and
 competition detail only; it must not append final-looking review reasons or apply
 decision caps. Candidate table / selected-candidate detail uses
 `candidate_reasons`, `candidate_blockers`, and `candidate_diagnostics` for
-candidate-level explanations; final reasons use `final_review_reasons`.
+candidate-level explanations; special-mode detail uses `mode_diagnostics` and
+`candidate_reasons`. Final reasons use `final_review_reasons`.
 Close-competition uses one threshold source: the runtime candidate selection
 policy, which the decision contract consumes to produce the final
 `candidate_competition_close` reason and cap.

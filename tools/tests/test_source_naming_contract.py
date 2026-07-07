@@ -238,6 +238,17 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn('"review_reasons"', text)
         self.assertIn('"candidate_reasons"', text)
 
+    def test_mode_details_use_mode_or_candidate_reason_names(self) -> None:
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "modes"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            if '"review_reasons"' in text:
+                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+
+        self.assertEqual(offenders, [])
+
     def test_decision_package_marker_does_not_reexport_runtime_helpers(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "__init__.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))

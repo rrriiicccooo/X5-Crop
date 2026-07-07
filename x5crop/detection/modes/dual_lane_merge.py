@@ -17,11 +17,14 @@ def dual_lane_review_detection(
     gray: np.ndarray,
     config: RuntimeConfig,
     context: DualLaneDetectionContext,
-    reason: str,
+    mode_reason: str,
 ) -> Detection:
     detection = hard_safety_detection(gray, config, context.format_spec)
-    detection.review_reasons.append(reason)
+    detection.review_reasons.append(mode_reason)
     detection.review_reasons = sorted(set(detection.review_reasons))
+    mode_diagnostics = detection.detail.setdefault("mode_diagnostics", [])
+    if isinstance(mode_diagnostics, list):
+        mode_diagnostics.append(mode_reason)
     return detection
 
 
@@ -55,13 +58,13 @@ def merge_dual_lane_detections(
 
     lane_confidences = [float(detection.confidence) for detection in confirmed_lanes]
     confidence = min(lane_confidences)
-    review_reasons = sorted(set(reason for detection in confirmed_lanes for reason in detection.review_reasons))
+    mode_reasons = sorted(set(reason for detection in confirmed_lanes for reason in detection.review_reasons))
     if any(conf < config.confidence_threshold for conf in lane_confidences):
         confidence = min(confidence, 0.84)
-        review_reasons.append("dual_lane_below_threshold")
+        mode_reasons.append("dual_lane_below_threshold")
     if len(frames) != context.total_count:
         confidence = min(confidence, 0.82)
-        review_reasons.append("frame_count_mismatch")
+        mode_reasons.append("frame_count_mismatch")
 
     source_h, source_w = gray.shape
     outer_original = map_work_box(combined_work_outer, config.layout, source_w, source_h)
@@ -74,7 +77,7 @@ def merge_dual_lane_detections(
         frames,
         gaps,
         float(max(0.0, min(1.0, confidence))),
-        sorted(set(review_reasons)),
+        sorted(set(mode_reasons)),
         _dual_lane_detail(
             config,
             context,
@@ -83,7 +86,7 @@ def merge_dual_lane_detections(
             gaps,
             confirmed_lanes,
             confidence,
-            review_reasons,
+            mode_reasons,
         ),
     )
 
@@ -115,7 +118,7 @@ def _dual_lane_detail(
     gaps: list[Gap],
     lane_detections: list[Detection],
     confidence: float,
-    review_reasons: list[str],
+    mode_reasons: list[str],
 ) -> dict:
     lane_summaries = [
         {
@@ -125,7 +128,7 @@ def _dual_lane_detail(
             "total_format": context.format_id,
             "total_count": context.total_count,
             "confidence": float(detection.confidence),
-            "review_reasons": list(detection.review_reasons),
+            "candidate_reasons": list(detection.review_reasons),
             "work_outer": detection.detail.get("work_outer"),
             "content_evidence": detection.detail.get("content_evidence", {}),
             "outer_content_alignment": detection.detail.get("outer_content_alignment", {}),
@@ -135,6 +138,7 @@ def _dual_lane_detail(
     ]
     return {
         "candidate_source": CANDIDATE_SOURCE_DUAL_LANE,
+        "mode_diagnostics": sorted(set(mode_reasons)),
         "layout": config.layout,
         "candidate_count": context.total_count,
         "work_outer": asdict(combined_work_outer),
@@ -151,7 +155,7 @@ def _dual_lane_detail(
                 "count": context.total_count,
                 "strip_mode": "full",
                 "confidence": float(confidence),
-                "review_reasons": sorted(set(review_reasons)),
+                "candidate_reasons": sorted(set(mode_reasons)),
             },
             "selection_override": None,
             "top_candidates": lane_summaries,
