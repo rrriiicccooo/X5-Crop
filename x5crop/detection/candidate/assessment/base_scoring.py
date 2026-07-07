@@ -117,6 +117,23 @@ def _candidate_width_metrics(
     }
 
 
+def _outer_area_profile(outer_area: float, base_score) -> dict[str, Any]:
+    if outer_area < base_score.outer_min_area:
+        status = "below_profile"
+    elif outer_area > base_score.outer_max_area:
+        status = "above_profile"
+    else:
+        status = "ok"
+    return {
+        "status": status,
+        "role": "diagnostic_until_final_alignment",
+        "outer_area_ratio": float(outer_area),
+        "min_outer_area_ratio": float(base_score.outer_min_area),
+        "max_outer_area_ratio": float(base_score.outer_max_area),
+        "too_large_ratio": float(base_score.outer_too_large),
+    }
+
+
 def base_detection_assessment(
     gray_work: np.ndarray,
     outer: Box,
@@ -140,6 +157,7 @@ def base_detection_assessment(
     width_metrics = _candidate_width_metrics(gaps, boxes, origin, pitch, count)
     width_cv = float(width_metrics["width_cv"])
     outer_area = float(outer.width * outer.height) / max(1.0, float(gray_work.shape[0] * gray_work.shape[1]))
+    outer_area_profile = _outer_area_profile(outer_area, base_score)
     p01, p50, p99 = sampled_percentile(gray_work, [1, 50, 99])
     contrast = float(p99 - p01)
 
@@ -212,10 +230,6 @@ def base_detection_assessment(
         reasons.append("too_few_detected_separators")
     if width_cv > base_score.unstable_width_cv:
         reasons.append("photo_width_unstable")
-    if not (base_score.outer_min_area <= outer_area <= base_score.outer_max_area):
-        reasons.append("outer_box_uncertain")
-    if outer_area > base_score.outer_too_large:
-        reasons.append("outer_box_too_large")
     if fmt.family == "120" and gap_evidence.separator_support_count < expected_gaps:
         reasons.append(base_score.family_separator_uncertain_reason)
     if contrast < base_score.contrast_min:
@@ -243,9 +257,6 @@ def base_detection_assessment(
             confidence = min(confidence, separator_gate.low_hard_confidence_cap)
         elif gap_evidence.equal_model_gaps >= max(2, expected_gaps // 2 + 1):
             confidence = min(confidence, separator_gate.mostly_equal_confidence_cap)
-    if outer_area > base_score.outer_too_large:
-        confidence = min(confidence, base_score.outer_too_large_cap)
-
     detail = {
         "detected_gaps": gap_evidence.separator_support_count,
         "separator_support_count": gap_evidence.separator_support_count,
@@ -256,6 +267,7 @@ def base_detection_assessment(
         "equal_gaps": gap_evidence.equal_model_gaps,
         **width_metrics,
         "outer_area_ratio": outer_area,
+        "outer_area_profile": outer_area_profile,
         "image_quality": {
             "p01": float(p01),
             "p50": float(p50),

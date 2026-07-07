@@ -16,7 +16,7 @@ from ...evidence.separator_summary import separator_gate_detail_summary
 from ...evidence.separator_width import separator_width_evidence_detail, separator_width_requirement_detail
 
 
-def partial_safe_broad_separator_width_gap_detail(
+def partial_safe_holder_edge_disambiguation_detail(
     detection: Detection,
     fmt: FormatSpec,
     policy: Optional[DetectionPolicy] = None,
@@ -28,15 +28,24 @@ def partial_safe_broad_separator_width_gap_detail(
         return {
             "used": False,
             "reason": "disabled",
-            "broad_separator_width_gaps": 0,
-            "min_broad_separator_width_gaps": min_required,
+            "holder_edge_disambiguation_gaps": 0,
+            "min_holder_edge_disambiguation_gaps": min_required,
         }
 
     existing_detail = detection.detail.get("separator_width_evidence")
     if isinstance(existing_detail, dict) and bool(existing_detail.get("used", False)):
-        detail = separator_width_requirement_detail(existing_detail, min_required)
-        detail["used"] = True
-        return detail
+        width_detail = separator_width_requirement_detail(existing_detail, min_required)
+        count = int(width_detail.get("separator_width_gap_count", width_detail.get("broad_separator_width_gaps", 0)) or 0)
+        ok = count >= min_required
+        return {
+            "used": True,
+            "ok": bool(ok),
+            "reason": "ok" if ok else "holder_edge_disambiguation_weak",
+            "evidence_source": "separator_width_evidence",
+            "holder_edge_disambiguation_gaps": int(count),
+            "min_holder_edge_disambiguation_gaps": int(min_required),
+            "separator_width_evidence": width_detail,
+        }
 
     work_outer_detail = detection.detail.get("work_outer", {})
     short_axis = 0.0
@@ -49,14 +58,23 @@ def partial_safe_broad_separator_width_gap_detail(
         frames = [frame for frame in detection.frames if frame.valid()]
         short_axis = float(np.median(np.array([frame.width for frame in frames], dtype=np.float32))) if frames else 0.0
 
-    detail = separator_width_evidence_detail(
+    width_detail = separator_width_evidence_detail(
         detection.gaps,
         short_axis,
         float(holder.broad_separator_width_min_ratio),
         min_required,
     )
-    detail["used"] = True
-    return detail
+    count = int(width_detail.get("separator_width_gap_count", width_detail.get("broad_separator_width_gaps", 0)) or 0)
+    ok = count >= min_required
+    return {
+        "used": True,
+        "ok": bool(ok),
+        "reason": "ok" if ok else "holder_edge_disambiguation_weak",
+        "evidence_source": "separator_width_evidence",
+        "holder_edge_disambiguation_gaps": int(count),
+        "min_holder_edge_disambiguation_gaps": int(min_required),
+        "separator_width_evidence": width_detail,
+    }
 
 
 def partial_safe_leading_content_detail(
@@ -246,7 +264,7 @@ def partial_extra_holder_frames_gate_detail(
     outer_area = float(detection.detail.get("outer_area_ratio", 1.0) or 1.0)
     min_count = holder.min_count_35mm if fmt.default_count >= 6 else holder.min_count_small
     hard_ratio = 1.0 if expected <= 0 else hard / float(max(1, expected))
-    broad_separator_width_detail = partial_safe_broad_separator_width_gap_detail(detection, fmt, policy)
+    holder_edge_detail = partial_safe_holder_edge_disambiguation_detail(detection, fmt, policy)
     leading_content = partial_safe_leading_content_detail(gray, detection, fmt, cache, policy)
     frame_content = partial_safe_frame_content_detail(content_detail, detection, fmt, policy)
     disqualifiers: list[str] = []
@@ -269,19 +287,18 @@ def partial_extra_holder_frames_gate_detail(
     if hard_ratio < holder.min_hard_ratio:
         disqualifiers.append("hard_gap_ratio_low")
     if (
-        bool(broad_separator_width_detail.get("used", False))
-        and int(broad_separator_width_detail.get("broad_separator_width_gaps", 0) or 0)
-        < int(broad_separator_width_detail.get("min_broad_separator_width_gaps", 0) or 0)
+        bool(holder_edge_detail.get("used", False))
+        and int(holder_edge_detail.get("holder_edge_disambiguation_gaps", 0) or 0)
+        < int(holder_edge_detail.get("min_holder_edge_disambiguation_gaps", 0) or 0)
     ):
-        disqualifiers.append("too_few_broad_separator_width_gaps")
+        disqualifiers.append("holder_edge_disambiguation_weak")
     if equal > holder.max_equal_gaps:
         disqualifiers.append("equal_gap_used")
     if width_cv > holder.max_width_cv:
         disqualifiers.append("photo_width_unstable")
     if joint_score < holder.min_joint_score:
         disqualifiers.append("joint_score_low")
-    if content_score < holder.min_content_score:
-        disqualifiers.append("content_score_low")
+    content_quality_ok = content_score >= holder.min_content_score
     if geometry_score < holder.min_geometry_score:
         disqualifiers.append("geometry_score_low")
     hard_partial_blockers = HARD_REVIEW_REASONS.difference({"outer_box_too_large", "outer_box_uncertain"})
@@ -308,15 +325,21 @@ def partial_extra_holder_frames_gate_detail(
         "joint_score": float(joint_score),
         "content_score": float(content_score),
         "geometry_score": float(geometry_score),
+        "content_quality": {
+            "score": float(content_score),
+            "min_quality_score": float(holder.min_content_score),
+            "quality_ok": bool(content_quality_ok),
+            "role": "quality_diagnostic_not_hard_gate",
+        },
         "policy_id": policy.policy_id,
         "holder_policy": {
             "safe_extra_frames": holder.safe_extra_frames,
-            "requires_broad_separator_width_gaps": holder.requires_broad_separator_width_gaps,
+            "requires_holder_edge_disambiguation_gaps": holder.requires_broad_separator_width_gaps,
             "checks_leading_content": holder.checks_leading_content,
             "checks_frame_content": holder.checks_frame_content,
             "max_frame_aspect_error": holder.max_frame_aspect_error,
         },
-        "broad_separator_width_evidence": broad_separator_width_detail,
+        "holder_edge_disambiguation": holder_edge_detail,
         "leading_content": leading_content,
         "frame_content": frame_content,
     }
@@ -326,5 +349,5 @@ __all__ = [
     "partial_extra_holder_frames_gate_detail",
     "partial_safe_frame_content_detail",
     "partial_safe_leading_content_detail",
-    "partial_safe_broad_separator_width_gap_detail",
+    "partial_safe_holder_edge_disambiguation_detail",
 ]

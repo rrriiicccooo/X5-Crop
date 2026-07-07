@@ -49,7 +49,7 @@ REASON_NORMALIZATION_MAP = {
     "likely_partial_strip": "partial_edge_uncertain",
     "partial_outer_leading_content": "partial_edge_uncertain",
     "partial_frame_content_unstable": "partial_edge_uncertain",
-    "too_few_broad_separator_width_gaps": "partial_edge_uncertain",
+    "holder_edge_disambiguation_weak": "partial_edge_uncertain",
     "needs_manual_review": "evidence_combination_insufficient",
 }
 
@@ -98,6 +98,7 @@ def evidence_summary_for(
     content_harm_risk = bool(
         content_detail.get("content_harm_risk", content_support != "ok")
     )
+    content_quality_ok = content_score >= policy.evidence.min_content_score
     partial_detail = _dict(assessment.get("partial_safe_extra_frames"))
     partial_edge_safe = bool(partial_detail.get("ok", False))
     expected = int(separator["expected_gaps"])
@@ -132,12 +133,22 @@ def evidence_summary_for(
             and model_share <= policy.evidence.max_model_gap_share
         )
     )
-    outer_ok = (
+    outer_area_ok = (
         policy.evidence.min_outer_area_ratio
         <= outer_area_ratio
         <= policy.evidence.max_outer_area_ratio
-        and bool(outer_alignment.get("ok", True))
     )
+    outer_alignment_ok = bool(outer_alignment.get("ok", True))
+    safe_overcut_allowed = (
+        not outer_area_ok
+        and outer_area_ratio > policy.evidence.max_outer_area_ratio
+        and bool(outer_alignment.get("used", False))
+        and outer_alignment_ok
+        and bool(outer_alignment.get("overcontainment_allowed", False))
+        and content_containment_ok
+        and not content_harm_risk
+    )
+    outer_ok = outer_alignment_ok and (outer_area_ok or safe_overcut_allowed)
     geometry_ok = (
         width_cv <= policy.evidence.max_width_cv_ratio
         and geometry_score >= policy.evidence.min_geometry_score
@@ -145,7 +156,6 @@ def evidence_summary_for(
     content_ok = (
         content_containment_ok
         and not content_harm_risk
-        and content_score >= policy.evidence.min_content_score
     )
     return {
         "outer": {
@@ -153,6 +163,9 @@ def evidence_summary_for(
             "outer_area_ratio": outer_area_ratio,
             "min_outer_area_ratio": policy.evidence.min_outer_area_ratio,
             "max_outer_area_ratio": policy.evidence.max_outer_area_ratio,
+            "area_ok": bool(outer_area_ok),
+            "alignment_ok": bool(outer_alignment_ok),
+            "safe_overcut_allowed": bool(safe_overcut_allowed),
             "outer_content_alignment": outer_alignment,
         },
         "separator": {
@@ -178,6 +191,9 @@ def evidence_summary_for(
             "content_containment_ok": bool(content_containment_ok),
             "content_harm_risk": bool(content_harm_risk),
             "content_score": content_score,
+            "content_quality_score": content_score,
+            "quality_ok": bool(content_quality_ok),
+            "score_role": "quality_diagnostic_not_hard_gate",
             "min_content_score": policy.evidence.min_content_score,
             "detail": content_detail,
         },
@@ -263,6 +279,14 @@ def apply_final_decision_policy(
 
     reasons = normalized_review_reasons(reasons)
     existing_reasons = normalized_review_reasons(list(detection.review_reasons))
+    if bool(evidence["outer"]["ok"]):
+        existing_reasons = [
+            reason for reason in existing_reasons if reason != policy.decision.outer_content_mismatch_reason
+        ]
+    if bool(evidence["content"]["ok"]):
+        existing_reasons = [
+            reason for reason in existing_reasons if reason != policy.decision.content_only_evidence_reason
+        ]
     final_reasons = sorted(set(existing_reasons + reasons))
     passed = detection.confidence >= config.confidence_threshold and not final_reasons
     if not passed:

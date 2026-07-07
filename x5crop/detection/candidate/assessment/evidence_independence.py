@@ -57,10 +57,8 @@ def evidence_independence_detail(
     standard_detected_gaps = gap_source_count(separator_detail, ("standard_detected",))
     width_cv = _float(detection.detail.get("width_cv"), 1.0)
     standard_ok = standard_detected_gaps >= int(policy.min_standard_detected_gaps)
-    content_ok = (
-        content_support == policy.require_content_support
-        and float(content_score) >= float(policy.min_content_score)
-    )
+    content_ok = content_support == policy.require_content_support
+    content_quality_ok = float(content_score) >= float(policy.min_content_score)
     geometry_ok = (
         float(geometry_score) >= float(policy.min_geometry_score)
         and width_cv <= float(policy.max_width_cv)
@@ -91,6 +89,8 @@ def evidence_independence_detail(
         "content_score": float(content_score),
         "min_content_score": float(policy.min_content_score),
         "content_ok": bool(content_ok),
+        "content_quality_ok": bool(content_quality_ok),
+        "content_score_role": "quality_diagnostic_not_hard_gate",
         "geometry_score": float(geometry_score),
         "min_geometry_score": float(policy.min_geometry_score),
         "width_cv": float(width_cv),

@@ -237,7 +237,7 @@ def apply_candidate_assessment_policy(
         and bool(
             partial_safe_disqualifiers.intersection(
                 {
-                    "too_few_broad_separator_width_gaps",
+                    "holder_edge_disambiguation_weak",
                     "partial_outer_leading_content",
                     "partial_frame_content_unstable",
                 }

@@ -18,7 +18,7 @@ def separator_width_requirement_detail(detail: dict[str, Any], min_required: int
     result["min_broad_separator_width_gaps"] = min_required
     if bool(result.get("used", False)):
         ok = count >= min_required
-        result["reason"] = "ok" if ok else "too_few_broad_separator_width_gaps"
+        result["reason"] = "ok" if ok else "separator_width_evidence_insufficient"
     return result
 
 
