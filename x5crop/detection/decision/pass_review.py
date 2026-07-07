@@ -92,6 +92,12 @@ def evidence_summary_for(
     width_cv = _float(detection.detail.get("width_cv"), 1.0)
     width_cv_source = str(detection.detail.get("width_cv_source") or "unknown")
     content_support = str(content_detail.get("support", assessment.get("content_support", "")))
+    content_containment_ok = bool(
+        content_detail.get("content_containment_ok", content_support == "ok")
+    )
+    content_harm_risk = bool(
+        content_detail.get("content_harm_risk", content_support != "ok")
+    )
     partial_detail = _dict(assessment.get("partial_safe_extra_frames"))
     partial_edge_safe = bool(partial_detail.get("ok", False))
     expected = int(separator["expected_gaps"])
@@ -104,13 +110,15 @@ def evidence_summary_for(
         and hard_ratio >= policy.evidence.geometry_supported_min_hard_ratio
         and width_cv <= policy.evidence.geometry_supported_max_width_cv_ratio
         and int(separator["equal_gaps"]) <= policy.evidence.max_equal_gap_count
-        and content_support == "ok"
+        and content_containment_ok
+        and not content_harm_risk
     )
     partial_supported_separator = (
         detection.strip_mode == "partial"
         and partial_edge_safe
         and int(separator["hard_gaps"]) >= 1
-        and content_support == "ok"
+        and content_containment_ok
+        and not content_harm_risk
     )
     separator_ok = (
         expected <= 0
@@ -135,7 +143,8 @@ def evidence_summary_for(
         and geometry_score >= policy.evidence.min_geometry_score
     )
     content_ok = (
-        content_support == "ok"
+        content_containment_ok
+        and not content_harm_risk
         and content_score >= policy.evidence.min_content_score
     )
     return {
@@ -166,6 +175,8 @@ def evidence_summary_for(
         "content": {
             "ok": bool(content_ok),
             "support": content_support,
+            "content_containment_ok": bool(content_containment_ok),
+            "content_harm_risk": bool(content_harm_risk),
             "content_score": content_score,
             "min_content_score": policy.evidence.min_content_score,
             "detail": content_detail,

@@ -65,10 +65,18 @@ def outer_content_alignment_detail(
     long_slack_right = max(0, outer.right - content_box.right)
     short_slack_top = max(0, content_box.top - outer.top)
     short_slack_bottom = max(0, outer.bottom - content_box.bottom)
+    long_undercrop_left = max(0, outer.left - content_box.left)
+    long_undercrop_right = max(0, content_box.right - outer.right)
+    short_undercrop_top = max(0, outer.top - content_box.top)
+    short_undercrop_bottom = max(0, content_box.bottom - outer.bottom)
     max_long_slack = max(long_slack_left, long_slack_right)
     max_short_slack = max(short_slack_top, short_slack_bottom)
+    max_long_undercrop = max(long_undercrop_left, long_undercrop_right)
+    max_short_undercrop = max(short_undercrop_top, short_undercrop_bottom)
     long_slack_ratio = float(max_long_slack) / max(1.0, pitch)
     short_slack_ratio = float(max_short_slack) / max(1.0, float(outer.height))
+    long_undercrop_ratio = float(max_long_undercrop) / max(1.0, pitch)
+    short_undercrop_ratio = float(max_short_undercrop) / max(1.0, float(outer.height))
     content_width_ratio = float(content_box.width) / max(1.0, float(outer.width))
     content_height_ratio = float(content_box.height) / max(1.0, float(outer.height))
     white_edge_long_slack_min = clamp_int(
@@ -124,19 +132,22 @@ def outer_content_alignment_detail(
     if alignment.short_content_height_max < 1.0:
         short_axis_semantic_ok = short_axis_semantic_ok and content_height_ratio <= alignment.short_content_height_max
 
-    excess_long = long_slack_ratio > alignment.long_excess_ratio or (max_long_slack >= long_slack_pixel_gate and long_slack_ratio > alignment.long_gate_excess_ratio) or white_edge_slack
-    excess_short = short_axis_semantic_ok and short_slack_ratio > alignment.short_excess_ratio and max_short_slack >= short_slack_pixel_gate
-    ok = not (excess_long or excess_short)
+    overcontains_long = long_slack_ratio > alignment.long_excess_ratio or (max_long_slack >= long_slack_pixel_gate and long_slack_ratio > alignment.long_gate_excess_ratio) or white_edge_slack
+    overcontains_short = short_axis_semantic_ok and short_slack_ratio > alignment.short_excess_ratio and max_short_slack >= short_slack_pixel_gate
+    undercrops_long = max_long_undercrop >= long_slack_pixel_gate
+    undercrops_short = max_short_undercrop >= short_slack_pixel_gate
+    ok = not (undercrops_long or undercrops_short)
     reason = "ok"
-    if excess_long:
-        reason = "outer_long_axis_excess"
-    elif excess_short:
-        reason = "outer_short_axis_excess"
+    if undercrops_long:
+        reason = "content_outside_outer_long_axis"
+    elif undercrops_short:
+        reason = "content_outside_outer_short_axis"
 
     detail = {
         "used": True,
         "ok": ok,
         "reason": reason,
+        "overcontainment_allowed": True,
         "content_bbox_source": source,
         "outer_work_box": asdict(outer),
         "content_work_box": asdict(content_box),
@@ -144,12 +155,22 @@ def outer_content_alignment_detail(
         "long_slack_right": int(long_slack_right),
         "short_slack_top": int(short_slack_top),
         "short_slack_bottom": int(short_slack_bottom),
+        "long_undercrop_left": int(long_undercrop_left),
+        "long_undercrop_right": int(long_undercrop_right),
+        "short_undercrop_top": int(short_undercrop_top),
+        "short_undercrop_bottom": int(short_undercrop_bottom),
         "max_long_slack": int(max_long_slack),
         "max_short_slack": int(max_short_slack),
+        "max_long_undercrop": int(max_long_undercrop),
+        "max_short_undercrop": int(max_short_undercrop),
         "long_slack_ratio": long_slack_ratio,
         "short_slack_ratio": short_slack_ratio,
+        "long_undercrop_ratio": long_undercrop_ratio,
+        "short_undercrop_ratio": short_undercrop_ratio,
         "content_width_ratio": content_width_ratio,
         "content_height_ratio": content_height_ratio,
+        "overcontains_long_axis": bool(overcontains_long),
+        "overcontains_short_axis": bool(overcontains_short),
         "white_edge_long_slack_min": int(white_edge_long_slack_min),
         "long_slack_pixel_gate": int(long_slack_pixel_gate),
         "short_slack_pixel_gate": int(short_slack_pixel_gate),

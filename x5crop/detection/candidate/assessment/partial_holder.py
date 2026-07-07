@@ -152,6 +152,7 @@ def partial_safe_frame_content_detail(
     weak_frames: list[int] = []
     aspect_conflict_frames: list[int] = []
     normalized_scores: list[dict[str, Any]] = []
+    content_frame_count = 0
     for item in frame_scores:
         if not isinstance(item, dict):
             continue
@@ -166,6 +167,24 @@ def partial_safe_frame_content_detail(
             aspect_error = None if aspect_error_value is None else float(aspect_error_value)
         except (TypeError, ValueError):
             aspect_error = None
+        content_present = bool(
+            item.get(
+                "content_present",
+                mean >= min_mean or coverage >= min_coverage,
+            )
+        )
+        if not content_present:
+            normalized_scores.append(
+                {
+                    "index": index,
+                    "mean": mean,
+                    "coverage": coverage,
+                    "aspect_error": aspect_error,
+                    "content_present": False,
+                }
+            )
+            continue
+        content_frame_count += 1
         if mean < min_mean and coverage < min_coverage:
             weak_frames.append(index)
         if aspect_error is not None and aspect_error > max_aspect_error:
@@ -176,11 +195,12 @@ def partial_safe_frame_content_detail(
                 "mean": mean,
                 "coverage": coverage,
                 "aspect_error": aspect_error,
+                "content_present": True,
             }
         )
 
     ok = (
-        len(normalized_scores) >= detection.count
+        content_frame_count > 0
         and not weak_frames
         and not aspect_conflict_frames
     )
@@ -189,6 +209,7 @@ def partial_safe_frame_content_detail(
         "ok": bool(ok),
         "reason": "ok" if ok else "frame_content_not_stable",
         "frame_count": int(len(normalized_scores)),
+        "content_frame_count": int(content_frame_count),
         "expected_count": int(detection.count),
         "weak_frames": weak_frames,
         "aspect_conflict_frames": aspect_conflict_frames,
@@ -239,8 +260,10 @@ def partial_extra_holder_frames_gate_detail(
         disqualifiers.append("count_too_small")
     if expected <= 0:
         disqualifiers.append("no_internal_gaps")
-    if str(content_detail.get("support", "")) != "ok":
-        disqualifiers.append("content_not_ok")
+    content_containment_ok = bool(content_detail.get("content_containment_ok", False))
+    content_harm_risk = bool(content_detail.get("content_harm_risk", True))
+    if not content_containment_ok or content_harm_risk:
+        disqualifiers.append("content_harm_risk")
     if hard < holder.min_hard_gaps:
         disqualifiers.append("too_few_hard_gaps")
     if hard_ratio < holder.min_hard_ratio:

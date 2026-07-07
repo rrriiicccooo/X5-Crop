@@ -21,6 +21,7 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ....utils import HARD_REVIEW_REASONS
+from ...evidence.content.containment import content_containment_detail
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.separator_summary import separator_gate_detail_summary
 from .base_scoring import apply_base_detection_scoring
@@ -79,6 +80,11 @@ def apply_candidate_assessment_policy(
         policy,
     )
     content_detail = content_evidence_detail(gray, candidate, cache, policy.content)
+    containment_detail = content_containment_detail(
+        content_detail,
+        policy.content.evidence,
+        expected_count=candidate.count,
+    )
     scoring_policy = policy.scoring
     floor_applies = hard_full_calibration_floor_applies(
         candidate,
@@ -105,8 +111,8 @@ def apply_candidate_assessment_policy(
         separator_gate_detail["calibrate_hard_full_confidence_floor"] = float(
             scoring_policy.hard_full_confidence_floor
         )
-    content_score = content_support_score(content_detail, fmt.name, policy.content)
-    geometry_score = geometry_support_score(candidate, content_detail, policy)
+    content_score = content_support_score(containment_detail, fmt.name, policy.content)
+    geometry_score = geometry_support_score(candidate, containment_detail, policy)
     separator_score = (
         separator_support_score(candidate, separator_gate_detail, policy)
         if source == "separator"
@@ -119,7 +125,9 @@ def apply_candidate_assessment_policy(
         source=source,
         policy=policy,
     )
-    support = str(content_detail.get("support", ""))
+    support = str(containment_detail.get("support", ""))
+    content_containment_ok = bool(containment_detail.get("content_containment_ok", False))
+    content_harm_risk = bool(containment_detail.get("content_harm_risk", True))
     reasons = list(candidate.review_reasons)
     if floor_applies:
         reasons = [reason for reason in reasons if reason != "low_confidence"]
@@ -205,7 +213,7 @@ def apply_candidate_assessment_policy(
         gray,
         candidate,
         separator_gate_detail,
-        content_detail,
+        containment_detail,
         fmt,
         source,
         joint_score,
@@ -287,7 +295,8 @@ def apply_candidate_assessment_policy(
     if source == "separator":
         auto_gate = (
             (separator_gate_ok or partial_safe_auto_support_ok)
-            and support == "ok"
+            and content_containment_ok
+            and not content_harm_risk
             and evidence_independence_ok
             and not hard_reasons
         )
@@ -316,6 +325,7 @@ def apply_candidate_assessment_policy(
         CANDIDATE_SOURCE_SEPARATOR if source == "separator" else CANDIDATE_SOURCE_CONTENT
     )
     candidate.detail["content_evidence"] = content_detail
+    candidate.detail["content_containment"] = containment_detail
     candidate.detail["candidate_assessment"] = {
         "source": source,
         "joint_score": float(joint_score),
@@ -329,6 +339,9 @@ def apply_candidate_assessment_policy(
         "frame_box_width_cv": candidate.detail.get("frame_box_width_cv"),
         "separator_width_cv": candidate.detail.get("separator_width_cv"),
         "content_support": support,
+        "content_containment_ok": bool(content_containment_ok),
+        "content_harm_risk": bool(content_harm_risk),
+        "content_containment": containment_detail,
         "separator_hard_evidence": separator_gate_detail,
         "evidence_independence": independence_detail,
         "partial_extra_holder_frames": partial_safe_extra_frames,
