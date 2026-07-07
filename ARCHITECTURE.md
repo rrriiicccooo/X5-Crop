@@ -66,6 +66,7 @@ X5_Crop.py / launchers
 | Foundation capability | `x5crop.geometry` / `x5crop.image` / `x5crop.io` | 只提供 box、gap、profile、deskew、pixel transform、TIFF I/O 等能力。 |
 | Cache adapters | `x5crop.cache` | 只复用 analysis、profile、evidence 结果，不生成候选或决策。 |
 | Detection behavior | `x5crop.detection` | 生成候选、证据、assessment、selection、decision 和 finalization。 |
+| Output geometry | `x5crop.output` | output bleed 参数转换、overlap 输出风险读模型和缓存输出几何恢复。 |
 | Output surfaces | `x5crop.export` / `x5crop.report` / `x5crop.debug` | 消费稳定结果，不反向参与候选选择。 |
 | Developer tools | `tools/` | standalone build、reference compare、classification 和 unit tests；不进入 runtime package。 |
 
@@ -125,7 +126,7 @@ candidate plan
 | `detection.candidate.extension` | corrected outer、content-guided separator 等 reassessed candidates。 |
 | `detection.candidate.selection` | 多候选竞争和 selected candidate。 |
 | `detection.decision` | final evidence、confidence caps、risk summary、final review reasons 和 PASS / REVIEW。 |
-| `detection.final` | output bleed、approved geometry adjustment 和 read-only diagnostics attachment。 |
+| `detection.final` | 消费 `x5crop.output` bleed helper，执行 approved geometry adjustment 和 read-only diagnostics attachment。 |
 
 关键审核点：
 
@@ -182,7 +183,10 @@ candidate plan
   `detection.candidate.plan`。
 - evidence 层只生成和汇总证据；从 `candidate_assessment` 读取 gate detail 属于 decision
   或 report/read-model。
-- finalization 不生成候选、不评分、不决定 PASS / REVIEW；它只消费 decision 结果并做输出相邻调整。
+- finalization 不生成候选、不评分、不决定 PASS / REVIEW；它只消费 decision 结果并调用
+  `x5crop.output` 做输出相邻调整。
+- `x5crop.output` 是 output-adjacent read/apply helper；它可以读取已存在的 risk /
+  decision detail 来计算 output bleed，但不能生成新的 PASS / REVIEW 输入。
 - report / debug / export 是 output read-model；它们只能消费 `ProcessResult` 或
   `decision_summary.status`，不能根据 confidence / review reason 自行推导最终状态。
   裸 Detection 若还没有 decision summary，报告和 Debug Analysis 必须显示 `unknown` /
@@ -492,8 +496,11 @@ not from risk strings.
 Physical packages do not keep `plan.py`; planning, execution budget, and source
 composition belong to `detection.candidate.plan`.
 `detection.decision` owns final evidence, confidence caps, risk summary, final
-review reasons, and PASS / REVIEW. `detection.final` consumes that result
-for output bleed, approved geometry adjustment, and read-only diagnostics only.
+review reasons, and PASS / REVIEW. `x5crop.output` owns output-bleed parameter
+conversion, output-risk read models, and cached output-geometry restoration.
+`detection.final` consumes the decision result and `x5crop.output` helpers for
+approved geometry adjustment, output-adjacent bleed adjustment, and read-only
+diagnostics only.
 `approved_auto` requires both threshold-level confidence and empty final review
 reasons; workflow and finalization must not derive final status from confidence
 alone.
@@ -533,8 +540,9 @@ Candidate-plan policy fields that block candidate auto gate use blocker naming,
 not review-reason naming; final review reasons belong only to the decision
 contract.
 Final risk evidence such as overlap and lucky-pass risk is attached before the
-final decision. Finalization may consume that detail for output bleed, but it
-must not generate PASS / REVIEW inputs after the decision step.
+final decision. `x5crop.output` and finalization may consume that detail for
+output bleed, but must not generate PASS / REVIEW inputs after the decision
+step.
 Decision sublayers must read or update final reasons through
 `detection.decision.reasons`; after the decision step, `review_reasons` is the
 user-visible final reason field, so decision code must not append to it directly.

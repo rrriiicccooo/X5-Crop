@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from ...domain import Box, Detection
-from ...geometry.boxes import map_work_box, original_box_to_work
+from ..domain import Box, Detection
+from ..geometry.boxes import map_work_box, original_box_to_work
 
 
 class OutputBleedPolicy(Protocol):
@@ -37,7 +37,10 @@ def detection_has_overlap_bleed_risk(detection: Detection) -> bool:
             return True
         counts = lucky.get("overlap_risk_counts")
         if isinstance(counts, dict):
-            if int(counts.get("strong", 0) or 0) > 0 or int(counts.get("medium", 0) or 0) > 0:
+            if (
+                int(counts.get("strong", 0) or 0) > 0
+                or int(counts.get("medium", 0) or 0) > 0
+            ):
                 return True
 
     diagnostics = detection.detail.get("diagnostics")
@@ -48,7 +51,10 @@ def detection_has_overlap_bleed_risk(detection: Detection) -> bool:
                 return True
             counts = summary.get("overlap_risk_counts")
             if isinstance(counts, dict):
-                if int(counts.get("strong", 0) or 0) > 0 or int(counts.get("medium", 0) or 0) > 0:
+                if (
+                    int(counts.get("strong", 0) or 0) > 0
+                    or int(counts.get("medium", 0) or 0) > 0
+                ):
                     return True
     return False
 
@@ -60,7 +66,10 @@ def output_bleed_parameters_for_detection(
 ) -> AxisBleedParameters:
     if not detection_has_overlap_bleed_risk(detection):
         return current_bleed
-    target_long_axis = max(int(current_bleed.long_axis), int(output_policy.overlap_risk_long_axis_bleed))
+    target_long_axis = max(
+        int(current_bleed.long_axis),
+        int(output_policy.overlap_risk_long_axis_bleed),
+    )
     if target_long_axis == int(current_bleed.long_axis):
         return current_bleed
     return AxisBleedParameters(long_axis=target_long_axis, short_axis=int(current_bleed.short_axis))
@@ -78,7 +87,10 @@ def apply_output_bleed(
         and int(detection_bleed.short_axis) == int(output_bleed.short_axis)
     ):
         return
-    frames_work = [original_box_to_work(frame, detection.layout, image_w, image_h) for frame in detection.frames]
+    frames_work = [
+        original_box_to_work(frame, detection.layout, image_w, image_h)
+        for frame in detection.frames
+    ]
     work_w = image_w if detection.layout == "horizontal" else image_h
     work_h = image_h if detection.layout == "horizontal" else image_w
     adjusted_work: list[Box] = []
@@ -91,8 +103,18 @@ def apply_output_bleed(
         )
         if not raw.valid():
             return
-        adjusted_work.append(raw.expand(int(output_bleed.long_axis), int(output_bleed.short_axis), work_w, work_h))
-    detection.frames = [map_work_box(frame, detection.layout, image_w, image_h) for frame in adjusted_work]
+        adjusted_work.append(
+            raw.expand(
+                int(output_bleed.long_axis),
+                int(output_bleed.short_axis),
+                work_w,
+                work_h,
+            )
+        )
+    detection.frames = [
+        map_work_box(frame, detection.layout, image_w, image_h)
+        for frame in adjusted_work
+    ]
     detection.detail["output_bleed"] = {
         "used": True,
         "detection_long_axis_bleed": int(detection_bleed.long_axis),
@@ -114,8 +136,12 @@ def reapply_cached_output_bleed(
         return
     try:
         cached_bleed = AxisBleedParameters(
-            long_axis=int(output_bleed.get("output_long_axis_bleed", target_bleed.long_axis)),
-            short_axis=int(output_bleed.get("output_short_axis_bleed", target_bleed.short_axis)),
+            long_axis=int(
+                output_bleed.get("output_long_axis_bleed", target_bleed.long_axis)
+            ),
+            short_axis=int(
+                output_bleed.get("output_short_axis_bleed", target_bleed.short_axis)
+            ),
         )
     except (TypeError, ValueError):
         return

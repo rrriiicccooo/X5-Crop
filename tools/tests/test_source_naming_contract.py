@@ -551,6 +551,27 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_output_bleed_helpers_live_in_output_layer(self) -> None:
+        offenders: list[str] = []
+        banned = (
+            "detection.final.output_bleed",
+            "from .output_bleed",
+            "final.output_bleed",
+        )
+        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                if path == Path(__file__).resolve():
+                    continue
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
+        self.assertTrue((PROJECT_ROOT / "x5crop" / "output" / "bleed.py").is_file())
+
     def test_low_confidence_context_reasons_do_not_use_tail_or_post_check_names(self) -> None:
         banned = (
             "_apply_decision_" "tail_reasons",

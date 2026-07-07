@@ -19,9 +19,9 @@ from ..domain import ProcessResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from ..export.paths import output_directory_for
 from ..formats import FORMATS
-from ..detection.final.output_bleed import detection_bleed_parameters
 from ..image.gray import make_base_gray_u8
 from ..io.tiff import read_tiff, read_tiff_profile
+from ..output.bleed import detection_bleed_parameters
 from ..policies.registry import get_detection_policy
 from ..report.outputs import write_report_outputs_for_result
 from ..report.result_builder import result_from_detection

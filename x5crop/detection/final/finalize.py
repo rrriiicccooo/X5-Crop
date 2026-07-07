@@ -8,7 +8,7 @@ import numpy as np
 from ...runtime.config import RuntimeConfig
 from ...domain import Detection
 from ...formats import FormatSpec
-from .output_bleed import (
+from ...output.bleed import (
     AxisBleedParameters,
     apply_output_bleed,
     detection_bleed_parameters,

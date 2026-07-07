@@ -9,7 +9,7 @@ import numpy as np
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
 from ..domain import Box, Detection, Gap, ImageProfile, ProcessResult
 from ..export.crops import write_crops
-from ..detection.final.output_bleed import (
+from ..output.bleed import (
     AxisBleedParameters,
     output_bleed_parameters_for_detection,
     reapply_cached_output_bleed,
