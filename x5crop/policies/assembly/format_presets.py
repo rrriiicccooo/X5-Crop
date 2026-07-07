@@ -229,7 +229,7 @@ def _diagnostics_overlap_bleed(format_id: str, strip_mode: str) -> bool:
     return format_id in {"half", "120-645", "120-66", "120-67"}
 
 
-def _content_mismatch_review_enabled(format_id: str) -> bool:
+def _content_mismatch_candidate_selection_enabled(format_id: str) -> bool:
     return format_id == "half"
 
 
@@ -258,7 +258,9 @@ def format_policy_preset(
         parameters=parameters,
         separator_gate_profile=_separator_gate_profile(format_id),
         separator_edge_pair=_separator_edge_pair(format_id),
-        content_mismatch_review_enabled=_content_mismatch_review_enabled(format_id),
+        content_mismatch_candidate_selection_enabled=(
+            _content_mismatch_candidate_selection_enabled(format_id)
+        ),
         modes={
             FULL: mode_policy_preset(format_id, FULL),
             PARTIAL: mode_policy_preset(format_id, PARTIAL),

@@ -13,7 +13,7 @@ from ..runtime.base import FULL, PARTIAL
 from ..runtime.candidate import (
     BaseDetectionScorePolicy,
     CandidatePlanPolicy,
-    ContentMismatchReviewSelectionPolicy,
+    ContentMismatchCandidateSelectionPolicy,
     SafetyCandidatePolicy,
     GeometrySupportScorePolicy,
     OuterCorrectionCandidateExtensionPolicy,
@@ -129,8 +129,11 @@ def selection_policy(
         top_n=int(competition.top_n),
         close_margin=float(competition.close_margin),
         confidence_cap=float(competition.confidence_cap),
-        content_mismatch_review=ContentMismatchReviewSelectionPolicy(
-            enabled=bool(preset.content_mismatch_review_enabled and strip_mode == FULL),
+        content_mismatch_candidate=ContentMismatchCandidateSelectionPolicy(
+            enabled=bool(
+                preset.content_mismatch_candidate_selection_enabled
+                and strip_mode == FULL
+            ),
         ),
     )
 

@@ -52,13 +52,13 @@ def is_partial_safe_auto_candidate(detection: Detection, threshold: float) -> bo
     )
 
 
-def select_separator_review_candidate_on_content_mismatch(
+def select_separator_candidate_for_content_mismatch(
     best: Detection,
     candidates: list[Detection],
     fmt: FormatSpec,
     policy: DetectionPolicy,
 ) -> Optional[Detection]:
-    review_policy = policy.candidate_selection.content_mismatch_review
+    mismatch_policy = policy.candidate_selection.content_mismatch_candidate
     best_assessment = best.detail.get("candidate_assessment", {})
     best_source = best_assessment.get("source") if isinstance(best_assessment, dict) else None
 
@@ -80,12 +80,12 @@ def select_separator_review_candidate_on_content_mismatch(
         )
 
     if (
-        not review_policy.enabled
+        not mismatch_policy.enabled
         or best.film_format != fmt.name
-        or best.strip_mode not in review_policy.strip_modes
-        or (review_policy.require_default_count and best.count != fmt.default_count)
-        or best_source != review_policy.required_best_source
-        or review_policy.required_review_reason not in best.review_reasons
+        or best.strip_mode not in mismatch_policy.strip_modes
+        or (mismatch_policy.require_default_count and best.count != fmt.default_count)
+        or best_source != mismatch_policy.required_best_source
+        or mismatch_policy.required_candidate_reason not in best.review_reasons
     ):
         return None
     plausible: list[Detection] = []
@@ -98,15 +98,18 @@ def select_separator_review_candidate_on_content_mismatch(
         ):
             continue
         candidate_assessment = candidate.detail.get("candidate_assessment", {})
-        if not isinstance(candidate_assessment, dict) or candidate_assessment.get("source") != review_policy.candidate_source:
+        if (
+            not isinstance(candidate_assessment, dict)
+            or candidate_assessment.get("source") != mismatch_policy.candidate_source
+        ):
             continue
         expected, hard, equal = separator_summary_for(candidate)
         support = str(candidate_assessment.get("content_support", ""))
-        min_hard = max(1, math.ceil(expected * review_policy.min_hard_ratio))
+        min_hard = max(1, math.ceil(expected * mismatch_policy.min_hard_ratio))
         if (
             hard >= min_hard
-            and equal <= review_policy.max_equal_gaps
-            and support == review_policy.required_content_support
+            and equal <= mismatch_policy.max_equal_gaps
+            and support == mismatch_policy.required_content_support
         ):
             plausible.append(candidate)
     if not plausible:
@@ -153,20 +156,20 @@ def select_detection_candidate(
     candidates = sorted(candidates, key=lambda d: calibrated_candidate_rank(d, threshold), reverse=True)
     best = candidates[0]
     selection_override: Optional[str] = None
-    separator_review_on_mismatch = select_separator_review_candidate_on_content_mismatch(
+    separator_candidate_on_mismatch = select_separator_candidate_for_content_mismatch(
         best,
         candidates,
         fmt,
         policy,
     )
-    if separator_review_on_mismatch is not None and separator_review_on_mismatch.confidence < threshold:
-        override_reason = policy.candidate_selection.content_mismatch_review.override_reason
-        separator_review_on_mismatch.detail["content_candidate_mismatch"] = {
+    if separator_candidate_on_mismatch is not None and separator_candidate_on_mismatch.confidence < threshold:
+        override_reason = policy.candidate_selection.content_mismatch_candidate.override_reason
+        separator_candidate_on_mismatch.detail["content_candidate_mismatch"] = {
             "content_candidate_confidence": float(best.confidence),
             "content_candidate_reasons": list(best.review_reasons),
             "content_candidate_assessment": best.detail.get("candidate_assessment", {}),
         }
-        best = separator_review_on_mismatch
+        best = separator_candidate_on_mismatch
         selection_override = override_reason
     second = next((candidate for candidate in candidates if candidate is not best), None)
     selected_policy = get_detection_policy(best.film_format, best.strip_mode)
@@ -235,5 +238,5 @@ __all__ = [
     "calibrated_candidate_rank",
     "is_partial_safe_auto_candidate",
     "select_detection_candidate",
-    "select_separator_review_candidate_on_content_mismatch",
+    "select_separator_candidate_for_content_mismatch",
 ]

@@ -37,7 +37,7 @@ class FormatPolicyPreset:
     parameters: Callable[[], FormatParameters]
     separator_gate_profile: str
     separator_edge_pair: SeparatorEdgePairPolicy = field(default_factory=SeparatorEdgePairPolicy)
-    content_mismatch_review_enabled: bool = False
+    content_mismatch_candidate_selection_enabled: bool = False
     modes: dict[str, ModePolicyPreset] = field(default_factory=dict)
 
 

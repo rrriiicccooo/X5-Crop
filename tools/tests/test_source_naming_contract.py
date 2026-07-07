@@ -241,6 +241,29 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn('"review_reasons"', text)
         self.assertIn('"candidate_reasons"', text)
 
+    def test_content_mismatch_selector_uses_candidate_selection_names(self) -> None:
+        banned = (
+            "ContentMismatchReviewSelectionPolicy",
+            "content_mismatch_review",
+            "required_review_reason",
+            "select_separator_review_candidate_on_content_mismatch",
+            "separator_review_on_mismatch",
+        )
+        offenders: list[str] = []
+        for path in (
+            PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "candidate.py",
+            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "candidate.py",
+            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "presets.py",
+            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "format_presets.py",
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "selection" / "choose.py",
+        ):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_mode_details_use_mode_or_candidate_reason_names(self) -> None:
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "modes"

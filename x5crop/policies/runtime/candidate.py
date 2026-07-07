@@ -99,17 +99,17 @@ class ScoringPolicy:
 
 
 @dataclass(frozen=True)
-class ContentMismatchReviewSelectionPolicy:
+class ContentMismatchCandidateSelectionPolicy:
     enabled: bool = False
     strip_modes: tuple[str, ...] = ("full",)
     require_default_count: bool = True
     required_best_source: str = "content"
-    required_review_reason: str = "content_run_count_mismatch"
+    required_candidate_reason: str = "content_run_count_mismatch"
     candidate_source: str = "separator"
     min_hard_ratio: float = 0.50
     max_equal_gaps: int = 0
     required_content_support: str = "ok"
-    override_reason: str = "content_candidate_mismatch_prefers_separator_review"
+    override_reason: str = "content_candidate_mismatch_prefers_separator_candidate"
 
 
 @dataclass(frozen=True)
@@ -117,7 +117,9 @@ class SelectionPolicy:
     top_n: int = 8
     close_margin: float = 0.04
     confidence_cap: float = 0.84
-    content_mismatch_review: ContentMismatchReviewSelectionPolicy = field(default_factory=ContentMismatchReviewSelectionPolicy)
+    content_mismatch_candidate: ContentMismatchCandidateSelectionPolicy = field(
+        default_factory=ContentMismatchCandidateSelectionPolicy
+    )
 
 
 @dataclass(frozen=True)
@@ -223,7 +225,7 @@ __all__ = [
     "CandidatePlanPolicy",
     "ContentCandidatePlanPolicy",
     "ContentGuidedSeparatorCandidatePolicy",
-    "ContentMismatchReviewSelectionPolicy",
+    "ContentMismatchCandidateSelectionPolicy",
     "EvidenceIndependencePolicy",
     "GatePolicy",
     "GeometrySupportScorePolicy",
