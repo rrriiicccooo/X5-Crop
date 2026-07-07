@@ -74,6 +74,14 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertNotIn("candidate_policy", detail)
         self.assertIn("risk_policy", detail)
         self.assertIn("decision_policy", detail)
+        self.assertNotIn(
+            "content_only_candidates_review_only",
+            detail["risk_policy"],
+        )
+        self.assertNotIn(
+            "safety_candidates_review_only",
+            detail["risk_policy"],
+        )
         self.assertEqual(
             detail["decision_policy"]["content_evidence_insufficient_reason"],
             "content_evidence_insufficient",

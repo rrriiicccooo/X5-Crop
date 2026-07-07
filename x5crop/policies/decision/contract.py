@@ -49,8 +49,6 @@ class RiskPolicy:
     review_on_close_competition: bool = True
     candidate_close_margin: float = 0.020
     suppress_close_competition_when_partial_edge_safe: bool = True
-    content_only_candidates_review_only: bool = True
-    safety_candidates_review_only: bool = True
 
 
 @dataclass(frozen=True)

@@ -159,6 +159,16 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_decision_contract_does_not_keep_unused_review_only_flags(self) -> None:
+        from x5crop.policies.decision.contract import RiskPolicy
+
+        banned = {
+            "content_only_candidates_review_only",
+            "safety_candidates_review_only",
+        }
+
+        self.assertTrue(banned.isdisjoint(RiskPolicy.__dataclass_fields__))
+
     def test_guidance_layer_does_not_own_final_candidate_scoring(self) -> None:
         banned = (
             "content_candidate_confidence_and_reasons",

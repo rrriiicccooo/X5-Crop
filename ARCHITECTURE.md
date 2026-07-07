@@ -212,6 +212,9 @@ candidate plan
   decision cap 分别归 assessment / decision。
 - `candidate_assessment.blockers`、`candidate_assessment.diagnostics` 和
   `candidate_assessment.auto_gate_inputs` 是 report/debug 的候选级解释，不是最终裁决。
+- content-only、safety 和 review-only candidate 是否进入最终 REVIEW 由 source-derived
+  `risk_summary` 和 decision applier 表达；decision policy 不保留未被裁决消费的
+  review-only 布尔开关。
 - `selection_risk_inputs` 是候选竞争阶段的风险证据，不是最终裁决；只有 decision 可以把它
   映射为 `candidate_competition_close`。
 - overlap / lucky-pass 这类 final risk evidence 必须在 decision 阶段生成；finalization
@@ -489,7 +492,9 @@ means evidence strength. Photo-width hard reasons may consume only
 `photo_edges`-sourced `photo_width_cv`. Candidate blockers, diagnostics,
 auto-gate inputs, and candidate confidence caps are assessment detail; decision
 reason inputs, final-review reason fields, and decision confidence caps are
-final decision detail.
+final decision detail. Content-only, safety, and review-only candidate outcomes
+are expressed by source-derived `risk_summary` plus the decision applier, not by
+unused review-only flags in decision policy.
 Final risk evidence such as overlap and lucky-pass risk is attached before the
 final decision. Finalization may consume that detail for output bleed, but it
 must not generate PASS / REVIEW inputs after the decision step.
