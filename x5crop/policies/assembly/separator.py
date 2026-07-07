@@ -139,7 +139,6 @@ def separator_width_profile_policy(
     return SeparatorWidthProfilePolicy(
         mode=mode,
         max_width_ratio=float(width_profile.max_width_ratio),
-        confidence_cap=float(width_profile.confidence_cap),
         required_count=0,
     )
 

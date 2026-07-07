@@ -118,7 +118,6 @@ class FormatParameterViews:
             full_enabled=self.separator_width_profile_enabled,
             partial_enabled=self.separator_width_profile_partial_enabled,
             max_width_ratio=self.separator_width_profile_max_width_ratio,
-            confidence_cap=self.separator_width_profile_confidence_cap,
         )
 
     @property

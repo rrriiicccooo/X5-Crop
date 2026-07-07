@@ -65,7 +65,6 @@ def _separator_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         (
             "mode",
             "max_width_ratio",
-            "confidence_cap",
             "required_count",
             "spacing_min_ratio",
             "spacing_max_ratio",

@@ -91,7 +91,6 @@ class FormatParameters(FormatParameterViews):
     separator_width_profile_max_width_ratio: float = 0.060
     separator_width_profile_min_mean: float = 0.95
     separator_width_profile_min_prominence: float = 0.02
-    separator_width_profile_confidence_cap: float = 0.995
     gap_min_width_ratio: float = 0.001
     gap_min_width_min: int = 1
     gap_min_width_max: int = 12

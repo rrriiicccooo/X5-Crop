@@ -33,6 +33,7 @@ from .gate_support import (
 from .gates import assess_separator_gate
 from .partial_holder import partial_extra_holder_frames_gate_detail
 from .scoring import (
+    content_quality_score,
     content_support_score,
     geometry_support_score,
     joint_support_score,
@@ -112,6 +113,7 @@ def apply_candidate_assessment_policy(
             scoring_policy.hard_full_confidence_floor
         )
     content_score = content_support_score(containment_detail, fmt.name, policy.content)
+    content_quality = content_quality_score(containment_detail, fmt.name, policy.content)
     geometry_score = geometry_support_score(candidate, containment_detail, policy)
     separator_score = (
         separator_support_score(candidate, separator_gate_detail, policy)
@@ -217,7 +219,7 @@ def apply_candidate_assessment_policy(
         fmt,
         source,
         joint_score,
-        content_score,
+        content_quality,
         geometry_score,
         cache,
         policy,
@@ -275,7 +277,7 @@ def apply_candidate_assessment_policy(
         candidate,
         source=source,
         content_support=support,
-        content_score=content_score,
+        content_score=content_quality,
         geometry_score=geometry_score,
         policy=policy.candidate_plan.evidence_independence,
     )
@@ -313,12 +315,6 @@ def apply_candidate_assessment_policy(
         reasons.append(REASON_AUTO_GATE_NOT_SATISFIED)
     else:
         confidence = max(confidence, config.confidence_threshold + min(0.10, joint_score * 0.08))
-    broad_width_count = int(
-        separator_gate_detail.get("broad_separator_width_gaps", 0) or 0
-    )
-    if source == "separator" and broad_width_count > 0:
-        confidence = min(confidence, policy.separator.width_profile.confidence_cap)
-
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
     candidate.review_reasons = sorted(set(reasons))
     candidate.detail["candidate_source"] = (
@@ -333,6 +329,9 @@ def apply_candidate_assessment_policy(
         "geometry_score": float(geometry_score),
         "separator_score": float(separator_score),
         "content_score": float(content_score),
+        "content_score_role": "content_containment_support",
+        "content_quality_score": float(content_quality),
+        "content_quality_score_role": "quality_diagnostic_not_hard_gate",
         "width_cv": _detail_float(candidate.detail, "width_cv", 1.0),
         "width_cv_source": str(candidate.detail.get("width_cv_source") or "unknown"),
         "photo_width_cv": candidate.detail.get("photo_width_cv"),

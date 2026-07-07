@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from ....domain import Detection
 from ...evidence.photo_width import photo_width_cv_from_detail
@@ -9,7 +9,7 @@ from ....policies.registry import get_detection_policy
 from ....policies.runtime.content import ContentPolicy
 from ....policies.runtime.policy import DetectionPolicy
 
-def content_support_score(
+def content_quality_score(
     detail: dict[str, Any],
     format_name: str,
     content_policy: Optional[ContentPolicy] = None,
@@ -41,6 +41,24 @@ def content_support_score(
             * support_gate,
         ),
     )
+
+
+def content_support_score(
+    detail: dict[str, Any],
+    format_name: str,
+    content_policy: Optional[ContentPolicy] = None,
+) -> float:
+    del format_name, content_policy
+    if not bool(detail.get("used", False)):
+        return 0.0
+    containment_ok = bool(detail.get("content_containment_ok", False))
+    harm_risk = bool(detail.get("content_harm_risk", True))
+    support = str(detail.get("support", ""))
+    if containment_ok and not harm_risk:
+        return 1.0
+    if support == "ok":
+        return 1.0
+    return 0.0
 
 
 def geometry_support_score(
@@ -132,6 +150,7 @@ def joint_support_score(
 
 
 __all__ = [
+    "content_quality_score",
     "content_support_score",
     "geometry_support_score",
     "joint_support_score",

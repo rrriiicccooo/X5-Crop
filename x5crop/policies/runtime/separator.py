@@ -115,7 +115,6 @@ class SeparatorModelGapProposalPolicy:
 class SeparatorWidthProfilePolicy:
     mode: str = "off"
     max_width_ratio: float = 0.060
-    confidence_cap: float = 0.995
     required_count: int = 0
     spacing_min_ratio: float = 0.82
     spacing_max_ratio: float = 1.18

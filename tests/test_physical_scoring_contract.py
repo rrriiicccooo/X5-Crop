@@ -1,7 +1,9 @@
+from pathlib import Path
 import unittest
 
 import numpy as np
 
+from x5crop.detection.candidate.assessment.candidate import apply_candidate_assessment_policy
 from x5crop.detection.candidate.assessment.base_scoring import base_detection_assessment
 from x5crop.detection.candidate.assessment.evidence_independence import evidence_independence_detail
 from x5crop.detection.candidate.assessment.gate_support import (
@@ -9,6 +11,10 @@ from x5crop.detection.candidate.assessment.gate_support import (
     separator_geometry_support_applies,
 )
 from x5crop.detection.candidate.assessment.partial_holder import partial_extra_holder_frames_gate_detail
+from x5crop.detection.candidate.assessment.scoring import (
+    content_quality_score,
+    content_support_score,
+)
 from x5crop.detection.decision.pass_review import evidence_summary_for
 from x5crop.detection.evidence.risk import lucky_photo_width_instability_components
 from x5crop.domain import Box, Detection, Gap
@@ -19,6 +25,7 @@ from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.runtime.candidate import EvidenceIndependencePolicy
 from x5crop.policies.runtime.diagnostics import LuckyPassRiskPolicy
 from x5crop.policies.runtime.separator import SeparatorGeometrySupportModePolicy
+from x5crop.runtime.config import RuntimeConfig
 
 
 class PhysicalScoringContractTest(unittest.TestCase):
@@ -154,6 +161,113 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertNotIn("low_contrast", reasons)
         self.assertFalse(detail["image_quality"]["contrast_ok"])
         self.assertEqual(detail["image_quality"]["role"], "diagnostic_not_crop_gate")
+
+    def test_content_score_measures_containment_before_content_quality(self) -> None:
+        policy = get_detection_policy("120-66", "full").content
+        containment = {
+            "used": True,
+            "support": "ok",
+            "content_containment_ok": True,
+            "content_harm_risk": False,
+            "median_mean": 0.01,
+            "median_coverage": 0.02,
+            "max_aspect_error": None,
+        }
+
+        self.assertEqual(
+            content_support_score(containment, "120-66", policy),
+            1.0,
+        )
+        self.assertLess(
+            content_quality_score(containment, "120-66", policy),
+            0.40,
+        )
+
+    def test_broad_separator_width_does_not_cap_confidence_by_itself(self) -> None:
+        gray = np.zeros((100, 300), dtype=np.uint8)
+        gray[:, ::2] = 255
+        policy = get_detection_policy("120-66", "full")
+        detection = Detection(
+            film_format="120-66",
+            layout="horizontal",
+            strip_mode="full",
+            count=3,
+            outer=Box(0, 0, 300, 100),
+            frames=[
+                Box(0, 0, 95, 100),
+                Box(105, 0, 195, 100),
+                Box(205, 0, 300, 100),
+            ],
+            gaps=[
+                Gap(1, 100.0, 1.0, GAP_DETECTED, 95.0, 105.0),
+                Gap(2, 200.0, 1.0, GAP_DETECTED, 195.0, 205.0),
+            ],
+            confidence=0.99,
+            review_reasons=[],
+            detail={
+                "outer_candidate_strategy": "base_outer",
+                "outer_area_ratio": 0.80,
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+                "broad_separator_width_gaps": 2,
+                "standard_gap_search": {
+                    "entries": [
+                        {"selected_source": "standard_detected"},
+                        {"selected_source": "standard_detected"},
+                    ],
+                },
+            },
+        )
+        config = RuntimeConfig(
+            input_path=Path("synthetic.tif"),
+            output_dir=None,
+            film_format="120-66",
+            layout_auto=False,
+            layout="horizontal",
+            strip_mode="full",
+            count=3,
+            count_override=3,
+            page=0,
+            bleed_x=0,
+            bleed_y=0,
+            deskew="off",
+            deskew_fallback="off",
+            deskew_min_angle=-2.0,
+            deskew_max_angle=2.0,
+            confidence_threshold=0.85,
+            review_dir=None,
+            copy_review_files=False,
+            export_review=False,
+            compression="none",
+            debug=False,
+            debug_analysis=False,
+            dry_run=True,
+            diagnostics=False,
+            overwrite=True,
+            report=False,
+            debug_errors=False,
+            reuse_analysis=False,
+            jobs=1,
+        )
+
+        assessed = apply_candidate_assessment_policy(
+            gray,
+            detection,
+            config,
+            format_spec("120-66"),
+            "separator",
+            policy=policy,
+        )
+
+        self.assertGreater(assessed.confidence, 0.95)
+        self.assertTrue(assessed.detail["candidate_assessment"]["auto_gate"])
+        self.assertEqual(
+            assessed.detail["candidate_assessment"]["separator_hard_evidence"][
+                "broad_separator_width_gaps"
+            ],
+            2,
+        )
 
     def test_safe_outer_overcut_and_low_content_quality_do_not_fail_final_evidence(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)

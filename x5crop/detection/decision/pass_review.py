@@ -93,6 +93,7 @@ def evidence_summary_for(
     )
     geometry_score = _float(assessment.get("geometry_score"), 0.0)
     content_score = _float(assessment.get("content_score"), 0.0)
+    content_quality_score = _float(assessment.get("content_quality_score"), content_score)
     width_cv = _float(detection.detail.get("width_cv"), 1.0)
     width_cv_source = str(detection.detail.get("width_cv_source") or "unknown")
     photo_width_stability = photo_width_stability_detail(
@@ -109,7 +110,7 @@ def evidence_summary_for(
     content_harm_risk = bool(
         content_detail.get("content_harm_risk", content_support != "ok")
     )
-    content_quality_ok = content_score >= policy.evidence.min_content_score
+    content_quality_ok = content_quality_score >= policy.evidence.min_content_score
     partial_detail = _dict(assessment.get("partial_safe_extra_frames"))
     partial_edge_safe = bool(partial_detail.get("ok", False))
     expected = int(separator["expected_gaps"])
@@ -207,7 +208,8 @@ def evidence_summary_for(
             "content_containment_ok": bool(content_containment_ok),
             "content_harm_risk": bool(content_harm_risk),
             "content_score": content_score,
-            "content_quality_score": content_score,
+            "content_score_role": assessment.get("content_score_role", "content_containment_support"),
+            "content_quality_score": content_quality_score,
             "quality_ok": bool(content_quality_ok),
             "score_role": "quality_diagnostic_not_hard_gate",
             "min_content_score": policy.evidence.min_content_score,

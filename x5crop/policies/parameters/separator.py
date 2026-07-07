@@ -42,7 +42,6 @@ class SeparatorWidthProfileParameters:
     full_enabled: bool
     partial_enabled: bool
     max_width_ratio: float
-    confidence_cap: float
 
 @dataclass(frozen=True)
 class NearbySeparatorRefinementParameters:
