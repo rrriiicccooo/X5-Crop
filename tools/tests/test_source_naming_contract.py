@@ -539,6 +539,8 @@ class SourceNamingContractTest(unittest.TestCase):
             "lucky_pass_risk_score_detail",
             "from ..evidence.risk",
             "from ...detection.evidence.risk",
+            "get_detection_policy",
+            "policies.registry",
         )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "final"

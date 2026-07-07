@@ -187,6 +187,8 @@ candidate plan
   `x5crop.output` 做输出相邻调整。
 - `x5crop.output` 是 output-adjacent read/apply helper；它可以读取已存在的 risk /
   decision detail 来计算 output bleed，但不能生成新的 PASS / REVIEW 输入。
+- `detection.final` 接收 workflow 已选定的 runtime policy；它不能自行查 policy registry
+  或重新解释 format / mode。
 - report / debug / export 是 output read-model；它们只能消费 `ProcessResult` 或
   `decision_summary.status`，不能根据 confidence / review reason 自行推导最终状态。
   裸 Detection 若还没有 decision summary，报告和 Debug Analysis 必须显示 `unknown` /
@@ -500,7 +502,8 @@ review reasons, and PASS / REVIEW. `x5crop.output` owns output-bleed parameter
 conversion, output-risk read models, and cached output-geometry restoration.
 `detection.final` consumes the decision result and `x5crop.output` helpers for
 approved geometry adjustment, output-adjacent bleed adjustment, and read-only
-diagnostics only.
+diagnostics only. It receives the runtime policy selected by workflow instead
+of looking up policy registry itself.
 `approved_auto` requires both threshold-level confidence and empty final review
 reasons; workflow and finalization must not derive final status from confidence
 alone.

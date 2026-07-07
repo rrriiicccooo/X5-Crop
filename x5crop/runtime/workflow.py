@@ -70,8 +70,8 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
         decision.detection,
         decision.status,
         config,
-        fmt,
         analysis_cache,
+        selected_policy,
     )
     detection = finalization.detection
     status = finalization.status

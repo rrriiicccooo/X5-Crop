@@ -7,14 +7,13 @@ import numpy as np
 
 from ...runtime.config import RuntimeConfig
 from ...domain import Detection
-from ...formats import FormatSpec
 from ...output.bleed import (
     AxisBleedParameters,
     apply_output_bleed,
     detection_bleed_parameters,
     output_bleed_parameters_for_detection,
 )
-from ...policies.registry import get_detection_policy
+from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
 from ..evidence.read_only import attach_read_only_diagnostics
 from .geometry import (
@@ -35,10 +34,9 @@ def finalize_detection(
     detection: Detection,
     status: str,
     config: RuntimeConfig,
-    fmt: FormatSpec,
     analysis_cache: AnalysisCache,
+    policy: DetectionPolicy,
 ) -> DetectionFinalizationResult:
-    policy = get_detection_policy(fmt.name, detection.strip_mode)
     detection_bleed = detection_bleed_parameters(policy.output)
     if policy.finalization.apply_approved_geometry_adjustment:
         apply_approved_geometry_adjustment(
@@ -48,11 +46,24 @@ def finalize_detection(
             status,
             policy.finalization.approved_geometry_adjustment,
         )
-    base_bleed = AxisBleedParameters(long_axis=int(config.bleed_x), short_axis=int(config.bleed_y))
+    base_bleed = AxisBleedParameters(
+        long_axis=int(config.bleed_x),
+        short_axis=int(config.bleed_y),
+    )
     output_bleed = output_bleed_parameters_for_detection(base_bleed, detection, policy.output)
-    output_config = replace(config, bleed_x=output_bleed.long_axis, bleed_y=output_bleed.short_axis)
+    output_config = replace(
+        config,
+        bleed_x=output_bleed.long_axis,
+        bleed_y=output_bleed.short_axis,
+    )
     if policy.output.apply_output_bleed:
-        apply_output_bleed(detection, detection_bleed, output_bleed, gray.shape[1], gray.shape[0])
+        apply_output_bleed(
+            detection,
+            detection_bleed,
+            output_bleed,
+            gray.shape[1],
+            gray.shape[0],
+        )
         apply_edge_bleed_protection(
             detection,
             output_config,
