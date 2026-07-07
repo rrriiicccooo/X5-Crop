@@ -10,7 +10,8 @@ from ..detail import final_review_reasons_from_detail
 from ...domain import Box, Detection
 from ...geometry.boxes import map_work_box, original_box_to_work
 from ...geometry.layout import work_gray
-from ...policies.runtime.final import ApprovedGeometryAdjustmentPolicy, EdgeBleedProtectionPolicy
+from ...policies.runtime.final import ApprovedGeometryAdjustmentPolicy
+from ...policies.runtime.output import EdgeBleedProtectionPolicy
 from ...utils import clamp_float, clamp_int
 
 

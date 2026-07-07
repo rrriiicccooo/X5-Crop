@@ -14,6 +14,7 @@ from .decision import runtime_decision_policy
 from .diagnostics import diagnostics_policy
 from .finalization import finalization_policy
 from .outer import outer_policy
+from .output import output_policy
 from .presets import FormatPolicyPreset
 from .report import report_policy
 from .risk import runtime_risk_policy
@@ -55,6 +56,7 @@ def build_policy_from_preset(
         risk=runtime_risk_policy(fmt, mode_preset, params),
         decision=runtime_decision_policy(params),
         finalization=finalization_policy(params),
+        output=output_policy(),
         diagnostics=diagnostics_policy(params),
         report=report_policy(),
         notes=mode_preset.notes,

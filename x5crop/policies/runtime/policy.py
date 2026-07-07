@@ -19,11 +19,9 @@ from .candidate import (
 from .content import ContentPolicy
 from .diagnostics import RuntimeDiagnosticsPolicy
 from .decision import RuntimeDecisionPolicy
-from .final import (
-    FinalizationPolicy,
-    OutputPolicy,
-)
+from .final import FinalizationPolicy
 from .outer import OuterPolicy
+from .output import OutputPolicy
 from .report import ReportPolicy
 from .risk import RuntimeRiskPolicy
 from .separator import SeparatorPolicy

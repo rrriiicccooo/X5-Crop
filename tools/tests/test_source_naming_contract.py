@@ -141,6 +141,30 @@ class SourceNamingContractTest(unittest.TestCase):
         }
         self.assertTrue(banned.isdisjoint(FinalizationPolicy.__dataclass_fields__))
 
+    def test_finalization_runtime_module_does_not_own_output_policy(self) -> None:
+        from x5crop.policies.runtime import final
+
+        banned = {
+            "EdgeBleedProtectionPolicy",
+            "OutputPolicy",
+        }
+
+        for name in banned:
+            self.assertFalse(hasattr(final, name))
+        self.assertEqual(
+            tuple(final.__all__),
+            ("ApprovedGeometryAdjustmentPolicy", "FinalizationPolicy"),
+        )
+
+    def test_output_policy_is_owned_by_runtime_output_module(self) -> None:
+        from x5crop.policies.runtime.output import (
+            EdgeBleedProtectionPolicy,
+            OutputPolicy,
+        )
+
+        self.assertIn("edge_bleed_protection", OutputPolicy.__dataclass_fields__)
+        self.assertIn("guard_ratio", EdgeBleedProtectionPolicy.__dataclass_fields__)
+
     def test_finalization_assembly_does_not_own_diagnostics_policy(self) -> None:
         from x5crop.policies.assembly import finalization
 

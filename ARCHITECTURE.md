@@ -252,7 +252,7 @@ format fact、runtime capability 和 final decision 必须分开：
 |---|---|
 | `policies.formats` | format-specific physical tolerance、content profile tolerance 和 search budget overrides。 |
 | `policies.parameters` | 数值参数对象、format parameter registry 和 override ownership validation。 |
-| `policies.runtime` | runtime `DetectionPolicy` 和子 policy dataclass，包括 candidate / risk / decision / finalization / diagnostics / report。 |
+| `policies.runtime` | runtime `DetectionPolicy` 和子 policy dataclass，包括 candidate / risk / decision / finalization / output / diagnostics / report。 |
 | `policies.assembly` | 从 format facts、受限 overrides 和 profile defaults 组装 active runtime policy。 |
 | `policies.decision` | final PASS / REVIEW decision contract 和少量 final evidence overrides。 |
 | `policies.reporting` | policy detail serialization；只负责报告可见性。 |
@@ -260,9 +260,11 @@ format fact、runtime capability 和 final decision 必须分开：
 
 format 文件不能声明 scoring、gate、risk、detector、diagnostics 或 runtime preset。影响
 final PASS / REVIEW 的参数必须进入 decision policy detail；影响 runtime 检测路径但不直接
-决定 PASS / REVIEW 的参数必须进入 runtime policy detail。`finalization` policy 只保留输出相邻
-几何和 bleed；runtime risk policy 只保留生成 final risk evidence 的参数；diagnostics policy
-与 report policy 单独装配，confidence cap 和 review reason 不属于 finalization。
+决定 PASS / REVIEW 的参数必须进入 runtime policy detail。`finalization` policy 只保留最终
+输出前的 approved geometry adjustment / attachment 开关；runtime output policy 拥有 detection
+bleed、output bleed 和 edge-bleed protection。runtime risk policy 只保留生成 final risk
+evidence 的参数；diagnostics policy 与 report policy 单独装配，confidence cap 和 review reason
+不属于 finalization。
 format policy module 的唯一构建入口是 `build_policy(strip_mode)`；`full_policy()` /
 `partial_policy()` 这类 mode-specific convenience helper 不再保留。
 
@@ -544,11 +546,13 @@ and final decision contract remain separate.
 Format files may provide physical tolerance, content profile tolerance, and
 search-budget overrides only. Runtime path parameters must appear in runtime
 policy detail; final PASS / REVIEW parameters must appear in decision policy
-detail. Finalization policy is output-adjacent geometry and bleed only; runtime
-risk policy only owns parameters for final risk evidence. Diagnostics and report
-policies are assembled separately. The only policy-construction
-entry in a format module is `build_policy(strip_mode)`; mode-specific convenience
-helpers such as `full_policy()` / `partial_policy()` are not kept.
+detail. Finalization policy owns approved geometry adjustment / attachment
+switches before export; runtime output policy owns detection bleed, output bleed,
+and edge-bleed protection. Runtime risk policy only owns parameters for final
+risk evidence. Diagnostics and report policies are assembled separately. The only
+policy-construction entry in a format module is `build_policy(strip_mode)`;
+mode-specific convenience helpers such as `full_policy()` / `partial_policy()`
+are not kept.
 
 ### 8. Format / Mode Composition Perspective
 
