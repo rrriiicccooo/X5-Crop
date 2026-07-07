@@ -144,6 +144,7 @@ class SourceNamingContractTest(unittest.TestCase):
     def test_active_gate_names_use_candidate_and_decision_contract_terms(self) -> None:
         banned = (
             "hard_review_reason_gate",
+            "hard_review_reasons_block_auto",
             "auto_pass_gate",
             "finalization_gate",
         )

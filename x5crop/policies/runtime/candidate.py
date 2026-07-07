@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class GatePolicy:
     ordered_gates: tuple[str, ...]
-    hard_review_reasons_block_auto: bool = True
 
 
 @dataclass(frozen=True)
