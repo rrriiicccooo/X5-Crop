@@ -294,7 +294,15 @@ def partial_extra_holder_frames_gate_detail(
         disqualifiers.append("holder_edge_disambiguation_weak")
     if equal > holder.max_equal_gaps:
         disqualifiers.append("equal_gap_used")
-    if width_cv > holder.max_width_cv:
+    photo_width_stability = {
+        "used": width_cv_source == "photo_edges",
+        "role": "photo_width_gate" if width_cv_source == "photo_edges" else "diagnostic_until_photo_edges",
+        "width_cv": float(width_cv),
+        "width_cv_source": width_cv_source,
+        "max_width_cv": float(holder.max_width_cv),
+        "unstable": bool(width_cv_source == "photo_edges" and width_cv > holder.max_width_cv),
+    }
+    if bool(photo_width_stability["unstable"]):
         disqualifiers.append("photo_width_unstable")
     if joint_score < holder.min_joint_score:
         disqualifiers.append("joint_score_low")
@@ -321,6 +329,7 @@ def partial_extra_holder_frames_gate_detail(
         "hard_ratio": float(hard_ratio),
         "width_cv": float(width_cv),
         "width_cv_source": width_cv_source,
+        "photo_width_stability": photo_width_stability,
         "outer_area_ratio": float(outer_area),
         "joint_score": float(joint_score),
         "content_score": float(content_score),

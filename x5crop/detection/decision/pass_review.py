@@ -91,6 +91,20 @@ def evidence_summary_for(
     content_score = _float(assessment.get("content_score"), 0.0)
     width_cv = _float(detection.detail.get("width_cv"), 1.0)
     width_cv_source = str(detection.detail.get("width_cv_source") or "unknown")
+    photo_width_gate_used = width_cv_source == "photo_edges"
+    photo_width_ok = (
+        width_cv <= policy.evidence.max_width_cv_ratio
+        if photo_width_gate_used
+        else True
+    )
+    photo_width_stability = {
+        "used": bool(photo_width_gate_used),
+        "role": "photo_width_gate" if photo_width_gate_used else "diagnostic_until_photo_edges",
+        "width_cv": width_cv,
+        "width_cv_source": width_cv_source,
+        "max_width_cv_ratio": policy.evidence.max_width_cv_ratio,
+        "ok": bool(photo_width_ok),
+    }
     content_support = str(content_detail.get("support", assessment.get("content_support", "")))
     content_containment_ok = bool(
         content_detail.get("content_containment_ok", content_support == "ok")
@@ -109,7 +123,11 @@ def evidence_summary_for(
         policy.evidence.allow_geometry_supported_separator
         and geometry_support_mode in {"detected_geometry", "stable_grid"}
         and hard_ratio >= policy.evidence.geometry_supported_min_hard_ratio
-        and width_cv <= policy.evidence.geometry_supported_max_width_cv_ratio
+        and (
+            width_cv <= policy.evidence.geometry_supported_max_width_cv_ratio
+            if photo_width_gate_used
+            else True
+        )
         and int(separator["equal_gaps"]) <= policy.evidence.max_equal_gap_count
         and content_containment_ok
         and not content_harm_risk
@@ -150,7 +168,7 @@ def evidence_summary_for(
     )
     outer_ok = outer_alignment_ok and (outer_area_ok or safe_overcut_allowed)
     geometry_ok = (
-        width_cv <= policy.evidence.max_width_cv_ratio
+        photo_width_ok
         and geometry_score >= policy.evidence.min_geometry_score
     )
     content_ok = (
@@ -181,6 +199,7 @@ def evidence_summary_for(
             "ok": bool(geometry_ok),
             "width_cv": width_cv,
             "width_cv_source": width_cv_source,
+            "photo_width_stability": photo_width_stability,
             "max_width_cv_ratio": policy.evidence.max_width_cv_ratio,
             "geometry_score": geometry_score,
             "min_geometry_score": policy.evidence.min_geometry_score,

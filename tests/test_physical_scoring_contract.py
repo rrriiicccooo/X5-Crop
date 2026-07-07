@@ -90,6 +90,36 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertEqual(overcut_detail["outer_area_profile"]["status"], "above_profile")
         self.assertAlmostEqual(profile_confidence, overcut_confidence)
 
+    def test_frame_box_width_fallback_does_not_act_as_photo_width_evidence(self) -> None:
+        gray = np.zeros((100, 100), dtype=np.uint8)
+        gray[:, ::2] = 255
+        outer = Box(0, 0, 100, 100)
+        gaps = [
+            Gap(1, 32.0, 1.0, GAP_DETECTED, 28.0, 36.0),
+            Gap(2, 68.0, 1.0, GAP_DETECTED, 64.0, 72.0),
+        ]
+        boxes = [
+            Box(0, 0, 12, 100),
+            Box(36, 0, 88, 100),
+            Box(92, 0, 100, 100),
+        ]
+
+        confidence, reasons, detail = base_detection_assessment(
+            gray,
+            outer,
+            gaps,
+            boxes,
+            3,
+            format_spec("120-645"),
+            "full",
+        )
+
+        self.assertGreater(confidence, 0.82)
+        self.assertEqual(detail["width_cv_source"], "frame_boxes")
+        self.assertFalse(detail["photo_width_stability"]["used"])
+        self.assertEqual(detail["photo_width_stability"]["role"], "diagnostic_until_photo_edges")
+        self.assertNotIn("photo_width_unstable", reasons)
+
     def test_low_global_contrast_is_image_quality_detail_not_crop_failure(self) -> None:
         gray = np.full((100, 100), 128, dtype=np.uint8)
         outer = Box(0, 0, 100, 100)
@@ -179,6 +209,59 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertTrue(evidence["content"]["ok"])
         self.assertFalse(evidence["content"]["quality_ok"])
         self.assertEqual(evidence["content"]["score_role"], "quality_diagnostic_not_hard_gate")
+
+    def test_final_evidence_does_not_gate_on_frame_box_width_fallback(self) -> None:
+        gray = np.zeros((100, 100), dtype=np.uint8)
+        detection = Detection(
+            film_format="120-66",
+            layout="horizontal",
+            strip_mode="full",
+            count=3,
+            outer=Box(0, 0, 100, 100),
+            frames=[
+                Box(0, 0, 12, 100),
+                Box(36, 0, 88, 100),
+                Box(92, 0, 100, 100),
+            ],
+            gaps=[
+                Gap(1, 32.0, 1.0, GAP_DETECTED, 28.0, 36.0),
+                Gap(2, 68.0, 1.0, GAP_DETECTED, 64.0, 72.0),
+            ],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "outer_area_ratio": 0.80,
+                "width_cv": 0.20,
+                "width_cv_source": "frame_boxes",
+                "candidate_assessment": {
+                    "geometry_score": 0.95,
+                    "content_score": 0.95,
+                    "source": "separator",
+                },
+            },
+        )
+        content_detail = {
+            "used": True,
+            "support": "ok",
+            "content_containment_ok": True,
+            "content_harm_risk": False,
+            "content_quality_score": 0.95,
+        }
+
+        evidence = evidence_summary_for(
+            gray,
+            detection,
+            content_detail,
+            {"used": True, "ok": True, "reason": "ok"},
+            decision_contract_for("120-66", "full"),
+        )
+
+        self.assertTrue(evidence["geometry"]["ok"])
+        self.assertFalse(evidence["geometry"]["photo_width_stability"]["used"])
+        self.assertEqual(
+            evidence["geometry"]["photo_width_stability"]["role"],
+            "diagnostic_until_photo_edges",
+        )
 
     def test_lucky_pass_width_instability_requires_photo_edge_width_source(self) -> None:
         policy = LuckyPassRiskPolicy()
@@ -310,6 +393,64 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertFalse(detail["content_quality_ok"])
         self.assertEqual(detail["content_score_role"], "quality_diagnostic_not_hard_gate")
         self.assertTrue(detail["ok"])
+
+    def test_partial_holder_does_not_treat_frame_box_width_as_photo_instability(self) -> None:
+        policy = get_detection_policy("120-66", "partial")
+        detection = Detection(
+            film_format="120-66",
+            layout="horizontal",
+            strip_mode="partial",
+            count=3,
+            outer=Box(0, 0, 300, 100),
+            frames=[
+                Box(0, 0, 80, 100),
+                Box(95, 0, 205, 100),
+                Box(220, 0, 300, 100),
+            ],
+            gaps=[
+                Gap(1, 87.5, 1.0, GAP_DETECTED, 80.0, 95.0),
+                Gap(2, 212.5, 1.0, GAP_DETECTED, 205.0, 220.0),
+            ],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "width_cv": 0.20,
+                "width_cv_source": "frame_boxes",
+                "outer_area_ratio": 0.80,
+                "separator_width_evidence": {
+                    "used": True,
+                    "separator_width_gap_count": 2,
+                    "broad_separator_width_gaps": 2,
+                },
+            },
+        )
+        content_detail = {
+            "used": True,
+            "support": "ok",
+            "content_containment_ok": True,
+            "content_harm_risk": False,
+            "frame_scores": [
+                {"index": 1, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
+                {"index": 2, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
+                {"index": 3, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
+            ],
+        }
+
+        detail = partial_extra_holder_frames_gate_detail(
+            np.zeros((100, 300), dtype=np.uint8),
+            detection,
+            {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0},
+            content_detail,
+            format_spec("120-66"),
+            "separator",
+            joint_score=0.90,
+            content_score=0.90,
+            geometry_score=0.90,
+            policy=policy,
+        )
+
+        self.assertNotIn("photo_width_unstable", detail["disqualifiers"])
+        self.assertEqual(detail["photo_width_stability"]["role"], "diagnostic_until_photo_edges")
 
 
 if __name__ == "__main__":

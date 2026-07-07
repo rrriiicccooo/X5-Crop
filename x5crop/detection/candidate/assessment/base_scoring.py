@@ -134,6 +134,38 @@ def _outer_area_profile(outer_area: float, base_score) -> dict[str, Any]:
     }
 
 
+def _photo_width_stability_profile(width_metrics: dict[str, Any], base_score) -> dict[str, Any]:
+    frame_box_cv_value = width_metrics.get("frame_box_width_cv")
+    try:
+        frame_box_cv = 1.0 if frame_box_cv_value is None else float(frame_box_cv_value)
+    except (TypeError, ValueError):
+        frame_box_cv = 1.0
+    photo_width_cv = width_metrics.get("photo_width_cv")
+    if photo_width_cv is None:
+        return {
+            "used": False,
+            "reason": "photo_width_unavailable",
+            "role": "diagnostic_until_photo_edges",
+            "width_cv_source": width_metrics.get("width_cv_source", "unknown"),
+            "photo_width_cv": None,
+            "frame_box_width_cv": frame_box_cv,
+            "confidence": None,
+            "unstable": False,
+        }
+    cv = float(photo_width_cv)
+    return {
+        "used": True,
+        "reason": "ok" if cv <= base_score.unstable_width_cv else "photo_width_unstable",
+        "role": "base_confidence_input",
+        "width_cv_source": "photo_edges",
+        "photo_width_cv": cv,
+        "frame_box_width_cv": frame_box_cv,
+        "confidence": max(0.0, min(1.0, 1.0 - cv / base_score.width_cv_norm)),
+        "unstable": cv > base_score.unstable_width_cv,
+        "unstable_width_cv": float(base_score.unstable_width_cv),
+    }
+
+
 def base_detection_assessment(
     gray_work: np.ndarray,
     outer: Box,
@@ -156,13 +188,14 @@ def base_detection_assessment(
     )
     width_metrics = _candidate_width_metrics(gaps, boxes, origin, pitch, count)
     width_cv = float(width_metrics["width_cv"])
+    photo_width_stability = _photo_width_stability_profile(width_metrics, base_score)
     outer_area = float(outer.width * outer.height) / max(1.0, float(gray_work.shape[0] * gray_work.shape[1]))
     outer_area_profile = _outer_area_profile(outer_area, base_score)
     p01, p50, p99 = sampled_percentile(gray_work, [1, 50, 99])
     contrast = float(p99 - p01)
 
     gap_conf = 1.0 if expected_gaps == 0 else gap_evidence.separator_support_count / float(expected_gaps)
-    width_conf = max(0.0, min(1.0, 1.0 - width_cv / base_score.width_cv_norm))
+    width_conf = photo_width_stability.get("confidence")
     uses_min_hard_equal_cap = (
         separator_gate.profile == SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
     )
@@ -179,12 +212,13 @@ def base_detection_assessment(
 
     confidence_weight = max(
         1e-6,
-        base_score.gap_weight + base_score.width_weight,
+        base_score.gap_weight
+        + (base_score.width_weight if width_conf is not None else 0.0),
     )
-    confidence = (
-        base_score.gap_weight * gap_conf
-        + base_score.width_weight * width_conf
-    ) / confidence_weight
+    confidence = base_score.gap_weight * gap_conf
+    if width_conf is not None:
+        confidence += base_score.width_weight * float(width_conf)
+    confidence /= confidence_weight
 
     full_geometry_ok = (
         strip_mode == "full"
@@ -228,7 +262,7 @@ def base_detection_assessment(
         and gap_evidence.hard_separator_gaps < 2
     ):
         reasons.append("too_few_detected_separators")
-    if width_cv > base_score.unstable_width_cv:
+    if bool(photo_width_stability.get("unstable", False)):
         reasons.append("photo_width_unstable")
     if fmt.family == "120" and gap_evidence.separator_support_count < expected_gaps:
         reasons.append(base_score.family_separator_uncertain_reason)
@@ -264,6 +298,7 @@ def base_detection_assessment(
         "reliable_support_count": gap_evidence.reliable_support_count,
         "equal_gaps": gap_evidence.equal_model_gaps,
         **width_metrics,
+        "photo_width_stability": photo_width_stability,
         "outer_area_ratio": outer_area,
         "outer_area_profile": outer_area_profile,
         "image_quality": {
