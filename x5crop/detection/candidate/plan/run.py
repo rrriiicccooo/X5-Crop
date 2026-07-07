@@ -15,7 +15,11 @@ from ..assessment.candidate import apply_candidate_assessment_policy
 from .reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
 from ..selection.choose import is_partial_safe_auto_candidate
 from .source_policy import safety_candidate_outer_proposals_enabled
-from .sources import detect_candidate_for_count, detect_safety_outer_proposal_candidate_for_count
+from .sources import (
+    detect_candidate_for_count,
+    detect_content_guided_separator_candidate_for_count,
+    detect_safety_outer_proposal_candidate_for_count,
+)
 
 
 def _separator_extension_families(
@@ -29,6 +33,8 @@ def _separator_extension_families(
     families: list[str] = []
     if separator_policy.full_width.available_for(strip_mode, explicit_count):
         families.append("separator_full_width")
+    if policy.candidate_plan.content_guided_separator.available_for(strip_mode):
+        families.append("content_guided_separator")
     return families
 
 
@@ -125,6 +131,43 @@ def calibrated_candidates_for_count(
             expanded_after_primary=True,
             extension_families=extension_families,
         )
+        if "content_guided_separator" in extension_families:
+            content_guided_separator, guidance_detail = detect_content_guided_separator_candidate_for_count(
+                gray,
+                config,
+                fmt,
+                count,
+                strip_mode,
+                offset,
+                cache,
+                policy=policy,
+            )
+            if content_guided_separator is None:
+                separator_candidate.detail.setdefault("candidate_plan", {})[
+                    "content_guided_separator"
+                ] = guidance_detail
+            else:
+                content_guided_candidate = apply_candidate_assessment_policy(
+                    gray,
+                    content_guided_separator,
+                    config,
+                    fmt,
+                    "separator",
+                    cache,
+                    policy=policy,
+                )
+                content_guided_candidate.detail.setdefault("candidate_plan", {})[
+                    "execution_budget"
+                ] = {
+                    "stage": "expanded_after_primary",
+                    "action": "run_extension_candidates",
+                    "reason": "primary_not_reliable",
+                    "primary_reliable": bool(primary_reliability.get("reliable", False)),
+                    "primary_reliability": primary_reliability,
+                    "expanded_after_primary": True,
+                    "extension_families": list(extension_families),
+                }
+                candidates.append(content_guided_candidate)
     else:
         separator_candidate = primary_candidate
         skipped_reason = "reliable_primary" if extension_families else "no_extension_families"

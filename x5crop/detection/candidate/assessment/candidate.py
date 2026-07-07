@@ -155,6 +155,19 @@ def apply_candidate_assessment_policy(
             separator_gate_detail["edge_anchor_needs_hard_separator"] = True
             reasons.append("edge_anchor_separator_weak")
 
+    content_guided_hard_separator_missing = False
+    content_guided_detail = candidate.detail.get("content_guided_separator", {})
+    if source == "separator" and isinstance(content_guided_detail, dict) and bool(content_guided_detail.get("used", False)):
+        hard_count = separator_gate_detail_summary(separator_gate_detail).hard_separator_gaps
+        if hard_count <= 0:
+            content_guided_hard_separator_missing = True
+            separator_gate_ok = False
+            separator_gate_detail = dict(separator_gate_detail)
+            separator_gate_detail["ok"] = False
+            separator_gate_detail["reason"] = policy.candidate_plan.content_guided_separator.requires_hard_separator_reason
+            separator_gate_detail["content_guided_separator_needs_hard_separator"] = True
+            reasons.append(policy.candidate_plan.content_guided_separator.requires_hard_separator_reason)
+
     if source == "separator" and not separator_gate_ok:
         reasons.append(REASON_SEPARATOR_HARD_EVIDENCE_WEAK)
     if support == "aspect_conflict":
@@ -183,6 +196,7 @@ def apply_candidate_assessment_policy(
         policy,
     )
     partial_safe_extra_frames_ok = bool(partial_safe_extra_frames.get("ok", False))
+    partial_safe_auto_support_ok = partial_safe_extra_frames_ok and not content_guided_hard_separator_missing
     partial_safe_disqualifiers = set(
         partial_safe_extra_frames.get("disqualifiers", [])
     )
@@ -212,7 +226,7 @@ def apply_candidate_assessment_policy(
             partial_safe_disqualifiers
         )
         reasons.extend(sorted(partial_safe_disqualifiers))
-    if partial_safe_extra_frames_ok:
+    if partial_safe_auto_support_ok:
         separator_gate_detail = dict(separator_gate_detail)
         separator_gate_detail["ok"] = True
         separator_gate_detail["reason"] = "partial_safe_extra_frames_support"
@@ -253,7 +267,7 @@ def apply_candidate_assessment_policy(
     auto_gate = False
     if source == "separator":
         auto_gate = (
-            (separator_gate_ok or partial_safe_extra_frames_ok)
+            (separator_gate_ok or partial_safe_auto_support_ok)
             and support == "ok"
             and evidence_independence_ok
             and not hard_reasons

@@ -10,6 +10,7 @@ from ....formats import FormatSpec
 from ....cache.separator import cached_separator_profile
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
+from ..proposal.separator.hints import SeparatorGapHintSet
 from .separator_refinements import (
     NEARBY_SEPARATOR_REFINEMENT_FAMILY,
     apply_late_separator_refinement_chain,
@@ -67,6 +68,7 @@ def build_primary_separator_gaps_for_outer(
     *,
     explicit_count: bool,
     force_standard_gap_search: bool = False,
+    gap_hints: Optional[SeparatorGapHintSet] = None,
 ) -> SeparatorGapBuildResult:
     work_height, work_width = gray_work.shape
     crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
@@ -87,6 +89,7 @@ def build_primary_separator_gaps_for_outer(
             gap_max_width_ratio_override,
             policy,
             forced=True,
+            gap_hints=gap_hints,
         )
         model_detail = model_gap_proposal_detail(
             initial_gaps,

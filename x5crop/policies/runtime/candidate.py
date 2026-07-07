@@ -195,8 +195,27 @@ class ContentCandidatePlanPolicy:
 
 
 @dataclass(frozen=True)
+class ContentGuidedSeparatorCandidatePolicy:
+    enabled: bool = True
+    strip_modes: tuple[str, ...] = ("full", "partial")
+    requires_exact_content_runs: bool = True
+    max_hint_offset_ratio: float = 0.28
+    max_hint_offset_min: int = 18
+    max_hint_offset_max: int = 420
+    proposal_role: str = "content_guided_separator_search"
+    guidance_source: str = "content_region_hints"
+    requires_hard_separator_reason: str = "content_guided_separator_needs_hard_separator"
+
+    def available_for(self, strip_mode: str) -> bool:
+        return bool(self.enabled and strip_mode in self.strip_modes)
+
+
+@dataclass(frozen=True)
 class CandidatePlanPolicy:
     content_candidate: ContentCandidatePlanPolicy = field(default_factory=ContentCandidatePlanPolicy)
+    content_guided_separator: ContentGuidedSeparatorCandidatePolicy = field(
+        default_factory=ContentGuidedSeparatorCandidatePolicy
+    )
     safety_candidate: SafetyCandidatePolicy = field(default_factory=SafetyCandidatePolicy)
     partial_stop: PartialStopPolicy = field(default_factory=PartialStopPolicy)
     separator_full_width_competition: SeparatorFullWidthCompetitionPolicy = field(
@@ -214,6 +233,7 @@ __all__ = [
     "CandidateExecutionBudgetPolicy",
     "CandidatePlanPolicy",
     "ContentCandidatePlanPolicy",
+    "ContentGuidedSeparatorCandidatePolicy",
     "ContentMismatchReviewSelectionPolicy",
     "EvidenceIndependencePolicy",
     "GatePolicy",

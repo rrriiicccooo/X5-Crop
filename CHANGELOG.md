@@ -28,6 +28,9 @@ Current stable release: v4.2.8
   `content_regions` 只生成 bbox / run hints，`content_evidence` 只验证已有
   frame boxes，content candidate 只生成 content-model gaps，并在 policy/detail 中
   明确 `review_only` contract。
+- Content-guided separator search 已加入 candidate plan extension：content bbox / run
+  hints 只能移动 separator search center，不能生成 hard gap 或 content-based equal
+  gap；content-guided separator candidate 若没有真实 hard separator，仍必须 REVIEW。
 - active retry architecture 已退休；safety candidate 和 corrected outer 都作为候选计划或候选扩展统一 assessment。
 - separator-derived outer family 已通用化：标准 strip 的 full 默认启用 local / full-width scope；partial 只有显式 count 时启用 extension scope。separator 宽度由单一 `width_aware` proposal 同时解释 standard theoretical width 与 observed width evidence，format 只提供 width / spacing / budget 参数。
 - observed width profile 是中性的实测宽度证据，不是 broad-only profile：standard hard search 找不到时，它可以补充比 physical width prior 更窄、匹配或更宽的 detected separator，并在 detail 中记录 selected width relation；broad separator width 仍只是 gate / partial-safety 消费的 evidence summary。
@@ -164,6 +167,13 @@ Current stable release: v4.2.8
   proposal 只生成 review-only weak candidate 和 content-model gaps。cached /
   uncached 路径继续共用 threshold 与 frame support summary helper；threshold、
   support、frame_scores 和 successful cache 行为保持不变。
+- Content-guided separator search 已新增为 candidate extension family：
+  `candidate/proposal/content_guidance.py` 从 content bbox / runs 生成
+  separator gap hints，`candidate/proposal/separator/hints.py` 承接 hint contract，
+  `candidate/proposal/separator/proposal.py` 只用 hint 移动 hard / observed-width
+  separator search center；如果真实 separator 找不到，model fallback 仍回到几何
+  expected center。`candidate/assessment/candidate.py` 明确要求 content-guided
+  separator candidate 必须有 hard separator，否则不能 auto PASS。
 - equal / grid / content model-gap proposal 已集中到 `geometry.model_gaps`，
   profile 等分模型归 `detection.candidate.proposal.separator.model`；
   build / safety / refinement / content candidate 路径不再手写 `"equal"` /
@@ -545,6 +555,10 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   hints, `content_evidence` only validates existing frame boxes, and content
   candidates only create content-model gaps with an explicit `review_only`
   policy/detail contract.
+- Content-guided separator search is a candidate-plan extension: content bbox /
+  run hints may move separator search centers, but they cannot create hard gaps
+  or content-based equal gaps. Content-guided separator candidates without real
+  hard separator evidence must still REVIEW.
 - Active retry architecture is retired; safety candidates and corrected outers
   are assessed as candidate-plan entries or candidate extensions.
 - Separator-derived outer families are generalized: standard full strips enable
@@ -950,6 +964,14 @@ Verified:
   candidates with content-model gaps. Cached and uncached content evidence paths
   still share threshold and frame-support summary helpers; threshold, support,
   frame score, and successful cache behavior are unchanged.
+- Content-guided separator search is added as a candidate extension family:
+  `candidate/proposal/content_guidance.py` turns content bbox / runs into
+  separator gap hints, `candidate/proposal/separator/hints.py` carries the hint
+  contract, and `candidate/proposal/separator/proposal.py` uses hints only to
+  move hard / observed-width separator search centers. If real separator
+  evidence is not found, model fallback remains geometry-based, and candidate
+  assessment blocks auto PASS for content-guided separator candidates without
+  hard separators.
 - Corrected outer extension now runs inside the detection pipeline before final
   selection: proposal creates only corrected boxes, candidate code rebuilds and
   reassesses them, and finalization no longer creates candidates.

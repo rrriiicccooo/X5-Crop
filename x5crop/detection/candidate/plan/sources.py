@@ -5,6 +5,7 @@ from typing import Optional
 
 import numpy as np
 
+from ....constants import CANDIDATE_SOURCE_SEPARATOR
 from ....domain import Detection
 from ....formats import FormatSpec
 from ....geometry.layout import work_gray
@@ -13,6 +14,7 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ...evidence.content_evidence import content_evidence_detail
+from ..proposal.content_guidance import content_guided_separator_seed_for_count
 from ..proposal.outer.plan import (
     merge_outer_proposal_candidates,
     outer_candidate_strategy,
@@ -169,6 +171,66 @@ def detect_candidate_for_count(
         "separator_width_profile_merged": True,
     }
     return best
+
+
+def detect_content_guided_separator_candidate_for_count(
+    gray: np.ndarray,
+    config: RuntimeConfig,
+    fmt: FormatSpec,
+    count: int,
+    strip_mode: str,
+    offset_fraction: float = 0.0,
+    cache: Optional[AnalysisCache] = None,
+    policy: Optional[DetectionPolicy] = None,
+) -> tuple[Optional[Detection], dict]:
+    policy = policy or get_detection_policy(fmt.name, strip_mode)
+    guidance_policy = policy.candidate_plan.content_guided_separator
+    seed_result = content_guided_separator_seed_for_count(
+        gray,
+        config,
+        fmt,
+        count,
+        strip_mode,
+        offset_fraction,
+        cache,
+        policy.content,
+        guidance_policy,
+    )
+    if seed_result.seed is None:
+        return None, seed_result.detail
+
+    detection = build_detection_for_outer(
+        gray,
+        config,
+        fmt,
+        count,
+        strip_mode,
+        seed_result.seed.outer,
+        offset_fraction,
+        "content_guided_separator",
+        "content_guided_separator_outer",
+        cache=cache,
+        allow_outer_refine=False,
+        gap_search_profile=WIDTH_AWARE_GAP_PROFILE,
+        separator_gap_hints=seed_result.seed.gap_hints,
+        policy=policy,
+    )
+    gap_profile_detail = width_aware_gap_profile_detail(policy.separator)
+    detection.detail["gap_search_profile"] = gap_profile_detail
+    detection.detail["separator_width_profile"] = gap_profile_detail
+    detection.detail["candidate_source"] = CANDIDATE_SOURCE_SEPARATOR
+    detection.detail["content_guided_separator"] = seed_result.seed.detail
+    detection.detail["candidate_plan"] = {
+        "source": "content_guided_separator",
+        "source_candidate": "separator",
+        "proposal_family": "content_guided_separator",
+        "content_seeded": True,
+        "decision_contract": "separator_evidence_required",
+        "gap_profiles": [WIDTH_AWARE_GAP_PROFILE],
+        "gap_search_profiles": [WIDTH_AWARE_GAP_PROFILE],
+        "content_guidance": seed_result.seed.gap_hints.summary(),
+    }
+    return detection, seed_result.detail
 
 
 def detect_safety_outer_proposal_candidate_for_count(

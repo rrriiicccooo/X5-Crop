@@ -20,6 +20,7 @@ from ..assessment.partial_edge import partial_edge_hint
 from ..assessment.scoring import score_detection
 from ..proposal.outer.grid_refine import grid_refined_outer_box
 from ..proposal.outer.plan import outer_candidate_strategy
+from ..proposal.separator.hints import SeparatorGapHintSet
 from .separator_gaps import (
     SeparatorGapBuildResult,
     apply_late_separator_refinements,
@@ -41,6 +42,7 @@ def build_detection_for_outer(
     allow_outer_refine: bool = True,
     gap_max_width_ratio_override: Optional[float] = None,
     gap_search_profile: str = WIDTH_AWARE_GAP_PROFILE,
+    separator_gap_hints: Optional[SeparatorGapHintSet] = None,
     policy: Optional[DetectionPolicy] = None,
 ) -> Detection:
     if gap_search_profile != WIDTH_AWARE_GAP_PROFILE:
@@ -64,6 +66,7 @@ def build_detection_for_outer(
         policy,
         ww,
         explicit_count=bool(config.count_override is not None),
+        gap_hints=separator_gap_hints,
     )
     outer = separator_gaps.outer
     profile = separator_gaps.profile
@@ -156,6 +159,11 @@ def build_detection_for_outer(
             "grid_used": bool(separator_gaps.grid_detail.get("grid_used", False)),
             "standard_gap_search": separator_gaps.standard_gap_search_detail,
             "separator_width_profile_gap_search": separator_gaps.separator_width_profile_gap_search_detail,
+            "separator_gap_hints": (
+                separator_gap_hints.summary()
+                if separator_gap_hints is not None
+                else {"used": False, "reason": "no_gap_hints"}
+            ),
             "edge_pair_correction": separator_gaps.edge_pair_correction_detail,
             "frame_size_fit": frame_size_detail,
             "nearby_separator_refinement": separator_gaps.nearby_refinement_detail,
@@ -191,6 +199,7 @@ def _build_separator_gap_lifecycle(
     work_width: int,
     *,
     explicit_count: bool,
+    gap_hints: Optional[SeparatorGapHintSet] = None,
 ) -> SeparatorGapBuildResult:
     separator_gaps = build_primary_separator_gaps_for_outer(
         gray_work,
@@ -203,6 +212,7 @@ def _build_separator_gap_lifecycle(
         gap_max_width_ratio_override,
         policy,
         explicit_count=explicit_count,
+        gap_hints=gap_hints,
     )
     if not allow_outer_refine or strip_mode != "full":
         return apply_late_separator_refinements(
@@ -242,6 +252,7 @@ def _build_separator_gap_lifecycle(
         policy,
         explicit_count=explicit_count,
         force_standard_gap_search=True,
+        gap_hints=gap_hints,
     )
     grid_detail = dict(refined_separator_gaps.grid_detail)
     grid_detail["outer_refined"] = True

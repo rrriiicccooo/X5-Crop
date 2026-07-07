@@ -9,6 +9,7 @@ from ....domain import Box, Gap
 from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
+from ..proposal.separator.hints import SeparatorGapHintSet
 from ..proposal.separator.model import propose_equal_model_gaps_from_profile
 from ..proposal.separator.proposal import (
     propose_separator_gap_profile_gaps_with_detail,
@@ -75,6 +76,7 @@ def standard_separator_gap_result(
     policy: DetectionPolicy,
     *,
     forced: bool = False,
+    gap_hints: Optional[SeparatorGapHintSet] = None,
 ) -> InitialSeparatorGapResult:
     frame_aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
     standard_gap_proposal = propose_separator_gap_profile_gaps_with_detail(
@@ -90,6 +92,7 @@ def standard_separator_gap_result(
         policy.separator.gap_search,
         policy.separator.width_profile,
         policy.separator.width_profile_search,
+        gap_hints,
     )
     standard_gap_search_detail = selected_gap_source_detail(
         standard_gap_proposal.detail,
