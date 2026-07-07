@@ -572,6 +572,7 @@ class SourceNamingContractTest(unittest.TestCase):
             "review_only_safety_equal_split",
             "changes_pass_review",
             '"review_only": True',
+            "auto_pass_eligible",
         )
         offenders: list[str] = []
         for path in (

@@ -237,6 +237,8 @@ candidate plan
   不能作为 candidate assessment 或 final review reason 的主要业务字段。
 - candidate auto-gate blocking vocabulary belongs to `candidate.assessment`；通用
   `utils` 不承载 candidate-specific blocker list，也不用 hard review reason 命名。
+- candidate 级可见字段必须写 `candidate_auto_gate_*`；不能用 `auto_pass_*` 表达候选资格，
+  因为最终 PASS 只属于 decision contract。
 - candidate-plan policy 中阻断 candidate auto gate 的字段必须叫 blocker，不叫 review
   reason；final review reason 只属于 decision contract。
 - candidate-plan detail 中 gap search family 只用 `gap_search_profiles` 表达；旧
@@ -562,6 +564,9 @@ remain in runtime output / diagnostics / report policy instead of decision
 contract.
 Candidate auto-gate blocker vocabulary belongs to `candidate.assessment`, not to
 generic utilities, and must not be named as hard review reasons.
+Candidate-visible fields use `candidate_auto_gate_*`; they must not use
+`auto_pass_*` for candidate eligibility because final PASS belongs only to the
+decision contract.
 Candidate-plan policy fields that block candidate auto gate use blocker naming,
 not review-reason naming; final review reasons belong only to the decision
 contract.

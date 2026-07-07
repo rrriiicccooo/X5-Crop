@@ -39,7 +39,7 @@ def apply_safety_candidate_assessment(
 
     detection.detail["safety_candidate"] = {
         "used": True,
-        "auto_pass_eligible": False,
+        "candidate_auto_gate_eligible": False,
         "candidate_blocker": SAFETY_CANDIDATE_AUTO_GATE_BLOCKER,
         "separator_local_mode": policy.outer.proposal.geometry.separator.local.mode,
         "separator_full_width_mode": policy.outer.proposal.geometry.separator.full_width.mode,

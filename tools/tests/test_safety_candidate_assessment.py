@@ -47,7 +47,7 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
         self.assertFalse(assessment["auto_gate"])
         self.assertEqual(assessment["source"], CANDIDATE_SOURCE_SAFETY)
         self.assertEqual(assessment["auto_gate_inputs"]["source"], CANDIDATE_SOURCE_SAFETY)
-        self.assertEqual(detection.detail["safety_candidate"]["auto_pass_eligible"], False)
+        self.assertEqual(detection.detail["safety_candidate"]["candidate_auto_gate_eligible"], False)
         self.assertEqual(
             detection.detail["safety_candidate"]["candidate_blocker"],
             SAFETY_CANDIDATE_AUTO_GATE_BLOCKER,

@@ -308,6 +308,6 @@ def detect_safety_outer_proposal_candidate_for_count(
         "source": CANDIDATE_SOURCE_SAFETY,
         "gap_search_profiles": [WIDTH_AWARE_GAP_PROFILE],
         "outer_candidate_count": int(len(outer_candidates)),
-        "auto_pass_eligible": False,
+        "candidate_auto_gate_eligible": False,
     }
     return best
