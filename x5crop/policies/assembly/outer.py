@@ -42,13 +42,13 @@ def separator_outer_family_policies(
         ),
         SeparatorOuterFamilyPolicy(
             mode="conditional" if is_standard_strip else "off",
-            phase="late",
+            phase="extension",
             requires_explicit_count_for_partial=True,
             max_candidates=int(params.separator_full_width_outer_max_candidates),
         ),
         SeparatorOuterFamilyPolicy(
             mode="conditional" if is_standard_strip and width_profile_enabled else "off",
-            phase="auxiliary",
+            phase="supplemental",
             requires_explicit_count_for_partial=True,
             max_candidates=0,
         ),

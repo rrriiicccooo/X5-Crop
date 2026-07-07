@@ -94,8 +94,8 @@ def calibrated_candidates_for_count(
         offset,
         cache,
         policy=policy,
-        include_late_outer=False,
-        include_auxiliary_outer=False,
+        include_extension_outer=False,
+        include_supplemental_outer=False,
     )
     primary_candidate = apply_candidate_assessment_policy(
         gray,

@@ -165,7 +165,7 @@ def separator_refinement_policy(
         ),
         nearby=SeparatorRefinementFamilyPolicy(
             mode="conditional",
-            phase="late",
+            phase="extension",
             strip_modes=standard_strip_modes,
             requires_explicit_count_for_partial=True,
             target_gap_methods=(GAP_DETECTED, GAP_EDGE_PAIR),

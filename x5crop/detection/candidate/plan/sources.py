@@ -39,8 +39,8 @@ def detect_candidate_for_count(
     cache: Optional[AnalysisCache] = None,
     gap_max_width_ratio_override: Optional[float] = None,
     policy: Optional[DetectionPolicy] = None,
-    include_late_outer: bool = True,
-    include_auxiliary_outer: bool = True,
+    include_extension_outer: bool = True,
+    include_supplemental_outer: bool = True,
 ) -> Detection:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     policy = policy or get_detection_policy(fmt.name, strip_mode)
@@ -97,7 +97,7 @@ def detect_candidate_for_count(
     separator_full_width_family = policy.outer.proposal.geometry.separator.full_width
     separator_full_width_mode = separator_full_width_family.mode
     should_try_separator_full_width = (
-        include_late_outer
+        include_extension_outer
         and separator_full_width_family.available_for(strip_mode, explicit_count)
         and (
             separator_full_width_mode == "always"
@@ -165,11 +165,11 @@ def detect_candidate_for_count(
         "count_explicit": bool(explicit_count),
         "outer_execution_stage": (
             "complete"
-            if include_late_outer and include_auxiliary_outer
+            if include_extension_outer and include_supplemental_outer
             else "primary"
         ),
-        "late_outer_enabled": bool(include_late_outer),
-        "auxiliary_outer_enabled": bool(include_auxiliary_outer),
+        "extension_outer_enabled": bool(include_extension_outer),
+        "supplemental_outer_enabled": bool(include_supplemental_outer),
         "gap_profiles": gap_profiles,
         "gap_search_profiles": gap_profiles,
         "outer_candidate_count": int(len(outer_candidates)),
