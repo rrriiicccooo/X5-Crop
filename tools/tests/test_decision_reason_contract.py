@@ -369,7 +369,7 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "overlap_bleed_risk": {
                     "used": True,
                     "risk": True,
-                    "reason": "diagnostic_overlap_risk",
+                    "reason": "overlap_bleed_risk",
                 },
                 "lucky_pass_risk_score": {
                     "used": True,
@@ -405,7 +405,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertFalse(decided.detail["risk_summary"]["lucky_pass_risk"])
         self.assertEqual(
             decided.detail["risk_summary"]["overlap_bleed_risk"]["reason"],
-            "diagnostic_overlap_risk",
+            "overlap_bleed_risk",
         )
         self.assertEqual(
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
@@ -442,10 +442,10 @@ class DecisionReasonContractTest(unittest.TestCase):
         base_policy = get_detection_policy("135", "full")
         policy = replace(
             base_policy,
-            diagnostics=replace(
-                base_policy.diagnostics,
-                overlap_bleed_risk=replace(
-                    base_policy.diagnostics.overlap_bleed_risk,
+            risk=replace(
+                base_policy.risk,
+                overlap_bleed=replace(
+                    base_policy.risk.overlap_bleed,
                     enabled=True,
                 ),
             ),
@@ -469,7 +469,7 @@ class DecisionReasonContractTest(unittest.TestCase):
                 return_value={
                     "used": True,
                     "risk": True,
-                    "reason": "diagnostic_overlap_risk",
+                    "reason": "overlap_bleed_risk",
                 },
             ),
             patch(
@@ -491,7 +491,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertEqual(decision.detection.review_reasons, ["overlap_risk"])
         self.assertEqual(
             decision.detection.detail["overlap_bleed_risk"]["reason"],
-            "diagnostic_overlap_risk",
+            "overlap_bleed_risk",
         )
         self.assertEqual(
             [item["signal"] for item in decision.detection.detail["decision_reason_inputs"]],

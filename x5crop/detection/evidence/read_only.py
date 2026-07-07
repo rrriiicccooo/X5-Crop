@@ -31,7 +31,7 @@ def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: 
         for name in ("suspect_internal_edge", "suspect_frame_border", "nearby_separator_conflict", "geometry_conflict")
     )
     strong_overlap_models = int(overlap_risk_counts.get("strong", 0))
-    lucky_policy = get_detection_policy(detection.film_format, detection.strip_mode).diagnostics.lucky_pass_risk
+    lucky_policy = get_detection_policy(detection.film_format, detection.strip_mode).risk.lucky_pass
     single_anchor_pass_risk = (
         lucky_policy.enabled
         and detection.strip_mode == "full"

@@ -14,8 +14,6 @@ from .content import (
 )
 from .diagnostics import (
     DebugGapOverlayParameters,
-    DiagnosticOverlapRiskParameters,
-    LuckyPassRiskParameters,
     NearbySeparatorDiagnosticsParameters,
 )
 from .decision import DecisionReviewParameters
@@ -34,6 +32,10 @@ from .outer import (
     LongAxisGeometryCorrectionParameters,
     SeparatorOuterBandParameters,
     ShortAxisGeometryCorrectionParameters,
+)
+from .risk import (
+    LuckyPassRiskParameters,
+    OverlapBleedRiskParameters,
 )
 from .scoring import (
     BaseDetectionScoreParameters,
@@ -625,15 +627,15 @@ class FormatParameterViews:
         )
 
     @property
-    def diagnostic_overlap_risk(self) -> DiagnosticOverlapRiskParameters:
-        return DiagnosticOverlapRiskParameters(
-            mean_min=self.diagnostic_overlap_mean_min,
-            weak_continuity=self.diagnostic_overlap_weak_continuity,
-            weak_activity=self.diagnostic_overlap_weak_activity,
-            medium_continuity=self.diagnostic_overlap_medium_continuity,
-            medium_activity=self.diagnostic_overlap_medium_activity,
-            strong_continuity=self.diagnostic_overlap_strong_continuity,
-            strong_activity=self.diagnostic_overlap_strong_activity,
+    def overlap_bleed_risk(self) -> OverlapBleedRiskParameters:
+        return OverlapBleedRiskParameters(
+            mean_min=self.overlap_bleed_risk_mean_min,
+            weak_continuity=self.overlap_bleed_risk_weak_continuity,
+            weak_activity=self.overlap_bleed_risk_weak_activity,
+            medium_continuity=self.overlap_bleed_risk_medium_continuity,
+            medium_activity=self.overlap_bleed_risk_medium_activity,
+            strong_continuity=self.overlap_bleed_risk_strong_continuity,
+            strong_activity=self.overlap_bleed_risk_strong_activity,
         )
 
     @property

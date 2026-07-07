@@ -4,18 +4,6 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
-class OverlapBleedRiskPolicy:
-    enabled: bool = False
-    mean_min: float = 55.0
-    weak_continuity: float = 0.16
-    weak_activity: float = 0.04
-    medium_continuity: float = 0.35
-    medium_activity: float = 0.08
-    strong_continuity: float = 0.70
-    strong_activity: float = 0.12
-
-
-@dataclass(frozen=True)
 class DebugGapOverlayPolicy:
     overlap_tolerance_ratio: float = 0.012
     overlap_tolerance_min: float = 4.0
@@ -43,31 +31,6 @@ class NearbySeparatorDiagnosticsPolicy:
 
 
 @dataclass(frozen=True)
-class LuckyPassRiskPolicy:
-    enabled: bool = True
-    model_gap_support_min: int = 2
-    model_gap_support_weight: float = 0.24
-    minor_model_gap_support_weight: float = 0.08
-    limited_strong_hard_max: int = 2
-    limited_strong_hard_weight: float = 0.20
-    very_limited_strong_hard_max: int = 1
-    very_limited_strong_hard_weight: float = 0.10
-    suspicious_hard_weight: float = 0.20
-    strong_overlap_weight: float = 0.20
-    combo_weight: float = 0.12
-    unstable_photo_width_cv: float = 0.006
-    unstable_photo_width_weight: float = 0.16
-    mild_photo_width_cv: float = 0.003
-    mild_photo_width_weight: float = 0.08
-    strong_hard_credit_min: int = 3
-    strong_hard_credit: float = -0.15
-    stable_photo_width_cv: float = 0.002
-    stable_model_gap_min: int = 3
-    stable_photo_width_geometry_credit: float = -0.35
-    risk_threshold: float = 0.80
-
-
-@dataclass(frozen=True)
 class DebugPanelPolicy:
     panel_id: str
     title: str
@@ -76,10 +39,8 @@ class DebugPanelPolicy:
 @dataclass(frozen=True)
 class RuntimeDiagnosticsPolicy:
     attach_read_only_when_requested: bool = True
-    overlap_bleed_risk: OverlapBleedRiskPolicy = field(default_factory=OverlapBleedRiskPolicy)
     debug_gap_overlay: DebugGapOverlayPolicy = field(default_factory=DebugGapOverlayPolicy)
     nearby_separator: NearbySeparatorDiagnosticsPolicy = field(default_factory=NearbySeparatorDiagnosticsPolicy)
-    lucky_pass_risk: LuckyPassRiskPolicy = field(default_factory=LuckyPassRiskPolicy)
     debug_panels: tuple[str, ...] = (
         "original_gray",
         "debug_boxes",
@@ -105,8 +66,6 @@ class RuntimeDiagnosticsPolicy:
 __all__ = [
     "DebugGapOverlayPolicy",
     "DebugPanelPolicy",
-    "LuckyPassRiskPolicy",
     "NearbySeparatorDiagnosticsPolicy",
-    "OverlapBleedRiskPolicy",
     "RuntimeDiagnosticsPolicy",
 ]

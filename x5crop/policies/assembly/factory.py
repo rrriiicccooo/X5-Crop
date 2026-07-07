@@ -16,6 +16,7 @@ from .finalization import finalization_policy
 from .outer import outer_policy
 from .presets import FormatPolicyPreset
 from .report import report_policy
+from .risk import runtime_risk_policy
 from .separator import separator_policy
 from ..ids import detection_policy_id_for
 from ..runtime.base import DetectorPolicy
@@ -51,9 +52,10 @@ def build_policy_from_preset(
         scoring=scoring_policy(fmt, params),
         candidate_selection=selection_policy(preset, strip_mode, params),
         candidate_plan=candidate_plan_policy(mode_preset, strip_mode, params),
+        risk=runtime_risk_policy(fmt, mode_preset, params),
         decision=runtime_decision_policy(params),
         finalization=finalization_policy(params),
-        diagnostics=diagnostics_policy(fmt, mode_preset, params),
+        diagnostics=diagnostics_policy(params),
         report=report_policy(),
         notes=mode_preset.notes,
     )

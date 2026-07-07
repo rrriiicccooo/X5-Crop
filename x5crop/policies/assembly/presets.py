@@ -28,7 +28,7 @@ class ModePolicyPreset:
     review_only: ReviewOnlyPolicy = field(default_factory=ReviewOnlyPolicy)
     separator_width_profile: SeparatorWidthProfilePreset = field(default_factory=SeparatorWidthProfilePreset)
     separator_geometry_support_modes: tuple[str, ...] = ()
-    diagnostics_overlap_bleed: bool = False
+    overlap_bleed_risk_enabled: bool = False
 
 
 @dataclass(frozen=True)

@@ -25,7 +25,7 @@ from x5crop.gap_methods import GAP_DETECTED
 from x5crop.policies.decision.contract import decision_contract_for
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.runtime.candidate import EvidenceIndependencePolicy
-from x5crop.policies.runtime.diagnostics import LuckyPassRiskPolicy
+from x5crop.policies.runtime.risk import LuckyPassRiskPolicy
 from x5crop.policies.runtime.separator import SeparatorGeometrySupportModePolicy
 from x5crop.runtime.config import RuntimeConfig
 

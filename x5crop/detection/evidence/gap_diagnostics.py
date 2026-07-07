@@ -102,10 +102,9 @@ def nearby_separator_candidate_detail(
 
 def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap, cache: Optional[AnalysisCache] = None) -> dict[str, Any]:
     policy = get_detection_policy(detection.film_format, detection.strip_mode)
-    diagnostics_policy = policy.diagnostics
     hard_gap_trust_policy = policy.separator.hard_gap_trust
-    nearby_policy = diagnostics_policy.nearby_separator
-    overlap_policy = diagnostics_policy.overlap_bleed_risk
+    nearby_policy = policy.diagnostics.nearby_separator
+    overlap_policy = policy.risk.overlap_bleed
     work_outer = gap_work_outer(detection, gap)
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
     origin = float(detection.detail.get("origin", 0.0) or 0.0)

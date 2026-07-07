@@ -154,6 +154,32 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertFalse(hasattr(diagnostics, "ReportPolicy"))
         self.assertFalse(hasattr(common, "report_policy"))
 
+    def test_runtime_risk_policy_is_not_owned_by_diagnostics_modules(self) -> None:
+        from x5crop.policies.assembly import diagnostics
+        from x5crop.policies.runtime import diagnostics as runtime_diagnostics
+
+        banned = (
+            "OverlapBleedRiskPolicy",
+            "LuckyPassRiskPolicy",
+            "overlap_bleed_risk",
+            "lucky_pass_risk",
+        )
+        for name in banned:
+            self.assertFalse(hasattr(runtime_diagnostics, name))
+            self.assertNotIn(name, tuple(diagnostics.__all__))
+
+    def test_overlap_bleed_risk_does_not_use_diagnostic_ownership_name(self) -> None:
+        offenders: list[str] = []
+        banned = ("diagnostic_" + "overlap", "Diagnostic" + "Overlap")
+        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                text = path.read_text(encoding="utf-8")
+                if any(term in text for term in banned):
+                    offenders.append(str(path.relative_to(PROJECT_ROOT)))
+
+        self.assertEqual(offenders, [])
+
     def test_active_gate_names_use_candidate_and_decision_contract_terms(self) -> None:
         banned = (
             "hard_review_reason_gate",

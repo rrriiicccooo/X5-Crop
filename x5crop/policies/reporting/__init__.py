@@ -119,14 +119,19 @@ def _selection_detail(policy: "DetectionPolicy") -> dict[str, Any]:
 def _runtime_diagnostics_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     diagnostics = policy.diagnostics
     return {
-        "overlap_bleed_risk": _plain(diagnostics.overlap_bleed_risk),
         "debug_gap_overlay": _plain(diagnostics.debug_gap_overlay),
         "nearby_separator": _plain(diagnostics.nearby_separator),
-        "lucky_pass_risk": _plain(diagnostics.lucky_pass_risk),
         "debug_panels": list(diagnostics.debug_panels),
         "debug_panel_titles": {
             panel.panel_id: panel.title for panel in diagnostics.debug_panel_titles
         },
+    }
+
+
+def _runtime_risk_detail(policy: "DetectionPolicy") -> dict[str, Any]:
+    return {
+        "overlap_bleed": _plain(policy.risk.overlap_bleed),
+        "lucky_pass": _plain(policy.risk.lucky_pass),
     }
 
 
@@ -154,6 +159,7 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "scoring": _scoring_detail(policy),
         "selection": _selection_detail(policy),
         "candidate_plan": _plain(policy.candidate_plan),
+        "risk": _runtime_risk_detail(policy),
         "decision": _plain(policy.decision),
         "finalization": _plain(policy.finalization),
         "output": _plain(policy.output),

@@ -38,7 +38,7 @@ def overlap_bleed_risk_detail(gray: np.ndarray, detection: Detection, cache: Opt
     return {
         "used": True,
         "risk": bool(risk),
-        "reason": "diagnostic_overlap_risk" if risk else "no_medium_or_strong_overlap_risk",
+        "reason": "overlap_bleed_risk" if risk else "no_medium_or_strong_overlap_risk",
         "overlap_risk_counts": overlap_risk_counts,
         "gap_diagnostics": gap_records,
         "gap_count": len(gap_records),
@@ -85,7 +85,7 @@ def lucky_pass_risk_score_detail(
     threshold: float,
     cache: Optional[AnalysisCache] = None,
 ) -> dict[str, Any]:
-    policy = get_detection_policy(detection.film_format, detection.strip_mode).diagnostics.lucky_pass_risk
+    policy = get_detection_policy(detection.film_format, detection.strip_mode).risk.lucky_pass
     fmt = FORMATS.get(detection.film_format, FORMATS["135"])
     if (
         not policy.enabled

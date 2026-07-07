@@ -105,7 +105,7 @@ def _attach_decision_risk_evidence(
     analysis_cache: AnalysisCache,
 ) -> None:
     if (
-        policy.diagnostics.overlap_bleed_risk.enabled
+        policy.risk.overlap_bleed.enabled
         and not isinstance(detection.detail.get("overlap_bleed_risk"), dict)
     ):
         detection.detail["overlap_bleed_risk"] = overlap_bleed_risk_detail(

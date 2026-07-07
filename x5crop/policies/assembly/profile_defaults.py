@@ -5,8 +5,8 @@ from dataclasses import replace
 from ...formats import FormatSpec
 from ..parameters.aggregate import FormatParameters
 from ..parameters.base import PartialCountParameters
-from ..parameters.diagnostics import LuckyPassRiskParameters
 from ..parameters.finalization import PartialHolderParameters
+from ..parameters.risk import LuckyPassRiskParameters
 from ..parameters.scoring import (
     BaseDetectionScoreParameters,
     ScoringCalibrationParameters,

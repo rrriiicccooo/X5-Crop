@@ -25,6 +25,7 @@ from .final import (
 )
 from .outer import OuterPolicy
 from .report import ReportPolicy
+from .risk import RuntimeRiskPolicy
 from .separator import SeparatorPolicy
 
 if TYPE_CHECKING:
@@ -51,6 +52,7 @@ class DetectionPolicy:
     scoring: ScoringPolicy
     candidate_selection: SelectionPolicy
     candidate_plan: CandidatePlanPolicy
+    risk: RuntimeRiskPolicy
     decision: RuntimeDecisionPolicy
     finalization: FinalizationPolicy
     output: OutputPolicy = field(default_factory=OutputPolicy)

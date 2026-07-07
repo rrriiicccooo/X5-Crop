@@ -223,7 +223,7 @@ def _separator_geometry_support_modes(format_id: str, strip_mode: str) -> tuple[
     return ()
 
 
-def _diagnostics_overlap_bleed(format_id: str, strip_mode: str) -> bool:
+def _overlap_bleed_risk_enabled(format_id: str, strip_mode: str) -> bool:
     if strip_mode == PARTIAL:
         return True
     return format_id in {"half", "120-645", "120-66", "120-67"}
@@ -245,7 +245,7 @@ def mode_policy_preset(format_id: str, strip_mode: str) -> ModePolicyPreset:
             format_id,
             strip_mode,
         ),
-        diagnostics_overlap_bleed=_diagnostics_overlap_bleed(format_id, strip_mode),
+        overlap_bleed_risk_enabled=_overlap_bleed_risk_enabled(format_id, strip_mode),
     )
 
 
