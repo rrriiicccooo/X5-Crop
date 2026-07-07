@@ -207,6 +207,13 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_decision_package_marker_does_not_reexport_runtime_helpers(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "__init__.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        import_from_nodes = [node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
+
+        self.assertEqual(import_from_nodes, [])
+
     def test_format_policy_modules_expose_only_unified_build_entry(self) -> None:
         banned = (
             "def full_policy",

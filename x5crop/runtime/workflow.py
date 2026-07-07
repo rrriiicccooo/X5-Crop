@@ -12,7 +12,7 @@ from .config import RuntimeConfig
 from .deskew import apply_deskew
 from .profile import runtime_for_profile
 from ..debug.outputs import write_debug_outputs
-from ..detection.decision import apply_detection_decision
+from ..detection.decision.final_decision import apply_detection_decision
 from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
 from ..domain import ProcessResult
