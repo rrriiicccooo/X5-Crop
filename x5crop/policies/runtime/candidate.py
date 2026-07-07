@@ -152,7 +152,7 @@ class CandidateExecutionBudgetPolicy:
     requires_auto_gate: bool = True
     requires_hard_separator_ok: bool = True
     requires_content_support: str = "ok"
-    requires_no_review_reasons: bool = True
+    requires_no_candidate_reasons: bool = True
 
 
 @dataclass(frozen=True)

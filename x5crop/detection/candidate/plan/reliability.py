@@ -31,7 +31,10 @@ def candidate_reliability_detail(
         or content_support == budget.requires_content_support
     )
     confidence_ok = float(detection.confidence) >= required_confidence
-    review_reasons_ok = (not budget.requires_no_review_reasons) or not detection.review_reasons
+    candidate_reasons = list(detection.review_reasons)
+    candidate_reasons_ok = (
+        not budget.requires_no_candidate_reasons
+    ) or not candidate_reasons
     reliable = all(
         (
             source_ok,
@@ -39,7 +42,7 @@ def candidate_reliability_detail(
             hard_separator_requirement_ok,
             content_ok,
             confidence_ok,
-            review_reasons_ok,
+            candidate_reasons_ok,
         )
     )
     return {
@@ -54,8 +57,8 @@ def candidate_reliability_detail(
         "hard_separator_requirement_ok": bool(hard_separator_requirement_ok),
         "content_support": content_support,
         "content_ok": bool(content_ok),
-        "review_reasons": list(detection.review_reasons),
-        "review_reasons_ok": bool(review_reasons_ok),
+        "candidate_reasons": candidate_reasons,
+        "candidate_reasons_ok": bool(candidate_reasons_ok),
     }
 
 

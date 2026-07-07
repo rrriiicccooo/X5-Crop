@@ -178,6 +178,9 @@ class SourceNamingContractTest(unittest.TestCase):
     def test_candidate_plan_does_not_name_source_contract_as_final_decision(self) -> None:
         banned = (
             "decision_contract",
+            '"review_reasons"',
+            "review_reasons_ok",
+            "requires_no_review_reasons",
         )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan"
