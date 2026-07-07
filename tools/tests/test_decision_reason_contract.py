@@ -5,9 +5,13 @@ from pathlib import Path
 
 import numpy as np
 
+from x5crop.cache.analysis import make_analysis_cache
 from x5crop.constants import CANDIDATE_SOURCE_SAFETY
 from x5crop.detection.candidate.assessment.safety import SAFETY_CANDIDATE_AUTO_GATE_BLOCKER
-from x5crop.detection.decision.final_decision import _apply_decision_post_check_reasons
+from x5crop.detection.decision.final_decision import (
+    _apply_decision_post_check_reasons,
+    apply_detection_decision,
+)
 from x5crop.detection.decision.pass_review import apply_final_decision_policy
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, Detection
@@ -208,6 +212,87 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertEqual(
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
             ["safety_or_review_only", "candidate_auto_gate_failed"],
+        )
+
+    def test_final_status_requires_no_review_reasons_with_low_threshold(self) -> None:
+        gray = np.zeros((100, 100), dtype=np.uint8)
+        detection = Detection(
+            film_format="135",
+            layout="horizontal",
+            strip_mode="full",
+            count=1,
+            outer=Box(10, 10, 90, 90),
+            frames=[Box(10, 10, 90, 90)],
+            gaps=[],
+            confidence=0.90,
+            review_reasons=[SAFETY_CANDIDATE_AUTO_GATE_BLOCKER],
+            detail={
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+                "candidate_source": CANDIDATE_SOURCE_SAFETY,
+                "candidate_assessment": {
+                    "source": CANDIDATE_SOURCE_SAFETY,
+                    "auto_gate": False,
+                    "geometry_score": 1.0,
+                    "content_score": 1.0,
+                    "content_quality_score": 1.0,
+                    "blockers": [SAFETY_CANDIDATE_AUTO_GATE_BLOCKER],
+                    "diagnostics": [],
+                },
+            },
+        )
+        config = RuntimeConfig(
+            input_path=Path("synthetic.tif"),
+            output_dir=None,
+            film_format="135",
+            layout_auto=False,
+            layout="horizontal",
+            strip_mode="full",
+            count=1,
+            count_override=1,
+            page=0,
+            bleed_x=0,
+            bleed_y=0,
+            deskew="off",
+            deskew_fallback="off",
+            deskew_min_angle=-2.0,
+            deskew_max_angle=2.0,
+            confidence_threshold=0.70,
+            review_dir=None,
+            copy_review_files=False,
+            export_review=False,
+            diagnostics=False,
+            compression="auto",
+            debug=False,
+            debug_analysis=False,
+            dry_run=True,
+            overwrite=True,
+            report=True,
+            debug_errors=False,
+            reuse_analysis=False,
+            jobs=1,
+        )
+
+        decision = apply_detection_decision(
+            gray,
+            detection,
+            config,
+            format_spec("135"),
+            make_analysis_cache(gray, "horizontal"),
+            {},
+            get_detection_policy("135", "full"),
+        )
+
+        self.assertEqual(decision.status, "needs_review")
+        self.assertEqual(decision.detection.confidence, 0.84)
+        self.assertEqual(
+            decision.detection.review_reasons,
+            ["content_only_evidence", "evidence_combination_insufficient"],
+        )
+        self.assertEqual(
+            decision.detection.detail["decision_summary"]["status"],
+            "needs_review",
         )
 
     def test_close_competition_is_final_decision_reason(self) -> None:

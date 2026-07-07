@@ -196,6 +196,8 @@ candidate plan
   映射为 `candidate_competition_close`。
 - `decision_reason_inputs`、`final_review_reasons_added` 和 `final_review_reasons` 是最终
   PASS / REVIEW 的解释入口；decision post-check reason 也必须进入这些 final summary 字段。
+- `approved_auto` 必须同时满足 confidence 达到阈值且 `final_review_reasons` 为空；
+  workflow / finalization 不能只根据 confidence 推导最终状态。
 
 字段命名必须反映物理语义。`width_cv` 只能作为 generic diagnostic 或 separator / gap
 几何测量；照片宽度证据使用 `photo_width_*`。
@@ -429,6 +431,9 @@ composition belong to `detection.candidate.plan`.
 `detection.decision` owns final evidence, confidence caps, risk summary, final
 review reasons, and PASS / REVIEW. `detection.final` consumes that result
 for output bleed, approved geometry adjustment, and read-only diagnostics only.
+`approved_auto` requires both threshold-level confidence and empty final review
+reasons; workflow and finalization must not derive final status from confidence
+alone.
 Stable `Detection.detail` readers live in `detection.detail`, not the root
 package.
 

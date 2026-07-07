@@ -71,7 +71,8 @@ def apply_detection_decision(
         outer_alignment,
     )
     _apply_decision_post_check_reasons(detection, config, policy, deskew_detail)
-    status = "approved_auto" if detection.confidence >= config.confidence_threshold else "needs_review"
+    status = _decision_status_for(detection, config.confidence_threshold)
+    _sync_decision_summary_status(detection, status)
     return FinalDecisionResult(
         detection=detection,
         status=status,
@@ -202,6 +203,19 @@ def _apply_decision_post_check_reasons(
             )
             decision_summary["final_review_reasons"] = list(detection.review_reasons)
             decision_summary["decision_reason_inputs"] = reason_inputs
+
+
+def _decision_status_for(detection: Detection, confidence_threshold: float) -> str:
+    if detection.confidence >= confidence_threshold and not detection.review_reasons:
+        return "approved_auto"
+    return "needs_review"
+
+
+def _sync_decision_summary_status(detection: Detection, status: str) -> None:
+    decision_summary = detection.detail.get("decision_summary")
+    if isinstance(decision_summary, dict):
+        decision_summary["status"] = status
+        decision_summary["pass"] = status == "approved_auto"
 
 
 __all__ = [
