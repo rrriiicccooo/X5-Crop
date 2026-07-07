@@ -15,6 +15,7 @@ from ....constants import (
 )
 from ....domain import Detection
 from ....formats import FormatSpec
+from ....geometry.layout import work_gray
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
@@ -26,6 +27,7 @@ from .evidence_independence import evidence_independence_detail
 from .gates import assess_separator_gate
 from .partial_holder import partial_extra_holder_frames_gate_detail
 from .scoring import (
+    apply_base_detection_scoring,
     content_support_score,
     geometry_support_score,
     hard_full_calibration_floor_applies,
@@ -49,6 +51,15 @@ def apply_candidate_assessment_policy(
         detail=dict(detection.detail),
     )
     policy = policy or get_detection_policy(fmt.name, candidate.strip_mode)
+    if source == "separator":
+        gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
+        candidate = apply_base_detection_scoring(
+            gray_work,
+            candidate,
+            config,
+            fmt,
+            policy,
+        )
     separator_gate_ok, separator_gate_detail = assess_separator_gate(
         candidate,
         config.confidence_threshold,

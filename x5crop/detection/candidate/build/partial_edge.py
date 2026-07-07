@@ -28,3 +28,8 @@ def partial_edge_hint(
         "span_start": span_start,
         "span_end": span_end,
     }
+
+
+__all__ = [
+    "partial_edge_hint",
+]

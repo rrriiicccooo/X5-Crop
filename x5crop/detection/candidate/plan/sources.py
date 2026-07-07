@@ -23,6 +23,7 @@ from ...physical.outer.plan import (
 )
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE, width_aware_gap_profile_detail
 from ..build.detection import build_detection_for_outer
+from ..assessment.scoring import apply_base_detection_scoring
 from .counts import raw_detection_rank
 from ..assessment.partial_holder import partial_safe_frame_content_detail, partial_safe_leading_content_detail
 from .source_policy import separator_full_width_can_compete, separator_outer_gap_max_width_override
@@ -78,6 +79,13 @@ def detect_candidate_for_count(
                 gap_max_width_ratio_override=candidate_gap_override,
                 gap_search_profile=gap_profile,
                 policy=policy,
+            )
+            detection = apply_base_detection_scoring(
+                gray_work,
+                detection,
+                config,
+                fmt,
+                policy,
             )
             gap_profile_detail = width_aware_gap_profile_detail(policy.separator)
             detection.detail["gap_search_profile"] = gap_profile_detail
@@ -261,22 +269,21 @@ def detect_safety_outer_proposal_candidate_for_count(
     candidates: list[Detection] = []
     for candidate in outer_candidates:
         candidate_gap_override = separator_outer_gap_max_width_override(policy)
-        candidates.append(
-            build_detection_for_outer(
-                gray,
-                config,
-                fmt,
-                count,
-                strip_mode,
-                candidate.box,
-                offset_fraction,
-                candidate.name,
-                candidate.strategy,
-                cache=cache,
-                gap_max_width_ratio_override=candidate_gap_override,
-                policy=policy,
-            )
+        detection = build_detection_for_outer(
+            gray,
+            config,
+            fmt,
+            count,
+            strip_mode,
+            candidate.box,
+            offset_fraction,
+            candidate.name,
+            candidate.strategy,
+            cache=cache,
+            gap_max_width_ratio_override=candidate_gap_override,
+            policy=policy,
         )
+        candidates.append(apply_base_detection_scoring(gray_work, detection, config, fmt, policy))
     best = max(candidates, key=lambda d: raw_detection_rank(d, config.confidence_threshold))
     areas = [candidate.box.width * candidate.box.height for candidate in outer_candidates if candidate.box.valid()]
     if areas:

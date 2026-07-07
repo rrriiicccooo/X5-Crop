@@ -8,7 +8,7 @@ import numpy as np
 from ....domain import Box, Detection
 from ....formats import FormatSpec
 from ....geometry.boxes import map_work_box
-from ....geometry.frame_fit import fit_frame_boxes_from_gaps, frame_boxes_from_gaps
+from ....geometry.frame_fit import fit_frame_boxes_from_gaps
 from ....geometry.layout import work_gray
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
@@ -16,11 +16,10 @@ from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ...evidence.separator_width import separator_width_evidence_detail
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
-from ..assessment.partial_edge import partial_edge_hint
-from ..assessment.scoring import score_detection
 from ...physical.outer.grid_refine import grid_refined_outer_box
 from ...physical.outer.plan import outer_candidate_strategy
 from ...physical.separator.hints import SeparatorGapHintSet
+from .partial_edge import partial_edge_hint
 from .separator_gaps import (
     SeparatorGapBuildResult,
     apply_late_separator_refinements,
@@ -85,22 +84,8 @@ def build_detection_for_outer(
         pitch=pitch,
         frame_fit=policy.frame_fit,
     )
-    score_boxes_work = frame_boxes_from_gaps(
-        outer,
-        gaps,
-        count,
-        ww,
-        wh,
-        config.bleed_x,
-        config.bleed_y,
-        origin=origin,
-        pitch=pitch,
-        apply_geometry_fit=policy.frame_fit.geometry_fallback,
-        geometry_config=policy.frame_fit,
-    )
     boxes = [map_work_box(box, config.layout, w, h) for box in boxes_work]
     outer_original = map_work_box(outer, config.layout, w, h)
-    confidence, reasons, detail = score_detection(gray_work, outer, gaps, boxes_work, count, fmt, strip_mode, policy)
     separator_width_evidence = separator_width_evidence_detail(
         gaps,
         float(outer.height),
@@ -110,42 +95,14 @@ def build_detection_for_outer(
             int(policy.separator.gate.min_broad_separator_width_gaps_for_auto),
         ),
     )
-    pre_nearby_confidence = None
-    if separator_gaps.pre_nearby_gaps is not None:
-        pre_nearby_boxes_work = frame_boxes_from_gaps(
-            outer,
-            separator_gaps.pre_nearby_gaps,
-            count,
-            ww,
-            wh,
-            config.bleed_x,
-            config.bleed_y,
-            origin=origin,
-            pitch=pitch,
-        )
-        pre_nearby_confidence, _pre_nearby_reasons, _pre_nearby_detail = score_detection(
-            gray_work,
-            outer,
-            separator_gaps.pre_nearby_gaps,
-            pre_nearby_boxes_work,
-            count,
-            fmt,
-            strip_mode,
-            policy,
-        )
-        geometry_confidence, _geometry_reasons, _geometry_detail = score_detection(
-            gray_work,
-            outer,
-            gaps,
-            score_boxes_work,
-            count,
-            fmt,
-            strip_mode,
-            policy,
-        )
-        confidence = min(confidence, geometry_confidence)
+    detail: dict[str, object] = {}
     detail.update(
         {
+            "candidate_build": {
+                "owner": "candidate.build",
+                "role": "physical_detection_geometry",
+                "base_scoring_applied": False,
+            },
             "candidate_count": count,
             "offset_fraction": float(offset_fraction),
             "origin": float(origin),
@@ -154,6 +111,7 @@ def build_detection_for_outer(
             "outer_candidate": outer_candidate_name,
             "outer_candidate_strategy": candidate_strategy,
             "work_outer": asdict(outer),
+            "work_frame_boxes": [asdict(box) for box in boxes_work],
             "grid": separator_gaps.grid_detail,
             "grid_residual": separator_gaps.grid_detail.get("grid_residual"),
             "grid_used": bool(separator_gaps.grid_detail.get("grid_used", False)),
@@ -179,9 +137,9 @@ def build_detection_for_outer(
             "gap_methods": [gap.method for gap in gaps],
         }
     )
-    if pre_nearby_confidence is not None:
-        detail["nearby_separator_refinement_confidence_cap"] = float(pre_nearby_confidence)
-    return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, confidence, reasons, detail)
+    if separator_gaps.pre_nearby_gaps is not None:
+        detail["pre_nearby_gaps"] = [asdict(gap) for gap in separator_gaps.pre_nearby_gaps]
+    return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, 0.0, [], detail)
 
 
 def _build_separator_gap_lifecycle(

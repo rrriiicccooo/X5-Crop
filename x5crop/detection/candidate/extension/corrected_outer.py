@@ -4,10 +4,10 @@ from dataclasses import asdict
 
 import numpy as np
 
+from ....cache import AnalysisCache
 from ....domain import Detection
 from ....formats import FormatSpec
 from ....policies.runtime.policy import DetectionPolicy
-from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ...physical.outer.correction.types import OuterCorrectionProposal
 
@@ -25,7 +25,7 @@ def build_assessed_corrected_outer_candidate(
     from ...evidence.outer_alignment import outer_content_alignment_detail
     from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE, width_aware_gap_profile_detail
     from ..assessment.candidate import apply_candidate_assessment_policy
-    from .detection import build_detection_for_outer
+    from ..build.detection import build_detection_for_outer
 
     reassessed = build_detection_for_outer(
         gray,

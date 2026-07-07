@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 from typing import Any, Optional
 
 import numpy as np
 
 from ....domain import Box, Detection, Gap
+from ....geometry.frame_fit import frame_boxes_from_gaps
 from ...evidence.separator_summary import (
     gap_method_evidence_summary,
     separator_gate_detail_summary,
@@ -16,6 +18,8 @@ from ....policies.runtime.content import ContentPolicy
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import SeparatorGeometrySupportModePolicy
 from ....policies.separator_gate_profiles import SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
+from ....runtime.config import RuntimeConfig
+from ....utils import box_from_dict, gap_from_dict
 from ....utils import sampled_percentile
 
 
@@ -183,6 +187,159 @@ def separator_geometry_support_applies(
     )
 
 
+def _work_box_from_detail(detail: dict[str, Any]) -> Optional[Box]:
+    value = detail.get("work_outer")
+    if not isinstance(value, dict):
+        return None
+    try:
+        return box_from_dict(value)
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _work_frame_boxes_from_detail(detail: dict[str, Any]) -> list[Box]:
+    value = detail.get("work_frame_boxes")
+    if not isinstance(value, list):
+        return []
+    boxes: list[Box] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        try:
+            box = box_from_dict(item)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if box.valid():
+            boxes.append(box)
+    return boxes
+
+
+def _gaps_from_detail(detail: dict[str, Any], key: str) -> list[Gap]:
+    value = detail.get(key)
+    if not isinstance(value, list):
+        return []
+    gaps: list[Gap] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        try:
+            gaps.append(gap_from_dict(item))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return gaps
+
+
+def apply_base_detection_scoring(
+    gray_work: np.ndarray,
+    detection: Detection,
+    config: RuntimeConfig,
+    fmt: FormatSpec,
+    policy: Optional[DetectionPolicy] = None,
+) -> Detection:
+    """Apply separator base scoring to a built candidate.
+
+    Candidate build owns geometry assembly only. This helper lives in assessment
+    and consumes the build detail needed for raw ranking and downstream gates.
+    """
+    detail = dict(detection.detail)
+    scoring_detail = detail.get("base_candidate_scoring", {})
+    if isinstance(scoring_detail, dict) and bool(scoring_detail.get("applied", False)):
+        return replace(detection, review_reasons=list(detection.review_reasons), detail=detail)
+
+    policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
+    work_outer = _work_box_from_detail(detail)
+    work_frame_boxes = _work_frame_boxes_from_detail(detail)
+    if work_outer is None or not work_frame_boxes:
+        detail["base_candidate_scoring"] = {
+            "applied": False,
+            "owner": "candidate.assessment",
+            "reason": "missing_build_geometry",
+        }
+        return replace(detection, review_reasons=list(detection.review_reasons), detail=detail)
+
+    confidence, reasons, base_detail = score_detection(
+        gray_work,
+        work_outer,
+        detection.gaps,
+        work_frame_boxes,
+        detection.count,
+        fmt,
+        detection.strip_mode,
+        policy,
+    )
+    pre_nearby_gaps = _gaps_from_detail(detail, "pre_nearby_gaps")
+    if pre_nearby_gaps:
+        origin = float(detail.get("origin", 0.0) or 0.0)
+        pitch = float(detail.get("pitch", 0.0) or 0.0)
+        wh, ww = gray_work.shape
+        pre_nearby_boxes_work = frame_boxes_from_gaps(
+            work_outer,
+            pre_nearby_gaps,
+            detection.count,
+            ww,
+            wh,
+            config.bleed_x,
+            config.bleed_y,
+            origin=origin,
+            pitch=pitch,
+        )
+        pre_nearby_confidence, _pre_nearby_reasons, _pre_nearby_detail = score_detection(
+            gray_work,
+            work_outer,
+            pre_nearby_gaps,
+            pre_nearby_boxes_work,
+            detection.count,
+            fmt,
+            detection.strip_mode,
+            policy,
+        )
+        score_boxes_work = frame_boxes_from_gaps(
+            work_outer,
+            detection.gaps,
+            detection.count,
+            ww,
+            wh,
+            config.bleed_x,
+            config.bleed_y,
+            origin=origin,
+            pitch=pitch,
+            apply_geometry_fit=policy.frame_fit.geometry_fallback,
+            geometry_config=policy.frame_fit,
+        )
+        geometry_confidence, _geometry_reasons, _geometry_detail = score_detection(
+            gray_work,
+            work_outer,
+            detection.gaps,
+            score_boxes_work,
+            detection.count,
+            fmt,
+            detection.strip_mode,
+            policy,
+        )
+        confidence = min(confidence, geometry_confidence)
+        base_detail["nearby_separator_refinement_confidence_cap"] = float(pre_nearby_confidence)
+        base_detail["nearby_separator_refinement_geometry_confidence_cap"] = float(geometry_confidence)
+
+    detail.update(base_detail)
+    detail["base_candidate_scoring"] = {
+        "applied": True,
+        "owner": "candidate.assessment",
+        "source": "separator_base_geometry",
+    }
+    build_detail = detail.get("candidate_build", {})
+    if isinstance(build_detail, dict):
+        build_detail = dict(build_detail)
+        build_detail["base_scoring_applied"] = False
+        build_detail["base_scoring_owner"] = "candidate.assessment"
+        detail["candidate_build"] = build_detail
+    return replace(
+        detection,
+        confidence=float(max(0.0, min(1.0, confidence))),
+        review_reasons=sorted(set([*detection.review_reasons, *reasons])),
+        detail=detail,
+    )
+
+
 def score_detection(
     gray_work: np.ndarray,
     outer: Box,
@@ -333,6 +490,7 @@ def score_detection(
     return float(max(0.0, min(1.0, confidence))), sorted(set(reasons)), detail
 
 __all__ = [
+    "apply_base_detection_scoring",
     "content_support_score",
     "detail_float",
     "geometry_support_score",

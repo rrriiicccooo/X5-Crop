@@ -50,6 +50,11 @@ Current stable release: v4.2.8
 - report / detail 中旧的 `analysis_source` 字段已改为 `candidate_source`；
   它描述候选来源，不再复用含糊的 analysis 语义。
 - candidate execution budget 将 “eligible” 与 “executed” 分开：可靠 primary separator 已通过 assessment 时，可跳过 full-width / outer-scope extension；outer correction 还要求 outer alignment ok 才跳过。
+- Candidate build / frame geometry 边界已收紧：`build_detection_for_outer` 只生成
+  outer / gaps / frames / frame-fit detail 和未评分 Detection；separator base
+  confidence、review reasons、nearby confidence cap 与 raw-rank preview 统一由
+  `candidate.assessment.scoring` 应用。corrected outer reassessment 迁入
+  `candidate.extension`，build 包不再承载 assessed candidate orchestration。
 - detection 分层已对齐为 pipeline / modes / physical / guidance / candidate
   lifecycle / evidence / decision / final；outer 和 separator 是 physical holder
   structure，content 是 guidance + evidence，不再与 outer / separator 作为同级
@@ -190,7 +195,7 @@ Current stable release: v4.2.8
   解耦，改为只使用 geometry box 与参数对象；nearby diagnostic cache key 补入
   diagnostic policy。
 - nearby separator refinement 只返回 refinement 后的 gap evidence、refinement
-  detail 和 pre-refinement gaps；confidence cap / scoring 保留在 detection build 与
+  detail 和 pre-refinement gaps；confidence cap / scoring 保留在 candidate
   assessment 消费层。
 - edge-pair / nearby refinement 共用
   `geometry/gap_refinement_detail.py` 组装 accepted / rejected / searched
@@ -391,7 +396,7 @@ Current stable release: v4.2.8
   `correction.geometry_consistency` 合并原 short-axis 与 format-geometry retry，
   `correction.content_containment` 替代原 content-aligned retry 命名。
 - corrected outer 不再在 correction helper 内直接完成重建与评估；统一通过
-  `detection/candidate/build/corrected_outer.py` 重新 build detection、重算 evidence
+  `detection/candidate/extension/corrected_outer.py` 重新 build detection、重算 evidence
   并重新 apply candidate assessment。outer correction 只改变候选输入，PASS /
   REVIEW 仍只由 candidate gate 和 final decision contract 决定。
 - separator-derived outer policy 不再由各 format 单独打开 local/full-width/broad-width profile；
@@ -589,6 +594,13 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - Candidate execution budget separates eligibility from execution: reliable
   primary separator assessment may skip full-width / outer-scope extension;
   outer correction also requires ok outer alignment before it skips.
+- Candidate build / frame geometry is tightened: `build_detection_for_outer`
+  now writes only outer / gaps / frames / frame-fit detail and returns an
+  unscored Detection. Separator base confidence, review reasons, nearby
+  confidence caps, and raw-rank preview are applied by
+  `candidate.assessment.scoring`. Corrected outer reassessment moved into
+  `candidate.extension`, so the build package no longer owns assessed-candidate
+  orchestration.
 - Detection layering is aligned as pipeline / modes / physical / guidance /
   candidate lifecycle / evidence / decision / final. Outer and separator are
   physical holder structure; content is guidance + evidence, not a peer physical
