@@ -15,6 +15,7 @@ from ..detection.detail import (
     RISK_SUMMARY,
     decision_summary,
     detail_dict,
+    final_review_reasons_from_detail,
     policy_detail,
     policy_id_from_detail,
     runtime_policy_detail,
@@ -74,7 +75,7 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
         "result": {
             "status": status,
             "confidence": float(detection.confidence),
-            "review_reasons": list(detection.review_reasons),
+            "review_reasons": final_review_reasons_from_detail(detection),
             "outer_box": asdict(detection.outer),
             "frame_boxes": [asdict(box) for box in detection.frames],
             "gaps": [asdict(gap) for gap in detection.gaps],

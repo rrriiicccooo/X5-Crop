@@ -5,7 +5,13 @@ from typing import Any, Optional
 import numpy as np
 from PIL import Image, ImageDraw
 
-from ..detection.detail import RISK_SUMMARY, decision_summary, detail_dict, policy_id_from_detail
+from ..detection.detail import (
+    RISK_SUMMARY,
+    decision_summary,
+    detail_dict,
+    final_review_reasons_from_detail,
+    policy_id_from_detail,
+)
 from ..domain import Box, Detection
 from ..cache.separator import cached_separator_evidence_crop
 from ..image.evidence import make_separator_evidence_gray
@@ -108,9 +114,10 @@ def make_risk_review_rgb(
     rgb = make_frame_geometry_rgb(gray, detection, cache)
     decision = decision_summary(detection)
     risk = detail_dict(detection, RISK_SUMMARY)
+    reasons = final_review_reasons_from_detail(detection)
     lines = [
         f"policy: {policy_id_from_detail(detection)}",
-        "reasons: " + (",".join(detection.review_reasons[:4]) if detection.review_reasons else "none"),
+        "reasons: " + (",".join(reasons[:4]) if reasons else "none"),
     ]
     if decision:
         lines.append(f"decision pass: {bool(decision.get('pass', False))}")

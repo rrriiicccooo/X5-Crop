@@ -42,7 +42,7 @@ def _candidate_reason_inputs_before_decision(detection: Detection) -> dict[str, 
     }
 
 
-def apply_final_decision_policy(
+def apply_decision_contract(
     gray: np.ndarray,
     detection: Detection,
     config: RuntimeConfig,

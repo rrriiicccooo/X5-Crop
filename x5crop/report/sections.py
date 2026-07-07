@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..detection.detail import candidate_assessment, candidate_competition
+from ..detection.detail import (
+    candidate_assessment,
+    candidate_competition,
+    final_review_reasons_from_detail,
+)
 from ..domain import Detection
 from ..policies.registry import get_detection_policy
 from ..policies.runtime.diagnostics import ReportPolicy
@@ -23,7 +27,7 @@ def selected_candidate(detection: Detection) -> dict[str, Any]:
         "count": int(detection.count),
         "strip_mode": detection.strip_mode,
         "final_confidence": float(detection.confidence),
-        "final_review_reasons": list(detection.review_reasons),
+        "final_review_reasons": final_review_reasons_from_detail(detection),
         "candidate_assessment": candidate_assessment(detection),
         "candidate_plan": detection.detail.get("candidate_plan", {}),
         "gap_search_profile": detection.detail.get("gap_search_profile", {}),

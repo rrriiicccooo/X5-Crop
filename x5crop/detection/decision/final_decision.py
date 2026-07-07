@@ -21,7 +21,7 @@ from ..evidence.risk import (
     lucky_pass_risk_score_detail,
     overlap_bleed_risk_detail,
 )
-from .pass_review import apply_final_decision_policy
+from .contract_applier import apply_decision_contract
 from .reasons import (
     add_final_review_reason,
     final_review_reasons,
@@ -74,7 +74,7 @@ def apply_detection_decision(
         content_detail,
         outer_alignment,
     )
-    detection = apply_final_decision_policy(
+    detection = apply_decision_contract(
         gray,
         detection,
         config,

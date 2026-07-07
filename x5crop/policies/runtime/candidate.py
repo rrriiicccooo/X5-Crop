@@ -167,7 +167,7 @@ class EvidenceIndependencePolicy:
     min_content_score: float = 0.72
     min_geometry_score: float = 0.72
     max_photo_width_cv: float = 0.040
-    review_reason: str = "evidence_dependency_cycle_risk"
+    candidate_blocker: str = "evidence_dependency_cycle_risk"
 
 
 @dataclass(frozen=True)

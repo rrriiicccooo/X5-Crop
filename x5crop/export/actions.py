@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from ..runtime.config import RuntimeConfig
+from ..detection.detail import final_review_reasons_from_detail
 from ..domain import Detection, ImageProfile
 from .crops import write_crops
 from .review import copy_for_review, review_directory_for
@@ -19,10 +20,11 @@ def copy_for_review_if_needed(
 ) -> str | None:
     if status != "needs_review":
         return None
+    reasons = final_review_reasons_from_detail(detection)
     warnings.append(
         f"review required: confidence={detection.confidence:.3f}; "
         f"threshold={config.confidence_threshold:.3f}; "
-        f"reasons={','.join(detection.review_reasons) or 'none'}"
+        f"reasons={','.join(reasons) or 'none'}"
     )
     if not config.copy_review_files:
         return None

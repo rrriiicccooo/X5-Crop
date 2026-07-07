@@ -14,7 +14,7 @@ from x5crop.detection.decision.final_decision import (
     _apply_low_confidence_context_reasons,
     apply_detection_decision,
 )
-from x5crop.detection.decision.pass_review import apply_final_decision_policy
+from x5crop.detection.decision.contract_applier import apply_decision_contract
 from x5crop.detection.decision.reasons import normalized_final_review_reasons
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, Detection
@@ -118,7 +118,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         content_detail = _content_ok_detail()
         outer_alignment = {"used": True, "ok": True}
 
-        decided = apply_final_decision_policy(
+        decided = apply_decision_contract(
             gray,
             detection,
             config,
@@ -180,7 +180,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         content_detail = _content_ok_detail()
         outer_alignment = {"used": True, "ok": True}
 
-        decided = apply_final_decision_policy(
+        decided = apply_decision_contract(
             gray,
             detection,
             config,
@@ -272,7 +272,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         }
         outer_alignment = {"used": True, "ok": True}
 
-        decided = apply_final_decision_policy(
+        decided = apply_decision_contract(
             gray,
             detection,
             config,
@@ -323,7 +323,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         content_detail = _content_ok_detail()
         outer_alignment = {"used": True, "ok": True}
 
-        decided = apply_final_decision_policy(
+        decided = apply_decision_contract(
             gray,
             detection,
             config,
@@ -389,7 +389,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         content_detail = _content_ok_detail()
         outer_alignment = {"used": True, "ok": True}
 
-        decided = apply_final_decision_policy(
+        decided = apply_decision_contract(
             gray,
             detection,
             config,
@@ -647,7 +647,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         }
         outer_alignment = {"used": True, "ok": True}
 
-        decided = apply_final_decision_policy(
+        decided = apply_decision_contract(
             gray,
             detection,
             config,
@@ -699,6 +699,10 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertEqual(
             selected.detail["selection_risk_inputs"][0]["signal"],
             "candidate_competition_close",
+        )
+        self.assertNotIn(
+            "recommended_final_review_reason",
+            selected.detail["selection_risk_inputs"][0],
         )
         self.assertTrue(
             selected.detail["candidate_competition"]["second_candidate_close"]

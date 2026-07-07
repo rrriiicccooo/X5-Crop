@@ -5,8 +5,9 @@ from types import SimpleNamespace
 import unittest
 
 from x5crop.debug.status import debug_status_parts
-from x5crop.domain import Box, Detection
+from x5crop.domain import Box, Detection, ImageProfile
 from x5crop.export.actions import copy_for_review_if_needed
+from x5crop.report.result_builder import result_from_detection
 from x5crop.report.schema import report_schema_for_detection
 
 
@@ -45,6 +46,72 @@ class OutputReadModelContractTest(unittest.TestCase):
 
         self.assertEqual(decided_schema["status"], "needs_review")
         self.assertEqual(decided_schema["result"]["status"], "needs_review")
+        self.assertEqual(
+            decided_schema["result"]["review_reasons"],
+            ["separator_evidence_insufficient"],
+        )
+
+    def test_output_read_models_prefer_decision_summary_reasons(self) -> None:
+        detection = _detection(
+            {
+                "decision_summary": {
+                    "status": "needs_review",
+                    "final_review_reasons": ["outer_content_mismatch"],
+                }
+            },
+            ["candidate_level_legacy_reason"],
+        )
+
+        status, detail, _color = debug_status_parts(detection, 0.85)
+
+        self.assertEqual(status, "REVIEW")
+        self.assertIn("outer_content_mismatch", detail)
+        self.assertNotIn("candidate_level_legacy_reason", detail)
+
+        warnings: list[str] = []
+        config = SimpleNamespace(
+            confidence_threshold=0.85,
+            copy_review_files=False,
+        )
+        copy_for_review_if_needed(
+            Path("input.tif"),
+            Path("out"),
+            config,
+            detection,
+            "needs_review",
+            warnings,
+        )
+
+        self.assertIn("outer_content_mismatch", warnings[0])
+        self.assertNotIn("candidate_level_legacy_reason", warnings[0])
+
+        schema = report_schema_for_detection(detection)
+        self.assertEqual(schema["result"]["review_reasons"], ["outer_content_mismatch"])
+
+        profile = ImageProfile(
+            shape=(100, 100),
+            dtype="uint8",
+            axes="YX",
+            photometric="minisblack",
+            compression=None,
+            sample_format=None,
+            bits_per_sample=8,
+            samples_per_pixel=None,
+            planar_config=None,
+            resolution=None,
+            resolution_unit=None,
+            icc_profile=None,
+        )
+        result = result_from_detection(
+            Path("input.tif"),
+            detection,
+            profile,
+            "needs_review",
+            [],
+            None,
+            [],
+        )
+        self.assertEqual(result.review_reasons, ["outer_content_mismatch"])
 
     def test_report_schema_uses_diagnostics_section_not_finalization(self) -> None:
         schema = report_schema_for_detection(_detection())

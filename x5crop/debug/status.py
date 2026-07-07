@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from ..app_info import SCRIPT_NAME, VERSION
-from ..detection.detail import decision_summary
+from ..detection.detail import decision_summary, final_review_reasons_from_detail
 from ..domain import Detection
 
 
@@ -26,8 +26,9 @@ def debug_status_parts(detection: Detection, threshold: float) -> tuple[str, str
             f"confidence {detection.confidence:.3f}; threshold {threshold:.3f}"
         )
         color = (170, 170, 170)
-    if detection.review_reasons:
-        detail += " | " + ",".join(detection.review_reasons[:3])
+    reasons = final_review_reasons_from_detail(detection)
+    if reasons:
+        detail += " | " + ",".join(reasons[:3])
     return status, detail, color
 
 

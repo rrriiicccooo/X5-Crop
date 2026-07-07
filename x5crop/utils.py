@@ -6,19 +6,7 @@ from typing import Any, Iterable, Optional
 
 import numpy as np
 
-from .constants import REASON_CONTENT_ASPECT_CONFLICT
 from .domain import Box, Gap
-
-
-HARD_REVIEW_REASONS = {
-    REASON_CONTENT_ASPECT_CONFLICT,
-    "content_aspect_uncertain",
-    "content_coverage_weak",
-    "outer_box_too_large",
-    "outer_box_uncertain",
-    "photo_width_unstable",
-    "unstable_frame_width",
-}
 
 
 def clamp_int(value: float, lower: int, upper: int) -> int:

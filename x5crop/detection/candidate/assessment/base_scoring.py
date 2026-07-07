@@ -492,12 +492,6 @@ def apply_base_detection_scoring(
         "owner": "candidate.assessment",
         "source": "separator_base_geometry",
     }
-    build_detail = detail.get("candidate_build", {})
-    if isinstance(build_detail, dict):
-        build_detail = dict(build_detail)
-        build_detail["base_scoring_applied"] = False
-        build_detail["base_scoring_owner"] = "candidate.assessment"
-        detail["candidate_build"] = build_detail
     return replace(
         detection,
         confidence=float(max(0.0, min(1.0, confidence))),

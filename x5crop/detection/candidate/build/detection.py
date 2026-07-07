@@ -112,7 +112,6 @@ def build_detection_for_outer(
             "candidate_build": {
                 "owner": "candidate.build",
                 "role": "physical_detection_geometry",
-                "base_scoring_applied": False,
             },
             "candidate_count": count,
             "offset_fraction": float(offset_fraction),

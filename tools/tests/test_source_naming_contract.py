@@ -169,6 +169,25 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertTrue(banned.isdisjoint(RiskPolicy.__dataclass_fields__))
 
+    def test_decision_contract_applier_uses_current_names(self) -> None:
+        banned = (
+            "apply_final_decision_policy",
+            "from .pass_review",
+            "from x5crop.detection.decision.pass_review",
+        )
+        offenders: list[str] = []
+        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                if path == Path(__file__).resolve():
+                    continue
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_guidance_layer_does_not_own_final_candidate_scoring(self) -> None:
         banned = (
             "content_candidate_confidence_and_reasons",
@@ -208,6 +227,8 @@ class SourceNamingContractTest(unittest.TestCase):
             '"review_reasons"',
             "review_reasons_ok",
             "requires_no_review_reasons",
+            "review_reason:",
+            ".review_reason",
         )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan"
@@ -220,11 +241,22 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_candidate_policy_uses_blocker_names_for_candidate_gate_inputs(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "candidate.py"
+        text = path.read_text(encoding="utf-8")
+
+        self.assertNotIn("review_reason:", text)
+        self.assertNotIn(".review_reason", text)
+        self.assertIn("candidate_blocker", text)
+
     def test_candidate_assessment_uses_canonical_detail_names(self) -> None:
         banned = (
             "partial_extra_holder_frames",
             "partial_extra_holder_frames_gate_detail",
             "_apply_pre_decision_review_caps",
+            "HARD_REVIEW_REASONS",
+            "hard_review_reason_present",
+            '"hard_reasons"',
         )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop"
@@ -242,6 +274,7 @@ class SourceNamingContractTest(unittest.TestCase):
             "candidate_review_reasons_before_decision",
             "candidate_competition_uncertain",
             "content_candidate_review_reasons",
+            "recommended_final_review_reason",
         )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop"
@@ -267,6 +300,22 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertNotIn('"review_reasons"', text)
         self.assertIn('"candidate_reasons"', text)
+
+    def test_candidate_build_detail_does_not_carry_assessment_state(self) -> None:
+        banned = (
+            "base_scoring_applied",
+            "base_scoring_owner",
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "candidate"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
 
     def test_candidate_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
         offenders: list[str] = []

@@ -134,6 +134,8 @@ candidate plan
   review reasons 属于 candidate assessment。content 不能生成 hard gap、不能直接修 physical result、
   不能决定 PASS / REVIEW。
 - build 只生成未评分 Detection；assessment 和 decision 才消费证据。
+- `candidate_build` detail 只描述物理 build geometry；base scoring 是否应用写在
+  `base_candidate_scoring`，不能反写到 build detail。
 - candidate assessment 的 reason 只能作为候选 blockers / diagnostics；最终用户可见
   `review_reasons` 只由 decision contract 生成。
 - policy / report 可见的 gate stage 名必须使用 `candidate_blocker_gate`、
@@ -187,6 +189,9 @@ candidate plan
 - report schema 的 risk / deskew 可见细节属于 `diagnostics` section，不挂在
   `finalization` 名下；finalization 这个词只保留给输出相邻几何和 bleed 调整。
 - `Detection.detail` 的稳定读取 helper 属于 `detection.detail`，根包不承载 report/debug read-model。
+- report、debug、export 和 finalization 的输出面读取最终 reason 时必须通过
+  `final_review_reasons_from_detail()`，优先使用 `decision_summary.final_review_reasons`，
+  裸 Detection 才 fallback 到 `Detection.review_reasons`。
 - active detail 使用 `primary`、`extension`、`supplemental`、`nearby_separator_refinement`
   等职责命名，不用 `late` / `auxiliary` 表达含糊流程阶段。
 
@@ -212,8 +217,12 @@ candidate plan
   decision cap 分别归 assessment / decision。
 - `candidate_assessment.blockers`、`candidate_assessment.diagnostics` 和
   `candidate_assessment.auto_gate_inputs` 是 report/debug 的候选级解释，不是最终裁决。
+- candidate auto-gate blocking vocabulary belongs to `candidate.assessment`；通用
+  `utils` 不承载 candidate-specific blocker list，也不用 hard review reason 命名。
+- candidate-plan policy 中阻断 candidate auto gate 的字段必须叫 blocker，不叫 review
+  reason；final review reason 只属于 decision contract。
 - content-only、safety 和 review-only candidate 是否进入最终 REVIEW 由 source-derived
-  `risk_summary` 和 decision applier 表达；decision policy 不保留未被裁决消费的
+  `risk_summary` 和 decision contract applier 表达；decision policy 不保留未被裁决消费的
   review-only 布尔开关。
 - `selection_risk_inputs` 是候选竞争阶段的风险证据，不是最终裁决；只有 decision 可以把它
   映射为 `candidate_competition_close`。
@@ -414,7 +423,9 @@ candidate plan
 ```
 
 Outer and separator are physical structure; content is guidance plus evidence.
-Build creates unscored detections. Assessment and decision consume evidence.
+Build creates unscored detections. `candidate_build` detail describes only the
+physical build geometry; base scoring state belongs to `base_candidate_scoring`.
+Assessment and decision consume evidence.
 Corrected candidates must be rebuilt, reassessed, and returned to the shared
 candidate pool before selection.
 
@@ -480,7 +491,10 @@ and `risk_summary`; constructed audit sections must not remain hidden internal
 dictionaries. Report-visible risk / deskew details live under `diagnostics`, not
 a `finalization` section.
 Stable `Detection.detail` readers live in `detection.detail`, not the root
-package.
+package. Output-facing report/debug/export/finalization code reads final reasons
+through `final_review_reasons_from_detail()`, preferring
+`decision_summary.final_review_reasons` and falling back to
+`Detection.review_reasons` only for bare detections.
 
 ### 6. Scoring / Gate Perspective
 
@@ -493,8 +507,13 @@ means evidence strength. Photo-width hard reasons may consume only
 auto-gate inputs, and candidate confidence caps are assessment detail; decision
 reason inputs, final-review reason fields, and decision confidence caps are
 final decision detail. Content-only, safety, and review-only candidate outcomes
-are expressed by source-derived `risk_summary` plus the decision applier, not by
-unused review-only flags in decision policy.
+are expressed by source-derived `risk_summary` plus the decision contract
+applier, not by unused review-only flags in decision policy.
+Candidate auto-gate blocker vocabulary belongs to `candidate.assessment`, not to
+generic utilities, and must not be named as hard review reasons.
+Candidate-plan policy fields that block candidate auto gate use blocker naming,
+not review-reason naming; final review reasons belong only to the decision
+contract.
 Final risk evidence such as overlap and lucky-pass risk is attached before the
 final decision. Finalization may consume that detail for output bleed, but it
 must not generate PASS / REVIEW inputs after the decision step.

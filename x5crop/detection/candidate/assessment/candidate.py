@@ -20,7 +20,6 @@ from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
-from ....utils import HARD_REVIEW_REASONS
 from ...confidence_caps import apply_confidence_cap
 from ...evidence.content.containment import content_containment_detail
 from ...evidence.content.frame_support import content_evidence_detail
@@ -37,6 +36,7 @@ from .gate_support import (
     hard_full_calibration_floor_applies,
     separator_geometry_support_applies,
 )
+from .blockers import CANDIDATE_AUTO_GATE_BLOCKING_REASONS
 from .gates import assess_separator_gate
 from .partial_holder import partial_safe_extra_frames_gate_detail
 from .scoring import (
@@ -342,11 +342,11 @@ def apply_candidate_assessment_policy(
         reasons.append(
             str(
                 independence_detail.get("reason")
-                or policy.candidate_plan.evidence_independence.review_reason
+                or policy.candidate_plan.evidence_independence.candidate_blocker
             )
         )
     pre_auto_blockers, pre_auto_diagnostics = _candidate_reason_buckets(reasons)
-    hard_reasons = HARD_REVIEW_REASONS.intersection(reasons)
+    auto_gate_blocking_reasons = CANDIDATE_AUTO_GATE_BLOCKING_REASONS.intersection(reasons)
     auto_gate_inputs = {
         "source": source,
         "separator_gate_ok": bool(separator_gate_ok),
@@ -356,7 +356,7 @@ def apply_candidate_assessment_policy(
         "evidence_independence_ok": bool(evidence_independence_ok),
         "candidate_blockers": pre_auto_blockers,
         "candidate_diagnostics": pre_auto_diagnostics,
-        "hard_reasons": sorted(hard_reasons),
+        "candidate_auto_gate_blocking_reasons": sorted(auto_gate_blocking_reasons),
     }
     auto_gate = False
     if source == "separator":
@@ -366,7 +366,7 @@ def apply_candidate_assessment_policy(
             and not content_harm_risk
             and evidence_independence_ok
             and not pre_auto_blockers
-            and not hard_reasons
+            and not auto_gate_blocking_reasons
         )
     elif source == "content":
         auto_gate = False

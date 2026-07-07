@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ..app_info import VERSION
-from ..detection.detail import policy_id_from_detail
+from ..detection.detail import final_review_reasons_from_detail, policy_id_from_detail
 from ..domain import Detection, ImageProfile, ProcessResult
 from ..utils import json_safe
 from .schema import report_schema_for_detection
@@ -36,7 +36,7 @@ def result_from_detection(
         layout=detection.layout,
         strip_mode=detection.strip_mode,
         count=int(detection.count),
-        review_reasons=list(detection.review_reasons),
+        review_reasons=final_review_reasons_from_detail(detection),
         output_files=output_files,
         review_copy=review_copy,
         outer_box=asdict(detection.outer),

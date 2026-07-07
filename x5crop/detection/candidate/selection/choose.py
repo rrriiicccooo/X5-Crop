@@ -228,7 +228,6 @@ def select_detection_candidate(
                 "margin_to_second": float(margin),
                 "close_margin": float(selected_policy.candidate_selection.close_margin),
                 "partial_full_conflict": bool(partial_full_conflict),
-                "recommended_final_review_reason": "candidate_competition_close",
             }
             risk_inputs.append(risk_input)
             best.detail["candidate_competition"]["selection_risk_inputs"] = list(risk_inputs)

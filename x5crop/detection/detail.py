@@ -38,6 +38,13 @@ def decision_summary(detection: Detection) -> dict[str, Any]:
     return detail_dict(detection, DECISION_SUMMARY)
 
 
+def final_review_reasons_from_detail(detection: Detection) -> list[str]:
+    reasons = decision_summary(detection).get("final_review_reasons")
+    if isinstance(reasons, list):
+        return [str(reason) for reason in reasons]
+    return list(detection.review_reasons)
+
+
 def policy_detail(detection: Detection) -> dict[str, Any]:
     return detail_dict(detection, POLICY)
 
@@ -73,6 +80,7 @@ __all__ = [
     "candidate_assessment",
     "decision_summary",
     "detail_dict",
+    "final_review_reasons_from_detail",
     "policy_detail",
     "policy_id_from_detail",
     "runtime_policy_detail",

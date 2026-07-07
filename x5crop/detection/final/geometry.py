@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 
 from ...runtime.config import RuntimeConfig
+from ..detail import final_review_reasons_from_detail
 from ...domain import Box, Detection
 from ...geometry.boxes import map_work_box, original_box_to_work
 from ...geometry.layout import work_gray
@@ -70,7 +71,7 @@ def apply_approved_geometry_adjustment(
 ) -> None:
     if status != "approved_auto" or detection.strip_mode != "full" or len(detection.frames) != detection.count:
         return
-    if detection.review_reasons:
+    if final_review_reasons_from_detail(detection):
         return
     gray_work = work_gray(gray, detection.layout)
     h, w = gray_work.shape
