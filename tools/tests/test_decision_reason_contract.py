@@ -10,10 +10,7 @@ import numpy as np
 from x5crop.cache.analysis import make_analysis_cache
 from x5crop.constants import CANDIDATE_SOURCE_SAFETY, REASON_LUCKY_PASS_RISK
 from x5crop.detection.candidate.assessment.safety import SAFETY_CANDIDATE_AUTO_GATE_BLOCKER
-from x5crop.detection.decision.final_decision import (
-    _apply_low_confidence_context_reasons,
-    apply_detection_decision,
-)
+from x5crop.detection.decision.final_decision import apply_detection_decision
 from x5crop.detection.decision.contract_applier import apply_decision_contract
 from x5crop.detection.decision.reasons import normalized_final_review_reasons
 from x5crop.detection.modes.review_only import review_only_detection
@@ -859,23 +856,30 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
 
     def test_low_confidence_context_reasons_update_added_summary(self) -> None:
+        gray = np.zeros((100, 100), dtype=np.uint8)
         detection = Detection(
             film_format="135",
             layout="horizontal",
-            strip_mode="partial",
+            strip_mode="full",
             count=1,
             outer=Box(10, 10, 90, 90),
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.83,
-            review_reasons=["evidence_combination_insufficient"],
+            review_reasons=[],
             detail={
                 "outer_area_spread_ratio": 0.25,
-                "decision_reason_inputs": [],
-                "decision_summary": {
-                    "final_review_reasons_added": ["evidence_combination_insufficient"],
-                    "final_review_reasons": ["evidence_combination_insufficient"],
-                    "decision_reason_inputs": [],
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+                "candidate_assessment": {
+                    "source": "separator",
+                    "auto_gate": True,
+                    "geometry_score": 1.0,
+                    "content_score": 1.0,
+                    "content_quality_score": 1.0,
+                    "blockers": [],
+                    "diagnostics": [],
                 },
                 "candidate_competition": {
                     "selected_candidate": {
@@ -895,73 +899,49 @@ class DecisionReasonContractTest(unittest.TestCase):
                 },
             },
         )
-        config = RuntimeConfig(
-            input_path=Path("synthetic.tif"),
-            output_dir=None,
-            film_format="135",
-            layout_auto=False,
-            layout="horizontal",
-            strip_mode="partial",
-            count=1,
-            count_override=1,
-            page=0,
-            bleed_x=0,
-            bleed_y=0,
-            deskew="off",
-            deskew_fallback="off",
-            deskew_min_angle=-2.0,
-            deskew_max_angle=2.0,
-            confidence_threshold=0.85,
-            review_dir=None,
-            copy_review_files=False,
-            export_review=False,
-            diagnostics=False,
-            compression="auto",
-            debug=False,
-            debug_analysis=False,
-            dry_run=True,
-            overwrite=True,
-            report=True,
-            debug_errors=False,
-            reuse_analysis=False,
-            jobs=1,
-        )
 
-        _apply_low_confidence_context_reasons(
+        decided = apply_decision_contract(
+            gray,
             detection,
-            config,
-            get_detection_policy("135", "partial"),
+            _decision_test_config(),
+            format_spec("135"),
+            _content_ok_detail(),
+            {"used": True, "ok": True},
             {},
         )
 
         self.assertEqual(
-            detection.detail["final_review_reasons"],
+            decided.detail["final_review_reasons"],
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
         self.assertEqual(
-            detection.detail["decision_summary"]["final_review_reasons_added"],
+            decided.detail["decision_summary"]["final_review_reasons_added"],
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
+        decision_signals = [
+            item["signal"] for item in decided.detail["decision_summary"]["decision_reason_inputs"]
+        ]
         self.assertEqual(
-            detection.detail["decision_summary"]["decision_reason_inputs"][0]["signal"],
-            "outer_area_spread",
+            decision_signals,
+            ["below_threshold", "outer_area_spread"],
         )
         self.assertEqual(
-            detection.detail["decision_summary"]["decision_reason_inputs"][0]["bucket"],
+            decided.detail["decision_summary"]["decision_reason_inputs"][1]["bucket"],
             "low_confidence_context",
         )
-        selected = detection.detail["candidate_competition"]["selected_candidate"]
+        selected = decided.detail["candidate_competition"]["selected_candidate"]
         self.assertEqual(
             selected["final_review_reasons"],
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
         self.assertEqual(selected["decision_status"], "needs_review")
         self.assertEqual(
-            detection.detail["candidate_competition"]["top_candidates"][0]["final_review_reasons"],
+            decided.detail["candidate_competition"]["top_candidates"][0]["final_review_reasons"],
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
 
     def test_low_confidence_context_reasons_do_not_create_high_confidence_review(self) -> None:
+        gray = np.zeros((100, 100), dtype=np.uint8)
         detection = Detection(
             film_format="135",
             layout="horizontal",
@@ -974,25 +954,34 @@ class DecisionReasonContractTest(unittest.TestCase):
             review_reasons=[],
             detail={
                 "outer_area_spread_ratio": 0.25,
-                "decision_reason_inputs": [],
-                "decision_summary": {
-                    "final_review_reasons_added": [],
-                    "final_review_reasons": [],
-                    "decision_reason_inputs": [],
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+                "candidate_assessment": {
+                    "source": "separator",
+                    "auto_gate": True,
+                    "geometry_score": 1.0,
+                    "content_score": 1.0,
+                    "content_quality_score": 1.0,
+                    "blockers": [],
+                    "diagnostics": [],
                 },
             },
         )
 
-        _apply_low_confidence_context_reasons(
+        decided = apply_decision_contract(
+            gray,
             detection,
             _decision_test_config(),
-            get_detection_policy("135", "full"),
+            format_spec("135"),
+            _content_ok_detail(),
+            {"used": True, "ok": True},
             {"reason": "no_outer"},
         )
 
-        self.assertEqual(detection.review_reasons, [])
-        self.assertEqual(detection.detail["decision_summary"]["final_review_reasons"], [])
-        self.assertEqual(detection.detail["decision_summary"]["decision_reason_inputs"], [])
+        self.assertEqual(decided.review_reasons, [])
+        self.assertEqual(decided.detail["decision_summary"]["final_review_reasons"], [])
+        self.assertEqual(decided.detail["decision_summary"]["decision_reason_inputs"], [])
 
 
 if __name__ == "__main__":

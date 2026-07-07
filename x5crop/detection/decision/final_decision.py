@@ -21,15 +21,7 @@ from ..evidence.risk import (
     lucky_pass_risk_score_detail,
     overlap_bleed_risk_detail,
 )
-from .contract_applier import (
-    apply_decision_contract,
-    sync_candidate_competition_decision_fields,
-)
-from .reasons import (
-    add_final_review_reason,
-    final_review_reasons,
-    normalized_final_review_reasons,
-)
+from .contract_applier import apply_decision_contract
 
 
 @dataclass
@@ -84,11 +76,9 @@ def apply_detection_decision(
         fmt,
         content_detail,
         outer_alignment,
+        deskew_detail,
     )
-    _apply_low_confidence_context_reasons(detection, config, policy, deskew_detail)
     status = _decision_status_for(detection, config.confidence_threshold)
-    _sync_decision_summary_status(detection, status)
-    sync_candidate_competition_decision_fields(detection, status)
     return FinalDecisionResult(
         detection=detection,
         status=status,
@@ -185,69 +175,10 @@ def _suppress_outer_mismatch(detection: Detection) -> bool:
     )
 
 
-def _apply_low_confidence_context_reasons(
-    detection: Detection,
-    config: RuntimeConfig,
-    policy: DetectionPolicy,
-    deskew_detail: dict[str, Any],
-) -> None:
-    if detection.confidence < config.confidence_threshold:
-        low_confidence_context_reasons: list[str] = []
-        reason_inputs = detection.detail.setdefault("decision_reason_inputs", [])
-        if not isinstance(reason_inputs, list):
-            reason_inputs = []
-            detection.detail["decision_reason_inputs"] = reason_inputs
-
-        def append_context_reason(reason: str, signal: str) -> None:
-            low_confidence_context_reasons.append(reason)
-            add_final_review_reason(detection, reason)
-            reason_inputs.append(
-                {
-                    "bucket": "low_confidence_context",
-                    "signal": signal,
-                    "final_review_reason": reason,
-                }
-            )
-
-        if float(detection.detail.get("outer_area_spread_ratio", 0.0)) >= 0.20:
-            append_context_reason(
-                policy.decision.outer_candidate_disagreement_review_reason,
-                "outer_area_spread",
-            )
-        if deskew_detail.get("skipped") == "angle_out_of_range" or deskew_detail.get("reason"):
-            append_context_reason(
-                policy.decision.deskew_uncertain_review_reason,
-                "deskew_uncertain",
-            )
-        final_reasons = final_review_reasons(detection)
-        detection.detail["final_review_reasons"] = final_reasons
-        decision_summary = detection.detail.get("decision_summary", {})
-        if isinstance(decision_summary, dict):
-            added = decision_summary.get("final_review_reasons_added", [])
-            if not isinstance(added, list):
-                added = []
-            decision_summary["final_review_reasons_added"] = normalized_final_review_reasons(
-                [*added, *low_confidence_context_reasons]
-            )
-            decision_summary["final_review_reasons"] = final_reasons
-            decision_summary["decision_reason_inputs"] = reason_inputs
-        sync_candidate_competition_decision_fields(
-            detection,
-            _decision_status_for(detection, config.confidence_threshold),
-        )
-
-
 def _decision_status_for(detection: Detection, confidence_threshold: float) -> str:
     if detection.confidence >= confidence_threshold and not detection.review_reasons:
         return "approved_auto"
     return "needs_review"
-
-
-def _sync_decision_summary_status(detection: Detection, status: str) -> None:
-    decision_summary = detection.detail.get("decision_summary")
-    if isinstance(decision_summary, dict):
-        decision_summary["status"] = status
-        decision_summary["pass"] = status == "approved_auto"
 
 
 __all__ = [

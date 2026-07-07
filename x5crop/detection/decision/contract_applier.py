@@ -9,7 +9,7 @@ from ...domain import Detection
 from ...formats import FormatSpec
 from ..detail import candidate_reasons_from_detail
 from ..confidence_caps import apply_confidence_cap
-from ...policies.decision.contract import decision_contract_for
+from ...policies.decision.contract import DetectionDecisionContract, decision_contract_for
 from .evidence_summary import evidence_summary_for
 from .reasons import (
     final_review_reasons,
@@ -62,6 +62,50 @@ def sync_candidate_competition_decision_fields(detection: Detection, status: str
                 candidate["decision_status"] = status
 
 
+def _decision_status_for(
+    detection: Detection,
+    confidence_threshold: float,
+    final_reasons: list[str],
+) -> str:
+    if detection.confidence >= confidence_threshold and not final_reasons:
+        return "approved_auto"
+    return "needs_review"
+
+
+def _low_confidence_context_reason_inputs(
+    detection: Detection,
+    config: RuntimeConfig,
+    policy: DetectionDecisionContract,
+    deskew_detail: dict[str, Any],
+) -> tuple[list[str], list[dict[str, Any]]]:
+    if detection.confidence >= config.confidence_threshold:
+        return [], []
+    reasons: list[str] = []
+    reason_inputs: list[dict[str, Any]] = []
+
+    def add_context_reason(reason: str, signal: str) -> None:
+        reasons.append(reason)
+        reason_inputs.append(
+            {
+                "bucket": "low_confidence_context",
+                "signal": signal,
+                "final_review_reason": reason,
+            }
+        )
+
+    if float(detection.detail.get("outer_area_spread_ratio", 0.0)) >= 0.20:
+        add_context_reason(
+            policy.decision.outer_candidate_disagreement_review_reason,
+            "outer_area_spread",
+        )
+    if deskew_detail.get("skipped") == "angle_out_of_range" or deskew_detail.get("reason"):
+        add_context_reason(
+            policy.decision.deskew_uncertain_review_reason,
+            "deskew_uncertain",
+        )
+    return reasons, reason_inputs
+
+
 def apply_decision_contract(
     gray: np.ndarray,
     detection: Detection,
@@ -69,6 +113,7 @@ def apply_decision_contract(
     fmt: FormatSpec,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
+    deskew_detail: dict[str, Any] | None = None,
 ) -> Detection:
     policy = decision_contract_for(fmt.name, detection.strip_mode)
     evidence = evidence_summary_for(gray, detection, content_detail, outer_alignment, policy)
@@ -165,12 +210,12 @@ def apply_decision_contract(
 
     reasons = normalized_final_review_reasons(reasons)
     final_reasons = list(reasons)
-    passed = detection.confidence >= config.confidence_threshold and not final_reasons
+    base_passed = detection.confidence >= config.confidence_threshold and not final_reasons
     decision_caps = detection.detail.setdefault("decision_confidence_caps", [])
     if not isinstance(decision_caps, list):
         decision_caps = []
         detection.detail["decision_confidence_caps"] = decision_caps
-    if not passed:
+    if not base_passed:
         detection.confidence, cap_detail = apply_confidence_cap(
             float(detection.confidence),
             policy.decision.review_confidence_cap,
@@ -178,21 +223,28 @@ def apply_decision_contract(
             reason="final_review",
         )
         decision_caps.append(cap_detail)
+    context_reasons, context_reason_inputs = _low_confidence_context_reason_inputs(
+        detection,
+        config,
+        policy,
+        deskew_detail or {},
+    )
+    reasons = normalized_final_review_reasons([*reasons, *context_reasons])
+    reason_inputs.extend(context_reason_inputs)
+    final_reasons = list(reasons)
+    status = _decision_status_for(detection, config.confidence_threshold, final_reasons)
     candidate_reason_inputs = _candidate_reason_inputs_before_decision(detection)
     detection.detail["candidate_reason_inputs_before_decision"] = candidate_reason_inputs
     detection.detail["candidate_blockers_before_decision"] = candidate_reason_inputs["blockers"]
     detection.detail["candidate_diagnostics_before_decision"] = candidate_reason_inputs["diagnostics"]
     set_final_review_reasons(detection, final_reasons)
     final_reasons = final_review_reasons(detection)
-    sync_candidate_competition_decision_fields(
-        detection,
-        "approved_auto" if passed else "needs_review",
-    )
+    sync_candidate_competition_decision_fields(detection, status)
     detail = {
         "policy_id": policy.policy_id,
         "schema_version": policy.schema_version,
-        "pass": bool(passed),
-        "status": "approved_auto" if passed else "needs_review",
+        "pass": status == "approved_auto",
+        "status": status,
         "final_review_reasons_added": reasons,
         "final_review_reasons": final_reasons,
         "decision_reason_inputs": reason_inputs,

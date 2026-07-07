@@ -144,6 +144,8 @@ candidate plan
 - decision 的 `candidate_reason_inputs_before_decision` 只保留候选 blockers /
   diagnostics 作为主模型；旧 reason 归并读模型必须显式命名为
   `legacy_reduced_candidate_reasons`。
+- low-confidence context reasons，例如 outer candidate disagreement 和 deskew uncertainty，
+  属于 decision contract input；不能在 `final_decision` 中事后补写 `decision_summary`。
 - policy / report 可见的 gate stage 名必须使用 `candidate_blocker_gate`、
   `candidate_auto_gate` 和 `decision_contract_gate` 这类职责名，不能把 finalization
   写成裁决 gate。
