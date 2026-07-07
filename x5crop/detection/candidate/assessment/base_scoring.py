@@ -19,6 +19,7 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....policies.separator_gate_profiles import SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
 from ....runtime.config import RuntimeConfig
 from ....utils import box_from_dict, gap_from_dict, sampled_percentile
+from ...confidence_caps import apply_confidence_cap
 from ...physical.photo_size import photo_size_consistency_from_gap_edges
 from ...evidence.separator_summary import gap_method_evidence_summary
 
@@ -217,6 +218,7 @@ def base_detection_assessment(
     outer_area_profile = _outer_area_profile(outer_area, base_score)
     p01, p50, p99 = sampled_percentile(gray_work, [1, 50, 99])
     contrast = float(p99 - p01)
+    confidence_caps: list[dict[str, Any]] = []
 
     gap_conf = 1.0 if expected_gaps == 0 else gap_evidence.separator_support_count / float(expected_gaps)
     width_conf = photo_width_stability.get("confidence")
@@ -305,12 +307,24 @@ def base_detection_assessment(
     }
     if strip_mode == "partial" and count < fmt.default_count:
         if count <= 1:
-            confidence = min(confidence, base_score.partial_one_cap)
+            confidence, cap_detail = apply_confidence_cap(
+                confidence,
+                base_score.partial_one_cap,
+                owner="candidate.assessment",
+                reason="partial_single_frame_ambiguity",
+            )
+            confidence_caps.append(cap_detail)
             reasons.append("partial_too_ambiguous")
             partial_count_assessment["reason"] = "single_frame_partial"
             partial_count_assessment["intrinsically_ambiguous"] = True
         elif count <= 2 and fmt.default_count >= 6:
-            confidence = min(confidence, base_score.partial_two_35mm_cap)
+            confidence, cap_detail = apply_confidence_cap(
+                confidence,
+                base_score.partial_two_35mm_cap,
+                owner="candidate.assessment",
+                reason="partial_two_frame_35mm_ambiguity",
+            )
+            confidence_caps.append(cap_detail)
             reasons.append("partial_too_ambiguous")
             partial_count_assessment["reason"] = "two_frame_35mm_partial"
             partial_count_assessment["intrinsically_ambiguous"] = True
@@ -319,11 +333,29 @@ def base_detection_assessment(
 
     if uses_min_hard_equal_cap and expected_gaps >= 3:
         if gap_evidence.hard_separator_gaps < 1:
-            confidence = min(confidence, separator_gate.low_hard_confidence_cap)
+            confidence, cap_detail = apply_confidence_cap(
+                confidence,
+                separator_gate.low_hard_confidence_cap,
+                owner="candidate.assessment",
+                reason="no_detected_hard_separator",
+            )
+            confidence_caps.append(cap_detail)
         elif gap_evidence.hard_separator_gaps < 2:
-            confidence = min(confidence, separator_gate.low_hard_confidence_cap)
+            confidence, cap_detail = apply_confidence_cap(
+                confidence,
+                separator_gate.low_hard_confidence_cap,
+                owner="candidate.assessment",
+                reason="too_few_detected_hard_separators",
+            )
+            confidence_caps.append(cap_detail)
         elif gap_evidence.equal_model_gaps >= max(2, expected_gaps // 2 + 1):
-            confidence = min(confidence, separator_gate.mostly_equal_confidence_cap)
+            confidence, cap_detail = apply_confidence_cap(
+                confidence,
+                separator_gate.mostly_equal_confidence_cap,
+                owner="candidate.assessment",
+                reason="mostly_equal_model_gaps",
+            )
+            confidence_caps.append(cap_detail)
     detail = {
         "detected_gaps": gap_evidence.separator_support_count,
         "separator_support_count": gap_evidence.separator_support_count,
@@ -349,6 +381,7 @@ def base_detection_assessment(
         "full_geometry_ok": full_geometry_ok,
         "separator_gate_profile": separator_gate.profile,
         "partial_count_assessment": partial_count_assessment,
+        "candidate_confidence_caps": confidence_caps,
     }
     return float(max(0.0, min(1.0, confidence))), sorted(set(reasons)), detail
 
@@ -442,9 +475,15 @@ def apply_base_detection_scoring(
             origin=origin,
             pitch=pitch,
         )
-        confidence = min(confidence, geometry_confidence)
+        confidence, cap_detail = apply_confidence_cap(
+            confidence,
+            geometry_confidence,
+            owner="candidate.assessment",
+            reason="nearby_separator_refinement_geometry_reassessment",
+        )
         base_detail["nearby_separator_refinement_confidence_cap"] = float(pre_nearby_confidence)
         base_detail["nearby_separator_refinement_geometry_confidence_cap"] = float(geometry_confidence)
+        base_detail.setdefault("candidate_confidence_caps", []).append(cap_detail)
 
     detail.update(base_detail)
     detail["base_candidate_scoring"] = {

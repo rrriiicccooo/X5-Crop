@@ -203,7 +203,6 @@ def decision_contract_report_detail(contract: "DetectionDecisionContract") -> di
         "mode_policy": asdict(contract.mode),
         "evidence_policy": asdict(contract.evidence),
         "risk_policy": asdict(contract.risk),
-        "candidate_policy": asdict(contract.candidate),
         "decision_policy": asdict(contract.decision),
         "output_policy": asdict(contract.output),
         "diagnostics_policy": _decision_diagnostics_detail(contract),

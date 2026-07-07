@@ -7,6 +7,7 @@ import numpy as np
 from ...runtime.config import RuntimeConfig
 from ...domain import Detection
 from ...formats import FormatSpec
+from ..confidence_caps import apply_confidence_cap
 from ...policies.decision.contract import decision_contract_for
 from .evidence_summary import evidence_summary_for
 from .reasons import normalized_review_reasons
@@ -24,42 +25,110 @@ def apply_final_decision_policy(
     policy = decision_contract_for(fmt.name, detection.strip_mode)
     evidence = evidence_summary_for(gray, detection, content_detail, outer_alignment, policy)
     risk = risk_summary_for(detection, evidence, policy)
+    assessment = detection.detail.get("candidate_assessment", {})
+    assessment = dict(assessment) if isinstance(assessment, dict) else {}
+    candidate_auto_gate = assessment.get("auto_gate")
+    candidate_auto_gate_failed = candidate_auto_gate is False
     reasons: list[str] = []
-    if risk["content_only_evidence"] or risk["safety_or_review_only"]:
-        reasons.append(policy.decision.content_only_evidence_reason)
+    reason_inputs: list[dict[str, Any]] = []
+
+    def add_reason(reason: str, *, bucket: str, signal: str) -> None:
+        reasons.append(reason)
+        reason_inputs.append(
+            {
+                "bucket": bucket,
+                "signal": signal,
+                "final_review_reason": reason,
+            }
+        )
+
+    if risk["content_only_evidence"]:
+        add_reason(
+            policy.decision.content_only_evidence_reason,
+            bucket="risk",
+            signal="content_only_evidence",
+        )
+    if risk["safety_or_review_only"]:
+        add_reason(
+            policy.decision.content_only_evidence_reason,
+            bucket="risk",
+            signal="safety_or_review_only",
+        )
     if not bool(evidence["outer"]["ok"]) and policy.risk.review_on_outer_content_mismatch:
-        reasons.append(policy.decision.outer_content_mismatch_reason)
+        add_reason(
+            policy.decision.outer_content_mismatch_reason,
+            bucket="outer",
+            signal="outer_not_ok",
+        )
     if not bool(evidence["separator"]["ok"]):
-        reasons.append(policy.decision.separator_incomplete_reason)
+        add_reason(
+            policy.decision.separator_incomplete_reason,
+            bucket="separator",
+            signal="separator_not_ok",
+        )
     if not bool(evidence["geometry"]["ok"]):
-        reasons.append(policy.decision.geometry_unstable_reason)
+        add_reason(
+            policy.decision.geometry_unstable_reason,
+            bucket="geometry",
+            signal="geometry_not_ok",
+        )
     if not bool(evidence["content"]["ok"]):
-        reasons.append(policy.decision.content_only_evidence_reason)
+        add_reason(
+            policy.decision.content_only_evidence_reason,
+            bucket="content",
+            signal="content_not_ok",
+        )
     if risk["candidate_competition_close"] and policy.risk.review_on_close_competition:
-        reasons.append(policy.decision.candidate_competition_close_reason)
+        add_reason(
+            policy.decision.candidate_competition_close_reason,
+            bucket="risk",
+            signal="candidate_competition_close",
+        )
     if risk["overlap_risk"] and (
         policy.risk.review_on_overlap_risk or policy.risk.review_on_lucky_pass_risk
     ):
-        reasons.append(policy.decision.overlap_risk_reason)
+        add_reason(
+            policy.decision.overlap_risk_reason,
+            bucket="risk",
+            signal="overlap_or_lucky_pass_risk",
+        )
     if risk["partial_edge_uncertain"]:
-        reasons.append(policy.decision.partial_edge_uncertain_reason)
+        add_reason(
+            policy.decision.partial_edge_uncertain_reason,
+            bucket="partial_edge",
+            signal="partial_edge_uncertain",
+        )
+    if candidate_auto_gate_failed:
+        add_reason(
+            policy.decision.decision_insufficient_reason,
+            bucket="candidate_assessment",
+            signal="candidate_auto_gate_failed",
+        )
     if detection.confidence < config.confidence_threshold and not reasons:
-        reasons.append(policy.decision.decision_insufficient_reason)
+        add_reason(
+            policy.decision.decision_insufficient_reason,
+            bucket="confidence",
+            signal="below_threshold",
+        )
 
     reasons = normalized_review_reasons(reasons)
-    existing_reasons = normalized_review_reasons(list(detection.review_reasons))
-    if bool(evidence["outer"]["ok"]):
-        existing_reasons = [
-            reason for reason in existing_reasons if reason != policy.decision.outer_content_mismatch_reason
-        ]
-    if bool(evidence["content"]["ok"]):
-        existing_reasons = [
-            reason for reason in existing_reasons if reason != policy.decision.content_only_evidence_reason
-        ]
-    final_reasons = sorted(set(existing_reasons + reasons))
+    final_reasons = sorted(set(reasons))
     passed = detection.confidence >= config.confidence_threshold and not final_reasons
+    decision_caps = detection.detail.setdefault("decision_confidence_caps", [])
+    if not isinstance(decision_caps, list):
+        decision_caps = []
+        detection.detail["decision_confidence_caps"] = decision_caps
     if not passed:
-        detection.confidence = min(float(detection.confidence), policy.decision.review_confidence_cap)
+        detection.confidence, cap_detail = apply_confidence_cap(
+            float(detection.confidence),
+            policy.decision.review_confidence_cap,
+            owner="decision",
+            reason="final_review",
+        )
+        decision_caps.append(cap_detail)
+    detection.detail["candidate_review_reasons_before_decision"] = normalized_review_reasons(
+        list(detection.review_reasons)
+    )
     detection.review_reasons = final_reasons
     competition = detection.detail.get("candidate_competition")
     if isinstance(competition, dict):
@@ -81,6 +150,9 @@ def apply_final_decision_policy(
         "pass": bool(passed),
         "status": "approved_auto" if passed else "needs_review",
         "review_reasons_added": reasons,
+        "final_review_reasons": final_reasons,
+        "decision_reason_inputs": reason_inputs,
+        "decision_confidence_caps": decision_caps,
         "evidence_summary": evidence,
         "risk_summary": risk,
         "decision_policy_detail": policy.report_detail(),
@@ -88,6 +160,8 @@ def apply_final_decision_policy(
     detection.detail["decision_summary"] = detail
     detection.detail["evidence_summary"] = evidence
     detection.detail["risk_summary"] = risk
+    detection.detail["decision_reason_inputs"] = reason_inputs
+    detection.detail["final_review_reasons"] = final_reasons
     detection.detail["decision_policy_detail"] = policy.report_detail()
     detection.detail["policy_id"] = policy.policy_id
     return detection

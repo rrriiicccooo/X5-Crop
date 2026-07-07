@@ -21,6 +21,7 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ....utils import HARD_REVIEW_REASONS
+from ...confidence_caps import apply_confidence_cap
 from ...evidence.content.containment import content_containment_detail
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.separator_summary import separator_gate_detail_summary
@@ -50,6 +51,33 @@ def _detail_float(detail: dict, key: str, default: float) -> float:
         return float(value)
     except (TypeError, ValueError):
         return float(default)
+
+
+_CANDIDATE_DIAGNOSTIC_REASONS = {
+    "content_grid_fallback",
+    "content_run_count_mismatch",
+    "content_runs_incomplete",
+    "content_coverage_weak",
+    "content_aspect_uncertain",
+    "content_confidence_low",
+    "low_confidence",
+}
+
+
+def _candidate_reason_buckets(reasons: list[str]) -> tuple[list[str], list[str]]:
+    unique = sorted(set(str(reason) for reason in reasons if reason))
+    diagnostics = [
+        reason for reason in unique if reason in _CANDIDATE_DIAGNOSTIC_REASONS
+    ]
+    blockers = [
+        reason for reason in unique if reason not in _CANDIDATE_DIAGNOSTIC_REASONS
+    ]
+    return blockers, diagnostics
+
+
+def _candidate_confidence_caps(candidate: Detection) -> list[dict]:
+    caps = candidate.detail.get("candidate_confidence_caps", [])
+    return list(caps) if isinstance(caps, list) else []
 
 
 def apply_candidate_assessment_policy(
@@ -87,6 +115,12 @@ def apply_candidate_assessment_policy(
         content_primary = candidate.detail.get("content_primary")
         if isinstance(content_primary, dict):
             content_primary["candidate_assessment"] = proposal_detail
+        proposal_caps = proposal_detail.get("confidence_caps", [])
+        if isinstance(proposal_caps, list):
+            candidate.detail["candidate_confidence_caps"] = [
+                *_candidate_confidence_caps(candidate),
+                *proposal_caps,
+            ]
     separator_gate_ok, separator_gate_detail = assess_separator_gate(
         candidate,
         config.confidence_threshold,
@@ -303,7 +337,19 @@ def apply_candidate_assessment_policy(
                 or policy.candidate_plan.evidence_independence.review_reason
             )
         )
+    pre_auto_blockers, pre_auto_diagnostics = _candidate_reason_buckets(reasons)
     hard_reasons = HARD_REVIEW_REASONS.intersection(reasons)
+    auto_gate_inputs = {
+        "source": source,
+        "separator_gate_ok": bool(separator_gate_ok),
+        "partial_safe_auto_support_ok": bool(partial_safe_auto_support_ok),
+        "content_containment_ok": bool(content_containment_ok),
+        "content_harm_risk": bool(content_harm_risk),
+        "evidence_independence_ok": bool(evidence_independence_ok),
+        "candidate_blockers": pre_auto_blockers,
+        "candidate_diagnostics": pre_auto_diagnostics,
+        "hard_reasons": sorted(hard_reasons),
+    }
     auto_gate = False
     if source == "separator":
         auto_gate = (
@@ -311,21 +357,30 @@ def apply_candidate_assessment_policy(
             and content_containment_ok
             and not content_harm_risk
             and evidence_independence_ok
+            and not pre_auto_blockers
             and not hard_reasons
         )
     elif source == "content":
         auto_gate = False
 
+    confidence_caps = _candidate_confidence_caps(candidate)
     if not auto_gate:
         cap = (
             scoring_policy.no_auto_cap_partial
             if candidate.strip_mode == "partial"
             else scoring_policy.no_auto_cap_full
         )
-        confidence = min(confidence, cap)
+        confidence, cap_detail = apply_confidence_cap(
+            confidence,
+            cap,
+            owner="candidate.assessment",
+            reason="auto_gate_not_satisfied",
+        )
+        confidence_caps.append(cap_detail)
         reasons.append(REASON_AUTO_GATE_NOT_SATISFIED)
     else:
         confidence = max(confidence, config.confidence_threshold + min(0.10, joint_score * 0.08))
+    candidate_blockers, candidate_diagnostics = _candidate_reason_buckets(reasons)
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
     candidate.review_reasons = sorted(set(reasons))
     candidate.detail["candidate_source"] = (
@@ -343,6 +398,10 @@ def apply_candidate_assessment_policy(
         "content_score_role": "content_containment_support",
         "content_quality_score": float(content_quality),
         "content_quality_score_role": "quality_diagnostic_not_hard_gate",
+        "blockers": candidate_blockers,
+        "diagnostics": candidate_diagnostics,
+        "confidence_caps": confidence_caps,
+        "auto_gate_inputs": auto_gate_inputs,
         "width_cv": _detail_float(candidate.detail, "width_cv", 1.0),
         "width_cv_source": str(candidate.detail.get("width_cv_source") or "unknown"),
         "photo_width_cv": candidate.detail.get("photo_width_cv"),

@@ -54,16 +54,6 @@ class RiskPolicy:
 
 
 @dataclass(frozen=True)
-class CandidatePolicy:
-    separator_candidate_can_pass: bool = True
-    content_candidate_can_pass: bool = False
-    safety_candidate_can_pass: bool = False
-    aggressive_candidate_default: str = "review_only"
-    weak_grid_can_pass_alone: bool = False
-    equal_gap_can_pass_alone: bool = False
-
-
-@dataclass(frozen=True)
 class DecisionPolicy:
     confidence_threshold_default: float = 0.85
     review_confidence_cap: float = 0.84
@@ -131,7 +121,6 @@ class DetectionDecisionContract:
     mode: ModePolicy
     evidence: EvidencePolicy
     risk: RiskPolicy
-    candidate: CandidatePolicy
     decision: DecisionPolicy
     output: OutputPolicy
     diagnostics: DecisionDiagnosticsPolicy
@@ -235,7 +224,6 @@ def decision_contract_for_policy(detection_policy: DetectionPolicy) -> Detection
             detection_policy,
         ),
         risk=RiskPolicy(),
-        candidate=CandidatePolicy(),
         decision=decision_policy_for(detection_policy),
         output=output_policy_for(detection_policy),
         diagnostics=diagnostics_policy_for(detection_policy),
@@ -250,7 +238,6 @@ def decision_contract_for(format_id: str, strip_mode: str) -> DetectionDecisionC
 
 __all__ = [
     "REPORT_SCHEMA_VERSION",
-    "CandidatePolicy",
     "DetectionDecisionContract",
     "DecisionPolicy",
     "DecisionDiagnosticsPolicy",

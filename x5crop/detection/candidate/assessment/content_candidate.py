@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ....domain import Detection
+from ...confidence_caps import apply_confidence_cap
 from ....policies.runtime.content import ContentCandidatePolicy, ContentPolicy
 from ....runtime.config import RuntimeConfig
 
@@ -30,21 +31,52 @@ def content_candidate_confidence_and_reasons(
         + candidate_policy.run_weight * run_conf
         + candidate_policy.aspect_weight * aspect_conf
     )
+    confidence_caps: list[dict[str, Any]] = []
     reasons: list[str] = []
     if placement != "content_runs":
-        confidence = min(confidence, candidate_policy.grid_fallback_cap)
+        confidence, cap_detail = apply_confidence_cap(
+            confidence,
+            candidate_policy.grid_fallback_cap,
+            owner="candidate.assessment",
+            reason="content_grid_fallback",
+        )
+        confidence_caps.append(cap_detail)
         reasons.append("content_grid_fallback")
     if runs_count != count:
-        confidence = min(confidence, candidate_policy.run_mismatch_cap)
+        confidence, cap_detail = apply_confidence_cap(
+            confidence,
+            candidate_policy.run_mismatch_cap,
+            owner="candidate.assessment",
+            reason="content_run_count_mismatch",
+        )
+        confidence_caps.append(cap_detail)
         reasons.append("content_run_count_mismatch")
     if run_conf < 1.0:
-        confidence = min(confidence, candidate_policy.runs_incomplete_cap)
+        confidence, cap_detail = apply_confidence_cap(
+            confidence,
+            candidate_policy.runs_incomplete_cap,
+            owner="candidate.assessment",
+            reason="content_runs_incomplete",
+        )
+        confidence_caps.append(cap_detail)
         reasons.append("content_runs_incomplete")
     if median_coverage < candidate_policy.weak_coverage:
-        confidence = min(confidence, candidate_policy.weak_coverage_cap)
+        confidence, cap_detail = apply_confidence_cap(
+            confidence,
+            candidate_policy.weak_coverage_cap,
+            owner="candidate.assessment",
+            reason="content_coverage_weak",
+        )
+        confidence_caps.append(cap_detail)
         reasons.append("content_coverage_weak")
     if max_aspect_error > candidate_policy.aspect_uncertain:
-        confidence = min(confidence, candidate_policy.aspect_uncertain_cap)
+        confidence, cap_detail = apply_confidence_cap(
+            confidence,
+            candidate_policy.aspect_uncertain_cap,
+            owner="candidate.assessment",
+            reason="content_aspect_uncertain",
+        )
+        confidence_caps.append(cap_detail)
         reasons.append("content_aspect_uncertain")
     if confidence < confidence_threshold and not reasons:
         reasons.append("content_confidence_low")
@@ -58,6 +90,7 @@ def content_candidate_confidence_and_reasons(
             if strip_mode == "partial"
             else "content_guidance"
         ),
+        "confidence_caps": confidence_caps,
     }
     return float(confidence), reasons, detail
 
