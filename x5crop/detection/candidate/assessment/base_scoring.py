@@ -155,14 +155,14 @@ def _photo_width_stability_profile(width_metrics: dict[str, Any], base_score) ->
     cv = float(photo_width_cv)
     return {
         "used": True,
-        "reason": "ok" if cv <= base_score.unstable_width_cv else "photo_width_unstable",
+        "reason": "ok" if cv <= base_score.unstable_photo_width_cv else "photo_width_unstable",
         "role": "base_confidence_input",
         "width_cv_source": "photo_edges",
         "photo_width_cv": cv,
         "frame_box_width_cv": frame_box_cv,
-        "confidence": max(0.0, min(1.0, 1.0 - cv / base_score.width_cv_norm)),
-        "unstable": cv > base_score.unstable_width_cv,
-        "unstable_width_cv": float(base_score.unstable_width_cv),
+        "confidence": max(0.0, min(1.0, 1.0 - cv / base_score.photo_width_cv_norm)),
+        "unstable": cv > base_score.unstable_photo_width_cv,
+        "unstable_photo_width_cv": float(base_score.unstable_photo_width_cv),
     }
 
 
@@ -189,10 +189,10 @@ def base_detection_assessment(
     width_metrics = _candidate_width_metrics(gaps, boxes, origin, pitch, count)
     photo_width_cv = width_metrics.get("photo_width_cv")
     photo_width_within_full_limit = (
-        True if photo_width_cv is None else float(photo_width_cv) <= base_score.full_width_cv
+        True if photo_width_cv is None else float(photo_width_cv) <= base_score.full_photo_width_cv
     )
     photo_width_tight = (
-        False if photo_width_cv is None else float(photo_width_cv) <= base_score.geometry_floor_tight_cv
+        False if photo_width_cv is None else float(photo_width_cv) <= base_score.geometry_floor_tight_photo_width_cv
     )
     photo_width_stability = _photo_width_stability_profile(width_metrics, base_score)
     outer_area = float(outer.width * outer.height) / max(1.0, float(gray_work.shape[0] * gray_work.shape[1]))
@@ -219,11 +219,11 @@ def base_detection_assessment(
     confidence_weight = max(
         1e-6,
         base_score.gap_weight
-        + (base_score.width_weight if width_conf is not None else 0.0),
+        + (base_score.photo_width_weight if width_conf is not None else 0.0),
     )
     confidence = base_score.gap_weight * gap_conf
     if width_conf is not None:
-        confidence += base_score.width_weight * float(width_conf)
+        confidence += base_score.photo_width_weight * float(width_conf)
     confidence /= confidence_weight
 
     full_geometry_ok = (

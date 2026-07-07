@@ -60,7 +60,7 @@ class SeparatorGeometrySupportModePolicy:
     min_joint_score: float = 1.0
     allow_grid: bool = True
     max_equal_gaps: int = 0
-    max_width_cv: float = 0.040
+    max_photo_width_cv: float = 0.040
     required_content_support: str = "ok"
     max_outer_area_ratio: float = 0.995
 

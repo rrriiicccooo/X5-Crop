@@ -58,7 +58,7 @@ def evidence_independence_detail(
     standard_detected_gaps = gap_source_count(separator_detail, ("standard_detected",))
     photo_width_stability = photo_width_stability_detail(
         detection.detail,
-        float(policy.max_width_cv),
+        float(policy.max_photo_width_cv),
         used_role="evidence_independence_geometry_check",
     )
     standard_ok = standard_detected_gaps >= int(policy.min_standard_detected_gaps)
@@ -101,7 +101,7 @@ def evidence_independence_detail(
         "min_geometry_score": float(policy.min_geometry_score),
         "width_cv": _float(detection.detail.get("width_cv"), 1.0),
         "width_cv_source": str(detection.detail.get("width_cv_source") or "unknown"),
-        "max_width_cv": float(policy.max_width_cv),
+        "max_photo_width_cv": float(policy.max_photo_width_cv),
         "photo_width_stability": photo_width_stability,
         "geometry_ok": bool(geometry_ok),
     }

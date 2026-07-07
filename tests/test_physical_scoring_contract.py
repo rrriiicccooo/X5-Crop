@@ -456,7 +456,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             max_equal_gaps=0,
             required_content_support="ok",
             min_joint_score=0.70,
-            max_width_cv=0.040,
+            max_photo_width_cv=0.040,
             max_outer_area_ratio=0.99,
         )
         frame_fallback_candidate = Detection(

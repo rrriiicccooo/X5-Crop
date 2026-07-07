@@ -30,7 +30,7 @@ def photo_width_cv_from_detail(detail: dict[str, Any]) -> float | None:
 
 def photo_width_stability_detail(
     detail: dict[str, Any],
-    max_width_cv: float,
+    max_photo_width_cv: float,
     *,
     used_role: str,
     unavailable_role: str = "diagnostic_until_photo_edges",
@@ -46,11 +46,11 @@ def photo_width_stability_detail(
             "width_cv": width_cv,
             "photo_width_cv": None,
             "width_cv_source": source,
-            "max_width_cv": float(max_width_cv),
+            "max_photo_width_cv": float(max_photo_width_cv),
             "ok": True,
             "unstable": False,
         }
-    ok = photo_width_cv <= float(max_width_cv)
+    ok = photo_width_cv <= float(max_photo_width_cv)
     return {
         "used": True,
         "role": used_role,
@@ -58,7 +58,7 @@ def photo_width_stability_detail(
         "width_cv": float(width_cv if width_cv is not None else photo_width_cv),
         "photo_width_cv": float(photo_width_cv),
         "width_cv_source": PHOTO_WIDTH_SOURCE,
-        "max_width_cv": float(max_width_cv),
+        "max_photo_width_cv": float(max_photo_width_cv),
         "ok": bool(ok),
         "unstable": not bool(ok),
     }
@@ -66,14 +66,14 @@ def photo_width_stability_detail(
 
 def photo_width_within_limit(
     detail: dict[str, Any],
-    max_width_cv: float,
+    max_photo_width_cv: float,
     *,
     unavailable_ok: bool,
 ) -> bool:
     photo_width_cv = photo_width_cv_from_detail(detail)
     if photo_width_cv is None:
         return bool(unavailable_ok)
-    return photo_width_cv <= float(max_width_cv)
+    return photo_width_cv <= float(max_photo_width_cv)
 
 
 __all__ = [

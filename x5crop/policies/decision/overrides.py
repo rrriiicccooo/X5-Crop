@@ -10,43 +10,43 @@ EVIDENCE_POLICY_OVERRIDES: dict[str, dict[str, Any]] = {
     "135": {
         "min_hard_separator_ratio": 0.35,
         "min_hard_separator_count": 2,
-        "max_width_cv_ratio": 0.030,
+        "max_photo_width_cv_ratio": 0.030,
         "max_model_gap_share": 0.70,
     },
     "135-dual": {
         "min_hard_separator_ratio": 0.50,
         "min_hard_separator_count": 2,
-        "max_width_cv_ratio": 0.035,
+        "max_photo_width_cv_ratio": 0.035,
     },
     "half": {
         "min_hard_separator_ratio": 0.55,
         "min_hard_separator_count": 2,
-        "max_width_cv_ratio": 0.012,
+        "max_photo_width_cv_ratio": 0.012,
         "allow_geometry_supported_separator": True,
         "geometry_supported_min_hard_ratio": 0.20,
-        "geometry_supported_max_width_cv_ratio": 0.010,
+        "geometry_supported_max_photo_width_cv_ratio": 0.010,
         "max_outer_area_ratio": 0.990,
     },
     "xpan": {
         "min_hard_separator_ratio": 0.67,
         "min_hard_separator_count": 1,
-        "max_width_cv_ratio": 0.035,
+        "max_photo_width_cv_ratio": 0.035,
     },
     "120-645": {
         "min_hard_separator_ratio": 0.67,
         "min_hard_separator_count": 2,
-        "max_width_cv_ratio": 0.035,
+        "max_photo_width_cv_ratio": 0.035,
     },
     "120-66": {
         "min_hard_separator_ratio": 0.90,
         "min_hard_separator_count": 2,
-        "max_width_cv_ratio": 0.040,
+        "max_photo_width_cv_ratio": 0.040,
         "max_outer_area_ratio": 0.990,
     },
     "120-67": {
         "min_hard_separator_ratio": 0.75,
         "min_hard_separator_count": 2,
-        "max_width_cv_ratio": 0.040,
+        "max_photo_width_cv_ratio": 0.040,
     },
 }
 
@@ -68,8 +68,8 @@ def evidence_policy_values(
                     float(values.get("min_hard_separator_ratio", defaults.min_hard_separator_ratio)),
                     0.35,
                 ),
-                "max_width_cv_ratio": max(
-                    float(values.get("max_width_cv_ratio", defaults.max_width_cv_ratio)),
+                "max_photo_width_cv_ratio": max(
+                    float(values.get("max_photo_width_cv_ratio", defaults.max_photo_width_cv_ratio)),
                     0.045,
                 ),
                 "max_outer_area_ratio": max(

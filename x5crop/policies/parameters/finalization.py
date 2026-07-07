@@ -12,7 +12,7 @@ class PartialHolderParameters:
     min_hard_gaps: int
     min_hard_ratio: float
     max_equal_gaps: int
-    max_width_cv: float
+    max_photo_width_cv: float
     min_joint_score: float
     min_content_score: float
     min_geometry_score: float

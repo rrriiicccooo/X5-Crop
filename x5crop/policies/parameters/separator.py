@@ -34,7 +34,7 @@ class SeparatorGeometrySupportParameters:
     detected_geometry_min_joint_score: float
     stable_grid_min_hard_ratio: float
     stable_grid_min_joint_score: float
-    max_width_cv: float
+    max_photo_width_cv: float
     max_outer_area_ratio: float
 
 @dataclass(frozen=True)

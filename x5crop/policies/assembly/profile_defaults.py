@@ -63,9 +63,9 @@ def leading_grid_failure_parameters(fmt: FormatSpec, params: FormatParameters) -
 def base_detection_score_parameters(fmt: FormatSpec, params: FormatParameters) -> BaseDetectionScoreParameters:
     score = params.base_detection_score
     if _is_dense_half_frame(fmt):
-        score = replace(score, full_width_cv=0.008)
+        score = replace(score, full_photo_width_cv=0.008)
     elif fmt.family == "120":
-        score = replace(score, full_width_cv=0.012)
+        score = replace(score, full_photo_width_cv=0.012)
     if _has_physical_risk(fmt, "holder_edge_can_mimic_separator"):
         score = replace(
             score,
@@ -116,7 +116,7 @@ def separator_geometry_support_parameters(
     base_score = base_detection_score_parameters(fmt, params)
     return replace(
         support,
-        max_width_cv=base_score.full_width_cv,
+        max_photo_width_cv=base_score.full_photo_width_cv,
         max_outer_area_ratio=base_score.outer_max_area,
     )
 

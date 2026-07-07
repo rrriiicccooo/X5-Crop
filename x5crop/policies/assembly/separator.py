@@ -88,7 +88,7 @@ def separator_geometry_support_policy(
         min_joint_score=float(support.detected_geometry_min_joint_score),
         allow_grid=True,
         max_equal_gaps=0,
-        max_width_cv=float(support.max_width_cv),
+        max_photo_width_cv=float(support.max_photo_width_cv),
         required_content_support="ok",
         max_outer_area_ratio=float(support.max_outer_area_ratio),
     )
@@ -98,7 +98,7 @@ def separator_geometry_support_policy(
         min_joint_score=float(support.stable_grid_min_joint_score),
         allow_grid=True,
         max_equal_gaps=0,
-        max_width_cv=float(support.max_width_cv),
+        max_photo_width_cv=float(support.max_photo_width_cv),
         required_content_support="ok",
         max_outer_area_ratio=float(support.max_outer_area_ratio),
     )

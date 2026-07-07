@@ -97,10 +97,10 @@ def evidence_summary_for(
     width_cv_source = str(detection.detail.get("width_cv_source") or "unknown")
     photo_width_stability = photo_width_stability_detail(
         detection.detail,
-        policy.evidence.max_width_cv_ratio,
+        policy.evidence.max_photo_width_cv_ratio,
         used_role="photo_width_gate",
     )
-    photo_width_stability["max_width_cv_ratio"] = policy.evidence.max_width_cv_ratio
+    photo_width_stability["max_photo_width_cv_ratio"] = policy.evidence.max_photo_width_cv_ratio
     photo_width_ok = bool(photo_width_stability.get("ok", True))
     content_support = str(content_detail.get("support", assessment.get("content_support", "")))
     content_containment_ok = bool(
@@ -122,7 +122,7 @@ def evidence_summary_for(
         and hard_ratio >= policy.evidence.geometry_supported_min_hard_ratio
         and photo_width_within_limit(
             detection.detail,
-            policy.evidence.geometry_supported_max_width_cv_ratio,
+            policy.evidence.geometry_supported_max_photo_width_cv_ratio,
             unavailable_ok=True,
         )
         and int(separator["equal_gaps"]) <= policy.evidence.max_equal_gap_count
@@ -197,7 +197,7 @@ def evidence_summary_for(
             "width_cv": width_cv,
             "width_cv_source": width_cv_source,
             "photo_width_stability": photo_width_stability,
-            "max_width_cv_ratio": policy.evidence.max_width_cv_ratio,
+            "max_photo_width_cv_ratio": policy.evidence.max_photo_width_cv_ratio,
             "geometry_score": geometry_score,
             "min_geometry_score": policy.evidence.min_geometry_score,
         },

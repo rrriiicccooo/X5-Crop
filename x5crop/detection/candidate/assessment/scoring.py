@@ -52,7 +52,7 @@ def geometry_support_score(
     geometry_policy = policy.scoring.geometry_support
     photo_width_cv = photo_width_cv_from_detail(detection.detail)
     width_score = (
-        max(0.0, min(1.0, 1.0 - photo_width_cv / geometry_policy.width_cv_norm))
+        max(0.0, min(1.0, 1.0 - photo_width_cv / geometry_policy.photo_width_cv_norm))
         if photo_width_cv is not None
         else None
     )
@@ -67,7 +67,7 @@ def geometry_support_score(
         (geometry_policy.count_weight, count_score),
     ]
     if width_score is not None:
-        weighted_scores.append((geometry_policy.width_weight, width_score))
+        weighted_scores.append((geometry_policy.photo_width_weight, width_score))
     weight_total = max(1e-6, sum(weight for weight, _score in weighted_scores))
     return max(
         0.0,

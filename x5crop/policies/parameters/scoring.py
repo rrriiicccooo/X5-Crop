@@ -16,18 +16,18 @@ class ScoringCalibrationParameters:
 
 @dataclass(frozen=True)
 class BaseDetectionScoreParameters:
-    width_cv_norm: float
+    photo_width_cv_norm: float
     gap_weight: float
-    width_weight: float
+    photo_width_weight: float
     outer_min_area: float
     outer_max_area: float
     outer_too_large: float
     image_quality_contrast_min: float
-    full_width_cv: float
-    geometry_floor_tight_cv: float
+    full_photo_width_cv: float
+    geometry_floor_tight_photo_width_cv: float
     geometry_floor_high: float
     geometry_floor_low: float
-    unstable_width_cv: float
+    unstable_photo_width_cv: float
     full_outer_min_area: float
     low_confidence_floor: float
     partial_one_cap: float
@@ -45,13 +45,13 @@ class SeparatorSupportScoreParameters:
 
 @dataclass(frozen=True)
 class GeometrySupportScoreParameters:
-    width_cv_norm: float
+    photo_width_cv_norm: float
     outer_min_area: float
     outer_max_area: float
     outer_uncertain_score: float
     aspect_norm: float
     no_aspect_score: float
-    width_weight: float
+    photo_width_weight: float
     outer_weight: float
     aspect_weight: float
     count_weight: float

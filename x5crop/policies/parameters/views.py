@@ -108,7 +108,7 @@ class FormatParameterViews:
             detected_geometry_min_joint_score=self.separator_detected_geometry_min_joint_score,
             stable_grid_min_hard_ratio=self.separator_stable_grid_min_hard_ratio,
             stable_grid_min_joint_score=self.separator_stable_grid_min_joint_score,
-            max_width_cv=self.score_full_width_cv,
+            max_photo_width_cv=self.score_full_photo_width_cv,
             max_outer_area_ratio=self.score_outer_max_area,
         )
 
@@ -384,7 +384,7 @@ class FormatParameterViews:
             min_hard_gaps=self.partial_safe_extra_frames_min_hard_gaps,
             min_hard_ratio=self.partial_safe_extra_frames_min_hard_ratio,
             max_equal_gaps=self.partial_safe_extra_frames_max_equal_gaps,
-            max_width_cv=self.partial_safe_extra_frames_max_width_cv,
+            max_photo_width_cv=self.partial_safe_extra_frames_max_photo_width_cv,
             min_joint_score=self.partial_safe_extra_frames_min_joint_score,
             min_content_score=self.partial_safe_extra_frames_min_content_score,
             min_geometry_score=self.partial_safe_extra_frames_min_geometry_score,
@@ -414,18 +414,18 @@ class FormatParameterViews:
     @property
     def base_detection_score(self) -> BaseDetectionScoreParameters:
         return BaseDetectionScoreParameters(
-            width_cv_norm=self.score_width_cv_norm,
+            photo_width_cv_norm=self.score_photo_width_cv_norm,
             gap_weight=self.score_gap_weight,
-            width_weight=self.score_width_weight,
+            photo_width_weight=self.score_photo_width_weight,
             outer_min_area=self.score_outer_min_area,
             outer_max_area=self.score_outer_max_area,
             outer_too_large=self.score_outer_too_large,
             image_quality_contrast_min=self.image_quality_contrast_min,
-            full_width_cv=self.score_full_width_cv,
-            geometry_floor_tight_cv=self.score_geometry_floor_tight_cv,
+            full_photo_width_cv=self.score_full_photo_width_cv,
+            geometry_floor_tight_photo_width_cv=self.score_geometry_floor_tight_photo_width_cv,
             geometry_floor_high=self.score_geometry_floor_high,
             geometry_floor_low=self.score_geometry_floor_low,
-            unstable_width_cv=self.score_unstable_width_cv,
+            unstable_photo_width_cv=self.score_unstable_photo_width_cv,
             full_outer_min_area=self.score_full_outer_min_area,
             low_confidence_floor=self.score_low_confidence_floor,
             partial_one_cap=self.score_partial_one_cap,
@@ -447,13 +447,13 @@ class FormatParameterViews:
     @property
     def geometry_support_score(self) -> GeometrySupportScoreParameters:
         return GeometrySupportScoreParameters(
-            width_cv_norm=self.geometry_width_cv_norm,
+            photo_width_cv_norm=self.geometry_photo_width_cv_norm,
             outer_min_area=self.score_outer_min_area,
             outer_max_area=self.score_outer_too_large,
             outer_uncertain_score=self.geometry_support_outer_uncertain,
             aspect_norm=self.content_support_aspect_norm,
             no_aspect_score=self.geometry_support_no_aspect_score,
-            width_weight=self.geometry_support_width_weight,
+            photo_width_weight=self.geometry_support_photo_width_weight,
             outer_weight=self.geometry_support_outer_weight,
             aspect_weight=self.geometry_support_aspect_weight,
             count_weight=self.geometry_support_count_weight,

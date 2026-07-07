@@ -43,7 +43,7 @@ def hard_full_calibration_floor_applies(
         and evidence.equal_model_gaps == 0
         and photo_width_within_limit(
             candidate.detail,
-            base_score.full_width_cv,
+            base_score.full_photo_width_cv,
             unavailable_ok=True,
         )
     )
@@ -76,7 +76,7 @@ def separator_geometry_support_applies(
         and evidence.equal_model_gaps <= mode_policy.max_equal_gaps
         and photo_width_within_limit(
             candidate.detail,
-            mode_policy.max_width_cv,
+            mode_policy.max_photo_width_cv,
             unavailable_ok=True,
         )
         and support == mode_policy.required_content_support

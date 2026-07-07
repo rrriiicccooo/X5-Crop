@@ -297,7 +297,7 @@ def partial_extra_holder_frames_gate_detail(
         disqualifiers.append("equal_gap_used")
     photo_width_stability = photo_width_stability_detail(
         detection.detail,
-        float(holder.max_width_cv),
+        float(holder.max_photo_width_cv),
         used_role="photo_width_gate",
     )
     if bool(photo_width_stability["unstable"]):

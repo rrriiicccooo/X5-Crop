@@ -21,7 +21,7 @@ class PartialHolderPolicy:
     min_hard_gaps: int = 1
     min_hard_ratio: float = 0.15
     max_equal_gaps: int = 0
-    max_width_cv: float = 0.055
+    max_photo_width_cv: float = 0.055
     min_joint_score: float = 0.65
     min_content_score: float = 0.72
     min_geometry_score: float = 0.72
@@ -43,13 +43,13 @@ class PartialEdgeHintPolicy:
 
 @dataclass(frozen=True)
 class GeometrySupportScorePolicy:
-    width_cv_norm: float = 0.040
+    photo_width_cv_norm: float = 0.040
     outer_min_area: float = 0.35
     outer_max_area: float = 0.94
     outer_uncertain_score: float = 0.55
     aspect_norm: float = 0.22
     no_aspect_score: float = 0.80
-    width_weight: float = 0.34
+    photo_width_weight: float = 0.34
     outer_weight: float = 0.24
     aspect_weight: float = 0.26
     count_weight: float = 0.16
@@ -57,18 +57,18 @@ class GeometrySupportScorePolicy:
 
 @dataclass(frozen=True)
 class BaseDetectionScorePolicy:
-    width_cv_norm: float = 0.030
+    photo_width_cv_norm: float = 0.030
     gap_weight: float = 0.40
-    width_weight: float = 0.30
+    photo_width_weight: float = 0.30
     outer_min_area: float = 0.35
     outer_max_area: float = 0.995
     outer_too_large: float = 0.94
     image_quality_contrast_min: float = 35.0
-    full_width_cv: float = 0.040
-    geometry_floor_tight_cv: float = 0.006
+    full_photo_width_cv: float = 0.040
+    geometry_floor_tight_photo_width_cv: float = 0.006
     geometry_floor_high: float = 0.92
     geometry_floor_low: float = 0.88
-    unstable_width_cv: float = 0.030
+    unstable_photo_width_cv: float = 0.030
     full_outer_min_area: float = 0.40
     low_confidence_floor: float = 0.85
     partial_one_cap: float = 0.78
@@ -171,7 +171,7 @@ class EvidenceIndependencePolicy:
     require_content_support: str = "ok"
     min_content_score: float = 0.72
     min_geometry_score: float = 0.72
-    max_width_cv: float = 0.040
+    max_photo_width_cv: float = 0.040
     review_reason: str = "evidence_dependency_cycle_risk"
 
 
