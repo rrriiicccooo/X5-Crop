@@ -15,7 +15,7 @@ from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ...evidence.content.frame_support import content_evidence_detail
 from ...guidance.content_separator import content_guided_separator_seed_for_count
-from ...physical.outer.plan import (
+from .outer_proposals import (
     merge_outer_proposal_candidates,
     outer_candidate_strategy,
     outer_proposal_candidates,

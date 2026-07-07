@@ -98,6 +98,26 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_physical_layer_does_not_import_guidance_or_final_packages(self) -> None:
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "physical"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.ImportFrom):
+                    continue
+                module = node.module or ""
+                if (
+                    module.startswith("guidance")
+                    or module.startswith("final")
+                    or module.startswith("x5crop.detection.guidance")
+                    or module.startswith("x5crop.detection.final")
+                ):
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {module}")
+
+        self.assertEqual(offenders, [])
+
 
 if __name__ == "__main__":
     unittest.main()

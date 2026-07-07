@@ -17,7 +17,7 @@ from ....runtime.config import RuntimeConfig
 from ...evidence.separator_width import separator_width_evidence_detail
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ...physical.outer.grid_refine import grid_refined_outer_box
-from ...physical.outer.plan import outer_candidate_strategy
+from ..plan.outer_proposals import outer_candidate_strategy
 from ...physical.photo_size import photo_size_consistency_from_gap_edges
 from ...physical.separator.hints import SeparatorGapHintSet
 from .partial_edge import partial_edge_hint
