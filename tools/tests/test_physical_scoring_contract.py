@@ -177,7 +177,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         }
 
         self.assertEqual(
-            content_support_score(containment, "120-66", policy),
+            content_support_score(containment),
             1.0,
         )
         self.assertLess(
@@ -198,7 +198,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         }
 
         self.assertEqual(
-            content_support_score(containment, "120-66", policy),
+            content_support_score(containment),
             0.0,
         )
 

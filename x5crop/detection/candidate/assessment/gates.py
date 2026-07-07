@@ -131,7 +131,7 @@ def separator_gate_all_internal_gaps_hard_assessment(
     return ok, reason
 
 
-def hard_gap_indexes_are_adjacent_late(hard_indexes: list[int]) -> bool:
+def hard_gap_indexes_are_tail_adjacent(hard_indexes: list[int]) -> bool:
     if not hard_indexes:
         return False
     expected_sequence = list(
@@ -160,7 +160,7 @@ def separator_gate_leading_grid_failure_assessment(
             if score < policy.very_low_score
         ) >= policy.very_low_count
         and len(evidence.hard_gap_indexes) <= policy.max_hard_gaps
-        and hard_gap_indexes_are_adjacent_late(evidence.hard_gap_indexes)
+        and hard_gap_indexes_are_tail_adjacent(evidence.hard_gap_indexes)
     )
 
 
@@ -293,7 +293,7 @@ def assess_separator_gate(
 __all__ = [
     "SeparatorGateAssessment",
     "SeparatorGateEvidence",
-    "hard_gap_indexes_are_adjacent_late",
+    "hard_gap_indexes_are_tail_adjacent",
     "separator_gate_all_internal_gaps_hard_assessment",
     "separator_gate_broad_width_support_assessment",
     "separator_gate_edge_pair_support_assessment",

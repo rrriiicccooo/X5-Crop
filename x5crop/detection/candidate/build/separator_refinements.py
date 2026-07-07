@@ -22,7 +22,7 @@ from ....policies.runtime.separator import SeparatorRefinementFamilyPolicy
 
 EDGE_PAIR_REFINEMENT_FAMILY = "edge_pair"
 NEARBY_SEPARATOR_REFINEMENT_FAMILY = "nearby_separator_refinement"
-LATE_REFINEMENT_PENDING_REASON = "pending_late_refinement"
+NEARBY_REFINEMENT_PENDING_REASON = "pending_nearby_separator_refinement"
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ class PrimarySeparatorRefinementResult:
 
 
 @dataclass(frozen=True)
-class LateSeparatorRefinementResult:
+class NearbySeparatorRefinementChainResult:
     gaps: list[Gap]
     nearby_refinement_detail: dict[str, Any]
     pre_nearby_gaps: Optional[list[Gap]]
@@ -135,9 +135,9 @@ def _skipped_gap_refinement_result(
 def pending_gap_refinement_detail(family: str) -> dict[str, Any]:
     return _gap_refinement_detail(
         family,
-        {"used": False, "reason": LATE_REFINEMENT_PENDING_REASON},
+        {"used": False, "reason": NEARBY_REFINEMENT_PENDING_REASON},
         eligible=False,
-        skipped_reason=LATE_REFINEMENT_PENDING_REASON,
+        skipped_reason=NEARBY_REFINEMENT_PENDING_REASON,
     )
 
 
@@ -357,7 +357,7 @@ def apply_nearby_separator_refinement(
     )
 
 
-def apply_late_separator_refinement_chain(
+def apply_nearby_separator_refinement_chain(
     count: int,
     strip_mode: str,
     explicit_count: bool,
@@ -366,7 +366,7 @@ def apply_late_separator_refinement_chain(
     origin: float,
     pitch: float,
     policy: DetectionPolicy,
-) -> LateSeparatorRefinementResult:
+) -> NearbySeparatorRefinementChainResult:
     nearby_refinement = apply_nearby_separator_refinement(
         profile,
         gaps,
@@ -377,7 +377,7 @@ def apply_late_separator_refinement_chain(
         pitch,
         policy,
     )
-    return LateSeparatorRefinementResult(
+    return NearbySeparatorRefinementChainResult(
         gaps=nearby_refinement.gaps,
         nearby_refinement_detail=nearby_refinement.detail,
         pre_nearby_gaps=nearby_refinement.pre_refinement_gaps,
@@ -387,12 +387,12 @@ def apply_late_separator_refinement_chain(
 __all__ = [
     "EDGE_PAIR_REFINEMENT_FAMILY",
     "GapRefinementResult",
-    "LATE_REFINEMENT_PENDING_REASON",
-    "LateSeparatorRefinementResult",
     "NEARBY_SEPARATOR_REFINEMENT_FAMILY",
+    "NEARBY_REFINEMENT_PENDING_REASON",
+    "NearbySeparatorRefinementChainResult",
     "PrimarySeparatorRefinementResult",
     "apply_edge_pair_refinement",
-    "apply_late_separator_refinement_chain",
+    "apply_nearby_separator_refinement_chain",
     "apply_nearby_separator_refinement",
     "apply_primary_separator_refinements",
     "edge_pair_refinement_skip_reason",

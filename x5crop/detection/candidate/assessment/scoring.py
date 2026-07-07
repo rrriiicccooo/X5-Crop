@@ -45,10 +45,7 @@ def content_quality_score(
 
 def content_support_score(
     detail: dict[str, Any],
-    format_name: str,
-    content_policy: Optional[ContentPolicy] = None,
 ) -> float:
-    del format_name, content_policy
     if not bool(detail.get("used", False)):
         return 0.0
     containment_ok = bool(detail.get("content_containment_ok", False))

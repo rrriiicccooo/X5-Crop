@@ -4,14 +4,26 @@ from pathlib import Path
 import unittest
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class SourceNamingContractTest(unittest.TestCase):
-    def test_active_source_has_no_late_or_auxiliary_outer_terms(self) -> None:
-        banned = ("late_outer", "auxiliary_outer", 'phase="late"', 'phase="auxiliary"')
+    def test_active_source_has_no_late_or_auxiliary_flow_terms(self) -> None:
+        banned = (
+            "late_outer",
+            "auxiliary_outer",
+            "late_refinement",
+            "pending_late",
+            "apply_late",
+            "LateSeparator",
+            "adjacent_late",
+            'phase="late"',
+            'phase="auxiliary"',
+        )
         offenders: list[str] = []
-        for path in (PROJECT_ROOT / "x5crop").rglob("*.py"):
+        source_root = PROJECT_ROOT / "x5crop"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
             text = path.read_text(encoding="utf-8")
             for term in banned:
                 if term in text:

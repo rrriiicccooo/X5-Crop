@@ -13,7 +13,7 @@ from ....cache import AnalysisCache
 from ...physical.separator.hints import SeparatorGapHintSet
 from .separator_refinements import (
     NEARBY_SEPARATOR_REFINEMENT_FAMILY,
-    apply_late_separator_refinement_chain,
+    apply_nearby_separator_refinement_chain,
     apply_primary_separator_refinements,
     pending_gap_refinement_detail,
 )
@@ -144,7 +144,7 @@ def build_primary_separator_gaps_for_outer(
     )
 
 
-def apply_late_separator_refinements(
+def apply_nearby_separator_refinements(
     count: int,
     strip_mode: str,
     separator_gaps: SeparatorGapBuildResult,
@@ -152,7 +152,7 @@ def apply_late_separator_refinements(
     *,
     explicit_count: bool,
 ) -> SeparatorGapBuildResult:
-    late_refinement = apply_late_separator_refinement_chain(
+    nearby_refinement = apply_nearby_separator_refinement_chain(
         count,
         strip_mode,
         explicit_count,
@@ -167,18 +167,18 @@ def apply_late_separator_refinements(
         profile=separator_gaps.profile,
         origin=separator_gaps.origin,
         pitch=separator_gaps.pitch,
-        gaps=late_refinement.gaps,
+        gaps=nearby_refinement.gaps,
         grid_detail=separator_gaps.grid_detail,
         standard_gap_search_detail=separator_gaps.standard_gap_search_detail,
         separator_width_profile_gap_search_detail=separator_gaps.separator_width_profile_gap_search_detail,
         edge_pair_correction_detail=separator_gaps.edge_pair_correction_detail,
-        nearby_refinement_detail=late_refinement.nearby_refinement_detail,
-        pre_nearby_gaps=late_refinement.pre_nearby_gaps,
+        nearby_refinement_detail=nearby_refinement.nearby_refinement_detail,
+        pre_nearby_gaps=nearby_refinement.pre_nearby_gaps,
     )
 
 __all__ = [
     "SeparatorGapBuildResult",
-    "apply_late_separator_refinements",
+    "apply_nearby_separator_refinements",
     "build_primary_separator_gaps_for_outer",
     "separator_origin_pitch",
 ]

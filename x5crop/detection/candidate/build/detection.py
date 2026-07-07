@@ -22,7 +22,7 @@ from ...physical.separator.hints import SeparatorGapHintSet
 from .partial_edge import partial_edge_hint
 from .separator_gaps import (
     SeparatorGapBuildResult,
-    apply_late_separator_refinements,
+    apply_nearby_separator_refinements,
     build_primary_separator_gaps_for_outer,
 )
 
@@ -173,7 +173,7 @@ def _build_separator_gap_lifecycle(
         gap_hints=gap_hints,
     )
     if not allow_outer_refine or strip_mode != "full":
-        return apply_late_separator_refinements(
+        return apply_nearby_separator_refinements(
             count,
             strip_mode,
             separator_gaps,
@@ -190,7 +190,7 @@ def _build_separator_gap_lifecycle(
         policy.outer.proposal.geometry.grid_refine,
     )
     if refined_outer is None:
-        return apply_late_separator_refinements(
+        return apply_nearby_separator_refinements(
             count,
             strip_mode,
             separator_gaps,
@@ -215,7 +215,7 @@ def _build_separator_gap_lifecycle(
     grid_detail = dict(refined_separator_gaps.grid_detail)
     grid_detail["outer_refined"] = True
     refined_separator_gaps = replace(refined_separator_gaps, grid_detail=grid_detail)
-    return apply_late_separator_refinements(
+    return apply_nearby_separator_refinements(
         count,
         strip_mode,
         refined_separator_gaps,

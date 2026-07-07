@@ -112,7 +112,7 @@ def apply_candidate_assessment_policy(
         separator_gate_detail["calibrate_hard_full_confidence_floor"] = float(
             scoring_policy.hard_full_confidence_floor
         )
-    content_score = content_support_score(containment_detail, fmt.name, policy.content)
+    content_score = content_support_score(containment_detail)
     content_quality = content_quality_score(containment_detail, fmt.name, policy.content)
     geometry_score = geometry_support_score(candidate, containment_detail, policy)
     separator_score = (
