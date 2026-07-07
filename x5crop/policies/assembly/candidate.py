@@ -100,7 +100,6 @@ def scoring_policy(fmt: FormatSpec, params: FormatParameters) -> ScoringPolicy:
             low_confidence_floor=float(base_score.low_confidence_floor),
             partial_one_cap=float(base_score.partial_one_cap),
             partial_two_35mm_cap=float(base_score.partial_two_35mm_cap),
-            partial_general_cap=float(base_score.partial_general_cap),
         ),
         geometry_support=GeometrySupportScorePolicy(
             photo_width_cv_norm=float(geometry_support.photo_width_cv_norm),

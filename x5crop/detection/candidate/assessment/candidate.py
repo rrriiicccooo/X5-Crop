@@ -265,7 +265,6 @@ def apply_candidate_assessment_policy(
             for reason in reasons
             if reason
             not in {
-                "partial_strip_count_candidate",
                 "partial_too_ambiguous",
                 REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
                 "weak_separators",

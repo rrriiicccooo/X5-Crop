@@ -32,7 +32,6 @@ class BaseDetectionScoreParameters:
     low_confidence_floor: float
     partial_one_cap: float
     partial_two_35mm_cap: float
-    partial_general_cap: float
 
 @dataclass(frozen=True)
 class SeparatorSupportScoreParameters:

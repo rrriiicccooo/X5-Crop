@@ -267,7 +267,6 @@ class FormatParameters(FormatParameterViews):
     score_gate_mostly_equal_confidence_cap: float = 0.84
     score_partial_one_cap: float = 0.78
     score_partial_two_35mm_cap: float = 0.82
-    score_partial_general_cap: float = 0.84
     score_low_confidence_floor: float = 0.85
     score_gate_allow_full_detected_geometry: bool = True
     score_gate_allow_geometry_support: bool = True

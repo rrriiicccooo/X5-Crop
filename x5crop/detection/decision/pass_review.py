@@ -49,7 +49,6 @@ REASON_NORMALIZATION_MAP = {
     "unstable_frame_width": "geometry_unstable",
     "candidate_competition_uncertain": "candidate_competition_close",
     "partial_too_ambiguous": "partial_edge_uncertain",
-    "partial_strip_count_candidate": "partial_edge_uncertain",
     "likely_partial_strip": "partial_edge_uncertain",
     "partial_outer_leading_content": "partial_edge_uncertain",
     "partial_frame_content_unstable": "partial_edge_uncertain",

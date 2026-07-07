@@ -173,8 +173,6 @@ def content_candidate_confidence_and_reasons(
     if max_aspect_error > candidate_policy.aspect_uncertain:
         confidence = min(confidence, candidate_policy.aspect_uncertain_cap)
         reasons.append("content_aspect_uncertain")
-    if strip_mode == "partial":
-        reasons.append("partial_strip_count_candidate")
     if confidence < confidence_threshold and not reasons:
         reasons.append("content_confidence_low")
     detail = {
@@ -182,6 +180,11 @@ def content_candidate_confidence_and_reasons(
         "coverage_conf": coverage_conf,
         "mean_conf": mean_conf,
         "aspect_conf": aspect_conf,
+        "partial_candidate_role": (
+            "content_guidance_not_count_risk"
+            if strip_mode == "partial"
+            else "content_guidance"
+        ),
     }
     return float(confidence), reasons, detail
 

@@ -17,6 +17,7 @@ from x5crop.detection.candidate.assessment.scoring import (
 )
 from x5crop.detection.decision.pass_review import evidence_summary_for
 from x5crop.detection.evidence.risk import lucky_photo_width_instability_components
+from x5crop.detection.guidance.content_model import content_candidate_confidence_and_reasons
 from x5crop.domain import Box, Detection, Gap
 from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED
@@ -268,6 +269,69 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
             2,
         )
+
+    def test_partial_three_frame_hard_separator_is_not_intrinsically_ambiguous(self) -> None:
+        gray = np.zeros((100, 300), dtype=np.uint8)
+        gray[:, ::2] = 255
+        confidence, reasons, detail = base_detection_assessment(
+            gray,
+            Box(0, 0, 300, 100),
+            [
+                Gap(1, 100.0, 1.0, GAP_DETECTED, 95.0, 105.0),
+                Gap(2, 200.0, 1.0, GAP_DETECTED, 195.0, 205.0),
+            ],
+            [
+                Box(0, 0, 95, 100),
+                Box(105, 0, 195, 100),
+                Box(205, 0, 300, 100),
+            ],
+            3,
+            format_spec("135"),
+            "partial",
+        )
+
+        self.assertGreater(confidence, 0.90)
+        self.assertNotIn("partial_strip_count_candidate", reasons)
+        self.assertNotIn("partial_too_ambiguous", reasons)
+        self.assertEqual(detail["partial_count_assessment"]["reason"], "enough_frames_for_physical_assessment")
+
+    def test_partial_single_frame_remains_intrinsically_ambiguous(self) -> None:
+        gray = np.zeros((100, 120), dtype=np.uint8)
+        gray[:, ::2] = 255
+        confidence, reasons, detail = base_detection_assessment(
+            gray,
+            Box(0, 0, 120, 100),
+            [],
+            [Box(0, 0, 120, 100)],
+            1,
+            format_spec("135"),
+            "partial",
+        )
+
+        self.assertLessEqual(
+            confidence,
+            get_detection_policy("135", "partial").scoring.base_detection.partial_one_cap,
+        )
+        self.assertIn("partial_too_ambiguous", reasons)
+        self.assertNotIn("partial_strip_count_candidate", reasons)
+        self.assertEqual(detail["partial_count_assessment"]["reason"], "single_frame_partial")
+
+    def test_content_partial_candidate_does_not_emit_partial_count_reason(self) -> None:
+        _confidence, reasons, detail = content_candidate_confidence_and_reasons(
+            placement="content_runs",
+            runs_count=3,
+            selected_run_count=3,
+            count=3,
+            strip_mode="partial",
+            median_mean=0.20,
+            median_coverage=0.40,
+            max_aspect_error=0.01,
+            confidence_threshold=0.85,
+            candidate_policy=get_detection_policy("135", "partial").content.candidate,
+        )
+
+        self.assertNotIn("partial_strip_count_candidate", reasons)
+        self.assertEqual(detail["partial_candidate_role"], "content_guidance_not_count_risk")
 
     def test_safe_outer_overcut_and_low_content_quality_do_not_fail_final_evidence(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)

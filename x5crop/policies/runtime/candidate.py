@@ -73,7 +73,6 @@ class BaseDetectionScorePolicy:
     low_confidence_floor: float = 0.85
     partial_one_cap: float = 0.78
     partial_two_35mm_cap: float = 0.82
-    partial_general_cap: float = 0.84
     family_separator_uncertain_reason: str = "separator_evidence_incomplete"
 
 

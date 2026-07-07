@@ -277,16 +277,27 @@ def base_detection_assessment(
     if confidence < base_score.low_confidence_floor and not reasons:
         reasons.append("low_confidence")
 
+    partial_count_assessment = {
+        "used": bool(strip_mode == "partial" and count < fmt.default_count),
+        "reason": "not_partial_or_default_count",
+        "intrinsically_ambiguous": False,
+        "count": int(count),
+        "default_count": int(fmt.default_count),
+        "role": "count_ambiguity_only",
+    }
     if strip_mode == "partial" and count < fmt.default_count:
         if count <= 1:
             confidence = min(confidence, base_score.partial_one_cap)
             reasons.append("partial_too_ambiguous")
+            partial_count_assessment["reason"] = "single_frame_partial"
+            partial_count_assessment["intrinsically_ambiguous"] = True
         elif count <= 2 and fmt.default_count >= 6:
             confidence = min(confidence, base_score.partial_two_35mm_cap)
             reasons.append("partial_too_ambiguous")
+            partial_count_assessment["reason"] = "two_frame_35mm_partial"
+            partial_count_assessment["intrinsically_ambiguous"] = True
         else:
-            confidence = min(confidence, base_score.partial_general_cap)
-        reasons.append("partial_strip_count_candidate")
+            partial_count_assessment["reason"] = "enough_frames_for_physical_assessment"
 
     if uses_min_hard_equal_cap and expected_gaps >= 3:
         if gap_evidence.hard_separator_gaps < 1:
@@ -319,6 +330,7 @@ def base_detection_assessment(
         "contrast_1_99": contrast,
         "full_geometry_ok": full_geometry_ok,
         "separator_gate_profile": separator_gate.profile,
+        "partial_count_assessment": partial_count_assessment,
     }
     return float(max(0.0, min(1.0, confidence))), sorted(set(reasons)), detail
 

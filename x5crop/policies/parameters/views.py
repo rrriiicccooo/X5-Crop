@@ -429,7 +429,6 @@ class FormatParameterViews:
             low_confidence_floor=self.score_low_confidence_floor,
             partial_one_cap=self.score_partial_one_cap,
             partial_two_35mm_cap=self.score_partial_two_35mm_cap,
-            partial_general_cap=self.score_partial_general_cap,
         )
 
     @property
