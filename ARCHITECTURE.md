@@ -174,6 +174,12 @@ candidate plan
 - evidence 层只生成和汇总证据；从 `candidate_assessment` 读取 gate detail 属于 decision
   或 report/read-model。
 - finalization 不生成候选、不评分、不决定 PASS / REVIEW；它只消费 decision 结果并做输出相邻调整。
+- report / debug / export 是 output read-model；它们只能消费 `ProcessResult` 或
+  `decision_summary.status`，不能根据 confidence / review reason 自行推导最终状态。
+  裸 Detection 若还没有 decision summary，报告和 Debug Analysis 必须显示 `unknown` /
+  `UNKNOWN`。
+- report schema 的 risk / deskew 可见细节属于 `diagnostics` section，不挂在
+  `finalization` 名下；finalization 这个词只保留给输出相邻几何和 bleed 调整。
 - `Detection.detail` 的稳定读取 helper 属于 `detection.detail`，根包不承载 report/debug read-model。
 - active detail 使用 `primary`、`extension`、`supplemental`、`nearby_separator_refinement`
   等职责命名，不用 `late` / `auxiliary` 表达含糊流程阶段。
@@ -453,6 +459,11 @@ for output bleed, approved geometry adjustment, and read-only diagnostics only.
 `approved_auto` requires both threshold-level confidence and empty final review
 reasons; workflow and finalization must not derive final status from confidence
 alone.
+Report, debug, and export are output read-models: they consume `ProcessResult`
+or `decision_summary.status`, never infer final status from confidence or review
+reasons. A bare Detection without decision summary is reported as `unknown` /
+`UNKNOWN`. Report-visible risk / deskew details live under `diagnostics`, not a
+`finalization` section.
 Stable `Detection.detail` readers live in `detection.detail`, not the root
 package.
 

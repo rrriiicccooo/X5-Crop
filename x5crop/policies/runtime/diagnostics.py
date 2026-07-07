@@ -118,6 +118,7 @@ class ReportPolicy:
         "decision_policy_detail",
         "policy_id",
         "candidate_table",
+        "diagnostics",
         "output",
     )
 

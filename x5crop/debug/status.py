@@ -13,19 +13,21 @@ def debug_status_parts(detection: Detection, threshold: float) -> tuple[str, str
     status_value = str(decision.get("status", "") or "")
     if status_value:
         passed = status_value == "approved_auto"
-        source = "decision"
+        status = "PASS" if passed else "REVIEW"
+        detail = (
+            f"decision status {status_value}; "
+            f"confidence {detection.confidence:.3f}; threshold {threshold:.3f}"
+        )
+        color = (40, 180, 90) if passed else (230, 80, 70)
     else:
-        passed = detection.confidence >= threshold and not detection.review_reasons
-        status_value = "approved_auto" if passed else "needs_review"
-        source = "derived"
-    status = "PASS" if passed else "REVIEW"
-    detail = (
-        f"{source} status {status_value}; "
-        f"confidence {detection.confidence:.3f}; threshold {threshold:.3f}"
-    )
+        status = "UNKNOWN"
+        detail = (
+            "decision status unavailable; "
+            f"confidence {detection.confidence:.3f}; threshold {threshold:.3f}"
+        )
+        color = (170, 170, 170)
     if detection.review_reasons:
         detail += " | " + ",".join(detection.review_reasons[:3])
-    color = (40, 180, 90) if passed else (230, 80, 70)
     return status, detail, color
 
 

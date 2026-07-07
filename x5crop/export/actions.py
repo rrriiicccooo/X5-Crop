@@ -20,8 +20,9 @@ def copy_for_review_if_needed(
     if status != "needs_review":
         return None
     warnings.append(
-        f"low confidence: {detection.confidence:.3f} < {config.confidence_threshold:.3f}; "
-        f"reasons={','.join(detection.review_reasons)}"
+        f"review required: confidence={detection.confidence:.3f}; "
+        f"threshold={config.confidence_threshold:.3f}; "
+        f"reasons={','.join(detection.review_reasons) or 'none'}"
     )
     if not config.copy_review_files:
         return None

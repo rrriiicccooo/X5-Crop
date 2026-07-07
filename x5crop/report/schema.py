@@ -26,10 +26,23 @@ from ..utils import json_safe
 from .sections import candidate_table, gate_records, report_policy_for_detection, selected_candidate
 
 
+def _report_status(
+    result: ProcessResult | None,
+    decision_detail: dict,
+) -> str:
+    if result is not None:
+        return str(result.status)
+    status = decision_detail.get("status")
+    if status:
+        return str(status)
+    return "unknown"
+
+
 def report_schema_for_detection(detection: Detection, result: ProcessResult | None = None) -> dict:
     report_policy = report_policy_for_detection(detection)
     decision_contract = decision_contract_for(detection.film_format, detection.strip_mode)
     decision_detail = decision_summary(detection)
+    status = _report_status(result, decision_detail)
     output = {}
     if result is not None:
         output = {
@@ -59,7 +72,7 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
             "layout": detection.layout,
         },
         "result": {
-            "status": result.status if result is not None else ("approved_auto" if not detection.review_reasons else "needs_review"),
+            "status": status,
             "confidence": float(detection.confidence),
             "review_reasons": list(detection.review_reasons),
             "outer_box": asdict(detection.outer),
@@ -75,7 +88,7 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
             "outer_content_alignment": detail_dict(detection, OUTER_CONTENT_ALIGNMENT),
         },
         "gates": gate_records(detection),
-        "finalization": {
+        "diagnostics": {
             "lucky_pass_risk": detail_dict(detection, LUCKY_PASS_RISK_SCORE),
             "overlap_bleed_risk": detail_dict(detection, OVERLAP_BLEED_RISK),
             "deskew": detail_dict(detection, DESKEW),
