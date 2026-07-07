@@ -119,6 +119,14 @@ def edge_anchored_outer_candidates(
                         f"edge_anchor_{strip_mode}_{anchor_name}_{source.name}_r{target_ratio:.3f}",
                         box,
                         "edge_anchor_outer",
+                        {
+                            "family": "content_outer",
+                            "placement": "edge_anchor",
+                            "anchor": anchor_name,
+                            "source_outer": source.name,
+                            "target_ratio": float(target_ratio),
+                            "content_guidance_role": "outer_position_hint",
+                        },
                     )
                 )
 

@@ -61,6 +61,7 @@ class OuterCandidate:
     name: str
     box: Box
     strategy: str = "unknown_outer"
+    detail: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

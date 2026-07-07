@@ -18,20 +18,48 @@ def base_outer_candidates(
     bw = detect_outer(gray, outer_config)
     white_x = detect_outer_white_x(gray, outer_config)
     side_boundary = side_boundary_outer(gray, outer_config)
-    candidates = [OuterCandidate("bw", bw, "base_outer")]
+    candidates = [
+        OuterCandidate(
+            "bw",
+            bw,
+            "base_outer",
+            {"family": "base_outer", "method": "bw"},
+        )
+    ]
     if white_x.valid():
         max_reasonable = max(
             float(bw.width) * outer_config.white_x_width_multiplier,
             float(bw.width) + w * outer_config.white_x_extra_ratio,
         )
         if white_x.width >= bw.width and white_x.width <= max_reasonable:
-            candidates.append(OuterCandidate("white_x", white_x, "base_outer"))
+            candidates.append(
+                OuterCandidate(
+                    "white_x",
+                    white_x,
+                    "base_outer",
+                    {"family": "base_outer", "method": "white_x"},
+                )
+            )
     if side_boundary.box is not None:
-        candidates.append(OuterCandidate("side_boundary", side_boundary.box, "base_outer"))
+        candidates.append(
+            OuterCandidate(
+                "side_boundary",
+                side_boundary.box,
+                "base_outer",
+                side_boundary.detail(),
+            )
+        )
     for profile in outer_config.mask_profiles:
         box = detect_mask_profile_outer(gray, profile, outer_config)
         if box is not None:
-            candidates.append(OuterCandidate(profile.name, box, "base_outer"))
+            candidates.append(
+                OuterCandidate(
+                    profile.name,
+                    box,
+                    "base_outer",
+                    {"family": "base_outer", "method": "mask_profile", "profile": profile.name},
+                )
+            )
 
     unique = unique_outer_candidates(candidates)
     canvas_area = float(w * h)
@@ -41,4 +69,11 @@ def base_outer_candidates(
     ]
     if non_full:
         return non_full
-    return unique or [OuterCandidate("full_canvas", Box(0, 0, w, h), "base_outer")]
+    return unique or [
+        OuterCandidate(
+            "full_canvas",
+            Box(0, 0, w, h),
+            "base_outer",
+            {"family": "base_outer", "method": "full_canvas"},
+        )
+    ]

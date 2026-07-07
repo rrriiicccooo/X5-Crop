@@ -56,6 +56,11 @@ def detect_dual_lane(
             0.0,
             f"dual_lane_{lane_index}_{outer_candidate.name}",
             outer_candidate.strategy,
+            outer_candidate_detail={
+                **outer_candidate.detail,
+                "dual_lane_index": int(lane_index),
+                "lane_box": asdict(lane),
+            },
             cache=cache,
         )
         calibrated = apply_candidate_assessment_policy(

@@ -6,7 +6,7 @@ from typing import Optional
 import numpy as np
 
 from ....constants import CANDIDATE_SOURCE_SEPARATOR
-from ....domain import Detection
+from ....domain import Detection, OuterCandidate
 from ....formats import FormatSpec
 from ....geometry.layout import work_gray
 from ....policies.registry import get_detection_policy
@@ -27,6 +27,17 @@ from ..assessment.base_scoring import apply_base_detection_scoring
 from .counts import raw_detection_rank
 from ..assessment.partial_holder import partial_safe_frame_content_detail, partial_safe_leading_content_detail
 from .source_policy import separator_full_width_can_compete, separator_outer_gap_max_width_override
+
+
+def _outer_candidate_report_detail(candidate: OuterCandidate) -> dict:
+    detail = {
+        "name": candidate.name,
+        "strategy": outer_candidate_strategy(candidate),
+        "box": asdict(candidate.box),
+    }
+    if candidate.detail:
+        detail["proposal_detail"] = dict(candidate.detail)
+    return detail
 
 
 def detect_candidate_for_count(
@@ -75,6 +86,7 @@ def detect_candidate_for_count(
                 offset_fraction,
                 candidate.name,
                 candidate.strategy,
+                outer_candidate_detail=candidate.detail,
                 cache=cache,
                 gap_max_width_ratio_override=candidate_gap_override,
                 gap_search_profile=gap_profile,
@@ -156,7 +168,7 @@ def detect_candidate_for_count(
         best.detail["outer_candidate_count"] = len(outer_candidates)
         best.detail["outer_area_spread_ratio"] = (max(areas) - min(areas)) / max(1.0, float(max(areas)))
         best.detail["outer_candidates"] = [
-            {"name": candidate.name, "strategy": outer_candidate_strategy(candidate), "box": asdict(candidate.box)}
+            _outer_candidate_report_detail(candidate)
             for candidate in outer_candidates
         ]
     gap_profiles = [WIDTH_AWARE_GAP_PROFILE]
@@ -217,6 +229,10 @@ def detect_content_guided_separator_candidate_for_count(
         offset_fraction,
         "content_guided_separator",
         "content_guided_separator_outer",
+        outer_candidate_detail={
+            "family": "content_guided_separator",
+            "content_guidance": seed_result.seed.detail,
+        },
         cache=cache,
         allow_outer_refine=False,
         gap_search_profile=WIDTH_AWARE_GAP_PROFILE,
@@ -279,6 +295,7 @@ def detect_safety_outer_proposal_candidate_for_count(
             offset_fraction,
             candidate.name,
             candidate.strategy,
+            outer_candidate_detail=candidate.detail,
             cache=cache,
             gap_max_width_ratio_override=candidate_gap_override,
             policy=policy,
@@ -290,7 +307,7 @@ def detect_safety_outer_proposal_candidate_for_count(
         best.detail["outer_candidate_count"] = len(outer_candidates)
         best.detail["outer_area_spread_ratio"] = (max(areas) - min(areas)) / max(1.0, float(max(areas)))
         best.detail["outer_candidates"] = [
-            {"name": candidate.name, "strategy": outer_candidate_strategy(candidate), "box": asdict(candidate.box)}
+            _outer_candidate_report_detail(candidate)
             for candidate in outer_candidates
         ]
     best.detail["candidate_plan"] = {

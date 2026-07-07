@@ -44,6 +44,15 @@ class SeparatorOuterPlan:
     uses_width_aware_bands: bool = False
 
 
+@dataclass(frozen=True)
+class SeparatorOuterSequenceRank:
+    rank: float
+    sequence: tuple[SeparatorBand, ...]
+    expected_ratio: float
+    photo_size_detail: dict
+    sequence_score: float
+
+
 def separator_outer_scopes_for_policy(
     policy: DetectionPolicy,
     strip_mode: str = "full",
@@ -299,10 +308,12 @@ def _separator_outer_candidates_for_plan(
             band_policy,
             plan,
         )
-        for rank, (_sequence_rank, sequence, expected_ratio) in enumerate(
+        for rank, ranked_sequence in enumerate(
             ranked_sequences[: plan.sequence_candidate_count],
             start=1,
         ):
+            sequence = ranked_sequence.sequence
+            expected_ratio = ranked_sequence.expected_ratio
             first_band = sequence[0]
             last_band = sequence[-1]
             separator_total = sum(float(band.width) for band in sequence)
@@ -329,6 +340,24 @@ def _separator_outer_candidates_for_plan(
                     f"{plan.candidate_prefix}_{source.name}_{rank}{ratio_suffix}",
                     proposed,
                     "separator_outer",
+                    {
+                        "family": "separator_derived_outer",
+                        "outer_scope": plan.outer_scope,
+                        "gap_search_profile": plan.gap_search_profile,
+                        "source_outer": source.name,
+                        "photo_size_consistency": ranked_sequence.photo_size_detail,
+                        "separator_sequence_score": float(ranked_sequence.sequence_score),
+                        "separator_bands": [
+                            {
+                                "start": float(band.start),
+                                "end": float(band.end),
+                                "center": float(band.center),
+                                "width": float(band.width),
+                                "score": float(band.score),
+                            }
+                            for band in sequence
+                        ],
+                    },
                 )
             )
 
@@ -347,12 +376,12 @@ def _rank_separator_sequences(
     aspect: float,
     band_policy: SeparatorOuterBandPolicy,
     plan: SeparatorOuterPlan,
-) -> list[tuple[float, tuple[SeparatorBand, ...], float]]:
+) -> list[SeparatorOuterSequenceRank]:
     candidate_bands = sorted(
         bands,
         key=lambda band: (-float(band.score), float(band.center)),
     )[: max(expected_gaps, plan.band_candidate_count)]
-    ranked: list[tuple[float, tuple[SeparatorBand, ...], float]] = []
+    ranked: list[SeparatorOuterSequenceRank] = []
     sequence_policy = _sequence_band_policy(band_policy, plan)
     for sequence in separator_outer_band_sequences(candidate_bands, expected_gaps, frame_long, sequence_policy):
         previous: Optional[SeparatorBand] = None
@@ -392,8 +421,16 @@ def _rank_separator_sequences(
             actual_ratio = proposed_width / max(1.0, short_axis)
             rank = photo_size.rank_penalty() - plan.sequence_score_weight * sequence_score
             rank += abs(actual_ratio - expected_ratio)
-            ranked.append((rank, sequence, expected_ratio))
-    return sorted(ranked, key=lambda item: item[0])
+            ranked.append(
+                SeparatorOuterSequenceRank(
+                    rank=float(rank),
+                    sequence=sequence,
+                    expected_ratio=float(expected_ratio),
+                    photo_size_detail=photo_size.detail(),
+                    sequence_score=float(sequence_score),
+                )
+            )
+    return sorted(ranked, key=lambda item: item.rank)
 
 
 def _sequence_band_policy(

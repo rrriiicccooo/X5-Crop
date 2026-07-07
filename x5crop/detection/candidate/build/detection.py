@@ -18,7 +18,6 @@ from ...evidence.separator_width import separator_width_evidence_detail
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ...physical.outer.grid_refine import grid_refined_outer_box
 from ...physical.outer.plan import outer_candidate_strategy
-from ...physical.outer.side_boundary import side_boundary_outer
 from ...physical.photo_size import photo_size_consistency_from_gap_edges
 from ...physical.separator.hints import SeparatorGapHintSet
 from .partial_edge import partial_edge_hint
@@ -39,6 +38,7 @@ def build_detection_for_outer(
     offset_fraction: float = 0.0,
     outer_candidate_name: str = "unknown",
     outer_candidate_strategy_name: str | None = None,
+    outer_candidate_detail: Optional[dict] = None,
     cache: Optional[AnalysisCache] = None,
     allow_outer_refine: bool = True,
     gap_max_width_ratio_override: Optional[float] = None,
@@ -121,6 +121,7 @@ def build_detection_for_outer(
             "layout": config.layout,
             "outer_candidate": outer_candidate_name,
             "outer_candidate_strategy": candidate_strategy,
+            "outer_candidate_detail": dict(outer_candidate_detail or {}),
             "work_outer": asdict(outer),
             "work_frame_boxes": [asdict(box) for box in boxes_work],
             "grid": separator_gaps.grid_detail,
@@ -149,11 +150,6 @@ def build_detection_for_outer(
             "gap_methods": [gap.method for gap in gaps],
         }
     )
-    if outer_candidate_name == "side_boundary":
-        detail["outer_side_boundary"] = side_boundary_outer(
-            gray_work,
-            policy.outer.proposal.base.candidates,
-        ).detail()
     if separator_gaps.pre_nearby_gaps is not None:
         detail["pre_nearby_gaps"] = [asdict(gap) for gap in separator_gaps.pre_nearby_gaps]
     return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, 0.0, [], detail)

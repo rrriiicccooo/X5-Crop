@@ -101,6 +101,13 @@ def floating_content_position_candidates(
                         f"floating_{strip_mode}_{source.name}_r{target_ratio:.3f}",
                         box,
                         "content_outer",
+                        {
+                            "family": "content_outer",
+                            "placement": "floating",
+                            "source_outer": source.name,
+                            "target_ratio": float(target_ratio),
+                            "content_guidance_role": "outer_position_hint",
+                        },
                     )
                 )
 

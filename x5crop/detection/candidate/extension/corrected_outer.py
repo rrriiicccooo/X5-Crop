@@ -37,6 +37,12 @@ def build_assessed_corrected_outer_candidate(
         float(detection.detail.get("offset_fraction", 0.0)),
         corrected.name,
         corrected.strategy,
+        outer_candidate_detail={
+            "family": "outer_correction",
+            "source_reason": corrected.source_reason,
+            "original_outer_work_box": corrected.original_outer_work_box,
+            **corrected.detail,
+        },
         cache=cache,
         allow_outer_refine=False,
         gap_max_width_ratio_override=None,
