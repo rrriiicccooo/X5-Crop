@@ -10,7 +10,7 @@ from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
-from ..proposal.content import content_detection_for_count
+from ...guidance.content_model import content_detection_for_count
 from ..assessment.candidate import apply_candidate_assessment_policy
 from .reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
 from ..selection.choose import is_partial_safe_auto_candidate

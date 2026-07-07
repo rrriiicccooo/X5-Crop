@@ -9,7 +9,7 @@ from ....formats import FormatSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
-from ..proposal.correction.types import OuterCorrectionProposal
+from ...physical.outer.correction.types import OuterCorrectionProposal
 
 
 def build_assessed_corrected_outer_candidate(
@@ -21,7 +21,7 @@ def build_assessed_corrected_outer_candidate(
     cache: AnalysisCache,
     policy: DetectionPolicy,
 ) -> Detection:
-    from ...evidence.content_evidence import content_evidence_detail
+    from ...evidence.content.frame_support import content_evidence_detail
     from ...evidence.outer_alignment import outer_content_alignment_detail
     from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE, width_aware_gap_profile_detail
     from ..assessment.candidate import apply_candidate_assessment_policy

@@ -10,7 +10,7 @@ from ....formats import FormatSpec
 from ....cache.separator import cached_separator_profile
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
-from ..proposal.separator.hints import SeparatorGapHintSet
+from ...physical.separator.hints import SeparatorGapHintSet
 from .separator_refinements import (
     NEARBY_SEPARATOR_REFINEMENT_FAMILY,
     apply_late_separator_refinement_chain,

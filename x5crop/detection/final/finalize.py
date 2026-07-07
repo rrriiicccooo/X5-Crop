@@ -24,7 +24,7 @@ from .output_bleed import (
 )
 from ...policies.registry import get_detection_policy
 from ...cache import AnalysisCache
-from ..evidence.content_evidence import content_evidence_detail
+from ..evidence.content.frame_support import content_evidence_detail
 from ..evidence.read_only import attach_read_only_diagnostics
 from ..evidence.risk import lucky_pass_risk_score_detail, overlap_bleed_risk_detail
 from ..evidence.outer_alignment import outer_content_alignment_detail

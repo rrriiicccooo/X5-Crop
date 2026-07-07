@@ -5,17 +5,17 @@ from typing import Optional
 
 import numpy as np
 
-from .....domain import Box, OuterCandidate
-from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from .....cache.separator import cached_separator_profile
-from .....geometry.separator_band import SeparatorBand
-from .....geometry.separator_width_profile import collect_separator_width_bands, separator_width_profile
-from .....policies.registry import get_detection_policy
-from .....policies.runtime.outer import SeparatorOuterBandPolicy, SeparatorOuterFamilyPolicy
-from .....policies.runtime.policy import DetectionPolicy
-from .....cache import AnalysisCache
-from ....cache_keys import separator_outer_cache_key
-from ....gap_profiles import WIDTH_AWARE_GAP_PROFILE
+from ....domain import Box, OuterCandidate
+from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ....cache.separator import cached_separator_profile
+from ....geometry.separator_band import SeparatorBand
+from ....geometry.separator_width_profile import collect_separator_width_bands, separator_width_profile
+from ....policies.registry import get_detection_policy
+from ....policies.runtime.outer import SeparatorOuterBandPolicy, SeparatorOuterFamilyPolicy
+from ....policies.runtime.policy import DetectionPolicy
+from ....cache import AnalysisCache
+from ...cache_keys import separator_outer_cache_key
+from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from .common import unique_outer_candidates
 from .separator_bands import collect_separator_outer_bands, separator_outer_band_sequences
 

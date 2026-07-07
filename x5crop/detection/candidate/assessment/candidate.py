@@ -20,7 +20,7 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ....utils import HARD_REVIEW_REASONS
-from ...evidence.content_evidence import content_evidence_detail
+from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.separator_summary import separator_gate_detail_summary
 from .evidence_independence import evidence_independence_detail
 from .gates import assess_separator_gate

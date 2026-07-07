@@ -9,9 +9,9 @@ from ....domain import Box, Gap
 from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
-from ..proposal.separator.hints import SeparatorGapHintSet
-from ..proposal.separator.model import propose_equal_model_gaps_from_profile
-from ..proposal.separator.proposal import (
+from ...physical.separator.hints import SeparatorGapHintSet
+from ...physical.separator.model import propose_equal_model_gaps_from_profile
+from ...physical.separator.proposal import (
     propose_separator_gap_profile_gaps_with_detail,
 )
 

@@ -6,13 +6,13 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...cache import AnalysisCache
-from ...domain import Box
-from ...formats import FormatSpec
-from ...geometry.boxes import box_cache_key
-from ...policies.runtime.content import ContentPolicy
-from ...utils import bbox_from_mask, runs_from_mask, sampled_percentile, smooth_1d
-from .content_signal import resolve_content_policy
+from ....cache import AnalysisCache
+from ....domain import Box
+from ....formats import FormatSpec
+from ....geometry.boxes import box_cache_key
+from ....policies.runtime.content import ContentPolicy
+from ....utils import bbox_from_mask, runs_from_mask, sampled_percentile, smooth_1d
+from .signal import resolve_content_policy
 
 
 CONTENT_REGION_HINT_ROLE = "content_region_hint"

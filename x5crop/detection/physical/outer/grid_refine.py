@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from .....domain import Box
-from .....policies.runtime.outer import GridOuterRefinePolicy
-from .....utils import clamp_int
+from ....domain import Box
+from ....policies.runtime.outer import GridOuterRefinePolicy
+from ....utils import clamp_int
 
 
 def grid_refined_outer_box(

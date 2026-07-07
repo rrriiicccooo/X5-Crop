@@ -5,22 +5,22 @@ from typing import Any, Optional
 
 import numpy as np
 
-from .....domain import Box, Gap
-from .....gap_methods import is_detected_gap_method
-from .....geometry.detection_parameters import (
+from ....domain import Box, Gap
+from ....gap_methods import is_detected_gap_method
+from ....geometry.detection_parameters import (
     GapSearchParameters,
     SeparatorWidthProfileSearchParameters,
 )
-from .....geometry.gap_search import find_detected_gap
-from .....geometry.separator_width_profile import (
+from ....geometry.gap_search import find_detected_gap
+from ....geometry.separator_width_profile import (
     SeparatorPhysicalWidthPrior,
     separator_physical_width_prior,
     separator_width_gap_at_with_detail,
     separator_width_profile as make_separator_width_profile,
 )
-from .....policies.runtime.separator import SeparatorWidthProfilePolicy
-from .....utils import clamp_int
-from ....gap_profiles import WIDTH_AWARE_GAP_PROFILE
+from ....policies.runtime.separator import SeparatorWidthProfilePolicy
+from ....utils import clamp_int
+from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from .hints import SeparatorGapHintSet
 from .model import propose_equal_model_gap
 

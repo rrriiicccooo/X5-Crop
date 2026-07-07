@@ -4,10 +4,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .....geometry.detection_parameters import GapSearchParameters
-from .....geometry.separator_band import SeparatorBand
-from .....policies.runtime.outer import SeparatorGeometryProposalPolicy, SeparatorOuterBandPolicy
-from .....utils import clamp_float, clamp_int, runs_from_mask
+from ....geometry.detection_parameters import GapSearchParameters
+from ....geometry.separator_band import SeparatorBand
+from ....policies.runtime.outer import SeparatorGeometryProposalPolicy, SeparatorOuterBandPolicy
+from ....utils import clamp_float, clamp_int, runs_from_mask
 
 
 @dataclass(frozen=True)

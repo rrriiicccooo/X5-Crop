@@ -5,10 +5,10 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...image.evidence import make_content_evidence_gray
-from ...policies.registry import get_detection_policy
-from ...policies.runtime.content import ContentEvidencePolicy, ContentPolicy
-from ...utils import sampled_percentile
+from ....image.evidence import make_content_evidence_gray
+from ....policies.registry import get_detection_policy
+from ....policies.runtime.content import ContentEvidencePolicy, ContentPolicy
+from ....utils import sampled_percentile
 
 CONTENT_SIGNAL_COMPOSITE = "gradient+neighbor_texture+local_contrast+tonal_presence"
 CACHED_CONTENT_SIGNAL_COMPOSITE = "cached_" + CONTENT_SIGNAL_COMPOSITE

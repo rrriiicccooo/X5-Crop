@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import numpy as np
 
-from .....domain import Box, OuterCandidate
-from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from .....policies.runtime.policy import DetectionPolicy
-from .....utils import bbox_from_mask, clamp_int
-from .common import unique_outer_candidates
+from ...domain import Box, OuterCandidate
+from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ...policies.runtime.policy import DetectionPolicy
+from ...utils import bbox_from_mask, clamp_int
+from ..physical.outer.common import unique_outer_candidates
 
 
 def floating_content_position_candidates(

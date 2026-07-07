@@ -10,13 +10,13 @@ from ....formats import FormatSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
-from ...evidence.content_evidence import content_evidence_detail
+from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.outer_alignment import outer_content_alignment_detail
 from ..build.corrected_outer import build_assessed_corrected_outer_candidate
 from ..plan.reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
-from ..proposal.correction.content_containment import content_containment_correction_proposal
-from ..proposal.correction.geometry import geometry_consistency_correction_proposal, geometry_consistency_model_detail
-from ..proposal.correction.policy import correction_family_available
+from ...physical.outer.correction.content_containment import content_containment_correction_proposal
+from ...physical.outer.correction.geometry import geometry_consistency_correction_proposal, geometry_consistency_model_detail
+from ...physical.outer.correction.policy import correction_family_available
 
 
 def _correction_skip_reason(family, detection: Detection, explicit_count: bool) -> str | None:

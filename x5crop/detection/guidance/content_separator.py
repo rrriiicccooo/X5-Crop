@@ -5,26 +5,26 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ....cache import AnalysisCache
-from ....domain import Box
-from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from ....geometry.layout import work_gray
-from ....policies.runtime.candidate import ContentGuidedSeparatorCandidatePolicy
-from ....policies.runtime.content import ContentPolicy
-from ....runtime.config import RuntimeConfig
-from ...evidence.content_regions import (
+from ...cache import AnalysisCache
+from ...domain import Box
+from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ...geometry.layout import work_gray
+from ...policies.runtime.candidate import ContentGuidedSeparatorCandidatePolicy
+from ...policies.runtime.content import ContentPolicy
+from ...runtime.config import RuntimeConfig
+from ..evidence.content.regions import (
     CONTENT_BBOX_HINT_ROLE,
     CONTENT_RUN_HINT_ROLE,
     content_mask_region_detail,
     content_region_runs,
     select_content_runs,
 )
-from .content import (
+from .content_model import (
     content_candidate_outer_from_mask,
     content_candidate_raw_frame_boxes,
     content_signal_arrays_for_candidate,
 )
-from .separator.hints import SeparatorGapHint, SeparatorGapHintSet
+from ..physical.separator.hints import SeparatorGapHint, SeparatorGapHintSet
 
 
 CONTENT_GUIDED_SEPARATOR_FAMILY = "content_guided_separator"

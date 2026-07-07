@@ -18,9 +18,9 @@ from ...evidence.separator_width import separator_width_evidence_detail
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ..assessment.partial_edge import partial_edge_hint
 from ..assessment.scoring import score_detection
-from ..proposal.outer.grid_refine import grid_refined_outer_box
-from ..proposal.outer.plan import outer_candidate_strategy
-from ..proposal.separator.hints import SeparatorGapHintSet
+from ...physical.outer.grid_refine import grid_refined_outer_box
+from ...physical.outer.plan import outer_candidate_strategy
+from ...physical.separator.hints import SeparatorGapHintSet
 from .separator_gaps import (
     SeparatorGapBuildResult,
     apply_late_separator_refinements,

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from .....domain import Gap
-from .....geometry.model_gaps import equal_model_gap
+from ....domain import Gap
+from ....geometry.model_gaps import equal_model_gap
 
 
 def propose_equal_model_gap(index: int, expected: float, score: float) -> Gap:

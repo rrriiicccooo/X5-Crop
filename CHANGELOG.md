@@ -24,10 +24,10 @@ Current stable release: v4.2.8
 - 自动 PASS 必须由 outer、separator、geometry、content 和 risk 组合证据解释。
 - evidence independence contract 已加入 candidate assessment：当 separator-derived outer 依赖 observed width-profile gap 时，必须再由 standard hard gap、content ok 和 geometry ok 交叉确认；否则进入 REVIEW，避免循环论证。
 - weak grid、equal、content-only、safety candidate 或 partial edge 不可信的候选默认进入 REVIEW。
-- Content 是 soft evidence + weak proposal family：`content_signal` 只生成内容证据图，
-  `content_regions` 只生成 bbox / run hints，`content_evidence` 只验证已有
-  frame boxes，content candidate 只生成 content-model gaps，并在 policy/detail 中
-  明确 `review_only` contract。
+- Content 是 soft evidence + guidance family：`detection.evidence.content` 只生成
+  signal、region hints 和 frame support；`detection.guidance` 可生成 content outer
+  hints、content-guided separator hints 和 review-only content-model candidate。
+  content 不拥有 physical result，不直接 PASS / REVIEW。
 - Content-guided separator search 已加入 candidate plan extension：content bbox / run
   hints 只能移动 separator search center，不能生成 hard gap 或 content-based equal
   gap；content-guided separator candidate 若没有真实 hard separator，仍必须 REVIEW。
@@ -50,13 +50,16 @@ Current stable release: v4.2.8
 - report / detail 中旧的 `analysis_source` 字段已改为 `candidate_source`；
   它描述候选来源，不再复用含糊的 analysis 语义。
 - candidate execution budget 将 “eligible” 与 “executed” 分开：可靠 primary separator 已通过 assessment 时，可跳过 full-width / outer-scope extension；outer correction 还要求 outer alignment ok 才跳过。
-- detection 分层已对齐为 pipeline / modes / candidate proposal lifecycle /
-  evidence / decision / final；outer proposal / correction 是 candidate proposal
-  family，不再作为 detection 一级子层。PASS / REVIEW 属于 decision 层，
-  finalization 只做 output-adjacent 调整。
+- detection 分层已对齐为 pipeline / modes / physical / guidance / candidate
+  lifecycle / evidence / decision / final；outer 和 separator 是 physical holder
+  structure，content 是 guidance + evidence，不再与 outer / separator 作为同级
+  physical family。PASS / REVIEW 属于 decision 层，finalization 只做
+  output-adjacent 调整。
 - source package layout 已对齐到显式边界：`entry`、`runtime`、`cache`、
-  `report`、`formats`、`detection.candidate.{plan,proposal,build,assessment,selection,extension}`
-  和 `policies.{formats,parameters,runtime,decision,assembly,reporting}`。
+  `report`、`formats`、`detection.physical`、`detection.guidance`、
+  `detection.evidence.content`、
+  `detection.candidate.{plan,proposal,build,assessment,selection,extension}` 和
+  `policies.{formats,parameters,runtime,decision,assembly,reporting}`。
 - format policy 入口已收紧：`policies/formats/format_*.py` 只保留
   format-specific parameter overrides 和标准 build 入口；gate profile、frame fit、
   review-only、diagnostics、edge-pair preset 和 mode role 由
@@ -81,10 +84,10 @@ Current stable release: v4.2.8
   TIFF / deskew 后的 base gray；`image.evidence` 只负责现有 content /
   separator evidence 和 deskew fallback gray。当前不保留 color contrast 或
   heavy texture evidence 接口，未来如引入 OpenCV 等大依赖再重新评估。
-- Gap / Separator 族群已按 candidate proposal 模型收敛入口：
-  `detection.candidate.proposal.separator` 承接 separator proposal；
+- Gap / Separator 族群已按 physical 模型收敛入口：
+  `detection.physical.separator` 承接 separator proposal / model；
   `detection.evidence.separator_width` 承接 width evidence summary；
-  separator-derived outer band helper 已归回 `detection.candidate.proposal.outer`；
+  separator-derived outer band helper 已归回 `detection.physical.outer`；
   `geometry` 保留底层 profile/search/trust 数学能力；width profile 纯数学归
   `geometry/separator_width_profile.py`，搜索参数归
   `SeparatorPolicy.width_profile_search`，启用 / 宽度上限 / confidence cap 归
@@ -161,21 +164,22 @@ Current stable release: v4.2.8
   source selection 细节集中在 source 模块，`separator_gaps.py` 现在只负责
   lifecycle result assembly。report key、gap 顺序、candidate assessment 和
   PASS / REVIEW 行为不变。
-- Content 族群已拆成 `content_signal.py`、`content_regions.py`、
-  `content_evidence.py` 和 `candidate/proposal/content.py`：signal 只生成内容证据图，
-  region 只生成 bbox / run hints，evidence 只验证已有 frame boxes，content
-  proposal 只生成 review-only weak candidate 和 content-model gaps。cached /
+- Content 族群已拆成 `detection/evidence/content/signal.py`、
+  `detection/evidence/content/regions.py`、`detection/evidence/content/frame_support.py`
+  和 `detection/guidance/content_model.py`：signal 只生成内容证据图，
+  region 只生成 bbox / run hints，frame support 只验证已有 frame boxes，
+  content-model guidance 只生成 review-only weak candidate 和 content-model gaps。cached /
   uncached 路径继续共用 threshold 与 frame support summary helper；threshold、
   support、frame_scores 和 successful cache 行为保持不变。
 - Content-guided separator search 已新增为 candidate extension family：
-  `candidate/proposal/content_guidance.py` 从 content bbox / runs 生成
-  separator gap hints，`candidate/proposal/separator/hints.py` 承接 hint contract，
-  `candidate/proposal/separator/proposal.py` 只用 hint 移动 hard / observed-width
+  `detection/guidance/content_separator.py` 从 content bbox / runs 生成
+  separator gap hints，`detection/physical/separator/hints.py` 承接 hint contract，
+  `detection/physical/separator/proposal.py` 只用 hint 移动 hard / observed-width
   separator search center；如果真实 separator 找不到，model fallback 仍回到几何
   expected center。`candidate/assessment/candidate.py` 明确要求 content-guided
   separator candidate 必须有 hard separator，否则不能 auto PASS。
 - equal / grid / content model-gap proposal 已集中到 `geometry.model_gaps`，
-  profile 等分模型归 `detection.candidate.proposal.separator.model`；
+  profile 等分模型归 `detection.physical.separator.model`；
   build / safety / refinement / content candidate 路径不再手写 `"equal"` /
   `"grid"` / `"content"` method 字符串。
 - `geometry_equal_model` 已迁入显式 `SeparatorPolicy.model_gap_proposal`；
@@ -280,7 +284,7 @@ Current stable release: v4.2.8
   `apply_nearby_separator_refinement` 不再通过裸 tuple 返回 gaps/detail，
   report/detail 字段保持不变。
 - grid-derived outer box 计算已从 separator gap lifecycle 移到
-  `detection.candidate.proposal.outer.grid_refine`；separator lifecycle 只消费
+  `detection.physical.outer.grid_refine`；separator lifecycle 只消费
   grid detail 并在需要时重新生成 gaps，不拥有 outer 修正规则。
 - grid-derived outer refine 的编排已上移到 `build_detection_for_outer`：
   `separator_gaps.py` 只提供 primary gap build 与 late separator refinements，
@@ -374,8 +378,8 @@ Current stable release: v4.2.8
   analysis source 和 review reason 统一使用 `dual_lane` 命名，不再使用泛化的并行 lane 命名。
 - `review_only` mode 已推广为通用 mode detector 接口；`135-dual/partial` 只是
   该接口的当前使用者，不再通过 dual-lane detector 或旧的专用模块旁路。
-- outer 源码层级已降入 `detection/candidate/proposal/outer/` 与
-  `detection/candidate/proposal/correction/`；outer 只作为 candidate proposal
+- outer 源码层级已降入 `detection/physical/outer/` 与
+  `detection/physical/outer/correction/`；outer 只作为 candidate proposal
   family 负责 proposal / correction，separator bands、outer-content alignment
   和 cache key 分别归入 evidence / detection cache 层。
 - 源码包边界进一步收敛：entry、runtime、cache、report、formats、candidate lifecycle
@@ -398,7 +402,7 @@ Current stable release: v4.2.8
   时可用 strict long-axis、short-axis 和 content-containment correction；partial auto 不生成
   corrected outer candidate。
 - outer correction proposal type 已归入
-  `detection/candidate/proposal/correction/types.py`；candidate 层只消费
+  `detection/physical/outer/correction/types.py`；candidate 层只消费
   `OuterCorrectionProposal`，outer correction 不再 import candidate reassessment 类型。
 - `outer_correction_extension` 现在只表示 standard-strip candidate lifecycle 允许
   corrected-candidate extension；实际开启面由 correction family 的 mode、strip mode
@@ -411,7 +415,7 @@ Current stable release: v4.2.8
   finalization 不再生成候选，只做 output bleed、approved geometry adjustment 和
   read-only diagnostics attachment。
 - separator-derived outer 已收敛为统一
-  `detection/candidate/proposal/outer/separator.py` 引擎；outer scope（local /
+  `detection/physical/outer/separator.py` 引擎；outer scope（local /
   full-width）生成候选，标准理论宽度与 observed measured-width bands 都作为同一
   width-aware separator evidence 被消费；observed measured-width bands 可比
   physical prior 更窄、匹配或更宽；broad width 不再作为 outer variant 或独立
@@ -550,11 +554,11 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   requires independent standard hard-gap, content, and geometry validation.
 - Weak grid, equal, content-only, safety, or untrusted partial-edge candidates
   default to REVIEW.
-- Content is a soft-evidence and weak-proposal family: `content_signal` only
-  creates the content evidence image, `content_regions` only creates bbox / run
-  hints, `content_evidence` only validates existing frame boxes, and content
-  candidates only create content-model gaps with an explicit `review_only`
-  policy/detail contract.
+- Content is a soft-evidence and guidance family: `detection.evidence.content`
+  owns signal, region hints, and frame support; `detection.guidance` may create
+  content outer hints, content-guided separator hints, and review-only
+  content-model candidates. Content does not own physical results or PASS /
+  REVIEW.
 - Content-guided separator search is a candidate-plan extension: content bbox /
   run hints may move separator search centers, but they cannot create hard gaps
   or content-based equal gaps. Content-guided separator candidates without real
@@ -585,10 +589,11 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
 - Candidate execution budget separates eligibility from execution: reliable
   primary separator assessment may skip full-width / outer-scope extension;
   outer correction also requires ok outer alignment before it skips.
-- Detection layering is aligned as pipeline / modes / candidate proposal
-  lifecycle / evidence / decision / final. Outer / separator / content / safety
-  are candidate proposal families, not top-level detection sublayers. PASS /
-  REVIEW belongs to the decision layer, and finalization is output-adjacent only.
+- Detection layering is aligned as pipeline / modes / physical / guidance /
+  candidate lifecycle / evidence / decision / final. Outer and separator are
+  physical holder structure; content is guidance + evidence, not a peer physical
+  family. PASS / REVIEW belongs to the decision layer, and finalization is
+  output-adjacent only.
 - Format policy entry points are tightened: `policies/formats/format_*.py` now
   keep only format-specific parameter overrides and standard build entry points;
   gate profiles, frame fit, review-only, diagnostics, edge-pair presets, and mode
@@ -600,10 +605,10 @@ Test/半格/partial/4.5.4_partial/split_report.jsonl
   in `cache/separator.py`, output bleed moved to `detection/final/output_bleed.py`,
   and TIFF I/O now returns only array/profile/warnings while runtime/cache callers
   create base gray through `image.gray.make_base_gray_u8`.
-- The Gap / Separator logic family now follows the same lifecycle model as outer:
-  `detection.candidate.proposal.separator` owns separator proposal;
+- The Gap / Separator logic family now follows the physical-structure model:
+  `detection.physical.separator` owns separator proposal / model;
   `detection.evidence.separator_width` owns width evidence summaries; separator-
-  derived outer band evidence is consumed by outer proposal; `geometry` keeps
+  derived outer band evidence is consumed by `detection.physical.outer`; `geometry` keeps
   the lower-level profile/search/trust math.
 - Gap method vocabulary is provided by `constants.py` and `gap_methods.py`;
   candidate assessment, decision summary, risk/read-only diagnostics, separator
@@ -678,13 +683,13 @@ Verified:
 - `review_only` mode is now a generic mode-detector interface; `135-dual/partial`
   is only the current user of that interface and no longer routes through the
   dual-lane detector or the old dedicated module.
-- Outer source layout now lives under `detection/candidate/proposal/outer/` and
-  `detection/candidate/proposal/correction/`; outer is a candidate proposal
+- Outer source layout now lives under `detection/physical/outer/` and
+  `detection/physical/outer/correction/`; outer is a candidate proposal
   family only, with separator-derived outer band helpers kept inside the outer
   proposal package; outer-content alignment and cache
   keys live in evidence / detection cache layers.
 - Separator-derived outer proposals are consolidated into the single
-  `detection/candidate/proposal/outer/separator.py` engine; outer scope (local /
+  `detection/physical/outer/separator.py` engine; outer scope (local /
   full-width) generates candidates, while standard theoretical width and
   observed measured-width bands are consumed as one width-aware separator
   evidence stream. Observed measured-width bands may be narrower than, match, or
@@ -716,7 +721,7 @@ Verified:
   evidence measurement, prominence support, and width-profile support are split
   so ordinary separator detection can be reviewed step by step.
 - Equal / grid / content model-gap proposal is centralized in `geometry.model_gaps`,
-  with profile equal-split proposal in `detection.candidate.proposal.separator.model`;
+  with profile equal-split proposal in `detection.physical.separator.model`;
   build, safety, refinement, and content-candidate paths no longer hand-write
   `"equal"` / `"grid"` / `"content"` method strings.
 - `geometry_equal_model` now lives in explicit
@@ -745,7 +750,7 @@ Verified:
   selection, grid fit candidate generation, fit ranking, fit assessment,
   predicted center, and hard-gap protection / override adjustment so model
   evidence movement can be reviewed directly. Grid-derived
-  outer-box calculation now lives in `detection.candidate.proposal.outer.grid_refine`;
+  outer-box calculation now lives in `detection.physical.outer.grid_refine`;
   the separator gap lifecycle consumes grid detail and may rebuild gaps, but it
   does not own the outer-box adjustment rule.
 - Robust grid selected fit now consumes `GridFitCandidate` directly; the
@@ -957,17 +962,19 @@ Verified:
   source-selection details now live in the source module while
   `separator_gaps.py` owns lifecycle result assembly. Report keys, gap order,
   candidate assessment, and PASS / REVIEW behavior are unchanged.
-- Content logic is split into `content_signal.py`, `content_regions.py`,
-  `content_evidence.py`, and `candidate/proposal/content.py`: signal creates
-  the content evidence image, regions create bbox / run hints, evidence
-  validates existing frame boxes, and content proposal creates review-only weak
-  candidates with content-model gaps. Cached and uncached content evidence paths
+- Content logic is split into `detection/evidence/content/signal.py`,
+  `detection/evidence/content/regions.py`,
+  `detection/evidence/content/frame_support.py`, and
+  `detection/guidance/content_model.py`: signal creates the content evidence
+  image, regions create bbox / run hints, frame support validates existing frame
+  boxes, and content-model guidance creates review-only weak candidates with
+  content-model gaps. Cached and uncached content evidence paths
   still share threshold and frame-support summary helpers; threshold, support,
   frame score, and successful cache behavior are unchanged.
 - Content-guided separator search is added as a candidate extension family:
-  `candidate/proposal/content_guidance.py` turns content bbox / runs into
-  separator gap hints, `candidate/proposal/separator/hints.py` carries the hint
-  contract, and `candidate/proposal/separator/proposal.py` uses hints only to
+  `detection/guidance/content_separator.py` turns content bbox / runs into
+  separator gap hints, `detection/physical/separator/hints.py` carries the hint
+  contract, and `detection/physical/separator/proposal.py` uses hints only to
   move hard / observed-width separator search centers. If real separator
   evidence is not found, model fallback remains geometry-based, and candidate
   assessment blocks auto PASS for content-guided separator candidates without
@@ -981,7 +988,7 @@ Verified:
   content-containment correction; auto-count partial strips do not generate
   corrected outer candidates.
 - The outer correction proposal type now lives in
-  `detection/candidate/proposal/correction/types.py`; candidate code consumes
+  `detection/physical/outer/correction/types.py`; candidate code consumes
   `OuterCorrectionProposal` instead of outer correction importing candidate
   reassessment types.
 - Final PASS / REVIEW implementation lives under `detection/decision/`; final

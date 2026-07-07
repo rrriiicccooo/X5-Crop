@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from .....domain import OuterCandidate
+from ....domain import OuterCandidate
 
 
 def unique_outer_candidates(candidates: Iterable[OuterCandidate]) -> list[OuterCandidate]:

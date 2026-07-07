@@ -5,24 +5,24 @@ from typing import Optional
 
 import numpy as np
 
-from ....constants import CANDIDATE_SOURCE_CONTENT_PRIMARY
-from ....domain import Box, Detection, Gap
-from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from ....geometry.boxes import map_work_box
-from ....geometry.layout import work_gray
-from ....geometry.model_gaps import content_model_gap
-from ....policies.runtime.content import ContentPolicy
-from ....cache import AnalysisCache
-from ....runtime.config import RuntimeConfig
-from ....utils import box_from_dict
-from ...evidence.content_regions import (
+from ...constants import CANDIDATE_SOURCE_CONTENT_PRIMARY
+from ...domain import Box, Detection, Gap
+from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ...geometry.boxes import map_work_box
+from ...geometry.layout import work_gray
+from ...geometry.model_gaps import content_model_gap
+from ...policies.runtime.content import ContentPolicy
+from ...cache import AnalysisCache
+from ...runtime.config import RuntimeConfig
+from ...utils import box_from_dict
+from ..evidence.content.regions import (
     CONTENT_BBOX_HINT_ROLE,
     CONTENT_RUN_HINT_ROLE,
     content_mask_region_detail,
     content_region_runs,
     select_content_runs,
 )
-from ...evidence.content_signal import content_signal_from_gray, resolve_content_policy
+from ..evidence.content.signal import content_signal_from_gray, resolve_content_policy
 
 CONTENT_PROPOSAL_FAMILY = "content"
 

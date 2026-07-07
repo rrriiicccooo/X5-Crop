@@ -6,16 +6,16 @@ from typing import Optional
 
 import numpy as np
 
-from .....domain import OuterCandidate
-from .....formats import FormatSpec
-from .....policies.registry import get_detection_policy
-from .....policies.runtime.policy import DetectionPolicy
-from .....cache import AnalysisCache
-from ....gap_profiles import WIDTH_AWARE_GAP_PROFILE
+from ....domain import OuterCandidate
+from ....formats import FormatSpec
+from ....policies.registry import get_detection_policy
+from ....policies.runtime.policy import DetectionPolicy
+from ....cache import AnalysisCache
+from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
+from ...guidance.content_outer_edge import edge_anchored_outer_candidates
+from ...guidance.content_outer_floating import floating_content_position_candidates
 from .base import base_outer_candidates
 from .common import unique_outer_candidates
-from .partial_content import floating_content_position_candidates
-from .partial_edge import edge_anchored_outer_candidates
 from .separator import (
     FULL_WIDTH_SEPARATOR_OUTER,
     LOCAL_SEPARATOR_OUTER,

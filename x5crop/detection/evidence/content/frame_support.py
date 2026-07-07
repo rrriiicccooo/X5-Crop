@@ -5,13 +5,13 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...domain import Box, Detection
-from ...formats import CONTENT_ASPECTS_HORIZONTAL
-from ...geometry.boxes import original_box_to_work
-from ...policies.runtime.content import ContentEvidencePolicy, ContentPolicy
-from ...cache import AnalysisCache
-from .evidence_cache_keys import content_detail_cache_key
-from .content_signal import (
+from ....domain import Box, Detection
+from ....formats import CONTENT_ASPECTS_HORIZONTAL
+from ....geometry.boxes import original_box_to_work
+from ....policies.runtime.content import ContentEvidencePolicy, ContentPolicy
+from ....cache import AnalysisCache
+from ..evidence_cache_keys import content_detail_cache_key
+from .signal import (
     CACHED_CONTENT_SIGNAL_COMPOSITE,
     content_evidence_threshold,
     content_policy_cache_key,

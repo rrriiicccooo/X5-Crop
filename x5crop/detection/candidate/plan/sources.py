@@ -13,9 +13,9 @@ from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
-from ...evidence.content_evidence import content_evidence_detail
-from ..proposal.content_guidance import content_guided_separator_seed_for_count
-from ..proposal.outer.plan import (
+from ...evidence.content.frame_support import content_evidence_detail
+from ...guidance.content_separator import content_guided_separator_seed_for_count
+from ...physical.outer.plan import (
     merge_outer_proposal_candidates,
     outer_candidate_strategy,
     outer_proposal_candidates,
