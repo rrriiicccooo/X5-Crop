@@ -6,20 +6,14 @@ from typing import Optional
 import numpy as np
 
 from ....cache import AnalysisCache
-from ....constants import (
-    REASON_CONTENT_ASPECT_CONFLICT,
-    REASON_CONTENT_EVIDENCE_WEAK,
-    REASON_OUTER_CONTENT_BBOX_MISMATCH,
-)
 from ....domain import Box, Detection
 from ....formats import FormatSpec
 from ....geometry.boxes import translate_box
 from ....policies.runtime.policy import DetectionPolicy
 from ....runtime.config import RuntimeConfig
-from ...evidence.content.frame_support import content_evidence_detail
-from ...evidence.outer_alignment import outer_content_alignment_detail
 from ...physical.outer.base import base_outer_candidates
 from ..assessment.candidate import apply_candidate_assessment_policy
+from ..assessment.dual_lane import apply_dual_lane_content_assessment
 from ..build.detection import build_detection_for_outer
 from ..selection.choose import calibrated_candidate_rank
 
@@ -65,7 +59,7 @@ def select_dual_lane_candidate(
         return None
 
     best = max(candidates, key=lambda d: calibrated_candidate_rank(d, config.confidence_threshold))
-    _attach_lane_content_checks(gray, best, cache, lane_policy, config.confidence_threshold)
+    apply_dual_lane_content_assessment(gray, best, cache, lane_policy, config.confidence_threshold)
     return best
 
 
@@ -109,33 +103,6 @@ def _assessed_lane_candidate(
     assessed.detail["dual_lane_index"] = lane_index
     assessed.detail["dual_lane_work_box"] = asdict(lane)
     return assessed
-
-
-def _attach_lane_content_checks(
-    gray: np.ndarray,
-    detection: Detection,
-    cache: AnalysisCache,
-    lane_policy: DetectionPolicy,
-    confidence_threshold: float,
-) -> None:
-    content_detail = content_evidence_detail(gray, detection, cache, lane_policy.content)
-    outer_alignment = outer_content_alignment_detail(gray, detection, cache, policy=lane_policy)
-    detection.detail["content_evidence"] = content_detail
-    detection.detail["outer_content_alignment"] = outer_alignment
-
-    if bool(content_detail.get("used", False)):
-        support = str(content_detail.get("support", ""))
-        if support == "aspect_conflict":
-            detection.confidence = min(detection.confidence, 0.82)
-            detection.review_reasons.append(REASON_CONTENT_ASPECT_CONFLICT)
-        elif support in {"low_content", "weak"} and detection.confidence >= confidence_threshold:
-            detection.confidence = min(detection.confidence, 0.84)
-            detection.review_reasons.append(REASON_CONTENT_EVIDENCE_WEAK)
-    if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
-        detection.confidence = min(detection.confidence, 0.84)
-        detection.review_reasons.append(REASON_OUTER_CONTENT_BBOX_MISMATCH)
-
-    detection.review_reasons = sorted(set(detection.review_reasons))
 
 
 __all__ = ["select_dual_lane_candidate"]

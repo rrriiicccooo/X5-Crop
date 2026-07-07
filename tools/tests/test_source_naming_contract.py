@@ -252,6 +252,15 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_dual_lane_plan_delegates_content_assessment(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan" / "dual_lane.py"
+        text = path.read_text(encoding="utf-8")
+
+        self.assertNotIn("content_evidence_detail", text)
+        self.assertNotIn("outer_content_alignment_detail", text)
+        self.assertNotIn("REASON_CONTENT_ASPECT_CONFLICT", text)
+        self.assertIn("apply_dual_lane_content_assessment", text)
+
     def test_decision_package_marker_does_not_reexport_runtime_helpers(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "__init__.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))

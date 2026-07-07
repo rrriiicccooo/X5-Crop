@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+import unittest
+from unittest.mock import patch
+
+import numpy as np
+
+from x5crop.constants import REASON_CONTENT_ASPECT_CONFLICT
+from x5crop.detection.candidate.assessment.dual_lane import (
+    apply_dual_lane_content_assessment,
+)
+from x5crop.domain import Box, Detection
+
+
+class DualLaneAssessmentTest(unittest.TestCase):
+    def test_content_conflict_cap_is_candidate_assessment_detail(self) -> None:
+        detection = Detection(
+            film_format="135",
+            layout="horizontal",
+            strip_mode="full",
+            count=6,
+            outer=Box(0, 0, 120, 20),
+            frames=[],
+            gaps=[],
+            confidence=0.96,
+            review_reasons=[],
+            detail={},
+        )
+        policy = SimpleNamespace(content=object())
+        gray = np.zeros((20, 120), dtype=np.uint8)
+
+        with (
+            patch(
+                "x5crop.detection.candidate.assessment.dual_lane.content_evidence_detail",
+                return_value={"used": True, "support": "aspect_conflict"},
+            ),
+            patch(
+                "x5crop.detection.candidate.assessment.dual_lane.outer_content_alignment_detail",
+                return_value={"used": False},
+            ),
+        ):
+            apply_dual_lane_content_assessment(
+                gray,
+                detection,
+                object(),
+                policy,
+                confidence_threshold=0.85,
+            )
+
+        self.assertEqual(detection.confidence, 0.82)
+        self.assertEqual(detection.review_reasons, [REASON_CONTENT_ASPECT_CONFLICT])
+        self.assertEqual(
+            detection.detail["candidate_confidence_caps"],
+            [
+                {
+                    "owner": "candidate.assessment",
+                    "reason": REASON_CONTENT_ASPECT_CONFLICT,
+                    "cap_value": 0.82,
+                    "confidence_before": 0.96,
+                    "confidence_after": 0.82,
+                    "changed": True,
+                }
+            ],
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
