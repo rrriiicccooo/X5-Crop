@@ -11,7 +11,8 @@ from .candidate import (
 from .common import count_policy, gate_policy, partial_frame_fit, report_policy
 from .content import content_policy
 from .decision import runtime_decision_policy
-from .finalization import diagnostics_policy, finalization_policy
+from .diagnostics import diagnostics_policy
+from .finalization import finalization_policy
 from .outer import outer_policy
 from .presets import FormatPolicyPreset
 from .separator import separator_policy

@@ -141,6 +141,12 @@ class SourceNamingContractTest(unittest.TestCase):
         }
         self.assertTrue(banned.isdisjoint(FinalizationPolicy.__dataclass_fields__))
 
+    def test_finalization_assembly_does_not_own_diagnostics_policy(self) -> None:
+        from x5crop.policies.assembly import finalization
+
+        self.assertFalse(hasattr(finalization, "diagnostics_policy"))
+        self.assertEqual(tuple(finalization.__all__), ("finalization_policy",))
+
     def test_active_gate_names_use_candidate_and_decision_contract_terms(self) -> None:
         banned = (
             "hard_review_reason_gate",
