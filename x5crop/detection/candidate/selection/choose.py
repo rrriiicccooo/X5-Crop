@@ -9,6 +9,7 @@ from ...evidence.separator_summary import separator_gate_detail_summary
 from ....formats import FormatSpec
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
+from ..reasons import candidate_reasons
 
 
 @dataclass(frozen=True)
@@ -137,7 +138,7 @@ def _candidate_summary(candidate: Detection) -> dict:
         "count": int(candidate.count),
         "strip_mode": candidate.strip_mode,
         "confidence": float(candidate.confidence),
-        "candidate_reasons": list(candidate.review_reasons),
+        "candidate_reasons": candidate_reasons(candidate),
         "candidate_blockers": list(assessment.get("blockers", []))
         if isinstance(assessment.get("blockers"), list)
         else [],

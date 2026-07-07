@@ -22,6 +22,7 @@ from ....utils import box_from_dict, gap_from_dict, sampled_percentile
 from ...confidence_caps import apply_confidence_cap
 from ...physical.photo_size import photo_size_consistency_from_gap_edges
 from ...evidence.separator_summary import gap_method_evidence_summary
+from ..reasons import candidate_reasons, merged_candidate_reasons
 
 
 def _work_box_from_detail(detail: dict[str, Any]) -> Optional[Box]:
@@ -397,7 +398,7 @@ def apply_base_detection_scoring(
     detail = dict(detection.detail)
     scoring_detail = detail.get("base_candidate_scoring", {})
     if isinstance(scoring_detail, dict) and bool(scoring_detail.get("applied", False)):
-        return replace(detection, review_reasons=list(detection.review_reasons), detail=detail)
+        return replace(detection, review_reasons=candidate_reasons(detection), detail=detail)
 
     policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     work_outer = _work_box_from_detail(detail)
@@ -408,7 +409,7 @@ def apply_base_detection_scoring(
             "owner": "candidate.assessment",
             "reason": "missing_build_geometry",
         }
-        return replace(detection, review_reasons=list(detection.review_reasons), detail=detail)
+        return replace(detection, review_reasons=candidate_reasons(detection), detail=detail)
 
     origin = _detail_float(detail, "origin", 0.0)
     pitch = _detail_float(detail, "pitch", 0.0)
@@ -500,7 +501,7 @@ def apply_base_detection_scoring(
     return replace(
         detection,
         confidence=float(max(0.0, min(1.0, confidence))),
-        review_reasons=sorted(set([*detection.review_reasons, *reasons])),
+        review_reasons=merged_candidate_reasons(detection, reasons),
         detail=detail,
     )
 

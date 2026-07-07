@@ -240,6 +240,17 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn('"review_reasons"', text)
         self.assertIn('"candidate_reasons"', text)
 
+    def test_candidate_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "candidate"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            if ".review_reasons.append" in text:
+                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+
+        self.assertEqual(offenders, [])
+
     def test_content_mismatch_selector_uses_candidate_selection_names(self) -> None:
         banned = (
             "ContentMismatchReviewSelectionPolicy",

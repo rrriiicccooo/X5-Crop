@@ -4,6 +4,7 @@ from typing import Any
 
 from ....domain import Detection
 from ....policies.runtime.policy import DetectionPolicy
+from ..reasons import candidate_reasons
 
 
 def candidate_reliability_detail(
@@ -31,10 +32,10 @@ def candidate_reliability_detail(
         or content_support == budget.requires_content_support
     )
     confidence_ok = float(detection.confidence) >= required_confidence
-    candidate_reasons = list(detection.review_reasons)
+    reasons = candidate_reasons(detection)
     candidate_reasons_ok = (
         not budget.requires_no_candidate_reasons
-    ) or not candidate_reasons
+    ) or not reasons
     reliable = all(
         (
             source_ok,
@@ -57,7 +58,7 @@ def candidate_reliability_detail(
         "hard_separator_requirement_ok": bool(hard_separator_requirement_ok),
         "content_support": content_support,
         "content_ok": bool(content_ok),
-        "candidate_reasons": candidate_reasons,
+        "candidate_reasons": reasons,
         "candidate_reasons_ok": bool(candidate_reasons_ok),
     }
 

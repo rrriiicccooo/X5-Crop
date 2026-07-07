@@ -3,6 +3,7 @@ from __future__ import annotations
 from ....constants import CANDIDATE_SOURCE_SAFETY
 from ....domain import Detection
 from ....policies.runtime.policy import DetectionPolicy
+from ..reasons import add_candidate_reason
 from .confidence_caps import apply_candidate_confidence_cap
 
 
@@ -26,8 +27,7 @@ def apply_safety_candidate_assessment(
         cap,
         SAFETY_CANDIDATE_AUTO_GATE_BLOCKER,
     )
-    detection.review_reasons.append(SAFETY_CANDIDATE_AUTO_GATE_BLOCKER)
-    detection.review_reasons = sorted(set(detection.review_reasons))
+    add_candidate_reason(detection, SAFETY_CANDIDATE_AUTO_GATE_BLOCKER)
 
     assessment = detection.detail.get("candidate_assessment", {})
     if isinstance(assessment, dict):

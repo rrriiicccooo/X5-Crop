@@ -15,6 +15,7 @@ from ....utils import HARD_REVIEW_REASONS, clamp_int
 from ...evidence.photo_width import photo_width_stability_detail
 from ...evidence.separator_summary import separator_gate_detail_summary
 from ...evidence.separator_width import separator_width_evidence_detail, separator_width_requirement_detail
+from ..reasons import candidate_reasons
 
 
 def partial_safe_holder_edge_disambiguation_detail(
@@ -308,7 +309,7 @@ def partial_safe_extra_frames_gate_detail(
     if geometry_score < holder.min_geometry_score:
         disqualifiers.append("geometry_score_low")
     hard_partial_blockers = HARD_REVIEW_REASONS.difference({"outer_box_too_large", "outer_box_uncertain"})
-    if any(reason in detection.review_reasons for reason in hard_partial_blockers):
+    if any(reason in candidate_reasons(detection) for reason in hard_partial_blockers):
         disqualifiers.append("hard_review_reason_present")
     if bool(leading_content.get("used", False)) and not bool(leading_content.get("ok", True)):
         disqualifiers.append("partial_outer_leading_content")

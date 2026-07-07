@@ -12,6 +12,7 @@ from ....domain import Detection
 from ....policies.runtime.policy import DetectionPolicy
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.outer_alignment import outer_content_alignment_detail
+from ..reasons import add_candidate_reasons
 from .confidence_caps import apply_candidate_confidence_cap
 
 
@@ -27,19 +28,20 @@ def apply_dual_lane_content_assessment(
     detection.detail["content_evidence"] = content_detail
     detection.detail["outer_content_alignment"] = outer_alignment
 
+    candidate_blockers: list[str] = []
     if bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
         if support == "aspect_conflict":
             apply_candidate_confidence_cap(detection, 0.82, REASON_CONTENT_ASPECT_CONFLICT)
-            detection.review_reasons.append(REASON_CONTENT_ASPECT_CONFLICT)
+            candidate_blockers.append(REASON_CONTENT_ASPECT_CONFLICT)
         elif support in {"low_content", "weak"} and detection.confidence >= confidence_threshold:
             apply_candidate_confidence_cap(detection, 0.84, REASON_CONTENT_EVIDENCE_WEAK)
-            detection.review_reasons.append(REASON_CONTENT_EVIDENCE_WEAK)
+            candidate_blockers.append(REASON_CONTENT_EVIDENCE_WEAK)
     if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
         apply_candidate_confidence_cap(detection, 0.84, REASON_OUTER_CONTENT_BBOX_MISMATCH)
-        detection.review_reasons.append(REASON_OUTER_CONTENT_BBOX_MISMATCH)
+        candidate_blockers.append(REASON_OUTER_CONTENT_BBOX_MISMATCH)
 
-    detection.review_reasons = sorted(set(detection.review_reasons))
+    add_candidate_reasons(detection, candidate_blockers)
 
 
 __all__ = ["apply_dual_lane_content_assessment"]

@@ -25,6 +25,11 @@ from ...confidence_caps import apply_confidence_cap
 from ...evidence.content.containment import content_containment_detail
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.separator_summary import separator_gate_detail_summary
+from ..reasons import (
+    candidate_reasons,
+    merged_candidate_reasons,
+    set_candidate_reasons,
+)
 from .base_scoring import apply_base_detection_scoring
 from .content_candidate import content_candidate_assessment_from_proposal
 from .evidence_independence import evidence_independence_detail
@@ -91,7 +96,7 @@ def apply_candidate_assessment_policy(
 ) -> Detection:
     candidate = replace(
         detection,
-        review_reasons=list(detection.review_reasons),
+        review_reasons=candidate_reasons(detection),
         detail=dict(detection.detail),
     )
     policy = policy or get_detection_policy(fmt.name, candidate.strip_mode)
@@ -111,7 +116,10 @@ def apply_candidate_assessment_policy(
             policy.content,
         )
         candidate.confidence = max(float(candidate.confidence), float(proposal_confidence))
-        candidate.review_reasons = sorted(set([*candidate.review_reasons, *proposal_reasons]))
+        set_candidate_reasons(
+            candidate,
+            merged_candidate_reasons(candidate, proposal_reasons),
+        )
         content_primary = candidate.detail.get("content_primary")
         if isinstance(content_primary, dict):
             content_primary["candidate_assessment"] = proposal_detail
@@ -176,7 +184,7 @@ def apply_candidate_assessment_policy(
     support = str(containment_detail.get("support", ""))
     content_containment_ok = bool(containment_detail.get("content_containment_ok", False))
     content_harm_risk = bool(containment_detail.get("content_harm_risk", True))
-    reasons = list(candidate.review_reasons)
+    reasons = candidate_reasons(candidate)
     if floor_applies:
         reasons = [reason for reason in reasons if reason != "low_confidence"]
     detected_geometry_policy = policy.separator.geometry_support.detected_geometry
@@ -382,7 +390,7 @@ def apply_candidate_assessment_policy(
         confidence = max(confidence, config.confidence_threshold + min(0.10, joint_score * 0.08))
     candidate_blockers, candidate_diagnostics = _candidate_reason_buckets(reasons)
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
-    candidate.review_reasons = sorted(set(reasons))
+    set_candidate_reasons(candidate, reasons)
     candidate.detail["candidate_source"] = (
         CANDIDATE_SOURCE_SEPARATOR if source == "separator" else CANDIDATE_SOURCE_CONTENT
     )
