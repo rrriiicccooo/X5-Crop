@@ -39,6 +39,16 @@ from .scoring import (
 )
 
 
+def _detail_float(detail: dict, key: str, default: float) -> float:
+    value = detail.get(key)
+    if value is None:
+        return float(default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 def apply_candidate_assessment_policy(
     gray: np.ndarray,
     detection: Detection,
@@ -313,6 +323,11 @@ def apply_candidate_assessment_policy(
         "geometry_score": float(geometry_score),
         "separator_score": float(separator_score),
         "content_score": float(content_score),
+        "width_cv": _detail_float(candidate.detail, "width_cv", 1.0),
+        "width_cv_source": str(candidate.detail.get("width_cv_source") or "unknown"),
+        "photo_width_cv": candidate.detail.get("photo_width_cv"),
+        "frame_box_width_cv": candidate.detail.get("frame_box_width_cv"),
+        "separator_width_cv": candidate.detail.get("separator_width_cv"),
         "content_support": support,
         "separator_hard_evidence": separator_gate_detail,
         "evidence_independence": independence_detail,

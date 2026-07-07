@@ -11,6 +11,16 @@ from ....policies.runtime.content import ContentPolicy
 from ....policies.runtime.policy import DetectionPolicy
 
 
+def _optional_detail_float(detail: dict[str, Any], key: str) -> float | None:
+    value = detail.get(key)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def content_support_score(
     detail: dict[str, Any],
     format_name: str,
@@ -52,8 +62,8 @@ def geometry_support_score(
 ) -> float:
     policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
     geometry_policy = policy.scoring.geometry_support
-    width_cv = float(detection.detail.get("width_cv", 0.0))
-    if width_cv <= 0.0:
+    width_cv = _optional_detail_float(detection.detail, "width_cv")
+    if width_cv is None:
         widths = np.array([box.width for box in detection.frames if box.valid()], dtype=np.float64)
         width_cv = float(widths.std() / max(1.0, widths.mean())) if widths.size else 1.0
     width_score = max(0.0, min(1.0, 1.0 - width_cv / geometry_policy.width_cv_norm))

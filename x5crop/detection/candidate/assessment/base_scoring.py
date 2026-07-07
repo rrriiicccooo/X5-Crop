@@ -8,6 +8,13 @@ import numpy as np
 from ....domain import Box, Detection, Gap
 from ....formats import FormatSpec
 from ....geometry.frame_fit import frame_boxes_from_gaps
+from ....geometry.gap_geometry import (
+    gap_width_cv,
+    photo_widths_from_gap_edges,
+    separator_width_cv,
+    separator_widths,
+    width_cv as coefficient_of_variation,
+)
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.separator_gate_profiles import SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
@@ -58,6 +65,58 @@ def _gaps_from_detail(detail: dict[str, Any], key: str) -> list[Gap]:
     return gaps
 
 
+def _detail_float(detail: dict[str, Any], key: str, default: float) -> float:
+    value = detail.get(key)
+    if value is None:
+        return float(default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _frame_box_widths(boxes: list[Box]) -> list[float]:
+    return [float(box.width) for box in boxes if box.valid()]
+
+
+def _candidate_width_metrics(
+    gaps: list[Gap],
+    boxes: list[Box],
+    origin: float | None,
+    pitch: float | None,
+    count: int,
+) -> dict[str, Any]:
+    frame_widths = _frame_box_widths(boxes)
+    frame_box_cv = coefficient_of_variation(frame_widths) if frame_widths else 1.0
+    photo_widths = (
+        photo_widths_from_gap_edges(gaps, float(origin), float(pitch), count)
+        if origin is not None and pitch is not None and pitch > 0.0
+        else None
+    )
+    photo_cv = (
+        coefficient_of_variation(photo_widths)
+        if photo_widths is not None
+        else None
+    )
+    center_cv = (
+        gap_width_cv(gaps, float(origin), float(pitch), count)
+        if origin is not None and pitch is not None and pitch > 0.0
+        else None
+    )
+    selected_cv = float(photo_cv) if photo_cv is not None else float(frame_box_cv)
+    return {
+        "width_cv": selected_cv,
+        "width_cv_source": "photo_edges" if photo_cv is not None else "frame_boxes",
+        "photo_width_cv": photo_cv,
+        "frame_box_width_cv": float(frame_box_cv),
+        "center_interval_width_cv": center_cv,
+        "separator_width_cv": separator_width_cv(gaps),
+        "photo_widths": photo_widths or [],
+        "frame_box_widths": frame_widths,
+        "separator_widths": separator_widths(gaps),
+    }
+
+
 def base_detection_assessment(
     gray_work: np.ndarray,
     outer: Box,
@@ -67,6 +126,8 @@ def base_detection_assessment(
     fmt: FormatSpec,
     strip_mode: str,
     policy: Optional[DetectionPolicy] = None,
+    origin: float | None = None,
+    pitch: float | None = None,
 ) -> tuple[float, list[str], dict[str, Any]]:
     policy = policy or get_detection_policy(fmt.name, strip_mode)
     base_score = policy.scoring.base_detection
@@ -76,8 +137,8 @@ def base_detection_assessment(
         gaps,
         policy.separator.robust_grid.reliable_min_score,
     )
-    widths = np.array([box.width for box in boxes if box.valid()], dtype=np.float64)
-    width_cv = float(widths.std() / max(1.0, widths.mean())) if widths.size else 1.0
+    width_metrics = _candidate_width_metrics(gaps, boxes, origin, pitch, count)
+    width_cv = float(width_metrics["width_cv"])
     outer_area = float(outer.width * outer.height) / max(1.0, float(gray_work.shape[0] * gray_work.shape[1]))
     p01, p50, p99 = sampled_percentile(gray_work, [1, 50, 99])
     contrast = float(p99 - p01)
@@ -150,7 +211,7 @@ def base_detection_assessment(
     ):
         reasons.append("too_few_detected_separators")
     if width_cv > base_score.unstable_width_cv:
-        reasons.append("unstable_frame_width")
+        reasons.append("photo_width_unstable")
     if not (base_score.outer_min_area <= outer_area <= base_score.outer_max_area):
         reasons.append("outer_box_uncertain")
     if outer_area > base_score.outer_too_large:
@@ -193,7 +254,7 @@ def base_detection_assessment(
         "reliable_gaps": gap_evidence.reliable_support_count,
         "reliable_support_count": gap_evidence.reliable_support_count,
         "equal_gaps": gap_evidence.equal_model_gaps,
-        "width_cv": width_cv,
+        **width_metrics,
         "outer_area_ratio": outer_area,
         "image_quality": {
             "p01": float(p01),
@@ -232,6 +293,8 @@ def apply_base_detection_scoring(
         }
         return replace(detection, review_reasons=list(detection.review_reasons), detail=detail)
 
+    origin = _detail_float(detail, "origin", 0.0)
+    pitch = _detail_float(detail, "pitch", 0.0)
     confidence, reasons, base_detail = base_detection_assessment(
         gray_work,
         work_outer,
@@ -241,11 +304,11 @@ def apply_base_detection_scoring(
         fmt,
         detection.strip_mode,
         policy,
+        origin=origin,
+        pitch=pitch,
     )
     pre_nearby_gaps = _gaps_from_detail(detail, "pre_nearby_gaps")
     if pre_nearby_gaps:
-        origin = float(detail.get("origin", 0.0) or 0.0)
-        pitch = float(detail.get("pitch", 0.0) or 0.0)
         wh, ww = gray_work.shape
         pre_nearby_boxes_work = frame_boxes_from_gaps(
             work_outer,
@@ -267,6 +330,8 @@ def apply_base_detection_scoring(
             fmt,
             detection.strip_mode,
             policy,
+            origin=origin,
+            pitch=pitch,
         )
         score_boxes_work = frame_boxes_from_gaps(
             work_outer,
@@ -290,6 +355,8 @@ def apply_base_detection_scoring(
             fmt,
             detection.strip_mode,
             policy,
+            origin=origin,
+            pitch=pitch,
         )
         confidence = min(confidence, geometry_confidence)
         base_detail["nearby_separator_refinement_confidence_cap"] = float(pre_nearby_confidence)

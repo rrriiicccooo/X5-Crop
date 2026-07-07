@@ -221,6 +221,7 @@ def partial_extra_holder_frames_gate_detail(
     grid = separator_evidence.grid_model_gaps
     width_cv_value = detection.detail.get("width_cv", None)
     width_cv = 1.0 if width_cv_value is None else float(width_cv_value)
+    width_cv_source = str(detection.detail.get("width_cv_source") or "unknown")
     outer_area = float(detection.detail.get("outer_area_ratio", 1.0) or 1.0)
     min_count = holder.min_count_35mm if fmt.default_count >= 6 else holder.min_count_small
     hard_ratio = 1.0 if expected <= 0 else hard / float(max(1, expected))
@@ -253,7 +254,7 @@ def partial_extra_holder_frames_gate_detail(
     if equal > holder.max_equal_gaps:
         disqualifiers.append("equal_gap_used")
     if width_cv > holder.max_width_cv:
-        disqualifiers.append("width_cv_unstable")
+        disqualifiers.append("photo_width_unstable")
     if joint_score < holder.min_joint_score:
         disqualifiers.append("joint_score_low")
     if content_score < holder.min_content_score:
@@ -279,6 +280,7 @@ def partial_extra_holder_frames_gate_detail(
         "equal_gaps": int(equal),
         "hard_ratio": float(hard_ratio),
         "width_cv": float(width_cv),
+        "width_cv_source": width_cv_source,
         "outer_area_ratio": float(outer_area),
         "joint_score": float(joint_score),
         "content_score": float(content_score),

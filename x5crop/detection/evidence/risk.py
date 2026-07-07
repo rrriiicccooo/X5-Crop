@@ -14,6 +14,16 @@ from .gap_diagnostics import gap_diagnostic_record
 from .separator_summary import gap_method_evidence_summary
 
 
+def _detail_float(detail: dict[str, Any], key: str, default: float) -> float:
+    value = detail.get(key)
+    if value is None:
+        return float(default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 def overlap_bleed_risk_detail(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> dict[str, Any]:
     if not detection.gaps:
         return {"used": False, "risk": False, "reason": "no_gaps"}
@@ -67,7 +77,8 @@ def lucky_pass_risk_score_detail(
     strong_overlap_models = int(overlap_risk_counts.get("strong", 0))
     gap_evidence = gap_method_evidence_summary(detection.gaps, reliable_min_score=0.0)
     geometry_model_gaps = gap_evidence.geometry_model_gaps
-    width_cv = float(detection.detail.get("width_cv", 0.0) or 0.0)
+    width_cv = _detail_float(detection.detail, "width_cv", 0.0)
+    width_cv_source = str(detection.detail.get("width_cv_source") or "unknown")
     components: dict[str, float] = {}
     if geometry_model_gaps >= policy.model_gap_support_min:
         components["model_gap_support"] = policy.model_gap_support_weight
@@ -108,4 +119,5 @@ def lucky_pass_risk_score_detail(
         "strong_overlap_model_gaps": int(strong_overlap_models),
         "model_gap_count": int(geometry_model_gaps),
         "width_cv": float(width_cv),
+        "width_cv_source": width_cv_source,
     }

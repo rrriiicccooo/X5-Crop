@@ -41,6 +41,7 @@ REASON_NORMALIZATION_MAP = {
     "content_coverage_weak": "content_only_evidence",
     "outer_box_too_large": "outer_content_mismatch",
     "outer_box_uncertain": "outer_content_mismatch",
+    "photo_width_unstable": "geometry_unstable",
     "unstable_frame_width": "geometry_unstable",
     "candidate_competition_uncertain": "candidate_competition_close",
     "partial_too_ambiguous": "partial_edge_uncertain",
@@ -89,6 +90,7 @@ def evidence_summary_for(
     geometry_score = _float(assessment.get("geometry_score"), 0.0)
     content_score = _float(assessment.get("content_score"), 0.0)
     width_cv = _float(detection.detail.get("width_cv"), 1.0)
+    width_cv_source = str(detection.detail.get("width_cv_source") or "unknown")
     content_support = str(content_detail.get("support", assessment.get("content_support", "")))
     partial_detail = _dict(assessment.get("partial_safe_extra_frames"))
     partial_edge_safe = bool(partial_detail.get("ok", False))
@@ -156,6 +158,7 @@ def evidence_summary_for(
         "geometry": {
             "ok": bool(geometry_ok),
             "width_cv": width_cv,
+            "width_cv_source": width_cv_source,
             "max_width_cv_ratio": policy.evidence.max_width_cv_ratio,
             "geometry_score": geometry_score,
             "min_geometry_score": policy.evidence.min_geometry_score,

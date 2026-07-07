@@ -16,6 +16,7 @@ HARD_REVIEW_REASONS = {
     "content_coverage_weak",
     "outer_box_too_large",
     "outer_box_uncertain",
+    "photo_width_unstable",
     "unstable_frame_width",
 }
 
