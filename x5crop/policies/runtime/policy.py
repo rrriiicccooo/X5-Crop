@@ -17,16 +17,14 @@ from .candidate import (
     SelectionPolicy,
 )
 from .content import ContentPolicy
-from .diagnostics import (
-    ReportPolicy,
-    RuntimeDiagnosticsPolicy,
-)
+from .diagnostics import RuntimeDiagnosticsPolicy
 from .decision import RuntimeDecisionPolicy
 from .final import (
     FinalizationPolicy,
     OutputPolicy,
 )
 from .outer import OuterPolicy
+from .report import ReportPolicy
 from .separator import SeparatorPolicy
 
 if TYPE_CHECKING:

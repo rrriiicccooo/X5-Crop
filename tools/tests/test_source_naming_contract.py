@@ -147,6 +147,13 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertFalse(hasattr(finalization, "diagnostics_policy"))
         self.assertEqual(tuple(finalization.__all__), ("finalization_policy",))
 
+    def test_report_policy_is_not_owned_by_diagnostics_modules(self) -> None:
+        from x5crop.policies.assembly import common
+        from x5crop.policies.runtime import diagnostics
+
+        self.assertFalse(hasattr(diagnostics, "ReportPolicy"))
+        self.assertFalse(hasattr(common, "report_policy"))
+
     def test_active_gate_names_use_candidate_and_decision_contract_terms(self) -> None:
         banned = (
             "hard_review_reason_gate",

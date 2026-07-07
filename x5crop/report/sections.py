@@ -9,7 +9,7 @@ from ..detection.detail import (
 )
 from ..domain import Detection
 from ..policies.registry import get_detection_policy
-from ..policies.runtime.diagnostics import ReportPolicy
+from ..policies.runtime.report import ReportPolicy
 
 
 def candidate_table(detection: Detection) -> list[dict[str, Any]]:

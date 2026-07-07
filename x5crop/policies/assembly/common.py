@@ -9,7 +9,6 @@ from ..runtime.base import (
     FrameFitPolicy,
 )
 from ..runtime.candidate import GatePolicy
-from ..runtime.diagnostics import ReportPolicy
 
 
 def partial_frame_fit(format_id: str) -> FrameFitPolicy:
@@ -48,12 +47,8 @@ def gate_policy() -> GatePolicy:
     )
 
 
-def report_policy() -> ReportPolicy:
-    return ReportPolicy()
-
 __all__ = [
-    'partial_frame_fit',
-    'count_policy',
-    'gate_policy',
-    'report_policy',
+    "partial_frame_fit",
+    "count_policy",
+    "gate_policy",
 ]

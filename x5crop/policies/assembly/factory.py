@@ -8,13 +8,14 @@ from .candidate import (
     scoring_policy,
     selection_policy,
 )
-from .common import count_policy, gate_policy, partial_frame_fit, report_policy
+from .common import count_policy, gate_policy, partial_frame_fit
 from .content import content_policy
 from .decision import runtime_decision_policy
 from .diagnostics import diagnostics_policy
 from .finalization import finalization_policy
 from .outer import outer_policy
 from .presets import FormatPolicyPreset
+from .report import report_policy
 from .separator import separator_policy
 from ..ids import detection_policy_id_for
 from ..runtime.base import DetectorPolicy
