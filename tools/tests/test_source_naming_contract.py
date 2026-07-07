@@ -136,7 +136,6 @@ class SourceNamingContractTest(unittest.TestCase):
             "content_low_confidence_cap",
             "outer_mismatch_cap",
             "lucky_pass_risk_cap",
-            "likely_partial_review_reason",
             "outer_candidate_disagreement_review_reason",
             "deskew_uncertain_review_reason",
         }
@@ -323,12 +322,14 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(import_from_nodes, [])
 
-    def test_decision_post_check_reasons_are_not_named_as_tail(self) -> None:
+    def test_low_confidence_context_reasons_do_not_use_tail_or_post_check_names(self) -> None:
         banned = (
             "_apply_decision_" "tail_reasons",
             "decision" "_tail",
             "tail review" " reasons",
             "decision-tail" " reasons",
+            "decision_post_check",
+            "post-check review",
         )
         offenders: list[str] = []
         for path in (

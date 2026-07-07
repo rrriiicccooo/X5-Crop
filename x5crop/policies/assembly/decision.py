@@ -9,7 +9,6 @@ def runtime_decision_policy(params: FormatParameters) -> RuntimeDecisionPolicy:
     return RuntimeDecisionPolicy(
         align_outer_to_content=True,
         outer_alignment_disabled_reason="disabled_by_policy",
-        likely_partial_review_reason="likely_partial_strip",
         outer_candidate_disagreement_review_reason="outer_candidate_disagreement",
         deskew_uncertain_review_reason="deskew_uncertain",
         content_aspect_conflict_cap=float(decision.content_aspect_conflict_cap),

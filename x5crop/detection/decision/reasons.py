@@ -31,7 +31,6 @@ REASON_NORMALIZATION_MAP = {
     "photo_width_unstable": "geometry_unstable",
     "unstable_frame_width": "geometry_unstable",
     "partial_too_ambiguous": "partial_edge_uncertain",
-    "likely_partial_strip": "partial_edge_uncertain",
     "partial_outer_leading_content": "partial_edge_uncertain",
     "partial_frame_content_unstable": "partial_edge_uncertain",
     "holder_edge_disambiguation_weak": "partial_edge_uncertain",

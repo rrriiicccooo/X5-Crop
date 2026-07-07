@@ -70,7 +70,7 @@ def apply_detection_decision(
         content_detail,
         outer_alignment,
     )
-    _apply_decision_post_check_reasons(detection, config, policy, deskew_detail)
+    _apply_low_confidence_context_reasons(detection, config, policy, deskew_detail)
     status = _decision_status_for(detection, config.confidence_threshold)
     _sync_decision_summary_status(detection, status)
     return FinalDecisionResult(
@@ -152,42 +152,37 @@ def _suppress_outer_mismatch(detection: Detection) -> bool:
     )
 
 
-def _apply_decision_post_check_reasons(
+def _apply_low_confidence_context_reasons(
     detection: Detection,
     config: RuntimeConfig,
     policy: DetectionPolicy,
     deskew_detail: dict[str, Any],
 ) -> None:
     if detection.confidence < config.confidence_threshold:
-        post_check_reasons: list[str] = []
+        low_confidence_context_reasons: list[str] = []
         reason_inputs = detection.detail.setdefault("decision_reason_inputs", [])
         if not isinstance(reason_inputs, list):
             reason_inputs = []
             detection.detail["decision_reason_inputs"] = reason_inputs
 
-        def append_post_check_reason(reason: str, signal: str) -> None:
-            post_check_reasons.append(reason)
+        def append_context_reason(reason: str, signal: str) -> None:
+            low_confidence_context_reasons.append(reason)
             detection.review_reasons.append(reason)
             reason_inputs.append(
                 {
-                    "bucket": "decision_post_check",
+                    "bucket": "low_confidence_context",
                     "signal": signal,
                     "final_review_reason": reason,
                 }
             )
 
-        if detection.detail.get("partial_best"):
-            append_post_check_reason(
-                policy.decision.likely_partial_review_reason,
-                "partial_best",
-            )
         if float(detection.detail.get("outer_area_spread_ratio", 0.0)) >= 0.20:
-            append_post_check_reason(
+            append_context_reason(
                 policy.decision.outer_candidate_disagreement_review_reason,
                 "outer_area_spread",
             )
         if deskew_detail.get("skipped") == "angle_out_of_range" or deskew_detail.get("reason"):
-            append_post_check_reason(
+            append_context_reason(
                 policy.decision.deskew_uncertain_review_reason,
                 "deskew_uncertain",
             )
@@ -199,7 +194,7 @@ def _apply_decision_post_check_reasons(
             if not isinstance(added, list):
                 added = []
             decision_summary["final_review_reasons_added"] = normalized_review_reasons(
-                [*added, *post_check_reasons]
+                [*added, *low_confidence_context_reasons]
             )
             decision_summary["final_review_reasons"] = list(detection.review_reasons)
             decision_summary["decision_reason_inputs"] = reason_inputs

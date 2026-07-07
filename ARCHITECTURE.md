@@ -61,7 +61,7 @@ X5_Crop.py / launchers
 |---|---|---|
 | Format facts | `x5crop.formats` | format identity、family、count、aspect 和物理事实集中定义。 |
 | Runtime policy | `x5crop.policies.runtime` / `policies.assembly` | format / mode 行为由 policy profile 和 assembly 显式生成。 |
-| Runtime decision policy | `policies.runtime.decision` | decision 前置证据、confidence cap 和 post-check review reasons。 |
+| Runtime decision policy | `policies.runtime.decision` | decision 前置证据、confidence cap 和 low-confidence context review reasons。 |
 | Final decision contract | `x5crop.policies.decision` | final PASS / REVIEW 门槛从 active runtime policy 派生，只保留少量不可推导 override。 |
 | Foundation capability | `x5crop.geometry` / `x5crop.image` / `x5crop.io` | 只提供 box、gap、profile、deskew、pixel transform、TIFF I/O 等能力。 |
 | Cache adapters | `x5crop.cache` | 只复用 analysis、profile、evidence 结果，不生成候选或决策。 |
@@ -199,7 +199,7 @@ candidate plan
 - `selection_risk_inputs` 是候选竞争阶段的风险证据，不是最终裁决；只有 decision 可以把它
   映射为 `candidate_competition_close`。
 - `decision_reason_inputs`、`final_review_reasons_added` 和 `final_review_reasons` 是最终
-  PASS / REVIEW 的解释入口；decision post-check reason 也必须进入这些 final summary 字段。
+  PASS / REVIEW 的解释入口；low-confidence context reason 也必须进入这些 final summary 字段。
 - `approved_auto` 必须同时满足 confidence 达到阈值且 `final_review_reasons` 为空；
   workflow / finalization 不能只根据 confidence 推导最终状态。
 

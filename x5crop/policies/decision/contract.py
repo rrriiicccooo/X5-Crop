@@ -64,7 +64,6 @@ class DecisionPolicy:
     content_low_confidence_cap: float = 0.84
     outer_mismatch_cap: float = 0.84
     lucky_pass_risk_cap: float = 0.84
-    likely_partial_review_reason: str = "likely_partial_strip"
     outer_candidate_disagreement_review_reason: str = "outer_candidate_disagreement"
     deskew_uncertain_review_reason: str = "deskew_uncertain"
     separator_incomplete_reason: str = "separator_evidence_incomplete"
@@ -185,7 +184,6 @@ def decision_policy_for(detection_policy: DetectionPolicy) -> DecisionPolicy:
         content_low_confidence_cap=detection_policy.decision.content_low_confidence_cap,
         outer_mismatch_cap=detection_policy.decision.outer_mismatch_cap,
         lucky_pass_risk_cap=detection_policy.decision.lucky_pass_risk_cap,
-        likely_partial_review_reason=detection_policy.decision.likely_partial_review_reason,
         outer_candidate_disagreement_review_reason=detection_policy.decision.outer_candidate_disagreement_review_reason,
         deskew_uncertain_review_reason=detection_policy.decision.deskew_uncertain_review_reason,
     )

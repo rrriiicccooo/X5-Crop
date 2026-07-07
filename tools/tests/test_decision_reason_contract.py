@@ -9,7 +9,7 @@ from x5crop.cache.analysis import make_analysis_cache
 from x5crop.constants import CANDIDATE_SOURCE_SAFETY, REASON_LUCKY_PASS_RISK
 from x5crop.detection.candidate.assessment.safety import SAFETY_CANDIDATE_AUTO_GATE_BLOCKER
 from x5crop.detection.decision.final_decision import (
-    _apply_decision_post_check_reasons,
+    _apply_low_confidence_context_reasons,
     apply_detection_decision,
 )
 from x5crop.detection.decision.pass_review import apply_final_decision_policy
@@ -605,7 +605,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             selected.detail["candidate_competition"]["second_candidate_close"]
         )
 
-    def test_decision_post_check_reasons_update_added_summary(self) -> None:
+    def test_low_confidence_context_reasons_update_added_summary(self) -> None:
         detection = Detection(
             film_format="135",
             layout="horizontal",
@@ -617,7 +617,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             confidence=0.83,
             review_reasons=["evidence_combination_insufficient"],
             detail={
-                "partial_best": True,
+                "outer_area_spread_ratio": 0.25,
                 "decision_reason_inputs": [],
                 "decision_summary": {
                     "final_review_reasons_added": ["evidence_combination_insufficient"],
@@ -658,7 +658,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             jobs=1,
         )
 
-        _apply_decision_post_check_reasons(
+        _apply_low_confidence_context_reasons(
             detection,
             config,
             get_detection_policy("135", "partial"),
@@ -667,20 +667,53 @@ class DecisionReasonContractTest(unittest.TestCase):
 
         self.assertEqual(
             detection.detail["final_review_reasons"],
-            ["evidence_combination_insufficient", "partial_edge_uncertain"],
+            ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
         self.assertEqual(
             detection.detail["decision_summary"]["final_review_reasons_added"],
-            ["evidence_combination_insufficient", "partial_edge_uncertain"],
+            ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
         self.assertEqual(
             detection.detail["decision_summary"]["decision_reason_inputs"][0]["signal"],
-            "partial_best",
+            "outer_area_spread",
         )
         self.assertEqual(
             detection.detail["decision_summary"]["decision_reason_inputs"][0]["bucket"],
-            "decision_post_check",
+            "low_confidence_context",
         )
+
+    def test_low_confidence_context_reasons_do_not_create_high_confidence_review(self) -> None:
+        detection = Detection(
+            film_format="135",
+            layout="horizontal",
+            strip_mode="full",
+            count=1,
+            outer=Box(10, 10, 90, 90),
+            frames=[Box(10, 10, 90, 90)],
+            gaps=[],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "outer_area_spread_ratio": 0.25,
+                "decision_reason_inputs": [],
+                "decision_summary": {
+                    "final_review_reasons_added": [],
+                    "final_review_reasons": [],
+                    "decision_reason_inputs": [],
+                },
+            },
+        )
+
+        _apply_low_confidence_context_reasons(
+            detection,
+            _decision_test_config(),
+            get_detection_policy("135", "full"),
+            {"reason": "no_outer"},
+        )
+
+        self.assertEqual(detection.review_reasons, [])
+        self.assertEqual(detection.detail["decision_summary"]["final_review_reasons"], [])
+        self.assertEqual(detection.detail["decision_summary"]["decision_reason_inputs"], [])
 
 
 if __name__ == "__main__":
