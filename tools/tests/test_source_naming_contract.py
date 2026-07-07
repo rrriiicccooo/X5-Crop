@@ -573,6 +573,7 @@ class SourceNamingContractTest(unittest.TestCase):
             "changes_pass_review",
             '"review_only": True',
             "auto_pass_eligible",
+            "changes_final_decision",
         )
         offenders: list[str] = []
         for path in (
@@ -587,6 +588,18 @@ class SourceNamingContractTest(unittest.TestCase):
                     offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
 
         self.assertEqual(offenders, [])
+
+    def test_read_only_diagnostics_use_effects_detail(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "read_only.py"
+        text = path.read_text(encoding="utf-8")
+
+        self.assertIn('"effects"', text)
+        self.assertIn('"output": False', text)
+        self.assertIn('"confidence": False', text)
+        self.assertIn('"decision": False', text)
+        self.assertNotIn("changes_output", text)
+        self.assertNotIn("changes_confidence", text)
+        self.assertNotIn("changes_final_decision", text)
 
     def test_decision_package_marker_does_not_reexport_runtime_helpers(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "__init__.py"
