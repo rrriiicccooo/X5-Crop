@@ -141,6 +141,23 @@ class SourceNamingContractTest(unittest.TestCase):
         }
         self.assertTrue(banned.isdisjoint(FinalizationPolicy.__dataclass_fields__))
 
+    def test_active_gate_names_use_candidate_and_decision_contract_terms(self) -> None:
+        banned = (
+            "hard_review_reason_gate",
+            "auto_pass_gate",
+            "finalization_gate",
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_guidance_layer_does_not_own_final_candidate_scoring(self) -> None:
         banned = (
             "content_candidate_confidence_and_reasons",

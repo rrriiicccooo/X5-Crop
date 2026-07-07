@@ -41,9 +41,9 @@ def gate_policy() -> GatePolicy:
             "content_gate",
             "geometry_gate",
             "mode_specific_gate",
-            "hard_review_reason_gate",
-            "auto_pass_gate",
-            "finalization_gate",
+            "candidate_blocker_gate",
+            "candidate_auto_gate",
+            "decision_contract_gate",
         ),
     )
 

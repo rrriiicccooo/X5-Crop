@@ -56,9 +56,13 @@ def gate_records(detection: Detection) -> list[dict[str, Any]]:
         )
     gates.append(
         {
-            "name": "auto_pass_gate",
+            "name": "candidate_auto_gate",
             "ok": bool(assessment.get("auto_gate", False)),
-            "reason": "auto_gate_passed" if assessment.get("auto_gate", False) else "auto_gate_failed",
+            "reason": (
+                "candidate_auto_gate_passed"
+                if assessment.get("auto_gate", False)
+                else "candidate_auto_gate_failed"
+            ),
             "detail": {
                 "joint_score": assessment.get("joint_score"),
                 "content_support": assessment.get("content_support"),

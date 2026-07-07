@@ -52,6 +52,20 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertIn("diagnostics", schema)
         self.assertNotIn("finalization", schema)
 
+    def test_report_schema_exposes_evidence_and_candidate_gate_sections(self) -> None:
+        schema = report_schema_for_detection(_detection())
+
+        self.assertIn("evidence", schema)
+        self.assertIn("gates", schema)
+        self.assertIn(
+            "candidate_auto_gate",
+            [gate.get("name") for gate in schema["gates"]],
+        )
+        self.assertNotIn(
+            "auto_pass_gate",
+            [gate.get("name") for gate in schema["gates"]],
+        )
+
     def test_debug_status_does_not_derive_pass_review_without_decision(self) -> None:
         status, detail, color = debug_status_parts(_detection(), 0.85)
 

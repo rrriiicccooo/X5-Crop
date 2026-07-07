@@ -113,6 +113,8 @@ class ReportPolicy:
         "result",
         "selected_candidate",
         "policy",
+        "evidence",
+        "gates",
         "evidence_summary",
         "risk_summary",
         "decision_policy_detail",
