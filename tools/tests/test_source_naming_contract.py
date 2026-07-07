@@ -437,6 +437,19 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn("detection.review_reasons =", text)
         self.assertIn('detection.detail[CANDIDATE_REASONS]', text)
 
+    def test_decision_candidate_reason_inputs_name_legacy_reducer_explicitly(self) -> None:
+        path = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "decision"
+            / "contract_applier.py"
+        )
+        text = path.read_text(encoding="utf-8")
+
+        self.assertNotIn('"normalized_candidate_reasons"', text)
+        self.assertIn('"legacy_reduced_candidate_reasons"', text)
+
     def test_content_mismatch_selector_uses_candidate_selection_names(self) -> None:
         banned = (
             "ContentMismatchReviewSelectionPolicy",

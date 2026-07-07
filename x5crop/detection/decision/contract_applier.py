@@ -28,13 +28,13 @@ def _candidate_reason_inputs_before_decision(detection: Detection) -> dict[str, 
     assessment = dict(assessment) if isinstance(assessment, dict) else {}
     blockers = [str(reason) for reason in _detail_list(assessment.get("blockers"))]
     diagnostics = [str(reason) for reason in _detail_list(assessment.get("diagnostics"))]
-    normalized_candidate_reasons = normalized_final_review_reasons(
+    legacy_reduced_candidate_reasons = normalized_final_review_reasons(
         candidate_reasons_from_detail(detection)
     )
     return {
         "blockers": blockers,
         "diagnostics": diagnostics,
-        "normalized_candidate_reasons": normalized_candidate_reasons,
+        "legacy_reduced_candidate_reasons": legacy_reduced_candidate_reasons,
         "auto_gate": bool(assessment.get("auto_gate", False)),
         "auto_gate_inputs": assessment.get("auto_gate_inputs", {}),
         "selection_risk_inputs": _detail_list(

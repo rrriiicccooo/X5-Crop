@@ -137,7 +137,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             ["content_coverage_weak"],
         )
         self.assertEqual(
-            decided.detail["candidate_reason_inputs_before_decision"]["normalized_candidate_reasons"],
+            decided.detail["candidate_reason_inputs_before_decision"]["legacy_reduced_candidate_reasons"],
             ["content_evidence_insufficient"],
         )
         self.assertNotIn("candidate_review_reasons_before_decision", decided.detail)
@@ -253,7 +253,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertIn("separator_evidence_incomplete", decided.review_reasons)
         self.assertIn(
             "evidence_combination_insufficient",
-            decided.detail["candidate_reason_inputs_before_decision"]["normalized_candidate_reasons"],
+            decided.detail["candidate_reason_inputs_before_decision"]["legacy_reduced_candidate_reasons"],
         )
         decision_signals = [
             item["signal"] for item in decided.detail["decision_reason_inputs"]
