@@ -6,8 +6,8 @@ from ...runtime.config import RuntimeConfig
 from ...domain import Detection
 from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
+from ..candidate.plan.dual_lane import select_dual_lane_candidate
 from .dual_lane_context import build_dual_lane_context
-from .dual_lane_detect import detect_dual_lane
 from .dual_lane_merge import merge_dual_lane_detections
 from .dual_lane_split import split_dual_lanes
 
@@ -24,7 +24,16 @@ def choose_dual_lane_detection(
 
     lanes = split_dual_lanes(cache.gray_work, context.lane_count)
     lane_detections = [
-        detect_dual_lane(gray, config, lane, index, cache, context)
+        select_dual_lane_candidate(
+            gray,
+            config,
+            lane,
+            index,
+            cache,
+            context.lane_format_id,
+            context.lane_format_spec,
+            context.lane_policy,
+        )
         for index, lane in enumerate(lanes, start=1)
     ]
     return merge_dual_lane_detections(gray, config, lanes, lane_detections, context)

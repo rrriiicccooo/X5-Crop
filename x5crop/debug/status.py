@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from ..app_info import SCRIPT_NAME, VERSION
-from ..detection_detail import decision_summary
+from ..detection.detail import decision_summary
 from ..domain import Detection
 
 

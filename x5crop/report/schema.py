@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict
 
 from ..app_info import VERSION
-from ..detection_detail import (
+from ..detection.detail import (
     CANDIDATE_ASSESSMENT,
     CONTENT_EVIDENCE,
     DECISION_POLICY_DETAIL,

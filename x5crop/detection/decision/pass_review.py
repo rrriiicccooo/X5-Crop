@@ -19,11 +19,17 @@ from ...constants import (
     REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
 )
 from ...domain import Detection
+from ...gap_methods import (
+    is_content_model_gap_method,
+    is_equal_model_gap_method,
+    is_grid_model_gap_method,
+    is_hard_gap_method,
+)
 from ..evidence.photo_width import (
     photo_width_stability_detail,
     photo_width_within_limit,
 )
-from ..evidence.separator_summary import separator_summary_from_detection
+from ..evidence.separator_summary import SeparatorGateDetailSummary, separator_gate_detail_summary
 from ...formats import FormatSpec
 from ...policies.decision.contract import DetectionDecisionContract, decision_contract_for
 
@@ -73,8 +79,25 @@ def normalized_review_reasons(reasons: list[str]) -> list[str]:
     return sorted(set(reason for reason in normalized if reason))
 
 
+def _gap_method_count(detection: Detection, predicate) -> int:
+    return sum(1 for gap in detection.gaps if predicate(gap.method))
+
+
+def _separator_summary_from_assessment(detection: Detection) -> SeparatorGateDetailSummary:
+    assessment = _dict(detection.detail.get("candidate_assessment"))
+    hard_detail = _dict(assessment.get("separator_hard_evidence"))
+    return separator_gate_detail_summary(
+        hard_detail,
+        expected_default=max(0, int(detection.count) - 1),
+        hard_default=sum(1 for gap in detection.gaps if is_hard_gap_method(gap.method)),
+        grid_default=_gap_method_count(detection, is_grid_model_gap_method),
+        equal_default=_gap_method_count(detection, is_equal_model_gap_method),
+        content_default=_gap_method_count(detection, is_content_model_gap_method),
+    )
+
+
 def _separator_summary(detection: Detection) -> dict[str, Any]:
-    return separator_summary_from_detection(detection).evidence_detail()
+    return _separator_summary_from_assessment(detection).evidence_detail()
 
 
 def evidence_summary_for(

@@ -113,16 +113,16 @@ candidate plan
 | 子层 | 内容 |
 |---|---|
 | `detection.pipeline` | orchestration：候选计划、候选池、扩展和 selection。 |
-| `detection.modes` | dual-lane、review-only 等 mode detector。 |
+| `detection.modes` | dual-lane、review-only 等 mode routing；dual-lane 只负责拆 lane 和合并 lane 结果。 |
 | `detection.physical` | outer proposal / correction、separator proposal / model、photo-size model。 |
 | `detection.guidance` | content outer hints、content separator hints、review-only content-model candidate。 |
-| `detection.evidence` | separator、content、geometry、outer alignment、risk 和只读 diagnostics evidence。 |
-| `detection.candidate.plan` | count、offset、candidate source、execution budget。 |
+| `detection.evidence` | separator、content、geometry、outer alignment、risk 和只读 diagnostics evidence；不读取 assessment。 |
+| `detection.candidate.plan` | count、offset、candidate source、execution budget 和 dual-lane lane candidate lifecycle。 |
 | `detection.candidate.build` | outer -> separator gaps -> frames -> unscored `Detection`。 |
 | `detection.candidate.assessment` | base scoring、support scores、gate support、candidate review reasons 和 auto gate。 |
 | `detection.candidate.extension` | corrected outer、content-guided separator 等 reassessed candidates。 |
 | `detection.candidate.selection` | 多候选竞争和 selected candidate。 |
-| `detection.decision` | final evidence summary、risk summary、PASS / REVIEW 和 reason normalization。 |
+| `detection.decision` | final evidence、confidence caps、risk summary、PASS / REVIEW 和 reason normalization。 |
 | `detection.final` | output bleed、approved geometry adjustment 和 read-only diagnostics attachment。 |
 
 关键审核点：
@@ -133,6 +133,10 @@ candidate plan
 - build 只生成未评分 Detection；assessment 和 decision 才消费证据。
 - corrected candidate 必须重新 build、重新 assessment，再回到候选池统一 selection。
 - physical correction 不读取 candidate assessment；是否尝试 correction 属于 candidate extension。
+- evidence 层只生成和汇总证据；从 `candidate_assessment` 读取 gate detail 属于 decision
+  或 report/read-model。
+- finalization 不生成候选、不评分、不决定 PASS / REVIEW；它只消费 decision 结果并做输出相邻调整。
+- `Detection.detail` 的稳定读取 helper 属于 `detection.detail`，根包不承载 report/debug read-model。
 - active detail 使用 `primary`、`extension`、`supplemental`、`nearby_separator_refinement`
   等职责命名，不用 `late` / `auxiliary` 表达含糊流程阶段。
 
@@ -333,6 +337,16 @@ Outer and separator are physical structure; content is guidance plus evidence.
 Build creates unscored detections. Assessment and decision consume evidence.
 Corrected candidates must be rebuilt, reassessed, and returned to the shared
 candidate pool before selection.
+
+`detection.modes` routes special modes only. For dual-lane full strips, modes
+split and merge lanes, while lane candidate build / assessment / selection lives
+in `detection.candidate.plan`. `detection.evidence` produces and summarizes
+evidence only; reading `candidate_assessment` is a decision or report read-model
+concern. `detection.decision` owns final evidence, confidence caps, risk summary,
+PASS / REVIEW, and reason normalization. `detection.final` consumes that result
+for output bleed, approved geometry adjustment, and read-only diagnostics only.
+Stable `Detection.detail` readers live in `detection.detail`, not the root
+package.
 
 ### 6. Scoring / Gate Perspective
 

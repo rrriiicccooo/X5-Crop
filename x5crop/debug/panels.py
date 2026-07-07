@@ -5,7 +5,7 @@ from typing import Any, Optional
 import numpy as np
 from PIL import Image, ImageDraw
 
-from ..detection_detail import RISK_SUMMARY, decision_summary, detail_dict, policy_id_from_detail
+from ..detection.detail import RISK_SUMMARY, decision_summary, detail_dict, policy_id_from_detail
 from ..domain import Box, Detection
 from ..cache.separator import cached_separator_evidence_crop
 from ..image.evidence import make_separator_evidence_gray

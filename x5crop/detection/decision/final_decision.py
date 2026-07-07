@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
+
+from ...cache import AnalysisCache
+from ...constants import (
+    CANDIDATE_SOURCE_REVIEW_ONLY,
+    REASON_CONTENT_ASPECT_CONFLICT,
+    REASON_CONTENT_EVIDENCE_WEAK,
+    REASON_LUCKY_PASS_RISK,
+    REASON_OUTER_CONTENT_BBOX_MISMATCH,
+)
+from ...domain import Detection
+from ...formats import FormatSpec
+from ...policies.runtime.policy import DetectionPolicy
+from ...runtime.config import RuntimeConfig
+from ..evidence.content.containment import content_containment_detail
+from ..evidence.content.frame_support import content_evidence_detail
+from ..evidence.outer_alignment import outer_content_alignment_detail
+from ..evidence.risk import lucky_pass_risk_score_detail
+from .pass_review import apply_final_decision_policy, normalized_review_reasons
+
+
+@dataclass
+class FinalDecisionResult:
+    detection: Detection
+    status: str
+    content_detail: dict[str, Any]
+    outer_alignment: dict[str, Any]
+
+
+def apply_detection_decision(
+    gray: np.ndarray,
+    detection: Detection,
+    config: RuntimeConfig,
+    fmt: FormatSpec,
+    analysis_cache: AnalysisCache,
+    deskew_detail: dict[str, Any],
+    policy: DetectionPolicy,
+) -> FinalDecisionResult:
+    raw_content_detail = content_evidence_detail(gray, detection, analysis_cache, policy.content)
+    content_detail = content_containment_detail(
+        raw_content_detail,
+        policy.content.evidence,
+        expected_count=detection.count,
+    )
+    detection.detail["content_evidence"] = raw_content_detail
+    detection.detail["content_containment"] = content_detail
+    outer_alignment = (
+        outer_content_alignment_detail(gray, detection, analysis_cache, policy=policy)
+        if policy.finalization.align_outer_to_content
+        else {"used": False, "reason": policy.finalization.outer_alignment_disabled_reason}
+    )
+    detection.detail["outer_content_alignment"] = outer_alignment
+    _apply_pre_decision_review_caps(
+        gray,
+        detection,
+        config,
+        policy,
+        analysis_cache,
+        content_detail,
+        outer_alignment,
+    )
+    detection = apply_final_decision_policy(
+        gray,
+        detection,
+        config,
+        fmt,
+        content_detail,
+        outer_alignment,
+    )
+    _apply_decision_tail_reasons(detection, config, policy, deskew_detail)
+    status = "approved_auto" if detection.confidence >= config.confidence_threshold else "needs_review"
+    return FinalDecisionResult(
+        detection=detection,
+        status=status,
+        content_detail=content_detail,
+        outer_alignment=outer_alignment,
+    )
+
+
+def _apply_pre_decision_review_caps(
+    gray: np.ndarray,
+    detection: Detection,
+    config: RuntimeConfig,
+    policy: DetectionPolicy,
+    analysis_cache: AnalysisCache,
+    content_detail: dict[str, Any],
+    outer_alignment: dict[str, Any],
+) -> None:
+    review_only_mode = detection.detail.get("candidate_source") == CANDIDATE_SOURCE_REVIEW_ONLY
+    suppress_outer_mismatch = _suppress_outer_mismatch(detection)
+    if not review_only_mode and bool(content_detail.get("used", False)):
+        support = str(content_detail.get("support", ""))
+        if support == "aspect_conflict":
+            detection.confidence = min(detection.confidence, policy.finalization.content_aspect_conflict_cap)
+            detection.review_reasons.append(REASON_CONTENT_ASPECT_CONFLICT)
+        elif support == "low_content" and detection.confidence >= config.confidence_threshold:
+            detection.confidence = min(detection.confidence, policy.finalization.content_low_confidence_cap)
+            detection.review_reasons.append(REASON_CONTENT_EVIDENCE_WEAK)
+    if (
+        not review_only_mode
+        and not suppress_outer_mismatch
+        and bool(outer_alignment.get("used", False))
+        and not bool(outer_alignment.get("ok", True))
+    ):
+        detection.confidence = min(detection.confidence, policy.finalization.outer_mismatch_cap)
+        detection.review_reasons.append(REASON_OUTER_CONTENT_BBOX_MISMATCH)
+    lucky_pass_risk = lucky_pass_risk_score_detail(
+        gray,
+        detection,
+        config.confidence_threshold,
+        analysis_cache,
+    )
+    detection.detail["lucky_pass_risk_score"] = lucky_pass_risk
+    if bool(lucky_pass_risk.get("risk", False)):
+        detection.confidence = min(detection.confidence, policy.finalization.lucky_pass_risk_cap)
+        detection.review_reasons.append(REASON_LUCKY_PASS_RISK)
+
+
+def _suppress_outer_mismatch(detection: Detection) -> bool:
+    outer_correction_detail = detection.detail.get("outer_correction", {})
+    return bool(
+        isinstance(outer_correction_detail, dict)
+        and outer_correction_detail.get("suppress_outer_mismatch", False)
+    )
+
+
+def _apply_decision_tail_reasons(
+    detection: Detection,
+    config: RuntimeConfig,
+    policy: DetectionPolicy,
+    deskew_detail: dict[str, Any],
+) -> None:
+    if detection.confidence < config.confidence_threshold:
+        if detection.detail.get("partial_best"):
+            detection.review_reasons.append(policy.finalization.likely_partial_review_reason)
+        if float(detection.detail.get("outer_area_spread_ratio", 0.0)) >= 0.20:
+            detection.review_reasons.append(policy.finalization.outer_candidate_disagreement_review_reason)
+        if deskew_detail.get("skipped") == "angle_out_of_range" or deskew_detail.get("reason"):
+            detection.review_reasons.append(policy.finalization.deskew_uncertain_review_reason)
+        detection.review_reasons = normalized_review_reasons(detection.review_reasons)
+
+
+__all__ = [
+    "FinalDecisionResult",
+    "apply_detection_decision",
+]

@@ -25,6 +25,15 @@ def crop_work_outer(gray_work: np.ndarray, outer: Box) -> np.ndarray:
     return crop if crop.size else gray_work
 
 
+def translate_box(box: Box, offset_x: int, offset_y: int) -> Box:
+    return Box(
+        box.left + offset_x,
+        box.top + offset_y,
+        box.right + offset_x,
+        box.bottom + offset_y,
+    )
+
+
 def map_work_box(box: Box, layout: str, width: int, height: int) -> Box:
     if layout == "horizontal":
         return box.clamp(width, height)

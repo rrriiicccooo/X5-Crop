@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from ...domain import Detection, Gap
+from ...domain import Gap
 from ...gap_methods import (
     is_content_model_gap_method,
     is_detected_gap_method,
@@ -106,11 +105,6 @@ def _int(value: Any, default: int = 0) -> int:
     except (TypeError, ValueError):
         return int(default)
 
-
-def _gap_method_count(detection: Detection, predicate: Callable[[str], bool]) -> int:
-    return sum(1 for gap in detection.gaps if predicate(gap.method))
-
-
 def gap_method_evidence_summary(
     gaps: list[Gap],
     reliable_min_score: float,
@@ -188,23 +182,9 @@ def separator_gate_detail_summary(
     )
 
 
-def separator_summary_from_detection(detection: Detection) -> SeparatorGateDetailSummary:
-    assessment = _dict(detection.detail.get("candidate_assessment"))
-    hard_detail = _dict(assessment.get("separator_hard_evidence"))
-    return separator_gate_detail_summary(
-        hard_detail,
-        expected_default=max(0, int(detection.count) - 1),
-        hard_default=sum(1 for gap in detection.gaps if is_hard_gap_method(gap.method)),
-        grid_default=_gap_method_count(detection, is_grid_model_gap_method),
-        equal_default=_gap_method_count(detection, is_equal_model_gap_method),
-        content_default=_gap_method_count(detection, is_content_model_gap_method),
-    )
-
-
 __all__ = [
     "GapMethodEvidenceSummary",
     "SeparatorGateDetailSummary",
     "gap_method_evidence_summary",
     "separator_gate_detail_summary",
-    "separator_summary_from_detection",
 ]

@@ -5,15 +5,6 @@ import numpy as np
 from ...domain import Box
 
 
-def translate_work_box(box: Box, offset_x: int, offset_y: int) -> Box:
-    return Box(
-        box.left + offset_x,
-        box.top + offset_y,
-        box.right + offset_x,
-        box.bottom + offset_y,
-    )
-
-
 def split_dual_lanes(gray_work: np.ndarray, lane_count: int) -> list[Box]:
     if lane_count != 2:
         raise ValueError("dual lane detector supports exactly two lanes")
@@ -25,5 +16,4 @@ def split_dual_lanes(gray_work: np.ndarray, lane_count: int) -> list[Box]:
 
 __all__ = [
     "split_dual_lanes",
-    "translate_work_box",
 ]

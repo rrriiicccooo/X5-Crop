@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ..app_info import VERSION
-from ..detection_detail import policy_id_from_detail
+from ..detection.detail import policy_id_from_detail
 from ..domain import Detection, ImageProfile, ProcessResult
 from ..utils import json_safe
 from .schema import report_schema_for_detection

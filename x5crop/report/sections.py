@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..detection_detail import candidate_assessment, candidate_competition
+from ..detection.detail import candidate_assessment, candidate_competition
 from ..domain import Detection
 from ..policies.registry import get_detection_policy
 from ..policies.runtime.diagnostics import ReportPolicy
