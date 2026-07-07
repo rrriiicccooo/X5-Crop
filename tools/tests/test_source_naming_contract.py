@@ -214,6 +214,22 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(import_from_nodes, [])
 
+    def test_policy_assembly_does_not_use_reported_physical_risk_strings(self) -> None:
+        banned = (
+            "known_physical_risks",
+            "_has_physical_risk",
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "policies" / "assembly"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_format_policy_modules_expose_only_unified_build_entry(self) -> None:
         banned = (
             "def full_policy",

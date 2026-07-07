@@ -139,6 +139,8 @@ candidate plan
 - guidance 和 candidate plan detail 只能写 `candidate_contract` / `evidence_contract` 这类
   源头契约；`decision_contract` 名称只属于 `policies.decision` 和 `detection.decision`。
 - runtime 调用 decision 时直接 import owning module；`detection.decision.__init__` 只做 package marker。
+- format 的 `known_physical_risks` 是 report/debug 可见描述；policy assembly 必须用
+  family、count、aspect 等物理谓词推导参数，不能把 risk 字符串当能力开关。
 - corrected candidate 必须重新 build、重新 assessment，再回到候选池统一 selection。
 - physical correction 不读取 candidate assessment；是否尝试 correction 属于 candidate extension。
 - physical 层不保留 `plan.py`；计划、execution budget 和候选 source 组合属于
@@ -377,6 +379,9 @@ Guidance and candidate-plan detail may use `candidate_contract` or
 `evidence_contract`; `decision_contract` naming belongs only to decision policy
 and decision execution. Runtime callers import decision owning modules directly;
 `detection.decision.__init__` remains a package marker only.
+Format `known_physical_risks` are report/debug descriptors only; policy assembly
+derives parameters from physical predicates such as family, count, and aspect,
+not from risk strings.
 Physical packages do not keep `plan.py`; planning, execution budget, and source
 composition belong to `detection.candidate.plan`.
 `detection.decision` owns final evidence, confidence caps, risk summary, final

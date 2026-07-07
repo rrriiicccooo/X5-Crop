@@ -20,30 +20,39 @@ from ..parameters.separator import (
 )
 
 
-def _has_physical_risk(fmt: FormatSpec, risk: str) -> bool:
-    return risk in fmt.known_physical_risks
+def _content_aspect(fmt: FormatSpec) -> float:
+    return float(fmt.horizontal_content_aspect or 1.0)
+
+
+def _is_standard_35mm_strip(fmt: FormatSpec) -> bool:
+    return fmt.family == "35mm" and fmt.default_count == 6 and 1.2 <= _content_aspect(fmt) <= 1.8
 
 
 def _is_dense_half_frame(fmt: FormatSpec) -> bool:
-    return fmt.family == "35mm" and fmt.default_count > 6 and float(fmt.horizontal_content_aspect or 1.0) < 1.0
+    return fmt.family == "35mm" and fmt.default_count > 6 and _content_aspect(fmt) < 1.0
 
 
 def _is_panorama_frame(fmt: FormatSpec) -> bool:
-    return fmt.family == "35mm" and float(fmt.horizontal_content_aspect or 1.0) > 2.0
+    return fmt.family == "35mm" and _content_aspect(fmt) > 2.0
+
+
+def _is_square_medium_frame(fmt: FormatSpec) -> bool:
+    return fmt.family == "120" and abs(_content_aspect(fmt) - 1.0) <= 0.05
+
+
+def _is_landscape_medium_frame(fmt: FormatSpec) -> bool:
+    return fmt.family == "120" and _content_aspect(fmt) > 1.1
 
 
 def partial_count_parameters(fmt: FormatSpec, params: FormatParameters) -> PartialCountParameters:
     partial = params.partial_counts
-    include_default = (
-        _has_physical_risk(fmt, "wide_content_can_mask_separator")
-        or _has_physical_risk(fmt, "holder_edge_can_mimic_separator")
-    )
+    include_default = _is_panorama_frame(fmt) or _is_square_medium_frame(fmt)
     return replace(partial, include_default_auto=include_default)
 
 
 def separator_gate_parameters(fmt: FormatSpec, params: FormatParameters) -> SeparatorGateParameters:
     gate = params.separator_gate
-    if _has_physical_risk(fmt, "holder_edge_can_mimic_separator"):
+    if _is_square_medium_frame(fmt):
         return replace(
             gate,
             edge_pair_min_score_without_broad_width=1.0,
@@ -56,7 +65,7 @@ def separator_gate_parameters(fmt: FormatSpec, params: FormatParameters) -> Sepa
 def leading_grid_failure_parameters(fmt: FormatSpec, params: FormatParameters) -> LeadingGridFailureParameters:
     return replace(
         params.leading_grid_failure,
-        enabled=_has_physical_risk(fmt, "weak_grid_may_hide_missing_separator"),
+        enabled=_is_standard_35mm_strip(fmt),
     )
 
 
@@ -66,13 +75,13 @@ def base_detection_score_parameters(fmt: FormatSpec, params: FormatParameters) -
         score = replace(score, full_photo_width_cv=0.008)
     elif fmt.family == "120":
         score = replace(score, full_photo_width_cv=0.012)
-    if _has_physical_risk(fmt, "holder_edge_can_mimic_separator"):
+    if _is_square_medium_frame(fmt):
         score = replace(
             score,
             outer_max_area=1.0,
             outer_too_large=1.0,
         )
-    elif _has_physical_risk(fmt, "short_axis_correction_can_overtrust_holder"):
+    elif _is_landscape_medium_frame(fmt):
         score = replace(
             score,
             outer_too_large=0.995,
@@ -89,10 +98,7 @@ def scoring_calibration_parameters(fmt: FormatSpec, params: FormatParameters) ->
             geometry_weight=0.32,
             content_weight=0.32,
         )
-    if (
-        _has_physical_risk(fmt, "holder_edge_can_mimic_separator")
-        or _has_physical_risk(fmt, "short_axis_correction_can_overtrust_holder")
-    ):
+    if _is_square_medium_frame(fmt) or _is_landscape_medium_frame(fmt):
         calibration = replace(calibration, hard_full_confidence_floor=0.86)
     return calibration
 
@@ -123,7 +129,7 @@ def separator_geometry_support_parameters(
 
 def partial_holder_parameters(fmt: FormatSpec, params: FormatParameters) -> PartialHolderParameters:
     holder = params.partial_holder
-    if _has_physical_risk(fmt, "holder_edge_can_mimic_separator"):
+    if _is_square_medium_frame(fmt):
         holder = replace(
             holder,
             min_broad_separator_width_gaps=2,
@@ -146,7 +152,7 @@ def nearby_separator_refinement_parameters(
 def lucky_pass_risk_parameters(fmt: FormatSpec, params: FormatParameters) -> LuckyPassRiskParameters:
     return replace(
         params.lucky_pass_risk,
-        enabled=_has_physical_risk(fmt, "weak_grid_may_hide_missing_separator"),
+        enabled=_is_standard_35mm_strip(fmt),
     )
 
 
