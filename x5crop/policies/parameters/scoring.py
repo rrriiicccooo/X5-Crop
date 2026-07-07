@@ -45,13 +45,8 @@ class SeparatorSupportScoreParameters:
 @dataclass(frozen=True)
 class GeometrySupportScoreParameters:
     photo_width_cv_norm: float
-    outer_min_area: float
-    outer_max_area: float
-    outer_uncertain_score: float
     aspect_norm: float
-    no_aspect_score: float
     photo_width_weight: float
-    outer_weight: float
     aspect_weight: float
     count_weight: float
 

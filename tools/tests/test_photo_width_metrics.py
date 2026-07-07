@@ -4,6 +4,7 @@ import numpy as np
 
 from x5crop.detection.candidate.assessment.base_scoring import base_detection_assessment
 from x5crop.detection.candidate.assessment.scoring import geometry_support_score
+from x5crop.detection.evidence.photo_width import photo_width_cv_from_detail
 from x5crop.detection.candidate.plan.counts import raw_detection_rank
 from x5crop.domain import Detection, Gap
 from x5crop.domain import Box
@@ -90,7 +91,12 @@ class PhotoWidthMetricsTest(unittest.TestCase):
             gaps=[],
             confidence=0.0,
             review_reasons=[],
-            detail={"width_cv": 0.0, "width_cv_source": "photo_edges", "outer_area_ratio": 0.74},
+            detail={
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+                "outer_area_ratio": 0.74,
+            },
         )
 
         score = geometry_support_score(
@@ -100,7 +106,17 @@ class PhotoWidthMetricsTest(unittest.TestCase):
 
         self.assertGreater(score, 0.90)
 
-    def test_geometry_support_ignores_frame_box_width_fallback(self) -> None:
+    def test_photo_width_detail_requires_explicit_photo_width_cv(self) -> None:
+        self.assertIsNone(
+            photo_width_cv_from_detail(
+                {
+                    "width_cv": 0.0,
+                    "width_cv_source": "photo_edges",
+                }
+            )
+        )
+
+    def test_geometry_support_ignores_frame_box_width_detail(self) -> None:
         detection = Detection(
             film_format="120-645",
             layout="horizontal",
@@ -131,7 +147,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
 
         self.assertGreater(score, 0.90)
 
-    def test_raw_detection_rank_does_not_reward_frame_box_width_fallback(self) -> None:
+    def test_raw_detection_rank_does_not_reward_frame_box_width_detail(self) -> None:
         stable_frame_boxes = Detection(
             film_format="120-645",
             layout="horizontal",

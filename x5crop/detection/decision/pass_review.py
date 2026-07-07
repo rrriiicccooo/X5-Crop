@@ -92,7 +92,7 @@ def evidence_summary_for(
     )
     geometry_score = _float(assessment.get("geometry_score"), 0.0)
     content_score = _float(assessment.get("content_score"), 0.0)
-    content_quality_score = _float(assessment.get("content_quality_score"), content_score)
+    content_quality_score = _float(assessment.get("content_quality_score"), 0.0)
     width_cv = _float(detection.detail.get("width_cv"), 1.0)
     width_cv_source = str(detection.detail.get("width_cv_source") or "unknown")
     photo_width_stability = photo_width_stability_detail(
@@ -102,13 +102,9 @@ def evidence_summary_for(
     )
     photo_width_stability["max_photo_width_cv_ratio"] = policy.evidence.max_photo_width_cv_ratio
     photo_width_ok = bool(photo_width_stability.get("ok", True))
-    content_support = str(content_detail.get("support", assessment.get("content_support", "")))
-    content_containment_ok = bool(
-        content_detail.get("content_containment_ok", content_support == "ok")
-    )
-    content_harm_risk = bool(
-        content_detail.get("content_harm_risk", content_support != "ok")
-    )
+    content_support = str(content_detail.get("support", ""))
+    content_containment_ok = bool(content_detail.get("content_containment_ok", False))
+    content_harm_risk = bool(content_detail.get("content_harm_risk", True))
     content_quality_ok = content_quality_score >= policy.evidence.min_content_score
     partial_detail = _dict(assessment.get("partial_safe_extra_frames"))
     partial_edge_safe = bool(partial_detail.get("ok", False))

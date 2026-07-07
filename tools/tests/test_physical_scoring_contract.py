@@ -14,6 +14,7 @@ from x5crop.detection.candidate.assessment.partial_holder import partial_extra_h
 from x5crop.detection.candidate.assessment.scoring import (
     content_quality_score,
     content_support_score,
+    geometry_support_score,
 )
 from x5crop.detection.decision.pass_review import evidence_summary_for
 from x5crop.detection.evidence.risk import lucky_photo_width_instability_components
@@ -103,7 +104,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertEqual(overcut_detail["outer_area_profile"]["status"], "above_profile")
         self.assertAlmostEqual(profile_confidence, overcut_confidence)
 
-    def test_frame_box_width_fallback_does_not_act_as_photo_width_evidence(self) -> None:
+    def test_frame_box_width_detail_does_not_act_as_photo_width_evidence(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         gray[:, ::2] = 255
         outer = Box(0, 0, 100, 100)
@@ -184,7 +185,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             0.40,
         )
 
-    def test_content_support_score_prefers_explicit_harm_risk_over_legacy_support(self) -> None:
+    def test_content_support_score_uses_containment_instead_of_support_summary(self) -> None:
         policy = get_detection_policy("120-66", "full").content
         containment = {
             "used": True,
@@ -410,7 +411,88 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertFalse(evidence["content"]["quality_ok"])
         self.assertEqual(evidence["content"]["score_role"], "quality_diagnostic_not_hard_gate")
 
-    def test_final_evidence_does_not_gate_on_frame_box_width_fallback(self) -> None:
+    def test_geometry_support_score_does_not_penalize_raw_outer_area(self) -> None:
+        frames = [
+            Box(0, 0, 95, 100),
+            Box(105, 0, 195, 100),
+            Box(205, 0, 300, 100),
+        ]
+        content_detail = {
+            "used": True,
+            "support": "ok",
+            "content_containment_ok": True,
+            "content_harm_risk": False,
+            "max_aspect_error": 0.0,
+        }
+        profile_outer = Detection(
+            film_format="120-66",
+            layout="horizontal",
+            strip_mode="full",
+            count=3,
+            outer=Box(0, 0, 300, 100),
+            frames=frames,
+            gaps=[],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "outer_area_ratio": 0.80,
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+            },
+        )
+        overcut_outer = Detection(
+            film_format="120-66",
+            layout="horizontal",
+            strip_mode="full",
+            count=3,
+            outer=Box(0, 0, 300, 100),
+            frames=frames,
+            gaps=[],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "outer_area_ratio": 1.0,
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+            },
+        )
+
+        self.assertAlmostEqual(
+            geometry_support_score(profile_outer, content_detail),
+            geometry_support_score(overcut_outer, content_detail),
+        )
+
+    def test_geometry_support_score_does_not_penalize_missing_aspect_evidence(self) -> None:
+        detection = Detection(
+            film_format="120-66",
+            layout="horizontal",
+            strip_mode="full",
+            count=3,
+            outer=Box(0, 0, 300, 100),
+            frames=[
+                Box(0, 0, 95, 100),
+                Box(105, 0, 195, 100),
+                Box(205, 0, 300, 100),
+            ],
+            gaps=[],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "outer_area_ratio": 1.0,
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+            },
+        )
+
+        self.assertEqual(
+            geometry_support_score(detection, {"used": False, "support": "unknown"}),
+            1.0,
+        )
+
+    def test_final_evidence_does_not_gate_on_frame_box_width_detail(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = Detection(
             film_format="120-66",
@@ -466,7 +548,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
     def test_lucky_pass_photo_width_instability_requires_photo_edge_width_source(self) -> None:
         policy = LuckyPassRiskPolicy()
 
-        fallback_components, fallback_detail = lucky_photo_width_instability_components(
+        frame_box_components, frame_box_detail = lucky_photo_width_instability_components(
             0.020,
             "frame_boxes",
             policy,
@@ -477,9 +559,9 @@ class PhysicalScoringContractTest(unittest.TestCase):
             policy,
         )
 
-        self.assertEqual(fallback_components, {})
-        self.assertFalse(fallback_detail["used"])
-        self.assertEqual(fallback_detail["reason"], "photo_width_source_not_photo_edges")
+        self.assertEqual(frame_box_components, {})
+        self.assertFalse(frame_box_detail["used"])
+        self.assertEqual(frame_box_detail["reason"], "photo_width_source_not_photo_edges")
         self.assertIn("unstable_photo_widths", photo_components)
         self.assertTrue(photo_detail["used"])
 
@@ -571,6 +653,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 "outer_candidate_strategy": "separator_outer",
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
                 "standard_gap_search": {
                     "entries": [
                         {"selected_source": "standard_detected"},
@@ -595,7 +678,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertEqual(detail["content_score_role"], "quality_diagnostic_not_hard_gate")
         self.assertTrue(detail["ok"])
 
-    def test_frame_box_width_fallback_does_not_validate_evidence_independence(self) -> None:
+    def test_frame_box_width_detail_does_not_validate_evidence_independence(self) -> None:
         detection = Detection(
             film_format="120-66",
             layout="horizontal",
@@ -654,7 +737,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             max_photo_width_cv=0.040,
             max_outer_area_ratio=0.99,
         )
-        frame_fallback_candidate = Detection(
+        frame_box_detail_candidate = Detection(
             film_format="120-66",
             layout="horizontal",
             strip_mode="full",
@@ -680,20 +763,21 @@ class PhysicalScoringContractTest(unittest.TestCase):
             strip_mode="full",
             count=3,
             outer=Box(0, 0, 300, 100),
-            frames=frame_fallback_candidate.frames,
+            frames=frame_box_detail_candidate.frames,
             gaps=[],
             confidence=0.90,
             review_reasons=[],
             detail={
                 "width_cv": 0.20,
                 "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.20,
                 "outer_area_ratio": 0.80,
             },
         )
 
         self.assertTrue(
             hard_full_calibration_floor_applies(
-                frame_fallback_candidate,
+                frame_box_detail_candidate,
                 hard_detail,
                 fmt,
                 "separator",
@@ -711,7 +795,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
         self.assertTrue(
             separator_geometry_support_applies(
-                frame_fallback_candidate,
+                frame_box_detail_candidate,
                 hard_detail,
                 fmt,
                 "separator",

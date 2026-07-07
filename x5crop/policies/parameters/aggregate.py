@@ -302,11 +302,8 @@ class FormatParameters(FormatParameterViews):
     content_support_gate_aspect_conflict: float = 0.35
     content_support_gate_unknown: float = 0.50
     geometry_support_photo_width_weight: float = 0.34
-    geometry_support_outer_weight: float = 0.24
     geometry_support_aspect_weight: float = 0.26
     geometry_support_count_weight: float = 0.16
-    geometry_support_outer_uncertain: float = 0.55
-    geometry_support_no_aspect_score: float = 0.80
     separator_support_hard_weight: float = 0.78
     separator_support_model_weight: float = 0.22
     calibrate_geometry_weight: float = 0.34

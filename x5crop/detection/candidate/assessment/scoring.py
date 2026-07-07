@@ -51,18 +51,9 @@ def content_support_score(
     del format_name, content_policy
     if not bool(detail.get("used", False)):
         return 0.0
-    has_containment_fields = (
-        "content_containment_ok" in detail
-        or "content_harm_risk" in detail
-    )
     containment_ok = bool(detail.get("content_containment_ok", False))
     harm_risk = bool(detail.get("content_harm_risk", True))
-    if has_containment_fields:
-        return 1.0 if containment_ok and not harm_risk else 0.0
-    support = str(detail.get("support", ""))
-    if support == "ok":
-        return 1.0
-    return 0.0
+    return 1.0 if containment_ok and not harm_risk else 0.0
 
 
 def geometry_support_score(
@@ -78,18 +69,20 @@ def geometry_support_score(
         if photo_width_cv is not None
         else None
     )
-    outer_area = float(detection.detail.get("outer_area_ratio", 0.70))
-    outer_score = 1.0 if geometry_policy.outer_min_area <= outer_area <= geometry_policy.outer_max_area else geometry_policy.outer_uncertain_score
     aspect_error = content_detail.get("max_aspect_error")
-    aspect_score = geometry_policy.no_aspect_score if aspect_error is None else max(0.0, min(1.0, 1.0 - float(aspect_error) / geometry_policy.aspect_norm))
+    aspect_score = (
+        max(0.0, min(1.0, 1.0 - float(aspect_error) / geometry_policy.aspect_norm))
+        if aspect_error is not None
+        else None
+    )
     count_score = 1.0 if len(detection.frames) == detection.count else 0.0
     weighted_scores = [
-        (geometry_policy.outer_weight, outer_score),
-        (geometry_policy.aspect_weight, aspect_score),
         (geometry_policy.count_weight, count_score),
     ]
     if width_score is not None:
         weighted_scores.append((geometry_policy.photo_width_weight, width_score))
+    if aspect_score is not None:
+        weighted_scores.append((geometry_policy.aspect_weight, aspect_score))
     weight_total = max(1e-6, sum(weight for weight, _score in weighted_scores))
     return max(
         0.0,

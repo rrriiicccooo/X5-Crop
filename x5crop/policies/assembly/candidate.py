@@ -103,13 +103,8 @@ def scoring_policy(fmt: FormatSpec, params: FormatParameters) -> ScoringPolicy:
         ),
         geometry_support=GeometrySupportScorePolicy(
             photo_width_cv_norm=float(geometry_support.photo_width_cv_norm),
-            outer_min_area=float(base_score.outer_min_area),
-            outer_max_area=float(base_score.outer_too_large),
-            outer_uncertain_score=float(geometry_support.outer_uncertain_score),
             aspect_norm=float(geometry_support.aspect_norm),
-            no_aspect_score=float(geometry_support.no_aspect_score),
             photo_width_weight=float(geometry_support.photo_width_weight),
-            outer_weight=float(geometry_support.outer_weight),
             aspect_weight=float(geometry_support.aspect_weight),
             count_weight=float(geometry_support.count_weight),
         ),

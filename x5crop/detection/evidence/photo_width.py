@@ -22,10 +22,7 @@ def width_cv_source(detail: dict[str, Any]) -> str:
 def photo_width_cv_from_detail(detail: dict[str, Any]) -> float | None:
     if width_cv_source(detail) != PHOTO_WIDTH_SOURCE:
         return None
-    photo_width_cv = _optional_float(detail.get("photo_width_cv"))
-    if photo_width_cv is not None:
-        return photo_width_cv
-    return _optional_float(detail.get("width_cv"))
+    return _optional_float(detail.get("photo_width_cv"))
 
 
 def photo_width_stability_detail(

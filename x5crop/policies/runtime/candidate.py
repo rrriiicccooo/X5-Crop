@@ -44,13 +44,8 @@ class PartialEdgeHintPolicy:
 @dataclass(frozen=True)
 class GeometrySupportScorePolicy:
     photo_width_cv_norm: float = 0.040
-    outer_min_area: float = 0.35
-    outer_max_area: float = 0.94
-    outer_uncertain_score: float = 0.55
     aspect_norm: float = 0.22
-    no_aspect_score: float = 0.80
     photo_width_weight: float = 0.34
-    outer_weight: float = 0.24
     aspect_weight: float = 0.26
     count_weight: float = 0.16
 

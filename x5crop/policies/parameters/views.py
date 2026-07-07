@@ -446,13 +446,8 @@ class FormatParameterViews:
     def geometry_support_score(self) -> GeometrySupportScoreParameters:
         return GeometrySupportScoreParameters(
             photo_width_cv_norm=self.geometry_photo_width_cv_norm,
-            outer_min_area=self.score_outer_min_area,
-            outer_max_area=self.score_outer_too_large,
-            outer_uncertain_score=self.geometry_support_outer_uncertain,
             aspect_norm=self.content_support_aspect_norm,
-            no_aspect_score=self.geometry_support_no_aspect_score,
             photo_width_weight=self.geometry_support_photo_width_weight,
-            outer_weight=self.geometry_support_outer_weight,
             aspect_weight=self.geometry_support_aspect_weight,
             count_weight=self.geometry_support_count_weight,
         )
