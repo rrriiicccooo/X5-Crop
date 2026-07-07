@@ -348,6 +348,24 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_finalization_does_not_generate_decision_risk_evidence(self) -> None:
+        banned = (
+            "overlap_bleed_risk_detail",
+            "lucky_pass_risk_score_detail",
+            "from ..evidence.risk",
+            "from ...detection.evidence.risk",
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "final"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_low_confidence_context_reasons_do_not_use_tail_or_post_check_names(self) -> None:
         banned = (
             "_apply_decision_" "tail_reasons",

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
@@ -397,6 +399,92 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
         self.assertEqual(
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
+            ["overlap_bleed_risk"],
+        )
+
+    def test_overlap_bleed_risk_is_attached_before_final_decision(self) -> None:
+        gray = np.zeros((100, 100), dtype=np.uint8)
+        detection = Detection(
+            film_format="135",
+            layout="horizontal",
+            strip_mode="full",
+            count=1,
+            outer=Box(10, 10, 90, 90),
+            frames=[Box(10, 10, 90, 90)],
+            gaps=[],
+            confidence=0.90,
+            review_reasons=[],
+            detail={
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+                "candidate_assessment": {
+                    "source": "separator",
+                    "auto_gate": True,
+                    "geometry_score": 1.0,
+                    "content_score": 1.0,
+                    "content_quality_score": 1.0,
+                    "blockers": [],
+                    "diagnostics": [],
+                },
+            },
+        )
+        base_policy = get_detection_policy("135", "full")
+        policy = replace(
+            base_policy,
+            diagnostics=replace(
+                base_policy.diagnostics,
+                overlap_bleed_risk=replace(
+                    base_policy.diagnostics.overlap_bleed_risk,
+                    enabled=True,
+                ),
+            ),
+        )
+
+        with (
+            patch(
+                "x5crop.detection.decision.final_decision.content_evidence_detail",
+                return_value={"used": True},
+            ),
+            patch(
+                "x5crop.detection.decision.final_decision.content_containment_detail",
+                return_value=_content_ok_detail(),
+            ),
+            patch(
+                "x5crop.detection.decision.final_decision.outer_content_alignment_detail",
+                return_value={"used": True, "ok": True},
+            ),
+            patch(
+                "x5crop.detection.decision.final_decision.overlap_bleed_risk_detail",
+                return_value={
+                    "used": True,
+                    "risk": True,
+                    "reason": "diagnostic_overlap_risk",
+                },
+            ),
+            patch(
+                "x5crop.detection.decision.final_decision.lucky_pass_risk_score_detail",
+                return_value={"used": True, "risk": False, "reason": "ok"},
+            ),
+        ):
+            decision = apply_detection_decision(
+                gray,
+                detection,
+                _decision_test_config(),
+                format_spec("135"),
+                make_analysis_cache(gray, "horizontal"),
+                {},
+                policy,
+            )
+
+        self.assertEqual(decision.status, "needs_review")
+        self.assertEqual(decision.detection.review_reasons, ["overlap_risk"])
+        self.assertEqual(
+            decision.detection.detail["overlap_bleed_risk"]["reason"],
+            "diagnostic_overlap_risk",
+        )
+        self.assertEqual(
+            [item["signal"] for item in decision.detection.detail["decision_reason_inputs"]],
             ["overlap_bleed_risk"],
         )
 

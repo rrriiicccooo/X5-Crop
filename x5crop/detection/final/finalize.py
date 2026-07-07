@@ -12,13 +12,11 @@ from .output_bleed import (
     AxisBleedParameters,
     apply_output_bleed,
     detection_bleed_parameters,
-    detection_has_overlap_bleed_risk,
     output_bleed_parameters_for_detection,
 )
 from ...policies.registry import get_detection_policy
 from ...cache import AnalysisCache
 from ..evidence.read_only import attach_read_only_diagnostics
-from ..evidence.risk import overlap_bleed_risk_detail
 from .geometry import (
     apply_approved_geometry_adjustment,
     apply_edge_bleed_protection,
@@ -50,8 +48,6 @@ def finalize_detection(
             status,
             policy.finalization.approved_geometry_adjustment,
         )
-    if policy.diagnostics.overlap_bleed_risk.enabled and not detection_has_overlap_bleed_risk(detection):
-        detection.detail["overlap_bleed_risk"] = overlap_bleed_risk_detail(gray, detection, analysis_cache)
     base_bleed = AxisBleedParameters(long_axis=int(config.bleed_x), short_axis=int(config.bleed_y))
     output_bleed = output_bleed_parameters_for_detection(base_bleed, detection, policy.output)
     output_config = replace(config, bleed_x=output_bleed.long_axis, bleed_y=output_bleed.short_axis)

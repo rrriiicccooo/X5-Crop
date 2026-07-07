@@ -17,7 +17,10 @@ from ..confidence_caps import apply_confidence_cap
 from ..evidence.content.containment import content_containment_detail
 from ..evidence.content.frame_support import content_evidence_detail
 from ..evidence.outer_alignment import outer_content_alignment_detail
-from ..evidence.risk import lucky_pass_risk_score_detail
+from ..evidence.risk import (
+    lucky_pass_risk_score_detail,
+    overlap_bleed_risk_detail,
+)
 from .pass_review import apply_final_decision_policy
 from .reasons import (
     add_final_review_reason,
@@ -57,12 +60,17 @@ def apply_detection_decision(
         else {"used": False, "reason": policy.decision.outer_alignment_disabled_reason}
     )
     detection.detail["outer_content_alignment"] = outer_alignment
-    _apply_decision_confidence_caps(
+    _attach_decision_risk_evidence(
         gray,
         detection,
         config,
         policy,
         analysis_cache,
+    )
+    _apply_decision_confidence_caps(
+        detection,
+        config,
+        policy,
         content_detail,
         outer_alignment,
     )
@@ -85,12 +93,34 @@ def apply_detection_decision(
     )
 
 
-def _apply_decision_confidence_caps(
+def _attach_decision_risk_evidence(
     gray: np.ndarray,
     detection: Detection,
     config: RuntimeConfig,
     policy: DetectionPolicy,
     analysis_cache: AnalysisCache,
+) -> None:
+    if (
+        policy.diagnostics.overlap_bleed_risk.enabled
+        and not isinstance(detection.detail.get("overlap_bleed_risk"), dict)
+    ):
+        detection.detail["overlap_bleed_risk"] = overlap_bleed_risk_detail(
+            gray,
+            detection,
+            analysis_cache,
+        )
+    detection.detail["lucky_pass_risk_score"] = lucky_pass_risk_score_detail(
+        gray,
+        detection,
+        config.confidence_threshold,
+        analysis_cache,
+    )
+
+
+def _apply_decision_confidence_caps(
+    detection: Detection,
+    config: RuntimeConfig,
+    policy: DetectionPolicy,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
 ) -> None:
@@ -131,13 +161,8 @@ def _apply_decision_confidence_caps(
             reason="outer_content_mismatch",
         )
         cap_details.append(cap_detail)
-    lucky_pass_risk = lucky_pass_risk_score_detail(
-        gray,
-        detection,
-        config.confidence_threshold,
-        analysis_cache,
-    )
-    detection.detail["lucky_pass_risk_score"] = lucky_pass_risk
+    lucky_pass_risk = detection.detail.get("lucky_pass_risk_score", {})
+    lucky_pass_risk = dict(lucky_pass_risk) if isinstance(lucky_pass_risk, dict) else {}
     if bool(lucky_pass_risk.get("risk", False)):
         detection.confidence, cap_detail = apply_confidence_cap(
             detection.confidence,

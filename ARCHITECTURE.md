@@ -202,6 +202,8 @@ candidate plan
   `candidate_assessment.auto_gate_inputs` 是 report/debug 的候选级解释，不是最终裁决。
 - `selection_risk_inputs` 是候选竞争阶段的风险证据，不是最终裁决；只有 decision 可以把它
   映射为 `candidate_competition_close`。
+- overlap / lucky-pass 这类 final risk evidence 必须在 decision 阶段生成；finalization
+  只能消费已有 risk detail 做 output bleed，不能在 PASS / REVIEW 之后补充裁决输入。
 - `decision_reason_inputs`、`final_review_reasons_added` 和 `final_review_reasons` 是最终
   PASS / REVIEW 的解释入口；low-confidence context reason 也必须进入这些 final summary 字段。
 - decision 子层读取或更新最终原因必须经过 `detection.decision.reasons`；`review_reasons`
@@ -465,6 +467,9 @@ means evidence strength. Photo-width hard reasons may consume only
 auto-gate inputs, and candidate confidence caps are assessment detail; decision
 reason inputs, final-review reason fields, and decision confidence caps are
 final decision detail.
+Final risk evidence such as overlap and lucky-pass risk is attached before the
+final decision. Finalization may consume that detail for output bleed, but it
+must not generate PASS / REVIEW inputs after the decision step.
 Decision sublayers must read or update final reasons through
 `detection.decision.reasons`; after the decision step, `review_reasons` is the
 user-visible final reason field, so decision code must not append to it directly.
