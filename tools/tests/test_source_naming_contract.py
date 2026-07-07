@@ -190,6 +190,22 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_format_policy_modules_expose_only_unified_build_entry(self) -> None:
+        banned = (
+            "def full_policy",
+            "def partial_policy",
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "policies" / "formats"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.glob("format_*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
 
 if __name__ == "__main__":
     unittest.main()

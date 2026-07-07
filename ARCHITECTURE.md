@@ -195,6 +195,8 @@ format 文件不能声明 scoring、gate、risk、detector、diagnostics 或 run
 final PASS / REVIEW 的参数必须进入 decision policy detail；影响 runtime 检测路径但不直接
 决定 PASS / REVIEW 的参数必须进入 runtime policy detail。`finalization` policy 只保留输出相邻
 几何、bleed 和 diagnostics attachment；confidence cap 和 review reason 不属于 finalization。
+format policy module 的唯一构建入口是 `build_policy(strip_mode)`；`full_policy()` /
+`partial_policy()` 这类 mode-specific convenience helper 不再保留。
 
 ### 8. Format / Mode 组合视角
 
@@ -400,7 +402,9 @@ contract remain separate.
 Format files may provide physical tolerance, content profile tolerance, and
 search-budget overrides only. Runtime path parameters must appear in runtime
 policy detail; final PASS / REVIEW parameters must appear in decision policy
-detail. Finalization policy is output-adjacent only.
+detail. Finalization policy is output-adjacent only. The only policy-construction
+entry in a format module is `build_policy(strip_mode)`; mode-specific convenience
+helpers such as `full_policy()` / `partial_policy()` are not kept.
 
 ### 8. Format / Mode Composition Perspective
 

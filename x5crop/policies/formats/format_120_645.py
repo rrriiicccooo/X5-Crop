@@ -27,11 +27,3 @@ def parameters() -> FormatParameters:
 
 def build_policy(strip_mode: str):
     return build_policy_from_format(FORMAT_ID, parameters, strip_mode)
-
-
-def full_policy():
-    return build_policy("full")
-
-
-def partial_policy():
-    return build_policy("partial")
