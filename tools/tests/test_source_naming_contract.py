@@ -118,6 +118,16 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_physical_layer_does_not_keep_candidate_plan_modules(self) -> None:
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "physical"
+        self.assertTrue(source_root.is_dir())
+        offenders = [
+            str(path.relative_to(PROJECT_ROOT))
+            for path in source_root.rglob("plan.py")
+        ]
+
+        self.assertEqual(offenders, [])
+
     def test_finalization_policy_does_not_own_decision_caps_or_reasons(self) -> None:
         from x5crop.policies.runtime.final import FinalizationPolicy
 
