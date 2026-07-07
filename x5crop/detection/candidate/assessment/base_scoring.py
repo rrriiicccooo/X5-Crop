@@ -10,7 +10,6 @@ from ....formats import FormatSpec
 from ....geometry.frame_fit import frame_boxes_from_gaps
 from ....geometry.gap_geometry import (
     gap_width_cv,
-    photo_widths_from_gap_edges,
     separator_width_cv,
     separator_widths,
     width_cv as coefficient_of_variation,
@@ -20,6 +19,7 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....policies.separator_gate_profiles import SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
 from ....runtime.config import RuntimeConfig
 from ....utils import box_from_dict, gap_from_dict, sampled_percentile
+from ...physical.photo_size import photo_size_consistency_from_gap_edges
 from ...evidence.separator_summary import gap_method_evidence_summary
 
 
@@ -85,19 +85,23 @@ def _candidate_width_metrics(
     origin: float | None,
     pitch: float | None,
     count: int,
+    target_photo_width: float | None = None,
 ) -> dict[str, Any]:
     frame_widths = _frame_box_widths(boxes)
     frame_box_cv = coefficient_of_variation(frame_widths) if frame_widths else 1.0
-    photo_widths = (
-        photo_widths_from_gap_edges(gaps, float(origin), float(pitch), count)
+    photo_size = (
+        photo_size_consistency_from_gap_edges(
+            gaps,
+            float(origin),
+            float(pitch),
+            count,
+            target_photo_width=target_photo_width,
+        )
         if origin is not None and pitch is not None and pitch > 0.0
         else None
     )
-    photo_cv = (
-        coefficient_of_variation(photo_widths)
-        if photo_widths is not None
-        else None
-    )
+    photo_widths = list(photo_size.photo_widths) if photo_size is not None and photo_size.used else None
+    photo_cv = photo_size.photo_width_cv if photo_size is not None and photo_size.used else None
     center_cv = (
         gap_width_cv(gaps, float(origin), float(pitch), count)
         if origin is not None and pitch is not None and pitch > 0.0
@@ -111,6 +115,11 @@ def _candidate_width_metrics(
         "frame_box_width_cv": float(frame_box_cv),
         "center_interval_width_cv": center_cv,
         "separator_width_cv": separator_width_cv(gaps),
+        "photo_size_consistency": (
+            photo_size.detail()
+            if photo_size is not None
+            else {"used": False, "reason": "missing_origin_or_pitch"}
+        ),
         "photo_widths": photo_widths or [],
         "frame_box_widths": frame_widths,
         "separator_widths": separator_widths(gaps),
@@ -186,7 +195,16 @@ def base_detection_assessment(
         gaps,
         policy.separator.robust_grid.reliable_min_score,
     )
-    width_metrics = _candidate_width_metrics(gaps, boxes, origin, pitch, count)
+    frame_aspect = float(fmt.horizontal_content_aspect or 0.0)
+    target_photo_width = float(outer.height) * frame_aspect if frame_aspect > 0.0 else None
+    width_metrics = _candidate_width_metrics(
+        gaps,
+        boxes,
+        origin,
+        pitch,
+        count,
+        target_photo_width=target_photo_width,
+    )
     photo_width_cv = width_metrics.get("photo_width_cv")
     photo_width_within_full_limit = (
         True if photo_width_cv is None else float(photo_width_cv) <= base_score.full_photo_width_cv

@@ -18,6 +18,8 @@ from ...evidence.separator_width import separator_width_evidence_detail
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ...physical.outer.grid_refine import grid_refined_outer_box
 from ...physical.outer.plan import outer_candidate_strategy
+from ...physical.outer.side_boundary import side_boundary_outer
+from ...physical.photo_size import photo_size_consistency_from_gap_edges
 from ...physical.separator.hints import SeparatorGapHintSet
 from .partial_edge import partial_edge_hint
 from .separator_gaps import (
@@ -95,6 +97,15 @@ def build_detection_for_outer(
             int(policy.separator.gate.min_broad_separator_width_gaps_for_auto),
         ),
     )
+    frame_aspect = float(fmt.horizontal_content_aspect or 0.0)
+    target_photo_width = float(outer.height) * frame_aspect if frame_aspect > 0.0 else None
+    photo_size_consistency = photo_size_consistency_from_gap_edges(
+        gaps,
+        origin,
+        pitch,
+        count,
+        target_photo_width=target_photo_width,
+    )
     detail: dict[str, object] = {}
     detail.update(
         {
@@ -125,6 +136,7 @@ def build_detection_for_outer(
             "edge_pair_correction": separator_gaps.edge_pair_correction_detail,
             "frame_size_fit": frame_size_detail,
             "nearby_separator_refinement": separator_gaps.nearby_refinement_detail,
+            "photo_size_consistency": photo_size_consistency.detail(),
             "separator_width_evidence": separator_width_evidence,
             "broad_separator_width_gaps": int(separator_width_evidence.get("broad_separator_width_gaps", 0) or 0),
             "broad_separator_width_gap_indexes": list(separator_width_evidence.get("broad_separator_width_gap_indexes", [])),
@@ -137,6 +149,11 @@ def build_detection_for_outer(
             "gap_methods": [gap.method for gap in gaps],
         }
     )
+    if outer_candidate_name == "side_boundary":
+        detail["outer_side_boundary"] = side_boundary_outer(
+            gray_work,
+            policy.outer.proposal.base.candidates,
+        ).detail()
     if separator_gaps.pre_nearby_gaps is not None:
         detail["pre_nearby_gaps"] = [asdict(gap) for gap in separator_gaps.pre_nearby_gaps]
     return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, 0.0, [], detail)

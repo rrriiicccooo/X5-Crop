@@ -298,14 +298,8 @@ def separator_width_gap_candidate_from_accepted_run(
 ) -> SeparatorWidthGapCandidate:
     mean_score = float(profile[run.start:run.end].mean())
     distance_penalty = abs(run.center - expected) / max(1.0, pitch)
-    width_prior_penalty = 0.0
-    if prior is not None and prior.used and prior.ideal_width > 0.0:
-        width_prior_penalty = abs(float(run.width) - float(prior.ideal_width)) / max(1.0, float(prior.ideal_width))
-    score = (
-        mean_score
-        - params.gap_distance_penalty_weight * distance_penalty
-        - params.gap_width_prior_penalty_weight * width_prior_penalty
-    )
+    del prior
+    score = mean_score - params.gap_distance_penalty_weight * distance_penalty
     return SeparatorWidthGapCandidate(score=score, start=run.start, end=run.end, center=run.center)
 
 

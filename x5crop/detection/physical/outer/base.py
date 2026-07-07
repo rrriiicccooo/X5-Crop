@@ -6,6 +6,7 @@ from ....domain import Box, OuterCandidate
 from ....geometry.detection_parameters import OuterBoxDetectionParameters
 from ....geometry.outer_boxes import detect_mask_profile_outer, detect_outer, detect_outer_white_x
 from .common import unique_outer_candidates
+from .side_boundary import side_boundary_outer
 
 
 def base_outer_candidates(
@@ -16,6 +17,7 @@ def base_outer_candidates(
     h, w = gray.shape
     bw = detect_outer(gray, outer_config)
     white_x = detect_outer_white_x(gray, outer_config)
+    side_boundary = side_boundary_outer(gray, outer_config)
     candidates = [OuterCandidate("bw", bw, "base_outer")]
     if white_x.valid():
         max_reasonable = max(
@@ -24,6 +26,8 @@ def base_outer_candidates(
         )
         if white_x.width >= bw.width and white_x.width <= max_reasonable:
             candidates.append(OuterCandidate("white_x", white_x, "base_outer"))
+    if side_boundary.box is not None:
+        candidates.append(OuterCandidate("side_boundary", side_boundary.box, "base_outer"))
     for profile in outer_config.mask_profiles:
         box = detect_mask_profile_outer(gray, profile, outer_config)
         if box is not None:

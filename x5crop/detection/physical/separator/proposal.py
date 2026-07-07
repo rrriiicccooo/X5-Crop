@@ -21,6 +21,7 @@ from ....geometry.separator_width_profile import (
 from ....policies.runtime.separator import SeparatorWidthProfilePolicy
 from ....utils import clamp_int
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
+from ..photo_size import photo_size_consistency_from_gap_edges
 from .hints import SeparatorGapHintSet
 from .model import propose_equal_model_gap
 
@@ -242,6 +243,14 @@ def _propose_standard_separator_gaps_with_detail(
         proposal.detail["gap_hint"] = hint_detail
         gaps.append(proposal.gap)
         entries.append(proposal.detail)
+    target_photo_width = float(outer.height) * float(frame_aspect) if frame_aspect is not None and frame_aspect > 0.0 else None
+    photo_size_consistency = photo_size_consistency_from_gap_edges(
+        gaps,
+        origin,
+        pitch,
+        count,
+        target_photo_width=target_photo_width,
+    )
     return SeparatorGapProfileProposal(
         profile=WIDTH_AWARE_GAP_PROFILE,
         gaps=gaps,
@@ -253,6 +262,7 @@ def _propose_standard_separator_gaps_with_detail(
             "count": int(count),
             "max_width_ratio_override": max_width_ratio_override,
             "physical_width_prior": physical_width_prior.detail(),
+            "photo_size_consistency": photo_size_consistency.detail(),
             "gap_hint_guidance": (
                 {
                     "used": bool(gap_hints is not None and gap_hints.hints),

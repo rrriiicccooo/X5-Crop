@@ -16,6 +16,7 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ...cache_keys import separator_outer_cache_key
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
+from ..photo_size import photo_size_consistency_from_separator_bands
 from .common import unique_outer_candidates
 from .separator_bands import collect_separator_outer_bands, separator_outer_band_sequences
 
@@ -354,7 +355,6 @@ def _rank_separator_sequences(
     ranked: list[tuple[float, tuple[SeparatorBand, ...], float]] = []
     sequence_policy = _sequence_band_policy(band_policy, plan)
     for sequence in separator_outer_band_sequences(candidate_bands, expected_gaps, frame_long, sequence_policy):
-        frame_widths: list[float] = []
         previous: Optional[SeparatorBand] = None
         valid = True
         for band in sequence:
@@ -363,18 +363,19 @@ def _rank_separator_sequences(
                 if inner_width <= 0:
                     valid = False
                     break
-                frame_widths.append(inner_width)
             previous = band
         if not valid:
             continue
-        if frame_widths:
-            frame_errors = [abs(width - frame_long) / max(1.0, frame_long) for width in frame_widths]
-            max_frame_error = max(frame_errors)
-            mean_frame_error = float(sum(frame_errors) / len(frame_errors))
-        else:
-            max_frame_error = 0.0
-            mean_frame_error = 0.0
-        if plan.frame_error_max is not None and max_frame_error > plan.frame_error_max:
+        photo_size = photo_size_consistency_from_separator_bands(
+            sequence,
+            target_photo_width=frame_long,
+        )
+        max_frame_error = photo_size.max_photo_width_error_ratio
+        if (
+            plan.frame_error_max is not None
+            and max_frame_error is not None
+            and max_frame_error > plan.frame_error_max
+        ):
             continue
 
         separator_total = sum(float(band.width) for band in sequence)
@@ -382,7 +383,6 @@ def _rank_separator_sequences(
         sequence_score = sum(float(band.score) for band in sequence) / max(1, len(sequence))
         for margin_ratio in plan.margin_ratios:
             expected_ratio = expected_ratio_base + 2.0 * float(margin_ratio)
-            rank = mean_frame_error - plan.sequence_score_weight * sequence_score
             first_band = sequence[0]
             last_band = sequence[-1]
             margin = float(margin_ratio) * short_axis
@@ -390,6 +390,7 @@ def _rank_separator_sequences(
                 float(first_band.start) - frame_long - margin
             )
             actual_ratio = proposed_width / max(1.0, short_axis)
+            rank = photo_size.rank_penalty() - plan.sequence_score_weight * sequence_score
             rank += abs(actual_ratio - expected_ratio)
             ranked.append((rank, sequence, expected_ratio))
     return sorted(ranked, key=lambda item: item[0])

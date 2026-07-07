@@ -223,7 +223,6 @@ class SeparatorWidthProfileSearchParameters:
     gap_window_floor: int = 300
     gap_window_cap_ratio: float = 0.38
     gap_distance_penalty_weight: float = 0.35
-    gap_width_prior_penalty_weight: float = 0.20
     gap_score_base: float = 1.0
 
 
