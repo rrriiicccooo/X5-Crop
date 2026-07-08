@@ -114,20 +114,23 @@ def apply_candidate_assessment_policy(
             policy,
         )
     elif source == "content":
-        proposal_confidence, proposal_diagnostics, proposal_detail = content_candidate_assessment_from_proposal(
+        proposal_assessment = content_candidate_assessment_from_proposal(
             candidate,
             config,
             policy.content,
         )
-        candidate.confidence = max(float(candidate.confidence), float(proposal_confidence))
+        candidate.confidence = max(
+            float(candidate.confidence),
+            float(proposal_assessment.confidence),
+        )
         set_candidate_reasons(
             candidate,
-            merged_candidate_reasons(candidate, proposal_diagnostics),
+            merged_candidate_reasons(candidate, proposal_assessment.diagnostics),
         )
         content_primary = candidate.detail.get("content_primary")
         if isinstance(content_primary, dict):
-            content_primary["candidate_assessment"] = proposal_detail
-        proposal_caps = proposal_detail.get("confidence_caps", [])
+            content_primary["candidate_assessment"] = proposal_assessment.detail
+        proposal_caps = proposal_assessment.detail.get("confidence_caps", [])
         if isinstance(proposal_caps, list):
             candidate.detail["candidate_confidence_caps"] = [
                 *_candidate_confidence_caps(candidate),

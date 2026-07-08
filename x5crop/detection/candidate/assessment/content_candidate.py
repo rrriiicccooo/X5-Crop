@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from ....domain import Detection
 from ...confidence_caps import apply_confidence_cap
 from ....policies.runtime.content import ContentCandidatePolicy, ContentPolicy
 from ....runtime.config import RuntimeConfig
+
+
+@dataclass(frozen=True)
+class ContentCandidateAssessment:
+    confidence: float
+    diagnostics: list[str]
+    detail: dict[str, Any]
 
 
 def content_candidate_confidence_and_diagnostics(
@@ -20,7 +28,7 @@ def content_candidate_confidence_and_diagnostics(
     max_aspect_error: float,
     confidence_threshold: float,
     candidate_policy: ContentCandidatePolicy,
-) -> tuple[float, list[str], dict[str, Any]]:
+) -> ContentCandidateAssessment:
     run_conf = min(1.0, selected_run_count / float(max(1, count)))
     coverage_conf = min(1.0, median_coverage / candidate_policy.coverage_norm)
     mean_conf = min(1.0, median_mean / candidate_policy.mean_norm)
@@ -92,18 +100,26 @@ def content_candidate_confidence_and_diagnostics(
         ),
         "confidence_caps": confidence_caps,
     }
-    return float(confidence), diagnostics, detail
+    return ContentCandidateAssessment(
+        confidence=float(confidence),
+        diagnostics=diagnostics,
+        detail=detail,
+    )
 
 
 def content_candidate_assessment_from_proposal(
     detection: Detection,
     config: RuntimeConfig,
     policy: ContentPolicy,
-) -> tuple[float, list[str], dict[str, Any]]:
+) -> ContentCandidateAssessment:
     proposal = detection.detail.get("content_primary", {})
     if not isinstance(proposal, dict):
-        return 0.0, ["content_confidence_low"], {"used": False, "reason": "missing_content_proposal"}
-    confidence, diagnostics, detail = content_candidate_confidence_and_diagnostics(
+        return ContentCandidateAssessment(
+            confidence=0.0,
+            diagnostics=["content_confidence_low"],
+            detail={"used": False, "reason": "missing_content_proposal"},
+        )
+    assessment = content_candidate_confidence_and_diagnostics(
         placement=str(proposal.get("placement", "")),
         runs_count=int(proposal.get("usable_run_count", 0)),
         selected_run_count=int(proposal.get("selected_run_count", 0)),
@@ -115,14 +131,19 @@ def content_candidate_assessment_from_proposal(
         confidence_threshold=float(config.confidence_threshold),
         candidate_policy=policy.candidate,
     )
-    return confidence, diagnostics, {
-        **detail,
-        "used": True,
-        "owner": "candidate.assessment",
-    }
+    return ContentCandidateAssessment(
+        confidence=assessment.confidence,
+        diagnostics=assessment.diagnostics,
+        detail={
+            **assessment.detail,
+            "used": True,
+            "owner": "candidate.assessment",
+        },
+    )
 
 
 __all__ = [
+    "ContentCandidateAssessment",
     "content_candidate_assessment_from_proposal",
     "content_candidate_confidence_and_diagnostics",
 ]

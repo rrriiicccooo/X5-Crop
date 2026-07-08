@@ -513,6 +513,38 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_content_candidate_contract_uses_explicit_assessment_result(self) -> None:
+        content_candidate_path = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "assessment"
+            / "content_candidate.py"
+        )
+        content_candidate_text = content_candidate_path.read_text(encoding="utf-8")
+        self.assertIn("class ContentCandidateAssessment", content_candidate_text)
+
+        banned = (
+            "proposal_confidence, proposal_diagnostics, proposal_detail",
+            "confidence, diagnostics, detail = content_candidate_confidence_and_diagnostics",
+            "_confidence, diagnostics, detail = content_candidate_confidence_and_diagnostics",
+            "_confidence, _diagnostics, detail = content_candidate_assessment_from_proposal",
+            "tuple[float, list[str], dict[str, Any]]",
+        )
+        offenders: list[str] = []
+        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                if path == Path(__file__).resolve():
+                    continue
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_candidate_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
         banned = (
             ".review_reasons.append",

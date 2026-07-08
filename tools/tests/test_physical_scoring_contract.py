@@ -417,7 +417,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertEqual(assessment.detail["partial_count_assessment"]["reason"], "single_frame_partial")
 
     def test_content_partial_candidate_diagnostics_do_not_emit_partial_count_reason(self) -> None:
-        _confidence, diagnostics, detail = content_candidate_confidence_and_diagnostics(
+        assessment = content_candidate_confidence_and_diagnostics(
             placement="content_runs",
             runs_count=3,
             selected_run_count=3,
@@ -430,8 +430,8 @@ class PhysicalScoringContractTest(unittest.TestCase):
             candidate_policy=get_detection_policy("135", "partial").content.candidate,
         )
 
-        self.assertNotIn("partial_strip_count_candidate", diagnostics)
-        self.assertEqual(detail["partial_candidate_role"], "content_guidance_not_count_risk")
+        self.assertNotIn("partial_strip_count_candidate", assessment.diagnostics)
+        self.assertEqual(assessment.detail["partial_candidate_role"], "content_guidance_not_count_risk")
 
     def test_content_candidate_assessment_uses_candidate_assessment_owner(self) -> None:
         detection = Detection(
@@ -456,13 +456,13 @@ class PhysicalScoringContractTest(unittest.TestCase):
             },
         )
 
-        _confidence, _diagnostics, detail = content_candidate_assessment_from_proposal(
+        assessment = content_candidate_assessment_from_proposal(
             detection,
             SimpleNamespace(confidence_threshold=0.85),
             get_detection_policy("135", "partial").content,
         )
 
-        self.assertEqual(detail["owner"], "candidate.assessment")
+        self.assertEqual(assessment.detail["owner"], "candidate.assessment")
 
     def test_safe_outer_overcut_and_low_content_quality_do_not_fail_final_evidence(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
