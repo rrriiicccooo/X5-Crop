@@ -557,10 +557,15 @@ class SourceNamingContractTest(unittest.TestCase):
         )
         gate_text = gate_path.read_text(encoding="utf-8")
         self.assertIn("class SeparatorGateResult", gate_text)
+        self.assertIn("class SeparatorGateSupportAssessment", gate_text)
 
         banned = (
             "separator_gate_ok, separator_gate_detail = assess_separator_gate",
             ") -> tuple[bool, dict[str, Any]]",
+            ") -> tuple[bool, str]",
+            "ok, reason = separator_gate_",
+            "broad_ok, broad_reason",
+            "edge_ok, edge_reason",
         )
         offenders: list[str] = []
         for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):

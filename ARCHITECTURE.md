@@ -143,6 +143,9 @@ candidate plan
   `confidence`、`diagnostics` 和 `detail`；content diagnostics 仍是候选级解释。
 - separator gate 输出使用显式 `SeparatorGateResult`，字段为 `ok` 和 `detail`；
   调用方不能用匿名 tuple 解包 gate 契约。
+- separator gate 内部 profile / supplemental support checks 输出使用显式
+  `SeparatorGateSupportAssessment`，字段为 `ok` 和 `reason`；内部 helper 也不能
+  用匿名 ok/reason tuple 表达 gate 支持契约。
 - candidate assessment 的 reason 只能作为候选 blockers / diagnostics；最终用户可见
   `review_reasons` 只由 decision contract 生成。
 - `candidate_assessment.blockers` 只记录阻断 auto gate 的输入原因；`auto_gate_not_satisfied`
@@ -499,6 +502,9 @@ diagnostics remain candidate-level explanations.
 Separator gate assessment returns an explicit `SeparatorGateResult` with `ok`
 and `detail` fields; callers must not depend on anonymous tuple positions for
 the gate contract.
+Internal separator-gate profile and supplemental support checks return an
+explicit `SeparatorGateSupportAssessment` with `ok` and `reason` fields; helper
+functions must not encode gate-support contracts as anonymous ok/reason tuples.
 `candidate_reason_inputs_before_decision` keeps blockers / diagnostics as the
 main model; the old reason-reduction read model must be named
 `legacy_reduced_candidate_reasons`.
