@@ -6,6 +6,7 @@ import numpy as np
 
 from x5crop.detection.candidate.assessment.candidate import apply_candidate_assessment_policy
 from x5crop.detection.candidate.assessment.base_scoring import base_detection_assessment
+from x5crop.detection.candidate.assessment.candidate_gate import candidate_gate_assessment
 from x5crop.detection.candidate.assessment.evidence_independence import evidence_independence_detail
 from x5crop.detection.candidate.assessment.gate_support import (
     hard_full_calibration_floor_applies,
@@ -21,7 +22,7 @@ from x5crop.detection.candidate.assessment.scoring import (
     content_support_score,
     geometry_support_score,
 )
-from x5crop.detection.candidate.reasons import candidate_reasons
+from x5crop.detection.candidate.signals import candidate_signals
 from x5crop.detection.decision.evidence_summary import evidence_summary_for
 from x5crop.detection.evidence.risk import lucky_photo_width_instability_components
 from x5crop.domain import Box, Detection, Gap
@@ -36,6 +37,86 @@ from x5crop.runtime.config import RuntimeConfig
 
 
 class PhysicalScoringContractTest(unittest.TestCase):
+    def test_outer_size_uncertainty_is_candidate_diagnostic_not_gate_blocker(self) -> None:
+        gate = candidate_gate_assessment(
+            source="separator",
+            separator_gate_ok=True,
+            separator_gate_detail={"ok": True},
+            partial_safe_candidate_gate_support_ok=False,
+            partial_safe_blocks_auto=False,
+            partial_safe_disqualifiers=set(),
+            content_containment_ok=True,
+            content_harm_risk=False,
+            content_support="ok",
+            evidence_independence_ok=True,
+            evidence_independence_detail={"ok": True, "reason": "ok"},
+            signals=["outer_overcontains_holder_area", "outer_scope_uncertain"],
+        )
+
+        self.assertTrue(gate.passed)
+        self.assertEqual(gate.blockers, [])
+        self.assertEqual(gate.diagnostics, ["outer_overcontains_holder_area", "outer_scope_uncertain"])
+
+    def test_content_outside_outer_blocks_candidate_gate(self) -> None:
+        gate = candidate_gate_assessment(
+            source="separator",
+            separator_gate_ok=True,
+            separator_gate_detail={"ok": True},
+            partial_safe_candidate_gate_support_ok=False,
+            partial_safe_blocks_auto=False,
+            partial_safe_disqualifiers=set(),
+            content_containment_ok=True,
+            content_harm_risk=False,
+            content_support="ok",
+            evidence_independence_ok=True,
+            evidence_independence_detail={"ok": True, "reason": "ok"},
+            signals=["content_outside_outer"],
+        )
+
+        self.assertFalse(gate.passed)
+        self.assertEqual(gate.blockers, ["content_outside_outer"])
+
+    def test_unknown_candidate_signal_fails_contract(self) -> None:
+        with self.assertRaises(ValueError):
+            candidate_gate_assessment(
+                source="separator",
+                separator_gate_ok=True,
+                separator_gate_detail={"ok": True},
+                partial_safe_candidate_gate_support_ok=False,
+                partial_safe_blocks_auto=False,
+                partial_safe_disqualifiers=set(),
+                content_containment_ok=True,
+                content_harm_risk=False,
+                content_support="ok",
+                evidence_independence_ok=True,
+                evidence_independence_detail={"ok": True, "reason": "ok"},
+                signals=["unowned_signal"],
+            )
+
+    def test_content_integrity_gate_combines_containment_and_harm_absence(self) -> None:
+        gate = candidate_gate_assessment(
+            source="separator",
+            separator_gate_ok=True,
+            separator_gate_detail={"ok": True},
+            partial_safe_candidate_gate_support_ok=False,
+            partial_safe_blocks_auto=False,
+            partial_safe_disqualifiers=set(),
+            content_containment_ok=False,
+            content_harm_risk=True,
+            content_support="aspect_conflict",
+            evidence_independence_ok=True,
+            evidence_independence_detail={"ok": True, "reason": "ok"},
+            signals=[],
+        )
+
+        checks = {check.code: check for check in gate.checks}
+        self.assertIn("content_integrity", checks)
+        self.assertNotIn("content_containment", checks)
+        self.assertNotIn("content_harm_absent", checks)
+        self.assertFalse(checks["content_integrity"].passed)
+        self.assertEqual(checks["content_integrity"].signal, "content_aspect_conflict")
+        self.assertEqual(gate.blockers, ["content_aspect_conflict"])
+
     def test_large_outer_area_is_not_a_hard_reason_by_itself(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         gray[:, ::2] = 255
@@ -63,8 +144,8 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         self.assertGreater(assessment.confidence, 0.82)
-        self.assertNotIn("outer_box_too_large", assessment.candidate_reason_codes)
-        self.assertNotIn("outer_box_uncertain", assessment.candidate_reason_codes)
+        self.assertNotIn("outer_overcontains_holder_area", assessment.candidate_signals)
+        self.assertNotIn("outer_scope_uncertain", assessment.candidate_signals)
         self.assertEqual(assessment.detail["outer_area_profile"]["status"], "above_profile")
         self.assertEqual(assessment.detail["outer_area_profile"]["role"], "diagnostic_until_final_alignment")
 
@@ -137,7 +218,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertEqual(assessment.detail["width_cv_source"], "frame_boxes")
         self.assertFalse(assessment.detail["photo_width_stability"]["used"])
         self.assertEqual(assessment.detail["photo_width_stability"]["role"], "diagnostic_until_photo_edges")
-        self.assertNotIn("photo_width_unstable", assessment.candidate_reason_codes)
+        self.assertNotIn("photo_width_unstable", assessment.candidate_signals)
 
     def test_low_global_contrast_is_image_quality_detail_not_crop_failure(self) -> None:
         gray = np.full((100, 100), 128, dtype=np.uint8)
@@ -165,7 +246,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         self.assertGreater(assessment.confidence, 0.82)
-        self.assertNotIn("low_contrast", assessment.candidate_reason_codes)
+        self.assertNotIn("low_contrast", assessment.candidate_signals)
         self.assertFalse(assessment.detail["image_quality"]["contrast_ok"])
         self.assertEqual(assessment.detail["image_quality"]["role"], "diagnostic_not_crop_gate")
 
@@ -295,7 +376,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             2,
         )
 
-    def test_candidate_gate_result_is_structured_gate_not_candidate_reason(self) -> None:
+    def test_candidate_gate_result_is_structured_gate_not_candidate_signal(self) -> None:
         gray = np.zeros((100, 300), dtype=np.uint8)
         policy = get_detection_policy("135", "full")
         detection = Detection(
@@ -364,7 +445,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         assessment = assessed.detail["candidate_assessment"]
         self.assertFalse(assessment["candidate_gate_passed"])
         self.assertFalse(assessment["gate"]["passed"])
-        self.assertNotIn("candidate_gate_failed", candidate_reasons(assessed))
+        self.assertNotIn("candidate_gate_failed", candidate_signals(assessed))
         self.assertNotIn(
             "candidate_gate_failed",
             assessment["gate"]["blockers"],
@@ -391,8 +472,8 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         self.assertGreater(assessment.confidence, 0.90)
-        self.assertNotIn("partial_strip_count_candidate", assessment.candidate_reason_codes)
-        self.assertNotIn("partial_too_ambiguous", assessment.candidate_reason_codes)
+        self.assertNotIn("partial_strip_count_candidate", assessment.candidate_signals)
+        self.assertNotIn("partial_count_ambiguous", assessment.candidate_signals)
         self.assertEqual(assessment.detail["partial_count_assessment"]["reason"], "enough_frames_for_physical_assessment")
 
     def test_partial_single_frame_remains_intrinsically_ambiguous(self) -> None:
@@ -412,8 +493,8 @@ class PhysicalScoringContractTest(unittest.TestCase):
             assessment.confidence,
             get_detection_policy("135", "partial").scoring.base_detection.partial_one_cap,
         )
-        self.assertIn("partial_too_ambiguous", assessment.candidate_reason_codes)
-        self.assertNotIn("partial_strip_count_candidate", assessment.candidate_reason_codes)
+        self.assertIn("partial_count_ambiguous", assessment.candidate_signals)
+        self.assertNotIn("partial_strip_count_candidate", assessment.candidate_signals)
         self.assertEqual(assessment.detail["partial_count_assessment"]["reason"], "single_frame_partial")
 
     def test_content_partial_candidate_diagnostics_do_not_emit_partial_count_reason(self) -> None:

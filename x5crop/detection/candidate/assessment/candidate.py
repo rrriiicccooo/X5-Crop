@@ -8,9 +8,6 @@ import numpy as np
 from ....constants import (
     CANDIDATE_SOURCE_CONTENT,
     CANDIDATE_SOURCE_SEPARATOR,
-    REASON_CONTENT_ASPECT_CONFLICT,
-    REASON_CONTENT_EVIDENCE_WEAK,
-    REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
 )
 from ....domain import Detection
 from ....formats import FormatSpec
@@ -23,10 +20,20 @@ from ...confidence_caps import apply_confidence_cap
 from ...evidence.content.containment import content_containment_detail
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.separator_summary import separator_gate_detail_summary
-from ..reasons import (
-    candidate_reasons,
-    merged_candidate_reasons,
-    set_candidate_reasons,
+from ..signals import (
+    SIGNAL_CONTENT_ASPECT_CONFLICT,
+    SIGNAL_CONTENT_EVIDENCE_WEAK,
+    SIGNAL_CONTENT_GUIDED_HARD_SEPARATOR_MISSING,
+    SIGNAL_CONTENT_ONLY_NOT_ENOUGH_FOR_AUTO,
+    SIGNAL_EDGE_ANCHOR_HARD_SEPARATOR_MISSING,
+    SIGNAL_HOLDER_EDGE_DISAMBIGUATION_WEAK,
+    SIGNAL_PARTIAL_COUNT_AMBIGUOUS,
+    SIGNAL_PARTIAL_FRAME_CONTENT_UNSTABLE,
+    SIGNAL_PARTIAL_LEADING_CONTENT_RISK,
+    SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
+    candidate_signals,
+    merged_candidate_signals,
+    set_candidate_signals,
 )
 from .base_scoring import apply_base_detection_scoring
 from .content_candidate import content_candidate_assessment_from_proposal
@@ -72,9 +79,9 @@ def apply_candidate_assessment_policy(
     policy: Optional[DetectionPolicy] = None,
 ) -> Detection:
     candidate_detail = dict(detection.detail)
-    initial_candidate_reasons = candidate_reasons(detection)
-    if initial_candidate_reasons:
-        candidate_detail["candidate_reasons"] = initial_candidate_reasons
+    initial_candidate_signals = candidate_signals(detection)
+    if initial_candidate_signals:
+        candidate_detail["candidate_signals"] = initial_candidate_signals
     candidate = replace(
         detection,
         review_reasons=[],
@@ -100,9 +107,9 @@ def apply_candidate_assessment_policy(
             float(candidate.confidence),
             float(proposal_assessment.confidence),
         )
-        set_candidate_reasons(
+        set_candidate_signals(
             candidate,
-            merged_candidate_reasons(candidate, proposal_assessment.diagnostics),
+            merged_candidate_signals(candidate, proposal_assessment.diagnostics),
         )
         content_primary = candidate.detail.get("content_primary")
         if isinstance(content_primary, dict):
@@ -172,9 +179,7 @@ def apply_candidate_assessment_policy(
     support = str(containment_detail.get("support", ""))
     content_containment_ok = bool(containment_detail.get("content_containment_ok", False))
     content_harm_risk = bool(containment_detail.get("content_harm_risk", True))
-    reasons = candidate_reasons(candidate)
-    if floor_applies:
-        reasons = [reason for reason in reasons if reason != "low_confidence"]
+    signals = candidate_signals(candidate)
     detected_geometry_policy = policy.separator.geometry_support.detected_geometry
     stable_grid_policy = policy.separator.geometry_support.stable_grid
     detected_geometry_support = (
@@ -213,7 +218,6 @@ def apply_candidate_assessment_policy(
         else:
             separator_gate_detail["reason"] = "separator_stable_grid_support"
             separator_gate_detail["separator_geometry_support_mode"] = "stable_grid"
-        reasons = [reason for reason in reasons if reason != "outer_box_too_large"]
 
     outer_candidate_strategy = str(candidate.detail.get("outer_candidate_strategy", ""))
     if source == "separator" and outer_candidate_strategy == "edge_anchor_outer":
@@ -224,7 +228,7 @@ def apply_candidate_assessment_policy(
             separator_gate_detail["ok"] = False
             separator_gate_detail["reason"] = "edge_anchor_needs_hard_separator"
             separator_gate_detail["edge_anchor_needs_hard_separator"] = True
-            reasons.append("edge_anchor_separator_weak")
+            signals.append(SIGNAL_EDGE_ANCHOR_HARD_SEPARATOR_MISSING)
 
     content_guided_hard_separator_missing = False
     content_guided_detail = candidate.detail.get("content_guided_separator", {})
@@ -235,20 +239,20 @@ def apply_candidate_assessment_policy(
             separator_gate_ok = False
             separator_gate_detail = dict(separator_gate_detail)
             separator_gate_detail["ok"] = False
-            separator_gate_detail["reason"] = policy.candidate_plan.content_guided_separator.requires_hard_separator_reason
+            separator_gate_detail["reason"] = policy.candidate_plan.content_guided_separator.requires_hard_separator_signal
             separator_gate_detail["content_guided_separator_needs_hard_separator"] = True
-            reasons.append(policy.candidate_plan.content_guided_separator.requires_hard_separator_reason)
+            signals.append(SIGNAL_CONTENT_GUIDED_HARD_SEPARATOR_MISSING)
 
     if source == "separator" and not separator_gate_ok:
-        reasons.append(REASON_SEPARATOR_HARD_EVIDENCE_WEAK)
+        signals.append(SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK)
     if support == "aspect_conflict":
-        reasons.append(REASON_CONTENT_ASPECT_CONFLICT)
+        signals.append(SIGNAL_CONTENT_ASPECT_CONFLICT)
     elif support == "low_content":
-        reasons.append(REASON_CONTENT_EVIDENCE_WEAK)
+        signals.append(SIGNAL_CONTENT_EVIDENCE_WEAK)
     elif support == "weak":
-        reasons.append(REASON_CONTENT_EVIDENCE_WEAK)
+        signals.append(SIGNAL_CONTENT_EVIDENCE_WEAK)
     if source == "content":
-        reasons.append("content_only_not_enough_for_auto")
+        signals.append(SIGNAL_CONTENT_ONLY_NOT_ENOUGH_FOR_AUTO)
 
     confidence = max(float(candidate.confidence), joint_score)
     if floor_applies:
@@ -274,6 +278,16 @@ def apply_candidate_assessment_policy(
     partial_safe_disqualifiers = set(
         partial_safe_extra_frames.get("disqualifiers", [])
     )
+    partial_signal_map = {
+        "holder_edge_disambiguation_weak": SIGNAL_HOLDER_EDGE_DISAMBIGUATION_WEAK,
+        SIGNAL_PARTIAL_LEADING_CONTENT_RISK: SIGNAL_PARTIAL_LEADING_CONTENT_RISK,
+        "partial_frame_content_unstable": SIGNAL_PARTIAL_FRAME_CONTENT_UNSTABLE,
+    }
+    partial_safe_blocker_signals = {
+        partial_signal_map[disqualifier]
+        for disqualifier in partial_safe_disqualifiers
+        if disqualifier in partial_signal_map
+    }
     partial_safe_blocks_auto = (
         policy.partial_holder.safe_extra_frames
         and policy.partial_holder.checks_leading_content
@@ -282,11 +296,11 @@ def apply_candidate_assessment_policy(
         and source == "separator"
         and bool(partial_safe_extra_frames.get("used", False))
         and bool(
-            partial_safe_disqualifiers.intersection(
+            partial_safe_blocker_signals.intersection(
                 {
-                    "holder_edge_disambiguation_weak",
-                    "partial_outer_leading_content",
-                    "partial_frame_content_unstable",
+                    SIGNAL_HOLDER_EDGE_DISAMBIGUATION_WEAK,
+                    SIGNAL_PARTIAL_LEADING_CONTENT_RISK,
+                    SIGNAL_PARTIAL_FRAME_CONTENT_UNSTABLE,
                 }
             )
         )
@@ -299,22 +313,19 @@ def apply_candidate_assessment_policy(
         separator_gate_detail["partial_safe_extra_frames_blocked"] = sorted(
             partial_safe_disqualifiers
         )
-        reasons.extend(sorted(partial_safe_disqualifiers))
+        signals.extend(sorted(partial_safe_blocker_signals))
     if partial_safe_candidate_gate_support_ok:
         separator_gate_detail = dict(separator_gate_detail)
         separator_gate_detail["ok"] = True
         separator_gate_detail["reason"] = "partial_safe_extra_frames_support"
         separator_gate_detail["partial_safe_extra_frames_support"] = True
-        reasons = [
-            reason
-            for reason in reasons
-            if reason
+        signals = [
+            signal
+            for signal in signals
+            if signal
             not in {
-                "partial_too_ambiguous",
-                REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
-                "weak_separators",
-                "outer_box_too_large",
-                "outer_box_uncertain",
+                SIGNAL_PARTIAL_COUNT_AMBIGUOUS,
+                SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
             }
         ]
     independence_detail = evidence_independence_detail(
@@ -330,7 +341,7 @@ def apply_candidate_assessment_policy(
         separator_gate_detail = dict(separator_gate_detail)
         separator_gate_detail["evidence_independence"] = independence_detail
     if not evidence_independence_ok:
-        reasons.append(
+        signals.append(
             str(
                 independence_detail.get("reason")
                 or policy.candidate_plan.evidence_independence.candidate_signal
@@ -350,7 +361,7 @@ def apply_candidate_assessment_policy(
         content_support=support,
         evidence_independence_ok=bool(evidence_independence_ok),
         evidence_independence_detail=independence_detail,
-        reasons=reasons,
+        signals=signals,
     )
     confidence_caps = _candidate_confidence_caps(candidate)
     if not candidate_gate.passed:
@@ -370,7 +381,7 @@ def apply_candidate_assessment_policy(
         confidence = max(confidence, config.confidence_threshold + min(0.10, joint_score * 0.08))
     candidate_gate = candidate_gate.with_confidence_caps(confidence_caps)
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
-    set_candidate_reasons(candidate, reasons)
+    set_candidate_signals(candidate, signals)
     candidate.detail["candidate_source"] = (
         CANDIDATE_SOURCE_SEPARATOR if source == "separator" else CANDIDATE_SOURCE_CONTENT
     )

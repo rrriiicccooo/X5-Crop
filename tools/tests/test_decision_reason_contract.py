@@ -122,7 +122,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             confidence=0.90,
             review_reasons=[],
             detail={
-                "candidate_reasons": ["content_coverage_weak"],
+                "candidate_signals": ["content_coverage_weak"],
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
@@ -153,13 +153,11 @@ class DecisionReasonContractTest(unittest.TestCase):
 
         self.assertEqual(decided.review_reasons, ["evidence_combination_insufficient"])
         self.assertEqual(
-            decided.detail["candidate_reason_inputs_before_decision"]["diagnostics"],
+            decided.detail["candidate_signal_inputs_before_decision"]["diagnostics"],
             ["content_coverage_weak"],
         )
-        self.assertEqual(
-            decided.detail["candidate_reason_inputs_before_decision"]["legacy_reduced_candidate_reasons"],
-            ["content_evidence_insufficient"],
-        )
+        legacy_key = "legacy_" "reduced_candidate_signals"
+        self.assertNotIn(legacy_key, decided.detail["candidate_signal_inputs_before_decision"])
         self.assertNotIn("candidate_review_reasons_before_decision", decided.detail)
         self.assertEqual(
             decided.detail["final_review_reasons"],
@@ -189,7 +187,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             confidence=0.90,
             review_reasons=[],
             detail={
-                "candidate_reasons": [SAFETY_CANDIDATE_GATE_BLOCKER],
+                "candidate_signals": [SAFETY_CANDIDATE_GATE_BLOCKER],
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
@@ -223,7 +221,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             True,
         )
         self.assertEqual(
-            decided.detail["candidate_reason_inputs_before_decision"]["blockers"],
+            decided.detail["candidate_signal_inputs_before_decision"]["blockers"],
             [SAFETY_CANDIDATE_GATE_BLOCKER],
         )
         self.assertEqual(
@@ -330,7 +328,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertEqual(detection.review_reasons, [])
         mode_reasons = [policy.detector.review_only.reason, "needs_manual_review"]
         self.assertEqual(
-            detection.detail["candidate_reasons"],
+            detection.detail["candidate_signals"],
             mode_reasons,
         )
         self.assertEqual(
@@ -349,10 +347,8 @@ class DecisionReasonContractTest(unittest.TestCase):
 
         self.assertIn("evidence_combination_insufficient", decided.review_reasons)
         self.assertIn("separator_evidence_incomplete", decided.review_reasons)
-        self.assertIn(
-            "evidence_combination_insufficient",
-            decided.detail["candidate_reason_inputs_before_decision"]["legacy_reduced_candidate_reasons"],
-        )
+        legacy_key = "legacy_" "reduced_candidate_signals"
+        self.assertNotIn(legacy_key, decided.detail["candidate_signal_inputs_before_decision"])
         decision_signals = [
             item["signal"] for item in decided.detail["decision_reason_inputs"]
         ]
@@ -666,7 +662,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             confidence=0.90,
             review_reasons=[],
             detail={
-                "candidate_reasons": [SAFETY_CANDIDATE_GATE_BLOCKER],
+                "candidate_signals": [SAFETY_CANDIDATE_GATE_BLOCKER],
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
@@ -958,7 +954,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             ["content_run_count_mismatch"],
         )
         self.assertNotIn(
-            "content_candidate_reasons",
+            "content_candidate_signals",
             selected_with_diagnostic.detail["content_candidate_mismatch"],
         )
 

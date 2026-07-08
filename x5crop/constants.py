@@ -27,6 +27,5 @@ MODEL_GAP_METHODS = {
 REASON_SEPARATOR_HARD_EVIDENCE_WEAK = "separator_hard_evidence_weak"
 REASON_CONTENT_EVIDENCE_WEAK = "content_evidence_weak"
 REASON_CONTENT_ASPECT_CONFLICT = "content_aspect_conflict"
-REASON_OUTER_CONTENT_BBOX_MISMATCH = "outer_content_bbox_mismatch"
 REASON_LUCKY_PASS_RISK = "lucky_pass_risk"
 REASON_EVIDENCE_DEPENDENCY_CYCLE_RISK = "evidence_dependency_cycle_risk"

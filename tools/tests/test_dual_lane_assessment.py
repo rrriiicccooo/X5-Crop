@@ -6,11 +6,13 @@ from unittest.mock import patch
 
 import numpy as np
 
-from x5crop.constants import REASON_CONTENT_ASPECT_CONFLICT
 from x5crop.detection.candidate.assessment.dual_lane import (
     apply_dual_lane_content_assessment,
 )
-from x5crop.detection.candidate.reasons import candidate_reasons
+from x5crop.detection.candidate.signals import (
+    SIGNAL_CONTENT_ASPECT_CONFLICT,
+    candidate_signals,
+)
 from x5crop.domain import Box, Detection
 
 
@@ -51,13 +53,13 @@ class DualLaneAssessmentTest(unittest.TestCase):
 
         self.assertEqual(detection.confidence, 0.82)
         self.assertEqual(detection.review_reasons, [])
-        self.assertEqual(candidate_reasons(detection), [REASON_CONTENT_ASPECT_CONFLICT])
+        self.assertEqual(candidate_signals(detection), [SIGNAL_CONTENT_ASPECT_CONFLICT])
         self.assertEqual(
             detection.detail["candidate_confidence_caps"],
             [
                 {
                     "owner": "candidate.assessment",
-                    "reason": REASON_CONTENT_ASPECT_CONFLICT,
+                    "reason": SIGNAL_CONTENT_ASPECT_CONFLICT,
                     "cap_value": 0.82,
                     "confidence_before": 0.96,
                     "confidence_after": 0.82,

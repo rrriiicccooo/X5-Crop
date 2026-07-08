@@ -3,16 +3,16 @@ from __future__ import annotations
 import numpy as np
 
 from ....cache import AnalysisCache
-from ....constants import (
-    REASON_CONTENT_ASPECT_CONFLICT,
-    REASON_CONTENT_EVIDENCE_WEAK,
-    REASON_OUTER_CONTENT_BBOX_MISMATCH,
-)
 from ....domain import Detection
 from ....policies.runtime.policy import DetectionPolicy
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.outer_alignment import outer_content_alignment_detail
-from ..reasons import add_candidate_reasons
+from ..signals import (
+    SIGNAL_CONTENT_ASPECT_CONFLICT,
+    SIGNAL_CONTENT_EVIDENCE_WEAK,
+    SIGNAL_CONTENT_OUTSIDE_OUTER,
+    add_candidate_signals,
+)
 from .confidence_caps import apply_candidate_confidence_cap
 
 
@@ -28,20 +28,20 @@ def apply_dual_lane_content_assessment(
     detection.detail["content_evidence"] = content_detail
     detection.detail["outer_content_alignment"] = outer_alignment
 
-    candidate_reason_codes: list[str] = []
+    candidate_signals: list[str] = []
     if bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
         if support == "aspect_conflict":
-            apply_candidate_confidence_cap(detection, 0.82, REASON_CONTENT_ASPECT_CONFLICT)
-            candidate_reason_codes.append(REASON_CONTENT_ASPECT_CONFLICT)
+            apply_candidate_confidence_cap(detection, 0.82, SIGNAL_CONTENT_ASPECT_CONFLICT)
+            candidate_signals.append(SIGNAL_CONTENT_ASPECT_CONFLICT)
         elif support in {"low_content", "weak"} and detection.confidence >= confidence_threshold:
-            apply_candidate_confidence_cap(detection, 0.84, REASON_CONTENT_EVIDENCE_WEAK)
-            candidate_reason_codes.append(REASON_CONTENT_EVIDENCE_WEAK)
+            apply_candidate_confidence_cap(detection, 0.84, SIGNAL_CONTENT_EVIDENCE_WEAK)
+            candidate_signals.append(SIGNAL_CONTENT_EVIDENCE_WEAK)
     if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
-        apply_candidate_confidence_cap(detection, 0.84, REASON_OUTER_CONTENT_BBOX_MISMATCH)
-        candidate_reason_codes.append(REASON_OUTER_CONTENT_BBOX_MISMATCH)
+        apply_candidate_confidence_cap(detection, 0.84, SIGNAL_CONTENT_OUTSIDE_OUTER)
+        candidate_signals.append(SIGNAL_CONTENT_OUTSIDE_OUTER)
 
-    add_candidate_reasons(detection, candidate_reason_codes)
+    add_candidate_signals(detection, candidate_signals)
 
 
 __all__ = ["apply_dual_lane_content_assessment"]

@@ -4,11 +4,11 @@ from ....constants import CANDIDATE_SOURCE_SAFETY
 from ....domain import Detection
 from ....policies.runtime.policy import DetectionPolicy
 from ...gate_checks import GateCheck, unique_signals
-from ..reasons import add_candidate_reason
+from ..signals import SIGNAL_SAFETY_CANDIDATE_GATE_BLOCKED, add_candidate_signal
 from .confidence_caps import apply_candidate_confidence_cap
 
 
-SAFETY_CANDIDATE_GATE_BLOCKER = "safety_candidate_gate_blocked"
+SAFETY_CANDIDATE_GATE_BLOCKER = SIGNAL_SAFETY_CANDIDATE_GATE_BLOCKED
 
 
 def _detail_list(value: object) -> list:
@@ -81,7 +81,7 @@ def apply_safety_candidate_assessment(
         cap,
         SAFETY_CANDIDATE_GATE_BLOCKER,
     )
-    add_candidate_reason(detection, SAFETY_CANDIDATE_GATE_BLOCKER)
+    add_candidate_signal(detection, SAFETY_CANDIDATE_GATE_BLOCKER)
     _append_safety_candidate_gate_check(detection)
 
     detection.detail["safety_candidate"] = {

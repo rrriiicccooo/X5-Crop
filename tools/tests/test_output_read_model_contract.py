@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 
 from x5crop.debug.status import debug_status_parts
-from x5crop.detection.detail import candidate_reasons_from_detail
+from x5crop.detection.detail import candidate_signals_from_detail
 from x5crop.domain import Box, Detection, ImageProfile
 from x5crop.export.actions import copy_for_review_if_needed
 from x5crop.report.result_builder import result_from_detection
@@ -114,10 +114,10 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         self.assertEqual(result.review_reasons, ["outer_content_mismatch"])
 
-    def test_candidate_reasons_do_not_fallback_to_final_review_reasons(self) -> None:
+    def test_candidate_signals_do_not_fallback_to_final_review_reasons(self) -> None:
         detection = _detection(review_reasons=["outer_content_mismatch"])
 
-        self.assertEqual(candidate_reasons_from_detail(detection), [])
+        self.assertEqual(candidate_signals_from_detail(detection), [])
 
     def test_report_schema_uses_diagnostics_section_not_finalization(self) -> None:
         schema = report_schema_for_detection(_detection())

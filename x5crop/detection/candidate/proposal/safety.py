@@ -12,6 +12,7 @@ from ....geometry.frame_fit import frame_boxes_from_gaps
 from ....geometry.layout import work_gray
 from ....geometry.model_gaps import equal_model_gap
 from ....runtime.config import RuntimeConfig
+from ..signals import SIGNAL_HARD_SAFETY_NO_CANDIDATES, SIGNAL_NEEDS_MANUAL_REVIEW
 
 
 def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec) -> Detection:
@@ -40,7 +41,7 @@ def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSp
         0.0,
         [],
         {
-            "candidate_reasons": ["hard_safety_no_candidates", "needs_manual_review"],
+            "candidate_signals": [SIGNAL_HARD_SAFETY_NO_CANDIDATES, SIGNAL_NEEDS_MANUAL_REVIEW],
             "candidate_source": CANDIDATE_SOURCE_HARD_SAFETY,
             "safety_candidate_kind": "hard_safety_equal_split",
             "candidate_contract": "hard_safety_review_input",

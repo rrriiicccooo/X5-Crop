@@ -7,7 +7,6 @@ import numpy as np
 from ...runtime.config import RuntimeConfig
 from ...domain import Detection
 from ...formats import FormatSpec
-from ..detail import candidate_reasons_from_detail
 from ..confidence_caps import apply_confidence_cap
 from ...policies.decision.contract import decision_contract_for
 from .decision_gate import decision_gate_assessment
@@ -24,20 +23,16 @@ def _detail_list(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else []
 
 
-def _candidate_reason_inputs_before_decision(detection: Detection) -> dict[str, Any]:
+def _candidate_signal_inputs_before_decision(detection: Detection) -> dict[str, Any]:
     assessment = detection.detail.get("candidate_assessment", {})
     assessment = dict(assessment) if isinstance(assessment, dict) else {}
     blockers = [str(reason) for reason in _detail_list(assessment.get("blockers"))]
     diagnostics = [str(reason) for reason in _detail_list(assessment.get("diagnostics"))]
-    legacy_reduced_candidate_reasons = normalized_final_review_reasons(
-        candidate_reasons_from_detail(detection)
-    )
     gate = assessment.get("gate")
     gate = dict(gate) if isinstance(gate, dict) else {}
     return {
         "blockers": blockers,
         "diagnostics": diagnostics,
-        "legacy_reduced_candidate_reasons": legacy_reduced_candidate_reasons,
         "candidate_gate_passed": bool(
             gate.get("passed", assessment.get("candidate_gate_passed", False))
         ),
@@ -136,8 +131,8 @@ def apply_decision_contract(
     decision_gate = decision_gate.with_final_review_reasons(reasons)
     final_reasons = list(reasons)
     status = _decision_status_for(detection, config.confidence_threshold, final_reasons)
-    candidate_reason_inputs = _candidate_reason_inputs_before_decision(detection)
-    detection.detail["candidate_reason_inputs_before_decision"] = candidate_reason_inputs
+    candidate_signal_inputs = _candidate_signal_inputs_before_decision(detection)
+    detection.detail["candidate_signal_inputs_before_decision"] = candidate_signal_inputs
     set_final_review_reasons(detection, final_reasons)
     final_reasons = final_review_reasons(detection)
     sync_candidate_competition_decision_fields(detection, status)
@@ -151,7 +146,7 @@ def apply_decision_contract(
         "decision_reason_inputs": decision_gate.reason_inputs,
         "decision_confidence_caps": decision_caps,
         "decision_gate": decision_gate.report_detail(),
-        "candidate_reason_inputs_before_decision": candidate_reason_inputs,
+        "candidate_signal_inputs_before_decision": candidate_signal_inputs,
         "evidence_summary": evidence,
         "risk_summary": risk,
         "decision_policy_detail": policy.report_detail(),

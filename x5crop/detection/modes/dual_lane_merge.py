@@ -9,10 +9,14 @@ from ...domain import Box, Detection, Gap
 from ...geometry.boxes import map_work_box
 from ...runtime.config import RuntimeConfig
 from ...utils import box_from_dict
-from ..candidate.reasons import (
-    add_candidate_reason,
-    candidate_reasons,
-    normalized_candidate_reasons,
+from ..candidate.signals import (
+    SIGNAL_DUAL_LANE_BELOW_THRESHOLD,
+    SIGNAL_DUAL_LANE_DETECTION_FAILED,
+    SIGNAL_DUAL_LANE_OUTER_DETECTION_FAILED,
+    SIGNAL_FRAME_COUNT_MISMATCH,
+    add_candidate_signal,
+    candidate_signals,
+    normalized_candidate_signals,
 )
 from ..candidate.proposal.safety import hard_safety_detection
 from .dual_lane_context import DualLaneDetectionContext
@@ -22,13 +26,13 @@ def dual_lane_review_detection(
     gray: np.ndarray,
     config: RuntimeConfig,
     context: DualLaneDetectionContext,
-    mode_reason: str,
+    mode_signal: str,
 ) -> Detection:
     detection = hard_safety_detection(gray, config, context.format_spec)
-    add_candidate_reason(detection, mode_reason)
+    add_candidate_signal(detection, mode_signal)
     mode_diagnostics = detection.detail.setdefault("mode_diagnostics", [])
     if isinstance(mode_diagnostics, list):
-        mode_diagnostics.append(mode_reason)
+        mode_diagnostics.append(mode_signal)
     return detection
 
 
@@ -40,7 +44,7 @@ def merge_dual_lane_detections(
     context: DualLaneDetectionContext,
 ) -> Detection:
     if any(detection is None for detection in lane_detections):
-        return dual_lane_review_detection(gray, config, context, "dual_lane_detection_failed")
+        return dual_lane_review_detection(gray, config, context, SIGNAL_DUAL_LANE_DETECTION_FAILED)
 
     confirmed_lanes = [detection for detection in lane_detections if detection is not None]
     lane_work_outers = [
@@ -49,7 +53,7 @@ def merge_dual_lane_detections(
         if isinstance(detection.detail.get("work_outer"), dict)
     ]
     if len(lane_work_outers) != context.lane_count:
-        return dual_lane_review_detection(gray, config, context, "dual_lane_outer_detection_failed")
+        return dual_lane_review_detection(gray, config, context, SIGNAL_DUAL_LANE_OUTER_DETECTION_FAILED)
 
     combined_work_outer = Box(
         min(box.left for box in lane_work_outers),
@@ -62,19 +66,19 @@ def merge_dual_lane_detections(
 
     lane_confidences = [float(detection.confidence) for detection in confirmed_lanes]
     confidence = min(lane_confidences)
-    mode_reasons = normalized_candidate_reasons(
+    mode_signals = normalized_candidate_signals(
         [
-            reason
+            signal
             for detection in confirmed_lanes
-            for reason in candidate_reasons(detection)
+            for signal in candidate_signals(detection)
         ]
     )
     if any(conf < config.confidence_threshold for conf in lane_confidences):
         confidence = min(confidence, 0.84)
-        mode_reasons.append("dual_lane_below_threshold")
+        mode_signals.append(SIGNAL_DUAL_LANE_BELOW_THRESHOLD)
     if len(frames) != context.total_count:
         confidence = min(confidence, 0.82)
-        mode_reasons.append("frame_count_mismatch")
+        mode_signals.append(SIGNAL_FRAME_COUNT_MISMATCH)
 
     source_h, source_w = gray.shape
     outer_original = map_work_box(combined_work_outer, config.layout, source_w, source_h)
@@ -96,7 +100,7 @@ def merge_dual_lane_detections(
             gaps,
             confirmed_lanes,
             confidence,
-            mode_reasons,
+            mode_signals,
         ),
     )
 
@@ -128,7 +132,7 @@ def _dual_lane_detail(
     gaps: list[Gap],
     lane_detections: list[Detection],
     confidence: float,
-    mode_reasons: list[str],
+    mode_signals: list[str],
 ) -> dict:
     lane_summaries = [
         {
@@ -138,7 +142,7 @@ def _dual_lane_detail(
             "total_format": context.format_id,
             "total_count": context.total_count,
             "confidence": float(detection.confidence),
-            "candidate_reasons": candidate_reasons(detection),
+            "candidate_signals": candidate_signals(detection),
             "work_outer": detection.detail.get("work_outer"),
             "content_evidence": detection.detail.get("content_evidence", {}),
             "outer_content_alignment": detection.detail.get("outer_content_alignment", {}),
@@ -147,9 +151,9 @@ def _dual_lane_detail(
         for index, detection in enumerate(lane_detections, start=1)
     ]
     return {
-        "candidate_reasons": sorted(set(mode_reasons)),
+        "candidate_signals": sorted(set(mode_signals)),
         "candidate_source": CANDIDATE_SOURCE_DUAL_LANE,
-        "mode_diagnostics": sorted(set(mode_reasons)),
+        "mode_diagnostics": sorted(set(mode_signals)),
         "layout": config.layout,
         "candidate_count": context.total_count,
         "work_outer": asdict(combined_work_outer),
@@ -166,7 +170,7 @@ def _dual_lane_detail(
                 "count": context.total_count,
                 "strip_mode": "full",
                 "confidence": float(confidence),
-                "candidate_reasons": sorted(set(mode_reasons)),
+                "candidate_signals": sorted(set(mode_signals)),
             },
             "selection_override": None,
             "top_candidates": lane_summaries,

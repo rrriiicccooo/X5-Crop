@@ -3,41 +3,22 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from ....constants import (
-    CANDIDATE_SOURCE_SEPARATOR,
-    REASON_CONTENT_ASPECT_CONFLICT,
-    REASON_CONTENT_EVIDENCE_WEAK,
-    REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
-)
+from ....constants import CANDIDATE_SOURCE_SEPARATOR
 from ...gate_checks import GateCheck, gate_check_details, unique_signals
-
-
-_CANDIDATE_DIAGNOSTIC_SIGNALS = frozenset(
-    {
-        "content_grid_fallback",
-        "content_run_count_mismatch",
-        "content_runs_incomplete",
-        "content_coverage_weak",
-        "content_aspect_uncertain",
-        "content_confidence_low",
-        "low_confidence",
-    }
+from ..signals import (
+    GATE_BLOCKER_SIGNALS,
+    GATE_DIAGNOSTIC_SIGNALS,
+    MODE_DIAGNOSTIC_SIGNALS,
+    PHOTO_GEOMETRY_BLOCKER_SIGNALS,
+    SIGNAL_BUCKETS,
+    SIGNAL_CONTENT_ASPECT_CONFLICT,
+    SIGNAL_CONTENT_EVIDENCE_WEAK,
+    SIGNAL_CONTENT_HARM_RISK,
+    SIGNAL_CONTENT_OUTSIDE_OUTER,
+    SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_RISK,
+    SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
+    unknown_candidate_signals,
 )
-
-_GEOMETRY_PHOTO_WIDTH_SIGNALS = frozenset(
-    {
-        "photo_width_unstable",
-        "unstable_frame_width",
-    }
-)
-
-_OUTER_CANDIDATE_VALIDITY_SIGNALS = frozenset(
-    {
-        "outer_box_too_large",
-        "outer_box_uncertain",
-    }
-)
-
 
 @dataclass(frozen=True)
 class CandidateGateAssessment:
@@ -70,22 +51,31 @@ def _failed_check_signals(checks: list[GateCheck], severity: str) -> list[str]:
     )
 
 
-def candidate_reason_gate_checks(
-    reasons: list[str],
+def candidate_signal_gate_checks(
+    signals: list[str],
     *,
     ignored_signals: set[str] | None = None,
 ) -> list[GateCheck]:
     ignored = ignored_signals or set()
+    unknown = unknown_candidate_signals(signals, ignored=ignored)
+    if unknown:
+        raise ValueError(f"unowned candidate signals: {', '.join(unknown)}")
     checks: list[GateCheck] = []
-    for signal in unique_signals([str(reason) for reason in reasons]):
-        if signal in ignored:
+    for signal in unique_signals([str(signal) for signal in signals]):
+        if signal in ignored or signal in MODE_DIAGNOSTIC_SIGNALS:
             continue
-        severity = "diagnostic" if signal in _CANDIDATE_DIAGNOSTIC_SIGNALS else "blocker"
+        if signal in GATE_BLOCKER_SIGNALS:
+            severity = "blocker"
+        elif signal in GATE_DIAGNOSTIC_SIGNALS:
+            severity = "diagnostic"
+        else:
+            continue
+        bucket = SIGNAL_BUCKETS.get(signal, "candidate")
         checks.append(
             GateCheck(
-                code="candidate_reason_signal",
+                code=f"{bucket}_signal",
                 stage="candidate",
-                bucket="candidate_diagnostic" if severity == "diagnostic" else "candidate_reason",
+                bucket=bucket,
                 passed=False,
                 severity=severity,
                 signal=signal,
@@ -94,13 +84,13 @@ def candidate_reason_gate_checks(
     return checks
 
 
-def candidate_reason_blocker_signals(
-    reasons: list[str],
+def candidate_signal_blocker_signals(
+    signals: list[str],
     *,
     ignored_signals: set[str] | None = None,
 ) -> list[str]:
     return _failed_check_signals(
-        candidate_reason_gate_checks(reasons, ignored_signals=ignored_signals),
+        candidate_signal_gate_checks(signals, ignored_signals=ignored_signals),
         "blocker",
     )
 
@@ -118,7 +108,7 @@ def candidate_gate_assessment(
     content_support: str,
     evidence_independence_ok: bool,
     evidence_independence_detail: dict[str, Any],
-    reasons: list[str],
+    signals: list[str],
 ) -> CandidateGateAssessment:
     checks: list[GateCheck] = []
     source_auto_allowed = source in {"separator", CANDIDATE_SOURCE_SEPARATOR}
@@ -146,7 +136,7 @@ def candidate_gate_assessment(
             bucket="separator",
             passed=separator_support,
             severity="blocker",
-            signal=REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
+            signal=SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
             detail={
                 "separator_gate_ok": bool(separator_gate_ok),
                 "partial_safe_candidate_gate_support_ok": bool(
@@ -158,35 +148,36 @@ def candidate_gate_assessment(
     )
 
     content_signal = (
-        REASON_CONTENT_ASPECT_CONFLICT
+        SIGNAL_CONTENT_ASPECT_CONFLICT
         if content_support == "aspect_conflict"
-        else REASON_CONTENT_EVIDENCE_WEAK
+        else SIGNAL_CONTENT_EVIDENCE_WEAK
     )
+    content_integrity_ok = content_containment_ok and not content_harm_risk
+    if content_integrity_ok:
+        content_integrity_signal = "content_integrity_ok"
+    elif not content_containment_ok:
+        content_integrity_signal = content_signal
+    else:
+        content_integrity_signal = SIGNAL_CONTENT_HARM_RISK
     checks.append(
         GateCheck(
-            code="content_containment",
+            code="content_integrity",
             stage="candidate",
             bucket="content",
-            passed=content_containment_ok,
+            passed=content_integrity_ok,
             severity="blocker",
-            signal=content_signal,
-            detail={"content_support": content_support},
-        )
-    )
-    checks.append(
-        GateCheck(
-            code="content_harm_absent",
-            stage="candidate",
-            bucket="content",
-            passed=not content_harm_risk,
-            severity="blocker",
-            signal="content_harm_risk",
-            detail={"content_harm_risk": bool(content_harm_risk)},
+            signal=content_integrity_signal,
+            detail={
+                "content_support": content_support,
+                "content_containment_ok": bool(content_containment_ok),
+                "content_harm_risk": bool(content_harm_risk),
+            },
         )
     )
 
     independence_signal = str(
-        evidence_independence_detail.get("reason") or "evidence_independence_weak"
+        evidence_independence_detail.get("reason")
+        or SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_RISK
     )
     checks.append(
         GateCheck(
@@ -212,7 +203,7 @@ def candidate_gate_assessment(
         )
     )
 
-    photo_width_signals = _GEOMETRY_PHOTO_WIDTH_SIGNALS.intersection(reasons)
+    photo_width_signals = PHOTO_GEOMETRY_BLOCKER_SIGNALS.intersection(signals)
     checks.append(
         GateCheck(
             code="geometry_photo_width_stability",
@@ -225,33 +216,19 @@ def candidate_gate_assessment(
         )
     )
 
-    outer_signals = _OUTER_CANDIDATE_VALIDITY_SIGNALS.intersection(reasons)
-    checks.append(
-        GateCheck(
-            code="outer_candidate_validity",
-            stage="candidate",
-            bucket="outer",
-            passed=not outer_signals,
-            severity="blocker",
-            signal=next(iter(sorted(outer_signals)), "outer_candidate_valid"),
-            detail={"signals": sorted(outer_signals)},
-        )
-    )
-
     handled_signals = {
-        "content_harm_risk",
+        SIGNAL_CONTENT_HARM_RISK,
         "partial_safe_extra_frames_blocked",
-        REASON_CONTENT_ASPECT_CONFLICT,
-        REASON_CONTENT_EVIDENCE_WEAK,
-        REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
+        SIGNAL_CONTENT_ASPECT_CONFLICT,
+        SIGNAL_CONTENT_EVIDENCE_WEAK,
+        SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
         *partial_safe_disqualifiers,
         *photo_width_signals,
-        *outer_signals,
         independence_signal,
     }
     checks.extend(
-        candidate_reason_gate_checks(
-            reasons,
+        candidate_signal_gate_checks(
+            signals,
             ignored_signals=handled_signals,
         )
     )
@@ -270,6 +247,6 @@ def candidate_gate_assessment(
 __all__ = [
     "CandidateGateAssessment",
     "candidate_gate_assessment",
-    "candidate_reason_blocker_signals",
-    "candidate_reason_gate_checks",
+    "candidate_signal_blocker_signals",
+    "candidate_signal_gate_checks",
 ]

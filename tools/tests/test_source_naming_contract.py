@@ -444,7 +444,7 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_candidate_selection_summary_uses_candidate_reason_names(self) -> None:
+    def test_candidate_selection_summary_uses_candidate_signal_names(self) -> None:
         path = (
             PROJECT_ROOT
             / "x5crop"
@@ -456,7 +456,7 @@ class SourceNamingContractTest(unittest.TestCase):
         text = path.read_text(encoding="utf-8")
 
         self.assertNotIn('"review_reasons"', text)
-        self.assertIn('"candidate_reasons"', text)
+        self.assertIn('"candidate_signals"', text)
 
     def test_candidate_build_detail_does_not_carry_assessment_state(self) -> None:
         banned = (
@@ -474,7 +474,7 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_base_scoring_uses_candidate_reason_code_names(self) -> None:
+    def test_base_scoring_uses_candidate_signal_code_names(self) -> None:
         base_scoring_path = (
             PROJECT_ROOT
             / "x5crop"
@@ -486,7 +486,7 @@ class SourceNamingContractTest(unittest.TestCase):
         architecture_text = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
         base_scoring_text = base_scoring_path.read_text(encoding="utf-8")
 
-        self.assertIn("candidate_reason_codes", base_scoring_text)
+        self.assertIn("candidate_signals", base_scoring_text)
         self.assertIn("class BaseDetectionAssessment", base_scoring_text)
         self.assertNotIn("base review reasons", architecture_text)
         self.assertNotIn("confidence, reasons", base_scoring_text)
@@ -495,9 +495,9 @@ class SourceNamingContractTest(unittest.TestCase):
 
     def test_base_scoring_contract_uses_explicit_assessment_result(self) -> None:
         banned = (
-            "confidence, candidate_reason_codes, detail = base_detection_assessment",
-            "_confidence, candidate_reason_codes, detail = base_detection_assessment",
-            "confidence, candidate_reason_codes, base_detail = base_detection_assessment",
+            "confidence, candidate_signals, detail = base_detection_assessment",
+            "_confidence, candidate_signals, detail = base_detection_assessment",
+            "confidence, candidate_signals, base_detail = base_detection_assessment",
             "pre_nearby_confidence,",
             "geometry_confidence,",
         )
@@ -619,7 +619,7 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn("CANDIDATE_AUTO_GATE_BLOCKING_REASONS", assessment_text)
         self.assertNotIn("auto_gate_inputs", assessment_text)
         self.assertNotIn(
-            "candidate_blockers, candidate_diagnostics = _candidate_reason_buckets",
+            "candidate_blockers, candidate_diagnostics = _candidate_signal_buckets",
             assessment_text,
         )
 
@@ -647,13 +647,13 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn(") -> tuple[list[str], list[dict[str, Any]]]", contract_text)
         self.assertNotIn("context_reasons, context_reason_inputs", contract_text)
 
-    def test_candidate_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
+    def test_candidate_layer_routes_signal_mutation_through_candidate_helper(self) -> None:
         banned = (
             ".review_reasons.append",
             ".review_reasons =",
-            "review_reasons=candidate_reasons",
-            "review_reasons=merged_candidate_reasons",
-            "review_reasons=normalized_candidate_reasons",
+            "review_reasons=candidate_signals",
+            "review_reasons=merged_candidate_signals",
+            "review_reasons=normalized_candidate_signals",
         )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "candidate"
@@ -666,14 +666,17 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_candidate_reason_helper_does_not_write_final_reason_field(self) -> None:
-        path = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "reasons.py"
+    def test_candidate_signal_helper_does_not_write_final_reason_field(self) -> None:
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "reasons.py").exists()
+        )
+        path = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "signals.py"
         text = path.read_text(encoding="utf-8")
 
         self.assertNotIn("detection.review_reasons =", text)
-        self.assertIn('detection.detail[CANDIDATE_REASONS]', text)
+        self.assertIn('detection.detail[CANDIDATE_SIGNALS]', text)
 
-    def test_decision_candidate_reason_inputs_name_legacy_reducer_explicitly(self) -> None:
+    def test_decision_candidate_signal_inputs_do_not_keep_legacy_reducer(self) -> None:
         path = (
             PROJECT_ROOT
             / "x5crop"
@@ -683,16 +686,43 @@ class SourceNamingContractTest(unittest.TestCase):
         )
         text = path.read_text(encoding="utf-8")
 
-        self.assertNotIn('"normalized_candidate_reasons"', text)
-        self.assertIn('"legacy_reduced_candidate_reasons"', text)
+        self.assertNotIn('"normalized_candidate_signals"', text)
+        self.assertNotIn("legacy_" "reduced_candidate_signals", text)
+
+    def test_candidate_signal_taxonomy_has_no_legacy_fallback_or_old_signal_names(self) -> None:
+        banned = (
+            "candidate_" "reason_signal",
+            "legacy_" "reduced_candidate_signals",
+            "candidate_signal_" "signal",
+            "weak_" "separators",
+            "mostly_" "equal_split",
+            "too_few_" "detected_separators",
+            "partial_too_" "ambiguous",
+            "partial_outer_" "leading_content",
+            "outer_box_" "too_large",
+            "outer_box_" "uncertain",
+            "unstable_" "frame_width",
+            "outer_content_" "bbox_mismatch",
+            '"low_' '"confidence"',
+        )
+        offenders: list[str] = []
+        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
 
     def test_content_mismatch_selector_uses_candidate_selection_names(self) -> None:
         banned = (
             "ContentMismatchReviewSelectionPolicy",
             "content_mismatch_review",
             "required_review_reason",
-            "required_candidate_reason",
-            "content_candidate_reasons",
+            "required_candidate_signal",
+            "content_candidate_signals",
             "select_separator_review_candidate_on_content_mismatch",
             "separator_review_on_mismatch",
         )
@@ -711,7 +741,7 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_mode_details_use_mode_or_candidate_reason_names(self) -> None:
+    def test_mode_details_use_mode_or_candidate_signal_names(self) -> None:
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "modes"
         self.assertTrue(source_root.is_dir())
@@ -726,8 +756,8 @@ class SourceNamingContractTest(unittest.TestCase):
         banned = (
             ".review_reasons.append",
             ".review_reasons =",
-            "review_reasons=normalized_candidate_reasons",
-            "review_reasons=candidate_reasons",
+            "review_reasons=normalized_candidate_signals",
+            "review_reasons=candidate_signals",
         )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "modes"

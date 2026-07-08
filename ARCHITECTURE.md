@@ -132,13 +132,13 @@ candidate plan
 
 - outer 和 separator 是 physical structure；content 是 guidance + evidence。
 - content 可提示 search center，可生成 content-model proposal；content candidate 的 confidence、
-  diagnostics 和 internal `candidate_reasons` read model 属于 candidate assessment。
+  diagnostics 和 internal `candidate_signals` read model 属于 candidate assessment。
   content 不能生成 hard gap、不能直接修 physical result、不能决定 PASS / REVIEW。
 - build 只生成未评分 Detection；assessment 和 decision 才消费证据。
 - `candidate_build` detail 只描述物理 build geometry；base scoring 是否应用写在
   `base_candidate_scoring`，不能反写到 build detail。
 - base scoring 输出使用显式 `BaseDetectionAssessment`，字段为 `confidence`、
-  `candidate_reason_codes` 和 `detail`；不能用匿名 tuple 解包来传递 assessment 契约。
+  `candidate_signals` 和 `detail`；不能用匿名 tuple 解包来传递 assessment 契约。
 - content candidate assessment 输出使用显式 `ContentCandidateAssessment`，字段为
   `confidence`、`diagnostics` 和 `detail`；content diagnostics 仍是候选级解释。
 - separator gate 输出使用显式 `SeparatorGateResult`，字段为 `ok` 和 `detail`；
@@ -155,11 +155,10 @@ candidate plan
 - candidate assessment 的 reason 只能作为候选 blockers / diagnostics；最终用户可见
   `review_reasons` 只由 decision contract 生成。
 - `candidate_assessment.gate` 是候选资格的唯一结构化来源；候选级 failed
-  gate 结果写作 `candidate_gate_failed`，不能回塞进 `candidate_reasons` 或独立
+  gate 结果写作 `candidate_gate_failed`，不能回塞进 `candidate_signals` 或独立
   blocker 词表。
-- decision 的 `candidate_reason_inputs_before_decision` 只保留候选 blockers /
-  diagnostics 作为主模型；旧 reason 归并读模型必须显式命名为
-  `legacy_reduced_candidate_reasons`。
+- decision 的 `candidate_signal_inputs_before_decision` 只保留候选 blockers、
+  diagnostics、candidate gate 和 selection risk inputs；不再保留旧 signal reducer。
 - low-confidence context reasons，例如 outer candidate disagreement 和 deskew uncertainty，
   属于 decision contract input；不能在 `final_decision` 中事后补写 `decision_summary`。
 - decision gate 输出使用显式 `DecisionGateAssessment`，字段为 `passed`、
@@ -169,10 +168,10 @@ candidate plan
   add/append-style final reason helper。
 - policy / report 可见的 gate stage 名必须使用 `candidate_gate` 和
   `decision_gate` 这类职责名，不能把 finalization 写成裁决 gate。
-- candidate / mode 候选阶段读取或更新候选级原因必须经过
-  `detection.candidate.reasons`，并写入 `Detection.detail["candidate_reasons"]`；
-  candidate / mode 子层不能把候选原因写进 `Detection.review_reasons`。
-  candidate reason reader 不 fallback 到 `Detection.review_reasons`；`Detection.review_reasons`
+- candidate / mode 候选阶段读取或更新候选级 signal 必须经过
+  `detection.candidate.signals`，并写入 `Detection.detail["candidate_signals"]`；
+  candidate / mode 子层不能把候选 signal 写进 `Detection.review_reasons`。
+  candidate signal reader 不 fallback 到 `Detection.review_reasons`；`Detection.review_reasons`
   只用于 decision 之后的最终用户可见原因。
 - `content_only_evidence` 只表示 candidate source 主要依赖 content；content containment /
   content harm 失败使用 `content_evidence_insufficient`，不能复用 content-only reason。
@@ -191,7 +190,7 @@ candidate plan
 - content-model proposal 的 contract 使用 `content_guidance_assessment_required` 这类
   guidance / assessment 语义；不能把 content proposal 命名成 review-only 裁决。
 - content candidate assessment 里的 content-run / grid-fallback / aspect observations
-  叫 diagnostics；它们可以进入 internal `candidate_reasons` read model，但不能用
+  叫 diagnostics；它们可以进入 internal `candidate_signals` read model，但不能用
   `content_candidate_*_reasons` 这类 final-looking 命名。
 - dual-lane lane content / outer-alignment checks 属于 `candidate.assessment`；`candidate.plan`
   只选择 lane candidate 并调用 assessment helper；lane candidate 限分写入
@@ -199,11 +198,11 @@ candidate plan
 - safety candidate 的 auto-pass blocker、candidate cap 和 auto-gate 改写属于
   `candidate.assessment`；`candidate.plan` 只生成 safety candidate 并调用 assessment helper。
   最终 REVIEW 原因由 decision risk summary 根据 safety candidate source 生成。
-- candidate table / selected candidate 的候选级原因字段使用 `candidate_reasons`、
-  `candidate_blockers` 和 `candidate_diagnostics`；最终原因字段使用 `final_review_reasons`。
-- candidate plan / execution budget 的可靠性细节也使用 `candidate_reasons` 和
-  `candidate_reasons_ok`；不把候选级阻断条件写成 final-looking `review_reasons`。
-- special mode detail 使用 `mode_diagnostics` 和 `candidate_reasons` 记录模式级诊断；
+- candidate table / selected candidate 的候选级信号字段使用 `candidate_signals`、
+  `candidate_blockers` 和 `candidate_diagnostics`；最终信号字段使用 `final_review_reasons`。
+- candidate plan / execution budget 的可靠性细节也使用 `candidate_signals` 和
+  `candidate_signals_ok`；不把候选级阻断条件写成 final-looking `review_reasons`。
+- special mode detail 使用 `mode_diagnostics` 和 `candidate_signals` 记录模式级诊断；
   不在 mode detail 中输出 final-looking `review_reasons` 字段。
   review-only mode 也不在构造出的 `Detection.review_reasons` 写最终 reason；
   它只写 candidate / mode diagnostics，最终 REVIEW 原因由 decision contract 生成。
@@ -248,7 +247,7 @@ candidate plan
 分数是证据排序和 gate 支持，不是最终裁决本身：
 
 - `assessment.scoring` 只计算 support scores 和 joint score。
-- `assessment.base_scoring` 负责 base confidence 和候选级 `candidate_reason_codes`。
+- `assessment.base_scoring` 负责 base confidence 和候选级 `candidate_signals`。
 - `assessment.gate_support` 负责 hard-full calibration 和 separator geometry support。
 - base confidence 只由 separator / gap support 和 `photo_width_cv` 组成。
 - raw outer area、global contrast、frame-box width 和 separator-width variation 是 diagnostics
@@ -257,7 +256,7 @@ candidate plan
 - 当 detail 明确给出 `content_containment_ok` / `content_harm_risk` 时，support score 只能消费
   containment 字段；旧 `support` summary 只是报告 detail。
 - partial mode 本身不是低置信度原因。只有单张 partial 或 35mm 两张 partial 这类天然无法解释
-  holder structure 的情况继续标记 `partial_too_ambiguous`。
+  holder structure 的情况继续标记 `partial_count_ambiguous`。
 - `photo_width_unstable` 和 final photo-width gate 只能消费 `photo_edges` 来源的
   `photo_width_cv`；`frame_boxes` measurement 不能生成照片宽度 hard reason。
 - risk 只能拉回 REVIEW 或限制输出，不能救回 PASS。
@@ -266,9 +265,9 @@ candidate plan
 - `candidate_assessment.gate`、`candidate_assessment.blockers` 和
   `candidate_assessment.diagnostics` 是 report/debug 的候选级解释，不是最终裁决。
 - `candidate_gate_failed` 是 gate 结果，不是候选物理证据；它只能出现在 gate /
-  confidence-cap detail 或 decision reason input，不能作为 candidate reason 存储。
-- `legacy_reduced_candidate_reasons` 只是旧候选原因的 internal/read-model reducer；
-  不能作为 candidate assessment 或 final review reason 的主要业务字段。
+  confidence-cap detail 或 decision reason input，不能作为 candidate signal 存储。
+- 旧 candidate-signal reducer 已退休；candidate signal 不再由 decision 归并成
+  final review reason，decision 只读取 gate / evidence / risk 的结构化输入。
 - candidate gate 的 blockers 从 `GateCheck` 派生；通用 `utils` 不承载
   candidate-specific blocker list，也不用 hard review reason 命名。
 - candidate 级可见字段必须写 `candidate_gate_*`；不能用 `auto_pass_*` 表达候选资格，
@@ -502,7 +501,7 @@ evidence only; reading `candidate_assessment` is a decision or report read-model
 concern. Candidate assessment reasons are candidate blockers / diagnostics only;
 final user-visible `review_reasons` are generated by the decision contract.
 Base scoring returns an explicit `BaseDetectionAssessment` result with
-`confidence`, `candidate_reason_codes`, and `detail` fields; callers must not
+`confidence`, `candidate_signals`, and `detail` fields; callers must not
 depend on anonymous tuple positions for the assessment contract.
 Content candidate assessment returns an explicit `ContentCandidateAssessment`
 result with `confidence`, `diagnostics`, and `detail` fields; content
@@ -520,20 +519,20 @@ Candidate gate assessment returns an explicit `CandidateGateAssessment` with
 `passed`, `checks`, `blockers`, `diagnostics`, and `confidence_caps` fields;
 blockers are derived from failed required gate checks, not from an independent
 blocker vocabulary.
-`candidate_reason_inputs_before_decision` keeps blockers / diagnostics as the
-main model; the old reason-reduction read model must be named
-`legacy_reduced_candidate_reasons`.
+`candidate_signal_inputs_before_decision` keeps candidate blockers,
+diagnostics, candidate gate detail, and selection risk inputs only; the old
+candidate-signal reducer is retired.
 Decision gate assessment returns an explicit `DecisionGateAssessment` with
 `passed`, `checks`, `final_review_reasons`, `reason_inputs`, and
 `confidence_caps` fields; final REVIEW reasons are generated only from this
 structure.
 Policy/report-visible gate stage names use `candidate_gate` and
 `decision_gate`; finalization must not be named as a decision gate.
-Candidate and mode-stage code must read or update candidate-level reasons
-through `detection.candidate.reasons`; the underlying
-`Detection.detail["candidate_reasons"]` field stores candidate-level reasons.
-Candidate and mode sublayers must not write those candidate reasons into
-`Detection.review_reasons`, and candidate reason readers do not fall back to it.
+Candidate and mode-stage code must read or update candidate-level signals
+through `detection.candidate.signals`; the underlying
+`Detection.detail["candidate_signals"]` field stores candidate-level signals.
+Candidate and mode sublayers must not write those candidate signals into
+`Detection.review_reasons`, and candidate signal readers do not fall back to it.
 `Detection.review_reasons` is reserved for final user-visible reasons after the
 decision step.
 Candidate selection records `selection_risk_inputs`, selection override, and
@@ -563,11 +562,11 @@ only builds the safety candidate and calls the assessment helper. Final REVIEW
 reasons are generated by decision risk summary from the safety-candidate source.
 Candidate table
 / selected-candidate detail uses
-`candidate_reasons`, `candidate_blockers`, and `candidate_diagnostics` for
+`candidate_signals`, `candidate_blockers`, and `candidate_diagnostics` for
 candidate-level explanations. Candidate plan / execution-budget detail also uses
-`candidate_reasons` and `candidate_reasons_ok`, not final-looking
+`candidate_signals` and `candidate_signals_ok`, not final-looking
 `review_reasons`. Special-mode detail uses `mode_diagnostics` and
-`candidate_reasons`. Review-only mode also leaves `Detection.review_reasons`
+`candidate_signals`. Review-only mode also leaves `Detection.review_reasons`
 empty at construction time; it records candidate / mode diagnostics and lets the
 decision contract generate the final REVIEW reasons. Final reasons use
 `final_review_reasons`.
@@ -612,7 +611,7 @@ as a runtime-detail alias.
 ### 6. Scoring / Gate Perspective
 
 Scores rank and support evidence; they are not the final decision. Base
-scoring owns base confidence and candidate-level `candidate_reason_codes`.
+scoring owns base confidence and candidate-level `candidate_signals`.
 Base confidence uses separator / gap support and `photo_width_cv`. Raw outer area,
 global contrast, frame-box width, and separator-width variation remain diagnostic
 or final-decision inputs. Content support means containment; content quality
@@ -620,10 +619,9 @@ means evidence strength. Photo-width hard reasons may consume only
 `photo_edges`-sourced `photo_width_cv`. Candidate blockers, diagnostics,
 auto-gate inputs, and candidate confidence caps are assessment detail; decision
 reason inputs, final-review reason fields, and decision confidence caps are
-final decision detail. `legacy_reduced_candidate_reasons` is only an
-internal/read-model reducer for old candidate reason names, not the primary
-candidate-assessment or final-review reason field. Content-only, safety, and
-review-only candidate outcomes
+final decision detail. Candidate signals are no longer reduced into final review
+reasons by decision; decision reads structured gate / evidence / risk inputs.
+Content-only, safety, and review-only candidate outcomes
 are expressed by source-derived `risk_summary` plus the decision contract
 applier, not by unused review-only flags in decision policy.
 The decision contract carries only format/mode, evidence, risk, and PASS /

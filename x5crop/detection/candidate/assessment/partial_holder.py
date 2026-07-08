@@ -15,8 +15,11 @@ from ....utils import clamp_int
 from ...evidence.photo_width import photo_width_stability_detail
 from ...evidence.separator_summary import separator_gate_detail_summary
 from ...evidence.separator_width import separator_width_evidence_detail, separator_width_requirement_detail
-from ..reasons import candidate_reasons
-from .candidate_gate import candidate_reason_blocker_signals
+from ..signals import (
+    SIGNAL_PARTIAL_LEADING_CONTENT_RISK,
+    candidate_signals,
+)
+from .candidate_gate import candidate_signal_blocker_signals
 
 
 def partial_safe_holder_edge_disambiguation_detail(
@@ -309,14 +312,13 @@ def partial_safe_extra_frames_gate_detail(
     content_quality_ok = content_score >= holder.min_content_score
     if geometry_score < holder.min_geometry_score:
         disqualifiers.append("geometry_score_low")
-    partial_candidate_gate_blockers = candidate_reason_blocker_signals(
-        candidate_reasons(detection),
-        ignored_signals={"outer_box_too_large", "outer_box_uncertain"},
+    partial_candidate_gate_blockers = candidate_signal_blocker_signals(
+        candidate_signals(detection),
     )
     if partial_candidate_gate_blockers:
         disqualifiers.append("candidate_gate_blocker_present")
     if bool(leading_content.get("used", False)) and not bool(leading_content.get("ok", True)):
-        disqualifiers.append("partial_outer_leading_content")
+        disqualifiers.append(SIGNAL_PARTIAL_LEADING_CONTENT_RISK)
     if bool(frame_content.get("used", False)) and not bool(frame_content.get("ok", True)):
         disqualifiers.append("partial_frame_content_unstable")
     return {

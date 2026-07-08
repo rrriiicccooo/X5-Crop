@@ -153,7 +153,7 @@ class CandidateExecutionBudgetPolicy:
     requires_candidate_gate: bool = True
     requires_hard_separator_ok: bool = True
     requires_content_support: str = "ok"
-    requires_no_candidate_reasons: bool = True
+    requires_no_candidate_signals: bool = True
 
 
 @dataclass(frozen=True)
@@ -194,7 +194,7 @@ class ContentGuidedSeparatorCandidatePolicy:
     max_hint_offset_max: int = 420
     proposal_role: str = "content_guided_separator_search"
     guidance_source: str = "content_region_hints"
-    requires_hard_separator_reason: str = "content_guided_separator_needs_hard_separator"
+    requires_hard_separator_signal: str = "content_guided_hard_separator_missing"
 
     def available_for(self, strip_mode: str) -> bool:
         return bool(self.enabled and strip_mode in self.strip_modes)

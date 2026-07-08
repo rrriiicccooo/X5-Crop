@@ -7,7 +7,7 @@ from ..domain import Detection
 
 CANDIDATE_COMPETITION = "candidate_competition"
 CANDIDATE_ASSESSMENT = "candidate_assessment"
-CANDIDATE_REASONS = "candidate_reasons"
+CANDIDATE_SIGNALS = "candidate_signals"
 CONTENT_EVIDENCE = "content_evidence"
 DECISION_POLICY_DETAIL = "decision_policy_detail"
 DECISION_SUMMARY = "decision_summary"
@@ -35,10 +35,10 @@ def candidate_assessment(detection: Detection) -> dict[str, Any]:
     return detail_dict(detection, CANDIDATE_ASSESSMENT)
 
 
-def candidate_reasons_from_detail(detection: Detection) -> list[str]:
-    reasons = detection.detail.get(CANDIDATE_REASONS)
-    if isinstance(reasons, list):
-        return [str(reason) for reason in reasons if reason]
+def candidate_signals_from_detail(detection: Detection) -> list[str]:
+    signals = detection.detail.get(CANDIDATE_SIGNALS)
+    if isinstance(signals, list):
+        return [str(signal) for signal in signals if signal]
     return []
 
 
@@ -72,7 +72,7 @@ def policy_id_from_detail(detection: Detection) -> str:
 __all__ = [
     "CANDIDATE_COMPETITION",
     "CANDIDATE_ASSESSMENT",
-    "CANDIDATE_REASONS",
+    "CANDIDATE_SIGNALS",
     "CONTENT_EVIDENCE",
     "DECISION_POLICY_DETAIL",
     "DECISION_SUMMARY",
@@ -87,7 +87,7 @@ __all__ = [
     "RUNTIME_POLICY_DETAIL",
     "candidate_competition",
     "candidate_assessment",
-    "candidate_reasons_from_detail",
+    "candidate_signals_from_detail",
     "decision_summary",
     "detail_dict",
     "final_review_reasons_from_detail",

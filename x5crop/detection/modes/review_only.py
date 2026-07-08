@@ -11,6 +11,7 @@ from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
 from ...policies.runtime.policy import DetectionPolicy
 from ...runtime.config import RuntimeConfig
+from ..candidate.signals import SIGNAL_NEEDS_MANUAL_REVIEW
 
 
 def review_only_detection(
@@ -23,7 +24,7 @@ def review_only_detection(
     wh, ww = gray_work.shape
     outer = Box(0, 0, ww, wh)
     source_h, source_w = gray.shape
-    mode_diagnostics = [policy.detector.review_only.reason, "needs_manual_review"]
+    mode_diagnostics = [policy.detector.review_only.reason, SIGNAL_NEEDS_MANUAL_REVIEW]
     return Detection(
         fmt.name,
         config.layout,
@@ -35,7 +36,7 @@ def review_only_detection(
         0.0,
         [],
         {
-            "candidate_reasons": list(mode_diagnostics),
+            "candidate_signals": list(mode_diagnostics),
             "candidate_source": CANDIDATE_SOURCE_REVIEW_ONLY,
             "candidate_count": 0,
             "mode_diagnostics": list(mode_diagnostics),
@@ -49,7 +50,7 @@ def review_only_detection(
                     "count": fmt.default_count,
                     "strip_mode": config.strip_mode,
                     "confidence": 0.0,
-                    "candidate_reasons": list(mode_diagnostics),
+                    "candidate_signals": list(mode_diagnostics),
                 },
                 "selection_override": policy.detector.review_only.selection_override,
                 "top_candidates": [],
