@@ -7,7 +7,8 @@ if TYPE_CHECKING:
     from ..runtime.policy import DetectionPolicy
     from ..decision.contract import DetectionDecisionContract
 
-from ...formats import format_spec
+from ...formats import format_description, format_spec
+from .mode_descriptions import mode_notes_for_spec, mode_role_for_spec
 
 
 def _plain(value: Any) -> Any:
@@ -40,6 +41,7 @@ def _physical_detail(policy: "DetectionPolicy") -> dict[str, Any]:
 
 def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     return {
+        "preprocess": _plain(policy.preprocess),
         "detector": {
             "kind": policy.detector.kind,
             "review_only": _plain(policy.detector.review_only),
@@ -109,11 +111,12 @@ def _diagnostics_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
 
 
 def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
+    spec = format_spec(policy.format_id)
     return {
         "policy_id": policy.policy_id,
         "format": policy.format_id,
         "strip_mode": policy.strip_mode,
-        "role": policy.role,
+        "role": mode_role_for_spec(spec, policy.strip_mode),
         "physical": _physical_detail(policy),
         "physical_runtime": _physical_runtime_detail(policy),
         "candidate_runtime": _candidate_runtime_detail(policy),
@@ -123,12 +126,13 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
             "output": _plain(policy.output),
         },
         "diagnostics_runtime": _diagnostics_runtime_detail(policy),
-        "notes": list(policy.notes),
+        "notes": list(mode_notes_for_spec(spec, policy.strip_mode)),
     }
 
 
 def _format_spec_detail(contract: "DetectionDecisionContract") -> dict[str, Any]:
     spec = contract.format
+    description = format_description(spec.format_id)
     return {
         "format_id": spec.format_id.value,
         "family": spec.family,
@@ -136,12 +140,12 @@ def _format_spec_detail(contract: "DetectionDecisionContract") -> dict[str, Any]
         "allowed_count_range": list(spec.allowed_counts),
         "frame_aspect": spec.frame_aspect,
         "expected_separator_count": spec.expected_separator_count,
-        "full_mode_behavior": spec.full_mode_behavior,
-        "partial_mode_behavior": spec.partial_mode_behavior,
-        "outer_trust_profile": spec.outer_trust_profile,
-        "separator_visibility_expectation": spec.separator_visibility,
-        "geometry_tolerance": spec.geometry_tolerance,
-        "known_physical_notes": list(spec.known_physical_notes),
+        "full_mode_behavior": description.full_mode_behavior,
+        "partial_mode_behavior": description.partial_mode_behavior,
+        "outer_trust_profile": description.outer_trust_profile,
+        "separator_visibility_expectation": description.separator_visibility,
+        "geometry_tolerance": description.geometry_tolerance,
+        "known_physical_notes": list(description.known_physical_notes),
     }
 
 

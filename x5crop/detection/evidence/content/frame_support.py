@@ -136,7 +136,7 @@ def content_evidence_detail(
     if source_crop.size == 0:
         return {"used": False, "reason": "empty_outer"}
 
-    signal = content_signal_from_gray(source_crop)
+    signal = content_signal_from_gray(source_crop, content_policy.evidence_image)
     threshold = content_evidence_threshold(signal.evidence_float, evidence_params)
     expected_aspect = expected_content_aspect(detection.film_format, detection.layout)
     return content_frame_support_detail(

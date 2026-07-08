@@ -89,7 +89,7 @@ def detection_from_record(record: dict[str, Any]) -> Detection:
         frames=[box_from_dict(box) for box in record.get("frame_boxes", [])],
         gaps=[gap_from_dict(gap) for gap in record.get("gaps", [])],
         confidence=float(record["confidence"]),
-        final_review_reasons=list(record.get("final_review_reasons", [])),
+        final_review_reasons=list(record["final_review_reasons"]),
         detail=dict(record.get("detail", {})),
     )
 
@@ -177,6 +177,7 @@ def apply_cached_deskew(
     gray: np.ndarray,
     axes: str,
     photometric: str,
+    base_gray_params,
     detail: dict[str, Any],
     warnings: list[str],
 ) -> tuple[np.ndarray, np.ndarray, bool]:
@@ -185,7 +186,7 @@ def apply_cached_deskew(
         return arr, gray, False
     angle = float(deskew_detail.get("angle", 0.0))
     arr = rotate_array_expand(arr, -angle, axes)
-    gray = make_base_gray_u8(arr, axes, photometric)
+    gray = make_base_gray_u8(arr, axes, photometric, base_gray_params)
     warnings.append(f"reused deskew: {-angle:.4f} degrees")
     return arr, gray, True
 
@@ -211,7 +212,8 @@ def result_from_reusable_analysis(
         return result_from_cached_record(input_file, cached_record, profile, warnings)
 
     arr, profile, page_warnings = read_tiff(input_file, config.page)
-    gray = make_base_gray_u8(arr, profile.axes, profile.photometric)
+    policy = policy_context.policy_for(str(cached_record["film_format"]), str(cached_record["strip_mode"]))
+    gray = make_base_gray_u8(arr, profile.axes, profile.photometric, policy.preprocess.base_gray)
     warnings.extend(warning for warning in page_warnings if warning not in warnings)
     source_arr = arr
     detection = detection_from_record(cached_record)
@@ -220,12 +222,12 @@ def result_from_reusable_analysis(
         gray,
         profile.axes,
         profile.photometric,
+        policy.preprocess.base_gray,
         detection.detail,
         warnings,
     )
     base_bleed = AxisBleedParameters(long_axis=int(config.bleed_x), short_axis=int(config.bleed_y))
     reapply_cached_output_bleed(detection, base_bleed, gray.shape[1], gray.shape[0])
-    policy = policy_context.policy_for(detection.film_format, detection.strip_mode)
     output_bleed = output_bleed_parameters_for_detection(base_bleed, detection, policy.output)
     reapply_cached_output_bleed(detection, output_bleed, gray.shape[1], gray.shape[0])
     output_files = write_crops(

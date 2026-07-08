@@ -15,6 +15,7 @@ from .diagnostics import diagnostics_policy
 from .finalization import finalization_policy
 from .outer import outer_policy
 from .output import output_policy
+from .preprocess import preprocess_policy
 from .presets import FormatPolicyPreset
 from .report import report_policy
 from .output_evidence import runtime_output_evidence_policy
@@ -31,12 +32,13 @@ def build_policy_from_preset(
     mode_preset = preset.modes[strip_mode]
     fmt = FORMATS[preset.format_id]
     params = preset.parameters()
+    preprocess = preprocess_policy(params)
     return DetectionPolicy(
         policy_id=detection_policy_id_for(preset.format_id, strip_mode),
         format_id=preset.format_id,
         strip_mode=strip_mode,
         family=fmt.family,
-        role=mode_preset.role,
+        preprocess=preprocess,
         detector=DetectorPolicy(
             kind=mode_preset.detector_kind,
             review_only=mode_preset.review_only,
@@ -44,7 +46,7 @@ def build_policy_from_preset(
         counts=count_policy(preset.format_id, strip_mode, params),
         outer=outer_policy(mode_preset, strip_mode, params, fmt),
         separator=separator_policy(preset, mode_preset, strip_mode, params),
-        content=content_policy(params),
+        content=content_policy(params, evidence_image=preprocess.content_evidence_image),
         partial_holder=partial_holder_policy(fmt, mode_preset, strip_mode, params),
         partial_edge_hint=partial_edge_hint_policy(params),
         frame_fit=mode_preset.frame_fit or partial_frame_fit(preset.format_id),
@@ -57,7 +59,6 @@ def build_policy_from_preset(
         output=output_policy(),
         diagnostics=diagnostics_policy(params),
         report=report_policy(),
-        notes=mode_preset.notes,
     )
 
 

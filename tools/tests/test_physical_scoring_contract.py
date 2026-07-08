@@ -30,7 +30,7 @@ from x5crop.domain import Box, Detection, Gap
 from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED
 from x5crop.geometry.detection_parameters import HardGapTrustParameters
-from x5crop.policies.decision.contract import decision_contract_for
+from x5crop.policies.decision.contract import decision_contract_for_policy
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.runtime.candidate import EvidenceIndependencePolicy
 from x5crop.policies.runtime.separator import SeparatorGeometrySupportModePolicy
@@ -38,6 +38,9 @@ from x5crop.runtime.config import RuntimeConfig
 
 
 class PhysicalScoringContractTest(unittest.TestCase):
+    def _decision_contract(self, format_id: str, strip_mode: str):
+        return decision_contract_for_policy(get_detection_policy(format_id, strip_mode))
+
     def test_outer_size_uncertainty_is_candidate_diagnostic_not_gate_blocker(self) -> None:
         gate = candidate_gate_assessment(
             source="separator",
@@ -680,7 +683,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             detection,
             content_detail,
             outer_alignment,
-            decision_contract_for("120-66", "full"),
+            self._decision_contract("120-66", "full"),
         )
 
         self.assertTrue(evidence["outer"]["ok"])
@@ -821,7 +824,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             detection,
             content_detail,
             {"used": True, "ok": True, "reason": "ok"},
-            decision_contract_for("120-66", "full"),
+            self._decision_contract("120-66", "full"),
         )
 
         self.assertTrue(evidence["geometry"]["ok"])

@@ -1,60 +1,57 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
-
-
 @dataclass(frozen=True)
 class ScoringCalibrationParameters:
-    hard_full_confidence_floor: float
-    geometry_weight: float
-    content_weight: float
-    separator_weight: float
-    separator_source_bias: float
-    no_auto_cap_partial: float
-    no_auto_cap_full: float
+    hard_full_confidence_floor: float = 0.0
+    geometry_weight: float = 0.34
+    content_weight: float = 0.33
+    separator_weight: float = 0.33
+    separator_source_bias: float = 0.03
+    no_auto_cap_partial: float = 0.82
+    no_auto_cap_full: float = 0.84
 
 @dataclass(frozen=True)
 class BaseDetectionScoreParameters:
-    photo_width_cv_norm: float
-    gap_weight: float
-    photo_width_weight: float
-    outer_min_area: float
-    outer_max_area: float
-    outer_too_large: float
-    image_quality_contrast_min: float
-    full_photo_width_cv: float
-    geometry_floor_tight_photo_width_cv: float
-    geometry_floor_high: float
-    geometry_floor_low: float
-    unstable_photo_width_cv: float
-    full_outer_min_area: float
-    low_confidence_floor: float
-    partial_one_cap: float
-    partial_two_35mm_cap: float
+    photo_width_cv_norm: float = 0.030
+    gap_weight: float = 0.40
+    photo_width_weight: float = 0.30
+    outer_min_area: float = 0.35
+    outer_max_area: float = 0.995
+    outer_too_large: float = 0.94
+    image_quality_contrast_min: float = 35.0
+    full_photo_width_cv: float = 0.040
+    geometry_floor_tight_photo_width_cv: float = 0.006
+    geometry_floor_high: float = 0.92
+    geometry_floor_low: float = 0.88
+    unstable_photo_width_cv: float = 0.030
+    full_outer_min_area: float = 0.40
+    low_confidence_floor: float = 0.85
+    partial_one_cap: float = 0.78
+    partial_two_35mm_cap: float = 0.82
 
 @dataclass(frozen=True)
 class SeparatorSupportScoreParameters:
-    model_grid_credit: float
-    model_equal_credit: float
-    hard_weight: float
-    model_weight: float
-    no_expected_confidence_threshold: float
-    no_expected_confidence_cap: float
+    model_grid_credit: float = 0.35
+    model_equal_credit: float = 0.12
+    hard_weight: float = 0.78
+    model_weight: float = 0.22
+    no_expected_confidence_threshold: float = 0.85
+    no_expected_confidence_cap: float = 0.75
 
 @dataclass(frozen=True)
 class GeometrySupportScoreParameters:
-    photo_width_cv_norm: float
-    aspect_norm: float
-    photo_width_weight: float
-    aspect_weight: float
-    count_weight: float
+    photo_width_cv_norm: float = 0.040
+    aspect_norm: float = 0.22
+    photo_width_weight: float = 0.34
+    aspect_weight: float = 0.26
+    count_weight: float = 0.16
 
 @dataclass(frozen=True)
 class CandidateCompetitionParameters:
-    top_n: int
-    close_margin: float
-    confidence_cap: float
+    top_n: int = 8
+    close_margin: float = 0.04
+    confidence_cap: float = 0.84
 
 __all__ = [
     'ScoringCalibrationParameters',

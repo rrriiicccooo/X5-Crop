@@ -159,19 +159,12 @@ def decision_contract_for_policy(detection_policy: DetectionPolicy) -> Detection
     )
 
 
-def decision_contract_for(format_id: str, strip_mode: str) -> DetectionDecisionContract:
-    from ..registry import get_detection_policy
-
-    return decision_contract_for_policy(get_detection_policy(format_id, strip_mode))
-
-
 __all__ = [
     "REPORT_SCHEMA_VERSION",
     "DetectionDecisionContract",
     "DecisionPolicy",
     "EvidencePolicy",
     "ModePolicy",
-    "decision_contract_for",
     "decision_contract_for_policy",
     "decision_policy_for",
     "evidence_policy_for",

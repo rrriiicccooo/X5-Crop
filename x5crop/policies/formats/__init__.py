@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ..parameters.aggregate import FormatParameters
-from ..runtime.policy import DetectionPolicy
 from . import (
     format_120_645,
     format_120_66,
@@ -26,17 +25,6 @@ PARAMETER_FACTORIES: dict[str, Callable[[], FormatParameters]] = {
     format_120_67.FORMAT_ID: format_120_67.parameters,
 }
 
-POLICY_BUILDERS: dict[str, Callable[[str], DetectionPolicy]] = {
-    format_135.FORMAT_ID: format_135.build_policy,
-    format_135_dual.FORMAT_ID: format_135_dual.build_policy,
-    format_half.FORMAT_ID: format_half.build_policy,
-    format_xpan.FORMAT_ID: format_xpan.build_policy,
-    format_120_645.FORMAT_ID: format_120_645.build_policy,
-    format_120_66.FORMAT_ID: format_120_66.build_policy,
-    format_120_67.FORMAT_ID: format_120_67.build_policy,
-}
-
 __all__ = [
     "PARAMETER_FACTORIES",
-    "POLICY_BUILDERS",
 ]

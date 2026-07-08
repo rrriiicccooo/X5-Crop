@@ -16,7 +16,6 @@ DECISION_SIGNALS = "decision_signals"
 EVIDENCE_SUMMARY = "evidence_summary"
 OUTER_CONTENT_ALIGNMENT = "outer_content_alignment"
 OUTPUT_OVERLAP_EVIDENCE = "output_overlap_evidence"
-POLICY = "policy"
 POLICY_ID = "policy_id"
 RUNTIME_POLICY_DETAIL = "runtime_policy_detail"
 
@@ -52,10 +51,6 @@ def final_review_reasons_from_detail(detection: Detection) -> list[str]:
     return list(detection.final_review_reasons)
 
 
-def policy_detail(detection: Detection) -> dict[str, Any]:
-    return detail_dict(detection, POLICY)
-
-
 def runtime_policy_detail(detection: Detection) -> dict[str, Any]:
     return detail_dict(detection, RUNTIME_POLICY_DETAIL)
 
@@ -64,7 +59,7 @@ def policy_id_from_detail(detection: Detection) -> str:
     policy_id = detection.detail.get(POLICY_ID)
     if policy_id:
         return str(policy_id)
-    policy = runtime_policy_detail(detection) or policy_detail(detection)
+    policy = runtime_policy_detail(detection)
     return str(policy.get(POLICY_ID, ""))
 
 
@@ -80,7 +75,6 @@ __all__ = [
     "EVIDENCE_SUMMARY",
     "OUTER_CONTENT_ALIGNMENT",
     "OUTPUT_OVERLAP_EVIDENCE",
-    "POLICY",
     "POLICY_ID",
     "RUNTIME_POLICY_DETAIL",
     "candidate_competition",
@@ -89,7 +83,6 @@ __all__ = [
     "decision_summary",
     "detail_dict",
     "final_review_reasons_from_detail",
-    "policy_detail",
     "policy_id_from_detail",
     "runtime_policy_detail",
 ]

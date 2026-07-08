@@ -12,7 +12,7 @@ from ..cache.analysis import make_analysis_cache
 from ..runtime.policy_context import RuntimePolicyContext
 from ..policies.runtime.policy import DetectionPolicy
 from ..cache import AnalysisCache
-from .candidate.plan.run import calibrated_candidates_for_count
+from .candidate.lifecycle import calibrated_candidates_for_count
 from .candidate.plan.counts import candidate_counts_for_format
 from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import review_only_detection
@@ -39,8 +39,12 @@ def choose_detection(
     cache: Optional[AnalysisCache] = None,
 ) -> DetectionPipelineResult:
     candidates: list[Detection] = []
-    cache = cache if cache is not None and cache.layout == config.layout else make_analysis_cache(gray, config.layout)
     policy = policy_context.policy_for(fmt.name, config.strip_mode)
+    cache = (
+        cache
+        if cache is not None and cache.layout == config.layout
+        else make_analysis_cache(gray, config.layout, policy.preprocess.content_evidence_image)
+    )
     if policy.detector.kind == "dual_lane":
         detection = choose_dual_lane_detection(gray, config, cache, policy, policy_context)
         _attach_runtime_policy_detail(detection, policy)

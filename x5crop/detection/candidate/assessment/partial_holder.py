@@ -7,10 +7,7 @@ import numpy as np
 from ....domain import Box, Detection
 from ....formats import FormatSpec
 from ....geometry.layout import work_gray
-from ....image.evidence import (
-    default_content_evidence_image_parameters,
-    make_content_evidence_gray,
-)
+from ....image.evidence import make_content_evidence_gray
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....utils import clamp_int
@@ -19,9 +16,7 @@ from ...evidence.separator_summary import separator_support_detail_summary
 from ...evidence.separator_width import separator_width_evidence_detail, separator_width_requirement_detail
 from ..signals import (
     SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
-    candidate_signals,
 )
-from .candidate_gate import candidate_signal_blocker_signals
 
 
 def partial_edge_safety_holder_edge_disambiguation_detail(
@@ -129,7 +124,7 @@ def partial_edge_safety_leading_content_detail(
         gray_work = work_gray(gray, detection.layout)
         evidence = make_content_evidence_gray(
             gray_work,
-            default_content_evidence_image_parameters(),
+            policy.content.evidence_image,
         ).astype(np.float32) / 255.0
 
     left = max(0, min(left, evidence.shape[1]))
@@ -314,11 +309,6 @@ def partial_edge_safety_assessment_detail(
     content_quality_ok = content_score >= holder.min_content_score
     if geometry_score < holder.min_geometry_score:
         disqualifiers.append("geometry_score_low")
-    partial_candidate_gate_blockers = candidate_signal_blocker_signals(
-        candidate_signals(detection),
-    )
-    if partial_candidate_gate_blockers:
-        disqualifiers.extend(partial_candidate_gate_blockers)
     if bool(leading_content.get("used", False)) and not bool(leading_content.get("ok", True)):
         disqualifiers.append(SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT)
     if bool(frame_content.get("used", False)) and not bool(frame_content.get("ok", True)):

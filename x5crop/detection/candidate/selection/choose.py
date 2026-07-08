@@ -48,6 +48,10 @@ def calibrated_candidate_rank(detection: Detection, threshold: float) -> tuple[i
     )
 
 
+def select_source_candidate(candidates: list[Detection], threshold: float) -> Detection:
+    return max(candidates, key=lambda detection: calibrated_candidate_rank(detection, threshold))
+
+
 def is_partial_edge_safety_candidate(detection: Detection, threshold: float) -> bool:
     candidate = detection.detail.get("candidate_assessment", {})
     candidate_gate = {}
@@ -160,5 +164,6 @@ __all__ = [
     "SelectionResult",
     "calibrated_candidate_rank",
     "is_partial_edge_safety_candidate",
+    "select_source_candidate",
     "select_detection_candidate",
 ]

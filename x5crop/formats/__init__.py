@@ -29,18 +29,22 @@ class FormatSpec:
     horizontal_content_aspect: float | None
     frame_aspect: float | None
     expected_separator_count: int
-    full_mode_behavior: str
-    partial_mode_behavior: str
-    outer_trust_profile: str
-    separator_visibility: str
-    geometry_tolerance: str
-    known_physical_notes: tuple[str, ...]
     physical_layout: str = "single_strip"
     separator_width_profile: str = "standard"
     frame_fit_profile: str = "standard_strip"
     edge_pair_profile: str = "standard_35mm"
     geometry_support_profile: str = "none"
     output_overlap_profile: str = "standard"
+
+
+@dataclass(frozen=True)
+class FormatDescription:
+    full_mode_behavior: str
+    partial_mode_behavior: str
+    outer_trust_profile: str
+    separator_visibility: str
+    geometry_tolerance: str
+    known_physical_notes: tuple[str, ...]
 
 
 FormatPhysicalSpec = FormatSpec
@@ -58,10 +62,6 @@ def _format_spec(
     allowed_counts: tuple[int, ...],
     family: str,
     horizontal_content_aspect: float,
-    outer_trust_profile: str,
-    separator_visibility: str,
-    geometry_tolerance: str,
-    known_physical_notes: tuple[str, ...],
     physical_layout: str = "single_strip",
     separator_width_profile: str = "standard",
     frame_fit_profile: str = "standard_strip",
@@ -79,14 +79,6 @@ def _format_spec(
         horizontal_content_aspect=horizontal_content_aspect,
         frame_aspect=horizontal_content_aspect,
         expected_separator_count=expected_separator_count(name, default_count),
-        full_mode_behavior=f"fixed nominal {default_count}-frame strip",
-        partial_mode_behavior=(
-            "review-biased count search with uncertain leading/trailing edges"
-        ),
-        outer_trust_profile=outer_trust_profile,
-        separator_visibility=separator_visibility,
-        geometry_tolerance=geometry_tolerance,
-        known_physical_notes=known_physical_notes,
         physical_layout=physical_layout,
         separator_width_profile=separator_width_profile,
         frame_fit_profile=frame_fit_profile,
@@ -103,13 +95,6 @@ FORMATS: dict[str, FormatSpec] = {
         tuple(range(1, 7)),
         "35mm",
         3.0 / 2.0,
-        "moderate_white_holder_boundary",
-        "narrow_or_mixed_internal_gaps",
-        "tight_repeated_35mm_frames",
-        (
-            "wide_spacing_can_mimic_extra_holder",
-            "weak_grid_may_hide_missing_separator",
-        ),
         frame_fit_profile="standard_strip",
         edge_pair_profile="standard_35mm",
     ),
@@ -119,13 +104,6 @@ FORMATS: dict[str, FormatSpec] = {
         (12,),
         "35mm",
         3.0 / 2.0,
-        "two_lane_holder_boundary",
-        "per_lane_narrow_internal_gaps",
-        "two_independent_35mm_lanes",
-        (
-            "lane_split_failure",
-            "partial_dual_lane_not_trusted",
-        ),
         physical_layout="dual_lane",
         frame_fit_profile="dual_lane",
         edge_pair_profile="standard_35mm",
@@ -136,13 +114,6 @@ FORMATS: dict[str, FormatSpec] = {
         tuple(range(1, 13)),
         "35mm",
         2.0 / 3.0,
-        "long_dense_strip_boundary",
-        "many_small_internal_gaps",
-        "tight_many_frame_grid",
-        (
-            "weak_grid_can_overfit_dense_frames",
-            "partial_edges_may_include_holder",
-        ),
         frame_fit_profile="dense_half",
         edge_pair_profile="dense_half",
         geometry_support_profile="stable_dense_grid",
@@ -154,13 +125,6 @@ FORMATS: dict[str, FormatSpec] = {
         (1, 2, 3),
         "35mm",
         65.0 / 24.0,
-        "wide_frame_holder_boundary",
-        "few_wide_internal_gaps",
-        "wide_frame_aspect_sensitive",
-        (
-            "wide_content_can_mask_separator",
-            "outer_overcrop_cost_high",
-        ),
         frame_fit_profile="panoramic_35mm",
         edge_pair_profile="panoramic_35mm",
     ),
@@ -170,13 +134,6 @@ FORMATS: dict[str, FormatSpec] = {
         (1, 2, 3, 4),
         "120",
         3.0 / 4.0,
-        "medium_format_holder_boundary",
-        "moderate_internal_gaps",
-        "medium_format_aspect_sensitive",
-        (
-            "short_axis_boundary_can_blend_with_holder",
-            "content_edges_can_look_like_separators",
-        ),
         frame_fit_profile="medium_rectangle",
         edge_pair_profile="medium_rectangle",
         output_overlap_profile="sensitive",
@@ -187,14 +144,6 @@ FORMATS: dict[str, FormatSpec] = {
         (1, 2, 3),
         "120",
         1.0,
-        "square_frame_holder_boundary_guarded",
-        "broad_internal_separator_widths",
-        "square_frame_spacing_sensitive",
-        (
-            "broad_separator_width_can_be_false_frame_boundary",
-            "holder_edge_can_mimic_separator",
-            "overlap_or_stuck_frame_note",
-        ),
         separator_width_profile="broad",
         frame_fit_profile="medium_square",
         edge_pair_profile="medium_square",
@@ -206,17 +155,91 @@ FORMATS: dict[str, FormatSpec] = {
         (1, 2, 3),
         "120",
         5.0 / 4.0,
-        "medium_format_broad_separator_width_guarded",
-        "broad_internal_gap_widths_expected",
-        "medium_format_aspect_sensitive",
-        (
-            "short_axis_correction_can_overtrust_holder",
-            "broad_separator_width_may_compete_with_content",
-        ),
         separator_width_profile="broad",
         frame_fit_profile="medium_wide",
         edge_pair_profile="medium_square",
         output_overlap_profile="sensitive",
+    ),
+}
+
+FORMAT_DESCRIPTIONS: dict[str, FormatDescription] = {
+    "135": FormatDescription(
+        full_mode_behavior="fixed nominal 6-frame strip",
+        partial_mode_behavior="review-biased count search with uncertain leading/trailing edges",
+        outer_trust_profile="moderate_white_holder_boundary",
+        separator_visibility="narrow_or_mixed_internal_gaps",
+        geometry_tolerance="tight_repeated_35mm_frames",
+        known_physical_notes=(
+            "wide_spacing_can_mimic_extra_holder",
+            "weak_grid_may_hide_missing_separator",
+        ),
+    ),
+    "135-dual": FormatDescription(
+        full_mode_behavior="fixed nominal 12-frame strip",
+        partial_mode_behavior="review-biased count search with uncertain leading/trailing edges",
+        outer_trust_profile="two_lane_holder_boundary",
+        separator_visibility="per_lane_narrow_internal_gaps",
+        geometry_tolerance="two_independent_35mm_lanes",
+        known_physical_notes=(
+            "lane_split_failure",
+            "partial_dual_lane_not_trusted",
+        ),
+    ),
+    "half": FormatDescription(
+        full_mode_behavior="fixed nominal 12-frame strip",
+        partial_mode_behavior="review-biased count search with uncertain leading/trailing edges",
+        outer_trust_profile="long_dense_strip_boundary",
+        separator_visibility="many_small_internal_gaps",
+        geometry_tolerance="tight_many_frame_grid",
+        known_physical_notes=(
+            "weak_grid_can_overfit_dense_frames",
+            "partial_edges_may_include_holder",
+        ),
+    ),
+    "xpan": FormatDescription(
+        full_mode_behavior="fixed nominal 3-frame strip",
+        partial_mode_behavior="review-biased count search with uncertain leading/trailing edges",
+        outer_trust_profile="wide_frame_holder_boundary",
+        separator_visibility="few_wide_internal_gaps",
+        geometry_tolerance="wide_frame_aspect_sensitive",
+        known_physical_notes=(
+            "wide_content_can_mask_separator",
+            "outer_overcrop_cost_high",
+        ),
+    ),
+    "120-645": FormatDescription(
+        full_mode_behavior="fixed nominal 4-frame strip",
+        partial_mode_behavior="review-biased count search with uncertain leading/trailing edges",
+        outer_trust_profile="medium_format_holder_boundary",
+        separator_visibility="moderate_internal_gaps",
+        geometry_tolerance="medium_format_aspect_sensitive",
+        known_physical_notes=(
+            "short_axis_boundary_can_blend_with_holder",
+            "content_edges_can_look_like_separators",
+        ),
+    ),
+    "120-66": FormatDescription(
+        full_mode_behavior="fixed nominal 3-frame strip",
+        partial_mode_behavior="review-biased count search with uncertain leading/trailing edges",
+        outer_trust_profile="square_frame_holder_boundary_guarded",
+        separator_visibility="broad_internal_separator_widths",
+        geometry_tolerance="square_frame_spacing_sensitive",
+        known_physical_notes=(
+            "broad_separator_width_can_be_false_frame_boundary",
+            "holder_edge_can_mimic_separator",
+            "overlap_or_stuck_frame_note",
+        ),
+    ),
+    "120-67": FormatDescription(
+        full_mode_behavior="fixed nominal 3-frame strip",
+        partial_mode_behavior="review-biased count search with uncertain leading/trailing edges",
+        outer_trust_profile="medium_format_broad_separator_width_guarded",
+        separator_visibility="broad_internal_gap_widths_expected",
+        geometry_tolerance="medium_format_aspect_sensitive",
+        known_physical_notes=(
+            "short_axis_correction_can_overtrust_holder",
+            "broad_separator_width_may_compete_with_content",
+        ),
     ),
 }
 
@@ -238,19 +261,27 @@ def format_spec(format_id: str | FormatId) -> FormatSpec:
     return FORMATS[key]
 
 
+def format_description(format_id: str | FormatId) -> FormatDescription:
+    key = format_id.value if isinstance(format_id, FormatId) else str(format_id)
+    return FORMAT_DESCRIPTIONS[key]
+
+
 __all__ = [
     "COMPRESSION_CHOICES",
     "CONTENT_ASPECTS_HORIZONTAL",
     "DESKEW_CHOICES",
     "DESKEW_FALLBACK_CHOICES",
     "FORMAT_CHOICES",
+    "FORMAT_DESCRIPTIONS",
     "FORMATS",
     "LAYOUT_CHOICES",
     "STRIP_CHOICES",
     "FormatId",
+    "FormatDescription",
     "FormatPhysicalSpec",
     "FormatSpec",
     "StripMode",
     "expected_separator_count",
+    "format_description",
     "format_spec",
 ]

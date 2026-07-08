@@ -23,6 +23,7 @@ from .outer import OuterPolicy
 from .output import OutputPolicy
 from .report import ReportPolicy
 from .output_evidence import RuntimeOutputEvidencePolicy
+from .preprocess import RuntimePreprocessPolicy
 from .separator import SeparatorPolicy
 
 
@@ -32,7 +33,7 @@ class DetectionPolicy:
     format_id: str
     strip_mode: str
     family: str
-    role: str
+    preprocess: RuntimePreprocessPolicy
     detector: DetectorPolicy
     counts: CountPolicy
     outer: OuterPolicy
@@ -50,7 +51,6 @@ class DetectionPolicy:
     output: OutputPolicy = field(default_factory=OutputPolicy)
     diagnostics: RuntimeDiagnosticsPolicy = field(default_factory=RuntimeDiagnosticsPolicy)
     report: ReportPolicy = field(default_factory=ReportPolicy)
-    notes: tuple[str, ...] = ()
 
     def report_detail(self) -> dict[str, Any]:
         from ..reporting import detection_policy_report_detail

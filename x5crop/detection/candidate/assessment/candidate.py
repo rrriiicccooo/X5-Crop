@@ -7,6 +7,7 @@ import numpy as np
 
 from ....constants import (
     CANDIDATE_SOURCE_CONTENT,
+    CANDIDATE_SOURCE_SAFETY,
     CANDIDATE_SOURCE_SEPARATOR,
 )
 from ....domain import Detection
@@ -53,6 +54,10 @@ from .scoring import (
 )
 
 
+def _uses_separator_evidence(source: str) -> bool:
+    return source in {"separator", CANDIDATE_SOURCE_SEPARATOR, CANDIDATE_SOURCE_SAFETY}
+
+
 def _detail_float(detail: dict, key: str, default: float) -> float:
     value = detail.get(key)
     if value is None:
@@ -87,7 +92,7 @@ def apply_candidate_assessment_policy(
         final_review_reasons=[],
         detail=candidate_detail,
     )
-    if source == "separator":
+    if _uses_separator_evidence(source):
         gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
         candidate = apply_base_detection_scoring(
             gray_work,
@@ -170,7 +175,7 @@ def apply_candidate_assessment_policy(
     geometry_score = geometry_support_score(candidate, containment_detail, policy)
     separator_score = (
         separator_support_score(candidate, separator_support_detail, policy)
-        if source == "separator"
+        if _uses_separator_evidence(source)
         else 0.0
     )
     joint_score = joint_support_score(
@@ -224,7 +229,7 @@ def apply_candidate_assessment_policy(
             separator_support_detail["separator_geometry_support_mode"] = "stable_grid"
 
     outer_candidate_strategy = str(candidate.detail.get("outer_candidate_strategy", ""))
-    if source == "separator" and outer_candidate_strategy == "edge_anchor_outer":
+    if _uses_separator_evidence(source) and outer_candidate_strategy == "edge_anchor_outer":
         hard_count = separator_support_detail_summary(separator_support_detail).hard_separator_gaps
         if hard_count <= 0:
             separator_support_ok = False
@@ -236,7 +241,7 @@ def apply_candidate_assessment_policy(
 
     content_guided_hard_separator_missing = False
     content_guided_detail = candidate.detail.get("content_guided_separator", {})
-    if source == "separator" and isinstance(content_guided_detail, dict) and bool(content_guided_detail.get("used", False)):
+    if source in {"separator", CANDIDATE_SOURCE_SEPARATOR} and isinstance(content_guided_detail, dict) and bool(content_guided_detail.get("used", False)):
         hard_count = separator_support_detail_summary(separator_support_detail).hard_separator_gaps
         if hard_count <= 0:
             content_guided_hard_separator_missing = True
@@ -247,7 +252,7 @@ def apply_candidate_assessment_policy(
             separator_support_detail["content_guided_separator_needs_hard_separator"] = True
             signals.append(SIGNAL_CONTENT_GUIDED_HARD_SEPARATOR_MISSING)
 
-    if source == "separator" and not separator_support_ok:
+    if _uses_separator_evidence(source) and not separator_support_ok:
         signals.append(SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK)
     if support == "aspect_conflict":
         signals.append(SIGNAL_CONTENT_ASPECT_CONFLICT)
@@ -297,7 +302,7 @@ def apply_candidate_assessment_policy(
         and policy.partial_holder.checks_leading_content
         and policy.partial_holder.checks_frame_content
         and candidate.strip_mode == "partial"
-        and source == "separator"
+        and _uses_separator_evidence(source)
         and bool(partial_edge_safety.get("used", False))
         and bool(
             partial_edge_safety_blocker_signals.intersection(
@@ -341,7 +346,7 @@ def apply_candidate_assessment_policy(
         policy=policy.candidate_plan.evidence_independence,
     )
     evidence_independence_ok = bool(independence_detail.get("ok", True))
-    if source == "separator":
+    if _uses_separator_evidence(source):
         separator_support_detail = dict(separator_support_detail)
         separator_support_detail["evidence_independence"] = independence_detail
     if not evidence_independence_ok:
@@ -387,7 +392,11 @@ def apply_candidate_assessment_policy(
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
     set_candidate_signals(candidate, signals)
     candidate.detail["candidate_source"] = (
-        CANDIDATE_SOURCE_SEPARATOR if source == "separator" else CANDIDATE_SOURCE_CONTENT
+        CANDIDATE_SOURCE_SEPARATOR
+        if source in {"separator", CANDIDATE_SOURCE_SEPARATOR}
+        else source
+        if source == CANDIDATE_SOURCE_SAFETY
+        else CANDIDATE_SOURCE_CONTENT
     )
     candidate.detail["content_evidence"] = content_detail
     candidate.detail["content_containment"] = containment_detail

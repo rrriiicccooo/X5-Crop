@@ -85,10 +85,10 @@ candidate plan
 
 | 子阶段 | 主要职责 |
 |---|---|
-| Candidate plan | 决定 count、offset、candidate sources、execution budget 和 mode-specific candidate lifecycle。 |
 | Physical proposal | 产生 outer、separator、photo-size 等物理候选或证据。 |
 | Guidance | 使用 content-derived hint 辅助 outer / separator search。 |
-| Candidate build | 将 outer、separator gaps 和 frame geometry 组装成未评分 Detection。 |
+| Candidate plan | 只声明 count、offset、candidate source descriptors 和 execution budget。 |
+| Candidate build | 将 source descriptor、outer、separator gaps 和 frame geometry 组装成未评分 Detection。 |
 | Candidate assessment | 计算 candidate support、candidate gate、candidate blockers、diagnostics 和 confidence caps。 |
 | Candidate extension | 对 corrected outer、content-guided separator 等候选重新 build / reassess。 |
 | Candidate selection | 在已评估候选之间选择 selected candidate，并记录 competition detail。 |
@@ -126,7 +126,7 @@ decision 之后的层级只消费结果：
 | `x5crop.io` | TIFF 读取和写入相关 I/O。 |
 | `x5crop.detection` | 候选、证据、assessment、selection、decision、finalization。 |
 | `x5crop.output` | output-adjacent bleed / overlap read model 和输出几何 helper。 |
-| `x5crop.export` | crop 写出、review copy、输出路径和 export actions。 |
+| `x5crop.export` | crop 写出、review copy 和 export actions。 |
 | `x5crop.report` | report result、schema、sections、outputs。 |
 | `x5crop.debug` | Debug Analysis canvas、panels、gap overlay、writer、status。 |
 | `tools` | regression、build、unit tests 和开发辅助工具；不进入 runtime package。 |
@@ -151,9 +151,9 @@ runtime 可以编排，但不拥有底层几何算法、候选算法或最终 de
 | 子层 | 职责 |
 |---|---|
 | `policies.formats` | format-specific physical tolerance、content tolerance 和 search budget override。 |
-| `policies.parameters` | 参数对象、聚合视图、registry、ownership validation。 |
-| `policies.runtime` | active `DetectionPolicy` 和 runtime subpolicy dataclass。 |
-| `policies.assembly` | 从 format facts、mode posture、参数覆盖和 defaults 组装 runtime policy。 |
+| `policies.parameters` | 分组参数对象、registry、ownership validation 和 format override path mapping。 |
+| `policies.runtime` | active `DetectionPolicy` 和 runtime subpolicy dataclass，包括 preprocess / physical / candidate / decision / output / diagnostics。 |
+| `policies.assembly` | 从 format facts、mode posture、分组参数和受限 override 组装 runtime policy。 |
 | `policies.decision` | final PASS / REVIEW decision contract，以及由 physical traits 推导的 final evidence policy。 |
 | `policies.reporting` | policy detail serialization。 |
 | `policies.registry` / `consistency` / `ids` | policy lookup、consistency smoke、policy id 和 schema id。 |
@@ -172,7 +172,7 @@ geometry support profile 等物理 trait。
 | `detection.physical` | outer、separator、photo-size 等物理 proposal / evidence helper。 |
 | `detection.guidance` | content-derived outer / separator hints 和 content-model proposal inputs。 |
 | `detection.evidence` | content、separator、photo-width、frame topology、outer alignment、output overlap、read-only diagnostics 等证据。 |
-| `detection.candidate.plan` | count / offset / source orchestration / execution budget / dual-lane lane lifecycle。 |
+| `detection.candidate.plan` | count / offset / source descriptors / execution budget；不 build、不 assessment、不 selection。 |
 | `detection.candidate.proposal` | safety 等非物理候选入口。 |
 | `detection.candidate.build` | outer + gaps + frames -> unscored Detection。 |
 | `detection.candidate.assessment` | support scoring、base scoring、candidate gate、blockers、diagnostics、candidate confidence caps。 |
@@ -197,14 +197,14 @@ decision -> finalization。低层不能反向读取高层 decision 语义。
 foundation 层不反向依赖 runtime、detection、report、debug、export 或 policy registry。
 它们接收参数对象，不接收完整 runtime policy 或 `strip_mode` 字符串。
 foundation helper 不隐式生成默认参数；调用方必须显式传入 geometry / image evidence
-参数对象。默认值只允许存在于对应 foundation module 的命名 factory 中。
+参数对象；默认值由 runtime policy assembly 明确提供。
 
 #### 2.6 Output Surface 子层
 
 | 子层 | 职责 |
 |---|---|
 | `output` | output surface、approved geometry adjustment、bleed / overlap helper 和输出几何 read model。 |
-| `export` | TIFF crop、review copy、输出路径和文件动作。 |
+| `export` | TIFF crop、review copy 和文件动作。 |
 | `report` | ProcessResult 到 JSONL / CSV / sections 的转换。 |
 | `debug` | Debug Analysis 图像渲染和状态面板。 |
 
@@ -283,7 +283,7 @@ Source layering describes which package owns which knowledge.
 | `x5crop.io` | TIFF I/O. |
 | `x5crop.detection` | Candidates, evidence, assessment, selection, decision, finalization. |
 | `x5crop.output` | Output-adjacent bleed / overlap read model and output geometry helpers. |
-| `x5crop.export` | Crop writing, review copies, output paths, export actions. |
+| `x5crop.export` | Crop writing, review copies, and export actions. |
 | `x5crop.report` | Report result building, schema, sections, outputs. |
 | `x5crop.debug` | Debug Analysis canvas, panels, gap overlay, writer, status. |
 | `tools` | Regression, build, unit tests, and developer utilities outside the runtime package. |
@@ -302,10 +302,12 @@ or the final decision contract.
 #### 2.3 Policy Sublayers
 
 `policies.formats` owns constrained format presets. `policies.parameters` owns
-parameter objects and ownership validation. `policies.runtime` owns active
-runtime policy dataclasses. `policies.assembly` builds active policy from format
-facts, mode posture, and defaults. `policies.decision` owns the final decision
-contract and derives final evidence policy from physical traits.
+grouped parameter objects, ownership validation, and format override path
+mapping. `policies.runtime` owns active runtime policy dataclasses, including
+preprocess / physical / candidate / decision / output / diagnostics subpolicies.
+`policies.assembly` builds active policy from format facts, mode posture,
+grouped parameters, and constrained overrides. `policies.decision` owns the
+final decision contract and derives final evidence policy from physical traits.
 
 Format files do not carry algorithm switches; capability enablement belongs to
 assembly and runtime policy.
@@ -323,7 +325,7 @@ support profile.
 | `detection.physical` | Physical outer, separator, and photo-size proposal / evidence helpers. |
 | `detection.guidance` | Content-derived outer / separator hints and content-model proposal inputs. |
 | `detection.evidence` | Content, separator, photo-width, frame topology, outer alignment, output overlap, read-only diagnostics. |
-| `detection.candidate.plan` | Count / offset / source orchestration / execution budget / dual-lane lane lifecycle. |
+| `detection.candidate.plan` | Count / offset / source descriptors / execution budget; no build, assessment, or selection. |
 | `detection.candidate.proposal` | Non-physical candidate entries such as safety. |
 | `detection.candidate.build` | outer + gaps + frames -> unscored Detection. |
 | `detection.candidate.assessment` | Support scoring, base scoring, candidate gate, blockers, diagnostics, candidate confidence caps. |
@@ -343,7 +345,7 @@ semantics.
 plain parameters and return facts or transformed data. They must not depend back
 on runtime, detection, report, debug, export, or the policy registry. Foundation
 helpers do not create implicit default parameters; callers pass explicit
-parameter objects, with defaults exposed only through named foundation factories.
+parameter objects supplied by runtime policy assembly.
 
 #### 2.6 Output Surfaces
 

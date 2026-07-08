@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ...image.evidence import ContentEvidenceImageParameters
 from ..parameters.aggregate import FormatParameters
 from ..runtime.content import (
     ContentCandidatePolicy,
@@ -10,13 +11,18 @@ from ..runtime.content import (
 )
 
 
-def content_policy(params: FormatParameters) -> ContentPolicy:
+def content_policy(
+    params: FormatParameters,
+    *,
+    evidence_image: ContentEvidenceImageParameters,
+) -> ContentPolicy:
     evidence = params.content_evidence
     profile = params.content_profile
     mask = params.content_mask
     candidate = params.content_candidate
     support = params.content_support
     return ContentPolicy(
+        evidence_image=evidence_image,
         evidence=ContentEvidencePolicy(
             percentile=float(evidence.percentile),
             threshold_multiplier=float(evidence.threshold_multiplier),

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from ..assembly.format_presets import build_policy_from_format
 from ..parameters.aggregate import FormatParameters
 from ..parameters.registry import base_medium_format_parameters
 
@@ -19,7 +18,3 @@ def parameters() -> FormatParameters:
         separator_full_width_outer_margin_ratios=(0.00, 0.018, 0.035, 0.055),
         separator_full_width_outer_source_candidates=3,
     )
-
-
-def build_policy(strip_mode: str):
-    return build_policy_from_format(FORMAT_ID, parameters, strip_mode)

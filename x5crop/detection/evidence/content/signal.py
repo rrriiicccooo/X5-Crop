@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 
 from ....image.evidence import (
-    default_content_evidence_image_parameters,
+    ContentEvidenceImageParameters,
     make_content_evidence_gray,
 )
 from ....policies.runtime.content import ContentEvidencePolicy, ContentPolicy
@@ -27,10 +27,13 @@ def content_policy_cache_key(content_policy: ContentPolicy) -> tuple[Any, ...]:
     return (content_policy,)
 
 
-def content_signal_from_gray(gray: np.ndarray) -> ContentSignal:
+def content_signal_from_gray(
+    gray: np.ndarray,
+    params: ContentEvidenceImageParameters,
+) -> ContentSignal:
     evidence_u8 = make_content_evidence_gray(
         gray,
-        default_content_evidence_image_parameters(),
+        params,
     )
     return ContentSignal(
         evidence_u8=evidence_u8,

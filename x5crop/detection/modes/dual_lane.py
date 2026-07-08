@@ -7,8 +7,8 @@ from ...domain import Detection
 from ...runtime.policy_context import RuntimePolicyContext
 from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
-from ..candidate.plan.dual_lane import select_dual_lane_candidate
 from .dual_lane_context import build_dual_lane_context
+from .dual_lane_candidate import select_dual_lane_candidate
 from .dual_lane_merge import merge_dual_lane_detections
 from .dual_lane_split import split_dual_lanes
 

@@ -21,8 +21,6 @@ class SeparatorWidthProfilePreset:
 
 @dataclass(frozen=True)
 class ModePolicyPreset:
-    role: str
-    notes: tuple[str, ...] = ()
     detector_kind: str = "standard_strip"
     frame_fit: FrameFitPolicy | None = None
     review_only: ReviewOnlyPolicy = field(default_factory=ReviewOnlyPolicy)

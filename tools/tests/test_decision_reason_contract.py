@@ -22,9 +22,10 @@ from x5crop.detection.modes.review_only import review_only_detection
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, Detection
 from x5crop.formats import format_spec
+from x5crop.report.sections import selected_candidate
 from x5crop.runtime.policy_context import RuntimePolicyContext
 from x5crop.policies.registry import get_detection_policy
-from x5crop.policies.decision.contract import decision_contract_for
+from x5crop.policies.decision.contract import decision_contract_for_policy
 from x5crop.runtime.config import RuntimeConfig
 
 
@@ -72,7 +73,7 @@ def _content_ok_detail() -> dict[str, bool | str]:
 
 
 def _decision_contract(format_id: str = "135", strip_mode: str = "full"):
-    return decision_contract_for(format_id, strip_mode)
+    return decision_contract_for_policy(get_detection_policy(format_id, strip_mode))
 
 
 def _policy_context(format_id: str = "135", strip_mode: str = "full"):
@@ -96,7 +97,7 @@ def _candidate_gate_detail(
 
 class DecisionReasonContractTest(unittest.TestCase):
     def test_decision_contract_report_does_not_expose_unused_candidate_policy(self) -> None:
-        detail = decision_contract_for("135", "full").report_detail()
+        detail = _decision_contract("135", "full").report_detail()
 
         self.assertNotIn("candidate_policy", detail)
         self.assertNotIn("risk_policy", detail)
@@ -229,7 +230,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
 
     def test_decision_signals_separate_assessment_source_from_candidate_source(self) -> None:
-        policy = decision_contract_for("135", "full")
+        policy = _decision_contract("135", "full")
         evidence = {
             "outer": {"ok": True},
             "separator": {"ok": True},
@@ -551,7 +552,7 @@ class DecisionReasonContractTest(unittest.TestCase):
                 gray,
                 detection,
                 _decision_test_config(),
-                make_analysis_cache(gray, "horizontal"),
+                make_analysis_cache(gray, "horizontal", policy.preprocess.content_evidence_image),
                 {},
                 policy,
             )
@@ -628,13 +629,14 @@ class DecisionReasonContractTest(unittest.TestCase):
             jobs=1,
         )
 
+        policy = get_detection_policy("135", "full")
         decision = apply_detection_decision(
             gray,
             detection,
             config,
-            make_analysis_cache(gray, "horizontal"),
+            make_analysis_cache(gray, "horizontal", policy.preprocess.content_evidence_image),
             {},
-            get_detection_policy("135", "full"),
+            policy,
         )
 
         self.assertEqual(decision.status, "needs_review")
@@ -898,16 +900,12 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "candidate_competition": {
                     "selected_candidate": {
                         "selected": True,
-                        "final_confidence": 0.83,
-                        "final_review_reasons": ["evidence_combination_insufficient"],
-                        "decision_status": "needs_review",
+                        "candidate_assessment": {"source": "separator"},
                     },
                     "top_candidates": [
                         {
                             "selected": True,
-                            "final_confidence": 0.83,
-                            "final_review_reasons": ["evidence_combination_insufficient"],
-                            "decision_status": "needs_review",
+                            "candidate_assessment": {"source": "separator"},
                         }
                     ],
                 },
@@ -945,14 +943,17 @@ class DecisionReasonContractTest(unittest.TestCase):
             "low_confidence_context",
         )
         selected = decided.detail["candidate_competition"]["selected_candidate"]
+        self.assertNotIn("final_review_reasons", selected)
+        self.assertNotIn("decision_status", selected)
+        report_selected = selected_candidate(decided)
         self.assertEqual(
-            selected["final_review_reasons"],
+            report_selected["final_review_reasons"],
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
-        self.assertEqual(selected["decision_status"], "needs_review")
-        self.assertEqual(
-            decided.detail["candidate_competition"]["top_candidates"][0]["final_review_reasons"],
-            ["evidence_combination_insufficient", "outer_candidate_disagreement"],
+        self.assertEqual(report_selected["decision_status"], "needs_review")
+        self.assertNotIn(
+            "final_review_reasons",
+            decided.detail["candidate_competition"]["top_candidates"][0],
         )
 
     def test_low_confidence_context_reasons_do_not_create_high_confidence_review(self) -> None:

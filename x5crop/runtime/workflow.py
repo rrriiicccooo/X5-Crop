@@ -38,22 +38,24 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     config = runtime_for_profile(config, profile)
     fmt = FORMATS[config.film_format]
     policy_context = RuntimePolicyContext.for_format_mode(fmt.name, config.strip_mode)
+    initial_policy = policy_context.initial_policy
 
     cached_result = result_from_reusable_analysis(input_file, config, output_surface, profile, warnings, policy_context)
     if cached_result is not None:
         return _finish_result(cached_result, config)
 
     arr, profile, page_warnings = read_tiff(input_file, config.page)
-    gray = make_base_gray_u8(arr, profile.axes, profile.photometric)
+    gray = make_base_gray_u8(arr, profile.axes, profile.photometric, initial_policy.preprocess.base_gray)
     _extend_unique(warnings, page_warnings)
     source_arr = arr
     config = runtime_for_profile(config, profile)
     fmt = FORMATS[config.film_format]
     policy_context = RuntimePolicyContext.for_format_mode(fmt.name, config.strip_mode)
+    initial_policy = policy_context.initial_policy
 
-    arr, gray, deskew_detail = apply_deskew(arr, gray, profile, config, fmt, warnings)
-    analysis_cache = make_analysis_cache(gray, config.layout)
-    policy = policy_context.initial_policy
+    arr, gray, deskew_detail = apply_deskew(arr, gray, profile, config, initial_policy.preprocess, warnings)
+    analysis_cache = make_analysis_cache(gray, config.layout, initial_policy.preprocess.content_evidence_image)
+    policy = initial_policy
     detection_bleed = detection_bleed_parameters(policy.output)
     detection_config = replace(config, bleed_x=detection_bleed.long_axis, bleed_y=detection_bleed.short_axis)
     detection_result = choose_detection(gray, detection_config, fmt, policy_context, analysis_cache)

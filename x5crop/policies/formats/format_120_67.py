@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from ..assembly.format_presets import build_policy_from_format
 from ..parameters.aggregate import FormatParameters
 from ..parameters.registry import base_medium_format_parameters
 
@@ -24,7 +23,3 @@ def parameters() -> FormatParameters:
         partial_edge_ratio_extras=(0.04, 0.08),
         partial_edge_max_candidates=4,
     )
-
-
-def build_policy(strip_mode: str):
-    return build_policy_from_format(FORMAT_ID, parameters, strip_mode)

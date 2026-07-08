@@ -5,7 +5,7 @@ from typing import Any
 
 from ..runtime.config import RuntimeConfig
 from ..domain import Detection
-from ..export.paths import display_generated_path
+from ..output.surface import display_generated_path
 from ..policies.runtime.policy import DetectionPolicy
 from .writer import write_debug_analysis, write_debug_preview
 

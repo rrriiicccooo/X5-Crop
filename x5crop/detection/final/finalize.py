@@ -42,7 +42,6 @@ def finalize_detection(
         apply_approved_geometry_adjustment(
             detection,
             gray,
-            config,
             status,
             policy.finalization.approved_geometry_adjustment,
         )

@@ -68,7 +68,7 @@ def result_from_cached_record(
         layout=str(cached_record["layout"]),
         strip_mode=str(cached_record["strip_mode"]),
         count=int(cached_record["count"]),
-        final_review_reasons=list(cached_record.get("final_review_reasons", [])),
+        final_review_reasons=list(cached_record["final_review_reasons"]),
         output_files=[],
         review_copy=cached_record.get("review_copy"),
         outer_box=dict(cached_record.get("outer_box", {})),

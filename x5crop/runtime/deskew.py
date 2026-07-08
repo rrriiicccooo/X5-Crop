@@ -4,12 +4,11 @@ import math
 from typing import Any
 
 from ..domain import ImageProfile
-from ..formats import FormatSpec
 from ..geometry.layout import work_gray
 from ..image.deskew import choose_deskew_angle
 from ..image.gray import make_base_gray_u8
 from ..image.transforms import rotate_array_expand
-from ..policies.parameters.registry import format_parameters
+from ..policies.runtime.preprocess import RuntimePreprocessPolicy
 from ..utils import clamp_float
 from .config import RuntimeConfig
 
@@ -19,15 +18,21 @@ def apply_deskew(
     gray: Any,
     profile: ImageProfile,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    preprocess: RuntimePreprocessPolicy,
     warnings: list[str],
 ) -> tuple[Any, Any, dict[str, Any]]:
-    deskew = format_parameters(fmt.name).deskew
+    deskew = preprocess.deskew
     deskew_detail: dict[str, Any] = {"applied": False}
     if config.deskew == "off":
         return arr, gray, deskew_detail
 
-    angle, angle_detail = choose_deskew_angle(gray, config.layout, config.deskew_fallback, deskew)
+    angle, angle_detail = choose_deskew_angle(
+        gray,
+        config.layout,
+        config.deskew_fallback,
+        deskew,
+        preprocess.deskew_fallback_evidence,
+    )
     deskew_detail.update(angle_detail)
     deskew_detail["angle"] = angle
     deskew_work_width = float(work_gray(gray, config.layout).shape[1])
@@ -43,7 +48,7 @@ def apply_deskew(
         deskew_detail["skipped"] = "span_below_threshold"
     elif config.deskew_min_angle <= abs(angle) <= config.deskew_max_angle:
         arr = rotate_array_expand(arr, -angle, profile.axes)
-        gray = make_base_gray_u8(arr, profile.axes, profile.photometric)
+        gray = make_base_gray_u8(arr, profile.axes, profile.photometric, preprocess.base_gray)
         deskew_detail["applied"] = True
         warnings.append(f"deskew applied: {-angle:.4f} degrees")
     else:

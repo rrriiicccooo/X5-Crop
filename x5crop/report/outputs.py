@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..app_info import REPORT_JSONL_NAME, SUMMARY_CSV_NAME
 from ..domain import ProcessResult
-from ..export.paths import output_directory_for
+from ..output.surface import output_directory_for
 from ..runtime.config import RuntimeConfig
 from ..utils import json_safe
 

@@ -31,10 +31,11 @@ def content_signal_arrays_for_candidate(
     gray_work: np.ndarray,
     cache: Optional[AnalysisCache],
     layout: str,
+    content_policy: ContentPolicy,
 ) -> tuple[np.ndarray, np.ndarray, str]:
     if cache is not None and cache.layout == layout:
         return cache.content_evidence_work, cache.content_evidence_float_work, "cache"
-    signal = content_signal_from_gray(gray_work)
+    signal = content_signal_from_gray(gray_work, content_policy.evidence_image)
     return signal.evidence_u8, signal.evidence_float, "computed"
 
 
@@ -149,7 +150,12 @@ def content_detection_for_count(
     mask_policy = content_policy.mask
     candidate_policy = content_policy.candidate
     wh, ww = gray_work.shape
-    evidence, evidence_float, signal_source = content_signal_arrays_for_candidate(gray_work, cache, config.layout)
+    evidence, evidence_float, signal_source = content_signal_arrays_for_candidate(
+        gray_work,
+        cache,
+        config.layout,
+        content_policy,
+    )
     mask_detail = content_mask_region_detail(
         evidence_float,
         gray_work.shape,

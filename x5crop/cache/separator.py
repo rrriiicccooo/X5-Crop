@@ -14,13 +14,16 @@ from ..geometry.detection_parameters import (
 from ..geometry.edge_refine_profile import edge_refine_profiles
 from ..geometry.separator_profile import separator_profile
 from ..image.evidence import (
-    default_separator_evidence_image_parameters,
+    SeparatorEvidenceImageParameters,
     make_separator_evidence_gray,
 )
 
 
-def cached_full_separator_evidence(cache: Optional[AnalysisCache], gray_work: np.ndarray) -> np.ndarray:
-    params = default_separator_evidence_image_parameters()
+def cached_full_separator_evidence(
+    cache: Optional[AnalysisCache],
+    gray_work: np.ndarray,
+    params: SeparatorEvidenceImageParameters,
+) -> np.ndarray:
     if cache is None:
         return make_separator_evidence_gray(gray_work, params)
     if cache.separator_evidence_work_full is None:
@@ -73,12 +76,16 @@ def cached_separator_profile(
     return profile
 
 
-def cached_separator_evidence_crop(cache: Optional[AnalysisCache], gray_work: np.ndarray, outer: Box) -> np.ndarray:
-    params = default_separator_evidence_image_parameters()
+def cached_separator_evidence_crop(
+    cache: Optional[AnalysisCache],
+    gray_work: np.ndarray,
+    outer: Box,
+    params: SeparatorEvidenceImageParameters,
+) -> np.ndarray:
     if cache is None:
         return make_separator_evidence_gray(crop_work_outer(gray_work, outer), params)
     if is_full_work_box(cache.gray_work, outer):
-        return cached_full_separator_evidence(cache, cache.gray_work)
+        return cached_full_separator_evidence(cache, cache.gray_work, params)
     key = box_cache_key(outer)
     evidence = cache.separator_evidence_crops.get(key)
     if evidence is None:

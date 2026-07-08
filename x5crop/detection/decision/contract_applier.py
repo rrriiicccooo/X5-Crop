@@ -50,25 +50,6 @@ def _unique_reasons(reasons: list[str]) -> list[str]:
     return unique
 
 
-def sync_candidate_competition_decision_fields(detection: Detection, status: str) -> None:
-    competition = detection.detail.get("candidate_competition")
-    if not isinstance(competition, dict):
-        return
-    final_reasons = final_review_reasons(detection)
-    selected = competition.get("selected_candidate")
-    if isinstance(selected, dict):
-        selected["final_confidence"] = float(detection.confidence)
-        selected["final_review_reasons"] = list(final_reasons)
-        selected["decision_status"] = status
-    top = competition.get("top_candidates")
-    if isinstance(top, list):
-        for candidate in top:
-            if isinstance(candidate, dict) and bool(candidate.get("selected", False)):
-                candidate["final_confidence"] = float(detection.confidence)
-                candidate["final_review_reasons"] = list(final_reasons)
-                candidate["decision_status"] = status
-
-
 def _decision_status_for(
     detection: Detection,
     confidence_threshold: float,
@@ -181,7 +162,6 @@ def apply_decision_contract(
     detection.detail["candidate_gate_input"] = candidate_gate_input
     set_final_review_reasons(detection, final_reasons)
     final_reasons = final_review_reasons(detection)
-    sync_candidate_competition_decision_fields(detection, status)
     detail = {
         "policy_id": policy.policy_id,
         "schema_version": policy.schema_version,

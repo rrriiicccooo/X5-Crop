@@ -34,8 +34,8 @@ class SeparatorEvidenceImageParameters:
     high_percentile: float = 98.0
     vertical_edge_smooth_ratio: float = 0.0015
     vertical_edge_smooth_min: int = 3
-    dark_band_mean: float = 0.28
-    light_band_mean: float = 0.78
+    tonal_dark_mean: float = 0.28
+    tonal_light_mean: float = 0.78
     local_weight: float = 0.72
     vertical_edge_weight: float = 0.28
     tonal_band_weight: float = 0.55
@@ -52,18 +52,6 @@ class ContentEvidenceImageParameters:
     texture_weight: float = 0.34
     local_contrast_weight: float = 0.18
     tonal_presence_weight: float = 0.06
-
-
-def default_deskew_fallback_evidence_parameters() -> DeskewFallbackEvidenceParameters:
-    return DeskewFallbackEvidenceParameters()
-
-
-def default_separator_evidence_image_parameters() -> SeparatorEvidenceImageParameters:
-    return SeparatorEvidenceImageParameters()
-
-
-def default_content_evidence_image_parameters() -> ContentEvidenceImageParameters:
-    return ContentEvidenceImageParameters()
 
 
 def make_deskew_fallback_gray(
@@ -121,12 +109,12 @@ def make_separator_evidence_gray(
     )
     column_mean = local.mean(axis=0)
     dark_response = np.clip(
-        (params.dark_band_mean - column_mean) / params.dark_band_mean,
+        (params.tonal_dark_mean - column_mean) / params.tonal_dark_mean,
         0.0,
         1.0,
     )
     light_band = np.clip(
-        (column_mean - params.light_band_mean) / (1.0 - params.light_band_mean),
+        (column_mean - params.tonal_light_mean) / (1.0 - params.tonal_light_mean),
         0.0,
         1.0,
     )
@@ -195,9 +183,6 @@ __all__ = [
     "ContentEvidenceImageParameters",
     "DeskewFallbackEvidenceParameters",
     "SeparatorEvidenceImageParameters",
-    "default_content_evidence_image_parameters",
-    "default_deskew_fallback_evidence_parameters",
-    "default_separator_evidence_image_parameters",
     "make_content_evidence_gray",
     "make_deskew_fallback_gray",
     "make_separator_evidence_gray",

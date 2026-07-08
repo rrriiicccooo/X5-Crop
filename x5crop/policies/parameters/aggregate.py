@@ -1,401 +1,95 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from .outer import OuterMaskProfile
-from .views import FormatParameterViews
+from ...geometry.detection_parameters import SeparatorWidthProfileSearchParameters
+from ...image.deskew_parameters import DeskewParameters
+from .base import PartialCountParameters, PartialEdgeHintParameters
+from .content import (
+    ContentCandidateParameters,
+    ContentEvidenceParameters,
+    ContentMaskParameters,
+    ContentProfileParameters,
+    ContentSupportParameters,
+)
+from .decision import DecisionReviewParameters
+from .diagnostics import DebugGapOverlayParameters, NearbySeparatorDiagnosticsParameters
+from .finalization import ApprovedGeometryAdjustmentParameters, PartialHolderParameters
+from .outer import (
+    BaseOuterCandidateParameters,
+    ContentContainmentCorrectionParameters,
+    EdgeAnchoredContentPositionParameters,
+    FloatingContentPositionParameters,
+    FullWidthSeparatorOuterParameters,
+    GridOuterRefineParameters,
+    LongAxisGeometryCorrectionParameters,
+    OuterStrategyParameters,
+    SeparatorOuterBandParameters,
+    ShortAxisGeometryCorrectionParameters,
+)
+from .output_evidence import OutputOverlapEvidenceParameters
+from .scoring import (
+    BaseDetectionScoreParameters,
+    CandidateCompetitionParameters,
+    GeometrySupportScoreParameters,
+    ScoringCalibrationParameters,
+    SeparatorSupportScoreParameters,
+)
+from .separator import (
+    EdgeRefineProfileParameters,
+    GapSearchParameters,
+    HardGapTrustParameters,
+    LeadingGridFailureParameters,
+    NearbySeparatorRefinementParameters,
+    SeparatorGeometrySupportParameters,
+    SeparatorProfileParameters,
+    SeparatorSupportParameters,
+    SeparatorWidthProfileParameters,
+)
 
 
 @dataclass(frozen=True)
-class FormatParameters(FormatParameterViews):
+class FormatParameters:
     name: str
-    outer_white_x_width_multiplier: float = 1.80
-    outer_white_x_extra_ratio: float = 0.060
-    outer_candidate_max_area: float = 0.94
-    outer_mask_expand_ratio: float = 0.002
-    outer_mask_profiles: tuple[OuterMaskProfile, ...] = (
-        OuterMaskProfile("mask_not_white_246", None, 246),
-        OuterMaskProfile("mask_not_white_225", None, 225),
-        OuterMaskProfile("mask_mid_8_246", 8, 246),
-    )
-    outer_min_width_ratio: float = 0.10
-    outer_min_height_ratio: float = 0.10
-    outer_min_width_px: int = 20
-    outer_min_height_px: int = 20
-    outer_bw_not_white_threshold: int = 246
-    outer_bw_dark_threshold: int = 210
-    outer_bw_min_fraction: float = 0.015
-    outer_bw_min_width_ratio: float = 0.10
-    outer_bw_min_height_ratio: float = 0.10
-    outer_bw_margin_ratio: float = 0.002
-    outer_bw_margin_min: int = 2
-    outer_white_border_ratio: float = 0.985
-    outer_white_run_ratio: float = 0.003
-    outer_white_run_min: int = 2
-    outer_white_run_max: int = 80
-    outer_white_dark_threshold: int = 30
-    outer_white_light_threshold: int = 225
-    outer_white_min_width_ratio: float = 0.10
-    outer_white_min_height_ratio: float = 0.10
-    outer_white_margin_ratio: float = 0.002
-    outer_white_margin_min: int = 2
-    content_profile_smooth_ratio: float = 0.010
-    content_profile_min_run_ratio: float = 0.20
-    content_profile_threshold_min: float = 0.035
-    content_profile_threshold_max: float = 0.40
-    content_profile_p35_weight: float = 0.38
-    content_profile_p65_multiplier: float = 0.82
-    content_mask_p55_weight: float = 0.34
-    content_mask_p75_multiplier: float = 0.78
-    content_mask_min: float = 0.045
-    content_mask_max: float = 0.45
-    content_mask_percentiles: tuple[float, float, float] = (55.0, 75.0, 92.0)
-    content_bbox_min_fraction: float = 0.008
-    content_outer_min_width_ratio: float = 0.08
-    content_outer_min_height_ratio: float = 0.08
-    content_outer_min_width_px: int = 60
-    content_outer_min_height_px: int = 30
-    content_expected_width_min_px: float = 8.0
-    content_candidate_coverage_weight: float = 0.38
-    content_candidate_mean_weight: float = 0.30
-    content_candidate_plan_weight: float = 0.22
-    content_candidate_aspect_weight: float = 0.10
-    content_conf_coverage_norm: float = 0.22
-    content_conf_mean_norm: float = 0.16
-    content_conf_aspect_norm: float = 0.18
-    content_weak_coverage: float = 0.14
-    content_aspect_uncertain: float = 0.18
-    content_evidence_percentile: float = 70.0
-    content_evidence_threshold_multiplier: float = 0.70
-    content_evidence_threshold_min: float = 0.08
-    content_evidence_threshold_max: float = 0.45
-    content_evidence_aspect_ok_max: float = 0.22
-    content_evidence_present_mean_min: float = 0.075
-    content_evidence_present_coverage_min: float = 0.18
-    content_grid_fallback_cap: float = 0.82
-    content_run_mismatch_cap: float = 0.84
-    content_runs_incomplete_cap: float = 0.84
-    content_weak_coverage_cap: float = 0.82
-    content_aspect_uncertain_cap: float = 0.82
-    decision_content_aspect_conflict_cap: float = 0.82
-    decision_content_low_confidence_cap: float = 0.84
-    decision_outer_mismatch_cap: float = 0.84
-    gap_radius_ratio: float = 0.16
-    gap_radius_min: int = 6
-    gap_radius_max: int = 900
-    gap_max_width_ratio: float = 0.045
-    gap_max_width_min: int = 2
-    gap_max_width_max: int = 420
-    separator_width_profile_enabled: bool = True
-    separator_width_profile_max_width_ratio: float = 0.060
-    separator_width_profile_min_mean: float = 0.95
-    separator_width_profile_min_prominence: float = 0.02
-    gap_min_width_ratio: float = 0.001
-    gap_min_width_min: int = 1
-    gap_min_width_max: int = 12
-    gap_guard_ratio: float = 0.035
-    gap_guard_min: int = 3
-    gap_guard_max: int = 220
-    gap_min_score: float = 0.22
-    gap_peak_multiplier: float = 0.90
-    gap_band_multiplier: float = 0.62
-    gap_band_min_score_multiplier: float = 0.86
-    gap_weak_prominence_min: float = 0.08
-    gap_weak_prominence_mean_override: float = 0.95
-    gap_quality_prominence_weight: float = 0.80
-    constrain_full_shift_ratio: float = 0.045
-    constrain_partial_shift_ratio: float = 0.12
-    constrain_shift_min: float = 20.0
-    constrain_shift_max: float = 520.0
-    nearby_window_ratio: float = 0.040
-    nearby_window_min: int = 16
-    nearby_window_max: int = 320
-    nearby_exclude_ratio: float = 0.012
-    nearby_exclude_min: int = 8
-    nearby_exclude_max: int = 120
-    nearby_max_width_ratio: float = 0.070
-    nearby_max_width_min: int = 2
-    nearby_max_width_max: int = 520
-    nearby_distance_ratio: float = 0.040
-    nearby_score_add: float = 0.10
-    nearby_score_multiplier: float = 1.22
-    nearby_detail_score_add: float = 0.08
-    nearby_detail_score_multiplier: float = 1.18
-    nearby_local_gain_ratio: float = 0.006
-    nearby_local_gain_min: float = 8.0
-    nearby_local_gain_max: float = 40.0
-    nearby_width_cv_slack: float = 0.0015
-    nearby_active_refinement: bool = True
-    separator_profile_top_ratio: float = 0.10
-    separator_profile_bottom_ratio: float = 0.90
-    separator_profile_segments: int = 5
-    separator_profile_dark_threshold: int = 30
-    separator_profile_light_threshold: int = 225
-    separator_profile_consistency_percentile: float = 20.0
-    separator_profile_average_weight: float = 0.35
-    separator_profile_consistency_weight: float = 0.65
-    separator_profile_std_norm: float = 70.0
-    separator_profile_dark_soft_mean: float = 54.0
-    separator_profile_light_soft_mean: float = 225.0
-    separator_profile_light_soft_span: float = 30.0
-    separator_profile_soft_weight: float = 0.50
-    separator_profile_uniform_base: float = 0.90
-    separator_profile_uniform_weight: float = 0.10
-    separator_profile_gradient_weight: float = 0.25
-    separator_profile_smooth_ratio: float = 0.0015
-    separator_profile_smooth_min: int = 3
-    edge_refine_top_ratio: float = 0.12
-    edge_refine_bottom_ratio: float = 0.88
-    edge_refine_mean_weight: float = 0.65
-    edge_refine_p75_weight: float = 0.35
-    edge_refine_smooth_ratio: float = 0.0008
-    edge_refine_smooth_min: int = 3
-    edge_refine_high_percentile: float = 99.2
-    edge_refine_background_dark_threshold: int = 30
-    edge_refine_background_light_threshold: int = 225
-    edge_refine_y_edge_weight: float = 0.50
-    edge_refine_activity_percentile: float = 95.0
-    hard_trust_guard_ratio: float = 0.020
-    hard_trust_guard_min: int = 4
-    hard_trust_guard_max: int = 80
-    hard_trust_narrow_ratio: float = 0.020
-    hard_trust_narrow_min: float = 3.0
-    hard_trust_narrow_max: float = 140.0
-    hard_trust_model_delta_ratio: float = 0.040
-    hard_trust_geometry_width_ratio: float = 0.018
-    hard_trust_strong_min_score: float = 0.90
-    hard_trust_strong_width_min: float = 0.018
-    hard_trust_strong_width_max: float = 0.065
-    hard_trust_narrow_ok_score: float = 0.70
-    hard_trust_narrow_ok_width_min: float = 0.006
-    hard_trust_narrow_ok_width_max: float = 0.018
-    hard_trust_model_conflict_score: float = 1.05
-    hard_trust_core_content_threshold: int = 235
-    hard_trust_core_dark_threshold: int = 55
-    hard_trust_dark_mean_max: float = 45.0
-    hard_trust_dark_fraction_min: float = 0.45
-    hard_trust_dark_activity_max: float = 0.18
-    hard_trust_strong_core_content_max: float = 0.08
-    hard_trust_weak_mean_min: float = 70.0
-    hard_trust_weak_content_min: float = 0.10
-    hard_trust_frame_border_width_ratio: float = 0.010
-    hard_trust_continuity_min: float = 0.12
-    hard_trust_activity_min: float = 0.030
-    output_overlap_mean_min: float = 55.0
-    output_overlap_weak_continuity: float = 0.16
-    output_overlap_weak_activity: float = 0.04
-    output_overlap_medium_continuity: float = 0.35
-    output_overlap_medium_activity: float = 0.08
-    output_overlap_strong_continuity: float = 0.70
-    output_overlap_strong_activity: float = 0.12
-    debug_gap_overlap_tolerance_ratio: float = 0.012
-    debug_gap_overlap_tolerance_min: float = 4.0
-    debug_gap_overlap_tolerance_max: float = 80.0
-    debug_gap_tick_length_ratio: float = 0.12
-    debug_gap_tick_length_min: int = 20
-    debug_gap_hard_line_width: int = 2
-    debug_gap_model_line_width: int = 2
-    debug_gap_diagnostic_line_width: int = 3
-    outer_align_white_edge_long_ratio: float = 0.0190
-    outer_align_white_edge_long_min: int = 90
-    outer_align_white_edge_long_max: int = 180
-    outer_align_long_threshold_ratio: float = 0.0340
-    outer_align_long_threshold_min: int = 160
-    outer_align_long_threshold_max: int = 320
-    outer_align_short_threshold_ratio: float = 0.0060
-    outer_align_short_threshold_min: int = 28
-    outer_align_short_threshold_max: int = 80
-    outer_align_long_excess_ratio: float = 0.050
-    outer_align_long_excess_threshold_ratio: float = 0.035
-    outer_align_short_excess_ratio: float = 0.035
-    outer_align_short_requires_hard_anchors: bool = False
-    outer_align_short_content_height_max: float = 1.0
-    outer_align_content_width_min: float = 0.985
-    outer_align_edge_short_ratio: float = 0.015
-    outer_align_edge_dark_max: float = 0.02
-    outer_align_border_band_ratio: float = 0.018
-    outer_align_margin_x_ratio: float = 0.0030
-    outer_align_margin_x_min: int = 15
-    outer_align_margin_x_max: int = 30
-    outer_align_margin_y_ratio: float = 0.0030
-    outer_align_margin_y_min: int = 10
-    outer_align_margin_y_max: int = 20
-    outer_align_long_margin_ratio: float = 0.012
-    outer_align_long_margin_cap_ratio: float = 0.0170
-    outer_align_long_margin_cap_min: int = 80
-    outer_align_long_margin_cap_max: int = 160
-    outer_align_short_margin_ratio: float = 0.010
-    outer_align_short_margin_cap_ratio: float = 0.010
-    outer_align_short_margin_cap_min: int = 40
-    outer_align_short_margin_cap_max: int = 80
-    score_photo_width_cv_norm: float = 0.030
-    score_gap_weight: float = 0.40
-    score_photo_width_weight: float = 0.30
-    score_outer_min_area: float = 0.35
-    score_outer_max_area: float = 0.995
-    score_outer_too_large: float = 0.94
-    image_quality_contrast_min: float = 35.0
-    score_full_photo_width_cv: float = 0.040
-    score_geometry_floor_tight_photo_width_cv: float = 0.006
-    score_geometry_floor_high: float = 0.92
-    score_geometry_floor_low: float = 0.88
-    score_unstable_photo_width_cv: float = 0.030
-    score_full_outer_min_area: float = 0.40
-    separator_score_min_hard_gaps: int = 2
-    separator_score_max_equal_gaps_floor: int = 2
-    separator_score_low_hard_confidence_cap: float = 0.82
-    separator_score_mostly_equal_confidence_cap: float = 0.84
-    score_partial_one_cap: float = 0.78
-    score_partial_two_35mm_cap: float = 0.82
-    score_low_confidence_floor: float = 0.85
-    separator_score_allow_full_detected_geometry: bool = True
-    separator_score_allow_geometry_support: bool = True
-    calibrate_hard_full_confidence_floor: float = 0.0
-    separator_model_grid_credit: float = 0.35
-    separator_model_equal_credit: float = 0.12
-    separator_support_needed_hard_max: int = 2
-    separator_support_max_equal_gaps_floor: int = 2
-    separator_allow_geometry_support: bool = True
-    separator_detected_geometry_min_hard_ratio: float = 0.60
-    separator_detected_geometry_min_joint_score: float = 0.78
-    separator_stable_grid_min_hard_ratio: float = 0.35
-    separator_stable_grid_min_joint_score: float = 0.65
-    separator_hard_required_all_gaps: bool = True
-    separator_support_edge_pair_min_score_without_broad_width: float = 0.0
-    separator_support_edge_pair_min_score_with_broad_width: float = 0.0
-    separator_support_reliable_gap_min_score: float = 0.28
-    separator_support_min_broad_separator_width_gaps_for_auto: int = 0
-    leading_grid_failure_enabled: bool = True
-    leading_grid_failure_min_count: int = 5
-    leading_grid_failure_leading_count: int = 3
-    leading_grid_failure_low_score: float = 0.35
-    leading_grid_failure_very_low_score: float = 0.12
-    leading_grid_failure_very_low_count: int = 2
-    leading_grid_failure_max_hard: int = 2
-    geometry_photo_width_cv_norm: float = 0.040
-    content_support_aspect_norm: float = 0.22
-    content_support_coverage_weight: float = 0.42
-    content_support_mean_weight: float = 0.40
-    content_support_aspect_weight: float = 0.18
-    content_support_score_ok: float = 1.0
-    content_support_score_weak: float = 0.72
-    content_support_score_low_content: float = 0.58
-    content_support_score_aspect_conflict: float = 0.35
-    content_support_score_unknown: float = 0.50
-    geometry_support_photo_width_weight: float = 0.34
-    geometry_support_aspect_weight: float = 0.26
-    geometry_support_count_weight: float = 0.16
-    separator_support_hard_weight: float = 0.78
-    separator_support_model_weight: float = 0.22
-    calibrate_geometry_weight: float = 0.34
-    calibrate_content_weight: float = 0.33
-    calibrate_separator_weight: float = 0.33
-    calibrate_separator_source_bias: float = 0.03
-    calibrate_partial_no_auto_cap: float = 0.82
-    calibrate_full_no_auto_cap: float = 0.84
-    candidate_competition_top_n: int = 8
-    candidate_competition_close_margin: float = 0.04
-    candidate_competition_confidence_cap: float = 0.84
-    grid_outer_refine_shift_ratio: float = 0.080
-    grid_outer_refine_shift_min: int = 8
-    grid_outer_refine_shift_max: int = 420
-    grid_outer_refine_max_width_change: float = 0.12
-    deskew_min_outer_width: int = 100
-    deskew_outer_dark_threshold: int = 245
-    deskew_outer_min_fraction: float = 0.01
-    deskew_sample_width_px: int = 350
-    deskew_min_samples: int = 6
-    deskew_max_samples: int = 24
-    deskew_min_col_content: int = 10
-    deskew_min_col_content_ratio: float = 0.05
-    deskew_slope_delta_max: float = 0.006
-    deskew_residual_min: float = 3.0
-    deskew_residual_height_ratio: float = 0.003
-    deskew_auto_quality_ok: float = 8.0
-    deskew_fallback_quality_gain: float = 3.0
-    deskew_fit_min_points: int = 4
-    deskew_fit_tolerance_min: float = 2.0
-    deskew_fit_tolerance_multiplier: float = 3.0
-    deskew_span_skip_ratio: float = 0.0005
-    deskew_span_skip_min: float = 3.0
-    deskew_span_skip_max: float = 12.0
-    partial_offsets: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0)
-    partial_edge_hint_window_ratio: float = 0.18
-    partial_edge_hint_window_min: int = 8
-    partial_edge_hint_window_max: int = 900
-    partial_auto_include_default_count: bool = False
-    partial_edge_safety_enabled: bool = True
-    partial_edge_safety_min_count_35mm: int = 2
-    partial_edge_safety_min_count_small: int = 2
-    partial_edge_safety_min_hard_gaps: int = 1
-    partial_edge_safety_min_hard_ratio: float = 0.15
-    partial_edge_safety_max_equal_gaps: int = 0
-    partial_edge_safety_max_photo_width_cv: float = 0.055
-    partial_edge_safety_min_joint_score: float = 0.65
-    partial_edge_safety_min_content_score: float = 0.72
-    partial_edge_safety_min_geometry_score: float = 0.72
-    partial_edge_safety_min_broad_separator_width_gaps: int = 0
-    partial_edge_safety_broad_separator_width_min_ratio: float = 0.033
-    partial_edge_safety_leading_content_check: bool = False
-    partial_edge_safety_leading_content_max_mean: float = 0.20
-    partial_edge_safety_leading_content_max_coverage: float = 0.34
-    partial_edge_safety_leading_content_band_ratio: float = 0.04
-    partial_edge_safety_frame_content_check: bool = False
-    partial_edge_safety_min_frame_mean: float = 0.055
-    partial_edge_safety_min_frame_coverage: float = 0.10
-    approved_adjust_long_limit_ratio: float = 0.018
-    approved_adjust_long_limit_min: int = 20
-    approved_adjust_long_limit_max: int = 60
-    approved_adjust_min_ext_ratio: float = 0.0100
-    approved_adjust_min_ext_min: int = 50
-    approved_adjust_min_ext_max: int = 120
-    approved_adjust_side_band_trim_ratio: float = 0.12
-    approved_adjust_content_threshold_u8: int = 242
-    approved_adjust_min_active_column_fraction: float = 0.018
-    separator_full_width_outer_count: int = 0
-    separator_full_width_outer_max_candidates: int = 8
-    separator_full_width_outer_margin_ratios: tuple[float, ...] = (0.00, 0.018, 0.035)
-    separator_full_width_outer_source_candidates: int = 3
-    short_axis_geometry_correction_min_error: float = 0.24
-    short_axis_geometry_correction_target_aspect: float = 0.0
-    short_axis_geometry_correction_margin_ratio: float = 0.008
-    short_axis_geometry_correction_margin_min: int = 12
-    short_axis_geometry_correction_margin_max: int = 80
-    long_axis_geometry_correction_ratio_tolerance: float = 0.025
-    long_axis_geometry_correction_min_shrink_ratio: float = 0.003
-    long_axis_geometry_correction_max_shrink_ratio: float = 0.120
-    long_axis_geometry_correction_content_margin_ratio: float = 0.010
-    long_axis_geometry_correction_content_margin_min: int = 12
-    long_axis_geometry_correction_content_margin_max: int = 80
-    partial_floating_ratio_extras: tuple[float, ...] = (0.06, 0.10)
-    partial_floating_content_threshold: int = 225
-    partial_floating_content_margin_ratio: float = 0.012
-    partial_floating_content_margin_min: int = 12
-    partial_floating_content_margin_max: int = 80
-    partial_floating_min_width_ratio: float = 0.30
-    partial_floating_max_candidates: int = 12
-    partial_edge_center_ratio: float = 0.35
-    partial_edge_ratio_extras: tuple[float, ...] = (0.06, 0.10)
-    partial_edge_content_threshold: int = 225
-    partial_edge_content_margin_ratio: float = 0.012
-    partial_edge_content_margin_min: int = 12
-    partial_edge_content_margin_max: int = 80
-    partial_edge_min_width_ratio: float = 0.30
-    partial_edge_max_candidates: int = 8
-    separator_outer_min_score: float = 0.58
-    separator_outer_band_score: float = 0.36
-    separator_outer_min_width_ratio: float = 0.006
-    separator_outer_max_width_ratio: float = 0.120
-    separator_outer_spacing_min_ratio: float = 0.82
-    separator_outer_spacing_max_ratio: float = 1.24
-    separator_outer_frame_error_max: float = 0.18
-    separator_outer_edge_margin_ratio: float = 0.18
-    separator_outer_gap_max_width_ratio: float = 0.095
-    separator_outer_source_candidates: int = 2
-    separator_outer_band_candidates: int = 10
-    separator_outer_pair_candidates: int = 4
-    separator_outer_max_candidates: int = 12
-    separator_width_profile_partial_enabled: bool = True
+    partial_counts: PartialCountParameters = field(default_factory=PartialCountParameters)
+    partial_edge_hint: PartialEdgeHintParameters = field(default_factory=PartialEdgeHintParameters)
+    content_evidence: ContentEvidenceParameters = field(default_factory=ContentEvidenceParameters)
+    content_profile: ContentProfileParameters = field(default_factory=ContentProfileParameters)
+    content_mask: ContentMaskParameters = field(default_factory=ContentMaskParameters)
+    content_candidate: ContentCandidateParameters = field(default_factory=ContentCandidateParameters)
+    content_support: ContentSupportParameters = field(default_factory=ContentSupportParameters)
+    outer_strategy: OuterStrategyParameters = field(default_factory=OuterStrategyParameters)
+    floating_content_position: FloatingContentPositionParameters = field(default_factory=FloatingContentPositionParameters)
+    edge_anchored_content_position: EdgeAnchoredContentPositionParameters = field(default_factory=EdgeAnchoredContentPositionParameters)
+    base_outer_candidates: BaseOuterCandidateParameters = field(default_factory=BaseOuterCandidateParameters)
+    separator_outer_band: SeparatorOuterBandParameters = field(default_factory=SeparatorOuterBandParameters)
+    separator_full_width_outer: FullWidthSeparatorOuterParameters = field(default_factory=FullWidthSeparatorOuterParameters)
+    long_axis_geometry_correction: LongAxisGeometryCorrectionParameters = field(default_factory=LongAxisGeometryCorrectionParameters)
+    grid_outer_refine: GridOuterRefineParameters = field(default_factory=GridOuterRefineParameters)
+    short_axis_geometry_correction: ShortAxisGeometryCorrectionParameters = field(default_factory=ShortAxisGeometryCorrectionParameters)
+    content_containment_correction: ContentContainmentCorrectionParameters = field(default_factory=ContentContainmentCorrectionParameters)
+    separator_support: SeparatorSupportParameters = field(default_factory=SeparatorSupportParameters)
+    leading_grid_failure: LeadingGridFailureParameters = field(default_factory=LeadingGridFailureParameters)
+    separator_geometry_support: SeparatorGeometrySupportParameters = field(default_factory=SeparatorGeometrySupportParameters)
+    separator_width_profile: SeparatorWidthProfileParameters = field(default_factory=SeparatorWidthProfileParameters)
+    separator_width_profile_search: SeparatorWidthProfileSearchParameters = field(default_factory=SeparatorWidthProfileSearchParameters)
+    nearby_separator_refinement: NearbySeparatorRefinementParameters = field(default_factory=NearbySeparatorRefinementParameters)
+    gap_search: GapSearchParameters = field(default_factory=GapSearchParameters)
+    separator_profile: SeparatorProfileParameters = field(default_factory=SeparatorProfileParameters)
+    edge_refine_profile: EdgeRefineProfileParameters = field(default_factory=EdgeRefineProfileParameters)
+    hard_gap_trust: HardGapTrustParameters = field(default_factory=HardGapTrustParameters)
+    output_overlap: OutputOverlapEvidenceParameters = field(default_factory=OutputOverlapEvidenceParameters)
+    debug_gap_overlay: DebugGapOverlayParameters = field(default_factory=DebugGapOverlayParameters)
+    nearby_separator_diagnostics: NearbySeparatorDiagnosticsParameters = field(default_factory=NearbySeparatorDiagnosticsParameters)
+    decision_review: DecisionReviewParameters = field(default_factory=DecisionReviewParameters)
+    partial_holder: PartialHolderParameters = field(default_factory=PartialHolderParameters)
+    approved_geometry_adjustment: ApprovedGeometryAdjustmentParameters = field(default_factory=ApprovedGeometryAdjustmentParameters)
+    scoring_calibration: ScoringCalibrationParameters = field(default_factory=ScoringCalibrationParameters)
+    base_detection_score: BaseDetectionScoreParameters = field(default_factory=BaseDetectionScoreParameters)
+    separator_support_score: SeparatorSupportScoreParameters = field(default_factory=SeparatorSupportScoreParameters)
+    geometry_support_score: GeometrySupportScoreParameters = field(default_factory=GeometrySupportScoreParameters)
+    candidate_competition: CandidateCompetitionParameters = field(default_factory=CandidateCompetitionParameters)
+    deskew: DeskewParameters = field(default_factory=DeskewParameters)
 
 
 __all__ = [

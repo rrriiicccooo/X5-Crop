@@ -91,7 +91,12 @@ def content_guided_separator_seed_for_count(
     if count <= 1:
         return _skip_detail("count_has_no_internal_separators", count=int(count))
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
-    evidence, evidence_float, signal_source = content_signal_arrays_for_candidate(gray_work, cache, config.layout)
+    evidence, evidence_float, signal_source = content_signal_arrays_for_candidate(
+        gray_work,
+        cache,
+        config.layout,
+        content_policy,
+    )
     mask_detail = content_mask_region_detail(
         evidence_float,
         gray_work.shape,

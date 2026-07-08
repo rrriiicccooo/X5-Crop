@@ -20,16 +20,15 @@ def selected_candidate(detection: Detection) -> dict[str, Any]:
     competition = candidate_competition(detection)
     selected = competition.get("selected_candidate")
     if isinstance(selected, dict):
-        return dict(selected)
+        detail = dict(selected)
+        decision = decision_summary(detection)
+        detail["final_confidence"] = float(detection.confidence)
+        detail["final_review_reasons"] = final_review_reasons_from_detail(detection)
+        detail["decision_status"] = str(decision.get("status", "unknown"))
+        return detail
     return {
-        "format": detection.film_format,
-        "count": int(detection.count),
-        "strip_mode": detection.strip_mode,
-        "final_confidence": float(detection.confidence),
-        "final_review_reasons": final_review_reasons_from_detail(detection),
-        "candidate_assessment": candidate_assessment(detection),
-        "candidate_plan": detection.detail.get("candidate_plan", {}),
-        "gap_search_profile": detection.detail.get("gap_search_profile", {}),
+        "missing": True,
+        "reason": "candidate_competition_missing",
     }
 
 

@@ -15,12 +15,10 @@ from ..detection.detail import (
     decision_summary,
     detail_dict,
     final_review_reasons_from_detail,
-    policy_detail,
     policy_id_from_detail,
     runtime_policy_detail,
 )
 from ..domain import Detection, ProcessResult
-from ..policies.decision.contract import decision_contract_for_policy
 from ..policies.ids import REPORT_SCHEMA_VERSION
 from ..policies.runtime.policy import DetectionPolicy
 from ..utils import json_safe
@@ -46,7 +44,6 @@ def report_schema_for_detection(
     policy: DetectionPolicy,
 ) -> dict:
     report_policy = policy.report
-    decision_contract = decision_contract_for_policy(policy)
     decision_detail = decision_summary(detection)
     status = _report_status(result, decision_detail)
     output = {}
@@ -57,10 +54,17 @@ def report_schema_for_detection(
             "review_copy": result.review_copy,
             "warnings": list(result.warnings),
         }
-    runtime_policy = runtime_policy_detail(detection) or policy_detail(detection)
+    runtime_policy = runtime_policy_detail(detection) or {
+        "missing": True,
+        "reason": "runtime_policy_detail_missing",
+    }
     decision_policy = (
         detail_dict(detection, DECISION_POLICY_DETAIL)
-        or decision_detail.get(DECISION_POLICY_DETAIL, decision_contract.report_detail())
+        or decision_detail.get(DECISION_POLICY_DETAIL)
+        or {
+            "missing": True,
+            "reason": "decision_policy_detail_missing",
+        }
     )
     policy = {
         "runtime_policy": runtime_policy,
@@ -106,7 +110,7 @@ def report_schema_for_detection(
             policy_id_from_detail(detection)
             or decision_policy.get("policy_id")
             or runtime_policy.get("policy_id")
-            or decision_contract.policy_id
+            or "unknown_policy"
         ),
         "output": output,
     }

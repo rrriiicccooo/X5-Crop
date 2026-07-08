@@ -5,7 +5,7 @@ import numpy as np
 from x5crop.detection.candidate.assessment.base_scoring import base_detection_assessment
 from x5crop.detection.candidate.assessment.scoring import geometry_support_score
 from x5crop.detection.evidence.photo_width import photo_width_cv_from_detail
-from x5crop.detection.candidate.plan.counts import raw_detection_rank
+from x5crop.detection.candidate.selection.choose import calibrated_candidate_rank
 from x5crop.domain import Detection, Gap
 from x5crop.domain import Box
 from x5crop.formats import format_spec
@@ -153,7 +153,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
 
         self.assertGreater(score, 0.90)
 
-    def test_raw_detection_rank_does_not_reward_frame_box_width_detail(self) -> None:
+    def test_selection_rank_does_not_reward_frame_box_width_detail(self) -> None:
         stable_frame_boxes = Detection(
             film_format="120-645",
             layout="horizontal",
@@ -180,8 +180,8 @@ class PhotoWidthMetricsTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            raw_detection_rank(stable_frame_boxes, 0.85),
-            raw_detection_rank(unstable_frame_boxes, 0.85),
+            calibrated_candidate_rank(stable_frame_boxes, 0.85),
+            calibrated_candidate_rank(unstable_frame_boxes, 0.85),
         )
 
 

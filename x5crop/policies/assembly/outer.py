@@ -32,7 +32,9 @@ def separator_outer_family_policies(
     params: FormatParameters,
 ) -> tuple[SeparatorOuterFamilyPolicy, SeparatorOuterFamilyPolicy, SeparatorOuterFamilyPolicy]:
     is_standard_strip = mode_preset.detector_kind == "standard_strip"
-    width_profile_enabled = bool(params.separator_width_profile_enabled)
+    width_profile = params.separator_width_profile
+    full_width_outer = params.separator_full_width_outer
+    width_profile_enabled = bool(width_profile.full_enabled or width_profile.partial_enabled)
     return (
         SeparatorOuterFamilyPolicy(
             mode="always" if is_standard_strip else "off",
@@ -44,7 +46,7 @@ def separator_outer_family_policies(
             mode="conditional" if is_standard_strip else "off",
             phase="extension",
             requires_explicit_count_for_partial=True,
-            max_candidates=int(params.separator_full_width_outer_max_candidates),
+            max_candidates=int(full_width_outer.max_candidates),
         ),
         SeparatorOuterFamilyPolicy(
             mode="conditional" if is_standard_strip and width_profile_enabled else "off",

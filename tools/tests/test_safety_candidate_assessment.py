@@ -1,46 +1,81 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
+import numpy as np
+
+from x5crop.constants import CANDIDATE_SOURCE_SAFETY
+from x5crop.detection.candidate.assessment.candidate import apply_candidate_assessment_policy
 from x5crop.detection.candidate.assessment.safety import (
     SAFETY_CANDIDATE_BLOCKER,
     apply_safety_candidate_assessment,
 )
 from x5crop.detection.candidate.signals import candidate_signals
-from x5crop.constants import CANDIDATE_SOURCE_SAFETY
 from x5crop.domain import Box, Detection
+from x5crop.formats import format_spec
 from x5crop.policies.registry import get_detection_policy
+from x5crop.runtime.config import RuntimeConfig
 
 
-def _candidate_gate_detail(passed: bool) -> dict:
-    return {
-        "passed": bool(passed),
-        "checks": [],
-        "blockers": [],
-        "diagnostics": [],
-        "confidence_caps": [],
-    }
+def _config() -> RuntimeConfig:
+    return RuntimeConfig(
+        input_path=Path("synthetic.tif"),
+        output_dir=None,
+        film_format="135",
+        layout_auto=False,
+        layout="horizontal",
+        strip_mode="full",
+        count=1,
+        count_override=1,
+        page=0,
+        bleed_x=0,
+        bleed_y=0,
+        deskew="off",
+        deskew_fallback="off",
+        deskew_min_angle=-2.0,
+        deskew_max_angle=2.0,
+        confidence_threshold=0.85,
+        review_dir=None,
+        copy_review_files=False,
+        export_review=False,
+        compression="auto",
+        debug=False,
+        debug_analysis=False,
+        dry_run=True,
+        diagnostics=False,
+        overwrite=True,
+        report=True,
+        debug_errors=False,
+        reuse_analysis=False,
+        jobs=1,
+    )
 
 
 class SafetyCandidateAssessmentTest(unittest.TestCase):
     def test_safety_candidate_blocker_is_candidate_assessment_detail(self) -> None:
         policy = get_detection_policy("135", "full")
+        gray = np.zeros((100, 120), dtype=np.uint8)
+        gray[:, 20:100] = 120
         detection = Detection(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
-            count=6,
-            outer=Box(0, 0, 120, 20),
-            frames=[],
+            count=1,
+            outer=Box(10, 10, 110, 90),
+            frames=[Box(10, 10, 110, 90)],
             gaps=[],
             confidence=0.96,
             final_review_reasons=[],
-            detail={
-                "candidate_assessment": {
-                    "source": "separator",
-                    "candidate_gate": _candidate_gate_detail(True),
-                }
-            },
+            detail={"candidate_plan": {"source": CANDIDATE_SOURCE_SAFETY}},
+        )
+        detection = apply_candidate_assessment_policy(
+            gray,
+            detection,
+            _config(),
+            format_spec("135"),
+            CANDIDATE_SOURCE_SAFETY,
+            policy=policy,
         )
 
         apply_safety_candidate_assessment(
@@ -51,7 +86,7 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
 
         self.assertAlmostEqual(detection.confidence, 0.84)
         self.assertEqual(detection.final_review_reasons, [])
-        self.assertEqual(candidate_signals(detection), [SAFETY_CANDIDATE_BLOCKER])
+        self.assertNotIn(SAFETY_CANDIDATE_BLOCKER, candidate_signals(detection))
         assessment = detection.detail["candidate_assessment"]
         self.assertNotIn("candidate_gate_ok", assessment)
         self.assertFalse(assessment["candidate_gate"]["passed"])
@@ -63,19 +98,7 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
             detection.detail["safety_candidate"]["candidate_blocker_signal"],
             SAFETY_CANDIDATE_BLOCKER,
         )
-        self.assertEqual(
-            detection.detail["candidate_confidence_caps"],
-            [
-                {
-                    "owner": "candidate.assessment",
-                    "reason": SAFETY_CANDIDATE_BLOCKER,
-                    "cap_value": 0.84,
-                    "confidence_before": 0.96,
-                    "confidence_after": 0.84,
-                    "changed": True,
-                }
-            ],
-        )
+        self.assertEqual(assessment["confidence_caps"][0]["reason"], "candidate_gate_failed")
 
 
 if __name__ == "__main__":

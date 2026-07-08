@@ -15,9 +15,10 @@ from ..detection.detail import (
 from ..domain import Box, Detection
 from ..cache.separator import cached_separator_evidence_crop
 from ..image.evidence import (
-    default_separator_evidence_image_parameters,
+    SeparatorEvidenceImageParameters,
     make_separator_evidence_gray,
 )
+from ..policies.runtime.policy import DetectionPolicy
 from ..policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
 from ..cache import AnalysisCache
 from .canvas import (
@@ -162,16 +163,17 @@ def draw_evidence_context_overlay(
 def make_separator_evidence_debug_gray(
     gray: np.ndarray,
     detection: Detection,
+    params: SeparatorEvidenceImageParameters,
     cache: Optional[AnalysisCache] = None,
 ) -> np.ndarray:
     if cache is not None and cache.layout == detection.layout:
         full_work = Box(0, 0, cache.gray_work.shape[1], cache.gray_work.shape[0])
-        evidence = cached_separator_evidence_crop(cache, cache.gray_work, full_work)
+        evidence = cached_separator_evidence_crop(cache, cache.gray_work, full_work, params)
         if evidence.size:
             return work_evidence_to_original_shape(evidence, gray, detection.layout)
     return make_separator_evidence_gray(
         gray,
-        default_separator_evidence_image_parameters(),
+        params,
     )
 
 
@@ -179,9 +181,10 @@ def make_separator_evidence_debug_rgb(
     gray: np.ndarray,
     detection: Detection,
     debug_gap: Any,
+    params: SeparatorEvidenceImageParameters,
     cache: Optional[AnalysisCache] = None,
 ) -> np.ndarray:
-    evidence = make_separator_evidence_debug_gray(gray, detection, cache)
+    evidence = make_separator_evidence_debug_gray(gray, detection, params, cache)
     rgb, scale = cached_preview_gray(cache, "separator_evidence_full", evidence)
     draw_evidence_context_overlay(rgb, detection, scale)
     draw_gap_overlay(rgb, detection, scale, debug_gap)
@@ -192,9 +195,10 @@ def make_debug_analysis_panel(
     gray: np.ndarray,
     detection: Detection,
     threshold: float,
-    diagnostics: RuntimeDiagnosticsPolicy,
+    policy: DetectionPolicy,
     cache: Optional[AnalysisCache] = None,
 ) -> np.ndarray:
+    diagnostics: RuntimeDiagnosticsPolicy = policy.diagnostics
     debug_gap = diagnostics.debug_gap_overlay
     panel_builders = {
         "original_gray": lambda title: cached_labeled_preview_gray(cache, "original_gray", title, gray)[0],
@@ -202,7 +206,13 @@ def make_debug_analysis_panel(
         "debug_boxes": lambda title: add_panel_label(make_debug_preview_rgb(gray, detection, cache), title),
         "outer_candidates": lambda title: add_panel_label(make_outer_candidates_rgb(gray, detection, cache), title),
         "separator_evidence": lambda title: add_panel_label(
-            make_separator_evidence_debug_rgb(gray, detection, debug_gap, cache),
+            make_separator_evidence_debug_rgb(
+                gray,
+                detection,
+                debug_gap,
+                policy.preprocess.separator_evidence_image,
+                cache,
+            ),
             title,
         ),
         "frame_geometry": lambda title: add_panel_label(make_frame_geometry_rgb(gray, detection, debug_gap, cache), title),

@@ -5,7 +5,6 @@ from collections.abc import Callable
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import FULL, PARTIAL, ReviewOnlyPolicy
 from ...formats import format_spec
-from ..reporting.mode_descriptions import mode_notes_for_spec, mode_role_for_spec
 from .factory import build_policy_from_preset
 from .presets import (
     FormatPolicyPreset,
@@ -63,8 +62,6 @@ def _output_overlap_enabled(format_id: str, strip_mode: str) -> bool:
 def mode_policy_preset(format_id: str, strip_mode: str) -> ModePolicyPreset:
     spec = format_spec(format_id)
     return ModePolicyPreset(
-        role=mode_role_for_spec(spec, strip_mode),
-        notes=mode_notes_for_spec(spec, strip_mode),
         detector_kind=_detector_kind(format_id, strip_mode),
         frame_fit=frame_fit_profile(spec.frame_fit_profile, strip_mode),
         review_only=_review_only(format_id, strip_mode),

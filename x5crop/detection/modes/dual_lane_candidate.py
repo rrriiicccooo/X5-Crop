@@ -5,17 +5,17 @@ from typing import Optional
 
 import numpy as np
 
-from ....cache import AnalysisCache
-from ....domain import Box, Detection
-from ....formats import FormatSpec
-from ....geometry.boxes import translate_box
-from ....policies.runtime.policy import DetectionPolicy
-from ....runtime.config import RuntimeConfig
-from ...physical.outer.base import base_outer_candidates
-from ..assessment.candidate import apply_candidate_assessment_policy
-from ..assessment.dual_lane import apply_dual_lane_content_assessment
-from ..build.detection import build_detection_for_outer
-from ..selection.choose import calibrated_candidate_rank
+from ...cache import AnalysisCache
+from ...domain import Box, Detection
+from ...formats import FormatSpec
+from ...geometry.boxes import translate_box
+from ...policies.runtime.policy import DetectionPolicy
+from ...runtime.config import RuntimeConfig
+from ..candidate.assessment.candidate import apply_candidate_assessment_policy
+from ..candidate.assessment.dual_lane import apply_dual_lane_content_assessment
+from ..candidate.build.detection import build_detection_for_outer
+from ..candidate.selection.choose import select_source_candidate
+from ..physical.outer.base import base_outer_candidates
 
 
 def select_dual_lane_candidate(
@@ -58,7 +58,7 @@ def select_dual_lane_candidate(
     if not candidates:
         return None
 
-    best = max(candidates, key=lambda d: calibrated_candidate_rank(d, config.confidence_threshold))
+    best = select_source_candidate(candidates, config.confidence_threshold)
     apply_dual_lane_content_assessment(gray, best, cache, lane_policy, config.confidence_threshold)
     return best
 

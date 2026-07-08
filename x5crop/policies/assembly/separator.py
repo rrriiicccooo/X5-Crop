@@ -8,7 +8,6 @@ from ...geometry.detection_parameters import (
     HardGapTrustParameters,
     NearbySeparatorRefinementParameters,
     SeparatorProfileParameters,
-    SeparatorWidthProfileSearchParameters,
 )
 from ...formats import FORMATS
 from .profile_defaults import (
@@ -135,10 +134,6 @@ def separator_width_profile_policy(
     )
 
 
-def separator_width_profile_search_parameters() -> SeparatorWidthProfileSearchParameters:
-    return SeparatorWidthProfileSearchParameters()
-
-
 def separator_refinement_policy(
     mode_preset: ModePolicyPreset,
 ) -> SeparatorRefinementPolicy:
@@ -222,7 +217,7 @@ def separator_policy(
             params,
             enabled=separator_width_profile_enabled,
         ),
-        width_profile_search=separator_width_profile_search_parameters(),
+        width_profile_search=params.separator_width_profile_search,
         refinement=separator_refinement_policy(mode_preset),
         geometry_support_modes=mode_preset.separator_geometry_support_modes,
         geometry_support=separator_geometry_support_policy(preset, mode_preset, params),
@@ -339,6 +334,5 @@ __all__ = [
     'separator_model_gap_proposal_policy',
     'separator_refinement_policy',
     'separator_width_profile_policy',
-    'separator_width_profile_search_parameters',
     'separator_policy',
 ]

@@ -66,7 +66,6 @@ def apply_edge_bleed_protection(
 def apply_approved_geometry_adjustment(
     detection: Detection,
     gray: np.ndarray,
-    config: RuntimeConfig,
     status: str,
     policy: ApprovedGeometryAdjustmentPolicy,
 ) -> None:

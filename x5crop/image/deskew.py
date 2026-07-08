@@ -7,7 +7,7 @@ import numpy as np
 
 from ..geometry.layout import work_gray
 from ..utils import bbox_from_mask
-from .evidence import default_deskew_fallback_evidence_parameters, make_deskew_fallback_gray
+from .evidence import DeskewFallbackEvidenceParameters, make_deskew_fallback_gray
 from .deskew_parameters import DeskewParameters
 
 def fit_line(
@@ -118,6 +118,7 @@ def choose_deskew_angle(
     layout: str,
     deskew_fallback: str,
     deskew: DeskewParameters,
+    fallback_params: DeskewFallbackEvidenceParameters,
 ) -> tuple[float, dict[str, Any]]:
     base_angle, base_detail = fit_edge_angle(gray, layout, deskew)
     base_detail["source"] = "base"
@@ -128,7 +129,7 @@ def choose_deskew_angle(
         return base_angle, base_detail
     fallback_gray = make_deskew_fallback_gray(
         gray,
-        default_deskew_fallback_evidence_parameters(),
+        fallback_params,
     )
     fallback_angle, fallback_detail = fit_edge_angle(fallback_gray, layout, deskew)
     fallback_detail["source"] = "fallback"

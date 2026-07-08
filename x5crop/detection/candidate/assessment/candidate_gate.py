@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from ....constants import CANDIDATE_SOURCE_SEPARATOR
+from ....constants import (
+    CANDIDATE_SOURCE_CONTENT,
+    CANDIDATE_SOURCE_SAFETY,
+    CANDIDATE_SOURCE_SEPARATOR,
+)
 from ...gate_checks import GateCheck, gate_check_details, unique_signals
 from ..signals import (
     GATE_BLOCKER_SIGNALS,
@@ -14,9 +18,11 @@ from ..signals import (
     SIGNAL_BUCKETS,
     SIGNAL_CONTENT_ASPECT_CONFLICT,
     SIGNAL_CONTENT_EVIDENCE_WEAK,
+    SIGNAL_CONTENT_ONLY_NOT_ENOUGH_FOR_AUTO,
     SIGNAL_CONTENT_INTEGRITY_FAILED,
     SIGNAL_CONTENT_OUTSIDE_OUTER,
     SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED,
+    SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE,
     SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
     unknown_candidate_signals,
 )
@@ -50,6 +56,10 @@ def _failed_check_signals(checks: list[GateCheck], severity: str) -> list[str]:
             if not check.passed and check.severity == severity
         ]
     )
+
+
+def _source_uses_separator_evidence(source: str) -> bool:
+    return source in {"separator", CANDIDATE_SOURCE_SEPARATOR, CANDIDATE_SOURCE_SAFETY}
 
 
 def candidate_signal_gate_checks(
@@ -113,6 +123,12 @@ def candidate_gate_assessment(
 ) -> CandidateGateAssessment:
     checks: list[GateCheck] = []
     source_auto_allowed = source in {"separator", CANDIDATE_SOURCE_SEPARATOR}
+    if source == CANDIDATE_SOURCE_SAFETY:
+        source_signal = SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE
+    elif source == CANDIDATE_SOURCE_CONTENT:
+        source_signal = SIGNAL_CONTENT_ONLY_NOT_ENOUGH_FOR_AUTO
+    else:
+        source_signal = "candidate_source_not_auto_allowed"
     checks.append(
         GateCheck(
             code="candidate_source_auto_allowed",
@@ -120,13 +136,13 @@ def candidate_gate_assessment(
             bucket="source",
             passed=source_auto_allowed,
             severity="blocker",
-            signal="candidate_source_not_auto_allowed",
+            signal=source_signal,
             detail={"source": source},
         )
     )
 
     separator_support = (
-        source != CANDIDATE_SOURCE_SEPARATOR
+        not _source_uses_separator_evidence(source)
         or separator_support_ok
         or partial_edge_safety_candidate_support_ok
     )
@@ -235,6 +251,7 @@ def candidate_gate_assessment(
         SIGNAL_CONTENT_ASPECT_CONFLICT,
         SIGNAL_CONTENT_EVIDENCE_WEAK,
         SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
+        source_signal,
         *partial_edge_safety_disqualifiers,
         *photo_width_signals,
         *frame_topology_signals,

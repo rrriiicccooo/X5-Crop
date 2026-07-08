@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ...image.evidence import ContentEvidenceImageParameters
+
 
 @dataclass(frozen=True)
 class ContentEvidencePolicy:
@@ -64,6 +66,7 @@ class ContentCandidatePolicy:
 @dataclass(frozen=True)
 class ContentPolicy:
     validates_candidates: bool = True
+    evidence_image: ContentEvidenceImageParameters = field(default_factory=ContentEvidenceImageParameters)
     evidence: ContentEvidencePolicy = field(default_factory=ContentEvidencePolicy)
     profile: ContentProfilePolicy = field(default_factory=ContentProfilePolicy)
     mask: ContentMaskPolicy = field(default_factory=ContentMaskPolicy)

@@ -50,6 +50,7 @@ def _review_check(
     triggered: bool,
     signal: str,
     final_review_reason: str,
+    severity: str = "blocker",
     detail: dict[str, Any] | None = None,
 ) -> GateCheck:
     return GateCheck(
@@ -57,7 +58,7 @@ def _review_check(
         stage="decision",
         bucket=bucket,
         passed=not triggered,
-        severity="blocker",
+        severity=severity,
         signal=signal,
         detail={
             **(detail or {}),
@@ -189,43 +190,54 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
         )
     )
 
-    if not _failed_reasons(checks):
-        checks.append(
-            _review_check(
-                code="confidence_floor",
-                bucket="confidence",
-                triggered=float(detection.confidence) < float(confidence_threshold),
-                signal="confidence_below_threshold",
-                final_review_reason=policy.decision.decision_insufficient_reason,
-                detail={
-                    "confidence": float(detection.confidence),
-                    "confidence_threshold": float(confidence_threshold),
-                },
-            )
+    failed_before_confidence_floor = bool(_failed_reasons(checks))
+    confidence_below_threshold = float(detection.confidence) < float(confidence_threshold)
+    checks.append(
+        _review_check(
+            code="confidence_floor",
+            bucket="confidence",
+            triggered=confidence_below_threshold,
+            signal="confidence_below_threshold",
+            final_review_reason=policy.decision.decision_insufficient_reason,
+            severity="diagnostic" if failed_before_confidence_floor else "blocker",
+            detail={
+                "confidence": float(detection.confidence),
+                "confidence_threshold": float(confidence_threshold),
+                "reason_visibility": (
+                    "diagnostic_because_specific_reason_exists"
+                    if failed_before_confidence_floor
+                    else "final_reason"
+                ),
+            },
         )
-
-    if detection.confidence < confidence_threshold:
-        checks.append(
-            _review_check(
-                code="outer_candidate_disagreement",
-                bucket="low_confidence_context",
-                triggered=float(detection.detail.get("outer_area_spread_ratio", 0.0)) >= 0.20,
-                signal="outer_area_spread",
-                final_review_reason=policy.decision.outer_candidate_disagreement_review_reason,
-            )
+    )
+    checks.append(
+        _review_check(
+            code="outer_candidate_disagreement",
+            bucket="low_confidence_context",
+            triggered=(
+                confidence_below_threshold
+                and float(detection.detail.get("outer_area_spread_ratio", 0.0)) >= 0.20
+            ),
+            signal="outer_area_spread",
+            final_review_reason=policy.decision.outer_candidate_disagreement_review_reason,
         )
-        checks.append(
-            _review_check(
-                code="deskew_uncertain",
-                bucket="low_confidence_context",
-                triggered=(
+    )
+    checks.append(
+        _review_check(
+            code="deskew_uncertain",
+            bucket="low_confidence_context",
+            triggered=(
+                confidence_below_threshold
+                and (
                     deskew_detail.get("skipped") == "angle_out_of_range"
                     or bool(deskew_detail.get("reason"))
-                ),
-                signal="deskew_uncertain",
-                final_review_reason=policy.decision.deskew_uncertain_review_reason,
-            )
+                )
+            ),
+            signal="deskew_uncertain",
+            final_review_reason=policy.decision.deskew_uncertain_review_reason,
         )
+    )
 
     reasons = _failed_reasons(checks)
     return DecisionGateAssessment(

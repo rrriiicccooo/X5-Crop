@@ -36,7 +36,7 @@ def write_debug_analysis(
     analysis_dir = output_dir / "_debug_analysis"
     panel_path = analysis_dir / f"{stem}_debug_analysis.jpg"
     write_rgb_jpeg(
-        make_debug_analysis_panel(gray, detection, threshold, policy.diagnostics, cache),
+        make_debug_analysis_panel(gray, detection, threshold, policy, cache),
         panel_path,
     )
     return [str(panel_path)]

@@ -800,7 +800,7 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_dual_lane_plan_delegates_content_assessment(self) -> None:
-        path = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan" / "dual_lane.py"
+        path = PROJECT_ROOT / "x5crop" / "detection" / "modes" / "dual_lane_candidate.py"
         text = path.read_text(encoding="utf-8")
 
         self.assertNotIn("content_evidence_detail", text)
@@ -809,7 +809,7 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertIn("apply_dual_lane_content_assessment", text)
 
     def test_candidate_plan_delegates_safety_candidate_assessment(self) -> None:
-        path = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan" / "run.py"
+        path = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "lifecycle.py"
         text = path.read_text(encoding="utf-8")
 
         self.assertNotIn("safety_candidate.confidence = min", text)
@@ -832,7 +832,7 @@ class SourceNamingContractTest(unittest.TestCase):
         for path in (
             PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "assessment" / "safety.py",
             PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "proposal" / "safety.py",
-            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan" / "sources.py",
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "build" / "source_candidates.py",
             PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "read_only.py",
         ):
             text = path.read_text(encoding="utf-8")
@@ -1037,6 +1037,14 @@ class SourceNamingContractTest(unittest.TestCase):
             "source_parameters",
             "import_format_module",
             "format_module_name",
+            "source orchestration",
+            "FormatParameterViews",
+            "parameters.views",
+            "decision_contract_for(",
+            "default_content_evidence_image_parameters",
+            "default_separator_evidence_image_parameters",
+            "default_deskew_fallback_evidence_parameters",
+            "export.paths",
             "robust_grid",
             "RobustGrid",
             "ROBUST_GRID",
