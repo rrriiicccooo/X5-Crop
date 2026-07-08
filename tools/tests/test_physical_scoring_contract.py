@@ -4,7 +4,6 @@ import unittest
 
 import numpy as np
 
-from x5crop.constants import REASON_AUTO_GATE_NOT_SATISFIED
 from x5crop.detection.candidate.assessment.candidate import apply_candidate_assessment_policy
 from x5crop.detection.candidate.assessment.base_scoring import base_detection_assessment
 from x5crop.detection.candidate.assessment.evidence_independence import evidence_independence_detail
@@ -286,7 +285,9 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         self.assertGreater(assessed.confidence, 0.95)
-        self.assertTrue(assessed.detail["candidate_assessment"]["auto_gate"])
+        assessment = assessed.detail["candidate_assessment"]
+        self.assertTrue(assessment["candidate_gate_passed"])
+        self.assertTrue(assessment["gate"]["passed"])
         self.assertEqual(
             assessed.detail["candidate_assessment"]["separator_hard_evidence"][
                 "broad_separator_width_gaps"
@@ -294,7 +295,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             2,
         )
 
-    def test_auto_gate_result_is_not_structured_candidate_blocker(self) -> None:
+    def test_candidate_gate_result_is_structured_gate_not_candidate_reason(self) -> None:
         gray = np.zeros((100, 300), dtype=np.uint8)
         policy = get_detection_policy("135", "full")
         detection = Detection(
@@ -361,13 +362,12 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         assessment = assessed.detail["candidate_assessment"]
-        self.assertFalse(assessment["auto_gate"])
-        self.assertIn(REASON_AUTO_GATE_NOT_SATISFIED, candidate_reasons(assessed))
-        self.assertNotIn(REASON_AUTO_GATE_NOT_SATISFIED, assessment["blockers"])
-        self.assertNotIn(REASON_AUTO_GATE_NOT_SATISFIED, assessment["diagnostics"])
+        self.assertFalse(assessment["candidate_gate_passed"])
+        self.assertFalse(assessment["gate"]["passed"])
+        self.assertNotIn("candidate_gate_failed", candidate_reasons(assessed))
         self.assertNotIn(
-            REASON_AUTO_GATE_NOT_SATISFIED,
-            assessment["auto_gate_inputs"]["candidate_blockers"],
+            "candidate_gate_failed",
+            assessment["gate"]["blockers"],
         )
 
     def test_partial_three_frame_hard_separator_is_not_intrinsically_ambiguous(self) -> None:

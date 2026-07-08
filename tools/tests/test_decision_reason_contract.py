@@ -15,7 +15,7 @@ from x5crop.constants import (
     CANDIDATE_SOURCE_SEPARATOR,
     REASON_LUCKY_PASS_RISK,
 )
-from x5crop.detection.candidate.assessment.safety import SAFETY_CANDIDATE_AUTO_GATE_BLOCKER
+from x5crop.detection.candidate.assessment.safety import SAFETY_CANDIDATE_GATE_BLOCKER
 from x5crop.detection.decision.final_decision import apply_detection_decision
 from x5crop.detection.decision.contract_applier import apply_decision_contract
 from x5crop.detection.decision.reasons import normalized_final_review_reasons
@@ -72,6 +72,21 @@ def _content_ok_detail() -> dict[str, bool | str]:
     }
 
 
+def _candidate_gate_detail(
+    passed: bool,
+    *,
+    blockers: list[str] | None = None,
+    diagnostics: list[str] | None = None,
+) -> dict:
+    return {
+        "passed": bool(passed),
+        "checks": [],
+        "blockers": list(blockers or []),
+        "diagnostics": list(diagnostics or []),
+        "confidence_caps": [],
+    }
+
+
 class DecisionReasonContractTest(unittest.TestCase):
     def test_decision_contract_report_does_not_expose_unused_candidate_policy(self) -> None:
         detail = decision_contract_for("135", "full").report_detail()
@@ -113,7 +128,8 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "photo_width_cv": 0.0,
                 "candidate_assessment": {
                     "source": "separator",
-                    "auto_gate": False,
+                    "candidate_gate_passed": False,
+                    "gate": _candidate_gate_detail(False),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -151,7 +167,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
         self.assertEqual(
             decided.detail["decision_reason_inputs"][0]["signal"],
-            "candidate_auto_gate_failed",
+            "candidate_gate_failed",
         )
         self.assertIn("decision_confidence_caps", decided.detail["decision_summary"])
         self.assertIn("decision_generated_review_reasons", decided.detail["decision_summary"])
@@ -173,17 +189,18 @@ class DecisionReasonContractTest(unittest.TestCase):
             confidence=0.90,
             review_reasons=[],
             detail={
-                "candidate_reasons": [SAFETY_CANDIDATE_AUTO_GATE_BLOCKER],
+                "candidate_reasons": [SAFETY_CANDIDATE_GATE_BLOCKER],
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
                 "candidate_assessment": {
                     "source": CANDIDATE_SOURCE_SAFETY,
-                    "auto_gate": False,
+                    "candidate_gate_passed": False,
+                    "gate": _candidate_gate_detail(False),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
-                    "blockers": [SAFETY_CANDIDATE_AUTO_GATE_BLOCKER],
+                    "blockers": [SAFETY_CANDIDATE_GATE_BLOCKER],
                     "diagnostics": [],
                 },
             },
@@ -207,7 +224,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
         self.assertEqual(
             decided.detail["candidate_reason_inputs_before_decision"]["blockers"],
-            [SAFETY_CANDIDATE_AUTO_GATE_BLOCKER],
+            [SAFETY_CANDIDATE_GATE_BLOCKER],
         )
         self.assertEqual(
             decided.review_reasons,
@@ -215,7 +232,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
         self.assertEqual(
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
-            ["safety_or_review_only", "candidate_auto_gate_failed"],
+            ["safety_or_review_only", "candidate_gate_failed"],
         )
 
     def test_risk_summary_separates_assessment_source_from_candidate_source(self) -> None:
@@ -239,7 +256,8 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "candidate_source": CANDIDATE_SOURCE_SEPARATOR,
                 "candidate_assessment": {
                     "source": CANDIDATE_SOURCE_CONTENT,
-                    "auto_gate": False,
+                    "candidate_gate_passed": False,
+                    "gate": _candidate_gate_detail(False),
                 },
             },
         )
@@ -272,7 +290,8 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "candidate_source": CANDIDATE_SOURCE_HARD_SAFETY,
                 "candidate_assessment": {
                     "source": "separator",
-                    "auto_gate": False,
+                    "candidate_gate_passed": False,
+                    "gate": _candidate_gate_detail(False),
                 },
             },
         )
@@ -358,7 +377,8 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "photo_width_cv": 0.0,
                 "candidate_assessment": {
                     "source": "separator",
-                    "auto_gate": True,
+                    "candidate_gate_passed": True,
+                    "gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -444,7 +464,8 @@ class DecisionReasonContractTest(unittest.TestCase):
                 },
                 "candidate_assessment": {
                     "source": "separator",
-                    "auto_gate": True,
+                    "candidate_gate_passed": True,
+                    "gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -510,7 +531,8 @@ class DecisionReasonContractTest(unittest.TestCase):
                 },
                 "candidate_assessment": {
                     "source": "separator",
-                    "auto_gate": True,
+                    "candidate_gate_passed": True,
+                    "gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -562,7 +584,8 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "photo_width_cv": 0.0,
                 "candidate_assessment": {
                     "source": "separator",
-                    "auto_gate": True,
+                    "candidate_gate_passed": True,
+                    "gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -643,18 +666,19 @@ class DecisionReasonContractTest(unittest.TestCase):
             confidence=0.90,
             review_reasons=[],
             detail={
-                "candidate_reasons": [SAFETY_CANDIDATE_AUTO_GATE_BLOCKER],
+                "candidate_reasons": [SAFETY_CANDIDATE_GATE_BLOCKER],
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
                 "candidate_source": CANDIDATE_SOURCE_SAFETY,
                 "candidate_assessment": {
                     "source": CANDIDATE_SOURCE_SAFETY,
-                    "auto_gate": False,
+                    "candidate_gate_passed": False,
+                    "gate": _candidate_gate_detail(False),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
-                    "blockers": [SAFETY_CANDIDATE_AUTO_GATE_BLOCKER],
+                    "blockers": [SAFETY_CANDIDATE_GATE_BLOCKER],
                     "diagnostics": [],
                 },
             },
@@ -730,7 +754,8 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "photo_width_cv": 0.0,
                 "candidate_assessment": {
                     "source": "separator",
-                    "auto_gate": True,
+                    "candidate_gate_passed": True,
+                    "gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -956,7 +981,8 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "photo_width_cv": 0.0,
                 "candidate_assessment": {
                     "source": "separator",
-                    "auto_gate": True,
+                    "candidate_gate_passed": True,
+                    "gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -1042,7 +1068,8 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "photo_width_cv": 0.0,
                 "candidate_assessment": {
                     "source": "separator",
-                    "auto_gate": True,
+                    "candidate_gate_passed": True,
+                    "gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,

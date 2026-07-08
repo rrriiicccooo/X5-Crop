@@ -22,10 +22,14 @@ def candidate_reliability_detail(
     source = str(assessment.get("source", ""))
     content_support = str(assessment.get("content_support", ""))
     required_confidence = min(1.0, float(threshold) + float(budget.reliable_confidence_margin))
-    auto_gate = bool(assessment.get("auto_gate", False))
+    gate = assessment.get("gate")
+    gate = dict(gate) if isinstance(gate, dict) else {}
+    candidate_gate_passed = bool(
+        gate.get("passed", assessment.get("candidate_gate_passed", False))
+    )
     raw_hard_separator_ok = bool(separator_detail.get("ok", False))
     source_ok = (not budget.requires_separator_source) or source == "separator"
-    auto_gate_ok = (not budget.requires_auto_gate) or auto_gate
+    candidate_gate_ok = (not budget.requires_candidate_gate) or candidate_gate_passed
     hard_separator_requirement_ok = (not budget.requires_hard_separator_ok) or raw_hard_separator_ok
     content_ok = (
         not budget.requires_content_support
@@ -39,7 +43,7 @@ def candidate_reliability_detail(
     reliable = all(
         (
             source_ok,
-            auto_gate_ok,
+            candidate_gate_ok,
             hard_separator_requirement_ok,
             content_ok,
             confidence_ok,
@@ -52,8 +56,8 @@ def candidate_reliability_detail(
         "required_confidence": float(required_confidence),
         "source": source,
         "source_ok": bool(source_ok),
-        "auto_gate": bool(auto_gate),
-        "auto_gate_ok": bool(auto_gate_ok),
+        "candidate_gate_passed": bool(candidate_gate_passed),
+        "candidate_gate_ok": bool(candidate_gate_ok),
         "hard_separator_ok": bool(raw_hard_separator_ok),
         "hard_separator_requirement_ok": bool(hard_separator_requirement_ok),
         "content_support": content_support,

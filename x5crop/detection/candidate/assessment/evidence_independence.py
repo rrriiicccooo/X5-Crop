@@ -74,7 +74,7 @@ def evidence_independence_detail(
         if not requires_validation
         else bool(standard_ok and content_ok and geometry_ok)
     )
-    reason = "ok" if ok else policy.candidate_blocker
+    reason = "ok" if ok else policy.candidate_signal
     return {
         "used": True,
         "ok": bool(ok),

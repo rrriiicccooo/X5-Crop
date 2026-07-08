@@ -129,10 +129,10 @@ class SafetyCandidatePolicy:
 
 @dataclass(frozen=True)
 class PartialStopPolicy:
-    stop_after_safe_auto: bool = True
-    skip_content_after_safe_auto: bool = True
-    skip_content_after_safe_auto_strip_modes: tuple[str, ...] = ("partial",)
-    skip_content_after_safe_auto_reason: str = "partial_safe_separator_auto_gate_passed"
+    stop_after_safe_candidate_gate: bool = True
+    skip_content_after_safe_candidate_gate: bool = True
+    skip_content_after_safe_candidate_gate_strip_modes: tuple[str, ...] = ("partial",)
+    skip_content_after_safe_candidate_gate_reason: str = "partial_safe_separator_candidate_gate_passed"
 
 
 @dataclass(frozen=True)
@@ -150,7 +150,7 @@ class CandidateExecutionBudgetPolicy:
     skip_outer_correction_after_reliable_selection: bool = True
     reliable_confidence_margin: float = 0.02
     requires_separator_source: bool = True
-    requires_auto_gate: bool = True
+    requires_candidate_gate: bool = True
     requires_hard_separator_ok: bool = True
     requires_content_support: str = "ok"
     requires_no_candidate_reasons: bool = True
@@ -167,7 +167,7 @@ class EvidenceIndependencePolicy:
     min_content_score: float = 0.72
     min_geometry_score: float = 0.72
     max_photo_width_cv: float = 0.040
-    candidate_blocker: str = "evidence_dependency_cycle_risk"
+    candidate_signal: str = "evidence_dependency_cycle_risk"
 
 
 @dataclass(frozen=True)
@@ -178,9 +178,9 @@ class OuterCorrectionCandidateExtensionPolicy:
 @dataclass(frozen=True)
 class ContentCandidatePlanPolicy:
     enabled: bool = True
-    skip_after_separator_auto: bool = True
-    separator_auto_skip_strip_modes: tuple[str, ...] = ("full",)
-    separator_auto_skip_reason: str = "separator_auto_gate_passed"
+    skip_after_separator_candidate_gate: bool = True
+    separator_candidate_gate_skip_strip_modes: tuple[str, ...] = ("full",)
+    separator_candidate_gate_skip_reason: str = "separator_candidate_gate_passed"
     disabled_skip_reason: str = "disabled_by_policy"
 
 

@@ -28,20 +28,20 @@ def apply_dual_lane_content_assessment(
     detection.detail["content_evidence"] = content_detail
     detection.detail["outer_content_alignment"] = outer_alignment
 
-    candidate_blockers: list[str] = []
+    candidate_reason_codes: list[str] = []
     if bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
         if support == "aspect_conflict":
             apply_candidate_confidence_cap(detection, 0.82, REASON_CONTENT_ASPECT_CONFLICT)
-            candidate_blockers.append(REASON_CONTENT_ASPECT_CONFLICT)
+            candidate_reason_codes.append(REASON_CONTENT_ASPECT_CONFLICT)
         elif support in {"low_content", "weak"} and detection.confidence >= confidence_threshold:
             apply_candidate_confidence_cap(detection, 0.84, REASON_CONTENT_EVIDENCE_WEAK)
-            candidate_blockers.append(REASON_CONTENT_EVIDENCE_WEAK)
+            candidate_reason_codes.append(REASON_CONTENT_EVIDENCE_WEAK)
     if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
         apply_candidate_confidence_cap(detection, 0.84, REASON_OUTER_CONTENT_BBOX_MISMATCH)
-        candidate_blockers.append(REASON_OUTER_CONTENT_BBOX_MISMATCH)
+        candidate_reason_codes.append(REASON_OUTER_CONTENT_BBOX_MISMATCH)
 
-    add_candidate_reasons(detection, candidate_blockers)
+    add_candidate_reasons(detection, candidate_reason_codes)
 
 
 __all__ = ["apply_dual_lane_content_assessment"]

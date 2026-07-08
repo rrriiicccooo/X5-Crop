@@ -51,15 +51,25 @@ def calibrated_candidate_rank(detection: Detection, threshold: float) -> tuple[i
     )
 
 
-def is_partial_safe_auto_candidate(detection: Detection, threshold: float) -> bool:
+def is_partial_safe_candidate_gate_candidate(detection: Detection, threshold: float) -> bool:
     candidate = detection.detail.get("candidate_assessment", {})
+    candidate_gate = {}
+    if isinstance(candidate, dict):
+        gate = candidate.get("gate")
+        candidate_gate = dict(gate) if isinstance(gate, dict) else {}
+    candidate_gate_passed = bool(
+        candidate_gate.get(
+            "passed",
+            candidate.get("candidate_gate_passed", False) if isinstance(candidate, dict) else False,
+        )
+    )
     return bool(
         detection.strip_mode == "partial"
         and detection.confidence >= threshold
         and isinstance(candidate, dict)
         and isinstance(candidate.get("partial_safe_extra_frames"), dict)
         and candidate["partial_safe_extra_frames"].get("ok", False)
-        and candidate.get("auto_gate", False)
+        and candidate_gate_passed
     )
 
 
@@ -241,7 +251,7 @@ def select_detection_candidate(
 __all__ = [
     "SelectionResult",
     "calibrated_candidate_rank",
-    "is_partial_safe_auto_candidate",
+    "is_partial_safe_candidate_gate_candidate",
     "select_detection_candidate",
     "select_separator_candidate_for_content_mismatch",
 ]

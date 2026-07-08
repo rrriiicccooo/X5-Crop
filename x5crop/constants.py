@@ -24,7 +24,6 @@ MODEL_GAP_METHODS = {
     GAP_CONTENT,
 }
 
-REASON_AUTO_GATE_NOT_SATISFIED = "auto_gate_not_satisfied"
 REASON_SEPARATOR_HARD_EVIDENCE_WEAK = "separator_hard_evidence_weak"
 REASON_CONTENT_EVIDENCE_WEAK = "content_evidence_weak"
 REASON_CONTENT_ASPECT_CONFLICT = "content_aspect_conflict"

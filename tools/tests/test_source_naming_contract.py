@@ -395,13 +395,14 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_candidate_policy_uses_blocker_names_for_candidate_gate_inputs(self) -> None:
+    def test_evidence_policy_uses_signal_names_for_candidate_gate_inputs(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "candidate.py"
         text = path.read_text(encoding="utf-8")
 
         self.assertNotIn("review_reason:", text)
         self.assertNotIn(".review_reason", text)
-        self.assertIn("candidate_blocker", text)
+        self.assertNotIn("candidate_blocker", text)
+        self.assertIn("candidate_signal", text)
 
     def test_candidate_assessment_uses_canonical_detail_names(self) -> None:
         banned = (
@@ -580,7 +581,15 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_candidate_reason_buckets_use_explicit_result(self) -> None:
+    def test_candidate_gate_assessment_uses_explicit_result(self) -> None:
+        candidate_gate_path = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "assessment"
+            / "candidate_gate.py"
+        )
         candidate_assessment_path = (
             PROJECT_ROOT
             / "x5crop"
@@ -589,17 +598,39 @@ class SourceNamingContractTest(unittest.TestCase):
             / "assessment"
             / "candidate.py"
         )
-        text = candidate_assessment_path.read_text(encoding="utf-8")
+        self.assertFalse(
+            (
+                PROJECT_ROOT
+                / "x5crop"
+                / "detection"
+                / "candidate"
+                / "assessment"
+                / "blockers.py"
+            ).exists()
+        )
+        gate_text = candidate_gate_path.read_text(encoding="utf-8")
+        assessment_text = candidate_assessment_path.read_text(encoding="utf-8")
 
-        self.assertIn("class CandidateReasonBuckets", text)
-        self.assertNotIn(") -> tuple[list[str], list[str]]", text)
-        self.assertNotIn("pre_auto_blockers, pre_auto_diagnostics", text)
+        self.assertIn("class CandidateGateAssessment", gate_text)
+        self.assertIn("candidate_gate_assessment", assessment_text)
+        self.assertIn('"gate": candidate_gate.report_detail()', assessment_text)
+        self.assertNotIn("class CandidateReasonBuckets", assessment_text)
+        self.assertNotIn("CANDIDATE_AUTO_GATE_BLOCKING_REASONS", gate_text)
+        self.assertNotIn("CANDIDATE_AUTO_GATE_BLOCKING_REASONS", assessment_text)
+        self.assertNotIn("auto_gate_inputs", assessment_text)
         self.assertNotIn(
             "candidate_blockers, candidate_diagnostics = _candidate_reason_buckets",
-            text,
+            assessment_text,
         )
 
-    def test_decision_context_review_uses_explicit_assessment(self) -> None:
+    def test_decision_gate_uses_explicit_assessment(self) -> None:
+        decision_gate_path = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "decision"
+            / "decision_gate.py"
+        )
         contract_applier_path = (
             PROJECT_ROOT
             / "x5crop"
@@ -607,11 +638,14 @@ class SourceNamingContractTest(unittest.TestCase):
             / "decision"
             / "contract_applier.py"
         )
-        text = contract_applier_path.read_text(encoding="utf-8")
+        gate_text = decision_gate_path.read_text(encoding="utf-8")
+        contract_text = contract_applier_path.read_text(encoding="utf-8")
 
-        self.assertIn("class DecisionContextReviewAssessment", text)
-        self.assertNotIn(") -> tuple[list[str], list[dict[str, Any]]]", text)
-        self.assertNotIn("context_reasons, context_reason_inputs", text)
+        self.assertIn("class DecisionGateAssessment", gate_text)
+        self.assertIn('"decision_gate": decision_gate.report_detail()', contract_text)
+        self.assertNotIn("class DecisionContextReviewAssessment", contract_text)
+        self.assertNotIn(") -> tuple[list[str], list[dict[str, Any]]]", contract_text)
+        self.assertNotIn("context_reasons, context_reason_inputs", contract_text)
 
     def test_candidate_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
         banned = (
@@ -884,7 +918,11 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn("add_final_review_reason", final_decision_text)
         self.assertNotIn("_sync_decision_summary_status", final_decision_text)
         self.assertNotIn("sync_candidate_competition_decision_fields", final_decision_text)
-        self.assertIn("_low_confidence_context_reason_inputs", contract_text)
+        decision_gate_text = (
+            PROJECT_ROOT / "x5crop" / "detection" / "decision" / "decision_gate.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("low_confidence_context", decision_gate_text)
+        self.assertNotIn("_low_confidence_context_reason_inputs", contract_text)
 
     def test_policy_assembly_does_not_use_reported_physical_risk_strings(self) -> None:
         banned = (

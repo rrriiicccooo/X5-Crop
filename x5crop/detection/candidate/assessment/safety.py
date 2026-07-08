@@ -3,11 +3,65 @@ from __future__ import annotations
 from ....constants import CANDIDATE_SOURCE_SAFETY
 from ....domain import Detection
 from ....policies.runtime.policy import DetectionPolicy
+from ...gate_checks import GateCheck, unique_signals
 from ..reasons import add_candidate_reason
 from .confidence_caps import apply_candidate_confidence_cap
 
 
-SAFETY_CANDIDATE_AUTO_GATE_BLOCKER = "safety_candidate_auto_gate_blocked"
+SAFETY_CANDIDATE_GATE_BLOCKER = "safety_candidate_gate_blocked"
+
+
+def _detail_list(value: object) -> list:
+    return list(value) if isinstance(value, list) else []
+
+
+def _append_safety_candidate_gate_check(detection: Detection) -> None:
+    assessment = detection.detail.get("candidate_assessment")
+    if not isinstance(assessment, dict):
+        assessment = {}
+        detection.detail["candidate_assessment"] = assessment
+
+    gate = assessment.get("gate")
+    gate_detail = dict(gate) if isinstance(gate, dict) else {}
+    checks = _detail_list(gate_detail.get("checks"))
+    safety_check = GateCheck(
+        code="candidate_source_auto_allowed",
+        stage="candidate",
+        bucket="source",
+        passed=False,
+        severity="blocker",
+        signal=SAFETY_CANDIDATE_GATE_BLOCKER,
+        detail={"source": CANDIDATE_SOURCE_SAFETY},
+    )
+    checks.append(safety_check.report_detail())
+
+    blockers = unique_signals(
+        [
+            *[str(reason) for reason in _detail_list(assessment.get("blockers"))],
+            *[str(reason) for reason in _detail_list(gate_detail.get("blockers"))],
+            SAFETY_CANDIDATE_GATE_BLOCKER,
+        ]
+    )
+    diagnostics = unique_signals(
+        [
+            *[str(reason) for reason in _detail_list(assessment.get("diagnostics"))],
+            *[str(reason) for reason in _detail_list(gate_detail.get("diagnostics"))],
+        ]
+    )
+    confidence_caps = _detail_list(detection.detail.get("candidate_confidence_caps"))
+
+    assessment["source"] = CANDIDATE_SOURCE_SAFETY
+    assessment["candidate_gate_passed"] = False
+    assessment["blockers"] = blockers
+    assessment["diagnostics"] = diagnostics
+    assessment["confidence_caps"] = confidence_caps
+    assessment["gate"] = {
+        "passed": False,
+        "checks": checks,
+        "blockers": blockers,
+        "diagnostics": diagnostics,
+        "confidence_caps": confidence_caps,
+    }
 
 
 def apply_safety_candidate_assessment(
@@ -25,22 +79,15 @@ def apply_safety_candidate_assessment(
     apply_candidate_confidence_cap(
         detection,
         cap,
-        SAFETY_CANDIDATE_AUTO_GATE_BLOCKER,
+        SAFETY_CANDIDATE_GATE_BLOCKER,
     )
-    add_candidate_reason(detection, SAFETY_CANDIDATE_AUTO_GATE_BLOCKER)
-
-    assessment = detection.detail.get("candidate_assessment", {})
-    if isinstance(assessment, dict):
-        assessment["auto_gate"] = False
-        assessment["source"] = CANDIDATE_SOURCE_SAFETY
-        auto_gate_inputs = assessment.get("auto_gate_inputs")
-        if isinstance(auto_gate_inputs, dict):
-            auto_gate_inputs["source"] = CANDIDATE_SOURCE_SAFETY
+    add_candidate_reason(detection, SAFETY_CANDIDATE_GATE_BLOCKER)
+    _append_safety_candidate_gate_check(detection)
 
     detection.detail["safety_candidate"] = {
         "used": True,
-        "candidate_auto_gate_eligible": False,
-        "candidate_blocker": SAFETY_CANDIDATE_AUTO_GATE_BLOCKER,
+        "candidate_gate_eligible": False,
+        "candidate_gate_signal": SAFETY_CANDIDATE_GATE_BLOCKER,
         "separator_local_mode": policy.outer.proposal.geometry.separator.local.mode,
         "separator_full_width_mode": policy.outer.proposal.geometry.separator.full_width.mode,
         "strategies": list(policy.candidate_plan.safety_candidate.strategies),
@@ -48,6 +95,6 @@ def apply_safety_candidate_assessment(
 
 
 __all__ = [
-    "SAFETY_CANDIDATE_AUTO_GATE_BLOCKER",
+    "SAFETY_CANDIDATE_GATE_BLOCKER",
     "apply_safety_candidate_assessment",
 ]

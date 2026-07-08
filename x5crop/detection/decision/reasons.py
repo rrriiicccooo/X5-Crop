@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from ...constants import (
-    REASON_AUTO_GATE_NOT_SATISFIED,
     REASON_CONTENT_ASPECT_CONFLICT,
     REASON_CONTENT_EVIDENCE_WEAK,
     REASON_EVIDENCE_DEPENDENCY_CYCLE_RISK,
@@ -13,7 +12,6 @@ from ...domain import Detection
 
 
 FINAL_REVIEW_REASON_REDUCTION_MAP = {
-    REASON_AUTO_GATE_NOT_SATISFIED: "evidence_combination_insufficient",
     REASON_SEPARATOR_HARD_EVIDENCE_WEAK: "separator_evidence_incomplete",
     REASON_CONTENT_EVIDENCE_WEAK: "content_evidence_insufficient",
     REASON_CONTENT_ASPECT_CONFLICT: "outer_content_mismatch",

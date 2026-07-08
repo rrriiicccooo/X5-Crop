@@ -146,25 +146,29 @@ candidate plan
 - separator gate 内部 profile / supplemental support checks 输出使用显式
   `SeparatorGateSupportAssessment`，字段为 `ok` 和 `reason`；内部 helper 也不能
   用匿名 ok/reason tuple 表达 gate 支持契约。
-- candidate reason bucketing 输出使用显式 `CandidateReasonBuckets`，字段为
-  `blockers` 和 `diagnostics`；候选 reason taxonomy 不能靠匿名二元组传递。
+- gate check 使用统一 `GateCheck`，字段为 `code`、`stage`、`bucket`、
+  `passed`、`severity`、`signal` 和 `detail`；低层 signal 不直接伪装成最终
+  REVIEW reason。
+- candidate gate 输出使用显式 `CandidateGateAssessment`，字段为 `passed`、
+  `checks`、`blockers`、`diagnostics` 和 `confidence_caps`；`blockers` 只能从
+  failed required gate checks 派生，不能维护独立 blocker 词表。
 - candidate assessment 的 reason 只能作为候选 blockers / diagnostics；最终用户可见
   `review_reasons` 只由 decision contract 生成。
-- `candidate_assessment.blockers` 只记录阻断 auto gate 的输入原因；`auto_gate_not_satisfied`
-  是 gate 结果/legacy candidate reason，不能作为结构化 blocker。
+- `candidate_assessment.gate` 是候选资格的唯一结构化来源；候选级 failed
+  gate 结果写作 `candidate_gate_failed`，不能回塞进 `candidate_reasons` 或独立
+  blocker 词表。
 - decision 的 `candidate_reason_inputs_before_decision` 只保留候选 blockers /
   diagnostics 作为主模型；旧 reason 归并读模型必须显式命名为
   `legacy_reduced_candidate_reasons`。
 - low-confidence context reasons，例如 outer candidate disagreement 和 deskew uncertainty，
   属于 decision contract input；不能在 `final_decision` 中事后补写 `decision_summary`。
-- decision low-confidence context 输出使用显式 `DecisionContextReviewAssessment`，字段为
-  `reasons` 和 `reason_inputs`；context final reasons 和 reason input detail 不能用
-  匿名 tuple 携带。
+- decision gate 输出使用显式 `DecisionGateAssessment`，字段为 `passed`、
+  `checks`、`final_review_reasons`、`reason_inputs` 和 `confidence_caps`；最终
+  REVIEW reason 只能从这个结构产生。
 - final review reasons 只能由 decision contract 一次性 set；decision layer 不保留
   add/append-style final reason helper。
-- policy / report 可见的 gate stage 名必须使用 `candidate_blocker_gate`、
-  `candidate_auto_gate` 和 `decision_contract_gate` 这类职责名，不能把 finalization
-  写成裁决 gate。
+- policy / report 可见的 gate stage 名必须使用 `candidate_gate` 和
+  `decision_gate` 这类职责名，不能把 finalization 写成裁决 gate。
 - candidate / mode 候选阶段读取或更新候选级原因必须经过
   `detection.candidate.reasons`，并写入 `Detection.detail["candidate_reasons"]`；
   candidate / mode 子层不能把候选原因写进 `Detection.review_reasons`。
@@ -259,16 +263,15 @@ candidate plan
 - risk 只能拉回 REVIEW 或限制输出，不能救回 PASS。
 - confidence cap 必须记录 owner、reason、cap value 和前后 confidence；candidate cap 和
   decision cap 分别归 assessment / decision。
-- `candidate_assessment.blockers`、`candidate_assessment.diagnostics` 和
-  `candidate_assessment.auto_gate_inputs` 是 report/debug 的候选级解释，不是最终裁决。
-- `auto_gate_not_satisfied` 可以保留在 legacy/internal `candidate_reasons` 中，但不能出现在
-  `candidate_assessment.blockers` / `diagnostics`；decision 通过 `auto_gate=false`
-  映射最终 `evidence_combination_insufficient`。
+- `candidate_assessment.gate`、`candidate_assessment.blockers` 和
+  `candidate_assessment.diagnostics` 是 report/debug 的候选级解释，不是最终裁决。
+- `candidate_gate_failed` 是 gate 结果，不是候选物理证据；它只能出现在 gate /
+  confidence-cap detail 或 decision reason input，不能作为 candidate reason 存储。
 - `legacy_reduced_candidate_reasons` 只是旧候选原因的 internal/read-model reducer；
   不能作为 candidate assessment 或 final review reason 的主要业务字段。
-- candidate auto-gate blocking vocabulary belongs to `candidate.assessment`；通用
-  `utils` 不承载 candidate-specific blocker list，也不用 hard review reason 命名。
-- candidate 级可见字段必须写 `candidate_auto_gate_*`；不能用 `auto_pass_*` 表达候选资格，
+- candidate gate 的 blockers 从 `GateCheck` 派生；通用 `utils` 不承载
+  candidate-specific blocker list，也不用 hard review reason 命名。
+- candidate 级可见字段必须写 `candidate_gate_*`；不能用 `auto_pass_*` 表达候选资格，
   因为最终 PASS 只属于 decision contract。
 - read-only diagnostics 用 `effects` 结构声明 output / confidence / decision 副作用；
   不在低层 detail 中使用 `changes_final_decision` 这类 final-looking 字段。
@@ -510,19 +513,22 @@ the gate contract.
 Internal separator-gate profile and supplemental support checks return an
 explicit `SeparatorGateSupportAssessment` with `ok` and `reason` fields; helper
 functions must not encode gate-support contracts as anonymous ok/reason tuples.
-Candidate reason bucketing returns an explicit `CandidateReasonBuckets` with
-`blockers` and `diagnostics` fields; candidate reason taxonomy must not be
-passed around as an anonymous pair.
+Gate checks use a shared `GateCheck` shape with `code`, `stage`, `bucket`,
+`passed`, `severity`, `signal`, and `detail` fields; low-level signals must not
+pretend to be final REVIEW reasons.
+Candidate gate assessment returns an explicit `CandidateGateAssessment` with
+`passed`, `checks`, `blockers`, `diagnostics`, and `confidence_caps` fields;
+blockers are derived from failed required gate checks, not from an independent
+blocker vocabulary.
 `candidate_reason_inputs_before_decision` keeps blockers / diagnostics as the
 main model; the old reason-reduction read model must be named
 `legacy_reduced_candidate_reasons`.
-Decision low-confidence context returns an explicit
-`DecisionContextReviewAssessment` with `reasons` and `reason_inputs` fields;
-context final reasons and reason-input detail must not be carried as an
-anonymous tuple.
-Policy/report-visible gate stage names use `candidate_blocker_gate`,
-`candidate_auto_gate`, and `decision_contract_gate`; finalization must not be
-named as a decision gate.
+Decision gate assessment returns an explicit `DecisionGateAssessment` with
+`passed`, `checks`, `final_review_reasons`, `reason_inputs`, and
+`confidence_caps` fields; final REVIEW reasons are generated only from this
+structure.
+Policy/report-visible gate stage names use `candidate_gate` and
+`decision_gate`; finalization must not be named as a decision gate.
 Candidate and mode-stage code must read or update candidate-level reasons
 through `detection.candidate.reasons`; the underlying
 `Detection.detail["candidate_reasons"]` field stores candidate-level reasons.
@@ -624,17 +630,17 @@ The decision contract carries only format/mode, evidence, risk, and PASS /
 REVIEW decision parameters; output bleed, debug panels, and report sections
 remain in runtime output / diagnostics / report policy instead of decision
 contract.
-Candidate auto-gate blocker vocabulary belongs to `candidate.assessment`, not to
-generic utilities, and must not be named as hard review reasons.
-Candidate-visible fields use `candidate_auto_gate_*`; they must not use
+Candidate gate blockers are derived from `GateCheck` results, not stored in a
+generic utility vocabulary, and must not be named as hard review reasons.
+Candidate-visible fields use `candidate_gate_*`; they must not use
 `auto_pass_*` for candidate eligibility because final PASS belongs only to the
 decision contract.
 Read-only diagnostics use an `effects` object for output / confidence /
 decision side effects; low-level detail must not use final-looking fields such
 as `changes_final_decision`.
-Candidate-plan policy fields that block candidate auto gate use blocker naming,
-not review-reason naming; final review reasons belong only to the decision
-contract.
+Candidate-plan policy fields that contribute candidate gate signals use signal
+naming, not review-reason naming; final review reasons belong only to the
+decision contract.
 Candidate-plan detail exposes gap search families only as `gap_search_profiles`;
 the old `gap_profiles` alias is not a runtime/report field.
 Final risk evidence such as overlap and lucky-pass risk is attached before the

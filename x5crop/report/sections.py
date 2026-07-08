@@ -5,6 +5,7 @@ from typing import Any
 from ..detection.detail import (
     candidate_assessment,
     candidate_competition,
+    decision_summary,
     final_review_reasons_from_detail,
 )
 from ..domain import Detection
@@ -57,24 +58,34 @@ def gate_records(detection: Detection) -> list[dict[str, Any]]:
                 "detail": partial,
             }
         )
-    gates.append(
-        {
-            "name": "candidate_auto_gate",
-            "ok": bool(assessment.get("auto_gate", False)),
-            "reason": (
-                "candidate_auto_gate_passed"
-                if assessment.get("auto_gate", False)
-                else "candidate_auto_gate_failed"
-            ),
-            "detail": {
-                "joint_score": assessment.get("joint_score"),
-                "content_support": assessment.get("content_support"),
-                "geometry_score": assessment.get("geometry_score"),
-                "separator_score": assessment.get("separator_score"),
-                "content_score": assessment.get("content_score"),
-            },
-        }
-    )
+    candidate_gate = assessment.get("gate")
+    if isinstance(candidate_gate, dict):
+        gates.append(
+            {
+                "name": "candidate_gate",
+                "ok": bool(candidate_gate.get("passed", False)),
+                "reason": (
+                    "candidate_gate_passed"
+                    if candidate_gate.get("passed", False)
+                    else "candidate_gate_failed"
+                ),
+                "detail": candidate_gate,
+            }
+        )
+    decision_gate = decision_summary(detection).get("decision_gate")
+    if isinstance(decision_gate, dict):
+        gates.append(
+            {
+                "name": "decision_gate",
+                "ok": bool(decision_gate.get("passed", False)),
+                "reason": (
+                    "decision_gate_passed"
+                    if decision_gate.get("passed", False)
+                    else "decision_gate_failed"
+                ),
+                "detail": decision_gate,
+            }
+        )
     return gates
 
 

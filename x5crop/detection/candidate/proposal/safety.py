@@ -44,7 +44,7 @@ def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSp
             "candidate_source": CANDIDATE_SOURCE_HARD_SAFETY,
             "safety_candidate_kind": "hard_safety_equal_split",
             "candidate_contract": "hard_safety_review_input",
-            "candidate_auto_gate_eligible": False,
+            "candidate_gate_eligible": False,
             "layout": config.layout,
             "film_format": fmt.name,
             "strip_mode": config.strip_mode,

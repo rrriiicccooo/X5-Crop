@@ -14,7 +14,7 @@ from ...guidance.content_model import content_detection_for_count
 from ..assessment.candidate import apply_candidate_assessment_policy
 from ..assessment.safety import apply_safety_candidate_assessment
 from .reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
-from ..selection.choose import is_partial_safe_auto_candidate
+from ..selection.choose import is_partial_safe_candidate_gate_candidate
 from .source_policy import safety_candidate_outer_proposals_enabled
 from .sources import (
     detect_candidate_for_count,
@@ -181,8 +181,19 @@ def calibrated_candidates_for_count(
         )
     candidates.append(separator_candidate)
     separator_gate_candidate = separator_candidate
-    separator_auto_gate = bool(
-        separator_candidate.detail.get("candidate_assessment", {}).get("auto_gate", False)
+    separator_assessment = separator_candidate.detail.get("candidate_assessment", {})
+    separator_assessment = (
+        dict(separator_assessment) if isinstance(separator_assessment, dict) else {}
+    )
+    separator_candidate_gate = separator_assessment.get("gate")
+    separator_candidate_gate = (
+        dict(separator_candidate_gate) if isinstance(separator_candidate_gate, dict) else {}
+    )
+    separator_candidate_gate_passed = bool(
+        separator_candidate_gate.get(
+            "passed",
+            separator_assessment.get("candidate_gate_passed", False),
+        )
     )
     if safety_candidate_outer_proposals_enabled(policy):
         safety_proposal = detect_safety_outer_proposal_candidate_for_count(
@@ -203,24 +214,29 @@ def calibrated_candidates_for_count(
                 policy=policy,
             )
             candidates.append(safety_candidate)
-    partial_safe_auto = is_partial_safe_auto_candidate(separator_gate_candidate, config.confidence_threshold)
-    if partial_safe_auto and policy.candidate_plan.partial_stop.stop_after_safe_auto:
+    partial_safe_candidate_gate = is_partial_safe_candidate_gate_candidate(
+        separator_gate_candidate,
+        config.confidence_threshold,
+    )
+    if partial_safe_candidate_gate and policy.candidate_plan.partial_stop.stop_after_safe_candidate_gate:
         stop_after_this_count = True
     if (
-        content_policy.skip_after_separator_auto
-        and strip_mode in content_policy.separator_auto_skip_strip_modes
-        and separator_auto_gate
+        content_policy.skip_after_separator_candidate_gate
+        and strip_mode in content_policy.separator_candidate_gate_skip_strip_modes
+        and separator_candidate_gate_passed
         and separator_gate_candidate.confidence >= config.confidence_threshold
     ):
-        separator_gate_candidate.detail["content_candidate_skipped"] = content_policy.separator_auto_skip_reason
+        separator_gate_candidate.detail["content_candidate_skipped"] = (
+            content_policy.separator_candidate_gate_skip_reason
+        )
         return candidates, stop_after_this_count
     if (
-        policy.candidate_plan.partial_stop.skip_content_after_safe_auto
-        and strip_mode in policy.candidate_plan.partial_stop.skip_content_after_safe_auto_strip_modes
-        and partial_safe_auto
+        policy.candidate_plan.partial_stop.skip_content_after_safe_candidate_gate
+        and strip_mode in policy.candidate_plan.partial_stop.skip_content_after_safe_candidate_gate_strip_modes
+        and partial_safe_candidate_gate
     ):
         separator_gate_candidate.detail["content_candidate_skipped"] = (
-            policy.candidate_plan.partial_stop.skip_content_after_safe_auto_reason
+            policy.candidate_plan.partial_stop.skip_content_after_safe_candidate_gate_reason
         )
         return candidates, stop_after_this_count
     if not content_policy.enabled:

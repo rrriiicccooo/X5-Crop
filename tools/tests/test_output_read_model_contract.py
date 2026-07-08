@@ -126,12 +126,39 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertNotIn("finalization", schema)
 
     def test_report_schema_exposes_evidence_and_candidate_gate_sections(self) -> None:
-        schema = report_schema_for_detection(_detection())
+        schema = report_schema_for_detection(
+            _detection(
+                {
+                    "candidate_assessment": {
+                        "gate": {
+                            "passed": True,
+                            "checks": [],
+                            "blockers": [],
+                            "diagnostics": [],
+                            "confidence_caps": [],
+                        }
+                    },
+                    "decision_summary": {
+                        "decision_gate": {
+                            "passed": True,
+                            "checks": [],
+                            "final_review_reasons": [],
+                            "reason_inputs": [],
+                            "confidence_caps": [],
+                        }
+                    },
+                }
+            )
+        )
 
         self.assertIn("evidence", schema)
         self.assertIn("gates", schema)
         self.assertIn(
-            "candidate_auto_gate",
+            "candidate_gate",
+            [gate.get("name") for gate in schema["gates"]],
+        )
+        self.assertIn(
+            "decision_gate",
             [gate.get("name") for gate in schema["gates"]],
         )
         self.assertNotIn(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from typing import Optional
 
 import numpy as np
@@ -8,7 +8,6 @@ import numpy as np
 from ....constants import (
     CANDIDATE_SOURCE_CONTENT,
     CANDIDATE_SOURCE_SEPARATOR,
-    REASON_AUTO_GATE_NOT_SATISFIED,
     REASON_CONTENT_ASPECT_CONFLICT,
     REASON_CONTENT_EVIDENCE_WEAK,
     REASON_SEPARATOR_HARD_EVIDENCE_WEAK,
@@ -36,7 +35,7 @@ from .gate_support import (
     hard_full_calibration_floor_applies,
     separator_geometry_support_applies,
 )
-from .blockers import CANDIDATE_AUTO_GATE_BLOCKING_REASONS
+from .candidate_gate import candidate_gate_assessment
 from .gates import assess_separator_gate
 from .partial_holder import partial_safe_extra_frames_gate_detail
 from .scoring import (
@@ -56,34 +55,6 @@ def _detail_float(detail: dict, key: str, default: float) -> float:
         return float(value)
     except (TypeError, ValueError):
         return float(default)
-
-
-_CANDIDATE_DIAGNOSTIC_REASONS = {
-    "content_grid_fallback",
-    "content_run_count_mismatch",
-    "content_runs_incomplete",
-    "content_coverage_weak",
-    "content_aspect_uncertain",
-    "content_confidence_low",
-    "low_confidence",
-}
-
-
-@dataclass(frozen=True)
-class CandidateReasonBuckets:
-    blockers: list[str]
-    diagnostics: list[str]
-
-
-def _candidate_reason_buckets(reasons: list[str]) -> CandidateReasonBuckets:
-    unique = sorted(set(str(reason) for reason in reasons if reason))
-    diagnostics = [
-        reason for reason in unique if reason in _CANDIDATE_DIAGNOSTIC_REASONS
-    ]
-    blockers = [
-        reason for reason in unique if reason not in _CANDIDATE_DIAGNOSTIC_REASONS
-    ]
-    return CandidateReasonBuckets(blockers=blockers, diagnostics=diagnostics)
 
 
 def _candidate_confidence_caps(candidate: Detection) -> list[dict]:
@@ -296,7 +267,10 @@ def apply_candidate_assessment_policy(
         policy,
     )
     partial_safe_extra_frames_ok = bool(partial_safe_extra_frames.get("ok", False))
-    partial_safe_auto_support_ok = partial_safe_extra_frames_ok and not content_guided_hard_separator_missing
+    partial_safe_candidate_gate_support_ok = (
+        partial_safe_extra_frames_ok
+        and not content_guided_hard_separator_missing
+    )
     partial_safe_disqualifiers = set(
         partial_safe_extra_frames.get("disqualifiers", [])
     )
@@ -326,7 +300,7 @@ def apply_candidate_assessment_policy(
             partial_safe_disqualifiers
         )
         reasons.extend(sorted(partial_safe_disqualifiers))
-    if partial_safe_auto_support_ok:
+    if partial_safe_candidate_gate_support_ok:
         separator_gate_detail = dict(separator_gate_detail)
         separator_gate_detail["ok"] = True
         separator_gate_detail["reason"] = "partial_safe_extra_frames_support"
@@ -359,37 +333,27 @@ def apply_candidate_assessment_policy(
         reasons.append(
             str(
                 independence_detail.get("reason")
-                or policy.candidate_plan.evidence_independence.candidate_blocker
+                or policy.candidate_plan.evidence_independence.candidate_signal
             )
         )
-    pre_auto_reason_buckets = _candidate_reason_buckets(reasons)
-    auto_gate_blocking_reasons = CANDIDATE_AUTO_GATE_BLOCKING_REASONS.intersection(reasons)
-    auto_gate_inputs = {
-        "source": source,
-        "separator_gate_ok": bool(separator_gate_ok),
-        "partial_safe_auto_support_ok": bool(partial_safe_auto_support_ok),
-        "content_containment_ok": bool(content_containment_ok),
-        "content_harm_risk": bool(content_harm_risk),
-        "evidence_independence_ok": bool(evidence_independence_ok),
-        "candidate_blockers": pre_auto_reason_buckets.blockers,
-        "candidate_diagnostics": pre_auto_reason_buckets.diagnostics,
-        "candidate_auto_gate_blocking_reasons": sorted(auto_gate_blocking_reasons),
-    }
-    auto_gate = False
-    if source == "separator":
-        auto_gate = (
-            (separator_gate_ok or partial_safe_auto_support_ok)
-            and content_containment_ok
-            and not content_harm_risk
-            and evidence_independence_ok
-            and not pre_auto_reason_buckets.blockers
-            and not auto_gate_blocking_reasons
-        )
-    elif source == "content":
-        auto_gate = False
-
+    candidate_gate = candidate_gate_assessment(
+        source=source,
+        separator_gate_ok=bool(separator_gate_ok),
+        separator_gate_detail=separator_gate_detail,
+        partial_safe_candidate_gate_support_ok=bool(
+            partial_safe_candidate_gate_support_ok
+        ),
+        partial_safe_blocks_auto=bool(partial_safe_blocks_auto),
+        partial_safe_disqualifiers=partial_safe_disqualifiers,
+        content_containment_ok=bool(content_containment_ok),
+        content_harm_risk=bool(content_harm_risk),
+        content_support=support,
+        evidence_independence_ok=bool(evidence_independence_ok),
+        evidence_independence_detail=independence_detail,
+        reasons=reasons,
+    )
     confidence_caps = _candidate_confidence_caps(candidate)
-    if not auto_gate:
+    if not candidate_gate.passed:
         cap = (
             scoring_policy.no_auto_cap_partial
             if candidate.strip_mode == "partial"
@@ -399,20 +363,12 @@ def apply_candidate_assessment_policy(
             confidence,
             cap,
             owner="candidate.assessment",
-            reason="auto_gate_not_satisfied",
+            reason="candidate_gate_failed",
         )
         confidence_caps.append(cap_detail)
-        reasons.append(REASON_AUTO_GATE_NOT_SATISFIED)
     else:
         confidence = max(confidence, config.confidence_threshold + min(0.10, joint_score * 0.08))
-    structured_reason_inputs = [
-        reason
-        for reason in reasons
-        if reason != REASON_AUTO_GATE_NOT_SATISFIED
-    ]
-    final_reason_buckets = _candidate_reason_buckets(
-        structured_reason_inputs
-    )
+    candidate_gate = candidate_gate.with_confidence_caps(confidence_caps)
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
     set_candidate_reasons(candidate, reasons)
     candidate.detail["candidate_source"] = (
@@ -423,17 +379,17 @@ def apply_candidate_assessment_policy(
     candidate.detail["candidate_assessment"] = {
         "source": source,
         "joint_score": float(joint_score),
-        "auto_gate": bool(auto_gate),
+        "candidate_gate_passed": bool(candidate_gate.passed),
+        "gate": candidate_gate.report_detail(),
         "geometry_score": float(geometry_score),
         "separator_score": float(separator_score),
         "content_score": float(content_score),
         "content_score_role": "content_containment_support",
         "content_quality_score": float(content_quality),
         "content_quality_score_role": "quality_diagnostic_not_hard_gate",
-        "blockers": final_reason_buckets.blockers,
-        "diagnostics": final_reason_buckets.diagnostics,
+        "blockers": candidate_gate.blockers,
+        "diagnostics": candidate_gate.diagnostics,
         "confidence_caps": confidence_caps,
-        "auto_gate_inputs": auto_gate_inputs,
         "width_cv": _detail_float(candidate.detail, "width_cv", 1.0),
         "width_cv_source": str(candidate.detail.get("width_cv_source") or "unknown"),
         "photo_width_cv": candidate.detail.get("photo_width_cv"),
