@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
 from ....domain import Detection
 from ....formats import FormatSpec
-from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
@@ -78,9 +75,8 @@ def calibrated_candidates_for_count(
     strip_mode: str,
     offset: float,
     cache: AnalysisCache,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
 ) -> tuple[list[Detection], bool]:
-    policy = policy or get_detection_policy(fmt.name, strip_mode)
     content_policy = policy.candidate_plan.content_candidate
     candidates: list[Detection] = []
     stop_after_this_count = False
@@ -250,7 +246,7 @@ def calibrated_candidates_for_count(
         strip_mode,
         offset,
         cache,
-        policy.content,
+        content_policy=policy.content,
     )
     if content is not None:
         candidates.append(apply_candidate_assessment_policy(gray, content, config, fmt, "content", cache, policy=policy))

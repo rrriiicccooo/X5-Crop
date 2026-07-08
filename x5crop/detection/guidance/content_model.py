@@ -22,7 +22,7 @@ from ..evidence.content.regions import (
     content_region_runs,
     select_content_runs,
 )
-from ..evidence.content.signal import content_signal_from_gray, resolve_content_policy
+from ..evidence.content.signal import content_signal_from_gray
 
 CONTENT_PROPOSAL_FAMILY = "content"
 
@@ -142,15 +142,21 @@ def content_detection_for_count(
     strip_mode: str,
     offset_fraction: float = 0.0,
     cache: Optional[AnalysisCache] = None,
-    content_policy: Optional[ContentPolicy] = None,
+    *,
+    content_policy: ContentPolicy,
 ) -> Optional[Detection]:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
-    content_policy = resolve_content_policy(fmt.name, strip_mode, content_policy)
     mask_policy = content_policy.mask
     candidate_policy = content_policy.candidate
     wh, ww = gray_work.shape
     evidence, evidence_float, signal_source = content_signal_arrays_for_candidate(gray_work, cache, config.layout)
-    mask_detail = content_mask_region_detail(evidence_float, gray_work.shape, fmt, cache, content_policy)
+    mask_detail = content_mask_region_detail(
+        evidence_float,
+        gray_work.shape,
+        fmt,
+        cache,
+        content_policy=content_policy,
+    )
     mask_threshold = float(mask_detail["mask_threshold"])
     outer = content_candidate_outer_from_mask(mask_detail, gray_work.shape, mask_policy)
     if outer is None:
@@ -159,7 +165,14 @@ def content_detection_for_count(
     expected_aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
     if expected_aspect is None or expected_aspect <= 0:
         return None
-    runs, run_detail = content_region_runs(evidence, outer, count, fmt.name, cache, content_policy)
+    runs, run_detail = content_region_runs(
+        evidence,
+        outer,
+        count,
+        fmt.name,
+        cache,
+        content_policy=content_policy,
+    )
     selected_runs = select_content_runs(runs, count)
 
     frame_h = max(1.0, float(outer.height))

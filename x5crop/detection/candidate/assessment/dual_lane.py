@@ -23,7 +23,12 @@ def apply_dual_lane_content_assessment(
     lane_policy: DetectionPolicy,
     confidence_threshold: float,
 ) -> None:
-    content_detail = content_evidence_detail(gray, detection, cache, lane_policy.content)
+    content_detail = content_evidence_detail(
+        gray,
+        detection,
+        cache,
+        content_policy=lane_policy.content,
+    )
     outer_alignment = outer_content_alignment_detail(gray, detection, cache, policy=lane_policy)
     detection.detail["content_evidence"] = content_detail
     detection.detail["outer_content_alignment"] = outer_alignment

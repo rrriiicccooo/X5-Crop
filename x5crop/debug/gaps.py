@@ -7,7 +7,6 @@ import numpy as np
 from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_EQUAL, GAP_GRID
 from ..domain import Box, Detection, Gap
 from ..gap_methods import is_hard_gap_method
-from ..policies.registry import get_detection_policy
 from ..utils import clamp_float
 from .canvas import (
     draw_preview_hline,
@@ -75,8 +74,7 @@ def gap_tick_boxes(detection: Detection, gap: Gap, debug_gap: Any) -> list[Box]:
     ]
 
 
-def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> None:
-    debug_gap = get_detection_policy(detection.film_format, detection.strip_mode).diagnostics.debug_gap_overlay
+def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float, debug_gap: Any) -> None:
     gap_colors = {
         GAP_DETECTED: (255, 0, 0),
         GAP_EDGE_PAIR: (255, 0, 0),
@@ -108,11 +106,10 @@ def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> Non
                 draw_preview_line(rgb, tick, scale, color, debug_gap.model_line_width)
             else:
                 draw_preview_hline(rgb, tick, scale, color, debug_gap.model_line_width)
-    draw_gap_diagnostic_overlay(rgb, detection, scale)
+    draw_gap_diagnostic_overlay(rgb, detection, scale, debug_gap)
 
 
-def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: Detection, scale: float) -> None:
-    debug_gap = get_detection_policy(detection.film_format, detection.strip_mode).diagnostics.debug_gap_overlay
+def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: Detection, scale: float, debug_gap: Any) -> None:
     diagnostics = detection.detail.get("diagnostics")
     records: Any = None
     if isinstance(diagnostics, dict):

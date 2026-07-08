@@ -702,7 +702,7 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn("detection.review_reasons =", text)
         self.assertIn('detection.detail[CANDIDATE_SIGNALS]', text)
 
-    def test_decision_candidate_signal_inputs_do_not_keep_legacy_reducer(self) -> None:
+    def test_decision_candidate_signal_inputs_are_current_gate_inputs(self) -> None:
         path = (
             PROJECT_ROOT
             / "x5crop"
@@ -713,12 +713,11 @@ class SourceNamingContractTest(unittest.TestCase):
         text = path.read_text(encoding="utf-8")
 
         self.assertNotIn('"normalized_candidate_signals"', text)
-        self.assertNotIn("legacy_" "reduced_candidate_signals", text)
+        self.assertIn('"candidate_gate_input"', text)
 
-    def test_candidate_signal_taxonomy_has_no_legacy_fallback_or_old_signal_names(self) -> None:
+    def test_candidate_signal_taxonomy_uses_physical_signal_names(self) -> None:
         banned = (
             "candidate_" "reason_signal",
-            "legacy_" "reduced_candidate_signals",
             "candidate_signal_" "signal",
             "weak_" "separators",
             "mostly_" "equal_split",
@@ -913,6 +912,25 @@ class SourceNamingContractTest(unittest.TestCase):
             for term in banned:
                 if term in text:
                     offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
+    def test_runtime_policy_lookup_stays_out_of_output_and_detection_layers(self) -> None:
+        banned = ("get_detection_policy", "policies.registry")
+        checked_paths = [
+            PROJECT_ROOT / "x5crop" / "detection",
+            PROJECT_ROOT / "x5crop" / "debug",
+            PROJECT_ROOT / "x5crop" / "report",
+            PROJECT_ROOT / "x5crop" / "runtime" / "analysis_reuse.py",
+        ]
+        offenders: list[str] = []
+        for root in checked_paths:
+            paths = [root] if root.is_file() else list(root.rglob("*.py"))
+            for path in paths:
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
 
         self.assertEqual(offenders, [])
 

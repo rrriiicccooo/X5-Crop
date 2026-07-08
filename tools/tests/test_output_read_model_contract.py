@@ -8,6 +8,7 @@ from x5crop.debug.status import debug_status_parts
 from x5crop.detection.detail import candidate_signals_from_detail
 from x5crop.domain import Box, Detection, ImageProfile
 from x5crop.export.actions import copy_for_review_if_needed
+from x5crop.policies.registry import get_detection_policy
 from x5crop.report.result_builder import result_from_detection
 from x5crop.report.schema import report_schema_for_detection
 
@@ -28,8 +29,11 @@ def _detection(detail: dict | None = None, review_reasons: list[str] | None = No
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def _policy(self):
+        return get_detection_policy("135", "full")
+
     def test_report_schema_uses_decision_status_or_unknown(self) -> None:
-        schema = report_schema_for_detection(_detection())
+        schema = report_schema_for_detection(_detection(), policy=self._policy())
 
         self.assertEqual(schema["status"], "unknown")
         self.assertEqual(schema["result"]["status"], "unknown")
@@ -43,7 +47,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             },
             ["separator_evidence_insufficient"],
         )
-        decided_schema = report_schema_for_detection(decided)
+        decided_schema = report_schema_for_detection(decided, policy=self._policy())
 
         self.assertEqual(decided_schema["status"], "needs_review")
         self.assertEqual(decided_schema["result"]["status"], "needs_review")
@@ -86,7 +90,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertIn("outer_content_mismatch", warnings[0])
         self.assertNotIn("candidate_level_stale_reason", warnings[0])
 
-        schema = report_schema_for_detection(detection)
+        schema = report_schema_for_detection(detection, policy=self._policy())
         self.assertEqual(schema["result"]["review_reasons"], ["outer_content_mismatch"])
 
         profile = ImageProfile(
@@ -111,6 +115,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             [],
             None,
             [],
+            self._policy(),
         )
         self.assertEqual(result.review_reasons, ["outer_content_mismatch"])
 
@@ -120,7 +125,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(candidate_signals_from_detail(detection), [])
 
     def test_report_schema_uses_diagnostics_section_not_finalization(self) -> None:
-        schema = report_schema_for_detection(_detection())
+        schema = report_schema_for_detection(_detection(), policy=self._policy())
 
         self.assertIn("diagnostics", schema)
         self.assertNotIn("finalization", schema)
@@ -148,7 +153,8 @@ class OutputReadModelContractTest(unittest.TestCase):
                         }
                     },
                 }
-            )
+            ),
+            policy=self._policy(),
         )
 
         self.assertIn("evidence", schema)

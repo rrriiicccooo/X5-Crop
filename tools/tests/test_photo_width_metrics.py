@@ -16,9 +16,13 @@ from x5crop.geometry.gap_geometry import (
     photo_widths_from_gap_edges,
     separator_width_cv,
 )
+from x5crop.policies.registry import get_detection_policy
 
 
 class PhotoWidthMetricsTest(unittest.TestCase):
+    def _policy(self):
+        return get_detection_policy("120-645", "full")
+
     def test_separator_width_variation_does_not_change_photo_width_cv(self) -> None:
         gaps = [
             Gap(1, 105.0, 1.0, GAP_DETECTED, 100.0, 110.0),
@@ -64,6 +68,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
             4,
             format_spec("120-645"),
             "full",
+            self._policy(),
             origin=0.0,
             pitch=445.0 / 4.0,
         )
@@ -101,6 +106,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
         score = geometry_support_score(
             detection,
             {"used": False, "support": "unknown", "max_aspect_error": None},
+            self._policy(),
         )
 
         self.assertGreater(score, 0.90)
@@ -142,6 +148,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
         score = geometry_support_score(
             detection,
             {"used": False, "support": "unknown", "max_aspect_error": None},
+            self._policy(),
         )
 
         self.assertGreater(score, 0.90)

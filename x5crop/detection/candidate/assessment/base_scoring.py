@@ -14,7 +14,6 @@ from ....geometry.gap_geometry import (
     separator_widths,
     width_cv as coefficient_of_variation,
 )
-from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....runtime.config import RuntimeConfig
 from ....utils import box_from_dict, gap_from_dict, sampled_percentile
@@ -206,11 +205,10 @@ def base_detection_assessment(
     count: int,
     fmt: FormatSpec,
     strip_mode: str,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
     origin: float | None = None,
     pitch: float | None = None,
 ) -> BaseDetectionAssessment:
-    policy = policy or get_detection_policy(fmt.name, strip_mode)
     base_score = policy.scoring.base_detection
     separator_support = policy.separator.support
     expected_gaps = max(0, count - 1)
@@ -451,7 +449,7 @@ def apply_base_detection_scoring(
     detection: Detection,
     config: RuntimeConfig,
     fmt: FormatSpec,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
 ) -> Detection:
     """Apply separator base assessment to a built candidate."""
     detail = dict(detection.detail)
@@ -459,7 +457,6 @@ def apply_base_detection_scoring(
     if isinstance(scoring_detail, dict) and bool(scoring_detail.get("applied", False)):
         return replace(detection, detail=detail)
 
-    policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     work_outer = _work_box_from_detail(detail)
     work_frame_boxes = _work_frame_boxes_from_detail(detail)
     if work_outer is None or not work_frame_boxes:

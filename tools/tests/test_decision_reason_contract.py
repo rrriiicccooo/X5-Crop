@@ -22,6 +22,7 @@ from x5crop.detection.modes.review_only import review_only_detection
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, Detection
 from x5crop.formats import format_spec
+from x5crop.policies.context import RuntimePolicyContext
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.decision.contract import decision_contract_for
 from x5crop.runtime.config import RuntimeConfig
@@ -68,6 +69,14 @@ def _content_ok_detail() -> dict[str, bool | str]:
         "content_containment_ok": True,
         "content_integrity_failed": False,
     }
+
+
+def _decision_contract(format_id: str = "135", strip_mode: str = "full"):
+    return decision_contract_for(format_id, strip_mode)
+
+
+def _policy_context(format_id: str = "135", strip_mode: str = "full"):
+    return RuntimePolicyContext.for_format_mode(format_id, strip_mode)
 
 
 def _candidate_gate_detail(
@@ -136,9 +145,9 @@ class DecisionReasonContractTest(unittest.TestCase):
             gray,
             detection,
             config,
-            format_spec("135"),
             content_detail,
             outer_alignment,
+            policy=_decision_contract("135", "full"),
         )
 
         self.assertEqual(decided.review_reasons, ["evidence_combination_insufficient"])
@@ -146,8 +155,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             decided.detail["candidate_gate_input"]["diagnostics"],
             ["content_coverage_weak"],
         )
-        legacy_key = "legacy_" "reduced_candidate_signals"
-        self.assertNotIn(legacy_key, decided.detail["candidate_gate_input"])
         self.assertNotIn("candidate_review_reasons_before_decision", decided.detail)
         self.assertEqual(
             decided.detail["final_review_reasons"],
@@ -201,9 +208,9 @@ class DecisionReasonContractTest(unittest.TestCase):
             gray,
             detection,
             config,
-            format_spec("135"),
             content_detail,
             outer_alignment,
+            policy=_decision_contract("135", "full"),
         )
 
         self.assertEqual(
@@ -333,15 +340,13 @@ class DecisionReasonContractTest(unittest.TestCase):
             gray,
             detection,
             config,
-            fmt,
             _content_ok_detail(),
             {"used": True, "ok": True},
+            policy=_decision_contract("135-dual", "partial"),
         )
 
         self.assertIn("evidence_combination_insufficient", decided.review_reasons)
         self.assertIn("separator_evidence_incomplete", decided.review_reasons)
-        legacy_key = "legacy_" "reduced_candidate_signals"
-        self.assertNotIn(legacy_key, decided.detail["candidate_gate_input"])
         decision_signals = [
             item["signal"] for item in decided.detail["decision_reason_inputs"]
         ]
@@ -419,9 +424,9 @@ class DecisionReasonContractTest(unittest.TestCase):
             gray,
             detection,
             config,
-            format_spec("135"),
             content_detail,
             outer_alignment,
+            policy=_decision_contract("135", "full"),
         )
 
         self.assertEqual(decided.review_reasons, ["content_evidence_insufficient"])
@@ -471,9 +476,9 @@ class DecisionReasonContractTest(unittest.TestCase):
             gray,
             detection,
             config,
-            format_spec("135"),
             content_detail,
             outer_alignment,
+            policy=_decision_contract("135", "full"),
         )
 
         self.assertEqual(decided.review_reasons, ["output_overlap_detected"])
@@ -553,7 +558,6 @@ class DecisionReasonContractTest(unittest.TestCase):
                 gray,
                 detection,
                 _decision_test_config(),
-                format_spec("135"),
                 make_analysis_cache(gray, "horizontal"),
                 {},
                 policy,
@@ -636,7 +640,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             gray,
             detection,
             config,
-            format_spec("135"),
             make_analysis_cache(gray, "horizontal"),
             {},
             get_detection_policy("135", "full"),
@@ -728,9 +731,9 @@ class DecisionReasonContractTest(unittest.TestCase):
             gray,
             detection,
             config,
-            format_spec("135"),
             content_detail,
             outer_alignment,
+            policy=_decision_contract("135", "full"),
         )
 
         self.assertEqual(decided.review_reasons, ["candidate_competition_close"])
@@ -769,6 +772,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             format_spec("135"),
             threshold=0.85,
             policy=get_detection_policy("135", "full"),
+            policy_context=_policy_context("135", "full"),
         )
 
         self.assertEqual(selected.confidence, 0.90)
@@ -847,6 +851,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             fmt,
             threshold=0.85,
             policy=policy,
+            policy_context=_policy_context("half", "full"),
         )
         self.assertEqual(
             selected_without_diagnostic.detail["candidate_assessment"]["source"],
@@ -865,6 +870,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             fmt,
             threshold=0.85,
             policy=policy,
+            policy_context=_policy_context("half", "full"),
         )
         self.assertEqual(
             selected_with_diagnostic.detail["candidate_assessment"]["source"],
@@ -929,10 +935,10 @@ class DecisionReasonContractTest(unittest.TestCase):
             gray,
             detection,
             _decision_test_config(),
-            format_spec("135"),
             _content_ok_detail(),
             {"used": True, "ok": True},
-            {},
+            policy=_decision_contract("135", "full"),
+            deskew_detail={},
         )
 
         self.assertEqual(
@@ -1000,10 +1006,10 @@ class DecisionReasonContractTest(unittest.TestCase):
             gray,
             detection,
             _decision_test_config(),
-            format_spec("135"),
             _content_ok_detail(),
             {"used": True, "ok": True},
-            {"reason": "no_outer"},
+            policy=_decision_contract("135", "full"),
+            deskew_detail={"reason": "no_outer"},
         )
 
         self.assertEqual(decided.review_reasons, [])

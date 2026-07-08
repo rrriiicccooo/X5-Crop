@@ -5,6 +5,7 @@ import numpy as np
 from x5crop.domain import Box, Detection
 from x5crop.detection.evidence.content.containment import content_containment_detail
 from x5crop.detection.evidence.outer_alignment import outer_content_alignment_detail
+from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.runtime.content import ContentEvidencePolicy
 
 
@@ -95,7 +96,11 @@ class ContentContainmentTest(unittest.TestCase):
             detail={},
         )
 
-        alignment = outer_content_alignment_detail(gray, detection)
+        alignment = outer_content_alignment_detail(
+            gray,
+            detection,
+            policy=get_detection_policy("120-645", "full"),
+        )
 
         self.assertTrue(alignment["used"])
         self.assertTrue(alignment["ok"])
@@ -119,7 +124,11 @@ class ContentContainmentTest(unittest.TestCase):
             detail={},
         )
 
-        alignment = outer_content_alignment_detail(gray, detection)
+        alignment = outer_content_alignment_detail(
+            gray,
+            detection,
+            policy=get_detection_policy("120-645", "full"),
+        )
 
         self.assertTrue(alignment["used"])
         self.assertFalse(alignment["ok"])

@@ -219,6 +219,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             3,
             format_spec("120-645"),
             "full",
+            get_detection_policy("120-645", "full"),
             origin=0.0,
             pitch=100.0 / 3.0,
         )
@@ -251,6 +252,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             3,
             fmt,
             "full",
+            get_detection_policy("120-645", "full"),
             origin=0.0,
             pitch=100.0 / 3.0,
         )
@@ -262,6 +264,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             3,
             fmt,
             "full",
+            get_detection_policy("120-645", "full"),
             origin=0.0,
             pitch=100.0 / 3.0,
         )
@@ -292,6 +295,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             3,
             format_spec("120-645"),
             "full",
+            get_detection_policy("120-645", "full"),
         )
 
         self.assertGreater(assessment.confidence, 0.82)
@@ -321,6 +325,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             3,
             format_spec("120-645"),
             "full",
+            get_detection_policy("120-645", "full"),
             origin=0.0,
             pitch=100.0 / 3.0,
         )
@@ -347,7 +352,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             1.0,
         )
         self.assertLess(
-            content_quality_score(containment, "120-66", policy),
+            content_quality_score(containment, policy),
             0.40,
         )
 
@@ -549,6 +554,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             3,
             format_spec("135"),
             "partial",
+            get_detection_policy("135", "partial"),
         )
 
         self.assertGreater(assessment.confidence, 0.90)
@@ -567,6 +573,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             1,
             format_spec("135"),
             "partial",
+            get_detection_policy("135", "partial"),
         )
 
         self.assertLessEqual(
@@ -737,8 +744,8 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         self.assertAlmostEqual(
-            geometry_support_score(profile_outer, content_detail),
-            geometry_support_score(overcut_outer, content_detail),
+            geometry_support_score(profile_outer, content_detail, get_detection_policy("120-66", "full")),
+            geometry_support_score(overcut_outer, content_detail, get_detection_policy("120-66", "full")),
         )
 
     def test_geometry_support_score_does_not_penalize_missing_aspect_evidence(self) -> None:
@@ -765,7 +772,11 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            geometry_support_score(detection, {"used": False, "support": "unknown"}),
+            geometry_support_score(
+                detection,
+                {"used": False, "support": "unknown"},
+                get_detection_policy("120-66", "full"),
+            ),
             1.0,
         )
 

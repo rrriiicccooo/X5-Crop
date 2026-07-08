@@ -16,7 +16,6 @@ from .signal import (
     content_evidence_threshold,
     content_policy_cache_key,
     content_signal_from_gray,
-    resolve_content_policy,
 )
 
 
@@ -117,11 +116,16 @@ def content_evidence_detail(
     gray: np.ndarray,
     detection: Detection,
     cache: Optional[AnalysisCache] = None,
-    content_policy: Optional[ContentPolicy] = None,
+    *,
+    content_policy: ContentPolicy,
 ) -> dict[str, Any]:
-    content_policy = resolve_content_policy(detection.film_format, detection.strip_mode, content_policy)
     if cache is not None and cache.layout == detection.layout:
-        return content_evidence_detail_from_cache(gray, detection, cache, content_policy)
+        return content_evidence_detail_from_cache(
+            gray,
+            detection,
+            cache,
+            content_policy=content_policy,
+        )
     evidence_params = content_policy.evidence
 
     outer = detection.outer.clamp(gray.shape[1], gray.shape[0])
@@ -151,9 +155,9 @@ def content_evidence_detail_from_cache(
     gray: np.ndarray,
     detection: Detection,
     cache: AnalysisCache,
-    content_policy: Optional[ContentPolicy] = None,
+    *,
+    content_policy: ContentPolicy,
 ) -> dict[str, Any]:
-    content_policy = resolve_content_policy(detection.film_format, detection.strip_mode, content_policy)
     evidence_params = content_policy.evidence
     source_h, source_w = gray.shape
     detail_key = content_detail_cache_key(detection, source_w, source_h, content_policy_cache_key(content_policy))

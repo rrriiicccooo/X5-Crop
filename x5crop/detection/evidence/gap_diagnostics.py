@@ -17,8 +17,8 @@ from ...geometry.gap_trust import (
 )
 from ...geometry.nearby_separator import nearby_separator_search_detail
 from ...cache.separator import cached_separator_profile
-from ...policies.registry import get_detection_policy
 from ...policies.runtime.diagnostics import NearbySeparatorDiagnosticsPolicy
+from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
 from ...utils import clamp_int
 
@@ -100,8 +100,14 @@ def nearby_separator_candidate_detail(
     return detail
 
 
-def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap, cache: Optional[AnalysisCache] = None) -> dict[str, Any]:
-    policy = get_detection_policy(detection.film_format, detection.strip_mode)
+def gap_diagnostic_record(
+    gray_work: np.ndarray,
+    detection: Detection,
+    gap: Gap,
+    cache: Optional[AnalysisCache] = None,
+    *,
+    policy: DetectionPolicy,
+) -> dict[str, Any]:
     hard_gap_trust_policy = policy.separator.hard_gap_trust
     nearby_policy = policy.diagnostics.nearby_separator
     overlap_policy = policy.output_evidence.output_overlap

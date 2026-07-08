@@ -9,12 +9,22 @@ from ...domain import Detection
 from ...geometry.layout import work_gray
 from ...cache import AnalysisCache
 from ...gap_methods import gap_method_roles
+from ...policies.runtime.policy import DetectionPolicy
 from .gap_diagnostics import gap_diagnostic_record
 
 
-def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: Optional[AnalysisCache] = None) -> None:
+def attach_read_only_diagnostics(
+    gray: np.ndarray,
+    detection: Detection,
+    cache: Optional[AnalysisCache] = None,
+    *,
+    policy: DetectionPolicy,
+) -> None:
     gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
-    gap_records = [gap_diagnostic_record(gray_work, detection, gap, cache) for gap in detection.gaps]
+    gap_records = [
+        gap_diagnostic_record(gray_work, detection, gap, cache, policy=policy)
+        for gap in detection.gaps
+    ]
     hard_counts: dict[str, int] = {}
     for record in gap_records:
         trust = str(record.get("hard_trust", "not_hard_gap"))

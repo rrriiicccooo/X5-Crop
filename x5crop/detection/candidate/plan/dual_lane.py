@@ -90,6 +90,7 @@ def _assessed_lane_candidate(
             "lane_box": asdict(lane),
         },
         cache=cache,
+        policy=lane_policy,
     )
     assessed = apply_candidate_assessment_policy(
         gray,

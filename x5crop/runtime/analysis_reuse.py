@@ -17,7 +17,7 @@ from ..output.bleed import (
 from ..image.gray import make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..io.tiff import read_tiff
-from ..policies.registry import get_detection_policy
+from ..policies.context import RuntimePolicyContext
 from ..report.result_builder import result_from_cached_record, result_from_detection
 from ..cache import REPORT_RECORD_CACHE
 from .config import RuntimeConfig
@@ -182,6 +182,7 @@ def result_from_reusable_analysis(
     output_dir: Path,
     profile: ImageProfile,
     warnings: list[str],
+    policy_context: RuntimePolicyContext,
 ) -> ProcessResult | None:
     if not (config.reuse_analysis and not config.dry_run and not config.debug_analysis):
         return None
@@ -210,7 +211,7 @@ def result_from_reusable_analysis(
     )
     base_bleed = AxisBleedParameters(long_axis=int(config.bleed_x), short_axis=int(config.bleed_y))
     reapply_cached_output_bleed(detection, base_bleed, gray.shape[1], gray.shape[0])
-    policy = get_detection_policy(detection.film_format, detection.strip_mode)
+    policy = policy_context.policy_for(detection.film_format, detection.strip_mode)
     output_bleed = output_bleed_parameters_for_detection(base_bleed, detection, policy.output)
     reapply_cached_output_bleed(detection, output_bleed, gray.shape[1], gray.shape[0])
     output_files = write_crops(
@@ -231,6 +232,7 @@ def result_from_reusable_analysis(
         output_files,
         cached_record.get("review_copy"),
         warnings,
+        policy=policy,
         detail_extra={"reused_analysis": True},
     )
 

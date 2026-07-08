@@ -9,7 +9,6 @@ from .....domain import Box, Detection
 from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from .....gap_methods import is_hard_gap_method
 from .....geometry.boxes import original_box_to_work
-from .....policies.registry import get_detection_policy
 from .....policies.runtime.policy import DetectionPolicy
 from .....cache import AnalysisCache
 from .....runtime.config import RuntimeConfig
@@ -25,9 +24,8 @@ def corrected_outer_for_short_axis_geometry(
     detection: Detection,
     content_detail: dict[str, Any],
     cache: AnalysisCache,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
 ) -> Optional[Box]:
-    policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     short_axis = policy.outer.correction.geometry_consistency.short_axis
     family = short_axis.family
     if not short_axis.enabled:
@@ -134,9 +132,8 @@ def corrected_outer_from_long_axis_geometry(
     geometry_detail: dict[str, Any],
     alignment: dict[str, Any],
     cache: AnalysisCache,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
 ) -> Optional[Box]:
-    policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     long_axis = policy.outer.correction.geometry_consistency.long_axis
     family = long_axis.family
     if not long_axis.enabled:
@@ -236,8 +233,8 @@ def geometry_consistency_correction_proposal(
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
     eligible_families: set[str],
+    policy: DetectionPolicy,
 ) -> Optional[OuterCorrectionProposal]:
-    policy = get_detection_policy(fmt.name, detection.strip_mode)
     if "short_axis_geometry" in eligible_families:
         corrected_outer = corrected_outer_for_short_axis_geometry(
             gray,

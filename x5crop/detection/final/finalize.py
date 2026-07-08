@@ -72,7 +72,7 @@ def finalize_detection(
             policy.output.edge_bleed_protection,
         )
     if not policy.diagnostics.attach_read_only_when_requested or config.diagnostics:
-        attach_read_only_diagnostics(gray, detection, analysis_cache)
+        attach_read_only_diagnostics(gray, detection, analysis_cache, policy=policy)
     return DetectionFinalizationResult(
         detection=detection,
         status=status,

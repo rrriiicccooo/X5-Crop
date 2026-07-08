@@ -1,23 +1,19 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from ....domain import Detection
 from ...evidence.photo_width import photo_width_cv_from_detail
 from ...evidence.separator_summary import separator_support_detail_summary
-from ....policies.registry import get_detection_policy
 from ....policies.runtime.content import ContentPolicy
 from ....policies.runtime.policy import DetectionPolicy
 
 def content_quality_score(
     detail: dict[str, Any],
-    format_name: str,
-    content_policy: Optional[ContentPolicy] = None,
+    content_policy: ContentPolicy,
 ) -> float:
     if not bool(detail.get("used", False)):
         return 0.0
-    if content_policy is None:
-        content_policy = get_detection_policy(format_name, "full").content
     mean_score = min(1.0, float(detail.get("median_mean", 0.0)) / content_policy.support_mean_norm)
     coverage_score = min(1.0, float(detail.get("median_coverage", 0.0)) / content_policy.support_coverage_norm)
     aspect_error = detail.get("max_aspect_error")
@@ -56,9 +52,8 @@ def content_support_score(
 def geometry_support_score(
     detection: Detection,
     content_detail: dict[str, Any],
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
 ) -> float:
-    policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
     geometry_policy = policy.scoring.geometry_support
     photo_width_cv = photo_width_cv_from_detail(detection.detail)
     width_score = (
@@ -93,9 +88,8 @@ def geometry_support_score(
 def separator_support_score(
     detection: Detection,
     hard_detail: dict[str, Any],
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
 ) -> float:
-    policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
     support_policy = policy.scoring.separator_support
     evidence = separator_support_detail_summary(hard_detail)
     if evidence.expected_gaps == 0:

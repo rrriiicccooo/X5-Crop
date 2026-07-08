@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...formats import FORMATS, FormatSpec
-from ...policies.registry import get_detection_policy
+from ...policies.context import RuntimePolicyContext
 from ...policies.runtime.policy import DetectionPolicy
 
 
@@ -18,7 +18,10 @@ class DualLaneDetectionContext:
     total_count: int
 
 
-def build_dual_lane_context(policy: DetectionPolicy) -> DualLaneDetectionContext:
+def build_dual_lane_context(
+    policy: DetectionPolicy,
+    policy_context: RuntimePolicyContext,
+) -> DualLaneDetectionContext:
     lane_format_id = policy.detector.dual_lane.lane_format
     format_spec = FORMATS[policy.format_id]
     lane_format_spec = FORMATS[lane_format_id]
@@ -27,7 +30,7 @@ def build_dual_lane_context(policy: DetectionPolicy) -> DualLaneDetectionContext
         format_spec=format_spec,
         lane_format_id=lane_format_id,
         lane_format_spec=lane_format_spec,
-        lane_policy=get_detection_policy(lane_format_id, "full"),
+        lane_policy=policy_context.policy_for(lane_format_id, "full"),
         lane_count=policy.detector.dual_lane.lane_count,
         total_count=format_spec.default_count,
     )

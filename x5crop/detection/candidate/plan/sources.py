@@ -9,7 +9,6 @@ from ....constants import CANDIDATE_SOURCE_SAFETY, CANDIDATE_SOURCE_SEPARATOR
 from ....domain import Detection, OuterCandidate
 from ....formats import FormatSpec
 from ....geometry.layout import work_gray
-from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
@@ -48,13 +47,13 @@ def detect_candidate_for_count(
     strip_mode: str,
     offset_fraction: float = 0.0,
     cache: Optional[AnalysisCache] = None,
+    *,
     gap_max_width_ratio_override: Optional[float] = None,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
     include_extension_outer: bool = True,
     include_supplemental_outer: bool = True,
 ) -> Detection:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
-    policy = policy or get_detection_policy(fmt.name, strip_mode)
     explicit_count = bool(config.count_override is not None)
     outer_candidates = outer_proposal_candidates(
         gray_work,
@@ -126,7 +125,7 @@ def detect_candidate_for_count(
             count,
             strip_mode,
             cache,
-            policy,
+            policy=policy,
             explicit_count=explicit_count,
         )
         append_detections_for_outer_candidates(
@@ -149,7 +148,12 @@ def detect_candidate_for_count(
                 continue
             leading_content = partial_safe_leading_content_detail(gray, detection, fmt, cache, policy)
             frame_content = partial_safe_frame_content_detail(
-                content_evidence_detail(gray, detection, cache, policy.content),
+                content_evidence_detail(
+                    gray,
+                    detection,
+                    cache,
+                    content_policy=policy.content,
+                ),
                 detection,
                 fmt,
                 policy,
@@ -197,9 +201,9 @@ def detect_content_guided_separator_candidate_for_count(
     strip_mode: str,
     offset_fraction: float = 0.0,
     cache: Optional[AnalysisCache] = None,
-    policy: Optional[DetectionPolicy] = None,
+    *,
+    policy: DetectionPolicy,
 ) -> tuple[Optional[Detection], dict]:
-    policy = policy or get_detection_policy(fmt.name, strip_mode)
     guidance_policy = policy.candidate_plan.content_guided_separator
     seed_result = content_guided_separator_seed_for_count(
         gray,
@@ -259,10 +263,10 @@ def detect_safety_outer_proposal_candidate_for_count(
     strip_mode: str,
     offset_fraction: float = 0.0,
     cache: Optional[AnalysisCache] = None,
-    policy: Optional[DetectionPolicy] = None,
+    *,
+    policy: DetectionPolicy,
 ) -> Optional[Detection]:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
-    policy = policy or get_detection_policy(fmt.name, strip_mode)
     outer_candidates = outer_proposal_candidates(
         gray_work,
         fmt,

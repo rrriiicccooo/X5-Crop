@@ -6,7 +6,6 @@ import numpy as np
 
 from ...domain import Box, OuterCandidate
 from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from ...policies.registry import get_detection_policy
 from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
 from ...utils import bbox_from_mask, clamp_int
@@ -29,9 +28,9 @@ def edge_anchored_outer_candidates(
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
-    policy: Optional[DetectionPolicy] = None,
+    *,
+    policy: DetectionPolicy,
 ) -> list[OuterCandidate]:
-    policy = policy or get_detection_policy(fmt.name, strip_mode)
     partial_placement = policy.outer.proposal.geometry.partial_placement
     edge_anchor_policy = partial_placement.edge_anchor
     if not partial_placement.enabled or not edge_anchor_policy.enabled:

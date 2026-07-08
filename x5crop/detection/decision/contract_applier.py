@@ -6,9 +6,8 @@ import numpy as np
 
 from ...runtime.config import RuntimeConfig
 from ...domain import Detection
-from ...formats import FormatSpec
 from ..confidence_caps import apply_confidence_cap
-from ...policies.decision.contract import decision_contract_for
+from ...policies.decision.contract import DetectionDecisionContract
 from .decision_gate import decision_gate_assessment
 from .decision_signals import decision_signals_for
 from .evidence_summary import evidence_summary_for
@@ -86,12 +85,12 @@ def apply_decision_contract(
     gray: np.ndarray,
     detection: Detection,
     config: RuntimeConfig,
-    fmt: FormatSpec,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
+    *,
+    policy: DetectionDecisionContract,
     deskew_detail: dict[str, Any] | None = None,
 ) -> Detection:
-    policy = decision_contract_for(fmt.name, detection.strip_mode)
     evidence = evidence_summary_for(gray, detection, content_detail, outer_alignment, policy)
     decision_signals = decision_signals_for(detection, evidence, policy)
     assessment = detection.detail.get("candidate_assessment", {})

@@ -92,7 +92,13 @@ def content_guided_separator_seed_for_count(
         return _skip_detail("count_has_no_internal_separators", count=int(count))
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     evidence, evidence_float, signal_source = content_signal_arrays_for_candidate(gray_work, cache, config.layout)
-    mask_detail = content_mask_region_detail(evidence_float, gray_work.shape, fmt, cache, content_policy)
+    mask_detail = content_mask_region_detail(
+        evidence_float,
+        gray_work.shape,
+        fmt,
+        cache,
+        content_policy=content_policy,
+    )
     outer = content_candidate_outer_from_mask(mask_detail, gray_work.shape, content_policy.mask)
     if outer is None:
         return _skip_detail(
@@ -105,7 +111,14 @@ def content_guided_separator_seed_for_count(
     if expected_aspect is None or expected_aspect <= 0:
         return _skip_detail("missing_expected_content_aspect", format=fmt.name)
 
-    runs, run_detail = content_region_runs(evidence, outer, count, fmt.name, cache, content_policy)
+    runs, run_detail = content_region_runs(
+        evidence,
+        outer,
+        count,
+        fmt.name,
+        cache,
+        content_policy=content_policy,
+    )
     selected_runs = select_content_runs(runs, count)
     if guidance_policy.requires_exact_content_runs and len(selected_runs) != count:
         return _skip_detail(

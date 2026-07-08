@@ -168,7 +168,7 @@ candidate plan
   failed required gate checks 派生，不能维护独立 blocker 词表。
 - candidate assessment 的 reason 只能作为候选 blockers / diagnostics；最终用户可见
   `review_reasons` 只由 decision contract 生成。
-- `candidate_assessment.gate` 是候选资格的唯一结构化来源；候选级 failed
+- `candidate_assessment.candidate_gate` 是候选资格的唯一结构化来源；候选级 failed
   gate 结果写作 `candidate_gate_failed`，不能回塞进 `candidate_signals` 或独立
   blocker 词表。
 - decision 的 `candidate_gate_input` 只保留候选 blockers、diagnostics、candidate gate
@@ -243,8 +243,8 @@ candidate plan
   `decision_summary.status`，不能根据 confidence / review reason 自行推导最终状态。
   裸 Detection 若还没有 decision summary，报告和 Debug Analysis 必须显示 `unknown` /
   `UNKNOWN`。
-- report schema 必须显式输出 `evidence`、`gates`、`evidence_summary` 和
-  `decision_signals`；构造出的审核 section 不能只停留在内部临时字典里。
+- report schema 必须显式输出 `evidence`、`candidate_gate`、`decision_gate`、
+  `evidence_summary` 和 `decision_signals`；构造出的审核 section 不能只停留在内部临时字典里。
 - report schema 的 decision signal / deskew 可见细节属于 `diagnostics` section，不挂在
   `finalization` 名下；finalization 这个词只保留给输出相邻几何和 bleed 调整。
 - `Detection.detail` 的稳定读取 helper 属于 `detection.detail`，根包不承载 report/debug read-model。
@@ -280,7 +280,7 @@ candidate plan
 - decision signal 只能拉回 REVIEW 或限制输出，不能救回 PASS。
 - confidence cap 必须记录 owner、reason、cap value 和前后 confidence；candidate cap 和
   decision cap 分别归 assessment / decision。
-- `candidate_assessment.gate`、`candidate_assessment.blockers` 和
+- `candidate_assessment.candidate_gate`、`candidate_assessment.blockers` 和
   `candidate_assessment.diagnostics` 是 report/debug 的候选级解释，不是最终裁决。
 - `candidate_gate_failed` 是 gate 结果，不是候选物理证据；它只能出现在 gate /
   confidence-cap detail 或 decision reason input，不能作为 candidate signal 存储。
@@ -623,11 +623,15 @@ of looking up policy registry itself.
 `approved_auto` requires both threshold-level confidence and empty final review
 reasons; workflow and finalization must not derive final status from confidence
 alone.
+Workflow resolves runtime policy through `RuntimePolicyContext`; detection,
+decision, finalization, report, and debug receive explicit policy/subpolicy
+objects. Detection physical/evidence/candidate helpers, report, debug, and
+analysis reuse must not look up the policy registry from a `Detection`.
 Report, debug, and export are output read-models: they consume `ProcessResult`
 or `decision_summary.status`, never infer final status from confidence or review
 reasons. A bare Detection without decision summary is reported as `unknown` /
-`UNKNOWN`. Report schema must expose `evidence`, `gates`, `evidence_summary`,
-and `decision_signals`; constructed audit sections must not remain hidden internal
+`UNKNOWN`. Report schema must expose `evidence`, `candidate_gate`,
+`decision_gate`, `evidence_summary`, and `decision_signals`; constructed audit sections must not remain hidden internal
 dictionaries. Report-visible decision signal / deskew details live under `diagnostics`, not
 a `finalization` section.
 Stable `Detection.detail` readers live in `detection.detail`, not the root

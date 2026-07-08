@@ -123,7 +123,12 @@ def outer_correction_candidate_extensions(
     if not correction_plan["eligible_families"]:
         return []
 
-    content_detail = content_evidence_detail(gray, detection, cache, policy.content)
+    content_detail = content_evidence_detail(
+        gray,
+        detection,
+        cache,
+        content_policy=policy.content,
+    )
     detection.detail["content_evidence"] = content_detail
     outer_alignment = (
         outer_content_alignment_detail(gray, detection, cache, policy=policy)
@@ -174,6 +179,7 @@ def outer_correction_candidate_extensions(
         outer_alignment,
         cache,
         set(correction_plan["eligible_families"]),
+        policy,
     )
     if proposal is not None:
         reassessed = build_assessed_corrected_outer_candidate(gray, config, fmt, detection, proposal, cache, policy)
@@ -201,6 +207,7 @@ def outer_correction_candidate_extensions(
             outer_alignment,
             cache,
             set(correction_plan["eligible_families"]),
+            policy,
         )
         if proposal is not None:
             reassessed = build_assessed_corrected_outer_candidate(gray, config, fmt, detection, proposal, cache, policy)

@@ -6,7 +6,6 @@ from typing import Any, Optional
 from ....domain import Detection
 from ...evidence.separator_summary import gap_method_evidence_summary
 from ....formats import FORMATS
-from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import (
     LeadingGridFailurePolicy,
@@ -298,9 +297,8 @@ def separator_support_assessment(
 def assess_separator_support(
     detection: Detection,
     threshold: float,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
 ) -> SeparatorSupportResult:
-    policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
     support = policy.separator.support
     evidence = separator_support_evidence_from_detection(detection)
     assessment = separator_support_assessment(detection, threshold, evidence, support)

@@ -6,6 +6,7 @@ from typing import Optional
 import numpy as np
 
 from ..domain import Detection
+from ..policies.runtime.policy import DetectionPolicy
 from ..cache import AnalysisCache
 from .canvas import write_rgb_jpeg
 from .panels import make_debug_analysis_panel, make_debug_preview_rgb
@@ -29,10 +30,13 @@ def write_debug_analysis(
     output_dir: Path,
     stem: str,
     threshold: float,
+    policy: DetectionPolicy,
     cache: Optional[AnalysisCache] = None,
 ) -> list[str]:
     analysis_dir = output_dir / "_debug_analysis"
     panel_path = analysis_dir / f"{stem}_debug_analysis.jpg"
-    write_rgb_jpeg(make_debug_analysis_panel(gray, detection, threshold, cache), panel_path)
+    write_rgb_jpeg(
+        make_debug_analysis_panel(gray, detection, threshold, policy.diagnostics, cache),
+        panel_path,
+    )
     return [str(panel_path)]
-

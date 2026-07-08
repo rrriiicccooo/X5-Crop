@@ -6,6 +6,7 @@ from typing import Any
 from ..runtime.config import RuntimeConfig
 from ..domain import Detection
 from ..export.paths import display_generated_path
+from ..policies.runtime.policy import DetectionPolicy
 from .writer import write_debug_analysis, write_debug_preview
 
 
@@ -17,6 +18,7 @@ def write_debug_outputs(
     config: RuntimeConfig,
     analysis_cache: Any,
     warnings: list[str],
+    policy: DetectionPolicy,
 ) -> None:
     if config.debug and not config.debug_analysis:
         debug_path = output_dir / "_debug" / f"{input_stem}_debug.jpg"
@@ -29,6 +31,7 @@ def write_debug_outputs(
             output_dir,
             input_stem,
             config.confidence_threshold,
+            policy,
             analysis_cache,
         )
         for analysis_path in analysis_paths:

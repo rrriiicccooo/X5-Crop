@@ -15,7 +15,7 @@ from ..detection.detail import (
 from ..domain import Box, Detection
 from ..cache.separator import cached_separator_evidence_crop
 from ..image.evidence import make_separator_evidence_gray
-from ..policies.registry import get_detection_policy
+from ..policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
 from ..cache import AnalysisCache
 from .canvas import (
     FRAME_FILL_COLORS,
@@ -79,6 +79,7 @@ def make_outer_candidates_rgb(
 def make_frame_geometry_rgb(
     gray: np.ndarray,
     detection: Detection,
+    debug_gap: Any,
     cache: Optional[AnalysisCache] = None,
 ) -> np.ndarray:
     rgb, scale = cached_preview_gray(cache, "frame_geometry", gray)
@@ -87,7 +88,7 @@ def make_frame_geometry_rgb(
         color = FRAME_FILL_COLORS[index % len(FRAME_FILL_COLORS)]
         fill_preview_rect(rgb, box, scale, color, 0.18)
         draw_preview_rect(rgb, box, scale, color, 2)
-    draw_gap_overlay(rgb, detection, scale)
+    draw_gap_overlay(rgb, detection, scale, debug_gap)
     return rgb
 
 
@@ -109,9 +110,10 @@ def add_review_lines(rgb: np.ndarray, lines: list[str]) -> np.ndarray:
 def make_decision_review_rgb(
     gray: np.ndarray,
     detection: Detection,
+    debug_gap: Any,
     cache: Optional[AnalysisCache] = None,
 ) -> np.ndarray:
-    rgb = make_frame_geometry_rgb(gray, detection, cache)
+    rgb = make_frame_geometry_rgb(gray, detection, debug_gap, cache)
     decision = decision_summary(detection)
     signals = detail_dict(detection, DECISION_SIGNALS)
     reasons = final_review_reasons_from_detail(detection)
@@ -170,12 +172,13 @@ def make_separator_evidence_debug_gray(
 def make_separator_evidence_debug_rgb(
     gray: np.ndarray,
     detection: Detection,
+    debug_gap: Any,
     cache: Optional[AnalysisCache] = None,
 ) -> np.ndarray:
     evidence = make_separator_evidence_debug_gray(gray, detection, cache)
     rgb, scale = cached_preview_gray(cache, "separator_evidence_full", evidence)
     draw_evidence_context_overlay(rgb, detection, scale)
-    draw_gap_overlay(rgb, detection, scale)
+    draw_gap_overlay(rgb, detection, scale, debug_gap)
     return rgb
 
 
@@ -183,22 +186,22 @@ def make_debug_analysis_panel(
     gray: np.ndarray,
     detection: Detection,
     threshold: float,
+    diagnostics: RuntimeDiagnosticsPolicy,
     cache: Optional[AnalysisCache] = None,
 ) -> np.ndarray:
-    policy = get_detection_policy(detection.film_format, detection.strip_mode)
-    diagnostics = policy.diagnostics
+    debug_gap = diagnostics.debug_gap_overlay
     panel_builders = {
         "original_gray": lambda title: cached_labeled_preview_gray(cache, "original_gray", title, gray)[0],
         "gray_context": lambda title: cached_labeled_preview_gray(cache, "original_gray", title, gray)[0],
         "debug_boxes": lambda title: add_panel_label(make_debug_preview_rgb(gray, detection, cache), title),
         "outer_candidates": lambda title: add_panel_label(make_outer_candidates_rgb(gray, detection, cache), title),
         "separator_evidence": lambda title: add_panel_label(
-            make_separator_evidence_debug_rgb(gray, detection, cache),
+            make_separator_evidence_debug_rgb(gray, detection, debug_gap, cache),
             title,
         ),
-        "frame_geometry": lambda title: add_panel_label(make_frame_geometry_rgb(gray, detection, cache), title),
+        "frame_geometry": lambda title: add_panel_label(make_frame_geometry_rgb(gray, detection, debug_gap, cache), title),
         "selected_candidate": lambda title: add_panel_label(make_debug_preview_rgb(gray, detection, cache), title),
-        "decision_review": lambda title: add_panel_label(make_decision_review_rgb(gray, detection, cache), title),
+        "decision_review": lambda title: add_panel_label(make_decision_review_rgb(gray, detection, debug_gap, cache), title),
     }
     panels = [
         panel_builders[name](diagnostics.debug_panel_title(name))

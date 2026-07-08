@@ -8,7 +8,6 @@ from ....domain import Box, Detection
 from ....formats import FormatSpec
 from ....geometry.layout import work_gray
 from ....image.evidence import make_content_evidence_gray
-from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....utils import clamp_int
@@ -25,9 +24,8 @@ from .candidate_gate import candidate_signal_blocker_signals
 def partial_safe_holder_edge_disambiguation_detail(
     detection: Detection,
     fmt: FormatSpec,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
 ) -> dict[str, Any]:
-    policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     holder = policy.partial_holder
     min_required = int(holder.requires_broad_separator_width_gaps)
     if min_required <= 0 or detection.strip_mode != "partial":
@@ -88,9 +86,8 @@ def partial_safe_leading_content_detail(
     detection: Detection,
     fmt: FormatSpec,
     cache: Optional[AnalysisCache],
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
 ) -> dict[str, Any]:
-    policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     holder = policy.partial_holder
     if not holder.checks_leading_content or detection.strip_mode != "partial":
         return {"used": False, "reason": "disabled"}
@@ -160,9 +157,8 @@ def partial_safe_frame_content_detail(
     content_detail: dict[str, Any],
     detection: Detection,
     fmt: FormatSpec,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
 ) -> dict[str, Any]:
-    policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     holder = policy.partial_holder
     if not holder.checks_frame_content or detection.strip_mode != "partial":
         return {"used": False, "reason": "disabled"}
@@ -255,9 +251,9 @@ def partial_safe_extra_frames_assessment_detail(
     content_score: float,
     geometry_score: float,
     cache: Optional[AnalysisCache] = None,
-    policy: Optional[DetectionPolicy] = None,
+    *,
+    policy: DetectionPolicy,
 ) -> dict[str, Any]:
-    policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     holder = policy.partial_holder
     separator_evidence = separator_support_detail_summary(hard_detail)
     expected = separator_evidence.expected_gaps

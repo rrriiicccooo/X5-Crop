@@ -20,10 +20,11 @@ from ..detection.detail import (
     runtime_policy_detail,
 )
 from ..domain import Detection, ProcessResult
-from ..policies.decision.contract import decision_contract_for
+from ..policies.decision.contract import decision_contract_for_policy
 from ..policies.ids import REPORT_SCHEMA_VERSION
+from ..policies.runtime.policy import DetectionPolicy
 from ..utils import json_safe
-from .sections import candidate_gate_detail, candidate_table, decision_gate_detail, report_policy_for_detection, selected_candidate
+from .sections import candidate_gate_detail, candidate_table, decision_gate_detail, selected_candidate
 
 
 def _report_status(
@@ -38,9 +39,14 @@ def _report_status(
     return "unknown"
 
 
-def report_schema_for_detection(detection: Detection, result: ProcessResult | None = None) -> dict:
-    report_policy = report_policy_for_detection(detection)
-    decision_contract = decision_contract_for(detection.film_format, detection.strip_mode)
+def report_schema_for_detection(
+    detection: Detection,
+    result: ProcessResult | None = None,
+    *,
+    policy: DetectionPolicy,
+) -> dict:
+    report_policy = policy.report
+    decision_contract = decision_contract_for_policy(policy)
     decision_detail = decision_summary(detection)
     status = _report_status(result, decision_detail)
     output = {}

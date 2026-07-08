@@ -7,7 +7,7 @@ from typing import Optional
 from ....domain import Detection
 from ...evidence.separator_summary import separator_support_detail_summary
 from ....formats import FormatSpec
-from ....policies.registry import get_detection_policy
+from ....policies.context import RuntimePolicyContext
 from ....policies.runtime.policy import DetectionPolicy
 from ..signals import candidate_signals
 
@@ -165,9 +165,9 @@ def select_detection_candidate(
     candidates: list[Detection],
     fmt: FormatSpec,
     threshold: float,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
+    policy_context: RuntimePolicyContext,
 ) -> Detection:
-    policy = policy or get_detection_policy(fmt.name, candidates[0].strip_mode if candidates else "full")
     candidates = sorted(candidates, key=lambda d: calibrated_candidate_rank(d, threshold), reverse=True)
     best = candidates[0]
     selection_override: Optional[str] = None
@@ -188,7 +188,7 @@ def select_detection_candidate(
         best = separator_candidate_on_mismatch
         selection_override = override_reason
     second = next((candidate for candidate in candidates if candidate is not best), None)
-    selected_policy = get_detection_policy(best.film_format, best.strip_mode)
+    selected_policy = policy_context.policy_for(best.film_format, best.strip_mode)
     competition = [
         {
             "rank": index,

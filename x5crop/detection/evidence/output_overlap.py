@@ -7,6 +7,7 @@ import numpy as np
 from ...cache import AnalysisCache
 from ...domain import Detection
 from ...geometry.layout import work_gray
+from ...policies.runtime.policy import DetectionPolicy
 from .gap_diagnostics import gap_diagnostic_record
 
 
@@ -14,6 +15,8 @@ def output_overlap_evidence_detail(
     gray: np.ndarray,
     detection: Detection,
     cache: AnalysisCache | None = None,
+    *,
+    policy: DetectionPolicy,
 ) -> dict[str, Any]:
     if not detection.gaps:
         return {
@@ -27,7 +30,7 @@ def output_overlap_evidence_detail(
         else work_gray(gray, detection.layout)
     )
     gap_records = [
-        gap_diagnostic_record(gray_work, detection, gap, cache)
+        gap_diagnostic_record(gray_work, detection, gap, cache, policy=policy)
         for gap in detection.gaps
     ]
     output_overlap_counts: dict[str, int] = {}

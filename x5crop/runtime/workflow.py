@@ -22,7 +22,7 @@ from ..formats import FORMATS
 from ..image.gray import make_base_gray_u8
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..output.bleed import detection_bleed_parameters
-from ..policies.registry import get_detection_policy
+from ..policies.context import RuntimePolicyContext
 from ..report.outputs import write_report_outputs_for_result
 from ..report.result_builder import result_from_detection
 
@@ -37,8 +37,9 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     profile, warnings = read_tiff_profile(input_file, config.page)
     config = runtime_for_profile(config, profile)
     fmt = FORMATS[config.film_format]
+    policy_context = RuntimePolicyContext.for_format_mode(fmt.name, config.strip_mode)
 
-    cached_result = result_from_reusable_analysis(input_file, config, output_dir, profile, warnings)
+    cached_result = result_from_reusable_analysis(input_file, config, output_dir, profile, warnings, policy_context)
     if cached_result is not None:
         return _finish_result(cached_result, config)
 
@@ -48,19 +49,20 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     source_arr = arr
     config = runtime_for_profile(config, profile)
     fmt = FORMATS[config.film_format]
+    policy_context = RuntimePolicyContext.for_format_mode(fmt.name, config.strip_mode)
 
     arr, gray, deskew_detail = apply_deskew(arr, gray, profile, config, fmt, warnings)
     analysis_cache = make_analysis_cache(gray, config.layout)
-    policy = get_detection_policy(fmt.name, config.strip_mode)
+    policy = policy_context.initial_policy
     detection_bleed = detection_bleed_parameters(policy.output)
     detection_config = replace(config, bleed_x=detection_bleed.long_axis, bleed_y=detection_bleed.short_axis)
-    detection = choose_detection(gray, detection_config, fmt, analysis_cache)
-    selected_policy = get_detection_policy(fmt.name, detection.strip_mode)
+    detection_result = choose_detection(gray, detection_config, fmt, policy_context, analysis_cache)
+    detection = detection_result.detection
+    selected_policy = detection_result.policy
     decision = apply_detection_decision(
         gray,
         detection,
         config,
-        fmt,
         analysis_cache,
         deskew_detail,
         selected_policy,
@@ -88,7 +90,7 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
         output_dir,
         status,
     )
-    write_debug_outputs(gray, detection, output_dir, input_file.stem, config, analysis_cache, warnings)
+    write_debug_outputs(gray, detection, output_dir, input_file.stem, config, analysis_cache, warnings, selected_policy)
 
     result = result_from_detection(
         input_file,
@@ -98,6 +100,7 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
         output_files,
         review_copy,
         warnings,
+        policy=selected_policy,
         detail_extra={
             "deskew": deskew_detail,
             "analysis_cache": make_analysis_cache_metadata(input_file, profile, config),

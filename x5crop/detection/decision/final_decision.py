@@ -10,7 +10,6 @@ from ...constants import (
     CANDIDATE_SOURCE_REVIEW_ONLY,
 )
 from ...domain import Detection
-from ...formats import FormatSpec
 from ...policies.runtime.policy import DetectionPolicy
 from ...runtime.config import RuntimeConfig
 from ..confidence_caps import apply_confidence_cap
@@ -19,6 +18,7 @@ from ..evidence.content.frame_support import content_evidence_detail
 from ..evidence.outer_alignment import outer_content_alignment_detail
 from ..evidence.output_overlap import output_overlap_evidence_detail
 from .contract_applier import apply_decision_contract
+from ...policies.decision.contract import decision_contract_for_policy
 
 
 @dataclass
@@ -33,12 +33,16 @@ def apply_detection_decision(
     gray: np.ndarray,
     detection: Detection,
     config: RuntimeConfig,
-    fmt: FormatSpec,
     analysis_cache: AnalysisCache,
     deskew_detail: dict[str, Any],
     policy: DetectionPolicy,
 ) -> FinalDecisionResult:
-    raw_content_detail = content_evidence_detail(gray, detection, analysis_cache, policy.content)
+    raw_content_detail = content_evidence_detail(
+        gray,
+        detection,
+        analysis_cache,
+        content_policy=policy.content,
+    )
     content_detail = content_containment_detail(
         raw_content_detail,
         policy.content.evidence,
@@ -69,10 +73,10 @@ def apply_detection_decision(
         gray,
         detection,
         config,
-        fmt,
         content_detail,
         outer_alignment,
-        deskew_detail,
+        policy=decision_contract_for_policy(policy),
+        deskew_detail=deskew_detail,
     )
     status = _decision_status_for(detection, config.confidence_threshold)
     return FinalDecisionResult(
@@ -97,6 +101,7 @@ def _attach_decision_output_evidence(
             gray,
             detection,
             analysis_cache,
+            policy=policy,
         )
 
 

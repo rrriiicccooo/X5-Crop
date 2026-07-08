@@ -9,7 +9,6 @@ import numpy as np
 from ....cache import AnalysisCache
 from ....domain import OuterCandidate
 from ....formats import FormatSpec
-from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ...guidance.content_outer_edge import edge_anchored_outer_candidates
@@ -127,11 +126,11 @@ def outer_proposal_candidates(
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
+    *,
     safety_only: bool = False,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
     explicit_count: bool = True,
 ) -> list[OuterCandidate]:
-    policy = policy or get_detection_policy(fmt.name, strip_mode)
     strategy_plan = outer_proposal_strategy_plan_for_policy(
         policy,
         strip_mode=strip_mode,
@@ -149,7 +148,7 @@ def outer_proposal_candidates(
             count,
             strip_mode,
             cache,
-            policy,
+            policy=policy,
         )
     floating_candidates: list[OuterCandidate] = []
     if "floating" in enabled_strategy_names and not edge_anchored_candidates_trusted(edge_candidates, policy):
@@ -171,7 +170,7 @@ def outer_proposal_candidates(
             count,
             strip_mode,
             cache,
-            policy,
+            policy=policy,
             outer_scopes=separator_outer_scopes_for_policy(policy, strip_mode, explicit_count, safety_only=safety_only),
             gap_search_profiles=(WIDTH_AWARE_GAP_PROFILE,),
             explicit_count=explicit_count,
@@ -188,10 +187,10 @@ def separator_full_width_outer_proposal_candidates(
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
-    policy: Optional[DetectionPolicy] = None,
+    *,
+    policy: DetectionPolicy,
     explicit_count: bool = True,
 ) -> list[OuterCandidate]:
-    policy = policy or get_detection_policy(fmt.name, strip_mode)
     return separator_derived_outer_candidates(
         gray_work,
         base_candidates,
@@ -199,7 +198,7 @@ def separator_full_width_outer_proposal_candidates(
         count,
         strip_mode,
         cache,
-        policy,
+        policy=policy,
         outer_scopes=(FULL_WIDTH_SEPARATOR_OUTER,),
         gap_search_profiles=(WIDTH_AWARE_GAP_PROFILE,),
         explicit_count=explicit_count,

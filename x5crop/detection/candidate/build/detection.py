@@ -10,7 +10,6 @@ from ....formats import FormatSpec
 from ....geometry.boxes import map_work_box
 from ....geometry.frame_fit import fit_frame_boxes_from_gaps
 from ....geometry.layout import work_gray
-from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
@@ -46,11 +45,11 @@ def build_detection_for_outer(
     gap_max_width_ratio_override: Optional[float] = None,
     gap_search_profile: str = WIDTH_AWARE_GAP_PROFILE,
     separator_gap_hints: Optional[SeparatorGapHintSet] = None,
-    policy: Optional[DetectionPolicy] = None,
+    *,
+    policy: DetectionPolicy,
 ) -> Detection:
     if gap_search_profile != WIDTH_AWARE_GAP_PROFILE:
         raise ValueError(f"Unsupported separator gap search profile: {gap_search_profile!r}")
-    policy = policy or get_detection_policy(fmt.name, strip_mode)
     candidate_strategy = outer_candidate_strategy_name or outer_candidate_strategy(outer_candidate_name)
     h, w = gray.shape
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)

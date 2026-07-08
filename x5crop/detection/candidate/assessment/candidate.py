@@ -12,7 +12,6 @@ from ....constants import (
 from ....domain import Detection
 from ....formats import FormatSpec
 from ....geometry.layout import work_gray
-from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
@@ -76,7 +75,8 @@ def apply_candidate_assessment_policy(
     fmt: FormatSpec,
     source: str,
     cache: Optional[AnalysisCache] = None,
-    policy: Optional[DetectionPolicy] = None,
+    *,
+    policy: DetectionPolicy,
 ) -> Detection:
     candidate_detail = dict(detection.detail)
     initial_candidate_signals = candidate_signals(detection)
@@ -87,7 +87,6 @@ def apply_candidate_assessment_policy(
         review_reasons=[],
         detail=candidate_detail,
     )
-    policy = policy or get_detection_policy(fmt.name, candidate.strip_mode)
     if source == "separator":
         gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
         candidate = apply_base_detection_scoring(
@@ -127,7 +126,12 @@ def apply_candidate_assessment_policy(
     )
     separator_support_ok = separator_support_result.ok
     separator_support_detail = separator_support_result.detail
-    content_detail = content_evidence_detail(gray, candidate, cache, policy.content)
+    content_detail = content_evidence_detail(
+        gray,
+        candidate,
+        cache,
+        content_policy=policy.content,
+    )
     containment_detail = content_containment_detail(
         content_detail,
         policy.content.evidence,
@@ -162,7 +166,7 @@ def apply_candidate_assessment_policy(
             scoring_policy.hard_full_confidence_floor
         )
     content_score = content_support_score(containment_detail)
-    content_quality = content_quality_score(containment_detail, fmt.name, policy.content)
+    content_quality = content_quality_score(containment_detail, policy.content)
     geometry_score = geometry_support_score(candidate, containment_detail, policy)
     separator_score = (
         separator_support_score(candidate, separator_support_detail, policy)
@@ -268,7 +272,7 @@ def apply_candidate_assessment_policy(
         content_quality,
         geometry_score,
         cache,
-        policy,
+        policy=policy,
     )
     partial_safe_extra_frames_ok = bool(partial_safe_extra_frames.get("ok", False))
     partial_safe_candidate_support_ok = (

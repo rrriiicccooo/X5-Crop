@@ -7,6 +7,7 @@ from typing import Any, Optional
 from ..app_info import VERSION
 from ..detection.detail import final_review_reasons_from_detail, policy_id_from_detail
 from ..domain import Detection, ImageProfile, ProcessResult
+from ..policies.runtime.policy import DetectionPolicy
 from ..utils import json_safe
 from .schema import report_schema_for_detection
 
@@ -23,6 +24,7 @@ def result_from_detection(
     output_files: list[str],
     review_copy: Optional[str],
     warnings: list[str],
+    policy: DetectionPolicy,
     detail_extra: dict[str, Any] | None = None,
 ) -> ProcessResult:
     detail = dict(detection.detail)
@@ -48,7 +50,7 @@ def result_from_detection(
         version=VERSION,
         policy_id=policy_id_for_detection(detection),
     )
-    result.report_schema = report_schema_for_detection(detection, result)
+    result.report_schema = report_schema_for_detection(detection, result, policy=policy)
     return result
 
 

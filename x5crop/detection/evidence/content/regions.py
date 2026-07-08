@@ -12,7 +12,6 @@ from ....formats import FormatSpec
 from ....geometry.boxes import box_cache_key
 from ....policies.runtime.content import ContentPolicy
 from ....utils import bbox_from_mask, runs_from_mask, sampled_percentile, smooth_1d
-from .signal import resolve_content_policy
 
 
 CONTENT_REGION_HINT_ROLE = "content_region_hint"
@@ -26,9 +25,9 @@ def content_region_runs(
     count: int,
     format_name: str,
     cache: Optional[AnalysisCache] = None,
-    content_policy: Optional[ContentPolicy] = None,
+    *,
+    content_policy: ContentPolicy,
 ) -> tuple[list[tuple[int, int]], dict[str, Any]]:
-    content_policy = resolve_content_policy(format_name, "full", content_policy)
     profile_policy = content_policy.profile
     cache_key: Optional[tuple[Any, ...]] = None
     if cache is not None and evidence is cache.content_evidence_work:
@@ -85,9 +84,9 @@ def content_mask_region_detail(
     gray_work_shape: tuple[int, int],
     fmt: FormatSpec,
     cache: Optional[AnalysisCache] = None,
-    content_policy: Optional[ContentPolicy] = None,
+    *,
+    content_policy: ContentPolicy,
 ) -> dict[str, Any]:
-    content_policy = resolve_content_policy(fmt.name, "full", content_policy)
     mask_policy = content_policy.mask
     cache_key = (fmt.name, mask_policy)
     if cache is not None:

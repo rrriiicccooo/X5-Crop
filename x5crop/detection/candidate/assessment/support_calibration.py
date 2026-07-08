@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import math
-from typing import Any, Optional
+from typing import Any
 
 from ....domain import Detection
 from ....formats import FormatSpec
-from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import SeparatorGeometrySupportModePolicy
 from ...evidence.photo_width import photo_width_within_limit
@@ -27,9 +26,8 @@ def hard_full_calibration_floor_applies(
     hard_detail: dict[str, Any],
     fmt: FormatSpec,
     source: str,
-    policy: Optional[DetectionPolicy] = None,
+    policy: DetectionPolicy,
 ) -> bool:
-    policy = policy or get_detection_policy(fmt.name, candidate.strip_mode)
     base_score = policy.scoring.base_detection
     evidence = separator_support_detail_summary(hard_detail)
     return (

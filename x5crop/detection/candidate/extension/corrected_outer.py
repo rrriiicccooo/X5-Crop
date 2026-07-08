@@ -57,7 +57,12 @@ def build_assessed_corrected_outer_candidate(
     reassessed.detail["gap_search_profile"] = profile_detail
 
     reassessed_alignment = outer_content_alignment_detail(gray, reassessed, cache, policy=policy)
-    reassessed_content = content_evidence_detail(gray, reassessed, cache, policy.content)
+    reassessed_content = content_evidence_detail(
+        gray,
+        reassessed,
+        cache,
+        content_policy=policy.content,
+    )
     reassessed.detail["outer_content_alignment"] = reassessed_alignment
     reassessed.detail["content_evidence"] = reassessed_content
     reassessed.detail["outer_correction"] = {

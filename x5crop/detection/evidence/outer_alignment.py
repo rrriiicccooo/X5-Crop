@@ -10,7 +10,6 @@ from ...domain import Box, Detection
 from ...gap_methods import is_hard_gap_method
 from ...geometry.boxes import box_cache_key, original_box_to_work
 from ...geometry.layout import work_gray
-from ...policies.registry import get_detection_policy
 from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
 from ...utils import bbox_from_mask, box_from_dict, clamp_int
@@ -34,10 +33,10 @@ def outer_content_alignment_detail(
     gray: np.ndarray,
     detection: Detection,
     cache: Optional[AnalysisCache] = None,
-    policy: Optional[DetectionPolicy] = None,
+    *,
+    policy: DetectionPolicy,
 ) -> dict[str, Any]:
     gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
-    policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
     alignment = policy.outer.correction.content_containment
     work_h, work_w = gray_work.shape
     source_h, source_w = gray.shape

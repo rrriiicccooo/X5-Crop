@@ -10,7 +10,6 @@ from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ....cache.separator import cached_separator_profile
 from ....geometry.separator_band import SeparatorBand
 from ....geometry.separator_width_profile import collect_separator_width_bands, separator_width_profile
-from ....policies.registry import get_detection_policy
 from ....policies.runtime.outer import SeparatorOuterBandPolicy, SeparatorOuterFamilyPolicy
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
@@ -75,12 +74,12 @@ def separator_derived_outer_candidates(
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
-    policy: Optional[DetectionPolicy] = None,
+    *,
+    policy: DetectionPolicy,
     outer_scopes: tuple[str, ...] | None = None,
     gap_search_profiles: tuple[str, ...] | None = None,
     explicit_count: bool = True,
 ) -> list[OuterCandidate]:
-    policy = policy or get_detection_policy(fmt.name, strip_mode)
     if strip_mode not in {"full", "partial"} or count <= 1:
         return []
     aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)

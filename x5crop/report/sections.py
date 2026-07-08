@@ -9,8 +9,6 @@ from ..detection.detail import (
     final_review_reasons_from_detail,
 )
 from ..domain import Detection
-from ..policies.registry import get_detection_policy
-from ..policies.runtime.report import ReportPolicy
 
 
 def candidate_table(detection: Detection) -> list[dict[str, Any]]:
@@ -46,17 +44,9 @@ def decision_gate_detail(detection: Detection) -> dict[str, Any]:
     return dict(decision_gate) if isinstance(decision_gate, dict) else {}
 
 
-def report_policy_for_detection(detection: Detection) -> ReportPolicy:
-    try:
-        return get_detection_policy(detection.film_format, detection.strip_mode).report
-    except ValueError:
-        return ReportPolicy()
-
-
 __all__ = [
     "candidate_table",
     "candidate_gate_detail",
     "decision_gate_detail",
-    "report_policy_for_detection",
     "selected_candidate",
 ]
