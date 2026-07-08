@@ -526,6 +526,7 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertIn("class ContentCandidateAssessment", content_candidate_text)
 
         banned = (
+            "content_candidate_confidence_and_diagnostics",
             "proposal_confidence, proposal_diagnostics, proposal_detail",
             "confidence, diagnostics, detail = content_candidate_confidence_and_diagnostics",
             "_confidence, diagnostics, detail = content_candidate_confidence_and_diagnostics",

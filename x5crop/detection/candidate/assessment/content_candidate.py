@@ -16,7 +16,7 @@ class ContentCandidateAssessment:
     detail: dict[str, Any]
 
 
-def content_candidate_confidence_and_diagnostics(
+def content_candidate_assessment_from_metrics(
     *,
     placement: str,
     runs_count: int,
@@ -119,7 +119,7 @@ def content_candidate_assessment_from_proposal(
             diagnostics=["content_confidence_low"],
             detail={"used": False, "reason": "missing_content_proposal"},
         )
-    assessment = content_candidate_confidence_and_diagnostics(
+    assessment = content_candidate_assessment_from_metrics(
         placement=str(proposal.get("placement", "")),
         runs_count=int(proposal.get("usable_run_count", 0)),
         selected_run_count=int(proposal.get("selected_run_count", 0)),
@@ -145,5 +145,5 @@ def content_candidate_assessment_from_proposal(
 __all__ = [
     "ContentCandidateAssessment",
     "content_candidate_assessment_from_proposal",
-    "content_candidate_confidence_and_diagnostics",
+    "content_candidate_assessment_from_metrics",
 ]

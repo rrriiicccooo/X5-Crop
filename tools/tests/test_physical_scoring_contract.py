@@ -14,7 +14,7 @@ from x5crop.detection.candidate.assessment.gate_support import (
 )
 from x5crop.detection.candidate.assessment.content_candidate import (
     content_candidate_assessment_from_proposal,
-    content_candidate_confidence_and_diagnostics,
+    content_candidate_assessment_from_metrics,
 )
 from x5crop.detection.candidate.assessment.partial_holder import partial_safe_extra_frames_gate_detail
 from x5crop.detection.candidate.assessment.scoring import (
@@ -417,7 +417,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertEqual(assessment.detail["partial_count_assessment"]["reason"], "single_frame_partial")
 
     def test_content_partial_candidate_diagnostics_do_not_emit_partial_count_reason(self) -> None:
-        assessment = content_candidate_confidence_and_diagnostics(
+        assessment = content_candidate_assessment_from_metrics(
             placement="content_runs",
             runs_count=3,
             selected_run_count=3,
