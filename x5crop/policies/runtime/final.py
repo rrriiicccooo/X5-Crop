@@ -11,6 +11,9 @@ class ApprovedGeometryAdjustmentPolicy:
     min_ext_ratio: float = 0.0100
     min_ext_min: int = 50
     min_ext_max: int = 120
+    side_band_trim_ratio: float = 0.12
+    content_threshold_u8: int = 242
+    min_active_column_fraction: float = 0.018
 
 
 @dataclass(frozen=True)

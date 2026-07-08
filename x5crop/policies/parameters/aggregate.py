@@ -349,6 +349,9 @@ class FormatParameters(FormatParameterViews):
     approved_adjust_min_ext_ratio: float = 0.0100
     approved_adjust_min_ext_min: int = 50
     approved_adjust_min_ext_max: int = 120
+    approved_adjust_side_band_trim_ratio: float = 0.12
+    approved_adjust_content_threshold_u8: int = 242
+    approved_adjust_min_active_column_fraction: float = 0.018
     separator_full_width_outer_count: int = 0
     separator_full_width_outer_max_candidates: int = 8
     separator_full_width_outer_margin_ratios: tuple[float, ...] = (0.00, 0.018, 0.035)

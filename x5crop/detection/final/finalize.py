@@ -16,7 +16,7 @@ from ...output.bleed import (
 from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
 from ..evidence.read_only import attach_read_only_diagnostics
-from .geometry import (
+from ...output.geometry_adjustment import (
     apply_approved_geometry_adjustment,
     apply_edge_bleed_protection,
 )

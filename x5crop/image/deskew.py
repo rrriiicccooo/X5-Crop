@@ -7,7 +7,7 @@ import numpy as np
 
 from ..geometry.layout import work_gray
 from ..utils import bbox_from_mask
-from .evidence import make_deskew_fallback_gray
+from .evidence import default_deskew_fallback_evidence_parameters, make_deskew_fallback_gray
 from .deskew_parameters import DeskewParameters
 
 def fit_line(
@@ -126,7 +126,10 @@ def choose_deskew_angle(
     if deskew_fallback == "auto" and deskew_quality(base_detail) >= deskew.auto_quality_ok:
         base_detail["fallback_candidate"] = {"skipped": "auto_base_quality_ok"}
         return base_angle, base_detail
-    fallback_gray = make_deskew_fallback_gray(gray)
+    fallback_gray = make_deskew_fallback_gray(
+        gray,
+        default_deskew_fallback_evidence_parameters(),
+    )
     fallback_angle, fallback_detail = fit_edge_angle(fallback_gray, layout, deskew)
     fallback_detail["source"] = "fallback"
     if deskew_quality(fallback_detail) > deskew_quality(base_detail) + deskew.fallback_quality_gain:

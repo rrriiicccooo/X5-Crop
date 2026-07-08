@@ -66,6 +66,7 @@ read TIFF
 
 workflow 可以决定是否复用已匹配的 analysis report，但不能把复用结果解释成新的检测策略。
 检测策略必须来自 active runtime policy，并通过 detection / decision 层执行。
+workflow 只计算输出 surface 路径；只有 crop、review copy、debug 或 report 真的写出时才创建输出目录。
 
 #### 1.4 Detection 到 Decision
 
@@ -99,8 +100,8 @@ candidate assessment 只产生候选级解释；最终用户可见原因只由 d
 
 decision 之后的层级只消费结果：
 
-- `detection.final` 只做 approved geometry adjustment、output bleed 和只读 diagnostics attachment。
-- `x5crop.output` 提供 output-adjacent bleed / overlap helper。
+- `detection.final` 只编排已决策结果的 output-adjacent finalization。
+- `x5crop.output` 提供 output surface、approved geometry adjustment、bleed 和 overlap helper。
 - `x5crop.export` 写自动裁切 TIFF 或 `needs_review/` copy。
 - `x5crop.report` 写 JSONL / CSV / report sections。
 - `x5crop.debug` 生成 Debug Analysis 面板。
@@ -153,11 +154,14 @@ runtime 可以编排，但不拥有底层几何算法、候选算法或最终 de
 | `policies.parameters` | 参数对象、聚合视图、registry、ownership validation。 |
 | `policies.runtime` | active `DetectionPolicy` 和 runtime subpolicy dataclass。 |
 | `policies.assembly` | 从 format facts、mode posture、参数覆盖和 defaults 组装 runtime policy。 |
-| `policies.decision` | final PASS / REVIEW decision contract 和少量 final evidence override。 |
+| `policies.decision` | final PASS / REVIEW decision contract，以及由 physical traits 推导的 final evidence policy。 |
 | `policies.reporting` | policy detail serialization。 |
 | `policies.registry` / `consistency` / `ids` | policy lookup、consistency smoke、policy id 和 schema id。 |
 
 format 文件不承载算法开关；能力启用由 assembly 和 runtime policy 表达。
+decision evidence policy 不使用 format-id override 表；format 名称只作为 `FormatSpec`
+查询入口，实际差异来自 family、aspect、physical layout、separator width profile、
+geometry support profile 等物理 trait。
 
 #### 2.4 Detection 子层
 
@@ -175,7 +179,7 @@ format 文件不承载算法开关；能力启用由 assembly 和 runtime policy
 | `detection.candidate.extension` | corrected outer 和其它扩展候选的 reassessment。 |
 | `detection.candidate.selection` | candidate competition 和 selected candidate。 |
 | `detection.decision` | evidence summary、decision signals、decision gate、final reasons、contract applier。 |
-| `detection.final` | 已决策结果的 output-adjacent finalization。 |
+| `detection.final` | 已决策结果的 output-adjacent finalization 编排。 |
 | `detection.detail` | 稳定 detail read helper，供 report/debug/export/finalization 读取。 |
 
 detection 中的层级方向是：proposal / evidence -> build -> assessment -> selection ->
@@ -192,18 +196,22 @@ decision -> finalization。低层不能反向读取高层 decision 语义。
 
 foundation 层不反向依赖 runtime、detection、report、debug、export 或 policy registry。
 它们接收参数对象，不接收完整 runtime policy 或 `strip_mode` 字符串。
+foundation helper 不隐式生成默认参数；调用方必须显式传入 geometry / image evidence
+参数对象。默认值只允许存在于对应 foundation module 的命名 factory 中。
 
 #### 2.6 Output Surface 子层
 
 | 子层 | 职责 |
 |---|---|
-| `output` | output-adjacent bleed / overlap helper 和输出几何 read model。 |
+| `output` | output surface、approved geometry adjustment、bleed / overlap helper 和输出几何 read model。 |
 | `export` | TIFF crop、review copy、输出路径和文件动作。 |
 | `report` | ProcessResult 到 JSONL / CSV / sections 的转换。 |
 | `debug` | Debug Analysis 图像渲染和状态面板。 |
 
 output surface 只消费 `ProcessResult`、`Detection.detail` 的稳定 read helper 和最终
 decision summary。它们不生成候选，不评分，不决定 PASS / REVIEW。
+approved geometry adjustment 属于 output-adjacent adjustment：它只在 decision 已 approved
+且没有 final review reasons 后调整最终输出范围，不是 detection correction。
 
 ## English Guide
 
@@ -254,6 +262,8 @@ candidate plan
 
 Candidate assessment explains candidate qualification. Final user-visible
 reasons are produced by decision.
+Workflow computes the output surface path early but creates the output directory
+only when crop, review copy, debug, or report output is actually written.
 
 ### 2. Source-Layer Architecture
 
@@ -291,14 +301,18 @@ or the final decision contract.
 
 #### 2.3 Policy Sublayers
 
-`policies.formats` owns constrained format overrides. `policies.parameters` owns
+`policies.formats` owns constrained format presets. `policies.parameters` owns
 parameter objects and ownership validation. `policies.runtime` owns active
 runtime policy dataclasses. `policies.assembly` builds active policy from format
-facts, mode posture, overrides, and defaults. `policies.decision` owns the final
-decision contract. `policies.reporting` serializes policy detail.
+facts, mode posture, and defaults. `policies.decision` owns the final decision
+contract and derives final evidence policy from physical traits.
 
 Format files do not carry algorithm switches; capability enablement belongs to
 assembly and runtime policy.
+Decision evidence policy does not use format-id override tables. A format name is
+only a `FormatSpec` lookup key; behavior differences come from physical traits
+such as family, aspect, physical layout, separator width profile, and geometry
+support profile.
 
 #### 2.4 Detection Sublayers
 
@@ -327,9 +341,13 @@ semantics.
 
 `geometry`, `image`, `io`, and `cache` are foundation surfaces. They receive
 plain parameters and return facts or transformed data. They must not depend back
-on runtime, detection, report, debug, export, or the policy registry.
+on runtime, detection, report, debug, export, or the policy registry. Foundation
+helpers do not create implicit default parameters; callers pass explicit
+parameter objects, with defaults exposed only through named foundation factories.
 
 #### 2.6 Output Surfaces
 
 `output`, `export`, `report`, and `debug` consume stable results. They do not
-generate candidates, score candidates, or decide PASS / REVIEW.
+generate candidates, score candidates, or decide PASS / REVIEW. Approved geometry
+adjustment belongs here as an output-adjacent range adjustment after decision,
+not as detection correction.

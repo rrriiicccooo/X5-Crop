@@ -178,6 +178,21 @@ def edge_pair_parameters_from_preset(
         min_quality_for_hard_gap=float(edge_pair.min_quality_for_hard_gap),
         hard_gap_quality_ratio=float(edge_pair.hard_gap_quality_ratio),
         max_hard_shift_ratio=float(edge_pair.max_hard_shift_ratio),
+        zero_hard_shift_ratio=float(edge_pair.zero_hard_shift_ratio),
+        zero_hard_shift_limit_min=float(edge_pair.zero_hard_shift_limit_min),
+        zero_hard_shift_limit_max=float(edge_pair.zero_hard_shift_limit_max),
+        hard_shift_edge_width_multiplier=float(edge_pair.hard_shift_edge_width_multiplier),
+        hard_shift_limit_min=float(edge_pair.hard_shift_limit_min),
+        hard_shift_limit_max=float(edge_pair.hard_shift_limit_max),
+        close_shift_limit_min=float(edge_pair.close_shift_limit_min),
+        close_shift_edge_width_multiplier=float(edge_pair.close_shift_edge_width_multiplier),
+        search_window_min=int(edge_pair.search_window_min),
+        search_window_max=int(edge_pair.search_window_max),
+        min_gutter_min=int(edge_pair.min_gutter_min),
+        min_gutter_max=int(edge_pair.min_gutter_max),
+        max_gutter_min=int(edge_pair.max_gutter_min),
+        max_gutter_max=int(edge_pair.max_gutter_max),
+        background_quality_weight=float(edge_pair.background_quality_weight),
     )
 
 

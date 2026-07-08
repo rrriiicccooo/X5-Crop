@@ -5,7 +5,10 @@ from typing import Any
 
 import numpy as np
 
-from ....image.evidence import make_content_evidence_gray
+from ....image.evidence import (
+    default_content_evidence_image_parameters,
+    make_content_evidence_gray,
+)
 from ....policies.runtime.content import ContentEvidencePolicy, ContentPolicy
 from ....utils import sampled_percentile
 
@@ -25,7 +28,10 @@ def content_policy_cache_key(content_policy: ContentPolicy) -> tuple[Any, ...]:
 
 
 def content_signal_from_gray(gray: np.ndarray) -> ContentSignal:
-    evidence_u8 = make_content_evidence_gray(gray)
+    evidence_u8 = make_content_evidence_gray(
+        gray,
+        default_content_evidence_image_parameters(),
+    )
     return ContentSignal(
         evidence_u8=evidence_u8,
         evidence_float=evidence_u8.astype(np.float32) / 255.0,

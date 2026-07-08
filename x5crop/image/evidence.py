@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from ..utils import (
@@ -10,40 +12,130 @@ from ..utils import (
 )
 
 
-def make_deskew_fallback_gray(gray: np.ndarray) -> np.ndarray:
+@dataclass(frozen=True)
+class DeskewFallbackEvidenceParameters:
+    low_percentile: float = 0.5
+    high_percentile: float = 99.5
+    shadow_gamma: float = 0.72
+    edge_weight: float = 2.0
+    shadow_blend_weight: float = 0.82
+    edge_blend_weight: float = 0.18
+    extreme_dark_threshold: int = 35
+    extreme_light_threshold: int = 235
+    gutter_extreme_min_fraction: float = 0.82
+    gutter_activity_max: float = 0.10
+    gutter_run_width_ratio: float = 1.0 / 14.0
+    gutter_run_width_min: int = 3
+
+
+@dataclass(frozen=True)
+class SeparatorEvidenceImageParameters:
+    low_percentile: float = 2.0
+    high_percentile: float = 98.0
+    vertical_edge_smooth_ratio: float = 0.0015
+    vertical_edge_smooth_min: int = 3
+    dark_band_mean: float = 0.28
+    light_band_mean: float = 0.78
+    local_weight: float = 0.72
+    vertical_edge_weight: float = 0.28
+    tonal_band_weight: float = 0.55
+
+
+@dataclass(frozen=True)
+class ContentEvidenceImageParameters:
+    gradient_percentile: float = 99.2
+    texture_percentile: float = 99.2
+    local_contrast_percentile: float = 99.0
+    tonal_presence_multiplier: float = 0.35
+    tonal_presence_percentile: float = 99.0
+    gradient_weight: float = 0.42
+    texture_weight: float = 0.34
+    local_contrast_weight: float = 0.18
+    tonal_presence_weight: float = 0.06
+
+
+def default_deskew_fallback_evidence_parameters() -> DeskewFallbackEvidenceParameters:
+    return DeskewFallbackEvidenceParameters()
+
+
+def default_separator_evidence_image_parameters() -> SeparatorEvidenceImageParameters:
+    return SeparatorEvidenceImageParameters()
+
+
+def default_content_evidence_image_parameters() -> ContentEvidenceImageParameters:
+    return ContentEvidenceImageParameters()
+
+
+def make_deskew_fallback_gray(
+    gray: np.ndarray,
+    params: DeskewFallbackEvidenceParameters,
+) -> np.ndarray:
     data = gray.astype(np.float32)
-    lo, hi = sampled_percentile(data, [0.5, 99.5])
+    lo, hi = sampled_percentile(data, [params.low_percentile, params.high_percentile])
     if hi <= lo:
         return gray.copy()
     stretched = np.clip((data - lo) / (hi - lo), 0.0, 1.0)
-    shadow_lift = np.power(stretched, 0.72)
+    shadow_lift = np.power(stretched, params.shadow_gamma)
     gx = np.abs(np.diff(shadow_lift, axis=1, prepend=shadow_lift[:, :1]))
     gy = np.abs(np.diff(shadow_lift, axis=0, prepend=shadow_lift[:1, :]))
-    edge = np.clip((gx + gy) * 2.0, 0.0, 1.0)
-    fallback = np.clip(shadow_lift * 0.82 + edge * 0.18, 0.0, 1.0)
-    extreme = ((gray < 35) | (gray > 235)).mean(axis=0)
+    edge = np.clip((gx + gy) * params.edge_weight, 0.0, 1.0)
+    fallback = np.clip(
+        shadow_lift * params.shadow_blend_weight + edge * params.edge_blend_weight,
+        0.0,
+        1.0,
+    )
+    extreme = (
+        (gray < params.extreme_dark_threshold)
+        | (gray > params.extreme_light_threshold)
+    ).mean(axis=0)
     activity = (gx + gy).mean(axis=0)
-    gutter_cols = (extreme >= 0.82) & (activity <= 0.10)
+    gutter_cols = (
+        (extreme >= params.gutter_extreme_min_fraction)
+        & (activity <= params.gutter_activity_max)
+    )
     for start, end in runs_from_mask(gutter_cols):
-        if end - start <= max(3, gray.shape[1] // 14):
+        if end - start <= max(
+            params.gutter_run_width_min,
+            int(round(gray.shape[1] * params.gutter_run_width_ratio)),
+        ):
             fallback[:, start:end] = stretched[:, start:end]
     return (fallback * 255.0 + 0.5).astype(np.uint8)
 
 
-def make_separator_evidence_gray(gray: np.ndarray) -> np.ndarray:
+def make_separator_evidence_gray(
+    gray: np.ndarray,
+    params: SeparatorEvidenceImageParameters,
+) -> np.ndarray:
     data = gray.astype(np.float32, copy=False)
-    lo, hi = sampled_percentile(data, [2.0, 98.0])
+    lo, hi = sampled_percentile(data, [params.low_percentile, params.high_percentile])
     if hi <= lo:
         return gray.copy()
     local = np.clip((data - lo) / (hi - lo), 0.0, 1.0)
     gx = np.abs(np.diff(local, axis=1, prepend=local[:, :1]))
-    vertical_edge = smooth_1d(gx.mean(axis=0).astype(np.float32), max(3, int(round(gray.shape[1] * 0.0015))))
+    vertical_edge = smooth_1d(
+        gx.mean(axis=0).astype(np.float32),
+        max(
+            params.vertical_edge_smooth_min,
+            int(round(gray.shape[1] * params.vertical_edge_smooth_ratio)),
+        ),
+    )
     column_mean = local.mean(axis=0)
-    dark_response = np.clip((0.28 - column_mean) / 0.28, 0.0, 1.0)
-    light_band = np.clip((column_mean - 0.78) / 0.22, 0.0, 1.0)
+    dark_response = np.clip(
+        (params.dark_band_mean - column_mean) / params.dark_band_mean,
+        0.0,
+        1.0,
+    )
+    light_band = np.clip(
+        (column_mean - params.light_band_mean) / (1.0 - params.light_band_mean),
+        0.0,
+        1.0,
+    )
     band = np.maximum(dark_response, light_band)
-    evidence = np.maximum(local * 0.72, vertical_edge[None, :] * 0.28)
-    evidence = np.maximum(evidence, band[None, :] * 0.55)
+    evidence = np.maximum(
+        local * params.local_weight,
+        vertical_edge[None, :] * params.vertical_edge_weight,
+    )
+    evidence = np.maximum(evidence, band[None, :] * params.tonal_band_weight)
     return (np.clip(evidence, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 
 
@@ -55,14 +147,17 @@ def normalize_score_image(score: np.ndarray, percentile: float = 99.4) -> np.nda
     return np.clip(data / hi, 0.0, 1.0)
 
 
-def make_content_evidence_gray(gray: np.ndarray) -> np.ndarray:
+def make_content_evidence_gray(
+    gray: np.ndarray,
+    params: ContentEvidenceImageParameters,
+) -> np.ndarray:
     data = gray.astype(np.float32, copy=False) / 255.0
     if data.size == 0:
         return gray.copy()
 
     gx = np.abs(np.diff(data, axis=1, prepend=data[:, :1]))
     gy = np.abs(np.diff(data, axis=0, prepend=data[:1, :]))
-    gradient = normalize_score_image(gx + gy, 99.2)
+    gradient = normalize_score_image(gx + gy, params.gradient_percentile)
 
     north = np.empty_like(data)
     south = np.empty_like(data)
@@ -77,12 +172,34 @@ def make_content_evidence_gray(gray: np.ndarray) -> np.ndarray:
     east[:, -1] = data[:, -1]
     east[:, :-1] = data[:, 1:]
     neighbor_texture = (np.abs(data - north) + np.abs(data - south) + np.abs(data - west) + np.abs(data - east)) * 0.25
-    texture = normalize_score_image(neighbor_texture, 99.2)
+    texture = normalize_score_image(neighbor_texture, params.texture_percentile)
 
     local_mean = (data + north + south + west + east) * 0.2
-    local_contrast = normalize_score_image(np.abs(data - local_mean), 99.0)
+    local_contrast = normalize_score_image(np.abs(data - local_mean), params.local_contrast_percentile)
 
-    tonal_presence = normalize_score_image(np.abs(data - float(np.median(sampled_values_for_percentile(data)))) * 0.35, 99.0)
-    evidence = 0.42 * gradient + 0.34 * texture + 0.18 * local_contrast + 0.06 * tonal_presence
+    tonal_presence = normalize_score_image(
+        np.abs(data - float(np.median(sampled_values_for_percentile(data)))) * params.tonal_presence_multiplier,
+        params.tonal_presence_percentile,
+    )
+    evidence = (
+        params.gradient_weight * gradient
+        + params.texture_weight * texture
+        + params.local_contrast_weight * local_contrast
+        + params.tonal_presence_weight * tonal_presence
+    )
     evidence = np.clip(evidence, 0.0, 1.0)
     return (evidence * 255.0 + 0.5).astype(np.uint8)
+
+
+__all__ = [
+    "ContentEvidenceImageParameters",
+    "DeskewFallbackEvidenceParameters",
+    "SeparatorEvidenceImageParameters",
+    "default_content_evidence_image_parameters",
+    "default_deskew_fallback_evidence_parameters",
+    "default_separator_evidence_image_parameters",
+    "make_content_evidence_gray",
+    "make_deskew_fallback_gray",
+    "make_separator_evidence_gray",
+    "normalize_score_image",
+]

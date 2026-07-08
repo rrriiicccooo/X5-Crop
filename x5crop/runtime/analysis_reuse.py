@@ -14,6 +14,7 @@ from ..output.bleed import (
     output_bleed_parameters_for_detection,
     reapply_cached_output_bleed,
 )
+from ..output.surface import OutputSurface
 from ..image.gray import make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..io.tiff import read_tiff
@@ -93,7 +94,12 @@ def detection_from_record(record: dict[str, Any]) -> Detection:
     )
 
 
-def cached_record_matches(record: dict[str, Any], input_file: Path, profile: ImageProfile, config: RuntimeConfig) -> bool:
+def cached_record_matches(
+    record: dict[str, Any],
+    input_file: Path,
+    profile: ImageProfile,
+    config: RuntimeConfig,
+) -> bool:
     report_schema = record.get("report_schema")
     if not isinstance(report_schema, dict):
         return False
@@ -187,14 +193,14 @@ def apply_cached_deskew(
 def result_from_reusable_analysis(
     input_file: Path,
     config: RuntimeConfig,
-    output_dir: Path,
+    output_surface: OutputSurface,
     profile: ImageProfile,
     warnings: list[str],
     policy_context: RuntimePolicyContext,
 ) -> ProcessResult | None:
     if not (config.reuse_analysis and not config.dry_run and not config.debug_analysis):
         return None
-    cached_record = find_reusable_analysis(input_file, output_dir, profile, config)
+    cached_record = find_reusable_analysis(input_file, output_surface.root, profile, config)
     if cached_record is None:
         return None
 
@@ -230,7 +236,7 @@ def result_from_reusable_analysis(
         detection,
         config,
         deskew_applied,
-        output_dir,
+        output_surface.ensure_root(),
     )
     return result_from_detection(
         input_file,

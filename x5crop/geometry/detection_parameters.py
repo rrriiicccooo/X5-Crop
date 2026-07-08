@@ -205,6 +205,21 @@ class EdgePairParameters:
     min_quality_for_hard_gap: float = 0.70
     hard_gap_quality_ratio: float = 0.95
     max_hard_shift_ratio: float = 0.040
+    zero_hard_shift_ratio: float = 0.001
+    zero_hard_shift_limit_min: float = 4.0
+    zero_hard_shift_limit_max: float = 20.0
+    hard_shift_edge_width_multiplier: float = 2.0
+    hard_shift_limit_min: float = 15.0
+    hard_shift_limit_max: float = 220.0
+    close_shift_limit_min: float = 4.0
+    close_shift_edge_width_multiplier: float = 1.5
+    search_window_min: int = 8
+    search_window_max: int = 520
+    min_gutter_min: int = 2
+    min_gutter_max: int = 40
+    max_gutter_min: int = 8
+    max_gutter_max: int = 420
+    background_quality_weight: float = 0.60
 
 
 __all__ = [

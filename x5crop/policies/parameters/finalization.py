@@ -34,6 +34,9 @@ class ApprovedGeometryAdjustmentParameters:
     min_ext_ratio: float
     min_ext_min: int
     min_ext_max: int
+    side_band_trim_ratio: float
+    content_threshold_u8: int
+    min_active_column_fraction: float
 
 __all__ = [
     'PartialHolderParameters',

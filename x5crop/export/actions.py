@@ -6,6 +6,7 @@ from typing import Any
 from ..runtime.config import RuntimeConfig
 from ..detection.detail import final_review_reasons_from_detail
 from ..domain import Detection, ImageProfile
+from ..output.surface import OutputSurface
 from .crops import write_crops
 from .review import copy_for_review, review_directory_for
 
@@ -41,12 +42,13 @@ def write_crops_if_allowed(
     detection: Detection,
     config: RuntimeConfig,
     deskew_applied: bool,
-    output_dir: Path,
+    output_surface: OutputSurface,
     status: str,
 ) -> list[str]:
     should_export = (status == "approved_auto" or config.export_review) and not config.dry_run
     if not should_export:
         return []
+    output_dir = output_surface.ensure_root()
     return write_crops(
         input_file,
         arr,

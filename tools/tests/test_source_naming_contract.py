@@ -1043,6 +1043,11 @@ class SourceNamingContractTest(unittest.TestCase):
             "candidate_gate_passed",
             "partial_safe_extra_frames",
             "safe_extra_frames",
+            "EVIDENCE_POLICY_OVERRIDES",
+            "EVIDENCE_POLICY_MODE_OVERRIDES",
+            "evidence_policy_values",
+            "unacceptable_wrong_pass",
+            "risky_regression",
         )
         offenders: list[str] = []
         for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
@@ -1055,6 +1060,41 @@ class SourceNamingContractTest(unittest.TestCase):
                     if term in text:
                         offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
 
+        self.assertEqual(offenders, [])
+
+    def test_format_preset_assembly_does_not_own_profiles_or_descriptions(self) -> None:
+        text = (
+            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "format_presets.py"
+        ).read_text(encoding="utf-8")
+        banned = (
+            "FrameFitPolicy(",
+            "SeparatorEdgePairPolicy(",
+            "safe extra",
+            "def _notes",
+            "def _role",
+        )
+        offenders = [term for term in banned if term in text]
+        self.assertEqual(offenders, [])
+
+    def test_approved_geometry_adjustment_is_output_adjacent(self) -> None:
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop" / "detection" / "final" / "geometry.py").exists()
+        )
+        self.assertTrue(
+            (PROJECT_ROOT / "x5crop" / "output" / "geometry_adjustment.py").is_file()
+        )
+
+    def test_workflow_does_not_create_output_directory_before_io(self) -> None:
+        text = (PROJECT_ROOT / "x5crop" / "runtime" / "workflow.py").read_text(encoding="utf-8")
+        self.assertNotIn("output_dir.mkdir", text)
+        self.assertIn("output_surface_for_input", text)
+
+    def test_regression_tools_use_current_final_reason_field(self) -> None:
+        offenders: list[str] = []
+        for path in (PROJECT_ROOT / "tools" / "regression").rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            if '"review_reasons"' in text:
+                offenders.append(str(path.relative_to(PROJECT_ROOT)))
         self.assertEqual(offenders, [])
 
     def test_foundation_helpers_require_explicit_parameters(self) -> None:

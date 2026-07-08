@@ -59,16 +59,13 @@ def geometry_equal(before: dict[str, Any], after: dict[str, Any]) -> bool:
 
 
 def reason_summary(row: dict[str, Any]) -> str:
-    reasons = row.get("review_reasons", [])
+    reasons = row.get("final_review_reasons", [])
     if isinstance(reasons, list) and reasons:
         return ",".join(str(reason) for reason in reasons[:6])
     detail = row.get("detail", {})
     if isinstance(detail, dict):
         decision = detail.get("decision_summary", {})
         if isinstance(decision, dict):
-            generated = decision.get("decision_generated_review_reasons", [])
-            if isinstance(generated, list) and generated:
-                return ",".join(str(reason) for reason in generated[:6])
             final = decision.get("final_review_reasons", [])
             if isinstance(final, list) and final:
                 return ",".join(str(reason) for reason in final[:6])
@@ -79,20 +76,20 @@ def classify_pair(before: dict[str, Any], after: dict[str, Any]) -> str:
     before_status = str(before.get("status", ""))
     after_status = str(after.get("status", ""))
     if before_status == "approved_auto" and after_status == "needs_review":
-        return "safer_review"
+        return "changed_to_review"
     if before_status == "needs_review" and after_status == "approved_auto":
-        return "unacceptable_wrong_pass"
+        return "changed_to_pass"
     if before_status == after_status and geometry_equal(before, after):
         core_same = (
             before.get("confidence") == after.get("confidence")
-            and before.get("review_reasons") == after.get("review_reasons")
+            and before.get("final_review_reasons") == after.get("final_review_reasons")
         )
         return "same" if core_same else "metadata/schema diff"
     if after_status == "needs_review":
-        return "safer_review"
+        return "changed_to_review"
     if before_status == "approved_auto" and after_status == "approved_auto":
-        return "risky_regression"
-    return "risky_regression"
+        return "approved_geometry_changed"
+    return "output_changed"
 
 
 def classify_reports(baseline_path: Path, candidate_path: Path) -> list[ClassifiedDiff]:
@@ -101,10 +98,10 @@ def classify_reports(baseline_path: Path, candidate_path: Path) -> list[Classifi
     diffs: list[ClassifiedDiff] = []
     for key in sorted(set(baseline) | set(candidate)):
         if key not in baseline:
-            diffs.append(ClassifiedDiff(key, "risky_regression", "added row"))
+            diffs.append(ClassifiedDiff(key, "row_added", "added row"))
             continue
         if key not in candidate:
-            diffs.append(ClassifiedDiff(key, "risky_regression", "missing candidate row"))
+            diffs.append(ClassifiedDiff(key, "row_missing", "missing candidate row"))
             continue
         classification = classify_pair(baseline[key], candidate[key])
         diffs.append(
@@ -120,8 +117,7 @@ def classify_reports(baseline_path: Path, candidate_path: Path) -> list[Classifi
 def run_cases(repo_root: Path, candidate_root: Path, json_output: bool = False) -> int:
     all_counts: dict[str, int] = {}
     payload: dict[str, Any] = {}
-    unacceptable = 0
-    risky = 0
+    missing_reports = 0
     for name, (baseline_rel, candidate_rel) in REFERENCE_CASES.items():
         baseline = repo_root / baseline_rel
         candidate = candidate_root / candidate_rel
@@ -132,41 +128,40 @@ def run_cases(repo_root: Path, candidate_root: Path, json_output: bool = False) 
             if not candidate.exists():
                 missing.append(str(candidate))
             payload[name] = {"missing": missing}
-            risky += 1
+            missing_reports += 1
             continue
         rows = classify_reports(baseline, candidate)
         counts: dict[str, int] = {}
         for row in rows:
             counts[row.classification] = counts.get(row.classification, 0) + 1
-        unacceptable += counts.get("unacceptable_wrong_pass", 0)
-        risky += counts.get("risky_regression", 0)
         all_counts[name] = len(rows)
         payload[name] = {
             "rows": len(rows),
             "counts": counts,
-            "safer_review": [
+            "changed_to_review": [
                 {
                     "source": row.source,
                     "reason_summary": row.reason_summary,
                 }
                 for row in rows
-                if row.classification == "safer_review"
+                if row.classification == "changed_to_review"
             ],
-            "unacceptable_wrong_pass": [
+            "changed_to_pass": [
                 {
                     "source": row.source,
                     "reason_summary": row.reason_summary,
                 }
                 for row in rows
-                if row.classification == "unacceptable_wrong_pass"
+                if row.classification == "changed_to_pass"
             ],
-            "risky_regression": [
+            "geometry_or_output_changed": [
                 {
                     "source": row.source,
                     "reason_summary": row.reason_summary,
+                    "classification": row.classification,
                 }
                 for row in rows
-                if row.classification == "risky_regression"
+                if row.classification in {"approved_geometry_changed", "output_changed", "row_added", "row_missing"}
             ],
         }
     if json_output:
@@ -180,17 +175,19 @@ def run_cases(repo_root: Path, candidate_root: Path, json_output: bool = False) 
                 print(f"{name}: missing {data['missing']}")
                 continue
             print(f"{name}: {data['counts']}")
-            for item in data["safer_review"][:20]:
-                print(f"  safer_review: {Path(item['source']).name}: {item['reason_summary']}")
-            if len(data["safer_review"]) > 20:
-                print(f"  ... {len(data['safer_review']) - 20} more safer_review")
-            for item in data["unacceptable_wrong_pass"]:
-                print(f"  unacceptable_wrong_pass: {Path(item['source']).name}: {item['reason_summary']}")
-            for item in data["risky_regression"]:
-                print(f"  risky_regression: {Path(item['source']).name}: {item['reason_summary']}")
-        print(f"unacceptable_wrong_pass: {unacceptable}")
-        print(f"risky_regression: {risky}")
-    return 1 if unacceptable or risky else 0
+            for item in data["changed_to_review"][:20]:
+                print(f"  changed_to_review: {Path(item['source']).name}: {item['reason_summary']}")
+            if len(data["changed_to_review"]) > 20:
+                print(f"  ... {len(data['changed_to_review']) - 20} more changed_to_review")
+            for item in data["changed_to_pass"]:
+                print(f"  changed_to_pass: {Path(item['source']).name}: {item['reason_summary']}")
+            for item in data["geometry_or_output_changed"]:
+                print(
+                    f"  {item['classification']}: "
+                    f"{Path(item['source']).name}: {item['reason_summary']}"
+                )
+        print(f"missing report sets: {missing_reports}")
+    return 1 if missing_reports else 0
 
 
 def main(argv: list[str] | None = None) -> int:

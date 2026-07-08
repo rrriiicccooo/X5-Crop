@@ -7,7 +7,10 @@ import numpy as np
 from ....domain import Box, Detection
 from ....formats import FormatSpec
 from ....geometry.layout import work_gray
-from ....image.evidence import make_content_evidence_gray
+from ....image.evidence import (
+    default_content_evidence_image_parameters,
+    make_content_evidence_gray,
+)
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....utils import clamp_int
@@ -124,7 +127,10 @@ def partial_edge_safety_leading_content_detail(
         evidence = cache.content_evidence_float_work
     else:
         gray_work = work_gray(gray, detection.layout)
-        evidence = make_content_evidence_gray(gray_work).astype(np.float32) / 255.0
+        evidence = make_content_evidence_gray(
+            gray_work,
+            default_content_evidence_image_parameters(),
+        ).astype(np.float32) / 255.0
 
     left = max(0, min(left, evidence.shape[1]))
     right = max(0, min(right, evidence.shape[1]))

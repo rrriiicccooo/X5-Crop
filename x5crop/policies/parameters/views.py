@@ -515,6 +515,9 @@ class FormatParameterViews:
             min_ext_ratio=self.approved_adjust_min_ext_ratio,
             min_ext_min=self.approved_adjust_min_ext_min,
             min_ext_max=self.approved_adjust_min_ext_max,
+            side_band_trim_ratio=self.approved_adjust_side_band_trim_ratio,
+            content_threshold_u8=self.approved_adjust_content_threshold_u8,
+            min_active_column_fraction=self.approved_adjust_min_active_column_fraction,
         )
 
     @property

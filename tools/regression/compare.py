@@ -12,7 +12,7 @@ from typing import Any, Iterable
 DEFAULT_FIELDS = (
     "status",
     "confidence",
-    "review_reasons",
+    "final_review_reasons",
     "outer_box",
     "frame_boxes",
     "gaps",

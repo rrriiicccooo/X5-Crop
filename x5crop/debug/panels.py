@@ -14,7 +14,10 @@ from ..detection.detail import (
 )
 from ..domain import Box, Detection
 from ..cache.separator import cached_separator_evidence_crop
-from ..image.evidence import make_separator_evidence_gray
+from ..image.evidence import (
+    default_separator_evidence_image_parameters,
+    make_separator_evidence_gray,
+)
 from ..policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
 from ..cache import AnalysisCache
 from .canvas import (
@@ -166,7 +169,10 @@ def make_separator_evidence_debug_gray(
         evidence = cached_separator_evidence_crop(cache, cache.gray_work, full_work)
         if evidence.size:
             return work_evidence_to_original_shape(evidence, gray, detection.layout)
-    return make_separator_evidence_gray(gray)
+    return make_separator_evidence_gray(
+        gray,
+        default_separator_evidence_image_parameters(),
+    )
 
 
 def make_separator_evidence_debug_rgb(

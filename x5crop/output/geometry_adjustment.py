@@ -5,14 +5,14 @@ from typing import Any
 
 import numpy as np
 
-from ...runtime.config import RuntimeConfig
-from ..detail import final_review_reasons_from_detail
-from ...domain import Box, Detection
-from ...geometry.boxes import map_work_box, original_box_to_work
-from ...geometry.layout import work_gray
-from ...policies.runtime.final import ApprovedGeometryAdjustmentPolicy
-from ...policies.runtime.output import EdgeBleedProtectionPolicy
-from ...utils import clamp_float, clamp_int
+from ..detection.detail import final_review_reasons_from_detail
+from ..domain import Box, Detection
+from ..geometry.boxes import map_work_box, original_box_to_work
+from ..geometry.layout import work_gray
+from ..policies.runtime.final import ApprovedGeometryAdjustmentPolicy
+from ..policies.runtime.output import EdgeBleedProtectionPolicy
+from ..runtime.config import RuntimeConfig
+from ..utils import clamp_float, clamp_int
 
 
 def apply_edge_bleed_protection(
@@ -88,8 +88,8 @@ def apply_approved_geometry_adjustment(
         policy.long_limit_min,
         policy.long_limit_max,
     )
-    band_top = outer.top + int(round(outer.height * 0.12))
-    band_bottom = outer.bottom - int(round(outer.height * 0.12))
+    band_top = outer.top + int(round(outer.height * policy.side_band_trim_ratio))
+    band_bottom = outer.bottom - int(round(outer.height * policy.side_band_trim_ratio))
     if band_bottom <= band_top:
         band_top, band_bottom = outer.top, outer.bottom
 
@@ -103,11 +103,10 @@ def apply_approved_geometry_adjustment(
         strip = gray_work[band_top:band_bottom, lo:hi]
         if strip.size == 0:
             return 0
-        col_content = (strip < 242).mean(axis=0)
+        col_content = (strip < policy.content_threshold_u8).mean(axis=0)
+        active = np.where(col_content > policy.min_active_column_fraction)[0]
         if side == "left":
-            active = np.where(col_content > 0.018)[0]
             return int(hi - (lo + int(active[0]))) if active.size else 0
-        active = np.where(col_content > 0.018)[0]
         return int(int(active[-1]) + 1) if active.size else 0
 
     pitch = float(outer.width) / float(max(1, detection.count))
@@ -138,9 +137,17 @@ def apply_approved_geometry_adjustment(
         return
     detection.detail["approved_geometry_adjustment"] = {
         "used": True,
+        "role": "approved_output_geometry_adjustment",
+        "parameters": asdict(policy),
         "original_outer": asdict(original_outer),
         "adjusted_outer": asdict(outer),
         **changes,
     }
     detection.outer = map_work_box(outer, detection.layout, gray.shape[1], gray.shape[0])
     detection.frames = [map_work_box(frame, detection.layout, gray.shape[1], gray.shape[0]) for frame in frames]
+
+
+__all__ = [
+    "apply_approved_geometry_adjustment",
+    "apply_edge_bleed_protection",
+]

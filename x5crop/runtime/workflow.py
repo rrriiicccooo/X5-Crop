@@ -17,11 +17,11 @@ from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
 from ..domain import ProcessResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
-from ..export.paths import output_directory_for
 from ..formats import FORMATS
 from ..image.gray import make_base_gray_u8
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..output.bleed import detection_bleed_parameters
+from ..output.surface import output_surface_for_input
 from .policy_context import RuntimePolicyContext
 from ..report.outputs import write_report_outputs_for_result
 from ..report.result_builder import result_from_detection
@@ -32,14 +32,14 @@ def process_one_worker(input_file: Path, config: RuntimeConfig) -> ProcessResult
 
 
 def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
-    output_dir = output_directory_for(input_file, config)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_surface = output_surface_for_input(input_file, config)
+    output_dir = output_surface.root
     profile, warnings = read_tiff_profile(input_file, config.page)
     config = runtime_for_profile(config, profile)
     fmt = FORMATS[config.film_format]
     policy_context = RuntimePolicyContext.for_format_mode(fmt.name, config.strip_mode)
 
-    cached_result = result_from_reusable_analysis(input_file, config, output_dir, profile, warnings, policy_context)
+    cached_result = result_from_reusable_analysis(input_file, config, output_surface, profile, warnings, policy_context)
     if cached_result is not None:
         return _finish_result(cached_result, config)
 
@@ -87,7 +87,7 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
         detection,
         config,
         bool(deskew_detail["applied"]),
-        output_dir,
+        output_surface,
         status,
     )
     write_debug_outputs(gray, detection, output_dir, input_file.stem, config, analysis_cache, warnings, selected_policy)

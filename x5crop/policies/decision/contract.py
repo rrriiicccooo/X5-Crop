@@ -4,7 +4,6 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from ...formats import FormatSpec, format_spec
-from .overrides import evidence_policy_values
 from ..ids import REPORT_SCHEMA_VERSION, decision_policy_id_for
 
 if TYPE_CHECKING:
@@ -115,9 +114,14 @@ def evidence_policy_for(
     strip_mode: str,
     detection_policy: DetectionPolicy | None = None,
 ) -> EvidencePolicy:
-    policy = EvidencePolicy()
-    values = evidence_policy_values(format_id, strip_mode, policy, detection_policy)
-    return replace(policy, **values)
+    from .evidence_policy import evidence_policy_for_physical_spec
+
+    return evidence_policy_for_physical_spec(
+        format_id,
+        strip_mode,
+        EvidencePolicy(),
+        detection_policy,
+    )
 
 
 def decision_policy_for(detection_policy: DetectionPolicy) -> DecisionPolicy:

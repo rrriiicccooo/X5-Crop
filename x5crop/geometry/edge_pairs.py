@@ -122,14 +122,28 @@ def assess_edge_pair_hard_gap_replacement(
 ) -> EdgePairReplacementAssessment:
     delta = abs(edge_gap.center - gap.center)
     if params.max_hard_shift_ratio <= 0.0:
-        shift_limit = max(clamp_float(pitch * 0.001, 4.0, 20.0), edge_gap.width)
+        shift_limit = max(
+            clamp_float(
+                pitch * params.zero_hard_shift_ratio,
+                params.zero_hard_shift_limit_min,
+                params.zero_hard_shift_limit_max,
+            ),
+            edge_gap.width,
+        )
         return EdgePairReplacementAssessment(
             ok=delta <= shift_limit,
             reason="hard_shift_ok" if delta <= shift_limit else "hard_shift_too_large",
             delta_px=float(delta),
             shift_limit=float(shift_limit),
         )
-    shift_limit = max(edge_gap.width * 2.0, clamp_float(pitch * params.max_hard_shift_ratio, 15.0, 220.0))
+    shift_limit = max(
+        edge_gap.width * params.hard_shift_edge_width_multiplier,
+        clamp_float(
+            pitch * params.max_hard_shift_ratio,
+            params.hard_shift_limit_min,
+            params.hard_shift_limit_max,
+        ),
+    )
     if delta > shift_limit:
         return EdgePairReplacementAssessment(
             ok=False,
@@ -146,7 +160,10 @@ def assess_edge_pair_hard_gap_replacement(
             shift_limit=float(shift_limit),
             min_quality=float(min_quality),
         )
-    close_shift_limit = max(4.0, edge_gap.width * 1.5)
+    close_shift_limit = max(
+        params.close_shift_limit_min,
+        edge_gap.width * params.close_shift_edge_width_multiplier,
+    )
     close_shift_ok = delta <= close_shift_limit
     return EdgePairReplacementAssessment(
         ok=close_shift_ok,
@@ -202,9 +219,12 @@ def edge_pair_replacement_evidence_role_detail(gap: Gap, edge_gap: Gap) -> dict[
 
 
 def edge_pair_search_limits(pitch: float, params: EdgePairParameters) -> EdgePairSearchLimits:
-    window = clamp_int(pitch * params.window_ratio, 8, 520)
-    min_gutter = clamp_int(pitch * params.min_gutter_ratio, 2, 40)
-    max_gutter = max(min_gutter + 1, clamp_int(pitch * params.max_gutter_ratio, 8, 420))
+    window = clamp_int(pitch * params.window_ratio, params.search_window_min, params.search_window_max)
+    min_gutter = clamp_int(pitch * params.min_gutter_ratio, params.min_gutter_min, params.min_gutter_max)
+    max_gutter = max(
+        min_gutter + 1,
+        clamp_int(pitch * params.max_gutter_ratio, params.max_gutter_min, params.max_gutter_max),
+    )
     return EdgePairSearchLimits(int(window), int(min_gutter), int(max_gutter))
 
 
@@ -234,7 +254,7 @@ def edge_pair_candidates_for_gap(
             if bg_between < params.min_background:
                 continue
             strength = (float(edge[a]) + float(edge[b])) / 2.0
-            quality = strength + 0.6 * bg_between
+            quality = strength + params.background_quality_weight * bg_between
             distance = abs(center - x0) / max(1.0, pitch)
             candidates.append(
                 EdgePairCandidate(
