@@ -35,6 +35,11 @@ class ContentContainmentTest(unittest.TestCase):
         self.assertEqual(containment["leading_empty_count"], 1)
         self.assertEqual(containment["trailing_empty_count"], 1)
         self.assertEqual(containment["internal_empty_count"], 0)
+        holder_texture = containment["holder_texture_evidence"]
+        self.assertTrue(holder_texture["used"])
+        self.assertEqual(holder_texture["gate_role"], "guidance_not_auto_pass")
+        self.assertTrue(holder_texture["holder_texture_low"])
+        self.assertEqual(holder_texture["holder_frame_indexes"], [1, 4])
 
     def test_no_content_is_still_not_safe(self) -> None:
         detail = {

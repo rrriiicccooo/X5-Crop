@@ -92,6 +92,14 @@ X5_Crop.py / launchers
 - `detection.physical.photo_size` 是共享 photo-size consistency 模型；separator proposal、
   separator-derived outer 和 candidate assessment 不应各自发明宽度语义。
 - full 和 partial 都允许安全多切空 frame；只要真实图像没有被切伤，空 frame 本身不是负面证据。
+- frame topology 是显式物理证据：一条 strip 内的 frame 必须按长轴单调排列、
+  不交叉且 extent 有效。
+- hard separator 必须像真实 separator：它不仅要有 gap/source 证据，还要有横跨短轴的
+  cross-axis continuity。局部内容边缘不能靠 hard-gap 名义自动通过。
+- holder texture 是 guidance evidence：低纹理 / 低内容片夹区域可辅助 outer 和 content
+  containment，但不能单独成为 PASS oracle。
+- base outer 使用 per-side mixed boundary evidence；每条边都可独立表现为黑边到白片夹、
+  content 到白片夹或混合 / 不确定边界，不假设四边都有黑边。
 - TIFF metadata、位深、通道、ICC、resolution 和无损压缩行为属于输出质量边界，不随检测重构改变。
 
 不要把 observed / broad separator width 当成新的 detector family，也不要把 frame-box
@@ -143,6 +151,13 @@ candidate plan
   `confidence`、`diagnostics` 和 `detail`；content diagnostics 仍是候选级解释。
 - separator gate 输出使用显式 `SeparatorGateResult`，字段为 `ok` 和 `detail`；
   调用方不能用匿名 tuple 解包 gate 契约。
+- `frame_topology_evidence` 属于 candidate build / frame geometry evidence；失败时只产生
+  `frame_*` candidate signals，最终 REVIEW 仍由 decision 生成。
+- `separator_cross_axis_continuity` 属于 separator evidence；它决定 hard gap 是否像真实横跨短轴的 separator。
+- `holder_texture_evidence` 属于 content guidance / containment evidence；它解释 holder/content 分离，
+  不拥有 auto-pass 权限。
+- outer mixed-boundary detail 属于 physical outer proposal；它只提出或支持 outer candidate，
+  不评分、不 gate、不 PASS / REVIEW。
 - separator gate 内部 profile / supplemental support checks 输出使用显式
   `SeparatorGateSupportAssessment`，字段为 `ok` 和 `reason`；内部 helper 也不能
   用匿名 ok/reason tuple 表达 gate 支持契约。
@@ -252,6 +267,10 @@ candidate plan
 - base confidence 只由 separator / gap support 和 `photo_width_cv` 组成。
 - raw outer area、global contrast、frame-box width 和 separator-width variation 是 diagnostics
   或 final decision 输入，不是 base confidence 输入。
+- `photo_size_consistency` 和 `frame_topology` 是不同 candidate gate checks；照片本体尺寸稳定
+  不能和 frame 顺序 / 重叠混成一个 geometry bucket。
+- separator width variation 只能保留为 observed detail；separator cross-axis continuity 才能影响
+  hard separator trust。
 - content support score 表示真实内容 containment support；content quality score 只表示影像证据强弱。
 - 当 detail 明确给出 `content_containment_ok` / `content_harm_risk` 时，support score 只能消费
   containment 字段；旧 `support` summary 只是报告 detail。
@@ -582,6 +601,19 @@ derives parameters from physical predicates such as family, count, and aspect,
 not from risk strings.
 Physical packages do not keep `plan.py`; planning, execution budget, and source
 composition belong to `detection.candidate.plan`.
+Frame topology is explicit evidence: frames in one strip must be monotonic along
+the long axis, non-overlapping, and extent-valid. `frame_topology_evidence`
+belongs to candidate build / frame geometry evidence and can emit `frame_*`
+candidate signals; final REVIEW still belongs to decision.
+Hard separators must look like real separators, not just detected long-axis
+positions. `separator_cross_axis_continuity` belongs to separator evidence and
+requires hard gaps to span the short axis as continuous bands. Local content
+edges cannot auto-pass under a hard-gap name.
+Holder texture is guidance evidence. Low-texture / low-content holder regions
+may help explain holder/content separation, but they are not an auto-pass oracle.
+Base outer uses per-side mixed-boundary evidence. Each side may independently
+look like black-border-to-white-holder, content-to-white-holder, or mixed /
+uncertain boundary; outer proposals must not assume all sides have a black rim.
 `detection.decision` owns final evidence, confidence caps, risk summary, final
 review reasons, and PASS / REVIEW. `x5crop.output` owns output-bleed parameter
 conversion, output-risk read models, and cached output-geometry restoration.
@@ -621,6 +653,10 @@ auto-gate inputs, and candidate confidence caps are assessment detail; decision
 reason inputs, final-review reason fields, and decision confidence caps are
 final decision detail. Candidate signals are no longer reduced into final review
 reasons by decision; decision reads structured gate / evidence / risk inputs.
+`photo_size_consistency` and `frame_topology` are separate candidate gate checks;
+photo-size stability must not be mixed with frame ordering or overlap. Separator
+width variation remains observed detail, while separator cross-axis continuity
+is allowed to affect hard separator trust.
 Content-only, safety, and review-only candidate outcomes
 are expressed by source-derived `risk_summary` plus the decision contract
 applier, not by unused review-only flags in decision policy.

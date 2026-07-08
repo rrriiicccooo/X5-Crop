@@ -5,6 +5,7 @@ from typing import Any
 import numpy as np
 
 from ....policies.runtime.content import ContentEvidencePolicy
+from .holder_texture import holder_texture_evidence_detail
 
 
 def _float(value: Any, default: float = 0.0) -> float:
@@ -147,6 +148,12 @@ def content_containment_detail(
         "expected_aspect": content_detail.get("expected_aspect"),
         "max_aspect_error": max_aspect_error,
         "frame_scores": normalized,
+        "holder_texture_evidence": holder_texture_evidence_detail(
+            normalized,
+            content_indexes=content_indexes,
+            empty_indexes=empty_indexes,
+            evidence_policy=evidence_policy,
+        ),
         "source_content_support": content_detail.get("support"),
     }
 

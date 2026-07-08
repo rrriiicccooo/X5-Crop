@@ -23,11 +23,14 @@ from x5crop.detection.candidate.assessment.scoring import (
     geometry_support_score,
 )
 from x5crop.detection.candidate.signals import candidate_signals
+from x5crop.detection.evidence.frame_topology import frame_topology_evidence
+from x5crop.detection.evidence.separator_continuity import separator_cross_axis_continuity_evidence
 from x5crop.detection.decision.evidence_summary import evidence_summary_for
 from x5crop.detection.evidence.risk import lucky_photo_width_instability_components
 from x5crop.domain import Box, Detection, Gap
 from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED
+from x5crop.geometry.detection_parameters import HardGapTrustParameters
 from x5crop.policies.decision.contract import decision_contract_for
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.runtime.candidate import EvidenceIndependencePolicy
@@ -75,6 +78,85 @@ class PhysicalScoringContractTest(unittest.TestCase):
 
         self.assertFalse(gate.passed)
         self.assertEqual(gate.blockers, ["content_outside_outer"])
+
+    def test_frame_topology_overlap_blocks_candidate_gate(self) -> None:
+        evidence = frame_topology_evidence(
+            [Box(0, 0, 120, 100), Box(110, 0, 220, 100)],
+            expected_count=2,
+        )
+
+        self.assertFalse(evidence["ok"])
+        self.assertEqual(evidence["candidate_signals"], ["frame_overlap_detected"])
+
+        gate = candidate_gate_assessment(
+            source="separator",
+            separator_gate_ok=True,
+            separator_gate_detail={"ok": True},
+            partial_safe_candidate_gate_support_ok=False,
+            partial_safe_blocks_auto=False,
+            partial_safe_disqualifiers=set(),
+            content_containment_ok=True,
+            content_harm_risk=False,
+            content_support="ok",
+            evidence_independence_ok=True,
+            evidence_independence_detail={"ok": True, "reason": "ok"},
+            signals=evidence["candidate_signals"],
+        )
+
+        self.assertFalse(gate.passed)
+        self.assertEqual(gate.blockers, ["frame_overlap_detected"])
+        self.assertEqual({check.code for check in gate.checks if not check.passed}, {"frame_topology"})
+
+    def test_separator_cross_axis_continuity_blocks_local_content_edges(self) -> None:
+        gray = np.full((24, 120), 128, dtype=np.uint8)
+        gray[:4, 58:62] = 0
+        gray[4:, 58:62] = np.array([0, 255, 0, 255], dtype=np.uint8)
+        outer = Box(0, 0, 120, 24)
+        gap = Gap(1, 60.0, 1.0, GAP_DETECTED, 58.0, 62.0)
+
+        evidence = separator_cross_axis_continuity_evidence(
+            gray,
+            outer,
+            [gap],
+            pitch=60.0,
+            parameters=HardGapTrustParameters(),
+        )
+
+        self.assertFalse(evidence["ok"])
+        self.assertEqual(evidence["weak_gap_indexes"], [1])
+        self.assertEqual(evidence["candidate_signals"], ["separator_cross_axis_continuity_weak"])
+
+        gate = candidate_gate_assessment(
+            source="separator",
+            separator_gate_ok=True,
+            separator_gate_detail={"ok": True},
+            partial_safe_candidate_gate_support_ok=False,
+            partial_safe_blocks_auto=False,
+            partial_safe_disqualifiers=set(),
+            content_containment_ok=True,
+            content_harm_risk=False,
+            content_support="ok",
+            evidence_independence_ok=True,
+            evidence_independence_detail={"ok": True, "reason": "ok"},
+            signals=evidence["candidate_signals"],
+        )
+
+        self.assertFalse(gate.passed)
+        self.assertEqual(gate.blockers, ["separator_cross_axis_continuity_weak"])
+
+    def test_separator_cross_axis_continuity_accepts_full_band_separator(self) -> None:
+        gray = np.full((24, 120), 128, dtype=np.uint8)
+        gray[:, 58:62] = 0
+        evidence = separator_cross_axis_continuity_evidence(
+            gray,
+            Box(0, 0, 120, 24),
+            [Gap(1, 60.0, 1.0, GAP_DETECTED, 58.0, 62.0)],
+            pitch=60.0,
+            parameters=HardGapTrustParameters(),
+        )
+
+        self.assertTrue(evidence["ok"])
+        self.assertEqual(evidence["candidate_signals"], [])
 
     def test_unknown_candidate_signal_fails_contract(self) -> None:
         with self.assertRaises(ValueError):

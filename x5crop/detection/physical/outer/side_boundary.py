@@ -14,7 +14,7 @@ from ....utils import clamp_int, runs_from_mask
 class OuterSideBoundary:
     side: str
     boundary: int
-    role: str
+    boundary_model: str
     reason: str
     holder_run: int
     inside_mean: float
@@ -23,7 +23,7 @@ class OuterSideBoundary:
         return {
             "side": self.side,
             "boundary": int(self.boundary),
-            "role": self.role,
+            "boundary_model": self.boundary_model,
             "reason": self.reason,
             "holder_run": int(self.holder_run),
             "inside_mean": float(self.inside_mean),
@@ -40,7 +40,8 @@ class SideBoundaryOuterResult:
         return {
             "used": self.box is not None,
             "reason": self.reason,
-            "physical_rule": "holder_white_to_photo_footprint_side_independent",
+            "evidence_name": "outer_side_boundary_evidence",
+            "physical_rule": "mixed_boundary_side_independent",
             "box": None if self.box is None else asdict(self.box),
             "sides": [side.detail() for side in self.sides],
         }
@@ -106,12 +107,12 @@ def _inside_mean_for_boundary_box(gray: np.ndarray, side: str, box: Box, depth: 
     return float(gray[lo:hi, left:right].mean())
 
 
-def _boundary_role(inside_mean: float, config: OuterBoxDetectionParameters) -> str:
+def _boundary_model(inside_mean: float, config: OuterBoxDetectionParameters) -> str:
     if inside_mean <= float(config.white_dark_threshold):
-        return "holder_to_black_rim"
+        return "black_border_to_white_holder"
     if inside_mean >= float(config.white_light_threshold):
-        return "weak_or_missing_side"
-    return "holder_to_content"
+        return "mixed_or_uncertain"
+    return "content_to_white_holder"
 
 
 def _side_boundary(
@@ -132,7 +133,7 @@ def _side_boundary(
     return OuterSideBoundary(
         side=side,
         boundary=int(boundary),
-        role=_boundary_role(inside_mean, config),
+        boundary_model=_boundary_model(inside_mean, config),
         reason=reason,
         holder_run=int(holder_run),
         inside_mean=float(inside_mean),
@@ -167,7 +168,7 @@ def side_boundary_outer(
                 OuterSideBoundary(
                     side=side.side,
                     boundary=side.boundary,
-                    role=_boundary_role(inside_mean, config),
+                    boundary_model=_boundary_model(inside_mean, config),
                     reason=side.reason,
                     holder_run=side.holder_run,
                     inside_mean=inside_mean,

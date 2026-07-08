@@ -20,13 +20,19 @@ from ....policies.separator_gate_profiles import SEPARATOR_GATE_PROFILE_MIN_HARD
 from ....runtime.config import RuntimeConfig
 from ....utils import box_from_dict, gap_from_dict, sampled_percentile
 from ...confidence_caps import apply_confidence_cap
+from ...evidence.frame_topology import frame_topology_evidence
+from ...evidence.separator_continuity import separator_cross_axis_continuity_evidence
 from ...physical.photo_size import photo_size_consistency_from_gap_edges
 from ...evidence.separator_summary import gap_method_evidence_summary
 from ..signals import (
     SIGNAL_FRAME_COUNT_MISMATCH,
+    SIGNAL_FRAME_EXTENT_INVALID,
+    SIGNAL_FRAME_ORDER_INVALID,
+    SIGNAL_FRAME_OVERLAP_DETECTED,
     SIGNAL_PARTIAL_COUNT_AMBIGUOUS,
     SIGNAL_PHOTO_WIDTH_UNSTABLE,
-    SIGNAL_SEPARATOR_FAMILY_SUPPORT_INCOMPLETE,
+    SIGNAL_SEPARATOR_CROSS_AXIS_CONTINUITY_WEAK,
+    SIGNAL_SEPARATOR_EXPECTED_SUPPORT_INCOMPLETE,
     SIGNAL_SEPARATOR_HARD_GAP_FLOOR_FAILED,
     SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
     SIGNAL_SEPARATOR_MODEL_GAP_OVERUSED,
@@ -231,6 +237,28 @@ def base_detection_assessment(
         False if photo_width_cv is None else float(photo_width_cv) <= base_score.geometry_floor_tight_photo_width_cv
     )
     photo_width_stability = _photo_width_stability_profile(width_metrics, base_score)
+    work_h, work_w = gray_work.shape
+    topology_boxes = frame_boxes_from_gaps(
+        outer,
+        gaps,
+        count,
+        work_w,
+        work_h,
+        0,
+        0,
+        origin=origin or 0.0,
+        pitch=pitch,
+        apply_geometry_fit=policy.frame_fit.geometry_fallback,
+        geometry_config=policy.frame_fit,
+    )
+    topology_evidence = frame_topology_evidence(topology_boxes, count)
+    separator_continuity = separator_cross_axis_continuity_evidence(
+        gray_work,
+        outer,
+        gaps,
+        pitch or 0.0,
+        policy.separator.hard_gap_trust,
+    )
     outer_area = float(outer.width * outer.height) / max(1.0, float(gray_work.shape[0] * gray_work.shape[1]))
     outer_area_profile = _outer_area_profile(outer_area, base_score)
     p01, p50, p99 = sampled_percentile(gray_work, [1, 50, 99])
@@ -308,9 +336,17 @@ def base_detection_assessment(
     if bool(photo_width_stability.get("unstable", False)):
         candidate_signals.append(SIGNAL_PHOTO_WIDTH_UNSTABLE)
     if fmt.family == "120" and gap_evidence.separator_support_count < expected_gaps:
-        candidate_signals.append(SIGNAL_SEPARATOR_FAMILY_SUPPORT_INCOMPLETE)
+        candidate_signals.append(SIGNAL_SEPARATOR_EXPECTED_SUPPORT_INCOMPLETE)
+    if not bool(separator_continuity.get("ok", True)):
+        candidate_signals.append(SIGNAL_SEPARATOR_CROSS_AXIS_CONTINUITY_WEAK)
     if len(boxes) != count:
         candidate_signals.append(SIGNAL_FRAME_COUNT_MISMATCH)
+    if not bool(topology_evidence.get("frame_extent_valid", True)):
+        candidate_signals.append(SIGNAL_FRAME_EXTENT_INVALID)
+    if not bool(topology_evidence.get("frame_order_valid", True)):
+        candidate_signals.append(SIGNAL_FRAME_ORDER_INVALID)
+    if not bool(topology_evidence.get("frame_overlap_absent", True)):
+        candidate_signals.append(SIGNAL_FRAME_OVERLAP_DETECTED)
 
     partial_count_assessment = {
         "used": bool(strip_mode == "partial" and count < fmt.default_count),
@@ -380,6 +416,8 @@ def base_detection_assessment(
         "reliable_support_count": gap_evidence.reliable_support_count,
         "equal_gaps": gap_evidence.equal_model_gaps,
         **width_metrics,
+        "frame_topology_evidence": topology_evidence,
+        "separator_cross_axis_continuity": separator_continuity,
         "photo_width_stability": photo_width_stability,
         "outer_area_ratio": outer_area,
         "outer_area_profile": outer_area_profile,

@@ -43,7 +43,7 @@ def base_outer_candidates(
     if side_boundary.box is not None:
         candidates.append(
             OuterCandidate(
-                "side_boundary",
+                "mixed_boundary",
                 side_boundary.box,
                 "base_outer",
                 side_boundary.detail(),

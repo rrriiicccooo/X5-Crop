@@ -100,7 +100,7 @@ def outer_candidate_strategy(candidate: OuterCandidate | str) -> str:
     if isinstance(candidate, OuterCandidate):
         return candidate.strategy
     candidate_name = str(candidate)
-    if candidate_name in {"bw", "white_x", "full_canvas"}:
+    if candidate_name in {"bw", "white_x", "mixed_boundary", "full_canvas"}:
         return "base_outer"
     return "unknown_outer"
 

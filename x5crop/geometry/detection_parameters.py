@@ -74,6 +74,8 @@ class HardGapTrustParameters:
     frame_border_width_ratio: float = 0.010
     continuity_min: float = 0.12
     activity_min: float = 0.030
+    cross_axis_coverage_min: float = 0.62
+    cross_axis_continuity_min: float = 0.55
 
 
 @dataclass(frozen=True)

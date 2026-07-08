@@ -30,11 +30,11 @@ class OuterSideBoundaryTests(unittest.TestCase):
 
         self.assertTrue(detail["used"])
         self.assertEqual(detail["box"], {"left": 40, "top": 20, "right": 200, "bottom": 100})
-        roles = {side["side"]: side["role"] for side in detail["sides"]}
-        self.assertEqual(roles["left"], "holder_to_content")
-        self.assertEqual(roles["top"], "holder_to_black_rim")
-        self.assertEqual(roles["right"], "holder_to_black_rim")
-        self.assertEqual(roles["bottom"], "holder_to_black_rim")
+        models = {side["side"]: side["boundary_model"] for side in detail["sides"]}
+        self.assertEqual(models["left"], "content_to_white_holder")
+        self.assertEqual(models["top"], "black_border_to_white_holder")
+        self.assertEqual(models["right"], "black_border_to_white_holder")
+        self.assertEqual(models["bottom"], "black_border_to_white_holder")
 
     def test_base_outer_candidate_carries_side_boundary_detail(self) -> None:
         gray = np.full((120, 240), 255, dtype=np.uint8)
@@ -49,12 +49,16 @@ class OuterSideBoundaryTests(unittest.TestCase):
         )
 
         candidates = base_outer_candidates(gray, config)
-        side_candidates = [candidate for candidate in candidates if candidate.name == "side_boundary"]
+        side_candidates = [candidate for candidate in candidates if candidate.name == "mixed_boundary"]
 
         self.assertEqual(len(side_candidates), 1)
         self.assertEqual(
             side_candidates[0].detail["physical_rule"],
-            "holder_white_to_photo_footprint_side_independent",
+            "mixed_boundary_side_independent",
+        )
+        self.assertEqual(
+            side_candidates[0].detail["evidence_name"],
+            "outer_side_boundary_evidence",
         )
         self.assertEqual(len(side_candidates[0].detail["sides"]), 4)
 

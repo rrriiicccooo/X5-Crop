@@ -8,8 +8,9 @@ from ...gate_checks import GateCheck, gate_check_details, unique_signals
 from ..signals import (
     GATE_BLOCKER_SIGNALS,
     GATE_DIAGNOSTIC_SIGNALS,
+    FRAME_TOPOLOGY_BLOCKER_SIGNALS,
     MODE_DIAGNOSTIC_SIGNALS,
-    PHOTO_GEOMETRY_BLOCKER_SIGNALS,
+    PHOTO_SIZE_BLOCKER_SIGNALS,
     SIGNAL_BUCKETS,
     SIGNAL_CONTENT_ASPECT_CONFLICT,
     SIGNAL_CONTENT_EVIDENCE_WEAK,
@@ -203,16 +204,28 @@ def candidate_gate_assessment(
         )
     )
 
-    photo_width_signals = PHOTO_GEOMETRY_BLOCKER_SIGNALS.intersection(signals)
+    photo_width_signals = PHOTO_SIZE_BLOCKER_SIGNALS.intersection(signals)
     checks.append(
         GateCheck(
-            code="geometry_photo_width_stability",
+            code="photo_size_consistency",
             stage="candidate",
-            bucket="geometry",
+            bucket="photo_size",
             passed=not photo_width_signals,
             severity="blocker",
             signal=next(iter(sorted(photo_width_signals)), "photo_width_stable"),
             detail={"signals": sorted(photo_width_signals)},
+        )
+    )
+    frame_topology_signals = FRAME_TOPOLOGY_BLOCKER_SIGNALS.intersection(signals)
+    checks.append(
+        GateCheck(
+            code="frame_topology",
+            stage="candidate",
+            bucket="frame_topology",
+            passed=not frame_topology_signals,
+            severity="blocker",
+            signal=next(iter(sorted(frame_topology_signals)), "frame_topology_ok"),
+            detail={"signals": sorted(frame_topology_signals)},
         )
     )
 
@@ -224,6 +237,7 @@ def candidate_gate_assessment(
         SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
         *partial_safe_disqualifiers,
         *photo_width_signals,
+        *frame_topology_signals,
         independence_signal,
     }
     checks.extend(

@@ -15,6 +15,8 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....runtime.config import RuntimeConfig
 from ...evidence.separator_width import separator_width_evidence_detail
+from ...evidence.frame_topology import frame_topology_evidence
+from ...evidence.separator_continuity import separator_cross_axis_continuity_evidence
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ...physical.outer.grid_refine import grid_refined_outer_box
 from ..plan.outer_proposals import outer_candidate_strategy
@@ -87,6 +89,19 @@ def build_detection_for_outer(
         frame_fit=policy.frame_fit,
     )
     boxes = [map_work_box(box, config.layout, w, h) for box in boxes_work]
+    topology_boxes_work, _topology_fit_detail = fit_frame_boxes_from_gaps(
+        outer,
+        gaps,
+        count,
+        ww,
+        wh,
+        0,
+        0,
+        origin=origin,
+        pitch=pitch,
+        frame_fit=policy.frame_fit,
+    )
+    topology_evidence = frame_topology_evidence(topology_boxes_work, count)
     outer_original = map_work_box(outer, config.layout, w, h)
     separator_width_evidence = separator_width_evidence_detail(
         gaps,
@@ -96,6 +111,13 @@ def build_detection_for_outer(
             int(policy.partial_holder.requires_broad_separator_width_gaps),
             int(policy.separator.gate.min_broad_separator_width_gaps_for_auto),
         ),
+    )
+    separator_continuity_evidence = separator_cross_axis_continuity_evidence(
+        gray_work,
+        outer,
+        gaps,
+        pitch,
+        policy.separator.hard_gap_trust,
     )
     frame_aspect = float(fmt.horizontal_content_aspect or 0.0)
     target_photo_width = float(outer.height) * frame_aspect if frame_aspect > 0.0 else None
@@ -134,9 +156,11 @@ def build_detection_for_outer(
             ),
             "edge_pair_correction": separator_gaps.edge_pair_correction_detail,
             "frame_size_fit": frame_size_detail,
+            "frame_topology_evidence": topology_evidence,
             "nearby_separator_refinement": separator_gaps.nearby_refinement_detail,
             "photo_size_consistency": photo_size_consistency.detail(),
             "separator_width_evidence": separator_width_evidence,
+            "separator_cross_axis_continuity": separator_continuity_evidence,
             "broad_separator_width_gaps": int(separator_width_evidence.get("broad_separator_width_gaps", 0) or 0),
             "broad_separator_width_gap_indexes": list(separator_width_evidence.get("broad_separator_width_gap_indexes", [])),
             "separator_width_min_px": float(separator_width_evidence.get("separator_width_min_px", 0.0) or 0.0),

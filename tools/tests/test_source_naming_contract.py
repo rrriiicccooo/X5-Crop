@@ -623,6 +623,38 @@ class SourceNamingContractTest(unittest.TestCase):
             assessment_text,
         )
 
+    def test_candidate_signals_are_failure_or_risk_not_success_states(self) -> None:
+        from x5crop.detection.candidate.signals import CANDIDATE_SIGNAL_TAXONOMY
+
+        offenders = [
+            signal
+            for signal in CANDIDATE_SIGNAL_TAXONOMY
+            if signal.endswith("_ok")
+            or signal.endswith("_stable")
+            or signal.endswith("_passed")
+        ]
+
+        self.assertEqual(offenders, [])
+
+    def test_old_candidate_signal_group_names_are_removed(self) -> None:
+        banned = (
+            "separator_family_support_incomplete",
+            "SIGNAL_SEPARATOR_FAMILY_SUPPORT_INCOMPLETE",
+            "PHOTO_GEOMETRY_BLOCKER_SIGNALS",
+        )
+        offenders: list[str] = []
+        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                if path == Path(__file__).resolve():
+                    continue
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_decision_gate_uses_explicit_assessment(self) -> None:
         decision_gate_path = (
             PROJECT_ROOT

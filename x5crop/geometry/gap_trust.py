@@ -18,6 +18,10 @@ class HardGapPixelSignals:
     core_content: float
     core_dark: float
     core_activity: float
+    cross_axis_coverage_ratio: float
+    cross_axis_continuity_ratio: float
+    cross_axis_break_count: int
+    separator_band_straightness: float
     left_content: float
     right_content: float
     start: int
@@ -106,17 +110,84 @@ def hard_gap_pixel_signals(
         return None
     left = gray_work[outer.top:outer.bottom, left_start:start]
     right = gray_work[outer.top:outer.bottom, end:right_end]
+    cross_axis = hard_gap_cross_axis_continuity(core, config)
     return HardGapPixelSignals(
         core_mean=float(core.mean()),
         core_content=float((core < config.core_content_threshold).mean()),
         core_dark=float((core < config.core_dark_threshold).mean()),
         core_activity=float(core.std() / 255.0),
+        cross_axis_coverage_ratio=float(cross_axis["coverage_ratio"]),
+        cross_axis_continuity_ratio=float(cross_axis["continuity_ratio"]),
+        cross_axis_break_count=int(cross_axis["break_count"]),
+        separator_band_straightness=float(cross_axis["straightness"]),
         left_content=float((left < config.core_content_threshold).mean()) if left.size else 0.0,
         right_content=float((right < config.core_content_threshold).mean()) if right.size else 0.0,
         start=int(start),
         end=int(end),
         guard=int(guard),
     )
+
+
+def _longest_true_run(mask: np.ndarray) -> int:
+    longest = 0
+    current = 0
+    for flag in mask.astype(bool):
+        if bool(flag):
+            current += 1
+            longest = max(longest, current)
+        else:
+            current = 0
+    return int(longest)
+
+
+def _transition_count(mask: np.ndarray) -> int:
+    if mask.size <= 1:
+        return 0
+    return int(np.count_nonzero(np.diff(mask.astype(np.int8))))
+
+
+def hard_gap_cross_axis_continuity(
+    core: np.ndarray,
+    config: HardGapTrustParameters,
+) -> dict[str, float | int | bool]:
+    if core.size == 0:
+        return {
+            "coverage_ratio": 0.0,
+            "continuity_ratio": 0.0,
+            "break_count": 0,
+            "straightness": 0.0,
+            "weak": True,
+        }
+    rows = core.astype(np.float32, copy=False)
+    row_activity = rows.std(axis=1) / 255.0
+    row_dark = (rows < config.core_dark_threshold).mean(axis=1)
+    row_light = (rows >= config.core_content_threshold).mean(axis=1)
+    row_nonwhite = (rows < config.core_content_threshold).mean(axis=1)
+    low_activity = row_activity <= config.dark_activity_max
+    dark_like = row_dark >= config.dark_fraction_min
+    light_like = row_light >= 1.0 - config.weak_content_min
+    neutral_low_texture = (
+        low_activity
+        & (row_nonwhite >= config.weak_content_min)
+        & (row_nonwhite <= 1.0 - config.weak_content_min)
+    )
+    separator_like = low_activity & (dark_like | light_like | neutral_low_texture)
+    coverage = float(separator_like.mean()) if separator_like.size else 0.0
+    longest = _longest_true_run(separator_like)
+    continuity = float(longest) / max(1.0, float(separator_like.size))
+    transitions = _transition_count(separator_like)
+    straightness = max(0.0, 1.0 - transitions / max(1.0, float(separator_like.size - 1)))
+    weak = (
+        coverage < config.cross_axis_coverage_min
+        or continuity < config.cross_axis_continuity_min
+    )
+    return {
+        "coverage_ratio": coverage,
+        "continuity_ratio": continuity,
+        "break_count": transitions,
+        "straightness": straightness,
+        "weak": bool(weak),
+    }
 
 
 def hard_gap_tonal_separator_like(signals: HardGapPixelSignals, config: HardGapTrustParameters) -> bool:
@@ -156,6 +227,10 @@ def hard_gap_signal_flags(
         "tonal_separator_like": hard_gap_tonal_separator_like(signals, config),
         "low_contrast_tonal_gap": hard_gap_low_contrast_tonal_gap(signals, config),
         "content_continuous": hard_gap_content_continuous(signals, config),
+        "cross_axis_continuity_weak": (
+            signals.cross_axis_coverage_ratio < config.cross_axis_coverage_min
+            or signals.cross_axis_continuity_ratio < config.cross_axis_continuity_min
+        ),
     }
 
 
@@ -227,6 +302,8 @@ def runtime_hard_gap_trust_assessment(
             or bool(flags.get("low_contrast_tonal_gap", False))
         ):
             return assessment("suspect_internal_edge", "narrow_content_continuity_or_low_contrast_tonal")
+        if bool(flags.get("cross_axis_continuity_weak", False)):
+            return assessment("weak_or_ambiguous_separator", "cross_axis_continuity_weak")
     if gap.score >= config.strong_min_score and config.strong_width_min <= width_ratio <= config.strong_width_max:
         return assessment("strong_separator", "score_and_width_in_strong_range")
     if gap.score >= config.narrow_ok_score and config.narrow_ok_width_min <= width_ratio < config.narrow_ok_width_max:
@@ -270,6 +347,8 @@ def diagnostic_hard_gap_trust_assessment(
         or bool(flags.get("low_contrast_tonal_gap", False))
     ):
         return assessment("suspect_internal_edge", "narrow_content_continuity_or_low_contrast_tonal")
+    if bool(flags.get("cross_axis_continuity_weak", False)):
+        return assessment("weak_or_ambiguous_separator", "cross_axis_continuity_weak")
     if hard_gap_is_narrow(gap, pitch, config):
         return assessment("narrow_but_ok", "narrow_without_content_continuity")
     if tonal_separator_like or signals.core_content <= config.strong_core_content_max or gap.score >= config.strong_min_score:
@@ -283,6 +362,10 @@ def runtime_signal_detail(signals: HardGapPixelSignals) -> dict[str, Any]:
         "core_content": signals.core_content,
         "core_dark": signals.core_dark,
         "core_activity": signals.core_activity,
+        "cross_axis_coverage_ratio": signals.cross_axis_coverage_ratio,
+        "cross_axis_continuity_ratio": signals.cross_axis_continuity_ratio,
+        "cross_axis_break_count": signals.cross_axis_break_count,
+        "separator_band_straightness": signals.separator_band_straightness,
         "left_content": signals.left_content,
         "right_content": signals.right_content,
         "side_content": signals.side_content,
