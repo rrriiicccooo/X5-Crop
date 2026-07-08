@@ -9,7 +9,7 @@ from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import SeparatorGeometrySupportModePolicy
 from ...evidence.photo_width import photo_width_within_limit
-from ...evidence.separator_summary import separator_gate_detail_summary
+from ...evidence.separator_summary import separator_support_detail_summary
 
 
 def detail_float(detail: dict[str, Any], key: str, default: float) -> float:
@@ -31,7 +31,7 @@ def hard_full_calibration_floor_applies(
 ) -> bool:
     policy = policy or get_detection_policy(fmt.name, candidate.strip_mode)
     base_score = policy.scoring.base_detection
-    evidence = separator_gate_detail_summary(hard_detail)
+    evidence = separator_support_detail_summary(hard_detail)
     return (
         source == "separator"
         and policy.scoring.hard_full_confidence_floor > 0.0
@@ -58,7 +58,7 @@ def separator_geometry_support_applies(
     joint_score: float,
     mode_policy: SeparatorGeometrySupportModePolicy,
 ) -> bool:
-    evidence = separator_gate_detail_summary(hard_detail)
+    evidence = separator_support_detail_summary(hard_detail)
     outer_area = detail_float(candidate.detail, "outer_area_ratio", 1.0)
     min_hard = int(math.ceil(evidence.expected_gaps * mode_policy.min_hard_ratio))
     support_gap_count = evidence.hard_separator_gaps + (

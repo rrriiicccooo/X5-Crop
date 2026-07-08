@@ -48,7 +48,7 @@ def content_containment_detail(
             "used": False,
             "reason": content_detail.get("reason", "content_evidence_not_used"),
             "content_containment_ok": False,
-            "content_harm_risk": True,
+            "content_integrity_failed": True,
             "support": "unknown",
             "empty_frame_policy": "allowed_when_content_is_contained",
         }
@@ -113,8 +113,8 @@ def content_containment_detail(
 
     has_content = bool(content_indexes)
     aspect_conflict = bool(aspect_conflict_indexes)
-    content_harm_risk = (not has_content) or aspect_conflict
-    containment_ok = has_content and not content_harm_risk
+    content_integrity_failed = (not has_content) or aspect_conflict
+    containment_ok = has_content and not content_integrity_failed
     support = "ok" if containment_ok else ("aspect_conflict" if aspect_conflict else "low_content")
     reason = "ok"
     if not has_content:
@@ -133,7 +133,7 @@ def content_containment_detail(
         "support": support,
         "reason": reason,
         "content_containment_ok": bool(containment_ok),
-        "content_harm_risk": bool(content_harm_risk),
+        "content_integrity_failed": bool(content_integrity_failed),
         "empty_frame_policy": "allowed_when_content_is_contained",
         "expected_count": int(expected),
         "content_bearing_frame_indexes": content_indexes,

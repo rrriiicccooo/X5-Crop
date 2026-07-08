@@ -18,7 +18,7 @@ class OutputPolicy:
     detection_short_axis_bleed: int = 0
     output_long_axis_bleed_default: int = 20
     output_short_axis_bleed_default: int = 10
-    overlap_risk_long_axis_bleed: int = 50
+    output_overlap_long_axis_bleed: int = 50
     edge_bleed_protection: EdgeBleedProtectionPolicy = field(default_factory=EdgeBleedProtectionPolicy)
 
 

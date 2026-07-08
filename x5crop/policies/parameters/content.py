@@ -63,11 +63,11 @@ class ContentSupportParameters:
     coverage_weight: float
     mean_weight: float
     aspect_weight: float
-    gate_ok: float
-    gate_weak: float
-    gate_low_content: float
-    gate_aspect_conflict: float
-    gate_unknown: float
+    score_ok: float
+    score_weak: float
+    score_low_content: float
+    score_aspect_conflict: float
+    score_unknown: float
 
 __all__ = [
     'ContentEvidenceParameters',

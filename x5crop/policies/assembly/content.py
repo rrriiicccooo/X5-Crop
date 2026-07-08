@@ -73,11 +73,11 @@ def content_policy(params: FormatParameters) -> ContentPolicy:
         support_coverage_weight=float(support.coverage_weight),
         support_mean_weight=float(support.mean_weight),
         support_aspect_weight=float(support.aspect_weight),
-        support_gate_ok=float(support.gate_ok),
-        support_gate_weak=float(support.gate_weak),
-        support_gate_low_content=float(support.gate_low_content),
-        support_gate_aspect_conflict=float(support.gate_aspect_conflict),
-        support_gate_unknown=float(support.gate_unknown),
+        support_score_ok=float(support.score_ok),
+        support_score_weak=float(support.score_weak),
+        support_score_low_content=float(support.score_low_content),
+        support_score_aspect_conflict=float(support.score_aspect_conflict),
+        support_score_unknown=float(support.score_unknown),
     )
 
 __all__ = [

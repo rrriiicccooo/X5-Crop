@@ -13,13 +13,11 @@ from x5crop.constants import (
     CANDIDATE_SOURCE_HARD_SAFETY,
     CANDIDATE_SOURCE_SAFETY,
     CANDIDATE_SOURCE_SEPARATOR,
-    REASON_LUCKY_PASS_RISK,
 )
-from x5crop.detection.candidate.assessment.safety import SAFETY_CANDIDATE_GATE_BLOCKER
+from x5crop.detection.candidate.assessment.safety import SAFETY_CANDIDATE_BLOCKER
 from x5crop.detection.decision.final_decision import apply_detection_decision
 from x5crop.detection.decision.contract_applier import apply_decision_contract
-from x5crop.detection.decision.reasons import normalized_final_review_reasons
-from x5crop.detection.decision.risk_summary import risk_summary_for
+from x5crop.detection.decision.decision_signals import decision_signals_for
 from x5crop.detection.modes.review_only import review_only_detection
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, Detection
@@ -68,7 +66,7 @@ def _content_ok_detail() -> dict[str, bool | str]:
         "used": True,
         "support": "ok",
         "content_containment_ok": True,
-        "content_harm_risk": False,
+        "content_integrity_failed": False,
     }
 
 
@@ -92,18 +90,10 @@ class DecisionReasonContractTest(unittest.TestCase):
         detail = decision_contract_for("135", "full").report_detail()
 
         self.assertNotIn("candidate_policy", detail)
-        self.assertIn("risk_policy", detail)
+        self.assertNotIn("risk_policy", detail)
         self.assertIn("decision_policy", detail)
         self.assertNotIn("output_policy", detail)
         self.assertNotIn("diagnostics_policy", detail)
-        self.assertNotIn(
-            "content_only_candidates_review_only",
-            detail["risk_policy"],
-        )
-        self.assertNotIn(
-            "safety_candidates_review_only",
-            detail["risk_policy"],
-        )
         self.assertEqual(
             detail["decision_policy"]["content_evidence_insufficient_reason"],
             "content_evidence_insufficient",
@@ -129,7 +119,7 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "candidate_assessment": {
                     "source": "separator",
                     "candidate_gate_passed": False,
-                    "gate": _candidate_gate_detail(False),
+                    "candidate_gate": _candidate_gate_detail(False),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -153,11 +143,11 @@ class DecisionReasonContractTest(unittest.TestCase):
 
         self.assertEqual(decided.review_reasons, ["evidence_combination_insufficient"])
         self.assertEqual(
-            decided.detail["candidate_signal_inputs_before_decision"]["diagnostics"],
+            decided.detail["candidate_gate_input"]["diagnostics"],
             ["content_coverage_weak"],
         )
         legacy_key = "legacy_" "reduced_candidate_signals"
-        self.assertNotIn(legacy_key, decided.detail["candidate_signal_inputs_before_decision"])
+        self.assertNotIn(legacy_key, decided.detail["candidate_gate_input"])
         self.assertNotIn("candidate_review_reasons_before_decision", decided.detail)
         self.assertEqual(
             decided.detail["final_review_reasons"],
@@ -168,13 +158,13 @@ class DecisionReasonContractTest(unittest.TestCase):
             "candidate_gate_failed",
         )
         self.assertIn("decision_confidence_caps", decided.detail["decision_summary"])
-        self.assertIn("decision_generated_review_reasons", decided.detail["decision_summary"])
+        self.assertIn("final_review_reasons", decided.detail["decision_summary"])
         self.assertNotIn("final_review_reasons_added", decided.detail["decision_summary"])
         self.assertNotIn("review_reasons_added", decided.detail["decision_summary"])
         self.assertNotIn("candidate_blockers_before_decision", decided.detail)
         self.assertNotIn("candidate_diagnostics_before_decision", decided.detail)
 
-    def test_safety_candidate_blocker_is_explained_by_decision_risk(self) -> None:
+    def test_safety_candidate_blocker_is_explained_by_decision_signal(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = Detection(
             film_format="135",
@@ -187,18 +177,18 @@ class DecisionReasonContractTest(unittest.TestCase):
             confidence=0.90,
             review_reasons=[],
             detail={
-                "candidate_signals": [SAFETY_CANDIDATE_GATE_BLOCKER],
+                "candidate_signals": [SAFETY_CANDIDATE_BLOCKER],
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
                 "candidate_assessment": {
                     "source": CANDIDATE_SOURCE_SAFETY,
                     "candidate_gate_passed": False,
-                    "gate": _candidate_gate_detail(False),
+                    "candidate_gate": _candidate_gate_detail(False),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
-                    "blockers": [SAFETY_CANDIDATE_GATE_BLOCKER],
+                    "blockers": [SAFETY_CANDIDATE_BLOCKER],
                     "diagnostics": [],
                 },
             },
@@ -217,12 +207,12 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            decided.detail["risk_summary"]["safety_or_review_only"],
+            decided.detail["decision_signals"]["safety_or_review_only"],
             True,
         )
         self.assertEqual(
-            decided.detail["candidate_signal_inputs_before_decision"]["blockers"],
-            [SAFETY_CANDIDATE_GATE_BLOCKER],
+            decided.detail["candidate_gate_input"]["blockers"],
+            [SAFETY_CANDIDATE_BLOCKER],
         )
         self.assertEqual(
             decided.review_reasons,
@@ -233,10 +223,13 @@ class DecisionReasonContractTest(unittest.TestCase):
             ["safety_or_review_only", "candidate_gate_failed"],
         )
 
-    def test_risk_summary_separates_assessment_source_from_candidate_source(self) -> None:
+    def test_decision_signals_separate_assessment_source_from_candidate_source(self) -> None:
         policy = decision_contract_for("135", "full")
         evidence = {
             "outer": {"ok": True},
+            "separator": {"ok": True},
+            "geometry": {"ok": True},
+            "content": {"ok": True},
             "partial_edge": {"ok": True},
         }
 
@@ -255,17 +248,17 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "candidate_assessment": {
                     "source": CANDIDATE_SOURCE_CONTENT,
                     "candidate_gate_passed": False,
-                    "gate": _candidate_gate_detail(False),
+                    "candidate_gate": _candidate_gate_detail(False),
                 },
             },
         )
 
-        content_risk = risk_summary_for(content_detection, evidence, policy)
+        content_signals = decision_signals_for(content_detection, evidence, policy)
 
-        self.assertTrue(content_risk["content_only_evidence"])
-        self.assertFalse(content_risk["safety_or_review_only"])
+        self.assertTrue(content_signals["content_only_evidence"])
+        self.assertFalse(content_signals["safety_or_review_only"])
         self.assertEqual(
-            content_risk["candidate_source_detail"],
+            content_signals["candidate_source_detail"],
             {
                 "assessment_source": CANDIDATE_SOURCE_CONTENT,
                 "candidate_source": CANDIDATE_SOURCE_SEPARATOR,
@@ -289,21 +282,21 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "candidate_assessment": {
                     "source": "separator",
                     "candidate_gate_passed": False,
-                    "gate": _candidate_gate_detail(False),
+                    "candidate_gate": _candidate_gate_detail(False),
                 },
             },
         )
 
-        hard_safety_risk = risk_summary_for(hard_safety_detection, evidence, policy)
+        hard_safety_signals = decision_signals_for(hard_safety_detection, evidence, policy)
 
-        self.assertFalse(hard_safety_risk["content_only_evidence"])
-        self.assertTrue(hard_safety_risk["safety_or_review_only"])
+        self.assertFalse(hard_safety_signals["content_only_evidence"])
+        self.assertTrue(hard_safety_signals["safety_or_review_only"])
         self.assertEqual(
-            hard_safety_risk["candidate_source_detail"]["content_only_evidence_source"],
+            hard_safety_signals["candidate_source_detail"]["content_only_evidence_source"],
             "",
         )
         self.assertEqual(
-            hard_safety_risk["candidate_source_detail"]["safety_or_review_only_source"],
+            hard_safety_signals["candidate_source_detail"]["safety_or_review_only_source"],
             CANDIDATE_SOURCE_HARD_SAFETY,
         )
 
@@ -348,12 +341,12 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertIn("evidence_combination_insufficient", decided.review_reasons)
         self.assertIn("separator_evidence_incomplete", decided.review_reasons)
         legacy_key = "legacy_" "reduced_candidate_signals"
-        self.assertNotIn(legacy_key, decided.detail["candidate_signal_inputs_before_decision"])
+        self.assertNotIn(legacy_key, decided.detail["candidate_gate_input"])
         decision_signals = [
             item["signal"] for item in decided.detail["decision_reason_inputs"]
         ]
         self.assertIn("safety_or_review_only", decision_signals)
-        self.assertIn("separator_not_ok", decision_signals)
+        self.assertIn("separator_support_incomplete", decision_signals)
 
     def test_content_evidence_failure_is_not_content_only_reason(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
@@ -374,7 +367,7 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "candidate_assessment": {
                     "source": "separator",
                     "candidate_gate_passed": True,
-                    "gate": _candidate_gate_detail(True),
+                    "candidate_gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -418,7 +411,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             "used": True,
             "support": "low_content",
             "content_containment_ok": False,
-            "content_harm_risk": True,
+            "content_integrity_failed": True,
         }
         outer_alignment = {"used": True, "ok": True}
 
@@ -434,10 +427,10 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertEqual(decided.review_reasons, ["content_evidence_insufficient"])
         self.assertEqual(
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
-            ["content_not_ok"],
+            ["content_integrity_failed"],
         )
 
-    def test_lucky_pass_risk_is_distinct_final_reason(self) -> None:
+    def test_output_overlap_evidence_is_final_decision_signal(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = Detection(
             film_format="135",
@@ -453,15 +446,15 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
-                "lucky_pass_risk_score": {
+                "output_overlap_evidence": {
                     "used": True,
-                    "risk": True,
-                    "reason": "lucky_pass_risk",
+                    "output_overlap_detected": True,
+                    "reason": "output_overlap_detected",
                 },
                 "candidate_assessment": {
                     "source": "separator",
                     "candidate_gate_passed": True,
-                    "gate": _candidate_gate_detail(True),
+                    "candidate_gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -483,86 +476,18 @@ class DecisionReasonContractTest(unittest.TestCase):
             outer_alignment,
         )
 
+        self.assertEqual(decided.review_reasons, ["output_overlap_detected"])
+        self.assertTrue(decided.detail["decision_signals"]["output_overlap_detected"])
         self.assertEqual(
-            normalized_final_review_reasons([REASON_LUCKY_PASS_RISK]),
-            ["lucky_pass_risk"],
-        )
-        self.assertEqual(decided.review_reasons, ["lucky_pass_risk"])
-        self.assertFalse(decided.detail["risk_summary"]["overlap_risk"])
-        self.assertTrue(decided.detail["risk_summary"]["lucky_pass_risk"])
-        self.assertEqual(
-            decided.detail["risk_summary"]["lucky_pass_risk_detail"]["reason"],
-            "lucky_pass_risk",
+            decided.detail["decision_signals"]["output_overlap_evidence"]["reason"],
+            "output_overlap_detected",
         )
         self.assertEqual(
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
-            ["lucky_pass_risk"],
+            ["output_overlap_detected"],
         )
 
-    def test_overlap_bleed_risk_is_distinct_from_lucky_pass_risk(self) -> None:
-        gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
-            film_format="135",
-            layout="horizontal",
-            strip_mode="full",
-            count=1,
-            outer=Box(10, 10, 90, 90),
-            frames=[Box(10, 10, 90, 90)],
-            gaps=[],
-            confidence=0.90,
-            review_reasons=[],
-            detail={
-                "width_cv": 0.0,
-                "width_cv_source": "photo_edges",
-                "photo_width_cv": 0.0,
-                "overlap_bleed_risk": {
-                    "used": True,
-                    "risk": True,
-                    "reason": "overlap_bleed_risk",
-                },
-                "lucky_pass_risk_score": {
-                    "used": True,
-                    "risk": False,
-                    "reason": "ok",
-                },
-                "candidate_assessment": {
-                    "source": "separator",
-                    "candidate_gate_passed": True,
-                    "gate": _candidate_gate_detail(True),
-                    "geometry_score": 1.0,
-                    "content_score": 1.0,
-                    "content_quality_score": 1.0,
-                    "blockers": [],
-                    "diagnostics": [],
-                },
-            },
-        )
-        config = _decision_test_config()
-        content_detail = _content_ok_detail()
-        outer_alignment = {"used": True, "ok": True}
-
-        decided = apply_decision_contract(
-            gray,
-            detection,
-            config,
-            format_spec("135"),
-            content_detail,
-            outer_alignment,
-        )
-
-        self.assertEqual(decided.review_reasons, ["overlap_risk"])
-        self.assertTrue(decided.detail["risk_summary"]["overlap_risk"])
-        self.assertFalse(decided.detail["risk_summary"]["lucky_pass_risk"])
-        self.assertEqual(
-            decided.detail["risk_summary"]["overlap_bleed_risk"]["reason"],
-            "overlap_bleed_risk",
-        )
-        self.assertEqual(
-            [item["signal"] for item in decided.detail["decision_reason_inputs"]],
-            ["overlap_bleed_risk"],
-        )
-
-    def test_overlap_bleed_risk_is_attached_before_final_decision(self) -> None:
+    def test_output_overlap_evidence_is_attached_before_final_decision(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = Detection(
             film_format="135",
@@ -581,7 +506,7 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "candidate_assessment": {
                     "source": "separator",
                     "candidate_gate_passed": True,
-                    "gate": _candidate_gate_detail(True),
+                    "candidate_gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -593,10 +518,10 @@ class DecisionReasonContractTest(unittest.TestCase):
         base_policy = get_detection_policy("135", "full")
         policy = replace(
             base_policy,
-            risk=replace(
-                base_policy.risk,
-                overlap_bleed=replace(
-                    base_policy.risk.overlap_bleed,
+            output_evidence=replace(
+                base_policy.output_evidence,
+                output_overlap=replace(
+                    base_policy.output_evidence.output_overlap,
                     enabled=True,
                 ),
             ),
@@ -616,16 +541,12 @@ class DecisionReasonContractTest(unittest.TestCase):
                 return_value={"used": True, "ok": True},
             ),
             patch(
-                "x5crop.detection.decision.final_decision.overlap_bleed_risk_detail",
+                "x5crop.detection.decision.final_decision.output_overlap_evidence_detail",
                 return_value={
                     "used": True,
-                    "risk": True,
-                    "reason": "overlap_bleed_risk",
+                    "output_overlap_detected": True,
+                    "reason": "output_overlap_detected",
                 },
-            ),
-            patch(
-                "x5crop.detection.decision.final_decision.lucky_pass_risk_score_detail",
-                return_value={"used": True, "risk": False, "reason": "ok"},
             ),
         ):
             decision = apply_detection_decision(
@@ -639,14 +560,14 @@ class DecisionReasonContractTest(unittest.TestCase):
             )
 
         self.assertEqual(decision.status, "needs_review")
-        self.assertEqual(decision.detection.review_reasons, ["overlap_risk"])
+        self.assertEqual(decision.detection.review_reasons, ["output_overlap_detected"])
         self.assertEqual(
-            decision.detection.detail["overlap_bleed_risk"]["reason"],
-            "overlap_bleed_risk",
+            decision.detection.detail["output_overlap_evidence"]["reason"],
+            "output_overlap_detected",
         )
         self.assertEqual(
             [item["signal"] for item in decision.detection.detail["decision_reason_inputs"]],
-            ["overlap_bleed_risk"],
+            ["output_overlap_detected"],
         )
 
     def test_final_status_requires_no_review_reasons_with_low_threshold(self) -> None:
@@ -662,7 +583,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             confidence=0.90,
             review_reasons=[],
             detail={
-                "candidate_signals": [SAFETY_CANDIDATE_GATE_BLOCKER],
+                "candidate_signals": [SAFETY_CANDIDATE_BLOCKER],
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
@@ -670,11 +591,11 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "candidate_assessment": {
                     "source": CANDIDATE_SOURCE_SAFETY,
                     "candidate_gate_passed": False,
-                    "gate": _candidate_gate_detail(False),
+                    "candidate_gate": _candidate_gate_detail(False),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
-                    "blockers": [SAFETY_CANDIDATE_GATE_BLOCKER],
+                    "blockers": [SAFETY_CANDIDATE_BLOCKER],
                     "diagnostics": [],
                 },
             },
@@ -725,7 +646,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertEqual(decision.detection.confidence, 0.84)
         self.assertEqual(
             decision.detection.review_reasons,
-            ["content_evidence_insufficient", "evidence_combination_insufficient"],
+            ["evidence_combination_insufficient", "content_evidence_insufficient"],
         )
         self.assertEqual(
             decision.detection.detail["decision_summary"]["status"],
@@ -751,7 +672,7 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "candidate_assessment": {
                     "source": "separator",
                     "candidate_gate_passed": True,
-                    "gate": _candidate_gate_detail(True),
+                    "candidate_gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -799,7 +720,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             "used": True,
             "support": "ok",
             "content_containment_ok": True,
-            "content_harm_risk": False,
+            "content_integrity_failed": False,
         }
         outer_alignment = {"used": True, "ok": True}
 
@@ -819,11 +740,11 @@ class DecisionReasonContractTest(unittest.TestCase):
             "candidate_competition_close",
         )
         self.assertEqual(
-            decided.detail["risk_summary"]["candidate_margin_to_second"],
+            decided.detail["decision_signals"]["candidate_margin_to_second"],
             0.03,
         )
 
-    def test_selection_records_competition_risk_without_candidate_review_reason(self) -> None:
+    def test_selection_records_competition_signal_without_candidate_review_reason(self) -> None:
         def candidate(confidence: float) -> Detection:
             return Detection(
                 film_format="135",
@@ -853,12 +774,12 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertEqual(selected.confidence, 0.90)
         self.assertEqual(selected.review_reasons, [])
         self.assertEqual(
-            selected.detail["selection_risk_inputs"][0]["signal"],
+            selected.detail["selection_uncertainty_inputs"][0]["signal"],
             "candidate_competition_close",
         )
         self.assertNotIn(
             "recommended_final_review_reason",
-            selected.detail["selection_risk_inputs"][0],
+            selected.detail["selection_uncertainty_inputs"][0],
         )
         self.assertTrue(
             selected.detail["candidate_competition"]["second_candidate_close"]
@@ -906,7 +827,7 @@ class DecisionReasonContractTest(unittest.TestCase):
                     "content_support": "ok",
                     "diagnostics": [],
                     "blockers": [],
-                    "separator_hard_evidence": {
+                    "separator_support": {
                         "expected_gaps": fmt.default_count - 1,
                         "hard_gaps": 6,
                         "equal_gaps": 0,
@@ -978,7 +899,7 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "candidate_assessment": {
                     "source": "separator",
                     "candidate_gate_passed": True,
-                    "gate": _candidate_gate_detail(True),
+                    "candidate_gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -1019,7 +940,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
         self.assertEqual(
-            decided.detail["decision_summary"]["decision_generated_review_reasons"],
+            decided.detail["decision_summary"]["final_review_reasons"],
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
         self.assertNotIn("final_review_reasons_added", decided.detail["decision_summary"])
@@ -1028,7 +949,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         ]
         self.assertEqual(
             decision_signals,
-            ["below_threshold", "outer_area_spread"],
+        ["confidence_below_threshold", "outer_area_spread"],
         )
         self.assertEqual(
             decided.detail["decision_summary"]["decision_reason_inputs"][1]["bucket"],
@@ -1065,7 +986,7 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "candidate_assessment": {
                     "source": "separator",
                     "candidate_gate_passed": True,
-                    "gate": _candidate_gate_detail(True),
+                    "candidate_gate": _candidate_gate_detail(True),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,

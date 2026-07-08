@@ -94,7 +94,7 @@ def content_candidate_assessment_from_metrics(
         "mean_conf": mean_conf,
         "aspect_conf": aspect_conf,
         "partial_candidate_role": (
-            "content_guidance_not_count_risk"
+            "content_guidance_not_count_evidence"
             if strip_mode == "partial"
             else "content_guidance"
         ),

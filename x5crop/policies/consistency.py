@@ -76,11 +76,6 @@ def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsist
             contract.decision.outer_mismatch_cap,
         ),
         (
-            "decision.lucky_pass_risk_cap",
-            policy.decision.lucky_pass_risk_cap,
-            contract.decision.lucky_pass_risk_cap,
-        ),
-        (
             "evidence.allow_geometry_supported_separator",
             bool(policy.separator.geometry_support_modes),
             contract.evidence.allow_geometry_supported_separator,

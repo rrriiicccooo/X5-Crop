@@ -28,8 +28,8 @@ def _candidate_is_separator_assessed(detection: Detection) -> bool:
     return _candidate_assessment_detail(detection).get("source") == "separator"
 
 
-def _candidate_separator_hard_evidence_ok(detection: Detection) -> bool:
-    hard_detail = _candidate_assessment_detail(detection).get("separator_hard_evidence", {})
+def _candidate_separator_support_ok(detection: Detection) -> bool:
+    hard_detail = _candidate_assessment_detail(detection).get("separator_support", {})
     return isinstance(hard_detail, dict) and bool(hard_detail.get("ok", False))
 
 
@@ -47,8 +47,8 @@ def _correction_skip_reason(
         return "partial_requires_explicit_count"
     if family.requires_separator_assessment and not _candidate_is_separator_assessed(detection):
         return "requires_separator_assessment"
-    if name == "short_axis_geometry" and not _candidate_separator_hard_evidence_ok(detection):
-        return "requires_separator_hard_evidence"
+    if name == "short_axis_geometry" and not _candidate_separator_support_ok(detection):
+        return "requires_separator_support"
     return None
 
 

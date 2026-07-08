@@ -8,11 +8,10 @@ from ..detection.detail import (
     CONTENT_EVIDENCE,
     DECISION_POLICY_DETAIL,
     DESKEW,
+    DECISION_SIGNALS,
     EVIDENCE_SUMMARY,
-    LUCKY_PASS_RISK_SCORE,
     OUTER_CONTENT_ALIGNMENT,
-    OVERLAP_BLEED_RISK,
-    RISK_SUMMARY,
+    OUTPUT_OVERLAP_EVIDENCE,
     decision_summary,
     detail_dict,
     final_review_reasons_from_detail,
@@ -24,7 +23,7 @@ from ..domain import Detection, ProcessResult
 from ..policies.decision.contract import decision_contract_for
 from ..policies.ids import REPORT_SCHEMA_VERSION
 from ..utils import json_safe
-from .sections import candidate_table, gate_records, report_policy_for_detection, selected_candidate
+from .sections import candidate_gate_detail, candidate_table, decision_gate_detail, report_policy_for_detection, selected_candidate
 
 
 def _report_status(
@@ -85,17 +84,17 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
         "policy": policy,
         "evidence": {
             "content": detail_dict(detection, CONTENT_EVIDENCE),
-            "separator": detail_dict(detection, CANDIDATE_ASSESSMENT).get("separator_hard_evidence", {}),
+            "separator": detail_dict(detection, CANDIDATE_ASSESSMENT).get("separator_support", {}),
             "outer_content_alignment": detail_dict(detection, OUTER_CONTENT_ALIGNMENT),
         },
-        "gates": gate_records(detection),
+        "candidate_gate": candidate_gate_detail(detection),
+        "decision_gate": decision_gate_detail(detection),
         "diagnostics": {
-            "lucky_pass_risk": detail_dict(detection, LUCKY_PASS_RISK_SCORE),
-            "overlap_bleed_risk": detail_dict(detection, OVERLAP_BLEED_RISK),
+            "output_overlap_evidence": detail_dict(detection, OUTPUT_OVERLAP_EVIDENCE),
             "deskew": detail_dict(detection, DESKEW),
         },
         "evidence_summary": detail_dict(detection, EVIDENCE_SUMMARY) or decision_detail.get(EVIDENCE_SUMMARY, {}),
-        "risk_summary": detail_dict(detection, RISK_SUMMARY) or decision_detail.get(RISK_SUMMARY, {}),
+        "decision_signals": detail_dict(detection, DECISION_SIGNALS) or decision_detail.get(DECISION_SIGNALS, {}),
         "decision_policy_detail": decision_policy,
         "policy_id": (
             policy_id_from_detail(detection)
@@ -118,7 +117,9 @@ def report_schema_for_detection(detection: Detection, result: ProcessResult | No
         "gaps": section_values["result"]["gaps"],
         "selected_candidate": section_values["selected_candidate"],
         "evidence_summary": section_values["evidence_summary"],
-        "risk_summary": section_values["risk_summary"],
+        "decision_signals": section_values["decision_signals"],
+        "candidate_gate": section_values["candidate_gate"],
+        "decision_gate": section_values["decision_gate"],
         "decision_policy_detail": section_values["decision_policy_detail"],
         "policy_id": section_values["policy_id"],
     }

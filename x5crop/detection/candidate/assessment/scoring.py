@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 from ....domain import Detection
 from ...evidence.photo_width import photo_width_cv_from_detail
-from ...evidence.separator_summary import separator_gate_detail_summary
+from ...evidence.separator_summary import separator_support_detail_summary
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.content import ContentPolicy
 from ....policies.runtime.policy import DetectionPolicy
@@ -23,12 +23,12 @@ def content_quality_score(
     aspect_error = detail.get("max_aspect_error")
     aspect_score = 0.75 if aspect_error is None else max(0.0, min(1.0, 1.0 - float(aspect_error) / content_policy.support_aspect_norm))
     support = str(detail.get("support", ""))
-    support_gate = {
-        "ok": content_policy.support_gate_ok,
-        "weak": content_policy.support_gate_weak,
-        "low_content": content_policy.support_gate_low_content,
-        "aspect_conflict": content_policy.support_gate_aspect_conflict,
-    }.get(support, content_policy.support_gate_unknown)
+    support_score = {
+        "ok": content_policy.support_score_ok,
+        "weak": content_policy.support_score_weak,
+        "low_content": content_policy.support_score_low_content,
+        "aspect_conflict": content_policy.support_score_aspect_conflict,
+    }.get(support, content_policy.support_score_unknown)
     return max(
         0.0,
         min(
@@ -38,7 +38,7 @@ def content_quality_score(
                 + content_policy.support_mean_weight * mean_score
                 + content_policy.support_aspect_weight * aspect_score
             )
-            * support_gate,
+            * support_score,
         ),
     )
 
@@ -49,8 +49,8 @@ def content_support_score(
     if not bool(detail.get("used", False)):
         return 0.0
     containment_ok = bool(detail.get("content_containment_ok", False))
-    harm_risk = bool(detail.get("content_harm_risk", True))
-    return 1.0 if containment_ok and not harm_risk else 0.0
+    content_integrity_failed = bool(detail.get("content_integrity_failed", True))
+    return 1.0 if containment_ok and not content_integrity_failed else 0.0
 
 
 def geometry_support_score(
@@ -97,7 +97,7 @@ def separator_support_score(
 ) -> float:
     policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
     support_policy = policy.scoring.separator_support
-    evidence = separator_gate_detail_summary(hard_detail)
+    evidence = separator_support_detail_summary(hard_detail)
     if evidence.expected_gaps == 0:
         return (
             1.0

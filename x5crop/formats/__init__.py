@@ -34,7 +34,7 @@ class FormatSpec:
     outer_trust_profile: str
     separator_visibility: str
     geometry_tolerance: str
-    known_physical_risks: tuple[str, ...]
+    known_physical_notes: tuple[str, ...]
 
 
 FormatPhysicalSpec = FormatSpec
@@ -55,7 +55,7 @@ def _format_spec(
     outer_trust_profile: str,
     separator_visibility: str,
     geometry_tolerance: str,
-    known_physical_risks: tuple[str, ...],
+    known_physical_notes: tuple[str, ...],
 ) -> FormatSpec:
     name = format_id.value
     return FormatSpec(
@@ -74,7 +74,7 @@ def _format_spec(
         outer_trust_profile=outer_trust_profile,
         separator_visibility=separator_visibility,
         geometry_tolerance=geometry_tolerance,
-        known_physical_risks=known_physical_risks,
+        known_physical_notes=known_physical_notes,
     )
 
 
@@ -161,7 +161,7 @@ FORMATS: dict[str, FormatSpec] = {
         (
             "broad_separator_width_can_be_false_frame_boundary",
             "holder_edge_can_mimic_separator",
-            "overlap_or_stuck_frame_risk",
+            "overlap_or_stuck_frame_note",
         ),
     ),
     "120-67": _format_spec(

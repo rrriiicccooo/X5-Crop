@@ -104,7 +104,7 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
     policy = get_detection_policy(detection.film_format, detection.strip_mode)
     hard_gap_trust_policy = policy.separator.hard_gap_trust
     nearby_policy = policy.diagnostics.nearby_separator
-    overlap_policy = policy.risk.overlap_bleed
+    overlap_policy = policy.output_evidence.output_overlap
     work_outer = gap_work_outer(detection, gap)
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
     origin = float(detection.detail.get("origin", 0.0) or 0.0)
@@ -122,8 +122,8 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
         "score": float(gap.score),
         "width_px": float(gap.width),
         "hard_trust": "not_hard_gap",
-        "overlap_like": False,
-        "overlap_risk": "none",
+        "output_overlap_like": False,
+        "output_overlap_class": "none",
         "signals": {},
     }
     if work_outer is None or not work_outer.valid() or pitch <= 0:
@@ -200,27 +200,27 @@ def gap_diagnostic_record(gray_work: np.ndarray, detection: Detection, gap: Gap,
         record["hard_trust_detail"] = trust_assessment.detail()
     elif is_model_gap_method(gap.method):
         if hard_gap_tonal_separator_like(signals, hard_gap_trust_policy):
-            overlap_risk = "none"
+            output_overlap_class = "none"
         elif (
             signals.continuity >= overlap_policy.strong_continuity
             and signals.core_activity >= overlap_policy.strong_activity
             and signals.core_mean >= overlap_policy.mean_min
         ):
-            overlap_risk = "strong"
+            output_overlap_class = "strong"
         elif (
             signals.continuity >= overlap_policy.medium_continuity
             and signals.core_activity >= overlap_policy.medium_activity
             and signals.core_mean >= overlap_policy.mean_min
         ):
-            overlap_risk = "medium"
+            output_overlap_class = "medium"
         elif (
             signals.continuity >= overlap_policy.weak_continuity
             and signals.core_activity >= overlap_policy.weak_activity
             and signals.core_mean >= overlap_policy.mean_min
         ):
-            overlap_risk = "weak"
+            output_overlap_class = "weak"
         else:
-            overlap_risk = "none"
-        record["overlap_risk"] = overlap_risk
-        record["overlap_like"] = overlap_risk in {"medium", "strong"}
+            output_overlap_class = "none"
+        record["output_overlap_class"] = output_overlap_class
+        record["output_overlap_like"] = output_overlap_class in {"medium", "strong"}
     return record

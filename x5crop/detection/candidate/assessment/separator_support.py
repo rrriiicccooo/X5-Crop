@@ -8,20 +8,14 @@ from ...evidence.separator_summary import gap_method_evidence_summary
 from ....formats import FORMATS
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
-from ....policies.separator_gate_profiles import (
-    SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD,
-    SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT,
-    SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP,
-    SEPARATOR_GATE_PROFILES,
-)
 from ....policies.runtime.separator import (
     LeadingGridFailurePolicy,
-    SeparatorGatePolicy,
+    SeparatorSupportPolicy,
 )
 
 
 @dataclass(frozen=True)
-class SeparatorGateEvidence:
+class SeparatorSupportEvidence:
     expected_gaps: int
     actual_detected_gaps: int
     broad_separator_width_gaps: int
@@ -36,100 +30,100 @@ class SeparatorGateEvidence:
 
 
 @dataclass(frozen=True)
-class SeparatorGateAssessment:
+class SeparatorSupportAssessment:
     ok: bool
     reason: str
     leading_grid_failure: bool = False
 
 
 @dataclass(frozen=True)
-class SeparatorGateSupportAssessment:
+class SeparatorSupportCheck:
     ok: bool
     reason: str
 
 
 @dataclass(frozen=True)
-class SeparatorGateResult:
+class SeparatorSupportResult:
     ok: bool
     detail: dict[str, Any]
 
 
-def separator_gate_min_hard_with_equal_cap_assessment(
-    evidence: SeparatorGateEvidence,
-    gate: SeparatorGatePolicy,
-) -> SeparatorGateSupportAssessment:
-    needed = min(evidence.expected_gaps, gate.needed_hard_max)
+def separator_support_min_hard_with_equal_cap_assessment(
+    evidence: SeparatorSupportEvidence,
+    support: SeparatorSupportPolicy,
+) -> SeparatorSupportCheck:
+    needed = min(evidence.expected_gaps, support.needed_hard_max)
     ok = (
         evidence.hard_gaps >= needed
         and (
             evidence.equal_gaps
-            <= max(gate.max_equal_gaps_floor, evidence.expected_gaps // 2)
+            <= max(support.max_equal_gaps_floor, evidence.expected_gaps // 2)
         )
     )
-    return SeparatorGateSupportAssessment(
+    return SeparatorSupportCheck(
         ok=ok,
         reason="separator_min_hard_support" if ok else "separator_min_hard_support_weak",
     )
 
 
-def separator_gate_geometry_support_assessment(
+def separator_support_geometry_support_assessment(
     detection: Detection,
     threshold: float,
-    evidence: SeparatorGateEvidence,
-    gate: SeparatorGatePolicy,
-) -> SeparatorGateSupportAssessment:
+    evidence: SeparatorSupportEvidence,
+    support: SeparatorSupportPolicy,
+) -> SeparatorSupportCheck:
     ok = (
-        bool(gate.allow_geometry_support)
+        bool(support.allow_geometry_support)
         and detection.confidence >= threshold
         and evidence.equal_gaps <= evidence.expected_gaps
     )
-    return SeparatorGateSupportAssessment(
+    return SeparatorSupportCheck(
         ok=ok,
         reason="separator_geometry_support" if ok else "separator_geometry_support_weak",
     )
 
 
-def separator_gate_needs_full_strip_supplemental_checks(detection: Detection) -> bool:
+def separator_support_needs_full_strip_supplemental_checks(detection: Detection) -> bool:
     return detection.strip_mode == "full" and detection.count == FORMATS[detection.film_format].default_count
 
 
-def separator_gate_broad_width_support_assessment(
+def separator_support_broad_width_support_assessment(
     broad_width: int,
-    gate: SeparatorGatePolicy,
-) -> SeparatorGateSupportAssessment:
-    ok = broad_width >= gate.min_broad_separator_width_gaps_for_auto
-    return SeparatorGateSupportAssessment(
+    support: SeparatorSupportPolicy,
+) -> SeparatorSupportCheck:
+    ok = broad_width >= support.min_broad_separator_width_gaps_for_auto
+    return SeparatorSupportCheck(
         ok=ok,
         reason="separator_broad_width_support" if ok else "separator_broad_width_support_weak",
     )
 
 
-def separator_gate_edge_pair_support_assessment(
+def separator_support_edge_pair_support_assessment(
     broad_width: int,
     edge_pair_scores: list[float],
-    gate: SeparatorGatePolicy,
-) -> SeparatorGateSupportAssessment:
+    support: SeparatorSupportPolicy,
+) -> SeparatorSupportCheck:
     edge_min = (
-        gate.edge_pair_min_score_with_broad_width
+        support.edge_pair_min_score_with_broad_width
         if broad_width > 0
-        else gate.edge_pair_min_score_without_broad_width
+        else support.edge_pair_min_score_without_broad_width
     )
     ok = not edge_pair_scores or min(edge_pair_scores) >= edge_min
-    return SeparatorGateSupportAssessment(
+    return SeparatorSupportCheck(
         ok=ok,
         reason="separator_edge_pair_support" if ok else "separator_edge_pair_support_weak",
     )
 
 
-def separator_gate_all_internal_gaps_hard_assessment(
+def separator_support_all_internal_gaps_hard_assessment(
     detection: Detection,
-    evidence: SeparatorGateEvidence,
-    gate: SeparatorGatePolicy,
-) -> SeparatorGateSupportAssessment:
+    evidence: SeparatorSupportEvidence,
+    support: SeparatorSupportPolicy,
+) -> SeparatorSupportCheck:
     needed = max(
         1,
         evidence.expected_gaps
-        if gate.hard_required_all_gaps
+        if support.hard_required_all_gaps
         else min(evidence.expected_gaps, 1),
     )
     ok = evidence.hard_gaps >= needed
@@ -138,21 +132,21 @@ def separator_gate_all_internal_gaps_hard_assessment(
         if ok
         else "separator_all_internal_gaps_hard_support_weak"
     )
-    if ok and separator_gate_needs_full_strip_supplemental_checks(detection):
-        broad_assessment = separator_gate_broad_width_support_assessment(
+    if ok and separator_support_needs_full_strip_supplemental_checks(detection):
+        broad_assessment = separator_support_broad_width_support_assessment(
             evidence.broad_separator_width_gaps,
-            gate,
+            support,
         )
         if not broad_assessment.ok:
             return broad_assessment
-        edge_assessment = separator_gate_edge_pair_support_assessment(
+        edge_assessment = separator_support_edge_pair_support_assessment(
             evidence.broad_separator_width_gaps,
             evidence.edge_pair_scores,
-            gate,
+            support,
         )
         if not edge_assessment.ok:
             return edge_assessment
-    return SeparatorGateSupportAssessment(ok=ok, reason=reason)
+    return SeparatorSupportCheck(ok=ok, reason=reason)
 
 
 def hard_gap_indexes_are_tail_adjacent(hard_indexes: list[int]) -> bool:
@@ -164,9 +158,9 @@ def hard_gap_indexes_are_tail_adjacent(hard_indexes: list[int]) -> bool:
     return hard_indexes == expected_sequence and min(hard_indexes) >= 4
 
 
-def separator_gate_leading_grid_failure_assessment(
+def separator_support_leading_grid_failure_assessment(
     detection: Detection,
-    evidence: SeparatorGateEvidence,
+    evidence: SeparatorSupportEvidence,
     policy: LeadingGridFailurePolicy,
 ) -> bool:
     return (
@@ -188,7 +182,7 @@ def separator_gate_leading_grid_failure_assessment(
     )
 
 
-def separator_gate_evidence_from_detection(detection: Detection) -> SeparatorGateEvidence:
+def separator_support_evidence_from_detection(detection: Detection) -> SeparatorSupportEvidence:
     raw_gap_evidence = gap_method_evidence_summary(detection.gaps, reliable_min_score=0.0)
     broad_width = int(detection.detail.get("broad_separator_width_gaps", 0))
     width_evidence = detection.detail.get("separator_width_evidence", {})
@@ -197,7 +191,7 @@ def separator_gate_evidence_from_detection(detection: Detection) -> SeparatorGat
         if isinstance(width_evidence, dict)
         else []
     )
-    return SeparatorGateEvidence(
+    return SeparatorSupportEvidence(
         expected_gaps=max(0, int(detection.count) - 1),
         actual_detected_gaps=raw_gap_evidence.direct_hard_gaps,
         broad_separator_width_gaps=broad_width,
@@ -212,11 +206,11 @@ def separator_gate_evidence_from_detection(detection: Detection) -> SeparatorGat
     )
 
 
-def separator_gate_detail(
-    evidence: SeparatorGateEvidence,
-    assessment: SeparatorGateAssessment,
+def separator_support_detail(
+    evidence: SeparatorSupportEvidence,
+    assessment: SeparatorSupportAssessment,
     detection: Detection,
-    gate: SeparatorGatePolicy,
+    support: SeparatorSupportPolicy,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
     return {
@@ -236,25 +230,24 @@ def separator_gate_detail(
         "leading_grid_scores": evidence.leading_grid_scores,
         "leading_grid_separator_failure": bool(assessment.leading_grid_failure),
         "separator_confidence": float(detection.confidence),
-        "separator_gate_profile": gate.profile,
         "policy_id": policy.policy_id,
     }
 
 
-def separator_gate_assessment(
+def separator_support_assessment(
     detection: Detection,
     threshold: float,
-    evidence: SeparatorGateEvidence,
-    gate: SeparatorGatePolicy,
-) -> SeparatorGateAssessment:
-    leading_grid_failure = separator_gate_leading_grid_failure_assessment(
+    evidence: SeparatorSupportEvidence,
+    support: SeparatorSupportPolicy,
+) -> SeparatorSupportAssessment:
+    leading_grid_failure = separator_support_leading_grid_failure_assessment(
         detection,
         evidence,
-        gate.leading_grid_failure,
+        support.leading_grid_failure,
     )
 
     if evidence.expected_gaps == 0:
-        support_assessment = SeparatorGateSupportAssessment(
+        support_assessment = SeparatorSupportCheck(
             ok=detection.confidence >= threshold,
             reason=(
                 "single_frame_no_separator_needed"
@@ -263,84 +256,82 @@ def separator_gate_assessment(
             ),
         )
     elif detection.confidence < threshold:
-        support_assessment = SeparatorGateSupportAssessment(
+        support_assessment = SeparatorSupportCheck(
             ok=False,
             reason="separator_below_threshold",
         )
     elif leading_grid_failure:
-        support_assessment = SeparatorGateSupportAssessment(
+        support_assessment = SeparatorSupportCheck(
             ok=False,
             reason="leading_grid_separator_failure",
         )
-    elif gate.profile == SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP:
-        support_assessment = separator_gate_min_hard_with_equal_cap_assessment(
-            evidence,
-            gate,
-        )
-    elif gate.profile == SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT:
-        support_assessment = separator_gate_geometry_support_assessment(
-            detection,
-            threshold,
-            evidence,
-            gate,
-        )
-    elif gate.profile == SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD:
-        support_assessment = separator_gate_all_internal_gaps_hard_assessment(
-            detection,
-            evidence,
-            gate,
-        )
     else:
-        supported = ", ".join(SEPARATOR_GATE_PROFILES)
-        raise ValueError(
-            f"Unsupported separator gate profile: {gate.profile!r}; "
-            f"expected one of {supported}"
+        checks = [
+            separator_support_all_internal_gaps_hard_assessment(
+                detection,
+                evidence,
+                support,
+            ),
+            separator_support_min_hard_with_equal_cap_assessment(
+                evidence,
+                support,
+            ),
+            separator_support_geometry_support_assessment(
+                detection,
+                threshold,
+                evidence,
+                support,
+            ),
+        ]
+        support_assessment = next(
+            (check for check in checks if check.ok),
+            checks[0],
         )
 
-    return SeparatorGateAssessment(
+    return SeparatorSupportAssessment(
         ok=support_assessment.ok,
         reason=support_assessment.reason,
         leading_grid_failure=leading_grid_failure,
     )
 
 
-def assess_separator_gate(
+def assess_separator_support(
     detection: Detection,
     threshold: float,
     policy: Optional[DetectionPolicy] = None,
-) -> SeparatorGateResult:
+) -> SeparatorSupportResult:
     policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
-    gate = policy.separator.gate
-    evidence = separator_gate_evidence_from_detection(detection)
-    assessment = separator_gate_assessment(detection, threshold, evidence, gate)
+    support = policy.separator.support
+    evidence = separator_support_evidence_from_detection(detection)
+    assessment = separator_support_assessment(detection, threshold, evidence, support)
 
-    return SeparatorGateResult(
+    return SeparatorSupportResult(
         ok=assessment.ok,
-        detail=separator_gate_detail(
+        detail=separator_support_detail(
             evidence,
             assessment,
             detection,
-            gate,
+            support,
             policy,
         ),
     )
 
 
 __all__ = [
-    "SeparatorGateAssessment",
-    "SeparatorGateEvidence",
-    "SeparatorGateResult",
-    "SeparatorGateSupportAssessment",
+    "SeparatorSupportAssessment",
+    "SeparatorSupportEvidence",
+    "SeparatorSupportResult",
+    "SeparatorSupportCheck",
     "hard_gap_indexes_are_tail_adjacent",
-    "separator_gate_all_internal_gaps_hard_assessment",
-    "separator_gate_broad_width_support_assessment",
-    "separator_gate_edge_pair_support_assessment",
-    "separator_gate_geometry_support_assessment",
-    "separator_gate_leading_grid_failure_assessment",
-    "separator_gate_min_hard_with_equal_cap_assessment",
-    "separator_gate_needs_full_strip_supplemental_checks",
-    "separator_gate_assessment",
-    "separator_gate_detail",
-    "separator_gate_evidence_from_detection",
-    "assess_separator_gate",
+    "separator_support_all_internal_gaps_hard_assessment",
+    "separator_support_broad_width_support_assessment",
+    "separator_support_edge_pair_support_assessment",
+    "separator_support_geometry_support_assessment",
+    "separator_support_leading_grid_failure_assessment",
+    "separator_support_min_hard_with_equal_cap_assessment",
+    "separator_support_needs_full_strip_supplemental_checks",
+    "separator_support_assessment",
+    "separator_support_detail",
+    "separator_support_evidence_from_detection",
+    "assess_separator_support",
 ]

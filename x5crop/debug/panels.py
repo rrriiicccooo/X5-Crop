@@ -6,7 +6,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from ..detection.detail import (
-    RISK_SUMMARY,
+    DECISION_SIGNALS,
     decision_summary,
     detail_dict,
     final_review_reasons_from_detail,
@@ -106,14 +106,14 @@ def add_review_lines(rgb: np.ndarray, lines: list[str]) -> np.ndarray:
     return np.asarray(image)
 
 
-def make_risk_review_rgb(
+def make_decision_review_rgb(
     gray: np.ndarray,
     detection: Detection,
     cache: Optional[AnalysisCache] = None,
 ) -> np.ndarray:
     rgb = make_frame_geometry_rgb(gray, detection, cache)
     decision = decision_summary(detection)
-    risk = detail_dict(detection, RISK_SUMMARY)
+    signals = detail_dict(detection, DECISION_SIGNALS)
     reasons = final_review_reasons_from_detail(detection)
     lines = [
         f"policy: {policy_id_from_detail(detection)}",
@@ -121,9 +121,11 @@ def make_risk_review_rgb(
     ]
     if decision:
         lines.append(f"decision pass: {bool(decision.get('pass', False))}")
-    if risk:
-        active = [key for key, value in risk.items() if isinstance(value, bool) and value]
-        lines.append("risks: " + (",".join(active[:4]) if active else "none"))
+    if signals:
+        active = signals.get("active_signals")
+        if not isinstance(active, list):
+            active = [key for key, value in signals.items() if isinstance(value, bool) and value]
+        lines.append("signals: " + (",".join([str(item) for item in active[:4]]) if active else "none"))
     return add_review_lines(rgb, lines)
 
 
@@ -196,7 +198,7 @@ def make_debug_analysis_panel(
         ),
         "frame_geometry": lambda title: add_panel_label(make_frame_geometry_rgb(gray, detection, cache), title),
         "selected_candidate": lambda title: add_panel_label(make_debug_preview_rgb(gray, detection, cache), title),
-        "risk_review": lambda title: add_panel_label(make_risk_review_rgb(gray, detection, cache), title),
+        "decision_review": lambda title: add_panel_label(make_decision_review_rgb(gray, detection, cache), title),
     }
     panels = [
         panel_builders[name](diagnostics.debug_panel_title(name))

@@ -16,7 +16,7 @@ from ..evidence.photo_width import (
     photo_width_stability_detail,
     photo_width_within_limit,
 )
-from ..evidence.separator_summary import SeparatorGateDetailSummary, separator_gate_detail_summary
+from ..evidence.separator_summary import SeparatorSupportDetailSummary, separator_support_detail_summary
 
 
 def _dict(value: Any) -> dict[str, Any]:
@@ -34,10 +34,10 @@ def _gap_method_count(detection: Detection, predicate) -> int:
     return sum(1 for gap in detection.gaps if predicate(gap.method))
 
 
-def _separator_summary_from_assessment(detection: Detection) -> SeparatorGateDetailSummary:
+def _separator_summary_from_assessment(detection: Detection) -> SeparatorSupportDetailSummary:
     assessment = _dict(detection.detail.get("candidate_assessment"))
-    hard_detail = _dict(assessment.get("separator_hard_evidence"))
-    return separator_gate_detail_summary(
+    hard_detail = _dict(assessment.get("separator_support"))
+    return separator_support_detail_summary(
         hard_detail,
         expected_default=max(0, int(detection.count) - 1),
         hard_default=sum(1 for gap in detection.gaps if is_hard_gap_method(gap.method)),
@@ -72,13 +72,13 @@ def evidence_summary_for(
     photo_width_stability = photo_width_stability_detail(
         detection.detail,
         policy.evidence.max_photo_width_cv_ratio,
-        used_role="photo_width_gate",
+        used_role="photo_width_assessment",
     )
     photo_width_stability["max_photo_width_cv_ratio"] = policy.evidence.max_photo_width_cv_ratio
     photo_width_ok = bool(photo_width_stability.get("ok", True))
     content_support = str(content_detail.get("support", ""))
     content_containment_ok = bool(content_detail.get("content_containment_ok", False))
-    content_harm_risk = bool(content_detail.get("content_harm_risk", True))
+    content_integrity_failed = bool(content_detail.get("content_integrity_failed", True))
     content_quality_ok = content_quality_score >= policy.evidence.min_content_score
     partial_detail = _dict(assessment.get("partial_safe_extra_frames"))
     partial_edge_safe = bool(partial_detail.get("ok", False))
@@ -97,14 +97,14 @@ def evidence_summary_for(
         )
         and int(separator["equal_gaps"]) <= policy.evidence.max_equal_gap_count
         and content_containment_ok
-        and not content_harm_risk
+        and not content_integrity_failed
     )
     partial_supported_separator = (
         detection.strip_mode == "partial"
         and partial_edge_safe
         and int(separator["hard_gaps"]) >= 1
         and content_containment_ok
-        and not content_harm_risk
+        and not content_integrity_failed
     )
     separator_ok = (
         expected <= 0
@@ -131,7 +131,7 @@ def evidence_summary_for(
         and outer_alignment_ok
         and bool(outer_alignment.get("overcontainment_allowed", False))
         and content_containment_ok
-        and not content_harm_risk
+        and not content_integrity_failed
     )
     outer_ok = outer_alignment_ok and (outer_area_ok or safe_overcut_allowed)
     geometry_ok = (
@@ -140,7 +140,7 @@ def evidence_summary_for(
     )
     content_ok = (
         content_containment_ok
-        and not content_harm_risk
+        and not content_integrity_failed
     )
     return {
         "outer": {
@@ -175,12 +175,12 @@ def evidence_summary_for(
             "ok": bool(content_ok),
             "support": content_support,
             "content_containment_ok": bool(content_containment_ok),
-            "content_harm_risk": bool(content_harm_risk),
+            "content_integrity_failed": bool(content_integrity_failed),
             "content_score": content_score,
             "content_score_role": assessment.get("content_score_role", "content_containment_support"),
             "content_quality_score": content_quality_score,
             "quality_ok": bool(content_quality_ok),
-            "content_quality_score_role": "quality_diagnostic_not_hard_gate",
+            "content_quality_score_role": "quality_diagnostic_not_boundary_evidence",
             "min_content_score": policy.evidence.min_content_score,
             "detail": content_detail,
         },

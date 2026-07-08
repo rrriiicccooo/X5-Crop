@@ -12,13 +12,12 @@ CONTENT_EVIDENCE = "content_evidence"
 DECISION_POLICY_DETAIL = "decision_policy_detail"
 DECISION_SUMMARY = "decision_summary"
 DESKEW = "deskew"
+DECISION_SIGNALS = "decision_signals"
 EVIDENCE_SUMMARY = "evidence_summary"
-LUCKY_PASS_RISK_SCORE = "lucky_pass_risk_score"
 OUTER_CONTENT_ALIGNMENT = "outer_content_alignment"
-OVERLAP_BLEED_RISK = "overlap_bleed_risk"
+OUTPUT_OVERLAP_EVIDENCE = "output_overlap_evidence"
 POLICY = "policy"
 POLICY_ID = "policy_id"
-RISK_SUMMARY = "risk_summary"
 RUNTIME_POLICY_DETAIL = "runtime_policy_detail"
 
 
@@ -76,14 +75,13 @@ __all__ = [
     "CONTENT_EVIDENCE",
     "DECISION_POLICY_DETAIL",
     "DECISION_SUMMARY",
+    "DECISION_SIGNALS",
     "DESKEW",
     "EVIDENCE_SUMMARY",
-    "LUCKY_PASS_RISK_SCORE",
     "OUTER_CONTENT_ALIGNMENT",
-    "OVERLAP_BLEED_RISK",
+    "OUTPUT_OVERLAP_EVIDENCE",
     "POLICY",
     "POLICY_ID",
-    "RISK_SUMMARY",
     "RUNTIME_POLICY_DETAIL",
     "candidate_competition",
     "candidate_assessment",

@@ -84,15 +84,15 @@ def outer_content_alignment_detail(
         alignment.white_edge_long_min,
         alignment.white_edge_long_max,
     )
-    long_slack_pixel_gate = clamp_int(
-        pitch * alignment.long_gate_ratio,
-        alignment.long_gate_min,
-        alignment.long_gate_max,
+    long_slack_pixel_threshold = clamp_int(
+        pitch * alignment.long_threshold_ratio,
+        alignment.long_threshold_min,
+        alignment.long_threshold_max,
     )
-    short_slack_pixel_gate = clamp_int(
-        float(outer.height) * alignment.short_gate_ratio,
-        alignment.short_gate_min,
-        alignment.short_gate_max,
+    short_slack_pixel_threshold = clamp_int(
+        float(outer.height) * alignment.short_threshold_ratio,
+        alignment.short_threshold_min,
+        alignment.short_threshold_max,
     )
 
     edge_band = max(4, min(80, int(round(min(outer.width, outer.height) * alignment.border_band_ratio))))
@@ -132,10 +132,10 @@ def outer_content_alignment_detail(
     if alignment.short_content_height_max < 1.0:
         short_axis_semantic_ok = short_axis_semantic_ok and content_height_ratio <= alignment.short_content_height_max
 
-    overcontains_long = long_slack_ratio > alignment.long_excess_ratio or (max_long_slack >= long_slack_pixel_gate and long_slack_ratio > alignment.long_gate_excess_ratio) or white_edge_slack
-    overcontains_short = short_axis_semantic_ok and short_slack_ratio > alignment.short_excess_ratio and max_short_slack >= short_slack_pixel_gate
-    undercrops_long = max_long_undercrop >= long_slack_pixel_gate
-    undercrops_short = max_short_undercrop >= short_slack_pixel_gate
+    overcontains_long = long_slack_ratio > alignment.long_excess_ratio or (max_long_slack >= long_slack_pixel_threshold and long_slack_ratio > alignment.long_excess_threshold_ratio) or white_edge_slack
+    overcontains_short = short_axis_semantic_ok and short_slack_ratio > alignment.short_excess_ratio and max_short_slack >= short_slack_pixel_threshold
+    undercrops_long = max_long_undercrop >= long_slack_pixel_threshold
+    undercrops_short = max_short_undercrop >= short_slack_pixel_threshold
     ok = not (undercrops_long or undercrops_short)
     reason = "ok"
     if undercrops_long:
@@ -172,8 +172,8 @@ def outer_content_alignment_detail(
         "overcontains_long_axis": bool(overcontains_long),
         "overcontains_short_axis": bool(overcontains_short),
         "white_edge_long_slack_min": int(white_edge_long_slack_min),
-        "long_slack_pixel_gate": int(long_slack_pixel_gate),
-        "short_slack_pixel_gate": int(short_slack_pixel_gate),
+        "long_slack_pixel_threshold": int(long_slack_pixel_threshold),
+        "short_slack_pixel_threshold": int(short_slack_pixel_threshold),
         "border_dark_fraction": border_dark_fraction,
         "edge_hard_anchors": edge_hard_anchors,
         "white_edge_slack": white_edge_slack,

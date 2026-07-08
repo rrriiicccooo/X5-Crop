@@ -42,16 +42,6 @@ class EvidencePolicy:
 
 
 @dataclass(frozen=True)
-class RiskPolicy:
-    review_on_outer_content_mismatch: bool = True
-    review_on_overlap_risk: bool = True
-    review_on_lucky_pass_risk: bool = True
-    review_on_close_competition: bool = True
-    candidate_close_margin: float = 0.020
-    suppress_close_competition_when_partial_edge_safe: bool = True
-
-
-@dataclass(frozen=True)
 class DecisionPolicy:
     confidence_threshold_default: float = 0.85
     review_confidence_cap: float = 0.84
@@ -61,15 +51,15 @@ class DecisionPolicy:
     content_aspect_conflict_cap: float = 0.82
     content_low_confidence_cap: float = 0.84
     outer_mismatch_cap: float = 0.84
-    lucky_pass_risk_cap: float = 0.84
+    candidate_close_margin: float = 0.020
+    suppress_close_competition_when_partial_edge_safe: bool = True
     outer_candidate_disagreement_review_reason: str = "outer_candidate_disagreement"
     deskew_uncertain_review_reason: str = "deskew_uncertain"
     separator_incomplete_reason: str = "separator_evidence_incomplete"
     geometry_unstable_reason: str = "geometry_unstable"
     outer_content_mismatch_reason: str = "outer_content_mismatch"
     candidate_competition_close_reason: str = "candidate_competition_close"
-    overlap_risk_reason: str = "overlap_risk"
-    lucky_pass_risk_reason: str = "lucky_pass_risk"
+    output_overlap_reason: str = "output_overlap_detected"
     content_only_evidence_reason: str = "content_only_evidence"
     content_evidence_insufficient_reason: str = "content_evidence_insufficient"
     partial_edge_uncertain_reason: str = "partial_edge_uncertain"
@@ -83,7 +73,6 @@ class DetectionDecisionContract:
     format: FormatSpec
     mode: ModePolicy
     evidence: EvidencePolicy
-    risk: RiskPolicy
     decision: DecisionPolicy
 
     def report_detail(self) -> dict[str, Any]:
@@ -143,15 +132,9 @@ def decision_policy_for(detection_policy: DetectionPolicy) -> DecisionPolicy:
         content_aspect_conflict_cap=detection_policy.decision.content_aspect_conflict_cap,
         content_low_confidence_cap=detection_policy.decision.content_low_confidence_cap,
         outer_mismatch_cap=detection_policy.decision.outer_mismatch_cap,
-        lucky_pass_risk_cap=detection_policy.decision.lucky_pass_risk_cap,
+        candidate_close_margin=float(detection_policy.candidate_selection.close_margin),
         outer_candidate_disagreement_review_reason=detection_policy.decision.outer_candidate_disagreement_review_reason,
         deskew_uncertain_review_reason=detection_policy.decision.deskew_uncertain_review_reason,
-    )
-
-
-def risk_policy_for(detection_policy: DetectionPolicy) -> RiskPolicy:
-    return RiskPolicy(
-        candidate_close_margin=float(detection_policy.candidate_selection.close_margin),
     )
 
 
@@ -168,7 +151,6 @@ def decision_contract_for_policy(detection_policy: DetectionPolicy) -> Detection
             detection_policy.strip_mode,
             detection_policy,
         ),
-        risk=risk_policy_for(detection_policy),
         decision=decision_policy_for(detection_policy),
     )
 
@@ -185,10 +167,8 @@ __all__ = [
     "DecisionPolicy",
     "EvidencePolicy",
     "ModePolicy",
-    "RiskPolicy",
     "decision_contract_for",
     "decision_contract_for_policy",
     "decision_policy_for",
     "evidence_policy_for",
-    "risk_policy_for",
 ]

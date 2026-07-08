@@ -53,7 +53,7 @@ class RuntimeDiagnosticsPolicy:
         DebugPanelPolicy("frame_geometry", "Frame geometry"),
         DebugPanelPolicy("outer_candidates", "Outer candidates"),
         DebugPanelPolicy("selected_candidate", "Selected candidate"),
-        DebugPanelPolicy("risk_review", "Risk / review overlay"),
+        DebugPanelPolicy("decision_review", "Decision review overlay"),
     )
 
     def debug_panel_title(self, panel_id: str) -> str:

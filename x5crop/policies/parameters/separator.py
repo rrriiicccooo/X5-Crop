@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class SeparatorGateParameters:
+class SeparatorSupportParameters:
     needed_hard_max: int
     max_equal_gaps_floor: int
     allow_geometry_support: bool
@@ -178,7 +178,7 @@ class HardGapTrustParameters:
     activity_min: float
 
 __all__ = [
-    'SeparatorGateParameters',
+    'SeparatorSupportParameters',
     'LeadingGridFailureParameters',
     'SeparatorGeometrySupportParameters',
     'SeparatorWidthProfileParameters',

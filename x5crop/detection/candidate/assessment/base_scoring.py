@@ -16,7 +16,6 @@ from ....geometry.gap_geometry import (
 )
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
-from ....policies.separator_gate_profiles import SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
 from ....runtime.config import RuntimeConfig
 from ....utils import box_from_dict, gap_from_dict, sampled_percentile
 from ...confidence_caps import apply_confidence_cap
@@ -213,7 +212,7 @@ def base_detection_assessment(
 ) -> BaseDetectionAssessment:
     policy = policy or get_detection_policy(fmt.name, strip_mode)
     base_score = policy.scoring.base_detection
-    separator_gate = policy.separator.gate
+    separator_support = policy.separator.support
     expected_gaps = max(0, count - 1)
     gap_evidence = gap_method_evidence_summary(
         gaps,
@@ -267,17 +266,15 @@ def base_detection_assessment(
 
     gap_conf = 1.0 if expected_gaps == 0 else gap_evidence.separator_support_count / float(expected_gaps)
     width_conf = photo_width_stability.get("confidence")
-    uses_min_hard_equal_cap = (
-        separator_gate.profile == SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
-    )
-    geometry_support_allowed = separator_gate.allow_geometry_support and bool(policy.separator.geometry_support_modes)
+    hard_support_floor_checks_enabled = expected_gaps >= 3
+    geometry_support_allowed = separator_support.allow_geometry_support and bool(policy.separator.geometry_support_modes)
     enough_profile_separator_evidence = (
-        not uses_min_hard_equal_cap
+        not hard_support_floor_checks_enabled
         or expected_gaps <= 1
         or (
-            gap_evidence.hard_separator_gaps >= separator_gate.score_min_hard_gaps
+            gap_evidence.hard_separator_gaps >= separator_support.score_min_hard_gaps
             and gap_evidence.equal_model_gaps
-            <= max(separator_gate.score_max_equal_gaps_floor, expected_gaps // 2)
+            <= max(separator_support.score_max_equal_gaps_floor, expected_gaps // 2)
         )
     )
 
@@ -298,8 +295,8 @@ def base_detection_assessment(
         and (
             photo_width_within_full_limit
             or (
-                uses_min_hard_equal_cap
-                and separator_gate.allow_full_detected_geometry
+                hard_support_floor_checks_enabled
+                and separator_support.allow_full_detected_geometry
                 and gap_evidence.separator_support_count == expected_gaps
             )
         )
@@ -307,7 +304,7 @@ def base_detection_assessment(
         and outer_area <= base_score.outer_too_large
         and enough_profile_separator_evidence
         and (
-            uses_min_hard_equal_cap
+            hard_support_floor_checks_enabled
             or geometry_support_allowed
             or (
                 gap_evidence.reliable_support_count >= expected_gaps
@@ -318,7 +315,7 @@ def base_detection_assessment(
     if full_geometry_ok:
         geometry_floor = (
             base_score.geometry_floor_high
-            if (uses_min_hard_equal_cap or geometry_support_allowed) and photo_width_tight
+            if (hard_support_floor_checks_enabled or geometry_support_allowed) and photo_width_tight
             else base_score.geometry_floor_low
         )
         confidence = max(confidence, geometry_floor)
@@ -328,7 +325,7 @@ def base_detection_assessment(
     if gap_evidence.equal_model_gaps >= max(2, expected_gaps // 2 + 1) and not full_geometry_ok:
         candidate_signals.append(SIGNAL_SEPARATOR_MODEL_GAP_OVERUSED)
     if (
-        uses_min_hard_equal_cap
+        hard_support_floor_checks_enabled
         and expected_gaps >= 3
         and gap_evidence.hard_separator_gaps < 2
     ):
@@ -382,11 +379,11 @@ def base_detection_assessment(
         else:
             partial_count_assessment["reason"] = "enough_frames_for_physical_assessment"
 
-    if uses_min_hard_equal_cap and expected_gaps >= 3:
+    if hard_support_floor_checks_enabled:
         if gap_evidence.hard_separator_gaps < 1:
             confidence, cap_detail = apply_confidence_cap(
                 confidence,
-                separator_gate.low_hard_confidence_cap,
+                separator_support.low_hard_confidence_cap,
                 owner="candidate.assessment",
                 reason="no_detected_hard_separator",
             )
@@ -394,7 +391,7 @@ def base_detection_assessment(
         elif gap_evidence.hard_separator_gaps < 2:
             confidence, cap_detail = apply_confidence_cap(
                 confidence,
-                separator_gate.low_hard_confidence_cap,
+                separator_support.low_hard_confidence_cap,
                 owner="candidate.assessment",
                 reason="too_few_detected_hard_separators",
             )
@@ -402,7 +399,7 @@ def base_detection_assessment(
         elif gap_evidence.equal_model_gaps >= max(2, expected_gaps // 2 + 1):
             confidence, cap_detail = apply_confidence_cap(
                 confidence,
-                separator_gate.mostly_equal_confidence_cap,
+                separator_support.mostly_equal_confidence_cap,
                 owner="candidate.assessment",
                 reason="mostly_equal_model_gaps",
             )
@@ -428,11 +425,11 @@ def base_detection_assessment(
             "range_1_99": contrast,
             "contrast_ok": bool(contrast >= base_score.image_quality_contrast_min),
             "min_contrast": float(base_score.image_quality_contrast_min),
-            "role": "diagnostic_not_crop_gate",
+            "role": "diagnostic_not_crop_boundary",
         },
         "contrast_1_99": contrast,
         "full_geometry_ok": full_geometry_ok,
-        "separator_gate_profile": separator_gate.profile,
+        "separator_support_policy": "unified_physical_support",
         "partial_count_assessment": partial_count_assessment,
         "candidate_confidence_caps": confidence_caps,
         "confidence_floor": {

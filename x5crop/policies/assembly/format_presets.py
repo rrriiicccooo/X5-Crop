@@ -5,11 +5,6 @@ from collections.abc import Callable
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import FULL, PARTIAL, FrameFitPolicy, ReviewOnlyPolicy
 from ..runtime.separator import SeparatorEdgePairPolicy
-from ..separator_gate_profiles import (
-    SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD,
-    SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT,
-    SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP,
-)
 from .factory import build_policy_from_preset
 from .presets import (
     FormatPolicyPreset,
@@ -19,14 +14,6 @@ from .presets import (
 
 
 ParameterFactory = Callable[[], FormatParameters]
-
-
-def _separator_gate_profile(format_id: str) -> str:
-    if format_id == "135":
-        return SEPARATOR_GATE_PROFILE_MIN_HARD_WITH_EQUAL_CAP
-    if format_id == "half":
-        return SEPARATOR_GATE_PROFILE_GEOMETRY_SUPPORT
-    return SEPARATOR_GATE_PROFILE_ALL_INTERNAL_GAPS_HARD
 
 
 def _separator_edge_pair(format_id: str) -> SeparatorEdgePairPolicy:
@@ -223,7 +210,7 @@ def _separator_geometry_support_modes(format_id: str, strip_mode: str) -> tuple[
     return ()
 
 
-def _overlap_bleed_risk_enabled(format_id: str, strip_mode: str) -> bool:
+def _output_overlap_enabled(format_id: str, strip_mode: str) -> bool:
     if strip_mode == PARTIAL:
         return True
     return format_id in {"half", "120-645", "120-66", "120-67"}
@@ -245,7 +232,7 @@ def mode_policy_preset(format_id: str, strip_mode: str) -> ModePolicyPreset:
             format_id,
             strip_mode,
         ),
-        overlap_bleed_risk_enabled=_overlap_bleed_risk_enabled(format_id, strip_mode),
+        output_overlap_enabled=_output_overlap_enabled(format_id, strip_mode),
     )
 
 
@@ -256,7 +243,6 @@ def format_policy_preset(
     return FormatPolicyPreset(
         format_id=format_id,
         parameters=parameters,
-        separator_gate_profile=_separator_gate_profile(format_id),
         separator_edge_pair=_separator_edge_pair(format_id),
         content_mismatch_candidate_selection_enabled=(
             _content_mismatch_candidate_selection_enabled(format_id)

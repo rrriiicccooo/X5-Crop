@@ -14,7 +14,6 @@ def runtime_decision_policy(params: FormatParameters) -> RuntimeDecisionPolicy:
         content_aspect_conflict_cap=float(decision.content_aspect_conflict_cap),
         content_low_confidence_cap=float(decision.content_low_confidence_cap),
         outer_mismatch_cap=float(decision.outer_mismatch_cap),
-        lucky_pass_risk_cap=float(decision.lucky_pass_risk_cap),
     )
 
 

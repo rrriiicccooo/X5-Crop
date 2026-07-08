@@ -34,10 +34,9 @@ class LeadingGridFailurePolicy:
 
 
 @dataclass(frozen=True)
-class SeparatorGatePolicy:
-    """Separator auto-gate profile with explicit behavior parameters."""
+class SeparatorSupportPolicy:
+    """Separator support checks used by candidate assessment."""
 
-    profile: str
     needed_hard_max: int = 2
     max_equal_gaps_floor: int = 2
     allow_geometry_support: bool = False
@@ -174,7 +173,7 @@ class SeparatorRefinementPolicy:
 
 @dataclass(frozen=True)
 class SeparatorPolicy:
-    gate: SeparatorGatePolicy
+    support: SeparatorSupportPolicy
     hard_required_all_gaps: bool
     model_gap_proposal: SeparatorModelGapProposalPolicy = field(default_factory=SeparatorModelGapProposalPolicy)
     width_profile: SeparatorWidthProfilePolicy = field(default_factory=SeparatorWidthProfilePolicy)
@@ -196,7 +195,7 @@ class SeparatorPolicy:
 __all__ = [
     "LeadingGridFailurePolicy",
     "SeparatorEdgePairPolicy",
-    "SeparatorGatePolicy",
+    "SeparatorSupportPolicy",
     "SeparatorGeometrySupportModePolicy",
     "SeparatorGeometrySupportPolicy",
     "SeparatorModelGapProposalPolicy",

@@ -15,16 +15,15 @@ from ...formats import FORMATS
 from .profile_defaults import (
     leading_grid_failure_parameters,
     nearby_separator_refinement_parameters,
-    separator_gate_parameters,
+    separator_support_parameters,
     separator_geometry_support_parameters,
 )
 from .presets import FormatPolicyPreset, ModePolicyPreset
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import FULL, PARTIAL
-from ..separator_gate_profiles import SEPARATOR_GATE_PROFILES
 from ..runtime.separator import (
     LeadingGridFailurePolicy,
-    SeparatorGatePolicy,
+    SeparatorSupportPolicy,
     SeparatorGeometrySupportModePolicy,
     SeparatorGeometrySupportPolicy,
     SeparatorModelGapProposalPolicy,
@@ -35,21 +34,14 @@ from ..runtime.separator import (
 )
 
 
-def separator_gate_policy(
+def separator_support_policy(
     preset: FormatPolicyPreset,
     params: FormatParameters,
-) -> SeparatorGatePolicy:
-    if preset.separator_gate_profile not in SEPARATOR_GATE_PROFILES:
-        supported = ", ".join(SEPARATOR_GATE_PROFILES)
-        raise ValueError(
-            f"Unsupported separator gate profile: {preset.separator_gate_profile!r}; "
-            f"expected one of {supported}"
-        )
+) -> SeparatorSupportPolicy:
     fmt = FORMATS[preset.format_id]
-    gate = separator_gate_parameters(fmt, params)
+    gate = separator_support_parameters(fmt, params)
     leading_grid = leading_grid_failure_parameters(fmt, params)
-    return SeparatorGatePolicy(
-        profile=preset.separator_gate_profile,
+    return SeparatorSupportPolicy(
         needed_hard_max=int(gate.needed_hard_max),
         max_equal_gaps_floor=int(gate.max_equal_gaps_floor),
         allow_geometry_support=bool(gate.allow_geometry_support),
@@ -195,7 +187,7 @@ def separator_policy(
     strip_mode: str,
     params: FormatParameters,
 ) -> SeparatorPolicy:
-    gate = separator_gate_policy(preset, params)
+    support = separator_support_policy(preset, params)
     separator_width_profile = params.separator_width_profile
     separator_width_profile_enabled = bool(
         (strip_mode == FULL and separator_width_profile.full_enabled)
@@ -208,8 +200,8 @@ def separator_policy(
     profile = params.separator_profile
     edge_refine = params.edge_refine_profile
     return SeparatorPolicy(
-        gate=gate,
-        hard_required_all_gaps=bool(gate.hard_required_all_gaps),
+        support=support,
+        hard_required_all_gaps=bool(support.hard_required_all_gaps),
         model_gap_proposal=separator_model_gap_proposal_policy(mode_preset),
         width_profile=separator_width_profile_policy(
             mode_preset,
@@ -353,7 +345,7 @@ def separator_policy(
 
 __all__ = [
     'edge_pair_parameters_from_preset',
-    'separator_gate_policy',
+    'separator_support_policy',
     'separator_geometry_support_policy',
     'separator_model_gap_proposal_policy',
     'separator_refinement_policy',

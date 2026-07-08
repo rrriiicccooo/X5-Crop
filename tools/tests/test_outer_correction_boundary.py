@@ -21,7 +21,7 @@ def _detection(strip_mode: str, *, source: str = "separator", hard_ok: bool = Tr
         detail={
             "candidate_assessment": {
                 "source": source,
-                "separator_hard_evidence": {"ok": hard_ok},
+                "separator_support": {"ok": hard_ok},
             }
         },
     )
@@ -85,7 +85,7 @@ class OuterCorrectionBoundaryTest(unittest.TestCase):
         self.assertNotIn("short_axis_geometry", detail["eligible_families"])
         self.assertEqual(
             detail["skipped_reasons"].get("short_axis_geometry"),
-            "requires_separator_hard_evidence",
+            "requires_separator_support",
         )
 
 

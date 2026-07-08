@@ -75,7 +75,7 @@ def _separator_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         ),
     )
     return {
-        "gate_profile": separator.gate.profile,
+        "support_mode": "unified_physical_support",
         "hard_required_all_gaps": separator.hard_required_all_gaps,
         "separator_proposal": {
             "width_aware": {
@@ -100,7 +100,7 @@ def _separator_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "gap_search": _plain(separator.gap_search),
         "hard_methods": list(separator.hard_methods),
         "model_methods": list(separator.model_methods),
-        "gate": _plain(separator.gate),
+        "support": _plain(separator.support),
     }
 
 
@@ -128,10 +128,9 @@ def _runtime_diagnostics_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     }
 
 
-def _runtime_risk_detail(policy: "DetectionPolicy") -> dict[str, Any]:
+def _output_evidence_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     return {
-        "overlap_bleed": _plain(policy.risk.overlap_bleed),
-        "lucky_pass": _plain(policy.risk.lucky_pass),
+        "output_overlap": _plain(policy.output_evidence.output_overlap),
     }
 
 
@@ -153,13 +152,12 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "outer": _outer_detail(policy),
         "separator": _separator_detail(policy),
         "content": _content_detail(policy),
-        "gates": list(policy.gates.ordered_gates),
         "partial_holder": _plain(policy.partial_holder),
         "partial_edge_hint": _plain(policy.partial_edge_hint),
         "scoring": _scoring_detail(policy),
         "selection": _selection_detail(policy),
         "candidate_plan": _plain(policy.candidate_plan),
-        "risk": _runtime_risk_detail(policy),
+        "output_evidence": _output_evidence_detail(policy),
         "decision": _plain(policy.decision),
         "finalization": _plain(policy.finalization),
         "output": _plain(policy.output),
@@ -183,7 +181,7 @@ def _format_spec_detail(contract: "DetectionDecisionContract") -> dict[str, Any]
         "outer_trust_profile": spec.outer_trust_profile,
         "separator_visibility_expectation": spec.separator_visibility,
         "geometry_tolerance": spec.geometry_tolerance,
-        "known_physical_risks": list(spec.known_physical_risks),
+        "known_physical_notes": list(spec.known_physical_notes),
     }
 
 
@@ -194,6 +192,5 @@ def decision_contract_report_detail(contract: "DetectionDecisionContract") -> di
         "format_spec": _format_spec_detail(contract),
         "mode_policy": asdict(contract.mode),
         "evidence_policy": asdict(contract.evidence),
-        "risk_policy": asdict(contract.risk),
         "decision_policy": asdict(contract.decision),
     }

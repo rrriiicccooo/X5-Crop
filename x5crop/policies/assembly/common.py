@@ -8,7 +8,6 @@ from ..runtime.base import (
     CountPolicy,
     FrameFitPolicy,
 )
-from ..runtime.candidate import GatePolicy
 
 
 def partial_frame_fit(format_id: str) -> FrameFitPolicy:
@@ -32,22 +31,7 @@ def count_policy(fmt_id: str, strip_mode: str, params: FormatParameters) -> Coun
     )
 
 
-def gate_policy() -> GatePolicy:
-    return GatePolicy(
-        ordered_gates=(
-            "confidence_floor_gate",
-            "separator_gate",
-            "content_gate",
-            "geometry_gate",
-            "mode_specific_gate",
-            "candidate_gate",
-            "decision_gate",
-        ),
-    )
-
-
 __all__ = [
     "partial_frame_fit",
     "count_policy",
-    "gate_policy",
 ]

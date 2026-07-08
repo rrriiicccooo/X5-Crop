@@ -117,14 +117,14 @@ class ContentContainmentCorrectionParameters:
     white_edge_long_ratio: float
     white_edge_long_min: int
     white_edge_long_max: int
-    long_gate_ratio: float
-    long_gate_min: int
-    long_gate_max: int
-    short_gate_ratio: float
-    short_gate_min: int
-    short_gate_max: int
+    long_threshold_ratio: float
+    long_threshold_min: int
+    long_threshold_max: int
+    short_threshold_ratio: float
+    short_threshold_min: int
+    short_threshold_max: int
     long_excess_ratio: float
-    long_gate_excess_ratio: float
+    long_excess_threshold_ratio: float
     short_excess_ratio: float
     short_requires_hard_anchors: bool
     short_content_height_max: float

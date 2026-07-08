@@ -74,11 +74,11 @@ class ContentPolicy:
     support_coverage_weight: float = 0.42
     support_mean_weight: float = 0.40
     support_aspect_weight: float = 0.18
-    support_gate_ok: float = 1.0
-    support_gate_weak: float = 0.72
-    support_gate_low_content: float = 0.58
-    support_gate_aspect_conflict: float = 0.35
-    support_gate_unknown: float = 0.50
+    support_score_ok: float = 1.0
+    support_score_weak: float = 0.72
+    support_score_low_content: float = 0.58
+    support_score_aspect_conflict: float = 0.35
+    support_score_unknown: float = 0.50
 
 
 __all__ = [

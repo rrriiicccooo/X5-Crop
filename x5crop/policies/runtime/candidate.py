@@ -4,11 +4,6 @@ from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
-class GatePolicy:
-    ordered_gates: tuple[str, ...]
-
-
-@dataclass(frozen=True)
 class PartialHolderPolicy:
     safe_extra_frames: bool = False
     safe_extra_frames_strip_modes: tuple[str, ...] = ("partial",)
@@ -129,10 +124,10 @@ class SafetyCandidatePolicy:
 
 @dataclass(frozen=True)
 class PartialStopPolicy:
-    stop_after_safe_candidate_gate: bool = True
-    skip_content_after_safe_candidate_gate: bool = True
-    skip_content_after_safe_candidate_gate_strip_modes: tuple[str, ...] = ("partial",)
-    skip_content_after_safe_candidate_gate_reason: str = "partial_safe_separator_candidate_gate_passed"
+    stop_after_safe_candidate: bool = True
+    skip_content_after_safe_candidate: bool = True
+    skip_content_after_safe_candidate_strip_modes: tuple[str, ...] = ("partial",)
+    skip_content_after_safe_candidate_reason: str = "partial_safe_separator_candidate_selected"
 
 
 @dataclass(frozen=True)
@@ -167,7 +162,7 @@ class EvidenceIndependencePolicy:
     min_content_score: float = 0.72
     min_geometry_score: float = 0.72
     max_photo_width_cv: float = 0.040
-    candidate_signal: str = "evidence_dependency_cycle_risk"
+    candidate_signal: str = "evidence_dependency_cycle_detected"
 
 
 @dataclass(frozen=True)
@@ -178,9 +173,9 @@ class OuterCorrectionCandidateExtensionPolicy:
 @dataclass(frozen=True)
 class ContentCandidatePlanPolicy:
     enabled: bool = True
-    skip_after_separator_candidate_gate: bool = True
-    separator_candidate_gate_skip_strip_modes: tuple[str, ...] = ("full",)
-    separator_candidate_gate_skip_reason: str = "separator_candidate_gate_passed"
+    skip_after_reliable_separator_candidate: bool = True
+    reliable_separator_candidate_skip_strip_modes: tuple[str, ...] = ("full",)
+    reliable_separator_candidate_skip_reason: str = "reliable_separator_candidate_selected"
     disabled_skip_reason: str = "disabled_by_policy"
 
 
@@ -226,7 +221,6 @@ __all__ = [
     "ContentGuidedSeparatorCandidatePolicy",
     "ContentMismatchCandidateSelectionPolicy",
     "EvidenceIndependencePolicy",
-    "GatePolicy",
     "GeometrySupportScorePolicy",
     "OuterCorrectionCandidateExtensionPolicy",
     "PartialEdgeHintPolicy",

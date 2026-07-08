@@ -10,7 +10,7 @@ from ..geometry.boxes import map_work_box, original_box_to_work
 class OutputBleedPolicy(Protocol):
     detection_long_axis_bleed: int
     detection_short_axis_bleed: int
-    overlap_risk_long_axis_bleed: int
+    output_overlap_long_axis_bleed: int
 
 
 @dataclass(frozen=True)
@@ -26,30 +26,20 @@ def detection_bleed_parameters(output_policy: OutputBleedPolicy) -> AxisBleedPar
     )
 
 
-def detection_has_overlap_bleed_risk(detection: Detection) -> bool:
-    overlap_bleed = detection.detail.get("overlap_bleed_risk")
-    if isinstance(overlap_bleed, dict) and bool(overlap_bleed.get("risk", False)):
+def detection_has_output_overlap_evidence(detection: Detection) -> bool:
+    output_overlap = detection.detail.get("output_overlap_evidence")
+    if isinstance(output_overlap, dict) and bool(
+        output_overlap.get("output_overlap_detected", False)
+    ):
         return True
-
-    lucky = detection.detail.get("lucky_pass_risk_score")
-    if isinstance(lucky, dict):
-        if bool(lucky.get("risk", False)):
-            return True
-        counts = lucky.get("overlap_risk_counts")
-        if isinstance(counts, dict):
-            if (
-                int(counts.get("strong", 0) or 0) > 0
-                or int(counts.get("medium", 0) or 0) > 0
-            ):
-                return True
 
     diagnostics = detection.detail.get("diagnostics")
     if isinstance(diagnostics, dict):
         summary = diagnostics.get("summary")
         if isinstance(summary, dict):
-            if int(summary.get("overlap_like_model_gaps", 0) or 0) > 0:
+            if int(summary.get("output_overlap_like_model_gaps", 0) or 0) > 0:
                 return True
-            counts = summary.get("overlap_risk_counts")
+            counts = summary.get("output_overlap_counts")
             if isinstance(counts, dict):
                 if (
                     int(counts.get("strong", 0) or 0) > 0
@@ -64,11 +54,11 @@ def output_bleed_parameters_for_detection(
     detection: Detection,
     output_policy: OutputBleedPolicy,
 ) -> AxisBleedParameters:
-    if not detection_has_overlap_bleed_risk(detection):
+    if not detection_has_output_overlap_evidence(detection):
         return current_bleed
     target_long_axis = max(
         int(current_bleed.long_axis),
-        int(output_policy.overlap_risk_long_axis_bleed),
+        int(output_policy.output_overlap_long_axis_bleed),
     )
     if target_long_axis == int(current_bleed.long_axis):
         return current_bleed
@@ -121,7 +111,7 @@ def apply_output_bleed(
         "detection_short_axis_bleed": int(detection_bleed.short_axis),
         "output_long_axis_bleed": int(output_bleed.long_axis),
         "output_short_axis_bleed": int(output_bleed.short_axis),
-        "overlap_risk_long_axis_bleed": bool(detection_has_overlap_bleed_risk(detection)),
+        "output_overlap_long_axis_bleed": bool(detection_has_output_overlap_evidence(detection)),
     }
 
 
@@ -160,7 +150,7 @@ __all__ = [
     "AxisBleedParameters",
     "apply_output_bleed",
     "detection_bleed_parameters",
-    "detection_has_overlap_bleed_risk",
+    "detection_has_output_overlap_evidence",
     "output_bleed_parameters_for_detection",
     "reapply_cached_output_bleed",
 ]

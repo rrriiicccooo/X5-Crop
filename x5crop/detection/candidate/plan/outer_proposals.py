@@ -29,7 +29,7 @@ class OuterProposalStrategy:
     report_strategy: str
     mode: str
     safety_only: bool
-    risk_level: str
+    uncertainty_level: str
 
     @property
     def enabled(self) -> bool:

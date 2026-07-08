@@ -4,11 +4,11 @@ from ....constants import CANDIDATE_SOURCE_SAFETY
 from ....domain import Detection
 from ....policies.runtime.policy import DetectionPolicy
 from ...gate_checks import GateCheck, unique_signals
-from ..signals import SIGNAL_SAFETY_CANDIDATE_GATE_BLOCKED, add_candidate_signal
+from ..signals import SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE, add_candidate_signal
 from .confidence_caps import apply_candidate_confidence_cap
 
 
-SAFETY_CANDIDATE_GATE_BLOCKER = SIGNAL_SAFETY_CANDIDATE_GATE_BLOCKED
+SAFETY_CANDIDATE_BLOCKER = SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE
 
 
 def _detail_list(value: object) -> list:
@@ -21,7 +21,7 @@ def _append_safety_candidate_gate_check(detection: Detection) -> None:
         assessment = {}
         detection.detail["candidate_assessment"] = assessment
 
-    gate = assessment.get("gate")
+    gate = assessment.get("candidate_gate")
     gate_detail = dict(gate) if isinstance(gate, dict) else {}
     checks = _detail_list(gate_detail.get("checks"))
     safety_check = GateCheck(
@@ -30,7 +30,7 @@ def _append_safety_candidate_gate_check(detection: Detection) -> None:
         bucket="source",
         passed=False,
         severity="blocker",
-        signal=SAFETY_CANDIDATE_GATE_BLOCKER,
+        signal=SAFETY_CANDIDATE_BLOCKER,
         detail={"source": CANDIDATE_SOURCE_SAFETY},
     )
     checks.append(safety_check.report_detail())
@@ -39,7 +39,7 @@ def _append_safety_candidate_gate_check(detection: Detection) -> None:
         [
             *[str(reason) for reason in _detail_list(assessment.get("blockers"))],
             *[str(reason) for reason in _detail_list(gate_detail.get("blockers"))],
-            SAFETY_CANDIDATE_GATE_BLOCKER,
+            SAFETY_CANDIDATE_BLOCKER,
         ]
     )
     diagnostics = unique_signals(
@@ -55,7 +55,7 @@ def _append_safety_candidate_gate_check(detection: Detection) -> None:
     assessment["blockers"] = blockers
     assessment["diagnostics"] = diagnostics
     assessment["confidence_caps"] = confidence_caps
-    assessment["gate"] = {
+    assessment["candidate_gate"] = {
         "passed": False,
         "checks": checks,
         "blockers": blockers,
@@ -79,15 +79,15 @@ def apply_safety_candidate_assessment(
     apply_candidate_confidence_cap(
         detection,
         cap,
-        SAFETY_CANDIDATE_GATE_BLOCKER,
+        SAFETY_CANDIDATE_BLOCKER,
     )
-    add_candidate_signal(detection, SAFETY_CANDIDATE_GATE_BLOCKER)
+    add_candidate_signal(detection, SAFETY_CANDIDATE_BLOCKER)
     _append_safety_candidate_gate_check(detection)
 
     detection.detail["safety_candidate"] = {
         "used": True,
         "candidate_gate_eligible": False,
-        "candidate_gate_signal": SAFETY_CANDIDATE_GATE_BLOCKER,
+        "candidate_blocker_signal": SAFETY_CANDIDATE_BLOCKER,
         "separator_local_mode": policy.outer.proposal.geometry.separator.local.mode,
         "separator_full_width_mode": policy.outer.proposal.geometry.separator.full_width.mode,
         "strategies": list(policy.candidate_plan.safety_candidate.strategies),
@@ -95,6 +95,6 @@ def apply_safety_candidate_assessment(
 
 
 __all__ = [
-    "SAFETY_CANDIDATE_GATE_BLOCKER",
+    "SAFETY_CANDIDATE_BLOCKER",
     "apply_safety_candidate_assessment",
 ]

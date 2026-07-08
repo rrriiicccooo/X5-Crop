@@ -28,7 +28,7 @@ class ContentContainmentTest(unittest.TestCase):
         )
 
         self.assertTrue(containment["content_containment_ok"])
-        self.assertFalse(containment["content_harm_risk"])
+        self.assertFalse(containment["content_integrity_failed"])
         self.assertEqual(containment["support"], "ok")
         self.assertEqual(containment["content_bearing_frame_indexes"], [2, 3])
         self.assertEqual(containment["empty_frame_indexes"], [1, 4])
@@ -37,7 +37,7 @@ class ContentContainmentTest(unittest.TestCase):
         self.assertEqual(containment["internal_empty_count"], 0)
         holder_texture = containment["holder_texture_evidence"]
         self.assertTrue(holder_texture["used"])
-        self.assertEqual(holder_texture["gate_role"], "guidance_not_auto_pass")
+        self.assertEqual(holder_texture["gate_role"], "guidance_not_candidate_pass")
         self.assertTrue(holder_texture["holder_texture_low"])
         self.assertEqual(holder_texture["holder_frame_indexes"], [1, 4])
 
@@ -57,10 +57,10 @@ class ContentContainmentTest(unittest.TestCase):
         )
 
         self.assertFalse(containment["content_containment_ok"])
-        self.assertTrue(containment["content_harm_risk"])
+        self.assertTrue(containment["content_integrity_failed"])
         self.assertEqual(containment["support"], "low_content")
 
-    def test_aspect_conflict_on_content_frame_is_harm_risk(self) -> None:
+    def test_aspect_conflict_on_content_frame_is_integrity_failure(self) -> None:
         detail = {
             "used": True,
             "frame_scores": [
@@ -76,7 +76,7 @@ class ContentContainmentTest(unittest.TestCase):
         )
 
         self.assertFalse(containment["content_containment_ok"])
-        self.assertTrue(containment["content_harm_risk"])
+        self.assertTrue(containment["content_integrity_failed"])
         self.assertEqual(containment["support"], "aspect_conflict")
 
     def test_outer_overcontainment_is_allowed(self) -> None:
@@ -103,7 +103,7 @@ class ContentContainmentTest(unittest.TestCase):
         self.assertTrue(alignment["overcontainment_allowed"])
         self.assertTrue(alignment["overcontains_long_axis"])
 
-    def test_outer_undercrop_is_harm_risk(self) -> None:
+    def test_outer_undercrop_is_integrity_failure(self) -> None:
         gray = np.full((120, 900), 255, dtype=np.uint8)
         gray[20:100, 50:850] = 0
         detection = Detection(

@@ -48,13 +48,13 @@ class GapMethodEvidenceSummary:
 
 
 @dataclass(frozen=True)
-class SeparatorGateDetailSummary:
+class SeparatorSupportDetailSummary:
     expected_gaps: int
     hard_separator_gaps: int
     grid_model_gaps: int
     equal_model_gaps: int
     content_model_gaps: int = 0
-    gate_reason: Any = None
+    support_reason: Any = None
     geometry_support_mode: Any = None
     hard_detail: dict[str, Any] = field(default_factory=dict)
 
@@ -89,7 +89,7 @@ class SeparatorGateDetailSummary:
             "separator_support_count": self.separator_support_count,
             "hard_gap_ratio": self.hard_gap_ratio,
             "model_gap_share": self.model_gap_share,
-            "gate_reason": self.gate_reason,
+            "support_reason": self.support_reason,
             "geometry_support_mode": self.geometry_support_mode,
             "hard_detail": self.hard_detail,
         }
@@ -160,7 +160,7 @@ def gap_method_evidence_summary(
     )
 
 
-def separator_gate_detail_summary(
+def separator_support_detail_summary(
     hard_detail: dict[str, Any],
     *,
     expected_default: int = 0,
@@ -168,15 +168,15 @@ def separator_gate_detail_summary(
     grid_default: int = 0,
     equal_default: int = 0,
     content_default: int = 0,
-) -> SeparatorGateDetailSummary:
+) -> SeparatorSupportDetailSummary:
     detail = _dict(hard_detail)
-    return SeparatorGateDetailSummary(
+    return SeparatorSupportDetailSummary(
         expected_gaps=max(0, _int(detail.get("expected_gaps"), expected_default)),
         hard_separator_gaps=_int(detail.get("hard_gaps"), hard_default),
         grid_model_gaps=_int(detail.get("grid_gaps"), grid_default),
         equal_model_gaps=_int(detail.get("equal_gaps"), equal_default),
         content_model_gaps=_int(detail.get("content_gaps"), content_default),
-        gate_reason=detail.get("reason"),
+        support_reason=detail.get("reason"),
         geometry_support_mode=detail.get("separator_geometry_support_mode"),
         hard_detail=detail,
     )
@@ -184,7 +184,7 @@ def separator_gate_detail_summary(
 
 __all__ = [
     "GapMethodEvidenceSummary",
-    "SeparatorGateDetailSummary",
+    "SeparatorSupportDetailSummary",
     "gap_method_evidence_summary",
-    "separator_gate_detail_summary",
+    "separator_support_detail_summary",
 ]

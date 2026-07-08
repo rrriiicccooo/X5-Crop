@@ -8,7 +8,7 @@ from .candidate import (
     scoring_policy,
     selection_policy,
 )
-from .common import count_policy, gate_policy, partial_frame_fit
+from .common import count_policy, partial_frame_fit
 from .content import content_policy
 from .decision import runtime_decision_policy
 from .diagnostics import diagnostics_policy
@@ -17,7 +17,7 @@ from .outer import outer_policy
 from .output import output_policy
 from .presets import FormatPolicyPreset
 from .report import report_policy
-from .risk import runtime_risk_policy
+from .output_evidence import runtime_output_evidence_policy
 from .separator import separator_policy
 from ..ids import detection_policy_id_for
 from ..runtime.base import DetectorPolicy
@@ -49,11 +49,10 @@ def build_policy_from_preset(
         partial_holder=partial_holder_policy(fmt, mode_preset, strip_mode, params),
         partial_edge_hint=partial_edge_hint_policy(params),
         frame_fit=mode_preset.frame_fit or partial_frame_fit(preset.format_id),
-        gates=gate_policy(),
         scoring=scoring_policy(fmt, params),
         candidate_selection=selection_policy(preset, strip_mode, params),
         candidate_plan=candidate_plan_policy(mode_preset, strip_mode, params),
-        risk=runtime_risk_policy(fmt, mode_preset, params),
+        output_evidence=runtime_output_evidence_policy(mode_preset, params),
         decision=runtime_decision_policy(params),
         finalization=finalization_policy(params),
         output=output_policy(),

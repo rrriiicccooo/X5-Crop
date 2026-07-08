@@ -118,9 +118,9 @@ def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: Detection, scale: fl
     if isinstance(diagnostics, dict):
         records = diagnostics.get("gap_diagnostics", [])
     if not isinstance(records, list):
-        overlap_bleed = detection.detail.get("overlap_bleed_risk")
-        if isinstance(overlap_bleed, dict):
-            records = overlap_bleed.get("gap_diagnostics", [])
+        output_overlap = detection.detail.get("output_overlap_evidence")
+        if isinstance(output_overlap, dict):
+            records = output_overlap.get("gap_diagnostics", [])
     if not isinstance(records, list):
         return
     gaps_by_index = {gap.index: gap for gap in detection.gaps}
@@ -138,7 +138,7 @@ def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: Detection, scale: fl
             "geometry_conflict",
         }:
             color = (255, 0, 220)
-        elif str(record.get("overlap_risk", "none")) in {"medium", "strong"}:
+        elif str(record.get("output_overlap_class", "none")) in {"medium", "strong"}:
             color = (0, 220, 255)
         if color is None:
             continue

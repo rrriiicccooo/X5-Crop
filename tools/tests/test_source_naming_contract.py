@@ -163,7 +163,6 @@ class SourceNamingContractTest(unittest.TestCase):
             "content_aspect_conflict_cap",
             "content_low_confidence_cap",
             "outer_mismatch_cap",
-            "lucky_pass_risk_cap",
             "outer_candidate_disagreement_review_reason",
             "deskew_uncertain_review_reason",
         }
@@ -207,21 +206,20 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertFalse(hasattr(diagnostics, "ReportPolicy"))
         self.assertFalse(hasattr(common, "report_policy"))
 
-    def test_runtime_risk_policy_is_not_owned_by_diagnostics_modules(self) -> None:
+    def test_output_evidence_policy_is_not_owned_by_diagnostics_modules(self) -> None:
         from x5crop.policies.assembly import diagnostics
         from x5crop.policies.runtime import diagnostics as runtime_diagnostics
 
         banned = (
-            "OverlapBleedRiskPolicy",
-            "LuckyPassRiskPolicy",
-            "overlap_bleed_risk",
-            "lucky_pass_risk",
+            "OutputOverlapEvidencePolicy",
+            "RuntimeOutputEvidencePolicy",
+            "output_overlap_evidence",
         )
         for name in banned:
             self.assertFalse(hasattr(runtime_diagnostics, name))
             self.assertNotIn(name, tuple(diagnostics.__all__))
 
-    def test_overlap_bleed_risk_does_not_use_diagnostic_ownership_name(self) -> None:
+    def test_output_overlap_evidence_does_not_use_diagnostic_ownership_name(self) -> None:
         offenders: list[str] = []
         banned = ("diagnostic_" + "overlap", "Diagnostic" + "Overlap")
         for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
@@ -251,15 +249,10 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_decision_contract_does_not_keep_unused_review_only_flags(self) -> None:
-        from x5crop.policies.decision.contract import RiskPolicy
+    def test_decision_contract_does_not_keep_runtime_signal_policy(self) -> None:
+        from x5crop.policies.decision.contract import DetectionDecisionContract
 
-        banned = {
-            "content_only_candidates_review_only",
-            "safety_candidates_review_only",
-        }
-
-        self.assertTrue(banned.isdisjoint(RiskPolicy.__dataclass_fields__))
+        self.assertNotIn("risk", DetectionDecisionContract.__dataclass_fields__)
 
     def test_content_candidate_policy_does_not_use_final_review_only_terms(self) -> None:
         offenders: list[str] = []
@@ -426,7 +419,7 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_selection_risk_is_not_named_as_candidate_review_reason(self) -> None:
+    def test_selection_uncertainty_is_not_named_as_candidate_review_reason(self) -> None:
         banned = (
             "candidate_review_reasons_before_decision",
             "candidate_competition_uncertain",
@@ -547,24 +540,25 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_separator_gate_contract_uses_explicit_result(self) -> None:
-        gate_path = (
+    def test_separator_support_contract_uses_explicit_result(self) -> None:
+        support_path = (
             PROJECT_ROOT
             / "x5crop"
             / "detection"
             / "candidate"
             / "assessment"
-            / "gates.py"
+            / "separator_support.py"
         )
-        gate_text = gate_path.read_text(encoding="utf-8")
-        self.assertIn("class SeparatorGateResult", gate_text)
-        self.assertIn("class SeparatorGateSupportAssessment", gate_text)
+        support_text = support_path.read_text(encoding="utf-8")
+        self.assertIn("class SeparatorSupportResult", support_text)
+        self.assertIn("class SeparatorSupportCheck", support_text)
 
         banned = (
-            "separator_gate_ok, separator_gate_detail = assess_separator_gate",
+            "separator_" "score_ok",
+            "separator_" "gate_detail",
             ") -> tuple[bool, dict[str, Any]]",
             ") -> tuple[bool, str]",
-            "ok, reason = separator_gate_",
+            "ok, reason = separator_support_",
             "broad_ok, broad_reason",
             "edge_ok, edge_reason",
         )
@@ -613,7 +607,7 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertIn("class CandidateGateAssessment", gate_text)
         self.assertIn("candidate_gate_assessment", assessment_text)
-        self.assertIn('"gate": candidate_gate.report_detail()', assessment_text)
+        self.assertIn('"candidate_gate": candidate_gate.report_detail()', assessment_text)
         self.assertNotIn("class CandidateReasonBuckets", assessment_text)
         self.assertNotIn("CANDIDATE_AUTO_GATE_BLOCKING_REASONS", gate_text)
         self.assertNotIn("CANDIDATE_AUTO_GATE_BLOCKING_REASONS", assessment_text)
@@ -623,7 +617,7 @@ class SourceNamingContractTest(unittest.TestCase):
             assessment_text,
         )
 
-    def test_candidate_signals_are_failure_or_risk_not_success_states(self) -> None:
+    def test_candidate_signals_are_failure_or_diagnostic_not_success_states(self) -> None:
         from x5crop.detection.candidate.signals import CANDIDATE_SIGNAL_TAXONOMY
 
         offenders = [
@@ -756,7 +750,7 @@ class SourceNamingContractTest(unittest.TestCase):
             "required_candidate_signal",
             "content_candidate_signals",
             "select_separator_review_candidate_on_content_mismatch",
-            "separator_review_on_mismatch",
+            "separator_" "review" "_on_mismatch",
         )
         offenders: list[str] = []
         for path in (
@@ -853,8 +847,7 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertIn('"output": False', text)
         self.assertIn('"confidence": False', text)
         self.assertIn('"decision": False', text)
-        self.assertIn("single_anchor_evidence_risk", text)
-        self.assertNotIn("single_anchor_pass_risk", text)
+        self.assertIn("output_overlap_counts", text)
         self.assertNotIn("changes_output", text)
         self.assertNotIn("changes_confidence", text)
         self.assertNotIn("changes_final_decision", text)
@@ -887,11 +880,13 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertNotIn("add_final_review_reason", text)
         self.assertNotIn("review_reasons.append", text)
 
-    def test_decision_summary_uses_generated_not_added_reason_field(self) -> None:
+    def test_decision_summary_uses_final_reason_and_signal_fields(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "contract_applier.py"
         text = path.read_text(encoding="utf-8")
 
-        self.assertIn("decision_generated_review_reasons", text)
+        self.assertIn('"final_review_reasons"', text)
+        self.assertIn('"decision_signals"', text)
+        self.assertNotIn("decision_generated_review_reasons", text)
         self.assertNotIn("final_review_reasons_added", text)
         self.assertNotIn("review_reasons_added", text)
         self.assertNotIn("candidate_blockers_before_decision", text)
@@ -902,14 +897,11 @@ class SourceNamingContractTest(unittest.TestCase):
         text = path.read_text(encoding="utf-8")
 
         self.assertIn('"content_quality_score_role"', text)
-        self.assertNotIn('"score_role": "quality_diagnostic_not_hard_gate"', text)
+        self.assertNotIn('"score_role": "quality_diagnostic_not_boundary_evidence"', text)
 
-    def test_finalization_does_not_generate_decision_risk_evidence(self) -> None:
+    def test_finalization_does_not_generate_decision_output_evidence(self) -> None:
         banned = (
-            "overlap_bleed_risk_detail",
-            "lucky_pass_risk_score_detail",
-            "from ..evidence.risk",
-            "from ...detection.evidence.risk",
+            "output_overlap_evidence_detail",
             "get_detection_policy",
             "policies.registry",
         )
@@ -986,9 +978,9 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertIn("low_confidence_context", decision_gate_text)
         self.assertNotIn("_low_confidence_context_reason_inputs", contract_text)
 
-    def test_policy_assembly_does_not_use_reported_physical_risk_strings(self) -> None:
+    def test_policy_assembly_does_not_use_reported_physical_note_strings(self) -> None:
         banned = (
-            "known_physical_risks",
+            "known_physical_notes",
             "_has_physical_risk",
         )
         offenders: list[str] = []

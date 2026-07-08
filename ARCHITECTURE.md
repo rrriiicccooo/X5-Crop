@@ -74,7 +74,7 @@ X5_Crop.py / launchers
 
 - `geometry` / `image` / `io` 不反向依赖 runtime、workflow、detection、debug、report 或
   policy registry。
-- 基础层不读取 `Detection.detail`、risk detail 或 PASS / REVIEW 语义。
+- 基础层不读取 `Detection.detail`、decision-signal detail 或 PASS / REVIEW 语义。
 - 基础层不接收 `strip_mode` 字符串；上层先解析为普通参数对象。
 - cache key 只包含实际影响计算的输入和参数，不用 format 名称替代参数所有权。
 
@@ -127,13 +127,13 @@ candidate plan
 | `detection.modes` | dual-lane、review-only 等 mode routing；dual-lane 只负责拆 lane 和合并 lane 结果。 |
 | `detection.physical` | outer proposal / correction、separator proposal / model、photo-size model。 |
 | `detection.guidance` | content outer hints、content separator hints 和 content-model proposal raw metrics。 |
-| `detection.evidence` | separator、content、geometry、outer alignment、risk 和只读 diagnostics evidence；不读取 assessment。 |
+| `detection.evidence` | separator、content、geometry、outer alignment、output-overlap 和只读 diagnostics evidence；不读取 assessment。 |
 | `detection.candidate.plan` | count、offset、candidate source、execution budget 和 dual-lane lane candidate lifecycle。 |
 | `detection.candidate.build` | outer -> separator gaps -> frames -> unscored `Detection`。 |
-| `detection.candidate.assessment` | base scoring、support scores、gate support、candidate blockers / diagnostics 和 auto gate。 |
+| `detection.candidate.assessment` | base scoring、support scores、support helpers、candidate blockers / diagnostics 和 candidate gate。 |
 | `detection.candidate.extension` | corrected outer、content-guided separator 等 reassessed candidates。 |
 | `detection.candidate.selection` | 多候选竞争和 selected candidate。 |
-| `detection.decision` | final evidence、confidence caps、risk summary、final review reasons 和 PASS / REVIEW。 |
+| `detection.decision` | evidence summary、decision signals、confidence caps、final review reasons 和 PASS / REVIEW。 |
 | `detection.final` | 消费 `x5crop.output` bleed helper，执行 approved geometry adjustment 和 read-only diagnostics attachment。 |
 
 关键审核点：
@@ -149,8 +149,8 @@ candidate plan
   `candidate_signals` 和 `detail`；不能用匿名 tuple 解包来传递 assessment 契约。
 - content candidate assessment 输出使用显式 `ContentCandidateAssessment`，字段为
   `confidence`、`diagnostics` 和 `detail`；content diagnostics 仍是候选级解释。
-- separator gate 输出使用显式 `SeparatorGateResult`，字段为 `ok` 和 `detail`；
-  调用方不能用匿名 tuple 解包 gate 契约。
+- separator support assessment 输出使用显式 `SeparatorSupportResult`，字段为 `ok` 和 `detail`；
+  调用方不能用匿名 tuple 解包 support 契约。
 - `frame_topology_evidence` 属于 candidate build / frame geometry evidence；失败时只产生
   `frame_*` candidate signals，最终 REVIEW 仍由 decision 生成。
 - `separator_cross_axis_continuity` 属于 separator evidence；它决定 hard gap 是否像真实横跨短轴的 separator。
@@ -158,9 +158,8 @@ candidate plan
   不拥有 auto-pass 权限。
 - outer mixed-boundary detail 属于 physical outer proposal；它只提出或支持 outer candidate，
   不评分、不 gate、不 PASS / REVIEW。
-- separator gate 内部 profile / supplemental support checks 输出使用显式
-  `SeparatorGateSupportAssessment`，字段为 `ok` 和 `reason`；内部 helper 也不能
-  用匿名 ok/reason tuple 表达 gate 支持契约。
+- separator support supplemental checks 输出使用显式 `SeparatorSupportCheck`，字段为
+  `ok` 和 `reason`；内部 helper 也不能用匿名 ok/reason tuple 表达 support 契约。
 - gate check 使用统一 `GateCheck`，字段为 `code`、`stage`、`bucket`、
   `passed`、`severity`、`signal` 和 `detail`；低层 signal 不直接伪装成最终
   REVIEW reason。
@@ -172,8 +171,8 @@ candidate plan
 - `candidate_assessment.gate` 是候选资格的唯一结构化来源；候选级 failed
   gate 结果写作 `candidate_gate_failed`，不能回塞进 `candidate_signals` 或独立
   blocker 词表。
-- decision 的 `candidate_signal_inputs_before_decision` 只保留候选 blockers、
-  diagnostics、candidate gate 和 selection risk inputs；不再保留旧 signal reducer。
+- decision 的 `candidate_gate_input` 只保留候选 blockers、diagnostics、candidate gate
+  和 selection uncertainty inputs；不再保留旧 signal reducer。
 - low-confidence context reasons，例如 outer candidate disagreement 和 deskew uncertainty，
   属于 decision contract input；不能在 `final_decision` 中事后补写 `decision_summary`。
 - decision gate 输出使用显式 `DecisionGateAssessment`，字段为 `passed`、
@@ -189,15 +188,15 @@ candidate plan
   candidate signal reader 不 fallback 到 `Detection.review_reasons`；`Detection.review_reasons`
   只用于 decision 之后的最终用户可见原因。
 - `content_only_evidence` 只表示 candidate source 主要依赖 content；content containment /
-  content harm 失败使用 `content_evidence_insufficient`，不能复用 content-only reason。
-- decision `risk_summary.candidate_source_detail` 同时记录 `candidate_assessment.source`
-  和顶层 `candidate_source`；content-only risk 读取候选评估来源，safety / review-only
-  risk 读取对应候选来源，不能再混成一个模糊 source。
+  content integrity 失败使用 `content_evidence_insufficient`，不能复用 content-only reason。
+- decision `decision_signals.candidate_source_detail` 同时记录 `candidate_assessment.source`
+  和顶层 `candidate_source`；content-only evidence 读取候选评估来源，safety / review-only
+  source 读取对应候选来源，不能再混成一个模糊 source。
 - decision `evidence_summary.content` 中，`content_score_role` 表示 content containment
   support；`content_quality_score_role` 只表示 quality diagnostic，不是 hard gate。
-- `overlap_risk` 和 `lucky_pass_risk` 是不同 final risk reason：前者来自 overlap /
-  output-bleed 物理诊断，后者来自证据组合可能侥幸通过的 decision risk。两者不能互相借名。
-- candidate selection 只能记录 `selection_risk_inputs`、selection override 和 competition
+- output-overlap evidence 是 output-adjacent decision signal；不存在证据组合侥幸通过的
+  专用 gate 或独立 decision-signal family。
+- candidate selection 只能记录 `selection_uncertainty_inputs`、selection override 和 competition
   detail；它不能提前追加 final-looking review reason，也不能提前执行 decision cap。
 - content mismatch selector 属于 candidate selection；它只能读取 candidate-level
   diagnostics / blockers 并选择更可信的候选，不能命名为 review policy 或生成最终
@@ -210,9 +209,9 @@ candidate plan
 - dual-lane lane content / outer-alignment checks 属于 `candidate.assessment`；`candidate.plan`
   只选择 lane candidate 并调用 assessment helper；lane candidate 限分写入
   `candidate_confidence_caps`。
-- safety candidate 的 auto-pass blocker、candidate cap 和 auto-gate 改写属于
+- safety candidate 的 auto-pass blocker、candidate cap 和 candidate-qualification 改写属于
   `candidate.assessment`；`candidate.plan` 只生成 safety candidate 并调用 assessment helper。
-  最终 REVIEW 原因由 decision risk summary 根据 safety candidate source 生成。
+  最终 REVIEW 原因由 decision signals 根据 safety candidate source 生成。
 - candidate table / selected candidate 的候选级信号字段使用 `candidate_signals`、
   `candidate_blockers` 和 `candidate_diagnostics`；最终信号字段使用 `final_review_reasons`。
 - candidate plan / execution budget 的可靠性细节也使用 `candidate_signals` 和
@@ -226,8 +225,8 @@ candidate plan
 - guidance 和 candidate plan detail 只能写 `candidate_contract` / `evidence_contract` 这类
   源头契约；`decision_contract` 名称只属于 `policies.decision` 和 `detection.decision`。
 - runtime 调用 decision 时直接 import owning module；`detection.decision.__init__` 只做 package marker。
-- format 的 `known_physical_risks` 是 report/debug 可见描述；policy assembly 必须用
-  family、count、aspect 等物理谓词推导参数，不能把 risk 字符串当能力开关。
+- format 的 `known_physical_notes` 是 report/debug 可见描述；policy assembly 必须用
+  family、count、aspect 等物理谓词推导参数，不能把格式备注当能力开关。
 - corrected candidate 必须重新 build、重新 assessment，再回到候选池统一 selection。
 - physical correction 不读取 candidate assessment；是否尝试 correction 属于 candidate extension。
 - physical 层不保留 `plan.py`；计划、execution budget 和候选 source 组合属于
@@ -236,7 +235,7 @@ candidate plan
   或 report/read-model。
 - finalization 不生成候选、不评分、不决定 PASS / REVIEW；它只消费 decision 结果并调用
   `x5crop.output` 做输出相邻调整。
-- `x5crop.output` 是 output-adjacent read/apply helper；它可以读取已存在的 risk /
+- `x5crop.output` 是 output-adjacent read/apply helper；它可以读取已存在的 decision signal /
   decision detail 来计算 output bleed，但不能生成新的 PASS / REVIEW 输入。
 - `detection.final` 接收 workflow 已选定的 runtime policy；它不能自行查 policy registry
   或重新解释 format / mode。
@@ -245,8 +244,8 @@ candidate plan
   裸 Detection 若还没有 decision summary，报告和 Debug Analysis 必须显示 `unknown` /
   `UNKNOWN`。
 - report schema 必须显式输出 `evidence`、`gates`、`evidence_summary` 和
-  `risk_summary`；构造出的审核 section 不能只停留在内部临时字典里。
-- report schema 的 risk / deskew 可见细节属于 `diagnostics` section，不挂在
+  `decision_signals`；构造出的审核 section 不能只停留在内部临时字典里。
+- report schema 的 decision signal / deskew 可见细节属于 `diagnostics` section，不挂在
   `finalization` 名下；finalization 这个词只保留给输出相邻几何和 bleed 调整。
 - `Detection.detail` 的稳定读取 helper 属于 `detection.detail`，根包不承载 report/debug read-model。
 - report、debug、export 和 finalization 的输出面读取最终 reason 时必须通过
@@ -263,7 +262,7 @@ candidate plan
 
 - `assessment.scoring` 只计算 support scores 和 joint score。
 - `assessment.base_scoring` 负责 base confidence 和候选级 `candidate_signals`。
-- `assessment.gate_support` 负责 hard-full calibration 和 separator geometry support。
+- `assessment.support_calibration` 负责 hard-full calibration 和 separator geometry support。
 - base confidence 只由 separator / gap support 和 `photo_width_cv` 组成。
 - raw outer area、global contrast、frame-box width 和 separator-width variation 是 diagnostics
   或 final decision 输入，不是 base confidence 输入。
@@ -272,13 +271,13 @@ candidate plan
 - separator width variation 只能保留为 observed detail；separator cross-axis continuity 才能影响
   hard separator trust。
 - content support score 表示真实内容 containment support；content quality score 只表示影像证据强弱。
-- 当 detail 明确给出 `content_containment_ok` / `content_harm_risk` 时，support score 只能消费
+- 当 detail 明确给出 `content_containment_ok` / `content_integrity_failed` 时，support score 只能消费
   containment 字段；旧 `support` summary 只是报告 detail。
 - partial mode 本身不是低置信度原因。只有单张 partial 或 35mm 两张 partial 这类天然无法解释
   holder structure 的情况继续标记 `partial_count_ambiguous`。
 - `photo_width_unstable` 和 final photo-width gate 只能消费 `photo_edges` 来源的
   `photo_width_cv`；`frame_boxes` measurement 不能生成照片宽度 hard reason。
-- risk 只能拉回 REVIEW 或限制输出，不能救回 PASS。
+- decision signal 只能拉回 REVIEW 或限制输出，不能救回 PASS。
 - confidence cap 必须记录 owner、reason、cap value 和前后 confidence；candidate cap 和
   decision cap 分别归 assessment / decision。
 - `candidate_assessment.gate`、`candidate_assessment.blockers` 和
@@ -286,30 +285,30 @@ candidate plan
 - `candidate_gate_failed` 是 gate 结果，不是候选物理证据；它只能出现在 gate /
   confidence-cap detail 或 decision reason input，不能作为 candidate signal 存储。
 - 旧 candidate-signal reducer 已退休；candidate signal 不再由 decision 归并成
-  final review reason，decision 只读取 gate / evidence / risk 的结构化输入。
+  final review reason，decision 只读取 gate / evidence / decision signal 的结构化输入。
 - candidate gate 的 blockers 从 `GateCheck` 派生；通用 `utils` 不承载
   candidate-specific blocker list，也不用 hard review reason 命名。
 - candidate 级可见字段必须写 `candidate_gate_*`；不能用 `auto_pass_*` 表达候选资格，
   因为最终 PASS 只属于 decision contract。
 - read-only diagnostics 用 `effects` 结构声明 output / confidence / decision 副作用；
   不在低层 detail 中使用 `changes_final_decision` 这类 final-looking 字段。
-- read-only diagnostics 的风险观察使用 evidence 命名，例如 `single_anchor_evidence_risk`；
-  不能用 `pass` 表达最终裁决风险，最终 PASS / REVIEW 只属于 decision contract。
-- candidate-plan policy 中阻断 candidate auto gate 的字段必须叫 blocker，不叫 review
+- read-only diagnostics 只能使用 evidence 命名，不能用 `pass` 表达最终裁决，
+  最终 PASS / REVIEW 只属于 decision contract。
+- candidate-plan policy 中阻断 candidate candidate gate 的字段必须叫 blocker，不叫 review
   reason；final review reason 只属于 decision contract。
 - candidate-plan detail 中 gap search family 只用 `gap_search_profiles` 表达；旧
   `gap_profiles` 别名不再作为 runtime/report 可见字段出现。
 - content-only、safety 和 review-only candidate 是否进入最终 REVIEW 由 source-derived
-  `risk_summary` 和 decision contract applier 表达；decision policy 不保留未被裁决消费的
+  `decision_signals` 和 decision contract applier 表达；decision policy 不保留未被裁决消费的
   review-only 布尔开关。
-- decision contract 只承载 format/mode、evidence、risk 和 PASS / REVIEW decision
+- decision contract 只承载 format/mode、evidence、decision signals 和 PASS / REVIEW decision
   参数；output bleed、debug panels 和 report sections 留在 runtime output /
   diagnostics / report policy，不挂在 decision contract 下。
-- `selection_risk_inputs` 是候选竞争阶段的风险证据，不是最终裁决；只有 decision 可以把它
+- `selection_uncertainty_inputs` 是候选竞争阶段的不确定性证据，不是最终裁决；只有 decision 可以把它
   映射为 `candidate_competition_close`。
-- overlap / lucky-pass 这类 final risk evidence 必须在 decision 阶段生成；finalization
-  只能消费已有 risk detail 做 output bleed，不能在 PASS / REVIEW 之后补充裁决输入。
-- `decision_reason_inputs`、`decision_generated_review_reasons` 和 `final_review_reasons` 是最终
+- output-overlap evidence 必须在 decision 阶段生成；finalization 只能消费已有
+  output-overlap detail 做 output bleed，不能在 PASS / REVIEW 之后补充裁决输入。
+- `decision_reason_inputs` 和 `final_review_reasons` 是最终
   PASS / REVIEW 的解释入口；low-confidence context reason 也必须进入这些 final summary 字段。
 - decision 子层读取或更新最终原因必须经过 `detection.decision.reasons`；`review_reasons`
   字段在 decision 后才是用户可见 final reason，不允许绕过 helper 直接追加。
@@ -327,18 +326,18 @@ format fact、runtime capability 和 final decision 必须分开：
 |---|---|
 | `policies.formats` | format-specific physical tolerance、content profile tolerance 和 search budget overrides。 |
 | `policies.parameters` | 数值参数对象、format parameter registry 和 override ownership validation。 |
-| `policies.runtime` | runtime `DetectionPolicy` 和子 policy dataclass，包括 candidate / risk / decision / finalization / output / diagnostics / report。 |
+| `policies.runtime` | runtime `DetectionPolicy` 和子 policy dataclass，包括 candidate / decision signal / decision / finalization / output / diagnostics / report。 |
 | `policies.assembly` | 从 format facts、受限 overrides 和 profile defaults 组装 active runtime policy。 |
 | `policies.decision` | final PASS / REVIEW decision contract 和少量 final evidence overrides。 |
 | `policies.reporting` | policy detail serialization；只负责报告可见性。 |
 | `policies.registry` / `consistency` / `ids` | lookup、consistency smoke、policy id 和 schema id。 |
 
-format 文件不能声明 scoring、gate、risk、detector、diagnostics 或 runtime preset。影响
+format 文件不能声明 scoring、gate、decision-signal algorithm、detector、diagnostics 或 runtime preset。影响
 final PASS / REVIEW 的参数必须进入 decision policy detail；影响 runtime 检测路径但不直接
 决定 PASS / REVIEW 的参数必须进入 runtime policy detail。`finalization` policy 只保留最终
 输出前的 approved geometry adjustment / attachment 开关；runtime output policy 拥有 output
-bleed 的执行开关、detection bleed、output bleed 和 edge-bleed protection。runtime risk
-policy 只保留生成 final risk evidence 的参数；diagnostics policy 与 report policy 单独装配，
+bleed 的执行开关、detection bleed、output bleed 和 edge-bleed protection。runtime output-evidence
+policy 只保留生成 output-overlap evidence 的参数；diagnostics policy 与 report policy 单独装配，
 confidence cap 和 review reason 不属于 finalization。
 format policy module 的唯一构建入口是 `build_policy(strip_mode)`；`full_policy()` /
 `partial_policy()` 这类 mode-specific convenience helper 不再保留。
@@ -357,7 +356,7 @@ evidence / decision 决定结果如何解释。
 | 这个能力是否可用？ | runtime policy capability。 |
 | 这个 format / mode 默认怎样启用能力？ | policy assembly / preset。 |
 | 这个能力如何计算证据？ | detection / geometry / image 的对应 owner。 |
-| 这个证据如何影响结果？ | assessment、decision、risk 和 report detail。 |
+| 这个证据如何影响结果？ | assessment、decision signals 和 report detail。 |
 
 当前审核口径：
 
@@ -378,8 +377,8 @@ report 和 debug 必须让人复盘为什么得到当前结果：
 - `Detection` 是检测阶段的稳定候选结果。
 - `ProcessResult` 是 report、debug 和 export 的稳定输入。
 - report row 顶层包含 `version`、`policy_id` 和 `report_schema`。
-- V4.9 report schema 包含 evidence、risk、decision policy 和 selected candidate detail。
-- Debug Analysis 默认保持三联图；更细 evidence / gate / risk 信息进入 report detail。
+- V4.9 report schema 包含 evidence、decision signals、decision policy 和 selected candidate detail。
+- Debug Analysis 默认保持三联图；更细 evidence / gate / decision signal 信息进入 report detail。
 - output surface 只解释和输出结果，不参与候选选择。
 
 报告字段要说明 evidence 从哪里来、被谁消费、为什么通过或进入复核；不要把报告字段变成
@@ -525,12 +524,12 @@ depend on anonymous tuple positions for the assessment contract.
 Content candidate assessment returns an explicit `ContentCandidateAssessment`
 result with `confidence`, `diagnostics`, and `detail` fields; content
 diagnostics remain candidate-level explanations.
-Separator gate assessment returns an explicit `SeparatorGateResult` with `ok`
-and `detail` fields; callers must not depend on anonymous tuple positions for
-the gate contract.
-Internal separator-gate profile and supplemental support checks return an
-explicit `SeparatorGateSupportAssessment` with `ok` and `reason` fields; helper
-functions must not encode gate-support contracts as anonymous ok/reason tuples.
+Separator support assessment returns an explicit `SeparatorSupportResult` with
+`ok` and `detail` fields; callers must not depend on anonymous tuple positions
+for the support contract.
+Internal separator supplemental support checks return an explicit
+`SeparatorSupportCheck` with `ok` and `reason` fields; helper functions must not
+encode support contracts as anonymous ok/reason tuples.
 Gate checks use a shared `GateCheck` shape with `code`, `stage`, `bucket`,
 `passed`, `severity`, `signal`, and `detail` fields; low-level signals must not
 pretend to be final REVIEW reasons.
@@ -538,9 +537,9 @@ Candidate gate assessment returns an explicit `CandidateGateAssessment` with
 `passed`, `checks`, `blockers`, `diagnostics`, and `confidence_caps` fields;
 blockers are derived from failed required gate checks, not from an independent
 blocker vocabulary.
-`candidate_signal_inputs_before_decision` keeps candidate blockers,
-diagnostics, candidate gate detail, and selection risk inputs only; the old
-candidate-signal reducer is retired.
+`candidate_gate_input` keeps candidate blockers, diagnostics, candidate gate
+detail, and selection uncertainty inputs only; the old candidate-signal reducer
+is retired.
 Decision gate assessment returns an explicit `DecisionGateAssessment` with
 `passed`, `checks`, `final_review_reasons`, `reason_inputs`, and
 `confidence_caps` fields; final REVIEW reasons are generated only from this
@@ -554,16 +553,16 @@ Candidate and mode sublayers must not write those candidate signals into
 `Detection.review_reasons`, and candidate signal readers do not fall back to it.
 `Detection.review_reasons` is reserved for final user-visible reasons after the
 decision step.
-Candidate selection records `selection_risk_inputs`, selection override, and
+Candidate selection records `selection_uncertainty_inputs`, selection override, and
 competition detail only; it must not append final-looking review reasons or apply
 decision caps. The content mismatch selector is a candidate-selection rule: it
 reads candidate-level diagnostics / blockers and may choose a more credible
 candidate, but it is not a review policy and does not create final review
 reasons. `content_only_evidence` means the candidate source relies mainly on
-content; failed content containment or content-harm checks use
-`content_evidence_insufficient` instead. Decision risk summaries expose
+content; failed content containment or content-integrity checks use
+`content_evidence_insufficient` instead. Decision signals expose
 `candidate_source_detail` with both `candidate_assessment.source` and top-level
-`candidate_source`, so content-only risk and safety / review-only risk keep
+`candidate_source`, so content-only evidence and safety / review-only sources keep
 separate source ownership. Decision content summaries use `content_score_role`
 for content-containment support and `content_quality_score_role` for quality
 diagnostics, which are not hard gates. Content-model proposal contracts use
@@ -576,9 +575,9 @@ content / outer-alignment checks belong to
 `candidate.assessment`; `candidate.plan` selects lane candidates and calls the
 assessment helper. Lane-candidate caps are recorded in
 `candidate_confidence_caps`. Safety-candidate auto-pass blocker, candidate cap,
-and auto-gate rewrite also belong to `candidate.assessment`; `candidate.plan`
+and candidate-qualification rewrite also belong to `candidate.assessment`; `candidate.plan`
 only builds the safety candidate and calls the assessment helper. Final REVIEW
-reasons are generated by decision risk summary from the safety-candidate source.
+reasons are generated by decision signals from the safety-candidate source.
 Candidate table
 / selected-candidate detail uses
 `candidate_signals`, `candidate_blockers`, and `candidate_diagnostics` for
@@ -596,9 +595,9 @@ Guidance and candidate-plan detail may use `candidate_contract` or
 `evidence_contract`; `decision_contract` naming belongs only to decision policy
 and decision execution. Runtime callers import decision owning modules directly;
 `detection.decision.__init__` remains a package marker only.
-Format `known_physical_risks` are report/debug descriptors only; policy assembly
+Format `known_physical_notes` are report/debug descriptors only; policy assembly
 derives parameters from physical predicates such as family, count, and aspect,
-not from risk strings.
+not from physical notes.
 Physical packages do not keep `plan.py`; planning, execution budget, and source
 composition belong to `detection.candidate.plan`.
 Frame topology is explicit evidence: frames in one strip must be monotonic along
@@ -614,9 +613,9 @@ may help explain holder/content separation, but they are not an auto-pass oracle
 Base outer uses per-side mixed-boundary evidence. Each side may independently
 look like black-border-to-white-holder, content-to-white-holder, or mixed /
 uncertain boundary; outer proposals must not assume all sides have a black rim.
-`detection.decision` owns final evidence, confidence caps, risk summary, final
+`detection.decision` owns evidence summary, confidence caps, decision signals, final
 review reasons, and PASS / REVIEW. `x5crop.output` owns output-bleed parameter
-conversion, output-risk read models, and cached output-geometry restoration.
+conversion, output-overlap read models, and cached output-geometry restoration.
 `detection.final` consumes the decision result and `x5crop.output` helpers for
 approved geometry adjustment, output-adjacent bleed adjustment, and read-only
 diagnostics only. It receives the runtime policy selected by workflow instead
@@ -628,8 +627,8 @@ Report, debug, and export are output read-models: they consume `ProcessResult`
 or `decision_summary.status`, never infer final status from confidence or review
 reasons. A bare Detection without decision summary is reported as `unknown` /
 `UNKNOWN`. Report schema must expose `evidence`, `gates`, `evidence_summary`,
-and `risk_summary`; constructed audit sections must not remain hidden internal
-dictionaries. Report-visible risk / deskew details live under `diagnostics`, not
+and `decision_signals`; constructed audit sections must not remain hidden internal
+dictionaries. Report-visible decision signal / deskew details live under `diagnostics`, not
 a `finalization` section.
 Stable `Detection.detail` readers live in `detection.detail`, not the root
 package. Output-facing report/debug/export/finalization code reads final reasons
@@ -649,18 +648,18 @@ global contrast, frame-box width, and separator-width variation remain diagnosti
 or final-decision inputs. Content support means containment; content quality
 means evidence strength. Photo-width hard reasons may consume only
 `photo_edges`-sourced `photo_width_cv`. Candidate blockers, diagnostics,
-auto-gate inputs, and candidate confidence caps are assessment detail; decision
+candidate-qualification inputs, and candidate confidence caps are assessment detail; decision
 reason inputs, final-review reason fields, and decision confidence caps are
 final decision detail. Candidate signals are no longer reduced into final review
-reasons by decision; decision reads structured gate / evidence / risk inputs.
+reasons by decision; decision reads structured gate / evidence / decision-signal inputs.
 `photo_size_consistency` and `frame_topology` are separate candidate gate checks;
 photo-size stability must not be mixed with frame ordering or overlap. Separator
 width variation remains observed detail, while separator cross-axis continuity
 is allowed to affect hard separator trust.
 Content-only, safety, and review-only candidate outcomes
-are expressed by source-derived `risk_summary` plus the decision contract
+are expressed by source-derived `decision_signals` plus the decision contract
 applier, not by unused review-only flags in decision policy.
-The decision contract carries only format/mode, evidence, risk, and PASS /
+The decision contract carries only format/mode, evidence, decision signals, and PASS /
 REVIEW decision parameters; output bleed, debug panels, and report sections
 remain in runtime output / diagnostics / report policy instead of decision
 contract.
@@ -677,25 +676,24 @@ naming, not review-reason naming; final review reasons belong only to the
 decision contract.
 Candidate-plan detail exposes gap search families only as `gap_search_profiles`;
 the old `gap_profiles` alias is not a runtime/report field.
-Final risk evidence such as overlap and lucky-pass risk is attached before the
-final decision. `x5crop.output` and finalization may consume that detail for
-output bleed, but must not generate PASS / REVIEW inputs after the decision
-step.
+Output-overlap evidence is attached before the final decision. `x5crop.output`
+and finalization may consume that detail for output bleed, but must not generate
+PASS / REVIEW inputs after the decision step.
 Decision sublayers must read or update final reasons through
 `detection.decision.reasons`; after the decision step, `review_reasons` is the
 user-visible final reason field, so decision code must not append to it directly.
 
 ### 7. Policy Perspective
 
-Format facts, runtime capability, runtime risk policy, runtime decision policy,
+Format facts, runtime capability, runtime output-evidence policy, runtime decision policy,
 and final decision contract remain separate.
 Format files may provide physical tolerance, content profile tolerance, and
 search-budget overrides only. Runtime path parameters must appear in runtime
 policy detail; final PASS / REVIEW parameters must appear in decision policy
 detail. Finalization policy owns approved geometry adjustment / attachment
 switches before export; runtime output policy owns the output-bleed execution
-switch, detection bleed, output bleed, and edge-bleed protection. Runtime risk
-policy only owns parameters for final risk evidence. Diagnostics and report
+switch, detection bleed, output bleed, and edge-bleed protection. Runtime output-evidence
+policy only owns parameters for output-overlap evidence. Diagnostics and report
 policies are assembled separately. The only policy-construction entry in a
 format module is `build_policy(strip_mode)`;
 mode-specific convenience helpers such as `full_policy()` / `partial_policy()`
@@ -716,7 +714,7 @@ Review should separate:
 | Is this capability available? | Runtime policy capability. |
 | How does this format / mode enable the capability by default? | Policy assembly / preset. |
 | How is the evidence computed? | The relevant detection / geometry / image owner. |
-| How does the evidence affect the result? | Assessment, decision, risk, and report detail. |
+| How does the evidence affect the result? | Assessment, decision, decision signal, and report detail. |
 
 Current review stance:
 
@@ -740,7 +738,7 @@ Current review stance:
 
 Reports and Debug Analysis explain behavior without feeding back into candidate
 selection. Report rows include `version`, `policy_id`, and `report_schema`; V4.9
-detail exposes evidence, risk, decision policy, and selected candidate state.
+detail exposes evidence, decision signal, decision policy, and selected candidate state.
 Debug Analysis stays readable, while richer evidence belongs in report detail.
 
 ### 10. Diff / Verification Perspective

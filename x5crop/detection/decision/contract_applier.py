@@ -10,25 +10,24 @@ from ...formats import FormatSpec
 from ..confidence_caps import apply_confidence_cap
 from ...policies.decision.contract import decision_contract_for
 from .decision_gate import decision_gate_assessment
+from .decision_signals import decision_signals_for
 from .evidence_summary import evidence_summary_for
 from .reasons import (
     final_review_reasons,
-    normalized_final_review_reasons,
     set_final_review_reasons,
 )
-from .risk_summary import risk_summary_for
 
 
 def _detail_list(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else []
 
 
-def _candidate_signal_inputs_before_decision(detection: Detection) -> dict[str, Any]:
+def _candidate_gate_input(detection: Detection) -> dict[str, Any]:
     assessment = detection.detail.get("candidate_assessment", {})
     assessment = dict(assessment) if isinstance(assessment, dict) else {}
     blockers = [str(reason) for reason in _detail_list(assessment.get("blockers"))]
     diagnostics = [str(reason) for reason in _detail_list(assessment.get("diagnostics"))]
-    gate = assessment.get("gate")
+    gate = assessment.get("candidate_gate")
     gate = dict(gate) if isinstance(gate, dict) else {}
     return {
         "blockers": blockers,
@@ -37,10 +36,21 @@ def _candidate_signal_inputs_before_decision(detection: Detection) -> dict[str, 
             gate.get("passed", assessment.get("candidate_gate_passed", False))
         ),
         "candidate_gate": gate,
-        "selection_risk_inputs": _detail_list(
-            detection.detail.get("selection_risk_inputs")
+        "selection_uncertainty_inputs": _detail_list(
+            detection.detail.get("selection_uncertainty_inputs")
         ),
     }
+
+
+def _unique_reasons(reasons: list[str]) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for reason in reasons:
+        reason = str(reason)
+        if reason and reason not in seen:
+            unique.append(reason)
+            seen.add(reason)
+    return unique
 
 
 def sync_candidate_competition_decision_fields(detection: Detection, status: str) -> None:
@@ -83,10 +93,10 @@ def apply_decision_contract(
 ) -> Detection:
     policy = decision_contract_for(fmt.name, detection.strip_mode)
     evidence = evidence_summary_for(gray, detection, content_detail, outer_alignment, policy)
-    risk = risk_summary_for(detection, evidence, policy)
+    decision_signals = decision_signals_for(detection, evidence, policy)
     assessment = detection.detail.get("candidate_assessment", {})
     assessment = dict(assessment) if isinstance(assessment, dict) else {}
-    candidate_gate = assessment.get("gate")
+    candidate_gate = assessment.get("candidate_gate")
     candidate_gate = dict(candidate_gate) if isinstance(candidate_gate, dict) else {}
     candidate_gate_passed = bool(
         candidate_gate.get("passed", assessment.get("candidate_gate_passed", False))
@@ -95,13 +105,13 @@ def apply_decision_contract(
         detection=detection,
         confidence_threshold=config.confidence_threshold,
         evidence=evidence,
-        risk=risk,
+        decision_signals=decision_signals,
         policy=policy,
         candidate_gate_passed=candidate_gate_passed,
         deskew_detail={},
         include_low_confidence_context=False,
     )
-    reasons = normalized_final_review_reasons(decision_gate.final_review_reasons)
+    reasons = _unique_reasons(decision_gate.final_review_reasons)
     final_reasons = list(reasons)
     base_passed = detection.confidence >= config.confidence_threshold and not final_reasons
     decision_caps = detection.detail.setdefault("decision_confidence_caps", [])
@@ -120,19 +130,19 @@ def apply_decision_contract(
         detection=detection,
         confidence_threshold=config.confidence_threshold,
         evidence=evidence,
-        risk=risk,
+        decision_signals=decision_signals,
         policy=policy,
         candidate_gate_passed=candidate_gate_passed,
         deskew_detail=deskew_detail or {},
         include_low_confidence_context=True,
         confidence_caps=decision_caps,
     )
-    reasons = normalized_final_review_reasons(decision_gate.final_review_reasons)
+    reasons = _unique_reasons(decision_gate.final_review_reasons)
     decision_gate = decision_gate.with_final_review_reasons(reasons)
     final_reasons = list(reasons)
     status = _decision_status_for(detection, config.confidence_threshold, final_reasons)
-    candidate_signal_inputs = _candidate_signal_inputs_before_decision(detection)
-    detection.detail["candidate_signal_inputs_before_decision"] = candidate_signal_inputs
+    candidate_gate_input = _candidate_gate_input(detection)
+    detection.detail["candidate_gate_input"] = candidate_gate_input
     set_final_review_reasons(detection, final_reasons)
     final_reasons = final_review_reasons(detection)
     sync_candidate_competition_decision_fields(detection, status)
@@ -141,19 +151,18 @@ def apply_decision_contract(
         "schema_version": policy.schema_version,
         "pass": status == "approved_auto",
         "status": status,
-        "decision_generated_review_reasons": reasons,
         "final_review_reasons": final_reasons,
         "decision_reason_inputs": decision_gate.reason_inputs,
         "decision_confidence_caps": decision_caps,
         "decision_gate": decision_gate.report_detail(),
-        "candidate_signal_inputs_before_decision": candidate_signal_inputs,
+        "candidate_gate_input": candidate_gate_input,
         "evidence_summary": evidence,
-        "risk_summary": risk,
+        "decision_signals": decision_signals,
         "decision_policy_detail": policy.report_detail(),
     }
     detection.detail["decision_summary"] = detail
     detection.detail["evidence_summary"] = evidence
-    detection.detail["risk_summary"] = risk
+    detection.detail["decision_signals"] = decision_signals
     detection.detail["decision_reason_inputs"] = decision_gate.reason_inputs
     detection.detail["final_review_reasons"] = final_reasons
     detection.detail["decision_policy_detail"] = policy.report_detail()

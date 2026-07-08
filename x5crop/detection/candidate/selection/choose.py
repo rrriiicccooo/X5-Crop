@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from ....domain import Detection
-from ...evidence.separator_summary import separator_gate_detail_summary
+from ...evidence.separator_summary import separator_support_detail_summary
 from ....formats import FormatSpec
 from ....policies.registry import get_detection_policy
 from ....policies.runtime.policy import DetectionPolicy
@@ -51,11 +51,11 @@ def calibrated_candidate_rank(detection: Detection, threshold: float) -> tuple[i
     )
 
 
-def is_partial_safe_candidate_gate_candidate(detection: Detection, threshold: float) -> bool:
+def is_partial_safe_candidate(detection: Detection, threshold: float) -> bool:
     candidate = detection.detail.get("candidate_assessment", {})
     candidate_gate = {}
     if isinstance(candidate, dict):
-        gate = candidate.get("gate")
+        gate = candidate.get("candidate_gate")
         candidate_gate = dict(gate) if isinstance(gate, dict) else {}
     candidate_gate_passed = bool(
         candidate_gate.get(
@@ -85,10 +85,10 @@ def select_separator_candidate_for_content_mismatch(
 
     def separator_summary_for(candidate: Detection) -> tuple[int, int, int]:
         candidate_assessment = _candidate_assessment(candidate)
-        hard_detail = candidate_assessment.get("separator_hard_evidence", {})
+        hard_detail = candidate_assessment.get("separator_support", {})
         if not isinstance(hard_detail, dict):
             return 0, 0, 0
-        evidence = separator_gate_detail_summary(
+        evidence = separator_support_detail_summary(
             hard_detail,
             expected_default=max(1, best.count - 1),
         )
@@ -223,11 +223,11 @@ def select_detection_candidate(
             and not best_partial_safe
             and (second_close or partial_full_conflict)
         ):
-            risk_inputs = best.detail.setdefault("selection_risk_inputs", [])
-            if not isinstance(risk_inputs, list):
-                risk_inputs = []
-                best.detail["selection_risk_inputs"] = risk_inputs
-            risk_input = {
+            uncertainty_inputs = best.detail.setdefault("selection_uncertainty_inputs", [])
+            if not isinstance(uncertainty_inputs, list):
+                uncertainty_inputs = []
+                best.detail["selection_uncertainty_inputs"] = uncertainty_inputs
+            uncertainty_input = {
                 "bucket": "candidate_selection",
                 "signal": (
                     "partial_full_conflict"
@@ -238,8 +238,10 @@ def select_detection_candidate(
                 "close_margin": float(selected_policy.candidate_selection.close_margin),
                 "partial_full_conflict": bool(partial_full_conflict),
             }
-            risk_inputs.append(risk_input)
-            best.detail["candidate_competition"]["selection_risk_inputs"] = list(risk_inputs)
+            uncertainty_inputs.append(uncertainty_input)
+            best.detail["candidate_competition"]["selection_uncertainty_inputs"] = list(
+                uncertainty_inputs
+            )
         best.detail["candidate_competition"]["second_candidate_close"] = bool(second_close)
         best.detail["candidate_competition"]["partial_full_conflict"] = bool(partial_full_conflict)
         best.detail["candidate_competition"]["close_margin"] = float(
@@ -251,7 +253,7 @@ def select_detection_candidate(
 __all__ = [
     "SelectionResult",
     "calibrated_candidate_rank",
-    "is_partial_safe_candidate_gate_candidate",
+    "is_partial_safe_candidate",
     "select_detection_candidate",
     "select_separator_candidate_for_content_mismatch",
 ]

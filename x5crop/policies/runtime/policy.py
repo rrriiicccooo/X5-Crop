@@ -10,7 +10,6 @@ from .base import (
 )
 from .candidate import (
     CandidatePlanPolicy,
-    GatePolicy,
     PartialEdgeHintPolicy,
     PartialHolderPolicy,
     ScoringPolicy,
@@ -23,7 +22,7 @@ from .final import FinalizationPolicy
 from .outer import OuterPolicy
 from .output import OutputPolicy
 from .report import ReportPolicy
-from .risk import RuntimeRiskPolicy
+from .output_evidence import RuntimeOutputEvidencePolicy
 from .separator import SeparatorPolicy
 
 if TYPE_CHECKING:
@@ -46,11 +45,10 @@ class DetectionPolicy:
     partial_holder: PartialHolderPolicy
     partial_edge_hint: PartialEdgeHintPolicy
     frame_fit: FrameFitPolicy
-    gates: GatePolicy
     scoring: ScoringPolicy
     candidate_selection: SelectionPolicy
     candidate_plan: CandidatePlanPolicy
-    risk: RuntimeRiskPolicy
+    output_evidence: RuntimeOutputEvidencePolicy
     decision: RuntimeDecisionPolicy
     finalization: FinalizationPolicy
     output: OutputPolicy = field(default_factory=OutputPolicy)

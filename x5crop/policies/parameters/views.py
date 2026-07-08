@@ -33,10 +33,7 @@ from .outer import (
     SeparatorOuterBandParameters,
     ShortAxisGeometryCorrectionParameters,
 )
-from .risk import (
-    LuckyPassRiskParameters,
-    OverlapBleedRiskParameters,
-)
+from .output_evidence import OutputOverlapEvidenceParameters
 from .scoring import (
     BaseDetectionScoreParameters,
     CandidateCompetitionParameters,
@@ -51,7 +48,7 @@ from .separator import (
     LeadingGridFailureParameters,
     NearbySeparatorRefinementParameters,
     RobustGridParameters,
-    SeparatorGateParameters,
+    SeparatorSupportParameters,
     SeparatorGeometrySupportParameters,
     SeparatorProfileParameters,
     SeparatorWidthProfileParameters,
@@ -75,20 +72,20 @@ class FormatParameterViews:
         )
 
     @property
-    def separator_gate(self) -> SeparatorGateParameters:
-        return SeparatorGateParameters(
-            needed_hard_max=self.separator_gate_needed_hard_max,
-            max_equal_gaps_floor=self.separator_gate_max_equal_gaps_floor,
+    def separator_support(self) -> SeparatorSupportParameters:
+        return SeparatorSupportParameters(
+            needed_hard_max=self.separator_support_needed_hard_max,
+            max_equal_gaps_floor=self.separator_support_max_equal_gaps_floor,
             allow_geometry_support=self.separator_allow_geometry_support,
             hard_required_all_gaps=self.separator_hard_required_all_gaps,
-            edge_pair_min_score_without_broad_width=self.separator_gate_edge_pair_min_score_without_broad_width,
-            edge_pair_min_score_with_broad_width=self.separator_gate_edge_pair_min_score_with_broad_width,
-            min_broad_separator_width_gaps_for_auto=self.separator_gate_min_broad_separator_width_gaps_for_auto,
-            score_min_hard_gaps=self.score_gate_min_hard_gaps,
-            score_max_equal_gaps_floor=self.score_gate_max_equal_gaps_floor,
-            low_hard_confidence_cap=self.score_gate_low_hard_confidence_cap,
-            mostly_equal_confidence_cap=self.score_gate_mostly_equal_confidence_cap,
-            allow_full_detected_geometry=self.score_gate_allow_full_detected_geometry,
+            edge_pair_min_score_without_broad_width=self.separator_support_edge_pair_min_score_without_broad_width,
+            edge_pair_min_score_with_broad_width=self.separator_support_edge_pair_min_score_with_broad_width,
+            min_broad_separator_width_gaps_for_auto=self.separator_support_min_broad_separator_width_gaps_for_auto,
+            score_min_hard_gaps=self.separator_score_min_hard_gaps,
+            score_max_equal_gaps_floor=self.separator_score_max_equal_gaps_floor,
+            low_hard_confidence_cap=self.separator_score_low_hard_confidence_cap,
+            mostly_equal_confidence_cap=self.separator_score_mostly_equal_confidence_cap,
+            allow_full_detected_geometry=self.separator_score_allow_full_detected_geometry,
         )
 
     @property
@@ -190,11 +187,11 @@ class FormatParameterViews:
             coverage_weight=self.content_support_coverage_weight,
             mean_weight=self.content_support_mean_weight,
             aspect_weight=self.content_support_aspect_weight,
-            gate_ok=self.content_support_gate_ok,
-            gate_weak=self.content_support_gate_weak,
-            gate_low_content=self.content_support_gate_low_content,
-            gate_aspect_conflict=self.content_support_gate_aspect_conflict,
-            gate_unknown=self.content_support_gate_unknown,
+            score_ok=self.content_support_score_ok,
+            score_weak=self.content_support_score_weak,
+            score_low_content=self.content_support_score_low_content,
+            score_aspect_conflict=self.content_support_score_aspect_conflict,
+            score_unknown=self.content_support_score_unknown,
         )
 
     @property
@@ -345,14 +342,14 @@ class FormatParameterViews:
             white_edge_long_ratio=self.outer_align_white_edge_long_ratio,
             white_edge_long_min=self.outer_align_white_edge_long_min,
             white_edge_long_max=self.outer_align_white_edge_long_max,
-            long_gate_ratio=self.outer_align_long_gate_ratio,
-            long_gate_min=self.outer_align_long_gate_min,
-            long_gate_max=self.outer_align_long_gate_max,
-            short_gate_ratio=self.outer_align_short_gate_ratio,
-            short_gate_min=self.outer_align_short_gate_min,
-            short_gate_max=self.outer_align_short_gate_max,
+            long_threshold_ratio=self.outer_align_long_threshold_ratio,
+            long_threshold_min=self.outer_align_long_threshold_min,
+            long_threshold_max=self.outer_align_long_threshold_max,
+            short_threshold_ratio=self.outer_align_short_threshold_ratio,
+            short_threshold_min=self.outer_align_short_threshold_min,
+            short_threshold_max=self.outer_align_short_threshold_max,
             long_excess_ratio=self.outer_align_long_excess_ratio,
-            long_gate_excess_ratio=self.outer_align_long_gate_excess_ratio,
+            long_excess_threshold_ratio=self.outer_align_long_excess_threshold_ratio,
             short_excess_ratio=self.outer_align_short_excess_ratio,
             short_requires_hard_anchors=self.outer_align_short_requires_hard_anchors,
             short_content_height_max=self.outer_align_short_content_height_max,
@@ -507,7 +504,6 @@ class FormatParameterViews:
             content_aspect_conflict_cap=self.decision_content_aspect_conflict_cap,
             content_low_confidence_cap=self.decision_content_low_confidence_cap,
             outer_mismatch_cap=self.decision_outer_mismatch_cap,
-            lucky_pass_risk_cap=self.decision_lucky_pass_risk_cap,
         )
 
     @property
@@ -627,15 +623,15 @@ class FormatParameterViews:
         )
 
     @property
-    def overlap_bleed_risk(self) -> OverlapBleedRiskParameters:
-        return OverlapBleedRiskParameters(
-            mean_min=self.overlap_bleed_risk_mean_min,
-            weak_continuity=self.overlap_bleed_risk_weak_continuity,
-            weak_activity=self.overlap_bleed_risk_weak_activity,
-            medium_continuity=self.overlap_bleed_risk_medium_continuity,
-            medium_activity=self.overlap_bleed_risk_medium_activity,
-            strong_continuity=self.overlap_bleed_risk_strong_continuity,
-            strong_activity=self.overlap_bleed_risk_strong_activity,
+    def output_overlap(self) -> OutputOverlapEvidenceParameters:
+        return OutputOverlapEvidenceParameters(
+            mean_min=self.output_overlap_mean_min,
+            weak_continuity=self.output_overlap_weak_continuity,
+            weak_activity=self.output_overlap_weak_activity,
+            medium_continuity=self.output_overlap_medium_continuity,
+            medium_activity=self.output_overlap_medium_activity,
+            strong_continuity=self.output_overlap_strong_continuity,
+            strong_activity=self.output_overlap_strong_activity,
         )
 
     @property
@@ -668,33 +664,6 @@ class FormatParameterViews:
             continuity_min=self.hard_trust_continuity_min,
             activity_min=self.hard_trust_activity_min,
         )
-
-    @property
-    def lucky_pass_risk(self) -> LuckyPassRiskParameters:
-        return LuckyPassRiskParameters(
-            enabled=self.lucky_pass_risk_enabled,
-            model_gap_support_min=self.lucky_model_gap_support_min,
-            model_gap_support_weight=self.lucky_model_gap_support_weight,
-            minor_model_gap_support_weight=self.lucky_minor_model_gap_support_weight,
-            limited_strong_hard_max=self.lucky_limited_strong_hard_max,
-            limited_strong_hard_weight=self.lucky_limited_strong_hard_weight,
-            very_limited_strong_hard_max=self.lucky_very_limited_strong_hard_max,
-            very_limited_strong_hard_weight=self.lucky_very_limited_strong_hard_weight,
-            suspicious_hard_weight=self.lucky_suspicious_hard_weight,
-            strong_overlap_weight=self.lucky_strong_overlap_weight,
-            combo_weight=self.lucky_combo_weight,
-            unstable_photo_width_cv=self.lucky_unstable_photo_width_cv,
-            unstable_photo_width_weight=self.lucky_unstable_photo_width_weight,
-            mild_photo_width_cv=self.lucky_mild_photo_width_cv,
-            mild_photo_width_weight=self.lucky_mild_photo_width_weight,
-            strong_hard_credit_min=self.lucky_strong_hard_credit_min,
-            strong_hard_credit=self.lucky_strong_hard_credit,
-            stable_photo_width_cv=self.lucky_stable_photo_width_cv,
-            stable_model_gap_min=self.lucky_stable_model_gap_min,
-            stable_photo_width_geometry_credit=self.lucky_stable_photo_width_geometry_credit,
-            risk_threshold=self.lucky_risk_threshold,
-        )
-
 
 __all__ = [
     "FormatParameterViews",

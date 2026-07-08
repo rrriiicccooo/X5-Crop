@@ -13,10 +13,10 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....utils import clamp_int
 from ...evidence.photo_width import photo_width_stability_detail
-from ...evidence.separator_summary import separator_gate_detail_summary
+from ...evidence.separator_summary import separator_support_detail_summary
 from ...evidence.separator_width import separator_width_evidence_detail, separator_width_requirement_detail
 from ..signals import (
-    SIGNAL_PARTIAL_LEADING_CONTENT_RISK,
+    SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
     candidate_signals,
 )
 from .candidate_gate import candidate_signal_blocker_signals
@@ -244,7 +244,7 @@ def partial_safe_frame_content_detail(
     }
 
 
-def partial_safe_extra_frames_gate_detail(
+def partial_safe_extra_frames_assessment_detail(
     gray: np.ndarray,
     detection: Detection,
     hard_detail: dict[str, Any],
@@ -259,7 +259,7 @@ def partial_safe_extra_frames_gate_detail(
 ) -> dict[str, Any]:
     policy = policy or get_detection_policy(fmt.name, detection.strip_mode)
     holder = policy.partial_holder
-    separator_evidence = separator_gate_detail_summary(hard_detail)
+    separator_evidence = separator_support_detail_summary(hard_detail)
     expected = separator_evidence.expected_gaps
     hard = separator_evidence.hard_separator_gaps
     equal = separator_evidence.equal_model_gaps
@@ -285,9 +285,9 @@ def partial_safe_extra_frames_gate_detail(
     if expected <= 0:
         disqualifiers.append("no_internal_gaps")
     content_containment_ok = bool(content_detail.get("content_containment_ok", False))
-    content_harm_risk = bool(content_detail.get("content_harm_risk", True))
-    if not content_containment_ok or content_harm_risk:
-        disqualifiers.append("content_harm_risk")
+    content_integrity_failed = bool(content_detail.get("content_integrity_failed", True))
+    if not content_containment_ok or content_integrity_failed:
+        disqualifiers.append("content_integrity_failed")
     if hard < holder.min_hard_gaps:
         disqualifiers.append("too_few_hard_gaps")
     if hard_ratio < holder.min_hard_ratio:
@@ -303,7 +303,7 @@ def partial_safe_extra_frames_gate_detail(
     photo_width_stability = photo_width_stability_detail(
         detection.detail,
         float(holder.max_photo_width_cv),
-        used_role="photo_width_gate",
+        used_role="photo_width_assessment",
     )
     if bool(photo_width_stability["unstable"]):
         disqualifiers.append("photo_width_unstable")
@@ -316,9 +316,9 @@ def partial_safe_extra_frames_gate_detail(
         candidate_signals(detection),
     )
     if partial_candidate_gate_blockers:
-        disqualifiers.append("candidate_gate_blocker_present")
+        disqualifiers.extend(partial_candidate_gate_blockers)
     if bool(leading_content.get("used", False)) and not bool(leading_content.get("ok", True)):
-        disqualifiers.append(SIGNAL_PARTIAL_LEADING_CONTENT_RISK)
+        disqualifiers.append(SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT)
     if bool(frame_content.get("used", False)) and not bool(frame_content.get("ok", True)):
         disqualifiers.append("partial_frame_content_unstable")
     return {
@@ -343,7 +343,7 @@ def partial_safe_extra_frames_gate_detail(
             "score": float(content_score),
             "min_quality_score": float(holder.min_content_score),
             "quality_ok": bool(content_quality_ok),
-            "role": "quality_diagnostic_not_hard_gate",
+            "role": "quality_diagnostic_not_boundary_evidence",
         },
         "policy_id": policy.policy_id,
         "holder_policy": {
@@ -360,7 +360,7 @@ def partial_safe_extra_frames_gate_detail(
 
 
 __all__ = [
-    "partial_safe_extra_frames_gate_detail",
+    "partial_safe_extra_frames_assessment_detail",
     "partial_safe_frame_content_detail",
     "partial_safe_leading_content_detail",
     "partial_safe_holder_edge_disambiguation_detail",

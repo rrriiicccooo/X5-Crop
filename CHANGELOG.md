@@ -34,6 +34,20 @@ Current stable release: v4.2.8
 V4.9 是当前 active development 线。它继承 V4.7 的源码分层成果，并继续把检测逻辑整理为
 可审核的 evidence / policy / decision 结构。
 
+最新结构清理：
+
+- `assessment -> decision -> report/debug` 已收敛为
+  `Physical Evidence Summary -> CandidateGate -> CandidateAssessment -> Selection
+  -> DecisionSignals -> DecisionGate -> FinalDetection -> Report/Debug`。
+- 独立运行时 risk 概念、lucky-pass 链路、legacy reason reducer、`risk_summary` report 字段
+  和 `separator_gate_profile` 已退休；active schema 使用 `decision_signals`、
+  `candidate_gate`、`decision_gate` 和 `output_overlap_evidence`。
+- separator support 不再作为第三个 gate；它是 candidate assessment 内的物理 support
+  evidence，最终 PASS / REVIEW 仍只由 DecisionGate 生成。
+- content containment 使用 `content_integrity_failed` 表达伤害真实内容的失败；允许空 frame
+  的目标不变。
+- format 可见备注从 `known_physical_risks` 改为 `known_physical_notes`，只作说明，不作能力开关。
+
 当前版本口径：
 
 - V4.5.4 / V4.7 reference reports 是历史参考和 diff 定位工具，不是验收 oracle。

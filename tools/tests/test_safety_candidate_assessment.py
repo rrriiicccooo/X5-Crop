@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from x5crop.detection.candidate.assessment.safety import (
-    SAFETY_CANDIDATE_GATE_BLOCKER,
+    SAFETY_CANDIDATE_BLOCKER,
     apply_safety_candidate_assessment,
 )
 from x5crop.detection.candidate.signals import candidate_signals
@@ -23,7 +23,7 @@ def _candidate_gate_detail(passed: bool) -> dict:
 
 
 class SafetyCandidateAssessmentTest(unittest.TestCase):
-    def test_safety_candidate_gate_blocker_is_candidate_assessment_detail(self) -> None:
+    def test_safety_candidate_blocker_is_candidate_assessment_detail(self) -> None:
         policy = get_detection_policy("135", "full")
         detection = Detection(
             film_format="135",
@@ -39,7 +39,7 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
                 "candidate_assessment": {
                     "source": "separator",
                     "candidate_gate_passed": True,
-                    "gate": _candidate_gate_detail(True),
+                    "candidate_gate": _candidate_gate_detail(True),
                 }
             },
         )
@@ -52,24 +52,24 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
 
         self.assertAlmostEqual(detection.confidence, 0.84)
         self.assertEqual(detection.review_reasons, [])
-        self.assertEqual(candidate_signals(detection), [SAFETY_CANDIDATE_GATE_BLOCKER])
+        self.assertEqual(candidate_signals(detection), [SAFETY_CANDIDATE_BLOCKER])
         assessment = detection.detail["candidate_assessment"]
         self.assertFalse(assessment["candidate_gate_passed"])
-        self.assertFalse(assessment["gate"]["passed"])
-        self.assertIn(SAFETY_CANDIDATE_GATE_BLOCKER, assessment["blockers"])
-        self.assertIn(SAFETY_CANDIDATE_GATE_BLOCKER, assessment["gate"]["blockers"])
+        self.assertFalse(assessment["candidate_gate"]["passed"])
+        self.assertIn(SAFETY_CANDIDATE_BLOCKER, assessment["blockers"])
+        self.assertIn(SAFETY_CANDIDATE_BLOCKER, assessment["candidate_gate"]["blockers"])
         self.assertEqual(assessment["source"], CANDIDATE_SOURCE_SAFETY)
         self.assertEqual(detection.detail["safety_candidate"]["candidate_gate_eligible"], False)
         self.assertEqual(
-            detection.detail["safety_candidate"]["candidate_gate_signal"],
-            SAFETY_CANDIDATE_GATE_BLOCKER,
+            detection.detail["safety_candidate"]["candidate_blocker_signal"],
+            SAFETY_CANDIDATE_BLOCKER,
         )
         self.assertEqual(
             detection.detail["candidate_confidence_caps"],
             [
                 {
                     "owner": "candidate.assessment",
-                    "reason": SAFETY_CANDIDATE_GATE_BLOCKER,
+                    "reason": SAFETY_CANDIDATE_BLOCKER,
                     "cap_value": 0.84,
                     "confidence_before": 0.96,
                     "confidence_after": 0.84,

@@ -40,15 +40,14 @@ def _float(value: Any, default: float = 0.0) -> float:
         return float(default)
 
 
-def risk_summary_for(
+def decision_signals_for(
     detection: Detection,
     evidence: dict[str, Any],
     policy: DetectionDecisionContract,
 ) -> dict[str, Any]:
     assessment = _dict(detection.detail.get("candidate_assessment"))
     competition = _dict(detection.detail.get("candidate_competition"))
-    lucky = _dict(detection.detail.get("lucky_pass_risk_score"))
-    overlap_bleed = _dict(detection.detail.get("overlap_bleed_risk"))
+    output_overlap = _dict(detection.detail.get("output_overlap_evidence"))
     assessment_source = str(assessment.get("source") or "")
     candidate_source = str(detection.detail.get("candidate_source") or "")
     source = assessment_source or candidate_source
@@ -61,20 +60,37 @@ def risk_summary_for(
     margin = None if margin_raw is None else _float(margin_raw)
     partial_edge_safe = bool(evidence["partial_edge"]["ok"])
     partial_full_conflict = bool(competition.get("partial_full_conflict", False))
-    close_competition = (
+    candidate_competition_close = (
         (
             (
                 margin is not None
-                and margin < policy.risk.candidate_close_margin
+                and margin < policy.decision.candidate_close_margin
             )
             or partial_full_conflict
         )
         and not (
             partial_edge_safe
-            and policy.risk.suppress_close_competition_when_partial_edge_safe
+            and policy.decision.suppress_close_competition_when_partial_edge_safe
         )
     )
+    active_signals: list[str] = []
+    if content_only_evidence:
+        active_signals.append("content_only_evidence")
+    if safety_or_review_only:
+        active_signals.append("safety_or_review_only")
+    if candidate_competition_close:
+        active_signals.append("candidate_competition_close")
+    if bool(output_overlap.get("output_overlap_detected", False)):
+        active_signals.append("output_overlap_detected")
+    partial_edge_uncertain = bool(
+        detection.strip_mode == "partial"
+        and policy.evidence.partial_requires_safe_edge
+        and not partial_edge_safe
+    )
+    if partial_edge_uncertain:
+        active_signals.append("partial_edge_uncertain")
     return {
+        "active_signals": active_signals,
         "candidate_source_detail": {
             "assessment_source": assessment_source,
             "candidate_source": candidate_source,
@@ -87,25 +103,27 @@ def risk_summary_for(
                 else ""
             ),
         },
-        "content_only_evidence": content_only_evidence,
-        "safety_or_review_only": safety_or_review_only,
-        "outer_content_mismatch": not bool(evidence["outer"]["ok"]),
-        "overlap_risk": bool(overlap_bleed.get("risk", False)),
-        "overlap_bleed_risk": overlap_bleed,
-        "lucky_pass_risk": bool(lucky.get("risk", False)),
-        "lucky_pass_risk_detail": lucky,
-        "candidate_competition_close": bool(close_competition),
+        "content_only_evidence": bool(content_only_evidence),
+        "safety_or_review_only": bool(safety_or_review_only),
+        "outer_content_alignment_failed": not bool(evidence["outer"]["ok"]),
+        "separator_support_incomplete": not bool(evidence["separator"]["ok"]),
+        "photo_geometry_unstable": not bool(evidence["geometry"]["ok"]),
+        "content_integrity_failed": not bool(evidence["content"]["ok"]),
+        "output_overlap_detected": bool(
+            output_overlap.get("output_overlap_detected", False)
+        ),
+        "output_overlap_evidence": output_overlap,
+        "candidate_competition_close": bool(candidate_competition_close),
         "candidate_margin_to_second": margin,
         "partial_full_conflict": bool(partial_full_conflict),
-        "selection_risk_inputs": detection.detail.get("selection_risk_inputs", []),
-        "partial_edge_uncertain": bool(
-            detection.strip_mode == "partial"
-            and policy.evidence.partial_requires_safe_edge
-            and not partial_edge_safe
+        "selection_uncertainty_inputs": detection.detail.get(
+            "selection_uncertainty_inputs",
+            [],
         ),
+        "partial_edge_uncertain": bool(partial_edge_uncertain),
     }
 
 
 __all__ = [
-    "risk_summary_for",
+    "decision_signals_for",
 ]

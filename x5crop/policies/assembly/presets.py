@@ -28,14 +28,13 @@ class ModePolicyPreset:
     review_only: ReviewOnlyPolicy = field(default_factory=ReviewOnlyPolicy)
     separator_width_profile: SeparatorWidthProfilePreset = field(default_factory=SeparatorWidthProfilePreset)
     separator_geometry_support_modes: tuple[str, ...] = ()
-    overlap_bleed_risk_enabled: bool = False
+    output_overlap_enabled: bool = False
 
 
 @dataclass(frozen=True)
 class FormatPolicyPreset:
     format_id: str
     parameters: Callable[[], FormatParameters]
-    separator_gate_profile: str
     separator_edge_pair: SeparatorEdgePairPolicy = field(default_factory=SeparatorEdgePairPolicy)
     content_mismatch_candidate_selection_enabled: bool = False
     modes: dict[str, ModePolicyPreset] = field(default_factory=dict)

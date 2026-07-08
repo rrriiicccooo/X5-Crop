@@ -8,7 +8,7 @@ from x5crop.detection.candidate.assessment.candidate import apply_candidate_asse
 from x5crop.detection.candidate.assessment.base_scoring import base_detection_assessment
 from x5crop.detection.candidate.assessment.candidate_gate import candidate_gate_assessment
 from x5crop.detection.candidate.assessment.evidence_independence import evidence_independence_detail
-from x5crop.detection.candidate.assessment.gate_support import (
+from x5crop.detection.candidate.assessment.support_calibration import (
     hard_full_calibration_floor_applies,
     separator_geometry_support_applies,
 )
@@ -16,7 +16,7 @@ from x5crop.detection.candidate.assessment.content_candidate import (
     content_candidate_assessment_from_proposal,
     content_candidate_assessment_from_metrics,
 )
-from x5crop.detection.candidate.assessment.partial_holder import partial_safe_extra_frames_gate_detail
+from x5crop.detection.candidate.assessment.partial_holder import partial_safe_extra_frames_assessment_detail
 from x5crop.detection.candidate.assessment.scoring import (
     content_quality_score,
     content_support_score,
@@ -26,7 +26,6 @@ from x5crop.detection.candidate.signals import candidate_signals
 from x5crop.detection.evidence.frame_topology import frame_topology_evidence
 from x5crop.detection.evidence.separator_continuity import separator_cross_axis_continuity_evidence
 from x5crop.detection.decision.evidence_summary import evidence_summary_for
-from x5crop.detection.evidence.risk import lucky_photo_width_instability_components
 from x5crop.domain import Box, Detection, Gap
 from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED
@@ -34,7 +33,6 @@ from x5crop.geometry.detection_parameters import HardGapTrustParameters
 from x5crop.policies.decision.contract import decision_contract_for
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.runtime.candidate import EvidenceIndependencePolicy
-from x5crop.policies.runtime.risk import LuckyPassRiskPolicy
 from x5crop.policies.runtime.separator import SeparatorGeometrySupportModePolicy
 from x5crop.runtime.config import RuntimeConfig
 
@@ -43,13 +41,13 @@ class PhysicalScoringContractTest(unittest.TestCase):
     def test_outer_size_uncertainty_is_candidate_diagnostic_not_gate_blocker(self) -> None:
         gate = candidate_gate_assessment(
             source="separator",
-            separator_gate_ok=True,
-            separator_gate_detail={"ok": True},
-            partial_safe_candidate_gate_support_ok=False,
+            separator_support_ok=True,
+            separator_support_detail={"ok": True},
+            partial_safe_candidate_support_ok=False,
             partial_safe_blocks_auto=False,
             partial_safe_disqualifiers=set(),
             content_containment_ok=True,
-            content_harm_risk=False,
+            content_integrity_failed=False,
             content_support="ok",
             evidence_independence_ok=True,
             evidence_independence_detail={"ok": True, "reason": "ok"},
@@ -63,13 +61,13 @@ class PhysicalScoringContractTest(unittest.TestCase):
     def test_content_outside_outer_blocks_candidate_gate(self) -> None:
         gate = candidate_gate_assessment(
             source="separator",
-            separator_gate_ok=True,
-            separator_gate_detail={"ok": True},
-            partial_safe_candidate_gate_support_ok=False,
+            separator_support_ok=True,
+            separator_support_detail={"ok": True},
+            partial_safe_candidate_support_ok=False,
             partial_safe_blocks_auto=False,
             partial_safe_disqualifiers=set(),
             content_containment_ok=True,
-            content_harm_risk=False,
+            content_integrity_failed=False,
             content_support="ok",
             evidence_independence_ok=True,
             evidence_independence_detail={"ok": True, "reason": "ok"},
@@ -90,13 +88,13 @@ class PhysicalScoringContractTest(unittest.TestCase):
 
         gate = candidate_gate_assessment(
             source="separator",
-            separator_gate_ok=True,
-            separator_gate_detail={"ok": True},
-            partial_safe_candidate_gate_support_ok=False,
+            separator_support_ok=True,
+            separator_support_detail={"ok": True},
+            partial_safe_candidate_support_ok=False,
             partial_safe_blocks_auto=False,
             partial_safe_disqualifiers=set(),
             content_containment_ok=True,
-            content_harm_risk=False,
+            content_integrity_failed=False,
             content_support="ok",
             evidence_independence_ok=True,
             evidence_independence_detail={"ok": True, "reason": "ok"},
@@ -128,13 +126,13 @@ class PhysicalScoringContractTest(unittest.TestCase):
 
         gate = candidate_gate_assessment(
             source="separator",
-            separator_gate_ok=True,
-            separator_gate_detail={"ok": True},
-            partial_safe_candidate_gate_support_ok=False,
+            separator_support_ok=True,
+            separator_support_detail={"ok": True},
+            partial_safe_candidate_support_ok=False,
             partial_safe_blocks_auto=False,
             partial_safe_disqualifiers=set(),
             content_containment_ok=True,
-            content_harm_risk=False,
+            content_integrity_failed=False,
             content_support="ok",
             evidence_independence_ok=True,
             evidence_independence_detail={"ok": True, "reason": "ok"},
@@ -162,13 +160,13 @@ class PhysicalScoringContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             candidate_gate_assessment(
                 source="separator",
-                separator_gate_ok=True,
-                separator_gate_detail={"ok": True},
-                partial_safe_candidate_gate_support_ok=False,
+                separator_support_ok=True,
+                separator_support_detail={"ok": True},
+                partial_safe_candidate_support_ok=False,
                 partial_safe_blocks_auto=False,
                 partial_safe_disqualifiers=set(),
                 content_containment_ok=True,
-                content_harm_risk=False,
+                content_integrity_failed=False,
                 content_support="ok",
                 evidence_independence_ok=True,
                 evidence_independence_detail={"ok": True, "reason": "ok"},
@@ -178,13 +176,13 @@ class PhysicalScoringContractTest(unittest.TestCase):
     def test_content_integrity_gate_combines_containment_and_harm_absence(self) -> None:
         gate = candidate_gate_assessment(
             source="separator",
-            separator_gate_ok=True,
-            separator_gate_detail={"ok": True},
-            partial_safe_candidate_gate_support_ok=False,
+            separator_support_ok=True,
+            separator_support_detail={"ok": True},
+            partial_safe_candidate_support_ok=False,
             partial_safe_blocks_auto=False,
             partial_safe_disqualifiers=set(),
             content_containment_ok=False,
-            content_harm_risk=True,
+            content_integrity_failed=True,
             content_support="aspect_conflict",
             evidence_independence_ok=True,
             evidence_independence_detail={"ok": True, "reason": "ok"},
@@ -330,7 +328,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertGreater(assessment.confidence, 0.82)
         self.assertNotIn("low_contrast", assessment.candidate_signals)
         self.assertFalse(assessment.detail["image_quality"]["contrast_ok"])
-        self.assertEqual(assessment.detail["image_quality"]["role"], "diagnostic_not_crop_gate")
+        self.assertEqual(assessment.detail["image_quality"]["role"], "diagnostic_not_crop_boundary")
 
     def test_content_score_measures_containment_before_content_quality(self) -> None:
         policy = get_detection_policy("120-66", "full").content
@@ -338,7 +336,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             "used": True,
             "support": "ok",
             "content_containment_ok": True,
-            "content_harm_risk": False,
+            "content_integrity_failed": False,
             "median_mean": 0.01,
             "median_coverage": 0.02,
             "max_aspect_error": None,
@@ -359,7 +357,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             "used": True,
             "support": "ok",
             "content_containment_ok": False,
-            "content_harm_risk": True,
+            "content_integrity_failed": True,
             "median_mean": 0.20,
             "median_coverage": 0.40,
             "max_aspect_error": 0.40,
@@ -450,9 +448,9 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertGreater(assessed.confidence, 0.95)
         assessment = assessed.detail["candidate_assessment"]
         self.assertTrue(assessment["candidate_gate_passed"])
-        self.assertTrue(assessment["gate"]["passed"])
+        self.assertTrue(assessment["candidate_gate"]["passed"])
         self.assertEqual(
-            assessed.detail["candidate_assessment"]["separator_hard_evidence"][
+            assessed.detail["candidate_assessment"]["separator_support"][
                 "broad_separator_width_gaps"
             ],
             2,
@@ -526,11 +524,11 @@ class PhysicalScoringContractTest(unittest.TestCase):
 
         assessment = assessed.detail["candidate_assessment"]
         self.assertFalse(assessment["candidate_gate_passed"])
-        self.assertFalse(assessment["gate"]["passed"])
+        self.assertFalse(assessment["candidate_gate"]["passed"])
         self.assertNotIn("candidate_gate_failed", candidate_signals(assessed))
         self.assertNotIn(
             "candidate_gate_failed",
-            assessment["gate"]["blockers"],
+            assessment["candidate_gate"]["blockers"],
         )
 
     def test_partial_three_frame_hard_separator_is_not_intrinsically_ambiguous(self) -> None:
@@ -594,7 +592,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         self.assertNotIn("partial_strip_count_candidate", assessment.diagnostics)
-        self.assertEqual(assessment.detail["partial_candidate_role"], "content_guidance_not_count_risk")
+        self.assertEqual(assessment.detail["partial_candidate_role"], "content_guidance_not_count_evidence")
 
     def test_content_candidate_assessment_uses_candidate_assessment_owner(self) -> None:
         detection = Detection(
@@ -661,7 +659,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             "used": True,
             "support": "ok",
             "content_containment_ok": True,
-            "content_harm_risk": False,
+            "content_integrity_failed": False,
             "content_quality_score": 0.10,
         }
         outer_alignment = {
@@ -687,7 +685,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertFalse(evidence["content"]["quality_ok"])
         self.assertEqual(
             evidence["content"]["content_quality_score_role"],
-            "quality_diagnostic_not_hard_gate",
+            "quality_diagnostic_not_boundary_evidence",
         )
 
     def test_geometry_support_score_does_not_penalize_raw_outer_area(self) -> None:
@@ -700,7 +698,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             "used": True,
             "support": "ok",
             "content_containment_ok": True,
-            "content_harm_risk": False,
+            "content_integrity_failed": False,
             "max_aspect_error": 0.0,
         }
         profile_outer = Detection(
@@ -805,7 +803,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             "used": True,
             "support": "ok",
             "content_containment_ok": True,
-            "content_harm_risk": False,
+            "content_integrity_failed": False,
             "content_quality_score": 0.95,
         }
 
@@ -823,26 +821,6 @@ class PhysicalScoringContractTest(unittest.TestCase):
             evidence["geometry"]["photo_width_stability"]["role"],
             "diagnostic_until_photo_edges",
         )
-
-    def test_lucky_pass_photo_width_instability_requires_photo_edge_width_source(self) -> None:
-        policy = LuckyPassRiskPolicy()
-
-        frame_box_components, frame_box_detail = lucky_photo_width_instability_components(
-            0.020,
-            "frame_boxes",
-            policy,
-        )
-        photo_components, photo_detail = lucky_photo_width_instability_components(
-            0.020,
-            "photo_edges",
-            policy,
-        )
-
-        self.assertEqual(frame_box_components, {})
-        self.assertFalse(frame_box_detail["used"])
-        self.assertEqual(frame_box_detail["reason"], "photo_width_source_not_photo_edges")
-        self.assertIn("unstable_photo_widths", photo_components)
-        self.assertTrue(photo_detail["used"])
 
     def test_partial_holder_uses_holder_edge_disambiguation_reason(self) -> None:
         policy = get_detection_policy("120-66", "partial")
@@ -875,7 +853,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             "used": True,
             "support": "ok",
             "content_containment_ok": True,
-            "content_harm_risk": False,
+            "content_integrity_failed": False,
             "frame_scores": [
                 {"index": 1, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
                 {"index": 2, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
@@ -883,7 +861,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
         }
 
-        detail = partial_safe_extra_frames_gate_detail(
+        detail = partial_safe_extra_frames_assessment_detail(
             np.zeros((100, 300), dtype=np.uint8),
             detection,
             {"expected_gaps": 2, "hard_gaps": 1, "grid_gaps": 1, "equal_gaps": 0},
@@ -906,7 +884,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
         self.assertEqual(
             detail["content_quality"]["role"],
-            "quality_diagnostic_not_hard_gate",
+            "quality_diagnostic_not_boundary_evidence",
         )
         self.assertFalse(detail["content_quality"]["quality_ok"])
 
@@ -954,7 +932,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertTrue(detail["requires_validation"])
         self.assertTrue(detail["content_ok"])
         self.assertFalse(detail["content_quality_ok"])
-        self.assertEqual(detail["content_score_role"], "quality_diagnostic_not_hard_gate")
+        self.assertEqual(detail["content_score_role"], "quality_diagnostic_not_boundary_evidence")
         self.assertTrue(detail["ok"])
 
     def test_frame_box_width_detail_does_not_validate_evidence_independence(self) -> None:
@@ -1002,7 +980,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertFalse(detail["photo_width_stability"]["used"])
         self.assertEqual(detail["photo_width_stability"]["role"], "diagnostic_until_photo_edges")
 
-    def test_gate_support_checks_only_photo_edge_width_when_available(self) -> None:
+    def test_support_calibration_checks_only_photo_edge_width_when_available(self) -> None:
         fmt = format_spec("120-66")
         policy = get_detection_policy("120-66", "full")
         hard_detail = {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0}
@@ -1129,7 +1107,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             "used": True,
             "support": "ok",
             "content_containment_ok": True,
-            "content_harm_risk": False,
+            "content_integrity_failed": False,
             "frame_scores": [
                 {"index": 1, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
                 {"index": 2, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
@@ -1137,7 +1115,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
         }
 
-        detail = partial_safe_extra_frames_gate_detail(
+        detail = partial_safe_extra_frames_assessment_detail(
             np.zeros((100, 300), dtype=np.uint8),
             detection,
             {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0},

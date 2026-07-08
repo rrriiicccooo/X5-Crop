@@ -19,7 +19,7 @@ from ....runtime.config import RuntimeConfig
 from ...confidence_caps import apply_confidence_cap
 from ...evidence.content.containment import content_containment_detail
 from ...evidence.content.frame_support import content_evidence_detail
-from ...evidence.separator_summary import separator_gate_detail_summary
+from ...evidence.separator_summary import separator_support_detail_summary
 from ..signals import (
     SIGNAL_CONTENT_ASPECT_CONFLICT,
     SIGNAL_CONTENT_EVIDENCE_WEAK,
@@ -28,8 +28,8 @@ from ..signals import (
     SIGNAL_EDGE_ANCHOR_HARD_SEPARATOR_MISSING,
     SIGNAL_HOLDER_EDGE_DISAMBIGUATION_WEAK,
     SIGNAL_PARTIAL_COUNT_AMBIGUOUS,
+    SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
     SIGNAL_PARTIAL_FRAME_CONTENT_UNSTABLE,
-    SIGNAL_PARTIAL_LEADING_CONTENT_RISK,
     SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
     candidate_signals,
     merged_candidate_signals,
@@ -38,13 +38,13 @@ from ..signals import (
 from .base_scoring import apply_base_detection_scoring
 from .content_candidate import content_candidate_assessment_from_proposal
 from .evidence_independence import evidence_independence_detail
-from .gate_support import (
+from .support_calibration import (
     hard_full_calibration_floor_applies,
     separator_geometry_support_applies,
 )
 from .candidate_gate import candidate_gate_assessment
-from .gates import assess_separator_gate
-from .partial_holder import partial_safe_extra_frames_gate_detail
+from .partial_holder import partial_safe_extra_frames_assessment_detail
+from .separator_support import assess_separator_support
 from .scoring import (
     content_quality_score,
     content_support_score,
@@ -120,13 +120,13 @@ def apply_candidate_assessment_policy(
                 *_candidate_confidence_caps(candidate),
                 *proposal_caps,
             ]
-    separator_gate_result = assess_separator_gate(
+    separator_support_result = assess_separator_support(
         candidate,
         config.confidence_threshold,
         policy,
     )
-    separator_gate_ok = separator_gate_result.ok
-    separator_gate_detail = separator_gate_result.detail
+    separator_support_ok = separator_support_result.ok
+    separator_support_detail = separator_support_result.detail
     content_detail = content_evidence_detail(gray, candidate, cache, policy.content)
     containment_detail = content_containment_detail(
         content_detail,
@@ -136,7 +136,7 @@ def apply_candidate_assessment_policy(
     scoring_policy = policy.scoring
     floor_applies = hard_full_calibration_floor_applies(
         candidate,
-        separator_gate_detail,
+        separator_support_detail,
         fmt,
         source,
         policy,
@@ -149,23 +149,23 @@ def apply_candidate_assessment_policy(
                 scoring_policy.hard_full_confidence_floor,
             ),
         )
-        separator_gate_result = assess_separator_gate(
+        separator_support_result = assess_separator_support(
             gate_candidate,
             config.confidence_threshold,
             policy,
         )
-        separator_gate_ok = separator_gate_result.ok
-        separator_gate_detail = separator_gate_result.detail
-        separator_gate_detail = dict(separator_gate_detail)
-        separator_gate_detail["calibrate_hard_full_confidence_floor_applied"] = True
-        separator_gate_detail["calibrate_hard_full_confidence_floor"] = float(
+        separator_support_ok = separator_support_result.ok
+        separator_support_detail = separator_support_result.detail
+        separator_support_detail = dict(separator_support_detail)
+        separator_support_detail["calibrate_hard_full_confidence_floor_applied"] = True
+        separator_support_detail["calibrate_hard_full_confidence_floor"] = float(
             scoring_policy.hard_full_confidence_floor
         )
     content_score = content_support_score(containment_detail)
     content_quality = content_quality_score(containment_detail, fmt.name, policy.content)
     geometry_score = geometry_support_score(candidate, containment_detail, policy)
     separator_score = (
-        separator_support_score(candidate, separator_gate_detail, policy)
+        separator_support_score(candidate, separator_support_detail, policy)
         if source == "separator"
         else 0.0
     )
@@ -178,16 +178,16 @@ def apply_candidate_assessment_policy(
     )
     support = str(containment_detail.get("support", ""))
     content_containment_ok = bool(containment_detail.get("content_containment_ok", False))
-    content_harm_risk = bool(containment_detail.get("content_harm_risk", True))
+    content_integrity_failed = bool(containment_detail.get("content_integrity_failed", True))
     signals = candidate_signals(candidate)
     detected_geometry_policy = policy.separator.geometry_support.detected_geometry
     stable_grid_policy = policy.separator.geometry_support.stable_grid
     detected_geometry_support = (
-        (not separator_gate_ok)
+        (not separator_support_ok)
         and detected_geometry_policy.enabled
     ) and separator_geometry_support_applies(
         candidate,
-        separator_gate_detail,
+        separator_support_detail,
         fmt,
         source,
         support,
@@ -200,7 +200,7 @@ def apply_candidate_assessment_policy(
         or not stable_grid_policy.enabled
         else separator_geometry_support_applies(
             candidate,
-            separator_gate_detail,
+            separator_support_detail,
             fmt,
             source,
             support,
@@ -209,41 +209,41 @@ def apply_candidate_assessment_policy(
         )
     )
     if detected_geometry_support or stable_grid_support:
-        separator_gate_ok = True
-        separator_gate_detail = dict(separator_gate_detail)
-        separator_gate_detail["ok"] = True
+        separator_support_ok = True
+        separator_support_detail = dict(separator_support_detail)
+        separator_support_detail["ok"] = True
         if detected_geometry_support:
-            separator_gate_detail["reason"] = "separator_detected_geometry_support"
-            separator_gate_detail["separator_geometry_support_mode"] = "detected_geometry"
+            separator_support_detail["reason"] = "separator_detected_geometry_support"
+            separator_support_detail["separator_geometry_support_mode"] = "detected_geometry"
         else:
-            separator_gate_detail["reason"] = "separator_stable_grid_support"
-            separator_gate_detail["separator_geometry_support_mode"] = "stable_grid"
+            separator_support_detail["reason"] = "separator_stable_grid_support"
+            separator_support_detail["separator_geometry_support_mode"] = "stable_grid"
 
     outer_candidate_strategy = str(candidate.detail.get("outer_candidate_strategy", ""))
     if source == "separator" and outer_candidate_strategy == "edge_anchor_outer":
-        hard_count = separator_gate_detail_summary(separator_gate_detail).hard_separator_gaps
+        hard_count = separator_support_detail_summary(separator_support_detail).hard_separator_gaps
         if hard_count <= 0:
-            separator_gate_ok = False
-            separator_gate_detail = dict(separator_gate_detail)
-            separator_gate_detail["ok"] = False
-            separator_gate_detail["reason"] = "edge_anchor_needs_hard_separator"
-            separator_gate_detail["edge_anchor_needs_hard_separator"] = True
+            separator_support_ok = False
+            separator_support_detail = dict(separator_support_detail)
+            separator_support_detail["ok"] = False
+            separator_support_detail["reason"] = "edge_anchor_needs_hard_separator"
+            separator_support_detail["edge_anchor_needs_hard_separator"] = True
             signals.append(SIGNAL_EDGE_ANCHOR_HARD_SEPARATOR_MISSING)
 
     content_guided_hard_separator_missing = False
     content_guided_detail = candidate.detail.get("content_guided_separator", {})
     if source == "separator" and isinstance(content_guided_detail, dict) and bool(content_guided_detail.get("used", False)):
-        hard_count = separator_gate_detail_summary(separator_gate_detail).hard_separator_gaps
+        hard_count = separator_support_detail_summary(separator_support_detail).hard_separator_gaps
         if hard_count <= 0:
             content_guided_hard_separator_missing = True
-            separator_gate_ok = False
-            separator_gate_detail = dict(separator_gate_detail)
-            separator_gate_detail["ok"] = False
-            separator_gate_detail["reason"] = policy.candidate_plan.content_guided_separator.requires_hard_separator_signal
-            separator_gate_detail["content_guided_separator_needs_hard_separator"] = True
+            separator_support_ok = False
+            separator_support_detail = dict(separator_support_detail)
+            separator_support_detail["ok"] = False
+            separator_support_detail["reason"] = policy.candidate_plan.content_guided_separator.requires_hard_separator_signal
+            separator_support_detail["content_guided_separator_needs_hard_separator"] = True
             signals.append(SIGNAL_CONTENT_GUIDED_HARD_SEPARATOR_MISSING)
 
-    if source == "separator" and not separator_gate_ok:
+    if source == "separator" and not separator_support_ok:
         signals.append(SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK)
     if support == "aspect_conflict":
         signals.append(SIGNAL_CONTENT_ASPECT_CONFLICT)
@@ -257,10 +257,10 @@ def apply_candidate_assessment_policy(
     confidence = max(float(candidate.confidence), joint_score)
     if floor_applies:
         confidence = max(confidence, scoring_policy.hard_full_confidence_floor)
-    partial_safe_extra_frames = partial_safe_extra_frames_gate_detail(
+    partial_safe_extra_frames = partial_safe_extra_frames_assessment_detail(
         gray,
         candidate,
-        separator_gate_detail,
+        separator_support_detail,
         containment_detail,
         fmt,
         source,
@@ -271,7 +271,7 @@ def apply_candidate_assessment_policy(
         policy,
     )
     partial_safe_extra_frames_ok = bool(partial_safe_extra_frames.get("ok", False))
-    partial_safe_candidate_gate_support_ok = (
+    partial_safe_candidate_support_ok = (
         partial_safe_extra_frames_ok
         and not content_guided_hard_separator_missing
     )
@@ -280,7 +280,7 @@ def apply_candidate_assessment_policy(
     )
     partial_signal_map = {
         "holder_edge_disambiguation_weak": SIGNAL_HOLDER_EDGE_DISAMBIGUATION_WEAK,
-        SIGNAL_PARTIAL_LEADING_CONTENT_RISK: SIGNAL_PARTIAL_LEADING_CONTENT_RISK,
+        SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT: SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
         "partial_frame_content_unstable": SIGNAL_PARTIAL_FRAME_CONTENT_UNSTABLE,
     }
     partial_safe_blocker_signals = {
@@ -299,26 +299,26 @@ def apply_candidate_assessment_policy(
             partial_safe_blocker_signals.intersection(
                 {
                     SIGNAL_HOLDER_EDGE_DISAMBIGUATION_WEAK,
-                    SIGNAL_PARTIAL_LEADING_CONTENT_RISK,
+                    SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
                     SIGNAL_PARTIAL_FRAME_CONTENT_UNSTABLE,
                 }
             )
         )
     )
     if partial_safe_blocks_auto:
-        separator_gate_ok = False
-        separator_gate_detail = dict(separator_gate_detail)
-        separator_gate_detail["ok"] = False
-        separator_gate_detail["reason"] = "partial_safe_extra_frames_blocked"
-        separator_gate_detail["partial_safe_extra_frames_blocked"] = sorted(
+        separator_support_ok = False
+        separator_support_detail = dict(separator_support_detail)
+        separator_support_detail["ok"] = False
+        separator_support_detail["reason"] = "partial_safe_extra_frames_blocked"
+        separator_support_detail["partial_safe_extra_frames_blocked"] = sorted(
             partial_safe_disqualifiers
         )
         signals.extend(sorted(partial_safe_blocker_signals))
-    if partial_safe_candidate_gate_support_ok:
-        separator_gate_detail = dict(separator_gate_detail)
-        separator_gate_detail["ok"] = True
-        separator_gate_detail["reason"] = "partial_safe_extra_frames_support"
-        separator_gate_detail["partial_safe_extra_frames_support"] = True
+    if partial_safe_candidate_support_ok:
+        separator_support_detail = dict(separator_support_detail)
+        separator_support_detail["ok"] = True
+        separator_support_detail["reason"] = "partial_safe_extra_frames_support"
+        separator_support_detail["partial_safe_extra_frames_support"] = True
         signals = [
             signal
             for signal in signals
@@ -338,8 +338,8 @@ def apply_candidate_assessment_policy(
     )
     evidence_independence_ok = bool(independence_detail.get("ok", True))
     if source == "separator":
-        separator_gate_detail = dict(separator_gate_detail)
-        separator_gate_detail["evidence_independence"] = independence_detail
+        separator_support_detail = dict(separator_support_detail)
+        separator_support_detail["evidence_independence"] = independence_detail
     if not evidence_independence_ok:
         signals.append(
             str(
@@ -349,15 +349,15 @@ def apply_candidate_assessment_policy(
         )
     candidate_gate = candidate_gate_assessment(
         source=source,
-        separator_gate_ok=bool(separator_gate_ok),
-        separator_gate_detail=separator_gate_detail,
-        partial_safe_candidate_gate_support_ok=bool(
-            partial_safe_candidate_gate_support_ok
+        separator_support_ok=bool(separator_support_ok),
+        separator_support_detail=separator_support_detail,
+        partial_safe_candidate_support_ok=bool(
+            partial_safe_candidate_support_ok
         ),
         partial_safe_blocks_auto=bool(partial_safe_blocks_auto),
         partial_safe_disqualifiers=partial_safe_disqualifiers,
         content_containment_ok=bool(content_containment_ok),
-        content_harm_risk=bool(content_harm_risk),
+        content_integrity_failed=bool(content_integrity_failed),
         content_support=support,
         evidence_independence_ok=bool(evidence_independence_ok),
         evidence_independence_detail=independence_detail,
@@ -391,13 +391,13 @@ def apply_candidate_assessment_policy(
         "source": source,
         "joint_score": float(joint_score),
         "candidate_gate_passed": bool(candidate_gate.passed),
-        "gate": candidate_gate.report_detail(),
+        "candidate_gate": candidate_gate.report_detail(),
         "geometry_score": float(geometry_score),
         "separator_score": float(separator_score),
         "content_score": float(content_score),
         "content_score_role": "content_containment_support",
         "content_quality_score": float(content_quality),
-        "content_quality_score_role": "quality_diagnostic_not_hard_gate",
+        "content_quality_score_role": "quality_diagnostic_not_boundary_evidence",
         "blockers": candidate_gate.blockers,
         "diagnostics": candidate_gate.diagnostics,
         "confidence_caps": confidence_caps,
@@ -408,9 +408,9 @@ def apply_candidate_assessment_policy(
         "separator_width_cv": candidate.detail.get("separator_width_cv"),
         "content_support": support,
         "content_containment_ok": bool(content_containment_ok),
-        "content_harm_risk": bool(content_harm_risk),
+        "content_integrity_failed": bool(content_integrity_failed),
         "content_containment": containment_detail,
-        "separator_hard_evidence": separator_gate_detail,
+        "separator_support": separator_support_detail,
         "evidence_independence": independence_detail,
         "partial_safe_extra_frames": partial_safe_extra_frames,
     }

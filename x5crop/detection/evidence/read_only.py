@@ -7,7 +7,6 @@ import numpy as np
 from ...app_info import VERSION
 from ...domain import Detection
 from ...geometry.layout import work_gray
-from ...policies.registry import get_detection_policy
 from ...cache import AnalysisCache
 from ...gap_methods import gap_method_roles
 from .gap_diagnostics import gap_diagnostic_record
@@ -20,25 +19,19 @@ def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: 
     for record in gap_records:
         trust = str(record.get("hard_trust", "not_hard_gap"))
         hard_counts[trust] = hard_counts.get(trust, 0) + 1
-    overlap_count = sum(1 for record in gap_records if bool(record.get("overlap_like", False)))
-    overlap_risk_counts: dict[str, int] = {}
+    output_overlap_count = sum(
+        1 for record in gap_records if bool(record.get("output_overlap_like", False))
+    )
+    output_overlap_counts: dict[str, int] = {}
     for record in gap_records:
-        risk = str(record.get("overlap_risk", "none"))
-        overlap_risk_counts[risk] = overlap_risk_counts.get(risk, 0) + 1
+        output_overlap_class = str(record.get("output_overlap_class", "none"))
+        output_overlap_counts[output_overlap_class] = (
+            output_overlap_counts.get(output_overlap_class, 0) + 1
+        )
     strong_hard = int(hard_counts.get("strong_separator", 0))
     suspicious_hard = sum(
         int(hard_counts.get(name, 0))
         for name in ("suspect_internal_edge", "suspect_frame_border", "nearby_separator_conflict", "geometry_conflict")
-    )
-    strong_overlap_models = int(overlap_risk_counts.get("strong", 0))
-    lucky_policy = get_detection_policy(detection.film_format, detection.strip_mode).risk.lucky_pass
-    single_anchor_evidence_risk = (
-        lucky_policy.enabled
-        and detection.strip_mode == "full"
-        and (
-            (strong_hard <= 1 and (suspicious_hard >= 1 or strong_overlap_models >= 1))
-            or (strong_hard <= 2 and suspicious_hard >= 1 and strong_overlap_models >= 1)
-        )
     )
     method_roles = gap_method_roles()
     detection.detail["diagnostics"] = {
@@ -49,17 +42,16 @@ def attach_read_only_diagnostics(gray: np.ndarray, detection: Detection, cache: 
             "confidence": False,
             "decision": False,
         },
-        "purpose": "observe hard-gap trust, model-gap overlap risk, and evidence/model roles without changing crop output",
+        "purpose": "observe hard-gap trust, output-overlap evidence, and evidence/model roles without changing crop output",
         "method_roles": method_roles,
         "gap_diagnostics": gap_records,
         "summary": {
             "gap_count": len(gap_records),
             "hard_trust_counts": hard_counts,
-            "overlap_like_model_gaps": int(overlap_count),
-            "overlap_risk_counts": overlap_risk_counts,
+            "output_overlap_like_model_gaps": int(output_overlap_count),
+            "output_overlap_counts": output_overlap_counts,
             "suspect_hard_gaps": int(hard_counts.get("suspect_internal_edge", 0)),
             "suspicious_hard_gaps": int(suspicious_hard),
             "strong_hard_gaps": int(strong_hard),
-            "single_anchor_evidence_risk": bool(single_anchor_evidence_risk),
         },
     }

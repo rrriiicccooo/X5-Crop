@@ -109,7 +109,7 @@ def build_detection_for_outer(
         float(policy.partial_holder.broad_separator_width_min_ratio),
         max(
             int(policy.partial_holder.requires_broad_separator_width_gaps),
-            int(policy.separator.gate.min_broad_separator_width_gaps_for_auto),
+            int(policy.separator.support.min_broad_separator_width_gaps_for_auto),
         ),
     )
     separator_continuity_evidence = separator_cross_axis_continuity_evidence(

@@ -84,7 +84,7 @@ def decision_gate_assessment(
     detection: Detection,
     confidence_threshold: float,
     evidence: dict[str, Any],
-    risk: dict[str, Any],
+    decision_signals: dict[str, Any],
     policy: DetectionDecisionContract,
     candidate_gate_passed: bool,
     deskew_detail: dict[str, Any],
@@ -95,8 +95,8 @@ def decision_gate_assessment(
     checks.append(
         _review_check(
             code="content_only_evidence",
-            bucket="risk",
-            triggered=bool(risk["content_only_evidence"]),
+            bucket="source",
+            triggered=bool(decision_signals["content_only_evidence"]),
             signal="content_only_evidence",
             final_review_reason=policy.decision.content_only_evidence_reason,
         )
@@ -104,8 +104,8 @@ def decision_gate_assessment(
     checks.append(
         _review_check(
             code="safety_or_review_only",
-            bucket="risk",
-            triggered=bool(risk["safety_or_review_only"]),
+            bucket="source",
+            triggered=bool(decision_signals["safety_or_review_only"]),
             signal="safety_or_review_only",
             final_review_reason=policy.decision.decision_insufficient_reason,
         )
@@ -114,25 +114,17 @@ def decision_gate_assessment(
         _review_check(
             code="outer_content_alignment",
             bucket="outer",
-            triggered=(
-                not bool(evidence["outer"]["ok"])
-                and policy.risk.review_on_outer_content_mismatch
-            ),
-            signal="outer_not_ok",
+            triggered=bool(decision_signals["outer_content_alignment_failed"]),
+            signal="outer_content_alignment_failed",
             final_review_reason=policy.decision.outer_content_mismatch_reason,
-            detail={
-                "review_on_outer_content_mismatch": bool(
-                    policy.risk.review_on_outer_content_mismatch
-                )
-            },
         )
     )
     checks.append(
         _review_check(
             code="separator_support",
             bucket="separator",
-            triggered=not bool(evidence["separator"]["ok"]),
-            signal="separator_not_ok",
+            triggered=bool(decision_signals["separator_support_incomplete"]),
+            signal="separator_support_incomplete",
             final_review_reason=policy.decision.separator_incomplete_reason,
         )
     )
@@ -140,8 +132,8 @@ def decision_gate_assessment(
         _review_check(
             code="geometry_support",
             bucket="geometry",
-            triggered=not bool(evidence["geometry"]["ok"]),
-            signal="geometry_not_ok",
+            triggered=bool(decision_signals["photo_geometry_unstable"]),
+            signal="photo_geometry_unstable",
             final_review_reason=policy.decision.geometry_unstable_reason,
         )
     )
@@ -149,51 +141,34 @@ def decision_gate_assessment(
         _review_check(
             code="content_support",
             bucket="content",
-            triggered=not bool(evidence["content"]["ok"]),
-            signal="content_not_ok",
+            triggered=bool(decision_signals["content_integrity_failed"]),
+            signal="content_integrity_failed",
             final_review_reason=policy.decision.content_evidence_insufficient_reason,
         )
     )
     checks.append(
         _review_check(
             code="candidate_competition",
-            bucket="risk",
-            triggered=(
-                bool(risk["candidate_competition_close"])
-                and policy.risk.review_on_close_competition
-            ),
+            bucket="selection",
+            triggered=bool(decision_signals["candidate_competition_close"]),
             signal="candidate_competition_close",
             final_review_reason=policy.decision.candidate_competition_close_reason,
-            detail={
-                "review_on_close_competition": bool(policy.risk.review_on_close_competition)
-            },
         )
     )
     checks.append(
         _review_check(
-            code="overlap_risk",
-            bucket="risk",
-            triggered=bool(risk["overlap_risk"]) and policy.risk.review_on_overlap_risk,
-            signal="overlap_bleed_risk",
-            final_review_reason=policy.decision.overlap_risk_reason,
-            detail={"review_on_overlap_risk": bool(policy.risk.review_on_overlap_risk)},
-        )
-    )
-    checks.append(
-        _review_check(
-            code="lucky_pass_risk",
-            bucket="risk",
-            triggered=bool(risk["lucky_pass_risk"]) and policy.risk.review_on_lucky_pass_risk,
-            signal="lucky_pass_risk",
-            final_review_reason=policy.decision.lucky_pass_risk_reason,
-            detail={"review_on_lucky_pass_risk": bool(policy.risk.review_on_lucky_pass_risk)},
+            code="output_overlap",
+            bucket="output",
+            triggered=bool(decision_signals["output_overlap_detected"]),
+            signal="output_overlap_detected",
+            final_review_reason=policy.decision.output_overlap_reason,
         )
     )
     checks.append(
         _review_check(
             code="partial_edge_safety",
             bucket="partial_edge",
-            triggered=bool(risk["partial_edge_uncertain"]),
+            triggered=bool(decision_signals["partial_edge_uncertain"]),
             signal="partial_edge_uncertain",
             final_review_reason=policy.decision.partial_edge_uncertain_reason,
         )
@@ -214,7 +189,7 @@ def decision_gate_assessment(
                 code="confidence_floor",
                 bucket="confidence",
                 triggered=float(detection.confidence) < float(confidence_threshold),
-                signal="below_threshold",
+                signal="confidence_below_threshold",
                 final_review_reason=policy.decision.decision_insufficient_reason,
                 detail={
                     "confidence": float(detection.confidence),

@@ -12,7 +12,6 @@ class RuntimeDecisionPolicy:
     content_aspect_conflict_cap: float = 0.82
     content_low_confidence_cap: float = 0.84
     outer_mismatch_cap: float = 0.84
-    lucky_pass_risk_cap: float = 0.84
 
 
 __all__ = [

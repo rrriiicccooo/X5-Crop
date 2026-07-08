@@ -166,7 +166,7 @@ x5_crop_output/_debug_analysis/
 - `Debug boxes`: 当前 outer、frame 和裁切框。
 - `Separator evidence`: 分隔证据、当前 outer 和切线标记。
 
-详细 evidence / risk / decision 说明写入 report；Debug Analysis
+详细 evidence / decision signal / decision 说明写入 report；Debug Analysis
 默认保持三联图，优先服务人工快速审阅。
 
 状态含义：
@@ -425,7 +425,7 @@ Each JPG is controlled by runtime diagnostics policy and defaults to:
 - `Debug boxes`: current outer, frames, and crop boxes.
 - `Separator evidence`: separator evidence, current outer, and cut markers.
 
-Detailed evidence / risk / decision explanations are written to the
+Detailed evidence / decision signal / decision explanations are written to the
 report. Debug Analysis defaults to a three-panel image for fast human review.
 
 `PASS` means the file will be cropped automatically. `REVIEW` means it needs
@@ -453,7 +453,7 @@ x5_crop_output/
 ```
 
 Default output bleed is 20px on the long axis and 10px on the short axis. When
-overlap, near-overlap, or continuous-content risk is detected, long-axis output
+overlap, near-overlap, or continuous-content decision signal is detected, long-axis output
 bleed is raised to 50px. This affects final output geometry only, not detection
 scoring.
 

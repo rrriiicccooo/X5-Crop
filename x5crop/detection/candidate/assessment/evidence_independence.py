@@ -96,7 +96,7 @@ def evidence_independence_detail(
         "min_content_score": float(policy.min_content_score),
         "content_ok": bool(content_ok),
         "content_quality_ok": bool(content_quality_ok),
-        "content_score_role": "quality_diagnostic_not_hard_gate",
+        "content_score_role": "quality_diagnostic_not_boundary_evidence",
         "geometry_score": float(geometry_score),
         "min_geometry_score": float(policy.min_geometry_score),
         "width_cv": _float(detection.detail.get("width_cv"), 1.0),

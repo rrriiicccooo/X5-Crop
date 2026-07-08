@@ -6,7 +6,6 @@ from ...formats import FormatSpec
 from ..parameters.aggregate import FormatParameters
 from ..parameters.base import PartialCountParameters
 from ..parameters.finalization import PartialHolderParameters
-from ..parameters.risk import LuckyPassRiskParameters
 from ..parameters.scoring import (
     BaseDetectionScoreParameters,
     ScoringCalibrationParameters,
@@ -15,7 +14,7 @@ from ..parameters.scoring import (
 from ..parameters.separator import (
     LeadingGridFailureParameters,
     NearbySeparatorRefinementParameters,
-    SeparatorGateParameters,
+    SeparatorSupportParameters,
     SeparatorGeometrySupportParameters,
 )
 
@@ -50,8 +49,8 @@ def partial_count_parameters(fmt: FormatSpec, params: FormatParameters) -> Parti
     return replace(partial, include_default_auto=include_default)
 
 
-def separator_gate_parameters(fmt: FormatSpec, params: FormatParameters) -> SeparatorGateParameters:
-    gate = params.separator_gate
+def separator_support_parameters(fmt: FormatSpec, params: FormatParameters) -> SeparatorSupportParameters:
+    gate = params.separator_support
     if _is_square_medium_frame(fmt):
         return replace(
             gate,
@@ -149,22 +148,14 @@ def nearby_separator_refinement_parameters(
     return nearby
 
 
-def lucky_pass_risk_parameters(fmt: FormatSpec, params: FormatParameters) -> LuckyPassRiskParameters:
-    return replace(
-        params.lucky_pass_risk,
-        enabled=_is_standard_35mm_strip(fmt),
-    )
-
-
 __all__ = [
     "base_detection_score_parameters",
     "leading_grid_failure_parameters",
-    "lucky_pass_risk_parameters",
     "nearby_separator_refinement_parameters",
     "partial_count_parameters",
     "partial_holder_parameters",
     "scoring_calibration_parameters",
-    "separator_gate_parameters",
+    "separator_support_parameters",
     "separator_geometry_support_parameters",
     "separator_support_score_parameters",
 ]

@@ -14,9 +14,9 @@ from ..signals import (
     SIGNAL_BUCKETS,
     SIGNAL_CONTENT_ASPECT_CONFLICT,
     SIGNAL_CONTENT_EVIDENCE_WEAK,
-    SIGNAL_CONTENT_HARM_RISK,
+    SIGNAL_CONTENT_INTEGRITY_FAILED,
     SIGNAL_CONTENT_OUTSIDE_OUTER,
-    SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_RISK,
+    SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED,
     SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
     unknown_candidate_signals,
 )
@@ -99,13 +99,13 @@ def candidate_signal_blocker_signals(
 def candidate_gate_assessment(
     *,
     source: str,
-    separator_gate_ok: bool,
-    separator_gate_detail: dict[str, Any],
-    partial_safe_candidate_gate_support_ok: bool,
+    separator_support_ok: bool,
+    separator_support_detail: dict[str, Any],
+    partial_safe_candidate_support_ok: bool,
     partial_safe_blocks_auto: bool,
     partial_safe_disqualifiers: set[str],
     content_containment_ok: bool,
-    content_harm_risk: bool,
+    content_integrity_failed: bool,
     content_support: str,
     evidence_independence_ok: bool,
     evidence_independence_detail: dict[str, Any],
@@ -127,8 +127,8 @@ def candidate_gate_assessment(
 
     separator_support = (
         source != CANDIDATE_SOURCE_SEPARATOR
-        or separator_gate_ok
-        or partial_safe_candidate_gate_support_ok
+        or separator_support_ok
+        or partial_safe_candidate_support_ok
     )
     checks.append(
         GateCheck(
@@ -139,11 +139,11 @@ def candidate_gate_assessment(
             severity="blocker",
             signal=SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
             detail={
-                "separator_gate_ok": bool(separator_gate_ok),
-                "partial_safe_candidate_gate_support_ok": bool(
-                    partial_safe_candidate_gate_support_ok
+                "separator_support_ok": bool(separator_support_ok),
+                "partial_safe_candidate_support_ok": bool(
+                    partial_safe_candidate_support_ok
                 ),
-                "separator_hard_evidence": dict(separator_gate_detail),
+                "separator_support": dict(separator_support_detail),
             },
         )
     )
@@ -153,13 +153,13 @@ def candidate_gate_assessment(
         if content_support == "aspect_conflict"
         else SIGNAL_CONTENT_EVIDENCE_WEAK
     )
-    content_integrity_ok = content_containment_ok and not content_harm_risk
+    content_integrity_ok = content_containment_ok and not content_integrity_failed
     if content_integrity_ok:
         content_integrity_signal = "content_integrity_ok"
     elif not content_containment_ok:
         content_integrity_signal = content_signal
     else:
-        content_integrity_signal = SIGNAL_CONTENT_HARM_RISK
+        content_integrity_signal = SIGNAL_CONTENT_INTEGRITY_FAILED
     checks.append(
         GateCheck(
             code="content_integrity",
@@ -171,14 +171,14 @@ def candidate_gate_assessment(
             detail={
                 "content_support": content_support,
                 "content_containment_ok": bool(content_containment_ok),
-                "content_harm_risk": bool(content_harm_risk),
+                "content_integrity_failed": bool(content_integrity_failed),
             },
         )
     )
 
     independence_signal = str(
         evidence_independence_detail.get("reason")
-        or SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_RISK
+        or SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED
     )
     checks.append(
         GateCheck(
@@ -230,7 +230,7 @@ def candidate_gate_assessment(
     )
 
     handled_signals = {
-        SIGNAL_CONTENT_HARM_RISK,
+        SIGNAL_CONTENT_INTEGRITY_FAILED,
         "partial_safe_extra_frames_blocked",
         SIGNAL_CONTENT_ASPECT_CONFLICT,
         SIGNAL_CONTENT_EVIDENCE_WEAK,
