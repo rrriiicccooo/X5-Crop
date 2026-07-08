@@ -74,7 +74,7 @@ class Detection:
     frames: list[Box]
     gaps: list[Gap]
     confidence: float
-    review_reasons: list[str]
+    final_review_reasons: list[str]
     detail: dict[str, Any]
 
 
@@ -103,7 +103,7 @@ class ProcessResult:
     layout: str
     strip_mode: str
     count: int
-    review_reasons: list[str]
+    final_review_reasons: list[str]
     output_files: list[str]
     review_copy: Optional[str]
     outer_box: dict[str, int]

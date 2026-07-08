@@ -80,7 +80,7 @@ def evidence_summary_for(
     content_containment_ok = bool(content_detail.get("content_containment_ok", False))
     content_integrity_failed = bool(content_detail.get("content_integrity_failed", True))
     content_quality_ok = content_quality_score >= policy.evidence.min_content_score
-    partial_detail = _dict(assessment.get("partial_safe_extra_frames"))
+    partial_detail = _dict(assessment.get("partial_edge_safety"))
     partial_edge_safe = bool(partial_detail.get("ok", False))
     expected = int(separator["expected_gaps"])
     hard_ratio = float(separator["hard_gap_ratio"])

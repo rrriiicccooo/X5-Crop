@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -104,55 +104,6 @@ class GapGeometryConstraintParameters:
     shift_ratio: float = 0.045
     shift_min: float = 20.0
     shift_max: float = 520.0
-
-
-@dataclass(frozen=True)
-class RobustGridExecutionParameters:
-    constrain: GapGeometryConstraintParameters = field(default_factory=GapGeometryConstraintParameters)
-    reliable_min_score: float = 0.28
-    min_reliable: int = 2
-    pitch_min_ratio: float = 0.70
-    pitch_max_ratio: float = 1.30
-    fit_tolerance_ratio: float = 0.040
-    tolerance_min: float = 4.0
-    tolerance_max: float = 520.0
-    reject_residual_ratio: float = 0.045
-    shift_ratio: float = 0.035
-    shift_min: float = 20.0
-    shift_max: float = 520.0
-    hard_keep_ratio: float = 0.025
-    hard_keep_min: float = 3.0
-    hard_keep_max: float = 180.0
-    hard_protect_ratio: float = 0.006
-    hard_protect_min: float = 12.0
-    hard_protect_max: float = 40.0
-
-
-@dataclass(frozen=True)
-class RobustGridParameters:
-    constrain_full_shift_ratio: float = 0.045
-    constrain_partial_shift_ratio: float = 0.12
-    constrain_shift_min: float = 20.0
-    constrain_shift_max: float = 520.0
-    reliable_min_score: float = 0.28
-    min_reliable: int = 2
-    pitch_min_ratio: float = 0.70
-    pitch_max_ratio: float = 1.30
-    full_tolerance_ratio: float = 0.040
-    partial_tolerance_ratio: float = 0.090
-    tolerance_min: float = 4.0
-    tolerance_max: float = 520.0
-    reject_residual_ratio: float = 0.045
-    full_shift_ratio: float = 0.035
-    partial_shift_ratio: float = 0.10
-    shift_min: float = 20.0
-    shift_max: float = 520.0
-    hard_keep_ratio: float = 0.025
-    hard_keep_min: float = 3.0
-    hard_keep_max: float = 180.0
-    hard_protect_ratio: float = 0.006
-    hard_protect_min: float = 12.0
-    hard_protect_max: float = 40.0
 
 
 @dataclass(frozen=True)
@@ -265,8 +216,6 @@ __all__ = [
     "NearbySeparatorRefinementParameters",
     "OuterBoxDetectionParameters",
     "OuterMaskProfileParameters",
-    "RobustGridExecutionParameters",
-    "RobustGridParameters",
     "SeparatorProfileParameters",
     "SeparatorWidthProfileSearchParameters",
 ]

@@ -32,6 +32,17 @@ class DecisionGateAssessment:
         }
 
 
+@dataclass(frozen=True)
+class DecisionAssessmentInput:
+    detection: Detection
+    confidence_threshold: float
+    decision_signals: dict[str, Any]
+    policy: DetectionDecisionContract
+    candidate_gate: dict[str, Any]
+    deskew_detail: dict[str, Any]
+    confidence_caps: list[dict[str, Any]] = field(default_factory=list)
+
+
 def _review_check(
     *,
     code: str,
@@ -79,18 +90,13 @@ def _failed_reasons(checks: list[GateCheck]) -> list[str]:
     ]
 
 
-def decision_gate_assessment(
-    *,
-    detection: Detection,
-    confidence_threshold: float,
-    evidence: dict[str, Any],
-    decision_signals: dict[str, Any],
-    policy: DetectionDecisionContract,
-    candidate_gate_passed: bool,
-    deskew_detail: dict[str, Any],
-    include_low_confidence_context: bool,
-    confidence_caps: list[dict[str, Any]] | None = None,
-) -> DecisionGateAssessment:
+def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> DecisionGateAssessment:
+    detection = decision_input.detection
+    confidence_threshold = decision_input.confidence_threshold
+    decision_signals = decision_input.decision_signals
+    policy = decision_input.policy
+    candidate_gate_allows_auto = bool(decision_input.candidate_gate.get("passed", False))
+    deskew_detail = decision_input.deskew_detail
     checks: list[GateCheck] = []
     checks.append(
         _review_check(
@@ -177,7 +183,7 @@ def decision_gate_assessment(
         _review_check(
             code="candidate_gate",
             bucket="candidate_assessment",
-            triggered=not candidate_gate_passed,
+            triggered=not candidate_gate_allows_auto,
             signal="candidate_gate_failed",
             final_review_reason=policy.decision.decision_insufficient_reason,
         )
@@ -198,7 +204,7 @@ def decision_gate_assessment(
             )
         )
 
-    if include_low_confidence_context and detection.confidence < confidence_threshold:
+    if detection.confidence < confidence_threshold:
         checks.append(
             _review_check(
                 code="outer_candidate_disagreement",
@@ -227,11 +233,12 @@ def decision_gate_assessment(
         checks=checks,
         final_review_reasons=reasons,
         reason_inputs=_failed_reason_inputs(checks),
-        confidence_caps=list(confidence_caps or []),
+        confidence_caps=list(decision_input.confidence_caps),
     )
 
 
 __all__ = [
+    "DecisionAssessmentInput",
     "DecisionGateAssessment",
     "decision_gate_assessment",
 ]

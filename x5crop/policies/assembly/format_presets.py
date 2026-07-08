@@ -5,6 +5,7 @@ from collections.abc import Callable
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import FULL, PARTIAL, FrameFitPolicy, ReviewOnlyPolicy
 from ..runtime.separator import SeparatorEdgePairPolicy
+from ...formats import format_spec
 from .factory import build_policy_from_preset
 from .presets import (
     FormatPolicyPreset,
@@ -20,33 +21,29 @@ def _separator_edge_pair(format_id: str) -> SeparatorEdgePairPolicy:
     medium_square_like = SeparatorEdgePairPolicy(
         0.100, 0.001, 0.080, 0.24, 0.02, 0.28, 0.30, 0.95, 0.030
     )
-    presets = {
-        "135": SeparatorEdgePairPolicy(
+    profiles = {
+        "standard_35mm": SeparatorEdgePairPolicy(
             0.080, 0.004, 0.050, 0.42, 0.62, 0.0, 0.0, 1.0, 0.0
         ),
-        "135-dual": SeparatorEdgePairPolicy(
-            0.080, 0.004, 0.050, 0.42, 0.62, 0.0, 0.0, 1.0, 0.0
-        ),
-        "half": SeparatorEdgePairPolicy(
+        "dense_half": SeparatorEdgePairPolicy(
             0.090, 0.003, 0.060, 0.46, 0.66, 1.05, 0.70, 0.95, 0.040
         ),
-        "xpan": SeparatorEdgePairPolicy(
+        "panoramic_35mm": SeparatorEdgePairPolicy(
             0.060, 0.002, 0.035, 0.45, 0.64, 1.03, 0.70, 0.95, 0.035
         ),
-        "120-645": SeparatorEdgePairPolicy(
+        "medium_rectangle": SeparatorEdgePairPolicy(
             0.075, 0.001, 0.055, 0.32, 0.20, 0.58, 0.50, 0.95, 0.035
         ),
-        "120-66": medium_square_like,
-        "120-67": medium_square_like,
+        "medium_square": medium_square_like,
     }
-    return presets[format_id]
+    return profiles[format_spec(format_id).edge_pair_profile]
 
 
 def _frame_fit(format_id: str, strip_mode: str) -> FrameFitPolicy | None:
     if strip_mode != FULL:
         return None
-    full_presets = {
-        "135": FrameFitPolicy(
+    profiles = {
+        "standard_strip": FrameFitPolicy(
             name="standard_strip_frame_fit",
             edge_evidence=True,
             geometry_fallback=True,
@@ -55,12 +52,12 @@ def _frame_fit(format_id: str, strip_mode: str) -> FrameFitPolicy | None:
             nominal_max_ratio=1.10,
             inlier_tolerance_ratio=0.035,
         ),
-        "135-dual": FrameFitPolicy(
+        "dual_lane": FrameFitPolicy(
             name="dual_lane_frame_fit",
             edge_evidence=False,
             geometry_fallback=True,
         ),
-        "half": FrameFitPolicy(
+        "dense_half": FrameFitPolicy(
             name="dense_half_frame_fit",
             edge_evidence=True,
             geometry_fallback=True,
@@ -69,7 +66,7 @@ def _frame_fit(format_id: str, strip_mode: str) -> FrameFitPolicy | None:
             nominal_max_ratio=1.08,
             inlier_tolerance_ratio=0.030,
         ),
-        "xpan": FrameFitPolicy(
+        "panoramic_35mm": FrameFitPolicy(
             name="panoramic_strip_frame_fit",
             edge_evidence=True,
             geometry_fallback=True,
@@ -78,7 +75,7 @@ def _frame_fit(format_id: str, strip_mode: str) -> FrameFitPolicy | None:
             nominal_max_ratio=1.12,
             inlier_tolerance_ratio=0.035,
         ),
-        "120-645": FrameFitPolicy(
+        "medium_rectangle": FrameFitPolicy(
             name="medium_rectangle_frame_fit",
             edge_evidence=True,
             geometry_fallback=True,
@@ -87,7 +84,7 @@ def _frame_fit(format_id: str, strip_mode: str) -> FrameFitPolicy | None:
             nominal_max_ratio=1.15,
             inlier_tolerance_ratio=0.040,
         ),
-        "120-66": FrameFitPolicy(
+        "medium_square": FrameFitPolicy(
             name="medium_square_frame_fit",
             edge_evidence=True,
             geometry_fallback=True,
@@ -96,7 +93,7 @@ def _frame_fit(format_id: str, strip_mode: str) -> FrameFitPolicy | None:
             nominal_max_ratio=1.20,
             inlier_tolerance_ratio=0.045,
         ),
-        "120-67": FrameFitPolicy(
+        "medium_wide": FrameFitPolicy(
             name="medium_wide_frame_fit",
             edge_evidence=True,
             geometry_fallback=True,
@@ -106,7 +103,7 @@ def _frame_fit(format_id: str, strip_mode: str) -> FrameFitPolicy | None:
             inlier_tolerance_ratio=0.045,
         ),
     }
-    return full_presets[format_id]
+    return profiles[format_spec(format_id).frame_fit_profile]
 
 
 def _role(format_id: str, strip_mode: str) -> str:
@@ -179,15 +176,17 @@ def _notes(format_id: str, strip_mode: str) -> tuple[str, ...]:
 
 
 def _detector_kind(format_id: str, strip_mode: str) -> str:
-    if format_id == "135-dual" and strip_mode == FULL:
+    spec = format_spec(format_id)
+    if spec.physical_layout == "dual_lane" and strip_mode == FULL:
         return "dual_lane"
-    if format_id == "135-dual" and strip_mode == PARTIAL:
+    if spec.physical_layout == "dual_lane" and strip_mode == PARTIAL:
         return "review_only"
     return "standard_strip"
 
 
 def _review_only(format_id: str, strip_mode: str) -> ReviewOnlyPolicy:
-    if format_id == "135-dual" and strip_mode == PARTIAL:
+    spec = format_spec(format_id)
+    if spec.physical_layout == "dual_lane" and strip_mode == PARTIAL:
         return ReviewOnlyPolicy(
             reason="dual_lane_partial_not_supported",
             selection_override="dual_lane_partial_review_only",
@@ -196,7 +195,8 @@ def _review_only(format_id: str, strip_mode: str) -> ReviewOnlyPolicy:
 
 
 def _separator_width_profile(format_id: str) -> SeparatorWidthProfilePreset:
-    if format_id == "120-66":
+    spec = format_spec(format_id)
+    if spec.separator_width_profile == "broad":
         return SeparatorWidthProfilePreset(
             mode="conditional",
             separator_outer_allow_oversized_band=True,
@@ -205,7 +205,8 @@ def _separator_width_profile(format_id: str) -> SeparatorWidthProfilePreset:
 
 
 def _separator_geometry_support_modes(format_id: str, strip_mode: str) -> tuple[str, ...]:
-    if format_id == "half" and strip_mode == FULL:
+    spec = format_spec(format_id)
+    if spec.geometry_support_profile == "stable_dense_grid" and strip_mode == FULL:
         return ("detected_geometry", "stable_grid")
     return ()
 
@@ -213,11 +214,7 @@ def _separator_geometry_support_modes(format_id: str, strip_mode: str) -> tuple[
 def _output_overlap_enabled(format_id: str, strip_mode: str) -> bool:
     if strip_mode == PARTIAL:
         return True
-    return format_id in {"half", "120-645", "120-66", "120-67"}
-
-
-def _content_mismatch_candidate_selection_enabled(format_id: str) -> bool:
-    return format_id == "half"
+    return format_spec(format_id).output_overlap_profile == "sensitive"
 
 
 def mode_policy_preset(format_id: str, strip_mode: str) -> ModePolicyPreset:
@@ -244,9 +241,6 @@ def format_policy_preset(
         format_id=format_id,
         parameters=parameters,
         separator_edge_pair=_separator_edge_pair(format_id),
-        content_mismatch_candidate_selection_enabled=(
-            _content_mismatch_candidate_selection_enabled(format_id)
-        ),
         modes={
             FULL: mode_policy_preset(format_id, FULL),
             PARTIAL: mode_policy_preset(format_id, PARTIAL),

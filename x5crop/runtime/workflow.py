@@ -22,7 +22,7 @@ from ..formats import FORMATS
 from ..image.gray import make_base_gray_u8
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..output.bleed import detection_bleed_parameters
-from ..policies.context import RuntimePolicyContext
+from .policy_context import RuntimePolicyContext
 from ..report.outputs import write_report_outputs_for_result
 from ..report.result_builder import result_from_detection
 

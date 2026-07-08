@@ -9,9 +9,8 @@ from .....domain import Box, Detection
 from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from .....gap_methods import is_hard_gap_method
 from .....geometry.boxes import original_box_to_work
-from .....policies.runtime.policy import DetectionPolicy
+from .....policies.runtime.outer import GeometryConsistencyCorrectionPolicy
 from .....cache import AnalysisCache
-from .....runtime.config import RuntimeConfig
 from .....utils import box_from_dict, clamp_int
 from .constraints import correction_axes_allowed
 from .types import OuterCorrectionProposal
@@ -19,14 +18,13 @@ from .types import OuterCorrectionProposal
 
 def corrected_outer_for_short_axis_geometry(
     gray: np.ndarray,
-    config: RuntimeConfig,
     fmt: FormatSpec,
     detection: Detection,
     content_detail: dict[str, Any],
     cache: AnalysisCache,
-    policy: DetectionPolicy,
+    correction_policy: GeometryConsistencyCorrectionPolicy,
 ) -> Optional[Box]:
-    short_axis = policy.outer.correction.geometry_consistency.short_axis
+    short_axis = correction_policy.short_axis
     family = short_axis.family
     if not short_axis.enabled:
         return None
@@ -80,7 +78,12 @@ def corrected_outer_for_short_axis_geometry(
     return corrected
 
 
-def geometry_consistency_model_detail(gray: np.ndarray, detection: Detection, config: RuntimeConfig, fmt: FormatSpec, cache: AnalysisCache) -> dict[str, Any]:
+def geometry_consistency_model_detail(
+    gray: np.ndarray,
+    detection: Detection,
+    fmt: FormatSpec,
+    cache: AnalysisCache,
+) -> dict[str, Any]:
     if detection.count <= 0:
         return {"used": False, "reason": "invalid_count"}
     aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
@@ -127,14 +130,13 @@ def geometry_consistency_model_detail(gray: np.ndarray, detection: Detection, co
 
 def corrected_outer_from_long_axis_geometry(
     detection: Detection,
-    config: RuntimeConfig,
     fmt: FormatSpec,
     geometry_detail: dict[str, Any],
     alignment: dict[str, Any],
     cache: AnalysisCache,
-    policy: DetectionPolicy,
+    correction_policy: GeometryConsistencyCorrectionPolicy,
 ) -> Optional[Box]:
-    long_axis = policy.outer.correction.geometry_consistency.long_axis
+    long_axis = correction_policy.long_axis
     family = long_axis.family
     if not long_axis.enabled:
         return None
@@ -226,24 +228,22 @@ def corrected_outer_from_long_axis_geometry(
 
 def geometry_consistency_correction_proposal(
     gray: np.ndarray,
-    config: RuntimeConfig,
     fmt: FormatSpec,
     detection: Detection,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,
     eligible_families: set[str],
-    policy: DetectionPolicy,
+    correction_policy: GeometryConsistencyCorrectionPolicy,
 ) -> Optional[OuterCorrectionProposal]:
     if "short_axis_geometry" in eligible_families:
         corrected_outer = corrected_outer_for_short_axis_geometry(
             gray,
-            config,
             fmt,
             detection,
             content_detail,
             cache,
-            policy=policy,
+            correction_policy=correction_policy,
         )
         if corrected_outer is not None:
             return OuterCorrectionProposal(
@@ -258,16 +258,15 @@ def geometry_consistency_correction_proposal(
     if "long_axis_geometry" not in eligible_families:
         return None
 
-    geometry_detail = geometry_consistency_model_detail(gray, detection, config, fmt, cache)
+    geometry_detail = geometry_consistency_model_detail(gray, detection, fmt, cache)
     detection.detail["geometry_consistency_model"] = geometry_detail
     corrected_outer = corrected_outer_from_long_axis_geometry(
         detection,
-        config,
         fmt,
         geometry_detail,
         outer_alignment,
         cache,
-        policy=policy,
+        correction_policy=correction_policy,
     )
     if corrected_outer is None:
         return None

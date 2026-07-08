@@ -265,7 +265,7 @@ def nearby_separator_replacement_assessment(
     profile: np.ndarray,
     gap: Gap,
     pitch: float,
-    refinement_config: NearbySeparatorRefinementParameters | None = None,
+    refinement_config: NearbySeparatorRefinementParameters,
 ) -> NearbySeparatorReplacementAssessment:
     if not is_hard_gap_method(gap.method):
         return NearbySeparatorReplacementAssessment(
@@ -288,14 +288,13 @@ def nearby_separator_replacement_assessment(
             None,
             {"searched": False, "reason": "missing_gap_span"},
         )
-    config = refinement_config or NearbySeparatorRefinementParameters()
     result = nearby_separator_search_result(
         profile,
         gap,
         pitch,
-        config,
-        score_add=config.score_add,
-        score_multiplier=config.score_multiplier,
+        refinement_config,
+        score_add=refinement_config.score_add,
+        score_multiplier=refinement_config.score_multiplier,
     )
     if result is None:
         return NearbySeparatorReplacementAssessment(
@@ -396,10 +395,9 @@ def apply_nearby_separator_refinement(
     origin: float,
     pitch: float,
     count: int,
-    refinement_config: NearbySeparatorRefinementParameters | None = None,
+    refinement_config: NearbySeparatorRefinementParameters,
 ) -> NearbySeparatorRefinementResult:
-    config = refinement_config or NearbySeparatorRefinementParameters()
-    if not config.enabled or count <= 1 or len(gaps) != count - 1:
+    if not refinement_config.enabled or count <= 1 or len(gaps) != count - 1:
         return NearbySeparatorRefinementResult(gaps, {"used": False, "reason": "not_applicable"})
     if profile.size == 0:
         return NearbySeparatorRefinementResult(gaps, {"used": False, "reason": "empty_profile"})
@@ -409,7 +407,7 @@ def apply_nearby_separator_refinement(
     rejected: list[dict[str, Any]] = []
     searched: list[dict[str, Any]] = []
     for pos, gap in enumerate(list(corrected)):
-        assessment = nearby_separator_replacement_assessment(profile, gap, pitch, config)
+        assessment = nearby_separator_replacement_assessment(profile, gap, pitch, refinement_config)
         searched.append(assessment.detail(gap))
         replacement = assessment.replacement
         if replacement is None:
@@ -432,7 +430,7 @@ def apply_nearby_separator_refinement(
             after_cv,
             original_cv,
             pitch,
-            config,
+            refinement_config,
         ):
             rejected.append(
                 nearby_separator_reject_detail(

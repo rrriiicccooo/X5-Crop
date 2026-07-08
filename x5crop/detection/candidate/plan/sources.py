@@ -24,7 +24,7 @@ from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE, width_aware_gap_profile_det
 from ..build.detection import build_detection_for_outer
 from ..assessment.base_scoring import apply_base_detection_scoring
 from .counts import raw_detection_rank
-from ..assessment.partial_holder import partial_safe_frame_content_detail, partial_safe_leading_content_detail
+from ..assessment.partial_holder import partial_edge_safety_frame_content_detail, partial_edge_safety_leading_content_detail
 from .source_policy import separator_full_width_can_compete, separator_outer_gap_max_width_override
 
 
@@ -136,9 +136,9 @@ def detect_candidate_for_count(
         outer_candidates = merge_outer_proposal_candidates([*outer_candidates, *separator_full_width_candidates])
     best_candidates = candidates
     if (
-        policy.partial_holder.safe_extra_frames
+        policy.partial_holder.allow_empty_holder_frames
         and policy.partial_holder.checks_leading_content
-        and strip_mode in policy.partial_holder.safe_extra_frames_strip_modes
+        and strip_mode in policy.partial_holder.allow_empty_holder_frames_strip_modes
         and len(candidates) > 1
     ):
         non_cutting_candidates: list[Detection] = []
@@ -146,8 +146,8 @@ def detect_candidate_for_count(
             if str(detection.detail.get("outer_candidate_strategy", "")) != "content_outer":
                 non_cutting_candidates.append(detection)
                 continue
-            leading_content = partial_safe_leading_content_detail(gray, detection, fmt, cache, policy)
-            frame_content = partial_safe_frame_content_detail(
+            leading_content = partial_edge_safety_leading_content_detail(gray, detection, fmt, cache, policy)
+            frame_content = partial_edge_safety_frame_content_detail(
                 content_evidence_detail(
                     gray,
                     detection,

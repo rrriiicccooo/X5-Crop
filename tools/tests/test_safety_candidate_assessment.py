@@ -34,11 +34,10 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
             frames=[],
             gaps=[],
             confidence=0.96,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "candidate_assessment": {
                     "source": "separator",
-                    "candidate_gate_passed": True,
                     "candidate_gate": _candidate_gate_detail(True),
                 }
             },
@@ -51,10 +50,10 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
         )
 
         self.assertAlmostEqual(detection.confidence, 0.84)
-        self.assertEqual(detection.review_reasons, [])
+        self.assertEqual(detection.final_review_reasons, [])
         self.assertEqual(candidate_signals(detection), [SAFETY_CANDIDATE_BLOCKER])
         assessment = detection.detail["candidate_assessment"]
-        self.assertFalse(assessment["candidate_gate_passed"])
+        self.assertNotIn("candidate_gate_ok", assessment)
         self.assertFalse(assessment["candidate_gate"]["passed"])
         self.assertIn(SAFETY_CANDIDATE_BLOCKER, assessment["blockers"])
         self.assertIn(SAFETY_CANDIDATE_BLOCKER, assessment["candidate_gate"]["blockers"])

@@ -10,7 +10,7 @@ from ...domain import Box, Detection
 from ...gap_methods import is_hard_gap_method
 from ...geometry.boxes import box_cache_key, original_box_to_work
 from ...geometry.layout import work_gray
-from ...policies.runtime.policy import DetectionPolicy
+from ...policies.runtime.outer import ContentContainmentCorrectionPolicy
 from ...cache import AnalysisCache
 from ...utils import bbox_from_mask, box_from_dict, clamp_int
 from .evidence_cache_keys import detection_gap_cache_key
@@ -34,10 +34,10 @@ def outer_content_alignment_detail(
     detection: Detection,
     cache: Optional[AnalysisCache] = None,
     *,
-    policy: DetectionPolicy,
+    content_containment_policy: ContentContainmentCorrectionPolicy,
 ) -> dict[str, Any]:
     gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
-    alignment = policy.outer.correction.content_containment
+    alignment = content_containment_policy
     work_h, work_w = gray_work.shape
     source_h, source_w = gray.shape
     detail_key: Optional[tuple[Any, ...]] = None
@@ -184,8 +184,12 @@ def outer_content_alignment_detail(
     return detail
 
 
-def corrected_outer_from_alignment(alignment: dict[str, Any], count: int, policy: DetectionPolicy) -> Optional[Box]:
-    alignment_policy = policy.outer.correction.content_containment
+def corrected_outer_from_alignment(
+    alignment: dict[str, Any],
+    count: int,
+    content_containment_policy: ContentContainmentCorrectionPolicy,
+) -> Optional[Box]:
+    alignment_policy = content_containment_policy
     if not bool(alignment.get("used", False)) or bool(alignment.get("ok", True)):
         return None
     try:

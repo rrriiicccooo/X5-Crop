@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -14,6 +13,7 @@ from x5crop.detection.candidate.signals import (
     candidate_signals,
 )
 from x5crop.domain import Box, Detection
+from x5crop.policies.registry import get_detection_policy
 
 
 class DualLaneAssessmentTest(unittest.TestCase):
@@ -27,10 +27,10 @@ class DualLaneAssessmentTest(unittest.TestCase):
             frames=[],
             gaps=[],
             confidence=0.96,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={},
         )
-        policy = SimpleNamespace(content=object())
+        policy = get_detection_policy("135", "full")
         gray = np.zeros((20, 120), dtype=np.uint8)
 
         with (
@@ -52,7 +52,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
             )
 
         self.assertEqual(detection.confidence, 0.82)
-        self.assertEqual(detection.review_reasons, [])
+        self.assertEqual(detection.final_review_reasons, [])
         self.assertEqual(candidate_signals(detection), [SIGNAL_CONTENT_ASPECT_CONFLICT])
         self.assertEqual(
             detection.detail["candidate_confidence_caps"],

@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from ...formats import FORMAT_CHOICES
-from ..formats.modules import import_format_module
 from .aggregate import FormatParameters
 from .ownership import split_format_parameter_overrides
 
@@ -24,8 +23,13 @@ def base_medium_format_parameters(format_name: str, **overrides: Any) -> FormatP
 def format_parameters(format_name: str) -> FormatParameters:
     if format_name not in FORMAT_CHOICES:
         raise ValueError(f"Unsupported format parameters: {format_name}")
-    module = import_format_module(format_name)
-    return module.parameters()
+    from ..formats import PARAMETER_FACTORIES
+
+    try:
+        parameters = PARAMETER_FACTORIES[format_name]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported format parameters: {format_name}") from exc
+    return parameters()
 
 __all__ = [
     "base_format_parameters",

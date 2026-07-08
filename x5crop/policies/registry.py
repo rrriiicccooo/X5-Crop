@@ -4,14 +4,17 @@ from functools import lru_cache
 
 from ..formats import STRIP_CHOICES
 from .runtime.policy import DetectionPolicy
-from .formats.modules import import_format_module
+from .formats import POLICY_BUILDERS
 
 
 def _build_policy(format_id: str, strip_mode: str) -> DetectionPolicy:
     if strip_mode not in STRIP_CHOICES:
         raise ValueError(f"Unsupported strip policy: {strip_mode}")
-    module = import_format_module(format_id)
-    return module.build_policy(strip_mode)
+    try:
+        build_policy = POLICY_BUILDERS[format_id]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported format policy: {format_id}") from exc
+    return build_policy(strip_mode)
 
 
 @lru_cache(maxsize=None)

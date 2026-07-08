@@ -10,8 +10,12 @@ from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ....cache.separator import cached_separator_profile
 from ....geometry.separator_band import SeparatorBand
 from ....geometry.separator_width_profile import collect_separator_width_bands, separator_width_profile
-from ....policies.runtime.outer import SeparatorOuterBandPolicy, SeparatorOuterFamilyPolicy
-from ....policies.runtime.policy import DetectionPolicy
+from ....policies.runtime.outer import (
+    SeparatorGeometryProposalPolicy,
+    SeparatorOuterBandPolicy,
+    SeparatorOuterFamilyPolicy,
+)
+from ....policies.runtime.separator import SeparatorPolicy
 from ....cache import AnalysisCache
 from ...cache_keys import separator_outer_cache_key
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
@@ -52,17 +56,16 @@ class SeparatorOuterSequenceRank:
     sequence_score: float
 
 
-def separator_outer_scopes_for_policy(
-    policy: DetectionPolicy,
+def separator_outer_scopes(
+    separator_geometry_policy: SeparatorGeometryProposalPolicy,
     strip_mode: str = "full",
     explicit_count: bool = True,
     safety_only: bool = False,
 ) -> tuple[str, ...]:
-    separator_policy = policy.outer.proposal.geometry.separator
     scopes: list[str] = []
-    if _mode_active(separator_policy.local, strip_mode, explicit_count, safety_only):
+    if _mode_active(separator_geometry_policy.local, strip_mode, explicit_count, safety_only):
         scopes.append(LOCAL_SEPARATOR_OUTER)
-    if _mode_active(separator_policy.full_width, strip_mode, explicit_count, safety_only):
+    if _mode_active(separator_geometry_policy.full_width, strip_mode, explicit_count, safety_only):
         scopes.append(FULL_WIDTH_SEPARATOR_OUTER)
     return tuple(scopes)
 
@@ -75,7 +78,8 @@ def separator_derived_outer_candidates(
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
     *,
-    policy: DetectionPolicy,
+    separator_geometry_policy: SeparatorGeometryProposalPolicy,
+    separator_policy: SeparatorPolicy,
     outer_scopes: tuple[str, ...] | None = None,
     gap_search_profiles: tuple[str, ...] | None = None,
     explicit_count: bool = True,
@@ -86,7 +90,11 @@ def separator_derived_outer_candidates(
     if aspect is None or aspect <= 0.0 or not base_candidates:
         return []
 
-    selected_scopes = outer_scopes or separator_outer_scopes_for_policy(policy, strip_mode, explicit_count)
+    selected_scopes = outer_scopes or separator_outer_scopes(
+        separator_geometry_policy,
+        strip_mode,
+        explicit_count,
+    )
     selected_gap_profiles = gap_search_profiles or (WIDTH_AWARE_GAP_PROFILE,)
     candidates: list[OuterCandidate] = []
     for outer_scope in selected_scopes:
@@ -94,7 +102,8 @@ def separator_derived_outer_candidates(
             plan = _scope_profile_plan(
                 outer_scope,
                 gap_search_profile,
-                policy,
+                separator_geometry_policy,
+                separator_policy,
                 fmt,
                 count,
                 strip_mode,
@@ -112,7 +121,8 @@ def separator_derived_outer_candidates(
                     float(aspect),
                     plan,
                     cache,
-                    policy,
+                    separator_geometry_policy,
+                    separator_policy,
                 )
             )
     return unique_outer_candidates(candidates)
@@ -131,14 +141,14 @@ def _candidate_prefix(outer_scope: str, gap_search_profile: str) -> str | None:
 
 
 def _width_profile_bands_available(
-    policy: DetectionPolicy,
+    separator_geometry_policy: SeparatorGeometryProposalPolicy,
+    separator_policy: SeparatorPolicy,
     count: int,
     strip_mode: str,
     explicit_count: bool,
 ) -> bool:
-    separator_policy = policy.outer.proposal.geometry.separator
-    family = separator_policy.width_profile_family
-    width_policy = policy.separator.width_profile
+    family = separator_geometry_policy.width_profile_family
+    width_policy = separator_policy.width_profile
     required_count = int(width_policy.required_count)
     return bool(
         family.available_for(strip_mode, explicit_count)
@@ -150,20 +160,26 @@ def _width_profile_bands_available(
 def _scope_profile_plan(
     outer_scope: str,
     gap_search_profile: str,
-    policy: DetectionPolicy,
+    separator_geometry_policy: SeparatorGeometryProposalPolicy,
+    separator_policy: SeparatorPolicy,
     fmt: FormatSpec,
     count: int,
     strip_mode: str,
     explicit_count: bool,
 ) -> SeparatorOuterPlan | None:
-    separator_policy = policy.outer.proposal.geometry.separator
-    band_policy = separator_policy.band
-    width_policy = policy.separator.width_profile
+    band_policy = separator_geometry_policy.band
+    width_policy = separator_policy.width_profile
     if gap_search_profile != WIDTH_AWARE_GAP_PROFILE:
         return None
-    uses_width_aware_bands = _width_profile_bands_available(policy, count, strip_mode, explicit_count)
+    uses_width_aware_bands = _width_profile_bands_available(
+        separator_geometry_policy,
+        separator_policy,
+        count,
+        strip_mode,
+        explicit_count,
+    )
     if outer_scope == LOCAL_SEPARATOR_OUTER:
-        family = separator_policy.local
+        family = separator_geometry_policy.local
         if not family.available_for(strip_mode, explicit_count):
             return None
         if strip_mode == "full" and count != fmt.default_count:
@@ -189,8 +205,8 @@ def _scope_profile_plan(
             uses_width_aware_bands=uses_width_aware_bands,
         )
     if outer_scope == FULL_WIDTH_SEPARATOR_OUTER:
-        family = separator_policy.full_width
-        geometry_policy = separator_policy.full_width_outer
+        family = separator_geometry_policy.full_width
+        geometry_policy = separator_geometry_policy.full_width_outer
         if not family.available_for(strip_mode, explicit_count):
             return None
         expected_count = int(geometry_policy.required_count)
@@ -241,7 +257,8 @@ def _separator_outer_candidates_for_plan(
     aspect: float,
     plan: SeparatorOuterPlan,
     cache: Optional[AnalysisCache],
-    policy: DetectionPolicy,
+    separator_geometry_policy: SeparatorGeometryProposalPolicy,
+    separator_policy: SeparatorPolicy,
 ) -> list[OuterCandidate]:
     if cache is not None:
         candidate_key = separator_outer_cache_key(plan.name, base_candidates, fmt, count, strip_mode)
@@ -257,8 +274,7 @@ def _separator_outer_candidates_for_plan(
     )[: plan.source_candidate_count]
     candidates: list[OuterCandidate] = []
     expected_gaps = count - 1
-    separator_policy = policy.outer.proposal.geometry.separator
-    band_policy = separator_policy.band
+    band_policy = separator_geometry_policy.band
 
     for source in source_candidates:
         source_box = source.box.clamp(w, h)
@@ -272,25 +288,25 @@ def _separator_outer_candidates_for_plan(
         if frame_long <= 1.0:
             continue
 
-        profile = cached_separator_profile(cache, gray_work, outer, policy.separator.profile)
+        profile = cached_separator_profile(cache, gray_work, outer, separator_policy.profile)
         band_collection = collect_separator_outer_bands(
             profile,
             short_axis,
             float(outer.width),
             band_policy,
-            policy.separator.gap_search,
-            separator_policy,
+            separator_policy.gap_search,
+            separator_geometry_policy,
         )
         bands = list(band_collection.bands)
         edge_margin = band_collection.edge_margin
         if plan.uses_width_aware_bands:
             crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-            width_profile = separator_width_profile(crop, policy.separator.width_profile_search)
+            width_profile = separator_width_profile(crop, separator_policy.width_profile_search)
             width_band_collection = collect_separator_width_bands(
                 width_profile,
                 short_axis,
                 float(outer.width),
-                policy.separator.width_profile_search,
+                separator_policy.width_profile_search,
             )
             bands.extend(width_band_collection.bands)
             edge_margin = max(float(edge_margin), float(width_band_collection.edge_margin))
@@ -456,5 +472,5 @@ __all__ = [
     "FULL_WIDTH_SEPARATOR_OUTER",
     "LOCAL_SEPARATOR_OUTER",
     "separator_derived_outer_candidates",
-    "separator_outer_scopes_for_policy",
+    "separator_outer_scopes",
 ]

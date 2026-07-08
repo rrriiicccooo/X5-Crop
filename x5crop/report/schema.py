@@ -80,7 +80,7 @@ def report_schema_for_detection(
         "result": {
             "status": status,
             "confidence": float(detection.confidence),
-            "review_reasons": final_review_reasons_from_detail(detection),
+            "final_review_reasons": final_review_reasons_from_detail(detection),
             "outer_box": asdict(detection.outer),
             "frame_boxes": [asdict(box) for box in detection.frames],
             "gaps": [asdict(gap) for gap in detection.gaps],
@@ -117,7 +117,7 @@ def report_schema_for_detection(
         "strip_mode": detection.strip_mode,
         "status": section_values["result"]["status"],
         "confidence": section_values["result"]["confidence"],
-        "review_reasons": section_values["result"]["review_reasons"],
+        "final_review_reasons": section_values["result"]["final_review_reasons"],
         "outer_box": section_values["result"]["outer_box"],
         "frame_boxes": section_values["result"]["frame_boxes"],
         "gaps": section_values["result"]["gaps"],

@@ -15,7 +15,6 @@ from ...geometry.detection_parameters import (
     GapSearchParameters,
     HardGapTrustParameters,
     NearbySeparatorRefinementParameters,
-    RobustGridParameters,
     SeparatorProfileParameters,
     SeparatorWidthProfileSearchParameters,
 )
@@ -43,6 +42,7 @@ class SeparatorSupportPolicy:
     hard_required_all_gaps: bool = True
     edge_pair_min_score_without_broad_width: float = 0.0
     edge_pair_min_score_with_broad_width: float = 0.0
+    reliable_gap_min_score: float = 0.28
     min_broad_separator_width_gaps_for_auto: int = 0
     score_min_hard_gaps: int = 2
     score_max_equal_gaps_floor: int = 2
@@ -184,7 +184,6 @@ class SeparatorPolicy:
     edge_pair: EdgePairParameters = field(default_factory=EdgePairParameters)
     hard_gap_trust: HardGapTrustParameters = field(default_factory=HardGapTrustParameters)
     nearby_refinement: NearbySeparatorRefinementParameters = field(default_factory=NearbySeparatorRefinementParameters)
-    robust_grid: RobustGridParameters = field(default_factory=RobustGridParameters)
     gap_search: GapSearchParameters = field(default_factory=GapSearchParameters)
     profile: SeparatorProfileParameters = field(default_factory=SeparatorProfileParameters)
     edge_refine_profile: EdgeRefineProfileParameters = field(default_factory=EdgeRefineProfileParameters)

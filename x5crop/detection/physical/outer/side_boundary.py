@@ -142,9 +142,8 @@ def _side_boundary(
 
 def side_boundary_outer(
     gray: np.ndarray,
-    config: OuterBoxDetectionParameters | None = None,
+    config: OuterBoxDetectionParameters,
 ) -> SideBoundaryOuterResult:
-    config = config or OuterBoxDetectionParameters()
     h, w = gray.shape
     min_run_x = clamp_int(w * config.white_run_ratio, config.white_run_min, config.white_run_max)
     min_run_y = clamp_int(h * config.white_run_ratio, config.white_run_min, config.white_run_max)

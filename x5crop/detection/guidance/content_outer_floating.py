@@ -4,7 +4,7 @@ import numpy as np
 
 from ...domain import Box, OuterCandidate
 from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
-from ...policies.runtime.policy import DetectionPolicy
+from ...policies.runtime.outer import PartialPlacementGeometryPolicy
 from ...utils import bbox_from_mask, clamp_int
 from ..physical.outer.common import unique_outer_candidates
 
@@ -15,9 +15,8 @@ def floating_content_position_candidates(
     fmt: FormatSpec,
     count: int,
     strip_mode: str,
-    policy: DetectionPolicy,
+    partial_placement: PartialPlacementGeometryPolicy,
 ) -> list[OuterCandidate]:
-    partial_placement = policy.outer.proposal.geometry.partial_placement
     floating_policy = partial_placement.floating
     if not partial_placement.enabled or not floating_policy.enabled:
         return []

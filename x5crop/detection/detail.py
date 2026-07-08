@@ -49,7 +49,7 @@ def final_review_reasons_from_detail(detection: Detection) -> list[str]:
     reasons = decision_summary(detection).get("final_review_reasons")
     if isinstance(reasons, list):
         return [str(reason) for reason in reasons]
-    return list(detection.review_reasons)
+    return list(detection.final_review_reasons)
 
 
 def policy_detail(detection: Detection) -> dict[str, Any]:

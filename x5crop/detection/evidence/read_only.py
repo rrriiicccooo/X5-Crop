@@ -9,7 +9,9 @@ from ...domain import Detection
 from ...geometry.layout import work_gray
 from ...cache import AnalysisCache
 from ...gap_methods import gap_method_roles
-from ...policies.runtime.policy import DetectionPolicy
+from ...policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
+from ...policies.runtime.output_evidence import RuntimeOutputEvidencePolicy
+from ...policies.runtime.separator import SeparatorPolicy
 from .gap_diagnostics import gap_diagnostic_record
 
 
@@ -18,11 +20,21 @@ def attach_read_only_diagnostics(
     detection: Detection,
     cache: Optional[AnalysisCache] = None,
     *,
-    policy: DetectionPolicy,
+    separator_policy: SeparatorPolicy,
+    diagnostics_policy: RuntimeDiagnosticsPolicy,
+    output_evidence_policy: RuntimeOutputEvidencePolicy,
 ) -> None:
     gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
     gap_records = [
-        gap_diagnostic_record(gray_work, detection, gap, cache, policy=policy)
+        gap_diagnostic_record(
+            gray_work,
+            detection,
+            gap,
+            cache,
+            separator_policy=separator_policy,
+            nearby_policy=diagnostics_policy.nearby_separator,
+            output_overlap_policy=output_evidence_policy.output_overlap,
+        )
         for gap in detection.gaps
     ]
     hard_counts: dict[str, int] = {}

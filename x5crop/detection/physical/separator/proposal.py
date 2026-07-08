@@ -140,8 +140,8 @@ def _propose_standard_separator_gap_with_detail(
         search_expected,
         pitch,
         index,
-        max_width_ratio_override,
         gap_search,
+        max_width_ratio_override=max_width_ratio_override,
     )
     width_result = (
         separator_width_gap_at_with_detail(
@@ -150,8 +150,8 @@ def _propose_standard_separator_gap_with_detail(
             pitch,
             index,
             short_axis,
-            separator_width_theory,
             width_profile_search,
+            theory=separator_width_theory,
         )
         if width_profile_policy.mode != "off"
         else None

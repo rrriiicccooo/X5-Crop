@@ -27,29 +27,29 @@ def cached_full_separator_evidence(cache: Optional[AnalysisCache], gray_work: np
 
 def separator_profile_cache_key(
     outer: Box,
-    profile_config: SeparatorProfileParameters | None = None,
+    profile_config: SeparatorProfileParameters,
 ) -> tuple[Any, ...]:
-    return (profile_config or SeparatorProfileParameters(), *box_cache_key(outer))
+    return (profile_config, *box_cache_key(outer))
 
 
 def separator_profile_full_cache_key(
-    profile_config: SeparatorProfileParameters | None = None,
+    profile_config: SeparatorProfileParameters,
 ) -> tuple[Any, ...]:
-    return (profile_config or SeparatorProfileParameters(),)
+    return (profile_config,)
 
 
 def edge_refine_profile_cache_key(
     outer: Box,
-    edge_refine_config: EdgeRefineProfileParameters | None = None,
+    edge_refine_config: EdgeRefineProfileParameters,
 ) -> tuple[Any, ...]:
-    return (edge_refine_config or EdgeRefineProfileParameters(), *box_cache_key(outer))
+    return (edge_refine_config, *box_cache_key(outer))
 
 
 def cached_separator_profile(
     cache: Optional[AnalysisCache],
     gray_work: np.ndarray,
     outer: Box,
-    profile_config: SeparatorProfileParameters | None = None,
+    profile_config: SeparatorProfileParameters,
 ) -> np.ndarray:
     if cache is None:
         return separator_profile(crop_work_outer(gray_work, outer), profile_config)
@@ -86,7 +86,7 @@ def cached_edge_refine_profiles(
     cache: Optional[AnalysisCache],
     crop: np.ndarray,
     outer: Box,
-    edge_refine_config: EdgeRefineProfileParameters | None = None,
+    edge_refine_config: EdgeRefineProfileParameters,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if cache is None:
         return edge_refine_profiles(crop, edge_refine_config)

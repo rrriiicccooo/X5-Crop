@@ -17,7 +17,7 @@ def _detection(strip_mode: str, *, source: str = "separator", hard_ok: bool = Tr
         frames=[],
         gaps=[],
         confidence=0.0,
-        review_reasons=[],
+        final_review_reasons=[],
         detail={
             "candidate_assessment": {
                 "source": source,

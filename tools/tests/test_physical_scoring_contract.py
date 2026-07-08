@@ -16,7 +16,7 @@ from x5crop.detection.candidate.assessment.content_candidate import (
     content_candidate_assessment_from_proposal,
     content_candidate_assessment_from_metrics,
 )
-from x5crop.detection.candidate.assessment.partial_holder import partial_safe_extra_frames_assessment_detail
+from x5crop.detection.candidate.assessment.partial_holder import partial_edge_safety_assessment_detail
 from x5crop.detection.candidate.assessment.scoring import (
     content_quality_score,
     content_support_score,
@@ -43,9 +43,9 @@ class PhysicalScoringContractTest(unittest.TestCase):
             source="separator",
             separator_support_ok=True,
             separator_support_detail={"ok": True},
-            partial_safe_candidate_support_ok=False,
-            partial_safe_blocks_auto=False,
-            partial_safe_disqualifiers=set(),
+            partial_edge_safety_candidate_support_ok=False,
+            partial_edge_safety_blocks_auto=False,
+            partial_edge_safety_disqualifiers=set(),
             content_containment_ok=True,
             content_integrity_failed=False,
             content_support="ok",
@@ -63,9 +63,9 @@ class PhysicalScoringContractTest(unittest.TestCase):
             source="separator",
             separator_support_ok=True,
             separator_support_detail={"ok": True},
-            partial_safe_candidate_support_ok=False,
-            partial_safe_blocks_auto=False,
-            partial_safe_disqualifiers=set(),
+            partial_edge_safety_candidate_support_ok=False,
+            partial_edge_safety_blocks_auto=False,
+            partial_edge_safety_disqualifiers=set(),
             content_containment_ok=True,
             content_integrity_failed=False,
             content_support="ok",
@@ -90,9 +90,9 @@ class PhysicalScoringContractTest(unittest.TestCase):
             source="separator",
             separator_support_ok=True,
             separator_support_detail={"ok": True},
-            partial_safe_candidate_support_ok=False,
-            partial_safe_blocks_auto=False,
-            partial_safe_disqualifiers=set(),
+            partial_edge_safety_candidate_support_ok=False,
+            partial_edge_safety_blocks_auto=False,
+            partial_edge_safety_disqualifiers=set(),
             content_containment_ok=True,
             content_integrity_failed=False,
             content_support="ok",
@@ -128,9 +128,9 @@ class PhysicalScoringContractTest(unittest.TestCase):
             source="separator",
             separator_support_ok=True,
             separator_support_detail={"ok": True},
-            partial_safe_candidate_support_ok=False,
-            partial_safe_blocks_auto=False,
-            partial_safe_disqualifiers=set(),
+            partial_edge_safety_candidate_support_ok=False,
+            partial_edge_safety_blocks_auto=False,
+            partial_edge_safety_disqualifiers=set(),
             content_containment_ok=True,
             content_integrity_failed=False,
             content_support="ok",
@@ -162,9 +162,9 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 source="separator",
                 separator_support_ok=True,
                 separator_support_detail={"ok": True},
-                partial_safe_candidate_support_ok=False,
-                partial_safe_blocks_auto=False,
-                partial_safe_disqualifiers=set(),
+                partial_edge_safety_candidate_support_ok=False,
+                partial_edge_safety_blocks_auto=False,
+                partial_edge_safety_disqualifiers=set(),
                 content_containment_ok=True,
                 content_integrity_failed=False,
                 content_support="ok",
@@ -178,9 +178,9 @@ class PhysicalScoringContractTest(unittest.TestCase):
             source="separator",
             separator_support_ok=True,
             separator_support_detail={"ok": True},
-            partial_safe_candidate_support_ok=False,
-            partial_safe_blocks_auto=False,
-            partial_safe_disqualifiers=set(),
+            partial_edge_safety_candidate_support_ok=False,
+            partial_edge_safety_blocks_auto=False,
+            partial_edge_safety_disqualifiers=set(),
             content_containment_ok=False,
             content_integrity_failed=True,
             content_support="aspect_conflict",
@@ -393,7 +393,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 Gap(2, 200.0, 1.0, GAP_DETECTED, 195.0, 205.0),
             ],
             confidence=0.99,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "outer_candidate_strategy": "base_outer",
                 "outer_area_ratio": 0.80,
@@ -452,7 +452,6 @@ class PhysicalScoringContractTest(unittest.TestCase):
 
         self.assertGreater(assessed.confidence, 0.95)
         assessment = assessed.detail["candidate_assessment"]
-        self.assertTrue(assessment["candidate_gate_passed"])
         self.assertTrue(assessment["candidate_gate"]["passed"])
         self.assertEqual(
             assessed.detail["candidate_assessment"]["separator_support"][
@@ -477,7 +476,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
             gaps=[],
             confidence=0.10,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "outer_candidate_strategy": "base_outer",
                 "outer_area_ratio": 0.80,
@@ -528,7 +527,6 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         assessment = assessed.detail["candidate_assessment"]
-        self.assertFalse(assessment["candidate_gate_passed"])
         self.assertFalse(assessment["candidate_gate"]["passed"])
         self.assertNotIn("candidate_gate_failed", candidate_signals(assessed))
         self.assertNotIn(
@@ -611,7 +609,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             frames=[],
             gaps=[],
             confidence=0.0,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "content_primary": {
                     "placement": "content_runs",
@@ -650,7 +648,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 Gap(2, 66.0, 1.0, GAP_DETECTED, 63.0, 69.0),
             ],
             confidence=0.90,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "outer_area_ratio": 1.0,
                 "width_cv": 0.0,
@@ -717,7 +715,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             frames=frames,
             gaps=[],
             confidence=0.90,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "outer_area_ratio": 0.80,
                 "width_cv": 0.0,
@@ -734,7 +732,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             frames=frames,
             gaps=[],
             confidence=0.90,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "outer_area_ratio": 1.0,
                 "width_cv": 0.0,
@@ -762,7 +760,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
             gaps=[],
             confidence=0.90,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "outer_area_ratio": 1.0,
                 "width_cv": 0.0,
@@ -798,7 +796,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 Gap(2, 68.0, 1.0, GAP_DETECTED, 64.0, 72.0),
             ],
             confidence=0.90,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "outer_area_ratio": 0.80,
                 "width_cv": 0.20,
@@ -848,7 +846,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
             gaps=[Gap(1, 100.0, 1.0, GAP_DETECTED, 95.0, 105.0)],
             confidence=0.90,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
@@ -872,7 +870,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
         }
 
-        detail = partial_safe_extra_frames_assessment_detail(
+        detail = partial_edge_safety_assessment_detail(
             np.zeros((100, 300), dtype=np.uint8),
             detection,
             {"expected_gaps": 2, "hard_gaps": 1, "grid_gaps": 1, "equal_gaps": 0},
@@ -916,7 +914,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 Gap(2, 200.0, 1.0, GAP_DETECTED, 195.0, 205.0),
             ],
             confidence=0.90,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "outer_candidate_strategy": "separator_outer",
                 "width_cv": 0.0,
@@ -963,7 +961,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 Gap(2, 200.0, 1.0, GAP_DETECTED, 195.0, 205.0),
             ],
             confidence=0.90,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "outer_candidate_strategy": "separator_outer",
                 "width_cv": 0.0,
@@ -1018,7 +1016,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
             gaps=[],
             confidence=0.90,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "width_cv": 0.20,
                 "width_cv_source": "frame_boxes",
@@ -1034,7 +1032,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             frames=frame_box_detail_candidate.frames,
             gaps=[],
             confidence=0.90,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "width_cv": 0.20,
                 "width_cv_source": "photo_edges",
@@ -1102,7 +1100,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 Gap(2, 212.5, 1.0, GAP_DETECTED, 205.0, 220.0),
             ],
             confidence=0.90,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "width_cv": 0.20,
                 "width_cv_source": "frame_boxes",
@@ -1126,7 +1124,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
         }
 
-        detail = partial_safe_extra_frames_assessment_detail(
+        detail = partial_edge_safety_assessment_detail(
             np.zeros((100, 300), dtype=np.uint8),
             detection,
             {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0},

@@ -30,7 +30,7 @@ def append_summary_csv(path: Path, result: ProcessResult) -> None:
         "layout",
         "strip_mode",
         "count",
-        "review_reasons",
+        "final_review_reasons",
         "output_count",
     ]
     exists = path.exists()
@@ -49,7 +49,7 @@ def append_summary_csv(path: Path, result: ProcessResult) -> None:
                 "layout": result.layout,
                 "strip_mode": result.strip_mode,
                 "count": result.count,
-                "review_reasons": ";".join(result.review_reasons),
+                "final_review_reasons": ";".join(result.final_review_reasons),
                 "output_count": len(result.output_files),
             }
         )

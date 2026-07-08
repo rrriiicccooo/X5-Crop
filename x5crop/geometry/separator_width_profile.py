@@ -175,9 +175,8 @@ def theoretical_separator_width(
 
 def separator_width_profile(
     crop: np.ndarray,
-    params: SeparatorWidthProfileSearchParameters | None = None,
+    params: SeparatorWidthProfileSearchParameters,
 ) -> np.ndarray:
-    params = params or SeparatorWidthProfileSearchParameters()
     if crop.size == 0:
         return np.array([], dtype=np.float32)
     sample = crop[
@@ -199,9 +198,8 @@ def separator_width_profile(
 
 def separator_width_bounds(
     short_axis: float,
-    params: SeparatorWidthProfileSearchParameters | None = None,
+    params: SeparatorWidthProfileSearchParameters,
 ) -> SeparatorWidthBounds:
-    params = params or SeparatorWidthProfileSearchParameters()
     min_width = clamp_int(
         short_axis * params.min_width_ratio,
         params.min_width_min,
@@ -224,9 +222,8 @@ def collect_separator_width_bands(
     profile: np.ndarray,
     short_axis: float,
     coordinate_limit: float,
-    params: SeparatorWidthProfileSearchParameters | None = None,
+    params: SeparatorWidthProfileSearchParameters,
 ) -> SeparatorWidthBandCollection:
-    params = params or SeparatorWidthProfileSearchParameters()
     if profile.size <= 0:
         return SeparatorWidthBandCollection([], 0.0)
     edge_margin = clamp_float(
@@ -482,10 +479,10 @@ def separator_width_gap_at_with_detail(
     pitch: float,
     index: int,
     short_axis: float,
+    params: SeparatorWidthProfileSearchParameters,
+    *,
     theory: TheoreticalSeparatorWidth | None = None,
-    params: SeparatorWidthProfileSearchParameters | None = None,
 ) -> SeparatorWidthGapSearchResult:
-    params = params or SeparatorWidthProfileSearchParameters()
     if profile.size <= 0 or pitch <= 0:
         detail = {
             "index": int(index),

@@ -11,13 +11,12 @@ from .side_boundary import side_boundary_outer
 
 def base_outer_candidates(
     gray: np.ndarray,
-    config: OuterBoxDetectionParameters | None = None,
+    config: OuterBoxDetectionParameters,
 ) -> list[OuterCandidate]:
-    outer_config = config or OuterBoxDetectionParameters()
     h, w = gray.shape
-    bw = detect_outer(gray, outer_config)
-    white_x = detect_outer_white_x(gray, outer_config)
-    side_boundary = side_boundary_outer(gray, outer_config)
+    bw = detect_outer(gray, config)
+    white_x = detect_outer_white_x(gray, config)
+    side_boundary = side_boundary_outer(gray, config)
     candidates = [
         OuterCandidate(
             "bw",
@@ -28,8 +27,8 @@ def base_outer_candidates(
     ]
     if white_x.valid():
         max_reasonable = max(
-            float(bw.width) * outer_config.white_x_width_multiplier,
-            float(bw.width) + w * outer_config.white_x_extra_ratio,
+            float(bw.width) * config.white_x_width_multiplier,
+            float(bw.width) + w * config.white_x_extra_ratio,
         )
         if white_x.width >= bw.width and white_x.width <= max_reasonable:
             candidates.append(
@@ -49,8 +48,8 @@ def base_outer_candidates(
                 side_boundary.detail(),
             )
         )
-    for profile in outer_config.mask_profiles:
-        box = detect_mask_profile_outer(gray, profile, outer_config)
+    for profile in config.mask_profiles:
+        box = detect_mask_profile_outer(gray, profile, config)
         if box is not None:
             candidates.append(
                 OuterCandidate(
@@ -65,7 +64,7 @@ def base_outer_candidates(
     canvas_area = float(w * h)
     non_full = [
         candidate for candidate in unique
-        if (candidate.box.width * candidate.box.height) / max(1.0, canvas_area) <= outer_config.candidate_max_area
+        if (candidate.box.width * candidate.box.height) / max(1.0, canvas_area) <= config.candidate_max_area
     ]
     if non_full:
         return non_full

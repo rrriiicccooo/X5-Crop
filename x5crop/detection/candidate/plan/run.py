@@ -11,7 +11,7 @@ from ...guidance.content_model import content_detection_for_count
 from ..assessment.candidate import apply_candidate_assessment_policy
 from ..assessment.safety import apply_safety_candidate_assessment
 from .reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
-from ..selection.choose import is_partial_safe_candidate
+from ..selection.choose import is_partial_edge_safety_candidate
 from .source_policy import safety_candidate_outer_proposals_enabled
 from .sources import (
     detect_candidate_for_count,
@@ -186,10 +186,7 @@ def calibrated_candidates_for_count(
         dict(separator_candidate_qualification) if isinstance(separator_candidate_qualification, dict) else {}
     )
     separator_candidate_passed = bool(
-        separator_candidate_qualification.get(
-            "passed",
-            separator_assessment.get("candidate_gate_passed", False),
-        )
+        separator_candidate_qualification.get("passed", False)
     )
     if safety_candidate_outer_proposals_enabled(policy):
         safety_proposal = detect_safety_outer_proposal_candidate_for_count(
@@ -210,11 +207,11 @@ def calibrated_candidates_for_count(
                 policy=policy,
             )
             candidates.append(safety_candidate)
-    partial_safe_candidate = is_partial_safe_candidate(
+    partial_edge_safety_candidate = is_partial_edge_safety_candidate(
         separator_support_candidate,
         config.confidence_threshold,
     )
-    if partial_safe_candidate and policy.candidate_plan.partial_stop.stop_after_safe_candidate:
+    if partial_edge_safety_candidate and policy.candidate_plan.partial_stop.stop_after_safe_candidate:
         stop_after_this_count = True
     if (
         content_policy.skip_after_reliable_separator_candidate
@@ -229,7 +226,7 @@ def calibrated_candidates_for_count(
     if (
         policy.candidate_plan.partial_stop.skip_content_after_safe_candidate
         and strip_mode in policy.candidate_plan.partial_stop.skip_content_after_safe_candidate_strip_modes
-        and partial_safe_candidate
+        and partial_edge_safety_candidate
     ):
         separator_support_candidate.detail["content_candidate_skipped"] = (
             policy.candidate_plan.partial_stop.skip_content_after_safe_candidate_reason

@@ -214,7 +214,7 @@ def base_detection_assessment(
     expected_gaps = max(0, count - 1)
     gap_evidence = gap_method_evidence_summary(
         gaps,
-        policy.separator.robust_grid.reliable_min_score,
+        separator_support.reliable_gap_min_score,
     )
     frame_aspect = float(fmt.horizontal_content_aspect or 0.0)
     target_photo_width = float(outer.height) * frame_aspect if frame_aspect > 0.0 else None

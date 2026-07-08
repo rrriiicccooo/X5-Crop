@@ -94,7 +94,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
             ],
             gaps=[],
             confidence=0.0,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
@@ -136,7 +136,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
             ],
             gaps=[],
             confidence=0.0,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={
                 "width_cv": 0.20,
                 "width_cv_source": "frame_boxes",
@@ -163,7 +163,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
             frames=[],
             gaps=[],
             confidence=0.82,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={"width_cv": 0.0, "width_cv_source": "frame_boxes"},
         )
         unstable_frame_boxes = Detection(
@@ -175,7 +175,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
             frames=[],
             gaps=[],
             confidence=0.82,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={"width_cv": 0.20, "width_cv_source": "frame_boxes"},
         )
 

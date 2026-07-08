@@ -7,7 +7,9 @@ import numpy as np
 from ...cache import AnalysisCache
 from ...domain import Detection
 from ...geometry.layout import work_gray
-from ...policies.runtime.policy import DetectionPolicy
+from ...policies.runtime.diagnostics import NearbySeparatorDiagnosticsPolicy
+from ...policies.runtime.output_evidence import OutputOverlapEvidencePolicy
+from ...policies.runtime.separator import SeparatorPolicy
 from .gap_diagnostics import gap_diagnostic_record
 
 
@@ -16,7 +18,9 @@ def output_overlap_evidence_detail(
     detection: Detection,
     cache: AnalysisCache | None = None,
     *,
-    policy: DetectionPolicy,
+    separator_policy: SeparatorPolicy,
+    nearby_policy: NearbySeparatorDiagnosticsPolicy,
+    output_overlap_policy: OutputOverlapEvidencePolicy,
 ) -> dict[str, Any]:
     if not detection.gaps:
         return {
@@ -30,7 +34,15 @@ def output_overlap_evidence_detail(
         else work_gray(gray, detection.layout)
     )
     gap_records = [
-        gap_diagnostic_record(gray_work, detection, gap, cache, policy=policy)
+        gap_diagnostic_record(
+            gray_work,
+            detection,
+            gap,
+            cache,
+            separator_policy=separator_policy,
+            nearby_policy=nearby_policy,
+            output_overlap_policy=output_overlap_policy,
+        )
         for gap in detection.gaps
     ]
     output_overlap_counts: dict[str, int] = {}

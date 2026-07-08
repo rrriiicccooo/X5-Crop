@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from .base import (
     CountPolicy,
@@ -25,9 +25,6 @@ from .report import ReportPolicy
 from .output_evidence import RuntimeOutputEvidencePolicy
 from .separator import SeparatorPolicy
 
-if TYPE_CHECKING:
-    from ..parameters.aggregate import FormatParameters
-
 
 @dataclass(frozen=True)
 class DetectionPolicy:
@@ -37,7 +34,6 @@ class DetectionPolicy:
     family: str
     role: str
     detector: DetectorPolicy
-    source_parameters: FormatParameters
     counts: CountPolicy
     outer: OuterPolicy
     separator: SeparatorPolicy

@@ -7,6 +7,8 @@ if TYPE_CHECKING:
     from ..runtime.policy import DetectionPolicy
     from ..decision.contract import DetectionDecisionContract
 
+from ...formats import format_spec
+
 
 def _plain(value: Any) -> Any:
     if is_dataclass(value):
@@ -20,124 +22,89 @@ def _plain(value: Any) -> Any:
     return value
 
 
-def _fields(value: Any, names: tuple[str, ...]) -> dict[str, Any]:
-    return {name: _plain(getattr(value, name)) for name in names}
-
-
-def _detector_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    return _plain(policy.detector)
-
-
-def _outer_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    outer = policy.outer
-    proposal = outer.proposal
-    geometry = proposal.geometry
-    separator = geometry.separator
-    correction = outer.correction
+def _physical_detail(policy: "DetectionPolicy") -> dict[str, Any]:
+    spec = format_spec(policy.format_id)
     return {
-        "proposal": {
-            "base": _plain(proposal.base),
-            "geometry": {
-                "partial_placement": _plain(geometry.partial_placement),
-                "separator": {
-                    "local": _plain(separator.local),
-                    "full_width": _plain(separator.full_width),
-                    "width_profile_family": _plain(separator.width_profile_family),
-                    "separator_outer_allow_oversized_band": separator.separator_outer_allow_oversized_band,
-                    "separator_outer_oversized_band_max_ratio": separator.separator_outer_oversized_band_max_ratio,
-                    "separator_outer_oversized_band_score_penalty": separator.separator_outer_oversized_band_score_penalty,
-                    "separator_gap_search_max_width_ratio": separator.separator_gap_search_max_width_ratio,
-                    "band": _plain(separator.band),
-                    "full_width_outer": _plain(separator.full_width_outer),
-                },
-                "grid_refine": _plain(geometry.grid_refine),
-            },
-        },
-        "correction": _plain(correction),
+        "family": spec.family,
+        "physical_layout": spec.physical_layout,
+        "default_count": int(spec.default_count),
+        "allowed_counts": list(spec.allowed_counts),
+        "frame_aspect": spec.frame_aspect,
+        "separator_width_profile": spec.separator_width_profile,
+        "frame_fit_profile": spec.frame_fit_profile,
+        "edge_pair_profile": spec.edge_pair_profile,
+        "geometry_support_profile": spec.geometry_support_profile,
+        "output_overlap_profile": spec.output_overlap_profile,
     }
 
 
-def _separator_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    separator = policy.separator
-    width_profile_search = _plain(separator.width_profile_search)
-    width_profile_policy = _fields(
-        separator.width_profile,
-        (
-            "mode",
-            "max_width_ratio",
-            "required_count",
-            "spacing_min_ratio",
-            "spacing_max_ratio",
-            "source_candidate_count",
-            "band_candidate_count",
-            "sequence_candidate_count",
-            "max_candidates",
-        ),
-    )
+def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     return {
-        "support_mode": "unified_physical_support",
-        "hard_required_all_gaps": separator.hard_required_all_gaps,
-        "separator_proposal": {
-            "width_aware": {
-                "enabled": True,
-                "max_width_ratio": separator.gap_search.max_width_ratio,
-                "theoretical_separator_width": separator.width_profile.mode != "off",
-                "observed_width_profile": separator.width_profile.mode != "off",
-            },
+        "detector": {
+            "kind": policy.detector.kind,
+            "review_only": _plain(policy.detector.review_only),
         },
-        "width_profile": {**width_profile_search, **width_profile_policy},
-        "width_profile_search": width_profile_search,
-        "model_gap_proposal": _plain(separator.model_gap_proposal),
-        "refinement": _plain(separator.refinement),
-        "geometry_support_modes": list(separator.geometry_support_modes),
-        "geometry_support": _plain(separator.geometry_support),
-        "profile": _plain(separator.profile),
-        "edge_refine_profile": _plain(separator.edge_refine_profile),
-        "edge_pair": _plain(separator.edge_pair),
-        "hard_gap_trust": _plain(separator.hard_gap_trust),
-        "nearby_refinement": _plain(separator.nearby_refinement),
-        "robust_grid": _plain(separator.robust_grid),
-        "gap_search": _plain(separator.gap_search),
-        "hard_methods": list(separator.hard_methods),
-        "model_methods": list(separator.model_methods),
-        "support": _plain(separator.support),
+        "counts": _plain(policy.counts),
+        "outer": {
+            "proposal_families": {
+                "base": policy.outer.proposal.base.enabled,
+                "partial_placement": policy.outer.proposal.geometry.partial_placement.enabled,
+                "separator_geometry": True,
+            },
+            "correction": _plain(policy.outer.correction),
+        },
+        "separator": {
+            "support_mode": "unified_physical_support",
+            "hard_required_all_gaps": policy.separator.hard_required_all_gaps,
+            "width_profile_mode": policy.separator.width_profile.mode,
+            "geometry_support_modes": list(policy.separator.geometry_support_modes),
+            "hard_methods": list(policy.separator.hard_methods),
+            "model_methods": list(policy.separator.model_methods),
+        },
+        "content": {
+            "validates_candidates": bool(policy.content.validates_candidates),
+            "evidence": _plain(policy.content.evidence),
+            "profile": _plain(policy.content.profile),
+            "mask": _plain(policy.content.mask),
+            "candidate": _plain(policy.content.candidate),
+        },
     }
 
 
-def _content_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    return _plain(policy.content)
-
-
-def _scoring_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    return _plain(policy.scoring)
-
-
-def _selection_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    return _plain(policy.candidate_selection)
-
-
-def _runtime_diagnostics_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    diagnostics = policy.diagnostics
+def _candidate_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     return {
-        "debug_gap_overlay": _plain(diagnostics.debug_gap_overlay),
-        "nearby_separator": _plain(diagnostics.nearby_separator),
-        "debug_panels": list(diagnostics.debug_panels),
+        "candidate_plan": _plain(policy.candidate_plan),
+        "partial_holder": _plain(policy.partial_holder),
+        "partial_edge_hint": _plain(policy.partial_edge_hint),
+        "selection": _plain(policy.candidate_selection),
+        "scoring": {
+            "hard_full_confidence_floor": policy.scoring.hard_full_confidence_floor,
+            "weights": {
+                "geometry": policy.scoring.geometry_weight,
+                "content": policy.scoring.content_weight,
+                "separator": policy.scoring.separator_weight,
+            },
+        },
+    }
+
+
+def _decision_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
+    return {
+        "decision": _plain(policy.decision),
+        "output_evidence": {
+            "output_overlap": _plain(policy.output_evidence.output_overlap),
+        },
+    }
+
+
+def _diagnostics_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
+    return {
+        "debug_panels": list(policy.diagnostics.debug_panels),
         "debug_panel_titles": {
-            panel.panel_id: panel.title for panel in diagnostics.debug_panel_titles
+            panel.panel_id: panel.title for panel in policy.diagnostics.debug_panel_titles
         },
-    }
-
-
-def _output_evidence_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    return {
-        "output_overlap": _plain(policy.output_evidence.output_overlap),
-    }
-
-
-def _report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    return {
-        "schema_version": policy.report.schema_version,
-        "sections": list(policy.report.sections),
+        "report_schema_version": policy.report.schema_version,
+        "report_sections": list(policy.report.sections),
     }
 
 
@@ -146,23 +113,16 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "policy_id": policy.policy_id,
         "format": policy.format_id,
         "strip_mode": policy.strip_mode,
-        "family": policy.family,
         "role": policy.role,
-        "detector": _detector_detail(policy),
-        "outer": _outer_detail(policy),
-        "separator": _separator_detail(policy),
-        "content": _content_detail(policy),
-        "partial_holder": _plain(policy.partial_holder),
-        "partial_edge_hint": _plain(policy.partial_edge_hint),
-        "scoring": _scoring_detail(policy),
-        "selection": _selection_detail(policy),
-        "candidate_plan": _plain(policy.candidate_plan),
-        "output_evidence": _output_evidence_detail(policy),
-        "decision": _plain(policy.decision),
-        "finalization": _plain(policy.finalization),
-        "output": _plain(policy.output),
-        "diagnostics": _runtime_diagnostics_detail(policy),
-        "report": _report_detail(policy),
+        "physical": _physical_detail(policy),
+        "physical_runtime": _physical_runtime_detail(policy),
+        "candidate_runtime": _candidate_runtime_detail(policy),
+        "decision_runtime": _decision_runtime_detail(policy),
+        "output_runtime": {
+            "finalization": _plain(policy.finalization),
+            "output": _plain(policy.output),
+        },
+        "diagnostics_runtime": _diagnostics_runtime_detail(policy),
         "notes": list(policy.notes),
     }
 

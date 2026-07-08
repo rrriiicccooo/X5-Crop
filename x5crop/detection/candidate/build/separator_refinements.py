@@ -8,14 +8,8 @@ import numpy as np
 from ....cache import AnalysisCache
 from ....cache.separator import cached_edge_refine_profiles
 from ....domain import Box, Gap
-from ....geometry.detection_parameters import (
-    GapGeometryConstraintParameters,
-    RobustGridExecutionParameters,
-    RobustGridParameters,
-)
 from ....geometry.edge_pairs import refine_gaps_with_edge_profiles
 from ....geometry.nearby_separator import apply_nearby_separator_refinement as refine_nearby_separator_gaps
-from ....geometry.robust_grid import apply_robust_grid
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import SeparatorRefinementFamilyPolicy
 
@@ -141,56 +135,6 @@ def pending_gap_refinement_detail(family: str) -> dict[str, Any]:
     )
 
 
-def gap_geometry_parameters_for_strip_mode(
-    parameters: RobustGridParameters,
-    strip_mode: str,
-) -> GapGeometryConstraintParameters:
-    shift_ratio = (
-        parameters.constrain_full_shift_ratio
-        if strip_mode == "full"
-        else parameters.constrain_partial_shift_ratio
-    )
-    return GapGeometryConstraintParameters(
-        shift_ratio=float(shift_ratio),
-        shift_min=float(parameters.constrain_shift_min),
-        shift_max=float(parameters.constrain_shift_max),
-    )
-
-
-def robust_grid_execution_parameters_for_strip_mode(
-    parameters: RobustGridParameters,
-    strip_mode: str,
-) -> RobustGridExecutionParameters:
-    return RobustGridExecutionParameters(
-        constrain=gap_geometry_parameters_for_strip_mode(parameters, strip_mode),
-        reliable_min_score=float(parameters.reliable_min_score),
-        min_reliable=int(parameters.min_reliable),
-        pitch_min_ratio=float(parameters.pitch_min_ratio),
-        pitch_max_ratio=float(parameters.pitch_max_ratio),
-        fit_tolerance_ratio=(
-            float(parameters.full_tolerance_ratio)
-            if strip_mode == "full"
-            else float(parameters.partial_tolerance_ratio)
-        ),
-        tolerance_min=float(parameters.tolerance_min),
-        tolerance_max=float(parameters.tolerance_max),
-        reject_residual_ratio=float(parameters.reject_residual_ratio),
-        shift_ratio=(
-            float(parameters.full_shift_ratio)
-            if strip_mode == "full"
-            else float(parameters.partial_shift_ratio)
-        ),
-        shift_min=float(parameters.shift_min),
-        shift_max=float(parameters.shift_max),
-        hard_keep_ratio=float(parameters.hard_keep_ratio),
-        hard_keep_min=float(parameters.hard_keep_min),
-        hard_keep_max=float(parameters.hard_keep_max),
-        hard_protect_ratio=float(parameters.hard_protect_ratio),
-        hard_protect_min=float(parameters.hard_protect_min),
-        hard_protect_max=float(parameters.hard_protect_max),
-    )
-
-
 def edge_pair_refinement_skip_reason(
     count: int,
     strip_mode: str,
@@ -246,16 +190,12 @@ def apply_edge_pair_refinement(
 
 
 def apply_primary_separator_refinements(
-    gray_work: np.ndarray,
     outer: Box,
     crop: np.ndarray,
-    profile: np.ndarray,
     gaps: list[Gap],
     count: int,
     strip_mode: str,
     explicit_count: bool,
-    origin: float,
-    pitch: float,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> PrimarySeparatorRefinementResult:
@@ -269,26 +209,18 @@ def apply_primary_separator_refinements(
         cache,
         policy,
     )
-    gaps = edge_pair_refinement.gaps
-    robust_grid_parameters = robust_grid_execution_parameters_for_strip_mode(
-        policy.separator.robust_grid,
-        strip_mode,
-    )
-    grid = apply_robust_grid(
-        gaps,
-        origin,
-        pitch,
-        profile,
-        gray_work,
-        outer,
-        policy.separator.hard_gap_trust,
-        policy.separator.nearby_refinement,
-        robust_grid_parameters,
-    )
+    model_gap_alignment_detail = {
+        "family": "model_gap_alignment",
+        "used": False,
+        "grid_used": False,
+        "reason": "not_applied",
+        "input_count": len(gaps),
+        "output_count": len(edge_pair_refinement.gaps),
+    }
     return PrimarySeparatorRefinementResult(
-        gaps=grid.gaps,
+        gaps=edge_pair_refinement.gaps,
         edge_pair_correction_detail=edge_pair_refinement.detail,
-        grid_detail=grid.detail,
+        grid_detail=model_gap_alignment_detail,
     )
 
 
@@ -396,8 +328,6 @@ __all__ = [
     "apply_nearby_separator_refinement",
     "apply_primary_separator_refinements",
     "edge_pair_refinement_skip_reason",
-    "gap_geometry_parameters_for_strip_mode",
     "nearby_separator_refinement_skip_reason",
     "pending_gap_refinement_detail",
-    "robust_grid_execution_parameters_for_strip_mode",
 ]

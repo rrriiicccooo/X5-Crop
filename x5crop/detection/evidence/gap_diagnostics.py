@@ -18,7 +18,8 @@ from ...geometry.gap_trust import (
 from ...geometry.nearby_separator import nearby_separator_search_detail
 from ...cache.separator import cached_separator_profile
 from ...policies.runtime.diagnostics import NearbySeparatorDiagnosticsPolicy
-from ...policies.runtime.policy import DetectionPolicy
+from ...policies.runtime.output_evidence import OutputOverlapEvidencePolicy
+from ...policies.runtime.separator import SeparatorPolicy
 from ...cache import AnalysisCache
 from ...utils import clamp_int
 
@@ -46,8 +47,8 @@ def nearby_separator_candidate_detail(
     start: int,
     end: int,
     nearby_policy: NearbySeparatorDiagnosticsPolicy,
+    profile_policy: SeparatorProfileParameters,
     cache: Optional[AnalysisCache] = None,
-    profile_policy: Optional[SeparatorProfileParameters] = None,
 ) -> dict[str, Any]:
     if not is_hard_gap_method(gap.method) or pitch <= 0:
         return {"searched": False, "reason": "not_hard_gap"}
@@ -55,7 +56,7 @@ def nearby_separator_candidate_detail(
     if cache is not None:
         cache_key = (
             "nearby_separator",
-            profile_policy or SeparatorProfileParameters(),
+            profile_policy,
             nearby_policy,
             box_cache_key(work_outer),
             int(gap.index),
@@ -106,11 +107,11 @@ def gap_diagnostic_record(
     gap: Gap,
     cache: Optional[AnalysisCache] = None,
     *,
-    policy: DetectionPolicy,
+    separator_policy: SeparatorPolicy,
+    nearby_policy: NearbySeparatorDiagnosticsPolicy,
+    output_overlap_policy: OutputOverlapEvidencePolicy,
 ) -> dict[str, Any]:
-    hard_gap_trust_policy = policy.separator.hard_gap_trust
-    nearby_policy = policy.diagnostics.nearby_separator
-    overlap_policy = policy.output_evidence.output_overlap
+    hard_gap_trust_policy = separator_policy.hard_gap_trust
     work_outer = gap_work_outer(detection, gap)
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
     origin = float(detection.detail.get("origin", 0.0) or 0.0)
@@ -172,8 +173,8 @@ def gap_diagnostic_record(
         start,
         end,
         nearby_policy,
+        separator_policy.profile,
         cache,
-        policy.separator.profile,
     )
     record["signals"] = {
         "available": True,
@@ -208,21 +209,21 @@ def gap_diagnostic_record(
         if hard_gap_tonal_separator_like(signals, hard_gap_trust_policy):
             output_overlap_class = "none"
         elif (
-            signals.continuity >= overlap_policy.strong_continuity
-            and signals.core_activity >= overlap_policy.strong_activity
-            and signals.core_mean >= overlap_policy.mean_min
+            signals.continuity >= output_overlap_policy.strong_continuity
+            and signals.core_activity >= output_overlap_policy.strong_activity
+            and signals.core_mean >= output_overlap_policy.mean_min
         ):
             output_overlap_class = "strong"
         elif (
-            signals.continuity >= overlap_policy.medium_continuity
-            and signals.core_activity >= overlap_policy.medium_activity
-            and signals.core_mean >= overlap_policy.mean_min
+            signals.continuity >= output_overlap_policy.medium_continuity
+            and signals.core_activity >= output_overlap_policy.medium_activity
+            and signals.core_mean >= output_overlap_policy.mean_min
         ):
             output_overlap_class = "medium"
         elif (
-            signals.continuity >= overlap_policy.weak_continuity
-            and signals.core_activity >= overlap_policy.weak_activity
-            and signals.core_mean >= overlap_policy.mean_min
+            signals.continuity >= output_overlap_policy.weak_continuity
+            and signals.core_activity >= output_overlap_policy.weak_activity
+            and signals.core_mean >= output_overlap_policy.mean_min
         ):
             output_overlap_class = "weak"
         else:

@@ -101,9 +101,9 @@ def candidate_gate_assessment(
     source: str,
     separator_support_ok: bool,
     separator_support_detail: dict[str, Any],
-    partial_safe_candidate_support_ok: bool,
-    partial_safe_blocks_auto: bool,
-    partial_safe_disqualifiers: set[str],
+    partial_edge_safety_candidate_support_ok: bool,
+    partial_edge_safety_blocks_auto: bool,
+    partial_edge_safety_disqualifiers: set[str],
     content_containment_ok: bool,
     content_integrity_failed: bool,
     content_support: str,
@@ -128,7 +128,7 @@ def candidate_gate_assessment(
     separator_support = (
         source != CANDIDATE_SOURCE_SEPARATOR
         or separator_support_ok
-        or partial_safe_candidate_support_ok
+        or partial_edge_safety_candidate_support_ok
     )
     checks.append(
         GateCheck(
@@ -140,8 +140,8 @@ def candidate_gate_assessment(
             signal=SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
             detail={
                 "separator_support_ok": bool(separator_support_ok),
-                "partial_safe_candidate_support_ok": bool(
-                    partial_safe_candidate_support_ok
+                "partial_edge_safety_candidate_support_ok": bool(
+                    partial_edge_safety_candidate_support_ok
                 ),
                 "separator_support": dict(separator_support_detail),
             },
@@ -197,10 +197,10 @@ def candidate_gate_assessment(
             code="partial_edge_safety",
             stage="candidate",
             bucket="partial_edge",
-            passed=not partial_safe_blocks_auto,
+            passed=not partial_edge_safety_blocks_auto,
             severity="blocker",
-            signal="partial_safe_extra_frames_blocked",
-            detail={"disqualifiers": sorted(partial_safe_disqualifiers)},
+            signal="partial_edge_safety_blocked",
+            detail={"disqualifiers": sorted(partial_edge_safety_disqualifiers)},
         )
     )
 
@@ -231,11 +231,11 @@ def candidate_gate_assessment(
 
     handled_signals = {
         SIGNAL_CONTENT_INTEGRITY_FAILED,
-        "partial_safe_extra_frames_blocked",
+        "partial_edge_safety_blocked",
         SIGNAL_CONTENT_ASPECT_CONFLICT,
         SIGNAL_CONTENT_EVIDENCE_WEAK,
         SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
-        *partial_safe_disqualifiers,
+        *partial_edge_safety_disqualifiers,
         *photo_width_signals,
         *frame_topology_signals,
         independence_signal,

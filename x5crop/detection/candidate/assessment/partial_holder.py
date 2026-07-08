@@ -21,7 +21,7 @@ from ..signals import (
 from .candidate_gate import candidate_signal_blocker_signals
 
 
-def partial_safe_holder_edge_disambiguation_detail(
+def partial_edge_safety_holder_edge_disambiguation_detail(
     detection: Detection,
     fmt: FormatSpec,
     policy: DetectionPolicy,
@@ -81,7 +81,7 @@ def partial_safe_holder_edge_disambiguation_detail(
     }
 
 
-def partial_safe_leading_content_detail(
+def partial_edge_safety_leading_content_detail(
     gray: np.ndarray,
     detection: Detection,
     fmt: FormatSpec,
@@ -153,7 +153,7 @@ def partial_safe_leading_content_detail(
     }
 
 
-def partial_safe_frame_content_detail(
+def partial_edge_safety_frame_content_detail(
     content_detail: dict[str, Any],
     detection: Detection,
     fmt: FormatSpec,
@@ -240,7 +240,7 @@ def partial_safe_frame_content_detail(
     }
 
 
-def partial_safe_extra_frames_assessment_detail(
+def partial_edge_safety_assessment_detail(
     gray: np.ndarray,
     detection: Detection,
     hard_detail: dict[str, Any],
@@ -266,11 +266,11 @@ def partial_safe_extra_frames_assessment_detail(
     outer_area = float(detection.detail.get("outer_area_ratio", 1.0) or 1.0)
     min_count = holder.min_count_35mm if fmt.default_count >= 6 else holder.min_count_small
     hard_ratio = 1.0 if expected <= 0 else hard / float(max(1, expected))
-    holder_edge_detail = partial_safe_holder_edge_disambiguation_detail(detection, fmt, policy)
-    leading_content = partial_safe_leading_content_detail(gray, detection, fmt, cache, policy)
-    frame_content = partial_safe_frame_content_detail(content_detail, detection, fmt, policy)
+    holder_edge_detail = partial_edge_safety_holder_edge_disambiguation_detail(detection, fmt, policy)
+    leading_content = partial_edge_safety_leading_content_detail(gray, detection, fmt, cache, policy)
+    frame_content = partial_edge_safety_frame_content_detail(content_detail, detection, fmt, policy)
     disqualifiers: list[str] = []
-    if not holder.safe_extra_frames:
+    if not holder.allow_empty_holder_frames:
         disqualifiers.append("disabled")
     if detection.strip_mode != "partial":
         disqualifiers.append("not_partial")
@@ -320,7 +320,7 @@ def partial_safe_extra_frames_assessment_detail(
     return {
         "used": True,
         "ok": not disqualifiers,
-        "reason": "safe_extra_holder_frames_accepted" if not disqualifiers else "not_safe_enough_for_auto",
+        "reason": "empty_holder_frames_allowed" if not disqualifiers else "partial_edge_safety_failed",
         "disqualifiers": disqualifiers,
         "count": int(detection.count),
         "expected_gaps": int(expected),
@@ -343,7 +343,7 @@ def partial_safe_extra_frames_assessment_detail(
         },
         "policy_id": policy.policy_id,
         "holder_policy": {
-            "safe_extra_frames": holder.safe_extra_frames,
+            "allow_empty_holder_frames": holder.allow_empty_holder_frames,
             "requires_holder_edge_disambiguation_gaps": holder.requires_broad_separator_width_gaps,
             "checks_leading_content": holder.checks_leading_content,
             "checks_frame_content": holder.checks_frame_content,
@@ -356,8 +356,8 @@ def partial_safe_extra_frames_assessment_detail(
 
 
 __all__ = [
-    "partial_safe_extra_frames_assessment_detail",
-    "partial_safe_frame_content_detail",
-    "partial_safe_leading_content_detail",
-    "partial_safe_holder_edge_disambiguation_detail",
+    "partial_edge_safety_assessment_detail",
+    "partial_edge_safety_frame_content_detail",
+    "partial_edge_safety_leading_content_detail",
+    "partial_edge_safety_holder_edge_disambiguation_detail",
 ]

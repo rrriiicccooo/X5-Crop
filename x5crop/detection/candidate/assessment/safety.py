@@ -3,8 +3,8 @@ from __future__ import annotations
 from ....constants import CANDIDATE_SOURCE_SAFETY
 from ....domain import Detection
 from ....policies.runtime.policy import DetectionPolicy
-from ...gate_checks import GateCheck, unique_signals
 from ..signals import SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE, add_candidate_signal
+from .candidate_gate import candidate_signal_gate_checks
 from .confidence_caps import apply_candidate_confidence_cap
 
 
@@ -21,37 +21,13 @@ def _append_safety_candidate_gate_check(detection: Detection) -> None:
         assessment = {}
         detection.detail["candidate_assessment"] = assessment
 
-    gate = assessment.get("candidate_gate")
-    gate_detail = dict(gate) if isinstance(gate, dict) else {}
-    checks = _detail_list(gate_detail.get("checks"))
-    safety_check = GateCheck(
-        code="candidate_source_auto_allowed",
-        stage="candidate",
-        bucket="source",
-        passed=False,
-        severity="blocker",
-        signal=SAFETY_CANDIDATE_BLOCKER,
-        detail={"source": CANDIDATE_SOURCE_SAFETY},
-    )
-    checks.append(safety_check.report_detail())
-
-    blockers = unique_signals(
-        [
-            *[str(reason) for reason in _detail_list(assessment.get("blockers"))],
-            *[str(reason) for reason in _detail_list(gate_detail.get("blockers"))],
-            SAFETY_CANDIDATE_BLOCKER,
-        ]
-    )
-    diagnostics = unique_signals(
-        [
-            *[str(reason) for reason in _detail_list(assessment.get("diagnostics"))],
-            *[str(reason) for reason in _detail_list(gate_detail.get("diagnostics"))],
-        ]
-    )
+    gate_checks = candidate_signal_gate_checks([SAFETY_CANDIDATE_BLOCKER])
+    checks = [check.report_detail() for check in gate_checks]
+    blockers = [check.signal for check in gate_checks if check.severity == "blocker"]
+    diagnostics = [check.signal for check in gate_checks if check.severity == "diagnostic"]
     confidence_caps = _detail_list(detection.detail.get("candidate_confidence_caps"))
 
     assessment["source"] = CANDIDATE_SOURCE_SAFETY
-    assessment["candidate_gate_passed"] = False
     assessment["blockers"] = blockers
     assessment["diagnostics"] = diagnostics
     assessment["confidence_caps"] = confidence_caps

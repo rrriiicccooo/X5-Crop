@@ -9,7 +9,7 @@ from ..runtime.config import RuntimeConfig
 from ..domain import Detection
 from ..formats import FormatSpec
 from ..cache.analysis import make_analysis_cache
-from ..policies.context import RuntimePolicyContext
+from ..runtime.policy_context import RuntimePolicyContext
 from ..policies.runtime.policy import DetectionPolicy
 from ..cache import AnalysisCache
 from .candidate.plan.run import calibrated_candidates_for_count

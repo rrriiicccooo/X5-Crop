@@ -234,7 +234,7 @@ class SourceNamingContractTest(unittest.TestCase):
     def test_active_gate_names_use_candidate_and_decision_contract_terms(self) -> None:
         banned = (
             "hard_review_reason_gate",
-            "hard_review_reasons_block_auto",
+            "hard_final_review_reasons_block_auto",
             "auto_pass_gate",
             "finalization_gate",
         )
@@ -305,7 +305,7 @@ class SourceNamingContractTest(unittest.TestCase):
     def test_guidance_layer_does_not_own_final_candidate_scoring(self) -> None:
         banned = (
             "content_candidate_confidence_and_reasons",
-            "review_reasons",
+            "final_review_reasons",
             "decision_contract",
             "policy_allows_auto",
         )
@@ -356,9 +356,9 @@ class SourceNamingContractTest(unittest.TestCase):
     def test_candidate_plan_does_not_name_source_contract_as_final_decision(self) -> None:
         banned = (
             "decision_contract",
-            '"review_reasons"',
-            "review_reasons_ok",
-            "requires_no_review_reasons",
+            '"final_review_reasons"',
+            "final_review_reasons_ok",
+            "requires_no_final_review_reasons",
             "review_reason:",
             ".review_reason",
         )
@@ -421,9 +421,9 @@ class SourceNamingContractTest(unittest.TestCase):
 
     def test_selection_uncertainty_is_not_named_as_candidate_review_reason(self) -> None:
         banned = (
-            "candidate_review_reasons_before_decision",
+            "candidate_final_review_reasons_before_decision",
             "candidate_competition_uncertain",
-            "content_candidate_review_reasons",
+            "content_candidate_final_review_reasons",
             "recommended_final_review_reason",
         )
         offenders: list[str] = []
@@ -448,7 +448,7 @@ class SourceNamingContractTest(unittest.TestCase):
         )
         text = path.read_text(encoding="utf-8")
 
-        self.assertNotIn('"review_reasons"', text)
+        self.assertNotIn('"final_review_reasons"', text)
         self.assertIn('"candidate_signals"', text)
 
     def test_candidate_build_detail_does_not_carry_assessment_state(self) -> None:
@@ -675,11 +675,11 @@ class SourceNamingContractTest(unittest.TestCase):
 
     def test_candidate_layer_routes_signal_mutation_through_candidate_helper(self) -> None:
         banned = (
-            ".review_reasons.append",
-            ".review_reasons =",
-            "review_reasons=candidate_signals",
-            "review_reasons=merged_candidate_signals",
-            "review_reasons=normalized_candidate_signals",
+            ".final_review_reasons.append",
+            ".final_review_reasons =",
+            "final_review_reasons=candidate_signals",
+            "final_review_reasons=merged_candidate_signals",
+            "final_review_reasons=normalized_candidate_signals",
         )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "candidate"
@@ -699,7 +699,7 @@ class SourceNamingContractTest(unittest.TestCase):
         path = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "signals.py"
         text = path.read_text(encoding="utf-8")
 
-        self.assertNotIn("detection.review_reasons =", text)
+        self.assertNotIn("detection.final_review_reasons =", text)
         self.assertIn('detection.detail[CANDIDATE_SIGNALS]', text)
 
     def test_decision_candidate_signal_inputs_are_current_gate_inputs(self) -> None:
@@ -741,14 +741,18 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_content_mismatch_selector_uses_candidate_selection_names(self) -> None:
+    def test_content_mismatch_selector_override_is_removed(self) -> None:
         banned = (
             "ContentMismatchReviewSelectionPolicy",
+            "ContentMismatchCandidateSelectionPolicy",
             "content_mismatch_review",
+            "content_mismatch_candidate",
             "required_review_reason",
             "required_candidate_signal",
             "content_candidate_signals",
+            "content_candidate_mismatch",
             "select_separator_review_candidate_on_content_mismatch",
+            "select_separator_candidate_for_content_mismatch",
             "separator_" "review" "_on_mismatch",
         )
         offenders: list[str] = []
@@ -772,17 +776,17 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertTrue(source_root.is_dir())
         for path in source_root.rglob("*.py"):
             text = path.read_text(encoding="utf-8")
-            if '"review_reasons"' in text:
+            if '"final_review_reasons"' in text:
                 offenders.append(str(path.relative_to(PROJECT_ROOT)))
 
         self.assertEqual(offenders, [])
 
     def test_mode_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
         banned = (
-            ".review_reasons.append",
-            ".review_reasons =",
-            "review_reasons=normalized_candidate_signals",
-            "review_reasons=candidate_signals",
+            ".final_review_reasons.append",
+            ".final_review_reasons =",
+            "final_review_reasons=normalized_candidate_signals",
+            "final_review_reasons=candidate_signals",
         )
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "modes"
@@ -809,7 +813,7 @@ class SourceNamingContractTest(unittest.TestCase):
         text = path.read_text(encoding="utf-8")
 
         self.assertNotIn("safety_candidate.confidence = min", text)
-        self.assertNotIn("safety_candidate.review_reasons.append", text)
+        self.assertNotIn("safety_candidate.final_review_reasons.append", text)
         self.assertNotIn('"safety_candidate_review_only"', text)
         self.assertNotIn('assessment["auto_gate"] = False', text)
         self.assertIn("apply_safety_candidate_assessment", text)
@@ -866,7 +870,7 @@ class SourceNamingContractTest(unittest.TestCase):
             if path.name == "reasons.py":
                 continue
             text = path.read_text(encoding="utf-8")
-            if ".review_reasons.append" in text:
+            if ".final_review_reasons.append" in text:
                 offenders.append(str(path.relative_to(PROJECT_ROOT)))
 
         self.assertEqual(offenders, [])
@@ -877,7 +881,7 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertIn("set_final_review_reasons", text)
         self.assertNotIn("add_final_review_reason", text)
-        self.assertNotIn("review_reasons.append", text)
+        self.assertNotIn("final_review_reasons.append", text)
 
     def test_decision_summary_uses_final_reason_and_signal_fields(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "contract_applier.py"
@@ -885,9 +889,9 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertIn('"final_review_reasons"', text)
         self.assertIn('"decision_signals"', text)
-        self.assertNotIn("decision_generated_review_reasons", text)
+        self.assertNotIn("decision_generated_final_review_reasons", text)
         self.assertNotIn("final_review_reasons_added", text)
-        self.assertNotIn("review_reasons_added", text)
+        self.assertNotIn("final_review_reasons_added", text)
         self.assertNotIn("candidate_blockers_before_decision", text)
         self.assertNotIn("candidate_diagnostics_before_decision", text)
 
@@ -1025,6 +1029,78 @@ class SourceNamingContractTest(unittest.TestCase):
             for term in banned:
                 if term in text:
                     offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
+    def test_destructive_cleanup_removes_legacy_policy_and_import_hooks(self) -> None:
+        banned = (
+            "source_parameters",
+            "import_format_module",
+            "format_module_name",
+            "robust_grid",
+            "RobustGrid",
+            "ROBUST_GRID",
+            "candidate_gate_passed",
+            "partial_safe_extra_frames",
+            "safe_extra_frames",
+        )
+        offenders: list[str] = []
+        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                if path == Path(__file__).resolve():
+                    continue
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
+    def test_foundation_helpers_require_explicit_parameters(self) -> None:
+        banned = (
+            "params=None",
+            "params: None",
+            "config=None",
+            "config: None",
+            "policy=None",
+            "policy: None",
+        )
+        checked_roots = (
+            PROJECT_ROOT / "x5crop" / "geometry",
+            PROJECT_ROOT / "x5crop" / "cache",
+            PROJECT_ROOT / "x5crop" / "detection" / "physical",
+            PROJECT_ROOT / "x5crop" / "detection" / "evidence",
+            PROJECT_ROOT / "x5crop" / "detection" / "guidance",
+        )
+        offenders: list[str] = []
+        for root in checked_roots:
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
+    def test_foundation_physical_evidence_and_guidance_do_not_accept_full_detection_policy(self) -> None:
+        checked_roots = (
+            PROJECT_ROOT / "x5crop" / "geometry",
+            PROJECT_ROOT / "x5crop" / "image",
+            PROJECT_ROOT / "x5crop" / "io",
+            PROJECT_ROOT / "x5crop" / "cache",
+            PROJECT_ROOT / "x5crop" / "detection" / "physical",
+            PROJECT_ROOT / "x5crop" / "detection" / "evidence",
+            PROJECT_ROOT / "x5crop" / "detection" / "guidance",
+        )
+        offenders: list[str] = []
+        for root in checked_roots:
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                text = path.read_text(encoding="utf-8")
+                if "DetectionPolicy" in text:
+                    offenders.append(str(path.relative_to(PROJECT_ROOT)))
 
         self.assertEqual(offenders, [])
 

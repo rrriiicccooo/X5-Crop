@@ -35,6 +35,12 @@ class FormatSpec:
     separator_visibility: str
     geometry_tolerance: str
     known_physical_notes: tuple[str, ...]
+    physical_layout: str = "single_strip"
+    separator_width_profile: str = "standard"
+    frame_fit_profile: str = "standard_strip"
+    edge_pair_profile: str = "standard_35mm"
+    geometry_support_profile: str = "none"
+    output_overlap_profile: str = "standard"
 
 
 FormatPhysicalSpec = FormatSpec
@@ -56,6 +62,12 @@ def _format_spec(
     separator_visibility: str,
     geometry_tolerance: str,
     known_physical_notes: tuple[str, ...],
+    physical_layout: str = "single_strip",
+    separator_width_profile: str = "standard",
+    frame_fit_profile: str = "standard_strip",
+    edge_pair_profile: str = "standard_35mm",
+    geometry_support_profile: str = "none",
+    output_overlap_profile: str = "standard",
 ) -> FormatSpec:
     name = format_id.value
     return FormatSpec(
@@ -75,6 +87,12 @@ def _format_spec(
         separator_visibility=separator_visibility,
         geometry_tolerance=geometry_tolerance,
         known_physical_notes=known_physical_notes,
+        physical_layout=physical_layout,
+        separator_width_profile=separator_width_profile,
+        frame_fit_profile=frame_fit_profile,
+        edge_pair_profile=edge_pair_profile,
+        geometry_support_profile=geometry_support_profile,
+        output_overlap_profile=output_overlap_profile,
     )
 
 
@@ -92,6 +110,8 @@ FORMATS: dict[str, FormatSpec] = {
             "wide_spacing_can_mimic_extra_holder",
             "weak_grid_may_hide_missing_separator",
         ),
+        frame_fit_profile="standard_strip",
+        edge_pair_profile="standard_35mm",
     ),
     "135-dual": _format_spec(
         FormatId.DUAL_LANE,
@@ -106,6 +126,9 @@ FORMATS: dict[str, FormatSpec] = {
             "lane_split_failure",
             "partial_dual_lane_not_trusted",
         ),
+        physical_layout="dual_lane",
+        frame_fit_profile="dual_lane",
+        edge_pair_profile="standard_35mm",
     ),
     "half": _format_spec(
         FormatId.HALF,
@@ -120,6 +143,10 @@ FORMATS: dict[str, FormatSpec] = {
             "weak_grid_can_overfit_dense_frames",
             "partial_edges_may_include_holder",
         ),
+        frame_fit_profile="dense_half",
+        edge_pair_profile="dense_half",
+        geometry_support_profile="stable_dense_grid",
+        output_overlap_profile="sensitive",
     ),
     "xpan": _format_spec(
         FormatId.XPAN,
@@ -134,6 +161,8 @@ FORMATS: dict[str, FormatSpec] = {
             "wide_content_can_mask_separator",
             "outer_overcrop_cost_high",
         ),
+        frame_fit_profile="panoramic_35mm",
+        edge_pair_profile="panoramic_35mm",
     ),
     "120-645": _format_spec(
         FormatId.MEDIUM_RECTANGLE,
@@ -148,6 +177,9 @@ FORMATS: dict[str, FormatSpec] = {
             "short_axis_boundary_can_blend_with_holder",
             "content_edges_can_look_like_separators",
         ),
+        frame_fit_profile="medium_rectangle",
+        edge_pair_profile="medium_rectangle",
+        output_overlap_profile="sensitive",
     ),
     "120-66": _format_spec(
         FormatId.MEDIUM_SQUARE,
@@ -163,6 +195,10 @@ FORMATS: dict[str, FormatSpec] = {
             "holder_edge_can_mimic_separator",
             "overlap_or_stuck_frame_note",
         ),
+        separator_width_profile="broad",
+        frame_fit_profile="medium_square",
+        edge_pair_profile="medium_square",
+        output_overlap_profile="sensitive",
     ),
     "120-67": _format_spec(
         FormatId.MEDIUM_WIDE,
@@ -177,6 +213,10 @@ FORMATS: dict[str, FormatSpec] = {
             "short_axis_correction_can_overtrust_holder",
             "broad_separator_width_may_compete_with_content",
         ),
+        separator_width_profile="broad",
+        frame_fit_profile="medium_wide",
+        edge_pair_profile="medium_square",
+        output_overlap_profile="sensitive",
     ),
 }
 

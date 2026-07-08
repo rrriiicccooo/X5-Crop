@@ -115,16 +115,12 @@ def build_primary_separator_gaps_for_outer(
             policy,
         )
     primary_refinement = apply_primary_separator_refinements(
-        gray_work,
         outer,
         crop,
-        profile,
         initial_gaps.gaps,
         count,
         strip_mode,
         explicit_count,
-        origin,
-        pitch,
         cache,
         policy,
     )

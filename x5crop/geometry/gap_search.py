@@ -421,16 +421,16 @@ def find_detected_gap(
     expected: float,
     pitch: float,
     index: int,
+    gap_search: GapSearchParameters,
+    *,
     max_width_ratio_override: Optional[float] = None,
-    gap_search: GapSearchParameters | None = None,
 ) -> GapSearchResult:
-    config = gap_search or GapSearchParameters()
-    window = gap_search_window(len(profile), expected, pitch, config)
+    window = gap_search_window(len(profile), expected, pitch, gap_search)
     if window.empty:
         return GapSearchResult(None, 0.0, "empty_window", gap_search_detail(index, expected, pitch, window, 0.0, None))
     local = profile[window.lo:window.hi]
     local_max = float(local.max()) if local.size else 0.0
-    min_score = config.min_score
+    min_score = gap_search.min_score
     if local.size == 0 or local_max < min_score:
         return GapSearchResult(None, local_max, "below_min_score", gap_search_detail(index, expected, pitch, window, local_max, None))
 
@@ -441,7 +441,7 @@ def find_detected_gap(
         pitch,
         local_max,
         max_width_ratio_override,
-        config,
+        gap_search,
     )
     candidate_search = detected_gap_candidates_with_detail(context)
     candidate = best_detected_gap_candidate(candidate_search.candidates)

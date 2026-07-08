@@ -13,7 +13,7 @@ from x5crop.report.result_builder import result_from_detection
 from x5crop.report.schema import report_schema_for_detection
 
 
-def _detection(detail: dict | None = None, review_reasons: list[str] | None = None) -> Detection:
+def _detection(detail: dict | None = None, final_review_reasons: list[str] | None = None) -> Detection:
     return Detection(
         film_format="135",
         layout="horizontal",
@@ -23,7 +23,7 @@ def _detection(detail: dict | None = None, review_reasons: list[str] | None = No
         frames=[Box(10, 10, 90, 90)],
         gaps=[],
         confidence=0.99,
-        review_reasons=list(review_reasons or []),
+        final_review_reasons=list(final_review_reasons or []),
         detail=dict(detail or {}),
     )
 
@@ -52,7 +52,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(decided_schema["status"], "needs_review")
         self.assertEqual(decided_schema["result"]["status"], "needs_review")
         self.assertEqual(
-            decided_schema["result"]["review_reasons"],
+            decided_schema["result"]["final_review_reasons"],
             ["separator_evidence_insufficient"],
         )
 
@@ -91,7 +91,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertNotIn("candidate_level_stale_reason", warnings[0])
 
         schema = report_schema_for_detection(detection, policy=self._policy())
-        self.assertEqual(schema["result"]["review_reasons"], ["outer_content_mismatch"])
+        self.assertEqual(schema["result"]["final_review_reasons"], ["outer_content_mismatch"])
 
         profile = ImageProfile(
             shape=(100, 100),
@@ -117,10 +117,10 @@ class OutputReadModelContractTest(unittest.TestCase):
             [],
             self._policy(),
         )
-        self.assertEqual(result.review_reasons, ["outer_content_mismatch"])
+        self.assertEqual(result.final_review_reasons, ["outer_content_mismatch"])
 
     def test_candidate_signals_do_not_fallback_to_final_review_reasons(self) -> None:
-        detection = _detection(review_reasons=["outer_content_mismatch"])
+        detection = _detection(final_review_reasons=["outer_content_mismatch"])
 
         self.assertEqual(candidate_signals_from_detail(detection), [])
 
@@ -192,7 +192,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             Path("input.tif"),
             Path("out"),
             config,
-            _detection(review_reasons=["candidate_competition_close"]),
+            _detection(final_review_reasons=["candidate_competition_close"]),
             "needs_review",
             warnings,
         )

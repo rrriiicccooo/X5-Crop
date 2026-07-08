@@ -92,14 +92,15 @@ class ContentContainmentTest(unittest.TestCase):
             frames=[Box(0, 0, 300, 120), Box(300, 0, 600, 120), Box(600, 0, 900, 120)],
             gaps=[],
             confidence=0.0,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={},
         )
 
+        policy = get_detection_policy("120-645", "full")
         alignment = outer_content_alignment_detail(
             gray,
             detection,
-            policy=get_detection_policy("120-645", "full"),
+            content_containment_policy=policy.outer.correction.content_containment,
         )
 
         self.assertTrue(alignment["used"])
@@ -120,14 +121,15 @@ class ContentContainmentTest(unittest.TestCase):
             frames=[Box(250, 0, 383, 120), Box(383, 0, 516, 120), Box(516, 0, 650, 120)],
             gaps=[],
             confidence=0.0,
-            review_reasons=[],
+            final_review_reasons=[],
             detail={},
         )
 
+        policy = get_detection_policy("120-645", "full")
         alignment = outer_content_alignment_detail(
             gray,
             detection,
-            policy=get_detection_policy("120-645", "full"),
+            content_containment_policy=policy.outer.correction.content_containment,
         )
 
         self.assertTrue(alignment["used"])

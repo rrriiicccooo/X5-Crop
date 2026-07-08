@@ -17,7 +17,8 @@ from ..output.bleed import (
 from ..image.gray import make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..io.tiff import read_tiff
-from ..policies.context import RuntimePolicyContext
+from .policy_context import RuntimePolicyContext
+from ..policies.ids import REPORT_SCHEMA_VERSION
 from ..report.result_builder import result_from_cached_record, result_from_detection
 from ..cache import REPORT_RECORD_CACHE
 from .config import RuntimeConfig
@@ -87,12 +88,19 @@ def detection_from_record(record: dict[str, Any]) -> Detection:
         frames=[box_from_dict(box) for box in record.get("frame_boxes", [])],
         gaps=[gap_from_dict(gap) for gap in record.get("gaps", [])],
         confidence=float(record["confidence"]),
-        review_reasons=list(record.get("review_reasons", [])),
+        final_review_reasons=list(record.get("final_review_reasons", [])),
         detail=dict(record.get("detail", {})),
     )
 
 
 def cached_record_matches(record: dict[str, Any], input_file: Path, profile: ImageProfile, config: RuntimeConfig) -> bool:
+    report_schema = record.get("report_schema")
+    if not isinstance(report_schema, dict):
+        return False
+    if report_schema.get("schema_version") != REPORT_SCHEMA_VERSION:
+        return False
+    if "final_review_reasons" not in record:
+        return False
     detail = record.get("detail")
     if not isinstance(detail, dict):
         return False

@@ -18,7 +18,7 @@ from ...physical.outer.common import unique_outer_candidates
 from ...physical.outer.separator import (
     FULL_WIDTH_SEPARATOR_OUTER,
     separator_derived_outer_candidates,
-    separator_outer_scopes_for_policy,
+    separator_outer_scopes,
 )
 
 
@@ -43,11 +43,25 @@ def outer_proposal_strategy_plan_for_policy(
 ) -> list[OuterProposalStrategy]:
     proposal_policy = policy.outer.proposal
     partial_placement = proposal_policy.geometry.partial_placement
+    separator_geometry = proposal_policy.geometry.separator
     separator_mode = (
         "safety"
-        if safety_only and separator_outer_scopes_for_policy(policy, strip_mode, explicit_count, safety_only=True)
+        if safety_only and separator_outer_scopes(
+            separator_geometry,
+            strip_mode,
+            explicit_count,
+            safety_only=True,
+        )
         else "always"
-        if (not safety_only and separator_outer_scopes_for_policy(policy, strip_mode, explicit_count, safety_only=False))
+        if (
+            not safety_only
+            and separator_outer_scopes(
+                separator_geometry,
+                strip_mode,
+                explicit_count,
+                safety_only=False,
+            )
+        )
         else "off"
     )
     base = [
@@ -148,7 +162,7 @@ def outer_proposal_candidates(
             count,
             strip_mode,
             cache,
-            policy=policy,
+            partial_placement=policy.outer.proposal.geometry.partial_placement,
         )
     floating_candidates: list[OuterCandidate] = []
     if "floating" in enabled_strategy_names and not edge_anchored_candidates_trusted(edge_candidates, policy):
@@ -158,7 +172,7 @@ def outer_proposal_candidates(
             fmt,
             count,
             strip_mode,
-            policy,
+            policy.outer.proposal.geometry.partial_placement,
         )
     pre_separator_candidates = unique_outer_candidates([*base_candidates, *edge_candidates, *floating_candidates])
     separator_candidates: list[OuterCandidate] = []
@@ -170,8 +184,14 @@ def outer_proposal_candidates(
             count,
             strip_mode,
             cache,
-            policy=policy,
-            outer_scopes=separator_outer_scopes_for_policy(policy, strip_mode, explicit_count, safety_only=safety_only),
+            separator_geometry_policy=policy.outer.proposal.geometry.separator,
+            separator_policy=policy.separator,
+            outer_scopes=separator_outer_scopes(
+                policy.outer.proposal.geometry.separator,
+                strip_mode,
+                explicit_count,
+                safety_only=safety_only,
+            ),
             gap_search_profiles=(WIDTH_AWARE_GAP_PROFILE,),
             explicit_count=explicit_count,
         )
@@ -198,7 +218,8 @@ def separator_full_width_outer_proposal_candidates(
         count,
         strip_mode,
         cache,
-        policy=policy,
+        separator_geometry_policy=policy.outer.proposal.geometry.separator,
+        separator_policy=policy.separator,
         outer_scopes=(FULL_WIDTH_SEPARATOR_OUTER,),
         gap_search_profiles=(WIDTH_AWARE_GAP_PROFILE,),
         explicit_count=explicit_count,

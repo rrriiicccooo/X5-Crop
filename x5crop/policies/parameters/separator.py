@@ -11,6 +11,7 @@ class SeparatorSupportParameters:
     hard_required_all_gaps: bool
     edge_pair_min_score_without_broad_width: float
     edge_pair_min_score_with_broad_width: float
+    reliable_gap_min_score: float
     min_broad_separator_width_gaps_for_auto: int
     score_min_hard_gaps: int
     score_max_equal_gaps_floor: int
@@ -62,32 +63,6 @@ class NearbySeparatorRefinementParameters:
     local_gain_min: float
     local_gain_max: float
     width_cv_slack: float
-
-@dataclass(frozen=True)
-class RobustGridParameters:
-    constrain_full_shift_ratio: float
-    constrain_partial_shift_ratio: float
-    constrain_shift_min: float
-    constrain_shift_max: float
-    reliable_min_score: float
-    min_reliable: int
-    pitch_min_ratio: float
-    pitch_max_ratio: float
-    full_tolerance_ratio: float
-    partial_tolerance_ratio: float
-    tolerance_min: float
-    tolerance_max: float
-    reject_residual_ratio: float
-    full_shift_ratio: float
-    partial_shift_ratio: float
-    shift_min: float
-    shift_max: float
-    hard_keep_ratio: float
-    hard_keep_min: float
-    hard_keep_max: float
-    hard_protect_ratio: float
-    hard_protect_min: float
-    hard_protect_max: float
 
 @dataclass(frozen=True)
 class GapSearchParameters:
@@ -183,7 +158,6 @@ __all__ = [
     'SeparatorGeometrySupportParameters',
     'SeparatorWidthProfileParameters',
     'NearbySeparatorRefinementParameters',
-    'RobustGridParameters',
     'GapSearchParameters',
     'SeparatorProfileParameters',
     'EdgeRefineProfileParameters',

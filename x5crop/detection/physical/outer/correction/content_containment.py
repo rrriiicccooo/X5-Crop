@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 from .....domain import Detection
 from .....formats import FormatSpec
-from .....policies.runtime.policy import DetectionPolicy
+from .....policies.runtime.outer import ContentContainmentCorrectionPolicy
 from .....cache import AnalysisCache
 from .....runtime.config import RuntimeConfig
 from .....utils import box_from_dict
@@ -20,13 +20,17 @@ def content_containment_correction_proposal(
     alignment: dict[str, Any],
     cache: AnalysisCache,
     eligible_families: set[str],
-    policy: DetectionPolicy,
+    content_containment_policy: ContentContainmentCorrectionPolicy,
 ) -> Optional[OuterCorrectionProposal]:
     del config, cache
     if "content_containment" not in eligible_families:
         return None
-    family = policy.outer.correction.content_containment.family
-    corrected_outer = corrected_outer_from_alignment(alignment, detection.count, policy)
+    family = content_containment_policy.family
+    corrected_outer = corrected_outer_from_alignment(
+        alignment,
+        detection.count,
+        content_containment_policy,
+    )
     if corrected_outer is None:
         return None
     try:

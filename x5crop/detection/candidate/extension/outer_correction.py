@@ -131,7 +131,12 @@ def outer_correction_candidate_extensions(
     )
     detection.detail["content_evidence"] = content_detail
     outer_alignment = (
-        outer_content_alignment_detail(gray, detection, cache, policy=policy)
+        outer_content_alignment_detail(
+            gray,
+            detection,
+            cache,
+            content_containment_policy=policy.outer.correction.content_containment,
+        )
         if policy.decision.align_outer_to_content
         else {"used": False, "reason": policy.decision.outer_alignment_disabled_reason}
     )
@@ -172,14 +177,13 @@ def outer_correction_candidate_extensions(
     extensions: list[Detection] = []
     proposal = geometry_consistency_correction_proposal(
         gray,
-        config,
         fmt,
         detection,
         content_detail,
         outer_alignment,
         cache,
         set(correction_plan["eligible_families"]),
-        policy,
+        policy.outer.correction.geometry_consistency,
     )
     if proposal is not None:
         reassessed = build_assessed_corrected_outer_candidate(gray, config, fmt, detection, proposal, cache, policy)
@@ -207,7 +211,7 @@ def outer_correction_candidate_extensions(
             outer_alignment,
             cache,
             set(correction_plan["eligible_families"]),
-            policy,
+            policy.outer.correction.content_containment,
         )
         if proposal is not None:
             reassessed = build_assessed_corrected_outer_candidate(gray, config, fmt, detection, proposal, cache, policy)

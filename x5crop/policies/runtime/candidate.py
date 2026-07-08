@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class PartialHolderPolicy:
-    safe_extra_frames: bool = False
-    safe_extra_frames_strip_modes: tuple[str, ...] = ("partial",)
+    allow_empty_holder_frames: bool = False
+    allow_empty_holder_frames_strip_modes: tuple[str, ...] = ("partial",)
     requires_broad_separator_width_gaps: int = 0
     checks_leading_content: bool = False
     checks_frame_content: bool = False
@@ -93,27 +93,10 @@ class ScoringPolicy:
 
 
 @dataclass(frozen=True)
-class ContentMismatchCandidateSelectionPolicy:
-    enabled: bool = False
-    strip_modes: tuple[str, ...] = ("full",)
-    require_default_count: bool = True
-    required_best_source: str = "content"
-    required_candidate_diagnostic: str = "content_run_count_mismatch"
-    candidate_source: str = "separator"
-    min_hard_ratio: float = 0.50
-    max_equal_gaps: int = 0
-    required_content_support: str = "ok"
-    override_reason: str = "content_candidate_mismatch_prefers_separator_candidate"
-
-
-@dataclass(frozen=True)
 class SelectionPolicy:
     top_n: int = 8
     close_margin: float = 0.04
     confidence_cap: float = 0.84
-    content_mismatch_candidate: ContentMismatchCandidateSelectionPolicy = field(
-        default_factory=ContentMismatchCandidateSelectionPolicy
-    )
 
 
 @dataclass(frozen=True)
@@ -127,7 +110,7 @@ class PartialStopPolicy:
     stop_after_safe_candidate: bool = True
     skip_content_after_safe_candidate: bool = True
     skip_content_after_safe_candidate_strip_modes: tuple[str, ...] = ("partial",)
-    skip_content_after_safe_candidate_reason: str = "partial_safe_separator_candidate_selected"
+    skip_content_after_safe_candidate_reason: str = "partial_edge_safety_separator_candidate_selected"
 
 
 @dataclass(frozen=True)
@@ -219,7 +202,6 @@ __all__ = [
     "CandidatePlanPolicy",
     "ContentCandidatePlanPolicy",
     "ContentGuidedSeparatorCandidatePolicy",
-    "ContentMismatchCandidateSelectionPolicy",
     "EvidenceIndependencePolicy",
     "GeometrySupportScorePolicy",
     "OuterCorrectionCandidateExtensionPolicy",

@@ -304,14 +304,12 @@ def refine_gaps_with_edge_profiles(
     background: np.ndarray,
     gaps: list[Gap],
     count: int,
-    edge_pair_parameters: Optional[EdgePairParameters] = None,
+    edge_pair_parameters: EdgePairParameters,
 ) -> EdgePairRefinementResult:
     width = len(edge)
     if count <= 1 or width <= 1 or background.size <= 0 or not gaps:
         return EdgePairRefinementResult(gaps, {"used": False, "reason": "empty"})
     pitch = width / float(max(1, count))
-    if edge_pair_parameters is None:
-        raise ValueError("edge_pair parameters are required")
     params = edge_pair_parameters
     search_limits = edge_pair_search_limits(pitch, params)
     refined: list[Gap] = []

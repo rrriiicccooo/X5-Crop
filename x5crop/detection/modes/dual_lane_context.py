@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...formats import FORMATS, FormatSpec
-from ...policies.context import RuntimePolicyContext
+from ...runtime.policy_context import RuntimePolicyContext
 from ...policies.runtime.policy import DetectionPolicy
 
 

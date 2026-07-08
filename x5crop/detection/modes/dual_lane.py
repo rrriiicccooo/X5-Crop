@@ -4,7 +4,7 @@ import numpy as np
 
 from ...runtime.config import RuntimeConfig
 from ...domain import Detection
-from ...policies.context import RuntimePolicyContext
+from ...runtime.policy_context import RuntimePolicyContext
 from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
 from ..candidate.plan.dual_lane import select_dual_lane_candidate

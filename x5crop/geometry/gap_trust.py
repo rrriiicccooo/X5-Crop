@@ -387,15 +387,14 @@ def light_hard_gap_trust(
     profile: Optional[np.ndarray] = None,
     gray_work: Optional[np.ndarray] = None,
     outer: Optional[Box] = None,
-    hard_gap_trust: HardGapTrustParameters | None = None,
-    nearby_refinement: NearbySeparatorRefinementParameters | None = None,
+    hard_gap_trust: HardGapTrustParameters,
+    nearby_refinement: NearbySeparatorRefinementParameters,
 ) -> tuple[str, dict[str, Any]]:
-    trust_config = hard_gap_trust or HardGapTrustParameters()
     if not is_hard_gap_method(gap.method) or pitch <= 0:
         assessment = runtime_hard_gap_trust_assessment(
             gap,
             pitch,
-            trust_config,
+            hard_gap_trust,
             width_ratio=0.0,
         )
         return "not_hard_gap", {
@@ -418,7 +417,7 @@ def light_hard_gap_trust(
         assessment = runtime_hard_gap_trust_assessment(
             gap,
             pitch,
-            trust_config,
+            hard_gap_trust,
             width_ratio=width_ratio,
             nearby_separator_conflict=True,
         )
@@ -428,11 +427,11 @@ def light_hard_gap_trust(
     if predicted is not None:
         model_delta_ratio = abs(float(gap.center) - float(predicted)) / max(1.0, float(pitch))
         detail["model_delta_ratio"] = float(model_delta_ratio)
-        if hard_gap_geometry_conflict(width_ratio, gap.score, model_delta_ratio, trust_config):
+        if hard_gap_geometry_conflict(width_ratio, gap.score, model_delta_ratio, hard_gap_trust):
             assessment = runtime_hard_gap_trust_assessment(
                 gap,
                 pitch,
-                trust_config,
+                hard_gap_trust,
                 width_ratio=width_ratio,
                 model_delta_ratio=model_delta_ratio,
             )
@@ -440,13 +439,13 @@ def light_hard_gap_trust(
             return assessment.trust, detail
     signals = None
     if gray_work is not None and outer is not None and gap.start is not None and gap.end is not None:
-        signals = hard_gap_pixel_signals(gray_work, outer, gap, pitch, trust_config)
+        signals = hard_gap_pixel_signals(gray_work, outer, gap, pitch, hard_gap_trust)
         if signals is not None:
             detail["signals"] = runtime_signal_detail(signals)
     assessment = runtime_hard_gap_trust_assessment(
         gap,
         pitch,
-        trust_config,
+        hard_gap_trust,
         width_ratio=width_ratio,
         model_delta_ratio=model_delta_ratio,
         nearby_separator_conflict=nearby_conflict,

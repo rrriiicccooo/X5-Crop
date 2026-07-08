@@ -105,9 +105,8 @@ def separator_profile_smooth_window(width: int, config: SeparatorProfileParamete
 
 def separator_profile(
     crop: np.ndarray,
-    config: SeparatorProfileParameters | None = None,
+    config: SeparatorProfileParameters,
 ) -> np.ndarray:
-    config = config or SeparatorProfileParameters()
     h, w = crop.shape
     if h <= 0 or w <= 0:
         return np.zeros(0, dtype=np.float32)

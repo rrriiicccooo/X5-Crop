@@ -41,7 +41,6 @@ def build_policy_from_preset(
             kind=mode_preset.detector_kind,
             review_only=mode_preset.review_only,
         ),
-        source_parameters=params,
         counts=count_policy(preset.format_id, strip_mode, params),
         outer=outer_policy(mode_preset, strip_mode, params, fmt),
         separator=separator_policy(preset, mode_preset, strip_mode, params),

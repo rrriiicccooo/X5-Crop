@@ -4,11 +4,12 @@ from typing import Any
 
 import numpy as np
 
+from ...constants import CANDIDATE_SOURCE_REVIEW_ONLY
 from ...runtime.config import RuntimeConfig
 from ...domain import Detection
 from ..confidence_caps import apply_confidence_cap
 from ...policies.decision.contract import DetectionDecisionContract
-from .decision_gate import decision_gate_assessment
+from .decision_gate import DecisionAssessmentInput, decision_gate_assessment
 from .decision_signals import decision_signals_for
 from .evidence_summary import evidence_summary_for
 from .reasons import (
@@ -31,9 +32,6 @@ def _candidate_gate_input(detection: Detection) -> dict[str, Any]:
     return {
         "blockers": blockers,
         "diagnostics": diagnostics,
-        "candidate_gate_passed": bool(
-            gate.get("passed", assessment.get("candidate_gate_passed", False))
-        ),
         "candidate_gate": gate,
         "selection_uncertainty_inputs": _detail_list(
             detection.detail.get("selection_uncertainty_inputs")
@@ -81,6 +79,59 @@ def _decision_status_for(
     return "needs_review"
 
 
+def _apply_decision_confidence_caps(
+    detection: Detection,
+    config: RuntimeConfig,
+    content_detail: dict[str, Any],
+    outer_alignment: dict[str, Any],
+    policy: DetectionDecisionContract,
+) -> list[dict[str, Any]]:
+    decision_caps = detection.detail.setdefault("decision_confidence_caps", [])
+    if not isinstance(decision_caps, list):
+        decision_caps = []
+        detection.detail["decision_confidence_caps"] = decision_caps
+
+    review_only_mode = detection.detail.get("candidate_source") == CANDIDATE_SOURCE_REVIEW_ONLY
+    support = str(content_detail.get("support", ""))
+    if not review_only_mode:
+        if support == "aspect_conflict" and detection.confidence >= config.confidence_threshold:
+            detection.confidence, cap_detail = apply_confidence_cap(
+                float(detection.confidence),
+                policy.decision.content_aspect_conflict_cap,
+                owner="decision",
+                reason="content_aspect_conflict",
+            )
+            decision_caps.append(cap_detail)
+        elif support == "low_content" and detection.confidence >= config.confidence_threshold:
+            detection.confidence, cap_detail = apply_confidence_cap(
+                float(detection.confidence),
+                policy.decision.content_low_confidence_cap,
+                owner="decision",
+                reason="content_low_confidence",
+            )
+            decision_caps.append(cap_detail)
+
+    outer_correction_detail = detection.detail.get("outer_correction", {})
+    suppress_outer_mismatch = bool(
+        isinstance(outer_correction_detail, dict)
+        and outer_correction_detail.get("suppress_outer_mismatch", False)
+    )
+    if (
+        not review_only_mode
+        and not suppress_outer_mismatch
+        and bool(outer_alignment.get("used", False))
+        and not bool(outer_alignment.get("ok", True))
+    ):
+        detection.confidence, cap_detail = apply_confidence_cap(
+            float(detection.confidence),
+            policy.decision.outer_mismatch_cap,
+            owner="decision",
+            reason="outer_content_mismatch",
+        )
+        decision_caps.append(cap_detail)
+    return decision_caps
+
+
 def apply_decision_contract(
     gray: np.ndarray,
     detection: Detection,
@@ -97,27 +148,26 @@ def apply_decision_contract(
     assessment = dict(assessment) if isinstance(assessment, dict) else {}
     candidate_gate = assessment.get("candidate_gate")
     candidate_gate = dict(candidate_gate) if isinstance(candidate_gate, dict) else {}
-    candidate_gate_passed = bool(
-        candidate_gate.get("passed", assessment.get("candidate_gate_passed", False))
+    decision_caps = _apply_decision_confidence_caps(
+        detection=detection,
+        policy=policy,
+        config=config,
+        content_detail=content_detail,
+        outer_alignment=outer_alignment,
     )
     decision_gate = decision_gate_assessment(
-        detection=detection,
-        confidence_threshold=config.confidence_threshold,
-        evidence=evidence,
-        decision_signals=decision_signals,
-        policy=policy,
-        candidate_gate_passed=candidate_gate_passed,
-        deskew_detail={},
-        include_low_confidence_context=False,
+        DecisionAssessmentInput(
+            detection=detection,
+            confidence_threshold=config.confidence_threshold,
+            decision_signals=decision_signals,
+            policy=policy,
+            candidate_gate=candidate_gate,
+            deskew_detail=deskew_detail or {},
+            confidence_caps=decision_caps,
+        )
     )
-    reasons = _unique_reasons(decision_gate.final_review_reasons)
-    final_reasons = list(reasons)
-    base_passed = detection.confidence >= config.confidence_threshold and not final_reasons
-    decision_caps = detection.detail.setdefault("decision_confidence_caps", [])
-    if not isinstance(decision_caps, list):
-        decision_caps = []
-        detection.detail["decision_confidence_caps"] = decision_caps
-    if not base_passed:
+    final_reasons = _unique_reasons(decision_gate.final_review_reasons)
+    if detection.confidence < config.confidence_threshold or final_reasons:
         detection.confidence, cap_detail = apply_confidence_cap(
             float(detection.confidence),
             policy.decision.review_confidence_cap,
@@ -125,20 +175,7 @@ def apply_decision_contract(
             reason="final_review",
         )
         decision_caps.append(cap_detail)
-    decision_gate = decision_gate_assessment(
-        detection=detection,
-        confidence_threshold=config.confidence_threshold,
-        evidence=evidence,
-        decision_signals=decision_signals,
-        policy=policy,
-        candidate_gate_passed=candidate_gate_passed,
-        deskew_detail=deskew_detail or {},
-        include_low_confidence_context=True,
-        confidence_caps=decision_caps,
-    )
-    reasons = _unique_reasons(decision_gate.final_review_reasons)
-    decision_gate = decision_gate.with_final_review_reasons(reasons)
-    final_reasons = list(reasons)
+    decision_gate = decision_gate.with_confidence_caps(decision_caps)
     status = _decision_status_for(detection, config.confidence_threshold, final_reasons)
     candidate_gate_input = _candidate_gate_input(detection)
     detection.detail["candidate_gate_input"] = candidate_gate_input

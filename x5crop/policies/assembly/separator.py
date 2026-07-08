@@ -7,7 +7,6 @@ from ...geometry.detection_parameters import (
     GapSearchParameters,
     HardGapTrustParameters,
     NearbySeparatorRefinementParameters,
-    RobustGridParameters,
     SeparatorProfileParameters,
     SeparatorWidthProfileSearchParameters,
 )
@@ -48,6 +47,7 @@ def separator_support_policy(
         hard_required_all_gaps=bool(gate.hard_required_all_gaps),
         edge_pair_min_score_without_broad_width=float(gate.edge_pair_min_score_without_broad_width),
         edge_pair_min_score_with_broad_width=float(gate.edge_pair_min_score_with_broad_width),
+        reliable_gap_min_score=float(gate.reliable_gap_min_score),
         min_broad_separator_width_gaps_for_auto=int(gate.min_broad_separator_width_gaps_for_auto),
         score_min_hard_gaps=int(gate.score_min_hard_gaps),
         score_max_equal_gaps_floor=int(gate.score_max_equal_gaps_floor),
@@ -195,7 +195,6 @@ def separator_policy(
     )
     hard_gap_trust = params.hard_gap_trust
     nearby_refinement = nearby_separator_refinement_parameters(FORMATS[preset.format_id], params)
-    robust_grid = params.robust_grid
     gap_search = params.gap_search
     profile = params.separator_profile
     edge_refine = params.edge_refine_profile
@@ -259,31 +258,6 @@ def separator_policy(
             local_gain_min=float(nearby_refinement.local_gain_min),
             local_gain_max=float(nearby_refinement.local_gain_max),
             width_cv_slack=float(nearby_refinement.width_cv_slack),
-        ),
-        robust_grid=RobustGridParameters(
-            constrain_full_shift_ratio=float(robust_grid.constrain_full_shift_ratio),
-            constrain_partial_shift_ratio=float(robust_grid.constrain_partial_shift_ratio),
-            constrain_shift_min=float(robust_grid.constrain_shift_min),
-            constrain_shift_max=float(robust_grid.constrain_shift_max),
-            reliable_min_score=float(robust_grid.reliable_min_score),
-            min_reliable=int(robust_grid.min_reliable),
-            pitch_min_ratio=float(robust_grid.pitch_min_ratio),
-            pitch_max_ratio=float(robust_grid.pitch_max_ratio),
-            full_tolerance_ratio=float(robust_grid.full_tolerance_ratio),
-            partial_tolerance_ratio=float(robust_grid.partial_tolerance_ratio),
-            tolerance_min=float(robust_grid.tolerance_min),
-            tolerance_max=float(robust_grid.tolerance_max),
-            reject_residual_ratio=float(robust_grid.reject_residual_ratio),
-            full_shift_ratio=float(robust_grid.full_shift_ratio),
-            partial_shift_ratio=float(robust_grid.partial_shift_ratio),
-            shift_min=float(robust_grid.shift_min),
-            shift_max=float(robust_grid.shift_max),
-            hard_keep_ratio=float(robust_grid.hard_keep_ratio),
-            hard_keep_min=float(robust_grid.hard_keep_min),
-            hard_keep_max=float(robust_grid.hard_keep_max),
-            hard_protect_ratio=float(robust_grid.hard_protect_ratio),
-            hard_protect_min=float(robust_grid.hard_protect_min),
-            hard_protect_max=float(robust_grid.hard_protect_max),
         ),
         gap_search=GapSearchParameters(
             radius_ratio=float(gap_search.radius_ratio),

@@ -9,11 +9,10 @@ from .profile_defaults import (
 )
 from ...formats import FormatSpec
 from ..parameters.aggregate import FormatParameters
-from ..runtime.base import FULL, PARTIAL
+from ..runtime.base import PARTIAL
 from ..runtime.candidate import (
     BaseDetectionScorePolicy,
     CandidatePlanPolicy,
-    ContentMismatchCandidateSelectionPolicy,
     SafetyCandidatePolicy,
     GeometrySupportScorePolicy,
     OuterCorrectionCandidateExtensionPolicy,
@@ -38,15 +37,19 @@ def partial_holder_policy(
     else:
         holder_enabled = bool(holder.enabled)
     content_evidence = params.content_evidence
-    partial_safe = strip_mode == PARTIAL and holder_enabled
+    partial_edge_safety_enabled = strip_mode == PARTIAL and holder_enabled
     return PartialHolderPolicy(
-        safe_extra_frames=partial_safe,
-        requires_broad_separator_width_gaps=(int(holder.min_broad_separator_width_gaps) if partial_safe else 0),
+        allow_empty_holder_frames=partial_edge_safety_enabled,
+        requires_broad_separator_width_gaps=(
+            int(holder.min_broad_separator_width_gaps)
+            if partial_edge_safety_enabled
+            else 0
+        ),
         checks_leading_content=bool(
-            partial_safe and holder.leading_content_check
+            partial_edge_safety_enabled and holder.leading_content_check
         ),
         checks_frame_content=bool(
-            partial_safe and holder.frame_content_check
+            partial_edge_safety_enabled and holder.frame_content_check
         ),
         min_count_35mm=int(holder.min_count_35mm),
         min_count_small=int(holder.min_count_small),
@@ -124,17 +127,12 @@ def selection_policy(
     strip_mode: str,
     params: FormatParameters,
 ) -> SelectionPolicy:
+    del preset, strip_mode
     competition = params.candidate_competition
     return SelectionPolicy(
         top_n=int(competition.top_n),
         close_margin=float(competition.close_margin),
         confidence_cap=float(competition.confidence_cap),
-        content_mismatch_candidate=ContentMismatchCandidateSelectionPolicy(
-            enabled=bool(
-                preset.content_mismatch_candidate_selection_enabled
-                and strip_mode == FULL
-            ),
-        ),
     )
 
 

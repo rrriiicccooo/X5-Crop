@@ -13,15 +13,14 @@ def constrain_gap_to_geometry(
     gap: Gap,
     expected: float,
     pitch: float,
-    parameters: GapGeometryConstraintParameters | None = None,
+    parameters: GapGeometryConstraintParameters,
 ) -> Gap:
     if not is_hard_gap_method(gap.method):
         return equal_model_gap(gap.index, expected, gap.score)
-    config = parameters or GapGeometryConstraintParameters()
     max_shift = clamp_float(
-        pitch * config.shift_ratio,
-        config.shift_min,
-        config.shift_max,
+        pitch * parameters.shift_ratio,
+        parameters.shift_min,
+        parameters.shift_max,
     )
     shift = max(-max_shift, min(max_shift, gap.center - expected))
     center = float(expected + shift)

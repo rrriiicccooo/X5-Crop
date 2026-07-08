@@ -42,7 +42,7 @@ from .support_calibration import (
     separator_geometry_support_applies,
 )
 from .candidate_gate import candidate_gate_assessment
-from .partial_holder import partial_safe_extra_frames_assessment_detail
+from .partial_holder import partial_edge_safety_assessment_detail
 from .separator_support import assess_separator_support
 from .scoring import (
     content_quality_score,
@@ -84,7 +84,7 @@ def apply_candidate_assessment_policy(
         candidate_detail["candidate_signals"] = initial_candidate_signals
     candidate = replace(
         detection,
-        review_reasons=[],
+        final_review_reasons=[],
         detail=candidate_detail,
     )
     if source == "separator":
@@ -261,7 +261,7 @@ def apply_candidate_assessment_policy(
     confidence = max(float(candidate.confidence), joint_score)
     if floor_applies:
         confidence = max(confidence, scoring_policy.hard_full_confidence_floor)
-    partial_safe_extra_frames = partial_safe_extra_frames_assessment_detail(
+    partial_edge_safety = partial_edge_safety_assessment_detail(
         gray,
         candidate,
         separator_support_detail,
@@ -274,33 +274,33 @@ def apply_candidate_assessment_policy(
         cache,
         policy=policy,
     )
-    partial_safe_extra_frames_ok = bool(partial_safe_extra_frames.get("ok", False))
-    partial_safe_candidate_support_ok = (
-        partial_safe_extra_frames_ok
+    partial_edge_safety_ok = bool(partial_edge_safety.get("ok", False))
+    partial_edge_safety_candidate_support_ok = (
+        partial_edge_safety_ok
         and not content_guided_hard_separator_missing
     )
-    partial_safe_disqualifiers = set(
-        partial_safe_extra_frames.get("disqualifiers", [])
+    partial_edge_safety_disqualifiers = set(
+        partial_edge_safety.get("disqualifiers", [])
     )
     partial_signal_map = {
         "holder_edge_disambiguation_weak": SIGNAL_HOLDER_EDGE_DISAMBIGUATION_WEAK,
         SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT: SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
         "partial_frame_content_unstable": SIGNAL_PARTIAL_FRAME_CONTENT_UNSTABLE,
     }
-    partial_safe_blocker_signals = {
+    partial_edge_safety_blocker_signals = {
         partial_signal_map[disqualifier]
-        for disqualifier in partial_safe_disqualifiers
+        for disqualifier in partial_edge_safety_disqualifiers
         if disqualifier in partial_signal_map
     }
-    partial_safe_blocks_auto = (
-        policy.partial_holder.safe_extra_frames
+    partial_edge_safety_blocks_auto = (
+        policy.partial_holder.allow_empty_holder_frames
         and policy.partial_holder.checks_leading_content
         and policy.partial_holder.checks_frame_content
         and candidate.strip_mode == "partial"
         and source == "separator"
-        and bool(partial_safe_extra_frames.get("used", False))
+        and bool(partial_edge_safety.get("used", False))
         and bool(
-            partial_safe_blocker_signals.intersection(
+            partial_edge_safety_blocker_signals.intersection(
                 {
                     SIGNAL_HOLDER_EDGE_DISAMBIGUATION_WEAK,
                     SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
@@ -309,20 +309,20 @@ def apply_candidate_assessment_policy(
             )
         )
     )
-    if partial_safe_blocks_auto:
+    if partial_edge_safety_blocks_auto:
         separator_support_ok = False
         separator_support_detail = dict(separator_support_detail)
         separator_support_detail["ok"] = False
-        separator_support_detail["reason"] = "partial_safe_extra_frames_blocked"
-        separator_support_detail["partial_safe_extra_frames_blocked"] = sorted(
-            partial_safe_disqualifiers
+        separator_support_detail["reason"] = "partial_edge_safety_blocked"
+        separator_support_detail["partial_edge_safety_blocked"] = sorted(
+            partial_edge_safety_disqualifiers
         )
-        signals.extend(sorted(partial_safe_blocker_signals))
-    if partial_safe_candidate_support_ok:
+        signals.extend(sorted(partial_edge_safety_blocker_signals))
+    if partial_edge_safety_candidate_support_ok:
         separator_support_detail = dict(separator_support_detail)
         separator_support_detail["ok"] = True
-        separator_support_detail["reason"] = "partial_safe_extra_frames_support"
-        separator_support_detail["partial_safe_extra_frames_support"] = True
+        separator_support_detail["reason"] = "partial_edge_safety_support"
+        separator_support_detail["partial_edge_safety_support"] = True
         signals = [
             signal
             for signal in signals
@@ -355,11 +355,11 @@ def apply_candidate_assessment_policy(
         source=source,
         separator_support_ok=bool(separator_support_ok),
         separator_support_detail=separator_support_detail,
-        partial_safe_candidate_support_ok=bool(
-            partial_safe_candidate_support_ok
+        partial_edge_safety_candidate_support_ok=bool(
+            partial_edge_safety_candidate_support_ok
         ),
-        partial_safe_blocks_auto=bool(partial_safe_blocks_auto),
-        partial_safe_disqualifiers=partial_safe_disqualifiers,
+        partial_edge_safety_blocks_auto=bool(partial_edge_safety_blocks_auto),
+        partial_edge_safety_disqualifiers=partial_edge_safety_disqualifiers,
         content_containment_ok=bool(content_containment_ok),
         content_integrity_failed=bool(content_integrity_failed),
         content_support=support,
@@ -394,7 +394,6 @@ def apply_candidate_assessment_policy(
     candidate.detail["candidate_assessment"] = {
         "source": source,
         "joint_score": float(joint_score),
-        "candidate_gate_passed": bool(candidate_gate.passed),
         "candidate_gate": candidate_gate.report_detail(),
         "geometry_score": float(geometry_score),
         "separator_score": float(separator_score),
@@ -416,6 +415,6 @@ def apply_candidate_assessment_policy(
         "content_containment": containment_detail,
         "separator_support": separator_support_detail,
         "evidence_independence": independence_detail,
-        "partial_safe_extra_frames": partial_safe_extra_frames,
+        "partial_edge_safety": partial_edge_safety,
     }
     return candidate

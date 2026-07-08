@@ -19,9 +19,8 @@ def normalize_profile(profile: np.ndarray, high_percentile: float = 99.0) -> np.
 
 def edge_refine_profiles(
     crop: np.ndarray,
-    config: EdgeRefineProfileParameters | None = None,
+    config: EdgeRefineProfileParameters,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    config = config or EdgeRefineProfileParameters()
     h, w = crop.shape
     if h <= 0 or w <= 1:
         zeros = np.zeros(w, dtype=np.float32)
