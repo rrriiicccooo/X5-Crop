@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Optional
 
 import numpy as np
@@ -69,7 +69,13 @@ _CANDIDATE_DIAGNOSTIC_REASONS = {
 }
 
 
-def _candidate_reason_buckets(reasons: list[str]) -> tuple[list[str], list[str]]:
+@dataclass(frozen=True)
+class CandidateReasonBuckets:
+    blockers: list[str]
+    diagnostics: list[str]
+
+
+def _candidate_reason_buckets(reasons: list[str]) -> CandidateReasonBuckets:
     unique = sorted(set(str(reason) for reason in reasons if reason))
     diagnostics = [
         reason for reason in unique if reason in _CANDIDATE_DIAGNOSTIC_REASONS
@@ -77,7 +83,7 @@ def _candidate_reason_buckets(reasons: list[str]) -> tuple[list[str], list[str]]
     blockers = [
         reason for reason in unique if reason not in _CANDIDATE_DIAGNOSTIC_REASONS
     ]
-    return blockers, diagnostics
+    return CandidateReasonBuckets(blockers=blockers, diagnostics=diagnostics)
 
 
 def _candidate_confidence_caps(candidate: Detection) -> list[dict]:
@@ -356,7 +362,7 @@ def apply_candidate_assessment_policy(
                 or policy.candidate_plan.evidence_independence.candidate_blocker
             )
         )
-    pre_auto_blockers, pre_auto_diagnostics = _candidate_reason_buckets(reasons)
+    pre_auto_reason_buckets = _candidate_reason_buckets(reasons)
     auto_gate_blocking_reasons = CANDIDATE_AUTO_GATE_BLOCKING_REASONS.intersection(reasons)
     auto_gate_inputs = {
         "source": source,
@@ -365,8 +371,8 @@ def apply_candidate_assessment_policy(
         "content_containment_ok": bool(content_containment_ok),
         "content_harm_risk": bool(content_harm_risk),
         "evidence_independence_ok": bool(evidence_independence_ok),
-        "candidate_blockers": pre_auto_blockers,
-        "candidate_diagnostics": pre_auto_diagnostics,
+        "candidate_blockers": pre_auto_reason_buckets.blockers,
+        "candidate_diagnostics": pre_auto_reason_buckets.diagnostics,
         "candidate_auto_gate_blocking_reasons": sorted(auto_gate_blocking_reasons),
     }
     auto_gate = False
@@ -376,7 +382,7 @@ def apply_candidate_assessment_policy(
             and content_containment_ok
             and not content_harm_risk
             and evidence_independence_ok
-            and not pre_auto_blockers
+            and not pre_auto_reason_buckets.blockers
             and not auto_gate_blocking_reasons
         )
     elif source == "content":
@@ -404,7 +410,7 @@ def apply_candidate_assessment_policy(
         for reason in reasons
         if reason != REASON_AUTO_GATE_NOT_SATISFIED
     ]
-    candidate_blockers, candidate_diagnostics = _candidate_reason_buckets(
+    final_reason_buckets = _candidate_reason_buckets(
         structured_reason_inputs
     )
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
@@ -424,8 +430,8 @@ def apply_candidate_assessment_policy(
         "content_score_role": "content_containment_support",
         "content_quality_score": float(content_quality),
         "content_quality_score_role": "quality_diagnostic_not_hard_gate",
-        "blockers": candidate_blockers,
-        "diagnostics": candidate_diagnostics,
+        "blockers": final_reason_buckets.blockers,
+        "diagnostics": final_reason_buckets.diagnostics,
         "confidence_caps": confidence_caps,
         "auto_gate_inputs": auto_gate_inputs,
         "width_cv": _detail_float(candidate.detail, "width_cv", 1.0),

@@ -580,6 +580,39 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_candidate_reason_buckets_use_explicit_result(self) -> None:
+        candidate_assessment_path = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "assessment"
+            / "candidate.py"
+        )
+        text = candidate_assessment_path.read_text(encoding="utf-8")
+
+        self.assertIn("class CandidateReasonBuckets", text)
+        self.assertNotIn(") -> tuple[list[str], list[str]]", text)
+        self.assertNotIn("pre_auto_blockers, pre_auto_diagnostics", text)
+        self.assertNotIn(
+            "candidate_blockers, candidate_diagnostics = _candidate_reason_buckets",
+            text,
+        )
+
+    def test_decision_context_review_uses_explicit_assessment(self) -> None:
+        contract_applier_path = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "decision"
+            / "contract_applier.py"
+        )
+        text = contract_applier_path.read_text(encoding="utf-8")
+
+        self.assertIn("class DecisionContextReviewAssessment", text)
+        self.assertNotIn(") -> tuple[list[str], list[dict[str, Any]]]", text)
+        self.assertNotIn("context_reasons, context_reason_inputs", text)
+
     def test_candidate_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
         banned = (
             ".review_reasons.append",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -17,6 +18,12 @@ from .reasons import (
     set_final_review_reasons,
 )
 from .risk_summary import risk_summary_for
+
+
+@dataclass(frozen=True)
+class DecisionContextReviewAssessment:
+    reasons: list[str]
+    reason_inputs: list[dict[str, Any]]
 
 
 def _detail_list(value: Any) -> list[Any]:
@@ -77,9 +84,9 @@ def _low_confidence_context_reason_inputs(
     config: RuntimeConfig,
     policy: DetectionDecisionContract,
     deskew_detail: dict[str, Any],
-) -> tuple[list[str], list[dict[str, Any]]]:
+) -> DecisionContextReviewAssessment:
     if detection.confidence >= config.confidence_threshold:
-        return [], []
+        return DecisionContextReviewAssessment(reasons=[], reason_inputs=[])
     reasons: list[str] = []
     reason_inputs: list[dict[str, Any]] = []
 
@@ -103,7 +110,10 @@ def _low_confidence_context_reason_inputs(
             policy.decision.deskew_uncertain_review_reason,
             "deskew_uncertain",
         )
-    return reasons, reason_inputs
+    return DecisionContextReviewAssessment(
+        reasons=reasons,
+        reason_inputs=reason_inputs,
+    )
 
 
 def apply_decision_contract(
@@ -223,14 +233,14 @@ def apply_decision_contract(
             reason="final_review",
         )
         decision_caps.append(cap_detail)
-    context_reasons, context_reason_inputs = _low_confidence_context_reason_inputs(
+    context_assessment = _low_confidence_context_reason_inputs(
         detection,
         config,
         policy,
         deskew_detail or {},
     )
-    reasons = normalized_final_review_reasons([*reasons, *context_reasons])
-    reason_inputs.extend(context_reason_inputs)
+    reasons = normalized_final_review_reasons([*reasons, *context_assessment.reasons])
+    reason_inputs.extend(context_assessment.reason_inputs)
     final_reasons = list(reasons)
     status = _decision_status_for(detection, config.confidence_threshold, final_reasons)
     candidate_reason_inputs = _candidate_reason_inputs_before_decision(detection)

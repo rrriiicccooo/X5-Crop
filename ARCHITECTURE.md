@@ -146,6 +146,8 @@ candidate plan
 - separator gate 内部 profile / supplemental support checks 输出使用显式
   `SeparatorGateSupportAssessment`，字段为 `ok` 和 `reason`；内部 helper 也不能
   用匿名 ok/reason tuple 表达 gate 支持契约。
+- candidate reason bucketing 输出使用显式 `CandidateReasonBuckets`，字段为
+  `blockers` 和 `diagnostics`；候选 reason taxonomy 不能靠匿名二元组传递。
 - candidate assessment 的 reason 只能作为候选 blockers / diagnostics；最终用户可见
   `review_reasons` 只由 decision contract 生成。
 - `candidate_assessment.blockers` 只记录阻断 auto gate 的输入原因；`auto_gate_not_satisfied`
@@ -155,6 +157,9 @@ candidate plan
   `legacy_reduced_candidate_reasons`。
 - low-confidence context reasons，例如 outer candidate disagreement 和 deskew uncertainty，
   属于 decision contract input；不能在 `final_decision` 中事后补写 `decision_summary`。
+- decision low-confidence context 输出使用显式 `DecisionContextReviewAssessment`，字段为
+  `reasons` 和 `reason_inputs`；context final reasons 和 reason input detail 不能用
+  匿名 tuple 携带。
 - final review reasons 只能由 decision contract 一次性 set；decision layer 不保留
   add/append-style final reason helper。
 - policy / report 可见的 gate stage 名必须使用 `candidate_blocker_gate`、
@@ -505,9 +510,16 @@ the gate contract.
 Internal separator-gate profile and supplemental support checks return an
 explicit `SeparatorGateSupportAssessment` with `ok` and `reason` fields; helper
 functions must not encode gate-support contracts as anonymous ok/reason tuples.
+Candidate reason bucketing returns an explicit `CandidateReasonBuckets` with
+`blockers` and `diagnostics` fields; candidate reason taxonomy must not be
+passed around as an anonymous pair.
 `candidate_reason_inputs_before_decision` keeps blockers / diagnostics as the
 main model; the old reason-reduction read model must be named
 `legacy_reduced_candidate_reasons`.
+Decision low-confidence context returns an explicit
+`DecisionContextReviewAssessment` with `reasons` and `reason_inputs` fields;
+context final reasons and reason-input detail must not be carried as an
+anonymous tuple.
 Policy/report-visible gate stage names use `candidate_blocker_gate`,
 `candidate_auto_gate`, and `decision_contract_gate`; finalization must not be
 named as a decision gate.
