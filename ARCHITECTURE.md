@@ -141,6 +141,8 @@ candidate plan
   `candidate_reason_codes` 和 `detail`；不能用匿名 tuple 解包来传递 assessment 契约。
 - content candidate assessment 输出使用显式 `ContentCandidateAssessment`，字段为
   `confidence`、`diagnostics` 和 `detail`；content diagnostics 仍是候选级解释。
+- separator gate 输出使用显式 `SeparatorGateResult`，字段为 `ok` 和 `detail`；
+  调用方不能用匿名 tuple 解包 gate 契约。
 - candidate assessment 的 reason 只能作为候选 blockers / diagnostics；最终用户可见
   `review_reasons` 只由 decision contract 生成。
 - `candidate_assessment.blockers` 只记录阻断 auto gate 的输入原因；`auto_gate_not_satisfied`
@@ -494,6 +496,9 @@ depend on anonymous tuple positions for the assessment contract.
 Content candidate assessment returns an explicit `ContentCandidateAssessment`
 result with `confidence`, `diagnostics`, and `detail` fields; content
 diagnostics remain candidate-level explanations.
+Separator gate assessment returns an explicit `SeparatorGateResult` with `ok`
+and `detail` fields; callers must not depend on anonymous tuple positions for
+the gate contract.
 `candidate_reason_inputs_before_decision` keeps blockers / diagnostics as the
 main model; the old reason-reduction read model must be named
 `legacy_reduced_candidate_reasons`.

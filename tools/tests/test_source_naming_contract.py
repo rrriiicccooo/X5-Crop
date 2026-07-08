@@ -546,6 +546,35 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_separator_gate_contract_uses_explicit_result(self) -> None:
+        gate_path = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "assessment"
+            / "gates.py"
+        )
+        gate_text = gate_path.read_text(encoding="utf-8")
+        self.assertIn("class SeparatorGateResult", gate_text)
+
+        banned = (
+            "separator_gate_ok, separator_gate_detail = assess_separator_gate",
+            ") -> tuple[bool, dict[str, Any]]",
+        )
+        offenders: list[str] = []
+        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                if path == Path(__file__).resolve():
+                    continue
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_candidate_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
         banned = (
             ".review_reasons.append",

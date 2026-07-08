@@ -136,11 +136,13 @@ def apply_candidate_assessment_policy(
                 *_candidate_confidence_caps(candidate),
                 *proposal_caps,
             ]
-    separator_gate_ok, separator_gate_detail = assess_separator_gate(
+    separator_gate_result = assess_separator_gate(
         candidate,
         config.confidence_threshold,
         policy,
     )
+    separator_gate_ok = separator_gate_result.ok
+    separator_gate_detail = separator_gate_result.detail
     content_detail = content_evidence_detail(gray, candidate, cache, policy.content)
     containment_detail = content_containment_detail(
         content_detail,
@@ -163,11 +165,13 @@ def apply_candidate_assessment_policy(
                 scoring_policy.hard_full_confidence_floor,
             ),
         )
-        separator_gate_ok, separator_gate_detail = assess_separator_gate(
+        separator_gate_result = assess_separator_gate(
             gate_candidate,
             config.confidence_threshold,
             policy,
         )
+        separator_gate_ok = separator_gate_result.ok
+        separator_gate_detail = separator_gate_result.detail
         separator_gate_detail = dict(separator_gate_detail)
         separator_gate_detail["calibrate_hard_full_confidence_floor_applied"] = True
         separator_gate_detail["calibrate_hard_full_confidence_floor"] = float(

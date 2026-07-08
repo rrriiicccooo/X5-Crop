@@ -42,6 +42,12 @@ class SeparatorGateAssessment:
     leading_grid_failure: bool = False
 
 
+@dataclass(frozen=True)
+class SeparatorGateResult:
+    ok: bool
+    detail: dict[str, Any]
+
+
 def separator_gate_min_hard_with_equal_cap_assessment(
     evidence: SeparatorGateEvidence,
     gate: SeparatorGatePolicy,
@@ -275,24 +281,28 @@ def assess_separator_gate(
     detection: Detection,
     threshold: float,
     policy: Optional[DetectionPolicy] = None,
-) -> tuple[bool, dict[str, Any]]:
+) -> SeparatorGateResult:
     policy = policy or get_detection_policy(detection.film_format, detection.strip_mode)
     gate = policy.separator.gate
     evidence = separator_gate_evidence_from_detection(detection)
     assessment = separator_gate_assessment(detection, threshold, evidence, gate)
 
-    return assessment.ok, separator_gate_detail(
-        evidence,
-        assessment,
-        detection,
-        gate,
-        policy,
+    return SeparatorGateResult(
+        ok=assessment.ok,
+        detail=separator_gate_detail(
+            evidence,
+            assessment,
+            detection,
+            gate,
+            policy,
+        ),
     )
 
 
 __all__ = [
     "SeparatorGateAssessment",
     "SeparatorGateEvidence",
+    "SeparatorGateResult",
     "hard_gap_indexes_are_tail_adjacent",
     "separator_gate_all_internal_gaps_hard_assessment",
     "separator_gate_broad_width_support_assessment",
