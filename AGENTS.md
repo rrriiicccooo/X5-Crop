@@ -30,8 +30,7 @@ https://github.com/rrriiicccooo/X5-Crop
 - `快速启动_Quick_Start.md`: Release quick-start guide.
 - `README.md`: complete user manual for setup, launchers, Debug Analysis,
   outputs, review folders, and common command-line use.
-- `ARCHITECTURE.md`: source-audit perspectives, policy ownership, format/mode
-  composition, and verification boundaries.
+- `ARCHITECTURE.md`: runtime-flow architecture and source-layer architecture.
 - `CHANGELOG.md`: version summaries, behavior changes, validation notes, and
   rollback context.
 - `AGENTS.md`: Codex coordination rules and current handoff only.
@@ -71,8 +70,7 @@ for the user to restate it.
   vertical-strip behavior when implementing.
 - Update user docs when usage, setup, output folders, launcher behavior, or
   release packaging changes.
-- Update `ARCHITECTURE.md` when source layering, policy ownership, or
-  verification boundaries change.
+- Update `ARCHITECTURE.md` when runtime flow or source layering changes.
 - Update `CHANGELOG.md` when behavior, release packaging, validation scope, or
   rollback context changes.
 
@@ -190,12 +188,12 @@ unless the edit changes commands or release behavior.
 
 ## Current Handoff
 
-Date: 2026-07-07
+Date: 2026-07-08
 Computer: primary macOS machine
 Branch: main
 Latest documentation state: root documents have distinct responsibilities.
-`ARCHITECTURE.md` is the single source-audit perspective guide for current
-cleanup work; no `docs/` mirror is kept.
+`ARCHITECTURE.md` now keeps only runtime-flow architecture and source-layer
+architecture; no `docs/` mirror is kept.
 
 Current state:
 
@@ -204,8 +202,7 @@ Current state:
 - Source layout is layered: thin entry, explicit `entry/`, `runtime/`,
   `cache/`, `formats/`, `report/`, `detection/candidate/*`, and `policies/*`
   subpackages, split geometry helpers, and explicit debug/export/tool surfaces.
-- Source-audit perspectives, source layering, and policy boundaries live in
-  `ARCHITECTURE.md`.
+- Runtime flow and source-layer structure live in `ARCHITECTURE.md`.
 - Version history and validation summaries live in `CHANGELOG.md`.
 - User setup and usage live in `README.md` and `快速启动_Quick_Start.md`.
 - Documentation changes must meet the standing extreme cleanliness and elegance

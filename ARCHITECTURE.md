@@ -1,40 +1,22 @@
 # X5 Crop 架构说明 / Architecture Guide
 
-本文件是源码审核视角地图。它说明从不同角度审查代码时，项目应呈现什么结构、哪些层级
-拥有事实和决策、哪些差异只是审查线索。用户说明见 `README.md`；版本记录见
-`CHANGELOG.md`；Codex 协作和 handoff 见 `AGENTS.md`。
+本文件只保留两个视角：运行流程架构和源码分层架构。版本历史见 `CHANGELOG.md`；
+用户说明见 `README.md`；Codex 规则和 handoff 见 `AGENTS.md`。
 
-This file is a source-audit perspective map. It describes what the project should
-look like from each review angle, which layers own facts and decisions, and which
-diffs are audit evidence rather than blockers. Usage lives in `README.md`;
-version history lives in `CHANGELOG.md`; Codex coordination and handoff live in
-`AGENTS.md`.
+This file keeps only two views: runtime-flow architecture and source-layer
+architecture. Version history lives in `CHANGELOG.md`; user instructions live in
+`README.md`; Codex rules and handoff live in `AGENTS.md`.
 
 ## 中文说明
 
-### 1. 文档视角
+### 1. 运行流程架构
 
-根目录文档是一组不重叠的工作表面：
-
-| 文档 | 内容 |
-|---|---|
-| `快速启动_Quick_Start.md` | Release 用户的最短安装、摆放、启动和输出说明。 |
-| `README.md` | 完整用户手册：下载、依赖、启动器、format、partial、Debug Analysis、输出、命令行和卸载。 |
-| `ARCHITECTURE.md` | 源码审核视角、层级边界、policy 所有权、format / mode 组合和验证边界。 |
-| `CHANGELOG.md` | 版本级变化、验证记录、发布策略和回滚线索。 |
-| `AGENTS.md` | Codex 规则、当前 handoff、同步要求和仓库级约束。 |
-
-`README.md` 不放文档分工或内部架构说明。`ARCHITECTURE.md` 不放版本流水和长 handoff。
-仓库不维护 `docs/` 镜像。
-
-### 2. 入口和运行视角
-
-项目运行时应呈现为一条明确的数据流：
+运行流程描述一次任务从入口到输出如何流动。它不描述版本历史，也不列审计台账。
 
 ```text
 X5_Crop.py / launchers
   -> entry options
-  -> runtime config and input probe
+  -> runtime bootstrap
   -> workflow
   -> detection
   -> decision
@@ -42,451 +24,197 @@ X5_Crop.py / launchers
   -> export / report / debug
 ```
 
-| 层级 | 审核时应看到的职责 |
-|---|---|
-| `X5_Crop.py` | 开发入口；Release 构建生成 standalone 单文件。 |
-| `x5crop.entry` | CLI 和交互入口，只生成入口选项。 |
-| `x5crop.runtime.config` | 将入口选项、输入、layout 和 policy 绑定成 `RuntimeConfig`。 |
-| `x5crop.runtime.input_probe` / `runtime.app` | 探测 TIFF、解析 layout、打印启动摘要、调度 worker。 |
-| `x5crop.runtime.workflow` | 单图编排 read -> preprocess -> detect -> decision -> finalization -> export/report/debug。 |
-| launchers | 只负责找到 Python、进入交互流程或 diagnostics 流程。 |
+#### 1.1 顶层阶段
 
-入口不拥有检测策略；workflow 不承载 format-specific 实现。
-
-### 3. Source Ownership 视角
-
-每类知识只有一个长期 owner：
-
-| 领域 | Owner | 项目形态 |
+| 阶段 | 主要职责 | 主要位置 |
 |---|---|---|
-| Format facts | `x5crop.formats` | format identity、family、count、aspect 和物理事实集中定义。 |
-| Runtime policy | `x5crop.policies.runtime` / `policies.assembly` | format / mode 行为由 policy profile 和 assembly 显式生成。 |
-| Runtime decision policy | `policies.runtime.decision` | decision 前置证据、confidence cap 和 low-confidence context review reasons。 |
-| Final decision contract | `x5crop.policies.decision` | final PASS / REVIEW 门槛从 active runtime policy 派生，只保留少量不可推导 override。 |
-| Foundation capability | `x5crop.geometry` / `x5crop.image` / `x5crop.io` | 只提供 box、gap、profile、deskew、pixel transform、TIFF I/O 等能力。 |
-| Cache adapters | `x5crop.cache` | 只复用 analysis、profile、evidence 结果，不生成候选或决策。 |
-| Detection behavior | `x5crop.detection` | 生成候选、证据、assessment、selection、decision 和 finalization。 |
-| Output geometry | `x5crop.output` | output bleed 参数转换、overlap 输出风险读模型和缓存输出几何恢复。 |
-| Output surfaces | `x5crop.export` / `x5crop.report` / `x5crop.debug` | 消费稳定结果，不反向参与候选选择。 |
-| Developer tools | `tools/` | standalone build、reference compare、classification 和 unit tests；不进入 runtime package。 |
+| Entry | 解析 CLI / interactive 输入，形成入口选项。 | `X5_Crop.py`, `x5crop.entry`, launchers |
+| Runtime bootstrap | 探测输入、解析 layout、装配 runtime config 和 active policy。 | `x5crop.runtime.config`, `input_probe`, `app`, `policy_context` |
+| Workflow | 编排单图处理顺序，不拥有检测策略。 | `x5crop.runtime.workflow` |
+| Preprocess | 读取 TIFF、生成基础灰度、执行 deskew、准备证据输入和 cache。 | `x5crop.io`, `x5crop.image`, `x5crop.cache`, `x5crop.runtime.deskew` |
+| Detection | 生成候选、证据、候选评估、候选扩展和候选选择。 | `x5crop.detection` |
+| Decision | 将候选级证据转成最终 PASS / REVIEW、最终原因和 confidence cap。 | `x5crop.detection.decision` |
+| Finalization | 对已决策结果做 output-adjacent 几何调整、bleed 和只读 diagnostics attachment。 | `x5crop.detection.final`, `x5crop.output` |
+| Export | 写出裁切 TIFF 或 review copy，保持 TIFF 输出质量边界。 | `x5crop.export` |
+| Report / Debug | 写机器报告、人类摘要和 Debug Analysis，不反向参与候选选择。 | `x5crop.report`, `x5crop.debug` |
 
-基础层审核规则：
+#### 1.2 Entry 到 Runtime
 
-- `geometry` / `image` / `io` 不反向依赖 runtime、workflow、detection、debug、report 或
-  policy registry。
-- 基础层不读取 `Detection.detail`、decision-signal detail 或 PASS / REVIEW 语义。
-- 基础层不接收 `strip_mode` 字符串；上层先解析为普通参数对象。
-- cache key 只包含实际影响计算的输入和参数，不用 format 名称替代参数所有权。
+入口层只负责把用户输入变成明确选项：
 
-### 4. Physical Model 视角
+- CLI 参数由 `x5crop.entry.cli` 解析。
+- 双击启动器只负责找到 Python 并进入交互流程。
+- interactive 菜单由 `x5crop.entry.interactive` 处理。
+- runtime bootstrap 将入口选项、输入路径、layout、format、strip mode 和 active policy 绑定成运行上下文。
 
-项目处理的是片夹、照片 footprint、separator 和真实影像内容之间的关系：
+入口层不读取图像内容，不做候选判断，不决定 PASS / REVIEW。
 
-- outer 是片夹白边到照片 footprint 的边界；footprint 内侧可以是黑边，也可以直接是真实图像。
-- 黑边只是 side evidence，不是 outer 的定义。
-- separator 是照片之间的物理间隔；`detected` / `edge-pair` 是 hard gap，`grid` /
-  `equal` / `content` 是 model gap。
-- `width_aware` 是唯一 active separator gap profile。observed width 是中性实测宽度证据，
-  可以比理论均匀宽度更窄、相近或更宽。
-- 照片影像区域尺寸一致是强结构事实；separator 宽度可变只是 observed detail。
-- `detection.physical.photo_size` 是共享 photo-size consistency 模型；separator proposal、
-  separator-derived outer 和 candidate assessment 不应各自发明宽度语义。
-- full 和 partial 都允许安全多切空 frame；只要真实图像没有被切伤，空 frame 本身不是负面证据。
-- frame topology 是显式物理证据：一条 strip 内的 frame 必须按长轴单调排列、
-  不交叉且 extent 有效。
-- hard separator 必须像真实 separator：它不仅要有 gap/source 证据，还要有横跨短轴的
-  cross-axis continuity。局部内容边缘不能靠 hard-gap 名义自动通过。
-- holder texture 是 guidance evidence：低纹理 / 低内容片夹区域可辅助 outer 和 content
-  containment，但不能单独成为 PASS oracle。
-- base outer 使用 per-side mixed boundary evidence；每条边都可独立表现为黑边到白片夹、
-  content 到白片夹或混合 / 不确定边界，不假设四边都有黑边。
-- TIFF metadata、位深、通道、ICC、resolution 和无损压缩行为属于输出质量边界，不随检测重构改变。
+#### 1.3 Workflow 到 Detection
 
-不要把 observed / broad separator width 当成新的 detector family，也不要把 frame-box
-宽度或 separator 宽度误读成照片尺寸不稳。
+`workflow` 是编排层：
 
-### 5. Detection Lifecycle 视角
+```text
+read TIFF
+  -> build base gray / evidence input
+  -> deskew when enabled
+  -> reuse compatible analysis when available
+  -> run detection
+  -> apply decision
+  -> finalize
+  -> export / report / debug
+```
 
-detection 是一张协同证据图：
+workflow 可以决定是否复用已匹配的 analysis report，但不能把复用结果解释成新的检测策略。
+检测策略必须来自 active runtime policy，并通过 detection / decision 层执行。
+
+#### 1.4 Detection 到 Decision
+
+detection 内部按候选生命周期流动：
 
 ```text
 candidate plan
-  -> physical proposals
-  -> content guidance
+  -> physical proposal
+  -> guidance
   -> candidate build
   -> candidate assessment
   -> candidate extension
   -> candidate selection
-  -> final decision
-  -> finalization
+  -> decision
 ```
 
-| 子层 | 内容 |
+| 子阶段 | 主要职责 |
 |---|---|
-| `detection.pipeline` | orchestration：候选计划、候选池、扩展和 selection。 |
-| `detection.modes` | dual-lane、review-only 等 mode routing；dual-lane 只负责拆 lane 和合并 lane 结果。 |
-| `detection.physical` | outer proposal / correction、separator proposal / model、photo-size model。 |
-| `detection.guidance` | content outer hints、content separator hints 和 content-model proposal raw metrics。 |
-| `detection.evidence` | separator、content、geometry、outer alignment、output-overlap 和只读 diagnostics evidence；不读取 assessment。 |
-| `detection.candidate.plan` | count、offset、candidate source、execution budget 和 dual-lane lane candidate lifecycle。 |
-| `detection.candidate.build` | outer -> separator gaps -> frames -> unscored `Detection`。 |
-| `detection.candidate.assessment` | base scoring、support scores、support helpers、candidate blockers / diagnostics 和 candidate gate。 |
-| `detection.candidate.extension` | corrected outer、content-guided separator 等 reassessed candidates。 |
-| `detection.candidate.selection` | 多候选竞争和 selected candidate。 |
-| `detection.decision` | evidence summary、decision signals、confidence caps、final review reasons 和 PASS / REVIEW。 |
-| `detection.final` | 消费 `x5crop.output` bleed helper，执行 approved geometry adjustment 和 read-only diagnostics attachment。 |
+| Candidate plan | 决定 count、offset、candidate sources、execution budget 和 mode-specific candidate lifecycle。 |
+| Physical proposal | 产生 outer、separator、photo-size 等物理候选或证据。 |
+| Guidance | 使用 content-derived hint 辅助 outer / separator search。 |
+| Candidate build | 将 outer、separator gaps 和 frame geometry 组装成未评分 Detection。 |
+| Candidate assessment | 计算 candidate support、candidate gate、candidate blockers、diagnostics 和 confidence caps。 |
+| Candidate extension | 对 corrected outer、content-guided separator 等候选重新 build / reassess。 |
+| Candidate selection | 在已评估候选之间选择 selected candidate，并记录 competition detail。 |
+| Decision | 生成 final evidence summary、decision signals、decision gate、final review reasons 和最终 status。 |
 
-关键审核点：
+candidate assessment 只产生候选级解释；最终用户可见原因只由 decision 产生。
 
-- outer 和 separator 是 physical structure；content 是 guidance + evidence。
-- content 可提示 search center，可生成 content-model proposal；content candidate 的 confidence、
-  diagnostics 和 internal `candidate_signals` read model 属于 candidate assessment。
-  content 不能生成 hard gap、不能直接修 physical result、不能决定 PASS / REVIEW。
-- build 只生成未评分 Detection；assessment 和 decision 才消费证据。
-- `candidate_build` detail 只描述物理 build geometry；base scoring 是否应用写在
-  `base_candidate_scoring`，不能反写到 build detail。
-- base scoring 输出使用显式 `BaseDetectionAssessment`，字段为 `confidence`、
-  `candidate_signals` 和 `detail`；不能用匿名 tuple 解包来传递 assessment 契约。
-- content candidate assessment 输出使用显式 `ContentCandidateAssessment`，字段为
-  `confidence`、`diagnostics` 和 `detail`；content diagnostics 仍是候选级解释。
-- separator support assessment 输出使用显式 `SeparatorSupportResult`，字段为 `ok` 和 `detail`；
-  调用方不能用匿名 tuple 解包 support 契约。
-- `frame_topology_evidence` 属于 candidate build / frame geometry evidence；失败时只产生
-  `frame_*` candidate signals，最终 REVIEW 仍由 decision 生成。
-- `separator_cross_axis_continuity` 属于 separator evidence；它决定 hard gap 是否像真实横跨短轴的 separator。
-- `holder_texture_evidence` 属于 content guidance / containment evidence；它解释 holder/content 分离，
-  不拥有 auto-pass 权限。
-- outer mixed-boundary detail 属于 physical outer proposal；它只提出或支持 outer candidate，
-  不评分、不 gate、不 PASS / REVIEW。
-- separator support supplemental checks 输出使用显式 `SeparatorSupportCheck`，字段为
-  `ok` 和 `reason`；内部 helper 也不能用匿名 ok/reason tuple 表达 support 契约。
-- gate check 使用统一 `GateCheck`，字段为 `code`、`stage`、`bucket`、
-  `passed`、`severity`、`signal` 和 `detail`；低层 signal 不直接伪装成最终
-  REVIEW reason。
-- candidate gate 输出使用显式 `CandidateGateAssessment`，字段为 `passed`、
-  `checks`、`blockers`、`diagnostics` 和 `confidence_caps`；`blockers` 只能从
-  failed required gate checks 派生，不能维护独立 blocker 词表。
-- candidate assessment 的 reason 只能作为候选 blockers / diagnostics；最终用户可见
-  `final_review_reasons` 只由 decision contract 生成。
-- `candidate_assessment.candidate_gate` 是候选资格的唯一结构化来源；候选级 failed
-  gate 结果写作 `candidate_gate_failed`，不能回塞进 `candidate_signals` 或独立
-  blocker 词表。
-- decision 的 `candidate_gate_input` 只保留候选 blockers、diagnostics、candidate gate
-  和 selection uncertainty inputs；不再保留旧 signal reducer。
-- low-confidence context reasons，例如 outer candidate disagreement 和 deskew uncertainty，
-  属于 decision contract input；不能在 `final_decision` 中事后补写 `decision_summary`。
-- decision gate 输出使用显式 `DecisionGateAssessment`，字段为 `passed`、
-  `checks`、`final_review_reasons`、`reason_inputs` 和 `confidence_caps`；最终
-  REVIEW reason 只能从这个结构产生。
-- final review reasons 只能由 decision contract 一次性 set；decision layer 不保留
-  add/append-style final reason helper。
-- policy / report 可见的 gate stage 名必须使用 `candidate_gate` 和
-  `decision_gate` 这类职责名，不能把 finalization 写成裁决 gate。
-- candidate / mode 候选阶段读取或更新候选级 signal 必须经过
-  `detection.candidate.signals`，并写入 `Detection.detail["candidate_signals"]`；
-  candidate / mode 子层不能把候选 signal 写进 `Detection.final_review_reasons`。
-  candidate signal reader 不 fallback 到 `Detection.final_review_reasons`；`Detection.final_review_reasons`
-  只用于 decision 之后的最终用户可见原因。
-- `content_only_evidence` 只表示 candidate source 主要依赖 content；content containment /
-  content integrity 失败使用 `content_evidence_insufficient`，不能复用 content-only reason。
-- decision `decision_signals.candidate_source_detail` 同时记录 `candidate_assessment.source`
-  和顶层 `candidate_source`；content-only evidence 读取候选评估来源，safety / review-only
-  source 读取对应候选来源，不能再混成一个模糊 source。
-- decision `evidence_summary.content` 中，`content_score_role` 表示 content containment
-  support；`content_quality_score_role` 只表示 quality diagnostic，不是 hard gate。
-- output-overlap evidence 是 output-adjacent decision signal；不存在证据组合侥幸通过的
-  专用 gate 或独立 decision-signal family。
-- candidate selection 只能记录 `selection_uncertainty_inputs`、selection override 和 competition
-  detail；它不能提前追加 final-looking review reason，也不能提前执行 decision cap。
-- content mismatch selector 属于 candidate selection；它只能读取 candidate-level
-  diagnostics / blockers 并选择更可信的候选，不能命名为 review policy 或生成最终
-  review reason。
-- content-model proposal 的 contract 使用 `content_guidance_assessment_required` 这类
-  guidance / assessment 语义；不能把 content proposal 命名成 review-only 裁决。
-- content candidate assessment 里的 content-run / grid-fallback / aspect observations
-  叫 diagnostics；它们可以进入 internal `candidate_signals` read model，但不能用
-  `content_candidate_*_reasons` 这类 final-looking 命名。
-- dual-lane lane content / outer-alignment checks 属于 `candidate.assessment`；`candidate.plan`
-  只选择 lane candidate 并调用 assessment helper；lane candidate 限分写入
-  `candidate_confidence_caps`。
-- safety candidate 的 auto-pass blocker、candidate cap 和 candidate-qualification 改写属于
-  `candidate.assessment`；`candidate.plan` 只生成 safety candidate 并调用 assessment helper。
-  最终 REVIEW 原因由 decision signals 根据 safety candidate source 生成。
-- candidate table / selected candidate 的候选级信号字段使用 `candidate_signals`、
-  `candidate_blockers` 和 `candidate_diagnostics`；最终信号字段使用 `final_review_reasons`。
-- candidate plan / execution budget 的可靠性细节也使用 `candidate_signals` 和
-  `candidate_signals_ok`；不把候选级阻断条件写成 final-looking `final_review_reasons`。
-- special mode detail 使用 `mode_diagnostics` 和 `candidate_signals` 记录模式级诊断；
-  不在 mode detail 中输出 final-looking `final_review_reasons` 字段。
-  review-only mode 也不在构造出的 `Detection.final_review_reasons` 写最终 reason；
-  它只写 candidate / mode diagnostics，最终 REVIEW 原因由 decision contract 生成。
-- close competition 的阈值只有一个来源：runtime candidate selection policy。decision
-  contract 读取同一个阈值生成最终 `candidate_competition_close` reason 和 cap。
-- guidance 和 candidate plan detail 只能写 `candidate_contract` / `evidence_contract` 这类
-  源头契约；`decision_contract` 名称只属于 `policies.decision` 和 `detection.decision`。
-- runtime 调用 decision 时直接 import owning module；`detection.decision.__init__` 只做 package marker。
-- format 的 `known_physical_notes` 是 report/debug 可见描述；policy assembly 必须用
-  family、count、aspect 等物理谓词推导参数，不能把格式备注当能力开关。
-- corrected candidate 必须重新 build、重新 assessment，再回到候选池统一 selection。
-- physical correction 不读取 candidate assessment；是否尝试 correction 属于 candidate extension。
-- physical 层不保留 `plan.py`；计划、execution budget 和候选 source 组合属于
-  `detection.candidate.plan`。
-- evidence 层只生成和汇总证据；从 `candidate_assessment` 读取 gate detail 属于 decision
-  或 report/read-model。
-- finalization 不生成候选、不评分、不决定 PASS / REVIEW；它只消费 decision 结果并调用
-  `x5crop.output` 做输出相邻调整。
-- `x5crop.output` 是 output-adjacent read/apply helper；它可以读取已存在的 decision signal /
-  decision detail 来计算 output bleed，但不能生成新的 PASS / REVIEW 输入。
-- `detection.final` 接收 workflow 已选定的 runtime policy；它不能自行查 policy registry
-  或重新解释 format / mode。
-- report / debug / export 是 output read-model；它们只能消费 `ProcessResult` 或
-  `decision_summary.status`，不能根据 confidence / review reason 自行推导最终状态。
-  裸 Detection 若还没有 decision summary，报告和 Debug Analysis 必须显示 `unknown` /
-  `UNKNOWN`。
-- report schema 必须显式输出 `evidence`、`candidate_gate`、`decision_gate`、
-  `evidence_summary` 和 `decision_signals`；构造出的审核 section 不能只停留在内部临时字典里。
-- report schema 的 decision signal / deskew 可见细节属于 `diagnostics` section，不挂在
-  `finalization` 名下；finalization 这个词只保留给输出相邻几何和 bleed 调整。
-- `Detection.detail` 的稳定读取 helper 属于 `detection.detail`，根包不承载 report/debug read-model。
-- report、debug、export 和 finalization 的输出面读取最终 reason 时必须通过
-  `final_review_reasons_from_detail()`，优先使用 `decision_summary.final_review_reasons`，
-  裸 Detection 才 fallback 到 `Detection.final_review_reasons`。
-- active detail 使用 `primary`、`extension`、`supplemental`、`nearby_separator_refinement`
-  等职责命名，不用 `late` / `auxiliary` 表达含糊流程阶段。
-- candidate / report 可见的 gap 搜索详情只使用 `gap_search_profile`；
-  `separator_width_profile` 只保留给底层几何宽度计算语义，不作为 runtime detail 别名。
+#### 1.5 Decision 到 Output
 
-### 6. Scoring / Gate 视角
+decision 之后的层级只消费结果：
 
-分数是证据排序和 gate 支持，不是最终裁决本身：
+- `detection.final` 只做 approved geometry adjustment、output bleed 和只读 diagnostics attachment。
+- `x5crop.output` 提供 output-adjacent bleed / overlap helper。
+- `x5crop.export` 写自动裁切 TIFF 或 `needs_review/` copy。
+- `x5crop.report` 写 JSONL / CSV / report sections。
+- `x5crop.debug` 生成 Debug Analysis 面板。
 
-- `assessment.scoring` 只计算 support scores 和 joint score。
-- `assessment.base_scoring` 负责 base confidence 和候选级 `candidate_signals`。
-- `assessment.support_calibration` 负责 hard-full calibration 和 separator geometry support。
-- base confidence 只由 separator / gap support 和 `photo_width_cv` 组成。
-- raw outer area、global contrast、frame-box width 和 separator-width variation 是 diagnostics
-  或 final decision 输入，不是 base confidence 输入。
-- `photo_size_consistency` 和 `frame_topology` 是不同 candidate gate checks；照片本体尺寸稳定
-  不能和 frame 顺序 / 重叠混成一个 geometry bucket。
-- separator width variation 只能保留为 observed detail；separator cross-axis continuity 才能影响
-  hard separator trust。
-- content support score 表示真实内容 containment support；content quality score 只表示影像证据强弱。
-- 当 detail 明确给出 `content_containment_ok` / `content_integrity_failed` 时，support score 只能消费
-  containment 字段；旧 `support` summary 只是报告 detail。
-- partial mode 本身不是低置信度原因。只有单张 partial 或 35mm 两张 partial 这类天然无法解释
-  holder structure 的情况继续标记 `partial_count_ambiguous`。
-- `photo_width_unstable` 和 final photo-width gate 只能消费 `photo_edges` 来源的
-  `photo_width_cv`；`frame_boxes` measurement 不能生成照片宽度 hard reason。
-- decision signal 只能拉回 REVIEW 或限制输出，不能救回 PASS。
-- confidence cap 必须记录 owner、reason、cap value 和前后 confidence；candidate cap 和
-  decision cap 分别归 assessment / decision。
-- `candidate_assessment.candidate_gate`、`candidate_assessment.blockers` 和
-  `candidate_assessment.diagnostics` 是 report/debug 的候选级解释，不是最终裁决。
-- `candidate_gate_failed` 是 gate 结果，不是候选物理证据；它只能出现在 gate /
-  confidence-cap detail 或 decision reason input，不能作为 candidate signal 存储。
-- 旧 candidate-signal reducer 已退休；candidate signal 不再由 decision 归并成
-  final review reason，decision 只读取 gate / evidence / decision signal 的结构化输入。
-- candidate gate 的 blockers 从 `GateCheck` 派生；通用 `utils` 不承载
-  candidate-specific blocker list，也不用 hard review reason 命名。
-- candidate 级可见字段必须写 `candidate_gate_*`；不能用 `auto_pass_*` 表达候选资格，
-  因为最终 PASS 只属于 decision contract。
-- read-only diagnostics 用 `effects` 结构声明 output / confidence / decision 副作用；
-  不在低层 detail 中使用 `changes_final_decision` 这类 final-looking 字段。
-- read-only diagnostics 只能使用 evidence 命名，不能用 `pass` 表达最终裁决，
-  最终 PASS / REVIEW 只属于 decision contract。
-- candidate-plan policy 中阻断 candidate candidate gate 的字段必须叫 blocker，不叫 review
-  reason；final review reason 只属于 decision contract。
-- candidate-plan detail 中 gap search family 只用 `gap_search_profiles` 表达；旧
-  `gap_profiles` 别名不再作为 runtime/report 可见字段出现。
-- content-only、safety 和 review-only candidate 是否进入最终 REVIEW 由 source-derived
-  `decision_signals` 和 decision contract applier 表达；decision policy 不保留未被裁决消费的
-  review-only 布尔开关。
-- decision contract 只承载 format/mode、evidence、decision signals 和 PASS / REVIEW decision
-  参数；output bleed、debug panels 和 report sections 留在 runtime output /
-  diagnostics / report policy，不挂在 decision contract 下。
-- `selection_uncertainty_inputs` 是候选竞争阶段的不确定性证据，不是最终裁决；只有 decision 可以把它
-  映射为 `candidate_competition_close`。
-- output-overlap evidence 必须在 decision 阶段生成；finalization 只能消费已有
-  output-overlap detail 做 output bleed，不能在 PASS / REVIEW 之后补充裁决输入。
-- `decision_reason_inputs` 和 `final_review_reasons` 是最终
-  PASS / REVIEW 的解释入口；low-confidence context reason 也必须进入这些 final summary 字段。
-- decision 子层读取或更新最终原因必须经过 `detection.decision.reasons`；`final_review_reasons`
-  字段在 decision 后才是用户可见 final reason，不允许绕过 helper 直接追加。
-- `approved_auto` 必须同时满足 confidence 达到阈值且 `final_review_reasons` 为空；
-  workflow / finalization 不能只根据 confidence 推导最终状态。
+这些层级不能重新判断 PASS / REVIEW，也不能根据 confidence 自行推导最终状态。
 
-字段命名必须反映物理语义。`width_cv` 只能作为 generic diagnostic 或 separator / gap
-几何测量；照片宽度证据使用 `photo_width_*`。
+### 2. 源码分层架构
 
-### 7. Policy 视角
+源码分层描述每个 package 拥有什么知识，以及它不能拥有的东西。
 
-format fact、runtime capability 和 final decision 必须分开：
+#### 2.1 顶层分层
 
-| 子包 | 内容 |
+| 层级 | 主要职责 |
 |---|---|
-| `policies.formats` | format-specific physical tolerance、content profile tolerance 和 search budget overrides。 |
-| `policies.parameters` | 数值参数对象、format parameter registry 和 override ownership validation。 |
-| `policies.runtime` | runtime `DetectionPolicy` 和子 policy dataclass，包括 candidate / decision signal / decision / finalization / output / diagnostics / report。 |
-| `policies.assembly` | 从 format facts、受限 overrides 和 profile defaults 组装 active runtime policy。 |
-| `policies.decision` | final PASS / REVIEW decision contract 和少量 final evidence overrides。 |
-| `policies.reporting` | policy detail serialization；只负责报告可见性。 |
-| `policies.registry` / `consistency` / `ids` | lookup、consistency smoke、policy id 和 schema id。 |
+| `x5crop.entry` | 用户入口和选项解析。 |
+| `x5crop.runtime` | 运行配置、输入探测、workflow、deskew runtime、policy context、analysis reuse。 |
+| `x5crop.formats` | format identity、family、count、aspect 和物理 facts。 |
+| `x5crop.policies` | runtime policy、parameter ownership、policy assembly、decision contract、policy reporting。 |
+| `x5crop.cache` | analysis / separator cache adapters。 |
+| `x5crop.geometry` | box、gap、separator profile、edge pair、frame fit、layout、outer box 等纯几何能力。 |
+| `x5crop.image` | gray、deskew、evidence image、pixel transforms 和 crop pixels。 |
+| `x5crop.io` | TIFF 读取和写入相关 I/O。 |
+| `x5crop.detection` | 候选、证据、assessment、selection、decision、finalization。 |
+| `x5crop.output` | output-adjacent bleed / overlap read model 和输出几何 helper。 |
+| `x5crop.export` | crop 写出、review copy、输出路径和 export actions。 |
+| `x5crop.report` | report result、schema、sections、outputs。 |
+| `x5crop.debug` | Debug Analysis canvas、panels、gap overlay、writer、status。 |
+| `tools` | regression、build、unit tests 和开发辅助工具；不进入 runtime package。 |
 
-format 文件不能声明 scoring、gate、decision-signal algorithm、detector、diagnostics 或 runtime preset。影响
-final PASS / REVIEW 的参数必须进入 decision policy detail；影响 runtime 检测路径但不直接
-决定 PASS / REVIEW 的参数必须进入 runtime policy detail。`finalization` policy 只保留最终
-输出前的 approved geometry adjustment / attachment 开关；runtime output policy 拥有 output
-bleed 的执行开关、detection bleed、output bleed 和 edge-bleed protection。runtime output-evidence
-policy 只保留生成 output-overlap evidence 的参数；diagnostics policy 与 report policy 单独装配，
-confidence cap 和 review reason 不属于 finalization。
-format policy module 的唯一构建入口是 `build_policy(strip_mode)`；`full_policy()` /
-`partial_policy()` 这类 mode-specific convenience helper 不再保留。
+#### 2.2 Runtime 子层
 
-当前 V4.9 采用破坏性清理合同：
-
-- runtime policy lookup 只发生在 runtime / policy registry 边界；detection、report、debug、
-  export、analysis reuse 不反查 `get_detection_policy()`。
-- format policy registry 是显式表；不保留动态 import helper、format module name 字符串约定、
-  re-export shim 或旧内部路径兼容层。
-- format 名称不拥有算法开关。能力配置由 `FormatSpec` 的 physical traits、mode posture 和
-  grouped runtime parameters 推导。
-- `DetectionPolicy` 是 runtime 聚合入口，但不再携带完整 `source_parameters` dump；
-  report policy detail 只输出精简 read model。
-- physical / evidence / guidance / foundation helper 只接收参数对象或 subpolicy；
-  不能接收完整 `DetectionPolicy`，也不能静默构造默认参数。
-- `candidate_assessment.candidate_gate.passed` 是候选 gate 的唯一 canonical 结果；
-  不保留 `candidate_gate_passed` 投影字段。
-- `final_review_reasons` 是唯一 canonical final reason 字段；report、CSV、debug 和 cache reuse
-  都按当前 schema 读取。
-- `partial_edge_safety` / `partial_holder_safety` 表示 partial 边缘和片夹安全性；
-  空 frame 是允许输出结果，不是 gate 名称。
-- robust grid 不再是 active separator refinement family。可靠 gap 分数属于 separator support
-  参数；model / grid evidence 只能作为普通 explanation，不拥有独立运行时 family。
-- tests 只保护当前 schema 和当前边界，不保留旧字段形状。
-
-### 8. Format / Mode 组合视角
-
-format / mode 不再被审核为互相隔离的行为围栏。当前代码更接近一组可组合的能力：
-format 提供物理事实和参数范围，mode 提供执行姿态，policy assembly 决定能力如何启用，
-evidence / decision 决定结果如何解释。
-
-审核时应区分：
-
-| 问题 | 应归属的层 |
+| 子层 | 职责 |
 |---|---|
-| 这是什么片夹或画幅？ | `x5crop.formats` 的 physical facts。 |
-| 这个能力是否可用？ | runtime policy capability。 |
-| 这个 format / mode 默认怎样启用能力？ | policy assembly / preset。 |
-| 这个能力如何计算证据？ | detection / geometry / image 的对应 owner。 |
-| 这个证据如何影响结果？ | assessment、decision signals 和 report detail。 |
+| `runtime.config` | 运行配置模型。 |
+| `runtime.input_probe` | 输入 TIFF 探测和 layout 识别。 |
+| `runtime.app` | 批处理启动、worker 调度和用户可见启动摘要。 |
+| `runtime.workflow` | 单图处理主流程。 |
+| `runtime.deskew` | deskew runtime 调度和 detail 组装。 |
+| `runtime.analysis_reuse` | 匹配已有 Debug Analysis report 并复用已决策结果。 |
+| `runtime.policy_context` | 当前 format / strip mode 的 runtime policy context。 |
+| `runtime.profile` | runtime profiling / timing read model。 |
 
-当前审核口径：
+runtime 可以编排，但不拥有底层几何算法、候选算法或最终 decision contract。
 
-- format 名称不是算法边界。看到 format 名称时，先判断它是物理事实、参数 override、
-  preset 选择、report label，还是历史命名残留。
-- 能力可以跨 format / mode 共享；关键是 owner、输入参数、启用条件和报告 detail 是否清楚。
-- 旧的 “某能力只能属于某 format” 表述不再作为架构规则。它只能作为历史迁移线索。
-- format-specific 数值应表达物理尺寸、容忍度、search budget 或证据解释，不应隐藏独立算法分支。
-- mode-specific detector 应表达执行姿态，例如 standard、dual-lane、review-only，而不是把
-  format 物理事实复制成第二套行为体系。
-- 当一个能力从单一 format 推广为共享 capability，文档应记录新的 owner 和 policy
-  enablement，而不是保留旧的 format 隔离语言。
+#### 2.3 Policies 子层
 
-### 9. Report / Debug 视角
+| 子层 | 职责 |
+|---|---|
+| `policies.formats` | format-specific physical tolerance、content tolerance 和 search budget override。 |
+| `policies.parameters` | 参数对象、聚合视图、registry、ownership validation。 |
+| `policies.runtime` | active `DetectionPolicy` 和 runtime subpolicy dataclass。 |
+| `policies.assembly` | 从 format facts、mode posture、参数覆盖和 defaults 组装 runtime policy。 |
+| `policies.decision` | final PASS / REVIEW decision contract 和少量 final evidence override。 |
+| `policies.reporting` | policy detail serialization。 |
+| `policies.registry` / `consistency` / `ids` | policy lookup、consistency smoke、policy id 和 schema id。 |
 
-report 和 debug 必须让人复盘为什么得到当前结果：
+format 文件不承载算法开关；能力启用由 assembly 和 runtime policy 表达。
 
-- `Detection` 是检测阶段的稳定候选结果。
-- `ProcessResult` 是 report、debug 和 export 的稳定输入。
-- report row 顶层包含 `version`、`policy_id` 和 `report_schema`。
-- V4.9 report schema 包含 evidence、decision signals、decision policy 和 selected candidate detail。
-- Debug Analysis 默认保持三联图；更细 evidence / gate / decision signal 信息进入 report detail。
-- output surface 只解释和输出结果，不参与候选选择。
+#### 2.4 Detection 子层
 
-报告字段要说明 evidence 从哪里来、被谁消费、为什么通过或进入复核；不要把报告字段变成
-新的运行逻辑。
+| 子层 | 职责 |
+|---|---|
+| `detection.pipeline` | 候选流程 orchestration。 |
+| `detection.modes` | special mode routing，例如 dual-lane split / merge 和 review-only。 |
+| `detection.physical` | outer、separator、photo-size 等物理 proposal / evidence helper。 |
+| `detection.guidance` | content-derived outer / separator hints 和 content-model proposal inputs。 |
+| `detection.evidence` | content、separator、photo-width、frame topology、outer alignment、output overlap、read-only diagnostics 等证据。 |
+| `detection.candidate.plan` | count / offset / source orchestration / execution budget / dual-lane lane lifecycle。 |
+| `detection.candidate.proposal` | safety 等非物理候选入口。 |
+| `detection.candidate.build` | outer + gaps + frames -> unscored Detection。 |
+| `detection.candidate.assessment` | support scoring、base scoring、candidate gate、blockers、diagnostics、candidate confidence caps。 |
+| `detection.candidate.extension` | corrected outer 和其它扩展候选的 reassessment。 |
+| `detection.candidate.selection` | candidate competition 和 selected candidate。 |
+| `detection.decision` | evidence summary、decision signals、decision gate、final reasons、contract applier。 |
+| `detection.final` | 已决策结果的 output-adjacent finalization。 |
+| `detection.detail` | 稳定 detail read helper，供 report/debug/export/finalization 读取。 |
 
-### 10. Diff / Verification 视角
+detection 中的层级方向是：proposal / evidence -> build -> assessment -> selection ->
+decision -> finalization。低层不能反向读取高层 decision 语义。
 
-历史 reference 是审查材料，不是裁判。当前项目阶段允许任何历史 reference diff；
-diff 本身不阻断验收，也不要求归类为错误。
+#### 2.5 Foundation 子层
 
-应保留的做法：
+| 子层 | 职责 |
+|---|---|
+| `geometry` | 纯几何和 profile / search / fit 算法。 |
+| `image` | 图像灰度、证据图、deskew、pixel transform 和 crop pixel 操作。 |
+| `io` | TIFF I/O。 |
+| `cache` | cache adapters，不拥有算法判断。 |
 
-- 用 reference reports 定位变化。
-- 记录 material diff 的原因、涉及视角和后续检查点。
-- 区分 source cleanup、policy 变化、report schema 变化、metadata 变化和输出行为变化。
-- 对检测行为变更运行 reference classifier 或 raw compare，以便知道变化在哪里。
+foundation 层不反向依赖 runtime、detection、report、debug、export 或 policy registry。
+它们接收参数对象，不接收完整 runtime policy 或 `strip_mode` 字符串。
 
-不再使用的做法：
+#### 2.6 Output Surface 子层
 
-- 不要求 V4.5.4 / V4.7 0 diff。
-- 不把 `status`、`confidence`、`final_review_reasons`、`outer_box`、`frame_boxes`、`gaps` 等字段
-  单独设为历史一致性保护字段。
-- 不把旧分类标签作为历史 reference diff 的阻断条件。
-- 不用旧 baseline 决定当前 architecture 是否正确。
+| 子层 | 职责 |
+|---|---|
+| `output` | output-adjacent bleed / overlap helper 和输出几何 read model。 |
+| `export` | TIFF crop、review copy、输出路径和文件动作。 |
+| `report` | ProcessResult 到 JSONL / CSV / sections 的转换。 |
+| `debug` | Debug Analysis 图像渲染和状态面板。 |
 
-文档-only 变更至少运行：
-
-```bash
-git diff --check
-```
-
-源码或 policy 变更至少运行：
-
-```bash
-python3 -m unittest discover -s tools/tests
-python3 -m compileall -q X5_Crop.py x5crop
-python3 -m x5crop.policies.consistency
-bash -n X5_Crop_Mac.command
-bash -n X5_Crop_Mac_diagnostics.command
-git diff --check
-python3 X5_Crop.py --version
-```
-
-同时编译 `tools/regression/*.py`。
-
-### 11. 人工审核进度台账
-
-这张台账只记录当前清理接点，不替代 changelog：
-
-| 视角 / 族群 | 当前状态 | 成果 | 下一步 |
-|---|---|---|---|
-| 源码分层 | 完成，持续复核 | entry、runtime、policy、detection、output、report/debug 分层单向。 | 每次结构改动跑 source naming contract。 |
-| Policy 收敛 | 完成，持续复核 | format 提供 physical traits；runtime policy lookup 只在 runtime / registry 边界发生。 | 后续只按真实样片调参数，不恢复 format-name 算法开关。 |
-| Candidate Assessment | 完成，阈值待样片调优 | `CandidateGateAssessment` 是候选 gate 唯一结构；blockers / diagnostics 从 checks 派生。 | 用真实样片调 support / confidence 参数。 |
-| Decision | 完成，阈值待样片调优 | `DecisionAssessmentInput -> DecisionGateAssessment` 单次评估，`final_review_reasons` 唯一 canonical final reason。 | 样片确认 final reasons 是否足够可读。 |
-| Report / Debug / Cache reuse | 完成，持续复核 | 只读当前 schema；Debug Analysis 保持三联图，细节进入 report。 | 新增 schema 字段时同步 tests。 |
-| Separator / gap | 结构完成，阈值待样片调优 | width variation 是 detail；cross-axis continuity 和 support checks 进入 candidate gate。 | 用真实 separator 样片调 prominence / continuity。 |
-| Outer / boundary | 结构完成，阈值待样片调优 | mixed-boundary outer 和 correction extension 不拥有 PASS / REVIEW。 | 用黑边 / 白边 / 混合边界样片调参数。 |
-| Content guidance | 结构完成，阈值待样片调优 | content 只做 guidance、containment 和 integrity evidence，不做 boundary oracle。 | 用真实 undercrop / 空 frame 样片调参数。 |
+output surface 只消费 `ProcessResult`、`Detection.detail` 的稳定 read helper 和最终
+decision summary。它们不生成候选，不评分，不决定 PASS / REVIEW。
 
 ## English Guide
 
-### 1. Documentation Perspective
+### 1. Runtime-Flow Architecture
 
-Root documentation has non-overlapping roles:
-
-| Document | Content |
-|---|---|
-| `快速启动_Quick_Start.md` | Short Release-user install, placement, launch, and output guide. |
-| `README.md` | Complete user manual: download, dependencies, launchers, formats, partial mode, Debug Analysis, output, CLI, uninstall. |
-| `ARCHITECTURE.md` | Source-audit perspectives, layer boundaries, policy ownership, format / mode composition, and verification boundaries. |
-| `CHANGELOG.md` | Version-level changes, validation records, release policy, and rollback context. |
-| `AGENTS.md` | Codex rules, current handoff, sync requirements, and repository constraints. |
-
-`README.md` should not contain document-role maps or internal architecture notes.
-`ARCHITECTURE.md` should not contain version logs or long handoffs. The repository
-does not keep a `docs/` mirror.
-
-### 2. Entry And Runtime Perspective
-
-Runtime should read as one explicit flow:
+Runtime flow describes how one job moves from entry to output:
 
 ```text
 X5_Crop.py / launchers
   -> entry options
-  -> runtime config and input probe
+  -> runtime bootstrap
   -> workflow
   -> detection
   -> decision
@@ -494,347 +222,114 @@ X5_Crop.py / launchers
   -> export / report / debug
 ```
 
-Entry code does not own detection policy. Workflow orchestrates work and should
-not become the home for format-specific implementation.
+| Stage | Responsibility | Main location |
+|---|---|---|
+| Entry | Parse CLI / interactive input into entry options. | `X5_Crop.py`, `x5crop.entry`, launchers |
+| Runtime bootstrap | Probe input, resolve layout, assemble runtime config and active policy. | `x5crop.runtime.config`, `input_probe`, `app`, `policy_context` |
+| Workflow | Orchestrate one-image processing without owning detection policy. | `x5crop.runtime.workflow` |
+| Preprocess | Read TIFF, build gray/evidence input, deskew, and prepare cache. | `x5crop.io`, `x5crop.image`, `x5crop.cache`, `x5crop.runtime.deskew` |
+| Detection | Build candidates, evidence, assessment, extension, and selection. | `x5crop.detection` |
+| Decision | Convert candidate evidence into final PASS / REVIEW, final reasons, and confidence caps. | `x5crop.detection.decision` |
+| Finalization | Apply output-adjacent geometry, bleed, and read-only diagnostics attachment. | `x5crop.detection.final`, `x5crop.output` |
+| Export | Write cropped TIFFs or review copies while preserving TIFF output boundaries. | `x5crop.export` |
+| Report / Debug | Write reports, summaries, and Debug Analysis without feeding back into selection. | `x5crop.report`, `x5crop.debug` |
 
-### 3. Source Ownership Perspective
+Entry code produces options only. Runtime binds options to input, layout, format,
+strip mode, and active policy. Workflow runs the ordered process. Detection and
+decision own candidate logic and final status. Finalization, export, report, and
+debug consume the decision result.
 
-Each kind of knowledge has one long-term owner: `formats` owns physical facts,
-`policies` owns runtime and decision policy, foundation layers own pure
-capability, `cache` owns reuse adapters, `detection` owns candidates and
-decisions, and output surfaces consume stable results only.
-
-Foundation layers must not depend back on runtime, workflow, detection, debug,
-report, or the policy registry; must not read `Detection.detail`; and must not
-receive `strip_mode` strings.
-
-### 4. Physical Model Perspective
-
-The physical model is the relationship among holder, photo footprint, separator,
-and real image content:
-
-- Outer is the holder-to-photo-footprint boundary; black rim is side evidence,
-  not the definition of outer.
-- Separator is the physical space between photos. `detected` / `edge-pair` are
-  hard gaps; `grid` / `equal` / `content` are model gaps.
-- `width_aware` is the only active separator gap profile. Observed width is
-  neutral measured evidence and may be narrower than, similar to, or wider than
-  theoretical even spacing.
-- Consistent photo image-region size is strong structure; separator width
-  variation is observed detail.
-- Safe empty frames are acceptable when real image content is not harmed.
-- TIFF quality attributes are output boundaries and must not change during
-  detection refactors.
-
-### 5. Detection Lifecycle Perspective
-
-Detection is a cooperative evidence graph:
+Inside detection, the flow is:
 
 ```text
 candidate plan
-  -> physical proposals
-  -> content guidance
+  -> physical proposal
+  -> guidance
   -> candidate build
   -> candidate assessment
   -> candidate extension
   -> candidate selection
-  -> final decision
-  -> finalization
+  -> decision
 ```
 
-Outer and separator are physical structure; content is guidance plus evidence.
-Build creates unscored detections. `candidate_build` detail describes only the
-physical build geometry; base scoring state belongs to `base_candidate_scoring`.
-Assessment and decision consume evidence.
-Corrected candidates must be rebuilt, reassessed, and returned to the shared
-candidate pool before selection.
+Candidate assessment explains candidate qualification. Final user-visible
+reasons are produced by decision.
 
-`detection.modes` routes special modes only. For dual-lane full strips, modes
-split and merge lanes, while lane candidate build / assessment / selection lives
-in `detection.candidate.plan`. `detection.evidence` produces and summarizes
-evidence only; reading `candidate_assessment` is a decision or report read-model
-concern. Candidate assessment reasons are candidate blockers / diagnostics only;
-final user-visible `final_review_reasons` are generated by the decision contract.
-Base scoring returns an explicit `BaseDetectionAssessment` result with
-`confidence`, `candidate_signals`, and `detail` fields; callers must not
-depend on anonymous tuple positions for the assessment contract.
-Content candidate assessment returns an explicit `ContentCandidateAssessment`
-result with `confidence`, `diagnostics`, and `detail` fields; content
-diagnostics remain candidate-level explanations.
-Separator support assessment returns an explicit `SeparatorSupportResult` with
-`ok` and `detail` fields; callers must not depend on anonymous tuple positions
-for the support contract.
-Internal separator supplemental support checks return an explicit
-`SeparatorSupportCheck` with `ok` and `reason` fields; helper functions must not
-encode support contracts as anonymous ok/reason tuples.
-Gate checks use a shared `GateCheck` shape with `code`, `stage`, `bucket`,
-`passed`, `severity`, `signal`, and `detail` fields; low-level signals must not
-pretend to be final REVIEW reasons.
-Candidate gate assessment returns an explicit `CandidateGateAssessment` with
-`passed`, `checks`, `blockers`, `diagnostics`, and `confidence_caps` fields;
-blockers are derived from failed required gate checks, not from an independent
-blocker vocabulary.
-`candidate_gate_input` keeps candidate blockers, diagnostics, candidate gate
-detail, and selection uncertainty inputs only; the old candidate-signal reducer
-is retired.
-Decision gate assessment returns an explicit `DecisionGateAssessment` with
-`passed`, `checks`, `final_review_reasons`, `reason_inputs`, and
-`confidence_caps` fields; final REVIEW reasons are generated only from this
-structure.
-Policy/report-visible gate stage names use `candidate_gate` and
-`decision_gate`; finalization must not be named as a decision gate.
-Candidate and mode-stage code must read or update candidate-level signals
-through `detection.candidate.signals`; the underlying
-`Detection.detail["candidate_signals"]` field stores candidate-level signals.
-Candidate and mode sublayers must not write those candidate signals into
-`Detection.final_review_reasons`, and candidate signal readers do not fall back to it.
-`Detection.final_review_reasons` is reserved for final user-visible reasons after the
-decision step.
-Candidate selection records `selection_uncertainty_inputs`, selection override, and
-competition detail only; it must not append final-looking review reasons or apply
-decision caps. The content mismatch selector is a candidate-selection rule: it
-reads candidate-level diagnostics / blockers and may choose a more credible
-candidate, but it is not a review policy and does not create final review
-reasons. `content_only_evidence` means the candidate source relies mainly on
-content; failed content containment or content-integrity checks use
-`content_evidence_insufficient` instead. Decision signals expose
-`candidate_source_detail` with both `candidate_assessment.source` and top-level
-`candidate_source`, so content-only evidence and safety / review-only sources keep
-separate source ownership. Decision content summaries use `content_score_role`
-for content-containment support and `content_quality_score_role` for quality
-diagnostics, which are not hard gates. Content-model proposal contracts use
-guidance / assessment language such as
-`content_guidance_assessment_required`; they are not named as review-only
-decisions. Content-candidate assessment observations use diagnostic naming for
-content-run, grid-fallback, and aspect details; `content_candidate_*_reasons`
-is not an active naming pattern. Dual-lane lane
-content / outer-alignment checks belong to
-`candidate.assessment`; `candidate.plan` selects lane candidates and calls the
-assessment helper. Lane-candidate caps are recorded in
-`candidate_confidence_caps`. Safety-candidate auto-pass blocker, candidate cap,
-and candidate-qualification rewrite also belong to `candidate.assessment`; `candidate.plan`
-only builds the safety candidate and calls the assessment helper. Final REVIEW
-reasons are generated by decision signals from the safety-candidate source.
-Candidate table
-/ selected-candidate detail uses
-`candidate_signals`, `candidate_blockers`, and `candidate_diagnostics` for
-candidate-level explanations. Candidate plan / execution-budget detail also uses
-`candidate_signals` and `candidate_signals_ok`, not final-looking
-`final_review_reasons`. Special-mode detail uses `mode_diagnostics` and
-`candidate_signals`. Review-only mode also leaves `Detection.final_review_reasons`
-empty at construction time; it records candidate / mode diagnostics and lets the
-decision contract generate the final REVIEW reasons. Final reasons use
-`final_review_reasons`.
-Close-competition uses one threshold source: the runtime candidate selection
-policy, which the decision contract consumes to produce the final
-`candidate_competition_close` reason and cap.
-Guidance and candidate-plan detail may use `candidate_contract` or
-`evidence_contract`; `decision_contract` naming belongs only to decision policy
-and decision execution. Runtime callers import decision owning modules directly;
-`detection.decision.__init__` remains a package marker only.
-Format `known_physical_notes` are report/debug descriptors only; policy assembly
-derives parameters from physical predicates such as family, count, and aspect,
-not from physical notes.
-Physical packages do not keep `plan.py`; planning, execution budget, and source
-composition belong to `detection.candidate.plan`.
-Frame topology is explicit evidence: frames in one strip must be monotonic along
-the long axis, non-overlapping, and extent-valid. `frame_topology_evidence`
-belongs to candidate build / frame geometry evidence and can emit `frame_*`
-candidate signals; final REVIEW still belongs to decision.
-Hard separators must look like real separators, not just detected long-axis
-positions. `separator_cross_axis_continuity` belongs to separator evidence and
-requires hard gaps to span the short axis as continuous bands. Local content
-edges cannot auto-pass under a hard-gap name.
-Holder texture is guidance evidence. Low-texture / low-content holder regions
-may help explain holder/content separation, but they are not an auto-pass oracle.
-Base outer uses per-side mixed-boundary evidence. Each side may independently
-look like black-border-to-white-holder, content-to-white-holder, or mixed /
-uncertain boundary; outer proposals must not assume all sides have a black rim.
-`detection.decision` owns evidence summary, confidence caps, decision signals, final
-review reasons, and PASS / REVIEW. `x5crop.output` owns output-bleed parameter
-conversion, output-overlap read models, and cached output-geometry restoration.
-`detection.final` consumes the decision result and `x5crop.output` helpers for
-approved geometry adjustment, output-adjacent bleed adjustment, and read-only
-diagnostics only. It receives the runtime policy selected by workflow instead
-of looking up policy registry itself.
-`approved_auto` requires both threshold-level confidence and empty final review
-reasons; workflow and finalization must not derive final status from confidence
-alone.
-Workflow resolves runtime policy through `RuntimePolicyContext`; detection,
-decision, finalization, report, and debug receive explicit policy/subpolicy
-objects. Detection physical/evidence/candidate helpers, report, debug, and
-analysis reuse must not look up the policy registry from a `Detection`.
-Report, debug, and export are output read-models: they consume `ProcessResult`
-or `decision_summary.status`, never infer final status from confidence or review
-reasons. A bare Detection without decision summary is reported as `unknown` /
-`UNKNOWN`. Report schema must expose `evidence`, `candidate_gate`,
-`decision_gate`, `evidence_summary`, and `decision_signals`; constructed audit sections must not remain hidden internal
-dictionaries. Report-visible decision signal / deskew details live under `diagnostics`, not
-a `finalization` section.
-Stable `Detection.detail` readers live in `detection.detail`, not the root
-package. Output-facing report/debug/export/finalization code reads final reasons
-through `final_review_reasons_from_detail()`, preferring
-`decision_summary.final_review_reasons` and falling back to
-`Detection.final_review_reasons` only for bare detections.
-Candidate/report-visible gap-search detail uses `gap_search_profile` only;
-`separator_width_profile` is reserved for low-level width-profile geometry, not
-as a runtime-detail alias.
+### 2. Source-Layer Architecture
 
-### 6. Scoring / Gate Perspective
+Source layering describes which package owns which knowledge.
 
-Scores rank and support evidence; they are not the final decision. Base
-scoring owns base confidence and candidate-level `candidate_signals`.
-Base confidence uses separator / gap support and `photo_width_cv`. Raw outer area,
-global contrast, frame-box width, and separator-width variation remain diagnostic
-or final-decision inputs. Content support means containment; content quality
-means evidence strength. Photo-width hard reasons may consume only
-`photo_edges`-sourced `photo_width_cv`. Candidate blockers, diagnostics,
-candidate-qualification inputs, and candidate confidence caps are assessment detail; decision
-reason inputs, final-review reason fields, and decision confidence caps are
-final decision detail. Candidate signals are no longer reduced into final review
-reasons by decision; decision reads structured gate / evidence / decision-signal inputs.
-`photo_size_consistency` and `frame_topology` are separate candidate gate checks;
-photo-size stability must not be mixed with frame ordering or overlap. Separator
-width variation remains observed detail, while separator cross-axis continuity
-is allowed to affect hard separator trust.
-Content-only, safety, and review-only candidate outcomes
-are expressed by source-derived `decision_signals` plus the decision contract
-applier, not by unused review-only flags in decision policy.
-The decision contract carries only format/mode, evidence, decision signals, and PASS /
-REVIEW decision parameters; output bleed, debug panels, and report sections
-remain in runtime output / diagnostics / report policy instead of decision
-contract.
-Candidate gate blockers are derived from `GateCheck` results, not stored in a
-generic utility vocabulary, and must not be named as hard review reasons.
-Candidate-visible fields use `candidate_gate_*`; they must not use
-`auto_pass_*` for candidate eligibility because final PASS belongs only to the
-decision contract.
-Read-only diagnostics use an `effects` object for output / confidence /
-decision side effects; low-level detail must not use final-looking fields such
-as `changes_final_decision`.
-Candidate-plan policy fields that contribute candidate gate signals use signal
-naming, not review-reason naming; final review reasons belong only to the
-decision contract.
-Candidate-plan detail exposes gap search families only as `gap_search_profiles`;
-the old `gap_profiles` alias is not a runtime/report field.
-Output-overlap evidence is attached before the final decision. `x5crop.output`
-and finalization may consume that detail for output bleed, but must not generate
-PASS / REVIEW inputs after the decision step.
-Decision sublayers must read or update final reasons through
-`detection.decision.reasons`; after the decision step, `final_review_reasons` is the
-user-visible final reason field, so decision code must not append to it directly.
+#### 2.1 Top-Level Layers
 
-### 7. Policy Perspective
-
-Format facts, runtime capability, runtime output-evidence policy, runtime decision policy,
-and final decision contract remain separate.
-Format files may provide physical tolerance, content profile tolerance, and
-search-budget overrides only. Runtime path parameters must appear in runtime
-policy detail; final PASS / REVIEW parameters must appear in decision policy
-detail. Finalization policy owns approved geometry adjustment / attachment
-switches before export; runtime output policy owns the output-bleed execution
-switch, detection bleed, output bleed, and edge-bleed protection. Runtime output-evidence
-policy only owns parameters for output-overlap evidence. Diagnostics and report
-policies are assembled separately. The only policy-construction entry in a
-format module is `build_policy(strip_mode)`;
-mode-specific convenience helpers such as `full_policy()` / `partial_policy()`
-are not kept.
-
-Current V4.9 uses a destructive cleanup contract:
-
-- Runtime policy lookup happens only at runtime / policy-registry boundaries.
-  Detection, report, debug, export, and analysis reuse do not call
-  `get_detection_policy()`.
-- The format policy registry is explicit. Dynamic import helpers, format module
-  name strings, re-export shims, and old internal-path compatibility are not kept.
-- Format names do not own algorithm switches. Capability configuration is derived
-  from `FormatSpec` physical traits, mode posture, and grouped runtime parameters.
-- `DetectionPolicy` remains the runtime aggregate, but it no longer carries a
-  full `source_parameters` dump. Report policy detail is a compact read model.
-- Physical, evidence, guidance, and foundation helpers receive parameters or
-  subpolicies only. They must not accept full `DetectionPolicy` objects or create
-  silent default parameter objects.
-- `candidate_assessment.candidate_gate.passed` is the only canonical candidate
-  gate result; `candidate_gate_passed` is not kept as a projection field.
-- `final_review_reasons` is the only canonical final reason field. Reports, CSV,
-  debug, and cache reuse read the current schema only.
-- `partial_edge_safety` / `partial_holder_safety` name partial edge and holder
-  safety. Empty frames are allowed output, not gate names.
-- Robust grid is not an active separator refinement family. Reliable gap score
-  lives in separator support parameters; model / grid evidence is explanation,
-  not an independent runtime family.
-- Tests protect the current schema and boundaries only, not historical field
-  shapes.
-
-### 8. Format / Mode Composition Perspective
-
-Format / mode review is no longer a list of isolated behavior fences. The current
-code is closer to composable capability: format supplies physical facts and
-parameter ranges, mode supplies execution posture, policy assembly decides how
-capabilities are enabled, and evidence / decision layers explain the result.
-
-Review should separate:
-
-| Question | Owning layer |
+| Layer | Responsibility |
 |---|---|
-| What holder or frame family is this? | Physical facts in `x5crop.formats`. |
-| Is this capability available? | Runtime policy capability. |
-| How does this format / mode enable the capability by default? | Policy assembly / preset. |
-| How is the evidence computed? | The relevant detection / geometry / image owner. |
-| How does the evidence affect the result? | Assessment, decision, decision signal, and report detail. |
+| `x5crop.entry` | User entry and option parsing. |
+| `x5crop.runtime` | Runtime config, input probing, workflow, deskew runtime, policy context, analysis reuse. |
+| `x5crop.formats` | Format identity, family, count, aspect, and physical facts. |
+| `x5crop.policies` | Runtime policy, parameter ownership, policy assembly, decision contract, policy reporting. |
+| `x5crop.cache` | Analysis / separator cache adapters. |
+| `x5crop.geometry` | Pure geometry, separator profiles, edge pairs, frame fit, layout, outer boxes. |
+| `x5crop.image` | Gray images, deskew, evidence images, pixel transforms, crop pixels. |
+| `x5crop.io` | TIFF I/O. |
+| `x5crop.detection` | Candidates, evidence, assessment, selection, decision, finalization. |
+| `x5crop.output` | Output-adjacent bleed / overlap read model and output geometry helpers. |
+| `x5crop.export` | Crop writing, review copies, output paths, export actions. |
+| `x5crop.report` | Report result building, schema, sections, outputs. |
+| `x5crop.debug` | Debug Analysis canvas, panels, gap overlay, writer, status. |
+| `tools` | Regression, build, unit tests, and developer utilities outside the runtime package. |
 
-Current review stance:
+#### 2.2 Runtime Sublayers
 
-- Format names are not algorithm boundaries. When a format name appears, first
-  decide whether it is a physical fact, parameter override, preset choice,
-  report label, or historical naming residue.
-- Capabilities may be shared across formats and modes when owner, inputs,
-  enablement, and report detail are explicit.
-- Old statements that a capability can belong only to one format are historical
-  migration clues, not architecture rules.
-- Format-specific numbers should express physical size, tolerance, search budget,
-  or evidence interpretation. They should not hide independent algorithm branches.
-- Mode-specific detectors describe execution posture, such as standard,
-  dual-lane, or review-only; they should not duplicate format physical facts as a
-  second behavior system.
-- When a capability moves from one format to a shared capability, documentation
-  should record the new owner and policy enablement instead of preserving old
-  isolation wording.
+`runtime.config` owns runtime config; `runtime.input_probe` owns TIFF probing and
+layout; `runtime.app` owns batch startup and workers; `runtime.workflow` owns the
+single-image process; `runtime.deskew` owns deskew runtime detail;
+`runtime.analysis_reuse` owns compatible report reuse; `runtime.policy_context`
+owns active policy context.
 
-### 9. Report / Debug Perspective
+Runtime orchestrates but does not own geometry algorithms, candidate algorithms,
+or the final decision contract.
 
-Reports and Debug Analysis explain behavior without feeding back into candidate
-selection. Report rows include `version`, `policy_id`, and `report_schema`; V4.9
-detail exposes evidence, decision signal, decision policy, and selected candidate state.
-Debug Analysis stays readable, while richer evidence belongs in report detail.
+#### 2.3 Policy Sublayers
 
-### 10. Diff / Verification Perspective
+`policies.formats` owns constrained format overrides. `policies.parameters` owns
+parameter objects and ownership validation. `policies.runtime` owns active
+runtime policy dataclasses. `policies.assembly` builds active policy from format
+facts, mode posture, overrides, and defaults. `policies.decision` owns the final
+decision contract. `policies.reporting` serializes policy detail.
 
-Historical references are review material, not judges. In the current project
-phase, any historical reference diff can be accepted. A diff locates a change; it
-does not block acceptance and does not need to be classified as an error.
+Format files do not carry algorithm switches; capability enablement belongs to
+assembly and runtime policy.
 
-Keep using reference reports to locate material changes and explain which audit
-perspective they touch. Do not require V4.5.4 / V4.7 zero-diff parity, do not
-protect core fields solely for historical parity, and do not use old baselines
-to decide whether the current architecture is correct.
+#### 2.4 Detection Sublayers
 
-For documentation-only changes, run:
+| Sublayer | Responsibility |
+|---|---|
+| `detection.pipeline` | Candidate flow orchestration. |
+| `detection.modes` | Special mode routing, such as dual-lane split / merge and review-only. |
+| `detection.physical` | Physical outer, separator, and photo-size proposal / evidence helpers. |
+| `detection.guidance` | Content-derived outer / separator hints and content-model proposal inputs. |
+| `detection.evidence` | Content, separator, photo-width, frame topology, outer alignment, output overlap, read-only diagnostics. |
+| `detection.candidate.plan` | Count / offset / source orchestration / execution budget / dual-lane lane lifecycle. |
+| `detection.candidate.proposal` | Non-physical candidate entries such as safety. |
+| `detection.candidate.build` | outer + gaps + frames -> unscored Detection. |
+| `detection.candidate.assessment` | Support scoring, base scoring, candidate gate, blockers, diagnostics, candidate confidence caps. |
+| `detection.candidate.extension` | Reassessment of corrected outer and other extension candidates. |
+| `detection.candidate.selection` | Candidate competition and selected candidate. |
+| `detection.decision` | Evidence summary, decision signals, decision gate, final reasons, contract applier. |
+| `detection.final` | Output-adjacent finalization for an already-decided result. |
+| `detection.detail` | Stable detail readers for report/debug/export/finalization. |
 
-```bash
-git diff --check
-```
+The direction is proposal / evidence -> build -> assessment -> selection ->
+decision -> finalization. Lower layers must not read higher-level decision
+semantics.
 
-For source or policy changes, run:
+#### 2.5 Foundation Sublayers
 
-```bash
-python3 -m unittest discover -s tools/tests
-python3 -m compileall -q X5_Crop.py x5crop
-python3 -m x5crop.policies.consistency
-bash -n X5_Crop_Mac.command
-bash -n X5_Crop_Mac_diagnostics.command
-git diff --check
-python3 X5_Crop.py --version
-```
+`geometry`, `image`, `io`, and `cache` are foundation surfaces. They receive
+plain parameters and return facts or transformed data. They must not depend back
+on runtime, detection, report, debug, export, or the policy registry.
 
-Also compile `tools/regression/*.py`.
+#### 2.6 Output Surfaces
+
+`output`, `export`, `report`, and `debug` consume stable results. They do not
+generate candidates, score candidates, or decide PASS / REVIEW.
