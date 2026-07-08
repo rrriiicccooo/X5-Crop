@@ -56,7 +56,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
             Box(343, 10, 445, 110),
         ]
 
-        _confidence, reasons, detail = base_detection_assessment(
+        _confidence, candidate_reason_codes, detail = base_detection_assessment(
             gray,
             outer,
             gaps,
@@ -72,8 +72,8 @@ class PhotoWidthMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(detail["photo_width_cv"], 0.0)
         self.assertGreater(detail["frame_box_width_cv"], 0.05)
         self.assertGreater(detail["separator_width_cv"], 0.70)
-        self.assertNotIn("photo_width_unstable", reasons)
-        self.assertNotIn("unstable_frame_width", reasons)
+        self.assertNotIn("photo_width_unstable", candidate_reason_codes)
+        self.assertNotIn("unstable_frame_width", candidate_reason_codes)
 
     def test_geometry_support_respects_zero_photo_width_cv(self) -> None:
         detection = Detection(

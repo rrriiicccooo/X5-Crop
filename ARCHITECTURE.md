@@ -131,9 +131,9 @@ candidate plan
 关键审核点：
 
 - outer 和 separator 是 physical structure；content 是 guidance + evidence。
-- content 可提示 search center，可生成 content-model proposal；content candidate 的 confidence /
-  review reasons 属于 candidate assessment。content 不能生成 hard gap、不能直接修 physical result、
-  不能决定 PASS / REVIEW。
+- content 可提示 search center，可生成 content-model proposal；content candidate 的 confidence、
+  diagnostics 和 internal `candidate_reasons` read model 属于 candidate assessment。
+  content 不能生成 hard gap、不能直接修 physical result、不能决定 PASS / REVIEW。
 - build 只生成未评分 Detection；assessment 和 decision 才消费证据。
 - `candidate_build` detail 只描述物理 build geometry；base scoring 是否应用写在
   `base_candidate_scoring`，不能反写到 build detail。
@@ -230,7 +230,7 @@ candidate plan
 分数是证据排序和 gate 支持，不是最终裁决本身：
 
 - `assessment.scoring` 只计算 support scores 和 joint score。
-- `assessment.base_scoring` 负责 base confidence 和 base review reasons。
+- `assessment.base_scoring` 负责 base confidence 和候选级 `candidate_reason_codes`。
 - `assessment.gate_support` 负责 hard-full calibration 和 separator geometry support。
 - base confidence 只由 separator / gap support 和 `photo_width_cv` 组成。
 - raw outer area、global contrast、frame-box width 和 separator-width variation 是 diagnostics
@@ -573,7 +573,8 @@ as a runtime-detail alias.
 ### 6. Scoring / Gate Perspective
 
 Scores rank and support evidence; they are not the final decision. Base
-confidence uses separator / gap support and `photo_width_cv`. Raw outer area,
+scoring owns base confidence and candidate-level `candidate_reason_codes`.
+Base confidence uses separator / gap support and `photo_width_cv`. Raw outer area,
 global contrast, frame-box width, and separator-width variation remain diagnostic
 or final-decision inputs. Content support means containment; content quality
 means evidence strength. Photo-width hard reasons may consume only

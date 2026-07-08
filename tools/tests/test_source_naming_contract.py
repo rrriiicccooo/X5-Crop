@@ -473,6 +473,24 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_base_scoring_uses_candidate_reason_code_names(self) -> None:
+        base_scoring_path = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "assessment"
+            / "base_scoring.py"
+        )
+        architecture_text = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
+        base_scoring_text = base_scoring_path.read_text(encoding="utf-8")
+
+        self.assertIn("candidate_reason_codes", base_scoring_text)
+        self.assertNotIn("base review reasons", architecture_text)
+        self.assertNotIn("confidence, reasons", base_scoring_text)
+        self.assertNotIn("_pre_nearby_reasons", base_scoring_text)
+        self.assertNotIn("_geometry_reasons", base_scoring_text)
+
     def test_candidate_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
         banned = (
             ".review_reasons.append",

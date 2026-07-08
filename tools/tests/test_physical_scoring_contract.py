@@ -51,7 +51,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             Box(72, 0, 100, 100),
         ]
 
-        confidence, reasons, detail = base_detection_assessment(
+        confidence, candidate_reason_codes, detail = base_detection_assessment(
             gray,
             outer,
             gaps,
@@ -64,8 +64,8 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         self.assertGreater(confidence, 0.82)
-        self.assertNotIn("outer_box_too_large", reasons)
-        self.assertNotIn("outer_box_uncertain", reasons)
+        self.assertNotIn("outer_box_too_large", candidate_reason_codes)
+        self.assertNotIn("outer_box_uncertain", candidate_reason_codes)
         self.assertEqual(detail["outer_area_profile"]["status"], "above_profile")
         self.assertEqual(detail["outer_area_profile"]["role"], "diagnostic_until_final_alignment")
 
@@ -124,7 +124,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             Box(92, 0, 100, 100),
         ]
 
-        confidence, reasons, detail = base_detection_assessment(
+        confidence, candidate_reason_codes, detail = base_detection_assessment(
             gray,
             outer,
             gaps,
@@ -138,7 +138,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertEqual(detail["width_cv_source"], "frame_boxes")
         self.assertFalse(detail["photo_width_stability"]["used"])
         self.assertEqual(detail["photo_width_stability"]["role"], "diagnostic_until_photo_edges")
-        self.assertNotIn("photo_width_unstable", reasons)
+        self.assertNotIn("photo_width_unstable", candidate_reason_codes)
 
     def test_low_global_contrast_is_image_quality_detail_not_crop_failure(self) -> None:
         gray = np.full((100, 100), 128, dtype=np.uint8)
@@ -153,7 +153,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             Box(72, 0, 100, 100),
         ]
 
-        confidence, reasons, detail = base_detection_assessment(
+        confidence, candidate_reason_codes, detail = base_detection_assessment(
             gray,
             outer,
             gaps,
@@ -166,7 +166,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         self.assertGreater(confidence, 0.82)
-        self.assertNotIn("low_contrast", reasons)
+        self.assertNotIn("low_contrast", candidate_reason_codes)
         self.assertFalse(detail["image_quality"]["contrast_ok"])
         self.assertEqual(detail["image_quality"]["role"], "diagnostic_not_crop_gate")
 
@@ -373,7 +373,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
     def test_partial_three_frame_hard_separator_is_not_intrinsically_ambiguous(self) -> None:
         gray = np.zeros((100, 300), dtype=np.uint8)
         gray[:, ::2] = 255
-        confidence, reasons, detail = base_detection_assessment(
+        confidence, candidate_reason_codes, detail = base_detection_assessment(
             gray,
             Box(0, 0, 300, 100),
             [
@@ -391,14 +391,14 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         self.assertGreater(confidence, 0.90)
-        self.assertNotIn("partial_strip_count_candidate", reasons)
-        self.assertNotIn("partial_too_ambiguous", reasons)
+        self.assertNotIn("partial_strip_count_candidate", candidate_reason_codes)
+        self.assertNotIn("partial_too_ambiguous", candidate_reason_codes)
         self.assertEqual(detail["partial_count_assessment"]["reason"], "enough_frames_for_physical_assessment")
 
     def test_partial_single_frame_remains_intrinsically_ambiguous(self) -> None:
         gray = np.zeros((100, 120), dtype=np.uint8)
         gray[:, ::2] = 255
-        confidence, reasons, detail = base_detection_assessment(
+        confidence, candidate_reason_codes, detail = base_detection_assessment(
             gray,
             Box(0, 0, 120, 100),
             [],
@@ -412,8 +412,8 @@ class PhysicalScoringContractTest(unittest.TestCase):
             confidence,
             get_detection_policy("135", "partial").scoring.base_detection.partial_one_cap,
         )
-        self.assertIn("partial_too_ambiguous", reasons)
-        self.assertNotIn("partial_strip_count_candidate", reasons)
+        self.assertIn("partial_too_ambiguous", candidate_reason_codes)
+        self.assertNotIn("partial_strip_count_candidate", candidate_reason_codes)
         self.assertEqual(detail["partial_count_assessment"]["reason"], "single_frame_partial")
 
     def test_content_partial_candidate_diagnostics_do_not_emit_partial_count_reason(self) -> None:

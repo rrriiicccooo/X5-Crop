@@ -278,25 +278,25 @@ def base_detection_assessment(
             else base_score.geometry_floor_low
         )
         confidence = max(confidence, geometry_floor)
-    reasons: list[str] = []
+    candidate_reason_codes: list[str] = []
     if expected_gaps and gap_evidence.separator_support_count < max(1, expected_gaps // 2) and not full_geometry_ok:
-        reasons.append("weak_separators")
+        candidate_reason_codes.append("weak_separators")
     if gap_evidence.equal_model_gaps >= max(2, expected_gaps // 2 + 1) and not full_geometry_ok:
-        reasons.append("mostly_equal_split")
+        candidate_reason_codes.append("mostly_equal_split")
     if (
         uses_min_hard_equal_cap
         and expected_gaps >= 3
         and gap_evidence.hard_separator_gaps < 2
     ):
-        reasons.append("too_few_detected_separators")
+        candidate_reason_codes.append("too_few_detected_separators")
     if bool(photo_width_stability.get("unstable", False)):
-        reasons.append("photo_width_unstable")
+        candidate_reason_codes.append("photo_width_unstable")
     if fmt.family == "120" and gap_evidence.separator_support_count < expected_gaps:
-        reasons.append(base_score.family_separator_uncertain_reason)
+        candidate_reason_codes.append(base_score.family_separator_uncertain_reason)
     if len(boxes) != count:
-        reasons.append("frame_count_mismatch")
-    if confidence < base_score.low_confidence_floor and not reasons:
-        reasons.append("low_confidence")
+        candidate_reason_codes.append("frame_count_mismatch")
+    if confidence < base_score.low_confidence_floor and not candidate_reason_codes:
+        candidate_reason_codes.append("low_confidence")
 
     partial_count_assessment = {
         "used": bool(strip_mode == "partial" and count < fmt.default_count),
@@ -315,7 +315,7 @@ def base_detection_assessment(
                 reason="partial_single_frame_ambiguity",
             )
             confidence_caps.append(cap_detail)
-            reasons.append("partial_too_ambiguous")
+            candidate_reason_codes.append("partial_too_ambiguous")
             partial_count_assessment["reason"] = "single_frame_partial"
             partial_count_assessment["intrinsically_ambiguous"] = True
         elif count <= 2 and fmt.default_count >= 6:
@@ -326,7 +326,7 @@ def base_detection_assessment(
                 reason="partial_two_frame_35mm_ambiguity",
             )
             confidence_caps.append(cap_detail)
-            reasons.append("partial_too_ambiguous")
+            candidate_reason_codes.append("partial_too_ambiguous")
             partial_count_assessment["reason"] = "two_frame_35mm_partial"
             partial_count_assessment["intrinsically_ambiguous"] = True
         else:
@@ -384,7 +384,7 @@ def base_detection_assessment(
         "partial_count_assessment": partial_count_assessment,
         "candidate_confidence_caps": confidence_caps,
     }
-    return float(max(0.0, min(1.0, confidence))), sorted(set(reasons)), detail
+    return float(max(0.0, min(1.0, confidence))), sorted(set(candidate_reason_codes)), detail
 
 
 def apply_base_detection_scoring(
@@ -413,7 +413,7 @@ def apply_base_detection_scoring(
 
     origin = _detail_float(detail, "origin", 0.0)
     pitch = _detail_float(detail, "pitch", 0.0)
-    confidence, reasons, base_detail = base_detection_assessment(
+    confidence, candidate_reason_codes, base_detail = base_detection_assessment(
         gray_work,
         work_outer,
         detection.gaps,
@@ -439,7 +439,7 @@ def apply_base_detection_scoring(
             origin=origin,
             pitch=pitch,
         )
-        pre_nearby_confidence, _pre_nearby_reasons, _pre_nearby_detail = base_detection_assessment(
+        pre_nearby_confidence, _pre_nearby_candidate_reason_codes, _pre_nearby_detail = base_detection_assessment(
             gray_work,
             work_outer,
             pre_nearby_gaps,
@@ -464,7 +464,7 @@ def apply_base_detection_scoring(
             apply_geometry_fit=policy.frame_fit.geometry_fallback,
             geometry_config=policy.frame_fit,
         )
-        geometry_confidence, _geometry_reasons, _geometry_detail = base_detection_assessment(
+        geometry_confidence, _geometry_candidate_reason_codes, _geometry_detail = base_detection_assessment(
             gray_work,
             work_outer,
             detection.gaps,
@@ -487,7 +487,7 @@ def apply_base_detection_scoring(
         base_detail.setdefault("candidate_confidence_caps", []).append(cap_detail)
 
     detail.update(base_detail)
-    detail["candidate_reasons"] = merged_candidate_reasons(detection, reasons)
+    detail["candidate_reasons"] = merged_candidate_reasons(detection, candidate_reason_codes)
     detail["base_candidate_scoring"] = {
         "applied": True,
         "owner": "candidate.assessment",
