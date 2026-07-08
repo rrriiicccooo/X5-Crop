@@ -118,7 +118,7 @@ decision 之后的层级只消费结果：
 |---|---|
 | `x5crop.entry` | 用户入口和选项解析。 |
 | `x5crop.runtime` | 运行配置、输入探测、workflow、deskew runtime、policy context、analysis reuse。 |
-| `x5crop.formats` | format identity、family、count、aspect 和物理 facts。 |
+| `x5crop.formats` | format identity、family、count、frame size mm、derived aspect 和物理 facts。 |
 | `x5crop.policies` | runtime policy、parameter ownership、policy assembly、decision contract、policy reporting。 |
 | `x5crop.cache` | analysis / separator cache adapters。 |
 | `x5crop.geometry` | box、gap、separator profile、edge pair、frame fit、layout、outer box 等纯几何能力。 |
@@ -160,8 +160,9 @@ runtime 可以编排，但不拥有底层几何算法、候选算法或最终 de
 
 format 文件不承载算法开关；能力启用由 assembly 和 runtime policy 表达。
 decision evidence policy 不使用 format-id override 表；format 名称只作为 `FormatSpec`
-查询入口，实际差异来自 family、aspect、physical layout、separator width profile、
-geometry support profile 等物理 trait。
+查询入口，实际差异来自 family、frame size mm 派生的 aspect、physical layout、
+separator width profile、geometry support profile 等物理 trait。Aspect 是底片物理尺寸
+事实，不是经验 tuning。
 
 #### 2.4 Detection 子层
 
@@ -275,7 +276,7 @@ Source layering describes which package owns which knowledge.
 |---|---|
 | `x5crop.entry` | User entry and option parsing. |
 | `x5crop.runtime` | Runtime config, input probing, workflow, deskew runtime, policy context, analysis reuse. |
-| `x5crop.formats` | Format identity, family, count, aspect, and physical facts. |
+| `x5crop.formats` | Format identity, family, count, frame size mm, derived aspect, and physical facts. |
 | `x5crop.policies` | Runtime policy, parameter ownership, policy assembly, decision contract, policy reporting. |
 | `x5crop.cache` | Analysis / separator cache adapters. |
 | `x5crop.geometry` | Pure geometry, separator profiles, edge pairs, frame fit, layout, outer boxes. |
@@ -313,8 +314,9 @@ Format files do not carry algorithm switches; capability enablement belongs to
 assembly and runtime policy.
 Decision evidence policy does not use format-id override tables. A format name is
 only a `FormatSpec` lookup key; behavior differences come from physical traits
-such as family, aspect, physical layout, separator width profile, and geometry
-support profile.
+such as family, frame-size-mm-derived aspect, physical layout, separator width
+profile, and geometry support profile. Aspect is a film-frame physical fact, not
+empirical tuning.
 
 #### 2.4 Detection Sublayers
 

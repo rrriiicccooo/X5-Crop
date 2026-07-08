@@ -20,14 +20,24 @@ class StripMode(str, Enum):
 
 
 @dataclass(frozen=True)
+class FrameSizeMm:
+    width_mm: float
+    height_mm: float
+    label: str = "nominal"
+
+    @property
+    def aspect(self) -> float:
+        return float(self.width_mm) / float(self.height_mm)
+
+
+@dataclass(frozen=True)
 class FormatSpec:
     format_id: FormatId
     name: str
     default_count: int
     allowed_counts: tuple[int, ...]
     family: str
-    horizontal_content_aspect: float | None
-    frame_aspect: float | None
+    frame_size_mm_options: tuple[FrameSizeMm, ...]
     expected_separator_count: int
     physical_layout: str = "single_strip"
     separator_width_profile: str = "standard"
@@ -35,6 +45,18 @@ class FormatSpec:
     edge_pair_profile: str = "standard_35mm"
     geometry_support_profile: str = "none"
     output_overlap_profile: str = "standard"
+
+    @property
+    def nominal_frame_size_mm(self) -> FrameSizeMm:
+        return self.frame_size_mm_options[0]
+
+    @property
+    def horizontal_content_aspect(self) -> float:
+        return self.nominal_frame_size_mm.aspect
+
+    @property
+    def frame_aspect(self) -> float:
+        return self.horizontal_content_aspect
 
 
 @dataclass(frozen=True)
@@ -61,7 +83,8 @@ def _format_spec(
     default_count: int,
     allowed_counts: tuple[int, ...],
     family: str,
-    horizontal_content_aspect: float,
+    nominal_frame_size_mm: FrameSizeMm,
+    frame_size_mm_options: tuple[FrameSizeMm, ...] = (),
     physical_layout: str = "single_strip",
     separator_width_profile: str = "standard",
     frame_fit_profile: str = "standard_strip",
@@ -76,8 +99,7 @@ def _format_spec(
         default_count=default_count,
         allowed_counts=allowed_counts,
         family=family,
-        horizontal_content_aspect=horizontal_content_aspect,
-        frame_aspect=horizontal_content_aspect,
+        frame_size_mm_options=frame_size_mm_options or (nominal_frame_size_mm,),
         expected_separator_count=expected_separator_count(name, default_count),
         physical_layout=physical_layout,
         separator_width_profile=separator_width_profile,
@@ -94,7 +116,7 @@ FORMATS: dict[str, FormatSpec] = {
         6,
         tuple(range(1, 7)),
         "35mm",
-        3.0 / 2.0,
+        FrameSizeMm(36.0, 24.0),
         frame_fit_profile="standard_strip",
         edge_pair_profile="standard_35mm",
     ),
@@ -103,7 +125,7 @@ FORMATS: dict[str, FormatSpec] = {
         12,
         (12,),
         "35mm",
-        3.0 / 2.0,
+        FrameSizeMm(36.0, 24.0),
         physical_layout="dual_lane",
         frame_fit_profile="dual_lane",
         edge_pair_profile="standard_35mm",
@@ -113,7 +135,7 @@ FORMATS: dict[str, FormatSpec] = {
         12,
         tuple(range(1, 13)),
         "35mm",
-        2.0 / 3.0,
+        FrameSizeMm(18.0, 24.0),
         frame_fit_profile="dense_half",
         edge_pair_profile="dense_half",
         geometry_support_profile="stable_dense_grid",
@@ -124,7 +146,7 @@ FORMATS: dict[str, FormatSpec] = {
         3,
         (1, 2, 3),
         "35mm",
-        65.0 / 24.0,
+        FrameSizeMm(65.0, 24.0),
         frame_fit_profile="panoramic_35mm",
         edge_pair_profile="panoramic_35mm",
     ),
@@ -133,7 +155,7 @@ FORMATS: dict[str, FormatSpec] = {
         4,
         (1, 2, 3, 4),
         "120",
-        3.0 / 4.0,
+        FrameSizeMm(42.0, 56.0),
         frame_fit_profile="medium_rectangle",
         edge_pair_profile="medium_rectangle",
         output_overlap_profile="sensitive",
@@ -143,7 +165,11 @@ FORMATS: dict[str, FormatSpec] = {
         3,
         (1, 2, 3),
         "120",
-        1.0,
+        FrameSizeMm(56.0, 56.0),
+        frame_size_mm_options=(
+            FrameSizeMm(56.0, 56.0),
+            FrameSizeMm(54.0, 54.0, label="camera_variant"),
+        ),
         separator_width_profile="broad",
         frame_fit_profile="medium_square",
         edge_pair_profile="medium_square",
@@ -154,7 +180,7 @@ FORMATS: dict[str, FormatSpec] = {
         3,
         (1, 2, 3),
         "120",
-        5.0 / 4.0,
+        FrameSizeMm(70.0, 56.0),
         separator_width_profile="broad",
         frame_fit_profile="medium_wide",
         edge_pair_profile="medium_square",
@@ -276,6 +302,7 @@ __all__ = [
     "FORMATS",
     "LAYOUT_CHOICES",
     "STRIP_CHOICES",
+    "FrameSizeMm",
     "FormatId",
     "FormatDescription",
     "FormatPhysicalSpec",
