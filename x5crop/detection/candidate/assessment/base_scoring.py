@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any, Optional
 
 import numpy as np
@@ -23,6 +23,13 @@ from ...confidence_caps import apply_confidence_cap
 from ...physical.photo_size import photo_size_consistency_from_gap_edges
 from ...evidence.separator_summary import gap_method_evidence_summary
 from ..reasons import merged_candidate_reasons
+
+
+@dataclass(frozen=True)
+class BaseDetectionAssessment:
+    confidence: float
+    candidate_reason_codes: list[str]
+    detail: dict[str, Any]
 
 
 def _work_box_from_detail(detail: dict[str, Any]) -> Optional[Box]:
@@ -188,7 +195,7 @@ def base_detection_assessment(
     policy: Optional[DetectionPolicy] = None,
     origin: float | None = None,
     pitch: float | None = None,
-) -> tuple[float, list[str], dict[str, Any]]:
+) -> BaseDetectionAssessment:
     policy = policy or get_detection_policy(fmt.name, strip_mode)
     base_score = policy.scoring.base_detection
     separator_gate = policy.separator.gate
@@ -384,7 +391,11 @@ def base_detection_assessment(
         "partial_count_assessment": partial_count_assessment,
         "candidate_confidence_caps": confidence_caps,
     }
-    return float(max(0.0, min(1.0, confidence))), sorted(set(candidate_reason_codes)), detail
+    return BaseDetectionAssessment(
+        confidence=float(max(0.0, min(1.0, confidence))),
+        candidate_reason_codes=sorted(set(candidate_reason_codes)),
+        detail=detail,
+    )
 
 
 def apply_base_detection_scoring(
@@ -413,7 +424,7 @@ def apply_base_detection_scoring(
 
     origin = _detail_float(detail, "origin", 0.0)
     pitch = _detail_float(detail, "pitch", 0.0)
-    confidence, candidate_reason_codes, base_detail = base_detection_assessment(
+    assessment = base_detection_assessment(
         gray_work,
         work_outer,
         detection.gaps,
@@ -425,6 +436,9 @@ def apply_base_detection_scoring(
         origin=origin,
         pitch=pitch,
     )
+    confidence = assessment.confidence
+    candidate_reason_codes = assessment.candidate_reason_codes
+    base_detail = assessment.detail
     pre_nearby_gaps = _gaps_from_detail(detail, "pre_nearby_gaps")
     if pre_nearby_gaps:
         wh, ww = gray_work.shape
@@ -439,7 +453,7 @@ def apply_base_detection_scoring(
             origin=origin,
             pitch=pitch,
         )
-        pre_nearby_confidence, _pre_nearby_candidate_reason_codes, _pre_nearby_detail = base_detection_assessment(
+        pre_nearby_assessment = base_detection_assessment(
             gray_work,
             work_outer,
             pre_nearby_gaps,
@@ -464,7 +478,7 @@ def apply_base_detection_scoring(
             apply_geometry_fit=policy.frame_fit.geometry_fallback,
             geometry_config=policy.frame_fit,
         )
-        geometry_confidence, _geometry_candidate_reason_codes, _geometry_detail = base_detection_assessment(
+        geometry_assessment = base_detection_assessment(
             gray_work,
             work_outer,
             detection.gaps,
@@ -478,12 +492,16 @@ def apply_base_detection_scoring(
         )
         confidence, cap_detail = apply_confidence_cap(
             confidence,
-            geometry_confidence,
+            geometry_assessment.confidence,
             owner="candidate.assessment",
             reason="nearby_separator_refinement_geometry_reassessment",
         )
-        base_detail["nearby_separator_refinement_confidence_cap"] = float(pre_nearby_confidence)
-        base_detail["nearby_separator_refinement_geometry_confidence_cap"] = float(geometry_confidence)
+        base_detail["nearby_separator_refinement_confidence_cap"] = float(
+            pre_nearby_assessment.confidence
+        )
+        base_detail["nearby_separator_refinement_geometry_confidence_cap"] = float(
+            geometry_assessment.confidence
+        )
         base_detail.setdefault("candidate_confidence_caps", []).append(cap_detail)
 
     detail.update(base_detail)
@@ -501,6 +519,7 @@ def apply_base_detection_scoring(
 
 
 __all__ = [
+    "BaseDetectionAssessment",
     "apply_base_detection_scoring",
     "base_detection_assessment",
 ]

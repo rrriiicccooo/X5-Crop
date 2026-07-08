@@ -51,7 +51,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             Box(72, 0, 100, 100),
         ]
 
-        confidence, candidate_reason_codes, detail = base_detection_assessment(
+        assessment = base_detection_assessment(
             gray,
             outer,
             gaps,
@@ -63,11 +63,11 @@ class PhysicalScoringContractTest(unittest.TestCase):
             pitch=100.0 / 3.0,
         )
 
-        self.assertGreater(confidence, 0.82)
-        self.assertNotIn("outer_box_too_large", candidate_reason_codes)
-        self.assertNotIn("outer_box_uncertain", candidate_reason_codes)
-        self.assertEqual(detail["outer_area_profile"]["status"], "above_profile")
-        self.assertEqual(detail["outer_area_profile"]["role"], "diagnostic_until_final_alignment")
+        self.assertGreater(assessment.confidence, 0.82)
+        self.assertNotIn("outer_box_too_large", assessment.candidate_reason_codes)
+        self.assertNotIn("outer_box_uncertain", assessment.candidate_reason_codes)
+        self.assertEqual(assessment.detail["outer_area_profile"]["status"], "above_profile")
+        self.assertEqual(assessment.detail["outer_area_profile"]["role"], "diagnostic_until_final_alignment")
 
     def test_raw_outer_area_does_not_change_base_confidence(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
@@ -83,7 +83,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         ]
         fmt = format_spec("120-645")
 
-        profile_confidence, _, profile_detail = base_detection_assessment(
+        profile_assessment = base_detection_assessment(
             gray,
             Box(0, 0, 90, 100),
             gaps,
@@ -94,7 +94,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             origin=0.0,
             pitch=100.0 / 3.0,
         )
-        overcut_confidence, _, overcut_detail = base_detection_assessment(
+        overcut_assessment = base_detection_assessment(
             gray,
             Box(0, 0, 100, 100),
             gaps,
@@ -106,9 +106,9 @@ class PhysicalScoringContractTest(unittest.TestCase):
             pitch=100.0 / 3.0,
         )
 
-        self.assertEqual(profile_detail["outer_area_profile"]["status"], "ok")
-        self.assertEqual(overcut_detail["outer_area_profile"]["status"], "above_profile")
-        self.assertAlmostEqual(profile_confidence, overcut_confidence)
+        self.assertEqual(profile_assessment.detail["outer_area_profile"]["status"], "ok")
+        self.assertEqual(overcut_assessment.detail["outer_area_profile"]["status"], "above_profile")
+        self.assertAlmostEqual(profile_assessment.confidence, overcut_assessment.confidence)
 
     def test_frame_box_width_detail_does_not_act_as_photo_width_evidence(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
@@ -124,7 +124,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             Box(92, 0, 100, 100),
         ]
 
-        confidence, candidate_reason_codes, detail = base_detection_assessment(
+        assessment = base_detection_assessment(
             gray,
             outer,
             gaps,
@@ -134,11 +134,11 @@ class PhysicalScoringContractTest(unittest.TestCase):
             "full",
         )
 
-        self.assertGreater(confidence, 0.82)
-        self.assertEqual(detail["width_cv_source"], "frame_boxes")
-        self.assertFalse(detail["photo_width_stability"]["used"])
-        self.assertEqual(detail["photo_width_stability"]["role"], "diagnostic_until_photo_edges")
-        self.assertNotIn("photo_width_unstable", candidate_reason_codes)
+        self.assertGreater(assessment.confidence, 0.82)
+        self.assertEqual(assessment.detail["width_cv_source"], "frame_boxes")
+        self.assertFalse(assessment.detail["photo_width_stability"]["used"])
+        self.assertEqual(assessment.detail["photo_width_stability"]["role"], "diagnostic_until_photo_edges")
+        self.assertNotIn("photo_width_unstable", assessment.candidate_reason_codes)
 
     def test_low_global_contrast_is_image_quality_detail_not_crop_failure(self) -> None:
         gray = np.full((100, 100), 128, dtype=np.uint8)
@@ -153,7 +153,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             Box(72, 0, 100, 100),
         ]
 
-        confidence, candidate_reason_codes, detail = base_detection_assessment(
+        assessment = base_detection_assessment(
             gray,
             outer,
             gaps,
@@ -165,10 +165,10 @@ class PhysicalScoringContractTest(unittest.TestCase):
             pitch=100.0 / 3.0,
         )
 
-        self.assertGreater(confidence, 0.82)
-        self.assertNotIn("low_contrast", candidate_reason_codes)
-        self.assertFalse(detail["image_quality"]["contrast_ok"])
-        self.assertEqual(detail["image_quality"]["role"], "diagnostic_not_crop_gate")
+        self.assertGreater(assessment.confidence, 0.82)
+        self.assertNotIn("low_contrast", assessment.candidate_reason_codes)
+        self.assertFalse(assessment.detail["image_quality"]["contrast_ok"])
+        self.assertEqual(assessment.detail["image_quality"]["role"], "diagnostic_not_crop_gate")
 
     def test_content_score_measures_containment_before_content_quality(self) -> None:
         policy = get_detection_policy("120-66", "full").content
@@ -373,7 +373,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
     def test_partial_three_frame_hard_separator_is_not_intrinsically_ambiguous(self) -> None:
         gray = np.zeros((100, 300), dtype=np.uint8)
         gray[:, ::2] = 255
-        confidence, candidate_reason_codes, detail = base_detection_assessment(
+        assessment = base_detection_assessment(
             gray,
             Box(0, 0, 300, 100),
             [
@@ -390,15 +390,15 @@ class PhysicalScoringContractTest(unittest.TestCase):
             "partial",
         )
 
-        self.assertGreater(confidence, 0.90)
-        self.assertNotIn("partial_strip_count_candidate", candidate_reason_codes)
-        self.assertNotIn("partial_too_ambiguous", candidate_reason_codes)
-        self.assertEqual(detail["partial_count_assessment"]["reason"], "enough_frames_for_physical_assessment")
+        self.assertGreater(assessment.confidence, 0.90)
+        self.assertNotIn("partial_strip_count_candidate", assessment.candidate_reason_codes)
+        self.assertNotIn("partial_too_ambiguous", assessment.candidate_reason_codes)
+        self.assertEqual(assessment.detail["partial_count_assessment"]["reason"], "enough_frames_for_physical_assessment")
 
     def test_partial_single_frame_remains_intrinsically_ambiguous(self) -> None:
         gray = np.zeros((100, 120), dtype=np.uint8)
         gray[:, ::2] = 255
-        confidence, candidate_reason_codes, detail = base_detection_assessment(
+        assessment = base_detection_assessment(
             gray,
             Box(0, 0, 120, 100),
             [],
@@ -409,12 +409,12 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
         self.assertLessEqual(
-            confidence,
+            assessment.confidence,
             get_detection_policy("135", "partial").scoring.base_detection.partial_one_cap,
         )
-        self.assertIn("partial_too_ambiguous", candidate_reason_codes)
-        self.assertNotIn("partial_strip_count_candidate", candidate_reason_codes)
-        self.assertEqual(detail["partial_count_assessment"]["reason"], "single_frame_partial")
+        self.assertIn("partial_too_ambiguous", assessment.candidate_reason_codes)
+        self.assertNotIn("partial_strip_count_candidate", assessment.candidate_reason_codes)
+        self.assertEqual(assessment.detail["partial_count_assessment"]["reason"], "single_frame_partial")
 
     def test_content_partial_candidate_diagnostics_do_not_emit_partial_count_reason(self) -> None:
         _confidence, diagnostics, detail = content_candidate_confidence_and_diagnostics(

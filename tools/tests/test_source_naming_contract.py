@@ -486,10 +486,32 @@ class SourceNamingContractTest(unittest.TestCase):
         base_scoring_text = base_scoring_path.read_text(encoding="utf-8")
 
         self.assertIn("candidate_reason_codes", base_scoring_text)
+        self.assertIn("class BaseDetectionAssessment", base_scoring_text)
         self.assertNotIn("base review reasons", architecture_text)
         self.assertNotIn("confidence, reasons", base_scoring_text)
         self.assertNotIn("_pre_nearby_reasons", base_scoring_text)
         self.assertNotIn("_geometry_reasons", base_scoring_text)
+
+    def test_base_scoring_contract_uses_explicit_assessment_result(self) -> None:
+        banned = (
+            "confidence, candidate_reason_codes, detail = base_detection_assessment",
+            "_confidence, candidate_reason_codes, detail = base_detection_assessment",
+            "confidence, candidate_reason_codes, base_detail = base_detection_assessment",
+            "pre_nearby_confidence,",
+            "geometry_confidence,",
+        )
+        offenders: list[str] = []
+        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                if path == Path(__file__).resolve():
+                    continue
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
 
     def test_candidate_layer_routes_reason_mutation_through_candidate_helper(self) -> None:
         banned = (
