@@ -14,14 +14,14 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....runtime.config import RuntimeConfig
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE, width_aware_gap_profile_detail
 from ...guidance.content_separator import content_guided_separator_seed_for_count
-from ..plan.outer_proposals import (
+from ..proposal.outer import (
     merge_outer_proposal_candidates,
     outer_candidate_strategy,
     outer_proposal_candidates,
     separator_full_width_outer_proposal_candidates,
 )
 from ..plan.source_policy import separator_outer_gap_max_width_override
-from .detection import build_detection_for_outer
+from ..build.detection import build_detection_geometry_for_outer, enrich_detection_geometry_evidence
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ def _attach_outer_candidate_summary(
         detection.detail["holder_reference_outer_box"] = asdict(holder_outer)
 
 
-def _build_detection_for_outer_candidate(
+def _execute_outer_candidate_detection(
     gray: np.ndarray,
     config: RuntimeConfig,
     fmt: FormatSpec,
@@ -86,7 +86,7 @@ def _build_detection_for_outer_candidate(
     candidate_gap_override = gap_max_width_ratio_override
     if candidate.strategy == "separator_outer":
         candidate_gap_override = separator_outer_gap_max_width_override(policy, candidate_gap_override)
-    detection = build_detection_for_outer(
+    detection = build_detection_geometry_for_outer(
         gray,
         config,
         fmt,
@@ -102,6 +102,7 @@ def _build_detection_for_outer_candidate(
         gap_search_profile=gap_search_profile,
         policy=policy,
     )
+    detection = enrich_detection_geometry_evidence(gray, detection, config, fmt, cache, policy=policy)
     detection.detail["gap_search_profile"] = width_aware_gap_profile_detail(policy.separator)
     return detection
 
@@ -132,7 +133,7 @@ def separator_source_candidates_for_count(
         explicit_count=explicit_count,
     )
     detections = [
-        _build_detection_for_outer_candidate(
+        _execute_outer_candidate_detection(
             gray,
             config,
             fmt,
@@ -167,7 +168,7 @@ def separator_source_candidates_for_count(
             explicit_count=explicit_count,
         )
         detections.extend(
-            _build_detection_for_outer_candidate(
+            _execute_outer_candidate_detection(
                 gray,
                 config,
                 fmt,
@@ -232,7 +233,7 @@ def content_guided_separator_candidate_for_count(
     if seed_result.seed is None:
         return None, seed_result.detail
 
-    detection = build_detection_for_outer(
+    detection = build_detection_geometry_for_outer(
         gray,
         config,
         fmt,
@@ -252,6 +253,7 @@ def content_guided_separator_candidate_for_count(
         separator_gap_hints=seed_result.seed.gap_hints,
         policy=policy,
     )
+    detection = enrich_detection_geometry_evidence(gray, detection, config, fmt, cache, policy=policy)
     detection.detail["gap_search_profile"] = width_aware_gap_profile_detail(policy.separator)
     detection.detail["candidate_source"] = CANDIDATE_SOURCE_SEPARATOR
     detection.detail["content_guided_separator"] = seed_result.seed.detail
@@ -290,7 +292,7 @@ def safety_outer_proposal_candidates_for_count(
         explicit_count=bool(config.count_override is not None),
     )
     detections = [
-        _build_detection_for_outer_candidate(
+        _execute_outer_candidate_detection(
             gray,
             config,
             fmt,

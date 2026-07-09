@@ -135,7 +135,7 @@ def outer_correction_candidate_extensions(
             gray,
             detection,
             cache,
-            content_containment_policy=policy.outer.correction.content_containment,
+            alignment_policy=policy.outer.alignment_evidence,
         )
         if policy.decision.align_outer_to_content
         else {"used": False, "reason": policy.decision.outer_alignment_disabled_reason}

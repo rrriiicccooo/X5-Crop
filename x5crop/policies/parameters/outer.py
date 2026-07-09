@@ -84,6 +84,12 @@ class SeparatorOuterBandParameters:
     band_candidate_count: int = 10
     pair_candidate_count: int = 4
     max_candidates: int = 12
+    sequence_pair_score_weight: float = 0.02
+    edge_margin_min_px: float = 60.0
+    edge_margin_max_short_axis_ratio: float = 0.80
+    prominence_min: float = 0.02
+    high_mean_prominence_bypass: float = 0.88
+    prominence_score_weight: float = 0.8
 
 @dataclass(frozen=True)
 class FullWidthSeparatorOuterParameters:
@@ -118,6 +124,33 @@ class ShortAxisGeometryCorrectionParameters:
 
 @dataclass(frozen=True)
 class ContentContainmentCorrectionParameters:
+    margin_x_ratio: float = 0.0030
+    margin_x_min: int = 15
+    margin_x_max: int = 30
+    margin_y_ratio: float = 0.0030
+    margin_y_min: int = 10
+    margin_y_max: int = 20
+    long_margin_ratio: float = 0.012
+    long_margin_cap_ratio: float = 0.0170
+    long_margin_cap_min: int = 80
+    long_margin_cap_max: int = 160
+    short_margin_ratio: float = 0.010
+    short_margin_cap_ratio: float = 0.010
+    short_margin_cap_min: int = 40
+    short_margin_cap_max: int = 80
+    min_corrected_size_ratio: float = 0.80
+    min_corrected_width_px: int = 80
+    min_corrected_height_px: int = 40
+
+@dataclass(frozen=True)
+class OuterAlignmentEvidenceParameters:
+    content_bbox_thresholds: tuple[int, ...] = (225, 210, 190)
+    content_bbox_min_row_fraction: float = 0.015
+    content_bbox_min_col_fraction: float = 0.015
+    border_dark_threshold: int = 245
+    border_band_min_px: int = 4
+    border_band_max_px: int = 80
+    edge_short_min_px: int = 24
     white_edge_long_ratio: float = 0.0190
     white_edge_long_min: int = 90
     white_edge_long_max: int = 180
@@ -136,20 +169,6 @@ class ContentContainmentCorrectionParameters:
     edge_short_ratio: float = 0.015
     edge_dark_max: float = 0.02
     border_band_ratio: float = 0.018
-    margin_x_ratio: float = 0.0030
-    margin_x_min: int = 15
-    margin_x_max: int = 30
-    margin_y_ratio: float = 0.0030
-    margin_y_min: int = 10
-    margin_y_max: int = 20
-    long_margin_ratio: float = 0.012
-    long_margin_cap_ratio: float = 0.0170
-    long_margin_cap_min: int = 80
-    long_margin_cap_max: int = 160
-    short_margin_ratio: float = 0.010
-    short_margin_cap_ratio: float = 0.010
-    short_margin_cap_min: int = 40
-    short_margin_cap_max: int = 80
 
 __all__ = [
     'OuterMaskProfile',
@@ -163,4 +182,5 @@ __all__ = [
     'GridOuterRefineParameters',
     'ShortAxisGeometryCorrectionParameters',
     'ContentContainmentCorrectionParameters',
+    'OuterAlignmentEvidenceParameters',
 ]

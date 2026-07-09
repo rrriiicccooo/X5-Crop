@@ -90,7 +90,8 @@ candidate plan
 | Physical proposal | 产生 outer、separator、photo-size 等物理候选或证据。 |
 | Guidance | 使用 content-derived hint 辅助 outer / separator search。 |
 | Candidate plan | 只声明 count、offset、candidate source descriptors 和 execution budget。 |
-| Candidate build | 将 source descriptor、outer、separator gaps 和 frame geometry 组装成未评分 Detection。 |
+| Candidate build | 将 outer、separator gaps 和 frame geometry 组装成未评分 Detection 几何。 |
+| Candidate execution | 执行 source descriptor：调用 proposal、build geometry、补充 geometry evidence，再交给 assessment。 |
 | Candidate assessment | 计算 candidate support、candidate gate、candidate blockers、diagnostics 和 confidence caps。 |
 | Candidate extension | 对 corrected outer、content-guided separator 等候选重新 build / reassess。 |
 | Candidate selection | 在已评估候选之间选择 selected candidate，并记录 competition detail。 |
@@ -112,6 +113,8 @@ decision 之后的层级只消费结果：
 - `x5crop.debug` 生成 Debug Analysis 面板。
 
 这些层级不能重新判断 PASS / REVIEW，也不能根据 confidence 自行推导最终状态。
+JSONL 每行就是 current `detection_report` record；不再包裹旧 ProcessResult 字段或
+嵌套 `report_schema`。
 
 ### 2. 源码分层架构
 
@@ -166,11 +169,11 @@ runtime 可以编排，但不拥有底层几何算法、候选算法或最终 de
 `separator`、`candidate`、`decision`、`output` 和 `diagnostics` 参数组。assembly 只能从这些
 明确分组读取参数，不能恢复扁平 property view、string override path 或 per-format builder。
 
-format 文件不承载算法开关；能力启用由 physical traits、assembly 和 runtime policy 表达。
+format 文件不承载算法开关，也不保存 runtime profile 名称；能力启用由 physical facts
+在 `policies.assembly` / `policies.reporting` 中推导为 runtime traits，再进入 runtime policy。
 decision evidence policy 不使用 format-id override 表；format 名称只作为 `FormatSpec`
 查询入口，实际差异来自 family、frame size mm 派生的 aspect、physical layout、
-separator width profile、geometry support profile 等物理 trait。Aspect 是底片物理尺寸
-事实，不是经验 tuning。
+complete-underfilled strip trait 等物理事实。Aspect 是底片物理尺寸 fact，不是经验 tuning。
 XPAN 和 120-66 的 `complete_strip_can_be_underfilled` 是 format physical trait：
 它说明完整胶片可能不铺满片夹，不代表这些 format 拥有独立算法分支。
 
@@ -184,8 +187,9 @@ XPAN 和 120-66 的 `complete_strip_can_be_underfilled` 是 format physical trai
 | `detection.guidance` | content-derived outer / separator hints 和 content-model proposal inputs。 |
 | `detection.evidence` | content、separator、photo-width、frame topology、strip completeness、holder occupancy、outer alignment、output overlap、read-only diagnostics 等证据。 |
 | `detection.candidate.plan` | count / offset / source descriptors / execution budget；不 build、不 assessment、不 selection。 |
-| `detection.candidate.proposal` | safety 等非物理候选入口。 |
-| `detection.candidate.build` | outer + gaps + frames -> unscored Detection。 |
+| `detection.candidate.proposal` | outer 等 candidate-level proposal 执行入口。 |
+| `detection.candidate.build` | outer + gaps + frames -> unscored Detection geometry。 |
+| `detection.candidate.execution` | 将 source descriptor / proposal 输出显式串成 build -> evidence enrichment -> assessment。 |
 | `detection.candidate.assessment` | support scoring、base scoring、candidate gate、blockers、diagnostics、candidate confidence caps。 |
 | `detection.candidate.extension` | corrected outer 和其它扩展候选的 reassessment。 |
 | `detection.candidate.selection` | candidate competition 和 selected candidate。 |
@@ -193,13 +197,16 @@ XPAN 和 120-66 的 `complete_strip_can_be_underfilled` 是 format physical trai
 | `detection.final` | 已决策结果的 output-adjacent finalization 编排。 |
 | `detection.detail` | 稳定 detail read helper，供 report/debug/export/finalization 读取。 |
 
-detection 中的层级方向是：proposal / evidence -> build -> assessment -> selection ->
+detection 中的层级方向是：plan -> proposal / guidance -> build -> evidence enrichment -> assessment -> selection ->
 decision -> finalization。低层不能反向读取高层 decision 语义。
 `candidate.lifecycle` 只串联候选生命周期；execution budget detail 属于
 `candidate.plan.execution_budget`，批量 assessment 属于 `candidate.assessment.source_batch`。
-`output_overlap_evidence` 是 output-protection evidence：可由 bleed 保护的 overlap
-只进入 `output_overlap_protected_by_bleed`，由 finalization 扩大输出范围；只有
+`output_overlap_evidence` 是 output-protection evidence：detected、required output
+bleed、available output bleed、bleed sufficiency、protected 和 unresolved 都是独立字段。
+可由 bleed 保护的 overlap 由 finalization 扩大输出范围；只有
 `output_overlap_unresolved` 才能成为 DecisionGate blocker。
+`outer_alignment` 是 evidence policy；`content_containment` 是 correction policy。
+前者只测量 undercrop / overcontainment，后者只基于已测得 evidence 提出 corrected outer。
 
 #### 2.5 Foundation 子层
 
@@ -305,7 +312,7 @@ Source layering describes which package owns which knowledge.
 |---|---|
 | `x5crop.entry` | User entry and option parsing. |
 | `x5crop.runtime` | Runtime config, input probing, workflow, deskew runtime, and analysis reuse. |
-| `x5crop.formats` | Format identity, family, count, frame size mm, derived aspect, physical facts, and derived runtime traits. |
+| `x5crop.formats` | Format identity, family, count, frame size mm, derived aspect, and physical facts. |
 | `x5crop.units` | `ScanCalibration`, `PhysicalLength`, and `PixelKernel` unit models. |
 | `x5crop.policies` | Runtime policy, parameter ownership, policy assembly, decision contract, policy reporting. |
 | `x5crop.cache` | Analysis / separator cache adapters. |
@@ -344,12 +351,13 @@ final decision contract and derives final evidence policy from physical traits.
 and `diagnostics`; assembly reads those explicit groups and must not restore flat
 property views, string override paths, or per-format builders.
 
-Format files do not carry algorithm switches; capability enablement belongs to
-assembly and runtime policy.
+Format files do not carry algorithm switches or runtime profile names.
+Capability enablement is derived from physical facts in `policies.assembly` /
+`policies.reporting`, then expressed by runtime policy.
 Decision evidence policy does not use format-id override tables. A format name is
-only a `FormatSpec` lookup key; behavior differences come from physical traits
-such as family, frame-size-mm-derived aspect, physical layout, separator width
-profile, and geometry support profile. Aspect is a film-frame physical fact, not
+only a `FormatSpec` lookup key; behavior differences come from physical facts
+such as family, frame-size-mm-derived aspect, physical layout, and
+complete-underfilled strip traits. Aspect is a film-frame physical fact, not
 empirical tuning.
 XPAN and 120-66 expose `complete_strip_can_be_underfilled` as a physical trait:
 it says a complete strip may not fill the holder, not that those formats own
@@ -365,8 +373,9 @@ separate algorithms.
 | `detection.guidance` | Content-derived outer / separator hints and content-model proposal inputs. |
 | `detection.evidence` | Content, separator, photo-width, frame topology, strip completeness, holder occupancy, outer alignment, output overlap, read-only diagnostics. |
 | `detection.candidate.plan` | Count / offset / source descriptors / execution budget; no build, assessment, or selection. |
-| `detection.candidate.proposal` | Non-physical candidate entries such as safety. |
-| `detection.candidate.build` | outer + gaps + frames -> unscored Detection. |
+| `detection.candidate.proposal` | Candidate-level outer proposal execution entries. |
+| `detection.candidate.build` | outer + gaps + frames -> unscored Detection geometry. |
+| `detection.candidate.execution` | Explicit source descriptor / proposal -> build -> evidence enrichment -> assessment orchestration. |
 | `detection.candidate.assessment` | Support scoring, base scoring, candidate gate, blockers, diagnostics, candidate confidence caps. |
 | `detection.candidate.extension` | Reassessment of corrected outer and other extension candidates. |
 | `detection.candidate.selection` | Candidate competition and selected candidate. |
@@ -374,16 +383,19 @@ separate algorithms.
 | `detection.final` | Output-adjacent finalization for an already-decided result. |
 | `detection.detail` | Stable detail readers for report/debug/export/finalization. |
 
-The direction is proposal / evidence -> build -> assessment -> selection ->
+The direction is plan -> proposal / guidance -> build -> evidence enrichment -> assessment -> selection ->
 decision -> finalization. Lower layers must not read higher-level decision
 semantics.
 `candidate.lifecycle` only orchestrates the candidate lifecycle. Execution-budget
 visibility belongs to `candidate.plan.execution_budget`; batch assessment belongs
 to `candidate.assessment.source_batch`.
-`output_overlap_evidence` is output-protection evidence: overlap that can be
-covered by extra bleed is reported as `output_overlap_protected_by_bleed` and
-finalization expands output geometry; only `output_overlap_unresolved` can block
-the DecisionGate.
+`output_overlap_evidence` is output-protection evidence: detected, required
+output bleed, available output bleed, bleed sufficiency, protected, and
+unresolved are separate fields. Protected overlap expands output geometry; only
+`output_overlap_unresolved` can block the DecisionGate.
+`outer_alignment` is evidence policy; `content_containment` is correction policy.
+The former only measures undercrop / overcontainment, and the latter only
+proposes corrected outer boxes from already-measured evidence.
 
 #### 2.5 Foundation Sublayers
 
@@ -403,3 +415,5 @@ normalized evidence, not physical length.
 generate candidates, score candidates, or decide PASS / REVIEW. Approved geometry
 adjustment belongs here as an output-adjacent range adjustment after decision,
 not as detection correction.
+Each JSONL line is the current `detection_report` record itself; it no longer wraps
+legacy ProcessResult fields or a nested `report_schema`.

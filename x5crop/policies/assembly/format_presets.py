@@ -5,6 +5,7 @@ from collections.abc import Callable
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import FULL, PARTIAL, ReviewOnlyPolicy
 from ...formats import format_spec
+from ...formats.traits import runtime_traits_for_spec
 from .factory import build_policy_from_preset
 from .presets import (
     FormatPolicyPreset,
@@ -38,7 +39,8 @@ def _review_only(format_id: str, strip_mode: str) -> ReviewOnlyPolicy:
 
 def _separator_width_profile(format_id: str) -> SeparatorWidthProfilePreset:
     spec = format_spec(format_id)
-    if spec.separator_width_profile == "broad":
+    traits = runtime_traits_for_spec(spec)
+    if traits.separator_width_profile == "broad":
         return SeparatorWidthProfilePreset(
             mode="conditional",
             separator_outer_allow_oversized_band=True,
@@ -48,7 +50,8 @@ def _separator_width_profile(format_id: str) -> SeparatorWidthProfilePreset:
 
 def _separator_geometry_support_modes(format_id: str, strip_mode: str) -> tuple[str, ...]:
     spec = format_spec(format_id)
-    if spec.geometry_support_profile == "stable_dense_grid" and strip_mode == FULL:
+    traits = runtime_traits_for_spec(spec)
+    if traits.geometry_support_profile == "stable_dense_grid" and strip_mode == FULL:
         return ("detected_geometry", "stable_grid")
     return ()
 
@@ -56,14 +59,15 @@ def _separator_geometry_support_modes(format_id: str, strip_mode: str) -> tuple[
 def _output_overlap_enabled(format_id: str, strip_mode: str) -> bool:
     if strip_mode == PARTIAL:
         return True
-    return format_spec(format_id).output_overlap_profile == "sensitive"
+    return runtime_traits_for_spec(format_spec(format_id)).output_overlap_profile == "sensitive"
 
 
 def mode_policy_preset(format_id: str, strip_mode: str) -> ModePolicyPreset:
     spec = format_spec(format_id)
+    traits = runtime_traits_for_spec(spec)
     return ModePolicyPreset(
         detector_kind=_detector_kind(format_id, strip_mode),
-        frame_fit=frame_fit_profile(spec.frame_fit_profile, strip_mode),
+        frame_fit=frame_fit_profile(traits.frame_fit_profile, strip_mode),
         review_only=_review_only(format_id, strip_mode),
         separator_width_profile=_separator_width_profile(format_id),
         separator_geometry_support_modes=_separator_geometry_support_modes(
@@ -81,7 +85,7 @@ def format_policy_preset(
     return FormatPolicyPreset(
         format_id=format_id,
         parameters=parameters,
-        separator_edge_pair=separator_edge_pair_profile(format_spec(format_id).edge_pair_profile),
+        separator_edge_pair=separator_edge_pair_profile(runtime_traits_for_spec(format_spec(format_id)).edge_pair_profile),
         modes={
             FULL: mode_policy_preset(format_id, FULL),
             PARTIAL: mode_policy_preset(format_id, PARTIAL),

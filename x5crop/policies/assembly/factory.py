@@ -38,6 +38,7 @@ def build_policy_from_preset(
         format_id=preset.format_id,
         strip_mode=strip_mode,
         family=fmt.family,
+        default_count=int(fmt.default_count),
         preprocess=preprocess,
         detector=DetectorPolicy(
             kind=mode_preset.detector_kind,

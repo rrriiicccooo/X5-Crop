@@ -851,7 +851,7 @@ class SourceNamingContractTest(unittest.TestCase):
         for path in (
             PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "assessment" / "safety.py",
             PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "proposal" / "safety.py",
-            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "build" / "source_candidates.py",
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "execution" / "source_candidates.py",
             PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "read_only.py",
         ):
             text = path.read_text(encoding="utf-8")
@@ -937,6 +937,14 @@ class SourceNamingContractTest(unittest.TestCase):
                     offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
 
         self.assertEqual(offenders, [])
+
+    def test_outer_alignment_evidence_does_not_own_correction_policy(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "outer_alignment.py"
+        text = path.read_text(encoding="utf-8")
+
+        self.assertIn("OuterAlignmentEvidencePolicy", text)
+        self.assertNotIn("ContentContainmentCorrectionPolicy", text)
+        self.assertNotIn("corrected_outer_from_alignment", text)
 
     def test_runtime_policy_lookup_stays_out_of_output_and_detection_layers(self) -> None:
         banned = ("get_detection_policy", "policies.registry")

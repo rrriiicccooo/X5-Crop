@@ -33,6 +33,7 @@ class DetectionPolicy:
     format_id: str
     strip_mode: str
     family: str
+    default_count: int
     preprocess: RuntimePreprocessPolicy
     detector: DetectorPolicy
     counts: CountPolicy

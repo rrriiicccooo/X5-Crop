@@ -44,6 +44,9 @@ class FrameFitPolicy:
     edge_adjust_tolerance_ratio: float = 0.0
     edge_adjust_tolerance_min: float = 1.0
     edge_adjust_tolerance_max: float = 1.0
+    edge_pair_score_cap: float = 1.8
+    edge_pair_weight_multiplier: float = 1.20
+    detected_gap_score_cap: float = 1.5
 
 
 @dataclass(frozen=True)

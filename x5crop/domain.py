@@ -114,7 +114,7 @@ class ProcessResult:
     warnings: list[str]
     version: str = ""
     policy_id: str = ""
-    report_schema: dict[str, Any] = field(default_factory=dict)
+    report_record: dict[str, Any] = field(default_factory=dict)
 
 
 __all__ = [

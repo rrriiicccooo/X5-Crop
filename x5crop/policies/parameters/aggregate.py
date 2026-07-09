@@ -23,6 +23,7 @@ from .outer import (
     FullWidthSeparatorOuterParameters,
     GridOuterRefineParameters,
     LongAxisGeometryCorrectionParameters,
+    OuterAlignmentEvidenceParameters,
     OuterStrategyParameters,
     SeparatorOuterBandParameters,
     ShortAxisGeometryCorrectionParameters,
@@ -74,6 +75,7 @@ class OuterParameters:
     grid_outer_refine: GridOuterRefineParameters = field(default_factory=GridOuterRefineParameters)
     short_axis_geometry_correction: ShortAxisGeometryCorrectionParameters = field(default_factory=ShortAxisGeometryCorrectionParameters)
     content_containment_correction: ContentContainmentCorrectionParameters = field(default_factory=ContentContainmentCorrectionParameters)
+    outer_alignment_evidence: OuterAlignmentEvidenceParameters = field(default_factory=OuterAlignmentEvidenceParameters)
 
 
 @dataclass(frozen=True)

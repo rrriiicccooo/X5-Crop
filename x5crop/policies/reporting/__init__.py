@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from ..decision.contract import DetectionDecisionContract
 
 from ...formats import format_description, format_spec
+from ...formats.traits import runtime_traits_for_spec
 from .mode_descriptions import mode_notes_for_spec, mode_role_for_spec
 
 
@@ -25,6 +26,7 @@ def _plain(value: Any) -> Any:
 
 def _physical_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     spec = format_spec(policy.format_id)
+    traits = runtime_traits_for_spec(spec)
     return {
         "family": spec.family,
         "physical_layout": spec.physical_layout,
@@ -34,11 +36,7 @@ def _physical_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "frame_size_mm_options": _plain(spec.frame_size_mm_options),
         "frame_aspect": spec.frame_aspect,
         "aspect_source": "frame_size_mm",
-        "separator_width_profile": spec.separator_width_profile,
-        "frame_fit_profile": spec.frame_fit_profile,
-        "edge_pair_profile": spec.edge_pair_profile,
-        "geometry_support_profile": spec.geometry_support_profile,
-        "output_overlap_profile": spec.output_overlap_profile,
+        "runtime_traits": _plain(traits),
         "complete_strip_can_be_underfilled": bool(spec.complete_strip_can_be_underfilled),
     }
 

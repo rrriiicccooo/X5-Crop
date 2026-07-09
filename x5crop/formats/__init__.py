@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from enum import Enum
 
 from .descriptions import FORMAT_DESCRIPTIONS, FormatDescription
-from .traits import runtime_traits_for_format
 
 
 class FormatId(str, Enum):
@@ -58,13 +57,7 @@ class FormatPhysicalSpec:
         return self.horizontal_content_aspect
 
 
-@dataclass(frozen=True)
-class FormatSpec(FormatPhysicalSpec):
-    separator_width_profile: str = "standard"
-    frame_fit_profile: str = "standard_strip"
-    edge_pair_profile: str = "standard_35mm"
-    geometry_support_profile: str = "none"
-    output_overlap_profile: str = "standard"
+FormatSpec = FormatPhysicalSpec
 
 
 def expected_separator_count(format_id: str, default_count: int) -> int:
@@ -85,13 +78,7 @@ def _format_spec(
 ) -> FormatSpec:
     name = format_id.value
     frame_options = frame_size_mm_options or (nominal_frame_size_mm,)
-    traits = runtime_traits_for_format(
-        family=family,
-        default_count=default_count,
-        aspect=frame_options[0].aspect,
-        physical_layout=physical_layout,
-    )
-    return FormatSpec(
+    return FormatPhysicalSpec(
         format_id=format_id,
         name=name,
         default_count=default_count,
@@ -100,11 +87,6 @@ def _format_spec(
         frame_size_mm_options=frame_options,
         expected_separator_count=expected_separator_count(name, default_count),
         physical_layout=physical_layout,
-        separator_width_profile=traits.separator_width_profile,
-        frame_fit_profile=traits.frame_fit_profile,
-        edge_pair_profile=traits.edge_pair_profile,
-        geometry_support_profile=traits.geometry_support_profile,
-        output_overlap_profile=traits.output_overlap_profile,
         complete_strip_can_be_underfilled=complete_strip_can_be_underfilled,
     )
 

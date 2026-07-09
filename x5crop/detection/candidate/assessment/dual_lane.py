@@ -33,7 +33,7 @@ def apply_dual_lane_content_assessment(
         gray,
         detection,
         cache,
-        content_containment_policy=lane_policy.outer.correction.content_containment,
+        alignment_policy=lane_policy.outer.alignment_evidence,
     )
     detection.detail["content_evidence"] = content_detail
     detection.detail["outer_content_alignment"] = outer_alignment

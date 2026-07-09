@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 
@@ -8,8 +10,9 @@ from x5crop.debug.status import debug_status_parts
 from x5crop.detection.detail import candidate_signals_from_detail
 from x5crop.domain import Box, Detection, ImageProfile
 from x5crop.export.actions import copy_for_review_if_needed
+from x5crop.report.outputs import append_report_jsonl
 from x5crop.policies.registry import get_detection_policy
-from x5crop.report.result_builder import result_from_detection
+from x5crop.report.result_builder import result_from_cached_record, result_from_detection
 from x5crop.report.schema import report_schema_for_detection
 
 
@@ -119,10 +122,100 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         self.assertEqual(result.final_review_reasons, ["outer_content_mismatch"])
 
+    def test_report_jsonl_writes_current_schema_without_legacy_wrapper(self) -> None:
+        detection = _detection(
+            {
+                "decision_summary": {
+                    "status": "needs_review",
+                    "final_review_reasons": ["outer_content_mismatch"],
+                }
+            },
+            ["outer_content_mismatch"],
+        )
+        profile = ImageProfile(
+            shape=(100, 100),
+            dtype="uint8",
+            axes="YX",
+            photometric="minisblack",
+            compression=None,
+            sample_format=None,
+            bits_per_sample=8,
+            samples_per_pixel=None,
+            planar_config=None,
+            resolution=None,
+            resolution_unit=None,
+            icc_profile=None,
+        )
+        result = result_from_detection(
+            Path("input.tif"),
+            detection,
+            profile,
+            "needs_review",
+            [],
+            None,
+            [],
+            self._policy(),
+            detail_extra={"analysis_cache": {"script": "X5_Crop.py", "version": "test"}},
+        )
+
+        with TemporaryDirectory() as tmp:
+            report_path = Path(tmp) / "x5_crop_report.jsonl"
+            append_report_jsonl(report_path, result)
+            record = json.loads(report_path.read_text(encoding="utf-8").splitlines()[0])
+
+        self.assertEqual(record["schema_id"], "detection_report")
+        self.assertIn("candidate_gate", record)
+        self.assertIn("decision_gate", record)
+        self.assertIn("final_review_reasons", record)
+        self.assertNotIn("report_schema", record)
+        self.assertNotIn("film_format", record)
+        self.assertEqual(record["format_id"], "135")
+        self.assertEqual(record["detail"]["analysis_cache"]["script"], "X5_Crop.py")
+
     def test_candidate_signals_do_not_fallback_to_final_review_reasons(self) -> None:
         detection = _detection(final_review_reasons=["outer_content_mismatch"])
 
         self.assertEqual(candidate_signals_from_detail(detection), [])
+
+    def test_cached_record_result_keeps_current_schema_and_marks_reuse(self) -> None:
+        profile = ImageProfile(
+            shape=(100, 100),
+            dtype="uint8",
+            axes="YX",
+            photometric="minisblack",
+            compression=None,
+            sample_format=None,
+            bits_per_sample=8,
+            samples_per_pixel=None,
+            planar_config=None,
+            resolution=None,
+            resolution_unit=None,
+            icc_profile=None,
+        )
+        cached_record = {
+            "schema_id": "detection_report",
+            "schema_revision": "physical_decision_output_bleed",
+            "source": "input.tif",
+            "status": "needs_review",
+            "confidence": 0.84,
+            "format_id": "135",
+            "strip_mode": "full",
+            "layout": "horizontal",
+            "count": 6,
+            "final_review_reasons": ["candidate_competition_close"],
+            "outer_box": {"left": 0, "top": 0, "right": 10, "bottom": 10},
+            "frame_boxes": [],
+            "gaps": [],
+            "detail": {"analysis_cache": {"script": "X5_Crop.py"}},
+            "output": {"output_files": [], "review_copy": None, "warnings": []},
+        }
+
+        result = result_from_cached_record(Path("input.tif"), cached_record, profile, ["reused"])
+
+        self.assertEqual(result.report_record["schema_id"], "detection_report")
+        self.assertNotIn("report_schema", result.report_record)
+        self.assertTrue(result.report_record["detail"]["reused_analysis"])
+        self.assertEqual(result.report_record["output"]["warnings"], ["reused"])
 
     def test_report_schema_uses_diagnostics_section_not_finalization(self) -> None:
         schema = report_schema_for_detection(_detection(), policy=self._policy())

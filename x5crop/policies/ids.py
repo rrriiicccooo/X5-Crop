@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 REPORT_SCHEMA_ID = "detection_report"
-REPORT_SCHEMA_REVISION = "scan_calibration_holder_occupancy"
+REPORT_SCHEMA_REVISION = "physical_decision_output_bleed"
 
 _POLICY_ID_STEMS = {
     "135": "standard_strip",

@@ -52,21 +52,23 @@ def has_current_decision_summary(detection: Detection) -> bool:
     return isinstance(summary, dict) and isinstance(summary.get("final_review_reasons"), list)
 
 
-def _record_schema_diagnostic(detection: Detection, reason: str) -> None:
-    diagnostics = detection.detail.setdefault("schema_diagnostics", [])
-    if not isinstance(diagnostics, list):
-        diagnostics = []
-        detection.detail["schema_diagnostics"] = diagnostics
-    entry = {"owner": "detection.detail", "reason": reason}
-    if entry not in diagnostics:
-        diagnostics.append(entry)
+def decision_schema_diagnostics(detection: Detection) -> list[dict[str, str]]:
+    diagnostics: list[dict[str, str]] = []
+    summary = detection.detail.get(DECISION_SUMMARY)
+    if not isinstance(summary, dict):
+        diagnostics.append({"owner": "decision", "reason": "decision_summary_missing"})
+        return diagnostics
+    if not isinstance(summary.get("final_review_reasons"), list):
+        diagnostics.append({"owner": "decision", "reason": "final_review_reasons_missing"})
+    if not isinstance(summary.get("decision_gate"), dict):
+        diagnostics.append({"owner": "decision", "reason": "decision_gate_missing"})
+    return diagnostics
 
 
 def final_review_reasons_from_detail(detection: Detection) -> list[str]:
     reasons = decision_summary(detection).get("final_review_reasons")
     if isinstance(reasons, list):
         return [str(reason) for reason in reasons]
-    _record_schema_diagnostic(detection, "missing_decision_summary_final_review_reasons")
     return []
 
 
@@ -102,6 +104,7 @@ __all__ = [
     "candidate_competition",
     "candidate_assessment",
     "candidate_signals_from_detail",
+    "decision_schema_diagnostics",
     "decision_summary",
     "detail_dict",
     "final_review_reasons_from_detail",

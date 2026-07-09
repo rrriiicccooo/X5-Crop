@@ -50,7 +50,7 @@ def result_from_detection(
         version=VERSION,
         policy_id=policy_id_for_detection(detection),
     )
-    result.report_schema = report_schema_for_detection(detection, result, policy=policy)
+    result.report_record = report_schema_for_detection(detection, result, policy=policy)
     return result
 
 
@@ -60,17 +60,19 @@ def result_from_cached_record(
     profile: ImageProfile,
     warnings: list[str],
 ) -> ProcessResult:
+    format_detail = dict(cached_record.get("format", {})) if isinstance(cached_record.get("format"), dict) else {}
+    output_detail = dict(cached_record.get("output", {})) if isinstance(cached_record.get("output"), dict) else {}
     result = ProcessResult(
         source=str(input_file),
         status=str(cached_record["status"]),
         confidence=float(cached_record["confidence"]),
-        film_format=str(cached_record["film_format"]),
-        layout=str(cached_record["layout"]),
+        film_format=str(cached_record["format_id"]),
+        layout=str(cached_record.get("layout") or format_detail.get("layout")),
         strip_mode=str(cached_record["strip_mode"]),
-        count=int(cached_record["count"]),
+        count=int(cached_record.get("count") or format_detail.get("count")),
         final_review_reasons=list(cached_record["final_review_reasons"]),
-        output_files=[],
-        review_copy=cached_record.get("review_copy"),
+        output_files=list(output_detail.get("output_files", [])),
+        review_copy=output_detail.get("review_copy"),
         outer_box=dict(cached_record.get("outer_box", {})),
         frame_boxes=list(cached_record.get("frame_boxes", [])),
         gaps=list(cached_record.get("gaps", [])),
@@ -80,7 +82,12 @@ def result_from_cached_record(
         version=VERSION,
         policy_id=str(cached_record.get("policy_id", "")),
     )
-    result.report_schema = dict(cached_record.get("report_schema", {}))
+    report_record = dict(cached_record)
+    report_record["detail"] = dict(result.detail)
+    output_detail = dict(report_record.get("output", {})) if isinstance(report_record.get("output"), dict) else {}
+    output_detail["warnings"] = list(warnings)
+    report_record["output"] = output_detail
+    result.report_record = report_record
     return result
 
 

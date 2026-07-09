@@ -168,14 +168,11 @@ def _with_full_width_outer(
     )
 
 
-def _with_outer_alignment(
+def _with_content_containment_correction(
     params: FormatParameters,
     *,
     long_margin_ratio: float | None = None,
     long_margin_cap_ratio: float | None = None,
-    short_excess_ratio: float | None = None,
-    short_requires_hard_anchors: bool | None = None,
-    short_content_height_max: float | None = None,
 ) -> FormatParameters:
     current = params.outer.content_containment_correction
     return replace(
@@ -194,6 +191,25 @@ def _with_outer_alignment(
                     if long_margin_cap_ratio is None
                     else float(long_margin_cap_ratio)
                 ),
+            ),
+        ),
+    )
+
+
+def _with_outer_alignment_evidence(
+    params: FormatParameters,
+    *,
+    short_excess_ratio: float | None = None,
+    short_requires_hard_anchors: bool | None = None,
+    short_content_height_max: float | None = None,
+) -> FormatParameters:
+    current = params.outer.outer_alignment_evidence
+    return replace(
+        params,
+        outer=replace(
+            params.outer,
+            outer_alignment_evidence=replace(
+                current,
                 short_excess_ratio=(
                     current.short_excess_ratio
                     if short_excess_ratio is None
@@ -259,7 +275,7 @@ def format_parameters(format_name: str) -> FormatParameters:
         params = _with_partial_edge(params, ratio_extras=(0.04, 0.06), max_candidates=4)
     elif _is_panorama_35mm(fmt):
         params = _with_content_min_run(params, 0.24)
-        params = _with_outer_alignment(
+        params = _with_content_containment_correction(
             params,
             long_margin_ratio=0.008,
             long_margin_cap_ratio=0.012,
@@ -322,7 +338,7 @@ def format_parameters(format_name: str) -> FormatParameters:
         )
     elif _is_medium_wide(fmt):
         params = _with_separator_width_max(params, 0.090)
-        params = _with_outer_alignment(
+        params = _with_outer_alignment_evidence(
             params,
             short_excess_ratio=0.024,
             short_requires_hard_anchors=True,

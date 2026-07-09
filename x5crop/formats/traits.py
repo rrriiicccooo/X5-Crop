@@ -76,4 +76,13 @@ def runtime_traits_for_format(
     )
 
 
-__all__ = ["FormatRuntimeTraits", "runtime_traits_for_format"]
+def runtime_traits_for_spec(spec) -> FormatRuntimeTraits:
+    return runtime_traits_for_format(
+        family=spec.family,
+        default_count=spec.default_count,
+        aspect=spec.horizontal_content_aspect,
+        physical_layout=spec.physical_layout,
+    )
+
+
+__all__ = ["FormatRuntimeTraits", "runtime_traits_for_format", "runtime_traits_for_spec"]

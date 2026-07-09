@@ -497,6 +497,8 @@ def apply_base_detection_scoring(
             config.bleed_y,
             origin=origin,
             pitch=pitch,
+            apply_geometry_fit=policy.frame_fit.geometry_fallback,
+            geometry_config=policy.frame_fit,
         )
         pre_nearby_assessment = base_detection_assessment(
             gray_work,

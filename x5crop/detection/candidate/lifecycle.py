@@ -11,7 +11,7 @@ from ...runtime.config import RuntimeConfig
 from ..guidance.content_model import content_detection_for_count
 from .assessment.safety import apply_safety_candidate_assessment
 from .assessment.source_batch import assess_source_candidates
-from .build.source_candidates import (
+from .execution.source_candidates import (
     content_guided_separator_candidate_for_count,
     safety_outer_proposal_candidates_for_count,
     separator_source_candidates_for_count,

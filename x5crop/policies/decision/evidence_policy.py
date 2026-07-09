@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from ...formats import FormatSpec, format_spec
+from ...formats.traits import runtime_traits_for_spec
 from .contract import EvidencePolicy
 
 
@@ -15,12 +16,12 @@ def _is_standard_35mm_strip(spec: FormatSpec) -> bool:
         spec.family == "35mm"
         and spec.physical_layout == "single_strip"
         and spec.default_count == 6
-        and spec.frame_fit_profile == "standard_strip"
+        and runtime_traits_for_spec(spec).frame_fit_profile == "standard_strip"
     )
 
 
 def _is_dense_geometry_supported_strip(spec: FormatSpec) -> bool:
-    return spec.geometry_support_profile == "stable_dense_grid"
+    return runtime_traits_for_spec(spec).geometry_support_profile == "stable_dense_grid"
 
 
 def _is_panorama_strip(spec: FormatSpec) -> bool:

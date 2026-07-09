@@ -201,7 +201,7 @@ def _scope_profile_plan(
             spacing_min_ratio=float(band_policy.spacing_min_ratio),
             spacing_max_ratio=float(band_policy.spacing_max_ratio),
             frame_error_max=float(band_policy.frame_error_max),
-            sequence_score_weight=0.02,
+            sequence_score_weight=float(band_policy.sequence_pair_score_weight),
             uses_width_aware_bands=uses_width_aware_bands,
         )
     if outer_scope == FULL_WIDTH_SEPARATOR_OUTER:
@@ -229,7 +229,7 @@ def _scope_profile_plan(
             spacing_min_ratio=float(band_policy.spacing_min_ratio),
             spacing_max_ratio=float(band_policy.spacing_max_ratio),
             frame_error_max=float(band_policy.frame_error_max),
-            sequence_score_weight=0.02,
+            sequence_score_weight=float(band_policy.sequence_pair_score_weight),
             uses_width_aware_bands=uses_width_aware_bands,
         )
     return None
@@ -459,12 +459,18 @@ def _sequence_band_policy(
         max_width_ratio=band_policy.max_width_ratio,
         spacing_min_ratio=plan.spacing_min_ratio,
         spacing_max_ratio=plan.spacing_max_ratio,
-        frame_error_max=plan.frame_error_max if plan.frame_error_max is not None else 999.0,
+        frame_error_max=plan.frame_error_max if plan.frame_error_max is not None else band_policy.frame_error_max,
         edge_margin_ratio=band_policy.edge_margin_ratio,
         source_candidate_count=band_policy.source_candidate_count,
         band_candidate_count=plan.band_candidate_count,
         pair_candidate_count=plan.sequence_candidate_count,
         max_candidates=plan.max_candidates,
+        sequence_pair_score_weight=band_policy.sequence_pair_score_weight,
+        edge_margin_min_px=band_policy.edge_margin_min_px,
+        edge_margin_max_short_axis_ratio=band_policy.edge_margin_max_short_axis_ratio,
+        prominence_min=band_policy.prominence_min,
+        high_mean_prominence_bypass=band_policy.high_mean_prominence_bypass,
+        prominence_score_weight=band_policy.prominence_score_weight,
     )
 
 

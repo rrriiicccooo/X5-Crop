@@ -10,9 +10,9 @@ from ...domain import Box, Detection
 from ...gap_methods import is_hard_gap_method
 from ...geometry.boxes import box_cache_key, original_box_to_work
 from ...geometry.layout import work_gray
-from ...policies.runtime.outer import ContentContainmentCorrectionPolicy
+from ...policies.runtime.outer import OuterAlignmentEvidencePolicy
 from ...cache import AnalysisCache
-from ...utils import bbox_from_mask, box_from_dict, clamp_int
+from ...utils import bbox_from_mask, clamp_int
 from .evidence_cache_keys import detection_gap_cache_key
 
 
@@ -34,10 +34,9 @@ def outer_content_alignment_detail(
     detection: Detection,
     cache: Optional[AnalysisCache] = None,
     *,
-    content_containment_policy: ContentContainmentCorrectionPolicy,
+    alignment_policy: OuterAlignmentEvidencePolicy,
 ) -> dict[str, Any]:
     gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
-    alignment = content_containment_policy
     work_h, work_w = gray_work.shape
     source_h, source_w = gray.shape
     detail_key: Optional[tuple[Any, ...]] = None
@@ -51,8 +50,12 @@ def outer_content_alignment_detail(
         return {"used": False, "reason": "invalid_outer"}
 
     candidates: list[tuple[str, Box]] = []
-    for threshold in (225, 210, 190):
-        box = bbox_from_mask(gray_work < threshold, min_row_fraction=0.015, min_col_fraction=0.015)
+    for threshold in alignment_policy.content_bbox_thresholds:
+        box = bbox_from_mask(
+            gray_work < int(threshold),
+            min_row_fraction=float(alignment_policy.content_bbox_min_row_fraction),
+            min_col_fraction=float(alignment_policy.content_bbox_min_col_fraction),
+        )
         if box is not None and box.valid():
             candidates.append((f"gray_lt_{threshold}", box))
     if not candidates:
@@ -79,22 +82,28 @@ def outer_content_alignment_detail(
     content_width_ratio = float(content_box.width) / max(1.0, float(outer.width))
     content_height_ratio = float(content_box.height) / max(1.0, float(outer.height))
     white_edge_long_slack_min = clamp_int(
-        pitch * alignment.white_edge_long_ratio,
-        alignment.white_edge_long_min,
-        alignment.white_edge_long_max,
+        pitch * alignment_policy.white_edge_long_ratio,
+        alignment_policy.white_edge_long_min,
+        alignment_policy.white_edge_long_max,
     )
     long_slack_pixel_threshold = clamp_int(
-        pitch * alignment.long_threshold_ratio,
-        alignment.long_threshold_min,
-        alignment.long_threshold_max,
+        pitch * alignment_policy.long_threshold_ratio,
+        alignment_policy.long_threshold_min,
+        alignment_policy.long_threshold_max,
     )
     short_slack_pixel_threshold = clamp_int(
-        float(outer.height) * alignment.short_threshold_ratio,
-        alignment.short_threshold_min,
-        alignment.short_threshold_max,
+        float(outer.height) * alignment_policy.short_threshold_ratio,
+        alignment_policy.short_threshold_min,
+        alignment_policy.short_threshold_max,
     )
 
-    edge_band = max(4, min(80, int(round(min(outer.width, outer.height) * alignment.border_band_ratio))))
+    edge_band = max(
+        int(alignment_policy.border_band_min_px),
+        min(
+            int(alignment_policy.border_band_max_px),
+            int(round(min(outer.width, outer.height) * alignment_policy.border_band_ratio)),
+        ),
+    )
     outer_crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
     if outer_crop.size:
         left_band = outer_crop[:, :min(edge_band, outer_crop.shape[1])]
@@ -102,10 +111,10 @@ def outer_content_alignment_detail(
         top_band = outer_crop[:min(edge_band, outer_crop.shape[0]), :]
         bottom_band = outer_crop[max(0, outer_crop.shape[0] - edge_band):, :]
         border_dark_fraction = {
-            "left": float((left_band < 245).mean()) if left_band.size else 0.0,
-            "right": float((right_band < 245).mean()) if right_band.size else 0.0,
-            "top": float((top_band < 245).mean()) if top_band.size else 0.0,
-            "bottom": float((bottom_band < 245).mean()) if bottom_band.size else 0.0,
+            "left": float((left_band < alignment_policy.border_dark_threshold).mean()) if left_band.size else 0.0,
+            "right": float((right_band < alignment_policy.border_dark_threshold).mean()) if right_band.size else 0.0,
+            "top": float((top_band < alignment_policy.border_dark_threshold).mean()) if top_band.size else 0.0,
+            "bottom": float((bottom_band < alignment_policy.border_dark_threshold).mean()) if bottom_band.size else 0.0,
         }
     else:
         border_dark_fraction = {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0}
@@ -118,21 +127,24 @@ def outer_content_alignment_detail(
     )
     white_edge_slack = (
         edge_hard_anchors
-        and content_width_ratio >= alignment.content_width_min
-        and max_short_slack <= max(24, int(round(float(outer.height) * alignment.edge_short_ratio)))
+        and content_width_ratio >= alignment_policy.content_width_min
+        and max_short_slack <= max(
+            int(alignment_policy.edge_short_min_px),
+            int(round(float(outer.height) * alignment_policy.edge_short_ratio)),
+        )
         and (
-            (long_slack_left >= white_edge_long_slack_min and float(border_dark_fraction.get("left", 1.0)) <= alignment.edge_dark_max)
-            or (long_slack_right >= white_edge_long_slack_min and float(border_dark_fraction.get("right", 1.0)) <= alignment.edge_dark_max)
+            (long_slack_left >= white_edge_long_slack_min and float(border_dark_fraction.get("left", 1.0)) <= alignment_policy.edge_dark_max)
+            or (long_slack_right >= white_edge_long_slack_min and float(border_dark_fraction.get("right", 1.0)) <= alignment_policy.edge_dark_max)
         )
     )
     short_axis_semantic_ok = True
-    if alignment.short_requires_hard_anchors:
+    if alignment_policy.short_requires_hard_anchors:
         short_axis_semantic_ok = short_axis_semantic_ok and edge_hard_anchors
-    if alignment.short_content_height_max < 1.0:
-        short_axis_semantic_ok = short_axis_semantic_ok and content_height_ratio <= alignment.short_content_height_max
+    if alignment_policy.short_content_height_max < 1.0:
+        short_axis_semantic_ok = short_axis_semantic_ok and content_height_ratio <= alignment_policy.short_content_height_max
 
-    overcontains_long = long_slack_ratio > alignment.long_excess_ratio or (max_long_slack >= long_slack_pixel_threshold and long_slack_ratio > alignment.long_excess_threshold_ratio) or white_edge_slack
-    overcontains_short = short_axis_semantic_ok and short_slack_ratio > alignment.short_excess_ratio and max_short_slack >= short_slack_pixel_threshold
+    overcontains_long = long_slack_ratio > alignment_policy.long_excess_ratio or (max_long_slack >= long_slack_pixel_threshold and long_slack_ratio > alignment_policy.long_excess_threshold_ratio) or white_edge_slack
+    overcontains_short = short_axis_semantic_ok and short_slack_ratio > alignment_policy.short_excess_ratio and max_short_slack >= short_slack_pixel_threshold
     undercrops_long = max_long_undercrop >= long_slack_pixel_threshold
     undercrops_short = max_short_undercrop >= short_slack_pixel_threshold
     ok = not (undercrops_long or undercrops_short)
@@ -177,52 +189,8 @@ def outer_content_alignment_detail(
         "edge_hard_anchors": edge_hard_anchors,
         "white_edge_slack": white_edge_slack,
         "short_axis_semantic_ok": bool(short_axis_semantic_ok),
-        "short_content_height_max": float(alignment.short_content_height_max),
+        "short_content_height_max": float(alignment_policy.short_content_height_max),
     }
     if detail_key is not None:
         cache.outer_alignment_details[detail_key] = copy.deepcopy(detail)
     return detail
-
-
-def corrected_outer_from_alignment(
-    alignment: dict[str, Any],
-    count: int,
-    content_containment_policy: ContentContainmentCorrectionPolicy,
-) -> Optional[Box]:
-    alignment_policy = content_containment_policy
-    if not bool(alignment.get("used", False)) or bool(alignment.get("ok", True)):
-        return None
-    try:
-        outer = box_from_dict(alignment["outer_work_box"])
-        content = box_from_dict(alignment["content_work_box"])
-    except Exception:
-        return None
-    if not outer.valid() or not content.valid():
-        return None
-
-    pitch = float(outer.width) / float(max(1, count))
-    alignment_margin_x = clamp_int(pitch * alignment_policy.margin_x_ratio, alignment_policy.margin_x_min, alignment_policy.margin_x_max)
-    alignment_margin_y = clamp_int(float(outer.height) * alignment_policy.margin_y_ratio, alignment_policy.margin_y_min, alignment_policy.margin_y_max)
-    long_margin_cap = clamp_int(pitch * alignment_policy.long_margin_cap_ratio, alignment_policy.long_margin_cap_min, alignment_policy.long_margin_cap_max)
-    short_margin_cap = clamp_int(float(outer.height) * alignment_policy.short_margin_cap_ratio, alignment_policy.short_margin_cap_min, alignment_policy.short_margin_cap_max)
-    long_margin = max(alignment_margin_x, min(long_margin_cap, int(round(pitch * alignment_policy.long_margin_ratio))))
-    short_margin = max(alignment_margin_y, min(short_margin_cap, int(round(float(outer.height) * alignment_policy.short_margin_ratio))))
-    left, top, right, bottom = outer.left, outer.top, outer.right, outer.bottom
-
-    if int(alignment.get("long_slack_left", 0)) > 0:
-        left = max(outer.left, content.left - long_margin)
-    if int(alignment.get("long_slack_right", 0)) > 0:
-        right = min(outer.right, content.right + long_margin)
-    if int(alignment.get("short_slack_top", 0)) > 0 and str(alignment.get("reason", "")) == "outer_short_axis_excess":
-        top = max(outer.top, content.top - short_margin)
-    if int(alignment.get("short_slack_bottom", 0)) > 0 and str(alignment.get("reason", "")) == "outer_short_axis_excess":
-        bottom = min(outer.bottom, content.bottom + short_margin)
-
-    corrected = Box(left, top, right, bottom)
-    if not corrected.valid():
-        return None
-    if corrected.width < max(80, int(round(outer.width * 0.80))) or corrected.height < max(40, int(round(outer.height * 0.80))):
-        return None
-    if corrected == outer:
-        return None
-    return corrected

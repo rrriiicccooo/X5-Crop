@@ -77,11 +77,13 @@ def gap_from_dict(value: dict[str, Any]) -> Gap:
 
 
 def detection_from_record(record: dict[str, Any]) -> Detection:
+    format_detail = record.get("format")
+    format_detail = dict(format_detail) if isinstance(format_detail, dict) else {}
     return Detection(
-        film_format=str(record["film_format"]),
-        layout=str(record["layout"]),
+        film_format=str(record["format_id"]),
+        layout=str(record.get("layout") or format_detail.get("layout")),
         strip_mode=str(record["strip_mode"]),
-        count=int(record["count"]),
+        count=int(record.get("count") or format_detail.get("count")),
         outer=box_from_dict(record["outer_box"]),
         frames=[box_from_dict(box) for box in record.get("frame_boxes", [])],
         gaps=[gap_from_dict(gap) for gap in record.get("gaps", [])],
@@ -97,17 +99,28 @@ def cached_record_matches(
     profile: ImageProfile,
     config: RuntimeConfig,
 ) -> bool:
-    report_schema = record.get("report_schema")
-    if not isinstance(report_schema, dict):
+    if record.get("schema_id") != REPORT_SCHEMA_ID:
         return False
-    if report_schema.get("schema_id") != REPORT_SCHEMA_ID:
+    if record.get("schema_revision") != REPORT_SCHEMA_REVISION:
         return False
-    if report_schema.get("schema_revision") != REPORT_SCHEMA_REVISION:
+    required_schema_keys = (
+        "final_review_reasons",
+        "candidate_gate",
+        "decision_gate",
+        "decision_signals",
+        "evidence_summary",
+        "schema_validation",
+        "detail",
+    )
+    if any(key not in record for key in required_schema_keys):
         return False
     if "final_review_reasons" not in record:
         return False
     detail = record.get("detail")
     if not isinstance(detail, dict):
+        return False
+    decision_summary = detail.get("decision_summary")
+    if not isinstance(decision_summary, dict) or not isinstance(decision_summary.get("final_review_reasons"), list):
         return False
     if not isinstance(detail.get("output_geometry"), dict):
         return False
@@ -212,7 +225,7 @@ def result_from_reusable_analysis(
         return result_from_cached_record(input_file, cached_record, profile, warnings)
 
     arr, profile, page_warnings = read_tiff(input_file, config.page)
-    policy = policy_bundle.policy_for(str(cached_record["film_format"]), str(cached_record["strip_mode"]))
+    policy = policy_bundle.policy_for(str(cached_record["format_id"]), str(cached_record["strip_mode"]))
     gray = make_base_gray_u8(arr, profile.axes, profile.photometric, policy.preprocess.base_gray)
     warnings.extend(warning for warning in page_warnings if warning not in warnings)
     source_arr = arr

@@ -33,6 +33,9 @@ class FrameFitParameters(Protocol):
     edge_adjust_tolerance_ratio: float
     edge_adjust_tolerance_min: float
     edge_adjust_tolerance_max: float
+    edge_pair_score_cap: float
+    edge_pair_weight_multiplier: float
+    detected_gap_score_cap: float
 
 
 def frame_boxes_from_gaps(
@@ -99,13 +102,13 @@ def fit_cuts_by_geometry(
     return fitted
 
 
-def frame_edge_weight(gap: Gap) -> float:
+def frame_edge_weight(gap: Gap, config: FrameFitParameters) -> float:
     if gap.width <= 0:
         return 0.0
     if is_edge_pair_gap_method(gap.method):
-        return max(0.0, min(1.8, gap.score)) * 1.20
+        return max(0.0, min(float(config.edge_pair_score_cap), gap.score)) * float(config.edge_pair_weight_multiplier)
     if is_detected_gap_method(gap.method):
-        return max(0.0, min(1.5, gap.score))
+        return max(0.0, min(float(config.detected_gap_score_cap), gap.score))
     return 0.0
 
 
@@ -146,7 +149,7 @@ def fit_boxes_by_edge_evidence(
     left_edges: list[tuple[float, float] | None] = [None] * count
     right_edges: list[tuple[float, float] | None] = [None] * count
     for i, gap in enumerate(gaps):
-        weight = frame_edge_weight(gap)
+        weight = frame_edge_weight(gap, config)
         if weight <= 0 or gap.start is None or gap.end is None:
             continue
         right_edges[i] = (float(gap.start), weight)

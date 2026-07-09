@@ -12,6 +12,7 @@ from ..detection.detail import (
     EVIDENCE_SUMMARY,
     OUTER_CONTENT_ALIGNMENT,
     OUTPUT_OVERLAP_EVIDENCE,
+    decision_schema_diagnostics,
     decision_summary,
     detail_dict,
     final_review_reasons_from_detail,
@@ -39,6 +40,25 @@ def _report_status(
     return "unknown"
 
 
+def _missing_schema_diagnostic(owner: str, reason: str) -> dict[str, str]:
+    return {"owner": owner, "reason": reason}
+
+
+def _schema_validation(detection: Detection, runtime_policy: dict, decision_policy: dict) -> list[dict[str, str]]:
+    diagnostics = decision_schema_diagnostics(detection)
+    if not runtime_policy:
+        diagnostics.append(_missing_schema_diagnostic("runtime_policy", "runtime_policy_detail_missing"))
+    if not decision_policy:
+        diagnostics.append(_missing_schema_diagnostic("decision_policy", "decision_policy_detail_missing"))
+    if not detail_dict(detection, EVIDENCE_SUMMARY):
+        diagnostics.append(_missing_schema_diagnostic("evidence_summary", "evidence_summary_missing"))
+    if not detail_dict(detection, DECISION_SIGNALS):
+        diagnostics.append(_missing_schema_diagnostic("decision_signals", "decision_signals_missing"))
+    if not policy_id_from_detail(detection):
+        diagnostics.append(_missing_schema_diagnostic("policy", "policy_id_missing"))
+    return diagnostics
+
+
 def report_schema_for_detection(
     detection: Detection,
     result: ProcessResult | None = None,
@@ -49,35 +69,38 @@ def report_schema_for_detection(
     decision_detail = decision_summary(detection)
     status = _report_status(result, decision_detail)
     output = {}
+    source = ""
+    profile = {}
+    report_detail = json_safe(dict(detection.detail))
     if result is not None:
+        source = str(result.source)
+        profile = dict(result.profile)
+        report_detail = json_safe(dict(result.detail))
         output = {
             "status": result.status,
             "output_files": list(result.output_files),
             "review_copy": result.review_copy,
             "warnings": list(result.warnings),
         }
-    runtime_policy = runtime_policy_detail(detection) or {
-        "missing": True,
-        "reason": "runtime_policy_detail_missing",
-    }
-    decision_policy = (
-        detail_dict(detection, DECISION_POLICY_DETAIL)
-        or decision_detail.get(DECISION_POLICY_DETAIL)
-        or {
-            "missing": True,
-            "reason": "decision_policy_detail_missing",
-        }
-    )
+    runtime_policy = runtime_policy_detail(detection)
+    decision_policy = detail_dict(detection, DECISION_POLICY_DETAIL)
+    schema_validation = _schema_validation(detection, runtime_policy, decision_policy)
     policy = {
-        "runtime_policy": runtime_policy,
-        "decision_policy": decision_policy,
+        "runtime_policy": runtime_policy or {"missing": True, "reason": "runtime_policy_detail_missing"},
+        "decision_policy": decision_policy or {"missing": True, "reason": "decision_policy_detail_missing"},
     }
+    evidence_summary = detail_dict(detection, EVIDENCE_SUMMARY)
+    decision_signals = detail_dict(detection, DECISION_SIGNALS)
+    policy_id = policy_id_from_detail(detection)
     section_values = {
         "version": {
             "script_version": VERSION,
             "schema_id": report_policy.schema_id,
             "schema_revision": report_policy.schema_revision,
         },
+        "source": source,
+        "profile": profile,
+        "detail": report_detail,
         "format": {
             "format_id": detection.film_format,
             "strip_mode": detection.strip_mode,
@@ -107,19 +130,16 @@ def report_schema_for_detection(
         "candidate_gate": candidate_gate_detail(detection),
         "decision_gate": decision_gate_detail(detection),
         "diagnostics": {
+            "schema_validation": schema_validation,
             "output_overlap_evidence": detail_dict(detection, OUTPUT_OVERLAP_EVIDENCE),
             "deskew": detail_dict(detection, DESKEW),
             "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
         },
-        "evidence_summary": detail_dict(detection, EVIDENCE_SUMMARY) or decision_detail.get(EVIDENCE_SUMMARY, {}),
-        "decision_signals": detail_dict(detection, DECISION_SIGNALS) or decision_detail.get(DECISION_SIGNALS, {}),
-        "decision_policy_detail": decision_policy,
-        "policy_id": (
-            policy_id_from_detail(detection)
-            or decision_policy.get("policy_id")
-            or runtime_policy.get("policy_id")
-            or "unknown_policy"
-        ),
+        "schema_validation": schema_validation,
+        "evidence_summary": evidence_summary,
+        "decision_signals": decision_signals,
+        "decision_policy_detail": policy["decision_policy"],
+        "policy_id": policy_id,
         "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
         "strip_completeness": detail_dict(detection, STRIP_COMPLETENESS),
         "holder_occupancy": detail_dict(detection, HOLDER_OCCUPANCY),
@@ -129,8 +149,13 @@ def report_schema_for_detection(
         "schema_id": report_policy.schema_id,
         "schema_revision": report_policy.schema_revision,
         "version": VERSION,
+        "source": section_values["source"],
+        "profile": section_values["profile"],
+        "detail": section_values["detail"],
         "format_id": detection.film_format,
         "strip_mode": detection.strip_mode,
+        "layout": detection.layout,
+        "count": int(detection.count),
         "status": section_values["result"]["status"],
         "confidence": section_values["result"]["confidence"],
         "final_review_reasons": section_values["result"]["final_review_reasons"],
@@ -147,6 +172,7 @@ def report_schema_for_detection(
         "strip_completeness": section_values["strip_completeness"],
         "holder_occupancy": section_values["holder_occupancy"],
         "policy_id": section_values["policy_id"],
+        "schema_validation": section_values["schema_validation"],
     }
     for section in report_policy.sections:
         if section in section_values:

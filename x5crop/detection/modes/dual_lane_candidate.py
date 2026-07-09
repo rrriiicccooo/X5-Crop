@@ -13,7 +13,7 @@ from ...policies.runtime.policy import DetectionPolicy
 from ...runtime.config import RuntimeConfig
 from ..candidate.assessment.candidate import apply_candidate_assessment_policy
 from ..candidate.assessment.dual_lane import apply_dual_lane_content_assessment
-from ..candidate.build.detection import build_detection_for_outer
+from ..candidate.build.detection import build_detection_geometry_for_outer, enrich_detection_geometry_evidence
 from ..candidate.selection.choose import select_source_candidate
 from ..physical.outer.base import base_outer_candidates
 
@@ -74,7 +74,7 @@ def _assessed_lane_candidate(
     outer_candidate,
 ) -> Detection:
     lane_outer = translate_box(outer_candidate.box, lane.left, lane.top)
-    raw = build_detection_for_outer(
+    raw = build_detection_geometry_for_outer(
         gray,
         lane_config,
         lane_format_spec,
@@ -92,6 +92,7 @@ def _assessed_lane_candidate(
         cache=cache,
         policy=lane_policy,
     )
+    raw = enrich_detection_geometry_evidence(gray, raw, lane_config, lane_format_spec, cache, policy=lane_policy)
     assessed = apply_candidate_assessment_policy(
         gray,
         raw,

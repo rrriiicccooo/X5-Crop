@@ -10,7 +10,7 @@ from ..geometry.boxes import map_work_box, original_box_to_work
 class OutputBleedPolicy(Protocol):
     detection_long_axis_bleed: int
     detection_short_axis_bleed: int
-    output_overlap_long_axis_bleed: int
+    output_overlap_long_axis_bleed_capacity: int
 
 
 @dataclass(frozen=True)
@@ -32,9 +32,23 @@ def detection_has_output_overlap_evidence(detection: Detection) -> bool:
         return False
     if bool(output_overlap.get("output_overlap_unresolved", False)):
         return False
-    if bool(output_overlap.get("output_overlap_protected_by_bleed", False)):
+    if (
+        bool(output_overlap.get("output_overlap_protected_by_bleed", False))
+        and required_output_overlap_bleed_px(detection) > 0
+    ):
         return True
     return False
+
+
+def required_output_overlap_bleed_px(detection: Detection) -> int:
+    output_overlap = detection.detail.get("output_overlap_evidence")
+    if not isinstance(output_overlap, dict):
+        return 0
+    try:
+        required = int(output_overlap["required_output_bleed_px"])
+    except (KeyError, TypeError, ValueError):
+        return 0
+    return max(0, required)
 
 
 def output_bleed_parameters_for_detection(
@@ -44,9 +58,13 @@ def output_bleed_parameters_for_detection(
 ) -> AxisBleedParameters:
     if not detection_has_output_overlap_evidence(detection):
         return current_bleed
+    required_bleed = required_output_overlap_bleed_px(detection)
     target_long_axis = max(
         int(current_bleed.long_axis),
-        int(output_policy.output_overlap_long_axis_bleed),
+        min(
+            int(output_policy.output_overlap_long_axis_bleed_capacity),
+            int(required_bleed),
+        ),
     )
     if target_long_axis == int(current_bleed.long_axis):
         return current_bleed
@@ -142,5 +160,6 @@ __all__ = [
     "detection_bleed_parameters",
     "detection_has_output_overlap_evidence",
     "output_bleed_parameters_for_detection",
+    "required_output_overlap_bleed_px",
     "reapply_cached_output_bleed",
 ]

@@ -43,7 +43,7 @@ def separator_outer_band_sequences(
                     continue
                 score = 0.5 * (float(left.score) + float(right.score))
                 geometry_error = abs(spacing_ratio - 1.0)
-                pairs.append((geometry_error - 0.02 * score, (left, right)))
+                pairs.append((geometry_error - float(band_policy.sequence_pair_score_weight) * score, (left, right)))
         return [
             pair
             for _rank, pair in sorted(pairs, key=lambda item: item[0])[
@@ -107,8 +107,8 @@ def collect_separator_outer_bands(
     )
     edge_margin = clamp_float(
         short_axis * band_policy.edge_margin_ratio,
-        60.0,
-        max(60.0, short_axis * 0.80),
+        float(band_policy.edge_margin_min_px),
+        max(float(band_policy.edge_margin_min_px), short_axis * float(band_policy.edge_margin_max_short_axis_ratio)),
     )
 
     bands: list[SeparatorBand] = []
@@ -136,7 +136,10 @@ def collect_separator_outer_bands(
         mean_score = float(profile[band_start:band_end].mean())
         side_score = max(float(left_guard.mean()), float(right_guard.mean()))
         prominence = mean_score - side_score
-        if mean_score < gap_search_config.min_score or (prominence < 0.02 and mean_score < 0.88):
+        if mean_score < gap_search_config.min_score or (
+            prominence < float(band_policy.prominence_min)
+            and mean_score < float(band_policy.high_mean_prominence_bypass)
+        ):
             continue
         bands.append(
             SeparatorBand(
@@ -146,7 +149,7 @@ def collect_separator_outer_bands(
                 width=float(width),
                 score=float(
                     mean_score
-                    + 0.8 * prominence
+                    + float(band_policy.prominence_score_weight) * prominence
                     - (separator_policy.separator_outer_oversized_band_score_penalty if oversized_band else 0.0)
                 ),
                 oversized=bool(oversized_band),

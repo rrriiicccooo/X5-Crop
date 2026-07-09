@@ -100,7 +100,7 @@ class ContentContainmentTest(unittest.TestCase):
         alignment = outer_content_alignment_detail(
             gray,
             detection,
-            content_containment_policy=policy.outer.correction.content_containment,
+            alignment_policy=policy.outer.alignment_evidence,
         )
 
         self.assertTrue(alignment["used"])
@@ -129,7 +129,7 @@ class ContentContainmentTest(unittest.TestCase):
         alignment = outer_content_alignment_detail(
             gray,
             detection,
-            content_containment_policy=policy.outer.correction.content_containment,
+            alignment_policy=policy.outer.alignment_evidence,
         )
 
         self.assertTrue(alignment["used"])

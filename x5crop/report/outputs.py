@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import json
-from dataclasses import asdict
 from pathlib import Path
 
 from ..app_info import REPORT_JSONL_NAME, SUMMARY_CSV_NAME
@@ -13,12 +12,25 @@ from ..utils import json_safe
 
 
 def append_report_jsonl(path: Path, result: ProcessResult) -> None:
+    if not result.report_record:
+        raise ValueError("Current report record is missing")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(json_safe(asdict(result)), ensure_ascii=False) + "\n")
+        f.write(json.dumps(json_safe(result.report_record), ensure_ascii=False) + "\n")
 
 
 def append_summary_csv(path: Path, result: ProcessResult) -> None:
+    if not result.report_record:
+        raise ValueError("Current report record is missing")
+    record = result.report_record
+    version = record.get("version", {})
+    script_version = (
+        version.get("script_version")
+        if isinstance(version, dict)
+        else str(version)
+    )
+    output = record.get("output", {})
+    output_files = output.get("output_files", []) if isinstance(output, dict) else []
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = [
         "source",
@@ -41,16 +53,16 @@ def append_summary_csv(path: Path, result: ProcessResult) -> None:
         writer.writerow(
             {
                 "source": result.source,
-                "version": result.version,
-                "policy_id": result.policy_id,
-                "status": result.status,
-                "confidence": f"{result.confidence:.3f}",
-                "film_format": result.film_format,
-                "layout": result.layout,
-                "strip_mode": result.strip_mode,
-                "count": result.count,
-                "final_review_reasons": ";".join(result.final_review_reasons),
-                "output_count": len(result.output_files),
+                "version": script_version,
+                "policy_id": record.get("policy_id", ""),
+                "status": record.get("status", ""),
+                "confidence": f"{float(record.get('confidence', 0.0)):.3f}",
+                "film_format": record.get("format_id", ""),
+                "layout": record.get("layout", ""),
+                "strip_mode": record.get("strip_mode", ""),
+                "count": record.get("count", ""),
+                "final_review_reasons": ";".join(record.get("final_review_reasons", [])),
+                "output_count": len(output_files),
             }
         )
 

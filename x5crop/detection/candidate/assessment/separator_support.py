@@ -5,7 +5,6 @@ from typing import Any, Optional
 
 from ....domain import Detection
 from ...evidence.separator_summary import gap_method_evidence_summary
-from ....formats import FORMATS
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import (
     LeadingGridFailurePolicy,
@@ -82,8 +81,8 @@ def separator_support_geometry_support_assessment(
     )
 
 
-def separator_support_needs_full_strip_supplemental_checks(detection: Detection) -> bool:
-    return detection.strip_mode == "full" and detection.count == FORMATS[detection.film_format].default_count
+def separator_support_needs_full_strip_supplemental_checks(detection: Detection, default_count: int) -> bool:
+    return detection.strip_mode == "full" and detection.count == int(default_count)
 
 
 def separator_support_broad_width_support_assessment(
@@ -118,6 +117,7 @@ def separator_support_all_internal_gaps_hard_assessment(
     detection: Detection,
     evidence: SeparatorSupportEvidence,
     support: SeparatorSupportPolicy,
+    default_count: int,
 ) -> SeparatorSupportCheck:
     needed = max(
         1,
@@ -131,7 +131,7 @@ def separator_support_all_internal_gaps_hard_assessment(
         if ok
         else "separator_all_internal_gaps_hard_support_weak"
     )
-    if ok and separator_support_needs_full_strip_supplemental_checks(detection):
+    if ok and separator_support_needs_full_strip_supplemental_checks(detection, default_count):
         broad_assessment = separator_support_broad_width_support_assessment(
             evidence.broad_separator_width_gaps,
             support,
@@ -238,6 +238,7 @@ def separator_support_assessment(
     threshold: float,
     evidence: SeparatorSupportEvidence,
     support: SeparatorSupportPolicy,
+    default_count: int,
 ) -> SeparatorSupportAssessment:
     leading_grid_failure = separator_support_leading_grid_failure_assessment(
         detection,
@@ -270,6 +271,7 @@ def separator_support_assessment(
                 detection,
                 evidence,
                 support,
+                default_count,
             ),
             separator_support_min_hard_with_equal_cap_assessment(
                 evidence,
@@ -301,7 +303,7 @@ def assess_separator_support(
 ) -> SeparatorSupportResult:
     support = policy.separator.support
     evidence = separator_support_evidence_from_detection(detection)
-    assessment = separator_support_assessment(detection, threshold, evidence, support)
+    assessment = separator_support_assessment(detection, threshold, evidence, support, policy.default_count)
 
     return SeparatorSupportResult(
         ok=assessment.ok,

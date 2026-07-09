@@ -52,7 +52,7 @@ def apply_detection_decision(
             gray,
             detection,
             analysis_cache,
-            content_containment_policy=policy.outer.correction.content_containment,
+            alignment_policy=policy.outer.alignment_evidence,
         )
         if policy.decision.align_outer_to_content
         else {"used": False, "reason": policy.decision.outer_alignment_disabled_reason}
@@ -61,6 +61,7 @@ def apply_detection_decision(
     _attach_decision_output_evidence(
         gray,
         detection,
+        config,
         policy,
         analysis_cache,
     )
@@ -90,6 +91,7 @@ def apply_detection_decision(
 def _attach_decision_output_evidence(
     gray: np.ndarray,
     detection: Detection,
+    config: RuntimeConfig,
     policy: DetectionPolicy,
     analysis_cache: AnalysisCache,
 ) -> None:
@@ -97,6 +99,10 @@ def _attach_decision_output_evidence(
         policy.output_evidence.output_overlap.enabled
         and not isinstance(detection.detail.get("output_overlap_evidence"), dict)
     ):
+        available_output_bleed_px = max(
+            int(config.bleed_x),
+            int(policy.output.output_overlap_long_axis_bleed_capacity),
+        ) if policy.output.apply_output_bleed else int(config.bleed_x)
         detection.detail["output_overlap_evidence"] = output_overlap_evidence_detail(
             gray,
             detection,
@@ -104,6 +110,7 @@ def _attach_decision_output_evidence(
             separator_policy=policy.separator,
             nearby_policy=policy.diagnostics.nearby_separator,
             output_overlap_policy=policy.output_evidence.output_overlap,
+            available_output_bleed_px=available_output_bleed_px,
         )
 
 
