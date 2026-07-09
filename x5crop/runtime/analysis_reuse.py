@@ -19,7 +19,7 @@ from ..image.gray import make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..io.tiff import read_tiff
 from .policy_context import RuntimePolicyContext
-from ..policies.ids import REPORT_SCHEMA_VERSION
+from ..policies.ids import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from ..report.result_builder import result_from_cached_record, result_from_detection
 from ..cache import REPORT_RECORD_CACHE
 from .config import RuntimeConfig
@@ -103,7 +103,9 @@ def cached_record_matches(
     report_schema = record.get("report_schema")
     if not isinstance(report_schema, dict):
         return False
-    if report_schema.get("schema_version") != REPORT_SCHEMA_VERSION:
+    if report_schema.get("schema_id") != REPORT_SCHEMA_ID:
+        return False
+    if report_schema.get("schema_revision") != REPORT_SCHEMA_REVISION:
         return False
     if "final_review_reasons" not in record:
         return False

@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from ...formats import FormatSpec, format_spec
-from ..ids import REPORT_SCHEMA_VERSION, decision_policy_id_for
+from ..ids import decision_policy_id_for
 
 if TYPE_CHECKING:
     from ..runtime.policy import DetectionPolicy
@@ -68,7 +68,8 @@ class DecisionPolicy:
 @dataclass(frozen=True)
 class DetectionDecisionContract:
     policy_id: str
-    schema_version: str
+    schema_id: str
+    schema_revision: str
     format: FormatSpec
     mode: ModePolicy
     evidence: EvidencePolicy
@@ -147,7 +148,8 @@ def decision_contract_for_policy(detection_policy: DetectionPolicy) -> Detection
     policy_id = decision_policy_id_for(detection_policy.format_id, detection_policy.strip_mode)
     return DetectionDecisionContract(
         policy_id=policy_id,
-        schema_version=detection_policy.report.schema_version,
+        schema_id=detection_policy.report.schema_id,
+        schema_revision=detection_policy.report.schema_revision,
         format=spec,
         mode=mode_policy_for(spec, detection_policy.strip_mode),
         evidence=evidence_policy_for(
@@ -160,7 +162,6 @@ def decision_contract_for_policy(detection_policy: DetectionPolicy) -> Detection
 
 
 __all__ = [
-    "REPORT_SCHEMA_VERSION",
     "DetectionDecisionContract",
     "DecisionPolicy",
     "EvidencePolicy",

@@ -109,7 +109,8 @@ def _diagnostics_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "debug_panel_titles": {
             panel.panel_id: panel.title for panel in policy.diagnostics.debug_panel_titles
         },
-        "report_schema_version": policy.report.schema_version,
+        "report_schema_id": policy.report.schema_id,
+        "report_schema_revision": policy.report.schema_revision,
         "report_sections": list(policy.report.sections),
     }
 
@@ -160,7 +161,8 @@ def _format_spec_detail(contract: "DetectionDecisionContract") -> dict[str, Any]
 def decision_contract_report_detail(contract: "DetectionDecisionContract") -> dict[str, Any]:
     return {
         "policy_id": contract.policy_id,
-        "schema_version": contract.schema_version,
+        "schema_id": contract.schema_id,
+        "schema_revision": contract.schema_revision,
         "format_spec": _format_spec_detail(contract),
         "mode_policy": asdict(contract.mode),
         "evidence_policy": asdict(contract.evidence),

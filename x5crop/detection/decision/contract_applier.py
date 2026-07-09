@@ -164,7 +164,8 @@ def apply_decision_contract(
     final_reasons = final_review_reasons(detection)
     detail = {
         "policy_id": policy.policy_id,
-        "schema_version": policy.schema_version,
+        "schema_id": policy.schema_id,
+        "schema_revision": policy.schema_revision,
         "pass": status == "approved_auto",
         "status": status,
         "final_review_reasons": final_reasons,

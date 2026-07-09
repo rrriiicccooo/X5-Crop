@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..ids import REPORT_SCHEMA_VERSION
+from ..ids import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 
 
 @dataclass(frozen=True)
 class ReportPolicy:
-    schema_version: str = REPORT_SCHEMA_VERSION
+    schema_id: str = REPORT_SCHEMA_ID
+    schema_revision: str = REPORT_SCHEMA_REVISION
     sections: tuple[str, ...] = (
         "version",
         "format",

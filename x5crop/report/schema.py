@@ -22,7 +22,6 @@ from ..detection.detail import (
     STRIP_COMPLETENESS,
 )
 from ..domain import Detection, ProcessResult
-from ..policies.ids import REPORT_SCHEMA_VERSION
 from ..policies.runtime.policy import DetectionPolicy
 from ..utils import json_safe
 from .sections import candidate_gate_detail, candidate_table, decision_gate_detail, selected_candidate
@@ -76,7 +75,8 @@ def report_schema_for_detection(
     section_values = {
         "version": {
             "script_version": VERSION,
-            "schema_version": report_policy.schema_version,
+            "schema_id": report_policy.schema_id,
+            "schema_revision": report_policy.schema_revision,
         },
         "format": {
             "format_id": detection.film_format,
@@ -126,7 +126,8 @@ def report_schema_for_detection(
         "output": output,
     }
     schema = {
-        "schema_version": report_policy.schema_version,
+        "schema_id": report_policy.schema_id,
+        "schema_revision": report_policy.schema_revision,
         "version": VERSION,
         "format_id": detection.film_format,
         "strip_mode": detection.strip_mode,
@@ -154,6 +155,5 @@ def report_schema_for_detection(
 
 
 __all__ = [
-    "REPORT_SCHEMA_VERSION",
     "report_schema_for_detection",
 ]

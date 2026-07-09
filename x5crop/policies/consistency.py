@@ -47,7 +47,8 @@ def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsist
     contract = decision_contract_for_policy(policy)
     checks: list[tuple[str, object, object]] = [
         ("decision.policy_id", decision_policy_id_for(policy.format_id, policy.strip_mode), contract.policy_id),
-        ("schema_version", policy.report.schema_version, contract.schema_version),
+        ("schema_id", policy.report.schema_id, contract.schema_id),
+        ("schema_revision", policy.report.schema_revision, contract.schema_revision),
         ("format_id", policy.format_id, contract.format.format_id.value),
         ("strip_mode", policy.strip_mode, contract.mode.mode),
         (

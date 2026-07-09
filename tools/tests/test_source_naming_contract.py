@@ -206,6 +206,25 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertFalse(hasattr(diagnostics, "ReportPolicy"))
         self.assertFalse(hasattr(common, "report_policy"))
 
+    def test_report_schema_identity_is_not_version_named(self) -> None:
+        banned = (
+            "REPORT_SCHEMA_VERSION",
+            "v4_9_policy_schema",
+            "schema_version",
+        )
+        offenders: list[str] = []
+        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+            self.assertTrue(root.is_dir())
+            for path in root.rglob("*.py"):
+                if path == Path(__file__).resolve():
+                    continue
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
     def test_output_evidence_policy_is_not_owned_by_diagnostics_modules(self) -> None:
         from x5crop.policies.assembly import diagnostics
         from x5crop.policies.runtime import diagnostics as runtime_diagnostics

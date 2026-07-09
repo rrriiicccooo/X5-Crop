@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-REPORT_SCHEMA_VERSION = "v4_9_policy_schema_2"
+REPORT_SCHEMA_ID = "detection_report"
+REPORT_SCHEMA_REVISION = "scan_calibration_holder_occupancy"
 
 _POLICY_ID_STEMS = {
     "135": "standard_strip",
@@ -26,7 +27,8 @@ def decision_policy_id_for(format_id: str, strip_mode: str) -> str:
 
 
 __all__ = [
-    "REPORT_SCHEMA_VERSION",
+    "REPORT_SCHEMA_ID",
+    "REPORT_SCHEMA_REVISION",
     "decision_policy_id_for",
     "detection_policy_id_for",
     "policy_id_stem_for",
