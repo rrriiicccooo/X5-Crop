@@ -12,7 +12,7 @@ def runtime_output_evidence_policy(
     mode_preset: ModePolicyPreset,
     params: FormatParameters,
 ) -> RuntimeOutputEvidencePolicy:
-    overlap = params.output_overlap
+    overlap = params.output.output_overlap
     return RuntimeOutputEvidencePolicy(
         output_overlap=OutputOverlapEvidencePolicy(
             enabled=mode_preset.output_overlap_enabled,

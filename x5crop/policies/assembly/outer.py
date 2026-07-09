@@ -32,8 +32,8 @@ def separator_outer_family_policies(
     params: FormatParameters,
 ) -> tuple[SeparatorOuterFamilyPolicy, SeparatorOuterFamilyPolicy, SeparatorOuterFamilyPolicy]:
     is_standard_strip = mode_preset.detector_kind == "standard_strip"
-    width_profile = params.separator_width_profile
-    full_width_outer = params.separator_full_width_outer
+    width_profile = params.separator.separator_width_profile
+    full_width_outer = params.outer.separator_full_width_outer
     width_profile_enabled = bool(width_profile.full_enabled or width_profile.partial_enabled)
     return (
         SeparatorOuterFamilyPolicy(
@@ -110,16 +110,16 @@ def outer_policy(
     params: FormatParameters,
     fmt: FormatSpec,
 ) -> OuterPolicy:
-    outer = params.outer_strategy
-    long_axis = params.long_axis_geometry_correction
-    grid_refine = params.grid_outer_refine
-    short_axis = params.short_axis_geometry_correction
-    content_containment = params.content_containment_correction
-    floating_position = params.floating_content_position
-    edge_position = params.edge_anchored_content_position
-    base_candidates = params.base_outer_candidates
-    separator_outer = params.separator_outer_band
-    separator_full_width = params.separator_full_width_outer
+    outer = params.outer.outer_strategy
+    long_axis = params.outer.long_axis_geometry_correction
+    grid_refine = params.outer.grid_outer_refine
+    short_axis = params.outer.short_axis_geometry_correction
+    content_containment = params.outer.content_containment_correction
+    floating_position = params.outer.floating_content_position
+    edge_position = params.outer.edge_anchored_content_position
+    base_candidates = params.outer.base_outer_candidates
+    separator_outer = params.outer.separator_outer_band
+    separator_full_width = params.outer.separator_full_width_outer
     partial_content_enabled = bool(strip_mode == PARTIAL and mode_preset.detector_kind != "review_only")
     separator_width_profile = mode_preset.separator_width_profile
     local_family, full_width_family, width_profile_family = separator_outer_family_policies(mode_preset, params)

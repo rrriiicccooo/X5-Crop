@@ -37,7 +37,13 @@ def _is_medium_wide(fmt: FormatSpec) -> bool:
 def _with_content_min_run(params: FormatParameters, value: float) -> FormatParameters:
     return replace(
         params,
-        content_profile=replace(params.content_profile, min_run_ratio=float(value)),
+        content=replace(
+            params.content,
+            content_profile=replace(
+                params.content.content_profile,
+                min_run_ratio=float(value),
+            ),
+        ),
     )
 
 
@@ -49,10 +55,13 @@ def _with_partial_edge(
 ) -> FormatParameters:
     return replace(
         params,
-        edge_anchored_content_position=replace(
-            params.edge_anchored_content_position,
-            ratio_extras=ratio_extras,
-            max_candidates=int(max_candidates),
+        outer=replace(
+            params.outer,
+            edge_anchored_content_position=replace(
+                params.outer.edge_anchored_content_position,
+                ratio_extras=ratio_extras,
+                max_candidates=int(max_candidates),
+            ),
         ),
     )
 
@@ -74,37 +83,40 @@ def _with_separator_outer(
 ) -> FormatParameters:
     return replace(
         params,
-        outer_strategy=replace(
-            params.outer_strategy,
-            separator_gap_search_max_width_ratio=float(gap_max_width_ratio),
-        ),
-        separator_outer_band=replace(
-            params.separator_outer_band,
-            min_score=float(min_score),
-            band_score=float(band_score),
-            spacing_min_ratio=float(spacing_min_ratio),
-            spacing_max_ratio=float(spacing_max_ratio),
-            frame_error_max=float(frame_error_max),
-            max_width_ratio=float(max_width_ratio),
-            source_candidate_count=(
-                params.separator_outer_band.source_candidate_count
-                if source_candidates is None
-                else int(source_candidates)
+        outer=replace(
+            params.outer,
+            outer_strategy=replace(
+                params.outer.outer_strategy,
+                separator_gap_search_max_width_ratio=float(gap_max_width_ratio),
             ),
-            band_candidate_count=(
-                params.separator_outer_band.band_candidate_count
-                if band_candidates is None
-                else int(band_candidates)
-            ),
-            pair_candidate_count=(
-                params.separator_outer_band.pair_candidate_count
-                if pair_candidates is None
-                else int(pair_candidates)
-            ),
-            max_candidates=(
-                params.separator_outer_band.max_candidates
-                if max_candidates is None
-                else int(max_candidates)
+            separator_outer_band=replace(
+                params.outer.separator_outer_band,
+                min_score=float(min_score),
+                band_score=float(band_score),
+                spacing_min_ratio=float(spacing_min_ratio),
+                spacing_max_ratio=float(spacing_max_ratio),
+                frame_error_max=float(frame_error_max),
+                max_width_ratio=float(max_width_ratio),
+                source_candidate_count=(
+                    params.outer.separator_outer_band.source_candidate_count
+                    if source_candidates is None
+                    else int(source_candidates)
+                ),
+                band_candidate_count=(
+                    params.outer.separator_outer_band.band_candidate_count
+                    if band_candidates is None
+                    else int(band_candidates)
+                ),
+                pair_candidate_count=(
+                    params.outer.separator_outer_band.pair_candidate_count
+                    if pair_candidates is None
+                    else int(pair_candidates)
+                ),
+                max_candidates=(
+                    params.outer.separator_outer_band.max_candidates
+                    if max_candidates is None
+                    else int(max_candidates)
+                ),
             ),
         ),
     )
@@ -113,9 +125,12 @@ def _with_separator_outer(
 def _with_separator_width_max(params: FormatParameters, value: float) -> FormatParameters:
     return replace(
         params,
-        separator_width_profile=replace(
-            params.separator_width_profile,
-            max_width_ratio=float(value),
+        separator=replace(
+            params.separator,
+            separator_width_profile=replace(
+                params.separator.separator_width_profile,
+                max_width_ratio=float(value),
+            ),
         ),
     )
 
@@ -129,22 +144,25 @@ def _with_full_width_outer(
 ) -> FormatParameters:
     return replace(
         params,
-        separator_full_width_outer=replace(
-            params.separator_full_width_outer,
-            margin_ratios=(
-                params.separator_full_width_outer.margin_ratios
-                if margin_ratios is None
-                else margin_ratios
-            ),
-            max_candidates=(
-                params.separator_full_width_outer.max_candidates
-                if max_candidates is None
-                else int(max_candidates)
-            ),
-            source_candidate_count=(
-                params.separator_full_width_outer.source_candidate_count
-                if source_candidates is None
-                else int(source_candidates)
+        outer=replace(
+            params.outer,
+            separator_full_width_outer=replace(
+                params.outer.separator_full_width_outer,
+                margin_ratios=(
+                    params.outer.separator_full_width_outer.margin_ratios
+                    if margin_ratios is None
+                    else margin_ratios
+                ),
+                max_candidates=(
+                    params.outer.separator_full_width_outer.max_candidates
+                    if max_candidates is None
+                    else int(max_candidates)
+                ),
+                source_candidate_count=(
+                    params.outer.separator_full_width_outer.source_candidate_count
+                    if source_candidates is None
+                    else int(source_candidates)
+                ),
             ),
         ),
     )
@@ -159,35 +177,38 @@ def _with_outer_alignment(
     short_requires_hard_anchors: bool | None = None,
     short_content_height_max: float | None = None,
 ) -> FormatParameters:
-    current = params.content_containment_correction
+    current = params.outer.content_containment_correction
     return replace(
         params,
-        content_containment_correction=replace(
-            current,
-            long_margin_ratio=(
-                current.long_margin_ratio
-                if long_margin_ratio is None
-                else float(long_margin_ratio)
-            ),
-            long_margin_cap_ratio=(
-                current.long_margin_cap_ratio
-                if long_margin_cap_ratio is None
-                else float(long_margin_cap_ratio)
-            ),
-            short_excess_ratio=(
-                current.short_excess_ratio
-                if short_excess_ratio is None
-                else float(short_excess_ratio)
-            ),
-            short_requires_hard_anchors=(
-                current.short_requires_hard_anchors
-                if short_requires_hard_anchors is None
-                else bool(short_requires_hard_anchors)
-            ),
-            short_content_height_max=(
-                current.short_content_height_max
-                if short_content_height_max is None
-                else float(short_content_height_max)
+        outer=replace(
+            params.outer,
+            content_containment_correction=replace(
+                current,
+                long_margin_ratio=(
+                    current.long_margin_ratio
+                    if long_margin_ratio is None
+                    else float(long_margin_ratio)
+                ),
+                long_margin_cap_ratio=(
+                    current.long_margin_cap_ratio
+                    if long_margin_cap_ratio is None
+                    else float(long_margin_cap_ratio)
+                ),
+                short_excess_ratio=(
+                    current.short_excess_ratio
+                    if short_excess_ratio is None
+                    else float(short_excess_ratio)
+                ),
+                short_requires_hard_anchors=(
+                    current.short_requires_hard_anchors
+                    if short_requires_hard_anchors is None
+                    else bool(short_requires_hard_anchors)
+                ),
+                short_content_height_max=(
+                    current.short_content_height_max
+                    if short_content_height_max is None
+                    else float(short_content_height_max)
+                ),
             ),
         ),
     )
@@ -274,13 +295,22 @@ def format_parameters(format_name: str) -> FormatParameters:
         )
         params = _with_partial_edge(params, ratio_extras=(0.04, 0.08), max_candidates=4)
     elif _is_medium_square(fmt):
-        params = replace(params, gap_search=replace(params.gap_search, max_width_max=720))
+        params = replace(
+            params,
+            separator=replace(
+                params.separator,
+                gap_search=replace(params.separator.gap_search, max_width_max=720),
+            ),
+        )
         params = _with_separator_width_max(params, 0.140)
         params = replace(
             params,
-            short_axis_geometry_correction=replace(
-                params.short_axis_geometry_correction,
-                min_error=0.24,
+            outer=replace(
+                params.outer,
+                short_axis_geometry_correction=replace(
+                    params.outer.short_axis_geometry_correction,
+                    min_error=0.24,
+                ),
             ),
         )
         params = _with_partial_edge(params, ratio_extras=(0.06, 0.10), max_candidates=6)

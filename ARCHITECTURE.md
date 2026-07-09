@@ -155,12 +155,16 @@ runtime 可以编排，但不拥有底层几何算法、候选算法或最终 de
 
 | 子层 | 职责 |
 |---|---|
-| `policies.parameters` | 参数 dataclass 和 central typed parameter factory。 |
+| `policies.parameters` | 分组参数 dataclass 和 central typed parameter factory。 |
 | `policies.runtime` | active `DetectionPolicy` 和 runtime subpolicy dataclass，包括 preprocess / physical / candidate / decision / output / diagnostics。 |
 | `policies.assembly` | 从 format facts、mode posture 和分组参数组装 runtime policy。 |
 | `policies.decision` | final PASS / REVIEW decision contract，以及由 physical traits 推导的 final evidence policy。 |
 | `policies.reporting` | policy detail serialization。 |
 | `policies.registry` / `consistency` / `ids` | policy lookup、consistency smoke、policy id 和 schema id。 |
+
+`FormatParameters` 只是装配入口，内部固定分为 `preprocess`、`content`、`outer`、
+`separator`、`candidate`、`decision`、`output` 和 `diagnostics` 参数组。assembly 只能从这些
+明确分组读取参数，不能恢复扁平 property view、string override path 或 per-format builder。
 
 format 文件不承载算法开关；能力启用由 physical traits、assembly 和 runtime policy 表达。
 decision evidence policy 不使用 format-id override 表；format 名称只作为 `FormatSpec`
@@ -191,6 +195,8 @@ XPAN 和 120-66 的 `complete_strip_can_be_underfilled` 是 format physical trai
 
 detection 中的层级方向是：proposal / evidence -> build -> assessment -> selection ->
 decision -> finalization。低层不能反向读取高层 decision 语义。
+`candidate.lifecycle` 只串联候选生命周期；execution budget detail 属于
+`candidate.plan.execution_budget`，批量 assessment 属于 `candidate.assessment.source_batch`。
 
 #### 2.5 Foundation 子层
 
@@ -323,12 +329,17 @@ or the final decision contract.
 
 #### 2.3 Policy Sublayers
 
-`policies.parameters` owns parameter dataclasses and the central typed parameter
+`policies.parameters` owns grouped parameter dataclasses and the central typed parameter
 factory. `policies.runtime` owns active runtime policy dataclasses, including
 preprocess / physical / candidate / decision / output / diagnostics subpolicies.
 `policies.assembly` builds active policy from format facts, mode posture, and
 grouped parameters. `policies.decision` owns the
 final decision contract and derives final evidence policy from physical traits.
+
+`FormatParameters` is only the assembly entry. Its contents are grouped as
+`preprocess`, `content`, `outer`, `separator`, `candidate`, `decision`, `output`,
+and `diagnostics`; assembly reads those explicit groups and must not restore flat
+property views, string override paths, or per-format builders.
 
 Format files do not carry algorithm switches; capability enablement belongs to
 assembly and runtime policy.
@@ -363,6 +374,9 @@ separate algorithms.
 The direction is proposal / evidence -> build -> assessment -> selection ->
 decision -> finalization. Lower layers must not read higher-level decision
 semantics.
+`candidate.lifecycle` only orchestrates the candidate lifecycle. Execution-budget
+visibility belongs to `candidate.plan.execution_budget`; batch assessment belongs
+to `candidate.assessment.source_batch`.
 
 #### 2.5 Foundation Sublayers
 

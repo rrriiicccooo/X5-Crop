@@ -36,7 +36,7 @@ def partial_holder_policy(
         holder_enabled = False
     else:
         holder_enabled = bool(holder.enabled)
-    content_evidence = params.content_evidence
+    content_evidence = params.content.content_evidence
     partial_edge_safety_enabled = strip_mode == PARTIAL and holder_enabled
     return PartialHolderPolicy(
         allow_empty_holder_frames=partial_edge_safety_enabled,
@@ -75,9 +75,9 @@ def partial_holder_policy(
 
 def scoring_policy(fmt: FormatSpec, params: FormatParameters) -> ScoringPolicy:
     calibration = scoring_calibration_parameters(fmt, params)
-    competition = params.candidate_competition
+    competition = params.candidate.candidate_competition
     base_score = base_detection_score_parameters(fmt, params)
-    geometry_support = params.geometry_support_score
+    geometry_support = params.candidate.geometry_support_score
     separator_support = separator_support_score_parameters(fmt, params)
     return ScoringPolicy(
         hard_full_confidence_floor=float(calibration.hard_full_confidence_floor),
@@ -133,7 +133,7 @@ def selection_policy(
     params: FormatParameters,
 ) -> SelectionPolicy:
     del preset, strip_mode
-    competition = params.candidate_competition
+    competition = params.candidate.candidate_competition
     return SelectionPolicy(
         top_n=int(competition.top_n),
         close_margin=float(competition.close_margin),
@@ -157,7 +157,7 @@ def candidate_plan_policy(
 
 
 def partial_edge_hint_policy(params: FormatParameters) -> PartialEdgeHintPolicy:
-    hint = params.partial_edge_hint
+    hint = params.candidate.partial_edge_hint
     return PartialEdgeHintPolicy(
         window_ratio=float(hint.window_ratio),
         window_min=int(hint.window_min),

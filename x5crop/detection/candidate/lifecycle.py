@@ -9,102 +9,21 @@ from ...formats import FormatSpec
 from ...policies.runtime.policy import DetectionPolicy
 from ...runtime.config import RuntimeConfig
 from ..guidance.content_model import content_detection_for_count
-from .assessment.candidate import apply_candidate_assessment_policy
 from .assessment.safety import apply_safety_candidate_assessment
+from .assessment.source_batch import assess_source_candidates
 from .build.source_candidates import (
     content_guided_separator_candidate_for_count,
     safety_outer_proposal_candidates_for_count,
     separator_source_candidates_for_count,
 )
+from .plan.execution_budget import (
+    attach_execution_budget_to_candidates,
+    separator_extension_families,
+    set_execution_budget_detail,
+)
 from .plan.reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
 from .plan.source_policy import safety_candidate_outer_proposals_enabled, separator_full_width_can_compete
 from .selection.choose import is_partial_edge_safety_candidate, select_source_candidate
-
-
-def _separator_extension_families(
-    policy: DetectionPolicy,
-    strip_mode: str,
-    explicit_count: bool,
-) -> list[str]:
-    separator_policy = policy.outer.proposal.geometry.separator
-    families: list[str] = []
-    if separator_policy.full_width.available_for(strip_mode, explicit_count):
-        families.append("separator_full_width")
-    if policy.candidate_plan.content_guided_separator.available_for(strip_mode):
-        families.append("content_guided_separator")
-    return families
-
-
-def _set_execution_budget_detail(
-    detection: Detection,
-    *,
-    primary_reliability: dict,
-    expanded_after_primary: bool,
-    extension_families: list[str],
-    skipped_reason: str | None = None,
-) -> None:
-    plan = detection.detail.setdefault("candidate_plan", {})
-    if not isinstance(plan, dict):
-        plan = {}
-        detection.detail["candidate_plan"] = plan
-    expanded = bool(expanded_after_primary)
-    primary_reliable = bool(primary_reliability.get("reliable", False))
-    action = "run_extension_candidates" if expanded else "skip_extension_candidates"
-    reason = "primary_not_reliable" if expanded else (skipped_reason or "no_extension_families")
-    detail = {
-        "stage": "expanded_after_primary" if expanded else "primary_only",
-        "action": action,
-        "reason": reason,
-        "primary_reliable": primary_reliable,
-        "primary_reliability": primary_reliability,
-        "expanded_after_primary": expanded,
-        "extension_families": list(extension_families),
-    }
-    if skipped_reason is not None:
-        detail["skipped_extension_families"] = list(extension_families)
-        detail["skipped_reason"] = skipped_reason
-    plan["execution_budget"] = detail
-
-
-def _assess_source_candidates(
-    gray: np.ndarray,
-    detections: tuple[Detection, ...],
-    config: RuntimeConfig,
-    fmt: FormatSpec,
-    source: str,
-    cache: AnalysisCache,
-    policy: DetectionPolicy,
-) -> list[Detection]:
-    return [
-        apply_candidate_assessment_policy(
-            gray,
-            detection,
-            config,
-            fmt,
-            source,
-            cache,
-            policy=policy,
-        )
-        for detection in detections
-    ]
-
-
-def _attach_execution_budget_to_candidates(
-    candidates: list[Detection],
-    *,
-    primary_reliability: dict,
-    expanded_after_primary: bool,
-    extension_families: list[str],
-    skipped_reason: str | None = None,
-) -> None:
-    for candidate in candidates:
-        _set_execution_budget_detail(
-            candidate,
-            primary_reliability=primary_reliability,
-            expanded_after_primary=expanded_after_primary,
-            extension_families=extension_families,
-            skipped_reason=skipped_reason,
-        )
 
 
 def calibrated_candidates_for_count(
@@ -121,7 +40,7 @@ def calibrated_candidates_for_count(
     candidates: list[Detection] = []
     stop_after_this_count = False
     explicit_count = bool(config.count_override is not None)
-    extension_families = _separator_extension_families(policy, strip_mode, explicit_count)
+    extension_families = separator_extension_families(policy, strip_mode, explicit_count)
 
     primary_batch = separator_source_candidates_for_count(
         gray,
@@ -135,7 +54,7 @@ def calibrated_candidates_for_count(
         include_extension_outer=False,
         include_supplemental_outer=False,
     )
-    primary_candidates = _assess_source_candidates(
+    primary_candidates = assess_source_candidates(
         gray,
         primary_batch.detections,
         config,
@@ -171,7 +90,7 @@ def calibrated_candidates_for_count(
         separator_candidates = primary_candidates
         separator_candidate = primary_separator
         skipped_reason = "reliable_primary" if primary_reliable else "no_extension_families"
-        _attach_execution_budget_to_candidates(
+        attach_execution_budget_to_candidates(
             separator_candidates,
             primary_reliability=primary_reliability,
             expanded_after_primary=False,
@@ -189,7 +108,7 @@ def calibrated_candidates_for_count(
             cache,
             policy=policy,
         )
-        separator_candidates = _assess_source_candidates(
+        separator_candidates = assess_source_candidates(
             gray,
             expanded_batch.detections,
             config,
@@ -201,7 +120,7 @@ def calibrated_candidates_for_count(
         if not separator_candidates:
             separator_candidates = primary_candidates
         separator_candidate = select_source_candidate(separator_candidates, config.confidence_threshold)
-        _attach_execution_budget_to_candidates(
+        attach_execution_budget_to_candidates(
             separator_candidates,
             primary_reliability=primary_reliability,
             expanded_after_primary=True,
@@ -223,16 +142,16 @@ def calibrated_candidates_for_count(
                     "content_guided_separator"
                 ] = guidance_detail
             else:
-                content_guided_candidate = apply_candidate_assessment_policy(
+                content_guided_candidate = assess_source_candidates(
                     gray,
-                    content_guided_separator,
+                    (content_guided_separator,),
                     config,
                     fmt,
                     "separator",
                     cache,
-                    policy=policy,
-                )
-                _set_execution_budget_detail(
+                    policy,
+                )[0]
+                set_execution_budget_detail(
                     content_guided_candidate,
                     primary_reliability=primary_reliability,
                     expanded_after_primary=True,
@@ -262,7 +181,7 @@ def calibrated_candidates_for_count(
             cache,
             policy=policy,
         )
-        safety_candidates = _assess_source_candidates(
+        safety_candidates = assess_source_candidates(
             gray,
             safety_batch.detections,
             config,
@@ -317,7 +236,17 @@ def calibrated_candidates_for_count(
         content_policy=policy.content,
     )
     if content is not None:
-        candidates.append(apply_candidate_assessment_policy(gray, content, config, fmt, "content", cache, policy=policy))
+        candidates.extend(
+            assess_source_candidates(
+                gray,
+                (content,),
+                config,
+                fmt,
+                "content",
+                cache,
+                policy,
+            )
+        )
     return candidates, stop_after_this_count
 
 

@@ -16,11 +16,11 @@ def content_policy(
     *,
     evidence_image: ContentEvidenceImageParameters,
 ) -> ContentPolicy:
-    evidence = params.content_evidence
-    profile = params.content_profile
-    mask = params.content_mask
-    candidate = params.content_candidate
-    support = params.content_support
+    evidence = params.content.content_evidence
+    profile = params.content.content_profile
+    mask = params.content.content_mask
+    candidate = params.content.content_candidate
+    support = params.content.content_support
     return ContentPolicy(
         evidence_image=evidence_image,
         evidence=ContentEvidencePolicy(

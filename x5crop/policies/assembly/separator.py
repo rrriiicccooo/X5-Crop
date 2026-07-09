@@ -126,7 +126,7 @@ def separator_width_profile_policy(
     mode = preset.mode if preset.mode != "off" else family_mode
     if not enabled:
         mode = "off"
-    width_profile = params.separator_width_profile
+    width_profile = params.separator.separator_width_profile
     return SeparatorWidthProfilePolicy(
         mode=mode,
         max_width_ratio=float(width_profile.max_width_ratio),
@@ -198,16 +198,16 @@ def separator_policy(
     params: FormatParameters,
 ) -> SeparatorPolicy:
     support = separator_support_policy(preset, params)
-    separator_width_profile = params.separator_width_profile
+    separator_width_profile = params.separator.separator_width_profile
     separator_width_profile_enabled = bool(
         (strip_mode == FULL and separator_width_profile.full_enabled)
         or (strip_mode == PARTIAL and separator_width_profile.partial_enabled)
     )
-    hard_gap_trust = params.hard_gap_trust
+    hard_gap_trust = params.separator.hard_gap_trust
     nearby_refinement = nearby_separator_refinement_parameters(FORMATS[preset.format_id], params)
-    gap_search = params.gap_search
-    profile = params.separator_profile
-    edge_refine = params.edge_refine_profile
+    gap_search = params.separator.gap_search
+    profile = params.separator.separator_profile
+    edge_refine = params.separator.edge_refine_profile
     return SeparatorPolicy(
         support=support,
         hard_required_all_gaps=bool(support.hard_required_all_gaps),
@@ -217,7 +217,7 @@ def separator_policy(
             params,
             enabled=separator_width_profile_enabled,
         ),
-        width_profile_search=params.separator_width_profile_search,
+        width_profile_search=params.separator.separator_width_profile_search,
         refinement=separator_refinement_policy(mode_preset),
         geometry_support_modes=mode_preset.separator_geometry_support_modes,
         geometry_support=separator_geometry_support_policy(preset, mode_preset, params),

@@ -5,7 +5,7 @@ from ..runtime.decision import RuntimeDecisionPolicy
 
 
 def runtime_decision_policy(params: FormatParameters) -> RuntimeDecisionPolicy:
-    decision = params.decision_review
+    decision = params.decision.decision_review
     return RuntimeDecisionPolicy(
         align_outer_to_content=True,
         outer_alignment_disabled_reason="disabled_by_policy",

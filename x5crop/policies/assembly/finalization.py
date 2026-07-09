@@ -8,7 +8,7 @@ from ..runtime.final import (
 
 
 def finalization_policy(params: FormatParameters) -> FinalizationPolicy:
-    approved_adjustment = params.approved_geometry_adjustment
+    approved_adjustment = params.output.approved_geometry_adjustment
     return FinalizationPolicy(
         apply_approved_geometry_adjustment=True,
         approved_geometry_adjustment=ApprovedGeometryAdjustmentPolicy(

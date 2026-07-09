@@ -9,8 +9,8 @@ from ..runtime.diagnostics import (
 
 
 def diagnostics_policy(params: FormatParameters) -> RuntimeDiagnosticsPolicy:
-    debug_gap = params.debug_gap_overlay
-    nearby = params.nearby_separator_diagnostics
+    debug_gap = params.diagnostics.debug_gap_overlay
+    nearby = params.diagnostics.nearby_separator_diagnostics
     return RuntimeDiagnosticsPolicy(
         debug_gap_overlay=DebugGapOverlayPolicy(
             overlap_tolerance_ratio=float(debug_gap.overlap_tolerance_ratio),
