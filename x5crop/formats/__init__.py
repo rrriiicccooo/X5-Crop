@@ -60,9 +60,11 @@ class FormatPhysicalSpec:
 FormatSpec = FormatPhysicalSpec
 
 
-def expected_separator_count(format_id: str, default_count: int) -> int:
-    if format_id == FormatId.DUAL_LANE.value:
-        return 10
+def expected_separator_count(default_count: int, physical_layout: str) -> int:
+    if physical_layout == "dual_lane":
+        lane_count = 2
+        lane_frame_count = max(1, int(default_count) // lane_count)
+        return lane_count * max(0, lane_frame_count - 1)
     return max(0, int(default_count) - 1)
 
 
@@ -85,7 +87,7 @@ def _format_spec(
         allowed_counts=allowed_counts,
         family=family,
         frame_size_mm_options=frame_options,
-        expected_separator_count=expected_separator_count(name, default_count),
+        expected_separator_count=expected_separator_count(default_count, physical_layout),
         physical_layout=physical_layout,
         complete_strip_can_be_underfilled=complete_strip_can_be_underfilled,
     )

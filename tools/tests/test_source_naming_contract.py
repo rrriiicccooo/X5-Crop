@@ -250,6 +250,35 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_format_physical_count_does_not_branch_on_format_id(self) -> None:
+        text = (PROJECT_ROOT / "x5crop" / "formats" / "__init__.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("format_id == FormatId.DUAL_LANE.value", text)
+        self.assertIn('physical_layout == "dual_lane"', text)
+
+    def test_decision_evidence_policy_receives_physical_spec(self) -> None:
+        text = (
+            PROJECT_ROOT / "x5crop" / "policies" / "decision" / "evidence_policy.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("format_spec(", text)
+        self.assertIn("spec: FormatSpec", text)
+
+    def test_format_preset_helpers_use_spec_and_traits_not_format_id(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "format_presets.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        private_helper_arguments: dict[str, list[str]] = {}
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef) and node.name.startswith("_"):
+                private_helper_arguments[node.name] = [arg.arg for arg in node.args.args]
+
+        offenders = {
+            name: args
+            for name, args in private_helper_arguments.items()
+            if "format_id" in args
+        }
+        self.assertEqual(offenders, {})
+
     def test_active_gate_names_use_candidate_and_decision_contract_terms(self) -> None:
         banned = (
             "hard_review_reason_gate",

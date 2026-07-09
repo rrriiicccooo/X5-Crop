@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ...formats import FormatSpec, format_spec
+from ...formats import FormatSpec
 from ...formats.traits import runtime_traits_for_spec
 from .contract import EvidencePolicy
 
@@ -106,12 +106,11 @@ def _partial_evidence_policy(policy: EvidencePolicy) -> EvidencePolicy:
 
 
 def evidence_policy_for_physical_spec(
-    format_id: str,
+    spec: FormatSpec,
     strip_mode: str,
     defaults: EvidencePolicy,
     geometry_support_modes: tuple[str, ...] = (),
 ) -> EvidencePolicy:
-    spec = format_spec(format_id)
     policy = _physical_evidence_policy(spec, defaults)
     if strip_mode == "partial":
         policy = _partial_evidence_policy(policy)

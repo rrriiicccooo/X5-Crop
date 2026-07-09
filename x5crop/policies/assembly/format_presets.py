@@ -4,8 +4,8 @@ from collections.abc import Callable
 
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import FULL, PARTIAL, ReviewOnlyPolicy
-from ...formats import format_spec
-from ...formats.traits import runtime_traits_for_spec
+from ...formats import FormatSpec, format_spec
+from ...formats.traits import FormatRuntimeTraits, runtime_traits_for_spec
 from .factory import build_policy_from_preset
 from .presets import (
     FormatPolicyPreset,
@@ -18,8 +18,7 @@ from .profile_presets import frame_fit_profile, separator_edge_pair_profile
 ParameterFactory = Callable[[], FormatParameters]
 
 
-def _detector_kind(format_id: str, strip_mode: str) -> str:
-    spec = format_spec(format_id)
+def _detector_kind(spec: FormatSpec, strip_mode: str) -> str:
     if spec.physical_layout == "dual_lane" and strip_mode == FULL:
         return "dual_lane"
     if spec.physical_layout == "dual_lane" and strip_mode == PARTIAL:
@@ -27,8 +26,7 @@ def _detector_kind(format_id: str, strip_mode: str) -> str:
     return "standard_strip"
 
 
-def _review_only(format_id: str, strip_mode: str) -> ReviewOnlyPolicy:
-    spec = format_spec(format_id)
+def _review_only(spec: FormatSpec, strip_mode: str) -> ReviewOnlyPolicy:
     if spec.physical_layout == "dual_lane" and strip_mode == PARTIAL:
         return ReviewOnlyPolicy(
             reason="dual_lane_partial_not_supported",
@@ -37,9 +35,7 @@ def _review_only(format_id: str, strip_mode: str) -> ReviewOnlyPolicy:
     return ReviewOnlyPolicy()
 
 
-def _separator_width_profile(format_id: str) -> SeparatorWidthProfilePreset:
-    spec = format_spec(format_id)
-    traits = runtime_traits_for_spec(spec)
+def _separator_width_profile(traits: FormatRuntimeTraits) -> SeparatorWidthProfilePreset:
     if traits.separator_width_profile == "broad":
         return SeparatorWidthProfilePreset(
             mode="conditional",
@@ -48,33 +44,34 @@ def _separator_width_profile(format_id: str) -> SeparatorWidthProfilePreset:
     return SeparatorWidthProfilePreset()
 
 
-def _separator_geometry_support_modes(format_id: str, strip_mode: str) -> tuple[str, ...]:
-    spec = format_spec(format_id)
-    traits = runtime_traits_for_spec(spec)
+def _separator_geometry_support_modes(
+    traits: FormatRuntimeTraits,
+    strip_mode: str,
+) -> tuple[str, ...]:
     if traits.geometry_support_profile == "stable_dense_grid" and strip_mode == FULL:
         return ("detected_geometry", "stable_grid")
     return ()
 
 
-def _output_overlap_enabled(format_id: str, strip_mode: str) -> bool:
+def _output_overlap_enabled(traits: FormatRuntimeTraits, strip_mode: str) -> bool:
     if strip_mode == PARTIAL:
         return True
-    return runtime_traits_for_spec(format_spec(format_id)).output_overlap_profile == "sensitive"
+    return traits.output_overlap_profile == "sensitive"
 
 
 def mode_policy_preset(format_id: str, strip_mode: str) -> ModePolicyPreset:
     spec = format_spec(format_id)
     traits = runtime_traits_for_spec(spec)
     return ModePolicyPreset(
-        detector_kind=_detector_kind(format_id, strip_mode),
+        detector_kind=_detector_kind(spec, strip_mode),
         frame_fit=frame_fit_profile(traits.frame_fit_profile, strip_mode),
-        review_only=_review_only(format_id, strip_mode),
-        separator_width_profile=_separator_width_profile(format_id),
+        review_only=_review_only(spec, strip_mode),
+        separator_width_profile=_separator_width_profile(traits),
         separator_geometry_support_modes=_separator_geometry_support_modes(
-            format_id,
+            traits,
             strip_mode,
         ),
-        output_overlap_enabled=_output_overlap_enabled(format_id, strip_mode),
+        output_overlap_enabled=_output_overlap_enabled(traits, strip_mode),
     )
 
 
@@ -82,10 +79,12 @@ def format_policy_preset(
     format_id: str,
     parameters: ParameterFactory,
 ) -> FormatPolicyPreset:
+    spec = format_spec(format_id)
+    traits = runtime_traits_for_spec(spec)
     return FormatPolicyPreset(
         format_id=format_id,
         parameters=parameters,
-        separator_edge_pair=separator_edge_pair_profile(runtime_traits_for_spec(format_spec(format_id)).edge_pair_profile),
+        separator_edge_pair=separator_edge_pair_profile(traits.edge_pair_profile),
         modes={
             FULL: mode_policy_preset(format_id, FULL),
             PARTIAL: mode_policy_preset(format_id, PARTIAL),

@@ -115,10 +115,11 @@ def evidence_policy_for(
     strip_mode: str,
     geometry_support_modes: tuple[str, ...] = (),
 ) -> EvidencePolicy:
+    from ...formats import format_spec
     from .evidence_policy import evidence_policy_for_physical_spec
 
     return evidence_policy_for_physical_spec(
-        format_id,
+        format_spec(format_id),
         strip_mode,
         EvidencePolicy(),
         geometry_support_modes,
