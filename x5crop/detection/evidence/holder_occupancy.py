@@ -38,28 +38,14 @@ def _work_frames(detection: Detection) -> list[Box]:
 
 
 def _holder_reference_outer(detection: Detection) -> Box:
-    candidates = detection.detail.get("outer_candidates")
-    holder_boxes: list[Box] = []
-    if isinstance(candidates, list):
-        for item in candidates:
-            if not isinstance(item, dict):
-                continue
-            strategy = str(item.get("strategy") or "")
-            proposal = item.get("proposal_detail", {})
-            family = str(proposal.get("family") or "") if isinstance(proposal, dict) else ""
-            if strategy != "base_outer" and family != "base_outer":
-                continue
-            value = item.get("box")
-            if not isinstance(value, dict):
-                continue
-            try:
-                box = box_from_dict(value)
-            except (KeyError, TypeError, ValueError):
-                continue
+    holder_reference = detection.detail.get("holder_reference_outer_box")
+    if isinstance(holder_reference, dict):
+        try:
+            box = box_from_dict(holder_reference)
             if box.valid():
-                holder_boxes.append(box)
-    if holder_boxes:
-        return max(holder_boxes, key=lambda box: box.width * box.height)
+                return box
+        except (KeyError, TypeError, ValueError):
+            pass
     return _work_outer(detection)
 
 

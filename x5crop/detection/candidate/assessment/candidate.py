@@ -397,7 +397,11 @@ def apply_candidate_assessment_policy(
         )
         confidence_caps.append(cap_detail)
     else:
-        confidence = max(confidence, config.confidence_threshold + min(0.10, joint_score * 0.08))
+        gate_pass_boost = min(
+            float(scoring_policy.candidate_gate_pass_boost_cap),
+            float(joint_score) * float(scoring_policy.candidate_gate_pass_boost_ratio),
+        )
+        confidence = max(confidence, float(config.confidence_threshold) + gate_pass_boost)
     candidate_gate = candidate_gate.with_confidence_caps(confidence_caps)
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
     set_candidate_signals(candidate, signals)

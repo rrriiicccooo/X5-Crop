@@ -64,6 +64,9 @@ def partial_holder_policy(
         leading_content_max_mean=float(holder.leading_content_max_mean),
         leading_content_max_coverage=float(holder.leading_content_max_coverage),
         leading_content_band_ratio=float(holder.leading_content_band_ratio),
+        leading_content_band_min_px=int(holder.leading_content_band_min_px),
+        leading_content_band_max_ratio=float(holder.leading_content_band_max_ratio),
+        leading_content_signal_threshold=float(holder.leading_content_signal_threshold),
         min_frame_mean=float(holder.min_frame_mean),
         min_frame_coverage=float(holder.min_frame_coverage),
         max_frame_aspect_error=float(content_evidence.aspect_ok_max),
@@ -84,6 +87,8 @@ def scoring_policy(fmt: FormatSpec, params: FormatParameters) -> ScoringPolicy:
         separator_source_bias=float(calibration.separator_source_bias),
         no_auto_cap_full=float(calibration.no_auto_cap_full),
         no_auto_cap_partial=float(calibration.no_auto_cap_partial),
+        candidate_gate_pass_boost_cap=float(calibration.candidate_gate_pass_boost_cap),
+        candidate_gate_pass_boost_ratio=float(calibration.candidate_gate_pass_boost_ratio),
         competition_top_n=int(competition.top_n),
         competition_close_margin=float(competition.close_margin),
         base_detection=BaseDetectionScorePolicy(

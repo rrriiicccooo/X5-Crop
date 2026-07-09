@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from copy import deepcopy
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 import numpy as np
@@ -29,6 +30,28 @@ class DetectionFinalizationResult:
     output_config: RuntimeConfig
 
 
+def _clone_detection_for_output(detection: Detection) -> Detection:
+    return Detection(
+        film_format=detection.film_format,
+        layout=detection.layout,
+        strip_mode=detection.strip_mode,
+        count=int(detection.count),
+        outer=detection.outer,
+        frames=list(detection.frames),
+        gaps=list(detection.gaps),
+        confidence=float(detection.confidence),
+        final_review_reasons=list(detection.final_review_reasons),
+        detail=deepcopy(detection.detail),
+    )
+
+
+def _geometry_detail(detection: Detection) -> dict[str, Any]:
+    return {
+        "outer_box": asdict(detection.outer),
+        "frame_boxes": [asdict(frame) for frame in detection.frames],
+    }
+
+
 def finalize_detection(
     gray: np.ndarray,
     detection: Detection,
@@ -37,10 +60,12 @@ def finalize_detection(
     analysis_cache: AnalysisCache,
     policy: DetectionPolicy,
 ) -> DetectionFinalizationResult:
+    output_detection = _clone_detection_for_output(detection)
+    output_detection.detail["decision_geometry"] = _geometry_detail(detection)
     detection_bleed = detection_bleed_parameters(policy.output)
     if policy.finalization.apply_approved_geometry_adjustment:
         apply_approved_geometry_adjustment(
-            detection,
+            output_detection,
             gray,
             status,
             policy.finalization.approved_geometry_adjustment,
@@ -57,14 +82,14 @@ def finalize_detection(
     )
     if policy.output.apply_output_bleed:
         apply_output_bleed(
-            detection,
+            output_detection,
             detection_bleed,
             output_bleed,
             gray.shape[1],
             gray.shape[0],
         )
         apply_edge_bleed_protection(
-            detection,
+            output_detection,
             output_config,
             gray.shape[1],
             gray.shape[0],
@@ -73,14 +98,15 @@ def finalize_detection(
     if not policy.diagnostics.attach_read_only_when_requested or config.diagnostics:
         attach_read_only_diagnostics(
             gray,
-            detection,
+            output_detection,
             analysis_cache,
             separator_policy=policy.separator,
             diagnostics_policy=policy.diagnostics,
             output_evidence_policy=policy.output_evidence,
         )
+    output_detection.detail["output_geometry"] = _geometry_detail(output_detection)
     return DetectionFinalizationResult(
-        detection=detection,
+        detection=output_detection,
         status=status,
         output_config=output_config,
     )

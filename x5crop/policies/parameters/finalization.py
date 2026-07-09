@@ -19,6 +19,9 @@ class PartialHolderParameters:
     leading_content_max_mean: float = 0.20
     leading_content_max_coverage: float = 0.34
     leading_content_band_ratio: float = 0.04
+    leading_content_band_min_px: int = 8
+    leading_content_band_max_ratio: float = 0.12
+    leading_content_signal_threshold: float = 0.20
     frame_content_check: bool = False
     min_frame_mean: float = 0.055
     min_frame_coverage: float = 0.10

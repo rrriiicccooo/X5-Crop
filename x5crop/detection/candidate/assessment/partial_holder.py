@@ -112,10 +112,12 @@ def partial_edge_safety_leading_content_detail(
         pitch = 0.0
     if pitch <= 0.0:
         pitch = (right - left) / float(max(1, detection.count))
+    band_min_px = int(holder.leading_content_band_min_px)
+    band_max_ratio = float(holder.leading_content_band_max_ratio)
     band = clamp_int(
         pitch * float(holder.leading_content_band_ratio),
-        8,
-        max(8, int(max(8.0, pitch * 0.12))),
+        band_min_px,
+        max(band_min_px, int(max(float(band_min_px), pitch * band_max_ratio))),
     )
 
     if cache is not None and cache.layout == detection.layout:
@@ -137,7 +139,8 @@ def partial_edge_safety_leading_content_detail(
         return {"used": False, "reason": "empty_sample"}
 
     mean = float(sample.mean())
-    coverage = float((sample > 0.20).mean())
+    signal_threshold = float(holder.leading_content_signal_threshold)
+    coverage = float((sample > signal_threshold).mean())
     ok = (
         mean <= float(holder.leading_content_max_mean)
         and coverage <= float(holder.leading_content_max_coverage)
@@ -149,6 +152,9 @@ def partial_edge_safety_leading_content_detail(
         "mean": mean,
         "coverage": coverage,
         "band_px": int(band_right - left),
+        "band_min_px": int(band_min_px),
+        "band_max_ratio": float(band_max_ratio),
+        "signal_threshold": float(signal_threshold),
         "max_mean": float(holder.leading_content_max_mean),
         "max_coverage": float(holder.leading_content_max_coverage),
     }

@@ -155,7 +155,7 @@ Common fields to inspect:
 ```text
 status
 confidence
-review_reasons
+final_review_reasons
 outer_box
 frame_boxes
 gaps

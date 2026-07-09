@@ -10,8 +10,8 @@ from ..app_info import SCRIPT_NAME, VERSION
 from ..domain import ProcessResult
 from ..entry.options import CliOptions
 from ..report.outputs import write_report_outputs_for_result
+from ..policies.runtime.bundle import DetectionPolicyBundle
 from .config import RuntimeConfig
-from .policy_context import RuntimePolicyContext
 from .input_probe import runtime_config_from_options
 from .workflow import (
     process_one,
@@ -25,7 +25,7 @@ def print_run_header(config: RuntimeConfig, files: list[Path]) -> None:
     print(f"files: {len(files)}")
     layout_label = f"auto(probe={config.layout})" if config.layout_auto else config.layout
     mode_parts = [f"layout: {layout_label}", f"strip: {config.strip_mode}"]
-    policy = RuntimePolicyContext.for_format_mode(config.film_format, config.strip_mode).initial_policy
+    policy = DetectionPolicyBundle.for_format_mode(config.film_format, config.strip_mode).initial_policy
     mode_parts.append(f"policy: {policy.policy_id}")
     if config.strip_mode == "partial" and config.count_override is None:
         mode_parts.append("count: auto")

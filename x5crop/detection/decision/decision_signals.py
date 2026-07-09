@@ -116,10 +116,7 @@ def decision_signals_for(
         "candidate_competition_close": bool(candidate_competition_close),
         "candidate_margin_to_second": margin,
         "partial_full_conflict": bool(partial_full_conflict),
-        "selection_uncertainty_inputs": detection.detail.get(
-            "selection_uncertainty_inputs",
-            [],
-        ),
+        "selection_uncertainty_inputs": competition.get("selection_uncertainty_inputs", []),
         "partial_edge_uncertain": bool(partial_edge_uncertain),
     }
 

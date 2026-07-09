@@ -4,8 +4,7 @@ from dataclasses import dataclass
 
 from ....domain import Detection
 from ....formats import FormatSpec
-from ....runtime.policy_context import RuntimePolicyContext
-from ....policies.runtime.policy import DetectionPolicy
+from ....policies.runtime.candidate import SelectionPolicy
 from ..signals import candidate_signals
 
 
@@ -93,20 +92,18 @@ def select_detection_candidate(
     candidates: list[Detection],
     fmt: FormatSpec,
     threshold: float,
-    policy: DetectionPolicy,
-    policy_context: RuntimePolicyContext,
+    selection_policy: SelectionPolicy,
 ) -> Detection:
     candidates = sorted(candidates, key=lambda d: calibrated_candidate_rank(d, threshold), reverse=True)
     best = candidates[0]
     second = next((candidate for candidate in candidates if candidate is not best), None)
-    selected_policy = policy_context.policy_for(best.film_format, best.strip_mode)
     competition = [
         {
             "rank": index,
             "selected": candidate is best,
             **_candidate_summary(candidate),
         }
-        for index, candidate in enumerate(candidates[: selected_policy.candidate_selection.top_n], start=1)
+        for index, candidate in enumerate(candidates[: selection_policy.top_n], start=1)
     ]
     best.detail["candidate_competition"] = {
         "candidate_count": len(candidates),
@@ -117,7 +114,7 @@ def select_detection_candidate(
     if second is not None:
         margin = float(best.confidence) - float(second.confidence)
         best.detail["candidate_competition"]["margin_to_second"] = margin
-        second_close = margin < selected_policy.candidate_selection.close_margin
+        second_close = margin < selection_policy.close_margin
         partial_full_conflict = (
             best.strip_mode != second.strip_mode
             and min(best.confidence, second.confidence) >= threshold
@@ -133,10 +130,6 @@ def select_detection_candidate(
             and not best_partial_edge_safety_supported
             and (second_close or partial_full_conflict)
         ):
-            uncertainty_inputs = best.detail.setdefault("selection_uncertainty_inputs", [])
-            if not isinstance(uncertainty_inputs, list):
-                uncertainty_inputs = []
-                best.detail["selection_uncertainty_inputs"] = uncertainty_inputs
             uncertainty_input = {
                 "bucket": "candidate_selection",
                 "signal": (
@@ -145,18 +138,19 @@ def select_detection_candidate(
                     else "candidate_competition_close"
                 ),
                 "margin_to_second": float(margin),
-                "close_margin": float(selected_policy.candidate_selection.close_margin),
+                "close_margin": float(selection_policy.close_margin),
                 "partial_full_conflict": bool(partial_full_conflict),
             }
+            uncertainty_inputs = list(
+                best.detail["candidate_competition"].get("selection_uncertainty_inputs", [])
+            )
             uncertainty_inputs.append(uncertainty_input)
             best.detail["candidate_competition"]["selection_uncertainty_inputs"] = list(
                 uncertainty_inputs
             )
         best.detail["candidate_competition"]["second_candidate_close"] = bool(second_close)
         best.detail["candidate_competition"]["partial_full_conflict"] = bool(partial_full_conflict)
-        best.detail["candidate_competition"]["close_margin"] = float(
-            selected_policy.candidate_selection.close_margin
-        )
+        best.detail["candidate_competition"]["close_margin"] = float(selection_policy.close_margin)
     return best
 
 

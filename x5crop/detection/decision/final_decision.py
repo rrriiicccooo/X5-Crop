@@ -7,6 +7,7 @@ import numpy as np
 
 from ...cache import AnalysisCache
 from ...domain import Detection
+from ...policies.decision.contract import DetectionDecisionContract
 from ...policies.runtime.policy import DetectionPolicy
 from ...runtime.config import RuntimeConfig
 from ..evidence.content.containment import content_containment_detail
@@ -14,7 +15,6 @@ from ..evidence.content.frame_support import content_evidence_detail
 from ..evidence.outer_alignment import outer_content_alignment_detail
 from ..evidence.output_overlap import output_overlap_evidence_detail
 from .contract_applier import apply_decision_contract
-from ...policies.decision.contract import decision_contract_for_policy
 
 
 @dataclass
@@ -32,6 +32,7 @@ def apply_detection_decision(
     analysis_cache: AnalysisCache,
     deskew_detail: dict[str, Any],
     policy: DetectionPolicy,
+    decision_contract: DetectionDecisionContract,
 ) -> FinalDecisionResult:
     raw_content_detail = content_evidence_detail(
         gray,
@@ -69,7 +70,7 @@ def apply_detection_decision(
         config,
         content_detail,
         outer_alignment,
-        policy=decision_contract_for_policy(policy),
+        policy=decision_contract,
         deskew_detail=deskew_detail,
     )
     decision_summary = detection.detail.get("decision_summary", {})

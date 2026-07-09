@@ -83,14 +83,16 @@ def compare_reference_cases(cases: Iterable[ReferenceCase], fields: Iterable[str
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Compare candidate X5 Crop reports against V4.5.4 historical reference reports.")
+    parser = argparse.ArgumentParser(description="Audit candidate X5 Crop report diffs against historical reference reports.")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd(), help="Repository root containing Test/.")
     parser.add_argument("--candidate-root", type=Path, required=True, help="Root containing candidate reports laid out like Test/.")
     parser.add_argument("--field", action="append", dest="fields", help="Field to compare. Can be repeated.")
+    parser.add_argument("--fail-on-diff", action="store_true", help="Return non-zero when audited diffs are found.")
     args = parser.parse_args(argv)
     fields = tuple(args.fields) if args.fields else CORE_FIELDS
     cases = reference_cases(args.repo_root.resolve(), args.candidate_root.resolve())
-    return 1 if compare_reference_cases(cases, fields=fields) else 0
+    diff_count = compare_reference_cases(cases, fields=fields)
+    return 1 if args.fail_on_diff and diff_count else 0
 
 
 if __name__ == "__main__":

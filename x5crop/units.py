@@ -32,6 +32,12 @@ class ScanCalibration:
 
 
 @dataclass(frozen=True)
+class ScanCalibrationTrustParameters:
+    min_axis_resolution_ratio: float = 0.5
+    max_axis_resolution_ratio: float = 2.0
+
+
+@dataclass(frozen=True)
 class PhysicalLength:
     mm: float | None = None
     fallback_ratio: float | None = None
@@ -136,7 +142,10 @@ def _unavailable(*warnings: str) -> ScanCalibration:
     )
 
 
-def scan_calibration_from_profile(profile: ImageProfile) -> ScanCalibration:
+def scan_calibration_from_profile(
+    profile: ImageProfile,
+    parameters: ScanCalibrationTrustParameters,
+) -> ScanCalibration:
     if not profile.resolution:
         return _unavailable("missing_tiff_resolution")
     unit = _resolution_unit_name(profile.resolution_unit)
@@ -158,7 +167,10 @@ def scan_calibration_from_profile(profile: ImageProfile) -> ScanCalibration:
     if not math.isfinite(x_px_per_mm) or not math.isfinite(y_px_per_mm):
         return _unavailable("non_finite_tiff_resolution")
     ratio = x_px_per_mm / y_px_per_mm if y_px_per_mm else 0.0
-    if ratio < 0.5 or ratio > 2.0:
+    if (
+        ratio < float(parameters.min_axis_resolution_ratio)
+        or ratio > float(parameters.max_axis_resolution_ratio)
+    ):
         return ScanCalibration(
             x_px_per_mm=x_px_per_mm,
             y_px_per_mm=y_px_per_mm,
@@ -179,5 +191,6 @@ __all__ = [
     "PhysicalLength",
     "PixelKernel",
     "ScanCalibration",
+    "ScanCalibrationTrustParameters",
     "scan_calibration_from_profile",
 ]

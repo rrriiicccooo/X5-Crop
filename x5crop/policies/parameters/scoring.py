@@ -10,6 +10,8 @@ class ScoringCalibrationParameters:
     separator_source_bias: float = 0.03
     no_auto_cap_partial: float = 0.82
     no_auto_cap_full: float = 0.84
+    candidate_gate_pass_boost_cap: float = 0.10
+    candidate_gate_pass_boost_ratio: float = 0.08
 
 @dataclass(frozen=True)
 class BaseDetectionScoreParameters:

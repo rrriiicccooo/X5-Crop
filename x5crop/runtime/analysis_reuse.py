@@ -9,16 +9,11 @@ import numpy as np
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
 from ..domain import Box, Detection, Gap, ImageProfile, ProcessResult
 from ..export.crops import write_crops
-from ..output.bleed import (
-    AxisBleedParameters,
-    output_bleed_parameters_for_detection,
-    reapply_cached_output_bleed,
-)
 from ..output.surface import OutputSurface
 from ..image.gray import make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..io.tiff import read_tiff
-from .policy_context import RuntimePolicyContext
+from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..policies.ids import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from ..report.result_builder import result_from_cached_record, result_from_detection
 from ..cache import REPORT_RECORD_CACHE
@@ -51,6 +46,8 @@ def config_cache_signature(config: RuntimeConfig) -> dict[str, Any]:
         "deskew_min_angle": float(config.deskew_min_angle),
         "deskew_max_angle": float(config.deskew_max_angle),
         "confidence_threshold": float(config.confidence_threshold),
+        "bleed_x": int(config.bleed_x),
+        "bleed_y": int(config.bleed_y),
     }
 
 
@@ -112,6 +109,10 @@ def cached_record_matches(
     detail = record.get("detail")
     if not isinstance(detail, dict):
         return False
+    if not isinstance(detail.get("output_geometry"), dict):
+        return False
+    if not isinstance(detail.get("decision_geometry"), dict):
+        return False
     cache = detail.get("analysis_cache")
     if not isinstance(cache, dict):
         return False
@@ -124,10 +125,7 @@ def cached_record_matches(
     cached_config = cache.get("config")
     if not isinstance(cached_config, dict):
         return False
-    comparable_cached_config = dict(cached_config)
-    comparable_cached_config.pop("bleed_x", None)
-    comparable_cached_config.pop("bleed_y", None)
-    if comparable_cached_config != expected_config:
+    if cached_config != expected_config:
         return False
     return str(record.get("status", "")) in {"approved_auto", "needs_review"}
 
@@ -199,7 +197,7 @@ def result_from_reusable_analysis(
     output_surface: OutputSurface,
     profile: ImageProfile,
     warnings: list[str],
-    policy_context: RuntimePolicyContext,
+    policy_bundle: DetectionPolicyBundle,
 ) -> ProcessResult | None:
     if not (config.reuse_analysis and not config.dry_run and not config.debug_analysis):
         return None
@@ -214,7 +212,7 @@ def result_from_reusable_analysis(
         return result_from_cached_record(input_file, cached_record, profile, warnings)
 
     arr, profile, page_warnings = read_tiff(input_file, config.page)
-    policy = policy_context.policy_for(str(cached_record["film_format"]), str(cached_record["strip_mode"]))
+    policy = policy_bundle.policy_for(str(cached_record["film_format"]), str(cached_record["strip_mode"]))
     gray = make_base_gray_u8(arr, profile.axes, profile.photometric, policy.preprocess.base_gray)
     warnings.extend(warning for warning in page_warnings if warning not in warnings)
     source_arr = arr
@@ -228,10 +226,6 @@ def result_from_reusable_analysis(
         detection.detail,
         warnings,
     )
-    base_bleed = AxisBleedParameters(long_axis=int(config.bleed_x), short_axis=int(config.bleed_y))
-    reapply_cached_output_bleed(detection, base_bleed, gray.shape[1], gray.shape[0])
-    output_bleed = output_bleed_parameters_for_detection(base_bleed, detection, policy.output)
-    reapply_cached_output_bleed(detection, output_bleed, gray.shape[1], gray.shape[0])
     output_files = write_crops(
         input_file,
         arr,

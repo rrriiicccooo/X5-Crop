@@ -192,7 +192,13 @@ class OutputReadModelContractTest(unittest.TestCase):
             Path("input.tif"),
             Path("out"),
             config,
-            _detection(final_review_reasons=["candidate_competition_close"]),
+            _detection(
+                {
+                    "decision_summary": {
+                        "final_review_reasons": ["candidate_competition_close"],
+                    },
+                }
+            ),
             "needs_review",
             warnings,
         )

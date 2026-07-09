@@ -259,7 +259,6 @@ def geometry_consistency_correction_proposal(
         return None
 
     geometry_detail = geometry_consistency_model_detail(gray, detection, fmt, cache)
-    detection.detail["geometry_consistency_model"] = geometry_detail
     corrected_outer = corrected_outer_from_long_axis_geometry(
         detection,
         fmt,

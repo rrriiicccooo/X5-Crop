@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING
 
 from ...formats import FormatSpec, format_spec
 from .contract import EvidencePolicy
-
-if TYPE_CHECKING:
-    from ..runtime.policy import DetectionPolicy
 
 
 def _content_aspect(spec: FormatSpec) -> float:
@@ -112,7 +108,7 @@ def evidence_policy_for_physical_spec(
     format_id: str,
     strip_mode: str,
     defaults: EvidencePolicy,
-    detection_policy: DetectionPolicy | None = None,
+    geometry_support_modes: tuple[str, ...] = (),
 ) -> EvidencePolicy:
     spec = format_spec(format_id)
     policy = _physical_evidence_policy(spec, defaults)
@@ -120,12 +116,10 @@ def evidence_policy_for_physical_spec(
         policy = _partial_evidence_policy(policy)
     else:
         policy = replace(policy, partial_requires_safe_edge=False)
-    if detection_policy is not None:
-        policy = replace(
-            policy,
-            allow_geometry_supported_separator=bool(detection_policy.separator.geometry_support_modes),
-            partial_requires_safe_edge=detection_policy.strip_mode == "partial",
-        )
+    policy = replace(
+        policy,
+        allow_geometry_supported_separator=bool(geometry_support_modes),
+    )
     return policy
 
 

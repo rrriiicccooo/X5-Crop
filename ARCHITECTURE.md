@@ -29,7 +29,7 @@ X5_Crop.py / launchers
 | 阶段 | 主要职责 | 主要位置 |
 |---|---|---|
 | Entry | 解析 CLI / interactive 输入，形成入口选项。 | `X5_Crop.py`, `x5crop.entry`, launchers |
-| Runtime bootstrap | 探测输入、解析 layout、装配 runtime config 和 active policy。 | `x5crop.runtime.config`, `input_probe`, `app`, `policy_context` |
+| Runtime bootstrap | 探测输入、解析 layout、装配 runtime config 和 active policy bundle。 | `x5crop.runtime.config`, `input_probe`, `app`, `policies.runtime.bundle` |
 | Workflow | 编排单图处理顺序，不拥有检测策略。 | `x5crop.runtime.workflow` |
 | Preprocess | 读取 TIFF、生成基础灰度、执行 deskew、准备证据输入和 cache。 | `x5crop.io`, `x5crop.image`, `x5crop.cache`, `x5crop.runtime.deskew` |
 | Detection | 生成候选、证据、候选评估、候选扩展和候选选择。 | `x5crop.detection` |
@@ -146,8 +146,7 @@ decision 之后的层级只消费结果：
 | `runtime.app` | 批处理启动、worker 调度和用户可见启动摘要。 |
 | `runtime.workflow` | 单图处理主流程。 |
 | `runtime.deskew` | deskew runtime 调度和 detail 组装。 |
-| `runtime.analysis_reuse` | 匹配已有 Debug Analysis report 并复用已决策结果。 |
-| `runtime.policy_context` | 当前 format / strip mode 的 runtime policy context。 |
+| `runtime.analysis_reuse` | 匹配当前 schema 的 Debug Analysis report 并复用已决策输出几何。 |
 | `runtime.profile` | runtime profiling / timing read model。 |
 
 runtime 可以编排，但不拥有底层几何算法、候选算法或最终 decision contract。
@@ -156,15 +155,14 @@ runtime 可以编排，但不拥有底层几何算法、候选算法或最终 de
 
 | 子层 | 职责 |
 |---|---|
-| `policies.formats` | format-specific physical tolerance、content tolerance 和 search budget override。 |
-| `policies.parameters` | 分组参数对象、registry、ownership validation 和 format override path mapping。 |
+| `policies.parameters` | 参数 dataclass 和 central typed parameter factory。 |
 | `policies.runtime` | active `DetectionPolicy` 和 runtime subpolicy dataclass，包括 preprocess / physical / candidate / decision / output / diagnostics。 |
-| `policies.assembly` | 从 format facts、mode posture、分组参数和受限 override 组装 runtime policy。 |
+| `policies.assembly` | 从 format facts、mode posture 和分组参数组装 runtime policy。 |
 | `policies.decision` | final PASS / REVIEW decision contract，以及由 physical traits 推导的 final evidence policy。 |
 | `policies.reporting` | policy detail serialization。 |
 | `policies.registry` / `consistency` / `ids` | policy lookup、consistency smoke、policy id 和 schema id。 |
 
-format 文件不承载算法开关；能力启用由 assembly 和 runtime policy 表达。
+format 文件不承载算法开关；能力启用由 physical traits、assembly 和 runtime policy 表达。
 decision evidence policy 不使用 format-id override 表；format 名称只作为 `FormatSpec`
 查询入口，实际差异来自 family、frame size mm 派生的 aspect、physical layout、
 separator width profile、geometry support profile 等物理 trait。Aspect 是底片物理尺寸
@@ -247,7 +245,7 @@ X5_Crop.py / launchers
 | Stage | Responsibility | Main location |
 |---|---|---|
 | Entry | Parse CLI / interactive input into entry options. | `X5_Crop.py`, `x5crop.entry`, launchers |
-| Runtime bootstrap | Probe input, resolve layout, assemble runtime config and active policy. | `x5crop.runtime.config`, `input_probe`, `app`, `policy_context` |
+| Runtime bootstrap | Probe input, resolve layout, assemble runtime config and active policy bundle. | `x5crop.runtime.config`, `input_probe`, `app`, `policies.runtime.bundle` |
 | Workflow | Orchestrate one-image processing without owning detection policy. | `x5crop.runtime.workflow` |
 | Preprocess | Read TIFF, build gray/evidence input, deskew, and prepare cache. | `x5crop.io`, `x5crop.image`, `x5crop.cache`, `x5crop.runtime.deskew` |
 | Detection | Build candidates, evidence, assessment, extension, and selection. | `x5crop.detection` |
@@ -257,7 +255,7 @@ X5_Crop.py / launchers
 | Report / Debug | Write reports, summaries, and Debug Analysis without feeding back into selection. | `x5crop.report`, `x5crop.debug` |
 
 Entry code produces options only. Runtime binds options to input, layout, format,
-strip mode, and active policy. Workflow runs the ordered process. Detection and
+strip mode, and active policy bundle. Workflow runs the ordered process. Detection and
 decision own candidate logic and final status. Finalization, export, report, and
 debug consume the decision result. Workflow also derives `ScanCalibration` from
 TIFF resolution metadata; calibration is diagnostic/unit evidence and does not
@@ -284,6 +282,9 @@ so XPAN / 120-66 may be reported as `complete_underfilled_strip`: the default
 frame sequence is complete, but the holder still has leading/trailing slack.
 Workflow computes the output surface path early but creates the output directory
 only when crop, review copy, debug, or report output is actually written.
+Finalization builds output geometry on a cloned detection result; it records
+`decision_geometry` and `output_geometry` separately instead of mutating the
+decision-stage geometry in place.
 
 ### 2. Source-Layer Architecture
 
@@ -294,8 +295,8 @@ Source layering describes which package owns which knowledge.
 | Layer | Responsibility |
 |---|---|
 | `x5crop.entry` | User entry and option parsing. |
-| `x5crop.runtime` | Runtime config, input probing, workflow, deskew runtime, policy context, analysis reuse. |
-| `x5crop.formats` | Format identity, family, count, frame size mm, derived aspect, and physical facts. |
+| `x5crop.runtime` | Runtime config, input probing, workflow, deskew runtime, and analysis reuse. |
+| `x5crop.formats` | Format identity, family, count, frame size mm, derived aspect, physical facts, and derived runtime traits. |
 | `x5crop.units` | `ScanCalibration`, `PhysicalLength`, and `PixelKernel` unit models. |
 | `x5crop.policies` | Runtime policy, parameter ownership, policy assembly, decision contract, policy reporting. |
 | `x5crop.cache` | Analysis / separator cache adapters. |
@@ -314,20 +315,19 @@ Source layering describes which package owns which knowledge.
 `runtime.config` owns runtime config; `runtime.input_probe` owns TIFF probing and
 layout; `runtime.app` owns batch startup and workers; `runtime.workflow` owns the
 single-image process; `runtime.deskew` owns deskew runtime detail;
-`runtime.analysis_reuse` owns compatible report reuse; `runtime.policy_context`
-owns active policy context.
+`runtime.analysis_reuse` owns current-schema report reuse. Runtime creates a
+`DetectionPolicyBundle` at the boundary and passes explicit policies downward.
 
 Runtime orchestrates but does not own geometry algorithms, candidate algorithms,
 or the final decision contract.
 
 #### 2.3 Policy Sublayers
 
-`policies.formats` owns constrained format presets. `policies.parameters` owns
-grouped parameter objects, ownership validation, and format override path
-mapping. `policies.runtime` owns active runtime policy dataclasses, including
+`policies.parameters` owns parameter dataclasses and the central typed parameter
+factory. `policies.runtime` owns active runtime policy dataclasses, including
 preprocess / physical / candidate / decision / output / diagnostics subpolicies.
-`policies.assembly` builds active policy from format facts, mode posture,
-grouped parameters, and constrained overrides. `policies.decision` owns the
+`policies.assembly` builds active policy from format facts, mode posture, and
+grouped parameters. `policies.decision` owns the
 final decision contract and derives final evidence policy from physical traits.
 
 Format files do not carry algorithm switches; capability enablement belongs to

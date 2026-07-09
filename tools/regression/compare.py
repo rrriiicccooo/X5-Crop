@@ -90,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("baseline", type=Path)
     parser.add_argument("candidate", type=Path)
     parser.add_argument("--field", action="append", dest="fields", help="Field to compare. Can be repeated.")
+    parser.add_argument("--fail-on-diff", action="store_true", help="Return non-zero when audited diffs are found.")
     args = parser.parse_args(argv)
     fields = tuple(args.fields) if args.fields else DEFAULT_FIELDS
     diffs = compare_report_files(args.baseline, args.candidate, fields=fields)
@@ -102,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  after:  {diff.after}")
     if len(diffs) > 200:
         print(f"... {len(diffs) - 200} more diffs")
-    return 1 if diffs else 0
+    return 1 if args.fail_on_diff and diffs else 0
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Protocol
 
 import numpy as np
 
@@ -13,6 +13,28 @@ from ..gap_methods import (
 from ..utils import clamp_float
 
 
+class FrameFitParameters(Protocol):
+    name: str
+    edge_evidence: bool
+    geometry_fallback: bool
+    min_edge_samples: int
+    nominal_min_ratio: float
+    nominal_max_ratio: float
+    inlier_tolerance_ratio: float
+    min_inlier_tolerance_px: float
+    geometry_pitch_min_ratio: float
+    geometry_pitch_max_ratio: float
+    geometry_noop_width_cv: float
+    geometry_outer_tolerance_ratio: float
+    geometry_outer_tolerance_min: float
+    geometry_outer_tolerance_max: float
+    edge_candidate_weight_with_edges: float
+    edge_candidate_weight_without_edges: float
+    edge_adjust_tolerance_ratio: float
+    edge_adjust_tolerance_min: float
+    edge_adjust_tolerance_max: float
+
+
 def frame_boxes_from_gaps(
     outer: Box,
     gaps: list[Gap],
@@ -22,15 +44,17 @@ def frame_boxes_from_gaps(
     bleed_x: int,
     bleed_y: int,
     origin: float = 0.0,
-    pitch: Optional[float] = None,
+    pitch: float | None = None,
     apply_geometry_fit: bool = True,
-    geometry_config: Optional[Any] = None,
+    geometry_config: FrameFitParameters | None = None,
 ) -> list[Box]:
     if pitch is None:
         cuts = [float(outer.left)] + [gap.center + outer.left for gap in gaps] + [float(outer.right)]
     else:
         cuts = [outer.left + origin] + [outer.left + gap.center for gap in gaps] + [outer.left + origin + pitch * count]
     if apply_geometry_fit:
+        if geometry_config is None:
+            raise ValueError("geometry_config is required when geometry fit is enabled")
         cuts = fit_cuts_by_geometry(cuts, outer, count, pitch, geometry_config)
     boxes: list[Box] = []
     for left, right in zip(cuts[:-1], cuts[1:]):
@@ -39,10 +63,14 @@ def frame_boxes_from_gaps(
     return boxes[:count]
 
 
-def fit_cuts_by_geometry(cuts: list[float], outer: Box, count: int, pitch: Optional[float], config: Optional[Any] = None) -> list[float]:
+def fit_cuts_by_geometry(
+    cuts: list[float],
+    outer: Box,
+    count: int,
+    pitch: float | None,
+    config: FrameFitParameters,
+) -> list[float]:
     if len(cuts) != count + 1 or count <= 1:
-        return cuts
-    if config is None:
         return cuts
     widths = np.diff(np.array(cuts, dtype=np.float64))
     if widths.size != count or np.any(widths <= 1):
@@ -109,14 +137,14 @@ def fit_boxes_by_edge_evidence(
     image_h: int,
     bleed_x: int,
     bleed_y: int,
-    config: Any,
-) -> tuple[Optional[list[Box]], dict[str, Any]]:
+    config: FrameFitParameters,
+) -> tuple[list[Box] | None, dict[str, Any]]:
     if not config.edge_evidence:
         return None, {"used": False, "reason": "edge_evidence_disabled"}
     if count <= 1 or len(gaps) != count - 1 or outer.width <= 1:
         return None, {"used": False, "reason": "not_applicable"}
-    left_edges: list[Optional[tuple[float, float]]] = [None] * count
-    right_edges: list[Optional[tuple[float, float]]] = [None] * count
+    left_edges: list[tuple[float, float] | None] = [None] * count
+    right_edges: list[tuple[float, float] | None] = [None] * count
     for i, gap in enumerate(gaps):
         weight = frame_edge_weight(gap)
         if weight <= 0 or gap.start is None or gap.end is None:
@@ -202,8 +230,8 @@ def fit_frame_boxes_from_gaps(
     bleed_x: int,
     bleed_y: int,
     origin: float = 0.0,
-    pitch: Optional[float] = None,
-    frame_fit: Optional[Any] = None,
+    pitch: float | None = None,
+    frame_fit: FrameFitParameters | None = None,
 ) -> tuple[list[Box], dict[str, Any]]:
     if frame_fit is None:
         raise ValueError("frame_fit config is required")

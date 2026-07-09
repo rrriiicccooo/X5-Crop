@@ -113,7 +113,7 @@ def mode_policy_for(spec: FormatSpec, strip_mode: str) -> ModePolicy:
 def evidence_policy_for(
     format_id: str,
     strip_mode: str,
-    detection_policy: DetectionPolicy | None = None,
+    geometry_support_modes: tuple[str, ...] = (),
 ) -> EvidencePolicy:
     from .evidence_policy import evidence_policy_for_physical_spec
 
@@ -121,7 +121,7 @@ def evidence_policy_for(
         format_id,
         strip_mode,
         EvidencePolicy(),
-        detection_policy,
+        geometry_support_modes,
     )
 
 
@@ -155,7 +155,7 @@ def decision_contract_for_policy(detection_policy: DetectionPolicy) -> Detection
         evidence=evidence_policy_for(
             detection_policy.format_id,
             detection_policy.strip_mode,
-            detection_policy,
+            detection_policy.separator.geometry_support_modes,
         ),
         decision=decision_policy_for(detection_policy),
     )

@@ -22,7 +22,8 @@ from ..image.gray import make_base_gray_u8
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..output.bleed import detection_bleed_parameters
 from ..output.surface import output_surface_for_input
-from .policy_context import RuntimePolicyContext
+from ..policies.decision.contract import decision_contract_for_policy
+from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..report.outputs import write_report_outputs_for_result
 from ..report.result_builder import result_from_detection
 from ..units import scan_calibration_from_profile
@@ -39,10 +40,10 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     profile, warnings = read_tiff_profile(input_file, config.page)
     config = runtime_for_profile(config, profile)
     fmt = FORMATS[config.film_format]
-    policy_context = RuntimePolicyContext.for_format_mode(fmt.name, config.strip_mode)
-    initial_policy = policy_context.initial_policy
+    policy_bundle = DetectionPolicyBundle.for_format_mode(fmt.name, config.strip_mode)
+    initial_policy = policy_bundle.initial_policy
 
-    cached_result = result_from_reusable_analysis(input_file, config, output_surface, profile, warnings, policy_context)
+    cached_result = result_from_reusable_analysis(input_file, config, output_surface, profile, warnings, policy_bundle)
     if cached_result is not None:
         return _finish_result(cached_result, config)
 
@@ -52,16 +53,16 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     source_arr = arr
     config = runtime_for_profile(config, profile)
     fmt = FORMATS[config.film_format]
-    policy_context = RuntimePolicyContext.for_format_mode(fmt.name, config.strip_mode)
-    initial_policy = policy_context.initial_policy
+    policy_bundle = DetectionPolicyBundle.for_format_mode(fmt.name, config.strip_mode)
+    initial_policy = policy_bundle.initial_policy
 
     arr, gray, deskew_detail = apply_deskew(arr, gray, profile, config, initial_policy.preprocess, warnings)
-    scan_calibration = scan_calibration_from_profile(profile)
+    scan_calibration = scan_calibration_from_profile(profile, initial_policy.preprocess.scan_calibration_trust)
     analysis_cache = make_analysis_cache(gray, config.layout, initial_policy.preprocess.content_evidence_image)
     policy = initial_policy
     detection_bleed = detection_bleed_parameters(policy.output)
     detection_config = replace(config, bleed_x=detection_bleed.long_axis, bleed_y=detection_bleed.short_axis)
-    detection_result = choose_detection(gray, detection_config, fmt, policy_context, analysis_cache)
+    detection_result = choose_detection(gray, detection_config, fmt, policy_bundle, analysis_cache)
     detection = detection_result.detection
     selected_policy = detection_result.policy
     detection.detail["scan_calibration"] = scan_calibration.detail()
@@ -78,6 +79,7 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
         analysis_cache,
         deskew_detail,
         selected_policy,
+        decision_contract_for_policy(selected_policy),
     )
     finalization = finalize_detection(
         gray,

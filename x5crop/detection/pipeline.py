@@ -9,7 +9,7 @@ from ..runtime.config import RuntimeConfig
 from ..domain import Detection
 from ..formats import FormatSpec
 from ..cache.analysis import make_analysis_cache
-from ..runtime.policy_context import RuntimePolicyContext
+from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..policies.runtime.policy import DetectionPolicy
 from ..cache import AnalysisCache
 from .candidate.lifecycle import calibrated_candidates_for_count
@@ -35,18 +35,18 @@ def choose_detection(
     gray: np.ndarray,
     config: RuntimeConfig,
     fmt: FormatSpec,
-    policy_context: RuntimePolicyContext,
+    policy_bundle: DetectionPolicyBundle,
     cache: Optional[AnalysisCache] = None,
 ) -> DetectionPipelineResult:
     candidates: list[Detection] = []
-    policy = policy_context.policy_for(fmt.name, config.strip_mode)
+    policy = policy_bundle.policy_for(fmt.name, config.strip_mode)
     cache = (
         cache
         if cache is not None and cache.layout == config.layout
         else make_analysis_cache(gray, config.layout, policy.preprocess.content_evidence_image)
     )
     if policy.detector.kind == "dual_lane":
-        detection = choose_dual_lane_detection(gray, config, cache, policy, policy_context)
+        detection = choose_dual_lane_detection(gray, config, cache, policy, policy_bundle)
         _attach_runtime_policy_detail(detection, policy)
         return DetectionPipelineResult(detection, policy)
     if policy.detector.kind == "review_only":
@@ -79,8 +79,13 @@ def choose_detection(
         _attach_runtime_policy_detail(detection, policy)
         return DetectionPipelineResult(detection, policy)
 
-    provisional = select_detection_candidate(candidates, fmt, config.confidence_threshold, policy, policy_context)
-    extension_policy = policy_context.policy_for(provisional.film_format, provisional.strip_mode)
+    provisional = select_detection_candidate(
+        candidates,
+        fmt,
+        config.confidence_threshold,
+        policy.candidate_selection,
+    )
+    extension_policy = policy_bundle.policy_for(provisional.film_format, provisional.strip_mode)
     extension_candidates = outer_correction_candidate_extensions(
         gray,
         config,
@@ -91,7 +96,12 @@ def choose_detection(
     )
     if extension_candidates:
         candidates.extend(extension_candidates)
-    detection = select_detection_candidate(candidates, fmt, config.confidence_threshold, extension_policy, policy_context)
-    selected_policy = policy_context.policy_for(detection.film_format, detection.strip_mode)
+    detection = select_detection_candidate(
+        candidates,
+        fmt,
+        config.confidence_threshold,
+        extension_policy.candidate_selection,
+    )
+    selected_policy = policy_bundle.policy_for(detection.film_format, detection.strip_mode)
     _attach_runtime_policy_detail(detection, selected_policy)
     return DetectionPipelineResult(detection, selected_policy)

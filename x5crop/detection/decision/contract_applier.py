@@ -25,6 +25,8 @@ def _detail_list(value: Any) -> list[Any]:
 def _candidate_gate_input(detection: Detection) -> dict[str, Any]:
     assessment = detection.detail.get("candidate_assessment", {})
     assessment = dict(assessment) if isinstance(assessment, dict) else {}
+    competition = detection.detail.get("candidate_competition", {})
+    competition = dict(competition) if isinstance(competition, dict) else {}
     blockers = [str(reason) for reason in _detail_list(assessment.get("blockers"))]
     diagnostics = [str(reason) for reason in _detail_list(assessment.get("diagnostics"))]
     gate = assessment.get("candidate_gate")
@@ -34,7 +36,7 @@ def _candidate_gate_input(detection: Detection) -> dict[str, Any]:
         "diagnostics": diagnostics,
         "candidate_gate": gate,
         "selection_uncertainty_inputs": _detail_list(
-            detection.detail.get("selection_uncertainty_inputs")
+            competition.get("selection_uncertainty_inputs")
         ),
     }
 

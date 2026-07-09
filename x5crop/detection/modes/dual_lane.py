@@ -4,7 +4,7 @@ import numpy as np
 
 from ...runtime.config import RuntimeConfig
 from ...domain import Detection
-from ...runtime.policy_context import RuntimePolicyContext
+from ...policies.runtime.bundle import DetectionPolicyBundle
 from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
 from .dual_lane_context import build_dual_lane_context
@@ -18,9 +18,9 @@ def choose_dual_lane_detection(
     config: RuntimeConfig,
     cache: AnalysisCache,
     policy: DetectionPolicy,
-    policy_context: RuntimePolicyContext,
+    policy_bundle: DetectionPolicyBundle,
 ) -> Detection:
-    context = build_dual_lane_context(policy, policy_context)
+    context = build_dual_lane_context(policy, policy_bundle)
     if config.strip_mode != "full":
         raise ValueError("dual-lane detector is only valid for full mode")
 

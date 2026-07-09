@@ -5,8 +5,6 @@ from typing import Any, Optional
 from .....domain import Detection
 from .....formats import FormatSpec
 from .....policies.runtime.outer import ContentContainmentCorrectionPolicy
-from .....cache import AnalysisCache
-from .....runtime.config import RuntimeConfig
 from .....utils import box_from_dict
 from ....evidence.outer_alignment import corrected_outer_from_alignment
 from .constraints import correction_axes_allowed
@@ -14,15 +12,13 @@ from .types import OuterCorrectionProposal
 
 
 def content_containment_correction_proposal(
-    config: RuntimeConfig,
     fmt: FormatSpec,
     detection: Detection,
     alignment: dict[str, Any],
-    cache: AnalysisCache,
     eligible_families: set[str],
     content_containment_policy: ContentContainmentCorrectionPolicy,
 ) -> Optional[OuterCorrectionProposal]:
-    del config, cache
+    del fmt
     if "content_containment" not in eligible_families:
         return None
     family = content_containment_policy.family

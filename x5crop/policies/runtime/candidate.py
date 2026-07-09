@@ -23,6 +23,9 @@ class PartialHolderPolicy:
     leading_content_max_mean: float = 0.20
     leading_content_max_coverage: float = 0.34
     leading_content_band_ratio: float = 0.04
+    leading_content_band_min_px: int = 8
+    leading_content_band_max_ratio: float = 0.12
+    leading_content_signal_threshold: float = 0.20
     min_frame_mean: float = 0.055
     min_frame_coverage: float = 0.10
     max_frame_aspect_error: float = 0.22
@@ -85,6 +88,8 @@ class ScoringPolicy:
     separator_source_bias: float = 0.0
     no_auto_cap_full: float = 0.84
     no_auto_cap_partial: float = 0.82
+    candidate_gate_pass_boost_cap: float = 0.10
+    candidate_gate_pass_boost_ratio: float = 0.08
     competition_top_n: int = 8
     competition_close_margin: float = 0.04
     base_detection: BaseDetectionScorePolicy = field(default_factory=BaseDetectionScorePolicy)

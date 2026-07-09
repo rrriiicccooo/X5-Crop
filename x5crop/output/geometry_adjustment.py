@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from ..detection.detail import final_review_reasons_from_detail
+from ..detection.detail import final_review_reasons_from_detail, has_current_decision_summary
 from ..domain import Box, Detection
 from ..geometry.boxes import map_work_box, original_box_to_work
 from ..geometry.layout import work_gray
@@ -70,6 +70,8 @@ def apply_approved_geometry_adjustment(
     policy: ApprovedGeometryAdjustmentPolicy,
 ) -> None:
     if status != "approved_auto" or detection.strip_mode != "full" or len(detection.frames) != detection.count:
+        return
+    if not has_current_decision_summary(detection):
         return
     if final_review_reasons_from_detail(detection):
         return

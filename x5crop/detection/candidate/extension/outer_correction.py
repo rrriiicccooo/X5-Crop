@@ -205,11 +205,9 @@ def outer_correction_candidate_extensions(
 
     if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
         proposal = content_containment_correction_proposal(
-            config,
             fmt,
             detection,
             outer_alignment,
-            cache,
             set(correction_plan["eligible_families"]),
             policy.outer.correction.content_containment,
         )

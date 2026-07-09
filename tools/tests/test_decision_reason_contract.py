@@ -23,7 +23,6 @@ from x5crop.detection.candidate.selection.choose import select_detection_candida
 from x5crop.domain import Box, Detection
 from x5crop.formats import format_spec
 from x5crop.report.sections import selected_candidate
-from x5crop.runtime.policy_context import RuntimePolicyContext
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.decision.contract import decision_contract_for_policy
 from x5crop.runtime.config import RuntimeConfig
@@ -74,10 +73,6 @@ def _content_ok_detail() -> dict[str, bool | str]:
 
 def _decision_contract(format_id: str = "135", strip_mode: str = "full"):
     return decision_contract_for_policy(get_detection_policy(format_id, strip_mode))
-
-
-def _policy_context(format_id: str = "135", strip_mode: str = "full"):
-    return RuntimePolicyContext.for_format_mode(format_id, strip_mode)
 
 
 def _candidate_gate_detail(
@@ -555,6 +550,7 @@ class DecisionReasonContractTest(unittest.TestCase):
                 make_analysis_cache(gray, "horizontal", policy.preprocess.content_evidence_image),
                 {},
                 policy,
+                decision_contract_for_policy(policy),
             )
 
         self.assertEqual(decision.status, "needs_review")
@@ -637,6 +633,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             make_analysis_cache(gray, "horizontal", policy.preprocess.content_evidence_image),
             {},
             policy,
+            decision_contract_for_policy(policy),
         )
 
         self.assertEqual(decision.status, "needs_review")
@@ -764,19 +761,18 @@ class DecisionReasonContractTest(unittest.TestCase):
             [candidate(0.90), candidate(0.875)],
             format_spec("135"),
             threshold=0.85,
-            policy=get_detection_policy("135", "full"),
-            policy_context=_policy_context("135", "full"),
+            selection_policy=get_detection_policy("135", "full").candidate_selection,
         )
 
         self.assertEqual(selected.confidence, 0.90)
         self.assertEqual(selected.final_review_reasons, [])
         self.assertEqual(
-            selected.detail["selection_uncertainty_inputs"][0]["signal"],
+            selected.detail["candidate_competition"]["selection_uncertainty_inputs"][0]["signal"],
             "candidate_competition_close",
         )
         self.assertNotIn(
             "recommended_final_review_reason",
-            selected.detail["selection_uncertainty_inputs"][0],
+            selected.detail["candidate_competition"]["selection_uncertainty_inputs"][0],
         )
         self.assertTrue(
             selected.detail["candidate_competition"]["second_candidate_close"]
@@ -843,8 +839,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             ],
             fmt,
             threshold=0.85,
-            policy=policy,
-            policy_context=_policy_context("half", "full"),
+            selection_policy=policy.candidate_selection,
         )
         self.assertEqual(
             selected_without_diagnostic.detail["candidate_assessment"]["source"],
@@ -862,8 +857,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             ],
             fmt,
             threshold=0.85,
-            policy=policy,
-            policy_context=_policy_context("half", "full"),
+            selection_policy=policy.candidate_selection,
         )
         self.assertEqual(
             selected_with_diagnostic.detail["candidate_assessment"]["source"],

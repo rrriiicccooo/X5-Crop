@@ -55,6 +55,18 @@ def _attach_outer_candidate_summary(
         _outer_candidate_report_detail(candidate)
         for candidate in outer_candidates
     ]
+    holder_candidates = [
+        candidate.box
+        for candidate in outer_candidates
+        if candidate.box.valid()
+        and (
+            outer_candidate_strategy(candidate) == "base_outer"
+            or str(candidate.detail.get("family") or "") == "base_outer"
+        )
+    ]
+    if holder_candidates:
+        holder_outer = max(holder_candidates, key=lambda box: box.width * box.height)
+        detection.detail["holder_reference_outer_box"] = asdict(holder_outer)
 
 
 def _build_detection_for_outer_candidate(

@@ -47,11 +47,27 @@ def decision_summary(detection: Detection) -> dict[str, Any]:
     return detail_dict(detection, DECISION_SUMMARY)
 
 
+def has_current_decision_summary(detection: Detection) -> bool:
+    summary = detection.detail.get(DECISION_SUMMARY)
+    return isinstance(summary, dict) and isinstance(summary.get("final_review_reasons"), list)
+
+
+def _record_schema_diagnostic(detection: Detection, reason: str) -> None:
+    diagnostics = detection.detail.setdefault("schema_diagnostics", [])
+    if not isinstance(diagnostics, list):
+        diagnostics = []
+        detection.detail["schema_diagnostics"] = diagnostics
+    entry = {"owner": "detection.detail", "reason": reason}
+    if entry not in diagnostics:
+        diagnostics.append(entry)
+
+
 def final_review_reasons_from_detail(detection: Detection) -> list[str]:
     reasons = decision_summary(detection).get("final_review_reasons")
     if isinstance(reasons, list):
         return [str(reason) for reason in reasons]
-    return list(detection.final_review_reasons)
+    _record_schema_diagnostic(detection, "missing_decision_summary_final_review_reasons")
+    return []
 
 
 def runtime_policy_detail(detection: Detection) -> dict[str, Any]:
@@ -89,6 +105,7 @@ __all__ = [
     "decision_summary",
     "detail_dict",
     "final_review_reasons_from_detail",
+    "has_current_decision_summary",
     "policy_id_from_detail",
     "runtime_policy_detail",
 ]
