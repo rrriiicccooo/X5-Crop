@@ -166,9 +166,9 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
         _review_check(
             code="output_overlap",
             bucket="output",
-            triggered=bool(decision_signals["output_overlap_detected"]),
-            signal="output_overlap_detected",
-            final_review_reason=policy.decision.output_overlap_reason,
+            triggered=bool(decision_signals["output_overlap_unresolved"]),
+            signal="output_overlap_unresolved",
+            final_review_reason=policy.decision.output_overlap_unresolved_reason,
         )
     )
     checks.append(

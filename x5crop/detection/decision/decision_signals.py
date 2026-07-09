@@ -80,8 +80,10 @@ def decision_signals_for(
         active_signals.append("safety_or_review_only")
     if candidate_competition_close:
         active_signals.append("candidate_competition_close")
-    if bool(output_overlap.get("output_overlap_detected", False)):
-        active_signals.append("output_overlap_detected")
+    if bool(output_overlap.get("output_overlap_protected_by_bleed", False)):
+        active_signals.append("output_overlap_protected_by_bleed")
+    if bool(output_overlap.get("output_overlap_unresolved", False)):
+        active_signals.append("output_overlap_unresolved")
     partial_edge_uncertain = bool(
         detection.strip_mode == "partial"
         and policy.evidence.partial_requires_safe_edge
@@ -111,6 +113,12 @@ def decision_signals_for(
         "content_integrity_failed": not bool(evidence["content"]["ok"]),
         "output_overlap_detected": bool(
             output_overlap.get("output_overlap_detected", False)
+        ),
+        "output_overlap_protected_by_bleed": bool(
+            output_overlap.get("output_overlap_protected_by_bleed", False)
+        ),
+        "output_overlap_unresolved": bool(
+            output_overlap.get("output_overlap_unresolved", False)
         ),
         "output_overlap_evidence": output_overlap,
         "candidate_competition_close": bool(candidate_competition_close),

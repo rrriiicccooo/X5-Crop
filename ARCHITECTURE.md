@@ -197,6 +197,9 @@ detection 中的层级方向是：proposal / evidence -> build -> assessment -> 
 decision -> finalization。低层不能反向读取高层 decision 语义。
 `candidate.lifecycle` 只串联候选生命周期；execution budget detail 属于
 `candidate.plan.execution_budget`，批量 assessment 属于 `candidate.assessment.source_batch`。
+`output_overlap_evidence` 是 output-protection evidence：可由 bleed 保护的 overlap
+只进入 `output_overlap_protected_by_bleed`，由 finalization 扩大输出范围；只有
+`output_overlap_unresolved` 才能成为 DecisionGate blocker。
 
 #### 2.5 Foundation 子层
 
@@ -377,6 +380,10 @@ semantics.
 `candidate.lifecycle` only orchestrates the candidate lifecycle. Execution-budget
 visibility belongs to `candidate.plan.execution_budget`; batch assessment belongs
 to `candidate.assessment.source_batch`.
+`output_overlap_evidence` is output-protection evidence: overlap that can be
+covered by extra bleed is reported as `output_overlap_protected_by_bleed` and
+finalization expands output geometry; only `output_overlap_unresolved` can block
+the DecisionGate.
 
 #### 2.5 Foundation Sublayers
 

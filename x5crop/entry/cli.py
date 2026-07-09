@@ -28,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-n", "--count", type=int, default=None, help="Override frame count.")
     parser.add_argument("--page", type=int, default=0, help="TIFF page index; default 0.")
     parser.add_argument("--bleed", type=int, default=None, help="Bleed in pixels on all sides; overrides layout-aware defaults.")
-    parser.add_argument("--bleed-x", type=int, default=None, help="Long-axis bleed override; default 20, or 50 when output-overlap evidence is detected. Horizontal scans: left/right. Vertical scans: top/bottom.")
+    parser.add_argument("--bleed-x", type=int, default=None, help="Long-axis bleed override; default 20, or 50 when protected output-overlap evidence is detected. Horizontal scans: left/right. Vertical scans: top/bottom.")
     parser.add_argument("--bleed-y", type=int, default=None, help="Short-axis bleed override; default 10. Horizontal scans: top/bottom. Vertical scans: left/right.")
     parser.add_argument("--deskew", choices=DESKEW_CHOICES, default="auto", help="Deskew strip before detection/export.")
     parser.add_argument("--deskew-fallback", choices=DESKEW_FALLBACK_CHOICES, default="auto", help="Fallback edge fitting for deskew angle selection. auto runs the fallback only when base deskew quality is weak; always evaluates it; off disables the fallback.")

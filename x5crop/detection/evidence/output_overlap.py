@@ -26,7 +26,10 @@ def output_overlap_evidence_detail(
         return {
             "used": False,
             "output_overlap_detected": False,
+            "output_overlap_protected_by_bleed": False,
+            "output_overlap_unresolved": False,
             "reason": "no_gaps",
+            "decision_role": "no_output_overlap_evidence",
         }
     gray_work = (
         cache.gray_work
@@ -53,13 +56,21 @@ def output_overlap_evidence_detail(
         int(output_overlap_counts.get("strong", 0)) > 0
         or int(output_overlap_counts.get("medium", 0)) > 0
     )
+    output_overlap_protected_by_bleed = bool(output_overlap_detected)
     return {
         "used": True,
         "output_overlap_detected": bool(output_overlap_detected),
+        "output_overlap_protected_by_bleed": bool(output_overlap_protected_by_bleed),
+        "output_overlap_unresolved": False,
         "reason": (
-            "output_overlap_detected"
-            if output_overlap_detected
+            "output_overlap_protected_by_bleed"
+            if output_overlap_protected_by_bleed
             else "no_medium_or_strong_output_overlap"
+        ),
+        "decision_role": (
+            "output_bleed_adjustment_not_review_blocker"
+            if output_overlap_protected_by_bleed
+            else "no_output_overlap_decision_signal"
         ),
         "output_overlap_counts": output_overlap_counts,
         "gap_diagnostics": gap_records,

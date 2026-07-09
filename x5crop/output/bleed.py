@@ -28,24 +28,12 @@ def detection_bleed_parameters(output_policy: OutputBleedPolicy) -> AxisBleedPar
 
 def detection_has_output_overlap_evidence(detection: Detection) -> bool:
     output_overlap = detection.detail.get("output_overlap_evidence")
-    if isinstance(output_overlap, dict) and bool(
-        output_overlap.get("output_overlap_detected", False)
-    ):
+    if not isinstance(output_overlap, dict):
+        return False
+    if bool(output_overlap.get("output_overlap_unresolved", False)):
+        return False
+    if bool(output_overlap.get("output_overlap_protected_by_bleed", False)):
         return True
-
-    diagnostics = detection.detail.get("diagnostics")
-    if isinstance(diagnostics, dict):
-        summary = diagnostics.get("summary")
-        if isinstance(summary, dict):
-            if int(summary.get("output_overlap_like_model_gaps", 0) or 0) > 0:
-                return True
-            counts = summary.get("output_overlap_counts")
-            if isinstance(counts, dict):
-                if (
-                    int(counts.get("strong", 0) or 0) > 0
-                    or int(counts.get("medium", 0) or 0) > 0
-                ):
-                    return True
     return False
 
 
@@ -111,7 +99,9 @@ def apply_output_bleed(
         "detection_short_axis_bleed": int(detection_bleed.short_axis),
         "output_long_axis_bleed": int(output_bleed.long_axis),
         "output_short_axis_bleed": int(output_bleed.short_axis),
-        "output_overlap_long_axis_bleed": bool(detection_has_output_overlap_evidence(detection)),
+        "output_overlap_protected_by_bleed": bool(
+            detection_has_output_overlap_evidence(detection)
+        ),
     }
 
 

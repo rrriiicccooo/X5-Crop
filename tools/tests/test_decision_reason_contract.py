@@ -426,7 +426,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             ["content_integrity_failed"],
         )
 
-    def test_output_overlap_evidence_is_final_decision_signal(self) -> None:
+    def test_output_overlap_evidence_is_output_protection_signal(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = Detection(
             film_format="135",
@@ -445,7 +445,9 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "output_overlap_evidence": {
                     "used": True,
                     "output_overlap_detected": True,
-                    "reason": "output_overlap_detected",
+                    "output_overlap_protected_by_bleed": True,
+                    "output_overlap_unresolved": False,
+                    "reason": "output_overlap_protected_by_bleed",
                 },
                 "candidate_assessment": {
                     "source": "separator",
@@ -471,15 +473,69 @@ class DecisionReasonContractTest(unittest.TestCase):
             policy=_decision_contract("135", "full"),
         )
 
-        self.assertEqual(decided.final_review_reasons, ["output_overlap_detected"])
+        self.assertEqual(decided.final_review_reasons, [])
         self.assertTrue(decided.detail["decision_signals"]["output_overlap_detected"])
+        self.assertTrue(
+            decided.detail["decision_signals"]["output_overlap_protected_by_bleed"]
+        )
+        self.assertFalse(decided.detail["decision_signals"]["output_overlap_unresolved"])
         self.assertEqual(
             decided.detail["decision_signals"]["output_overlap_evidence"]["reason"],
-            "output_overlap_detected",
+            "output_overlap_protected_by_bleed",
         )
         self.assertEqual(
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
-            ["output_overlap_detected"],
+            [],
+        )
+
+    def test_unresolved_output_overlap_is_final_decision_signal(self) -> None:
+        gray = np.zeros((100, 100), dtype=np.uint8)
+        detection = Detection(
+            film_format="135",
+            layout="horizontal",
+            strip_mode="full",
+            count=1,
+            outer=Box(10, 10, 90, 90),
+            frames=[Box(10, 10, 90, 90)],
+            gaps=[],
+            confidence=0.90,
+            final_review_reasons=[],
+            detail={
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+                "output_overlap_evidence": {
+                    "used": True,
+                    "output_overlap_detected": True,
+                    "output_overlap_protected_by_bleed": False,
+                    "output_overlap_unresolved": True,
+                    "reason": "output_overlap_unresolved",
+                },
+                "candidate_assessment": {
+                    "source": "separator",
+                    "candidate_gate": _candidate_gate_detail(True),
+                    "geometry_score": 1.0,
+                    "content_score": 1.0,
+                    "content_quality_score": 1.0,
+                    "blockers": [],
+                    "diagnostics": [],
+                },
+            },
+        )
+        decided = apply_decision_contract(
+            gray,
+            detection,
+            _decision_test_config(),
+            _content_ok_detail(),
+            {"used": True, "ok": True},
+            policy=_decision_contract("135", "full"),
+        )
+
+        self.assertEqual(decided.final_review_reasons, ["output_overlap_unresolved"])
+        self.assertTrue(decided.detail["decision_signals"]["output_overlap_unresolved"])
+        self.assertEqual(
+            [item["signal"] for item in decided.detail["decision_reason_inputs"]],
+            ["output_overlap_unresolved"],
         )
 
     def test_output_overlap_evidence_is_attached_before_final_decision(self) -> None:
@@ -539,7 +595,9 @@ class DecisionReasonContractTest(unittest.TestCase):
                 return_value={
                     "used": True,
                     "output_overlap_detected": True,
-                    "reason": "output_overlap_detected",
+                    "output_overlap_protected_by_bleed": True,
+                    "output_overlap_unresolved": False,
+                    "reason": "output_overlap_protected_by_bleed",
                 },
             ),
         ):
@@ -553,15 +611,15 @@ class DecisionReasonContractTest(unittest.TestCase):
                 decision_contract_for_policy(policy),
             )
 
-        self.assertEqual(decision.status, "needs_review")
-        self.assertEqual(decision.detection.final_review_reasons, ["output_overlap_detected"])
+        self.assertEqual(decision.status, "approved_auto")
+        self.assertEqual(decision.detection.final_review_reasons, [])
         self.assertEqual(
             decision.detection.detail["output_overlap_evidence"]["reason"],
-            "output_overlap_detected",
+            "output_overlap_protected_by_bleed",
         )
         self.assertEqual(
             [item["signal"] for item in decision.detection.detail["decision_reason_inputs"]],
-            ["output_overlap_detected"],
+            [],
         )
 
     def test_final_status_requires_no_final_review_reasons_with_low_threshold(self) -> None:
