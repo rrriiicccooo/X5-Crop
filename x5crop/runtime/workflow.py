@@ -25,6 +25,8 @@ from ..output.surface import output_surface_for_input
 from .policy_context import RuntimePolicyContext
 from ..report.outputs import write_report_outputs_for_result
 from ..report.result_builder import result_from_detection
+from ..units import scan_calibration_from_profile
+from ..detection.evidence.holder_occupancy import enrich_holder_occupancy_with_calibration
 
 
 def process_one_worker(input_file: Path, config: RuntimeConfig) -> ProcessResult:
@@ -54,6 +56,7 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     initial_policy = policy_context.initial_policy
 
     arr, gray, deskew_detail = apply_deskew(arr, gray, profile, config, initial_policy.preprocess, warnings)
+    scan_calibration = scan_calibration_from_profile(profile)
     analysis_cache = make_analysis_cache(gray, config.layout, initial_policy.preprocess.content_evidence_image)
     policy = initial_policy
     detection_bleed = detection_bleed_parameters(policy.output)
@@ -61,6 +64,13 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     detection_result = choose_detection(gray, detection_config, fmt, policy_context, analysis_cache)
     detection = detection_result.detection
     selected_policy = detection_result.policy
+    detection.detail["scan_calibration"] = scan_calibration.detail()
+    holder_occupancy = detection.detail.get("holder_occupancy")
+    if isinstance(holder_occupancy, dict):
+        detection.detail["holder_occupancy"] = enrich_holder_occupancy_with_calibration(
+            holder_occupancy,
+            scan_calibration,
+        )
     decision = apply_detection_decision(
         gray,
         detection,

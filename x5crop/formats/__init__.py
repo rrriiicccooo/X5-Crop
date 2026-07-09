@@ -45,6 +45,7 @@ class FormatSpec:
     edge_pair_profile: str = "standard_35mm"
     geometry_support_profile: str = "none"
     output_overlap_profile: str = "standard"
+    complete_strip_can_be_underfilled: bool = False
 
     @property
     def nominal_frame_size_mm(self) -> FrameSizeMm:
@@ -91,6 +92,7 @@ def _format_spec(
     edge_pair_profile: str = "standard_35mm",
     geometry_support_profile: str = "none",
     output_overlap_profile: str = "standard",
+    complete_strip_can_be_underfilled: bool = False,
 ) -> FormatSpec:
     name = format_id.value
     return FormatSpec(
@@ -107,6 +109,7 @@ def _format_spec(
         edge_pair_profile=edge_pair_profile,
         geometry_support_profile=geometry_support_profile,
         output_overlap_profile=output_overlap_profile,
+        complete_strip_can_be_underfilled=complete_strip_can_be_underfilled,
     )
 
 
@@ -149,6 +152,7 @@ FORMATS: dict[str, FormatSpec] = {
         FrameSizeMm(65.0, 24.0),
         frame_fit_profile="panoramic_35mm",
         edge_pair_profile="panoramic_35mm",
+        complete_strip_can_be_underfilled=True,
     ),
     "120-645": _format_spec(
         FormatId.MEDIUM_RECTANGLE,
@@ -174,6 +178,7 @@ FORMATS: dict[str, FormatSpec] = {
         frame_fit_profile="medium_square",
         edge_pair_profile="medium_square",
         output_overlap_profile="sensitive",
+        complete_strip_can_be_underfilled=True,
     ),
     "120-67": _format_spec(
         FormatId.MEDIUM_WIDE,

@@ -883,6 +883,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             joint_score=0.90,
             content_score=0.10,
             geometry_score=0.90,
+            holder_occupancy={"complete_underfilled_strip": False, "strip_completeness": {}},
             policy=policy,
         )
 
@@ -1137,6 +1138,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             joint_score=0.90,
             content_score=0.90,
             geometry_score=0.90,
+            holder_occupancy={"complete_underfilled_strip": False, "strip_completeness": {}},
             policy=policy,
         )
 

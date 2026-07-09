@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-REPORT_SCHEMA_VERSION = "v4_9_policy_schema_1"
+REPORT_SCHEMA_VERSION = "v4_9_policy_schema_2"
 
 _POLICY_ID_STEMS = {
     "135": "standard_strip",

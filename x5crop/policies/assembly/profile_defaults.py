@@ -45,7 +45,7 @@ def _is_landscape_medium_frame(fmt: FormatSpec) -> bool:
 
 def partial_count_parameters(fmt: FormatSpec, params: FormatParameters) -> PartialCountParameters:
     partial = params.partial_counts
-    include_default = _is_panorama_frame(fmt) or _is_square_medium_frame(fmt)
+    include_default = bool(fmt.complete_strip_can_be_underfilled)
     return replace(partial, include_default_auto=include_default)
 
 

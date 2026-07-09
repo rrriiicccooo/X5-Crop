@@ -19,6 +19,7 @@ from ....runtime.config import RuntimeConfig
 from ...confidence_caps import apply_confidence_cap
 from ...evidence.content.containment import content_containment_detail
 from ...evidence.content.frame_support import content_evidence_detail
+from ...evidence.holder_occupancy import holder_occupancy_evidence
 from ...evidence.separator_summary import separator_support_detail_summary
 from ..signals import (
     SIGNAL_CONTENT_ASPECT_CONFLICT,
@@ -188,6 +189,14 @@ def apply_candidate_assessment_policy(
     support = str(containment_detail.get("support", ""))
     content_containment_ok = bool(containment_detail.get("content_containment_ok", False))
     content_integrity_failed = bool(containment_detail.get("content_integrity_failed", True))
+    holder_occupancy = holder_occupancy_evidence(
+        candidate,
+        fmt,
+        containment_detail,
+    )
+    strip_completeness = dict(holder_occupancy.get("strip_completeness", {}))
+    candidate.detail["strip_completeness"] = strip_completeness
+    candidate.detail["holder_occupancy"] = holder_occupancy
     signals = candidate_signals(candidate)
     detected_geometry_policy = policy.separator.geometry_support.detected_geometry
     stable_grid_policy = policy.separator.geometry_support.stable_grid
@@ -276,6 +285,7 @@ def apply_candidate_assessment_policy(
         joint_score,
         content_quality,
         geometry_score,
+        holder_occupancy,
         cache,
         policy=policy,
     )
@@ -400,6 +410,8 @@ def apply_candidate_assessment_policy(
     )
     candidate.detail["content_evidence"] = content_detail
     candidate.detail["content_containment"] = containment_detail
+    candidate.detail["strip_completeness"] = strip_completeness
+    candidate.detail["holder_occupancy"] = holder_occupancy
     candidate.detail["candidate_assessment"] = {
         "source": source,
         "joint_score": float(joint_score),
@@ -422,6 +434,8 @@ def apply_candidate_assessment_policy(
         "content_containment_ok": bool(content_containment_ok),
         "content_integrity_failed": bool(content_integrity_failed),
         "content_containment": containment_detail,
+        "strip_completeness": strip_completeness,
+        "holder_occupancy": holder_occupancy,
         "separator_support": separator_support_detail,
         "evidence_independence": independence_detail,
         "partial_edge_safety": partial_edge_safety,

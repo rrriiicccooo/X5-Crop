@@ -15,8 +15,11 @@ from ..detection.detail import (
     decision_summary,
     detail_dict,
     final_review_reasons_from_detail,
+    HOLDER_OCCUPANCY,
     policy_id_from_detail,
     runtime_policy_detail,
+    SCAN_CALIBRATION,
+    STRIP_COMPLETENESS,
 )
 from ..domain import Detection, ProcessResult
 from ..policies.ids import REPORT_SCHEMA_VERSION
@@ -80,6 +83,8 @@ def report_schema_for_detection(
             "strip_mode": detection.strip_mode,
             "count": int(detection.count),
             "layout": detection.layout,
+            "strip_completeness": detail_dict(detection, STRIP_COMPLETENESS),
+            "holder_occupancy": detail_dict(detection, HOLDER_OCCUPANCY),
         },
         "result": {
             "status": status,
@@ -96,12 +101,15 @@ def report_schema_for_detection(
             "content": detail_dict(detection, CONTENT_EVIDENCE),
             "separator": detail_dict(detection, CANDIDATE_ASSESSMENT).get("separator_support", {}),
             "outer_content_alignment": detail_dict(detection, OUTER_CONTENT_ALIGNMENT),
+            "strip_completeness": detail_dict(detection, STRIP_COMPLETENESS),
+            "holder_occupancy": detail_dict(detection, HOLDER_OCCUPANCY),
         },
         "candidate_gate": candidate_gate_detail(detection),
         "decision_gate": decision_gate_detail(detection),
         "diagnostics": {
             "output_overlap_evidence": detail_dict(detection, OUTPUT_OVERLAP_EVIDENCE),
             "deskew": detail_dict(detection, DESKEW),
+            "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
         },
         "evidence_summary": detail_dict(detection, EVIDENCE_SUMMARY) or decision_detail.get(EVIDENCE_SUMMARY, {}),
         "decision_signals": detail_dict(detection, DECISION_SIGNALS) or decision_detail.get(DECISION_SIGNALS, {}),
@@ -112,6 +120,9 @@ def report_schema_for_detection(
             or runtime_policy.get("policy_id")
             or "unknown_policy"
         ),
+        "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
+        "strip_completeness": detail_dict(detection, STRIP_COMPLETENESS),
+        "holder_occupancy": detail_dict(detection, HOLDER_OCCUPANCY),
         "output": output,
     }
     schema = {
@@ -131,6 +142,9 @@ def report_schema_for_detection(
         "candidate_gate": section_values["candidate_gate"],
         "decision_gate": section_values["decision_gate"],
         "decision_policy_detail": section_values["decision_policy_detail"],
+        "scan_calibration": section_values["scan_calibration"],
+        "strip_completeness": section_values["strip_completeness"],
+        "holder_occupancy": section_values["holder_occupancy"],
         "policy_id": section_values["policy_id"],
     }
     for section in report_policy.sections:

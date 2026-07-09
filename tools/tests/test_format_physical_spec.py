@@ -45,6 +45,23 @@ class FormatPhysicalSpecTests(unittest.TestCase):
             all(item.aspect == spec.frame_aspect for item in spec.frame_size_mm_options)
         )
 
+    def test_only_xpan_and_medium_square_can_be_complete_underfilled_strips(self) -> None:
+        expected = {
+            "135": False,
+            "135-dual": False,
+            "half": False,
+            "xpan": True,
+            "120-645": False,
+            "120-66": True,
+            "120-67": False,
+        }
+        for format_id, can_underfill in expected.items():
+            with self.subTest(format_id=format_id):
+                self.assertEqual(
+                    FORMATS[format_id].complete_strip_can_be_underfilled,
+                    can_underfill,
+                )
+
     def test_policy_report_exposes_physical_aspect_source(self) -> None:
         policy = get_detection_policy("half", "full")
         detail = detection_policy_report_detail(policy)
@@ -54,6 +71,43 @@ class FormatPhysicalSpecTests(unittest.TestCase):
         self.assertEqual(physical["nominal_frame_size_mm"]["width_mm"], 18.0)
         self.assertEqual(physical["nominal_frame_size_mm"]["height_mm"], 24.0)
         self.assertAlmostEqual(physical["frame_aspect"], 0.75)
+
+    def test_policy_report_exposes_complete_underfilled_trait(self) -> None:
+        policy = get_detection_policy("120-66", "partial")
+        detail = detection_policy_report_detail(policy)
+        self.assertTrue(detail["physical"]["complete_strip_can_be_underfilled"])
+
+    def test_complete_underfilled_formats_include_default_count_in_partial_auto(self) -> None:
+        for format_id in ("xpan", "120-66"):
+            with self.subTest(format_id=format_id):
+                spec = FORMATS[format_id]
+                policy = get_detection_policy(format_id, "partial")
+                counts = [
+                    count
+                    for count, _strip_mode, _offsets in policy.counts.count_specs(
+                        spec,
+                        "partial",
+                        spec.default_count,
+                        None,
+                    )
+                ]
+                self.assertIn(spec.default_count, counts)
+
+    def test_other_formats_do_not_include_default_count_in_partial_auto(self) -> None:
+        for format_id in ("135", "half", "120-645", "120-67"):
+            with self.subTest(format_id=format_id):
+                spec = FORMATS[format_id]
+                policy = get_detection_policy(format_id, "partial")
+                counts = [
+                    count
+                    for count, _strip_mode, _offsets in policy.counts.count_specs(
+                        spec,
+                        "partial",
+                        spec.default_count,
+                        None,
+                    )
+                ]
+                self.assertNotIn(spec.default_count, counts)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,9 @@ OUTER_CONTENT_ALIGNMENT = "outer_content_alignment"
 OUTPUT_OVERLAP_EVIDENCE = "output_overlap_evidence"
 POLICY_ID = "policy_id"
 RUNTIME_POLICY_DETAIL = "runtime_policy_detail"
+SCAN_CALIBRATION = "scan_calibration"
+STRIP_COMPLETENESS = "strip_completeness"
+HOLDER_OCCUPANCY = "holder_occupancy"
 
 
 def detail_dict(detection: Detection, key: str) -> dict[str, Any]:
@@ -77,6 +80,9 @@ __all__ = [
     "OUTPUT_OVERLAP_EVIDENCE",
     "POLICY_ID",
     "RUNTIME_POLICY_DETAIL",
+    "SCAN_CALIBRATION",
+    "STRIP_COMPLETENESS",
+    "HOLDER_OCCUPANCY",
     "candidate_competition",
     "candidate_assessment",
     "candidate_signals_from_detail",

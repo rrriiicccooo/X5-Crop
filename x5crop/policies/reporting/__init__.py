@@ -39,6 +39,7 @@ def _physical_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "edge_pair_profile": spec.edge_pair_profile,
         "geometry_support_profile": spec.geometry_support_profile,
         "output_overlap_profile": spec.output_overlap_profile,
+        "complete_strip_can_be_underfilled": bool(spec.complete_strip_can_be_underfilled),
     }
 
 
@@ -146,6 +147,7 @@ def _format_spec_detail(contract: "DetectionDecisionContract") -> dict[str, Any]
         "frame_aspect": spec.frame_aspect,
         "aspect_source": "frame_size_mm",
         "expected_separator_count": spec.expected_separator_count,
+        "complete_strip_can_be_underfilled": bool(spec.complete_strip_can_be_underfilled),
         "full_mode_behavior": description.full_mode_behavior,
         "partial_mode_behavior": description.partial_mode_behavior,
         "outer_trust_profile": description.outer_trust_profile,
