@@ -112,7 +112,6 @@ def outer_correction_candidate_extensions(
         return []
     explicit_count = bool(config.requested_count is not None)
     correction_plan = _outer_correction_plan_detail(detection, policy, explicit_count)
-    detection.detail["outer_correction_candidate_plan"] = correction_plan
     if not correction_plan["eligible_families"]:
         return []
 

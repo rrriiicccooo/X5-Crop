@@ -514,7 +514,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_finalization_policy_does_not_own_decision_caps_or_reasons(self) -> None:
-        from x5crop.policies.runtime.final import FinalizationPolicy
+        from x5crop.policies.runtime.policy import DetectionPolicy
 
         banned = {
             "apply_output_bleed",
@@ -524,19 +524,15 @@ class LayerBoundariesContractTest(unittest.TestCase):
             "outer_candidate_disagreement_review_reason",
             "deskew_uncertain_review_reason",
         }
-        self.assertTrue(banned.isdisjoint(FinalizationPolicy.__dataclass_fields__))
+        self.assertTrue(banned.isdisjoint(DetectionPolicy.__dataclass_fields__))
+        self.assertIn(
+            "approved_geometry_adjustment",
+            DetectionPolicy.__dataclass_fields__,
+        )
 
     def test_finalization_runtime_module_does_not_own_output_policy(self) -> None:
-        from x5crop.policies.runtime import final
-
-        banned = {
-            "EdgeBleedProtectionPolicy",
-            "OutputPolicy",
-        }
-
-        for name in banned:
-            self.assertFalse(hasattr(final, name))
-        self.assertTrue(hasattr(final, "FinalizationPolicy"))
+        runtime_root = PROJECT_ROOT / "x5crop" / "policies" / "runtime"
+        self.assertFalse((runtime_root / "final.py").exists())
 
     def test_output_policy_is_owned_by_runtime_output_module(self) -> None:
         from x5crop.policies.parameters.exposure_overlap import EdgeBleedProtectionParameters
@@ -568,9 +564,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
         from x5crop.policies.runtime.content import ContentPolicy
         from x5crop.policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
         from x5crop.policies.parameters.decision import DecisionReviewParameters
-        from x5crop.policies.runtime.final import FinalizationPolicy
         from x5crop.policies.runtime.outer import (
-            BaseOuterProposalPolicy,
             LongAxisGeometryCorrectionPolicy,
             PartialPlacementGeometryPolicy,
             OuterCorrectionFamilyPolicy,
@@ -586,12 +580,10 @@ class LayerBoundariesContractTest(unittest.TestCase):
         )
 
         switches = {
-            FinalizationPolicy: "apply_approved_geometry_adjustment",
             OutputPolicy: "apply_output_bleed",
             RuntimeDiagnosticsPolicy: "attach_read_only_when_requested",
             ContentPolicy: "validates_candidates",
             EdgeBleedProtectionParameters: "enabled",
-            BaseOuterProposalPolicy: "enabled",
             EdgeAnchoredContentPositionParameters: "enabled",
             FloatingContentPositionParameters: "enabled",
             LongAxisGeometryCorrectionPolicy: "enabled",

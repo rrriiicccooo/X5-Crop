@@ -7,7 +7,6 @@ from ..parameters.outer import (
 )
 from ..runtime.base import PARTIAL
 from ..runtime.outer import (
-    BaseOuterProposalPolicy,
     ContentContainmentCorrectionPolicy,
     GeometryConsistencyCorrectionPolicy,
     GeometryOuterProposalPolicy,
@@ -104,9 +103,7 @@ def outer_policy(
     )
     return OuterPolicy(
         proposal=OuterProposalPolicy(
-            base=BaseOuterProposalPolicy(
-                candidates=params.outer.base_outer_candidates,
-            ),
+            base=params.outer.base_outer_candidates,
             geometry=GeometryOuterProposalPolicy(
                 partial_placement=PartialPlacementGeometryPolicy(
                     enabled=partial_content_enabled,

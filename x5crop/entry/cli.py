@@ -15,11 +15,12 @@ from ..formats import (
     STRIP_CHOICES,
 )
 from ..output.protection import DEFAULT_OUTPUT_BLEED
+from ..runtime.bootstrap import run_options
+from ..runtime.limits import STANDARD_JOB_LIMIT
 from .options import (
     DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
     DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
-    STANDARD_JOB_LIMIT,
     CliOptions,
 )
 from .text_output import configure_entry_text_output
@@ -120,9 +121,7 @@ def main(argv: list[str] | None = None) -> int:
             from .interactive import run_interactive
 
             return run_interactive(diagnostics=bool(args.interactive_diagnostics))
-        from .invocation import run_entry_options
-
-        return run_entry_options(options_from_args(args))
+        return run_options(options_from_args(args))
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         if "args" in locals() and bool(getattr(args, "debug_errors", False)):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, replace
+from dataclasses import replace
 from typing import Optional
 
 import numpy as np
@@ -51,7 +51,7 @@ def select_dual_lane_candidate(
         )
         for outer_candidate in base_outer_candidates(
             lane_crop,
-            lane_policy.outer.proposal.base.candidates,
+            lane_policy.outer.proposal.base,
         )
     ]
     if not candidates:
@@ -90,11 +90,7 @@ def _assessed_lane_candidate(
         0.0,
         f"dual_lane_{lane_index}_{outer_candidate.name}",
         outer_candidate.strategy,
-        outer_candidate_detail={
-            **outer_candidate.detail,
-            "dual_lane_index": int(lane_index),
-            "lane_box": asdict(lane),
-        },
+        outer_candidate_detail=outer_candidate.detail,
         cache=cache,
         policy=lane_policy,
     )
@@ -108,6 +104,4 @@ def _assessed_lane_candidate(
         cache,
         policy=lane_policy,
     )
-    assessed.detail["dual_lane_index"] = lane_index
-    assessed.detail["dual_lane_work_box"] = asdict(lane)
     return assessed

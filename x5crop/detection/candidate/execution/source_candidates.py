@@ -33,17 +33,6 @@ class SourceCandidateBatch:
     detail: dict
 
 
-def _outer_candidate_report_detail(candidate: OuterCandidate) -> dict:
-    detail = {
-        "name": candidate.name,
-        "strategy": candidate.strategy,
-        "box": asdict(candidate.box),
-    }
-    if candidate.detail:
-        detail["proposal_detail"] = dict(candidate.detail)
-    return detail
-
-
 def _attach_outer_candidate_summary(
     detection: DetectionCandidate,
     outer_candidates: list[OuterCandidate],
@@ -51,12 +40,7 @@ def _attach_outer_candidate_summary(
     areas = [candidate.box.width * candidate.box.height for candidate in outer_candidates if candidate.box.valid()]
     if not areas:
         return
-    detection.detail["outer_candidate_count"] = len(outer_candidates)
     detection.detail["outer_area_spread_ratio"] = (max(areas) - min(areas)) / max(1.0, float(max(areas)))
-    detection.detail["outer_candidates"] = [
-        _outer_candidate_report_detail(candidate)
-        for candidate in outer_candidates
-    ]
     holder_candidates = [
         candidate.box
         for candidate in outer_candidates

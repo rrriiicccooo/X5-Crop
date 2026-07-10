@@ -80,8 +80,8 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         cli_source = (
             PROJECT_ROOT / "x5crop" / "entry" / "cli.py"
         ).read_text(encoding="utf-8")
-        invocation_source = (
-            PROJECT_ROOT / "x5crop" / "entry" / "invocation.py"
+        bootstrap_source = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "bootstrap.py"
         ).read_text(encoding="utf-8")
         app_source = (
             PROJECT_ROOT / "x5crop" / "runtime" / "app.py"
@@ -91,7 +91,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertNotIn("FORMATS", cli_source)
-        self.assertEqual(invocation_source.count("DetectionPolicyBundle.for_format_mode"), 1)
+        self.assertEqual(bootstrap_source.count("DetectionPolicyBundle.for_format_mode"), 1)
         self.assertNotIn("DetectionPolicyBundle.for_format_mode", app_source)
         self.assertNotIn("DetectionPolicyBundle.for_format_mode", workflow_source)
 
@@ -103,6 +103,19 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             ("invocation", "worker_config"),
         )
 
+    def test_entry_only_parses_options_and_delegates_to_runtime(self) -> None:
+        entry_root = PROJECT_ROOT / "x5crop" / "entry"
+        entry_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(entry_root.glob("*.py"))
+        )
+
+        self.assertNotIn("first_tiff_shape", entry_source)
+        self.assertNotIn("infer_layout", entry_source)
+        self.assertNotIn("DetectionPolicyBundle", entry_source)
+        self.assertNotIn("RunConfig(", entry_source)
+        self.assertFalse((entry_root / "invocation.py").exists())
+
     def test_policy_assembly_has_no_pass_through_preset_models(self) -> None:
         assembly = PROJECT_ROOT / "x5crop" / "policies" / "assembly"
         self.assertFalse((assembly / "presets.py").exists())
@@ -111,6 +124,40 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             PROJECT_ROOT / "x5crop" / "policies" / "registry.py"
         ).read_text(encoding="utf-8")
         self.assertIn("from .assembly.factory import build_detection_policy", registry)
+
+    def test_runtime_policy_has_no_single_value_forwarding_models(self) -> None:
+        runtime_root = PROJECT_ROOT / "x5crop" / "policies" / "runtime"
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(runtime_root.glob("*.py"))
+        )
+
+        for class_name in (
+            "DetectorPolicy",
+            "CountHypothesisPolicy",
+            "FinalizationPolicy",
+            "BaseOuterProposalPolicy",
+        ):
+            self.assertNotIn(f"class {class_name}", source)
+
+    def test_candidate_runtime_does_not_write_unconsumed_detail(self) -> None:
+        source_paths = (
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "execution" / "count_hypothesis.py",
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "execution" / "source_candidates.py",
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "extension" / "outer_correction.py",
+            PROJECT_ROOT / "x5crop" / "detection" / "modes" / "dual_lane_candidate.py",
+        )
+        source = "\n".join(path.read_text(encoding="utf-8") for path in source_paths)
+
+        for detail_key in (
+            'detail["content_candidate_skipped"]',
+            'detail["outer_candidate_count"]',
+            'detail["outer_candidates"]',
+            'detail["outer_correction_candidate_plan"]',
+            'detail["dual_lane_index"]',
+            'detail["dual_lane_work_box"]',
+        ):
+            self.assertNotIn(detail_key, source)
 
     def test_decision_evidence_thresholds_are_parameter_owned(self) -> None:
         decision_parameters = (

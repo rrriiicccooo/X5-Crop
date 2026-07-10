@@ -7,18 +7,14 @@ from ..parameters.base import PartialEdgeHintParameters
 from ..parameters.candidate import CandidatePlanParameters, FrameFitParameters
 from ..parameters.decision import DecisionEvidenceParameters, DecisionReviewParameters
 from ..parameters.exposure_overlap import ExposureOverlapEvidenceParameters
+from ..parameters.finalization import ApprovedGeometryAdjustmentParameters
 from ..parameters.scoring import CandidateCompetitionParameters
-from .base import (
-    CountHypothesisPolicy,
-    DetectorPolicy,
-)
 from .candidate import (
     PartialHolderPolicy,
     ScoringPolicy,
 )
 from .content import ContentPolicy
 from .diagnostics import RuntimeDiagnosticsPolicy
-from .final import FinalizationPolicy
 from .outer import OuterPolicy
 from .output import OutputPolicy
 from .preprocess import RuntimePreprocessPolicy
@@ -31,8 +27,8 @@ class DetectionPolicy:
     physical_spec: FormatPhysicalSpec
     strip_mode: str
     preprocess: RuntimePreprocessPolicy
-    detector: DetectorPolicy
-    count_hypotheses: CountHypothesisPolicy
+    detector_kind: str
+    partial_count_offsets: tuple[float, ...]
     outer: OuterPolicy
     separator: SeparatorPolicy
     content: ContentPolicy
@@ -45,6 +41,6 @@ class DetectionPolicy:
     exposure_overlap_evidence: ExposureOverlapEvidenceParameters
     decision_evidence: DecisionEvidenceParameters
     decision: DecisionReviewParameters
-    finalization: FinalizationPolicy
+    approved_geometry_adjustment: ApprovedGeometryAdjustmentParameters
     output: OutputPolicy
     diagnostics: RuntimeDiagnosticsPolicy

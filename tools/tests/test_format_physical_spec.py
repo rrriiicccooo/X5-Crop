@@ -128,7 +128,7 @@ class FormatPhysicalSpecTests(unittest.TestCase):
                     strip_mode="partial",
                     requested_count=None,
                     fmt=spec,
-                    policy=policy.count_hypotheses,
+                    partial_offsets=policy.partial_count_offsets,
                 )
                 counts = [hypothesis.count for hypothesis in plan.hypotheses]
                 self.assertIn(spec.default_count, counts)
@@ -142,7 +142,7 @@ class FormatPhysicalSpecTests(unittest.TestCase):
                     strip_mode="partial",
                     requested_count=None,
                     fmt=spec,
-                    policy=policy.count_hypotheses,
+                    partial_offsets=policy.partial_count_offsets,
                 )
                 counts = [hypothesis.count for hypothesis in plan.hypotheses]
                 self.assertNotIn(spec.default_count, counts)

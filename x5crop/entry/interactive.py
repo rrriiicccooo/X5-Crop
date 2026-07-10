@@ -4,13 +4,12 @@ from pathlib import Path
 
 from ..app_info import SCRIPT_NAME, VERSION
 from ..formats import FORMATS
-from .invocation import run_entry_options
+from ..runtime.bootstrap import run_options
+from ..runtime.limits import DIAGNOSTICS_JOB_LIMIT, STANDARD_JOB_LIMIT
 from .options import (
     DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
     DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
-    DIAGNOSTICS_JOB_LIMIT,
-    STANDARD_JOB_LIMIT,
     CliOptions,
 )
 
@@ -158,4 +157,4 @@ def interactive_options(diagnostics: bool = False) -> CliOptions:
 
 
 def run_interactive(diagnostics: bool = False) -> int:
-    return run_entry_options(interactive_options(diagnostics=diagnostics))
+    return run_options(interactive_options(diagnostics=diagnostics))

@@ -37,7 +37,7 @@ def choose_detection(
     policy = policy_bundle.policy_for(fmt.format_id, config.strip_mode)
     if cache.layout != config.layout:
         raise ValueError("Analysis cache layout does not match runtime layout")
-    if policy.detector.kind == "dual_lane":
+    if policy.detector_kind == "dual_lane":
         candidate = choose_dual_lane_detection(gray, config, cache, policy, policy_bundle)
         candidate = select_detection_candidate(
             [candidate],
@@ -46,7 +46,7 @@ def choose_detection(
             policy.candidate_selection,
         )
         return CandidatePipelineResult(candidate=candidate, policy=policy)
-    if policy.detector.kind == "review_only":
+    if policy.detector_kind == "review_only":
         candidate = review_only_detection(gray, config, fmt)
         candidate = select_detection_candidate(
             [candidate],
@@ -59,7 +59,7 @@ def choose_detection(
         strip_mode=config.strip_mode,
         requested_count=config.requested_count,
         fmt=fmt,
-        policy=policy.count_hypotheses,
+        partial_offsets=policy.partial_count_offsets,
     )
     count_evaluations = []
     for hypothesis in count_plan.hypotheses:

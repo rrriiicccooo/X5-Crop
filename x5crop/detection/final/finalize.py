@@ -41,7 +41,7 @@ def finalize_detection(
     apply_approved_geometry_adjustment(
         output_detection,
         gray,
-        policy.finalization.approved_geometry_adjustment,
+        policy.approved_geometry_adjustment,
     )
     output_config = replace(
         config,

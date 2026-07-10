@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ....formats import FormatPhysicalSpec
-from ....policies.runtime.base import FULL, PARTIAL, CountHypothesisPolicy
+from ....policies.runtime.base import FULL, PARTIAL
 
 
 @dataclass(frozen=True)
@@ -51,7 +51,7 @@ def count_hypothesis_plan(
     strip_mode: str,
     requested_count: int | None,
     fmt: FormatPhysicalSpec,
-    policy: CountHypothesisPolicy,
+    partial_offsets: tuple[float, ...],
 ) -> CountHypothesisPlan:
     if requested_count is not None and requested_count not in fmt.allowed_counts:
         raise ValueError(f"count {requested_count} is not allowed for {fmt.format_id}")
@@ -78,7 +78,7 @@ def count_hypothesis_plan(
                 CountHypothesis(
                     requested_count,
                     PARTIAL,
-                    policy.partial_offsets,
+                    partial_offsets,
                     "requested_count",
                 ),
             ),
@@ -95,7 +95,7 @@ def count_hypothesis_plan(
         raise ValueError(f"no automatic count hypotheses configured for {fmt.format_id}")
     return CountHypothesisPlan(
         hypotheses=tuple(
-            CountHypothesis(count, PARTIAL, policy.partial_offsets, "automatic_count")
+            CountHypothesis(count, PARTIAL, partial_offsets, "automatic_count")
             for count in counts
         ),
         automatic=True,

@@ -252,11 +252,11 @@ class ArchitectureResidualContractTest(unittest.TestCase):
         ):
             with self.subTest(format_id=format_id, strip_mode=strip_mode):
                 self.assertNotEqual(
-                    get_detection_policy(format_id, strip_mode).detector.kind,
+                    get_detection_policy(format_id, strip_mode).detector_kind,
                     "review_only",
                 )
         self.assertEqual(
-            get_detection_policy("135-dual", "partial").detector.kind,
+            get_detection_policy("135-dual", "partial").detector_kind,
             "review_only",
         )
 
@@ -593,9 +593,8 @@ class ArchitectureResidualContractTest(unittest.TestCase):
             DEFAULT_CONFIDENCE_THRESHOLD,
             DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
             DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
-            DIAGNOSTICS_JOB_LIMIT,
-            STANDARD_JOB_LIMIT,
         )
+        from x5crop.runtime.limits import DIAGNOSTICS_JOB_LIMIT, STANDARD_JOB_LIMIT
 
         self.assertEqual(DEFAULT_DESKEW_MIN_ANGLE_DEGREES, 0.03)
         self.assertEqual(DEFAULT_DESKEW_MAX_ANGLE_DEGREES, 2.0)

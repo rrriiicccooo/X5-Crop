@@ -178,17 +178,11 @@ def _assessed_candidates_for_offset(
         and separator_candidate_passed
         and separator_support_candidate.confidence >= config.confidence_threshold
     ):
-        separator_support_candidate.detail["content_candidate_skipped"] = (
-            "reliable_separator_candidate_selected"
-        )
         return candidates, stop_after_this_count
     if (
         strip_mode == "partial"
         and partial_edge_safety_candidate
     ):
-        separator_support_candidate.detail["content_candidate_skipped"] = (
-            "partial_edge_safety_separator_candidate_selected"
-        )
         return candidates, stop_after_this_count
     content = content_detection_for_count(
         gray,

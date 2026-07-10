@@ -15,11 +15,9 @@ from .candidate import partial_holder_policy
 from .outer import outer_policy
 from .separator import separator_policy
 from ..identity import detection_policy_id_for
-from ..runtime.base import CountHypothesisPolicy, DetectorPolicy
 from ..runtime.candidate import ScoringPolicy
 from ..runtime.content import ContentPolicy
 from ..runtime.diagnostics import RuntimeDiagnosticsPolicy
-from ..runtime.final import FinalizationPolicy
 from ..runtime.output import OutputPolicy
 from ..runtime.policy import DetectionPolicy
 from ..runtime.preprocess import RuntimePreprocessPolicy
@@ -63,12 +61,8 @@ def build_detection_policy(
         physical_spec=spec,
         strip_mode=strip_mode,
         preprocess=preprocess,
-        detector=DetectorPolicy(
-            kind=detector_kind,
-        ),
-        count_hypotheses=CountHypothesisPolicy(
-            partial_offsets=params.candidate.partial_counts.offsets,
-        ),
+        detector_kind=detector_kind,
+        partial_count_offsets=params.candidate.partial_counts.offsets,
         outer=outer_policy(detector_kind, strip_mode, params),
         separator=separator,
         content=ContentPolicy(
@@ -97,9 +91,7 @@ def build_detection_policy(
         exposure_overlap_evidence=params.output.exposure_overlap_evidence,
         decision_evidence=decision_evidence,
         decision=params.decision.decision_review,
-        finalization=FinalizationPolicy(
-            approved_geometry_adjustment=params.output.approved_geometry_adjustment,
-        ),
+        approved_geometry_adjustment=params.output.approved_geometry_adjustment,
         output=OutputPolicy(
             exposure_overlap_protection=params.output.exposure_overlap_protection,
             edge_bleed_protection=params.output.edge_bleed_protection,

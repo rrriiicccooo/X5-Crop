@@ -68,11 +68,6 @@ class SeparatorOuterFamilyPolicy:
 
 
 @dataclass(frozen=True)
-class BaseOuterProposalPolicy:
-    candidates: OuterBoxDetectionParameters = field(default_factory=OuterBoxDetectionParameters)
-
-
-@dataclass(frozen=True)
 class SeparatorGeometryProposalPolicy:
     band: SeparatorOuterBandParameters
     full_width_outer: FullWidthSeparatorOuterParameters
@@ -90,7 +85,7 @@ class GeometryOuterProposalPolicy:
 
 @dataclass(frozen=True)
 class OuterProposalPolicy:
-    base: BaseOuterProposalPolicy
+    base: OuterBoxDetectionParameters
     geometry: GeometryOuterProposalPolicy
 
 

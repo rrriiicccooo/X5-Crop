@@ -43,10 +43,8 @@ def _physical_detail(policy: "DetectionPolicy") -> dict[str, Any]:
 def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     return {
         "preprocess": _plain(policy.preprocess),
-        "detector": {
-            "kind": policy.detector.kind,
-        },
-        "count_hypotheses": _plain(policy.count_hypotheses),
+        "detector_kind": policy.detector_kind,
+        "partial_count_offsets": list(policy.partial_count_offsets),
         "outer": {
             "proposal_families": {
                 "partial_placement": policy.outer.proposal.geometry.partial_placement.enabled,
@@ -117,7 +115,7 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "candidate_runtime": _candidate_runtime_detail(policy),
         "decision_runtime": _decision_runtime_detail(policy),
         "output_runtime": {
-            "finalization": _plain(policy.finalization),
+            "approved_geometry_adjustment": _plain(policy.approved_geometry_adjustment),
             "output": _plain(policy.output),
         },
         "diagnostics_runtime": _diagnostics_runtime_detail(policy),

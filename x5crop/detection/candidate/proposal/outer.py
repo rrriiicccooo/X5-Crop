@@ -129,7 +129,7 @@ def outer_proposal_candidates(
         explicit_count=explicit_count,
     )
     enabled_strategy_names = {strategy.name for strategy in strategy_plan if strategy.enabled}
-    base_candidates = base_outer_candidates(gray_work, policy.outer.proposal.base.candidates)
+    base_candidates = base_outer_candidates(gray_work, policy.outer.proposal.base)
     edge_candidates: list[OuterCandidate] = []
     if "edge_anchor" in enabled_strategy_names:
         edge_candidates = edge_anchored_outer_candidates(

@@ -36,7 +36,7 @@ class AutoCountContractTest(unittest.TestCase):
             strip_mode="partial",
             requested_count=requested_count,
             fmt=fmt,
-            policy=policy.count_hypotheses,
+            partial_offsets=policy.partial_count_offsets,
         )
 
     def test_partial_auto_searches_largest_count_first(self) -> None:
