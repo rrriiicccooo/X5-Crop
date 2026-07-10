@@ -271,8 +271,9 @@ Current state:
 Recent verified baseline:
 
 - The previous architecture closure candidate was superseded by the partial
-  auto-count and execution-budget performance refactor. Architecture is not
-  closed; the complete two-audit plan must restart from the resulting commit.
+  auto-count, physical-resolution, outer-cohort, sampling, and cache performance
+  refactors. Architecture is not closed; the complete two-audit plan must restart
+  from the resulting commit.
 - `python3 X5_Crop.py --version` printed `X5_Crop.py 4.9`.
 - The full architecture and runtime contract suite passed.
 - Full compile across the V4.9 package and regression tools passed.

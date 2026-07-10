@@ -11,6 +11,7 @@ from ..utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, 
 from .detection_parameters import SeparatorWidthProfileSearchParameters
 from .gap_search_detail import attach_gap_run_evaluation_summary
 from .separator_band import SeparatorBand, SeparatorBandCollection
+from .sampling import sampling_step_for_limit
 
 
 @dataclass(frozen=True)
@@ -121,11 +122,6 @@ class TheoreticalSeparatorWidth:
             "total_separator_width": float(self.total_separator_width),
             "target_photo_width": float(self.target_photo_width),
         }
-
-
-def sampling_step_for_limit(length: int, sample_limit: int) -> int:
-    limit = max(1, int(sample_limit))
-    return max(1, (max(0, int(length)) + limit - 1) // limit)
 
 
 def separator_width_relation_to_theory(

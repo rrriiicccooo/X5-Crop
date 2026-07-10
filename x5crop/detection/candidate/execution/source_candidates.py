@@ -28,20 +28,22 @@ from ..build.detection import build_detection_geometry_for_outer, enrich_detecti
 
 
 @dataclass(frozen=True)
+class OuterCandidateCohort:
+    name: str
+    candidates: tuple[OuterCandidate, ...]
+
+
+@dataclass(frozen=True)
 class SeparatorOuterCandidatePlan:
-    outer_candidates: tuple[OuterCandidate, ...]
-    comparison_outer_candidates: tuple[OuterCandidate, ...]
+    cohorts: tuple[OuterCandidateCohort, ...]
+    comparison_candidates: tuple[OuterCandidate, ...]
     detail: dict
 
 
-def _attach_outer_candidate_summary(
+def _attach_holder_reference(
     detection: DetectionCandidate,
     outer_candidates: list[OuterCandidate],
 ) -> None:
-    areas = [candidate.box.width * candidate.box.height for candidate in outer_candidates if candidate.box.valid()]
-    if not areas:
-        return
-    detection.detail["outer_area_spread_ratio"] = (max(areas) - min(areas)) / max(1.0, float(max(areas)))
     holder_candidates = [
         candidate.box
         for candidate in outer_candidates
@@ -89,9 +91,9 @@ def build_separator_candidate_for_outer(
     detection.detail["separator_gap_search"] = separator_gap_search_detail(
         policy.separator.width_profile
     )
-    _attach_outer_candidate_summary(
+    _attach_holder_reference(
         detection,
-        list(plan.comparison_outer_candidates),
+        list(plan.comparison_candidates),
     )
     detection.detail["candidate_plan"] = dict(plan.detail)
     return detection
@@ -99,12 +101,38 @@ def build_separator_candidate_for_outer(
 
 def _outer_candidate_plan(
     outer_candidates: list[OuterCandidate],
-    comparison_outer_candidates: list[OuterCandidate],
+    comparison_candidates: list[OuterCandidate],
     detail: dict,
+    *,
+    physical_primary_candidate_count: int,
 ) -> SeparatorOuterCandidatePlan:
+    separator = [candidate for candidate in outer_candidates if candidate.strategy == "separator_outer"]
+    primary_count = max(1, int(physical_primary_candidate_count))
+    base = [candidate for candidate in outer_candidates if candidate.strategy == "base_outer"]
+    guidance = [
+        candidate
+        for candidate in outer_candidates
+        if candidate.strategy not in {"separator_outer", "base_outer"}
+    ]
+    cohorts = (
+        OuterCandidateCohort("separator_geometry_primary", tuple(separator[:primary_count])),
+        OuterCandidateCohort("base_geometry_primary", tuple(base[:primary_count])),
+        OuterCandidateCohort("separator_geometry_secondary", tuple(separator[primary_count:])),
+        OuterCandidateCohort("base_geometry_secondary", tuple(base[primary_count:])),
+        OuterCandidateCohort("content_guidance_primary", tuple(guidance[:primary_count])),
+        OuterCandidateCohort("content_guidance_secondary", tuple(guidance[primary_count:])),
+    )
+    active_cohorts = tuple(cohort for cohort in cohorts if cohort.candidates)
+    detail = {
+        **detail,
+        "outer_candidate_cohorts": [
+            {"name": cohort.name, "candidate_count": len(cohort.candidates)}
+            for cohort in active_cohorts
+        ],
+    }
     return SeparatorOuterCandidatePlan(
-        outer_candidates=tuple(outer_candidates),
-        comparison_outer_candidates=tuple(comparison_outer_candidates),
+        cohorts=active_cohorts,
+        comparison_candidates=tuple(comparison_candidates),
         detail=detail,
     )
 
@@ -141,7 +169,14 @@ def separator_primary_outer_plan(
         "separator_full_width_included": False,
         "width_aware_proposal": True,
     }
-    return _outer_candidate_plan(outer_candidates, outer_candidates, detail)
+    return _outer_candidate_plan(
+        outer_candidates,
+        outer_candidates,
+        detail,
+        physical_primary_candidate_count=(
+            policy.candidate_plan.execution_budget.physical_primary_candidate_count
+        ),
+    )
 
 
 def separator_extension_outer_plan(
@@ -198,6 +233,9 @@ def separator_extension_outer_plan(
         extension_outer_candidates,
         all_outer_candidates,
         detail,
+        physical_primary_candidate_count=(
+            policy.candidate_plan.execution_budget.physical_primary_candidate_count
+        ),
     )
 
 

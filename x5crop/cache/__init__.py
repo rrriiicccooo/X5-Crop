@@ -6,6 +6,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ..domain import OuterCandidate
+from .content_statistics import ContentColumnStatistics
 
 @dataclass
 class AnalysisCache:
@@ -25,6 +26,9 @@ class AnalysisCache:
     content_region_runs: dict[tuple[Any, ...], tuple[list[tuple[int, int]], dict[str, Any]]] = field(default_factory=dict)
     content_evidence_details: dict[tuple[Any, ...], dict[str, Any]] = field(default_factory=dict)
     content_evidence_thresholds: dict[tuple[Any, ...], float] = field(default_factory=dict)
+    content_column_statistics: dict[tuple[Any, ...], ContentColumnStatistics] = field(
+        default_factory=dict
+    )
     outer_alignment_details: dict[tuple[Any, ...], dict[str, Any]] = field(default_factory=dict)
     separator_outer_candidates: dict[tuple[Any, ...], list[OuterCandidate]] = field(default_factory=dict)
     edge_anchored_outer_candidates: dict[tuple[Any, ...], list[OuterCandidate]] = field(default_factory=dict)

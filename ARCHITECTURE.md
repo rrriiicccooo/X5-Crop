@@ -108,6 +108,8 @@ count-independent separator preflight for partial auto
 candidate assessment 只产生候选级解释；最终用户可见原因只由 decision 产生。
 CandidateGate 只能阻断或限制候选，不能把分数反向抬高；separator 宽度变化属于 evidence
 detail，不是独立 blocker。
+outer candidate disagreement 只由 selection 基于实际完成 assessment 的同 count 候选计算；
+未执行的 proposal cohort 不得影响 DecisionGate。
 用户入口 `strip_mode` 仍表示照片是否铺满片夹；detection 内部另行记录
 `strip_completeness` 和 `holder_occupancy`。因此 XPAN / 120-66 可以在 partial
 入口下被解释为 `complete_underfilled_strip`：完整张数存在，但片夹前后仍有 holder slack。
@@ -232,11 +234,13 @@ budget 和 retrospective detail 均由 assessment / execution / selection 拥有
 `FinalDetection.status` 与 `FinalDetection.final_review_reasons` 是内存中的唯一最终真相；
 decision summary 只保存 gate checks、signals、reason inputs 和 confidence caps。
 auto count 不在 runtime config 中保存伪默认 count：`requested_count=None` 明确表示自动模式。
-partial auto 先用 count-independent base outer、hard separator bands 和 observed-width measurement
-形成 `CountPlanningEvidence`；它只排列物理支持的 count 并从实测 separator 位置推导连续
-placement，不评分、不 gate。证据不足时 plan 仍保留其余物理允许 count。execution 对每个实际
-展开的 hypothesis 完整 build / assess，并在可信 placement 后停止等价搜索；selection 记录最终
-count 及其证据。XPAN / 120-66 的 partial auto 可以包含 nominal count。
+partial auto 先用 count-independent base outer 和 standard hard separator bands 形成
+`CountPlanningEvidence`；observed-width measurement 只有在某个实际执行的 count 缺少
+placement 时才按需运行。`CountResolution` 只读取 hard separator、cross-axis continuity、
+photo-size consistency 和 frame topology；它与 CandidateGate / confidence 表达的 auto readiness
+相互独立。物理 count 和 placement 已确定时停止更小 count 与等价 offset 搜索，即使最终结果
+仍可能 REVIEW。缺少物理 placement 的 count 只把 content bbox 用作 placement guidance。
+XPAN / 120-66 的 partial auto 可以包含 nominal count。
 `exposure_overlap_evidence` 只测量 model boundary 上的连续影像和最宽 overlap band，不知道
 bleed capacity 或 REVIEW。`x5crop.output` 根据该 evidence 生成唯一 `OutputProtectionPlan`；
 DecisionGate 只阻断不可执行的 plan，finalization 严格执行同一个 plan。所有 format/mode
@@ -253,7 +257,7 @@ separator gap search 直接执行 standard search，并在缺失时补充 observ
 | `geometry` | 纯几何和 profile / search / fit 算法。 |
 | `image` | 图像灰度、证据图、deskew、pixel transform 和 crop pixel 操作。 |
 | `io` | TIFF I/O。 |
-| `cache` | cache adapters；复用 count/offset-independent 的 base outer、outer proposal、separator profile、observed-width profile 和 per-outer content threshold，不缓存 gate 或 decision。 |
+| `cache` | cache adapters；复用 count/offset-independent 的 base outer、outer proposal、sampled separator profile、observed-width profile、per-outer content threshold 和精确 column statistics，不缓存 gate 或 decision。 |
 | `units` | TIFF resolution 到 scan calibration 的纯数据模型。 |
 
 foundation 层不反向依赖 runtime、detection、report、debug、export 或 policy registry。
@@ -338,6 +342,8 @@ Candidate assessment explains candidate qualification. Final user-visible
 reasons are produced by decision. CandidateGate may block or cap a candidate,
 but it cannot raise its score. Separator-width variation is evidence detail,
 not a standalone blocker.
+Outer-candidate disagreement is computed by selection from assessed candidates
+of the selected count; unexecuted proposal cohorts cannot affect DecisionGate.
 User-facing `strip_mode` still means whether the image fills the holder.
 Detection records separate `strip_completeness` and `holder_occupancy` evidence,
 so XPAN / 120-66 may be reported as `complete_underfilled_strip`: the default
@@ -466,14 +472,15 @@ assessment, execution, or selection. `FinalDetection.status` and
 summary retains gate checks, signals, reason inputs, and confidence caps only.
 Auto count does not store a placeholder default count in runtime config:
 `requested_count=None` explicitly means automatic mode. Partial auto first forms
-`CountPlanningEvidence` from count-independent base outer, hard separator bands,
-and observed-width measurement. This evidence only orders physically supported
-counts and derives continuous placement from measured separator positions; it
-does not score or gate. The plan retains all other physically permitted counts
-when evidence is insufficient. Execution fully builds and assesses every expanded
-hypothesis, stops equivalent placement search after trusted support, and selection
-records the chosen count and its evidence. XPAN and 120-66 partial auto may include
-the nominal count.
+`CountPlanningEvidence` from count-independent base outer and standard hard
+separator bands. Observed-width measurement runs lazily only when an executed
+count still lacks placement evidence. `CountResolution` reads only hard separator
+support, cross-axis continuity, photo-size consistency, and frame topology; it is
+independent from CandidateGate / confidence auto readiness. Physically resolved
+count and placement stop smaller counts and equivalent offsets even when the final
+result remains REVIEW. Counts without physical placement use the content bounding
+box as placement guidance only. XPAN and 120-66 partial auto may include the nominal
+count.
 `exposure_overlap_evidence` only measures continuous image content at model
 boundaries and the widest overlap band; it does not know bleed capacity or REVIEW.
 `x5crop.output` derives one `OutputProtectionPlan` from that evidence. DecisionGate
@@ -495,8 +502,9 @@ on runtime, detection, report, debug, export, or the policy registry. Foundation
 helpers do not create implicit default parameters; callers pass explicit
 parameter objects supplied by runtime policy assembly.
 Cache adapters reuse only count/offset-independent measurements: base outer,
-outer proposals, separator profiles, observed-width profiles, and per-outer
-content thresholds. They never cache a gate or decision result.
+outer proposals, sampled separator profiles, observed-width profiles, per-outer
+content thresholds, and exact content column statistics. They never cache a gate
+or decision result.
 Frame fitting follows the same contract: callers pass frame-fit parameters;
 the geometry model always supplies the baseline frames and edge evidence refines
 them when available. Geometry does not infer behavior from an optional config.

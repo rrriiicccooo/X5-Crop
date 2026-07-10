@@ -127,8 +127,11 @@ debug analysis? [y/n, return=no]:
 
 只有开启 partial mode 后才会询问 `count`。按 Return 或输入 `auto` 表示自动判断张数。
 auto count 会先读取不依赖 count 的 hard separator 位置，用它排列 count hypotheses 并估算
-连续 placement；只有证据不足时才继续其余张数和位置。该预判只缩小搜索范围，最终候选仍须
-完成相同的 evidence、CandidateGate 和 DecisionGate。
+连续 placement；只有当前 count 缺少 placement 时才按需测量 observed-width evidence。
+物理 count / placement 是否已确定，与候选能否自动通过分开记录：物理证据已完整时不再搜索
+更小 count，即使最终结果仍需 REVIEW。缺少物理 placement 的 count 使用 content position
+生成最多三个定位提示，不再固定扫描五个比例位置。所有实际候选仍须完成相同的 evidence、
+CandidateGate 和 DecisionGate。
 
 ### Format 和张数
 
@@ -403,9 +406,13 @@ debug analysis? [y/n, return=no]:
 It asks for `count` only when partial mode is enabled. Press Return or type
 `auto` to let the script estimate the partial count.
 Auto count first reads count-independent hard separator positions to order count
-hypotheses and estimate continuous placement. It expands to the remaining counts
-and positions only when that evidence is insufficient; every resulting candidate
-still passes through the same evidence, CandidateGate, and DecisionGate flow.
+hypotheses and estimate continuous placement. Observed-width evidence runs only
+when an executed count still lacks placement. Physical count/placement resolution
+is separate from auto readiness, so complete physical evidence stops smaller
+counts even when the final result remains REVIEW. Counts without physical
+placement use at most three content-position hints instead of five fixed offsets.
+Every resulting candidate still passes through the same evidence, CandidateGate,
+and DecisionGate.
 
 ### Formats
 

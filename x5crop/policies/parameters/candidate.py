@@ -12,6 +12,7 @@ class SeparatorFullWidthCompetitionParameters:
 @dataclass(frozen=True)
 class CandidateExecutionBudgetParameters:
     reliable_confidence_margin: float = 0.02
+    physical_primary_candidate_count: int = 2
 
 
 @dataclass(frozen=True)

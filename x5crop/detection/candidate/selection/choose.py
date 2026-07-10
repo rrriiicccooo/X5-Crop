@@ -108,6 +108,17 @@ def select_detection_candidate(
 ) -> DetectionCandidate:
     candidates = sorted(candidates, key=lambda d: calibrated_candidate_rank(d, threshold), reverse=True)
     best = candidates[0]
+    comparable_areas = [
+        candidate.outer.width * candidate.outer.height
+        for candidate in candidates
+        if candidate.count == best.count
+        and candidate.strip_mode == best.strip_mode
+        and candidate.outer.valid()
+    ]
+    if comparable_areas:
+        best.detail["outer_area_spread_ratio"] = (
+            max(comparable_areas) - min(comparable_areas)
+        ) / max(1.0, float(max(comparable_areas)))
     second = next((candidate for candidate in candidates if candidate is not best), None)
     competition = [
         {

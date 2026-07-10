@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from ....formats import FormatPhysicalSpec
@@ -13,6 +13,8 @@ class CountHypothesis:
     count: int
     strip_mode: str
     offsets: tuple[float, ...]
+    placement_source: str
+    placement_detail: dict[str, Any]
     source: str
     physically_supported: bool
 
@@ -21,6 +23,8 @@ class CountHypothesis:
             "count": int(self.count),
             "strip_mode": self.strip_mode,
             "offsets": [float(offset) for offset in self.offsets],
+            "placement_source": self.placement_source,
+            "placement_detail": dict(self.placement_detail),
             "source": self.source,
             "physically_supported": bool(self.physically_supported),
         }
@@ -34,7 +38,7 @@ class CountHypothesisPlan:
     planning_evidence: CountPlanningEvidence
 
     @property
-    def safety_count(self) -> int:
+    def hard_safety_count(self) -> int:
         if not self.hypotheses:
             raise ValueError("count hypothesis plan is empty")
         return int(self.hypotheses[0].count)
@@ -70,6 +74,8 @@ def count_hypothesis_plan(
                     count,
                     FULL,
                     (0.0,),
+                    "offset_not_applicable",
+                    {"used": True, "reason": "offset_not_applicable"},
                     "format_default" if requested_count is None else "requested_count",
                     False,
                 ),
@@ -87,6 +93,8 @@ def count_hypothesis_plan(
                     requested_count,
                     PARTIAL,
                     partial_offsets,
+                    "configured_partial_offsets",
+                    {"used": True, "reason": "explicit_count"},
                     "requested_count",
                     False,
                 ),
@@ -117,7 +125,25 @@ def count_hypothesis_plan(
                 (
                     (0.0,)
                     if count == fmt.default_count
-                    else planning_evidence.offsets_for_count(count) or partial_offsets
+                    else planning_evidence.offsets_for_count(count)
+                ),
+                (
+                    "offset_not_applicable"
+                    if count == fmt.default_count
+                    else (
+                        "hard_separator_bands"
+                        if planning_evidence.offsets_for_count(count)
+                        else "deferred"
+                    )
+                ),
+                (
+                    {"used": True, "reason": "offset_not_applicable"}
+                    if count == fmt.default_count
+                    else (
+                        {"used": True, "reason": "hard_separator_bands"}
+                        if planning_evidence.offsets_for_count(count)
+                        else {"used": False, "reason": "deferred"}
+                    )
                 ),
                 "physical_count_evidence" if count == supported_count else "automatic_count",
                 count == supported_count,
@@ -128,3 +154,23 @@ def count_hypothesis_plan(
         requested_count=None,
         planning_evidence=planning_evidence,
     )
+
+
+def with_count_hypothesis_placement(
+    plan: CountHypothesisPlan,
+    hypothesis: CountHypothesis,
+    offsets: tuple[float, ...],
+    placement_source: str,
+    placement_detail: dict[str, Any],
+) -> tuple[CountHypothesisPlan, CountHypothesis]:
+    resolved = replace(
+        hypothesis,
+        offsets=tuple(float(offset) for offset in offsets),
+        placement_source=str(placement_source),
+        placement_detail=dict(placement_detail),
+    )
+    hypotheses = tuple(
+        resolved if item.count == hypothesis.count else item
+        for item in plan.hypotheses
+    )
+    return replace(plan, hypotheses=hypotheses), resolved

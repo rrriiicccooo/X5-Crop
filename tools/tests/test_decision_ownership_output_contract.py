@@ -323,6 +323,34 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
             selected.detail["candidate_competition"]["second_candidate_close"]
         )
 
+    def test_outer_disagreement_uses_assessed_candidates_not_proposal_inventory(self) -> None:
+        def candidate(confidence: float, width: int) -> DetectionCandidate:
+            return DetectionCandidate(
+                format_id="135",
+                layout="horizontal",
+                strip_mode="full",
+                count=6,
+                outer=Box(0, 0, width, 20),
+                frames=[],
+                gaps=[],
+                confidence=confidence,
+                detail={"candidate_assessment": {"source": "separator"}},
+            )
+
+        selected = select_detection_candidate(
+            [candidate(0.90, 120), candidate(0.89, 80)],
+            format_spec("135"),
+            threshold=0.85,
+            selection_policy=get_detection_policy("135", "full").candidate_selection,
+        )
+
+        self.assertAlmostEqual(selected.detail["outer_area_spread_ratio"], 1.0 / 3.0)
+        build_source = (
+            PROJECT_ROOT
+            / "x5crop/detection/candidate/execution/source_candidates.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn('detection.detail["outer_area_spread_ratio"]', build_source)
+
     def test_content_mismatch_diagnostics_do_not_override_selection(self) -> None:
         fmt = format_spec("half")
         policy = get_detection_policy("half", "full")

@@ -11,6 +11,7 @@ from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..policies.runtime.policy import DetectionPolicy
 from ..cache import AnalysisCache
 from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
+from .candidate.execution.count_placement import resolve_automatic_count_placement
 from .candidate.plan.count_hypotheses import count_hypothesis_plan
 from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import review_only_detection
@@ -65,7 +66,6 @@ def choose_detection(
             separator_profile_parameters=policy.separator.profile,
             gap_search_parameters=policy.separator.gap_search,
             separator_band_parameters=policy.outer.proposal.geometry.separator.band,
-            width_profile_parameters=policy.separator.width_profile_search,
         )
         if config.strip_mode == "partial" and config.requested_count is None
         else CountPlanningEvidence.unavailable()
@@ -79,6 +79,13 @@ def choose_detection(
     )
     count_evaluations = []
     for hypothesis in count_plan.hypotheses:
+        count_plan, hypothesis = resolve_automatic_count_placement(
+            count_plan,
+            hypothesis,
+            cache,
+            fmt,
+            policy,
+        )
         evaluation = evaluate_count_hypothesis(
             gray,
             config,
@@ -89,7 +96,7 @@ def choose_detection(
         )
         count_evaluations.append(evaluation)
         candidates.extend(evaluation.candidates)
-        if count_plan.automatic and evaluation.search_satisfied:
+        if count_plan.automatic and evaluation.count_resolved:
             break
 
     if not candidates:
@@ -97,7 +104,7 @@ def choose_detection(
             gray,
             config,
             fmt,
-            count_plan.safety_count,
+            count_plan.hard_safety_count,
             policy.frame_fit,
         )
         candidate.detail["count_selection"] = count_selection_detail(

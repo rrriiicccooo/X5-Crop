@@ -163,6 +163,7 @@ class SeparatorProfileParameters:
     uniform_base: float = 0.90
     uniform_weight: float = 0.10
     gradient_weight: float = 0.25
+    sample_short_axis_max: int = 500
     smooth_ratio: float = 0.0015
     smooth_min: int = 3
 

@@ -10,6 +10,7 @@ from ....geometry.boxes import box_cache_key, original_box_to_work
 from ....policies.parameters.content import ContentEvidenceParameters
 from ....policies.runtime.content import ContentPolicy
 from ....cache import AnalysisCache
+from ....cache.content_statistics import ContentColumnStatistics
 from ..evidence_cache_keys import content_detail_cache_key
 from .signal import (
     CACHED_CONTENT_SIGNAL_COMPOSITE,
@@ -52,6 +53,7 @@ def content_frame_support_detail(
     expected_aspect: Optional[float],
     evidence_params: ContentEvidenceParameters,
     composite: str,
+    column_statistics: ContentColumnStatistics | None = None,
 ) -> dict[str, Any]:
     canvas_h, canvas_w = canvas_shape
     frame_scores: list[dict[str, Any]] = []
@@ -69,11 +71,15 @@ def content_frame_support_detail(
         )
         if not box.valid():
             continue
-        crop = evidence[box.top:box.bottom, box.left:box.right]
-        if crop.size == 0:
-            continue
-        mean = float(crop.mean())
-        coverage = float((crop >= threshold).mean())
+        full_short_axis = box.top == 0 and box.bottom == outer.height
+        if column_statistics is not None and full_short_axis:
+            mean, coverage = column_statistics.interval(box.left, box.right)
+        else:
+            crop = evidence[box.top:box.bottom, box.left:box.right]
+            if crop.size == 0:
+                continue
+            mean = float(crop.mean())
+            coverage = float((crop >= threshold).mean())
         means.append(mean)
         coverages.append(coverage)
         actual_aspect = float(absolute_box.width) / max(1.0, float(absolute_box.height))
@@ -202,6 +208,15 @@ def content_evidence_detail_from_cache(
         evidence_params,
     )
     expected_aspect = float(horizontal_frame_aspect)
+    statistics_key = (
+        evidence_params,
+        *box_cache_key(outer),
+        float(threshold),
+    )
+    column_statistics = cache.content_column_statistics.get(statistics_key)
+    if column_statistics is None:
+        column_statistics = ContentColumnStatistics.from_evidence(evidence, threshold)
+        cache.content_column_statistics[statistics_key] = column_statistics
     frames_work = [
         original_box_to_work(frame, detection.layout, source_w, source_h)
         for frame in detection.frames
@@ -215,6 +230,7 @@ def content_evidence_detail_from_cache(
         expected_aspect=expected_aspect,
         evidence_params=evidence_params,
         composite=CACHED_CONTENT_SIGNAL_COMPOSITE,
+        column_statistics=column_statistics,
     )
     if bool(detail.get("used", False)):
         cache.content_evidence_details[detail_key] = copy.deepcopy(detail)

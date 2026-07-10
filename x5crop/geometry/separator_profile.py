@@ -6,6 +6,7 @@ import numpy as np
 
 from ..utils import smooth_1d
 from .detection_parameters import SeparatorProfileParameters
+from .sampling import sampling_step_for_limit
 
 
 @dataclass(frozen=True)
@@ -111,6 +112,10 @@ def separator_profile(
     if h <= 0 or w <= 0:
         return np.zeros(0, dtype=np.float32)
     middle = vertical_profile_sample(crop, config.top_ratio, config.bottom_ratio)
+    middle = middle[
+        ::sampling_step_for_limit(middle.shape[0], config.sample_short_axis_max),
+        :,
+    ]
     signals = separator_profile_signals(middle, config)
     score = combined_separator_profile_score(signals, config)
     return smooth_1d(score.astype(np.float32), separator_profile_smooth_window(w, config))

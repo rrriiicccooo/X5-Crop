@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 
 from ....cache import AnalysisCache
@@ -10,7 +12,10 @@ from ....run_config import RunConfig
 from ...guidance.content_model import content_candidate_proposal_for_count
 from ...guidance.content_separator import content_guided_separator_seed_for_count
 from ..build.content import build_content_candidate
-from ..assessment.count_hypothesis import CountHypothesisEvaluation
+from ..assessment.count_hypothesis import (
+    CountHypothesisEvaluation,
+    physical_count_resolution,
+)
 from ..assessment.source_batch import assess_source_candidates
 from .source_candidates import (
     SeparatorOuterCandidatePlan,
@@ -39,31 +44,32 @@ def _assess_separator_outer_plan(
     existing_candidates: tuple[DetectionCandidate, ...],
 ) -> list[DetectionCandidate]:
     assessed: list[DetectionCandidate] = []
-    for outer_candidate in plan.outer_candidates:
-        detection = build_separator_candidate_for_outer(
-            gray,
-            config,
-            fmt,
-            count,
-            strip_mode,
-            offset,
-            cache,
-            policy,
-            outer_candidate,
-            plan=plan,
-            gap_max_width_ratio_override=None,
-        )
-        assessed.extend(
-            assess_source_candidates(
+    for cohort in plan.cohorts:
+        for outer_candidate in cohort.candidates:
+            detection = build_separator_candidate_for_outer(
                 gray,
-                (detection,),
                 config,
                 fmt,
-                "separator",
+                count,
+                strip_mode,
+                offset,
                 cache,
                 policy,
+                outer_candidate,
+                plan=plan,
+                gap_max_width_ratio_override=None,
             )
-        )
+            assessed.extend(
+                assess_source_candidates(
+                    gray,
+                    (detection,),
+                    config,
+                    fmt,
+                    "separator",
+                    cache,
+                    policy,
+                )
+            )
         selected = select_source_candidate(
             [*existing_candidates, *assessed],
             config.confidence_threshold,
@@ -73,7 +79,7 @@ def _assess_separator_outer_plan(
             config.confidence_threshold,
             policy,
         ):
-            break
+            return assessed
     return assessed
 
 
@@ -86,9 +92,8 @@ def _assessed_candidates_for_offset(
     offset: float,
     cache: AnalysisCache,
     policy: DetectionPolicy,
-) -> tuple[list[DetectionCandidate], bool]:
+) -> list[DetectionCandidate]:
     candidates: list[DetectionCandidate] = []
-    stop_after_this_count = False
     explicit_count = bool(config.requested_count is not None)
     full_width_family = policy.outer.proposal.geometry.separator.full_width
     available_physical_families = (
@@ -119,7 +124,7 @@ def _assessed_candidates_for_offset(
         (),
     )
     if not primary_candidates:
-        return candidates, stop_after_this_count
+        return candidates
 
     primary_separator = select_source_candidate(primary_candidates, config.confidence_threshold)
     primary_reliability = candidate_reliability_detail(
@@ -150,7 +155,7 @@ def _assessed_candidates_for_offset(
                 strip_mode,
                 cache=cache,
                 policy=policy,
-                primary_outer_candidates=primary_plan.outer_candidates,
+                primary_outer_candidates=primary_plan.comparison_candidates,
             )
             separator_candidates.extend(
                 _assess_separator_outer_plan(
@@ -253,18 +258,13 @@ def _assessed_candidates_for_offset(
         config.confidence_threshold,
     )
     if partial_edge_safety_candidate:
-        stop_after_this_count = True
+        return candidates
     if (
         strip_mode == "full"
         and separator_candidate_passed
         and separator_support_candidate.confidence >= config.confidence_threshold
     ):
-        return candidates, stop_after_this_count
-    if (
-        strip_mode == "partial"
-        and partial_edge_safety_candidate
-    ):
-        return candidates, stop_after_this_count
+        return candidates
     content_proposal = content_candidate_proposal_for_count(
         gray,
         config.layout,
@@ -296,7 +296,7 @@ def _assessed_candidates_for_offset(
                 policy,
             )
         )
-    return candidates, stop_after_this_count
+    return candidates
 
 
 def evaluate_count_hypothesis(
@@ -308,9 +308,13 @@ def evaluate_count_hypothesis(
     policy: DetectionPolicy,
 ) -> CountHypothesisEvaluation:
     candidates: list[DetectionCandidate] = []
-    supporting_offsets: list[float] = []
+    resolved_offsets: list[float] = []
+    count_resolved = False
+    placement_resolved = False
+    candidate_auto_ready = False
+    resolution_checks: list[dict[str, Any]] = []
     for offset in hypothesis.offsets:
-        offset_candidates, supported = _assessed_candidates_for_offset(
+        offset_candidates = _assessed_candidates_for_offset(
             gray,
             config,
             fmt,
@@ -325,12 +329,30 @@ def evaluate_count_hypothesis(
             plan_detail = candidate.detail.setdefault("candidate_plan", {})
             if isinstance(plan_detail, dict):
                 plan_detail["count_hypothesis"] = hypothesis.report_detail()
-        if supported:
-            supporting_offsets.append(float(offset))
+        if not offset_candidates:
+            continue
+        selected = select_source_candidate(offset_candidates, config.confidence_threshold)
+        resolution = physical_count_resolution(selected, hypothesis)
+        resolution_checks.append(
+            {"offset": float(offset), **resolution.report_detail()}
+        )
+        count_resolved = count_resolved or resolution.count_resolved
+        placement_resolved = placement_resolved or resolution.placement_resolved
+        candidate_auto_ready = candidate_auto_ready or candidate_is_reliable_for_execution_budget(
+            selected,
+            config.confidence_threshold,
+            policy,
+        )
+        if resolution.placement_resolved:
+            resolved_offsets.append(float(offset))
+        if resolution.placement_resolved or candidate_auto_ready:
             break
     return CountHypothesisEvaluation(
         hypothesis=hypothesis,
         candidates=tuple(candidates),
-        search_satisfied=bool(supporting_offsets),
-        supporting_offsets=tuple(supporting_offsets),
+        count_resolved=bool(count_resolved),
+        placement_resolved=bool(placement_resolved),
+        candidate_auto_ready=bool(candidate_auto_ready),
+        resolved_offsets=tuple(resolved_offsets),
+        resolution_checks=tuple(resolution_checks),
     )
