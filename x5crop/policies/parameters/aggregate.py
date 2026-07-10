@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from ...geometry.detection_parameters import (
+    EdgePairParameters,
     EdgeRefineProfileParameters,
     GapSearchParameters,
     HardGapTrustParameters,
@@ -13,7 +14,11 @@ from ...geometry.detection_parameters import (
 )
 from ...image.deskew_parameters import DeskewParameters
 from .base import PartialCountParameters, PartialEdgeHintParameters
-from .candidate import PartialHolderParameters
+from .candidate import (
+    CandidatePlanParameters,
+    FrameFitParameters,
+    PartialHolderParameters,
+)
 from .content import (
     ContentCandidateParameters,
     ContentEvidenceParameters,
@@ -21,7 +26,7 @@ from .content import (
     ContentProfileParameters,
     ContentSupportParameters,
 )
-from .decision import DecisionReviewParameters
+from .decision import DecisionEvidenceParameters, DecisionReviewParameters
 from .diagnostics import DebugGapOverlayParameters, NearbySeparatorDiagnosticsParameters
 from .finalization import ApprovedGeometryAdjustmentParameters
 from .outer import (
@@ -37,6 +42,7 @@ from .outer import (
     ShortAxisGeometryCorrectionParameters,
 )
 from .exposure_overlap import (
+    EdgeBleedProtectionParameters,
     ExposureOverlapEvidenceParameters,
     ExposureOverlapProtectionParameters,
 )
@@ -91,6 +97,7 @@ class SeparatorParameters:
     separator_geometry_support: SeparatorGeometrySupportParameters = field(default_factory=SeparatorGeometrySupportParameters)
     separator_width_profile: SeparatorWidthProfileParameters = field(default_factory=SeparatorWidthProfileParameters)
     separator_width_profile_search: SeparatorWidthProfileSearchParameters = field(default_factory=SeparatorWidthProfileSearchParameters)
+    edge_pair: EdgePairParameters = field(default_factory=EdgePairParameters)
     nearby_separator_refinement: NearbySeparatorRefinementParameters = field(default_factory=NearbySeparatorRefinementParameters)
     gap_search: GapSearchParameters = field(default_factory=GapSearchParameters)
     separator_profile: SeparatorProfileParameters = field(default_factory=SeparatorProfileParameters)
@@ -103,6 +110,14 @@ class CandidateParameters:
     partial_counts: PartialCountParameters = field(default_factory=PartialCountParameters)
     partial_edge_hint: PartialEdgeHintParameters = field(default_factory=PartialEdgeHintParameters)
     partial_holder: PartialHolderParameters = field(default_factory=PartialHolderParameters)
+    full_frame_fit: FrameFitParameters = field(default_factory=FrameFitParameters)
+    partial_frame_fit: FrameFitParameters = field(
+        default_factory=lambda: FrameFitParameters(
+            name="partial_strip_frame_fit",
+            edge_evidence=False,
+        )
+    )
+    candidate_plan: CandidatePlanParameters = field(default_factory=CandidatePlanParameters)
     scoring_calibration: ScoringCalibrationParameters = field(default_factory=ScoringCalibrationParameters)
     base_detection_score: BaseDetectionScoreParameters = field(default_factory=BaseDetectionScoreParameters)
     separator_support_score: SeparatorSupportScoreParameters = field(default_factory=SeparatorSupportScoreParameters)
@@ -113,6 +128,15 @@ class CandidateParameters:
 @dataclass(frozen=True)
 class DecisionParameters:
     decision_review: DecisionReviewParameters = field(default_factory=DecisionReviewParameters)
+    full_evidence: DecisionEvidenceParameters = field(default_factory=DecisionEvidenceParameters)
+    partial_evidence: DecisionEvidenceParameters = field(
+        default_factory=lambda: DecisionEvidenceParameters(
+            min_hard_separator_ratio=0.35,
+            max_photo_width_cv_ratio=0.045,
+            max_outer_area_ratio=0.990,
+            partial_requires_safe_edge=True,
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -122,6 +146,9 @@ class OutputParameters:
     )
     exposure_overlap_protection: ExposureOverlapProtectionParameters = field(
         default_factory=ExposureOverlapProtectionParameters
+    )
+    edge_bleed_protection: EdgeBleedProtectionParameters = field(
+        default_factory=EdgeBleedProtectionParameters
     )
     approved_geometry_adjustment: ApprovedGeometryAdjustmentParameters = field(default_factory=ApprovedGeometryAdjustmentParameters)
 

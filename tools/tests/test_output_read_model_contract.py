@@ -9,9 +9,10 @@ from types import SimpleNamespace
 import unittest
 
 from tools.tests.architecture_contracts import PROJECT_ROOT
+from tools.tests.decision_contract_support import final_detection_fixture
 from x5crop.debug.status import debug_status_parts
 from x5crop.detection.detail import candidate_signals_from_detail
-from x5crop.domain import Box, FinalDetection, ImageProfile, ProcessResult
+from x5crop.domain import FinalDetection, ImageProfile, ProcessResult
 from x5crop.export.actions import copy_for_review_if_needed
 from x5crop.report.outputs import append_report_jsonl
 from x5crop.policies.registry import get_detection_policy
@@ -25,18 +26,10 @@ def _detection(
     *,
     status: str = "needs_review",
 ) -> FinalDetection:
-    return FinalDetection(
-        format_id="135",
-        layout="horizontal",
-        strip_mode="full",
-        count=1,
-        outer=Box(10, 10, 90, 90),
-        frames=[Box(10, 10, 90, 90)],
-        gaps=[],
-        confidence=0.99,
-        detail=dict(detail or {}),
+    return final_detection_fixture(
         status=status,
-        final_review_reasons=list(final_review_reasons or []),
+        final_review_reasons=final_review_reasons,
+        detail=detail,
     )
 
 
@@ -59,6 +52,37 @@ def _process_result(detection: FinalDetection) -> ProcessResult:
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_cache_rejects_incomplete_current_gap_records(self) -> None:
+        from x5crop.runtime.analysis_reuse import candidate_geometry_from_record
+
+        record = {
+            "format_id": "135",
+            "layout": "horizontal",
+            "strip_mode": "full",
+            "count": 2,
+            "outer_box": {"left": 0, "top": 0, "right": 100, "bottom": 60},
+            "frame_boxes": [
+                {"left": 0, "top": 0, "right": 50, "bottom": 60},
+                {"left": 50, "top": 0, "right": 100, "bottom": 60},
+            ],
+            "gaps": [
+                {
+                    "index": 1,
+                    "center": 50.0,
+                    "start": None,
+                    "end": None,
+                    "lane_box": None,
+                }
+            ],
+            "confidence": 0.9,
+            "detail": {},
+            "status": "approved_auto",
+            "final_review_reasons": [],
+        }
+
+        with self.assertRaises(KeyError):
+            candidate_geometry_from_record(record)
+
     def test_script_version_identity_has_one_canonical_key(self) -> None:
         cache_source = (
             PROJECT_ROOT / "x5crop" / "runtime" / "analysis_reuse.py"
@@ -177,10 +201,10 @@ class OutputReadModelContractTest(unittest.TestCase):
             {
                 "decision_summary": {
                     "status": "needs_review",
-                    "final_review_reasons": ["separator_evidence_insufficient"],
+                    "final_review_reasons": ["separator_evidence_incomplete"],
                 }
             },
-            ["separator_evidence_insufficient"],
+            ["separator_evidence_incomplete"],
         )
         decided_schema = report_record_for_final_detection(
             decided,
@@ -190,7 +214,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(decided_schema["status"], "needs_review")
         self.assertEqual(
             decided_schema["final_review_reasons"],
-            ["separator_evidence_insufficient"],
+            ["separator_evidence_incomplete"],
         )
 
         approved = report_record_for_final_detection(
@@ -418,7 +442,14 @@ class OutputReadModelContractTest(unittest.TestCase):
             "output": {"output_files": [], "review_copy": None, "warnings": []},
         }
 
-        result = result_from_cached_record(Path("input.tif"), cached_record, profile, ["reused"])
+        result = result_from_cached_record(
+            Path("input.tif"),
+            cached_record,
+            profile,
+            ["reused"],
+            output_files=[],
+            detail_extra={"reused_analysis": True},
+        )
 
         self.assertEqual(result.report_record["schema_id"], "detection_report")
         self.assertNotIn("report_schema", result.report_record)

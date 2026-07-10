@@ -32,6 +32,9 @@ class SeparatorGeometrySupportParameters:
     max_photo_width_cv: float = 0.040
     max_outer_area_ratio: float = 0.995
 
+
 @dataclass(frozen=True)
 class SeparatorWidthProfileParameters:
-    max_width_ratio: float = 0.060
+    band_candidate_count: int = 10
+    sequence_candidate_count: int = 4
+    max_candidates: int = 4

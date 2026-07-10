@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 import unittest
 
@@ -7,6 +8,27 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 
 
 class DecisionOwnershipSourceContractTest(unittest.TestCase):
+    def test_decision_gate_is_only_final_detection_factory_repo_wide(self) -> None:
+        offenders = []
+        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+            for path in root.rglob("*.py"):
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+                for node in ast.walk(tree):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    direct_constructor = (
+                        isinstance(node.func, ast.Name)
+                        and node.func.id == "FinalDetection"
+                    )
+                    candidate_factory = (
+                        isinstance(node.func, ast.Attribute)
+                        and node.func.attr == "from_candidate"
+                    )
+                    if (direct_constructor or candidate_factory) and path.name != "decision_gate.py":
+                        offenders.append(str(path.relative_to(PROJECT_ROOT)))
+
+        self.assertEqual(sorted(set(offenders)), [])
+
     def test_decision_gate_is_only_final_detection_factory(self) -> None:
         decision_root = PROJECT_ROOT / "x5crop" / "detection" / "decision"
         final_factories = []

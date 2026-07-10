@@ -8,7 +8,8 @@ from ....constants import CANDIDATE_SOURCE_HARD_SAFETY
 from ....domain import Box, DetectionCandidate
 from ....formats import FormatPhysicalSpec
 from ....geometry.boxes import map_work_box
-from ....geometry.frame_fit import FrameFitParameters, frame_boxes_from_gaps
+from ....geometry.frame_fit import frame_boxes_from_gaps
+from ....policies.parameters.candidate import FrameFitParameters
 from ....geometry.layout import work_gray
 from ....geometry.model_gaps import equal_model_gap
 from ....run_config import RunConfig

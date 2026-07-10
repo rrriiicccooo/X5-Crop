@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from ...constants import GAP_CONTENT, GAP_DETECTED, GAP_EDGE_PAIR, GAP_EQUAL, GAP_GRID
-from .presets import FormatPolicyPreset, ModePolicyPreset
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import FULL, PARTIAL
 from ..runtime.separator import (
@@ -17,10 +16,10 @@ from ..runtime.separator import (
 
 def separator_geometry_support_policy(
     strip_mode: str,
-    mode_preset: ModePolicyPreset,
+    detector_kind: str,
     params: FormatParameters,
 ) -> SeparatorGeometrySupportPolicy:
-    if mode_preset.detector_kind != "standard_strip" or strip_mode != FULL:
+    if detector_kind != "standard_strip" or strip_mode != FULL:
         return SeparatorGeometrySupportPolicy()
     support = params.separator.separator_geometry_support
     mode_policy = SeparatorGeometrySupportModePolicy(
@@ -52,25 +51,24 @@ def separator_model_gap_proposal_policy() -> SeparatorModelGapProposalPolicy:
 
 
 def separator_width_profile_policy(
-    mode_preset: ModePolicyPreset,
+    detector_kind: str,
     params: FormatParameters,
 ) -> SeparatorWidthProfilePolicy:
     mode = (
         "conditional"
-        if mode_preset.detector_kind == "standard_strip"
+        if detector_kind == "standard_strip"
         else "off"
     )
-    width_profile = params.separator.separator_width_profile
     return SeparatorWidthProfilePolicy(
         mode=mode,
-        max_width_ratio=float(width_profile.max_width_ratio),
+        parameters=params.separator.separator_width_profile,
     )
 
 
 def separator_refinement_policy(
-    mode_preset: ModePolicyPreset,
+    detector_kind: str,
 ) -> SeparatorRefinementPolicy:
-    if mode_preset.detector_kind != "standard_strip":
+    if detector_kind != "standard_strip":
         return SeparatorRefinementPolicy()
     standard_strip_modes = (FULL, PARTIAL)
     return SeparatorRefinementPolicy(
@@ -92,8 +90,7 @@ def separator_refinement_policy(
 
 def separator_policy(
     strip_mode: str,
-    preset: FormatPolicyPreset,
-    mode_preset: ModePolicyPreset,
+    detector_kind: str,
     params: FormatParameters,
 ) -> SeparatorPolicy:
     hard_gap_trust = params.separator.hard_gap_trust
@@ -106,17 +103,17 @@ def separator_policy(
         leading_grid_failure=params.separator.leading_grid_failure,
         model_gap_proposal=separator_model_gap_proposal_policy(),
         width_profile=separator_width_profile_policy(
-            mode_preset,
+            detector_kind,
             params,
         ),
         width_profile_search=params.separator.separator_width_profile_search,
-        refinement=separator_refinement_policy(mode_preset),
+        refinement=separator_refinement_policy(detector_kind),
         geometry_support=separator_geometry_support_policy(
             strip_mode,
-            mode_preset,
+            detector_kind,
             params,
         ),
-        edge_pair=preset.separator_edge_pair,
+        edge_pair=params.separator.edge_pair,
         hard_gap_trust=hard_gap_trust,
         nearby_refinement=nearby_refinement,
         gap_search=gap_search,

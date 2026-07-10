@@ -41,7 +41,7 @@ def choose_detection(
         candidate = choose_dual_lane_detection(gray, config, cache, policy, policy_bundle)
         return CandidatePipelineResult(candidate=candidate, policy=policy)
     if policy.detector.kind == "review_only":
-        candidate = review_only_detection(gray, config, fmt, policy)
+        candidate = review_only_detection(gray, config, fmt)
         return CandidatePipelineResult(candidate=candidate, policy=policy)
     count_plan = count_hypothesis_plan(
         strip_mode=config.strip_mode,

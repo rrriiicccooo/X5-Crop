@@ -9,7 +9,7 @@ from ...cache import AnalysisCache
 from ...domain import Box
 from ...formats import FormatPhysicalSpec
 from ...geometry.layout import work_gray
-from ...policies.runtime.candidate import ContentGuidedSeparatorCandidatePolicy
+from ...policies.parameters.candidate import ContentGuidedSeparatorCandidateParameters
 from ...policies.runtime.content import ContentPolicy
 from ...run_config import RunConfig
 from ..evidence.content.regions import (
@@ -86,7 +86,7 @@ def content_guided_separator_seed_for_count(
     offset_fraction: float,
     cache: Optional[AnalysisCache],
     content_policy: ContentPolicy,
-    guidance_policy: ContentGuidedSeparatorCandidatePolicy,
+    guidance_policy: ContentGuidedSeparatorCandidateParameters,
 ) -> ContentGuidedSeparatorSeedResult:
     if count <= 1:
         return _skip_detail("count_has_no_internal_separators", count=int(count))

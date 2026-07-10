@@ -9,18 +9,20 @@ from pathlib import Path
 from ..app_info import SCRIPT_NAME, VERSION
 from ..domain import ProcessResult
 from ..report.outputs import write_report_outputs_for_result
-from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..run_config import RunConfig
-from .workflow import process_one_worker
+from .invocation import RuntimeInvocation
+from .workflow import process_one
 
 
-def print_run_header(config: RunConfig, files: list[Path]) -> None:
+def print_run_header(invocation: RuntimeInvocation) -> None:
+    config = invocation.config
+    files = invocation.files
     print(f"{SCRIPT_NAME} {VERSION}")
     print(f"input: {config.input_path}")
     print(f"files: {len(files)}")
     layout_label = f"auto(probe={config.layout})" if config.layout_auto else config.layout
     mode_parts = [f"layout: {layout_label}", f"strip: {config.strip_mode}"]
-    policy = DetectionPolicyBundle.for_format_mode(config.format_id, config.strip_mode).initial_policy
+    policy = invocation.policy_bundle.initial_policy
     mode_parts.append(f"policy: {policy.policy_id}")
     if config.strip_mode == "partial" and config.requested_count is None:
         mode_parts.append("count: auto")
@@ -50,10 +52,11 @@ def print_process_result(result: ProcessResult, config: RunConfig) -> None:
 
 
 def process_parallel_files(
-    files: list[Path],
-    config: RunConfig,
+    invocation: RuntimeInvocation,
     worker_config: RunConfig,
 ) -> tuple[int, int, int, int]:
+    config = invocation.config
+    files = invocation.files
     ok = 0
     failed = 0
     approved = 0
@@ -66,7 +69,12 @@ def process_parallel_files(
         executor_context = concurrent.futures.ThreadPoolExecutor(max_workers=config.jobs)
     with executor_context as executor:
         future_to_path = {
-            executor.submit(process_one_worker, path, worker_config): path
+            executor.submit(
+                process_one,
+                path,
+                worker_config,
+                invocation.policy_bundle,
+            ): path
             for path in files
         }
         for index, future in enumerate(concurrent.futures.as_completed(future_to_path), start=1):
@@ -87,7 +95,9 @@ def process_parallel_files(
     return ok, failed, approved, review
 
 
-def run_runtime(config: RunConfig, files: list[Path]) -> int:
+def run_runtime(invocation: RuntimeInvocation) -> int:
+    config = invocation.config
+    files = invocation.files
     ok = 0
     failed = 0
     approved = 0
@@ -95,12 +105,15 @@ def run_runtime(config: RunConfig, files: list[Path]) -> int:
     total = len(files)
     worker_config = replace(config, report=False)
     if total > 1 and config.jobs > 1:
-        ok, failed, approved, review = process_parallel_files(files, config, worker_config)
+        ok, failed, approved, review = process_parallel_files(
+            invocation,
+            worker_config,
+        )
     else:
         for index, path in enumerate(files, start=1):
             print(f"\n[{index}/{total}] {path.name}")
             try:
-                result = process_one_worker(path, worker_config)
+                result = process_one(path, worker_config, invocation.policy_bundle)
                 ok += 1
                 approved += int(result.status == "approved_auto")
                 review += int(result.status == "needs_review")

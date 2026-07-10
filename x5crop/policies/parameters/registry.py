@@ -3,7 +3,246 @@ from __future__ import annotations
 from dataclasses import replace
 
 from ...formats import FormatPhysicalSpec
+from ...geometry.detection_parameters import EdgePairParameters
 from .aggregate import FormatParameters
+from .candidate import FrameFitParameters
+from .decision import DecisionEvidenceParameters
+
+
+def _edge_pair_parameters(spec: FormatPhysicalSpec) -> EdgePairParameters:
+    profile = spec.frame_geometry_profile
+    if profile in {"medium_square", "medium_wide"}:
+        return EdgePairParameters(
+            window_ratio=0.100,
+            min_gutter_ratio=0.001,
+            max_gutter_ratio=0.080,
+            min_strength=0.24,
+            min_background=0.02,
+            min_quality_for_model_gap=0.28,
+            min_quality_for_hard_gap=0.30,
+            hard_gap_quality_ratio=0.95,
+            max_hard_shift_ratio=0.030,
+        )
+    profiles = {
+        "standard_35mm": EdgePairParameters(
+            window_ratio=0.080,
+            min_gutter_ratio=0.004,
+            max_gutter_ratio=0.050,
+            min_strength=0.42,
+            min_background=0.62,
+            min_quality_for_model_gap=0.0,
+            min_quality_for_hard_gap=0.0,
+            hard_gap_quality_ratio=1.0,
+            max_hard_shift_ratio=0.0,
+        ),
+        "dense_half": EdgePairParameters(
+            window_ratio=0.090,
+            min_gutter_ratio=0.003,
+            max_gutter_ratio=0.060,
+            min_strength=0.46,
+            min_background=0.66,
+            min_quality_for_model_gap=1.05,
+            min_quality_for_hard_gap=0.70,
+            hard_gap_quality_ratio=0.95,
+            max_hard_shift_ratio=0.040,
+        ),
+        "panoramic_35mm": EdgePairParameters(
+            window_ratio=0.060,
+            min_gutter_ratio=0.002,
+            max_gutter_ratio=0.035,
+            min_strength=0.45,
+            min_background=0.64,
+            min_quality_for_model_gap=1.03,
+            min_quality_for_hard_gap=0.70,
+            hard_gap_quality_ratio=0.95,
+            max_hard_shift_ratio=0.035,
+        ),
+        "medium_rectangle": EdgePairParameters(
+            window_ratio=0.075,
+            min_gutter_ratio=0.001,
+            max_gutter_ratio=0.055,
+            min_strength=0.32,
+            min_background=0.20,
+            min_quality_for_model_gap=0.58,
+            min_quality_for_hard_gap=0.50,
+            hard_gap_quality_ratio=0.95,
+            max_hard_shift_ratio=0.035,
+        ),
+        "dual_lane": EdgePairParameters(
+            window_ratio=0.080,
+            min_gutter_ratio=0.004,
+            max_gutter_ratio=0.050,
+            min_strength=0.42,
+            min_background=0.62,
+            min_quality_for_model_gap=0.0,
+            min_quality_for_hard_gap=0.0,
+            hard_gap_quality_ratio=1.0,
+            max_hard_shift_ratio=0.0,
+        ),
+    }
+    return profiles[profile]
+
+
+def _frame_fit_parameters(spec: FormatPhysicalSpec) -> FrameFitParameters:
+    profile = spec.frame_geometry_profile
+    profiles = {
+        "standard_35mm": FrameFitParameters(
+            name="standard_strip_frame_fit",
+            edge_evidence=True,
+            min_edge_samples=2,
+            nominal_min_ratio=0.72,
+            nominal_max_ratio=1.10,
+            inlier_tolerance_ratio=0.035,
+        ),
+        "dual_lane": FrameFitParameters(
+            name="dual_lane_frame_fit",
+            edge_evidence=False,
+        ),
+        "dense_half": FrameFitParameters(
+            name="dense_half_frame_fit",
+            edge_evidence=True,
+            min_edge_samples=4,
+            nominal_min_ratio=0.78,
+            nominal_max_ratio=1.08,
+            inlier_tolerance_ratio=0.030,
+        ),
+        "panoramic_35mm": FrameFitParameters(
+            name="panoramic_strip_frame_fit",
+            edge_evidence=True,
+            min_edge_samples=2,
+            nominal_min_ratio=0.70,
+            nominal_max_ratio=1.12,
+            inlier_tolerance_ratio=0.035,
+        ),
+        "medium_rectangle": FrameFitParameters(
+            name="medium_rectangle_frame_fit",
+            edge_evidence=True,
+            min_edge_samples=2,
+            nominal_min_ratio=0.70,
+            nominal_max_ratio=1.15,
+            inlier_tolerance_ratio=0.040,
+        ),
+        "medium_square": FrameFitParameters(
+            name="medium_square_frame_fit",
+            edge_evidence=True,
+            min_edge_samples=2,
+            nominal_min_ratio=0.65,
+            nominal_max_ratio=1.20,
+            inlier_tolerance_ratio=0.045,
+        ),
+        "medium_wide": FrameFitParameters(
+            name="medium_wide_frame_fit",
+            edge_evidence=True,
+            min_edge_samples=2,
+            nominal_min_ratio=0.65,
+            nominal_max_ratio=1.20,
+            inlier_tolerance_ratio=0.045,
+        ),
+    }
+    return profiles[profile]
+
+
+def _with_profile_parameters(
+    params: FormatParameters,
+    spec: FormatPhysicalSpec,
+) -> FormatParameters:
+    return replace(
+        params,
+        separator=replace(
+            params.separator,
+            edge_pair=_edge_pair_parameters(spec),
+        ),
+        candidate=replace(
+            params.candidate,
+            full_frame_fit=_frame_fit_parameters(spec),
+            partial_frame_fit=FrameFitParameters(
+                name=f"{spec.frame_geometry_profile}_partial_frame_fit",
+                edge_evidence=False,
+            ),
+        ),
+    )
+
+
+def _decision_evidence_parameters(spec: FormatPhysicalSpec) -> DecisionEvidenceParameters:
+    evidence = DecisionEvidenceParameters()
+    profile = spec.frame_geometry_profile
+    if spec.physical_layout == "dual_lane":
+        return replace(
+            evidence,
+            min_hard_separator_ratio=0.50,
+            min_hard_separator_count=2,
+            max_photo_width_cv_ratio=0.035,
+        )
+    if profile == "dense_half":
+        return replace(
+            evidence,
+            min_hard_separator_ratio=0.55,
+            min_hard_separator_count=2,
+            max_photo_width_cv_ratio=0.012,
+            geometry_supported_min_hard_ratio=0.20,
+            geometry_supported_max_photo_width_cv_ratio=0.010,
+            max_outer_area_ratio=0.990,
+        )
+    if profile == "standard_35mm":
+        return replace(
+            evidence,
+            min_hard_separator_ratio=0.35,
+            min_hard_separator_count=2,
+            max_photo_width_cv_ratio=0.030,
+            max_model_gap_share=0.70,
+        )
+    if profile == "panoramic_35mm":
+        return replace(
+            evidence,
+            min_hard_separator_ratio=0.67,
+            min_hard_separator_count=1,
+            max_photo_width_cv_ratio=0.035,
+        )
+    if profile == "medium_square":
+        return replace(
+            evidence,
+            min_hard_separator_ratio=0.90,
+            min_hard_separator_count=2,
+            max_photo_width_cv_ratio=0.040,
+            max_outer_area_ratio=0.990,
+        )
+    if profile == "medium_wide":
+        return replace(
+            evidence,
+            min_hard_separator_ratio=0.75,
+            min_hard_separator_count=2,
+            max_photo_width_cv_ratio=0.040,
+        )
+    if spec.family == "120":
+        return replace(
+            evidence,
+            min_hard_separator_ratio=0.67,
+            min_hard_separator_count=2,
+            max_photo_width_cv_ratio=0.035,
+        )
+    return evidence
+
+
+def _with_decision_evidence(
+    params: FormatParameters,
+    spec: FormatPhysicalSpec,
+) -> FormatParameters:
+    full = _decision_evidence_parameters(spec)
+    partial = replace(
+        full,
+        min_hard_separator_ratio=min(full.min_hard_separator_ratio, 0.35),
+        max_photo_width_cv_ratio=max(full.max_photo_width_cv_ratio, 0.045),
+        max_outer_area_ratio=max(full.max_outer_area_ratio, 0.990),
+        partial_requires_safe_edge=True,
+    )
+    return replace(
+        params,
+        decision=replace(
+            params.decision,
+            full_evidence=full,
+            partial_evidence=partial,
+        ),
+    )
 
 
 def _with_content_min_run(params: FormatParameters, value: float) -> FormatParameters:
@@ -89,19 +328,6 @@ def _with_separator_outer(
                     if max_candidates is None
                     else int(max_candidates)
                 ),
-            ),
-        ),
-    )
-
-
-def _with_separator_width_max(params: FormatParameters, value: float) -> FormatParameters:
-    return replace(
-        params,
-        separator=replace(
-            params.separator,
-            separator_width_profile=replace(
-                params.separator.separator_width_profile,
-                max_width_ratio=float(value),
             ),
         ),
     )
@@ -297,7 +523,7 @@ def _with_candidate_scoring_profile(
 
 def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
     profile = spec.frame_geometry_profile
-    params = FormatParameters()
+    params = _with_profile_parameters(FormatParameters(), spec)
 
     if spec.family == "120":
         params = _with_content_min_run(params, 0.18)
@@ -336,7 +562,6 @@ def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
             model_equal_credit=0.08,
         )
         params = _with_content_min_run(params, 0.16)
-        params = _with_separator_width_max(params, 0.100)
         params = _with_separator_outer(
             params,
             min_score=0.68,
@@ -407,7 +632,6 @@ def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
                 gap_search=replace(params.separator.gap_search, max_width_max=720),
             ),
         )
-        params = _with_separator_width_max(params, 0.140)
         params = replace(
             params,
             outer=replace(
@@ -430,7 +654,6 @@ def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
             params,
             outer_too_large=0.995,
         )
-        params = _with_separator_width_max(params, 0.090)
         params = _with_outer_alignment_evidence(
             params,
             short_excess_ratio=0.024,
@@ -449,4 +672,4 @@ def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
         )
         params = _with_partial_edge(params, ratio_extras=(0.04, 0.08), max_candidates=4)
 
-    return params
+    return _with_decision_evidence(params, spec)

@@ -5,6 +5,7 @@ import unittest
 
 import numpy as np
 
+from tools.tests.architecture_contracts import PROJECT_ROOT
 from x5crop.detection.candidate.assessment.evidence_independence import evidence_independence_detail
 from x5crop.detection.candidate.assessment.partial_holder import partial_edge_safety_assessment_detail
 from x5crop.detection.candidate.assessment.support_calibration import (
@@ -14,11 +15,32 @@ from x5crop.domain import Box, DetectionCandidate, Gap
 from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED
 from x5crop.policies.registry import get_detection_policy
-from x5crop.policies.runtime.candidate import EvidenceIndependencePolicy
+from x5crop.policies.parameters.candidate import EvidenceIndependenceParameters
 from x5crop.policies.runtime.separator import SeparatorGeometrySupportModePolicy
 
 
 class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
+    def test_candidate_signals_are_owned_and_emitted_only_by_candidate_layers(self) -> None:
+        evidence_paths = (
+            PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "frame_topology.py",
+            PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "separator_continuity.py",
+        )
+        for path in evidence_paths:
+            with self.subTest(path=path.name):
+                self.assertNotIn(
+                    '"candidate_signals"',
+                    path.read_text(encoding="utf-8"),
+                )
+
+        policy_factory = (
+            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "factory.py"
+        ).read_text(encoding="utf-8")
+        runtime_base = (
+            PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "base.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("dual_lane_partial_not_supported", policy_factory)
+        self.assertNotIn("class ReviewOnlyPolicy", runtime_base)
+
     def test_nearby_separator_diagnostics_separate_search_from_comparison_parameters(self) -> None:
         from inspect import signature
 
@@ -168,7 +190,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             content_support="ok",
             content_score=0.10,
             geometry_score=0.90,
-            policy=EvidenceIndependencePolicy(),
+            policy=EvidenceIndependenceParameters(),
         )
 
         self.assertTrue(detail["requires_validation"])
@@ -213,7 +235,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             content_support="ok",
             content_score=0.90,
             geometry_score=0.90,
-            policy=EvidenceIndependencePolicy(),
+            policy=EvidenceIndependenceParameters(),
         )
 
         self.assertTrue(detail["requires_validation"])

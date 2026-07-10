@@ -47,6 +47,9 @@ def result_from_cached_record(
     cached_record: dict[str, Any],
     profile: ImageProfile,
     warnings: list[str],
+    *,
+    output_files: list[str],
+    detail_extra: dict[str, Any],
 ) -> ProcessResult:
     output_detail = dict(cached_record["output"])
     result = ProcessResult(
@@ -58,9 +61,9 @@ def result_from_cached_record(
         strip_mode=str(cached_record["strip_mode"]),
         count=int(cached_record["count"]),
         final_review_reasons=list(cached_record["final_review_reasons"]),
-        output_files=list(output_detail["output_files"]),
+        output_files=list(output_files),
         review_copy=output_detail["review_copy"],
-        detail={**dict(cached_record["detail"]), "reused_analysis": True},
+        detail={**dict(cached_record["detail"]), **detail_extra},
         profile=json_safe(asdict(profile)),
         warnings=warnings,
         policy_id=str(cached_record["policy_id"]),
@@ -68,6 +71,7 @@ def result_from_cached_record(
     report_record = dict(cached_record)
     report_record["detail"] = dict(result.detail)
     output_detail = dict(report_record["output"])
+    output_detail["output_files"] = list(output_files)
     output_detail["warnings"] = list(warnings)
     report_record["output"] = output_detail
     result.report_record = report_record

@@ -35,18 +35,17 @@ from ..utils import spatial_shape_from_shape
 from ..detection.evidence.holder_occupancy import enrich_holder_occupancy_with_calibration
 
 
-def process_one_worker(input_file: Path, config: RunConfig) -> ProcessResult:
-    return process_one(input_file, replace(config, report=False))
-
-
-def process_one(input_file: Path, config: RunConfig) -> ProcessResult:
+def process_one(
+    input_file: Path,
+    config: RunConfig,
+    policy_bundle: DetectionPolicyBundle,
+) -> ProcessResult:
     output_surface = output_surface_for_input(input_file, config)
     output_dir = output_surface.root
     profile, warnings = read_tiff_profile(input_file, config.page)
     height, width = spatial_shape_from_shape(profile.shape)
     layout = infer_layout(width, height) if config.layout_auto else config.layout
     config = replace(config, layout=layout)
-    policy_bundle = DetectionPolicyBundle.for_format_mode(config.format_id, config.strip_mode)
     initial_policy = policy_bundle.initial_policy
     fmt = initial_policy.physical_spec
 

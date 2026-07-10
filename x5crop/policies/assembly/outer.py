@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from .presets import ModePolicyPreset
 from ..parameters.aggregate import FormatParameters
 from ..parameters.outer import (
     LongAxisGeometryCorrectionParameters,
@@ -25,10 +24,10 @@ from ..runtime.outer import (
 
 
 def separator_outer_family_policies(
-    mode_preset: ModePolicyPreset,
+    detector_kind: str,
     params: FormatParameters,
 ) -> tuple[SeparatorOuterFamilyPolicy, SeparatorOuterFamilyPolicy, SeparatorOuterFamilyPolicy]:
-    is_standard_strip = mode_preset.detector_kind == "standard_strip"
+    is_standard_strip = detector_kind == "standard_strip"
     full_width_outer = params.outer.separator_full_width_outer
     return (
         SeparatorOuterFamilyPolicy(
@@ -53,11 +52,11 @@ def separator_outer_family_policies(
 
 
 def outer_correction_family_policies(
-    mode_preset: ModePolicyPreset,
+    detector_kind: str,
     long_axis: LongAxisGeometryCorrectionParameters,
     short_axis: ShortAxisGeometryCorrectionParameters,
 ) -> tuple[OuterCorrectionFamilyPolicy, OuterCorrectionFamilyPolicy, OuterCorrectionFamilyPolicy]:
-    is_standard_strip = mode_preset.detector_kind == "standard_strip"
+    is_standard_strip = detector_kind == "standard_strip"
     long_mode = "conditional" if is_standard_strip else "off"
     short_mode = "conditional" if is_standard_strip else "off"
     content_mode = "conditional" if is_standard_strip else "off"
@@ -90,7 +89,7 @@ def outer_correction_family_policies(
 
 
 def outer_policy(
-    mode_preset: ModePolicyPreset,
+    detector_kind: str,
     strip_mode: str,
     params: FormatParameters,
 ) -> OuterPolicy:
@@ -102,10 +101,10 @@ def outer_policy(
     edge_position = params.outer.edge_anchored_content_position
     separator_outer = params.outer.separator_outer_band
     separator_full_width = params.outer.separator_full_width_outer
-    partial_content_enabled = bool(strip_mode == PARTIAL and mode_preset.detector_kind != "review_only")
-    local_family, full_width_family, width_profile_family = separator_outer_family_policies(mode_preset, params)
+    partial_content_enabled = bool(strip_mode == PARTIAL and detector_kind != "review_only")
+    local_family, full_width_family, width_profile_family = separator_outer_family_policies(detector_kind, params)
     long_correction_family, short_correction_family, content_correction_family = outer_correction_family_policies(
-        mode_preset,
+        detector_kind,
         long_axis,
         short_axis,
     )

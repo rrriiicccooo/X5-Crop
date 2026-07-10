@@ -8,6 +8,23 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 
 
 class CurrentSchemaNamingContractTest(unittest.TestCase):
+    def test_contract_tests_reference_only_current_paths(self) -> None:
+        contract_source = (
+            PROJECT_ROOT / "tools" / "tests" / "test_architecture_residual_contract.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn('"policies" / "formats"', contract_source)
+        self.assertIn('/ "factory.py"', contract_source)
+
+    def test_architecture_uses_current_decision_ownership_names(self) -> None:
+        architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
+
+        self.assertNotIn("contract applier", architecture.lower())
+        self.assertNotIn("reuse compatible analysis", architecture.lower())
+        self.assertNotIn("legacy processresult", architecture.lower())
+        self.assertNotIn("physical lengths resolve", architecture.lower())
+        self.assertNotIn("物理长度优先", architecture)
+
     def test_active_source_has_no_property_or_constant_aliases(self) -> None:
         format_source = (
             PROJECT_ROOT / "x5crop" / "formats" / "__init__.py"

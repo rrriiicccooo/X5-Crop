@@ -482,8 +482,7 @@ class CandidateLifecycleSourceContractTest(unittest.TestCase):
         for path in (
             PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "candidate.py",
             PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "candidate.py",
-            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "presets.py",
-            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "format_presets.py",
+            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "factory.py",
             PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "selection" / "choose.py",
         ):
             text = path.read_text(encoding="utf-8")

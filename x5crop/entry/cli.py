@@ -11,7 +11,6 @@ from ..formats import (
     DESKEW_CHOICES,
     DESKEW_FALLBACK_CHOICES,
     FORMAT_CHOICES,
-    FORMATS,
     LAYOUT_CHOICES,
     STRIP_CHOICES,
 )
@@ -67,9 +66,6 @@ def options_from_args(args: argparse.Namespace) -> CliOptions:
         raise ValueError("--format is required unless --interactive is used")
     if int(args.page) < 0:
         raise ValueError("--page must be 0 or greater")
-    if args.count is not None and int(args.count) not in FORMATS[str(args.format)].allowed_counts:
-        allowed = ", ".join(str(x) for x in FORMATS[str(args.format)].allowed_counts)
-        raise ValueError(f"--format {args.format} allows --count values: {allowed}")
     for name in ("bleed", "bleed_x", "bleed_y"):
         value = getattr(args, name)
         if value is not None and int(value) < 0:

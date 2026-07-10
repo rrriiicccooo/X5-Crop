@@ -119,6 +119,7 @@ class ArchitectureResidualContractTest(unittest.TestCase):
 
     def test_candidate_plan_policy_contains_parameters_not_static_labels(self) -> None:
         from x5crop.policies.runtime import candidate
+        from x5crop.policies.parameters import candidate as candidate_parameters
         from x5crop.policies.parameters.content import ContentCandidateParameters
 
         for class_name in (
@@ -133,20 +134,20 @@ class ArchitectureResidualContractTest(unittest.TestCase):
                 "separator_full_width_competition",
                 "execution_budget",
                 "evidence_independence",
-            }.issuperset(candidate.CandidatePlanPolicy.__dataclass_fields__)
+            }.issuperset(candidate_parameters.CandidatePlanParameters.__dataclass_fields__)
         )
         banned_fields = {
-            candidate.ContentGuidedSeparatorCandidatePolicy: {
+            candidate_parameters.ContentGuidedSeparatorCandidateParameters: {
                 "proposal_role",
                 "guidance_source",
                 "requires_hard_separator_signal",
             },
-            candidate.SeparatorFullWidthCompetitionPolicy: {
+            candidate_parameters.SeparatorFullWidthCompetitionParameters: {
                 "content_outer_max_median_aspect_strategies",
                 "content_outer_max_median_aspect_strip_modes",
             },
-            candidate.CandidateExecutionBudgetPolicy: {"requires_content_support"},
-            candidate.EvidenceIndependencePolicy: {
+            candidate_parameters.CandidateExecutionBudgetParameters: {"requires_content_support"},
+            candidate_parameters.EvidenceIndependenceParameters: {
                 "dependent_outer_strategies",
                 "dependent_gap_sources",
                 "require_content_support",
@@ -163,7 +164,7 @@ class ArchitectureResidualContractTest(unittest.TestCase):
             }.isdisjoint(ContentCandidateParameters.__dataclass_fields__)
         )
 
-    def test_review_only_policy_exists_only_for_review_only_detectors(self) -> None:
+    def test_review_only_detector_is_derived_only_for_dual_lane_partial(self) -> None:
         from x5crop.policies.registry import get_detection_policy
 
         for format_id, strip_mode in (
@@ -172,22 +173,23 @@ class ArchitectureResidualContractTest(unittest.TestCase):
             ("135-dual", "full"),
         ):
             with self.subTest(format_id=format_id, strip_mode=strip_mode):
-                self.assertIsNone(
-                    get_detection_policy(format_id, strip_mode).detector.review_only
+                self.assertNotEqual(
+                    get_detection_policy(format_id, strip_mode).detector.kind,
+                    "review_only",
                 )
-        self.assertIsNotNone(
-            get_detection_policy("135-dual", "partial").detector.review_only
+        self.assertEqual(
+            get_detection_policy("135-dual", "partial").detector.kind,
+            "review_only",
         )
 
     def test_separator_width_capability_has_no_format_preset_or_boolean_switch(self) -> None:
-        from x5crop.policies.assembly import presets
         from x5crop.policies.parameters.outer import SeparatorOuterBandParameters
         from x5crop.policies.runtime.outer import SeparatorGeometryProposalPolicy
+        from x5crop.policies.runtime.separator import SeparatorWidthProfilePolicy
 
-        self.assertFalse(hasattr(presets, "SeparatorWidthProfilePreset"))
         self.assertNotIn(
             "separator_width_profile",
-            presets.ModePolicyPreset.__dataclass_fields__,
+            SeparatorWidthProfilePolicy.__dataclass_fields__,
         )
         self.assertNotIn(
             "separator_outer_allow_oversized_band",
@@ -198,18 +200,15 @@ class ArchitectureResidualContractTest(unittest.TestCase):
             SeparatorOuterBandParameters.__dataclass_fields__,
         )
 
-    def test_separator_geometry_support_has_no_mode_preset_switch(self) -> None:
-        from x5crop.policies.assembly.presets import ModePolicyPreset
+    def test_separator_geometry_support_has_no_static_runtime_switch(self) -> None:
+        from x5crop.policies.runtime.separator import SeparatorPolicy
 
         self.assertNotIn(
             "separator_geometry_support_modes",
-            ModePolicyPreset.__dataclass_fields__,
+            SeparatorPolicy.__dataclass_fields__,
         )
 
     def test_review_only_mode_does_not_claim_selection_ownership(self) -> None:
-        from x5crop.policies.runtime.base import ReviewOnlyPolicy
-
-        self.assertNotIn("selection_override", ReviewOnlyPolicy.__dataclass_fields__)
         offenders: list[str] = []
         for path in (PROJECT_ROOT / "x5crop").rglob("*.py"):
             if "selection_override" in path.read_text(encoding="utf-8"):
@@ -429,13 +428,17 @@ class ArchitectureResidualContractTest(unittest.TestCase):
             "def partial_policy",
         )
         offenders: list[str] = []
-        source_root = PROJECT_ROOT / "x5crop" / "policies" / "formats"
-        self.assertTrue(source_root.is_dir())
-        for path in source_root.glob("format_*.py"):
-            text = path.read_text(encoding="utf-8")
-            for term in banned:
-                if term in text:
-                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+        source_path = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "policies"
+            / "assembly"
+            / "factory.py"
+        )
+        text = source_path.read_text(encoding="utf-8")
+        for term in banned:
+            if term in text:
+                offenders.append(f"{source_path.relative_to(PROJECT_ROOT)}: {term}")
 
         self.assertEqual(offenders, [])
 
@@ -482,9 +485,9 @@ class ArchitectureResidualContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_format_preset_assembly_does_not_own_profiles_or_descriptions(self) -> None:
+    def test_policy_assembly_does_not_own_profiles_or_descriptions(self) -> None:
         text = (
-            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "format_presets.py"
+            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "factory.py"
         ).read_text(encoding="utf-8")
         banned = (
             "FrameFitPolicy(",

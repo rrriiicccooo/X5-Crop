@@ -141,9 +141,9 @@ def gap_from_dict(value: dict[str, Any]) -> Gap:
     return Gap(
         index=int(value["index"]),
         center=float(value["center"]),
-        score=float(value.get("score", 0.0)),
-        method=str(value.get("method", "unknown")),
-        start=(None if value.get("start") is None else float(value.get("start"))),
-        end=(None if value.get("end") is None else float(value.get("end"))),
-        lane_box=value.get("lane_box"),
+        score=float(value["score"]),
+        method=str(value["method"]),
+        start=(None if value["start"] is None else float(value["start"])),
+        end=(None if value["end"] is None else float(value["end"])),
+        lane_box=value["lane_box"],
     )

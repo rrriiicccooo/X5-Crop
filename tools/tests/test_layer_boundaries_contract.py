@@ -513,19 +513,16 @@ class LayerBoundariesContractTest(unittest.TestCase):
         self.assertTrue(hasattr(final, "FinalizationPolicy"))
 
     def test_output_policy_is_owned_by_runtime_output_module(self) -> None:
-        from x5crop.policies.runtime.output import (
-            EdgeBleedProtectionPolicy,
-            OutputPolicy,
-        )
+        from x5crop.policies.parameters.exposure_overlap import EdgeBleedProtectionParameters
+        from x5crop.policies.runtime.output import OutputPolicy
 
         self.assertIn("edge_bleed_protection", OutputPolicy.__dataclass_fields__)
-        self.assertIn("guard_ratio", EdgeBleedProtectionPolicy.__dataclass_fields__)
+        self.assertIn("guard_ratio", EdgeBleedProtectionParameters.__dataclass_fields__)
 
     def test_universal_capabilities_do_not_have_constant_policy_switches(self) -> None:
         from x5crop.policies.parameters.separator import (
             LeadingGridFailureParameters,
             SeparatorSupportParameters,
-            SeparatorWidthProfileParameters,
         )
         from x5crop.policies.parameters.outer import (
             EdgeAnchoredContentPositionParameters,
@@ -534,14 +531,14 @@ class LayerBoundariesContractTest(unittest.TestCase):
         )
         from x5crop.geometry.detection_parameters import NearbySeparatorRefinementParameters
         from x5crop.image.gray import BaseGrayParameters
-        from x5crop.policies.runtime.candidate import (
-            CandidateExecutionBudgetPolicy,
-            CandidatePlanPolicy,
-            ContentGuidedSeparatorCandidatePolicy,
-            EvidenceIndependencePolicy,
-            SeparatorFullWidthCompetitionPolicy,
+        from x5crop.policies.parameters.candidate import (
+            CandidateExecutionBudgetParameters,
+            CandidatePlanParameters,
+            ContentGuidedSeparatorCandidateParameters,
+            EvidenceIndependenceParameters,
+            FrameFitParameters,
+            SeparatorFullWidthCompetitionParameters,
         )
-        from x5crop.policies.runtime.base import FrameFitPolicy
         from x5crop.policies.decision.contract import DecisionPolicy
         from x5crop.policies.runtime.content import ContentPolicy
         from x5crop.policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
@@ -554,7 +551,8 @@ class LayerBoundariesContractTest(unittest.TestCase):
             OuterCorrectionFamilyPolicy,
             ShortAxisGeometryCorrectionPolicy,
         )
-        from x5crop.policies.runtime.output import EdgeBleedProtectionPolicy, OutputPolicy
+        from x5crop.policies.parameters.exposure_overlap import EdgeBleedProtectionParameters
+        from x5crop.policies.runtime.output import OutputPolicy
         from x5crop.policies.runtime.separator import (
             SeparatorGeometrySupportModePolicy,
             SeparatorModelGapProposalPolicy,
@@ -568,31 +566,29 @@ class LayerBoundariesContractTest(unittest.TestCase):
             OutputPolicy: "apply_output_bleed",
             RuntimeDiagnosticsPolicy: "attach_read_only_when_requested",
             ContentPolicy: "validates_candidates",
-            EdgeBleedProtectionPolicy: "enabled",
+            EdgeBleedProtectionParameters: "enabled",
             BaseOuterProposalPolicy: "enabled",
             EdgeAnchoredContentPositionParameters: "enabled",
             FloatingContentPositionParameters: "enabled",
             LongAxisGeometryCorrectionPolicy: "enabled",
             ShortAxisGeometryCorrectionPolicy: "enabled",
             LeadingGridFailureParameters: "enabled",
-            SeparatorWidthProfileParameters: "full_enabled",
-            SeparatorFullWidthCompetitionPolicy: "enabled",
-            EvidenceIndependencePolicy: "enabled",
+            SeparatorFullWidthCompetitionParameters: "enabled",
+            EvidenceIndependenceParameters: "enabled",
             DecisionReviewParameters: "align_outer_to_content",
             DecisionPolicy: "align_outer_to_content",
-            ContentGuidedSeparatorCandidatePolicy: "requires_exact_content_runs",
+            ContentGuidedSeparatorCandidateParameters: "requires_exact_content_runs",
             SeparatorSupportParameters: "allow_geometry_support",
             SeparatorGeometrySupportModePolicy: "allow_grid",
             SeparatorGeometrySupportModePolicy: "enabled",
             SeparatorModelGapProposalPolicy: "geometry_equal_model_enabled",
             NearbySeparatorRefinementParameters: "enabled",
-            FrameFitPolicy: "geometry_fallback",
+            FrameFitParameters: "geometry_fallback",
             BaseGrayParameters: "miniswhite_inverts",
             PartialPlacementGeometryPolicy: "skip_floating_when_edge_trusted",
         }
         for policy_type, field_name in switches.items():
             self.assertNotIn(field_name, policy_type.__dataclass_fields__)
-        self.assertNotIn("partial_enabled", SeparatorWidthProfileParameters.__dataclass_fields__)
         for field_name in (
             "stop_after_reliable_primary",
             "skip_outer_correction_after_reliable_selection",
@@ -603,11 +599,11 @@ class LayerBoundariesContractTest(unittest.TestCase):
         ):
             self.assertNotIn(
                 field_name,
-                CandidateExecutionBudgetPolicy.__dataclass_fields__,
+                CandidateExecutionBudgetParameters.__dataclass_fields__,
             )
         self.assertNotIn(
             "outer_correction_extension",
-            CandidatePlanPolicy.__dataclass_fields__,
+            CandidatePlanParameters.__dataclass_fields__,
         )
         self.assertNotIn("hard_required_all_gaps", SeparatorPolicy.__dataclass_fields__)
         self.assertNotIn("geometry_support_modes", SeparatorPolicy.__dataclass_fields__)
@@ -626,7 +622,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
         self.assertNotIn("required_count", SeparatorWidthProfilePolicy.__dataclass_fields__)
         self.assertNotIn("required_count", FullWidthSeparatorOuterParameters.__dataclass_fields__)
         for policy_type, field_names in (
-            (ContentGuidedSeparatorCandidatePolicy, ("enabled",)),
+            (ContentGuidedSeparatorCandidateParameters, ("enabled",)),
             (SeparatorSupportParameters, ("allow_full_detected_geometry",)),
             (SeparatorGeometrySupportModePolicy, ("allow_grid",)),
         ):
@@ -685,16 +681,16 @@ class LayerBoundariesContractTest(unittest.TestCase):
         self.assertNotIn("format_id == FormatId.F135_DUAL.value", text)
         self.assertIn('physical_layout == "dual_lane"', text)
 
-    def test_decision_evidence_policy_receives_physical_spec(self) -> None:
+    def test_decision_evidence_parameters_are_derived_from_physical_spec(self) -> None:
         text = (
-            PROJECT_ROOT / "x5crop" / "policies" / "decision" / "evidence_policy.py"
+            PROJECT_ROOT / "x5crop" / "policies" / "parameters" / "registry.py"
         ).read_text(encoding="utf-8")
 
         self.assertNotIn("format_spec(", text)
-        self.assertIn("spec: FormatPhysicalSpec", text)
+        self.assertIn("_decision_evidence_parameters(spec: FormatPhysicalSpec)", text)
 
-    def test_format_preset_helpers_use_spec_and_traits_not_format_id(self) -> None:
-        path = PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "format_presets.py"
+    def test_policy_assembly_helpers_use_spec_and_traits_not_format_id(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "factory.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
         private_helper_arguments: dict[str, list[str]] = {}
         for node in tree.body:

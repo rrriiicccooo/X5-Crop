@@ -4,8 +4,6 @@ import unittest
 
 from x5crop.domain import ImageProfile
 from x5crop.units import (
-    PhysicalLength,
-    ScanCalibration,
     ScanCalibrationTrustParameters,
     scan_calibration_from_profile,
 )
@@ -56,20 +54,6 @@ class UnitModelTests(unittest.TestCase):
         self.assertIn("resolution_unit_has_no_absolute_length", invalid.warnings)
         self.assertFalse(unsupported.trusted)
         self.assertIn("unsupported_resolution_unit:99", unsupported.warnings)
-
-    def test_physical_length_uses_calibration_before_ratio_and_clamp(self) -> None:
-        trusted = ScanCalibration(10.0, 10.0, "tiff_resolution", True)
-        untrusted = ScanCalibration(None, None, "unavailable", False)
-        length = PhysicalLength(mm=5.0, fallback_ratio=0.25, min_px=20.0, max_px=80.0)
-
-        self.assertEqual(length.resolve_px(trusted, axis="x", reference_px=400.0), 50.0)
-        self.assertEqual(length.resolve_px(untrusted, axis="x", reference_px=400.0), 80.0)
-
-    def test_physical_length_falls_back_to_pixel_clamp_without_reference(self) -> None:
-        untrusted = ScanCalibration(None, None, "unavailable", False)
-        length = PhysicalLength(fallback_ratio=0.25, min_px=12.0, max_px=80.0)
-        self.assertEqual(length.resolve_px(untrusted, axis="x"), 12.0)
-
 
 if __name__ == "__main__":
     unittest.main()

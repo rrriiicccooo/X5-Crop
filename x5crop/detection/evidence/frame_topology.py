@@ -35,15 +35,6 @@ def frame_topology_evidence(boxes: list[Box], expected_count: int) -> dict[str, 
     overlap_absent = not overlap_pairs
     order_valid = not order_invalid_indexes
     ok = count_matches and extent_valid and overlap_absent and order_valid
-    signals: list[str] = []
-    if not count_matches:
-        signals.append("frame_count_mismatch")
-    if not extent_valid:
-        signals.append("frame_extent_invalid")
-    if not order_valid:
-        signals.append("frame_order_invalid")
-    if not overlap_absent:
-        signals.append("frame_overlap_detected")
     return {
         "used": True,
         "evidence_role": "frame_geometry_topology",
@@ -59,6 +50,5 @@ def frame_topology_evidence(boxes: list[Box], expected_count: int) -> dict[str, 
         "invalid_extent_indexes": invalid_extent_indexes,
         "order_invalid_indexes": order_invalid_indexes,
         "overlap_pairs": [[left, right] for left, right in overlap_pairs],
-        "candidate_signals": signals,
         "boxes": [asdict(box) for box in boxes],
     }

@@ -12,6 +12,101 @@ from tools.tests.architecture_contracts import (
 
 
 class LayerBoundariesOutputContractTest(unittest.TestCase):
+    def test_runtime_resolves_each_format_mode_once(self) -> None:
+        cli_source = (
+            PROJECT_ROOT / "x5crop" / "entry" / "cli.py"
+        ).read_text(encoding="utf-8")
+        invocation_source = (
+            PROJECT_ROOT / "x5crop" / "entry" / "invocation.py"
+        ).read_text(encoding="utf-8")
+        app_source = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "app.py"
+        ).read_text(encoding="utf-8")
+        workflow_source = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "workflow.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("FORMATS", cli_source)
+        self.assertEqual(invocation_source.count("DetectionPolicyBundle.for_format_mode"), 1)
+        self.assertNotIn("DetectionPolicyBundle.for_format_mode", app_source)
+        self.assertNotIn("DetectionPolicyBundle.for_format_mode", workflow_source)
+
+        from inspect import signature
+        from x5crop.runtime.app import process_parallel_files
+
+        self.assertEqual(
+            tuple(signature(process_parallel_files).parameters),
+            ("invocation", "worker_config"),
+        )
+
+    def test_policy_assembly_has_no_pass_through_preset_models(self) -> None:
+        assembly = PROJECT_ROOT / "x5crop" / "policies" / "assembly"
+        self.assertFalse((assembly / "presets.py").exists())
+        self.assertFalse((assembly / "format_presets.py").exists())
+        registry = (
+            PROJECT_ROOT / "x5crop" / "policies" / "registry.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("from .assembly.factory import build_detection_policy", registry)
+
+    def test_decision_evidence_thresholds_are_parameter_owned(self) -> None:
+        decision_parameters = (
+            PROJECT_ROOT / "x5crop" / "policies" / "parameters" / "decision.py"
+        ).read_text(encoding="utf-8")
+        evidence_policy = (
+            PROJECT_ROOT / "x5crop" / "policies" / "decision" / "evidence_policy.py"
+        )
+
+        self.assertIn("class DecisionEvidenceParameters", decision_parameters)
+        self.assertFalse(evidence_policy.exists())
+
+    def test_crop_decision_output_tuning_is_format_parameter_owned(self) -> None:
+        candidate_parameters = (
+            PROJECT_ROOT / "x5crop" / "policies" / "parameters" / "candidate.py"
+        ).read_text(encoding="utf-8")
+        runtime_separator = (
+            PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "separator.py"
+        ).read_text(encoding="utf-8")
+        aggregate_parameters = (
+            PROJECT_ROOT / "x5crop" / "policies" / "parameters" / "aggregate.py"
+        ).read_text(encoding="utf-8")
+        profile_presets = PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "profile_presets.py"
+
+        self.assertIn("class FrameFitParameters", candidate_parameters)
+        self.assertIn("class CandidatePlanParameters", candidate_parameters)
+        self.assertNotIn("sequence_score_weight", runtime_separator)
+        self.assertIn("separator_width_profile_search", aggregate_parameters)
+        self.assertIn("edge_bleed_protection", aggregate_parameters)
+        self.assertFalse(profile_presets.exists())
+
+    def test_separator_width_outer_budget_is_parameter_owned(self) -> None:
+        from x5crop.policies.parameters.separator import SeparatorWidthProfileParameters
+        from x5crop.policies.registry import get_detection_policy
+
+        required = {
+            "band_candidate_count",
+            "sequence_candidate_count",
+            "max_candidates",
+        }
+        self.assertTrue(required.issubset(SeparatorWidthProfileParameters.__dataclass_fields__))
+        width_profile = get_detection_policy("135", "full").separator.width_profile
+        self.assertEqual(set(width_profile.__dataclass_fields__), {"mode", "parameters"})
+
+    def test_active_source_symbols_require_active_source_consumers(self) -> None:
+        units_source = (PROJECT_ROOT / "x5crop" / "units.py").read_text(encoding="utf-8")
+        gap_geometry_source = (
+            PROJECT_ROOT / "x5crop" / "geometry" / "gap_geometry.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("class PhysicalLength", units_source)
+        self.assertNotIn("def photo_width_cv_from_gap_edges", gap_geometry_source)
+
+    def test_runtime_has_no_process_one_worker_forwarder(self) -> None:
+        workflow_source = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "workflow.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("def process_one_worker", workflow_source)
+
     def test_active_source_import_graph_is_acyclic(self) -> None:
         graph = source_import_graph()
         remaining = {module: set(targets) for module, targets in graph.items()}
@@ -32,14 +127,14 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertEqual(remaining, {})
 
     def test_policy_assembly_receives_one_resolved_physical_spec(self) -> None:
-        format_presets = (
-            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "format_presets.py"
+        policy_factory = (
+            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "factory.py"
         ).read_text(encoding="utf-8")
         parameter_registry = (
             PROJECT_ROOT / "x5crop" / "policies" / "parameters" / "registry.py"
         ).read_text(encoding="utf-8")
 
-        self.assertNotIn("format_spec(", format_presets)
+        self.assertNotIn("format_spec(", policy_factory)
         self.assertNotIn("format_spec(", parameter_registry)
         self.assertIn("def format_parameters(spec: FormatPhysicalSpec)", parameter_registry)
 

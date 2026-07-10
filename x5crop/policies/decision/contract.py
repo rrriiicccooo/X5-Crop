@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from ...formats import FormatPhysicalSpec
 from ..identity import decision_policy_id_for
-from .evidence_policy import EvidencePolicy, evidence_policy_for_physical_spec
+from ..parameters.decision import DecisionEvidenceParameters
 
 if TYPE_CHECKING:
     from ..runtime.policy import DetectionPolicy
@@ -26,7 +26,7 @@ class DetectionDecisionContract:
     policy_id: str
     physical_spec: FormatPhysicalSpec
     strip_mode: str
-    evidence: EvidencePolicy
+    evidence: DecisionEvidenceParameters
     decision: DecisionPolicy
 
 
@@ -51,11 +51,6 @@ def decision_contract_for_policy(detection_policy: DetectionPolicy) -> Detection
         policy_id=policy_id,
         physical_spec=spec,
         strip_mode=detection_policy.strip_mode,
-        evidence=evidence_policy_for_physical_spec(
-            spec,
-            detection_policy.strip_mode,
-            EvidencePolicy(),
-            detection_policy.separator.geometry_support.active_modes(),
-        ),
+        evidence=detection_policy.decision_evidence,
         decision=decision_policy_for(detection_policy),
     )

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ....domain import DetectionCandidate
-from ....policies.runtime.candidate import EvidenceIndependencePolicy
+from ....policies.parameters.candidate import EvidenceIndependenceParameters
 from ...evidence.photo_width import photo_width_stability_detail
 from ..signals import SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED
 
@@ -42,7 +42,7 @@ def evidence_independence_detail(
     content_support: str,
     content_score: float,
     geometry_score: float,
-    policy: EvidenceIndependencePolicy,
+    policy: EvidenceIndependenceParameters,
 ) -> dict[str, Any]:
     if source != "separator":
         return {"used": False, "ok": True, "reason": "non_separator_source"}

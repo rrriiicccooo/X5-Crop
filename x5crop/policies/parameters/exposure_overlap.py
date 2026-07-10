@@ -23,3 +23,10 @@ class ExposureOverlapProtectionParameters:
     required_bleed_padding_px: int = 0
     required_bleed_min_px: int = 1
     long_axis_bleed_capacity_px: int = 50
+
+
+@dataclass(frozen=True)
+class EdgeBleedProtectionParameters:
+    guard_ratio: float = 0.0150
+    guard_min: float = 70.0
+    guard_max: float = 120.0

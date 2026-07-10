@@ -46,7 +46,6 @@ def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "preprocess": _plain(policy.preprocess),
         "detector": {
             "kind": policy.detector.kind,
-            "review_only": _plain(policy.detector.review_only),
         },
         "count_hypotheses": _plain(policy.count_hypotheses),
         "outer": {

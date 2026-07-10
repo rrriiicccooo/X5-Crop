@@ -70,18 +70,6 @@ def photo_widths_from_gap_edges(
     return widths
 
 
-def photo_width_cv_from_gap_edges(
-    gaps: list[Gap],
-    origin: float,
-    pitch: float,
-    count: int,
-) -> float | None:
-    widths = photo_widths_from_gap_edges(gaps, origin, pitch, count)
-    if widths is None:
-        return None
-    return width_cv(widths)
-
-
 def local_gap_geometry_error(gaps: list[Gap], gap_index: int, origin: float, pitch: float, count: int) -> float:
     if count <= 1 or gap_index < 1 or gap_index >= count:
         return 0.0

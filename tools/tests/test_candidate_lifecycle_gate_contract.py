@@ -98,7 +98,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
         )
 
         self.assertFalse(evidence["ok"])
-        self.assertEqual(evidence["candidate_signals"], ["frame_overlap_detected"])
+        self.assertNotIn("candidate_signals", evidence)
 
         gate = candidate_gate_assessment(
             source="separator",
@@ -112,7 +112,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
             content_support="ok",
             evidence_independence_ok=True,
             evidence_independence_detail={"ok": True, "reason": "ok"},
-            signals=evidence["candidate_signals"],
+            signals=["frame_overlap_detected"],
         )
 
         self.assertFalse(gate.passed)
@@ -136,7 +136,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
 
         self.assertFalse(evidence["ok"])
         self.assertEqual(evidence["weak_gap_indexes"], [1])
-        self.assertEqual(evidence["candidate_signals"], ["separator_cross_axis_continuity_weak"])
+        self.assertNotIn("candidate_signals", evidence)
 
         gate = candidate_gate_assessment(
             source="separator",
@@ -150,7 +150,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
             content_support="ok",
             evidence_independence_ok=True,
             evidence_independence_detail={"ok": True, "reason": "ok"},
-            signals=evidence["candidate_signals"],
+            signals=["separator_cross_axis_continuity_weak"],
         )
 
         self.assertFalse(gate.passed)
@@ -168,7 +168,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
         )
 
         self.assertTrue(evidence["ok"])
-        self.assertEqual(evidence["candidate_signals"], [])
+        self.assertNotIn("candidate_signals", evidence)
 
     def test_unknown_candidate_signal_fails_contract(self) -> None:
         with self.assertRaises(ValueError):

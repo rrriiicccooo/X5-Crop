@@ -12,7 +12,6 @@ from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED
 from x5crop.geometry.gap_geometry import (
     gap_width_cv,
-    photo_width_cv_from_gap_edges,
     photo_widths_from_gap_edges,
     separator_width_cv,
 )
@@ -36,10 +35,6 @@ class PhotoWidthMetricsTest(unittest.TestCase):
         self.assertEqual(
             photo_widths_from_gap_edges(gaps, origin, pitch, count),
             [100.0, 100.0, 100.0, 100.0],
-        )
-        self.assertAlmostEqual(
-            photo_width_cv_from_gap_edges(gaps, origin, pitch, count),
-            0.0,
         )
         self.assertGreater(separator_width_cv(gaps), 0.70)
         self.assertGreater(gap_width_cv(gaps, origin, pitch, count), 0.05)

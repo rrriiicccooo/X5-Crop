@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import numpy as np
 
+from tools.tests.decision_contract_support import final_detection_fixture
 from x5crop.detection.evidence.exposure_overlap import (
     exposure_overlap_evidence_detail,
 )
@@ -18,19 +19,14 @@ from x5crop.policies.registry import get_detection_policy
 
 
 def _detection() -> FinalDetection:
-    return FinalDetection(
-        format_id="135",
-        layout="horizontal",
-        strip_mode="full",
-        count=2,
-        outer=Box(0, 0, 100, 60),
-        frames=[Box(0, 0, 50, 60), Box(50, 0, 100, 60)],
-        gaps=[Gap(1, 50.0, 0.5, "grid")],
-        confidence=0.95,
-        detail={},
-        status="approved_auto",
-        final_review_reasons=[],
-    )
+    detection = final_detection_fixture(status="approved_auto")
+    detection.count = 2
+    detection.outer = Box(0, 0, 100, 60)
+    detection.frames = [Box(0, 0, 50, 60), Box(50, 0, 100, 60)]
+    detection.gaps = [Gap(1, 50.0, 0.5, "grid")]
+    detection.confidence = 0.95
+    detection.detail = {}
+    return detection
 
 
 class ExposureOverlapProtectionTest(unittest.TestCase):

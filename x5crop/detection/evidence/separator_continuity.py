@@ -21,7 +21,6 @@ def separator_cross_axis_continuity_evidence(
         return {
             "used": False,
             "reason": "invalid_pitch",
-            "candidate_signals": [],
         }
     records: list[dict[str, Any]] = []
     weak_indexes: list[int] = []
@@ -70,5 +69,4 @@ def separator_cross_axis_continuity_evidence(
             "cross_axis_coverage_ratio": float(parameters.cross_axis_coverage_min),
             "cross_axis_continuity_ratio": float(parameters.cross_axis_continuity_min),
         },
-        "candidate_signals": [] if ok else ["separator_cross_axis_continuity_weak"],
     }

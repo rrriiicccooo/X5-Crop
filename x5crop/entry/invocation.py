@@ -1,24 +1,28 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-from ..formats import FORMATS
 from ..geometry.layout import infer_layout
 from ..output.protection import DEFAULT_OUTPUT_BLEED
+from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..run_config import RunConfig
 from ..runtime.app import print_run_header, run_runtime
 from ..runtime.input_probe import first_tiff_shape, iter_input_files
+from ..runtime.invocation import RuntimeInvocation
 from .options import DIAGNOSTICS_JOB_LIMIT, STANDARD_JOB_LIMIT, CliOptions
 
 
-def runtime_invocation_from_options(options: CliOptions) -> tuple[RunConfig, list[Path]]:
+
+def runtime_invocation_from_options(options: CliOptions) -> RuntimeInvocation:
     files = iter_input_files(options.input_path)
     first_file = next(iter(files), None)
     if first_file is None:
         raise ValueError(f"No TIFF files found: {options.input_path}")
 
     height, width = first_tiff_shape(first_file, options.page)
-    fmt = FORMATS[options.format_id]
+    policy_bundle = DetectionPolicyBundle.for_format_mode(
+        options.format_id,
+        options.strip_mode,
+    )
+    fmt = policy_bundle.initial_policy.physical_spec
     if options.requested_count is not None and options.requested_count not in fmt.allowed_counts:
         allowed = ", ".join(str(count) for count in fmt.allowed_counts)
         raise ValueError(
@@ -70,10 +74,14 @@ def runtime_invocation_from_options(options: CliOptions) -> tuple[RunConfig, lis
         reuse_analysis=options.reuse_analysis,
         jobs=jobs,
     )
-    return config, files
+    return RuntimeInvocation(
+        config=config,
+        files=tuple(files),
+        policy_bundle=policy_bundle,
+    )
 
 
 def run_entry_options(options: CliOptions) -> int:
-    config, files = runtime_invocation_from_options(options)
-    print_run_header(config, files)
-    return run_runtime(config, files)
+    invocation = runtime_invocation_from_options(options)
+    print_run_header(invocation)
+    return run_runtime(invocation)

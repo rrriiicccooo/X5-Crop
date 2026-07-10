@@ -1,24 +1,22 @@
 from __future__ import annotations
 
-from .presets import ModePolicyPreset
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import PARTIAL
 from ..runtime.candidate import (
-    CandidatePlanPolicy,
     PartialHolderPolicy,
     ScoringPolicy,
 )
 
 
 def partial_holder_policy(
-    mode_preset: ModePolicyPreset,
+    detector_kind: str,
     strip_mode: str,
     params: FormatParameters,
 ) -> PartialHolderPolicy:
     holder = params.candidate.partial_holder
     content_evidence = params.content.content_evidence
     partial_edge_safety_enabled = bool(
-        strip_mode == PARTIAL and mode_preset.detector_kind != "review_only"
+        strip_mode == PARTIAL and detector_kind != "review_only"
     )
     return PartialHolderPolicy(
         enabled=partial_edge_safety_enabled,
@@ -34,7 +32,3 @@ def scoring_policy(params: FormatParameters) -> ScoringPolicy:
         geometry_support=params.candidate.geometry_support_score,
         separator_support=params.candidate.separator_support_score,
     )
-
-
-def candidate_plan_policy() -> CandidatePlanPolicy:
-    return CandidatePlanPolicy()

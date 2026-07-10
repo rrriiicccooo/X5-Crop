@@ -9,25 +9,28 @@ from ...domain import Box, DetectionCandidate
 from ...formats import FormatPhysicalSpec
 from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
-from ...policies.runtime.policy import DetectionPolicy
 from ...run_config import RunConfig
-from ..candidate.signals import SIGNAL_NEEDS_MANUAL_REVIEW
+from ..candidate.signals import (
+    SIGNAL_DUAL_LANE_PARTIAL_NOT_SUPPORTED,
+    SIGNAL_NEEDS_MANUAL_REVIEW,
+)
 
 
 def review_only_detection(
     gray: np.ndarray,
     config: RunConfig,
     fmt: FormatPhysicalSpec,
-    policy: DetectionPolicy,
 ) -> DetectionCandidate:
-    review_only_policy = policy.detector.review_only
-    if review_only_policy is None:
-        raise ValueError("Review-only detector requires review-only policy")
+    if fmt.physical_layout != "dual_lane" or config.strip_mode != "partial":
+        raise ValueError("Review-only detector requires dual-lane partial input")
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
     outer = Box(0, 0, ww, wh)
     source_h, source_w = gray.shape
-    mode_diagnostics = [review_only_policy.reason, SIGNAL_NEEDS_MANUAL_REVIEW]
+    mode_diagnostics = [
+        SIGNAL_DUAL_LANE_PARTIAL_NOT_SUPPORTED,
+        SIGNAL_NEEDS_MANUAL_REVIEW,
+    ]
     return DetectionCandidate(
         format_id=fmt.format_id,
         layout=config.layout,

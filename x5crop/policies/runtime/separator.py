@@ -14,6 +14,7 @@ from ...geometry.detection_parameters import (
 from ..parameters.separator import (
     LeadingGridFailureParameters,
     SeparatorSupportParameters,
+    SeparatorWidthProfileParameters,
 )
 from .base import FULL, PARTIAL
 
@@ -72,14 +73,9 @@ class SeparatorModelGapProposalPolicy:
 @dataclass(frozen=True)
 class SeparatorWidthProfilePolicy:
     mode: str = "off"
-    max_width_ratio: float = 0.060
-    spacing_min_ratio: float = 0.82
-    spacing_max_ratio: float = 1.18
-    sequence_score_weight: float = 0.04
-    source_candidate_count: int = 2
-    band_candidate_count: int = 10
-    sequence_candidate_count: int = 4
-    max_candidates: int = 4
+    parameters: SeparatorWidthProfileParameters = field(
+        default_factory=SeparatorWidthProfileParameters
+    )
 
 
 @dataclass(frozen=True)

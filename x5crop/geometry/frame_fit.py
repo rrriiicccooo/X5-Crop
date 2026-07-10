@@ -13,7 +13,7 @@ from ..gap_methods import (
 from ..utils import clamp_float
 
 
-class FrameFitParameters(Protocol):
+class FrameFitParameterValues(Protocol):
     name: str
     edge_evidence: bool
     min_edge_samples: int
@@ -48,7 +48,7 @@ def frame_boxes_from_gaps(
     *,
     origin: float,
     pitch: float | None,
-    geometry_parameters: FrameFitParameters | None,
+    geometry_parameters: FrameFitParameterValues | None,
 ) -> list[Box]:
     if pitch is None:
         cuts = [float(outer.left)] + [gap.center + outer.left for gap in gaps] + [float(outer.right)]
@@ -68,7 +68,7 @@ def fit_cuts_by_geometry(
     outer: Box,
     count: int,
     pitch: float | None,
-    config: FrameFitParameters,
+    config: FrameFitParameterValues,
 ) -> list[float]:
     if len(cuts) != count + 1 or count <= 1:
         return cuts
@@ -99,7 +99,7 @@ def fit_cuts_by_geometry(
     return fitted
 
 
-def frame_edge_weight(gap: Gap, config: FrameFitParameters) -> float:
+def frame_edge_weight(gap: Gap, config: FrameFitParameterValues) -> float:
     if gap.width <= 0:
         return 0.0
     if is_edge_pair_gap_method(gap.method):
@@ -137,7 +137,7 @@ def fit_boxes_by_edge_evidence(
     image_h: int,
     bleed_x: int,
     bleed_y: int,
-    config: FrameFitParameters,
+    config: FrameFitParameterValues,
 ) -> tuple[list[Box] | None, dict[str, Any]]:
     if not config.edge_evidence:
         return None, {"used": False, "reason": "edge_evidence_disabled"}
@@ -232,7 +232,7 @@ def fit_frame_boxes_from_gaps(
     *,
     origin: float,
     pitch: float | None,
-    frame_fit: FrameFitParameters,
+    frame_fit: FrameFitParameterValues,
 ) -> tuple[list[Box], dict[str, Any]]:
     config = frame_fit
     base_boxes = frame_boxes_from_gaps(

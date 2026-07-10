@@ -7,7 +7,7 @@ import numpy as np
 import tifffile
 
 from ..run_config import RunConfig
-from ..domain import FinalDetection, ImageProfile
+from ..domain import DetectionCandidate, ImageProfile
 from ..image.crop_pixels import crop_array, validate_source_crop_pixels
 from ..io.tiff import tiff_write_kwargs, validate_written_tiff
 
@@ -17,7 +17,7 @@ def write_crops(
     arr: np.ndarray,
     source_arr: np.ndarray,
     profile: ImageProfile,
-    detection: FinalDetection,
+    detection: DetectionCandidate,
     config: RunConfig,
     deskew_applied: bool,
     output_dir: Path,

@@ -1,15 +1,7 @@
 from __future__ import annotations
 
-from ...formats import FormatPhysicalSpec
 from ..parameters.aggregate import FormatParameters
-from ..runtime.base import CountHypothesisPolicy, FrameFitPolicy
-
-
-def partial_frame_fit(fmt: FormatPhysicalSpec) -> FrameFitPolicy:
-    return FrameFitPolicy(
-        name=f"{fmt.format_id}-partial",
-        edge_evidence=False,
-    )
+from ..runtime.base import CountHypothesisPolicy
 
 
 def count_hypothesis_policy(params: FormatParameters) -> CountHypothesisPolicy:

@@ -9,7 +9,7 @@ from ..domain import Box, FinalDetection
 from ..geometry.boxes import map_work_box, original_box_to_work
 from ..geometry.layout import work_gray
 from ..policies.parameters.finalization import ApprovedGeometryAdjustmentParameters
-from ..policies.runtime.output import EdgeBleedProtectionPolicy
+from ..policies.parameters.exposure_overlap import EdgeBleedProtectionParameters
 from ..run_config import RunConfig
 from ..utils import clamp_float, clamp_int
 
@@ -19,7 +19,7 @@ def apply_edge_bleed_protection(
     config: RunConfig,
     image_w: int,
     image_h: int,
-    policy: EdgeBleedProtectionPolicy,
+    policy: EdgeBleedProtectionParameters,
 ) -> None:
     if detection.strip_mode != "full" or detection.count <= 1 or len(detection.frames) != detection.count:
         return

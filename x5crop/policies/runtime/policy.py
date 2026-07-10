@@ -4,16 +4,15 @@ from dataclasses import dataclass
 
 from ...formats import FormatPhysicalSpec
 from ..parameters.base import PartialEdgeHintParameters
-from ..parameters.decision import DecisionReviewParameters
+from ..parameters.candidate import CandidatePlanParameters, FrameFitParameters
+from ..parameters.decision import DecisionEvidenceParameters, DecisionReviewParameters
 from ..parameters.exposure_overlap import ExposureOverlapEvidenceParameters
 from ..parameters.scoring import CandidateCompetitionParameters
 from .base import (
     CountHypothesisPolicy,
     DetectorPolicy,
-    FrameFitPolicy,
 )
 from .candidate import (
-    CandidatePlanPolicy,
     PartialHolderPolicy,
     ScoringPolicy,
 )
@@ -39,11 +38,12 @@ class DetectionPolicy:
     content: ContentPolicy
     partial_holder: PartialHolderPolicy
     partial_edge_hint: PartialEdgeHintParameters
-    frame_fit: FrameFitPolicy
+    frame_fit: FrameFitParameters
     scoring: ScoringPolicy
     candidate_selection: CandidateCompetitionParameters
-    candidate_plan: CandidatePlanPolicy
+    candidate_plan: CandidatePlanParameters
     exposure_overlap_evidence: ExposureOverlapEvidenceParameters
+    decision_evidence: DecisionEvidenceParameters
     decision: DecisionReviewParameters
     finalization: FinalizationPolicy
     output: OutputPolicy

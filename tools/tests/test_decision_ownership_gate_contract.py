@@ -252,11 +252,10 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             gray,
             config,
             fmt,
-            policy,
         )
 
         self.assertFalse(hasattr(detection, "final_review_reasons"))
-        mode_reasons = [policy.detector.review_only.reason, "needs_manual_review"]
+        mode_reasons = ["dual_lane_partial_not_supported", "needs_manual_review"]
         self.assertEqual(
             detection.detail["candidate_signals"],
             mode_reasons,
