@@ -67,8 +67,12 @@ class FormatPhysicalSpecTests(unittest.TestCase):
 
         context = build_dual_lane_context(bundle.initial_policy, bundle)
 
-        self.assertEqual(context.format_id, "135-dual")
-        self.assertEqual(context.lane_format_id, "135")
+        self.assertEqual(
+            set(context.__dataclass_fields__),
+            {"policy", "lane_policy"},
+        )
+        self.assertEqual(context.policy.physical_spec.format_id, "135-dual")
+        self.assertEqual(context.lane_policy.physical_spec.format_id, "135")
 
     def test_medium_square_records_same_aspect_size_variant(self) -> None:
         spec = FORMATS["120-66"]

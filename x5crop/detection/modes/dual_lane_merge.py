@@ -19,6 +19,7 @@ from ..candidate.signals import (
 )
 from ..detail import candidate_signals_from_detail
 from ..candidate.proposal.hard_safety import hard_safety_detection
+from ..candidate.assessment.mode import apply_mode_candidate_assessment
 from .dual_lane_context import DualLaneDetectionContext
 
 
@@ -28,18 +29,24 @@ def dual_lane_review_detection(
     context: DualLaneDetectionContext,
     mode_signal: str,
 ) -> DetectionCandidate:
+    parent_spec = context.policy.physical_spec
     detection = hard_safety_detection(
         gray,
         config,
-        context.format_spec,
-        context.total_count,
+        parent_spec,
+        parent_spec.default_count,
         context.lane_policy.frame_fit,
     )
     add_candidate_signals(detection, [mode_signal])
     mode_diagnostics = detection.detail.setdefault("mode_diagnostics", [])
     if isinstance(mode_diagnostics, list):
         mode_diagnostics.append(mode_signal)
-    return detection
+    return apply_mode_candidate_assessment(
+        detection,
+        source=CANDIDATE_SOURCE_DUAL_LANE,
+        source_auto_allowed=False,
+        component_candidate_gates=[],
+    )
 
 
 def merge_dual_lane_detections(
@@ -49,6 +56,8 @@ def merge_dual_lane_detections(
     lane_detections: list[DetectionCandidate | None],
     context: DualLaneDetectionContext,
 ) -> DetectionCandidate:
+    parent_spec = context.policy.physical_spec
+    lane_spec = context.lane_policy.physical_spec
     if any(detection is None for detection in lane_detections):
         return dual_lane_review_detection(gray, config, context, SIGNAL_DUAL_LANE_DETECTION_FAILED)
 
@@ -58,7 +67,7 @@ def merge_dual_lane_detections(
         for detection in confirmed_lanes
         if isinstance(detection.detail.get("work_outer"), dict)
     ]
-    if len(lane_work_outers) != context.lane_count:
+    if len(lane_work_outers) != parent_spec.lane_count:
         return dual_lane_review_detection(gray, config, context, SIGNAL_DUAL_LANE_OUTER_DETECTION_FAILED)
 
     combined_work_outer = Box(
@@ -68,7 +77,7 @@ def merge_dual_lane_detections(
         max(box.bottom for box in lane_work_outers),
     )
     frames = [box for detection in confirmed_lanes for box in detection.frames]
-    gaps = _merged_dual_lane_gaps(confirmed_lanes, context.lane_format_spec.default_count)
+    gaps = _merged_dual_lane_gaps(confirmed_lanes, lane_spec.default_count)
 
     lane_confidences = [float(detection.confidence) for detection in confirmed_lanes]
     confidence = min(lane_confidences)
@@ -85,7 +94,7 @@ def merge_dual_lane_detections(
             context.lane_policy.scoring.calibration.dual_lane_below_threshold_cap,
         )
         mode_signals.append(SIGNAL_DUAL_LANE_BELOW_THRESHOLD)
-    if len(frames) != context.total_count:
+    if len(frames) != parent_spec.default_count:
         confidence = min(
             confidence,
             context.lane_policy.scoring.calibration.dual_lane_frame_count_mismatch_cap,
@@ -94,11 +103,11 @@ def merge_dual_lane_detections(
 
     source_h, source_w = gray.shape
     outer_original = map_work_box(combined_work_outer, config.layout, source_w, source_h)
-    return DetectionCandidate(
-        format_id=context.format_id,
+    detection = DetectionCandidate(
+        format_id=parent_spec.format_id,
         layout=config.layout,
         strip_mode="full",
-        count=context.total_count,
+        count=parent_spec.default_count,
         outer=outer_original,
         frames=frames,
         gaps=gaps,
@@ -110,9 +119,18 @@ def merge_dual_lane_detections(
             combined_work_outer,
             gaps,
             confirmed_lanes,
-            confidence,
             mode_signals,
         ),
+    )
+    component_gates = [
+        dict(detection.detail["candidate_assessment"]["candidate_gate"])
+        for detection in confirmed_lanes
+    ]
+    return apply_mode_candidate_assessment(
+        detection,
+        source=CANDIDATE_SOURCE_DUAL_LANE,
+        source_auto_allowed=True,
+        component_candidate_gates=component_gates,
     )
 
 
@@ -142,16 +160,17 @@ def _dual_lane_detail(
     combined_work_outer: Box,
     gaps: list[Gap],
     lane_detections: list[DetectionCandidate],
-    confidence: float,
     mode_signals: list[str],
 ) -> dict:
+    parent_spec = context.policy.physical_spec
+    lane_spec = context.lane_policy.physical_spec
     lane_summaries = [
         {
             "lane": index,
-            "lane_format": context.lane_format_id,
-            "lane_count": context.lane_format_spec.default_count,
-            "total_format": context.format_id,
-            "total_count": context.total_count,
+            "lane_format": lane_spec.format_id,
+            "lane_count": lane_spec.default_count,
+            "total_format": parent_spec.format_id,
+            "total_count": parent_spec.default_count,
             "confidence": float(detection.confidence),
             "candidate_signals": candidate_signals_from_detail(detection),
             "work_outer": detection.detail.get("work_outer"),
@@ -166,23 +185,15 @@ def _dual_lane_detail(
         "candidate_source": CANDIDATE_SOURCE_DUAL_LANE,
         "mode_diagnostics": sorted(set(mode_signals)),
         "layout": config.layout,
-        "candidate_count": context.total_count,
+        "candidate_count": parent_spec.default_count,
         "work_outer": asdict(combined_work_outer),
         "dual_lane_work_boxes": [asdict(lane) for lane in lanes],
         "dual_lane_detections": lane_summaries,
         "gap_centers": [gap.center for gap in gaps],
         "gap_scores": [gap.score for gap in gaps],
         "gap_methods": [gap.method for gap in gaps],
-        "candidate_competition": {
-            "candidate_count": context.lane_count,
-            "format_ids": [context.format_id],
-            "selected_candidate": {
-                "format_id": context.format_id,
-                "count": context.total_count,
-                "strip_mode": "full",
-                "confidence": float(confidence),
-                "candidate_signals": sorted(set(mode_signals)),
-            },
-            "top_candidates": lane_summaries,
+        "dual_lane_composition": {
+            "lane_count": parent_spec.lane_count,
+            "lanes": lane_summaries,
         },
     }

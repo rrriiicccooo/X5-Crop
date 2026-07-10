@@ -34,9 +34,6 @@ def complete_selected_candidate_evidence(
     candidate = deepcopy(candidate)
     if not isinstance(candidate.detail.get("exposure_overlap_evidence"), dict):
         raise ValueError("decision requires exposure_overlap_evidence")
-    if not isinstance(candidate.detail.get("output_protection_plan"), dict):
-        raise ValueError("decision requires output_protection_plan")
-
     raw_content = content_evidence_detail(
         gray,
         candidate,

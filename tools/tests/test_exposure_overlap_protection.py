@@ -9,12 +9,9 @@ from tools.tests.decision_contract_support import final_detection_fixture
 from x5crop.detection.evidence.exposure_overlap import (
     exposure_overlap_evidence_detail,
 )
-from x5crop.domain import Box, FinalDetection, Gap
+from x5crop.domain import AxisBleedParameters, Box, FinalDetection, Gap
 from x5crop.output.bleed import apply_output_protection_plan
-from x5crop.output.protection import (
-    AxisBleedParameters,
-    output_protection_plan,
-)
+from x5crop.output.protection import output_protection_plan
 from x5crop.policies.registry import get_detection_policy
 
 

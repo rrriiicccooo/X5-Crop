@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -96,10 +97,10 @@ class FinalDetection(DetectionCandidate):
             strip_mode=candidate.strip_mode,
             count=candidate.count,
             outer=candidate.outer,
-            frames=candidate.frames,
-            gaps=candidate.gaps,
+            frames=deepcopy(candidate.frames),
+            gaps=deepcopy(candidate.gaps),
             confidence=candidate.confidence,
-            detail=candidate.detail,
+            detail=deepcopy(candidate.detail),
             status=status,
             final_review_reasons=list(final_review_reasons),
         )
@@ -119,6 +120,36 @@ class ImageProfile:
     resolution: Optional[tuple[Any, Any]]
     resolution_unit: Optional[Any]
     icc_profile: Optional[bytes]
+
+
+@dataclass(frozen=True)
+class AxisBleedParameters:
+    long_axis: int
+    short_axis: int
+
+
+@dataclass(frozen=True)
+class OutputProtectionPlan:
+    base_bleed: AxisBleedParameters
+    output_bleed: AxisBleedParameters
+    exposure_overlap_detected: bool
+    required_long_axis_bleed_px: int
+    available_long_axis_bleed_px: int
+    feasible: bool
+    reason: str
+
+    def report_detail(self) -> dict[str, Any]:
+        return {
+            "base_long_axis_bleed_px": int(self.base_bleed.long_axis),
+            "base_short_axis_bleed_px": int(self.base_bleed.short_axis),
+            "output_long_axis_bleed_px": int(self.output_bleed.long_axis),
+            "output_short_axis_bleed_px": int(self.output_bleed.short_axis),
+            "exposure_overlap_detected": bool(self.exposure_overlap_detected),
+            "required_long_axis_bleed_px": int(self.required_long_axis_bleed_px),
+            "available_long_axis_bleed_px": int(self.available_long_axis_bleed_px),
+            "feasible": bool(self.feasible),
+            "reason": self.reason,
+        }
 
 
 @dataclass(frozen=True)

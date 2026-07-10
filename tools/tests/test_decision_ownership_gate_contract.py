@@ -12,6 +12,7 @@ from tools.tests.decision_contract_support import (
     content_ok_detail as _content_ok_detail,
     decision_contract as _decision_contract,
     decision_test_config as _decision_test_config,
+    output_protection_plan_fixture as _output_protection_plan,
 )
 from x5crop.cache.analysis import make_analysis_cache
 from x5crop.constants import (
@@ -95,6 +96,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             outer_alignment,
             policy=_decision_contract("135", "full"),
             deskew_detail={},
+            output_protection_plan=_output_protection_plan(),
         )
 
         self.assertEqual(decided.final_review_reasons, ["evidence_combination_insufficient"])
@@ -143,7 +145,12 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             },
         )
 
-        content_signals = decision_signals_for(content_detection, evidence, policy)
+        content_signals = decision_signals_for(
+            content_detection,
+            evidence,
+            policy,
+            _output_protection_plan(),
+        )
 
         self.assertTrue(content_signals["content_only_evidence"])
         self.assertFalse(content_signals["safety_or_review_only"])
@@ -175,7 +182,12 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             },
         )
 
-        hard_safety_signals = decision_signals_for(hard_safety_detection, evidence, policy)
+        hard_safety_signals = decision_signals_for(
+            hard_safety_detection,
+            evidence,
+            policy,
+            _output_protection_plan(),
+        )
 
         self.assertFalse(hard_safety_signals["content_only_evidence"])
         self.assertTrue(hard_safety_signals["safety_or_review_only"])
@@ -223,6 +235,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             {"used": True, "ok": True},
             policy=_decision_contract("135-dual", "partial"),
             deskew_detail={},
+            output_protection_plan=_output_protection_plan(),
         )
 
         self.assertIn("evidence_combination_insufficient", decided.final_review_reasons)
@@ -305,6 +318,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             outer_alignment,
             policy=_decision_contract("135", "full"),
             deskew_detail={},
+            output_protection_plan=_output_protection_plan(),
         )
 
         self.assertEqual(decided.final_review_reasons, ["content_evidence_insufficient"])
@@ -358,6 +372,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             {"used": True, "ok": True},
             policy=_decision_contract("135", "full"),
             deskew_detail={},
+            output_protection_plan=_output_protection_plan(detected=True, feasible=False),
         )
 
         self.assertEqual(decided.final_review_reasons, ["exposure_overlap_unresolved"])
@@ -443,6 +458,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             outer_alignment,
             policy=_decision_contract("135", "full"),
             deskew_detail={},
+            output_protection_plan=_output_protection_plan(),
         )
 
         self.assertEqual(decided.final_review_reasons, ["candidate_competition_close"])

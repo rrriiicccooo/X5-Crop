@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from ..domain import Box, FinalDetection
+from ..domain import AxisBleedParameters, Box, FinalDetection, OutputProtectionPlan
 from ..geometry.boxes import map_work_box, original_box_to_work
-from .protection import AxisBleedParameters, OutputProtectionPlan
 
 
 def apply_output_bleed(

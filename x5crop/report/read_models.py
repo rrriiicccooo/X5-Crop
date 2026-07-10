@@ -12,17 +12,17 @@ from ..domain import FinalDetection
 
 def candidate_table(detection: FinalDetection) -> list[dict[str, Any]]:
     candidates = candidate_competition(detection).get("top_candidates", [])
-    return list(candidates) if isinstance(candidates, list) else []
-
-
-def selected_candidate(detection: FinalDetection) -> dict[str, Any]:
-    selected = candidate_competition(detection).get("selected_candidate")
-    if isinstance(selected, dict):
-        return dict(selected)
-    return {
-        "missing": True,
-        "reason": "candidate_competition_missing",
-    }
+    if not isinstance(candidates, list):
+        return []
+    return [
+        {
+            key: value
+            for key, value in dict(candidate).items()
+            if key != "candidate_assessment"
+        }
+        for candidate in candidates
+        if isinstance(candidate, dict)
+    ]
 
 
 def candidate_gate_detail(detection: FinalDetection) -> dict[str, Any]:

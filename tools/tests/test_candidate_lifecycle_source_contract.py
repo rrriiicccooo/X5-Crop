@@ -8,6 +8,27 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 
 
 class CandidateLifecycleSourceContractTest(unittest.TestCase):
+    def test_only_candidate_selection_writes_candidate_competition(self) -> None:
+        offenders: list[str] = []
+        detection_root = PROJECT_ROOT / "x5crop" / "detection"
+        for path in detection_root.rglob("*.py"):
+            if "candidate/selection" in path.as_posix():
+                continue
+            source = path.read_text(encoding="utf-8")
+            if (
+                '"candidate_competition":' in source
+                or 'detail["candidate_competition"] =' in source
+            ):
+                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+        self.assertEqual(offenders, [])
+
+    def test_mode_candidates_delegate_candidate_gate_assessment(self) -> None:
+        for name in ("review_only.py", "dual_lane_merge.py"):
+            source = (
+                PROJECT_ROOT / "x5crop" / "detection" / "modes" / name
+            ).read_text(encoding="utf-8")
+            self.assertIn("apply_mode_candidate_assessment", source)
+
     def test_candidate_plan_never_reads_or_mutates_detection_candidates(self) -> None:
         banned = ("DetectionCandidate", ".detail", ".confidence", ".frames")
         offenders: list[str] = []

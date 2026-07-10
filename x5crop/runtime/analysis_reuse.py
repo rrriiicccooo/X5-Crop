@@ -17,7 +17,7 @@ from ..image.transforms import rotate_array_expand
 from ..io.tiff import read_tiff
 from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..policies.runtime.policy import DetectionPolicy
-from ..report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
+from ..report.validation import current_report_record_errors
 from ..report.result_builder import result_from_cached_record
 from ..utils import box_from_dict
 from ..run_config import RunConfig
@@ -95,75 +95,9 @@ def cached_record_matches(
     config: RunConfig,
     policy: DetectionPolicy,
 ) -> bool:
-    if record.get("schema_id") != REPORT_SCHEMA_ID:
-        return False
-    if record.get("schema_revision") != REPORT_SCHEMA_REVISION:
-        return False
-    required_schema_keys = (
-        "source",
-        "script_version",
-        "format_id",
-        "layout",
-        "strip_mode",
-        "count",
-        "count_selection",
-        "status",
-        "confidence",
-        "final_review_reasons",
-        "outer_box",
-        "frame_boxes",
-        "gaps",
-        "candidate_gate",
-        "decision_gate",
-        "decision_signals",
-        "evidence_summary",
-        "policy_id",
-        "schema_validation",
-        "output",
-        "analysis_cache",
-        "analysis_reuse",
-        "decision_geometry",
-        "output_geometry",
-        "diagnostics",
-        "evidence",
-    )
-    if any(key not in record for key in required_schema_keys):
-        return False
-    if not isinstance(record["gaps"], list):
-        return False
-    required_gap_keys = {"index", "center", "score", "method", "start", "end", "lane_box"}
-    if any(
-        not isinstance(gap, dict) or not required_gap_keys.issubset(gap)
-        for gap in record["gaps"]
-    ):
+    if current_report_record_errors(record):
         return False
     if record["script_version"] != VERSION:
-        return False
-    if record["schema_validation"]:
-        return False
-    if not isinstance(record["decision_gate"], dict):
-        return False
-    if not isinstance(record["output_geometry"], dict):
-        return False
-    if not isinstance(record["decision_geometry"], dict):
-        return False
-    evidence = record["evidence"]
-    if not isinstance(evidence, dict) or not isinstance(evidence.get("exposure_overlap"), dict):
-        return False
-    diagnostics = record["diagnostics"]
-    if not isinstance(diagnostics, dict):
-        return False
-    deskew_detail = diagnostics.get("deskew")
-    if not isinstance(deskew_detail, dict) or "applied" not in deskew_detail:
-        return False
-    if bool(deskew_detail["applied"]) and "angle" not in deskew_detail:
-        return False
-    output = record["output"]
-    if not isinstance(output, dict):
-        return False
-    if any(key not in output for key in ("output_files", "review_copy", "warnings", "protection_plan")):
-        return False
-    if not isinstance(output["protection_plan"], dict):
         return False
     cache = record["analysis_cache"]
     if not isinstance(cache, dict):

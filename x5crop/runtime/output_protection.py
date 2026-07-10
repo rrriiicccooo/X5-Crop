@@ -3,11 +3,9 @@ from __future__ import annotations
 import numpy as np
 
 from ..cache import AnalysisCache
-from ..domain import DetectionCandidate
+from ..domain import AxisBleedParameters, DetectionCandidate, OutputProtectionPlan
 from ..detection.evidence.exposure_overlap import exposure_overlap_evidence_detail
 from ..output.protection import (
-    AxisBleedParameters,
-    OutputProtectionPlan,
     output_protection_plan,
 )
 from ..policies.runtime.policy import DetectionPolicy
@@ -37,5 +35,4 @@ def prepare_output_protection(
         policy.output,
     )
     detection.detail["exposure_overlap_evidence"] = evidence
-    detection.detail["output_protection_plan"] = plan.report_detail()
     return plan

@@ -7,14 +7,13 @@ from typing import Any
 import numpy as np
 
 from ...run_config import RunConfig
-from ...domain import FinalDetection
+from ...domain import FinalDetection, OutputProtectionPlan
 from ...output.bleed import (
     apply_output_protection_plan,
 )
-from ...output.protection import OutputProtectionPlan
 from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
-from ..detail import DECISION_GEOMETRY, OUTPUT_GEOMETRY
+from ..detail import DECISION_GEOMETRY
 from ..evidence.read_only import attach_read_only_diagnostics
 from ...output.geometry_adjustment import (
     apply_approved_geometry_adjustment,
@@ -70,5 +69,4 @@ def finalize_detection(
             separator_policy=policy.separator,
             diagnostics_policy=policy.diagnostics,
         )
-    output_detection.detail[OUTPUT_GEOMETRY] = _geometry_detail(output_detection)
     return output_detection

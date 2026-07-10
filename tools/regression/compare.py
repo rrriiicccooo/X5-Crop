@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
-from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
+from x5crop.report.validation import validate_current_report_record
 
 
 DEFAULT_FIELDS = (
@@ -39,13 +39,7 @@ def field_value(row: dict[str, Any], field: str) -> Any:
 
 
 def validate_report_row(row: dict[str, Any]) -> None:
-    if row.get("schema_id") != REPORT_SCHEMA_ID:
-        raise ValueError("Report row does not use the current schema id")
-    if row.get("schema_revision") != REPORT_SCHEMA_REVISION:
-        raise ValueError("Report row does not use the current schema revision")
-    missing = [field for field in ("source", *DEFAULT_FIELDS) if field not in row]
-    if missing:
-        raise ValueError(f"Current report fields are missing: {', '.join(missing)}")
+    validate_current_report_record(row)
 
 
 def load_jsonl_report(path: Path) -> list[dict[str, Any]]:

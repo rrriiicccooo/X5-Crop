@@ -99,6 +99,7 @@ def process_one(
         selected_evidence.outer_alignment,
         policy=decision_contract,
         deskew_detail=deskew_detail,
+        output_protection_plan=output_protection_plan,
     )
     decided_detection.detail[DECISION_POLICY_DETAIL] = decision_contract_report_detail(
         decision_contract,

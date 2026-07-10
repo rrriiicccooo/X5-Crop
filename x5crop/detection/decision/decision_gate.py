@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from typing import Any
 
 import numpy as np
 
 from ...constants import CANDIDATE_SOURCE_REVIEW_ONLY
-from ...domain import DetectionCandidate, FinalDetection
+from ...domain import DetectionCandidate, FinalDetection, OutputProtectionPlan
 from ...policies.decision.contract import DetectionDecisionContract
 from ...run_config import RunConfig
 from ..confidence_caps import apply_confidence_cap
@@ -329,15 +330,22 @@ def apply_decision_gate(
     *,
     policy: DetectionDecisionContract,
     deskew_detail: dict[str, Any],
+    output_protection_plan: OutputProtectionPlan,
 ) -> FinalDetection:
-    evidence = evidence_summary_for(gray, detection, content_detail, outer_alignment, policy)
-    decision_signals = decision_signals_for(detection, evidence, policy)
-    assessment = detection.detail.get("candidate_assessment", {})
+    working = deepcopy(detection)
+    evidence = evidence_summary_for(gray, working, content_detail, outer_alignment, policy)
+    decision_signals = decision_signals_for(
+        working,
+        evidence,
+        policy,
+        output_protection_plan,
+    )
+    assessment = working.detail.get("candidate_assessment", {})
     assessment = dict(assessment) if isinstance(assessment, dict) else {}
     candidate_gate = assessment.get("candidate_gate")
     candidate_gate = dict(candidate_gate) if isinstance(candidate_gate, dict) else {}
     decision_caps = _apply_decision_confidence_caps(
-        detection,
+        working,
         config,
         content_detail,
         outer_alignment,
@@ -345,7 +353,7 @@ def apply_decision_gate(
     )
     decision_gate = decision_gate_assessment(
         DecisionAssessmentInput(
-            detection=detection,
+            detection=working,
             confidence_threshold=config.confidence_threshold,
             decision_signals=decision_signals,
             policy=policy,
@@ -355,9 +363,9 @@ def apply_decision_gate(
         )
     )
     final_reasons = list(decision_gate.final_review_reasons)
-    if detection.confidence < config.confidence_threshold or final_reasons:
-        detection.confidence, cap_detail = apply_confidence_cap(
-            float(detection.confidence),
+    if working.confidence < config.confidence_threshold or final_reasons:
+        working.confidence, cap_detail = apply_confidence_cap(
+            float(working.confidence),
             policy.candidate_selection.confidence_cap,
             owner="decision",
             reason="final_review",
@@ -366,17 +374,17 @@ def apply_decision_gate(
     decision_gate = decision_gate.with_confidence_caps(decision_caps)
     status = (
         "approved_auto"
-        if decision_gate.passed and detection.confidence >= config.confidence_threshold
+        if decision_gate.passed and working.confidence >= config.confidence_threshold
         else "needs_review"
     )
-    detection.detail["decision_summary"] = {
+    working.detail["decision_summary"] = {
         "decision_gate": decision_gate.report_detail(),
     }
-    detection.detail["evidence_summary"] = evidence
-    detection.detail["decision_signals"] = decision_signals
-    detection.detail["policy_id"] = policy.policy_id
+    working.detail["evidence_summary"] = evidence
+    working.detail["decision_signals"] = decision_signals
+    working.detail["policy_id"] = policy.policy_id
     return FinalDetection.from_candidate(
-        detection,
+        working,
         status=status,
         final_review_reasons=final_reasons,
     )

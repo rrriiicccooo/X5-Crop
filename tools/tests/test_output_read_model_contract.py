@@ -51,15 +51,59 @@ def _report_record(
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_current_schema_validator_rejects_missing_or_empty_canonical_sections(self) -> None:
+        from x5crop.report.validation import current_report_record_errors
+
+        record = _report_record(_detection())
+        record["schema_validation"] = []
+        record["decision_geometry"] = {
+            "outer_box": dict(record["outer_box"]),
+            "frame_boxes": list(record["frame_boxes"]),
+        }
+        self.assertEqual(current_report_record_errors(record), [])
+
+        for key in ("count_selection", "candidate_table", "policy", "evidence", "analysis_cache"):
+            incomplete = dict(record)
+            incomplete.pop(key)
+            self.assertTrue(current_report_record_errors(incomplete), key)
+
+        empty_geometry = dict(record)
+        empty_geometry["decision_geometry"] = {}
+        self.assertTrue(current_report_record_errors(empty_geometry))
+    def test_report_has_one_candidate_and_final_geometry_projection(self) -> None:
+        detection = _detection(
+            {
+                "candidate_competition": {
+                    "selected_candidate": {"format_id": "135"},
+                    "top_candidates": [
+                        {
+                            "rank": 1,
+                            "selected": True,
+                            "format_id": "135",
+                            "candidate_assessment": {"candidate_gate": {"passed": True}},
+                        }
+                    ],
+                },
+                "output_geometry": {
+                    "outer_box": {"left": 10, "top": 10, "right": 90, "bottom": 90},
+                    "frame_boxes": [],
+                },
+            }
+        )
+        record = _report_record(detection)
+
+        self.assertNotIn("selected_candidate", record)
+        self.assertNotIn("output_geometry", record)
+        self.assertNotIn("candidate_assessment", record["candidate_table"][0])
     def test_count_selection_is_a_current_schema_section(self) -> None:
         detection = _detection({"count_selection": {"marker": "count-selection"}})
         record = _report_record(detection)
         self.assertEqual(record["count_selection"], {"marker": "count-selection"})
 
-        reuse_source = (
-            PROJECT_ROOT / "x5crop" / "runtime" / "analysis_reuse.py"
+        validation_source = (
+            PROJECT_ROOT / "x5crop" / "report" / "validation.py"
         ).read_text(encoding="utf-8")
-        self.assertIn('"count_selection",', reuse_source)
+        self.assertIn('"count_selection",', validation_source)
 
     def test_process_result_has_one_canonical_record_surface(self) -> None:
         from x5crop.domain import ProcessResult
@@ -160,22 +204,6 @@ class OutputReadModelContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertNotIn('"status": result.status', source)
 
-    def test_selected_candidate_does_not_duplicate_final_decision(self) -> None:
-        from x5crop.report.read_models import selected_candidate
-
-        detection = _detection(
-            {
-                "candidate_competition": {
-                    "selected_candidate": {"format_id": "135", "confidence": 0.8}
-                }
-            }
-        )
-
-        selected = selected_candidate(detection)
-
-        for duplicate in ("final_confidence", "final_review_reasons", "decision_status"):
-            self.assertNotIn(duplicate, selected)
-
     def test_summary_writer_requires_current_schema_fields(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "report" / "outputs.py"
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -200,6 +228,11 @@ class OutputReadModelContractTest(unittest.TestCase):
         detection = _detection()
         current = _report_record(detection)
         current["source"] = "current.tif"
+        current["schema_validation"] = []
+        current["decision_geometry"] = {
+            "outer_box": dict(current["outer_box"]),
+            "frame_boxes": list(current["frame_boxes"]),
+        }
         self.assertEqual(report_key(current), "current.tif")
         with self.assertRaises(ValueError):
             report_key({"input_file": "superseded.tif"})

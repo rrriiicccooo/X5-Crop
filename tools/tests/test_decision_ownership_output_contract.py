@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from copy import deepcopy
+from inspect import signature
 import unittest
 from unittest.mock import patch
 
@@ -12,13 +14,13 @@ from tools.tests.decision_contract_support import (
     content_ok_detail as _content_ok_detail,
     decision_contract as _decision_contract,
     decision_test_config as _decision_test_config,
+    output_protection_plan_fixture as _output_protection_plan,
 )
 from x5crop.cache.analysis import make_analysis_cache
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, DetectionCandidate
 from x5crop.formats import format_spec
-from x5crop.report.read_models import selected_candidate
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.decision.contract import decision_contract_for_policy
 from x5crop.runtime.output_protection import prepare_output_protection
@@ -29,6 +31,62 @@ def _decision_gate_detail(detection) -> dict:
 
 
 class DecisionOwnershipOutputContractTest(unittest.TestCase):
+    def test_decision_conversion_does_not_mutate_or_alias_candidate(self) -> None:
+        gray = np.zeros((100, 100), dtype=np.uint8)
+        candidate = DetectionCandidate(
+            format_id="135",
+            layout="horizontal",
+            strip_mode="full",
+            count=1,
+            outer=Box(10, 10, 90, 90),
+            frames=[Box(10, 10, 90, 90)],
+            gaps=[],
+            confidence=0.90,
+            detail={
+                "candidate_source": "separator",
+                "candidate_assessment": {
+                    "candidate_gate": _candidate_gate_detail(True),
+                    "geometry_score": 1.0,
+                    "content_score": 1.0,
+                    "content_quality_score": 1.0,
+                },
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+                "exposure_overlap_evidence": {"exposure_overlap_detected": False},
+                "output_protection_plan": {"feasible": True},
+            },
+        )
+        before = deepcopy(candidate)
+        final = apply_decision_gate(
+            gray,
+            candidate,
+            _decision_test_config(),
+            _content_ok_detail(),
+            {"used": True, "ok": True},
+            policy=_decision_contract("135", "full"),
+            deskew_detail={},
+            output_protection_plan=_output_protection_plan(),
+        )
+
+        self.assertEqual(candidate, before)
+        self.assertIsNot(final.detail, candidate.detail)
+        self.assertIsNot(final.frames, candidate.frames)
+        self.assertIsNot(final.gaps, candidate.gaps)
+
+    def test_decision_requires_the_typed_output_protection_plan(self) -> None:
+        parameters = signature(apply_decision_gate).parameters
+        self.assertIn("output_protection_plan", parameters)
+        signals_source = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "decision"
+            / "decision_signals.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn('"exposure_overlap_evidence": exposure_overlap', signals_source)
+        self.assertNotIn('"output_protection_plan": output_protection', signals_source)
+
     def test_decision_detail_has_one_canonical_shape(self) -> None:
         source = (
             PROJECT_ROOT
@@ -127,15 +185,12 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
             outer_alignment,
             policy=_decision_contract("135", "full"),
             deskew_detail={},
+            output_protection_plan=_output_protection_plan(detected=True, feasible=True),
         )
 
         self.assertEqual(decided.final_review_reasons, [])
         self.assertTrue(decided.detail["decision_signals"]["exposure_overlap_detected"])
         self.assertFalse(decided.detail["decision_signals"]["exposure_overlap_unresolved"])
-        self.assertEqual(
-            decided.detail["decision_signals"]["output_protection_plan"]["reason"],
-            "exposure_overlap_protection_planned",
-        )
         self.assertEqual(
             [item["signal"] for item in _decision_gate_detail(decided)["reason_inputs"]],
             [],
@@ -377,10 +432,6 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
                     "diagnostics": [],
                 },
                 "candidate_competition": {
-                    "selected_candidate": {
-                        "selected": True,
-                        "candidate_assessment": {"source": "separator"},
-                    },
                     "top_candidates": [
                         {
                             "selected": True,
@@ -399,6 +450,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
             {"used": True, "ok": True},
             policy=_decision_contract("135", "full"),
             deskew_detail={},
+            output_protection_plan=_output_protection_plan(),
         )
 
         self.assertNotIn("final_review_reasons", decided.detail)
@@ -418,17 +470,11 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
             _decision_gate_detail(decided)["reason_inputs"][1]["bucket"],
             "low_confidence_context",
         )
-        selected = decided.detail["candidate_competition"]["selected_candidate"]
-        self.assertNotIn("final_review_reasons", selected)
-        self.assertNotIn("decision_status", selected)
-        report_selected = selected_candidate(decided)
         self.assertEqual(
             decided.final_review_reasons,
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
         self.assertEqual(decided.status, "needs_review")
-        self.assertNotIn("final_review_reasons", report_selected)
-        self.assertNotIn("decision_status", report_selected)
         self.assertNotIn(
             "final_review_reasons",
             decided.detail["candidate_competition"]["top_candidates"][0],
@@ -470,6 +516,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
             {"used": True, "ok": True},
             policy=_decision_contract("135", "full"),
             deskew_detail={"reason": "no_outer"},
+            output_protection_plan=_output_protection_plan(),
         )
 
         self.assertEqual(decided.final_review_reasons, [])

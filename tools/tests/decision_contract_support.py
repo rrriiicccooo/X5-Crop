@@ -6,7 +6,14 @@ import numpy as np
 
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.evidence.selected_candidate import complete_selected_candidate_evidence
-from x5crop.domain import Box, DetectionCandidate, FinalDetection
+from x5crop.domain import (
+    AxisBleedParameters,
+    Box,
+    DetectionCandidate,
+    FinalDetection,
+    OutputProtectionPlan,
+)
+from x5crop.output.protection import output_protection_plan
 from x5crop.policies.decision.contract import decision_contract_for_policy
 from x5crop.policies.registry import get_detection_policy
 from x5crop.run_config import RunConfig
@@ -73,6 +80,28 @@ def candidate_gate_detail(
     }
 
 
+def output_protection_plan_fixture(
+    *,
+    detected: bool = False,
+    feasible: bool = True,
+) -> OutputProtectionPlan:
+    return OutputProtectionPlan(
+        base_bleed=AxisBleedParameters(20, 10),
+        output_bleed=AxisBleedParameters(20, 10),
+        exposure_overlap_detected=detected,
+        required_long_axis_bleed_px=20 if detected else 0,
+        available_long_axis_bleed_px=20,
+        feasible=feasible,
+        reason=(
+            "no_exposure_overlap"
+            if not detected
+            else "exposure_overlap_protection_planned"
+            if feasible
+            else "exposure_overlap_exceeds_bleed_capacity"
+        ),
+    )
+
+
 def final_detection_fixture(
     *,
     status: str = "needs_review",
@@ -133,6 +162,7 @@ def final_detection_fixture(
         outer_alignment,
         policy=decision_contract(),
         deskew_detail={},
+        output_protection_plan=output_protection_plan_fixture(),
     )
     if detail:
         final.detail.update(detail)
@@ -156,6 +186,11 @@ def apply_test_detection_decision(
         alignment_parameters=policy.outer.alignment_evidence,
         horizontal_frame_aspect=contract.physical_spec.horizontal_content_aspect,
     )
+    protection_plan = output_protection_plan(
+        candidate.detail["exposure_overlap_evidence"],
+        AxisBleedParameters(config.bleed_x, config.bleed_y),
+        policy.output,
+    )
     return apply_decision_gate(
         gray,
         evidence.candidate,
@@ -164,4 +199,5 @@ def apply_test_detection_decision(
         evidence.outer_alignment,
         policy=contract,
         deskew_detail=deskew_detail,
+        output_protection_plan=protection_plan,
     )

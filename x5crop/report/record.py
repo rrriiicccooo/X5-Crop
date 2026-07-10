@@ -15,7 +15,6 @@ from ..detection.detail import (
     EXPOSURE_OVERLAP_EVIDENCE,
     OUTER_CONTENT_ALIGNMENT,
     OUTPUT_PROTECTION_PLAN,
-    OUTPUT_GEOMETRY,
     decision_schema_diagnostics,
     detail_dict,
     HOLDER_OCCUPANCY,
@@ -31,7 +30,6 @@ from .read_models import (
     candidate_gate_detail,
     candidate_table,
     decision_gate_detail,
-    selected_candidate,
 )
 
 
@@ -102,7 +100,6 @@ def report_record_for_final_detection(
         "outer_box": asdict(detection.outer),
         "frame_boxes": [asdict(box) for box in detection.frames],
         "gaps": [asdict(gap) for gap in detection.gaps],
-        "selected_candidate": selected_candidate(detection),
         "candidate_table": candidate_table(detection),
         "policy": policy_detail,
         "policy_id": policy_id,
@@ -121,7 +118,6 @@ def report_record_for_final_detection(
         "decision_gate": decision_gate_detail(detection),
         "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
         "decision_geometry": detail_dict(detection, DECISION_GEOMETRY),
-        "output_geometry": detail_dict(detection, OUTPUT_GEOMETRY),
         "analysis_cache": dict(analysis_cache_metadata),
         "analysis_reuse": {"used": False},
         "schema_validation": schema_validation,

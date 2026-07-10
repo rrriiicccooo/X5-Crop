@@ -24,7 +24,9 @@ def choose_dual_lane_detection(
     if config.strip_mode != "full":
         raise ValueError("dual-lane detector is only valid for full mode")
 
-    lanes = split_dual_lanes(cache.gray_work, context.lane_count)
+    parent_spec = context.policy.physical_spec
+    lane_spec = context.lane_policy.physical_spec
+    lanes = split_dual_lanes(cache.gray_work, parent_spec.lane_count)
     lane_detections = [
         select_dual_lane_candidate(
             gray,
@@ -32,8 +34,8 @@ def choose_dual_lane_detection(
             lane,
             index,
             cache,
-            context.lane_format_id,
-            context.lane_format_spec,
+            lane_spec.format_id,
+            lane_spec,
             context.lane_policy,
         )
         for index, lane in enumerate(lanes, start=1)

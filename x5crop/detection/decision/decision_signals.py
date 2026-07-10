@@ -8,7 +8,7 @@ from ...constants import (
     CANDIDATE_SOURCE_HARD_SAFETY,
     CANDIDATE_SOURCE_REVIEW_ONLY,
 )
-from ...domain import DetectionCandidate
+from ...domain import DetectionCandidate, OutputProtectionPlan
 from ...policies.decision.contract import DetectionDecisionContract
 
 
@@ -43,11 +43,11 @@ def decision_signals_for(
     detection: DetectionCandidate,
     evidence: dict[str, Any],
     policy: DetectionDecisionContract,
+    output_protection_plan: OutputProtectionPlan,
 ) -> dict[str, Any]:
     assessment = _dict(detection.detail.get("candidate_assessment"))
     competition = _dict(detection.detail.get("candidate_competition"))
     exposure_overlap = _dict(detection.detail.get("exposure_overlap_evidence"))
-    output_protection = _dict(detection.detail.get("output_protection_plan"))
     assessment_source = str(assessment.get("source") or "")
     candidate_source = str(detection.detail.get("candidate_source") or "")
     source = assessment_source or candidate_source
@@ -75,8 +75,8 @@ def decision_signals_for(
     if candidate_competition_close:
         active_signals.append("candidate_competition_close")
     exposure_overlap_unresolved = bool(
-        exposure_overlap.get("exposure_overlap_detected", False)
-        and not output_protection.get("feasible", False)
+        output_protection_plan.exposure_overlap_detected
+        and not output_protection_plan.feasible
     )
     if exposure_overlap_unresolved:
         active_signals.append("exposure_overlap_unresolved")
@@ -103,12 +103,8 @@ def decision_signals_for(
         "separator_support_incomplete": not bool(evidence["separator"]["ok"]),
         "photo_geometry_unstable": not bool(evidence["geometry"]["ok"]),
         "content_integrity_failed": not bool(evidence["content"]["ok"]),
-        "exposure_overlap_detected": bool(
-            exposure_overlap.get("exposure_overlap_detected", False)
-        ),
+        "exposure_overlap_detected": bool(output_protection_plan.exposure_overlap_detected),
         "exposure_overlap_unresolved": exposure_overlap_unresolved,
-        "exposure_overlap_evidence": exposure_overlap,
-        "output_protection_plan": output_protection,
         "candidate_competition_close": bool(candidate_competition_close),
         "candidate_margin_to_second": margin,
         "partial_full_conflict": bool(partial_full_conflict),

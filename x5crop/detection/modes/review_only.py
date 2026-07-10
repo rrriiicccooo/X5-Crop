@@ -14,6 +14,7 @@ from ..candidate.signals import (
     SIGNAL_DUAL_LANE_PARTIAL_NOT_SUPPORTED,
     SIGNAL_NEEDS_MANUAL_REVIEW,
 )
+from ..candidate.assessment.mode import apply_mode_candidate_assessment
 
 
 def review_only_detection(
@@ -31,7 +32,7 @@ def review_only_detection(
         SIGNAL_DUAL_LANE_PARTIAL_NOT_SUPPORTED,
         SIGNAL_NEEDS_MANUAL_REVIEW,
     ]
-    return DetectionCandidate(
+    detection = DetectionCandidate(
         format_id=fmt.format_id,
         layout=config.layout,
         strip_mode=config.strip_mode,
@@ -47,17 +48,11 @@ def review_only_detection(
             "mode_diagnostics": list(mode_diagnostics),
             "layout": config.layout,
             "work_outer": asdict(outer),
-            "candidate_competition": {
-                "candidate_count": 0,
-                "format_ids": [fmt.format_id],
-                "selected_candidate": {
-                    "format_id": fmt.format_id,
-                    "count": fmt.default_count,
-                    "strip_mode": config.strip_mode,
-                    "confidence": 0.0,
-                    "candidate_signals": list(mode_diagnostics),
-                },
-                "top_candidates": [],
-            },
         },
+    )
+    return apply_mode_candidate_assessment(
+        detection,
+        source=CANDIDATE_SOURCE_REVIEW_ONLY,
+        source_auto_allowed=False,
+        component_candidate_gates=[],
     )

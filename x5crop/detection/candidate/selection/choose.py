@@ -72,7 +72,17 @@ def _candidate_summary(candidate: DetectionCandidate) -> dict:
         "candidate_diagnostics": list(assessment.get("diagnostics", []))
         if isinstance(assessment.get("diagnostics"), list)
         else [],
-        "candidate_assessment": assessment,
+        "candidate_scores": {
+            key: assessment[key]
+            for key in (
+                "joint_score",
+                "geometry_score",
+                "separator_score",
+                "content_score",
+                "content_quality_score",
+            )
+            if key in assessment
+        },
         "candidate_plan": candidate.detail.get("candidate_plan", {}),
         "separator_gap_search": candidate.detail.get("separator_gap_search", {}),
     }
@@ -98,7 +108,6 @@ def select_detection_candidate(
     best.detail["candidate_competition"] = {
         "candidate_count": len(candidates),
         "format_ids": [fmt.format_id],
-        "selected_candidate": _candidate_summary(best),
         "top_candidates": competition,
     }
     if second is not None:
