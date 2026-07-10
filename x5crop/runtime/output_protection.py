@@ -32,7 +32,7 @@ def prepare_output_protection(
             long_axis=int(config.bleed_x),
             short_axis=int(config.bleed_y),
         ),
-        policy.output,
+        policy.output.exposure_overlap_protection,
     )
     detection.detail["exposure_overlap_evidence"] = evidence
     return plan

@@ -9,9 +9,62 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 
 
 class CurrentSchemaNamingContractTest(unittest.TestCase):
+    def test_contract_tests_do_not_keep_inactive_source_exemptions(self) -> None:
+        source = (
+            PROJECT_ROOT / "tools" / "tests" / "test_architecture_ownership_contract.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("allowed_numeric_owners", source)
+
+    def test_candidate_lifecycle_uses_current_model_names(self) -> None:
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for root in (
+                PROJECT_ROOT / "x5crop" / "detection",
+                PROJECT_ROOT / "x5crop" / "policies" / "parameters",
+            )
+            for path in root.rglob("*.py")
+        )
+
+        for old_name in (
+            "fallback_count",
+            "grid_fallback_cap",
+            "content_grid_fallback",
+            "geometry_fallback",
+        ):
+            self.assertNotIn(old_name, source)
+
+    def test_contract_modules_use_owned_domains_not_residual_buckets(self) -> None:
+        tests_root = PROJECT_ROOT / "tools" / "tests"
+
+        self.assertFalse((tests_root / "test_architecture_residual_contract.py").exists())
+        self.assertTrue((tests_root / "test_architecture_ownership_contract.py").is_file())
+
+    def test_gap_taxonomy_has_one_hard_evidence_identity(self) -> None:
+        from x5crop.constants import HARD_GAP_METHODS, MODEL_GAP_METHODS
+
+        source = (PROJECT_ROOT / "x5crop" / "gap_methods.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("DIRECT_HARD_GAP_METHODS", source)
+        self.assertNotIn("is_direct_hard_gap_method", source)
+        self.assertIsInstance(HARD_GAP_METHODS, frozenset)
+        self.assertIsInstance(MODEL_GAP_METHODS, frozenset)
+
+    def test_content_candidate_source_has_one_canonical_identity(self) -> None:
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (PROJECT_ROOT / "x5crop").rglob("*.py")
+        )
+
+        self.assertNotIn("CANDIDATE_SOURCE_CONTENT_PRIMARY", source)
+        self.assertNotIn("_CONTENT_EVIDENCE_CANDIDATE_SOURCES", source)
+        self.assertNotIn('"content_primary"', source)
+
     def test_contract_tests_reference_only_current_paths(self) -> None:
         contract_source = (
-            PROJECT_ROOT / "tools" / "tests" / "test_architecture_residual_contract.py"
+            PROJECT_ROOT / "tools" / "tests" / "test_architecture_ownership_contract.py"
         ).read_text(encoding="utf-8")
 
         self.assertNotIn('"policies" / "formats"', contract_source)
@@ -21,6 +74,12 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
 
         self.assertNotIn("contract applier", architecture.lower())
+
+    def test_architecture_describes_parameter_profile_ownership_not_removed_format_field(self) -> None:
+        architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
+
+        self.assertNotIn("frame_geometry_profile", architecture)
+        self.assertIn("parameter profile", architecture.lower())
         self.assertNotIn("reuse compatible analysis", architecture.lower())
         self.assertNotIn("legacy processresult", architecture.lower())
         self.assertNotIn("physical lengths resolve", architecture.lower())
@@ -104,12 +163,12 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
 
     def test_format_identity_has_one_canonical_name(self) -> None:
         from x5crop.domain import DetectionCandidate, ProcessResult
-        from x5crop.entry.options import CliOptions
+        from x5crop.runtime.options import RuntimeOptions
         from x5crop.formats import FormatPhysicalSpec
         from x5crop.policies.decision.contract import DetectionDecisionContract
         from x5crop.run_config import RunConfig
 
-        for contract in (DetectionCandidate, CliOptions, RunConfig):
+        for contract in (DetectionCandidate, RuntimeOptions, RunConfig):
             self.assertIn("format_id", contract.__dataclass_fields__)
         self.assertEqual(set(ProcessResult.__dataclass_fields__), {"record"})
         self.assertNotIn("name", FormatPhysicalSpec.__dataclass_fields__)

@@ -4,21 +4,12 @@ from typing import Any
 
 from ...constants import (
     CANDIDATE_SOURCE_CONTENT,
-    CANDIDATE_SOURCE_CONTENT_PRIMARY,
     CANDIDATE_SOURCE_HARD_SAFETY,
     CANDIDATE_SOURCE_REVIEW_ONLY,
 )
 from ...domain import DetectionCandidate, OutputProtectionPlan
 from ...policies.decision.contract import DetectionDecisionContract
 
-
-_CONTENT_EVIDENCE_CANDIDATE_SOURCES = frozenset(
-    {
-        CANDIDATE_SOURCE_CONTENT,
-        CANDIDATE_SOURCE_CONTENT_PRIMARY,
-        "content",
-    }
-)
 
 _NON_AUTO_CANDIDATE_SOURCES = frozenset(
     {
@@ -50,8 +41,7 @@ def decision_signals_for(
     exposure_overlap = _dict(detection.detail.get("exposure_overlap_evidence"))
     assessment_source = str(assessment.get("source") or "")
     candidate_source = str(detection.detail.get("candidate_source") or "")
-    source = assessment_source or candidate_source
-    content_only_evidence = source in _CONTENT_EVIDENCE_CANDIDATE_SOURCES
+    content_only_evidence = candidate_source == CANDIDATE_SOURCE_CONTENT
     safety_or_review_only = candidate_source in _NON_AUTO_CANDIDATE_SOURCES
     margin_raw = competition.get("margin_to_second")
     margin = None if margin_raw is None else _float(margin_raw)
@@ -82,7 +72,6 @@ def decision_signals_for(
         active_signals.append("exposure_overlap_unresolved")
     partial_edge_uncertain = bool(
         detection.strip_mode == "partial"
-        and policy.evidence.partial_requires_safe_edge
         and not partial_edge_safe
     )
     if partial_edge_uncertain:
@@ -92,7 +81,9 @@ def decision_signals_for(
         "candidate_source_detail": {
             "assessment_source": assessment_source,
             "candidate_source": candidate_source,
-            "content_only_evidence_source": source if content_only_evidence else "",
+            "content_only_evidence_source": (
+                candidate_source if content_only_evidence else ""
+            ),
             "safety_or_review_only_source": (
                 candidate_source if candidate_source in _NON_AUTO_CANDIDATE_SOURCES else ""
             ),

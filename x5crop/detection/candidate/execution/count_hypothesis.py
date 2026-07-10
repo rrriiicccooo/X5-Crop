@@ -7,7 +7,8 @@ from ....domain import DetectionCandidate
 from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....run_config import RunConfig
-from ...guidance.content_model import content_detection_for_count
+from ...guidance.content_model import content_candidate_proposal_for_count
+from ..build.content import build_content_candidate
 from ..assessment.count_hypothesis import CountHypothesisEvaluation
 from ..assessment.source_batch import assess_source_candidates
 from .source_candidates import (
@@ -184,9 +185,9 @@ def _assessed_candidates_for_offset(
         and partial_edge_safety_candidate
     ):
         return candidates, stop_after_this_count
-    content = content_detection_for_count(
+    content_proposal = content_candidate_proposal_for_count(
         gray,
-        config,
+        config.layout,
         fmt,
         count,
         strip_mode,
@@ -194,7 +195,16 @@ def _assessed_candidates_for_offset(
         cache=cache,
         content_policy=policy.content,
     )
-    if content is not None:
+    if content_proposal is not None:
+        content = build_content_candidate(
+            content_proposal,
+            gray,
+            config,
+            fmt,
+            count,
+            strip_mode,
+            offset,
+        )
         candidates.extend(
             assess_source_candidates(
                 gray,

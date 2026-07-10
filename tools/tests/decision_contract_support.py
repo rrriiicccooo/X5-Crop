@@ -189,7 +189,7 @@ def apply_test_detection_decision(
     protection_plan = output_protection_plan(
         candidate.detail["exposure_overlap_evidence"],
         AxisBleedParameters(config.bleed_x, config.bleed_y),
-        policy.output,
+        policy.output.exposure_overlap_protection,
     )
     return apply_decision_gate(
         gray,

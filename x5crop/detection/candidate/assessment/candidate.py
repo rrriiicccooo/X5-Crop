@@ -111,9 +111,9 @@ def apply_candidate_assessment_policy(
             candidate,
             merged_candidate_signals(candidate, proposal_assessment.diagnostics),
         )
-        content_primary = candidate.detail.get("content_primary")
-        if isinstance(content_primary, dict):
-            content_primary["candidate_assessment"] = proposal_assessment.detail
+        content_proposal = candidate.detail.get("content_proposal")
+        if isinstance(content_proposal, dict):
+            content_proposal["candidate_assessment"] = proposal_assessment.detail
         proposal_caps = proposal_assessment.detail.get("confidence_caps", [])
         if isinstance(proposal_caps, list):
             candidate.detail["candidate_confidence_caps"] = [

@@ -35,7 +35,6 @@ def _physical_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "frame_size_mm_options": _plain(spec.frame_size_mm_options),
         "frame_aspect": spec.horizontal_content_aspect,
         "aspect_source": "frame_size_mm",
-        "frame_geometry_profile": spec.frame_geometry_profile,
         "complete_strip_can_be_underfilled": bool(spec.complete_strip_can_be_underfilled),
     }
 

@@ -45,6 +45,9 @@ def _report_record(
         output_files=[],
         review_copy=None,
         warnings=[],
+        policy_id="test_policy",
+        runtime_policy={"test": True},
+        decision_policy={"test": True},
         deskew_detail={"applied": False},
         analysis_cache_metadata=analysis_cache_metadata or {},
     )
@@ -338,6 +341,9 @@ class OutputReadModelContractTest(unittest.TestCase):
             [],
             None,
             [],
+            policy_id="test_policy",
+            runtime_policy_detail={"test": True},
+            decision_policy_detail={"test": True},
             deskew_detail={"applied": False},
             analysis_cache_metadata={},
         )
@@ -374,6 +380,9 @@ class OutputReadModelContractTest(unittest.TestCase):
             [],
             None,
             [],
+            policy_id="test_policy",
+            runtime_policy_detail={"test": True},
+            decision_policy_detail={"test": True},
             deskew_detail={"applied": False},
             analysis_cache_metadata={
                 "script": "X5_Crop.py",
@@ -448,8 +457,8 @@ class OutputReadModelContractTest(unittest.TestCase):
         source = (
             PROJECT_ROOT / "x5crop" / "detection" / "detail.py"
         ).read_text(encoding="utf-8")
-        function = source[source.index("def policy_id_from_detail"):]
-        self.assertNotIn("runtime_policy_detail", function)
+        self.assertNotIn("def policy_id_from_detail", source)
+        self.assertNotIn("runtime_policy_detail", source)
 
     def test_result_builder_does_not_wrap_policy_identity_accessor(self) -> None:
         source = (

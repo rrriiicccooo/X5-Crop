@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..parameters.aggregate import FormatParameters
-from ..runtime.base import PARTIAL
+from ...strip_modes import PARTIAL
 from ..runtime.candidate import (
     PartialHolderPolicy,
 )

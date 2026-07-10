@@ -152,14 +152,14 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             _output_protection_plan(),
         )
 
-        self.assertTrue(content_signals["content_only_evidence"])
+        self.assertFalse(content_signals["content_only_evidence"])
         self.assertFalse(content_signals["safety_or_review_only"])
         self.assertEqual(
             content_signals["candidate_source_detail"],
             {
                 "assessment_source": CANDIDATE_SOURCE_CONTENT,
                 "candidate_source": CANDIDATE_SOURCE_SEPARATOR,
-                "content_only_evidence_source": CANDIDATE_SOURCE_CONTENT,
+                "content_only_evidence_source": "",
                 "safety_or_review_only_source": "",
             },
         )
@@ -198,6 +198,17 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         self.assertEqual(
             hard_safety_signals["candidate_source_detail"]["safety_or_review_only_source"],
             CANDIDATE_SOURCE_HARD_SAFETY,
+        )
+
+    def test_decision_package_marker_does_not_reexport_runtime_helpers(self) -> None:
+        import ast
+
+        project_root = Path(__file__).resolve().parents[2]
+        path = project_root / "x5crop" / "detection" / "decision" / "__init__.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+
+        self.assertFalse(
+            any(isinstance(node, ast.ImportFrom) for node in ast.walk(tree))
         )
 
     def test_review_only_mode_diagnostics_wait_for_final_decision(self) -> None:

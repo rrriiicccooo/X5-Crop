@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from ...geometry.detection_parameters import (
     EdgePairParameters,
     EdgeRefineProfileParameters,
+    FrameFitParameters,
     GapSearchParameters,
     HardGapTrustParameters,
     NearbySeparatorRefinementParameters,
@@ -14,11 +15,7 @@ from ...geometry.detection_parameters import (
 )
 from ...image.deskew_parameters import DeskewParameters
 from .base import PartialCountParameters, PartialEdgeHintParameters
-from .candidate import (
-    CandidatePlanParameters,
-    FrameFitParameters,
-    PartialHolderParameters,
-)
+from .candidate import CandidatePlanParameters, PartialHolderParameters
 from .content import (
     ContentCandidateParameters,
     ContentEvidenceParameters,
@@ -134,7 +131,6 @@ class DecisionParameters:
             min_hard_separator_ratio=0.35,
             max_photo_width_cv_ratio=0.045,
             max_outer_area_ratio=0.990,
-            partial_requires_safe_edge=True,
         )
     )
 

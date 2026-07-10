@@ -38,7 +38,7 @@ class ContentContainmentTest(unittest.TestCase):
         self.assertEqual(containment["internal_empty_count"], 0)
         holder_texture = containment["holder_texture_evidence"]
         self.assertTrue(holder_texture["used"])
-        self.assertEqual(holder_texture["gate_role"], "guidance_not_candidate_pass")
+        self.assertEqual(holder_texture["evidence_role"], "holder_texture_guidance")
         self.assertTrue(holder_texture["holder_texture_low"])
         self.assertEqual(holder_texture["holder_frame_indexes"], [1, 4])
 

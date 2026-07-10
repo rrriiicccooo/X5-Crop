@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
-
 from ...formats import FormatPhysicalSpec
 from ...image.evidence import (
     ContentEvidenceImageParameters,
@@ -10,11 +8,10 @@ from ...image.evidence import (
 )
 from ...image.gray import BaseGrayParameters
 from ..parameters.aggregate import FormatParameters
-from ..runtime.base import FULL, PARTIAL
+from ...strip_modes import FULL, PARTIAL
 from .candidate import partial_holder_policy
 from .outer import outer_policy
 from .separator import separator_policy
-from ..identity import detection_policy_id_for
 from ..runtime.candidate import ScoringPolicy
 from ..runtime.content import ContentPolicy
 from ..runtime.diagnostics import RuntimeDiagnosticsPolicy
@@ -50,14 +47,7 @@ def build_detection_policy(
         if strip_mode == "partial"
         else params.decision.full_evidence
     )
-    decision_evidence = replace(
-        decision_evidence,
-        allow_geometry_supported_separator=bool(
-            separator.geometry_support.active_modes()
-        ),
-    )
     return DetectionPolicy(
-        policy_id=detection_policy_id_for(spec.format_id, strip_mode),
         physical_spec=spec,
         strip_mode=strip_mode,
         preprocess=preprocess,

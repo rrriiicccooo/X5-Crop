@@ -15,6 +15,15 @@ from x5crop.policies.runtime.bundle import DetectionPolicyBundle
 
 
 class FormatPhysicalSpecTests(unittest.TestCase):
+    def test_expected_separator_count_is_derived_not_stored(self) -> None:
+        from x5crop.formats import FormatPhysicalSpec
+
+        self.assertNotIn(
+            "expected_separator_count",
+            FormatPhysicalSpec.__dataclass_fields__,
+        )
+        self.assertIsInstance(FormatPhysicalSpec.expected_separator_count, property)
+
     def test_policy_report_uses_physical_expected_separator_count_for_every_format_mode(self) -> None:
         for format_id, spec in FORMATS.items():
             for strip_mode in ("full", "partial"):

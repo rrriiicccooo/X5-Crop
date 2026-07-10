@@ -76,7 +76,6 @@ def holder_texture_evidence_detail(
         "used": True,
         "evidence_role": "holder_texture_guidance",
         "physical_rule": "holder_area_is_low_texture_low_content",
-        "gate_role": "guidance_not_candidate_pass",
         "holder_texture_low": bool(holder_texture_low),
         "holder_frame_indexes": list(empty_indexes),
         "content_frame_indexes": list(content_indexes),

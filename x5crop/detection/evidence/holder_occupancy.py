@@ -146,7 +146,6 @@ def holder_occupancy_evidence(
         "leading_holder_slack_mm": leading_slack_mm,
         "trailing_holder_slack_mm": trailing_slack_mm,
         "holder_fill_ratio": holder_fill_ratio,
-        "holder_fill_ratio_role": "occupancy_detail_not_candidate_gate_blocker",
         "occupancy_status": occupancy_status,
         "complete_underfilled_strip": complete_underfilled,
         "content_contained": content_contained,
@@ -158,7 +157,6 @@ def holder_occupancy_evidence(
             else {"left": film_left, "right": film_right}
         ),
         "scan_calibration_used": bool(calibration is not None and calibration.trusted),
-        "role": "holder_occupancy_evidence_not_pass_review_gate",
     }
 
 

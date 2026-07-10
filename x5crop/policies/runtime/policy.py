@@ -3,8 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...formats import FormatPhysicalSpec
+from ...geometry.detection_parameters import FrameFitParameters
+from ..identity import detection_policy_id_for
 from ..parameters.base import PartialEdgeHintParameters
-from ..parameters.candidate import CandidatePlanParameters, FrameFitParameters
+from ..parameters.candidate import CandidatePlanParameters
 from ..parameters.decision import DecisionEvidenceParameters, DecisionReviewParameters
 from ..parameters.exposure_overlap import ExposureOverlapEvidenceParameters
 from ..parameters.finalization import ApprovedGeometryAdjustmentParameters
@@ -23,7 +25,6 @@ from .separator import SeparatorPolicy
 
 @dataclass(frozen=True)
 class DetectionPolicy:
-    policy_id: str
     physical_spec: FormatPhysicalSpec
     strip_mode: str
     preprocess: RuntimePreprocessPolicy
@@ -44,3 +45,10 @@ class DetectionPolicy:
     approved_geometry_adjustment: ApprovedGeometryAdjustmentParameters
     output: OutputPolicy
     diagnostics: RuntimeDiagnosticsPolicy
+
+    @property
+    def policy_id(self) -> str:
+        return detection_policy_id_for(
+            self.physical_spec.format_id,
+            self.strip_mode,
+        )

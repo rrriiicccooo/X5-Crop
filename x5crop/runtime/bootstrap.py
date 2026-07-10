@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional, Protocol
-
 from ..geometry.layout import infer_layout
 from ..output.protection import DEFAULT_OUTPUT_BLEED
 from ..policies.runtime.bundle import DetectionPolicyBundle
@@ -11,40 +8,10 @@ from .app import print_run_header, run_runtime
 from .input_probe import first_tiff_shape, iter_input_files
 from .invocation import RuntimeInvocation
 from .limits import DIAGNOSTICS_JOB_LIMIT, STANDARD_JOB_LIMIT
+from .options import RuntimeOptions
 
 
-class RuntimeOptionValues(Protocol):
-    input_path: Path
-    output_dir: Optional[Path]
-    format_id: str
-    layout: str
-    strip_mode: str
-    requested_count: Optional[int]
-    page: int
-    bleed: Optional[int]
-    bleed_x: Optional[int]
-    bleed_y: Optional[int]
-    deskew: str
-    deskew_fallback: str
-    deskew_min_angle: float
-    deskew_max_angle: float
-    confidence_threshold: float
-    review_dir: Optional[Path]
-    copy_review_files: bool
-    export_review: bool
-    compression: str
-    debug: bool
-    debug_analysis: bool
-    dry_run: bool
-    diagnostics: bool
-    overwrite: bool
-    report: bool
-    debug_errors: bool
-    reuse_analysis: bool
-    jobs: int
-
-
-def runtime_invocation_from_options(options: RuntimeOptionValues) -> RuntimeInvocation:
+def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocation:
     files = iter_input_files(options.input_path)
     first_file = next(iter(files), None)
     if first_file is None:
@@ -113,7 +80,7 @@ def runtime_invocation_from_options(options: RuntimeOptionValues) -> RuntimeInvo
     )
 
 
-def run_options(options: RuntimeOptionValues) -> int:
+def run_options(options: RuntimeOptions) -> int:
     invocation = runtime_invocation_from_options(options)
     print_run_header(invocation)
     return run_runtime(invocation)

@@ -382,7 +382,6 @@ def apply_decision_gate(
     }
     working.detail["evidence_summary"] = evidence
     working.detail["decision_signals"] = decision_signals
-    working.detail["policy_id"] = policy.policy_id
     return FinalDetection.from_candidate(
         working,
         status=status,

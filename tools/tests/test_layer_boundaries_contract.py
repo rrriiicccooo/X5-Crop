@@ -513,6 +513,51 @@ class LayerBoundariesContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
+    def test_decision_evidence_uses_thresholds_not_capability_switches(self) -> None:
+        from x5crop.policies.parameters.decision import DecisionEvidenceParameters
+
+        for field_name in (
+            "allow_geometry_supported_separator",
+            "partial_requires_safe_edge",
+        ):
+            self.assertNotIn(
+                field_name,
+                DecisionEvidenceParameters.__dataclass_fields__,
+            )
+
+    def test_foundation_parameter_models_have_no_protocol_mirrors(self) -> None:
+        frame_fit = (
+            PROJECT_ROOT / "x5crop" / "geometry" / "frame_fit.py"
+        ).read_text(encoding="utf-8")
+        nearby = (
+            PROJECT_ROOT / "x5crop" / "geometry" / "nearby_separator.py"
+        ).read_text(encoding="utf-8")
+        parameters = (
+            PROJECT_ROOT / "x5crop" / "geometry" / "detection_parameters.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("Protocol", frame_fit)
+        self.assertNotIn("Protocol", nearby)
+        self.assertIn("class FrameFitParameters", parameters)
+
+    def test_format_module_owns_only_format_vocabulary(self) -> None:
+        formats = (
+            PROJECT_ROOT / "x5crop" / "formats" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        runtime_base = PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "base.py"
+        strip_modes = PROJECT_ROOT / "x5crop" / "strip_modes.py"
+
+        for name in (
+            "LAYOUT_CHOICES",
+            "STRIP_CHOICES",
+            "DESKEW_CHOICES",
+            "DESKEW_FALLBACK_CHOICES",
+            "COMPRESSION_CHOICES",
+        ):
+            self.assertNotIn(name, formats)
+        self.assertFalse(runtime_base.exists())
+        self.assertTrue(strip_modes.is_file())
+
     def test_finalization_policy_does_not_own_decision_caps_or_reasons(self) -> None:
         from x5crop.policies.runtime.policy import DetectionPolicy
 
@@ -551,14 +596,16 @@ class LayerBoundariesContractTest(unittest.TestCase):
             FloatingContentPositionParameters,
             FullWidthSeparatorOuterParameters,
         )
-        from x5crop.geometry.detection_parameters import NearbySeparatorRefinementParameters
+        from x5crop.geometry.detection_parameters import (
+            FrameFitParameters,
+            NearbySeparatorRefinementParameters,
+        )
         from x5crop.image.gray import BaseGrayParameters
         from x5crop.policies.parameters.candidate import (
             CandidateExecutionBudgetParameters,
             CandidatePlanParameters,
             ContentGuidedSeparatorCandidateParameters,
             EvidenceIndependenceParameters,
-            FrameFitParameters,
             SeparatorFullWidthCompetitionParameters,
         )
         from x5crop.policies.runtime.content import ContentPolicy
@@ -597,7 +644,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
             SeparatorGeometrySupportModePolicy: "allow_grid",
             SeparatorGeometrySupportModePolicy: "enabled",
             NearbySeparatorRefinementParameters: "enabled",
-            FrameFitParameters: "geometry_fallback",
             BaseGrayParameters: "miniswhite_inverts",
             PartialPlacementGeometryPolicy: "skip_floating_when_edge_trusted",
         }
@@ -707,59 +753,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
         }
 
         self.assertTrue(banned.isdisjoint(DetectionDecisionContract.__dataclass_fields__))
-
-    def test_guidance_layer_does_not_own_final_candidate_scoring(self) -> None:
-        banned = (
-            "content_candidate_confidence_and_reasons",
-            "final_review_reasons",
-            "decision_contract",
-            "policy_allows_auto",
-        )
-        offenders: list[str] = []
-        source_root = PROJECT_ROOT / "x5crop" / "detection" / "guidance"
-        self.assertTrue(source_root.is_dir())
-        for path in source_root.rglob("*.py"):
-            text = path.read_text(encoding="utf-8")
-            for term in banned:
-                if term in text:
-                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
-
-        self.assertEqual(offenders, [])
-
-    def test_evidence_layer_does_not_name_evidence_as_final_decision_input(self) -> None:
-        banned = (
-            "used_for_decision",
-        )
-        offenders: list[str] = []
-        source_root = PROJECT_ROOT / "x5crop" / "detection" / "evidence"
-        self.assertTrue(source_root.is_dir())
-        for path in source_root.rglob("*.py"):
-            text = path.read_text(encoding="utf-8")
-            for term in banned:
-                if term in text:
-                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
-
-        self.assertEqual(offenders, [])
-
-    def test_read_only_diagnostics_use_effects_detail(self) -> None:
-        path = PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "read_only.py"
-        text = path.read_text(encoding="utf-8")
-
-        self.assertIn('"effects"', text)
-        self.assertIn('"output": False', text)
-        self.assertIn('"confidence": False', text)
-        self.assertIn('"decision": False', text)
-        self.assertIn("exposure_overlap_counts", text)
-        self.assertNotIn("changes_output", text)
-        self.assertNotIn("changes_confidence", text)
-        self.assertNotIn("changes_final_decision", text)
-
-    def test_decision_package_marker_does_not_reexport_runtime_helpers(self) -> None:
-        path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "__init__.py"
-        tree = ast.parse(path.read_text(encoding="utf-8"))
-        import_from_nodes = [node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
-
-        self.assertEqual(import_from_nodes, [])
 
 if __name__ == "__main__":
     unittest.main()

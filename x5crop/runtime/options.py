@@ -4,11 +4,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+
 DEFAULT_DESKEW_MIN_ANGLE_DEGREES = 0.03
 DEFAULT_DESKEW_MAX_ANGLE_DEGREES = 2.0
 DEFAULT_CONFIDENCE_THRESHOLD = 0.85
+LAYOUT_CHOICES = ("auto", "horizontal", "vertical")
+DESKEW_CHOICES = ("off", "auto")
+DESKEW_FALLBACK_CHOICES = ("off", "auto", "always")
+COMPRESSION_CHOICES = ("none", "same")
+
+
 @dataclass(frozen=True)
-class CliOptions:
+class RuntimeOptions:
     input_path: Path
     output_dir: Optional[Path]
     format_id: str

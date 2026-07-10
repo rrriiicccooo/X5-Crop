@@ -17,6 +17,9 @@ def result_from_detection(
     review_copy: Optional[str],
     warnings: list[str],
     *,
+    policy_id: str,
+    runtime_policy_detail: dict[str, Any],
+    decision_policy_detail: dict[str, Any],
     deskew_detail: dict[str, Any],
     analysis_cache_metadata: dict[str, Any],
 ) -> ProcessResult:
@@ -27,6 +30,9 @@ def result_from_detection(
         output_files=output_files,
         review_copy=review_copy,
         warnings=warnings,
+        policy_id=policy_id,
+        runtime_policy=runtime_policy_detail,
+        decision_policy=decision_policy_detail,
         deskew_detail=deskew_detail,
         analysis_cache_metadata=analysis_cache_metadata,
     )

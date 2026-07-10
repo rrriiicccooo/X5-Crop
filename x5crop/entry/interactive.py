@@ -6,11 +6,11 @@ from ..app_info import SCRIPT_NAME, VERSION
 from ..formats import FORMATS
 from ..runtime.bootstrap import run_options
 from ..runtime.limits import DIAGNOSTICS_JOB_LIMIT, STANDARD_JOB_LIMIT
-from .options import (
+from ..runtime.options import (
     DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
     DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
-    CliOptions,
+    RuntimeOptions,
 )
 
 
@@ -90,7 +90,7 @@ def ask_partial_count(format_id: str) -> int | None:
         print(f"use auto or one of: {allowed_text}")
 
 
-def interactive_options(diagnostics: bool = False) -> CliOptions:
+def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
     print(f"{SCRIPT_NAME} {VERSION} {'diagnostics ' if diagnostics else ''}launcher")
     print(f"Folder: {Path.cwd()}")
     print()
@@ -124,7 +124,7 @@ def interactive_options(diagnostics: bool = False) -> CliOptions:
         print(f"count: {'auto' if requested_count is None else requested_count}")
     print()
 
-    return CliOptions(
+    return RuntimeOptions(
         input_path=Path(".").resolve(),
         output_dir=None,
         format_id=format_id,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 import unittest
 
@@ -20,6 +21,20 @@ from x5crop.policies.runtime.separator import SeparatorGeometrySupportModePolicy
 
 
 class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
+    def test_evidence_strings_do_not_claim_gate_or_review_authority(self) -> None:
+        offenders: list[str] = []
+        evidence_root = PROJECT_ROOT / "x5crop" / "detection" / "evidence"
+        for path in evidence_root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                    continue
+                value = node.value.lower()
+                if any(term in value for term in ("gate", "blocker", "review", "pass")):
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {node.value}")
+
+        self.assertEqual(offenders, [])
+
     def test_photo_size_evidence_does_not_own_candidate_ranking(self) -> None:
         from x5crop.policies.parameters.outer import SeparatorOuterBandParameters
 
@@ -47,11 +62,53 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
         policy_factory = (
             PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "factory.py"
         ).read_text(encoding="utf-8")
-        runtime_base = (
-            PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "base.py"
-        ).read_text(encoding="utf-8")
+        runtime_policy_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (PROJECT_ROOT / "x5crop" / "policies" / "runtime").rglob("*.py")
+        )
         self.assertNotIn("dual_lane_partial_not_supported", policy_factory)
-        self.assertNotIn("class ReviewOnlyPolicy", runtime_base)
+        self.assertNotIn("class ReviewOnlyPolicy", runtime_policy_source)
+
+    def test_guidance_layer_does_not_own_final_candidate_scoring(self) -> None:
+        banned = (
+            "content_candidate_confidence_and_reasons",
+            "final_review_reasons",
+            "decision_contract",
+            "policy_allows_auto",
+        )
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "guidance"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
+    def test_evidence_layer_does_not_name_evidence_as_final_decision_input(self) -> None:
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "detection" / "evidence"
+        self.assertTrue(source_root.is_dir())
+        for path in source_root.rglob("*.py"):
+            if "used_for_decision" in path.read_text(encoding="utf-8"):
+                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+
+        self.assertEqual(offenders, [])
+
+    def test_read_only_diagnostics_use_effects_detail(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "read_only.py"
+        text = path.read_text(encoding="utf-8")
+
+        self.assertIn('"effects"', text)
+        self.assertIn('"output": False', text)
+        self.assertIn('"confidence": False', text)
+        self.assertIn('"decision": False', text)
+        self.assertIn("exposure_overlap_counts", text)
+        self.assertNotIn("changes_output", text)
+        self.assertNotIn("changes_confidence", text)
+        self.assertNotIn("changes_final_decision", text)
 
     def test_nearby_separator_diagnostics_separate_search_from_comparison_parameters(self) -> None:
         from inspect import signature

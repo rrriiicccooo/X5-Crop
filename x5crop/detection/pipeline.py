@@ -81,7 +81,7 @@ def choose_detection(
             gray,
             config,
             fmt,
-            count_plan.fallback_count,
+            count_plan.safety_count,
             policy.frame_fit,
         )
         candidate.detail["count_selection"] = count_selection_detail(

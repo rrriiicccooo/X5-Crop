@@ -363,7 +363,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
             gaps=[],
             confidence=0.0,
             detail={
-                "content_primary": {
+                "content_proposal": {
                     "placement": "content_runs",
                     "usable_run_count": 3,
                     "selected_run_count": 3,

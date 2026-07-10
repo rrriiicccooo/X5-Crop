@@ -49,7 +49,7 @@ class ContentCandidateParameters:
     aspect_norm: float = 0.18
     weak_coverage: float = 0.14
     aspect_uncertain: float = 0.18
-    grid_fallback_cap: float = 0.82
+    grid_placement_cap: float = 0.82
     run_mismatch_cap: float = 0.84
     runs_incomplete_cap: float = 0.84
     weak_coverage_cap: float = 0.82

@@ -116,6 +116,74 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertNotIn("RunConfig(", entry_source)
         self.assertFalse((entry_root / "invocation.py").exists())
 
+    def test_runtime_options_have_one_canonical_model(self) -> None:
+        entry_options = PROJECT_ROOT / "x5crop" / "entry" / "options.py"
+        runtime_options = PROJECT_ROOT / "x5crop" / "runtime" / "options.py"
+        bootstrap = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "bootstrap.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertFalse(entry_options.exists())
+        self.assertTrue(runtime_options.is_file())
+        runtime_source = runtime_options.read_text(encoding="utf-8")
+        self.assertIn("class RuntimeOptions", runtime_source)
+        self.assertNotIn("Protocol", bootstrap)
+        self.assertNotIn("RuntimeOptionValues", bootstrap)
+
+    def test_physical_spec_does_not_own_parameter_profile_identity(self) -> None:
+        from x5crop.formats import FormatPhysicalSpec
+        from x5crop.policies.parameters.registry import parameter_profile_for_spec
+
+        self.assertFalse(hasattr(FormatPhysicalSpec, "frame_geometry_profile"))
+        self.assertEqual(parameter_profile_for_spec.__module__, "x5crop.policies.parameters.registry")
+
+    def test_report_policy_read_models_do_not_live_in_detection_detail(self) -> None:
+        workflow = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "workflow.py"
+        ).read_text(encoding="utf-8")
+        detail = (
+            PROJECT_ROOT / "x5crop" / "detection" / "detail.py"
+        ).read_text(encoding="utf-8")
+
+        for field_name in (
+            "RUNTIME_POLICY_DETAIL",
+            "DECISION_POLICY_DETAIL",
+            "POLICY_ID",
+        ):
+            self.assertNotIn(field_name, workflow)
+            self.assertNotIn(field_name, detail)
+
+    def test_output_protection_consumes_the_canonical_parameter_type(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop" / "output" / "protection.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("PolicyLike", source)
+        self.assertIn("ExposureOverlapProtectionParameters", source)
+
+    def test_debug_receives_only_the_subpolicies_it_uses(self) -> None:
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (PROJECT_ROOT / "x5crop" / "debug").glob("*.py")
+        )
+
+        self.assertNotIn("DetectionPolicy", source)
+
+    def test_output_geometry_does_not_depend_on_runtime_config(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop" / "output" / "geometry_adjustment.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("RunConfig", source)
+        self.assertIn("AxisBleedParameters", source)
+
+    def test_finalization_receives_only_its_explicit_subpolicies(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop" / "detection" / "final" / "finalize.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("DetectionPolicy", source)
+
     def test_policy_assembly_has_no_pass_through_preset_models(self) -> None:
         assembly = PROJECT_ROOT / "x5crop" / "policies" / "assembly"
         self.assertFalse((assembly / "presets.py").exists())
@@ -171,6 +239,9 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertFalse(evidence_policy.exists())
 
     def test_crop_decision_output_tuning_is_format_parameter_owned(self) -> None:
+        geometry_parameters = (
+            PROJECT_ROOT / "x5crop" / "geometry" / "detection_parameters.py"
+        ).read_text(encoding="utf-8")
         candidate_parameters = (
             PROJECT_ROOT / "x5crop" / "policies" / "parameters" / "candidate.py"
         ).read_text(encoding="utf-8")
@@ -182,7 +253,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         profile_presets = PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "profile_presets.py"
 
-        self.assertIn("class FrameFitParameters", candidate_parameters)
+        self.assertIn("class FrameFitParameters", geometry_parameters)
         self.assertIn("class CandidatePlanParameters", candidate_parameters)
         self.assertNotIn("sequence_score_weight", runtime_separator)
         self.assertIn("separator_width_profile_search", aggregate_parameters)

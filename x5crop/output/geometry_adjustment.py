@@ -2,18 +2,17 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..domain import Box, FinalDetection
+from ..domain import AxisBleedParameters, Box, FinalDetection
 from ..geometry.boxes import map_work_box, original_box_to_work
 from ..geometry.layout import work_gray
 from ..policies.parameters.finalization import ApprovedGeometryAdjustmentParameters
 from ..policies.parameters.exposure_overlap import EdgeBleedProtectionParameters
-from ..run_config import RunConfig
 from ..utils import clamp_float, clamp_int
 
 
 def apply_edge_bleed_protection(
     detection: FinalDetection,
-    config: RunConfig,
+    output_bleed: AxisBleedParameters,
     image_w: int,
     image_h: int,
     policy: EdgeBleedProtectionParameters,
@@ -34,12 +33,12 @@ def apply_edge_bleed_protection(
     )
     changed = False
 
-    first_target = max(0, outer_work.left - int(config.bleed_x))
+    first_target = max(0, outer_work.left - int(output_bleed.long_axis))
     if frames_work[0].left > first_target + edge_guard:
         frames_work[0] = Box(first_target, frames_work[0].top, frames_work[0].right, frames_work[0].bottom)
         changed = True
 
-    last_target = min(work_w, outer_work.right + int(config.bleed_x))
+    last_target = min(work_w, outer_work.right + int(output_bleed.long_axis))
     if frames_work[-1].right < last_target - edge_guard:
         frames_work[-1] = Box(frames_work[-1].left, frames_work[-1].top, last_target, frames_work[-1].bottom)
         changed = True

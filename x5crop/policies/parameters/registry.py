@@ -3,14 +3,32 @@ from __future__ import annotations
 from dataclasses import replace
 
 from ...formats import FormatPhysicalSpec
-from ...geometry.detection_parameters import EdgePairParameters
+from ...geometry.detection_parameters import EdgePairParameters, FrameFitParameters
 from .aggregate import FormatParameters
-from .candidate import FrameFitParameters
 from .decision import DecisionEvidenceParameters
 
 
+def parameter_profile_for_spec(spec: FormatPhysicalSpec) -> str:
+    if spec.physical_layout == "dual_lane":
+        return "dual_lane"
+    aspect = spec.horizontal_content_aspect
+    if spec.family == "35mm":
+        if spec.default_count > 6 and aspect < 1.0:
+            return "dense_half"
+        if aspect > 2.0:
+            return "panoramic_35mm"
+        return "standard_35mm"
+    if spec.family == "120":
+        if abs(aspect - 1.0) <= 0.05:
+            return "medium_square"
+        if aspect < 1.0:
+            return "medium_rectangle"
+        return "medium_wide"
+    raise ValueError(f"Unsupported physical format family: {spec.family}")
+
+
 def _edge_pair_parameters(spec: FormatPhysicalSpec) -> EdgePairParameters:
-    profile = spec.frame_geometry_profile
+    profile = parameter_profile_for_spec(spec)
     if profile in {"medium_square", "medium_wide"}:
         return EdgePairParameters(
             window_ratio=0.100,
@@ -84,7 +102,7 @@ def _edge_pair_parameters(spec: FormatPhysicalSpec) -> EdgePairParameters:
 
 
 def _frame_fit_parameters(spec: FormatPhysicalSpec) -> FrameFitParameters:
-    profile = spec.frame_geometry_profile
+    profile = parameter_profile_for_spec(spec)
     profiles = {
         "standard_35mm": FrameFitParameters(
             name="standard_strip_frame_fit",
@@ -156,7 +174,7 @@ def _with_profile_parameters(
             params.candidate,
             full_frame_fit=_frame_fit_parameters(spec),
             partial_frame_fit=FrameFitParameters(
-                name=f"{spec.frame_geometry_profile}_partial_frame_fit",
+                name=f"{parameter_profile_for_spec(spec)}_partial_frame_fit",
                 edge_evidence=False,
             ),
         ),
@@ -165,7 +183,7 @@ def _with_profile_parameters(
 
 def _decision_evidence_parameters(spec: FormatPhysicalSpec) -> DecisionEvidenceParameters:
     evidence = DecisionEvidenceParameters()
-    profile = spec.frame_geometry_profile
+    profile = parameter_profile_for_spec(spec)
     if spec.physical_layout == "dual_lane":
         return replace(
             evidence,
@@ -233,7 +251,6 @@ def _with_decision_evidence(
         min_hard_separator_ratio=min(full.min_hard_separator_ratio, 0.35),
         max_photo_width_cv_ratio=max(full.max_photo_width_cv_ratio, 0.045),
         max_outer_area_ratio=max(full.max_outer_area_ratio, 0.990),
-        partial_requires_safe_edge=True,
     )
     return replace(
         params,
@@ -522,7 +539,7 @@ def _with_candidate_scoring_profile(
 
 
 def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
-    profile = spec.frame_geometry_profile
+    profile = parameter_profile_for_spec(spec)
     params = _with_profile_parameters(FormatParameters(), spec)
 
     if spec.family == "120":

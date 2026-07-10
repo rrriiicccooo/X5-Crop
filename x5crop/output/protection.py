@@ -1,31 +1,20 @@
 from __future__ import annotations
 
 from math import ceil
-from typing import Any, Protocol
+from typing import Any
 
 from ..domain import AxisBleedParameters, OutputProtectionPlan
+from ..policies.parameters.exposure_overlap import ExposureOverlapProtectionParameters
 
 
 DEFAULT_OUTPUT_BLEED = AxisBleedParameters(long_axis=20, short_axis=10)
 
 
-class ExposureOverlapProtectionPolicyLike(Protocol):
-    required_bleed_window_fraction: float
-    required_bleed_padding_px: int
-    required_bleed_min_px: int
-    long_axis_bleed_capacity_px: int
-
-
-class OutputProtectionPolicyLike(Protocol):
-    exposure_overlap_protection: ExposureOverlapProtectionPolicyLike
-
-
 def output_protection_plan(
     exposure_overlap_evidence: dict[str, Any],
     base_bleed: AxisBleedParameters,
-    policy: OutputProtectionPolicyLike,
+    protection: ExposureOverlapProtectionParameters,
 ) -> OutputProtectionPlan:
-    protection = policy.exposure_overlap_protection
     detected = bool(exposure_overlap_evidence.get("exposure_overlap_detected", False))
     widest_band = max(
         0.0,

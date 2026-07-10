@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any
 
 import numpy as np
 
@@ -101,26 +101,11 @@ class NearbySeparatorRefinementResult:
     detail: dict[str, Any]
 
 
-class NearbySeparatorSearchConfig(Protocol):
-    window_ratio: float
-    window_min: int
-    window_max: int
-    exclude_ratio: float
-    exclude_min: int
-    exclude_max: int
-    max_width_ratio: float
-    max_width_min: int
-    max_width_max: int
-    candidate_threshold_percentile: float
-    candidate_threshold_floor: float
-    distance_ratio: float
-
-
 def nearby_separator_search_context(
     profile: np.ndarray,
     gap: Gap,
     pitch: float,
-    config: NearbySeparatorSearchConfig,
+    config: NearbySeparatorRefinementParameters,
 ) -> NearbySeparatorSearchContext | None:
     center = int(round(gap.center))
     current_start = max(0, min(len(profile), int(round(min(gap.start, gap.end)))))
@@ -162,7 +147,7 @@ def nearby_separator_candidates(
     profile: np.ndarray,
     gap: Gap,
     pitch: float,
-    config: NearbySeparatorSearchConfig,
+    config: NearbySeparatorRefinementParameters,
     context: NearbySeparatorSearchContext,
 ) -> list[NearbySeparatorCandidate]:
     candidates: list[NearbySeparatorCandidate] = []
@@ -222,7 +207,7 @@ def nearby_separator_search_result(
     profile: np.ndarray,
     gap: Gap,
     pitch: float,
-    config: NearbySeparatorSearchConfig,
+    config: NearbySeparatorRefinementParameters,
     *,
     score_add: float,
     score_multiplier: float,
@@ -252,7 +237,7 @@ def nearby_separator_search_detail(
     profile: np.ndarray,
     gap: Gap,
     pitch: float,
-    config: NearbySeparatorSearchConfig,
+    config: NearbySeparatorRefinementParameters,
     *,
     score_add: float,
     score_multiplier: float,

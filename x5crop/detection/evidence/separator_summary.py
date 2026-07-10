@@ -7,7 +7,7 @@ from ...domain import Gap
 from ...gap_methods import (
     is_content_model_gap_method,
     is_detected_gap_method,
-    is_direct_hard_gap_method,
+    is_hard_gap_method,
     is_edge_pair_gap_method,
     is_equal_model_gap_method,
     is_grid_model_gap_method,
@@ -110,7 +110,7 @@ def gap_method_evidence_summary(
 
     for gap in gaps:
         method = gap.method
-        if is_direct_hard_gap_method(method):
+        if is_hard_gap_method(method):
             direct_hard_gaps += 1
         if is_grid_model_gap_method(method):
             grid_model_gaps += 1

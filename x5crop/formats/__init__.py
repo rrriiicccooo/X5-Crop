@@ -22,7 +22,6 @@ class FormatPhysicalSpec:
     allowed_counts: tuple[int, ...]
     family: str
     frame_size_mm_options: tuple[FrameSizeMm, ...]
-    expected_separator_count: int
     physical_layout: str = "single_strip"
     complete_strip_can_be_underfilled: bool = False
     lane_count: int = 1
@@ -37,24 +36,12 @@ class FormatPhysicalSpec:
         return self.nominal_frame_size_mm.aspect
 
     @property
-    def frame_geometry_profile(self) -> str:
-        if self.physical_layout == "dual_lane":
-            return "dual_lane"
-        aspect = self.horizontal_content_aspect
-        if self.family == "35mm":
-            if self.default_count > 6 and aspect < 1.0:
-                return "dense_half"
-            if aspect > 2.0:
-                return "panoramic_35mm"
-            return "standard_35mm"
-        if self.family == "120":
-            if abs(aspect - 1.0) <= 0.05:
-                return "medium_square"
-            if aspect < 1.0:
-                return "medium_rectangle"
-            return "medium_wide"
-        raise ValueError(f"Unsupported physical format family: {self.family}")
-
+    def expected_separator_count(self) -> int:
+        return expected_separator_count(
+            self.default_count,
+            self.physical_layout,
+            self.lane_count,
+        )
 
 def expected_separator_count(
     default_count: int,
@@ -87,11 +74,6 @@ def _format_spec(
         allowed_counts=allowed_counts,
         family=family,
         frame_size_mm_options=frame_options,
-        expected_separator_count=expected_separator_count(
-            default_count,
-            physical_layout,
-            lane_count,
-        ),
         physical_layout=physical_layout,
         complete_strip_can_be_underfilled=complete_strip_can_be_underfilled,
         lane_count=lane_count,
@@ -161,11 +143,6 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
 }
 
 FORMAT_CHOICES = tuple(FORMATS.keys())
-LAYOUT_CHOICES = ("auto", "horizontal", "vertical")
-STRIP_CHOICES = ("full", "partial")
-DESKEW_CHOICES = ("off", "auto")
-DESKEW_FALLBACK_CHOICES = ("off", "auto", "always")
-COMPRESSION_CHOICES = ("none", "same")
 
 
 def format_spec(format_id: str) -> FormatPhysicalSpec:

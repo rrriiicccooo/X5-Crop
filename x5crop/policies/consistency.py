@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-from ..formats import FORMAT_CHOICES, STRIP_CHOICES
+from ..formats import FORMAT_CHOICES
+from ..strip_modes import STRIP_MODES
 from .decision.contract import decision_contract_for_policy
 from .identity import decision_policy_id_for
 from .registry import get_detection_policy
@@ -76,16 +77,6 @@ def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsist
             policy.decision.outer_mismatch_cap,
             contract.decision.outer_mismatch_cap,
         ),
-        (
-            "evidence.allow_geometry_supported_separator",
-            bool(policy.separator.geometry_support.active_modes()),
-            contract.evidence.allow_geometry_supported_separator,
-        ),
-        (
-            "evidence.partial_requires_safe_edge",
-            policy.strip_mode == "partial",
-            contract.evidence.partial_requires_safe_edge,
-        ),
     ]
     return [
         issue
@@ -97,7 +88,7 @@ def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsist
 def all_policy_consistency_issues() -> list[PolicyConsistencyIssue]:
     issues: list[PolicyConsistencyIssue] = []
     for format_id in FORMAT_CHOICES:
-        for strip_mode in STRIP_CHOICES:
+        for strip_mode in STRIP_MODES:
             issues.extend(consistency_issues_for_policy(get_detection_policy(format_id, strip_mode)))
     return issues
 
@@ -112,7 +103,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         for issue in issues:
             print(issue.message())
         return 1
-    print(f"Policy consistency check passed for {len(FORMAT_CHOICES) * len(STRIP_CHOICES)} format/mode pairs.")
+    print(f"Policy consistency check passed for {len(FORMAT_CHOICES) * len(STRIP_MODES)} format/mode pairs.")
     return 0
 
 

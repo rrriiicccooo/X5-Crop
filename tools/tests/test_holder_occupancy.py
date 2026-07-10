@@ -57,10 +57,6 @@ class HolderOccupancyTests(unittest.TestCase):
         self.assertTrue(evidence["frame_sequence_complete"])
         self.assertEqual(evidence["occupancy_status"], "underfilled")
         self.assertTrue(evidence["complete_underfilled_strip"])
-        self.assertEqual(
-            evidence["holder_fill_ratio_role"],
-            "occupancy_detail_not_candidate_gate_blocker",
-        )
 
     def test_complete_underfilled_strip_uses_the_same_partial_safety_contract(self) -> None:
         detection = _complete_underfilled_medium_square_detection()

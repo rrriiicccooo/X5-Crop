@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ....formats import FormatPhysicalSpec
-from ....policies.runtime.base import FULL, PARTIAL
+from ....strip_modes import FULL, PARTIAL
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ class CountHypothesisPlan:
     requested_count: int | None
 
     @property
-    def fallback_count(self) -> int:
+    def safety_count(self) -> int:
         if not self.hypotheses:
             raise ValueError("count hypothesis plan is empty")
         return int(self.hypotheses[0].count)

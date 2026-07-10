@@ -14,7 +14,6 @@ from .deskew import apply_deskew
 from ..debug.outputs import write_debug_outputs
 from ..detection.decision.decision_gate import apply_decision_gate
 from ..detection.evidence.selected_candidate import complete_selected_candidate_evidence
-from ..detection.detail import DECISION_POLICY_DETAIL, RUNTIME_POLICY_DETAIL
 from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
 from ..domain import ProcessResult
@@ -67,7 +66,6 @@ def process_one(
     detection_result = choose_detection(gray, detection_config, fmt, policy_bundle, analysis_cache)
     detection = detection_result.candidate
     selected_policy = detection_result.policy
-    detection.detail[RUNTIME_POLICY_DETAIL] = detection_policy_report_detail(selected_policy)
     detection.detail["scan_calibration"] = scan_calibration.detail()
     holder_occupancy = detection.detail.get("holder_occupancy")
     if isinstance(holder_occupancy, dict):
@@ -101,17 +99,21 @@ def process_one(
         deskew_detail=deskew_detail,
         output_protection_plan=output_protection_plan,
     )
-    decided_detection.detail[DECISION_POLICY_DETAIL] = decision_contract_report_detail(
+    runtime_policy_detail = detection_policy_report_detail(selected_policy)
+    decision_policy_detail = decision_contract_report_detail(
         decision_contract,
         format_description(decision_contract.physical_spec.format_id),
     )
     detection = finalize_detection(
         gray,
         decided_detection,
-        config,
         analysis_cache,
-        selected_policy,
         output_protection_plan,
+        diagnostics_enabled=config.diagnostics,
+        approved_geometry_adjustment=selected_policy.approved_geometry_adjustment,
+        edge_bleed_protection=selected_policy.output.edge_bleed_protection,
+        separator_policy=selected_policy.separator,
+        diagnostics_policy=selected_policy.diagnostics,
     )
     review_copy = copy_for_review_if_needed(input_file, output_dir, config, detection, warnings)
     output_files = write_crops_if_allowed(
@@ -124,7 +126,17 @@ def process_one(
         bool(deskew_detail["applied"]),
         output_surface,
     )
-    write_debug_outputs(gray, detection, output_dir, input_file.stem, config, analysis_cache, warnings, selected_policy)
+    write_debug_outputs(
+        gray,
+        detection,
+        output_dir,
+        input_file.stem,
+        config,
+        analysis_cache,
+        warnings,
+        selected_policy.diagnostics,
+        selected_policy.preprocess.separator_evidence_image,
+    )
 
     result = result_from_detection(
         input_file,
@@ -133,6 +145,9 @@ def process_one(
         output_files,
         review_copy,
         warnings,
+        policy_id=selected_policy.policy_id,
+        runtime_policy_detail=runtime_policy_detail,
+        decision_policy_detail=decision_policy_detail,
         deskew_detail=deskew_detail,
         analysis_cache_metadata=make_analysis_cache_metadata(
             input_file,

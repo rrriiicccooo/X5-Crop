@@ -45,12 +45,12 @@ def content_candidate_assessment_from_metrics(
     if placement != "content_runs":
         confidence, cap_detail = apply_confidence_cap(
             confidence,
-            candidate_policy.grid_fallback_cap,
+            candidate_policy.grid_placement_cap,
             owner="candidate.assessment",
-            reason="content_grid_fallback",
+            reason="content_grid_placement",
         )
         confidence_caps.append(cap_detail)
-        diagnostics.append("content_grid_fallback")
+        diagnostics.append("content_grid_placement")
     if runs_count != count:
         confidence, cap_detail = apply_confidence_cap(
             confidence,
@@ -113,7 +113,7 @@ def content_candidate_assessment_from_proposal(
     config: RunConfig,
     policy: ContentPolicy,
 ) -> ContentCandidateAssessment:
-    proposal = detection.detail.get("content_primary", {})
+    proposal = detection.detail.get("content_proposal", {})
     if not isinstance(proposal, dict):
         return ContentCandidateAssessment(
             confidence=0.0,

@@ -5,7 +5,7 @@ from ..parameters.outer import (
     LongAxisGeometryCorrectionParameters,
     ShortAxisGeometryCorrectionParameters,
 )
-from ..runtime.base import PARTIAL
+from ...strip_modes import PARTIAL
 from ..runtime.outer import (
     ContentContainmentCorrectionPolicy,
     GeometryConsistencyCorrectionPolicy,

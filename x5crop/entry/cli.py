@@ -6,23 +6,21 @@ import traceback
 from pathlib import Path
 
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, SUMMARY_CSV_NAME, VERSION
-from ..formats import (
-    COMPRESSION_CHOICES,
-    DESKEW_CHOICES,
-    DESKEW_FALLBACK_CHOICES,
-    FORMAT_CHOICES,
-    LAYOUT_CHOICES,
-    STRIP_CHOICES,
-)
+from ..formats import FORMAT_CHOICES
 from ..output.protection import DEFAULT_OUTPUT_BLEED
 from ..runtime.bootstrap import run_options
 from ..runtime.limits import STANDARD_JOB_LIMIT
-from .options import (
+from ..runtime.options import (
+    COMPRESSION_CHOICES,
     DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
     DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
-    CliOptions,
+    DESKEW_CHOICES,
+    DESKEW_FALLBACK_CHOICES,
+    LAYOUT_CHOICES,
+    RuntimeOptions,
 )
+from ..strip_modes import STRIP_MODES
 from .text_output import configure_entry_text_output
 
 
@@ -32,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/x5_crop_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, help="Film format. Required unless --interactive is used.")
     parser.add_argument("--layout", choices=LAYOUT_CHOICES, default="auto", help="auto/horizontal/vertical single-strip layout.")
-    parser.add_argument("--strip", choices=STRIP_CHOICES, default="full", help="full strip or partial/head mode.")
+    parser.add_argument("--strip", choices=STRIP_MODES, default="full", help="full strip or partial/head mode.")
     parser.add_argument("-n", "--count", type=int, default=None, help="Override frame count.")
     parser.add_argument("--page", type=int, default=0, help="TIFF page index; default 0.")
     parser.add_argument("--bleed", type=int, default=None, help="Bleed in pixels on all sides; overrides layout-aware defaults.")
@@ -63,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def options_from_args(args: argparse.Namespace) -> CliOptions:
+def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
     if args.format is None:
         raise ValueError("--format is required unless --interactive is used")
     if int(args.page) < 0:
@@ -80,7 +78,7 @@ def options_from_args(args: argparse.Namespace) -> CliOptions:
         raise ValueError("--jobs must be 1 or greater")
 
     diagnostics = bool(args.diagnostics)
-    return CliOptions(
+    return RuntimeOptions(
         input_path=Path(args.input).expanduser().resolve(),
         output_dir=Path(args.output).expanduser().resolve() if args.output else None,
         format_id=str(args.format),

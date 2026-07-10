@@ -8,7 +8,6 @@ from ..detection.detail import (
     COUNT_SELECTION,
     CONTENT_EVIDENCE,
     DECISION_GEOMETRY,
-    DECISION_POLICY_DETAIL,
     DECISION_SIGNALS,
     DIAGNOSTICS,
     EVIDENCE_SUMMARY,
@@ -18,8 +17,6 @@ from ..detection.detail import (
     decision_schema_diagnostics,
     detail_dict,
     HOLDER_OCCUPANCY,
-    policy_id_from_detail,
-    runtime_policy_detail,
     SCAN_CALIBRATION,
     STRIP_COMPLETENESS,
 )
@@ -37,7 +34,12 @@ def _missing_schema_diagnostic(owner: str, reason: str) -> dict[str, str]:
     return {"owner": owner, "reason": reason}
 
 
-def _schema_validation(detection: FinalDetection, runtime_policy: dict, decision_policy: dict) -> list[dict[str, str]]:
+def _schema_validation(
+    detection: FinalDetection,
+    policy_id: str,
+    runtime_policy: dict,
+    decision_policy: dict,
+) -> list[dict[str, str]]:
     diagnostics = decision_schema_diagnostics(detection)
     if not runtime_policy:
         diagnostics.append(_missing_schema_diagnostic("runtime_policy", "runtime_policy_detail_missing"))
@@ -47,7 +49,7 @@ def _schema_validation(detection: FinalDetection, runtime_policy: dict, decision
         diagnostics.append(_missing_schema_diagnostic("evidence_summary", "evidence_summary_missing"))
     if not detail_dict(detection, DECISION_SIGNALS):
         diagnostics.append(_missing_schema_diagnostic("decision_signals", "decision_signals_missing"))
-    if not policy_id_from_detail(detection):
+    if not policy_id:
         diagnostics.append(_missing_schema_diagnostic("policy", "policy_id_missing"))
     return diagnostics
 
@@ -60,6 +62,9 @@ def report_record_for_final_detection(
     output_files: list[str],
     review_copy: str | None,
     warnings: list[str],
+    policy_id: str,
+    runtime_policy: dict,
+    decision_policy: dict,
     deskew_detail: dict,
     analysis_cache_metadata: dict,
 ) -> dict:
@@ -71,16 +76,18 @@ def report_record_for_final_detection(
         "review_copy": review_copy,
         "warnings": list(warnings),
     })
-    runtime_policy = runtime_policy_detail(detection)
-    decision_policy = detail_dict(detection, DECISION_POLICY_DETAIL)
-    schema_validation = _schema_validation(detection, runtime_policy, decision_policy)
+    schema_validation = _schema_validation(
+        detection,
+        policy_id,
+        runtime_policy,
+        decision_policy,
+    )
     policy_detail = {
-        "runtime_policy": runtime_policy or {"missing": True, "reason": "runtime_policy_detail_missing"},
-        "decision_policy": decision_policy or {"missing": True, "reason": "decision_policy_detail_missing"},
+        "runtime_policy": dict(runtime_policy),
+        "decision_policy": dict(decision_policy),
     }
     evidence_summary = detail_dict(detection, EVIDENCE_SUMMARY)
     decision_signals = detail_dict(detection, DECISION_SIGNALS)
-    policy_id = policy_id_from_detail(detection)
     schema = {
         "schema_id": REPORT_SCHEMA_ID,
         "schema_revision": REPORT_SCHEMA_REVISION,

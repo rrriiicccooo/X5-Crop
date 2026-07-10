@@ -10,7 +10,6 @@ CANDIDATE_ASSESSMENT = "candidate_assessment"
 CANDIDATE_SIGNALS = "candidate_signals"
 COUNT_SELECTION = "count_selection"
 CONTENT_EVIDENCE = "content_evidence"
-DECISION_POLICY_DETAIL = "decision_policy_detail"
 DECISION_GEOMETRY = "decision_geometry"
 DECISION_SUMMARY = "decision_summary"
 DECISION_SIGNALS = "decision_signals"
@@ -19,8 +18,6 @@ EVIDENCE_SUMMARY = "evidence_summary"
 OUTER_CONTENT_ALIGNMENT = "outer_content_alignment"
 EXPOSURE_OVERLAP_EVIDENCE = "exposure_overlap_evidence"
 OUTPUT_PROTECTION_PLAN = "output_protection_plan"
-POLICY_ID = "policy_id"
-RUNTIME_POLICY_DETAIL = "runtime_policy_detail"
 SCAN_CALIBRATION = "scan_calibration"
 STRIP_COMPLETENESS = "strip_completeness"
 HOLDER_OCCUPANCY = "holder_occupancy"
@@ -59,11 +56,3 @@ def decision_schema_diagnostics(detection: FinalDetection) -> list[dict[str, str
     if not isinstance(summary.get("decision_gate"), dict):
         diagnostics.append({"owner": "decision", "reason": "decision_gate_missing"})
     return diagnostics
-
-
-def runtime_policy_detail(detection: DetectionCandidate) -> dict[str, Any]:
-    return detail_dict(detection, RUNTIME_POLICY_DETAIL)
-
-
-def policy_id_from_detail(detection: DetectionCandidate) -> str:
-    return str(detection.detail.get(POLICY_ID, ""))

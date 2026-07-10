@@ -14,19 +14,23 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class DetectionDecisionContract:
-    policy_id: str
     physical_spec: FormatPhysicalSpec
     strip_mode: str
     evidence: DecisionEvidenceParameters
     decision: DecisionReviewParameters
     candidate_selection: CandidateCompetitionParameters
 
+    @property
+    def policy_id(self) -> str:
+        return decision_policy_id_for(
+            self.physical_spec.format_id,
+            self.strip_mode,
+        )
+
 
 def decision_contract_for_policy(detection_policy: DetectionPolicy) -> DetectionDecisionContract:
     spec = detection_policy.physical_spec
-    policy_id = decision_policy_id_for(spec.format_id, detection_policy.strip_mode)
     return DetectionDecisionContract(
-        policy_id=policy_id,
         physical_spec=spec,
         strip_mode=detection_policy.strip_mode,
         evidence=detection_policy.decision_evidence,

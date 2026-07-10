@@ -15,7 +15,7 @@ from x5crop.policies.parameters.aggregate import FormatParameters
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-class ArchitectureResidualContractTest(unittest.TestCase):
+class ArchitectureOwnershipContractTest(unittest.TestCase):
     def test_inactive_safety_candidate_lifecycle_does_not_exist(self) -> None:
         self.assertFalse(
             (
@@ -85,6 +85,14 @@ class ArchitectureResidualContractTest(unittest.TestCase):
             "candidate_selection",
             contract.DetectionDecisionContract.__dataclass_fields__,
         )
+
+    def test_policy_identity_is_derived_from_format_and_mode(self) -> None:
+        from x5crop.policies.decision.contract import DetectionDecisionContract
+        from x5crop.policies.runtime.policy import DetectionPolicy
+
+        for policy_type in (DetectionPolicy, DetectionDecisionContract):
+            self.assertNotIn("policy_id", policy_type.__dataclass_fields__)
+            self.assertIsInstance(policy_type.policy_id, property)
 
     def test_separator_model_gap_has_no_singleton_policy_selector(self) -> None:
         from x5crop.policies.runtime import separator
@@ -322,12 +330,9 @@ class ArchitectureResidualContractTest(unittest.TestCase):
         )
 
     def test_policy_assembly_does_not_own_tuning_literals(self) -> None:
-        allowed_numeric_owners = {"presets.py", "profile_presets.py", "registry.py"}
         offenders: list[str] = []
         assembly_root = PROJECT_ROOT / "x5crop" / "policies" / "assembly"
         for path in assembly_root.glob("*.py"):
-            if path.name in allowed_numeric_owners:
-                continue
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Constant):
@@ -450,8 +455,9 @@ class ArchitectureResidualContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_frame_geometry_classification_has_one_physical_owner(self) -> None:
+    def test_frame_geometry_parameter_profile_has_one_policy_owner(self) -> None:
         from x5crop.formats import FORMATS
+        from x5crop.policies.parameters.registry import parameter_profile_for_spec
 
         self.assertFalse((PROJECT_ROOT / "x5crop" / "formats" / "traits.py").exists())
         expected = {
@@ -465,7 +471,7 @@ class ArchitectureResidualContractTest(unittest.TestCase):
         }
         self.assertEqual(
             {
-                format_id: spec.frame_geometry_profile
+                format_id: parameter_profile_for_spec(spec)
                 for format_id, spec in FORMATS.items()
             },
             expected,
@@ -589,7 +595,7 @@ class ArchitectureResidualContractTest(unittest.TestCase):
         self.assertIn("output_surface_for_input", text)
 
     def test_entry_surfaces_share_one_canonical_default_source(self) -> None:
-        from x5crop.entry.options import (
+        from x5crop.runtime.options import (
             DEFAULT_CONFIDENCE_THRESHOLD,
             DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
             DEFAULT_DESKEW_MIN_ANGLE_DEGREES,

@@ -10,13 +10,8 @@ from .constants import (
     MODEL_GAP_METHODS,
 )
 
-DIRECT_HARD_GAP_METHODS = frozenset({GAP_DETECTED, GAP_EDGE_PAIR})
 GEOMETRY_MODEL_GAP_METHODS = frozenset({GAP_GRID, GAP_EQUAL})
 SEPARATOR_SUPPORT_GAP_METHODS = frozenset(set(HARD_GAP_METHODS) | {GAP_GRID})
-
-
-def is_direct_hard_gap_method(method: str) -> bool:
-    return method in DIRECT_HARD_GAP_METHODS
 
 
 def is_detected_gap_method(method: str) -> bool:
@@ -56,7 +51,7 @@ def is_separator_support_gap_method(method: str) -> bool:
 
 
 def gap_method_role(method: str) -> str:
-    if is_direct_hard_gap_method(method):
+    if is_hard_gap_method(method):
         return "separator_evidence"
     if is_geometry_model_gap_method(method):
         return "geometry_model"

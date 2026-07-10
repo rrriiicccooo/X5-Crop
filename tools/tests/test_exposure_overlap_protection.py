@@ -80,7 +80,7 @@ class ExposureOverlapProtectionTest(unittest.TestCase):
                 "widest_overlap_band_px": 72.0,
             },
             AxisBleedParameters(long_axis=20, short_axis=10),
-            policy.output,
+            policy.output.exposure_overlap_protection,
         )
 
         self.assertTrue(plan.feasible)
@@ -95,7 +95,7 @@ class ExposureOverlapProtectionTest(unittest.TestCase):
                 "widest_overlap_band_px": 140.0,
             },
             AxisBleedParameters(long_axis=20, short_axis=10),
-            policy.output,
+            policy.output.exposure_overlap_protection,
         )
 
         self.assertFalse(plan.feasible)
@@ -111,7 +111,7 @@ class ExposureOverlapProtectionTest(unittest.TestCase):
                 "widest_overlap_band_px": 72.0,
             },
             AxisBleedParameters(long_axis=20, short_axis=10),
-            policy.output,
+            policy.output.exposure_overlap_protection,
         )
 
         apply_output_protection_plan(

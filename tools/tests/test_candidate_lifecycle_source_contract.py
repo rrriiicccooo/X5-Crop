@@ -100,7 +100,7 @@ class CandidateLifecycleSourceContractTest(unittest.TestCase):
         explicit_runtime_inputs = {
             "separator_source_candidates_for_count": {"cache", "policy"},
             "content_guided_separator_candidate_for_count": {"cache", "policy"},
-            "content_detection_for_count": {"cache", "content_policy"},
+            "content_candidate_proposal_for_count": {"cache", "content_policy"},
         }
         calls = [
             node
@@ -151,6 +151,18 @@ class CandidateLifecycleSourceContractTest(unittest.TestCase):
                     offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
 
         self.assertEqual(offenders, [])
+
+    def test_guidance_proposes_content_without_building_detection_candidates(self) -> None:
+        guidance = (
+            PROJECT_ROOT / "x5crop" / "detection" / "guidance" / "content_model.py"
+        ).read_text(encoding="utf-8")
+        candidate_builder = (
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "build" / "content.py"
+        )
+
+        self.assertNotIn("DetectionCandidate", guidance)
+        self.assertNotIn("RunConfig", guidance)
+        self.assertTrue(candidate_builder.is_file())
 
     def test_content_candidate_assessment_uses_diagnostic_naming(self) -> None:
         banned = (

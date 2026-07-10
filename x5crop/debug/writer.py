@@ -6,7 +6,8 @@ from typing import Optional
 import numpy as np
 
 from ..domain import FinalDetection
-from ..policies.runtime.policy import DetectionPolicy
+from ..image.evidence import SeparatorEvidenceImageParameters
+from ..policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
 from ..cache import AnalysisCache
 from .canvas import write_rgb_jpeg
 from .panels import make_debug_analysis_panel, make_debug_preview_rgb
@@ -30,13 +31,21 @@ def write_debug_analysis(
     output_dir: Path,
     stem: str,
     threshold: float,
-    policy: DetectionPolicy,
+    diagnostics: RuntimeDiagnosticsPolicy,
+    separator_evidence_image: SeparatorEvidenceImageParameters,
     cache: Optional[AnalysisCache],
 ) -> list[str]:
     analysis_dir = output_dir / "_debug_analysis"
     panel_path = analysis_dir / f"{stem}_debug_analysis.jpg"
     write_rgb_jpeg(
-        make_debug_analysis_panel(gray, detection, threshold, policy, cache),
+        make_debug_analysis_panel(
+            gray,
+            detection,
+            threshold,
+            diagnostics,
+            separator_evidence_image,
+            cache,
+        ),
         panel_path,
     )
     return [str(panel_path)]

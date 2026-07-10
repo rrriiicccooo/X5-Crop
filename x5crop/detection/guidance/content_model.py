@@ -1,20 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from typing import Optional
 
 import numpy as np
 
-from ...constants import CANDIDATE_SOURCE_CONTENT_PRIMARY
-from ...domain import Box, DetectionCandidate, Gap
+from ...domain import Box, Gap
 from ...formats import FormatPhysicalSpec
-from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
 from ...geometry.model_gaps import content_model_gap
 from ...policies.runtime.content import ContentPolicy
 from ...policies.parameters.content import ContentMaskParameters
 from ...cache import AnalysisCache
-from ...run_config import RunConfig
 from ...utils import box_from_dict
 from ..evidence.content.regions import (
     CONTENT_BBOX_HINT_ROLE,
@@ -29,6 +26,14 @@ CONTENT_PROPOSAL_FAMILY = "content"
 CONTENT_PROPOSAL_ROLE = "weak_content_model_proposal"
 CONTENT_CANDIDATE_CONTRACT = "content_guidance_assessment_required"
 CONTENT_GAP_EVIDENCE_KIND = "content_model_gap"
+
+
+@dataclass(frozen=True)
+class ContentCandidateProposal:
+    outer: Box
+    frames: tuple[Box, ...]
+    gaps: tuple[Gap, ...]
+    detail: dict
 
 
 def content_signal_arrays_for_candidate(
@@ -73,7 +78,7 @@ def content_candidate_raw_frame_boxes(
 ) -> tuple[list[Box], str]:
     wh, ww = work_shape
     raw_boxes: list[Box] = []
-    placement = "content_runs" if len(selected_runs) >= count else "content_grid_fallback"
+    placement = "content_runs" if len(selected_runs) >= count else "content_grid_placement"
     if placement == "content_runs":
         for start, end in selected_runs[:count]:
             center = (float(start) + float(end)) * 0.5
@@ -139,9 +144,9 @@ def content_candidate_signal_stats(
     return median_mean, median_coverage
 
 
-def content_detection_for_count(
+def content_candidate_proposal_for_count(
     gray: np.ndarray,
-    config: RunConfig,
+    layout: str,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
@@ -149,15 +154,15 @@ def content_detection_for_count(
     *,
     cache: Optional[AnalysisCache],
     content_policy: ContentPolicy,
-) -> Optional[DetectionCandidate]:
-    gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
+) -> Optional[ContentCandidateProposal]:
+    gray_work = cache.gray_work if cache is not None and cache.layout == layout else work_gray(gray, layout)
     mask_policy = content_policy.mask
     candidate_policy = content_policy.candidate
     wh, ww = gray_work.shape
     evidence, evidence_float, signal_source = content_signal_arrays_for_candidate(
         gray_work,
         cache,
-        config.layout,
+        layout,
         content_policy,
     )
     mask_detail = content_mask_region_detail(
@@ -202,9 +207,6 @@ def content_detection_for_count(
     if len(raw_boxes) != count:
         return None
 
-    boxes_work = [box.expand(config.bleed_x, config.bleed_y, ww, wh) for box in raw_boxes]
-    boxes = [map_work_box(box, config.layout, gray.shape[1], gray.shape[0]) for box in boxes_work]
-    outer_original = map_work_box(outer, config.layout, gray.shape[1], gray.shape[0])
     gaps = content_model_gaps_for_boxes(raw_boxes, outer)
 
     median_mean, median_coverage = content_candidate_signal_stats(evidence_float, raw_boxes, mask_threshold)
@@ -212,49 +214,29 @@ def content_detection_for_count(
     max_aspect_error = float(max(aspect_errors)) if aspect_errors else 1.0
 
     detail = {
-        "proposal_family": CONTENT_PROPOSAL_FAMILY,
+        "used": True,
         "proposal_role": CONTENT_PROPOSAL_ROLE,
         "candidate_contract": CONTENT_CANDIDATE_CONTRACT,
-        "content_gap_evidence_kind": CONTENT_GAP_EVIDENCE_KIND,
-        "candidate_source": CANDIDATE_SOURCE_CONTENT_PRIMARY,
-        "candidate_count": count,
-        "offset_fraction": float(offset_fraction),
-        "layout": config.layout,
-        "outer_candidate": "content_evidence",
-        "work_outer": asdict(outer),
-        "content_primary": {
-            "used": True,
-            "proposal_role": CONTENT_PROPOSAL_ROLE,
-            "candidate_contract": CONTENT_CANDIDATE_CONTRACT,
-            "region_roles": {
-                "bbox": CONTENT_BBOX_HINT_ROLE,
-                "runs": CONTENT_RUN_HINT_ROLE,
-            },
-            "signal_source": signal_source,
-            "placement": placement,
-            "mask_threshold": mask_threshold,
-            "mask_percentiles": mask_detail.get("mask_percentiles", {}),
-            "expected_frame_aspect": expected_aspect,
-            "expected_frame_width": expected_w,
-            "median_mean": median_mean,
-            "median_coverage": median_coverage,
-            "max_aspect_error": max_aspect_error,
-            "selected_run_count": len(selected_runs),
-            "raw_boxes": [asdict(box) for box in raw_boxes],
-            **run_detail,
+        "region_roles": {
+            "bbox": CONTENT_BBOX_HINT_ROLE,
+            "runs": CONTENT_RUN_HINT_ROLE,
         },
-        "gap_centers": [gap.center for gap in gaps],
-        "gap_scores": [gap.score for gap in gaps],
-        "gap_methods": [gap.method for gap in gaps],
+        "signal_source": signal_source,
+        "placement": placement,
+        "mask_threshold": mask_threshold,
+        "mask_percentiles": mask_detail.get("mask_percentiles", {}),
+        "expected_frame_aspect": expected_aspect,
+        "expected_frame_width": expected_w,
+        "median_mean": median_mean,
+        "median_coverage": median_coverage,
+        "max_aspect_error": max_aspect_error,
+        "selected_run_count": len(selected_runs),
+        "raw_boxes": [asdict(box) for box in raw_boxes],
+        **run_detail,
     }
-    return DetectionCandidate(
-        format_id=fmt.format_id,
-        layout=config.layout,
-        strip_mode=strip_mode,
-        count=count,
-        outer=outer_original,
-        frames=boxes,
-        gaps=gaps,
-        confidence=0.0,
+    return ContentCandidateProposal(
+        outer=outer,
+        frames=tuple(raw_boxes),
+        gaps=tuple(gaps),
         detail=detail,
     )

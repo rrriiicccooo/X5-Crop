@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ...constants import GAP_CONTENT, GAP_DETECTED, GAP_EDGE_PAIR, GAP_EQUAL, GAP_GRID
 from ..parameters.aggregate import FormatParameters
-from ..runtime.base import FULL, PARTIAL
+from ...strip_modes import FULL, PARTIAL
 from ..runtime.separator import (
     SeparatorGeometrySupportModePolicy,
     SeparatorGeometrySupportPolicy,

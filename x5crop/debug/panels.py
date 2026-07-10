@@ -10,7 +10,6 @@ from ..image.evidence import (
     SeparatorEvidenceImageParameters,
     make_separator_evidence_gray,
 )
-from ..policies.runtime.policy import DetectionPolicy
 from ..policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
 from ..cache import AnalysisCache
 from .canvas import (
@@ -99,10 +98,10 @@ def make_debug_analysis_panel(
     gray: np.ndarray,
     detection: FinalDetection,
     threshold: float,
-    policy: DetectionPolicy,
+    diagnostics: RuntimeDiagnosticsPolicy,
+    separator_evidence_image: SeparatorEvidenceImageParameters,
     cache: Optional[AnalysisCache],
 ) -> np.ndarray:
-    diagnostics: RuntimeDiagnosticsPolicy = policy.diagnostics
     debug_gap = diagnostics.debug_gap_overlay
     panel_builders = {
         "original_gray": lambda title: cached_labeled_preview_gray(cache, "original_gray", title, gray)[0],
@@ -112,7 +111,7 @@ def make_debug_analysis_panel(
                 gray,
                 detection,
                 debug_gap,
-                policy.preprocess.separator_evidence_image,
+                separator_evidence_image,
                 cache,
             ),
             title,

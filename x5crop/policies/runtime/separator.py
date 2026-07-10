@@ -16,7 +16,7 @@ from ..parameters.separator import (
     SeparatorSupportParameters,
     SeparatorWidthProfileParameters,
 )
-from .base import FULL, PARTIAL
+from ...strip_modes import FULL, PARTIAL
 
 
 @dataclass(frozen=True)

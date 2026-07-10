@@ -91,8 +91,7 @@ def evidence_summary_for(
     model_share = float(separator["model_gap_share"])
     geometry_support_mode = str(separator.get("geometry_support_mode") or "")
     geometry_supported_separator = (
-        policy.evidence.allow_geometry_supported_separator
-        and geometry_support_mode in {"detected_geometry", "stable_grid"}
+        geometry_support_mode in {"detected_geometry", "stable_grid"}
         and hard_ratio >= policy.evidence.geometry_supported_min_hard_ratio
         and photo_width_within_limit(
             detection.detail,
@@ -190,7 +189,7 @@ def evidence_summary_for(
         },
         "partial_edge": {
             "ok": bool(partial_edge_safe),
-            "required": bool(detection.strip_mode == "partial" and policy.evidence.partial_requires_safe_edge),
+            "required": bool(detection.strip_mode == "partial"),
             "detail": partial_detail,
         },
     }
