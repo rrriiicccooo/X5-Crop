@@ -19,6 +19,18 @@ from x5crop.policies.runtime.separator import SeparatorGeometrySupportModePolicy
 
 
 class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
+    def test_nearby_separator_diagnostics_separate_search_from_comparison_parameters(self) -> None:
+        from inspect import signature
+
+        from x5crop.detection.evidence.nearby_separator_diagnostics import (
+            nearby_separator_diagnostic_detail,
+        )
+
+        parameters = signature(nearby_separator_diagnostic_detail).parameters
+        self.assertIn("search_parameters", parameters)
+        self.assertIn("comparison_parameters", parameters)
+        self.assertNotIn("nearby_policy", parameters)
+
     def test_separator_width_variation_is_not_a_candidate_gate_requirement(self) -> None:
         project_root = Path(__file__).resolve().parents[2]
         self.assertFalse(

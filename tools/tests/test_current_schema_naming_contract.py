@@ -288,6 +288,19 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("report_schema_id", policy_reporting_source)
         self.assertNotIn("report_schema_revision", policy_reporting_source)
 
+    def test_agent_regression_guidance_does_not_hardcode_local_fixture_layout(self) -> None:
+        agents_source = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        regression_section = agents_source.split("## Regression Priorities", 1)[1].split(
+            "## Current Handoff", 1
+        )[0]
+
+        hardcoded_paths = [
+            line
+            for line in regression_section.splitlines()
+            if "`Test/" in line and "`Test/`" not in line
+        ]
+        self.assertEqual(hardcoded_paths, [])
+
     def test_policy_identity_uses_canonical_format_id_without_alias_map(self) -> None:
         source = (PROJECT_ROOT / "x5crop" / "policies" / "identity.py").read_text(
             encoding="utf-8"

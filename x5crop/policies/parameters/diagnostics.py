@@ -17,14 +17,5 @@ class DebugGapOverlayParameters:
 
 @dataclass(frozen=True)
 class NearbySeparatorDiagnosticsParameters:
-    window_ratio: float = 0.040
-    window_min: int = 16
-    window_max: int = 320
-    exclude_ratio: float = 0.012
-    exclude_min: int = 8
-    exclude_max: int = 120
-    max_width_ratio: float = 0.070
-    max_width_min: int = 2
-    max_width_max: int = 520
     detail_score_add: float = 0.08
     detail_score_multiplier: float = 1.18

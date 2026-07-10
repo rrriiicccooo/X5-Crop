@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 import unittest
 
@@ -7,6 +8,64 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 
 
 class CandidateLifecycleSourceContractTest(unittest.TestCase):
+    def test_pending_separator_refinement_is_explicitly_policy_free(self) -> None:
+        from x5crop.detection.candidate.build.separator_refinements import (
+            NEARBY_SEPARATOR_REFINEMENT_FAMILY,
+            pending_gap_refinement_detail,
+        )
+
+        detail = pending_gap_refinement_detail(NEARBY_SEPARATOR_REFINEMENT_FAMILY)
+
+        self.assertEqual(detail["family"], NEARBY_SEPARATOR_REFINEMENT_FAMILY)
+        self.assertFalse(detail["eligible"])
+
+    def test_separator_source_execution_respects_keyword_only_runtime_inputs(self) -> None:
+        source_path = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "execution"
+            / "count_hypothesis.py"
+        )
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        explicit_runtime_inputs = {
+            "separator_source_candidates_for_count": {"cache", "policy"},
+            "content_guided_separator_candidate_for_count": {"cache", "policy"},
+            "content_detection_for_count": {"cache", "content_policy"},
+        }
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in explicit_runtime_inputs
+        ]
+
+        self.assertGreaterEqual(len(calls), len(explicit_runtime_inputs))
+        for call in calls:
+            keyword_names = {keyword.arg for keyword in call.keywords}
+            self.assertLessEqual(len(call.args), 6)
+            self.assertTrue(
+                explicit_runtime_inputs[call.func.id].issubset(keyword_names)
+            )
+
+    def test_separator_refinement_detail_reads_only_current_family_policy_fields(self) -> None:
+        source = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "build"
+            / "separator_refinements.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn(
+            "family_policy.requires_explicit_count_for_partial",
+            source,
+        )
+        self.assertNotIn("nearby_refinement.enabled", source)
+
     def test_content_candidate_policy_does_not_use_final_review_only_terms(self) -> None:
         offenders: list[str] = []
         banned = (

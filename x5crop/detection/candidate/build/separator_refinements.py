@@ -55,10 +55,6 @@ def _gap_refinement_detail(
         result_detail.setdefault("phase", family_policy.phase)
         result_detail.setdefault("mode", family_policy.mode)
         result_detail.setdefault("strip_modes", list(family_policy.strip_modes))
-        result_detail.setdefault(
-            "requires_explicit_count_for_partial",
-            bool(family_policy.requires_explicit_count_for_partial),
-        )
         result_detail.setdefault("target_gap_methods", list(family_policy.target_gap_methods))
         if family_policy.model_promotion_gap_methods:
             result_detail.setdefault(
@@ -130,6 +126,7 @@ def pending_gap_refinement_detail(family: str) -> dict[str, Any]:
     return _gap_refinement_detail(
         family,
         {"used": False, "reason": NEARBY_REFINEMENT_PENDING_REASON},
+        None,
         eligible=False,
         skipped_reason=NEARBY_REFINEMENT_PENDING_REASON,
     )
@@ -227,14 +224,11 @@ def apply_primary_separator_refinements(
 def nearby_separator_refinement_skip_reason(
     strip_mode: str,
     explicit_count: bool,
-    enabled: bool,
     family_policy: SeparatorRefinementFamilyPolicy,
 ) -> Optional[str]:
     family_block_reason = family_policy.block_reason(strip_mode, explicit_count)
     if family_block_reason is not None:
         return family_block_reason
-    if not enabled:
-        return "disabled"
     return None
 
 
@@ -252,7 +246,6 @@ def apply_candidate_nearby_separator_refinement(
     skip_reason = nearby_separator_refinement_skip_reason(
         strip_mode,
         explicit_count,
-        policy.separator.nearby_refinement.enabled,
         family_policy,
     )
     if skip_reason is not None:

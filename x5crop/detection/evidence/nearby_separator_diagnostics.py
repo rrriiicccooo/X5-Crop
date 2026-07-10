@@ -10,7 +10,10 @@ from ...cache.separator import cached_separator_profile
 from ...domain import Box, Gap
 from ...gap_methods import is_hard_gap_method
 from ...geometry.boxes import box_cache_key
-from ...geometry.detection_parameters import SeparatorProfileParameters
+from ...geometry.detection_parameters import (
+    NearbySeparatorRefinementParameters,
+    SeparatorProfileParameters,
+)
 from ...geometry.nearby_separator import nearby_separator_search_detail
 from ...policies.parameters.diagnostics import NearbySeparatorDiagnosticsParameters
 
@@ -22,7 +25,8 @@ def nearby_separator_diagnostic_detail(
     pitch: float,
     start: int,
     end: int,
-    nearby_policy: NearbySeparatorDiagnosticsParameters,
+    search_parameters: NearbySeparatorRefinementParameters,
+    comparison_parameters: NearbySeparatorDiagnosticsParameters,
     profile_policy: SeparatorProfileParameters,
     cache: AnalysisCache | None,
 ) -> dict[str, Any]:
@@ -33,7 +37,8 @@ def nearby_separator_diagnostic_detail(
         cache_key = (
             "nearby_separator_diagnostic",
             profile_policy,
-            nearby_policy,
+            search_parameters,
+            comparison_parameters,
             box_cache_key(work_outer),
             int(gap.index),
             str(gap.method),
@@ -67,9 +72,9 @@ def nearby_separator_diagnostic_detail(
         profile,
         search_gap,
         pitch,
-        nearby_policy,
-        score_add=nearby_policy.detail_score_add,
-        score_multiplier=nearby_policy.detail_score_multiplier,
+        search_parameters,
+        score_add=comparison_parameters.detail_score_add,
+        score_multiplier=comparison_parameters.detail_score_multiplier,
         absolute_center_offset=float(work_outer.left),
     ) or {"searched": False, "reason": "empty_search_window"}
     if cache_key is not None and cache is not None:

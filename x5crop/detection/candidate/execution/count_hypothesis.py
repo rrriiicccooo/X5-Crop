@@ -50,7 +50,7 @@ def _assessed_candidates_for_offset(
         count,
         strip_mode,
         offset,
-        cache,
+        cache=cache,
         policy=policy,
         include_extension_outer=False,
         include_supplemental_outer=False,
@@ -106,7 +106,7 @@ def _assessed_candidates_for_offset(
             count,
             strip_mode,
             offset,
-            cache,
+            cache=cache,
             policy=policy,
         )
         separator_candidates = assess_source_candidates(
@@ -135,7 +135,7 @@ def _assessed_candidates_for_offset(
                 count,
                 strip_mode,
                 offset,
-                cache,
+                cache=cache,
                 policy=policy,
             )
             if content_guided_separator is None:
@@ -227,7 +227,7 @@ def _assessed_candidates_for_offset(
         count,
         strip_mode,
         offset,
-        cache,
+        cache=cache,
         content_policy=policy.content,
     )
     if content is not None:

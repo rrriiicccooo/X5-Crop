@@ -45,7 +45,8 @@ def attach_read_only_diagnostics(
                 float(detection.detail.get("pitch", 0.0) or 0.0),
                 int(window["start"]),
                 int(window["end"]),
-                diagnostics_policy.nearby_separator,
+                diagnostics_policy.nearby_separator_search,
+                diagnostics_policy.nearby_separator_comparison,
                 separator_policy.profile,
                 cache,
             )

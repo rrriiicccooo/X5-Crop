@@ -217,13 +217,15 @@ frame_boxes
 gaps
 ```
 
-Key local reference sets:
+Local `Test/` fixtures are untracked and their directory layout is not a source
+contract. Discover available TIFFs at verification time:
 
-- `Test/135` full: 135 full reference examples.
-- `Test/new_135` full: wide 135 spacing examples.
-- `Test/半格/full` and `Test/半格/partial`: half-frame gate and partial behavior.
-- `Test/120/66` full/partial: variable separator width / separator-derived outer behavior.
-- `Test/120/67` full: 120-67 reference examples.
+```bash
+find Test -type f \( -iname '*.tif' -o -iname '*.tiff' \) | sort
+```
+
+When present, cover representative `135/full`, `120-66/partial`, `half/full`,
+and `120-67/full` inputs. Treat additional sets as audit material.
 
 For source or policy changes, also run:
 
@@ -269,12 +271,16 @@ Current state:
 Recent verified baseline:
 
 - `python3 X5_Crop.py --version` printed `X5_Crop.py 4.9`.
-- `python3 -m unittest discover -s tools/tests` passed 185 tests.
+- `python3 -m unittest discover -s tools/tests` passed 279 tests.
 - Full compile across the V4.9 package and regression tools passed.
 - `git diff --check` passed.
 - Decision contract policy smoke passed for 14 format / strip-mode combinations.
 - Representative `135/full`, `120-66/partial auto`, `half/full`, and
   `120-67/full` report/debug smokes completed against the current schema.
+- All four smoke reports had empty `schema_validation`; horizontal and vertical
+  Debug Analysis outputs were visually confirmed as three-panel images.
+- Architecture closure Audit A found zero remaining frozen-contract violations.
+  Independent Audit B is still required before marking architecture closed.
 - Seven local V4.5.4 reference sets have been used as comparison material for
   locating changes.
 - V4.9 no longer treats V4.5.4 or V4.7 as a field-parity oracle. In the current
