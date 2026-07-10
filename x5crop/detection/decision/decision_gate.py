@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from ...domain import Detection
+from ...domain import DetectionCandidate
 from ...policies.decision.contract import DetectionDecisionContract
 from ..gate_checks import GateCheck, gate_check_details
 
@@ -34,7 +34,7 @@ class DecisionGateAssessment:
 
 @dataclass(frozen=True)
 class DecisionAssessmentInput:
-    detection: Detection
+    detection: DetectionCandidate
     confidence_threshold: float
     decision_signals: dict[str, Any]
     policy: DetectionDecisionContract

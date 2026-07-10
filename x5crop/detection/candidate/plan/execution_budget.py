@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ....policies.runtime.policy import DetectionPolicy
 
 
@@ -21,7 +21,7 @@ def separator_extension_families(
 
 
 def set_execution_budget_detail(
-    detection: Detection,
+    detection: DetectionCandidate,
     *,
     primary_reliability: dict[str, Any],
     expanded_after_primary: bool,
@@ -52,7 +52,7 @@ def set_execution_budget_detail(
 
 
 def attach_execution_budget_to_candidates(
-    candidates: list[Detection],
+    candidates: list[DetectionCandidate],
     *,
     primary_reliability: dict[str, Any],
     expanded_after_primary: bool,

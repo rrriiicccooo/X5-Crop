@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ...domain import Detection
+from ...domain import DetectionCandidate
 from ...gap_methods import (
     is_content_model_gap_method,
     is_equal_model_gap_method,
@@ -30,11 +30,11 @@ def _float(value: Any, default: float = 0.0) -> float:
         return float(default)
 
 
-def _gap_method_count(detection: Detection, predicate) -> int:
+def _gap_method_count(detection: DetectionCandidate, predicate) -> int:
     return sum(1 for gap in detection.gaps if predicate(gap.method))
 
 
-def _separator_summary_from_assessment(detection: Detection) -> SeparatorSupportDetailSummary:
+def _separator_summary_from_assessment(detection: DetectionCandidate) -> SeparatorSupportDetailSummary:
     assessment = _dict(detection.detail.get("candidate_assessment"))
     hard_detail = _dict(assessment.get("separator_support"))
     return separator_support_detail_summary(
@@ -47,13 +47,13 @@ def _separator_summary_from_assessment(detection: Detection) -> SeparatorSupport
     )
 
 
-def _separator_summary(detection: Detection) -> dict[str, Any]:
+def _separator_summary(detection: DetectionCandidate) -> dict[str, Any]:
     return _separator_summary_from_assessment(detection).evidence_detail()
 
 
 def evidence_summary_for(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
     policy: DetectionDecisionContract,

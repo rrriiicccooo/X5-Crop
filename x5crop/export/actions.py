@@ -4,8 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from ..runtime.config import RuntimeConfig
-from ..detection.detail import final_review_reasons_from_detail
-from ..domain import Detection, ImageProfile
+from ..domain import FinalDetection, ImageProfile
 from ..output.surface import OutputSurface
 from .crops import write_crops
 from .review import copy_for_review, review_directory_for
@@ -15,13 +14,12 @@ def copy_for_review_if_needed(
     input_file: Path,
     output_dir: Path,
     config: RuntimeConfig,
-    detection: Detection,
-    status: str,
+    detection: FinalDetection,
     warnings: list[str],
 ) -> str | None:
-    if status != "needs_review":
+    if detection.status != "needs_review":
         return None
-    reasons = final_review_reasons_from_detail(detection)
+    reasons = detection.final_review_reasons
     warnings.append(
         f"review required: confidence={detection.confidence:.3f}; "
         f"threshold={config.confidence_threshold:.3f}; "
@@ -39,13 +37,12 @@ def write_crops_if_allowed(
     arr: Any,
     source_arr: Any,
     profile: ImageProfile,
-    detection: Detection,
+    detection: FinalDetection,
     config: RuntimeConfig,
     deskew_applied: bool,
     output_surface: OutputSurface,
-    status: str,
 ) -> list[str]:
-    should_export = (status == "approved_auto" or config.export_review) and not config.dry_run
+    should_export = (detection.status == "approved_auto" or config.export_review) and not config.dry_run
     if not should_export:
         return []
     output_dir = output_surface.ensure_root()

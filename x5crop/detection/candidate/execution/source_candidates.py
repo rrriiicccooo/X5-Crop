@@ -7,7 +7,7 @@ import numpy as np
 
 from ....constants import CANDIDATE_SOURCE_SAFETY, CANDIDATE_SOURCE_SEPARATOR
 from ....cache import AnalysisCache
-from ....domain import Detection, OuterCandidate
+from ....domain import DetectionCandidate, OuterCandidate
 from ....formats import FormatSpec
 from ....geometry.layout import work_gray
 from ....policies.runtime.policy import DetectionPolicy
@@ -26,7 +26,7 @@ from ..build.detection import build_detection_geometry_for_outer, enrich_detecti
 
 @dataclass(frozen=True)
 class SourceCandidateBatch:
-    detections: tuple[Detection, ...]
+    detections: tuple[DetectionCandidate, ...]
     outer_candidates: tuple[OuterCandidate, ...]
     detail: dict
 
@@ -43,7 +43,7 @@ def _outer_candidate_report_detail(candidate: OuterCandidate) -> dict:
 
 
 def _attach_outer_candidate_summary(
-    detection: Detection,
+    detection: DetectionCandidate,
     outer_candidates: list[OuterCandidate],
 ) -> None:
     areas = [candidate.box.width * candidate.box.height for candidate in outer_candidates if candidate.box.valid()]
@@ -82,7 +82,7 @@ def _execute_outer_candidate_detection(
     *,
     gap_max_width_ratio_override: Optional[float],
     gap_search_profile: str,
-) -> Detection:
+) -> DetectionCandidate:
     candidate_gap_override = gap_max_width_ratio_override
     if candidate.strategy == "separator_outer":
         candidate_gap_override = separator_outer_gap_max_width_override(policy, candidate_gap_override)
@@ -217,7 +217,7 @@ def content_guided_separator_candidate_for_count(
     cache: Optional[AnalysisCache] = None,
     *,
     policy: DetectionPolicy,
-) -> tuple[Optional[Detection], dict]:
+) -> tuple[Optional[DetectionCandidate], dict]:
     guidance_policy = policy.candidate_plan.content_guided_separator
     seed_result = content_guided_separator_seed_for_count(
         gray,

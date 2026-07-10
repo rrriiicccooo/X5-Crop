@@ -12,7 +12,7 @@ from x5crop.detection.candidate.assessment.safety import (
     apply_safety_candidate_assessment,
 )
 from x5crop.detection.candidate.signals import candidate_signals
-from x5crop.domain import Box, Detection
+from x5crop.domain import Box, DetectionCandidate
 from x5crop.formats import format_spec
 from x5crop.policies.registry import get_detection_policy
 from x5crop.runtime.config import RuntimeConfig
@@ -57,7 +57,7 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
         policy = get_detection_policy("135", "full")
         gray = np.zeros((100, 120), dtype=np.uint8)
         gray[:, 20:100] = 120
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -66,7 +66,6 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
             frames=[Box(10, 10, 110, 90)],
             gaps=[],
             confidence=0.96,
-            final_review_reasons=[],
             detail={"candidate_plan": {"source": CANDIDATE_SOURCE_SAFETY}},
         )
         detection = apply_candidate_assessment_policy(
@@ -85,7 +84,7 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
         )
 
         self.assertAlmostEqual(detection.confidence, 0.84)
-        self.assertEqual(detection.final_review_reasons, [])
+        self.assertFalse(hasattr(detection, "final_review_reasons"))
         self.assertNotIn(SAFETY_CANDIDATE_BLOCKER, candidate_signals(detection))
         assessment = detection.detail["candidate_assessment"]
         self.assertNotIn("candidate_gate_ok", assessment)

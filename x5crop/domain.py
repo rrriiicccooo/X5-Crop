@@ -65,7 +65,7 @@ class OuterCandidate:
 
 
 @dataclass
-class Detection:
+class DetectionCandidate:
     film_format: str
     layout: str
     strip_mode: str
@@ -74,8 +74,35 @@ class Detection:
     frames: list[Box]
     gaps: list[Gap]
     confidence: float
-    final_review_reasons: list[str]
     detail: dict[str, Any]
+
+
+@dataclass
+class FinalDetection(DetectionCandidate):
+    status: str
+    final_review_reasons: list[str]
+
+    @classmethod
+    def from_candidate(
+        cls,
+        candidate: DetectionCandidate,
+        *,
+        status: str,
+        final_review_reasons: list[str],
+    ) -> "FinalDetection":
+        return cls(
+            film_format=candidate.film_format,
+            layout=candidate.layout,
+            strip_mode=candidate.strip_mode,
+            count=candidate.count,
+            outer=candidate.outer,
+            frames=candidate.frames,
+            gaps=candidate.gaps,
+            confidence=candidate.confidence,
+            detail=candidate.detail,
+            status=status,
+            final_review_reasons=list(final_review_reasons),
+        )
 
 
 @dataclass
@@ -119,7 +146,8 @@ class ProcessResult:
 
 __all__ = [
     "Box",
-    "Detection",
+    "DetectionCandidate",
+    "FinalDetection",
     "Gap",
     "ImageProfile",
     "OuterCandidate",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ....formats import FormatSpec
 from ....policies.runtime.candidate import SelectionPolicy
 from ..signals import candidate_signals
@@ -10,21 +10,21 @@ from ..signals import candidate_signals
 
 @dataclass(frozen=True)
 class SelectionResult:
-    selected: Detection
-    candidates: tuple[Detection, ...]
+    selected: DetectionCandidate
+    candidates: tuple[DetectionCandidate, ...]
 
 
-def _candidate_assessment(candidate: Detection) -> dict:
+def _candidate_assessment(candidate: DetectionCandidate) -> dict:
     assessment = candidate.detail.get("candidate_assessment", {})
     return dict(assessment) if isinstance(assessment, dict) else {}
 
 
-def _candidate_detail_list(candidate: Detection, key: str) -> list:
+def _candidate_detail_list(candidate: DetectionCandidate, key: str) -> list:
     value = _candidate_assessment(candidate).get(key)
     return list(value) if isinstance(value, list) else []
 
 
-def calibrated_candidate_rank(detection: Detection, threshold: float) -> tuple[int, float, int, float]:
+def calibrated_candidate_rank(detection: DetectionCandidate, threshold: float) -> tuple[int, float, int, float]:
     candidate = detection.detail.get("candidate_assessment", {})
     joint = float(candidate.get("joint_score", 0.0)) if isinstance(candidate, dict) else 0.0
     partial_edge_safety_supported = bool(
@@ -47,11 +47,11 @@ def calibrated_candidate_rank(detection: Detection, threshold: float) -> tuple[i
     )
 
 
-def select_source_candidate(candidates: list[Detection], threshold: float) -> Detection:
+def select_source_candidate(candidates: list[DetectionCandidate], threshold: float) -> DetectionCandidate:
     return max(candidates, key=lambda detection: calibrated_candidate_rank(detection, threshold))
 
 
-def is_partial_edge_safety_candidate(detection: Detection, threshold: float) -> bool:
+def is_partial_edge_safety_candidate(detection: DetectionCandidate, threshold: float) -> bool:
     candidate = detection.detail.get("candidate_assessment", {})
     candidate_gate = {}
     if isinstance(candidate, dict):
@@ -68,7 +68,7 @@ def is_partial_edge_safety_candidate(detection: Detection, threshold: float) -> 
     )
 
 
-def _candidate_summary(candidate: Detection) -> dict:
+def _candidate_summary(candidate: DetectionCandidate) -> dict:
     assessment = _candidate_assessment(candidate)
     return {
         "format": candidate.film_format,
@@ -89,11 +89,11 @@ def _candidate_summary(candidate: Detection) -> dict:
 
 
 def select_detection_candidate(
-    candidates: list[Detection],
+    candidates: list[DetectionCandidate],
     fmt: FormatSpec,
     threshold: float,
     selection_policy: SelectionPolicy,
-) -> Detection:
+) -> DetectionCandidate:
     candidates = sorted(candidates, key=lambda d: calibrated_candidate_rank(d, threshold), reverse=True)
     best = candidates[0]
     second = next((candidate for candidate in candidates if candidate is not best), None)

@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...domain import Box, Detection, Gap
+from ...domain import Box, DetectionCandidate, Gap
 from ...gap_methods import gap_method_role, is_hard_gap_method, is_model_gap_method
 from ...geometry.boxes import box_cache_key
 from ...geometry.detection_parameters import SeparatorProfileParameters
@@ -24,7 +24,7 @@ from ...cache import AnalysisCache
 from ...utils import clamp_int
 
 
-def gap_work_outer(detection: Detection, gap: Gap) -> Optional[Box]:
+def gap_work_outer(detection: DetectionCandidate, gap: Gap) -> Optional[Box]:
     work_outer_raw = gap.lane_box if isinstance(gap.lane_box, dict) else detection.detail.get("work_outer")
     if not isinstance(work_outer_raw, dict):
         return None
@@ -103,7 +103,7 @@ def nearby_separator_candidate_detail(
 
 def gap_diagnostic_record(
     gray_work: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     gap: Gap,
     cache: Optional[AnalysisCache] = None,
     *,

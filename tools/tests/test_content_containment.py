@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from x5crop.domain import Box, Detection
+from x5crop.domain import Box, DetectionCandidate
 from x5crop.detection.evidence.content.containment import content_containment_detail
 from x5crop.detection.evidence.outer_alignment import outer_content_alignment_detail
 from x5crop.policies.registry import get_detection_policy
@@ -83,7 +83,7 @@ class ContentContainmentTest(unittest.TestCase):
     def test_outer_overcontainment_is_allowed(self) -> None:
         gray = np.full((120, 900), 255, dtype=np.uint8)
         gray[20:100, 220:680] = 0
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="120-645",
             layout="horizontal",
             strip_mode="full",
@@ -92,7 +92,6 @@ class ContentContainmentTest(unittest.TestCase):
             frames=[Box(0, 0, 300, 120), Box(300, 0, 600, 120), Box(600, 0, 900, 120)],
             gaps=[],
             confidence=0.0,
-            final_review_reasons=[],
             detail={},
         )
 
@@ -112,7 +111,7 @@ class ContentContainmentTest(unittest.TestCase):
     def test_outer_undercrop_is_integrity_failure(self) -> None:
         gray = np.full((120, 900), 255, dtype=np.uint8)
         gray[20:100, 50:850] = 0
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="120-645",
             layout="horizontal",
             strip_mode="full",
@@ -121,7 +120,6 @@ class ContentContainmentTest(unittest.TestCase):
             frames=[Box(250, 0, 383, 120), Box(383, 0, 516, 120), Box(516, 0, 650, 120)],
             gaps=[],
             confidence=0.0,
-            final_review_reasons=[],
             detail={},
         )
 

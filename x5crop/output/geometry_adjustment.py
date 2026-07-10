@@ -5,8 +5,8 @@ from typing import Any
 
 import numpy as np
 
-from ..detection.detail import final_review_reasons_from_detail, has_current_decision_summary
-from ..domain import Box, Detection
+from ..detection.detail import has_current_decision_summary
+from ..domain import Box, FinalDetection
 from ..geometry.boxes import map_work_box, original_box_to_work
 from ..geometry.layout import work_gray
 from ..policies.runtime.final import ApprovedGeometryAdjustmentPolicy
@@ -16,7 +16,7 @@ from ..utils import clamp_float, clamp_int
 
 
 def apply_edge_bleed_protection(
-    detection: Detection,
+    detection: FinalDetection,
     config: RuntimeConfig,
     image_w: int,
     image_h: int,
@@ -64,16 +64,15 @@ def apply_edge_bleed_protection(
 
 
 def apply_approved_geometry_adjustment(
-    detection: Detection,
+    detection: FinalDetection,
     gray: np.ndarray,
-    status: str,
     policy: ApprovedGeometryAdjustmentPolicy,
 ) -> None:
-    if status != "approved_auto" or detection.strip_mode != "full" or len(detection.frames) != detection.count:
+    if detection.status != "approved_auto" or detection.strip_mode != "full" or len(detection.frames) != detection.count:
         return
     if not has_current_decision_summary(detection):
         return
-    if final_review_reasons_from_detail(detection):
+    if detection.final_review_reasons:
         return
     gray_work = work_gray(gray, detection.layout)
     h, w = gray_work.shape

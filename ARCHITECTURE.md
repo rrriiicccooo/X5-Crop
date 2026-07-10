@@ -93,12 +93,12 @@ candidate plan
 | Physical proposal | 产生 outer、separator、photo-size 等物理候选或证据。 |
 | Guidance | 使用 content-derived hint 辅助 outer / separator search。 |
 | Candidate plan | 只声明 count、offset、candidate source descriptors 和 execution budget。 |
-| Candidate build | 将 outer、separator gaps 和 frame geometry 组装成未评分 Detection 几何。 |
+| Candidate build | 将 outer、separator gaps 和 frame geometry 组装成未评分 `DetectionCandidate`。 |
 | Candidate execution | 执行 source descriptor：调用 proposal、build geometry、补充 geometry evidence，再交给 assessment。 |
 | Candidate assessment | 计算 candidate support、candidate gate、candidate blockers、diagnostics 和 confidence caps。 |
 | Candidate extension | 对 corrected outer、content-guided separator 等候选重新 build / reassess。 |
 | Candidate selection | 在已评估候选之间选择 selected candidate，并记录 competition detail。 |
-| Decision | 生成 final evidence summary、decision signals、decision gate、final review reasons 和最终 status。 |
+| Decision | 将 selected `DetectionCandidate` 转成唯一拥有 status / final reasons 的 `FinalDetection`。 |
 
 candidate assessment 只产生候选级解释；最终用户可见原因只由 decision 产生。
 用户入口 `strip_mode` 仍表示照片是否铺满片夹；detection 内部另行记录
@@ -139,7 +139,7 @@ JSONL 每行就是 current `detection_report` record；不再包裹旧 ProcessRe
 | `x5crop.detection` | 候选、证据、assessment、selection、decision、finalization。 |
 | `x5crop.output` | output-adjacent bleed / overlap read model 和输出几何 helper。 |
 | `x5crop.export` | crop 写出、review copy 和 export actions。 |
-| `x5crop.report` | report result、schema、sections、outputs。 |
+| `x5crop.report` | report result / record 构建、sections、outputs 和 schema validation。 |
 | `x5crop.debug` | Debug Analysis canvas、panels、gap overlay、writer、status。 |
 | `tools` | regression、build、unit tests 和开发辅助工具；不进入 runtime package。 |
 
@@ -191,7 +191,7 @@ XPAN 和 120-66 的 `complete_strip_can_be_underfilled` 是 format physical trai
 | `detection.evidence` | content、separator、photo-width、frame topology、strip completeness、holder occupancy、outer alignment、output overlap、read-only diagnostics 等证据。 |
 | `detection.candidate.plan` | count / offset / source descriptors / execution budget；不 build、不 assessment、不 selection。 |
 | `detection.candidate.proposal` | outer 等 candidate-level proposal 执行入口。 |
-| `detection.candidate.build` | outer + gaps + frames -> unscored Detection geometry。 |
+| `detection.candidate.build` | outer + gaps + frames -> unscored `DetectionCandidate`。 |
 | `detection.candidate.execution` | 将 source descriptor / proposal 输出显式串成 build -> evidence enrichment -> assessment。 |
 | `detection.candidate.assessment` | support scoring、base scoring、candidate gate、blockers、diagnostics、candidate confidence caps。 |
 | `detection.candidate.extension` | corrected outer 和其它扩展候选的 reassessment。 |
@@ -202,6 +202,9 @@ XPAN 和 120-66 的 `complete_strip_can_be_underfilled` 是 format physical trai
 
 detection 中的层级方向是：plan -> proposal / guidance -> build -> evidence enrichment -> assessment -> selection ->
 decision -> finalization。低层不能反向读取高层 decision 语义。
+`DetectionCandidate` 不含 status 或 final reasons。DecisionGate 是唯一
+`DetectionCandidate -> FinalDetection` 转换点；finalization 只接收并返回
+`FinalDetection`，report / debug / export 也不能接收未决候选。
 `candidate.lifecycle` 只串联候选生命周期；execution budget detail 属于
 `candidate.plan.execution_budget`，批量 assessment 属于 `candidate.assessment.source_batch`。
 `output_overlap_evidence` 是 output-protection evidence：detected、required output
@@ -239,7 +242,7 @@ cross-axis continuity、photo-width CV、aspect error、confidence 等仍是 nor
 | `report` | ProcessResult 到 JSONL / CSV / sections 的转换。 |
 | `debug` | Debug Analysis 图像渲染和状态面板。 |
 
-output surface 只消费 `ProcessResult`、`Detection.detail` 的稳定 read helper 和最终
+output surface 只消费 `ProcessResult`、`FinalDetection.detail` 的稳定 read helper 和最终
 decision summary。它们不生成候选，不评分，不决定 PASS / REVIEW。
 approved geometry adjustment 属于 output-adjacent adjustment：它只在 decision 已 approved
 且没有 final review reasons 后调整最终输出范围，不是 detection correction。
@@ -325,7 +328,7 @@ Source layering describes which package owns which knowledge.
 | `x5crop.detection` | Candidates, evidence, assessment, selection, decision, finalization. |
 | `x5crop.output` | Output-adjacent bleed / overlap read model and output geometry helpers. |
 | `x5crop.export` | Crop writing, review copies, and export actions. |
-| `x5crop.report` | Report result building, schema, sections, outputs. |
+| `x5crop.report` | Report result/record building, sections, outputs, and schema validation. |
 | `x5crop.debug` | Debug Analysis canvas, panels, gap overlay, writer, status. |
 | `tools` | Regression, build, unit tests, and developer utilities outside the runtime package. |
 
@@ -380,7 +383,7 @@ declares the lane count and lane format. Detector policy does not hide a default
 | `detection.evidence` | Content, separator, photo-width, frame topology, strip completeness, holder occupancy, outer alignment, output overlap, read-only diagnostics. |
 | `detection.candidate.plan` | Count / offset / source descriptors / execution budget; no build, assessment, or selection. |
 | `detection.candidate.proposal` | Candidate-level outer proposal execution entries. |
-| `detection.candidate.build` | outer + gaps + frames -> unscored Detection geometry. |
+| `detection.candidate.build` | outer + gaps + frames -> unscored `DetectionCandidate`. |
 | `detection.candidate.execution` | Explicit source descriptor / proposal -> build -> evidence enrichment -> assessment orchestration. |
 | `detection.candidate.assessment` | Support scoring, base scoring, candidate gate, blockers, diagnostics, candidate confidence caps. |
 | `detection.candidate.extension` | Reassessment of corrected outer and other extension candidates. |
@@ -392,6 +395,10 @@ declares the lane count and lane format. Detector policy does not hide a default
 The direction is plan -> proposal / guidance -> build -> evidence enrichment -> assessment -> selection ->
 decision -> finalization. Lower layers must not read higher-level decision
 semantics.
+`DetectionCandidate` has no status or final reasons. DecisionGate is the only
+`DetectionCandidate -> FinalDetection` conversion point. Finalization only
+accepts and returns `FinalDetection`, and report / debug / export cannot consume
+an undecided candidate.
 `candidate.lifecycle` only orchestrates the candidate lifecycle. Execution-budget
 visibility belongs to `candidate.plan.execution_budget`; batch assessment belongs
 to `candidate.assessment.source_batch`.

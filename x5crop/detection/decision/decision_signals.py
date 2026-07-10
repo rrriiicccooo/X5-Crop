@@ -9,7 +9,7 @@ from ...constants import (
     CANDIDATE_SOURCE_REVIEW_ONLY,
     CANDIDATE_SOURCE_SAFETY,
 )
-from ...domain import Detection
+from ...domain import DetectionCandidate
 from ...policies.decision.contract import DetectionDecisionContract
 
 
@@ -41,7 +41,7 @@ def _float(value: Any, default: float = 0.0) -> float:
 
 
 def decision_signals_for(
-    detection: Detection,
+    detection: DetectionCandidate,
     evidence: dict[str, Any],
     policy: DetectionDecisionContract,
 ) -> dict[str, Any]:

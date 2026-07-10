@@ -59,7 +59,7 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     detection_bleed = detection_bleed_parameters(policy.output)
     detection_config = replace(config, bleed_x=detection_bleed.long_axis, bleed_y=detection_bleed.short_axis)
     detection_result = choose_detection(gray, detection_config, fmt, policy_bundle, analysis_cache)
-    detection = detection_result.detection
+    detection = detection_result.candidate
     selected_policy = detection_result.policy
     detection.detail["scan_calibration"] = scan_calibration.detail()
     holder_occupancy = detection.detail.get("holder_occupancy")
@@ -68,7 +68,7 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
             holder_occupancy,
             scan_calibration,
         )
-    decision = apply_detection_decision(
+    decided_detection = apply_detection_decision(
         gray,
         detection,
         config,
@@ -77,18 +77,14 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
         selected_policy,
         decision_contract_for_policy(selected_policy),
     )
-    finalization = finalize_detection(
+    detection = finalize_detection(
         gray,
-        decision.detection,
-        decision.status,
+        decided_detection,
         config,
         analysis_cache,
         selected_policy,
     )
-    detection = finalization.detection
-    status = finalization.status
-
-    review_copy = copy_for_review_if_needed(input_file, output_dir, config, detection, status, warnings)
+    review_copy = copy_for_review_if_needed(input_file, output_dir, config, detection, warnings)
     output_files = write_crops_if_allowed(
         input_file,
         arr,
@@ -98,7 +94,6 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
         config,
         bool(deskew_detail["applied"]),
         output_surface,
-        status,
     )
     write_debug_outputs(gray, detection, output_dir, input_file.stem, config, analysis_cache, warnings, selected_policy)
 
@@ -106,7 +101,6 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
         input_file,
         detection,
         profile,
-        status,
         output_files,
         review_copy,
         warnings,

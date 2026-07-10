@@ -5,7 +5,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_EQUAL, GAP_GRID
-from ..domain import Box, Detection, Gap
+from ..domain import Box, FinalDetection, Gap
 from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float
 from .canvas import (
@@ -15,7 +15,7 @@ from .canvas import (
 )
 
 
-def gap_mark_box(detection: Detection, gap: Gap) -> Optional[Box]:
+def gap_mark_box(detection: FinalDetection, gap: Gap) -> Optional[Box]:
     work_outer_raw = gap.lane_box if isinstance(gap.lane_box, dict) else detection.detail.get("work_outer")
     if not isinstance(work_outer_raw, dict):
         return None
@@ -43,7 +43,7 @@ def gap_mark_box(detection: Detection, gap: Gap) -> Optional[Box]:
     return Box(work_outer.top, x, work_outer.bottom, x + 1)
 
 
-def gap_tick_boxes(detection: Detection, gap: Gap, debug_gap: Any) -> list[Box]:
+def gap_tick_boxes(detection: FinalDetection, gap: Gap, debug_gap: Any) -> list[Box]:
     work_outer_raw = gap.lane_box if isinstance(gap.lane_box, dict) else detection.detail.get("work_outer")
     if not isinstance(work_outer_raw, dict):
         return []
@@ -74,7 +74,7 @@ def gap_tick_boxes(detection: Detection, gap: Gap, debug_gap: Any) -> list[Box]:
     ]
 
 
-def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float, debug_gap: Any) -> None:
+def draw_gap_overlay(rgb: np.ndarray, detection: FinalDetection, scale: float, debug_gap: Any) -> None:
     gap_colors = {
         GAP_DETECTED: (255, 0, 0),
         GAP_EDGE_PAIR: (255, 0, 0),
@@ -109,7 +109,7 @@ def draw_gap_overlay(rgb: np.ndarray, detection: Detection, scale: float, debug_
     draw_gap_diagnostic_overlay(rgb, detection, scale, debug_gap)
 
 
-def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: Detection, scale: float, debug_gap: Any) -> None:
+def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: FinalDetection, scale: float, debug_gap: Any) -> None:
     diagnostics = detection.detail.get("diagnostics")
     records: Any = None
     if isinstance(diagnostics, dict):

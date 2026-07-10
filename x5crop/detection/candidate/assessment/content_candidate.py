@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ...confidence_caps import apply_confidence_cap
 from ....policies.runtime.content import ContentCandidatePolicy, ContentPolicy
 from ....runtime.config import RuntimeConfig
@@ -108,7 +108,7 @@ def content_candidate_assessment_from_metrics(
 
 
 def content_candidate_assessment_from_proposal(
-    detection: Detection,
+    detection: DetectionCandidate,
     config: RuntimeConfig,
     policy: ContentPolicy,
 ) -> ContentCandidateAssessment:

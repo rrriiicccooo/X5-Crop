@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ....domain import Box, Detection
+from ....domain import Box, DetectionCandidate
 from ....formats import FormatSpec
 from ....geometry.boxes import map_work_box
 from ....geometry.frame_fit import fit_frame_boxes_from_gaps
@@ -48,7 +48,7 @@ def build_detection_geometry_for_outer(
     separator_gap_hints: Optional[SeparatorGapHintSet] = None,
     *,
     policy: DetectionPolicy,
-) -> Detection:
+) -> DetectionCandidate:
     if gap_search_profile != WIDTH_AWARE_GAP_PROFILE:
         raise ValueError(f"Unsupported separator gap search profile: {gap_search_profile!r}")
     candidate_strategy = outer_candidate_strategy_name or outer_candidate_strategy(outer_candidate_name)
@@ -129,18 +129,28 @@ def build_detection_geometry_for_outer(
     )
     if separator_gaps.pre_nearby_gaps is not None:
         detail["pre_nearby_gaps"] = [asdict(gap) for gap in separator_gaps.pre_nearby_gaps]
-    return Detection(fmt.name, config.layout, strip_mode, count, outer_original, boxes, gaps, 0.0, [], detail)
+    return DetectionCandidate(
+        film_format=fmt.name,
+        layout=config.layout,
+        strip_mode=strip_mode,
+        count=count,
+        outer=outer_original,
+        frames=boxes,
+        gaps=gaps,
+        confidence=0.0,
+        detail=detail,
+    )
 
 
 def enrich_detection_geometry_evidence(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     config: RuntimeConfig,
     fmt: FormatSpec,
     cache: Optional[AnalysisCache],
     *,
     policy: DetectionPolicy,
-) -> Detection:
+) -> DetectionCandidate:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     wh, ww = gray_work.shape
     outer = box_from_dict(detection.detail.get("work_outer", {}))

@@ -10,7 +10,7 @@ from x5crop.detection.candidate.assessment.support_calibration import (
     hard_full_calibration_floor_applies,
     separator_geometry_support_applies,
 )
-from x5crop.domain import Box, Detection, Gap
+from x5crop.domain import Box, DetectionCandidate, Gap
 from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED
 from x5crop.policies.registry import get_detection_policy
@@ -21,7 +21,7 @@ from x5crop.policies.runtime.separator import SeparatorGeometrySupportModePolicy
 class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
     def test_partial_holder_uses_holder_edge_disambiguation_reason(self) -> None:
         policy = get_detection_policy("120-66", "partial")
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="120-66",
             layout="horizontal",
             strip_mode="partial",
@@ -34,7 +34,6 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             ],
             gaps=[Gap(1, 100.0, 1.0, GAP_DETECTED, 95.0, 105.0)],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
@@ -87,7 +86,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
         self.assertFalse(detail["content_quality"]["quality_ok"])
 
     def test_evidence_independence_treats_content_score_as_quality_detail(self) -> None:
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="120-66",
             layout="horizontal",
             strip_mode="full",
@@ -103,7 +102,6 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
                 Gap(2, 200.0, 1.0, GAP_DETECTED, 195.0, 205.0),
             ],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "outer_candidate_strategy": "separator_outer",
                 "width_cv": 0.0,
@@ -134,7 +132,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
         self.assertTrue(detail["ok"])
 
     def test_frame_box_width_detail_does_not_validate_evidence_independence(self) -> None:
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="120-66",
             layout="horizontal",
             strip_mode="full",
@@ -150,7 +148,6 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
                 Gap(2, 200.0, 1.0, GAP_DETECTED, 195.0, 205.0),
             ],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "outer_candidate_strategy": "separator_outer",
                 "width_cv": 0.0,
@@ -192,7 +189,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             max_photo_width_cv=0.040,
             max_outer_area_ratio=0.99,
         )
-        frame_box_detail_candidate = Detection(
+        frame_box_detail_candidate = DetectionCandidate(
             film_format="120-66",
             layout="horizontal",
             strip_mode="full",
@@ -205,14 +202,13 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             ],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "width_cv": 0.20,
                 "width_cv_source": "frame_boxes",
                 "outer_area_ratio": 0.80,
             },
         )
-        unstable_photo_candidate = Detection(
+        unstable_photo_candidate = DetectionCandidate(
             film_format="120-66",
             layout="horizontal",
             strip_mode="full",
@@ -221,7 +217,6 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             frames=frame_box_detail_candidate.frames,
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "width_cv": 0.20,
                 "width_cv_source": "photo_edges",
@@ -273,7 +268,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
 
     def test_partial_holder_does_not_treat_frame_box_width_as_photo_instability(self) -> None:
         policy = get_detection_policy("120-66", "partial")
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="120-66",
             layout="horizontal",
             strip_mode="partial",
@@ -289,7 +284,6 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
                 Gap(2, 212.5, 1.0, GAP_DETECTED, 205.0, 220.0),
             ],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "width_cv": 0.20,
                 "width_cv_source": "frame_boxes",

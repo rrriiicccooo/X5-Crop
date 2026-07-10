@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from copy import deepcopy
 from typing import Any
 
 import numpy as np
 
 from ...cache import AnalysisCache
-from ...domain import Detection
+from ...domain import DetectionCandidate, FinalDetection
 from ...policies.decision.contract import DetectionDecisionContract
 from ...policies.runtime.policy import DetectionPolicy
 from ...runtime.config import RuntimeConfig
@@ -17,23 +17,16 @@ from ..evidence.output_overlap import output_overlap_evidence_detail
 from .contract_applier import apply_decision_contract
 
 
-@dataclass
-class FinalDecisionResult:
-    detection: Detection
-    status: str
-    content_detail: dict[str, Any]
-    outer_alignment: dict[str, Any]
-
-
 def apply_detection_decision(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     config: RuntimeConfig,
     analysis_cache: AnalysisCache,
     deskew_detail: dict[str, Any],
     policy: DetectionPolicy,
     decision_contract: DetectionDecisionContract,
-) -> FinalDecisionResult:
+) -> FinalDetection:
+    detection = deepcopy(detection)
     raw_content_detail = content_evidence_detail(
         gray,
         detection,
@@ -65,7 +58,7 @@ def apply_detection_decision(
         policy,
         analysis_cache,
     )
-    detection = apply_decision_contract(
+    return apply_decision_contract(
         gray,
         detection,
         config,
@@ -74,23 +67,11 @@ def apply_detection_decision(
         policy=decision_contract,
         deskew_detail=deskew_detail,
     )
-    decision_summary = detection.detail.get("decision_summary", {})
-    status = (
-        str(decision_summary.get("status"))
-        if isinstance(decision_summary, dict) and decision_summary.get("status")
-        else "needs_review"
-    )
-    return FinalDecisionResult(
-        detection=detection,
-        status=status,
-        content_detail=content_detail,
-        outer_alignment=outer_alignment,
-    )
 
 
 def _attach_decision_output_evidence(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     config: RuntimeConfig,
     policy: DetectionPolicy,
     analysis_cache: AnalysisCache,
@@ -115,6 +96,5 @@ def _attach_decision_output_evidence(
 
 
 __all__ = [
-    "FinalDecisionResult",
     "apply_detection_decision",
 ]

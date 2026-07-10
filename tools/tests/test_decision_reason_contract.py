@@ -20,7 +20,7 @@ from x5crop.detection.decision.contract_applier import apply_decision_contract
 from x5crop.detection.decision.decision_signals import decision_signals_for
 from x5crop.detection.modes.review_only import review_only_detection
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
-from x5crop.domain import Box, Detection
+from x5crop.domain import Box, DetectionCandidate
 from x5crop.formats import format_spec
 from x5crop.report.sections import selected_candidate
 from x5crop.policies.registry import get_detection_policy
@@ -106,7 +106,7 @@ class DecisionReasonContractTest(unittest.TestCase):
 
     def test_final_review_reasons_are_owned_by_decision_inputs(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -115,7 +115,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "candidate_signals": ["content_coverage_weak"],
                 "width_cv": 0.0,
@@ -151,10 +150,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             ["content_coverage_weak"],
         )
         self.assertNotIn("candidate_final_review_reasons_before_decision", decided.detail)
-        self.assertEqual(
-            decided.detail["final_review_reasons"],
-            ["evidence_combination_insufficient"],
-        )
+        self.assertNotIn("final_review_reasons", decided.detail)
         self.assertEqual(
             decided.detail["decision_reason_inputs"][0]["signal"],
             "candidate_gate_failed",
@@ -168,7 +164,7 @@ class DecisionReasonContractTest(unittest.TestCase):
 
     def test_safety_candidate_blocker_is_explained_by_decision_signal(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -177,7 +173,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "candidate_signals": [SAFETY_CANDIDATE_BLOCKER],
                 "width_cv": 0.0,
@@ -234,7 +229,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             "partial_edge": {"ok": True},
         }
 
-        content_detection = Detection(
+        content_detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -243,7 +238,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "candidate_source": CANDIDATE_SOURCE_SEPARATOR,
                 "candidate_assessment": {
@@ -267,7 +261,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             },
         )
 
-        hard_safety_detection = Detection(
+        hard_safety_detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -276,7 +270,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "candidate_source": CANDIDATE_SOURCE_HARD_SAFETY,
                 "candidate_assessment": {
@@ -317,7 +310,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             policy,
         )
 
-        self.assertEqual(detection.final_review_reasons, [])
+        self.assertFalse(hasattr(detection, "final_review_reasons"))
         mode_reasons = [policy.detector.review_only.reason, "needs_manual_review"]
         self.assertEqual(
             detection.detail["candidate_signals"],
@@ -347,7 +340,7 @@ class DecisionReasonContractTest(unittest.TestCase):
 
     def test_content_evidence_failure_is_not_content_only_reason(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -356,7 +349,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
@@ -428,7 +420,7 @@ class DecisionReasonContractTest(unittest.TestCase):
 
     def test_output_overlap_evidence_is_output_protection_signal(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -437,7 +429,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
@@ -490,7 +481,7 @@ class DecisionReasonContractTest(unittest.TestCase):
 
     def test_unresolved_output_overlap_is_final_decision_signal(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -499,7 +490,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
@@ -540,7 +530,7 @@ class DecisionReasonContractTest(unittest.TestCase):
 
     def test_output_overlap_evidence_is_attached_before_final_decision(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -549,7 +539,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
@@ -612,19 +601,19 @@ class DecisionReasonContractTest(unittest.TestCase):
             )
 
         self.assertEqual(decision.status, "approved_auto")
-        self.assertEqual(decision.detection.final_review_reasons, [])
+        self.assertEqual(decision.final_review_reasons, [])
         self.assertEqual(
-            decision.detection.detail["output_overlap_evidence"]["reason"],
+            decision.detail["output_overlap_evidence"]["reason"],
             "output_overlap_protected_by_bleed",
         )
         self.assertEqual(
-            [item["signal"] for item in decision.detection.detail["decision_reason_inputs"]],
+            [item["signal"] for item in decision.detail["decision_reason_inputs"]],
             [],
         )
 
     def test_final_status_requires_no_final_review_reasons_with_low_threshold(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -633,7 +622,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "candidate_signals": [SAFETY_CANDIDATE_BLOCKER],
                 "width_cv": 0.0,
@@ -695,19 +683,19 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
 
         self.assertEqual(decision.status, "needs_review")
-        self.assertEqual(decision.detection.confidence, 0.84)
+        self.assertEqual(decision.confidence, 0.84)
         self.assertEqual(
-            decision.detection.final_review_reasons,
+            decision.final_review_reasons,
             ["evidence_combination_insufficient", "content_evidence_insufficient"],
         )
         self.assertEqual(
-            decision.detection.detail["decision_summary"]["status"],
+            decision.detail["decision_summary"]["status"],
             "needs_review",
         )
 
     def test_close_competition_is_final_decision_reason(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -716,7 +704,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
@@ -796,8 +783,8 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
 
     def test_selection_records_competition_signal_without_candidate_review_reason(self) -> None:
-        def candidate(confidence: float) -> Detection:
-            return Detection(
+        def candidate(confidence: float) -> DetectionCandidate:
+            return DetectionCandidate(
                 film_format="135",
                 layout="horizontal",
                 strip_mode="full",
@@ -806,7 +793,6 @@ class DecisionReasonContractTest(unittest.TestCase):
                 frames=[],
                 gaps=[],
                 confidence=confidence,
-                final_review_reasons=[],
                 detail={
                     "candidate_assessment": {
                         "source": "separator",
@@ -823,7 +809,7 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
 
         self.assertEqual(selected.confidence, 0.90)
-        self.assertEqual(selected.final_review_reasons, [])
+        self.assertFalse(hasattr(selected, "final_review_reasons"))
         self.assertEqual(
             selected.detail["candidate_competition"]["selection_uncertainty_inputs"][0]["signal"],
             "candidate_competition_close",
@@ -840,8 +826,8 @@ class DecisionReasonContractTest(unittest.TestCase):
         fmt = format_spec("half")
         policy = get_detection_policy("half", "full")
 
-        def content_candidate(*, diagnostics: list[str], reasons: list[str]) -> Detection:
-            return Detection(
+        def content_candidate(*, diagnostics: list[str]) -> DetectionCandidate:
+            return DetectionCandidate(
                 film_format="half",
                 layout="horizontal",
                 strip_mode="full",
@@ -850,7 +836,6 @@ class DecisionReasonContractTest(unittest.TestCase):
                 frames=[],
                 gaps=[],
                 confidence=0.90,
-                final_review_reasons=reasons,
                 detail={
                     "candidate_assessment": {
                         "source": "content",
@@ -861,7 +846,7 @@ class DecisionReasonContractTest(unittest.TestCase):
                 },
             )
 
-        separator_candidate = Detection(
+        separator_candidate = DetectionCandidate(
             film_format="half",
             layout="horizontal",
             strip_mode="full",
@@ -870,7 +855,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[],
             gaps=[],
             confidence=0.84,
-            final_review_reasons=[],
             detail={
                 "candidate_assessment": {
                     "source": "separator",
@@ -891,7 +875,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             [
                 content_candidate(
                     diagnostics=[],
-                    reasons=["content_run_count_mismatch"],
                 ),
                 separator_candidate,
             ],
@@ -909,7 +892,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             [
                 content_candidate(
                     diagnostics=["content_run_count_mismatch"],
-                    reasons=[],
                 ),
                 separator_candidate,
             ],
@@ -925,7 +907,7 @@ class DecisionReasonContractTest(unittest.TestCase):
 
     def test_low_confidence_context_reasons_update_generated_summary(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -934,7 +916,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.83,
-            final_review_reasons=[],
             detail={
                 "outer_area_spread_ratio": 0.25,
                 "width_cv": 0.0,
@@ -974,10 +955,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             deskew_detail={},
         )
 
-        self.assertEqual(
-            decided.detail["final_review_reasons"],
-            ["evidence_combination_insufficient", "outer_candidate_disagreement"],
-        )
+        self.assertNotIn("final_review_reasons", decided.detail)
         self.assertEqual(
             decided.detail["decision_summary"]["final_review_reasons"],
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
@@ -1010,7 +988,7 @@ class DecisionReasonContractTest(unittest.TestCase):
 
     def test_low_confidence_context_reasons_do_not_create_high_confidence_review(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -1019,7 +997,6 @@ class DecisionReasonContractTest(unittest.TestCase):
             frames=[Box(10, 10, 90, 90)],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "outer_area_spread_ratio": 0.25,
                 "width_cv": 0.0,

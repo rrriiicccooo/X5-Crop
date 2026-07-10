@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 
 from ....constants import CANDIDATE_SOURCE_HARD_SAFETY
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ....formats import FormatSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.outer import OuterCorrectionFamilyPolicy
@@ -19,16 +19,16 @@ from ...physical.outer.correction.content_containment import content_containment
 from ...physical.outer.correction.geometry import geometry_consistency_correction_proposal, geometry_consistency_model_detail
 
 
-def _candidate_assessment_detail(detection: Detection) -> dict[str, Any]:
+def _candidate_assessment_detail(detection: DetectionCandidate) -> dict[str, Any]:
     assessment = detection.detail.get("candidate_assessment", {})
     return dict(assessment) if isinstance(assessment, dict) else {}
 
 
-def _candidate_is_separator_assessed(detection: Detection) -> bool:
+def _candidate_is_separator_assessed(detection: DetectionCandidate) -> bool:
     return _candidate_assessment_detail(detection).get("source") == "separator"
 
 
-def _candidate_separator_support_ok(detection: Detection) -> bool:
+def _candidate_separator_support_ok(detection: DetectionCandidate) -> bool:
     hard_detail = _candidate_assessment_detail(detection).get("separator_support", {})
     return isinstance(hard_detail, dict) and bool(hard_detail.get("ok", False))
 
@@ -36,7 +36,7 @@ def _candidate_separator_support_ok(detection: Detection) -> bool:
 def _correction_skip_reason(
     name: str,
     family: OuterCorrectionFamilyPolicy,
-    detection: Detection,
+    detection: DetectionCandidate,
     explicit_count: bool,
 ) -> str | None:
     if family.mode == "off":
@@ -55,14 +55,14 @@ def _correction_skip_reason(
 def _correction_family_eligible_for_candidate(
     name: str,
     family: OuterCorrectionFamilyPolicy,
-    detection: Detection,
+    detection: DetectionCandidate,
     explicit_count: bool,
 ) -> bool:
     return _correction_skip_reason(name, family, detection, explicit_count) is None
 
 
 def _outer_correction_plan_detail(
-    detection: Detection,
+    detection: DetectionCandidate,
     policy: DetectionPolicy,
     explicit_count: bool,
 ) -> dict[str, Any]:
@@ -109,10 +109,10 @@ def outer_correction_candidate_extensions(
     gray: np.ndarray,
     config: RuntimeConfig,
     fmt: FormatSpec,
-    detection: Detection,
+    detection: DetectionCandidate,
     cache: AnalysisCache,
     policy: DetectionPolicy,
-) -> list[Detection]:
+) -> list[DetectionCandidate]:
     if detection.detail.get("candidate_source") == CANDIDATE_SOURCE_HARD_SAFETY:
         return []
     if not bool(policy.candidate_plan.outer_correction_extension.enabled):
@@ -174,7 +174,7 @@ def outer_correction_candidate_extensions(
         }
         return []
 
-    extensions: list[Detection] = []
+    extensions: list[DetectionCandidate] = []
     proposal = geometry_consistency_correction_proposal(
         gray,
         fmt,

@@ -6,7 +6,7 @@ from typing import Optional
 import numpy as np
 
 from ...constants import CANDIDATE_SOURCE_CONTENT_PRIMARY
-from ...domain import Box, Detection, Gap
+from ...domain import Box, DetectionCandidate, Gap
 from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
@@ -145,7 +145,7 @@ def content_detection_for_count(
     cache: Optional[AnalysisCache] = None,
     *,
     content_policy: ContentPolicy,
-) -> Optional[Detection]:
+) -> Optional[DetectionCandidate]:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     mask_policy = content_policy.mask
     candidate_policy = content_policy.candidate
@@ -243,15 +243,14 @@ def content_detection_for_count(
         "gap_scores": [gap.score for gap in gaps],
         "gap_methods": [gap.method for gap in gaps],
     }
-    return Detection(
-        fmt.name,
-        config.layout,
-        strip_mode,
-        count,
-        outer_original,
-        boxes,
-        gaps,
-        0.0,
-        [],
-        detail,
+    return DetectionCandidate(
+        film_format=fmt.name,
+        layout=config.layout,
+        strip_mode=strip_mode,
+        count=count,
+        outer=outer_original,
+        frames=boxes,
+        gaps=gaps,
+        confidence=0.0,
+        detail=detail,
     )

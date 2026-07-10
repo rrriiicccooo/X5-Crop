@@ -5,7 +5,7 @@ from typing import Optional
 import numpy as np
 
 from ...app_info import VERSION
-from ...domain import Detection
+from ...domain import DetectionCandidate
 from ...geometry.layout import work_gray
 from ...cache import AnalysisCache
 from ...gap_methods import gap_method_roles
@@ -17,7 +17,7 @@ from .gap_diagnostics import gap_diagnostic_record
 
 def attach_read_only_diagnostics(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     cache: Optional[AnalysisCache] = None,
     *,
     separator_policy: SeparatorPolicy,

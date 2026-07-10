@@ -4,29 +4,18 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from ..app_info import SCRIPT_NAME, VERSION
-from ..detection.detail import decision_summary, final_review_reasons_from_detail
-from ..domain import Detection
+from ..domain import FinalDetection
 
 
-def debug_status_parts(detection: Detection, threshold: float) -> tuple[str, str, tuple[int, int, int]]:
-    decision = decision_summary(detection)
-    status_value = str(decision.get("status", "") or "")
-    if status_value:
-        passed = status_value == "approved_auto"
-        status = "PASS" if passed else "REVIEW"
-        detail = (
-            f"decision status {status_value}; "
-            f"confidence {detection.confidence:.3f}; threshold {threshold:.3f}"
-        )
-        color = (40, 180, 90) if passed else (230, 80, 70)
-    else:
-        status = "UNKNOWN"
-        detail = (
-            "decision status unavailable; "
-            f"confidence {detection.confidence:.3f}; threshold {threshold:.3f}"
-        )
-        color = (170, 170, 170)
-    reasons = final_review_reasons_from_detail(detection)
+def debug_status_parts(detection: FinalDetection, threshold: float) -> tuple[str, str, tuple[int, int, int]]:
+    passed = detection.status == "approved_auto"
+    status = "PASS" if passed else "REVIEW"
+    detail = (
+        f"decision status {detection.status}; "
+        f"confidence {detection.confidence:.3f}; threshold {threshold:.3f}"
+    )
+    color = (40, 180, 90) if passed else (230, 80, 70)
+    reasons = detection.final_review_reasons
     if reasons:
         detail += " | " + ",".join(reasons[:3])
     return status, detail, color
@@ -52,7 +41,7 @@ def draw_large_status(
     return width + 3, height + 3
 
 
-def add_status_bar(rgb: np.ndarray, detection: Detection, threshold: float) -> np.ndarray:
+def add_status_bar(rgb: np.ndarray, detection: FinalDetection, threshold: float) -> np.ndarray:
     status, detail, color = debug_status_parts(detection, threshold)
     detail = f"{SCRIPT_NAME} {VERSION} | {detail}"
     bar_h = 48

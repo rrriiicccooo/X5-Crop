@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ....formats import FormatSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import SeparatorGeometrySupportModePolicy
@@ -22,7 +22,7 @@ def detail_float(detail: dict[str, Any], key: str, default: float) -> float:
 
 
 def hard_full_calibration_floor_applies(
-    candidate: Detection,
+    candidate: DetectionCandidate,
     hard_detail: dict[str, Any],
     fmt: FormatSpec,
     source: str,
@@ -48,7 +48,7 @@ def hard_full_calibration_floor_applies(
 
 
 def separator_geometry_support_applies(
-    candidate: Detection,
+    candidate: DetectionCandidate,
     hard_detail: dict[str, Any],
     fmt: FormatSpec,
     source: str,

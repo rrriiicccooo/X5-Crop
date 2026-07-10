@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 
 from ...cache import AnalysisCache
-from ...domain import Detection
+from ...domain import DetectionCandidate
 from ...geometry.layout import work_gray
 from ...policies.runtime.diagnostics import NearbySeparatorDiagnosticsPolicy
 from ...policies.runtime.output_evidence import OutputOverlapEvidencePolicy
@@ -48,7 +48,7 @@ def _required_output_bleed_px(
 
 def output_overlap_evidence_detail(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     cache: AnalysisCache | None = None,
     *,
     separator_policy: SeparatorPolicy,

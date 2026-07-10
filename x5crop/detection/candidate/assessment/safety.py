@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from ....constants import CANDIDATE_SOURCE_SAFETY
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ....policies.runtime.policy import DetectionPolicy
 from ..signals import SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE
 
@@ -10,7 +9,7 @@ SAFETY_CANDIDATE_BLOCKER = SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE
 
 
 def apply_safety_candidate_assessment(
-    detection: Detection,
+    detection: DetectionCandidate,
     *,
     confidence_threshold: float,
     policy: DetectionPolicy,

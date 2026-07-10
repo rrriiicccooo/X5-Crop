@@ -20,7 +20,7 @@ from x5crop.detection.candidate.signals import candidate_signals
 from x5crop.detection.evidence.frame_topology import frame_topology_evidence
 from x5crop.detection.evidence.separator_continuity import separator_cross_axis_continuity_evidence
 from x5crop.detection.decision.evidence_summary import evidence_summary_for
-from x5crop.domain import Box, Detection, Gap
+from x5crop.domain import Box, DetectionCandidate, Gap
 from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED
 from x5crop.geometry.detection_parameters import HardGapTrustParameters
@@ -372,7 +372,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         gray = np.zeros((100, 300), dtype=np.uint8)
         gray[:, ::2] = 255
         policy = get_detection_policy("120-66", "full")
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="120-66",
             layout="horizontal",
             strip_mode="full",
@@ -388,7 +388,6 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 Gap(2, 200.0, 1.0, GAP_DETECTED, 195.0, 205.0),
             ],
             confidence=0.99,
-            final_review_reasons=[],
             detail={
                 "outer_candidate_strategy": "base_outer",
                 "outer_area_ratio": 0.80,
@@ -458,7 +457,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
     def test_candidate_gate_result_is_structured_gate_not_candidate_signal(self) -> None:
         gray = np.zeros((100, 300), dtype=np.uint8)
         policy = get_detection_policy("135", "full")
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -471,7 +470,6 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
             gaps=[],
             confidence=0.10,
-            final_review_reasons=[],
             detail={
                 "outer_candidate_strategy": "base_outer",
                 "outer_area_ratio": 0.80,
@@ -595,7 +593,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         self.assertEqual(assessment.detail["partial_candidate_role"], "content_guidance_not_count_evidence")
 
     def test_content_candidate_assessment_uses_candidate_assessment_owner(self) -> None:
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="partial",
@@ -604,7 +602,6 @@ class PhysicalScoringContractTest(unittest.TestCase):
             frames=[],
             gaps=[],
             confidence=0.0,
-            final_review_reasons=[],
             detail={
                 "content_primary": {
                     "placement": "content_runs",
@@ -627,7 +624,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
 
     def test_safe_outer_overcut_and_low_content_quality_do_not_fail_final_evidence(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="120-66",
             layout="horizontal",
             strip_mode="full",
@@ -643,7 +640,6 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 Gap(2, 66.0, 1.0, GAP_DETECTED, 63.0, 69.0),
             ],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "outer_area_ratio": 1.0,
                 "width_cv": 0.0,
@@ -701,7 +697,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
             "content_integrity_failed": False,
             "max_aspect_error": 0.0,
         }
-        profile_outer = Detection(
+        profile_outer = DetectionCandidate(
             film_format="120-66",
             layout="horizontal",
             strip_mode="full",
@@ -710,7 +706,6 @@ class PhysicalScoringContractTest(unittest.TestCase):
             frames=frames,
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "outer_area_ratio": 0.80,
                 "width_cv": 0.0,
@@ -718,7 +713,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 "photo_width_cv": 0.0,
             },
         )
-        overcut_outer = Detection(
+        overcut_outer = DetectionCandidate(
             film_format="120-66",
             layout="horizontal",
             strip_mode="full",
@@ -727,7 +722,6 @@ class PhysicalScoringContractTest(unittest.TestCase):
             frames=frames,
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "outer_area_ratio": 1.0,
                 "width_cv": 0.0,
@@ -742,7 +736,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
         )
 
     def test_geometry_support_score_does_not_penalize_missing_aspect_evidence(self) -> None:
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="120-66",
             layout="horizontal",
             strip_mode="full",
@@ -755,7 +749,6 @@ class PhysicalScoringContractTest(unittest.TestCase):
             ],
             gaps=[],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "outer_area_ratio": 1.0,
                 "width_cv": 0.0,
@@ -775,7 +768,7 @@ class PhysicalScoringContractTest(unittest.TestCase):
 
     def test_final_evidence_does_not_gate_on_frame_box_width_detail(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="120-66",
             layout="horizontal",
             strip_mode="full",
@@ -791,7 +784,6 @@ class PhysicalScoringContractTest(unittest.TestCase):
                 Gap(2, 68.0, 1.0, GAP_DETECTED, 64.0, 72.0),
             ],
             confidence=0.90,
-            final_review_reasons=[],
             detail={
                 "outer_area_ratio": 0.80,
                 "width_cv": 0.20,

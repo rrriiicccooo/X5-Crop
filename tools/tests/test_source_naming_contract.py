@@ -910,26 +910,22 @@ class SourceNamingContractTest(unittest.TestCase):
 
         self.assertEqual(import_from_nodes, [])
 
-    def test_decision_layer_routes_final_reason_mutation_through_reason_helper(self) -> None:
+    def test_decision_layer_constructs_final_reasons_once(self) -> None:
         offenders: list[str] = []
         source_root = PROJECT_ROOT / "x5crop" / "detection" / "decision"
         self.assertTrue(source_root.is_dir())
         for path in source_root.rglob("*.py"):
-            if path.name == "reasons.py":
-                continue
             text = path.read_text(encoding="utf-8")
-            if ".final_review_reasons.append" in text:
+            if ".final_review_reasons.append" in text or ".final_review_reasons =" in text:
                 offenders.append(str(path.relative_to(PROJECT_ROOT)))
 
         self.assertEqual(offenders, [])
+        applier = (source_root / "contract_applier.py").read_text(encoding="utf-8")
+        self.assertIn("FinalDetection.from_candidate", applier)
 
-    def test_decision_reason_helper_does_not_expose_append_mutation(self) -> None:
+    def test_decision_reason_mutation_helper_does_not_exist(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "reasons.py"
-        text = path.read_text(encoding="utf-8")
-
-        self.assertIn("set_final_review_reasons", text)
-        self.assertNotIn("add_final_review_reason", text)
-        self.assertNotIn("final_review_reasons.append", text)
+        self.assertFalse(path.exists())
 
     def test_decision_summary_uses_final_reason_and_signal_fields(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "contract_applier.py"

@@ -5,7 +5,7 @@ from dataclasses import asdict
 import numpy as np
 
 from ...constants import CANDIDATE_SOURCE_REVIEW_ONLY
-from ...domain import Box, Detection
+from ...domain import Box, DetectionCandidate
 from ...formats import FormatSpec
 from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
@@ -19,23 +19,22 @@ def review_only_detection(
     config: RuntimeConfig,
     fmt: FormatSpec,
     policy: DetectionPolicy,
-) -> Detection:
+) -> DetectionCandidate:
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
     outer = Box(0, 0, ww, wh)
     source_h, source_w = gray.shape
     mode_diagnostics = [policy.detector.review_only.reason, SIGNAL_NEEDS_MANUAL_REVIEW]
-    return Detection(
-        fmt.name,
-        config.layout,
-        config.strip_mode,
-        fmt.default_count,
-        map_work_box(outer, config.layout, source_w, source_h),
-        [],
-        [],
-        0.0,
-        [],
-        {
+    return DetectionCandidate(
+        film_format=fmt.name,
+        layout=config.layout,
+        strip_mode=config.strip_mode,
+        count=fmt.default_count,
+        outer=map_work_box(outer, config.layout, source_w, source_h),
+        frames=[],
+        gaps=[],
+        confidence=0.0,
+        detail={
             "candidate_signals": list(mode_diagnostics),
             "candidate_source": CANDIDATE_SOURCE_REVIEW_ONLY,
             "candidate_count": 0,

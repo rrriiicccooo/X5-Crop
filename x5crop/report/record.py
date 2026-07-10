@@ -13,38 +13,24 @@ from ..detection.detail import (
     OUTER_CONTENT_ALIGNMENT,
     OUTPUT_OVERLAP_EVIDENCE,
     decision_schema_diagnostics,
-    decision_summary,
     detail_dict,
-    final_review_reasons_from_detail,
     HOLDER_OCCUPANCY,
     policy_id_from_detail,
     runtime_policy_detail,
     SCAN_CALIBRATION,
     STRIP_COMPLETENESS,
 )
-from ..domain import Detection, ProcessResult
+from ..domain import FinalDetection, ProcessResult
 from ..policies.runtime.policy import DetectionPolicy
 from ..utils import json_safe
 from .sections import candidate_gate_detail, candidate_table, decision_gate_detail, selected_candidate
-
-
-def _report_status(
-    result: ProcessResult | None,
-    decision_detail: dict,
-) -> str:
-    if result is not None:
-        return str(result.status)
-    status = decision_detail.get("status")
-    if status:
-        return str(status)
-    return "unknown"
 
 
 def _missing_schema_diagnostic(owner: str, reason: str) -> dict[str, str]:
     return {"owner": owner, "reason": reason}
 
 
-def _schema_validation(detection: Detection, runtime_policy: dict, decision_policy: dict) -> list[dict[str, str]]:
+def _schema_validation(detection: FinalDetection, runtime_policy: dict, decision_policy: dict) -> list[dict[str, str]]:
     diagnostics = decision_schema_diagnostics(detection)
     if not runtime_policy:
         diagnostics.append(_missing_schema_diagnostic("runtime_policy", "runtime_policy_detail_missing"))
@@ -59,15 +45,13 @@ def _schema_validation(detection: Detection, runtime_policy: dict, decision_poli
     return diagnostics
 
 
-def report_schema_for_detection(
-    detection: Detection,
+def report_record_for_final_detection(
+    detection: FinalDetection,
     result: ProcessResult | None = None,
     *,
     policy: DetectionPolicy,
 ) -> dict:
     report_policy = policy.report
-    decision_detail = decision_summary(detection)
-    status = _report_status(result, decision_detail)
     output = {}
     source = ""
     profile = {}
@@ -110,9 +94,9 @@ def report_schema_for_detection(
             "holder_occupancy": detail_dict(detection, HOLDER_OCCUPANCY),
         },
         "result": {
-            "status": status,
+            "status": detection.status,
             "confidence": float(detection.confidence),
-            "final_review_reasons": final_review_reasons_from_detail(detection),
+            "final_review_reasons": list(detection.final_review_reasons),
             "outer_box": asdict(detection.outer),
             "frame_boxes": [asdict(box) for box in detection.frames],
             "gaps": [asdict(gap) for gap in detection.gaps],
@@ -181,5 +165,5 @@ def report_schema_for_detection(
 
 
 __all__ = [
-    "report_schema_for_detection",
+    "report_record_for_final_detection",
 ]

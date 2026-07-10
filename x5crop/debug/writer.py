@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..domain import Detection
+from ..domain import FinalDetection
 from ..policies.runtime.policy import DetectionPolicy
 from ..cache import AnalysisCache
 from .canvas import write_rgb_jpeg
@@ -15,7 +15,7 @@ from .status import add_status_bar
 
 def write_debug_preview(
     gray: np.ndarray,
-    detection: Detection,
+    detection: FinalDetection,
     output_path: Path,
     threshold: float,
     cache: Optional[AnalysisCache] = None,
@@ -26,7 +26,7 @@ def write_debug_preview(
 
 def write_debug_analysis(
     gray: np.ndarray,
-    detection: Detection,
+    detection: FinalDetection,
     output_dir: Path,
     stem: str,
     threshold: float,

@@ -5,22 +5,21 @@ from pathlib import Path
 from typing import Any, Optional
 
 from ..app_info import VERSION
-from ..detection.detail import final_review_reasons_from_detail, policy_id_from_detail
-from ..domain import Detection, ImageProfile, ProcessResult
+from ..detection.detail import policy_id_from_detail
+from ..domain import FinalDetection, ImageProfile, ProcessResult
 from ..policies.runtime.policy import DetectionPolicy
 from ..utils import json_safe
-from .schema import report_schema_for_detection
+from .record import report_record_for_final_detection
 
 
-def policy_id_for_detection(detection: Detection) -> str:
+def policy_id_for_detection(detection: FinalDetection) -> str:
     return policy_id_from_detail(detection)
 
 
 def result_from_detection(
     input_file: Path,
-    detection: Detection,
+    detection: FinalDetection,
     profile: ImageProfile,
-    status: str,
     output_files: list[str],
     review_copy: Optional[str],
     warnings: list[str],
@@ -32,13 +31,13 @@ def result_from_detection(
         detail.update(detail_extra)
     result = ProcessResult(
         source=str(input_file),
-        status=status,
+        status=detection.status,
         confidence=float(detection.confidence),
         film_format=detection.film_format,
         layout=detection.layout,
         strip_mode=detection.strip_mode,
         count=int(detection.count),
-        final_review_reasons=final_review_reasons_from_detail(detection),
+        final_review_reasons=list(detection.final_review_reasons),
         output_files=output_files,
         review_copy=review_copy,
         outer_box=asdict(detection.outer),
@@ -50,7 +49,7 @@ def result_from_detection(
         version=VERSION,
         policy_id=policy_id_for_detection(detection),
     )
-    result.report_record = report_schema_for_detection(detection, result, policy=policy)
+    result.report_record = report_record_for_final_detection(detection, result, policy=policy)
     return result
 
 

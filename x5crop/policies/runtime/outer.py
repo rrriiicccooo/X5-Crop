@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ...geometry.detection_parameters import OuterBoxDetectionParameters, OuterMaskProfileParameters
+from ...geometry.detection_parameters import OuterBoxDetectionParameters
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
-from ..domain import Box, Detection, Gap, ImageProfile, ProcessResult
+from ..domain import Box, FinalDetection, Gap, ImageProfile, ProcessResult
 from ..export.crops import write_crops
 from ..output.surface import OutputSurface
 from ..image.gray import make_base_gray_u8
@@ -76,10 +76,10 @@ def gap_from_dict(value: dict[str, Any]) -> Gap:
     )
 
 
-def detection_from_record(record: dict[str, Any]) -> Detection:
+def detection_from_record(record: dict[str, Any]) -> FinalDetection:
     format_detail = record.get("format")
     format_detail = dict(format_detail) if isinstance(format_detail, dict) else {}
-    return Detection(
+    return FinalDetection(
         film_format=str(record["format_id"]),
         layout=str(record.get("layout") or format_detail.get("layout")),
         strip_mode=str(record["strip_mode"]),
@@ -88,8 +88,9 @@ def detection_from_record(record: dict[str, Any]) -> Detection:
         frames=[box_from_dict(box) for box in record.get("frame_boxes", [])],
         gaps=[gap_from_dict(gap) for gap in record.get("gaps", [])],
         confidence=float(record["confidence"]),
-        final_review_reasons=list(record["final_review_reasons"]),
         detail=dict(record.get("detail", {})),
+        status=str(record["status"]),
+        final_review_reasons=list(record["final_review_reasons"]),
     )
 
 
@@ -253,7 +254,6 @@ def result_from_reusable_analysis(
         input_file,
         detection,
         profile,
-        status,
         output_files,
         cached_record.get("review_copy"),
         warnings,

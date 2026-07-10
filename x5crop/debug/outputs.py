@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from ..runtime.config import RuntimeConfig
-from ..domain import Detection
+from ..domain import FinalDetection
 from ..output.surface import display_generated_path
 from ..policies.runtime.policy import DetectionPolicy
 from .writer import write_debug_analysis, write_debug_preview
@@ -12,7 +12,7 @@ from .writer import write_debug_analysis, write_debug_preview
 
 def write_debug_outputs(
     gray: Any,
-    detection: Detection,
+    detection: FinalDetection,
     output_dir: Path,
     input_stem: str,
     config: RuntimeConfig,

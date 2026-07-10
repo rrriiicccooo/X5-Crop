@@ -8,16 +8,21 @@ import unittest
 
 from x5crop.debug.status import debug_status_parts
 from x5crop.detection.detail import candidate_signals_from_detail
-from x5crop.domain import Box, Detection, ImageProfile
+from x5crop.domain import Box, FinalDetection, ImageProfile
 from x5crop.export.actions import copy_for_review_if_needed
 from x5crop.report.outputs import append_report_jsonl
 from x5crop.policies.registry import get_detection_policy
 from x5crop.report.result_builder import result_from_cached_record, result_from_detection
-from x5crop.report.schema import report_schema_for_detection
+from x5crop.report.record import report_record_for_final_detection
 
 
-def _detection(detail: dict | None = None, final_review_reasons: list[str] | None = None) -> Detection:
-    return Detection(
+def _detection(
+    detail: dict | None = None,
+    final_review_reasons: list[str] | None = None,
+    *,
+    status: str = "needs_review",
+) -> FinalDetection:
+    return FinalDetection(
         film_format="135",
         layout="horizontal",
         strip_mode="full",
@@ -26,8 +31,9 @@ def _detection(detail: dict | None = None, final_review_reasons: list[str] | Non
         frames=[Box(10, 10, 90, 90)],
         gaps=[],
         confidence=0.99,
-        final_review_reasons=list(final_review_reasons or []),
         detail=dict(detail or {}),
+        status=status,
+        final_review_reasons=list(final_review_reasons or []),
     )
 
 
@@ -35,12 +41,7 @@ class OutputReadModelContractTest(unittest.TestCase):
     def _policy(self):
         return get_detection_policy("135", "full")
 
-    def test_report_schema_uses_decision_status_or_unknown(self) -> None:
-        schema = report_schema_for_detection(_detection(), policy=self._policy())
-
-        self.assertEqual(schema["status"], "unknown")
-        self.assertEqual(schema["result"]["status"], "unknown")
-
+    def test_report_schema_uses_canonical_final_detection_status(self) -> None:
         decided = _detection(
             {
                 "decision_summary": {
@@ -50,7 +51,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             },
             ["separator_evidence_insufficient"],
         )
-        decided_schema = report_schema_for_detection(decided, policy=self._policy())
+        decided_schema = report_record_for_final_detection(decided, policy=self._policy())
 
         self.assertEqual(decided_schema["status"], "needs_review")
         self.assertEqual(decided_schema["result"]["status"], "needs_review")
@@ -59,15 +60,21 @@ class OutputReadModelContractTest(unittest.TestCase):
             ["separator_evidence_insufficient"],
         )
 
-    def test_output_read_models_prefer_decision_summary_reasons(self) -> None:
+        approved = report_record_for_final_detection(
+            _detection(status="approved_auto"),
+            policy=self._policy(),
+        )
+        self.assertEqual(approved["status"], "approved_auto")
+
+    def test_output_read_models_use_canonical_final_reasons(self) -> None:
         detection = _detection(
             {
                 "decision_summary": {
                     "status": "needs_review",
-                    "final_review_reasons": ["outer_content_mismatch"],
+                    "final_review_reasons": ["candidate_level_stale_reason"],
                 }
             },
-            ["candidate_level_stale_reason"],
+            ["outer_content_mismatch"],
         )
 
         status, detail, _color = debug_status_parts(detection, 0.85)
@@ -86,14 +93,13 @@ class OutputReadModelContractTest(unittest.TestCase):
             Path("out"),
             config,
             detection,
-            "needs_review",
             warnings,
         )
 
         self.assertIn("outer_content_mismatch", warnings[0])
         self.assertNotIn("candidate_level_stale_reason", warnings[0])
 
-        schema = report_schema_for_detection(detection, policy=self._policy())
+        schema = report_record_for_final_detection(detection, policy=self._policy())
         self.assertEqual(schema["result"]["final_review_reasons"], ["outer_content_mismatch"])
 
         profile = ImageProfile(
@@ -114,7 +120,6 @@ class OutputReadModelContractTest(unittest.TestCase):
             Path("input.tif"),
             detection,
             profile,
-            "needs_review",
             [],
             None,
             [],
@@ -150,7 +155,6 @@ class OutputReadModelContractTest(unittest.TestCase):
             Path("input.tif"),
             detection,
             profile,
-            "needs_review",
             [],
             None,
             [],
@@ -218,13 +222,13 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(result.report_record["output"]["warnings"], ["reused"])
 
     def test_report_schema_uses_diagnostics_section_not_finalization(self) -> None:
-        schema = report_schema_for_detection(_detection(), policy=self._policy())
+        schema = report_record_for_final_detection(_detection(), policy=self._policy())
 
         self.assertIn("diagnostics", schema)
         self.assertNotIn("finalization", schema)
 
     def test_report_schema_exposes_evidence_and_candidate_gate_sections(self) -> None:
-        schema = report_schema_for_detection(
+        schema = report_record_for_final_detection(
             _detection(
                 {
                     "candidate_assessment": {
@@ -257,16 +261,12 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertTrue(schema["decision_gate"]["passed"])
         self.assertNotIn("gates", schema)
 
-    def test_debug_status_does_not_derive_pass_review_without_decision(self) -> None:
-        status, detail, color = debug_status_parts(_detection(), 0.85)
-
-        self.assertEqual(status, "UNKNOWN")
-        self.assertIn("decision status unavailable", detail)
-        self.assertEqual(color, (170, 170, 170))
-
-    def test_debug_status_reads_decision_summary_when_available(self) -> None:
+    def test_debug_status_reads_canonical_final_status(self) -> None:
         status, detail, color = debug_status_parts(
-            _detection({"decision_summary": {"status": "approved_auto"}}),
+            _detection(
+                {"decision_summary": {"status": "stale_detail_value"}},
+                status="approved_auto",
+            ),
             0.85,
         )
 
@@ -290,9 +290,9 @@ class OutputReadModelContractTest(unittest.TestCase):
                     "decision_summary": {
                         "final_review_reasons": ["candidate_competition_close"],
                     },
-                }
+                },
+                ["candidate_competition_close"],
             ),
-            "needs_review",
             warnings,
         )
 

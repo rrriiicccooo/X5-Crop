@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from x5crop.domain import Box, Detection, Gap
+from x5crop.domain import Box, FinalDetection, Gap
 from x5crop.detection.evidence.output_overlap import output_overlap_evidence_detail
 from x5crop.output.bleed import (
     AxisBleedParameters,
@@ -23,8 +23,8 @@ class _OutputPolicy:
     output_overlap_long_axis_bleed_capacity: int = 50
 
 
-def _detection(detail: dict) -> Detection:
-    return Detection(
+def _detection(detail: dict) -> FinalDetection:
+    return FinalDetection(
         film_format="135",
         layout="horizontal",
         strip_mode="full",
@@ -33,8 +33,9 @@ def _detection(detail: dict) -> Detection:
         frames=[Box(0, 0, 100, 60)],
         gaps=[],
         confidence=0.95,
-        final_review_reasons=[],
         detail=detail,
+        status="approved_auto",
+        final_review_reasons=[],
     )
 
 

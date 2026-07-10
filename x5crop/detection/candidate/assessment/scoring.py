@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ...evidence.photo_width import photo_width_cv_from_detail
 from ...evidence.separator_summary import separator_support_detail_summary
 from ....policies.runtime.content import ContentPolicy
@@ -50,7 +50,7 @@ def content_support_score(
 
 
 def geometry_support_score(
-    detection: Detection,
+    detection: DetectionCandidate,
     content_detail: dict[str, Any],
     policy: DetectionPolicy,
 ) -> float:
@@ -86,7 +86,7 @@ def geometry_support_score(
 
 
 def separator_support_score(
-    detection: Detection,
+    detection: DetectionCandidate,
     hard_detail: dict[str, Any],
     policy: DetectionPolicy,
 ) -> float:

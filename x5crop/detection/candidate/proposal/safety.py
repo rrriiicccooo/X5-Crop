@@ -5,7 +5,7 @@ from dataclasses import asdict
 import numpy as np
 
 from ....constants import CANDIDATE_SOURCE_HARD_SAFETY
-from ....domain import Box, Detection
+from ....domain import Box, DetectionCandidate
 from ....formats import FormatSpec
 from ....geometry.boxes import map_work_box
 from ....geometry.frame_fit import frame_boxes_from_gaps
@@ -15,7 +15,7 @@ from ....runtime.config import RuntimeConfig
 from ..signals import SIGNAL_HARD_SAFETY_NO_CANDIDATES, SIGNAL_NEEDS_MANUAL_REVIEW
 
 
-def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec) -> Detection:
+def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec) -> DetectionCandidate:
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
     count = max(1, int(config.count))
@@ -30,17 +30,16 @@ def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSp
     source_h, source_w = gray.shape
     boxes = [map_work_box(box, config.layout, source_w, source_h) for box in boxes_work]
     outer_original = map_work_box(outer, config.layout, source_w, source_h)
-    return Detection(
-        fmt.name,
-        config.layout,
-        config.strip_mode,
-        count,
-        outer_original,
-        boxes,
-        gaps,
-        0.0,
-        [],
-        {
+    return DetectionCandidate(
+        film_format=fmt.name,
+        layout=config.layout,
+        strip_mode=config.strip_mode,
+        count=count,
+        outer=outer_original,
+        frames=boxes,
+        gaps=gaps,
+        confidence=0.0,
+        detail={
             "candidate_signals": [SIGNAL_HARD_SAFETY_NO_CANDIDATES, SIGNAL_NEEDS_MANUAL_REVIEW],
             "candidate_source": CANDIDATE_SOURCE_HARD_SAFETY,
             "safety_candidate_kind": "hard_safety_equal_split",

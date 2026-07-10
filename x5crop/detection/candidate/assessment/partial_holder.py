@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ....domain import Box, Detection
+from ....domain import DetectionCandidate
 from ....formats import FormatSpec
 from ....geometry.layout import work_gray
 from ....image.evidence import make_content_evidence_gray
@@ -20,7 +20,7 @@ from ..signals import (
 
 
 def partial_edge_safety_holder_edge_disambiguation_detail(
-    detection: Detection,
+    detection: DetectionCandidate,
     fmt: FormatSpec,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
@@ -81,7 +81,7 @@ def partial_edge_safety_holder_edge_disambiguation_detail(
 
 def partial_edge_safety_leading_content_detail(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     fmt: FormatSpec,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
@@ -162,7 +162,7 @@ def partial_edge_safety_leading_content_detail(
 
 def partial_edge_safety_frame_content_detail(
     content_detail: dict[str, Any],
-    detection: Detection,
+    detection: DetectionCandidate,
     fmt: FormatSpec,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
@@ -249,7 +249,7 @@ def partial_edge_safety_frame_content_detail(
 
 def partial_edge_safety_assessment_detail(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     hard_detail: dict[str, Any],
     content_detail: dict[str, Any],
     fmt: FormatSpec,

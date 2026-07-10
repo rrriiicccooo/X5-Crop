@@ -12,13 +12,13 @@ from x5crop.detection.candidate.signals import (
     SIGNAL_CONTENT_ASPECT_CONFLICT,
     candidate_signals,
 )
-from x5crop.domain import Box, Detection
+from x5crop.domain import Box, DetectionCandidate
 from x5crop.policies.registry import get_detection_policy
 
 
 class DualLaneAssessmentTest(unittest.TestCase):
     def test_content_conflict_cap_is_candidate_assessment_detail(self) -> None:
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="135",
             layout="horizontal",
             strip_mode="full",
@@ -27,7 +27,6 @@ class DualLaneAssessmentTest(unittest.TestCase):
             frames=[],
             gaps=[],
             confidence=0.96,
-            final_review_reasons=[],
             detail={},
         )
         policy = get_detection_policy("135", "full")
@@ -52,7 +51,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
             )
 
         self.assertEqual(detection.confidence, 0.82)
-        self.assertEqual(detection.final_review_reasons, [])
+        self.assertFalse(hasattr(detection, "final_review_reasons"))
         self.assertEqual(candidate_signals(detection), [SIGNAL_CONTENT_ASPECT_CONFLICT])
         self.assertEqual(
             detection.detail["candidate_confidence_caps"],

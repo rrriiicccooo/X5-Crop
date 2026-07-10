@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, replace
 from typing import Any
 
 import numpy as np
 
 from ...runtime.config import RuntimeConfig
-from ...domain import Detection
+from ...domain import FinalDetection
 from ...output.bleed import (
     AxisBleedParameters,
     apply_output_bleed,
@@ -23,29 +23,7 @@ from ...output.geometry_adjustment import (
 )
 
 
-@dataclass
-class DetectionFinalizationResult:
-    detection: Detection
-    status: str
-    output_config: RuntimeConfig
-
-
-def _clone_detection_for_output(detection: Detection) -> Detection:
-    return Detection(
-        film_format=detection.film_format,
-        layout=detection.layout,
-        strip_mode=detection.strip_mode,
-        count=int(detection.count),
-        outer=detection.outer,
-        frames=list(detection.frames),
-        gaps=list(detection.gaps),
-        confidence=float(detection.confidence),
-        final_review_reasons=list(detection.final_review_reasons),
-        detail=deepcopy(detection.detail),
-    )
-
-
-def _geometry_detail(detection: Detection) -> dict[str, Any]:
+def _geometry_detail(detection: FinalDetection) -> dict[str, Any]:
     return {
         "outer_box": asdict(detection.outer),
         "frame_boxes": [asdict(frame) for frame in detection.frames],
@@ -54,20 +32,18 @@ def _geometry_detail(detection: Detection) -> dict[str, Any]:
 
 def finalize_detection(
     gray: np.ndarray,
-    detection: Detection,
-    status: str,
+    detection: FinalDetection,
     config: RuntimeConfig,
     analysis_cache: AnalysisCache,
     policy: DetectionPolicy,
-) -> DetectionFinalizationResult:
-    output_detection = _clone_detection_for_output(detection)
+) -> FinalDetection:
+    output_detection = deepcopy(detection)
     output_detection.detail["decision_geometry"] = _geometry_detail(detection)
     detection_bleed = detection_bleed_parameters(policy.output)
     if policy.finalization.apply_approved_geometry_adjustment:
         apply_approved_geometry_adjustment(
             output_detection,
             gray,
-            status,
             policy.finalization.approved_geometry_adjustment,
         )
     base_bleed = AxisBleedParameters(
@@ -105,8 +81,4 @@ def finalize_detection(
             output_evidence_policy=policy.output_evidence,
         )
     output_detection.detail["output_geometry"] = _geometry_detail(output_detection)
-    return DetectionFinalizationResult(
-        detection=output_detection,
-        status=status,
-        output_config=output_config,
-    )
+    return output_detection

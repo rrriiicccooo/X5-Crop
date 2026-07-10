@@ -7,13 +7,13 @@ import numpy as np
 from x5crop.constants import GAP_DETECTED
 from x5crop.detection.candidate.assessment.partial_holder import partial_edge_safety_assessment_detail
 from x5crop.detection.evidence.holder_occupancy import holder_occupancy_evidence
-from x5crop.domain import Box, Detection, Gap
+from x5crop.domain import Box, DetectionCandidate, Gap
 from x5crop.formats import format_spec
 from x5crop.policies.registry import get_detection_policy
 
 
-def _complete_underfilled_medium_square_detection() -> Detection:
-    return Detection(
+def _complete_underfilled_medium_square_detection() -> DetectionCandidate:
+    return DetectionCandidate(
         film_format="120-66",
         layout="horizontal",
         strip_mode="partial",
@@ -29,7 +29,6 @@ def _complete_underfilled_medium_square_detection() -> Detection:
             Gap(2, 245.0, 1.0, GAP_DETECTED, 240.0, 250.0),
         ],
         confidence=0.90,
-        final_review_reasons=[],
         detail={
             "width_cv": 0.0,
             "width_cv_source": "photo_edges",

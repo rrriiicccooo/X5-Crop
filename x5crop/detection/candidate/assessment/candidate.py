@@ -10,7 +10,7 @@ from ....constants import (
     CANDIDATE_SOURCE_SAFETY,
     CANDIDATE_SOURCE_SEPARATOR,
 )
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ....formats import FormatSpec
 from ....geometry.layout import work_gray
 from ....policies.runtime.policy import DetectionPolicy
@@ -69,28 +69,27 @@ def _detail_float(detail: dict, key: str, default: float) -> float:
         return float(default)
 
 
-def _candidate_confidence_caps(candidate: Detection) -> list[dict]:
+def _candidate_confidence_caps(candidate: DetectionCandidate) -> list[dict]:
     caps = candidate.detail.get("candidate_confidence_caps", [])
     return list(caps) if isinstance(caps, list) else []
 
 
 def apply_candidate_assessment_policy(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     config: RuntimeConfig,
     fmt: FormatSpec,
     source: str,
     cache: Optional[AnalysisCache] = None,
     *,
     policy: DetectionPolicy,
-) -> Detection:
+) -> DetectionCandidate:
     candidate_detail = dict(detection.detail)
     initial_candidate_signals = candidate_signals(detection)
     if initial_candidate_signals:
         candidate_detail["candidate_signals"] = initial_candidate_signals
     candidate = replace(
         detection,
-        final_review_reasons=[],
         detail=candidate_detail,
     )
     if _uses_separator_evidence(source):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ....policies.runtime.candidate import EvidenceIndependencePolicy
 from ...evidence.photo_width import photo_width_stability_detail
 
@@ -31,7 +31,7 @@ def gap_source_count(detail: dict[str, Any], sources: tuple[str, ...]) -> int:
 
 
 def evidence_independence_detail(
-    detection: Detection,
+    detection: DetectionCandidate,
     *,
     source: str,
     content_support: str,

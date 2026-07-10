@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..domain import Detection
+from ..domain import DetectionCandidate, FinalDetection
 
 
 CANDIDATE_COMPETITION = "candidate_competition"
@@ -23,36 +23,36 @@ STRIP_COMPLETENESS = "strip_completeness"
 HOLDER_OCCUPANCY = "holder_occupancy"
 
 
-def detail_dict(detection: Detection, key: str) -> dict[str, Any]:
+def detail_dict(detection: DetectionCandidate, key: str) -> dict[str, Any]:
     value = detection.detail.get(key, {})
     return dict(value) if isinstance(value, dict) else {}
 
 
-def candidate_competition(detection: Detection) -> dict[str, Any]:
+def candidate_competition(detection: DetectionCandidate) -> dict[str, Any]:
     return detail_dict(detection, CANDIDATE_COMPETITION)
 
 
-def candidate_assessment(detection: Detection) -> dict[str, Any]:
+def candidate_assessment(detection: DetectionCandidate) -> dict[str, Any]:
     return detail_dict(detection, CANDIDATE_ASSESSMENT)
 
 
-def candidate_signals_from_detail(detection: Detection) -> list[str]:
+def candidate_signals_from_detail(detection: DetectionCandidate) -> list[str]:
     signals = detection.detail.get(CANDIDATE_SIGNALS)
     if isinstance(signals, list):
         return [str(signal) for signal in signals if signal]
     return []
 
 
-def decision_summary(detection: Detection) -> dict[str, Any]:
+def decision_summary(detection: DetectionCandidate) -> dict[str, Any]:
     return detail_dict(detection, DECISION_SUMMARY)
 
 
-def has_current_decision_summary(detection: Detection) -> bool:
+def has_current_decision_summary(detection: FinalDetection) -> bool:
     summary = detection.detail.get(DECISION_SUMMARY)
     return isinstance(summary, dict) and isinstance(summary.get("final_review_reasons"), list)
 
 
-def decision_schema_diagnostics(detection: Detection) -> list[dict[str, str]]:
+def decision_schema_diagnostics(detection: FinalDetection) -> list[dict[str, str]]:
     diagnostics: list[dict[str, str]] = []
     summary = detection.detail.get(DECISION_SUMMARY)
     if not isinstance(summary, dict):
@@ -62,21 +62,18 @@ def decision_schema_diagnostics(detection: Detection) -> list[dict[str, str]]:
         diagnostics.append({"owner": "decision", "reason": "final_review_reasons_missing"})
     if not isinstance(summary.get("decision_gate"), dict):
         diagnostics.append({"owner": "decision", "reason": "decision_gate_missing"})
+    if summary.get("status") != detection.status:
+        diagnostics.append({"owner": "decision", "reason": "decision_status_mismatch"})
+    if summary.get("final_review_reasons") != detection.final_review_reasons:
+        diagnostics.append({"owner": "decision", "reason": "final_review_reasons_mismatch"})
     return diagnostics
 
 
-def final_review_reasons_from_detail(detection: Detection) -> list[str]:
-    reasons = decision_summary(detection).get("final_review_reasons")
-    if isinstance(reasons, list):
-        return [str(reason) for reason in reasons]
-    return []
-
-
-def runtime_policy_detail(detection: Detection) -> dict[str, Any]:
+def runtime_policy_detail(detection: DetectionCandidate) -> dict[str, Any]:
     return detail_dict(detection, RUNTIME_POLICY_DETAIL)
 
 
-def policy_id_from_detail(detection: Detection) -> str:
+def policy_id_from_detail(detection: DetectionCandidate) -> str:
     policy_id = detection.detail.get(POLICY_ID)
     if policy_id:
         return str(policy_id)
@@ -107,7 +104,6 @@ __all__ = [
     "decision_schema_diagnostics",
     "decision_summary",
     "detail_dict",
-    "final_review_reasons_from_detail",
     "has_current_decision_summary",
     "policy_id_from_detail",
     "runtime_policy_detail",

@@ -5,7 +5,7 @@ from dataclasses import asdict
 import numpy as np
 
 from ...constants import CANDIDATE_SOURCE_DUAL_LANE
-from ...domain import Box, Detection, Gap
+from ...domain import Box, DetectionCandidate, Gap
 from ...geometry.boxes import map_work_box
 from ...runtime.config import RuntimeConfig
 from ...utils import box_from_dict
@@ -27,7 +27,7 @@ def dual_lane_review_detection(
     config: RuntimeConfig,
     context: DualLaneDetectionContext,
     mode_signal: str,
-) -> Detection:
+) -> DetectionCandidate:
     detection = hard_safety_detection(gray, config, context.format_spec)
     add_candidate_signal(detection, mode_signal)
     mode_diagnostics = detection.detail.setdefault("mode_diagnostics", [])
@@ -40,9 +40,9 @@ def merge_dual_lane_detections(
     gray: np.ndarray,
     config: RuntimeConfig,
     lanes: list[Box],
-    lane_detections: list[Detection | None],
+    lane_detections: list[DetectionCandidate | None],
     context: DualLaneDetectionContext,
-) -> Detection:
+) -> DetectionCandidate:
     if any(detection is None for detection in lane_detections):
         return dual_lane_review_detection(gray, config, context, SIGNAL_DUAL_LANE_DETECTION_FAILED)
 
@@ -82,17 +82,16 @@ def merge_dual_lane_detections(
 
     source_h, source_w = gray.shape
     outer_original = map_work_box(combined_work_outer, config.layout, source_w, source_h)
-    return Detection(
-        context.format_id,
-        config.layout,
-        "full",
-        context.total_count,
-        outer_original,
-        frames,
-        gaps,
-        float(max(0.0, min(1.0, confidence))),
-        [],
-        _dual_lane_detail(
+    return DetectionCandidate(
+        film_format=context.format_id,
+        layout=config.layout,
+        strip_mode="full",
+        count=context.total_count,
+        outer=outer_original,
+        frames=frames,
+        gaps=gaps,
+        confidence=float(max(0.0, min(1.0, confidence))),
+        detail=_dual_lane_detail(
             config,
             context,
             lanes,
@@ -105,7 +104,7 @@ def merge_dual_lane_detections(
     )
 
 
-def _merged_dual_lane_gaps(lane_detections: list[Detection], lane_count: int) -> list[Gap]:
+def _merged_dual_lane_gaps(lane_detections: list[DetectionCandidate], lane_count: int) -> list[Gap]:
     gaps: list[Gap] = []
     for lane_number, detection in enumerate(lane_detections, start=1):
         lane_work_outer = box_from_dict(detection.detail["work_outer"])
@@ -130,7 +129,7 @@ def _dual_lane_detail(
     lanes: list[Box],
     combined_work_outer: Box,
     gaps: list[Gap],
-    lane_detections: list[Detection],
+    lane_detections: list[DetectionCandidate],
     confidence: float,
     mode_signals: list[str],
 ) -> dict:

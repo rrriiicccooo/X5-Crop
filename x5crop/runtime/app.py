@@ -13,10 +13,7 @@ from ..report.outputs import write_report_outputs_for_result
 from ..policies.runtime.bundle import DetectionPolicyBundle
 from .config import RuntimeConfig
 from .input_probe import runtime_config_from_options
-from .workflow import (
-    process_one,
-    process_one_worker,
-)
+from .workflow import process_one_worker
 
 
 def print_run_header(config: RuntimeConfig, files: list[Path]) -> None:
@@ -129,7 +126,6 @@ def run_cli_options(options: CliOptions) -> int:
 
 __all__ = [
     "print_run_header",
-    "process_one",
     "process_one_worker",
     "process_parallel_files",
     "run_cli_options",

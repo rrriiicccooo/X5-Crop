@@ -3,12 +3,12 @@ from __future__ import annotations
 import unittest
 
 from x5crop.detection.candidate.extension.outer_correction import _outer_correction_plan_detail
-from x5crop.domain import Box, Detection
+from x5crop.domain import Box, DetectionCandidate
 from x5crop.policies.registry import get_detection_policy
 
 
-def _detection(strip_mode: str, *, source: str = "separator", hard_ok: bool = True) -> Detection:
-    return Detection(
+def _detection(strip_mode: str, *, source: str = "separator", hard_ok: bool = True) -> DetectionCandidate:
+    return DetectionCandidate(
         film_format="120-66",
         layout="horizontal",
         strip_mode=strip_mode,
@@ -17,7 +17,6 @@ def _detection(strip_mode: str, *, source: str = "separator", hard_ok: bool = Tr
         frames=[],
         gaps=[],
         confidence=0.0,
-        final_review_reasons=[],
         detail={
             "candidate_assessment": {
                 "source": source,

@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from ...domain import Box, Detection
+from ...domain import Box, DetectionCandidate
 from ...formats import FormatSpec
 from ...units import ScanCalibration
 from ...utils import box_from_dict
 
 
-def _work_outer(detection: Detection) -> Box:
+def _work_outer(detection: DetectionCandidate) -> Box:
     value = detection.detail.get("work_outer")
     if isinstance(value, dict):
         try:
@@ -21,7 +21,7 @@ def _work_outer(detection: Detection) -> Box:
     return detection.outer
 
 
-def _work_frames(detection: Detection) -> list[Box]:
+def _work_frames(detection: DetectionCandidate) -> list[Box]:
     value = detection.detail.get("work_frame_boxes")
     boxes: list[Box] = []
     if isinstance(value, list):
@@ -37,7 +37,7 @@ def _work_frames(detection: Detection) -> list[Box]:
     return boxes or [box for box in detection.frames if box.valid()]
 
 
-def _holder_reference_outer(detection: Detection) -> Box:
+def _holder_reference_outer(detection: DetectionCandidate) -> Box:
     holder_reference = detection.detail.get("holder_reference_outer_box")
     if isinstance(holder_reference, dict):
         try:
@@ -49,7 +49,7 @@ def _holder_reference_outer(detection: Detection) -> Box:
     return _work_outer(detection)
 
 
-def strip_completeness_evidence(detection: Detection, fmt: FormatSpec) -> dict[str, Any]:
+def strip_completeness_evidence(detection: DetectionCandidate, fmt: FormatSpec) -> dict[str, Any]:
     frames = _work_frames(detection)
     valid_frame_count = len(frames)
     expected_gap_count = max(0, int(detection.count) - 1)
@@ -76,7 +76,7 @@ def _film_span_px(frames: list[Box]) -> tuple[float | None, float | None, float 
     return left, right, max(0.0, right - left)
 
 
-def _photo_width_stable(detection: Detection) -> bool:
+def _photo_width_stable(detection: DetectionCandidate) -> bool:
     detail = detection.detail.get("photo_width_stability")
     if isinstance(detail, dict) and bool(detail.get("used", False)):
         return not bool(detail.get("unstable", False))
@@ -85,7 +85,7 @@ def _photo_width_stable(detection: Detection) -> bool:
 
 
 def holder_occupancy_evidence(
-    detection: Detection,
+    detection: DetectionCandidate,
     fmt: FormatSpec,
     content_containment: dict[str, Any],
     *,

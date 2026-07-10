@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from .....domain import Box, Detection
+from .....domain import Box, DetectionCandidate
 from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
 from .....gap_methods import is_hard_gap_method
 from .....geometry.boxes import original_box_to_work
@@ -19,7 +19,7 @@ from .types import OuterCorrectionProposal
 def corrected_outer_for_short_axis_geometry(
     gray: np.ndarray,
     fmt: FormatSpec,
-    detection: Detection,
+    detection: DetectionCandidate,
     content_detail: dict[str, Any],
     cache: AnalysisCache,
     correction_policy: GeometryConsistencyCorrectionPolicy,
@@ -80,7 +80,7 @@ def corrected_outer_for_short_axis_geometry(
 
 def geometry_consistency_model_detail(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     fmt: FormatSpec,
     cache: AnalysisCache,
 ) -> dict[str, Any]:
@@ -129,7 +129,7 @@ def geometry_consistency_model_detail(
 
 
 def corrected_outer_from_long_axis_geometry(
-    detection: Detection,
+    detection: DetectionCandidate,
     fmt: FormatSpec,
     geometry_detail: dict[str, Any],
     alignment: dict[str, Any],
@@ -229,7 +229,7 @@ def corrected_outer_from_long_axis_geometry(
 def geometry_consistency_correction_proposal(
     gray: np.ndarray,
     fmt: FormatSpec,
-    detection: Detection,
+    detection: DetectionCandidate,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
     cache: AnalysisCache,

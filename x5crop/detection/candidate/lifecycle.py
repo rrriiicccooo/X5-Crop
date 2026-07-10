@@ -4,7 +4,7 @@ import numpy as np
 
 from ...constants import CANDIDATE_SOURCE_SAFETY
 from ...cache import AnalysisCache
-from ...domain import Detection
+from ...domain import DetectionCandidate
 from ...formats import FormatSpec
 from ...policies.runtime.policy import DetectionPolicy
 from ...runtime.config import RuntimeConfig
@@ -35,9 +35,9 @@ def calibrated_candidates_for_count(
     offset: float,
     cache: AnalysisCache,
     policy: DetectionPolicy,
-) -> tuple[list[Detection], bool]:
+) -> tuple[list[DetectionCandidate], bool]:
     content_policy = policy.candidate_plan.content_candidate
-    candidates: list[Detection] = []
+    candidates: list[DetectionCandidate] = []
     stop_after_this_count = False
     explicit_count = bool(config.count_override is not None)
     extension_families = separator_extension_families(policy, strip_mode, explicit_count)

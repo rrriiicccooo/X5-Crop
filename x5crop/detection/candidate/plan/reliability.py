@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ....policies.runtime.policy import DetectionPolicy
 from ..signals import candidate_signals
 
 
 def candidate_reliability_detail(
-    detection: Detection,
+    detection: DetectionCandidate,
     threshold: float,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
@@ -71,7 +71,7 @@ def candidate_reliability_detail(
 
 
 def candidate_is_reliable_for_execution_budget(
-    detection: Detection,
+    detection: DetectionCandidate,
     threshold: float,
     policy: DetectionPolicy,
 ) -> bool:

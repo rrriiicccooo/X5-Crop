@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ....cache import AnalysisCache
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ....policies.runtime.policy import DetectionPolicy
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.outer_alignment import outer_content_alignment_detail
@@ -18,7 +18,7 @@ from .confidence_caps import apply_candidate_confidence_cap
 
 def apply_dual_lane_content_assessment(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     cache: AnalysisCache,
     lane_policy: DetectionPolicy,
     confidence_threshold: float,

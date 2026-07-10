@@ -4,13 +4,13 @@ from typing import Optional
 
 import numpy as np
 
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ....geometry.boxes import original_box_to_work
 from ....policies.runtime.policy import DetectionPolicy
 
 
 def separator_full_width_can_compete(
-    detection: Detection,
+    detection: DetectionCandidate,
     gray: np.ndarray,
     policy: DetectionPolicy,
 ) -> bool:

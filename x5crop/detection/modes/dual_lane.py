@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ...runtime.config import RuntimeConfig
-from ...domain import Detection
+from ...domain import DetectionCandidate
 from ...policies.runtime.bundle import DetectionPolicyBundle
 from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
@@ -19,7 +19,7 @@ def choose_dual_lane_detection(
     cache: AnalysisCache,
     policy: DetectionPolicy,
     policy_bundle: DetectionPolicyBundle,
-) -> Detection:
+) -> DetectionCandidate:
     context = build_dual_lane_context(policy, policy_bundle)
     if config.strip_mode != "full":
         raise ValueError("dual-lane detector is only valid for full mode")

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ...confidence_caps import apply_confidence_cap
 
 
 def apply_candidate_confidence_cap(
-    detection: Detection,
+    detection: DetectionCandidate,
     cap: float,
     reason: str,
 ) -> None:

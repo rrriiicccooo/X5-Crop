@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..domain import Box
-from ..utils import bbox_from_mask, clamp_int, runs_from_mask, smooth_1d
+from ..utils import bbox_from_mask, clamp_int, runs_from_mask
 from .detection_parameters import OuterBoxDetectionParameters, OuterMaskProfileParameters
 
 

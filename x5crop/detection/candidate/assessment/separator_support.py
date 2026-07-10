@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ...evidence.separator_summary import gap_method_evidence_summary
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import (
@@ -65,7 +65,7 @@ def separator_support_min_hard_with_equal_cap_assessment(
 
 
 def separator_support_geometry_support_assessment(
-    detection: Detection,
+    detection: DetectionCandidate,
     threshold: float,
     evidence: SeparatorSupportEvidence,
     support: SeparatorSupportPolicy,
@@ -81,7 +81,7 @@ def separator_support_geometry_support_assessment(
     )
 
 
-def separator_support_needs_full_strip_supplemental_checks(detection: Detection, default_count: int) -> bool:
+def separator_support_needs_full_strip_supplemental_checks(detection: DetectionCandidate, default_count: int) -> bool:
     return detection.strip_mode == "full" and detection.count == int(default_count)
 
 
@@ -114,7 +114,7 @@ def separator_support_edge_pair_support_assessment(
 
 
 def separator_support_all_internal_gaps_hard_assessment(
-    detection: Detection,
+    detection: DetectionCandidate,
     evidence: SeparatorSupportEvidence,
     support: SeparatorSupportPolicy,
     default_count: int,
@@ -158,7 +158,7 @@ def hard_gap_indexes_are_tail_adjacent(hard_indexes: list[int]) -> bool:
 
 
 def separator_support_leading_grid_failure_assessment(
-    detection: Detection,
+    detection: DetectionCandidate,
     evidence: SeparatorSupportEvidence,
     policy: LeadingGridFailurePolicy,
 ) -> bool:
@@ -181,7 +181,7 @@ def separator_support_leading_grid_failure_assessment(
     )
 
 
-def separator_support_evidence_from_detection(detection: Detection) -> SeparatorSupportEvidence:
+def separator_support_evidence_from_detection(detection: DetectionCandidate) -> SeparatorSupportEvidence:
     raw_gap_evidence = gap_method_evidence_summary(detection.gaps, reliable_min_score=0.0)
     broad_width = int(detection.detail.get("broad_separator_width_gaps", 0))
     width_evidence = detection.detail.get("separator_width_evidence", {})
@@ -208,7 +208,7 @@ def separator_support_evidence_from_detection(detection: Detection) -> Separator
 def separator_support_detail(
     evidence: SeparatorSupportEvidence,
     assessment: SeparatorSupportAssessment,
-    detection: Detection,
+    detection: DetectionCandidate,
     support: SeparatorSupportPolicy,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
@@ -234,7 +234,7 @@ def separator_support_detail(
 
 
 def separator_support_assessment(
-    detection: Detection,
+    detection: DetectionCandidate,
     threshold: float,
     evidence: SeparatorSupportEvidence,
     support: SeparatorSupportPolicy,
@@ -297,7 +297,7 @@ def separator_support_assessment(
 
 
 def assess_separator_support(
-    detection: Detection,
+    detection: DetectionCandidate,
     threshold: float,
     policy: DetectionPolicy,
 ) -> SeparatorSupportResult:

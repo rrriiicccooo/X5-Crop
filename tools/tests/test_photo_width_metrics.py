@@ -6,7 +6,7 @@ from x5crop.detection.candidate.assessment.base_scoring import base_detection_as
 from x5crop.detection.candidate.assessment.scoring import geometry_support_score
 from x5crop.detection.evidence.photo_width import photo_width_cv_from_detail
 from x5crop.detection.candidate.selection.choose import calibrated_candidate_rank
-from x5crop.domain import Detection, Gap
+from x5crop.domain import DetectionCandidate, Gap
 from x5crop.domain import Box
 from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED
@@ -80,7 +80,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
         self.assertNotIn("photo_width_unstable", assessment.candidate_signals)
 
     def test_geometry_support_respects_zero_photo_width_cv(self) -> None:
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="120-645",
             layout="horizontal",
             strip_mode="full",
@@ -94,7 +94,6 @@ class PhotoWidthMetricsTest(unittest.TestCase):
             ],
             gaps=[],
             confidence=0.0,
-            final_review_reasons=[],
             detail={
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
@@ -122,7 +121,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
         )
 
     def test_geometry_support_ignores_frame_box_width_detail(self) -> None:
-        detection = Detection(
+        detection = DetectionCandidate(
             film_format="120-645",
             layout="horizontal",
             strip_mode="full",
@@ -136,7 +135,6 @@ class PhotoWidthMetricsTest(unittest.TestCase):
             ],
             gaps=[],
             confidence=0.0,
-            final_review_reasons=[],
             detail={
                 "width_cv": 0.20,
                 "width_cv_source": "frame_boxes",
@@ -154,7 +152,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
         self.assertGreater(score, 0.90)
 
     def test_selection_rank_does_not_reward_frame_box_width_detail(self) -> None:
-        stable_frame_boxes = Detection(
+        stable_frame_boxes = DetectionCandidate(
             film_format="120-645",
             layout="horizontal",
             strip_mode="full",
@@ -163,10 +161,9 @@ class PhotoWidthMetricsTest(unittest.TestCase):
             frames=[],
             gaps=[],
             confidence=0.82,
-            final_review_reasons=[],
             detail={"width_cv": 0.0, "width_cv_source": "frame_boxes"},
         )
-        unstable_frame_boxes = Detection(
+        unstable_frame_boxes = DetectionCandidate(
             film_format="120-645",
             layout="horizontal",
             strip_mode="full",
@@ -175,7 +172,6 @@ class PhotoWidthMetricsTest(unittest.TestCase):
             frames=[],
             gaps=[],
             confidence=0.82,
-            final_review_reasons=[],
             detail={"width_cv": 0.20, "width_cv_source": "frame_boxes"},
         )
 

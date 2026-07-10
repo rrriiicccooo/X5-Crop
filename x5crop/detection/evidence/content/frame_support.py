@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ....domain import Box, Detection
+from ....domain import Box, DetectionCandidate
 from ....formats import CONTENT_ASPECTS_HORIZONTAL
 from ....geometry.boxes import original_box_to_work
 from ....policies.runtime.content import ContentEvidencePolicy, ContentPolicy
@@ -114,7 +114,7 @@ def content_frame_support_detail(
 
 def content_evidence_detail(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     cache: Optional[AnalysisCache] = None,
     *,
     content_policy: ContentPolicy,
@@ -153,7 +153,7 @@ def content_evidence_detail(
 
 def content_evidence_detail_from_cache(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     cache: AnalysisCache,
     *,
     content_policy: ContentPolicy,

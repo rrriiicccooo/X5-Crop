@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from ...domain import Detection
+from ...domain import DetectionCandidate
 from ...geometry.boxes import box_cache_key
 
 
-def detection_frame_cache_key(detection: Detection) -> tuple[tuple[int, int, int, int], ...]:
+def detection_frame_cache_key(detection: DetectionCandidate) -> tuple[tuple[int, int, int, int], ...]:
     return tuple(box_cache_key(frame) for frame in detection.frames)
 
 
 def detection_gap_cache_key(
-    detection: Detection,
+    detection: DetectionCandidate,
 ) -> tuple[tuple[int, str, float, Optional[float], Optional[float]], ...]:
     return tuple(
         (
@@ -26,7 +26,7 @@ def detection_gap_cache_key(
 
 
 def content_detail_cache_key(
-    detection: Detection,
+    detection: DetectionCandidate,
     source_w: int,
     source_h: int,
     policy_key: tuple[Any, ...] = (),

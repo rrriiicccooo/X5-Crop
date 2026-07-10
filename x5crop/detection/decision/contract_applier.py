@@ -6,23 +6,19 @@ import numpy as np
 
 from ...constants import CANDIDATE_SOURCE_REVIEW_ONLY
 from ...runtime.config import RuntimeConfig
-from ...domain import Detection
+from ...domain import DetectionCandidate, FinalDetection
 from ..confidence_caps import apply_confidence_cap
 from ...policies.decision.contract import DetectionDecisionContract
 from .decision_gate import DecisionAssessmentInput, decision_gate_assessment
 from .decision_signals import decision_signals_for
 from .evidence_summary import evidence_summary_for
-from .reasons import (
-    final_review_reasons,
-    set_final_review_reasons,
-)
 
 
 def _detail_list(value: Any) -> list[Any]:
     return list(value) if isinstance(value, list) else []
 
 
-def _candidate_gate_input(detection: Detection) -> dict[str, Any]:
+def _candidate_gate_input(detection: DetectionCandidate) -> dict[str, Any]:
     assessment = detection.detail.get("candidate_assessment", {})
     assessment = dict(assessment) if isinstance(assessment, dict) else {}
     competition = detection.detail.get("candidate_competition", {})
@@ -53,7 +49,7 @@ def _unique_reasons(reasons: list[str]) -> list[str]:
 
 
 def _decision_status_for(
-    detection: Detection,
+    detection: DetectionCandidate,
     confidence_threshold: float,
     final_reasons: list[str],
 ) -> str:
@@ -63,7 +59,7 @@ def _decision_status_for(
 
 
 def _apply_decision_confidence_caps(
-    detection: Detection,
+    detection: DetectionCandidate,
     config: RuntimeConfig,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
@@ -117,14 +113,14 @@ def _apply_decision_confidence_caps(
 
 def apply_decision_contract(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     config: RuntimeConfig,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
     *,
     policy: DetectionDecisionContract,
     deskew_detail: dict[str, Any] | None = None,
-) -> Detection:
+) -> FinalDetection:
     evidence = evidence_summary_for(gray, detection, content_detail, outer_alignment, policy)
     decision_signals = decision_signals_for(detection, evidence, policy)
     assessment = detection.detail.get("candidate_assessment", {})
@@ -162,8 +158,6 @@ def apply_decision_contract(
     status = _decision_status_for(detection, config.confidence_threshold, final_reasons)
     candidate_gate_input = _candidate_gate_input(detection)
     detection.detail["candidate_gate_input"] = candidate_gate_input
-    set_final_review_reasons(detection, final_reasons)
-    final_reasons = final_review_reasons(detection)
     detail = {
         "policy_id": policy.policy_id,
         "schema_id": policy.schema_id,
@@ -183,7 +177,10 @@ def apply_decision_contract(
     detection.detail["evidence_summary"] = evidence
     detection.detail["decision_signals"] = decision_signals
     detection.detail["decision_reason_inputs"] = decision_gate.reason_inputs
-    detection.detail["final_review_reasons"] = final_reasons
     detection.detail["decision_policy_detail"] = policy.report_detail()
     detection.detail["policy_id"] = policy.policy_id
-    return detection
+    return FinalDetection.from_candidate(
+        detection,
+        status=status,
+        final_review_reasons=final_reasons,
+    )

@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...domain import Box, Detection
+from ...domain import Box, DetectionCandidate
 from ...gap_methods import is_hard_gap_method
 from ...geometry.boxes import box_cache_key, original_box_to_work
 from ...geometry.layout import work_gray
@@ -16,7 +16,7 @@ from ...utils import bbox_from_mask, clamp_int
 from .evidence_cache_keys import detection_gap_cache_key
 
 
-def outer_alignment_cache_key(detection: Detection, source_w: int, source_h: int) -> tuple[Any, ...]:
+def outer_alignment_cache_key(detection: DetectionCandidate, source_w: int, source_h: int) -> tuple[Any, ...]:
     return (
         str(detection.film_format),
         str(detection.layout),
@@ -31,7 +31,7 @@ def outer_alignment_cache_key(detection: Detection, source_w: int, source_h: int
 
 def outer_content_alignment_detail(
     gray: np.ndarray,
-    detection: Detection,
+    detection: DetectionCandidate,
     cache: Optional[AnalysisCache] = None,
     *,
     alignment_policy: OuterAlignmentEvidencePolicy,

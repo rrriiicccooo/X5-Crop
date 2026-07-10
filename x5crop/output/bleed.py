@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from ..domain import Box, Detection
+from ..domain import Box, FinalDetection
 from ..geometry.boxes import map_work_box, original_box_to_work
 
 
@@ -26,7 +26,7 @@ def detection_bleed_parameters(output_policy: OutputBleedPolicy) -> AxisBleedPar
     )
 
 
-def detection_has_output_overlap_evidence(detection: Detection) -> bool:
+def detection_has_output_overlap_evidence(detection: FinalDetection) -> bool:
     output_overlap = detection.detail.get("output_overlap_evidence")
     if not isinstance(output_overlap, dict):
         return False
@@ -40,7 +40,7 @@ def detection_has_output_overlap_evidence(detection: Detection) -> bool:
     return False
 
 
-def required_output_overlap_bleed_px(detection: Detection) -> int:
+def required_output_overlap_bleed_px(detection: FinalDetection) -> int:
     output_overlap = detection.detail.get("output_overlap_evidence")
     if not isinstance(output_overlap, dict):
         return 0
@@ -53,7 +53,7 @@ def required_output_overlap_bleed_px(detection: Detection) -> int:
 
 def output_bleed_parameters_for_detection(
     current_bleed: AxisBleedParameters,
-    detection: Detection,
+    detection: FinalDetection,
     output_policy: OutputBleedPolicy,
 ) -> AxisBleedParameters:
     if not detection_has_output_overlap_evidence(detection):
@@ -72,7 +72,7 @@ def output_bleed_parameters_for_detection(
 
 
 def apply_output_bleed(
-    detection: Detection,
+    detection: FinalDetection,
     detection_bleed: AxisBleedParameters,
     output_bleed: AxisBleedParameters,
     image_w: int,
@@ -124,7 +124,7 @@ def apply_output_bleed(
 
 
 def reapply_cached_output_bleed(
-    detection: Detection,
+    detection: FinalDetection,
     target_bleed: AxisBleedParameters,
     image_w: int,
     image_h: int,

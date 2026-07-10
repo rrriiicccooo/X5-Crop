@@ -5,7 +5,7 @@ from dataclasses import asdict
 import numpy as np
 
 from ....cache import AnalysisCache
-from ....domain import Detection
+from ....domain import DetectionCandidate
 from ....formats import FormatSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....runtime.config import RuntimeConfig
@@ -16,11 +16,11 @@ def build_assessed_corrected_outer_candidate(
     gray: np.ndarray,
     config: RuntimeConfig,
     fmt: FormatSpec,
-    detection: Detection,
+    detection: DetectionCandidate,
     corrected: OuterCorrectionProposal,
     cache: AnalysisCache,
     policy: DetectionPolicy,
-) -> Detection:
+) -> DetectionCandidate:
     from ...evidence.content.frame_support import content_evidence_detail
     from ...evidence.outer_alignment import outer_content_alignment_detail
     from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE, width_aware_gap_profile_detail

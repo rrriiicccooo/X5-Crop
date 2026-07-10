@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from .....domain import Box
-from .....domain import Detection
+from .....domain import DetectionCandidate
 from .....formats import FormatSpec
 from .....policies.runtime.outer import ContentContainmentCorrectionPolicy
 from .....utils import box_from_dict, clamp_int
@@ -92,7 +92,7 @@ def corrected_outer_from_alignment(
 
 def content_containment_correction_proposal(
     fmt: FormatSpec,
-    detection: Detection,
+    detection: DetectionCandidate,
     alignment: dict[str, Any],
     eligible_families: set[str],
     content_containment_policy: ContentContainmentCorrectionPolicy,

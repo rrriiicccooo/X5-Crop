@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...domain import Detection
+from ...domain import DetectionCandidate
 from ..detail import CANDIDATE_SIGNALS, candidate_signals_from_detail
 
 
@@ -170,23 +170,23 @@ def normalized_candidate_signals(signals: list[str]) -> list[str]:
     return sorted(set(str(signal) for signal in signals if signal))
 
 
-def candidate_signals(detection: Detection) -> list[str]:
+def candidate_signals(detection: DetectionCandidate) -> list[str]:
     return candidate_signals_from_detail(detection)
 
 
-def set_candidate_signals(detection: Detection, signals: list[str]) -> None:
+def set_candidate_signals(detection: DetectionCandidate, signals: list[str]) -> None:
     detection.detail[CANDIDATE_SIGNALS] = normalized_candidate_signals(signals)
 
 
-def add_candidate_signals(detection: Detection, signals: list[str]) -> None:
+def add_candidate_signals(detection: DetectionCandidate, signals: list[str]) -> None:
     set_candidate_signals(detection, [*candidate_signals(detection), *signals])
 
 
-def add_candidate_signal(detection: Detection, signal: str) -> None:
+def add_candidate_signal(detection: DetectionCandidate, signal: str) -> None:
     add_candidate_signals(detection, [signal])
 
 
-def merged_candidate_signals(detection: Detection, signals: list[str]) -> list[str]:
+def merged_candidate_signals(detection: DetectionCandidate, signals: list[str]) -> list[str]:
     return normalized_candidate_signals([*candidate_signals(detection), *signals])
 
 
