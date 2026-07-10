@@ -30,7 +30,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output", default=None, help="Output directory; default input/x5_crop_output.")
     parser.add_argument("--format", choices=FORMAT_CHOICES, help="Film format. Required unless --interactive is used.")
     parser.add_argument("--layout", choices=LAYOUT_CHOICES, default="auto", help="auto/horizontal/vertical single-strip layout.")
-    parser.add_argument("--strip", choices=STRIP_MODES, default="full", help="full strip or partial/head mode.")
+    parser.add_argument(
+        "--strip",
+        choices=STRIP_MODES,
+        default="full",
+        help="Holder occupancy: full when film fills the holder, partial when it does not.",
+    )
     parser.add_argument("-n", "--count", type=int, default=None, help="Override frame count.")
     parser.add_argument("--page", type=int, default=0, help="TIFF page index; default 0.")
     parser.add_argument("--bleed", type=int, default=None, help="Bleed in pixels on all sides; overrides layout-aware defaults.")

@@ -71,9 +71,9 @@ Windows: 双击 X5_Crop_win.bat
 
 ### 6. partial mode
 
-完整片条：按 Return，保持 `no`。
+照片铺满片夹：按 Return，保持 `no`。
 
-片头、片尾、局部片条、片夹没有铺满：输入 `y`。
+照片没有铺满片夹，包括片头、片尾和局部片条：输入 `y`。
 
 开启 partial mode 后会询问 `count`。按 Return 或输入 `auto` 表示自动判断张数；
 也可以输入当前格式允许的具体张数。
@@ -186,9 +186,9 @@ TIFF folder:
 
 ### 6. Partial Mode
 
-Complete strip: press Return and keep `no`.
+Film fills the holder: press Return and keep `no`.
 
-Head, tail, short scan, or holder not filled: type `y`.
+Film does not fill the holder, including a head, tail, or short scan: type `y`.
 
 When partial mode is enabled, the launcher asks for `count`. Press Return or
 type `auto` to let the script estimate it. You can also enter a valid count for

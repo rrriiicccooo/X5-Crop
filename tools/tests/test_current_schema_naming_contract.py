@@ -74,12 +74,6 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
 
         self.assertNotIn("contract applier", architecture.lower())
-
-    def test_architecture_describes_parameter_profile_ownership_not_removed_format_field(self) -> None:
-        architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
-
-        self.assertNotIn("frame_geometry_profile", architecture)
-        self.assertIn("parameter profile", architecture.lower())
         self.assertNotIn("reuse compatible analysis", architecture.lower())
         self.assertNotIn("legacy processresult", architecture.lower())
         self.assertNotIn("physical lengths resolve", architecture.lower())
@@ -91,6 +85,23 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
 
         agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
         self.assertIsNone(re.search(r"\b\d+\s+tests\b", agents, re.IGNORECASE))
+
+    def test_architecture_describes_parameter_profile_ownership_not_removed_format_field(self) -> None:
+        architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
+
+        self.assertNotIn("frame_geometry_profile", architecture)
+        self.assertIn("parameter profile", architecture.lower())
+
+    def test_user_facing_strip_mode_uses_holder_occupancy_not_strip_completeness(self) -> None:
+        cli = (PROJECT_ROOT / "x5crop" / "entry" / "cli.py").read_text(encoding="utf-8")
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        quick_start = (PROJECT_ROOT / "快速启动_Quick_Start.md").read_text(encoding="utf-8")
+
+        self.assertNotIn("partial/head mode", cli)
+        self.assertIn("holder", cli)
+        self.assertNotIn("Use `partial mode = no` for complete strips.", readme)
+        self.assertNotIn("完整片条：按 Return，保持 `no`。", quick_start)
+        self.assertNotIn("Complete strip: press Return and keep `no`.", quick_start)
 
     def test_active_source_has_no_property_or_constant_aliases(self) -> None:
         format_source = (

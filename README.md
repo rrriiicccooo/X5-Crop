@@ -412,8 +412,8 @@ It asks for `count` only when partial mode is enabled. Press Return or type
 | `66` | 120-66 | 3 |
 | `67` | 120-67 | 3 |
 
-Use `partial mode = no` for complete strips. Use partial mode for heads, tails,
-short scans, holders that are not filled, or cases that require automatic count
+Use `partial mode = no` when film fills the holder. Use partial mode when it does
+not, including heads, tails, short scans, or cases that require automatic count
 estimation. `135-dual` is intended for complete dual-lane 135 strips.
 
 ### Debug Analysis
