@@ -12,7 +12,8 @@ from ..run_config import RunConfig
 from .output_protection import prepare_output_protection
 from .deskew import apply_deskew
 from ..debug.outputs import write_debug_outputs
-from ..detection.decision.final_decision import apply_detection_decision
+from ..detection.decision.decision_gate import apply_decision_gate
+from ..detection.evidence.selected_candidate import complete_selected_candidate_evidence
 from ..detection.detail import DECISION_POLICY_DETAIL, RUNTIME_POLICY_DETAIL
 from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
@@ -82,14 +83,22 @@ def process_one(
         selected_policy,
     )
     decision_contract = decision_contract_for_policy(selected_policy)
-    decided_detection = apply_detection_decision(
+    selected_evidence = complete_selected_candidate_evidence(
         gray,
         detection,
-        config,
         analysis_cache,
-        deskew_detail,
-        selected_policy,
-        decision_contract,
+        content_policy=selected_policy.content,
+        alignment_parameters=selected_policy.outer.alignment_evidence,
+        horizontal_frame_aspect=decision_contract.physical_spec.horizontal_content_aspect,
+    )
+    decided_detection = apply_decision_gate(
+        gray,
+        selected_evidence.candidate,
+        config,
+        selected_evidence.content,
+        selected_evidence.outer_alignment,
+        policy=decision_contract,
+        deskew_detail=deskew_detail,
     )
     decided_detection.detail[DECISION_POLICY_DETAIL] = decision_contract_report_detail(
         decision_contract

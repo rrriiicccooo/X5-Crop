@@ -14,7 +14,6 @@ class ScanCalibration:
     source: str
     trusted: bool
     warnings: tuple[str, ...] = ()
-    inferred_from_frame_short_axis: dict[str, Any] | None = None
 
     def px_per_mm(self, axis: str) -> float | None:
         return self.y_px_per_mm if axis == "y" else self.x_px_per_mm
@@ -26,8 +25,6 @@ class ScanCalibration:
             "x_px_per_mm": self.x_px_per_mm,
             "y_px_per_mm": self.y_px_per_mm,
             "warnings": list(self.warnings),
-            "inferred_from_frame_short_axis": self.inferred_from_frame_short_axis
-            or {"used": False, "reason": "not_used_to_avoid_candidate_calibration_cycle"},
         }
 
 

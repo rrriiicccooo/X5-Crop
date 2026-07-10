@@ -7,13 +7,13 @@ import numpy as np
 
 from tools.tests.architecture_contracts import PROJECT_ROOT
 from tools.tests.decision_contract_support import (
+    apply_test_detection_decision as apply_detection_decision,
     candidate_gate_detail as _candidate_gate_detail,
     content_ok_detail as _content_ok_detail,
     decision_contract as _decision_contract,
     decision_test_config as _decision_test_config,
 )
 from x5crop.cache.analysis import make_analysis_cache
-from x5crop.detection.decision.final_decision import apply_detection_decision
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, DetectionCandidate
@@ -135,15 +135,15 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
 
         with (
             patch(
-                "x5crop.detection.decision.final_decision.content_evidence_detail",
+                "x5crop.detection.evidence.selected_candidate.content_evidence_detail",
                 return_value={"used": True},
             ),
             patch(
-                "x5crop.detection.decision.final_decision.content_containment_detail",
+                "x5crop.detection.evidence.selected_candidate.content_containment_detail",
                 return_value=_content_ok_detail(),
             ),
             patch(
-                "x5crop.detection.decision.final_decision.outer_content_alignment_detail",
+                "x5crop.detection.evidence.selected_candidate.outer_content_alignment_detail",
                 return_value={"used": True, "ok": True},
             ),
             patch(

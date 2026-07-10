@@ -61,13 +61,12 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_old_decision_and_finalization_wrappers_are_absent(self) -> None:
-        decision_text = (
-            PROJECT_ROOT / "x5crop" / "detection" / "decision" / "final_decision.py"
-        ).read_text(encoding="utf-8")
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop" / "detection" / "decision" / "final_decision.py").exists()
+        )
         finalization_text = (
             PROJECT_ROOT / "x5crop" / "detection" / "final" / "finalize.py"
         ).read_text(encoding="utf-8")
-        self.assertNotIn("FinalDecisionResult", decision_text)
         self.assertNotIn("DetectionFinalizationResult", finalization_text)
 
 

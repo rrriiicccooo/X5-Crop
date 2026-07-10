@@ -25,6 +25,9 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("physical lengths resolve", architecture.lower())
         self.assertNotIn("物理长度优先", architecture)
 
+        changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertNotIn("`PhysicalLength`", changelog)
+
     def test_active_source_has_no_property_or_constant_aliases(self) -> None:
         format_source = (
             PROJECT_ROOT / "x5crop" / "formats" / "__init__.py"

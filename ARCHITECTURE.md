@@ -87,6 +87,7 @@ candidate plan
   -> candidate assessment
   -> candidate extension
   -> candidate selection
+  -> selected-candidate evidence completion
   -> decision
 ```
 
@@ -100,6 +101,7 @@ candidate plan
 | Candidate assessment | 计算 candidate support、candidate gate、candidate blockers、diagnostics 和 confidence caps。 |
 | Candidate extension | 对 corrected outer、content-guided separator 等候选重新 build / reassess。 |
 | Candidate selection | 在已评估候选之间选择 selected candidate，并记录 count selection 与 competition detail。 |
+| Selected-candidate evidence completion | 为选中候选完成 content containment 与 outer alignment evidence；不做最终裁决。 |
 | Decision | 将 selected `DetectionCandidate` 转成唯一拥有 status / final reasons 的 `FinalDetection`。 |
 
 candidate assessment 只产生候选级解释；最终用户可见原因只由 decision 产生。
@@ -207,12 +209,13 @@ XPAN 和 120-66 的 `complete_strip_can_be_underfilled` 是 format physical trai
 | `detection.candidate.assessment` | count hypothesis evaluation、support scoring、base scoring、candidate gate、blockers、diagnostics、candidate confidence caps。 |
 | `detection.candidate.extension` | corrected outer 和其它扩展候选的 reassessment。 |
 | `detection.candidate.selection` | candidate competition 和 selected candidate。 |
+| `detection.evidence.selected_candidate` | 为 selected candidate 完成 content containment 与 outer alignment evidence。 |
 | `detection.decision` | evidence summary、decision signals、唯一的 decision gate 与 final reasons。 |
 | `detection.final` | 已决策结果的 output-adjacent finalization 编排。 |
 | `detection.detail` | 稳定 detail read helper，供 report/debug/export/finalization 读取。 |
 
 detection 中的层级方向是：plan -> proposal / guidance -> build -> evidence enrichment -> assessment -> selection ->
-decision -> finalization。低层不能反向读取高层 decision 语义。
+selected evidence completion -> decision -> finalization。低层不能反向读取高层 decision 语义。
 `DetectionCandidate` 不含 status 或 final reasons。DecisionGate 是唯一
 `DetectionCandidate -> FinalDetection` 转换点；finalization 只接收并返回
 `FinalDetection`，report / debug / export 也不能接收未决候选。
@@ -306,6 +309,7 @@ candidate plan
   -> candidate assessment
   -> candidate extension
   -> candidate selection
+  -> selected-candidate evidence completion
   -> decision
 ```
 
@@ -414,12 +418,13 @@ declares the lane count and lane format. Detector policy does not hide a default
 | `detection.candidate.assessment` | Count-hypothesis evaluation, support scoring, base scoring, candidate gate, blockers, diagnostics, and candidate confidence caps. |
 | `detection.candidate.extension` | Reassessment of corrected outer and other extension candidates. |
 | `detection.candidate.selection` | Candidate competition and selected candidate. |
+| `detection.evidence.selected_candidate` | Completes content-containment and outer-alignment evidence for the selected candidate. |
 | `detection.decision` | Evidence summary, decision signals, the sole decision gate, and final reasons. |
 | `detection.final` | Output-adjacent finalization for an already-decided result. |
 | `detection.detail` | Stable detail readers for report/debug/export/finalization. |
 
 The direction is plan -> proposal / guidance -> build -> evidence enrichment -> assessment -> selection ->
-decision -> finalization. Lower layers must not read higher-level decision
+selected evidence completion -> decision -> finalization. Lower layers must not read higher-level decision
 semantics.
 `DetectionCandidate` has no status or final reasons. DecisionGate is the only
 `DetectionCandidate -> FinalDetection` conversion point. Finalization only

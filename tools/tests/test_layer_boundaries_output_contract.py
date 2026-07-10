@@ -216,7 +216,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             / "x5crop"
             / "detection"
             / "decision"
-            / "final_decision.py"
+            / "decision_gate.py"
         ).read_text(encoding="utf-8")
 
         self.assertNotIn("runtime.diagnostics", exposure_text)

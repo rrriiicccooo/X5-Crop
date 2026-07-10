@@ -52,8 +52,28 @@ def _process_result(detection: FinalDetection) -> ProcessResult:
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_cache_export_uses_final_frame_read_model_not_detection_models(self) -> None:
+        reuse_source = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "analysis_reuse.py"
+        ).read_text(encoding="utf-8")
+        crop_source = (
+            PROJECT_ROOT / "x5crop" / "export" / "crops.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("candidate_geometry_from_record", reuse_source)
+        self.assertNotIn("DetectionCandidate", reuse_source)
+        self.assertNotIn("DetectionCandidate", crop_source)
+
+    def test_debug_does_not_reconstruct_decision_signals(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop" / "debug" / "panels.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("decision_signals.items()", source)
+        self.assertNotIn("isinstance(value, bool) and value", source)
+
     def test_cache_rejects_incomplete_current_gap_records(self) -> None:
-        from x5crop.runtime.analysis_reuse import candidate_geometry_from_record
+        from x5crop.utils import gap_from_dict
 
         record = {
             "format_id": "135",
@@ -81,7 +101,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         }
 
         with self.assertRaises(KeyError):
-            candidate_geometry_from_record(record)
+            gap_from_dict(record["gaps"][0])
 
     def test_script_version_identity_has_one_canonical_key(self) -> None:
         cache_source = (

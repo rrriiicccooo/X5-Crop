@@ -8,6 +8,21 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 
 
 class DecisionOwnershipSourceContractTest(unittest.TestCase):
+    def test_decision_consumes_evidence_without_building_it(self) -> None:
+        decision_root = PROJECT_ROOT / "x5crop" / "detection" / "decision"
+        offenders = []
+        for path in decision_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in (
+                "content_evidence_detail",
+                "content_containment_detail",
+                "outer_content_alignment_detail",
+                "DetectionPolicy",
+            ):
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}:{term}")
+        self.assertEqual(offenders, [])
+
     def test_decision_gate_is_only_final_detection_factory_repo_wide(self) -> None:
         offenders = []
         for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):

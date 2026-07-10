@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from tools.tests.decision_contract_support import (
+    apply_test_detection_decision as apply_detection_decision,
     candidate_gate_detail as _candidate_gate_detail,
     content_ok_detail as _content_ok_detail,
     decision_contract as _decision_contract,
@@ -22,7 +23,6 @@ from x5crop.constants import (
 from x5crop.detection.candidate.signals import (
     SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE,
 )
-from x5crop.detection.decision.final_decision import apply_detection_decision
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.decision.decision_signals import decision_signals_for
 from x5crop.detection.modes.review_only import review_only_detection

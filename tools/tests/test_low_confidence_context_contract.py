@@ -19,7 +19,7 @@ class LowConfidenceContextContractTest(unittest.TestCase):
         )
         offenders: list[str] = []
         for path in (
-            PROJECT_ROOT / "x5crop" / "detection" / "decision" / "final_decision.py",
+            PROJECT_ROOT / "x5crop" / "detection" / "decision" / "decision_gate.py",
             PROJECT_ROOT / "ARCHITECTURE.md",
             PROJECT_ROOT / "CHANGELOG.md",
         ):
@@ -31,16 +31,13 @@ class LowConfidenceContextContractTest(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_low_confidence_context_reasons_belong_to_decision_gate(self) -> None:
-        final_decision_text = (
-            PROJECT_ROOT / "x5crop" / "detection" / "decision" / "final_decision.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("_apply_low_confidence_context_reasons", final_decision_text)
-        self.assertNotIn("add_final_review_reason", final_decision_text)
-        self.assertNotIn("_sync_decision_summary_status", final_decision_text)
-        self.assertNotIn("sync_candidate_competition_decision_fields", final_decision_text)
         decision_gate_text = (
             PROJECT_ROOT / "x5crop" / "detection" / "decision" / "decision_gate.py"
         ).read_text(encoding="utf-8")
+        self.assertNotIn("_apply_low_confidence_context_reasons", decision_gate_text)
+        self.assertNotIn("add_final_review_reason", decision_gate_text)
+        self.assertNotIn("_sync_decision_summary_status", decision_gate_text)
+        self.assertNotIn("sync_candidate_competition_decision_fields", decision_gate_text)
         self.assertIn("low_confidence_context", decision_gate_text)
         self.assertNotIn("_low_confidence_context_reason_inputs", decision_gate_text)
 

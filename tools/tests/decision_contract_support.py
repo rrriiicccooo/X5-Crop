@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from x5crop.detection.decision.decision_gate import apply_decision_gate
+from x5crop.detection.evidence.selected_candidate import complete_selected_candidate_evidence
 from x5crop.domain import Box, DetectionCandidate, FinalDetection
 from x5crop.policies.decision.contract import decision_contract_for_policy
 from x5crop.policies.registry import get_detection_policy
@@ -136,3 +137,31 @@ def final_detection_fixture(
     if detail:
         final.detail.update(detail)
     return final
+
+
+def apply_test_detection_decision(
+    gray,
+    candidate,
+    config,
+    cache,
+    deskew_detail,
+    policy,
+    contract,
+):
+    evidence = complete_selected_candidate_evidence(
+        gray,
+        candidate,
+        cache,
+        content_policy=policy.content,
+        alignment_parameters=policy.outer.alignment_evidence,
+        horizontal_frame_aspect=contract.physical_spec.horizontal_content_aspect,
+    )
+    return apply_decision_gate(
+        gray,
+        evidence.candidate,
+        config,
+        evidence.content,
+        evidence.outer_alignment,
+        policy=contract,
+        deskew_detail=deskew_detail,
+    )

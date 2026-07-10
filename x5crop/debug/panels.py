@@ -128,9 +128,13 @@ def make_decision_review_rgb(
         lines.append(f"decision pass: {bool(decision.get('pass', False))}")
     if signals:
         active = signals.get("active_signals")
-        if not isinstance(active, list):
-            active = [key for key, value in signals.items() if isinstance(value, bool) and value]
-        lines.append("signals: " + (",".join([str(item) for item in active[:4]]) if active else "none"))
+        if isinstance(active, list):
+            lines.append(
+                "signals: "
+                + (",".join([str(item) for item in active[:4]]) if active else "none")
+            )
+        else:
+            lines.append("signals: invalid current schema")
     return add_review_lines(rgb, lines)
 
 

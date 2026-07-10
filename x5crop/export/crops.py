@@ -7,7 +7,7 @@ import numpy as np
 import tifffile
 
 from ..run_config import RunConfig
-from ..domain import DetectionCandidate, ImageProfile
+from ..domain import Box, ImageProfile
 from ..image.crop_pixels import crop_array, validate_source_crop_pixels
 from ..io.tiff import tiff_write_kwargs, validate_written_tiff
 
@@ -17,13 +17,13 @@ def write_crops(
     arr: np.ndarray,
     source_arr: np.ndarray,
     profile: ImageProfile,
-    detection: DetectionCandidate,
+    frames: list[Box],
     config: RunConfig,
     deskew_applied: bool,
     output_dir: Path,
 ) -> list[str]:
     output_files: list[str] = []
-    for i, box in enumerate(detection.frames, 1):
+    for i, box in enumerate(frames, 1):
         if not box.valid():
             raise RuntimeError(f"Invalid crop box for frame {i}: {box}")
         out_path = output_dir / f"{input_file.stem}_{i:02d}.tif"

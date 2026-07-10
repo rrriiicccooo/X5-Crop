@@ -51,7 +51,7 @@ def write_crops_if_allowed(
         arr,
         source_arr,
         profile,
-        detection,
+        detection.frames,
         config,
         deskew_applied,
         output_dir,

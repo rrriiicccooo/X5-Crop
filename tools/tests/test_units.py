@@ -30,6 +30,15 @@ def _profile(resolution=None, unit=None) -> ImageProfile:
 
 
 class UnitModelTests(unittest.TestCase):
+    def test_scan_calibration_has_no_candidate_inference_residue(self) -> None:
+        calibration = scan_calibration_from_profile(_profile(), TRUST_PARAMETERS)
+
+        self.assertNotIn(
+            "inferred_from_frame_short_axis",
+            calibration.__dataclass_fields__,
+        )
+        self.assertNotIn("inferred_from_frame_short_axis", calibration.detail())
+
     def test_scan_calibration_from_inch_resolution(self) -> None:
         calibration = scan_calibration_from_profile(_profile(((300, 1), (300, 1)), 2), TRUST_PARAMETERS)
         self.assertTrue(calibration.trusted)
