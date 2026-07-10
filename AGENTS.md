@@ -60,8 +60,11 @@ for the user to restate it.
 - Preserve TIFF quality and metadata behavior unless the user explicitly asks
   otherwise. Cropped TIFF output must keep bit depth, channel structure,
   ICC/color space, resolution, metadata, and known lossless compression behavior.
-- Keep detection changes conservative and sample-driven.
-- Do not broadly loosen PASS/REVIEW rules to fix one file.
+- Structural cleanup does not preserve historical output parity. PASS/REVIEW,
+  crop geometry, confidence, reasons, report/debug schema, and cache reuse may
+  all change when the new structure is cleaner and more truthful.
+- After structural closure, detection thresholds and behavior are calibrated
+  from real samples. Do not broadly loosen PASS/REVIEW rules to fix one file.
 - For detection changes, verify known-good formats before calling the change
   safe, especially `135`.
 - Use `--deskew off` for fast detector regressions unless the task is about
@@ -73,6 +76,60 @@ for the user to restate it.
 - Update `ARCHITECTURE.md` when runtime flow or source layering changes.
 - Update `CHANGELOG.md` when behavior, release packaging, validation scope, or
   rollback context changes.
+
+## Extreme Cleanliness Contract
+
+Extreme cleanliness is a closed, testable architecture contract. It means there
+are no known violations of the rules below; it does not mean that no alternative
+implementation could ever be imagined.
+
+Definition of extreme cleanliness and elegance:
+
+- Every active concept has one canonical name, type, owner, and source of truth.
+- Data and dependencies flow one way. Proposal, guidance, build, evidence,
+  assessment, selection, decision, finalization, output, report, and debug do not
+  borrow authority from one another.
+- `CandidateGate` and `DecisionGate` are the only gates. Only `DecisionGate`
+  creates final PASS/REVIEW status and `final_review_reasons`.
+- Format names identify physical specs; they do not own algorithm branches.
+  Physical facts, sample-tuned parameters, runtime policy, and report descriptions
+  remain separate concepts.
+- Policy and format resolution happen at the runtime boundary. Lower layers
+  receive explicit specs, subpolicies, or plain parameter objects and never query
+  registries or invent defaults.
+- Foundation modules know only geometry, pixels, TIFF I/O, cache mechanics, and
+  units. They do not know format/mode identity, decision state, or report schema.
+- Report, debug, cache reuse, tests, and tools consume the current schema only and
+  never reconstruct missing decisions or preserve superseded field shapes.
+- Keep no compatibility of any kind with superseded source, APIs, schemas,
+  fields, names, aliases, import paths, reducers, shims, branches, or test
+  expectations. Migrate every active caller and delete the old surface in the
+  same change.
+- Keep no dead files, unreachable helpers, pass-through wrappers, duplicate data
+  models, hidden constants that affect crop/decision/output, or abstractions that
+  merely relocate complexity.
+- Prefer the smallest coherent model: delete rather than alias, pass an existing
+  typed object rather than translate it twice, and add an abstraction only when
+  it removes real duplication or responsibility ambiguity.
+- Names must state the physical fact or lifecycle responsibility they represent;
+  comments and documents must not compensate for misleading code names.
+- Code, contract tests, `ARCHITECTURE.md`, and current report/debug output must
+  describe the same system without duplicated or stale explanations.
+
+Enforcement and closure:
+
+- When any new residue is found, first add a contract test that fails on that
+  exact class of violation, then fix the code. Keep the test permanently so the
+  same residue cannot return.
+- Architecture audits use this frozen contract. Do not invent a new aesthetic
+  standard midway through the same closure audit.
+- Architecture cleanup is complete only after the full verification suite passes
+  and two consecutive read-only audits using the same checklist find zero known
+  violations.
+- After closure, reopen architecture only for a demonstrated contract violation,
+  a new capability that cannot fit the current ownership model, or a physical fact
+  the current model cannot express. A sample-specific crop or threshold issue goes
+  to calibration, not another project-wide architecture rewrite.
 
 ## Completion And Sync
 
@@ -188,7 +245,7 @@ unless the edit changes commands or release behavior.
 
 ## Current Handoff
 
-Date: 2026-07-08
+Date: 2026-07-10
 Computer: primary macOS machine
 Branch: main
 Latest documentation state: root documents have distinct responsibilities.
@@ -207,13 +264,18 @@ Current state:
 - User setup and usage live in `README.md` and `快速启动_Quick_Start.md`.
 - Documentation changes must meet the standing extreme cleanliness and elegance
   bar: concise, current, structurally clear, and non-overlapping.
+- The binding definition and closure procedure for extreme cleanliness now live
+  in this file. Future work must apply it without asking the user to restate it.
 
 Recent verified baseline:
 
 - `python3 X5_Crop.py --version` printed `X5_Crop.py 4.9`.
-- Full py_compile across the V4.9 package passed.
+- `python3 -m unittest discover -s tools/tests` passed 185 tests.
+- Full compile across the V4.9 package and regression tools passed.
 - `git diff --check` passed.
 - Decision contract policy smoke passed for 14 format / strip-mode combinations.
+- Representative `135/full`, `120-66/partial auto`, `half/full`, and
+  `120-67/full` report/debug smokes completed against the current schema.
 - Seven local V4.5.4 reference sets have been used as comparison material for
   locating changes.
 - V4.9 no longer treats V4.5.4 or V4.7 as a field-parity oracle. In the current
