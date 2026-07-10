@@ -174,10 +174,6 @@ def add_candidate_signals(detection: DetectionCandidate, signals: list[str]) -> 
     set_candidate_signals(detection, [*candidate_signals_from_detail(detection), *signals])
 
 
-def add_candidate_signal(detection: DetectionCandidate, signal: str) -> None:
-    add_candidate_signals(detection, [signal])
-
-
 def merged_candidate_signals(detection: DetectionCandidate, signals: list[str]) -> list[str]:
     return normalized_candidate_signals(
         [*candidate_signals_from_detail(detection), *signals]

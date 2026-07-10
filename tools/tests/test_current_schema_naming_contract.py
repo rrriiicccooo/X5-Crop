@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+import re
 import unittest
 
 from tools.tests.architecture_contracts import PROJECT_ROOT
@@ -24,9 +25,13 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("legacy processresult", architecture.lower())
         self.assertNotIn("physical lengths resolve", architecture.lower())
         self.assertNotIn("物理长度优先", architecture)
+        self.assertNotIn("policy context", architecture.lower())
 
         changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
         self.assertNotIn("`PhysicalLength`", changelog)
+
+        agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIsNone(re.search(r"\b\d+\s+tests\b", agents, re.IGNORECASE))
 
     def test_active_source_has_no_property_or_constant_aliases(self) -> None:
         format_source = (

@@ -14,7 +14,7 @@ from ..candidate.signals import (
     SIGNAL_DUAL_LANE_DETECTION_FAILED,
     SIGNAL_DUAL_LANE_OUTER_DETECTION_FAILED,
     SIGNAL_FRAME_COUNT_MISMATCH,
-    add_candidate_signal,
+    add_candidate_signals,
     normalized_candidate_signals,
 )
 from ..detail import candidate_signals_from_detail
@@ -35,7 +35,7 @@ def dual_lane_review_detection(
         context.total_count,
         context.lane_policy.frame_fit,
     )
-    add_candidate_signal(detection, mode_signal)
+    add_candidate_signals(detection, [mode_signal])
     mode_diagnostics = detection.detail.setdefault("mode_diagnostics", [])
     if isinstance(mode_diagnostics, list):
         mode_diagnostics.append(mode_signal)

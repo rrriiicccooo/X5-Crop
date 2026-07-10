@@ -271,7 +271,7 @@ Current state:
 Recent verified baseline:
 
 - `python3 X5_Crop.py --version` printed `X5_Crop.py 4.9`.
-- `python3 -m unittest discover -s tools/tests` passed 289 tests.
+- The full architecture and runtime contract suite passed.
 - Full compile across the V4.9 package and regression tools passed.
 - `git diff --check` passed.
 - Decision contract policy smoke passed for 14 format / strip-mode combinations.

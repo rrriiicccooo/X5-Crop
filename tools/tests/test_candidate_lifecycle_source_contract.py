@@ -15,6 +15,13 @@ class CandidateLifecycleSourceContractTest(unittest.TestCase):
 
         self.assertNotIn("def separator_full_width_outer_proposal_candidates", source)
 
+    def test_candidate_signal_mutation_has_one_canonical_helper(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "signals.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("def add_candidate_signal(", source)
+
     def test_outer_candidate_strategy_has_one_typed_source(self) -> None:
         execution_source = (
             PROJECT_ROOT
