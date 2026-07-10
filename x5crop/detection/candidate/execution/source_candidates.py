@@ -23,7 +23,7 @@ from ..proposal.outer import (
     outer_proposal_candidates,
     separator_sequence_rank,
 )
-from ..plan.source_policy import separator_outer_gap_max_width_override
+from .source_policy import separator_outer_gap_max_width_override
 from ..build.detection import build_detection_geometry_for_outer, enrich_detection_geometry_evidence
 
 

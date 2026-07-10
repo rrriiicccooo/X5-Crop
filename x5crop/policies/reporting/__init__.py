@@ -163,6 +163,7 @@ def decision_contract_report_detail(
         ),
         "evidence_policy": asdict(contract.evidence),
         "decision_policy": asdict(contract.decision),
+        "candidate_selection_policy": asdict(contract.candidate_selection),
     }
 
 

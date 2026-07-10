@@ -100,26 +100,28 @@ def model_gap_proposal_detail(
     count: int,
     strip_mode: str,
     gap_max_width_ratio_override: Optional[float],
-    policy: DetectionPolicy,
 ) -> dict[str, Any]:
     expected_gaps = max(0, int(count) - 1)
     hard_gaps = int(result.standard_gap_search_detail.get("detected_count", 0) or 0)
-    model_policy = policy.separator.model_gap_proposal
-    block_reason = model_policy.geometry_equal_model_block_reason(
-        strip_mode=strip_mode,
-        count=count,
-        default_count=fmt.default_count,
-        gap_max_width_ratio_override=gap_max_width_ratio_override,
-        expected_gaps=expected_gaps,
-        hard_gaps=hard_gaps,
-    )
+    if strip_mode != "full":
+        block_reason = "requires_full_strip"
+    elif int(count) != int(fmt.default_count):
+        block_reason = "non_default_count"
+    elif gap_max_width_ratio_override is not None:
+        block_reason = "width_override_active"
+    elif expected_gaps <= 0:
+        block_reason = "single_frame"
+    elif hard_gaps >= expected_gaps:
+        block_reason = "hard_gaps_complete"
+    else:
+        block_reason = None
     return {
         "family": GEOMETRY_EQUAL_MODEL_SOURCE,
         "available": block_reason is None,
         "reason": "available" if block_reason is None else block_reason,
         "expected_gaps": int(expected_gaps),
         "hard_gaps": int(hard_gaps),
-        "strip_modes": list(model_policy.geometry_equal_model_strip_modes),
+        "eligibility": "full_default_count",
     }
 
 
@@ -144,7 +146,6 @@ def select_geometry_equal_model_gaps(
     origin: float,
     pitch: float,
     gap_max_width_ratio_override: Optional[float],
-    policy: DetectionPolicy,
 ) -> InitialSeparatorGapResult:
     model_detail = model_gap_proposal_detail(
         result,
@@ -152,7 +153,6 @@ def select_geometry_equal_model_gaps(
         count,
         strip_mode,
         gap_max_width_ratio_override,
-        policy,
     )
     result = with_model_gap_proposal_detail(result, model_detail)
     if not bool(model_detail.get("available", False)):
@@ -202,5 +202,4 @@ def initial_separator_gaps(
         origin=origin,
         pitch=pitch,
         gap_max_width_ratio_override=gap_max_width_ratio_override,
-        policy=policy,
     )

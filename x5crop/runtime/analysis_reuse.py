@@ -139,11 +139,7 @@ def cached_record_matches(
     if not isinstance(detail, dict):
         return False
     decision_summary = detail.get("decision_summary")
-    if not isinstance(decision_summary, dict) or not isinstance(decision_summary.get("final_review_reasons"), list):
-        return False
-    if decision_summary["final_review_reasons"] != record["final_review_reasons"]:
-        return False
-    if decision_summary.get("status") != record["status"]:
+    if not isinstance(decision_summary, dict) or not isinstance(decision_summary.get("decision_gate"), dict):
         return False
     if not isinstance(detail.get("output_geometry"), dict):
         return False

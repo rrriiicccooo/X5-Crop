@@ -44,33 +44,6 @@ class SeparatorGeometrySupportPolicy:
 
 
 @dataclass(frozen=True)
-class SeparatorModelGapProposalPolicy:
-    geometry_equal_model_strip_modes: tuple[str, ...] = ("full",)
-
-    def geometry_equal_model_block_reason(
-        self,
-        *,
-        strip_mode: str,
-        count: int,
-        default_count: int,
-        gap_max_width_ratio_override: float | None,
-        expected_gaps: int,
-        hard_gaps: int,
-    ) -> str | None:
-        if strip_mode not in self.geometry_equal_model_strip_modes:
-            return "strip_mode_not_enabled"
-        if int(count) != int(default_count):
-            return "non_default_count"
-        if gap_max_width_ratio_override is not None:
-            return "width_override_active"
-        if int(expected_gaps) <= 0:
-            return "single_frame"
-        if int(hard_gaps) >= int(expected_gaps):
-            return "hard_gaps_complete"
-        return None
-
-
-@dataclass(frozen=True)
 class SeparatorWidthProfilePolicy:
     mode: str = "off"
     parameters: SeparatorWidthProfileParameters = field(
@@ -121,7 +94,6 @@ class SeparatorRefinementPolicy:
 class SeparatorPolicy:
     support: SeparatorSupportParameters
     leading_grid_failure: LeadingGridFailureParameters
-    model_gap_proposal: SeparatorModelGapProposalPolicy = field(default_factory=SeparatorModelGapProposalPolicy)
     width_profile: SeparatorWidthProfilePolicy = field(default_factory=SeparatorWidthProfilePolicy)
     width_profile_search: SeparatorWidthProfileSearchParameters = field(default_factory=SeparatorWidthProfileSearchParameters)
     refinement: SeparatorRefinementPolicy = field(default_factory=SeparatorRefinementPolicy)

@@ -183,6 +183,9 @@ runtime 可以编排，但不拥有底层几何算法、候选算法或最终 de
 `DetectionPolicy` 直接聚合 canonical parameter objects 和真正需要组合语义的 runtime
 subpolicies；同一组参数不得再复制成形状相同的 runtime dataclass。Report schema identity
 只由 `x5crop.report.identity` 拥有，不能进入 policy 或 policy detail。
+`DetectionDecisionContract` 直接持有 canonical decision-review、candidate-selection 和
+evidence parameter objects，不复制 scalar fields 或默认值。assembly 中只有真正组合
+eligibility / mode posture 的 helper；纯 constructor forwarding 直接写在 central factory。
 
 format 文件不承载算法开关。`FormatPhysicalSpec.frame_geometry_profile` 是从 family、frame
 aspect、count 和 physical layout 派生的唯一几何分类；policy assembly 消费该物理分类，
@@ -220,6 +223,10 @@ selected evidence completion -> decision -> finalization。低层不能反向读
 `DetectionCandidate` 不含 status 或 final reasons。DecisionGate 是唯一
 `DetectionCandidate -> FinalDetection` 转换点；finalization 只接收并返回
 `FinalDetection`，report / debug / export 也不能接收未决候选。
+plan 不接收或读取 `DetectionCandidate`。primary reliability、candidate competition、extension
+budget 和 retrospective detail 均由 assessment / execution / selection 拥有。
+`FinalDetection.status` 与 `FinalDetection.final_review_reasons` 是内存中的唯一最终真相；
+decision summary 只保存 gate checks、signals、reason inputs 和 confidence caps。
 auto count 不在 runtime config 中保存伪默认 count：`requested_count=None` 明确表示自动模式。
 `CountHypothesisPlan` 按物理允许范围从大到小生成假设，execution 对每个假设完整 build / assess，
 selection 记录最终 count 及其证据；XPAN / 120-66 的 partial auto 可以包含 nominal count。
@@ -393,6 +400,10 @@ property views, string override paths, or per-format builders.
 runtime subpolicies that add real composition semantics; it must not duplicate the
 same parameters into shape-identical runtime dataclasses. Current report schema
 identity belongs solely to `x5crop.report.identity`, never to policy or policy detail.
+`DetectionDecisionContract` directly retains the canonical decision-review,
+candidate-selection, and evidence parameter objects. Assembly helpers exist only
+for real eligibility or mode composition; constructor-only forwarding is inlined
+in the central factory.
 
 Format files do not carry algorithm switches. The canonical
 `FormatPhysicalSpec.frame_geometry_profile` is derived from family, frame aspect,
@@ -438,6 +449,11 @@ semantics.
 `DetectionCandidate -> FinalDetection` conversion point. Finalization only
 accepts and returns `FinalDetection`, and report / debug / export cannot consume
 an undecided candidate.
+Plan modules never receive or inspect `DetectionCandidate`. Primary reliability,
+candidate competition, extension budgets, and retrospective detail belong to
+assessment, execution, or selection. `FinalDetection.status` and
+`FinalDetection.final_review_reasons` are the only in-memory final truth; decision
+summary retains gate checks, signals, reason inputs, and confidence caps only.
 Auto count does not store a placeholder default count in runtime config:
 `requested_count=None` explicitly means automatic mode. `CountHypothesisPlan`
 orders physically permitted hypotheses from largest to smallest, execution fully

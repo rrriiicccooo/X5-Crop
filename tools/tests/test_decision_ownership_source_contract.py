@@ -179,11 +179,11 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "reasons.py"
         self.assertFalse(path.exists())
 
-    def test_decision_summary_uses_final_reason_and_signal_fields(self) -> None:
+    def test_decision_summary_uses_signals_without_copying_final_reasons(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "decision_gate.py"
         text = path.read_text(encoding="utf-8")
 
-        self.assertIn('"final_review_reasons"', text)
+        self.assertNotIn('"final_review_reasons":', text)
         self.assertIn('"decision_signals"', text)
         self.assertNotIn("decision_generated_final_review_reasons", text)
         self.assertNotIn("final_review_reasons_added", text)

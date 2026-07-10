@@ -4,7 +4,6 @@ from ..parameters.aggregate import FormatParameters
 from ..runtime.base import PARTIAL
 from ..runtime.candidate import (
     PartialHolderPolicy,
-    ScoringPolicy,
 )
 
 
@@ -22,13 +21,4 @@ def partial_holder_policy(
         enabled=partial_edge_safety_enabled,
         parameters=holder,
         max_frame_aspect_error=float(content_evidence.aspect_ok_max),
-    )
-
-
-def scoring_policy(params: FormatParameters) -> ScoringPolicy:
-    return ScoringPolicy(
-        calibration=params.candidate.scoring_calibration,
-        base_detection=params.candidate.base_detection_score,
-        geometry_support=params.candidate.geometry_support_score,
-        separator_support=params.candidate.separator_support_score,
     )

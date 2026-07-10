@@ -96,7 +96,6 @@ def build_primary_separator_gaps_for_outer(
             count,
             strip_mode,
             gap_max_width_ratio_override,
-            policy,
         )
         model_detail["available"] = False
         model_detail["reason"] = "forced_standard_gap_search"

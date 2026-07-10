@@ -25,6 +25,23 @@ from x5crop.runtime.output_protection import prepare_output_protection
 
 
 class DecisionOwnershipOutputContractTest(unittest.TestCase):
+    def test_decision_summary_does_not_duplicate_canonical_final_fields(self) -> None:
+        decision_source = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "decision"
+            / "decision_gate.py"
+        ).read_text(encoding="utf-8")
+        reuse_source = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "analysis_reuse.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn('"status": status', decision_source)
+        self.assertNotIn('"final_review_reasons": final_reasons', decision_source)
+        self.assertNotIn('decision_summary["final_review_reasons"]', reuse_source)
+        self.assertNotIn('decision_summary.get("status")', reuse_source)
+
     def test_user_docs_describe_feasible_overlap_and_variable_protection_bleed(self) -> None:
         readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
 
@@ -362,7 +379,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
 
         self.assertNotIn("final_review_reasons", decided.detail)
         self.assertEqual(
-            decided.detail["decision_summary"]["final_review_reasons"],
+            decided.final_review_reasons,
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
         self.assertNotIn("final_review_reasons_added", decided.detail["decision_summary"])
@@ -432,7 +449,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
         )
 
         self.assertEqual(decided.final_review_reasons, [])
-        self.assertEqual(decided.detail["decision_summary"]["final_review_reasons"], [])
+        self.assertNotIn("final_review_reasons", decided.detail["decision_summary"])
         self.assertEqual(decided.detail["decision_summary"]["decision_reason_inputs"], [])
 
 

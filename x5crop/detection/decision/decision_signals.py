@@ -65,7 +65,7 @@ def decision_signals_for(
         (
             (
                 margin is not None
-                and margin < policy.decision.candidate_close_margin
+                and margin < policy.candidate_selection.close_margin
             )
             or partial_full_conflict
         )

@@ -29,6 +29,17 @@ from tools.tests.architecture_contracts import (
 
 
 class LayerBoundariesContractTest(unittest.TestCase):
+    def test_application_identity_import_has_no_runtime_side_effect(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "app_info.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        calls = [
+            node.lineno
+            for node in tree.body
+            if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+        ]
+
+        self.assertEqual(calls, [])
+
     def test_active_source_has_no_unreferenced_public_assignments(self) -> None:
         self.assertEqual(unreferenced_public_assignments(), [])
 
@@ -554,7 +565,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
             FrameFitParameters,
             SeparatorFullWidthCompetitionParameters,
         )
-        from x5crop.policies.decision.contract import DecisionPolicy
         from x5crop.policies.runtime.content import ContentPolicy
         from x5crop.policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
         from x5crop.policies.parameters.decision import DecisionReviewParameters
@@ -570,7 +580,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
         from x5crop.policies.runtime.output import OutputPolicy
         from x5crop.policies.runtime.separator import (
             SeparatorGeometrySupportModePolicy,
-            SeparatorModelGapProposalPolicy,
             SeparatorPolicy,
             SeparatorRefinementFamilyPolicy,
             SeparatorWidthProfilePolicy,
@@ -591,12 +600,10 @@ class LayerBoundariesContractTest(unittest.TestCase):
             SeparatorFullWidthCompetitionParameters: "enabled",
             EvidenceIndependenceParameters: "enabled",
             DecisionReviewParameters: "align_outer_to_content",
-            DecisionPolicy: "align_outer_to_content",
             ContentGuidedSeparatorCandidateParameters: "requires_exact_content_runs",
             SeparatorSupportParameters: "allow_geometry_support",
             SeparatorGeometrySupportModePolicy: "allow_grid",
             SeparatorGeometrySupportModePolicy: "enabled",
-            SeparatorModelGapProposalPolicy: "geometry_equal_model_enabled",
             NearbySeparatorRefinementParameters: "enabled",
             FrameFitParameters: "geometry_fallback",
             BaseGrayParameters: "miniswhite_inverts",
@@ -643,31 +650,12 @@ class LayerBoundariesContractTest(unittest.TestCase):
         ):
             for field_name in field_names:
                 self.assertNotIn(field_name, policy_type.__dataclass_fields__)
-        for field_name in (
-            "requires_default_count",
-            "requires_standard_width_search",
-            "requires_incomplete_hard_gaps",
-        ):
-            self.assertNotIn(
-                field_name,
-                SeparatorModelGapProposalPolicy.__dataclass_fields__,
-            )
-
-    def test_finalization_assembly_does_not_own_diagnostics_policy(self) -> None:
-        from x5crop.policies.assembly import finalization
-
-        self.assertFalse(hasattr(finalization, "diagnostics_policy"))
-        self.assertTrue(callable(finalization.finalization_policy))
-
     def test_report_policy_is_not_owned_by_diagnostics_modules(self) -> None:
-        from x5crop.policies.assembly import common
         from x5crop.policies.runtime import diagnostics
 
         self.assertFalse(hasattr(diagnostics, "ReportPolicy"))
-        self.assertFalse(hasattr(common, "report_policy"))
 
     def test_exposure_overlap_policy_is_not_owned_by_diagnostics_modules(self) -> None:
-        from x5crop.policies.assembly import diagnostics
         from x5crop.policies.runtime import diagnostics as runtime_diagnostics
 
         banned = (
@@ -676,7 +664,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
         )
         for name in banned:
             self.assertFalse(hasattr(runtime_diagnostics, name))
-            self.assertFalse(hasattr(diagnostics, name))
 
     def test_exposure_overlap_evidence_does_not_use_diagnostic_ownership_name(self) -> None:
         offenders: list[str] = []

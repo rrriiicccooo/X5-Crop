@@ -106,7 +106,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             "candidate_gate_failed",
         )
         self.assertIn("decision_confidence_caps", decided.detail["decision_summary"])
-        self.assertIn("final_review_reasons", decided.detail["decision_summary"])
+        self.assertNotIn("final_review_reasons", decided.detail["decision_summary"])
         self.assertNotIn("final_review_reasons_added", decided.detail["decision_summary"])
         self.assertNotIn("final_review_reasons_added", decided.detail["decision_summary"])
         self.assertNotIn("candidate_blockers_before_decision", decided.detail)
@@ -504,10 +504,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             decision.final_review_reasons,
             ["evidence_combination_insufficient", "content_evidence_insufficient"],
         )
-        self.assertEqual(
-            decision.detail["decision_summary"]["status"],
-            "needs_review",
-        )
+        self.assertNotIn("status", decision.detail["decision_summary"])
 
     def test_close_competition_is_final_decision_reason(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)

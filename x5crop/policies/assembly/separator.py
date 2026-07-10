@@ -6,7 +6,6 @@ from ..runtime.base import FULL, PARTIAL
 from ..runtime.separator import (
     SeparatorGeometrySupportModePolicy,
     SeparatorGeometrySupportPolicy,
-    SeparatorModelGapProposalPolicy,
     SeparatorPolicy,
     SeparatorRefinementFamilyPolicy,
     SeparatorRefinementPolicy,
@@ -41,12 +40,6 @@ def separator_geometry_support_policy(
     return SeparatorGeometrySupportPolicy(
         detected_geometry=mode_policy,
         stable_grid=stable_grid_policy,
-    )
-
-
-def separator_model_gap_proposal_policy() -> SeparatorModelGapProposalPolicy:
-    return SeparatorModelGapProposalPolicy(
-        geometry_equal_model_strip_modes=("full",),
     )
 
 
@@ -101,7 +94,6 @@ def separator_policy(
     return SeparatorPolicy(
         support=params.separator.separator_support,
         leading_grid_failure=params.separator.leading_grid_failure,
-        model_gap_proposal=separator_model_gap_proposal_policy(),
         width_profile=separator_width_profile_policy(
             detector_kind,
             params,

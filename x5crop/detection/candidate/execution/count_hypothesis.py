@@ -18,13 +18,13 @@ from .source_candidates import (
     separator_source_candidates_for_count,
 )
 from ..plan.count_hypotheses import CountHypothesis
-from ..plan.execution_budget import (
+from .budget import (
     attach_execution_budget_to_candidates,
     separator_extension_families,
     set_execution_budget_detail,
 )
-from ..plan.reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
-from ..plan.source_policy import safety_candidate_outer_proposals_enabled, separator_full_width_can_compete
+from ..assessment.reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
+from .source_policy import safety_candidate_outer_proposals_enabled, separator_full_width_can_compete
 from ..selection.choose import is_partial_edge_safety_candidate, select_source_candidate
 
 

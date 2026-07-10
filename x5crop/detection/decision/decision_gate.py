@@ -43,7 +43,6 @@ class DecisionGateAssessment:
         return {
             "passed": bool(self.passed),
             "checks": gate_check_details(self.checks),
-            "final_review_reasons": list(self.final_review_reasons),
             "reason_inputs": list(self.reason_inputs),
             "confidence_caps": list(self.confidence_caps),
         }
@@ -385,7 +384,7 @@ def apply_decision_gate(
     if detection.confidence < config.confidence_threshold or final_reasons:
         detection.confidence, cap_detail = apply_confidence_cap(
             float(detection.confidence),
-            policy.decision.review_confidence_cap,
+            policy.candidate_selection.confidence_cap,
             owner="decision",
             reason="final_review",
         )
@@ -400,9 +399,6 @@ def apply_decision_gate(
     detection.detail["candidate_gate_input"] = candidate_gate_input
     detection.detail["decision_summary"] = {
         "policy_id": policy.policy_id,
-        "pass": status == "approved_auto",
-        "status": status,
-        "final_review_reasons": final_reasons,
         "decision_reason_inputs": decision_gate.reason_inputs,
         "decision_confidence_caps": decision_caps,
         "decision_gate": decision_gate.report_detail(),

@@ -8,6 +8,20 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 
 
 class CandidateLifecycleSourceContractTest(unittest.TestCase):
+    def test_candidate_plan_never_reads_or_mutates_detection_candidates(self) -> None:
+        banned = ("DetectionCandidate", ".detail", ".confidence", ".frames")
+        offenders: list[str] = []
+        root = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan"
+        for path in root.glob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            offenders.extend(
+                f"{path.relative_to(PROJECT_ROOT)}:{term}"
+                for term in banned
+                if term in source
+            )
+
+        self.assertEqual(offenders, [])
+
     def test_outer_proposal_has_no_single_call_full_width_wrapper(self) -> None:
         source = (
             PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "proposal" / "outer.py"
@@ -108,7 +122,6 @@ class CandidateLifecycleSourceContractTest(unittest.TestCase):
         )
         for path in (
             PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "content.py",
-            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "content.py",
             PROJECT_ROOT / "x5crop" / "detection" / "guidance" / "content_model.py",
         ):
             text = path.read_text(encoding="utf-8")

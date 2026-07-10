@@ -59,7 +59,7 @@ def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsist
         (
             "decision.review_confidence_cap",
             policy.candidate_selection.confidence_cap,
-            contract.decision.review_confidence_cap,
+            contract.candidate_selection.confidence_cap,
         ),
         (
             "decision.content_aspect_conflict_cap",

@@ -54,14 +54,8 @@ def decision_schema_diagnostics(detection: FinalDetection) -> list[dict[str, str
     if not isinstance(summary, dict):
         diagnostics.append({"owner": "decision", "reason": "decision_summary_missing"})
         return diagnostics
-    if not isinstance(summary.get("final_review_reasons"), list):
-        diagnostics.append({"owner": "decision", "reason": "final_review_reasons_missing"})
     if not isinstance(summary.get("decision_gate"), dict):
         diagnostics.append({"owner": "decision", "reason": "decision_gate_missing"})
-    if summary.get("status") != detection.status:
-        diagnostics.append({"owner": "decision", "reason": "decision_status_mismatch"})
-    if summary.get("final_review_reasons") != detection.final_review_reasons:
-        diagnostics.append({"owner": "decision", "reason": "final_review_reasons_mismatch"})
     return diagnostics
 
 

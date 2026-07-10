@@ -16,6 +16,40 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class ArchitectureResidualContractTest(unittest.TestCase):
+    def test_policy_assembly_has_no_single_use_constructor_modules(self) -> None:
+        assembly = PROJECT_ROOT / "x5crop" / "policies" / "assembly"
+        obsolete = {
+            "common.py",
+            "content.py",
+            "diagnostics.py",
+            "finalization.py",
+            "output.py",
+        }
+
+        self.assertEqual(
+            sorted(path.name for path in assembly.glob("*.py") if path.name in obsolete),
+            [],
+        )
+
+    def test_decision_contract_uses_canonical_parameter_objects(self) -> None:
+        from x5crop.policies.decision import contract
+
+        self.assertFalse(hasattr(contract, "DecisionPolicy"))
+        self.assertFalse(hasattr(contract, "decision_policy_for"))
+        self.assertIn(
+            "candidate_selection",
+            contract.DetectionDecisionContract.__dataclass_fields__,
+        )
+
+    def test_separator_model_gap_has_no_singleton_policy_selector(self) -> None:
+        from x5crop.policies.runtime import separator
+
+        self.assertFalse(hasattr(separator, "SeparatorModelGapProposalPolicy"))
+        self.assertNotIn(
+            "model_gap_proposal",
+            separator.SeparatorPolicy.__dataclass_fields__,
+        )
+
     def test_static_schema_and_gap_taxonomy_are_not_runtime_policy_fields(self) -> None:
         from x5crop.policies.runtime.policy import DetectionPolicy
         from x5crop.policies.runtime.separator import SeparatorPolicy
@@ -114,7 +148,6 @@ class ArchitectureResidualContractTest(unittest.TestCase):
             "partial_edge_uncertain_reason",
             "decision_insufficient_reason",
         }
-        self.assertTrue(banned.isdisjoint(contract.DecisionPolicy.__dataclass_fields__))
         self.assertTrue(banned.isdisjoint(DecisionReviewParameters.__dataclass_fields__))
 
     def test_candidate_plan_policy_contains_parameters_not_static_labels(self) -> None:
@@ -274,11 +307,9 @@ class ArchitectureResidualContractTest(unittest.TestCase):
         )
 
     def test_runtime_confidence_threshold_has_one_entry_owned_default(self) -> None:
-        from x5crop.policies.decision.contract import DecisionPolicy
         from x5crop.policies.runtime.candidate import ScoringPolicy
 
         self.assertNotIn("confidence_threshold_default", ScoringPolicy.__dataclass_fields__)
-        self.assertNotIn("confidence_threshold_default", DecisionPolicy.__dataclass_fields__)
         consistency_source = (
             PROJECT_ROOT / "x5crop" / "policies" / "consistency.py"
         ).read_text(encoding="utf-8")

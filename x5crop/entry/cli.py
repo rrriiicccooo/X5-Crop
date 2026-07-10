@@ -22,6 +22,7 @@ from .options import (
     STANDARD_JOB_LIMIT,
     CliOptions,
 )
+from .text_output import configure_entry_text_output
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -111,6 +112,7 @@ def options_from_args(args: argparse.Namespace) -> CliOptions:
 
 
 def main(argv: list[str] | None = None) -> int:
+    configure_entry_text_output()
     parser = build_parser()
     try:
         args = parser.parse_args(argv)

@@ -14,7 +14,7 @@ from ....run_config import RunConfig
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.outer_alignment import outer_content_alignment_detail
 from .corrected_outer import build_assessed_corrected_outer_candidate
-from ..plan.reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
+from ..assessment.reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
 from ...physical.outer.correction.content_containment import content_containment_correction_proposal
 from ...physical.outer.correction.geometry import geometry_consistency_correction_proposal, geometry_consistency_model_detail
 
