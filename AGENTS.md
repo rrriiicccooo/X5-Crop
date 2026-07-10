@@ -153,6 +153,9 @@ Enforcement and closure:
   or release metadata, finish by verifying, committing, and pushing to GitHub
   unless the user explicitly says not to.
 - Do not require the user to restate "push" or "sync" in later sessions.
+- Treat this as standing authorization for verified pushes to the current branch;
+  do not ask for a separate chat confirmation before `git push`. Use the platform
+  approval flow directly if it is required.
 - Before committing, run the relevant checks and confirm `git status --short`
   contains only intentional changes.
 - Push the current branch to `origin` after a successful commit.
