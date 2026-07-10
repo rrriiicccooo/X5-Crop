@@ -110,16 +110,27 @@ def draw_gap_overlay(rgb: np.ndarray, detection: FinalDetection, scale: float, d
 
 
 def draw_gap_evidence_overlay(rgb: np.ndarray, detection: FinalDetection, scale: float, debug_gap: Any) -> None:
-    diagnostics = detection.detail.get("diagnostics")
-    records: Any = None
-    if isinstance(diagnostics, dict):
-        records = diagnostics.get("gap_evidence", [])
-    if not isinstance(records, list):
-        exposure_overlap = detection.detail.get("exposure_overlap_evidence")
-        if isinstance(exposure_overlap, dict):
-            records = exposure_overlap.get("gap_evidence", [])
+    exposure_overlap = detection.detail.get("exposure_overlap_evidence")
+    records: Any = (
+        exposure_overlap.get("gap_evidence", [])
+        if isinstance(exposure_overlap, dict)
+        else []
+    )
     if not isinstance(records, list):
         return
+    diagnostics = detection.detail.get("diagnostics")
+    nearby_records = (
+        diagnostics.get("nearby_separator_diagnostics", [])
+        if isinstance(diagnostics, dict)
+        else []
+    )
+    nearby_by_index = {
+        int(item["index"]): item["detail"]
+        for item in nearby_records
+        if isinstance(item, dict)
+        and isinstance(item.get("index"), int)
+        and isinstance(item.get("detail"), dict)
+    }
     gaps_by_index = {gap.index: gap for gap in detection.gaps}
     for record in records:
         if not isinstance(record, dict):
@@ -135,10 +146,7 @@ def draw_gap_evidence_overlay(rgb: np.ndarray, detection: FinalDetection, scale:
             "geometry_conflict",
         }:
             color = (255, 0, 220)
-        elif bool(
-            isinstance(record.get("nearby_separator_diagnostic"), dict)
-            and record["nearby_separator_diagnostic"].get("stronger_found", False)
-        ):
+        elif bool(nearby_by_index.get(gap.index, {}).get("stronger_found", False)):
             color = (255, 0, 220)
         elif str(record.get("exposure_overlap_class", "none")) in {"medium", "strong"}:
             color = (0, 220, 255)

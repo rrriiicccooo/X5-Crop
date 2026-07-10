@@ -21,16 +21,14 @@ from ....geometry.separator_width_profile import (
 )
 from ....policies.runtime.separator import SeparatorWidthProfilePolicy
 from ....utils import clamp_int
-from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ..photo_size import photo_size_consistency_from_gap_edges
 from .hints import SeparatorGapHintSet
 
 
 @dataclass(frozen=True)
-class SeparatorGapProfileProposal:
-    profile: str
+class SeparatorGapSearchResult:
     gaps: list[Gap]
-    detail: dict[str, Any]
+    search_detail: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -158,7 +156,7 @@ def _propose_standard_separator_gap_with_detail(
     )
     detail: dict[str, Any] = {
         "index": int(index),
-        "profile": WIDTH_AWARE_GAP_PROFILE,
+        "search_method": "standard_and_observed_width",
         "reason": standard_result.reason,
         "standard_expected_center": float(model_expected),
         "search_expected_center": float(search_expected),
@@ -187,7 +185,7 @@ def _propose_standard_separator_gap_with_detail(
     return SeparatorGapProposal(gap=gap, detail=detail)
 
 
-def _propose_standard_separator_gaps_with_detail(
+def propose_separator_gaps_with_detail(
     gray_work: np.ndarray,
     outer: Box,
     profile: np.ndarray,
@@ -200,7 +198,7 @@ def _propose_standard_separator_gaps_with_detail(
     width_profile_policy: SeparatorWidthProfilePolicy,
     width_profile_search: SeparatorWidthProfileSearchParameters,
     gap_hints: Optional[SeparatorGapHintSet] = None,
-) -> SeparatorGapProfileProposal:
+) -> SeparatorGapSearchResult:
     crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
     width_profile = (
         make_separator_width_profile(crop, width_profile_search)
@@ -251,12 +249,11 @@ def _propose_standard_separator_gaps_with_detail(
         count,
         target_photo_width=target_photo_width,
     )
-    return SeparatorGapProfileProposal(
-        profile=WIDTH_AWARE_GAP_PROFILE,
+    return SeparatorGapSearchResult(
         gaps=gaps,
-        detail={
+        search_detail={
             "used": True,
-            "profile": WIDTH_AWARE_GAP_PROFILE,
+            "search_method": "standard_and_observed_width",
             "origin": float(origin),
             "pitch": float(pitch),
             "count": int(count),
@@ -288,34 +285,14 @@ def _propose_standard_separator_gaps_with_detail(
     )
 
 
-def propose_separator_gap_profile_gaps_with_detail(
-    gray_work: np.ndarray,
-    outer: Box,
-    profile: np.ndarray,
-    origin: float,
-    pitch: float,
-    count: int,
-    gap_search_profile: str,
-    frame_aspect: float | None,
-    max_width_ratio_override: Optional[float],
-    gap_search: GapSearchParameters,
+def separator_gap_search_detail(
     width_profile_policy: SeparatorWidthProfilePolicy,
-    width_profile_search: SeparatorWidthProfileSearchParameters,
-    gap_hints: Optional[SeparatorGapHintSet] = None,
-) -> SeparatorGapProfileProposal:
-    if gap_search_profile == WIDTH_AWARE_GAP_PROFILE:
-        return _propose_standard_separator_gaps_with_detail(
-            gray_work,
-            outer,
-            profile,
-            origin,
-            pitch,
-            count,
-            frame_aspect,
-            max_width_ratio_override,
-            gap_search,
-            width_profile_policy,
-            width_profile_search,
-            gap_hints,
-        )
-    raise ValueError(f"Unsupported separator gap search profile: {gap_search_profile!r}")
+) -> dict[str, Any]:
+    width_measurement_enabled = width_profile_policy.mode != "off"
+    return {
+        "used": True,
+        "search_method": "standard_and_observed_width",
+        "standard_search": True,
+        "theoretical_width_search": width_measurement_enabled,
+        "observed_width_search": width_measurement_enabled,
+    }

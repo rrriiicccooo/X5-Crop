@@ -74,7 +74,7 @@ def _candidate_summary(candidate: DetectionCandidate) -> dict:
         else [],
         "candidate_assessment": assessment,
         "candidate_plan": candidate.detail.get("candidate_plan", {}),
-        "gap_search_profile": candidate.detail.get("gap_search_profile", {}),
+        "separator_gap_search": candidate.detail.get("separator_gap_search", {}),
     }
 
 

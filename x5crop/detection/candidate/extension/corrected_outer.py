@@ -23,7 +23,7 @@ def build_assessed_corrected_outer_candidate(
 ) -> DetectionCandidate:
     from ...evidence.content.frame_support import content_evidence_detail
     from ...evidence.outer_alignment import outer_content_alignment_detail
-    from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE, width_aware_gap_profile_detail
+    from ...physical.separator.proposal import separator_gap_search_detail
     from ..assessment.candidate import apply_candidate_assessment_policy
     from ..build.detection import build_detection_geometry_for_outer, enrich_detection_geometry_evidence
 
@@ -46,16 +46,13 @@ def build_assessed_corrected_outer_candidate(
         cache=cache,
         allow_outer_refine=False,
         gap_max_width_ratio_override=None,
-        gap_search_profile=WIDTH_AWARE_GAP_PROFILE,
         policy=policy,
     )
     reassessed = enrich_detection_geometry_evidence(gray, reassessed, config, fmt, cache, policy=policy)
     reassessed = apply_candidate_assessment_policy(gray, reassessed, config, fmt, "separator", cache, policy=policy)
-    profile_detail = width_aware_gap_profile_detail(policy.separator)
-    profile_detail["preserved_through_outer_correction_candidate"] = bool(
-        corrected.preserve_gap_search_profile
+    reassessed.detail["separator_gap_search"] = separator_gap_search_detail(
+        policy.separator.width_profile
     )
-    reassessed.detail["gap_search_profile"] = profile_detail
 
     reassessed_alignment = outer_content_alignment_detail(
         gray,

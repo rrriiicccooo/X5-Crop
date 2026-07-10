@@ -28,14 +28,10 @@ class RuntimeDiagnosticsPolicy:
         DebugPanelPolicy("original_gray", "Original gray context"),
         DebugPanelPolicy("debug_boxes", "Debug boxes"),
         DebugPanelPolicy("separator_evidence", "Separator evidence"),
-        DebugPanelPolicy("frame_geometry", "Frame geometry"),
-        DebugPanelPolicy("outer_candidates", "Outer candidates"),
-        DebugPanelPolicy("selected_candidate", "Selected candidate"),
-        DebugPanelPolicy("decision_review", "Decision review overlay"),
     )
 
     def debug_panel_title(self, panel_id: str) -> str:
         for panel in self.debug_panel_titles:
             if panel.panel_id == panel_id:
                 return panel.title
-        return panel_id.replace("_", " ").title()
+        raise KeyError(f"Unknown debug panel: {panel_id}")

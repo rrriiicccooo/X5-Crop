@@ -4,11 +4,10 @@ from dataclasses import asdict, fields, is_dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ...formats import FormatPhysicalSpec
+    from ...formats import FormatDescription, FormatPhysicalSpec
     from ..runtime.policy import DetectionPolicy
     from ..decision.contract import DetectionDecisionContract
 
-from ...formats import format_description
 from ...constants import HARD_GAP_METHODS, MODEL_GAP_METHODS
 from .mode_descriptions import mode_notes_for_spec, mode_role_for_spec
 
@@ -126,9 +125,11 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     }
 
 
-def _format_spec_detail(contract: "DetectionDecisionContract") -> dict[str, Any]:
+def _format_spec_detail(
+    contract: "DetectionDecisionContract",
+    description: "FormatDescription",
+) -> dict[str, Any]:
     spec = contract.physical_spec
-    description = format_description(spec.format_id)
     return {
         "format_id": spec.format_id,
         "family": spec.family,
@@ -149,10 +150,13 @@ def _format_spec_detail(contract: "DetectionDecisionContract") -> dict[str, Any]
     }
 
 
-def decision_contract_report_detail(contract: "DetectionDecisionContract") -> dict[str, Any]:
+def decision_contract_report_detail(
+    contract: "DetectionDecisionContract",
+    description: "FormatDescription",
+) -> dict[str, Any]:
     return {
         "policy_id": contract.policy_id,
-        "format_spec": _format_spec_detail(contract),
+        "format_spec": _format_spec_detail(contract, description),
         "mode_policy": _decision_mode_detail(
             contract.physical_spec,
             contract.strip_mode,

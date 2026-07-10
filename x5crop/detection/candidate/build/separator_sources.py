@@ -8,11 +8,10 @@ import numpy as np
 from ....domain import Box, Gap
 from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
-from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ...physical.separator.hints import SeparatorGapHintSet
 from ...physical.separator.model import propose_equal_model_gaps_from_profile
 from ...physical.separator.proposal import (
-    propose_separator_gap_profile_gaps_with_detail,
+    propose_separator_gaps_with_detail,
 )
 
 
@@ -69,14 +68,13 @@ def standard_separator_gap_result(
     gap_hints: Optional[SeparatorGapHintSet] = None,
 ) -> InitialSeparatorGapResult:
     frame_aspect = float(fmt.horizontal_content_aspect)
-    standard_gap_proposal = propose_separator_gap_profile_gaps_with_detail(
+    standard_gap_proposal = propose_separator_gaps_with_detail(
         gray_work,
         outer,
         profile,
         origin,
         pitch,
         count,
-        WIDTH_AWARE_GAP_PROFILE,
         frame_aspect,
         gap_max_width_ratio_override,
         policy.separator.gap_search,
@@ -85,8 +83,8 @@ def standard_separator_gap_result(
         gap_hints,
     )
     standard_gap_search_detail = selected_gap_source_detail(
-        standard_gap_proposal.detail,
-        WIDTH_AWARE_GAP_PROFILE,
+        standard_gap_proposal.search_detail,
+        "standard_and_observed_width",
     )
     if forced:
         standard_gap_search_detail["forced"] = True

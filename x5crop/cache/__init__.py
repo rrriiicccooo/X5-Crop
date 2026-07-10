@@ -1,16 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
 
 from ..domain import OuterCandidate
-
-
-REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
-
 
 @dataclass
 class AnalysisCache:

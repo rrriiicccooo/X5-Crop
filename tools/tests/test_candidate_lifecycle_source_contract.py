@@ -156,12 +156,13 @@ class CandidateLifecycleSourceContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_candidate_plan_uses_gap_search_profiles_detail_name(self) -> None:
-        banned = (
-            '"gap_profiles":',
+    def test_separator_search_has_no_single_value_profile_selector(self) -> None:
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop" / "detection" / "gap_profiles.py").exists()
         )
+        banned = ("gap_search_profile", "WIDTH_AWARE_GAP_PROFILE")
         offenders: list[str] = []
-        source_root = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "plan"
+        source_root = PROJECT_ROOT / "x5crop" / "detection"
         self.assertTrue(source_root.is_dir())
         for path in source_root.rglob("*.py"):
             text = path.read_text(encoding="utf-8")

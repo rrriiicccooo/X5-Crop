@@ -9,9 +9,8 @@ from ...geometry.layout import work_gray
 from ...cache import AnalysisCache
 from ...gap_methods import gap_method_roles
 from ...policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
-from ...policies.parameters.exposure_overlap import ExposureOverlapEvidenceParameters
 from ...policies.runtime.separator import SeparatorPolicy
-from .gap_evidence import gap_evidence_record, gap_work_outer
+from .gap_evidence import gap_work_outer
 from .nearby_separator_diagnostics import nearby_separator_diagnostic_detail
 
 
@@ -22,35 +21,45 @@ def attach_read_only_diagnostics(
     *,
     separator_policy: SeparatorPolicy,
     diagnostics_policy: RuntimeDiagnosticsPolicy,
-    exposure_overlap_policy: ExposureOverlapEvidenceParameters,
 ) -> None:
     gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
-    gap_records = []
-    for gap in detection.gaps:
-        record = gap_evidence_record(
-            gray_work,
-            detection,
-            gap,
-            separator_policy=separator_policy,
-            exposure_overlap_policy=exposure_overlap_policy,
-        )
+    exposure_overlap = detection.detail.get("exposure_overlap_evidence")
+    gap_records = (
+        exposure_overlap.get("gap_evidence", [])
+        if isinstance(exposure_overlap, dict)
+        else []
+    )
+    if not isinstance(gap_records, list):
+        gap_records = []
+    gaps_by_index = {gap.index: gap for gap in detection.gaps}
+    nearby_separator_diagnostics: list[dict] = []
+    for record in gap_records:
+        if not isinstance(record, dict):
+            continue
+        gap = gaps_by_index.get(int(record.get("index", -1)))
+        if gap is None:
+            continue
         work_outer = gap_work_outer(detection, gap)
         signals = record.get("signals")
         window = signals.get("window") if isinstance(signals, dict) else None
         if work_outer is not None and work_outer.valid() and isinstance(window, dict):
-            record["nearby_separator_diagnostic"] = nearby_separator_diagnostic_detail(
-                gray_work,
-                work_outer,
-                gap,
-                float(detection.detail.get("pitch", 0.0) or 0.0),
-                int(window["start"]),
-                int(window["end"]),
-                diagnostics_policy.nearby_separator_search,
-                diagnostics_policy.nearby_separator_comparison,
-                separator_policy.profile,
-                cache,
+            nearby_separator_diagnostics.append(
+                {
+                    "index": int(gap.index),
+                    "detail": nearby_separator_diagnostic_detail(
+                        gray_work,
+                        work_outer,
+                        gap,
+                        float(detection.detail.get("pitch", 0.0) or 0.0),
+                        int(window["start"]),
+                        int(window["end"]),
+                        diagnostics_policy.nearby_separator_search,
+                        diagnostics_policy.nearby_separator_comparison,
+                        separator_policy.profile,
+                        cache,
+                    ),
+                }
             )
-        gap_records.append(record)
     hard_counts: dict[str, int] = {}
     for record in gap_records:
         trust = str(record.get("hard_trust", "not_hard_gap"))
@@ -79,7 +88,7 @@ def attach_read_only_diagnostics(
         },
         "purpose": "observe hard-gap trust, exposure-overlap evidence, and evidence/model roles without changing crop output",
         "method_roles": method_roles,
-        "gap_evidence": gap_records,
+        "nearby_separator_diagnostics": nearby_separator_diagnostics,
         "summary": {
             "gap_count": len(gap_records),
             "hard_trust_counts": hard_counts,

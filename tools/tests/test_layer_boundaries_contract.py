@@ -115,6 +115,21 @@ class LayerBoundariesContractTest(unittest.TestCase):
             [],
         )
 
+    def test_policy_reporting_does_not_resolve_format_registry_data(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop" / "policies" / "reporting" / "__init__.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("from ...formats import format_description", source)
+        self.assertNotIn("format_description(spec.format_id)", source)
+
+    def test_foundation_cache_does_not_own_report_record_state(self) -> None:
+        source = (PROJECT_ROOT / "x5crop" / "cache" / "__init__.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("REPORT_RECORD_CACHE", source)
+
     def test_output_consumes_final_domain_types_not_detection_detail_schema(self) -> None:
         self.assertEqual(
             forbidden_import_edges(("x5crop.output",), ("x5crop.detection",)),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from x5crop.formats import FORMATS
+from x5crop.formats import FORMATS, format_description
 from x5crop.detection.candidate.plan.count_hypotheses import count_hypothesis_plan
 from x5crop.detection.modes.dual_lane_context import build_dual_lane_context
 from x5crop.policies.registry import get_detection_policy
@@ -21,7 +21,8 @@ class FormatPhysicalSpecTests(unittest.TestCase):
                 with self.subTest(format_id=format_id, strip_mode=strip_mode):
                     policy = get_detection_policy(format_id, strip_mode)
                     detail = decision_contract_report_detail(
-                        decision_contract_for_policy(policy)
+                        decision_contract_for_policy(policy),
+                        format_description(format_id),
                     )
                     self.assertEqual(
                         detail["mode_policy"]["expected_separator_count"],

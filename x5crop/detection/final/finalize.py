@@ -68,7 +68,6 @@ def finalize_detection(
             analysis_cache,
             separator_policy=policy.separator,
             diagnostics_policy=policy.diagnostics,
-            exposure_overlap_policy=policy.exposure_overlap_evidence,
         )
     output_detection.detail["output_geometry"] = _geometry_detail(output_detection)
     return output_detection

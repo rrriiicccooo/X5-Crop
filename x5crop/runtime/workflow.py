@@ -19,6 +19,7 @@ from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
 from ..domain import ProcessResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
+from ..formats import format_description
 from ..geometry.layout import infer_layout
 from ..image.gray import make_base_gray_u8
 from ..io.tiff import read_tiff, read_tiff_profile
@@ -29,7 +30,6 @@ from ..policies.reporting import (
     detection_policy_report_detail,
 )
 from ..policies.runtime.bundle import DetectionPolicyBundle
-from ..report.outputs import write_report_outputs_for_result
 from ..report.result_builder import result_from_detection
 from ..units import scan_calibration_from_profile
 from ..utils import spatial_shape_from_shape
@@ -52,7 +52,7 @@ def process_one(
 
     cached_result = result_from_reusable_analysis(input_file, config, output_surface, profile, warnings, policy_bundle)
     if cached_result is not None:
-        return _finish_result(cached_result, config)
+        return cached_result
 
     arr, profile, page_warnings = read_tiff(input_file, config.page)
     gray = make_base_gray_u8(arr, profile.axes, profile.photometric, initial_policy.preprocess.base_gray)
@@ -101,7 +101,8 @@ def process_one(
         deskew_detail=deskew_detail,
     )
     decided_detection.detail[DECISION_POLICY_DETAIL] = decision_contract_report_detail(
-        decision_contract
+        decision_contract,
+        format_description(decision_contract.physical_spec.format_id),
     )
     detection = finalize_detection(
         gray,
@@ -141,11 +142,6 @@ def process_one(
             ),
         },
     )
-    return _finish_result(result, config)
-
-
-def _finish_result(result: ProcessResult, config: RunConfig) -> ProcessResult:
-    write_report_outputs_for_result(result, config)
     return result
 
 

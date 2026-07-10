@@ -9,7 +9,6 @@ from ....cache import AnalysisCache
 from ....domain import OuterCandidate
 from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
-from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ...guidance.content_outer_edge import edge_anchored_outer_candidates
 from ...guidance.content_outer_floating import floating_content_position_candidates
 from ...physical.outer.base import base_outer_candidates
@@ -190,7 +189,6 @@ def outer_proposal_candidates(
                 explicit_count,
                 safety_only=safety_only,
             ),
-            gap_search_profiles=(WIDTH_AWARE_GAP_PROFILE,),
             explicit_count=explicit_count,
             sequence_ranker=separator_sequence_rank,
         )

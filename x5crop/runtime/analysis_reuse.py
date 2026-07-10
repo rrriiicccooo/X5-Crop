@@ -19,9 +19,11 @@ from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..policies.runtime.policy import DetectionPolicy
 from ..report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from ..report.result_builder import result_from_cached_record
-from ..cache import REPORT_RECORD_CACHE
 from ..utils import box_from_dict
 from ..run_config import RunConfig
+
+
+_REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
 
 
 def source_cache_signature(input_file: Path, profile: ImageProfile, page_index: int) -> dict[str, Any]:
@@ -185,7 +187,7 @@ def load_report_records(report_path: Path) -> list[dict[str, Any]]:
         stat = report_path.stat()
     except FileNotFoundError:
         return []
-    cached = REPORT_RECORD_CACHE.get(report_path)
+    cached = _REPORT_RECORD_CACHE.get(report_path)
     signature = (int(stat.st_size), int(stat.st_mtime_ns))
     if cached is not None and cached[0] == signature[0] and cached[1] == signature[1]:
         return cached[2]
@@ -203,7 +205,7 @@ def load_report_records(report_path: Path) -> list[dict[str, Any]]:
             continue
         if isinstance(record, dict):
             records.append(record)
-    REPORT_RECORD_CACHE[report_path] = (signature[0], signature[1], records)
+    _REPORT_RECORD_CACHE[report_path] = (signature[0], signature[1], records)
     return records
 
 

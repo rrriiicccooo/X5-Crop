@@ -18,7 +18,6 @@ from ....policies.parameters.outer import SeparatorOuterBandParameters
 from ....policies.runtime.separator import SeparatorPolicy
 from ....cache import AnalysisCache
 from ...cache_keys import separator_outer_cache_key
-from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ..photo_size import PhotoSizeConsistency, photo_size_consistency_from_separator_bands
 from .common import unique_outer_candidates
 from .separator_bands import collect_separator_outer_bands, separator_outer_band_sequences
@@ -36,7 +35,6 @@ _SeparatorSequenceRanker = Callable[
 @dataclass(frozen=True)
 class SeparatorOuterPlan:
     outer_scope: str
-    gap_search_profile: str
     name: str
     candidate_prefix: str
     full_width: bool
@@ -86,7 +84,6 @@ def separator_derived_outer_candidates(
     separator_geometry_policy: SeparatorGeometryProposalPolicy,
     separator_policy: SeparatorPolicy,
     outer_scopes: tuple[str, ...] | None = None,
-    gap_search_profiles: tuple[str, ...] | None = None,
     explicit_count: bool = True,
     sequence_ranker: _SeparatorSequenceRanker,
 ) -> list[OuterCandidate]:
@@ -101,49 +98,42 @@ def separator_derived_outer_candidates(
         strip_mode,
         explicit_count,
     )
-    selected_gap_profiles = gap_search_profiles or (WIDTH_AWARE_GAP_PROFILE,)
     candidates: list[OuterCandidate] = []
     for outer_scope in selected_scopes:
-        for gap_search_profile in selected_gap_profiles:
-            plan = _scope_profile_plan(
-                outer_scope,
-                gap_search_profile,
-                separator_geometry_policy,
-                separator_policy,
+        plan = _scope_plan(
+            outer_scope,
+            separator_geometry_policy,
+            separator_policy,
+            fmt,
+            count,
+            strip_mode,
+            explicit_count,
+        )
+        if plan is None:
+            continue
+        candidates.extend(
+            _separator_outer_candidates_for_plan(
+                gray_work,
+                base_candidates,
                 fmt,
                 count,
                 strip_mode,
-                explicit_count,
+                float(aspect),
+                plan,
+                cache,
+                separator_geometry_policy,
+                separator_policy,
+                sequence_ranker,
             )
-            if plan is None:
-                continue
-            candidates.extend(
-                _separator_outer_candidates_for_plan(
-                    gray_work,
-                    base_candidates,
-                    fmt,
-                    count,
-                    strip_mode,
-                    float(aspect),
-                    plan,
-                    cache,
-                    separator_geometry_policy,
-                    separator_policy,
-                    sequence_ranker,
-                )
-            )
+        )
     return unique_outer_candidates(candidates)
 
 
-def _candidate_prefix(outer_scope: str, gap_search_profile: str) -> str | None:
+def _candidate_prefix(outer_scope: str) -> str | None:
     if outer_scope == LOCAL_SEPARATOR_OUTER:
-        base = "separator_local"
-    elif outer_scope == FULL_WIDTH_SEPARATOR_OUTER:
-        base = "separator_full_width"
-    else:
-        return None
-    if gap_search_profile == WIDTH_AWARE_GAP_PROFILE:
-        return base
+        return "separator_local"
+    if outer_scope == FULL_WIDTH_SEPARATOR_OUTER:
+        return "separator_full_width"
     return None
 
 
@@ -161,9 +151,8 @@ def _width_profile_bands_available(
     )
 
 
-def _scope_profile_plan(
+def _scope_plan(
     outer_scope: str,
-    gap_search_profile: str,
     separator_geometry_policy: SeparatorGeometryProposalPolicy,
     separator_policy: SeparatorPolicy,
     fmt: FormatPhysicalSpec,
@@ -173,8 +162,6 @@ def _scope_profile_plan(
 ) -> SeparatorOuterPlan | None:
     band_policy = separator_geometry_policy.band
     width_policy = separator_policy.width_profile
-    if gap_search_profile != WIDTH_AWARE_GAP_PROFILE:
-        return None
     uses_width_aware_bands = _width_profile_bands_available(
         separator_geometry_policy,
         separator_policy,
@@ -187,13 +174,12 @@ def _scope_profile_plan(
             return None
         if strip_mode == "full" and count != fmt.default_count:
             return None
-        candidate_prefix = _candidate_prefix(outer_scope, WIDTH_AWARE_GAP_PROFILE)
+        candidate_prefix = _candidate_prefix(outer_scope)
         if candidate_prefix is None:
             return None
         return SeparatorOuterPlan(
             outer_scope=LOCAL_SEPARATOR_OUTER,
-            gap_search_profile=WIDTH_AWARE_GAP_PROFILE,
-            name=f"{LOCAL_SEPARATOR_OUTER}:{WIDTH_AWARE_GAP_PROFILE}",
+            name=LOCAL_SEPARATOR_OUTER,
             candidate_prefix=candidate_prefix,
             full_width=False,
             margin_ratios=(0.0,),
@@ -212,13 +198,12 @@ def _scope_profile_plan(
         geometry_policy = separator_geometry_policy.full_width_outer
         if not family.available_for(strip_mode, explicit_count):
             return None
-        candidate_prefix = _candidate_prefix(outer_scope, WIDTH_AWARE_GAP_PROFILE)
+        candidate_prefix = _candidate_prefix(outer_scope)
         if candidate_prefix is None:
             return None
         return SeparatorOuterPlan(
             outer_scope=FULL_WIDTH_SEPARATOR_OUTER,
-            gap_search_profile=WIDTH_AWARE_GAP_PROFILE,
-            name=f"{FULL_WIDTH_SEPARATOR_OUTER}:{WIDTH_AWARE_GAP_PROFILE}",
+            name=FULL_WIDTH_SEPARATOR_OUTER,
             candidate_prefix=candidate_prefix,
             full_width=True,
             margin_ratios=tuple(float(value) for value in geometry_policy.margin_ratios),
@@ -359,7 +344,7 @@ def _separator_outer_candidates_for_plan(
                     {
                         "family": "separator_derived_outer",
                         "outer_scope": plan.outer_scope,
-                        "gap_search_profile": plan.gap_search_profile,
+                        "separator_gap_search": "standard_and_observed_width",
                         "source_outer": source.name,
                         "photo_size_consistency": ranked_sequence.photo_size_detail,
                         "separator_sequence_score": float(ranked_sequence.sequence_score),

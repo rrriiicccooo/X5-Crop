@@ -27,7 +27,7 @@ from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.decision.decision_signals import decision_signals_for
 from x5crop.detection.modes.review_only import review_only_detection
 from x5crop.domain import Box, DetectionCandidate
-from x5crop.formats import format_spec
+from x5crop.formats import format_description, format_spec
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.decision.contract import decision_contract_for_policy
 from x5crop.run_config import RunConfig
@@ -38,7 +38,10 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
     def test_decision_contract_report_does_not_expose_unused_candidate_policy(self) -> None:
         from x5crop.policies.reporting import decision_contract_report_detail
 
-        detail = decision_contract_report_detail(_decision_contract("135", "full"))
+        detail = decision_contract_report_detail(
+            _decision_contract("135", "full"),
+            format_description("135"),
+        )
 
         self.assertNotIn("candidate_policy", detail)
         self.assertNotIn("risk_policy", detail)

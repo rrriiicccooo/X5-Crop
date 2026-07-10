@@ -16,7 +16,6 @@ from ....run_config import RunConfig
 from ....utils import box_from_dict
 from ...evidence.frame_topology import frame_topology_evidence
 from ...evidence.separator_continuity import separator_cross_axis_continuity_evidence
-from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ...physical.outer.grid_refine import grid_refined_outer_box
 from ...physical.photo_size import photo_size_consistency_from_gap_edges
 from ...physical.separator.hints import SeparatorGapHintSet
@@ -41,14 +40,11 @@ def build_detection_geometry_for_outer(
     outer_candidate_detail: Optional[dict] = None,
     allow_outer_refine: bool = True,
     gap_max_width_ratio_override: Optional[float] = None,
-    gap_search_profile: str = WIDTH_AWARE_GAP_PROFILE,
     separator_gap_hints: Optional[SeparatorGapHintSet] = None,
     *,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> DetectionCandidate:
-    if gap_search_profile != WIDTH_AWARE_GAP_PROFILE:
-        raise ValueError(f"Unsupported separator gap search profile: {gap_search_profile!r}")
     h, w = gray.shape
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     wh, ww = gray_work.shape
@@ -116,7 +112,6 @@ def build_detection_geometry_for_outer(
             "frame_size_fit": frame_size_detail,
             "nearby_separator_refinement": separator_gaps.nearby_refinement_detail,
             "gap_max_width_ratio_override": gap_max_width_ratio_override,
-            "gap_search_profile_id": str(gap_search_profile),
             "partial_edge_hint": partial_edge_hint(profile, origin, pitch, count, policy.partial_edge_hint) if strip_mode == "partial" else {},
             "gap_centers": [gap.center for gap in gaps],
             "gap_scores": [gap.score for gap in gaps],

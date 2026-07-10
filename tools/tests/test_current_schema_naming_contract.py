@@ -270,7 +270,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_candidate_and_report_detail_use_gap_search_profile_not_separator_width_profile(self) -> None:
+    def test_candidate_and_report_detail_do_not_restore_legacy_separator_width_names(self) -> None:
         banned = (
             'detail["separator_width_profile"]',
             '.get("separator_width_profile"',

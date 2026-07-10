@@ -12,6 +12,70 @@ from tools.tests.architecture_contracts import (
 
 
 class LayerBoundariesOutputContractTest(unittest.TestCase):
+    def test_report_output_has_one_runtime_owner(self) -> None:
+        owners = []
+        for path in (PROJECT_ROOT / "x5crop" / "runtime").glob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            if "write_report_outputs_for_result" in source:
+                owners.append(path.name)
+
+        self.assertEqual(owners, ["app.py"])
+
+    def test_debug_reads_one_canonical_gap_evidence_shape(self) -> None:
+        debug_source = (PROJECT_ROOT / "x5crop" / "debug" / "gaps.py").read_text(
+            encoding="utf-8"
+        )
+        diagnostics_source = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "evidence"
+            / "read_only.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn('diagnostics.get("gap_evidence"', debug_source)
+        self.assertNotIn('"gap_evidence": gap_records', diagnostics_source)
+
+    def test_every_debug_panel_is_reachable_from_active_policy(self) -> None:
+        from x5crop.formats import FORMAT_CHOICES
+        from x5crop.policies.registry import get_detection_policy
+
+        active_panels = {
+            panel_id
+            for format_id in FORMAT_CHOICES
+            for strip_mode in ("full", "partial")
+            for panel_id in get_detection_policy(
+                format_id,
+                strip_mode,
+            ).diagnostics.debug_panels
+        }
+        active_titles = {
+            panel.panel_id
+            for format_id in FORMAT_CHOICES
+            for strip_mode in ("full", "partial")
+            for panel in get_detection_policy(
+                format_id,
+                strip_mode,
+            ).diagnostics.debug_panel_titles
+        }
+        source_path = PROJECT_ROOT / "x5crop" / "debug" / "panels.py"
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+        renderer_ids = {
+            key.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "panel_builders"
+                for target in node.targets
+            )
+            and isinstance(node.value, ast.Dict)
+            for key in node.value.keys
+            if isinstance(key, ast.Constant) and isinstance(key.value, str)
+        }
+
+        self.assertEqual(renderer_ids, active_panels)
+        self.assertEqual(active_titles, active_panels)
+
     def test_runtime_resolves_each_format_mode_once(self) -> None:
         cli_source = (
             PROJECT_ROOT / "x5crop" / "entry" / "cli.py"
