@@ -166,16 +166,12 @@ def normalized_candidate_signals(signals: list[str]) -> list[str]:
     return sorted(set(str(signal) for signal in signals if signal))
 
 
-def candidate_signals(detection: DetectionCandidate) -> list[str]:
-    return candidate_signals_from_detail(detection)
-
-
 def set_candidate_signals(detection: DetectionCandidate, signals: list[str]) -> None:
     detection.detail[CANDIDATE_SIGNALS] = normalized_candidate_signals(signals)
 
 
 def add_candidate_signals(detection: DetectionCandidate, signals: list[str]) -> None:
-    set_candidate_signals(detection, [*candidate_signals(detection), *signals])
+    set_candidate_signals(detection, [*candidate_signals_from_detail(detection), *signals])
 
 
 def add_candidate_signal(detection: DetectionCandidate, signal: str) -> None:
@@ -183,7 +179,9 @@ def add_candidate_signal(detection: DetectionCandidate, signal: str) -> None:
 
 
 def merged_candidate_signals(detection: DetectionCandidate, signals: list[str]) -> list[str]:
-    return normalized_candidate_signals([*candidate_signals(detection), *signals])
+    return normalized_candidate_signals(
+        [*candidate_signals_from_detail(detection), *signals]
+    )
 
 
 def unknown_candidate_signals(signals: list[str], *, ignored: set[str] | None = None) -> list[str]:

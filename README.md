@@ -219,9 +219,10 @@ x5_crop_output/
 - `x5_crop_summary.csv` 是便于人工浏览的摘要表。
 - 普通启动器不会覆盖已有裁切 TIFF；命令行可用 `--overwrite` 覆盖。
 
-默认输出 bleed 为长轴 20px、短轴 10px。若检测到可由 bleed 保护的叠片、近似
-叠片或连续内容证据，输出长轴 bleed 会提高到 50px。这个调整只影响最终输出范围，
-不参与检测评分，也不单独触发复核。
+默认输出 bleed 为长轴 20px、短轴 10px。若检测到叠片、近似叠片或连续内容证据，
+输出长轴 bleed 会按实际所需的保护宽度增加，最大可用容量为 50px。所需保护不超过
+容量时，该证据不会单独触发复核；超过容量时进入复核，并使用当前可用的最大保护
+bleed。这个调整只影响最终输出范围，不参与检测评分。
 
 ### 常用命令行
 
@@ -306,8 +307,9 @@ Windows: install/X5_Crop_win_uninstall.bat
 - Auto-cropped TIFF output preserves source quality attributes, including bit
   depth, channel layout, ICC / color space, resolution, metadata, and known
   lossless compression behavior.
-- Detection stays conservative. Weak evidence, conflicting evidence, possible
-  overlap, or unstable local spacing goes to review.
+- Detection stays conservative. Weak evidence, conflicting evidence, unresolved
+  overlap, or unstable local spacing goes to review. Feasible overlap protection
+  does not independently require review.
 - The current active policy is more conservative. Difficult files
   that passed in older development versions may now go to `REVIEW` when
   combined evidence is insufficient.
@@ -458,10 +460,13 @@ x5_crop_output/
   x5_crop_summary.csv
 ```
 
-Default output bleed is 20px on the long axis and 10px on the short axis. When
-overlap, near-overlap, or continuous-content evidence can be protected by extra
-bleed, long-axis output bleed is raised to 50px. This affects final output
-geometry only; it does not affect detection scoring or trigger review by itself.
+Default output bleed is 20px on the long axis and 10px on the short axis. For
+overlap, near-overlap, or continuous-content evidence, the
+long-axis bleed grows by the required protection width up to a 50px capacity.
+Feasible protection does
+not independently require review; a requirement beyond capacity goes to review
+and uses the greatest available protection. This affects final output geometry
+only and does not affect detection scoring.
 
 ### Command Line
 

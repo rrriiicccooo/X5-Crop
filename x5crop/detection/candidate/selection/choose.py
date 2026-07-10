@@ -3,7 +3,7 @@ from __future__ import annotations
 from ....domain import DetectionCandidate
 from ....formats import FormatPhysicalSpec
 from ....policies.parameters.scoring import CandidateCompetitionParameters
-from ..signals import candidate_signals
+from ...detail import candidate_signals_from_detail
 
 
 def _candidate_assessment(candidate: DetectionCandidate) -> dict:
@@ -65,7 +65,7 @@ def _candidate_summary(candidate: DetectionCandidate) -> dict:
         "count": int(candidate.count),
         "strip_mode": candidate.strip_mode,
         "confidence": float(candidate.confidence),
-        "candidate_signals": candidate_signals(candidate),
+        "candidate_signals": candidate_signals_from_detail(candidate),
         "candidate_blockers": list(assessment.get("blockers", []))
         if isinstance(assessment.get("blockers"), list)
         else [],

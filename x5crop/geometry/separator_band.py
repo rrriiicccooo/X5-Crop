@@ -10,3 +10,9 @@ class SeparatorBand:
     center: float
     width: float
     score: float
+
+
+@dataclass(frozen=True)
+class SeparatorBandCollection:
+    bands: list[SeparatorBand]
+    edge_margin: float

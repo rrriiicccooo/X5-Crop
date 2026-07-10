@@ -1,9 +1,26 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from ...formats import FormatPhysicalSpec
-from .contract import EvidencePolicy
+
+
+@dataclass(frozen=True)
+class EvidencePolicy:
+    min_outer_area_ratio: float = 0.30
+    max_outer_area_ratio: float = 0.985
+    max_photo_width_cv_ratio: float = 0.030
+    min_geometry_score: float = 0.70
+    min_content_score: float = 0.72
+    min_hard_separator_ratio: float = 0.50
+    min_hard_separator_count: int = 1
+    max_equal_gap_count: int = 0
+    max_content_gap_count: int = 0
+    max_model_gap_share: float = 0.70
+    allow_geometry_supported_separator: bool = False
+    geometry_supported_min_hard_ratio: float = 0.35
+    geometry_supported_max_photo_width_cv_ratio: float = 0.010
+    partial_requires_safe_edge: bool = False
 
 
 def _physical_evidence_policy(spec: FormatPhysicalSpec, defaults: EvidencePolicy) -> EvidencePolicy:

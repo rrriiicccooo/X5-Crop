@@ -25,7 +25,7 @@ def build_policy_from_preset(
 ) -> DetectionPolicy:
     mode_preset = preset.modes[strip_mode]
     fmt = preset.format_spec
-    params = preset.parameters()
+    params = preset.parameters
     preprocess = preprocess_policy(params)
     return DetectionPolicy(
         policy_id=detection_policy_id_for(fmt.format_id, strip_mode),

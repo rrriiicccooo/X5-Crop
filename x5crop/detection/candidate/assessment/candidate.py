@@ -32,10 +32,10 @@ from ..signals import (
     SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
     SIGNAL_PARTIAL_FRAME_CONTENT_UNSTABLE,
     SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
-    candidate_signals,
     merged_candidate_signals,
     set_candidate_signals,
 )
+from ...detail import candidate_signals_from_detail
 from .base_scoring import apply_base_detection_scoring
 from .content_candidate import content_candidate_assessment_from_proposal
 from .evidence_independence import evidence_independence_detail
@@ -82,7 +82,7 @@ def apply_candidate_assessment_policy(
     policy: DetectionPolicy,
 ) -> DetectionCandidate:
     candidate_detail = dict(detection.detail)
-    initial_candidate_signals = candidate_signals(detection)
+    initial_candidate_signals = candidate_signals_from_detail(detection)
     if initial_candidate_signals:
         candidate_detail["candidate_signals"] = initial_candidate_signals
     candidate = replace(
@@ -167,7 +167,7 @@ def apply_candidate_assessment_policy(
     strip_completeness = dict(holder_occupancy.get("strip_completeness", {}))
     candidate.detail["strip_completeness"] = strip_completeness
     candidate.detail["holder_occupancy"] = holder_occupancy
-    signals = candidate_signals(candidate)
+    signals = candidate_signals_from_detail(candidate)
     detected_geometry_policy = policy.separator.geometry_support.detected_geometry
     stable_grid_policy = policy.separator.geometry_support.stable_grid
     detected_geometry_support = (

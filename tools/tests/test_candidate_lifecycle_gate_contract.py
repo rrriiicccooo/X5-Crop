@@ -11,7 +11,7 @@ from x5crop.detection.candidate.assessment.content_candidate import (
     content_candidate_assessment_from_proposal,
     content_candidate_assessment_from_metrics,
 )
-from x5crop.detection.candidate.signals import candidate_signals
+from x5crop.detection.detail import candidate_signals_from_detail
 from x5crop.detection.evidence.frame_topology import frame_topology_evidence
 from x5crop.detection.evidence.separator_continuity import separator_cross_axis_continuity_evidence
 from x5crop.domain import Box, DetectionCandidate, Gap
@@ -278,7 +278,10 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
 
         assessment = assessed.detail["candidate_assessment"]
         self.assertFalse(assessment["candidate_gate"]["passed"])
-        self.assertNotIn("candidate_gate_failed", candidate_signals(assessed))
+        self.assertNotIn(
+            "candidate_gate_failed",
+            candidate_signals_from_detail(assessed),
+        )
         self.assertNotIn(
             "candidate_gate_failed",
             assessment["candidate_gate"]["blockers"],

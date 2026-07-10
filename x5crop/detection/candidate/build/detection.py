@@ -18,7 +18,6 @@ from ...evidence.frame_topology import frame_topology_evidence
 from ...evidence.separator_continuity import separator_cross_axis_continuity_evidence
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ...physical.outer.grid_refine import grid_refined_outer_box
-from ..proposal.outer import outer_candidate_strategy
 from ...physical.photo_size import photo_size_consistency_from_gap_edges
 from ...physical.separator.hints import SeparatorGapHintSet
 from .partial_edge import partial_edge_hint
@@ -36,9 +35,9 @@ def build_detection_geometry_for_outer(
     count: int,
     strip_mode: str,
     outer: Box,
-    offset_fraction: float = 0.0,
-    outer_candidate_name: str = "unknown",
-    outer_candidate_strategy_name: str | None = None,
+    offset_fraction: float,
+    outer_candidate_name: str,
+    outer_candidate_strategy: str,
     outer_candidate_detail: Optional[dict] = None,
     allow_outer_refine: bool = True,
     gap_max_width_ratio_override: Optional[float] = None,
@@ -50,7 +49,6 @@ def build_detection_geometry_for_outer(
 ) -> DetectionCandidate:
     if gap_search_profile != WIDTH_AWARE_GAP_PROFILE:
         raise ValueError(f"Unsupported separator gap search profile: {gap_search_profile!r}")
-    candidate_strategy = outer_candidate_strategy_name or outer_candidate_strategy(outer_candidate_name)
     h, w = gray.shape
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     wh, ww = gray_work.shape
@@ -101,7 +99,7 @@ def build_detection_geometry_for_outer(
             "pitch": float(pitch),
             "layout": config.layout,
             "outer_candidate": outer_candidate_name,
-            "outer_candidate_strategy": candidate_strategy,
+            "outer_candidate_strategy": outer_candidate_strategy,
             "outer_candidate_detail": dict(outer_candidate_detail or {}),
             "work_outer": asdict(outer),
             "work_frame_boxes": [asdict(box) for box in boxes_work],

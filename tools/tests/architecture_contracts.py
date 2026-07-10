@@ -594,14 +594,6 @@ def reachable_source_modules(roots: Iterable[str]) -> frozenset[str]:
     return frozenset(reached)
 
 
-def source_paths(*roots: Path) -> tuple[Path, ...]:
-    return tuple(
-        path
-        for root in roots
-        for path in sorted(root.rglob("*.py"))
-    )
-
-
 def standalone_tool_modules() -> frozenset[str]:
     modules: set[str] = set()
     for path in sorted((PROJECT_ROOT / "tools").rglob("*.py")):
@@ -615,13 +607,3 @@ def standalone_tool_modules() -> frozenset[str]:
         ):
             modules.add(".".join(path.relative_to(PROJECT_ROOT).with_suffix("").parts))
     return frozenset(modules)
-
-
-def text_offenders(paths: Iterable[Path], banned: Iterable[str]) -> list[str]:
-    offenders: list[str] = []
-    for path in paths:
-        text = path.read_text(encoding="utf-8")
-        for term in banned:
-            if term in text:
-                offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
-    return offenders

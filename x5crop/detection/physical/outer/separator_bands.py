@@ -1,19 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import numpy as np
 
 from ....geometry.detection_parameters import GapSearchParameters
-from ....geometry.separator_band import SeparatorBand
+from ....geometry.separator_band import SeparatorBand, SeparatorBandCollection
 from ....policies.parameters.outer import SeparatorOuterBandParameters
 from ....utils import clamp_float, clamp_int, runs_from_mask
-
-
-@dataclass(frozen=True)
-class SeparatorOuterBandCollection:
-    bands: list[SeparatorBand]
-    edge_margin: float
 
 
 def separator_outer_band_sequences(
@@ -90,7 +82,7 @@ def collect_separator_outer_bands(
     coordinate_limit: float,
     band_policy: SeparatorOuterBandParameters,
     gap_search_config: GapSearchParameters,
-) -> SeparatorOuterBandCollection:
+) -> SeparatorBandCollection:
     peak_threshold = float(band_policy.min_score)
     band_threshold = max(
         band_policy.band_score,
@@ -159,4 +151,4 @@ def collect_separator_outer_bands(
                 ),
             )
         )
-    return SeparatorOuterBandCollection(bands, float(edge_margin))
+    return SeparatorBandCollection(bands, float(edge_margin))

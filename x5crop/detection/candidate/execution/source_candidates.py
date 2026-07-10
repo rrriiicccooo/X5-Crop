@@ -14,9 +14,8 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....run_config import RunConfig
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE, width_aware_gap_profile_detail
 from ...guidance.content_separator import content_guided_separator_seed_for_count
+from ...physical.outer.common import unique_outer_candidates
 from ..proposal.outer import (
-    merge_outer_proposal_candidates,
-    outer_candidate_strategy,
     outer_proposal_candidates,
     separator_full_width_outer_proposal_candidates,
 )
@@ -33,7 +32,7 @@ class SourceCandidateBatch:
 def _outer_candidate_report_detail(candidate: OuterCandidate) -> dict:
     detail = {
         "name": candidate.name,
-        "strategy": outer_candidate_strategy(candidate),
+        "strategy": candidate.strategy,
         "box": asdict(candidate.box),
     }
     if candidate.detail:
@@ -58,10 +57,7 @@ def _attach_outer_candidate_summary(
         candidate.box
         for candidate in outer_candidates
         if candidate.box.valid()
-        and (
-            outer_candidate_strategy(candidate) == "base_outer"
-            or str(candidate.detail.get("family") or "") == "base_outer"
-        )
+        and candidate.strategy == "base_outer"
     ]
     if holder_candidates:
         holder_outer = max(holder_candidates, key=lambda box: box.width * box.height)
@@ -182,7 +178,7 @@ def separator_source_candidates_for_count(
             )
             for candidate in separator_full_width_candidates
         )
-        outer_candidates = merge_outer_proposal_candidates([*outer_candidates, *separator_full_width_candidates])
+        outer_candidates = unique_outer_candidates([*outer_candidates, *separator_full_width_candidates])
 
     detail = {
         "source": CANDIDATE_SOURCE_SEPARATOR,

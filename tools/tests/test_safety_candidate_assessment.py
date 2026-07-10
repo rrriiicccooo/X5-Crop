@@ -8,10 +8,12 @@ import numpy as np
 from x5crop.constants import CANDIDATE_SOURCE_SAFETY
 from x5crop.detection.candidate.assessment.candidate import apply_candidate_assessment_policy
 from x5crop.detection.candidate.assessment.safety import (
-    SAFETY_CANDIDATE_BLOCKER,
     apply_safety_candidate_assessment,
 )
-from x5crop.detection.candidate.signals import candidate_signals
+from x5crop.detection.candidate.signals import (
+    SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE,
+)
+from x5crop.detection.detail import candidate_signals_from_detail
 from x5crop.domain import Box, DetectionCandidate
 from x5crop.formats import format_spec
 from x5crop.policies.registry import get_detection_policy
@@ -84,17 +86,26 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
 
         self.assertAlmostEqual(detection.confidence, 0.84)
         self.assertFalse(hasattr(detection, "final_review_reasons"))
-        self.assertNotIn(SAFETY_CANDIDATE_BLOCKER, candidate_signals(detection))
+        self.assertNotIn(
+            SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE,
+            candidate_signals_from_detail(detection),
+        )
         assessment = detection.detail["candidate_assessment"]
         self.assertNotIn("candidate_gate_ok", assessment)
         self.assertFalse(assessment["candidate_gate"]["passed"])
-        self.assertIn(SAFETY_CANDIDATE_BLOCKER, assessment["blockers"])
-        self.assertIn(SAFETY_CANDIDATE_BLOCKER, assessment["candidate_gate"]["blockers"])
+        self.assertIn(
+            SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE,
+            assessment["blockers"],
+        )
+        self.assertIn(
+            SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE,
+            assessment["candidate_gate"]["blockers"],
+        )
         self.assertEqual(assessment["source"], CANDIDATE_SOURCE_SAFETY)
         self.assertEqual(detection.detail["safety_candidate"]["candidate_gate_eligible"], False)
         self.assertEqual(
             detection.detail["safety_candidate"]["candidate_blocker_signal"],
-            SAFETY_CANDIDATE_BLOCKER,
+            SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE,
         )
         self.assertEqual(assessment["confidence_caps"][0]["reason"], "candidate_gate_failed")
 

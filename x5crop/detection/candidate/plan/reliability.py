@@ -4,7 +4,7 @@ from typing import Any
 
 from ....domain import DetectionCandidate
 from ....policies.runtime.policy import DetectionPolicy
-from ..signals import candidate_signals
+from ...detail import candidate_signals_from_detail
 
 
 def candidate_reliability_detail(
@@ -31,7 +31,7 @@ def candidate_reliability_detail(
     hard_separator_requirement_ok = raw_hard_separator_ok
     content_ok = content_support == "ok"
     confidence_ok = float(detection.confidence) >= required_confidence
-    signals = candidate_signals(detection)
+    signals = candidate_signals_from_detail(detection)
     candidate_signals_ok = not signals
     reliable = all(
         (

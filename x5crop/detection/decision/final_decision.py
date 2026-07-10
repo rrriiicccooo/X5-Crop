@@ -13,7 +13,7 @@ from ...run_config import RunConfig
 from ..evidence.content.containment import content_containment_detail
 from ..evidence.content.frame_support import content_evidence_detail
 from ..evidence.outer_alignment import outer_content_alignment_detail
-from .contract_applier import apply_decision_contract
+from .decision_gate import apply_decision_gate
 
 
 def apply_detection_decision(
@@ -51,7 +51,7 @@ def apply_detection_decision(
         alignment_policy=policy.outer.alignment_evidence,
     )
     detection.detail["outer_content_alignment"] = outer_alignment
-    return apply_decision_contract(
+    return apply_decision_gate(
         gray,
         detection,
         config,

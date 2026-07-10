@@ -142,7 +142,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
             / "x5crop"
             / "detection"
             / "decision"
-            / "contract_applier.py"
+            / "decision_gate.py"
         ).read_text(encoding="utf-8")
         workflow_source = (
             PROJECT_ROOT / "x5crop" / "runtime" / "workflow.py"

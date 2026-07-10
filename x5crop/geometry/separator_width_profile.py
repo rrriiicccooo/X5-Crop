@@ -10,7 +10,7 @@ from ..domain import Gap
 from ..utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 from .detection_parameters import SeparatorWidthProfileSearchParameters
 from .gap_search_detail import attach_gap_run_evaluation_summary
-from .separator_band import SeparatorBand
+from .separator_band import SeparatorBand, SeparatorBandCollection
 
 
 @dataclass(frozen=True)
@@ -37,12 +37,6 @@ class SeparatorWidthBounds:
     min_width: int
     max_width: int
     max_core_width: float
-
-
-@dataclass(frozen=True)
-class SeparatorWidthBandCollection:
-    bands: list[SeparatorBand]
-    edge_margin: float
 
 
 @dataclass(frozen=True)
@@ -223,9 +217,9 @@ def collect_separator_width_bands(
     short_axis: float,
     coordinate_limit: float,
     params: SeparatorWidthProfileSearchParameters,
-) -> SeparatorWidthBandCollection:
+) -> SeparatorBandCollection:
     if profile.size <= 0:
-        return SeparatorWidthBandCollection([], 0.0)
+        return SeparatorBandCollection([], 0.0)
     edge_margin = clamp_float(
         short_axis * params.edge_margin_ratio,
         params.edge_margin_min,
@@ -249,7 +243,7 @@ def collect_separator_width_bands(
                 score=float(profile[run_start:run_end].mean()),
             )
         )
-    return SeparatorWidthBandCollection(bands, float(edge_margin))
+    return SeparatorBandCollection(bands, float(edge_margin))
 
 
 def separator_width_gap_window(

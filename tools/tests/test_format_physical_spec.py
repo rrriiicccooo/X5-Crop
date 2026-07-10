@@ -6,11 +6,28 @@ from x5crop.formats import FORMATS
 from x5crop.detection.candidate.plan.count_hypotheses import count_hypothesis_plan
 from x5crop.detection.modes.dual_lane_context import build_dual_lane_context
 from x5crop.policies.registry import get_detection_policy
-from x5crop.policies.reporting import detection_policy_report_detail
+from x5crop.policies.decision.contract import decision_contract_for_policy
+from x5crop.policies.reporting import (
+    decision_contract_report_detail,
+    detection_policy_report_detail,
+)
 from x5crop.policies.runtime.bundle import DetectionPolicyBundle
 
 
 class FormatPhysicalSpecTests(unittest.TestCase):
+    def test_policy_report_uses_physical_expected_separator_count_for_every_format_mode(self) -> None:
+        for format_id, spec in FORMATS.items():
+            for strip_mode in ("full", "partial"):
+                with self.subTest(format_id=format_id, strip_mode=strip_mode):
+                    policy = get_detection_policy(format_id, strip_mode)
+                    detail = decision_contract_report_detail(
+                        decision_contract_for_policy(policy)
+                    )
+                    self.assertEqual(
+                        detail["mode_policy"]["expected_separator_count"],
+                        spec.expected_separator_count,
+                    )
+
     def test_frame_aspects_are_derived_from_nominal_mm_size(self) -> None:
         expected_aspects = {
             "135": 36.0 / 24.0,
@@ -26,7 +43,6 @@ class FormatPhysicalSpecTests(unittest.TestCase):
             with self.subTest(format_id=format_id):
                 spec = FORMATS[format_id]
                 self.assertAlmostEqual(spec.horizontal_content_aspect, expected)
-                self.assertAlmostEqual(spec.frame_aspect, expected)
                 self.assertAlmostEqual(
                     spec.nominal_frame_size_mm.width_mm / spec.nominal_frame_size_mm.height_mm,
                     expected,
@@ -60,7 +76,10 @@ class FormatPhysicalSpecTests(unittest.TestCase):
             [(56.0, 56.0, "nominal"), (54.0, 54.0, "camera_variant")],
         )
         self.assertTrue(
-            all(item.aspect == spec.frame_aspect for item in spec.frame_size_mm_options)
+            all(
+                item.aspect == spec.horizontal_content_aspect
+                for item in spec.frame_size_mm_options
+            )
         )
 
     def test_only_xpan_and_medium_square_can_be_complete_underfilled_strips(self) -> None:

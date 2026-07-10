@@ -8,6 +8,22 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 
 
 class CurrentSchemaNamingContractTest(unittest.TestCase):
+    def test_active_source_has_no_property_or_constant_aliases(self) -> None:
+        format_source = (
+            PROJECT_ROOT / "x5crop" / "formats" / "__init__.py"
+        ).read_text(encoding="utf-8")
+        safety_source = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "assessment"
+            / "safety.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("def frame_aspect", format_source)
+        self.assertNotIn("SAFETY_CANDIDATE_BLOCKER", safety_source)
+
     def test_regression_compare_rejects_non_current_schema_rows(self) -> None:
         from tools.regression.compare import compare_report_rows
 
@@ -15,12 +31,12 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             compare_report_rows([invalid], [invalid])
 
-    def test_parameter_registry_uses_canonical_format_id_name(self) -> None:
+    def test_parameter_registry_receives_resolved_physical_spec(self) -> None:
         from inspect import signature
 
         from x5crop.policies.parameters.registry import format_parameters
 
-        self.assertEqual(list(signature(format_parameters).parameters), ["format_id"])
+        self.assertEqual(list(signature(format_parameters).parameters), ["spec"])
 
     def test_current_documents_use_current_owners_and_tool_contracts(self) -> None:
         banned_by_document = {

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -22,6 +21,6 @@ class ModePolicyPreset:
 @dataclass(frozen=True)
 class FormatPolicyPreset:
     format_spec: FormatPhysicalSpec
-    parameters: Callable[[], FormatParameters]
+    parameters: FormatParameters
     separator_edge_pair: EdgePairParameters = field(default_factory=EdgePairParameters)
     modes: dict[str, ModePolicyPreset] = field(default_factory=dict)

@@ -34,7 +34,7 @@ def _physical_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "allowed_counts": list(spec.allowed_counts),
         "nominal_frame_size_mm": _plain(spec.nominal_frame_size_mm),
         "frame_size_mm_options": _plain(spec.frame_size_mm_options),
-        "frame_aspect": spec.frame_aspect,
+        "frame_aspect": spec.horizontal_content_aspect,
         "aspect_source": "frame_size_mm",
         "frame_geometry_profile": spec.frame_geometry_profile,
         "complete_strip_can_be_underfilled": bool(spec.complete_strip_can_be_underfilled),
@@ -137,7 +137,7 @@ def _format_spec_detail(contract: "DetectionDecisionContract") -> dict[str, Any]
         "allowed_count_range": list(spec.allowed_counts),
         "nominal_frame_size_mm": _plain(spec.nominal_frame_size_mm),
         "frame_size_mm_options": _plain(spec.frame_size_mm_options),
-        "frame_aspect": spec.frame_aspect,
+        "frame_aspect": spec.horizontal_content_aspect,
         "aspect_source": "frame_size_mm",
         "expected_separator_count": spec.expected_separator_count,
         "complete_strip_can_be_underfilled": bool(spec.complete_strip_can_be_underfilled),
@@ -172,11 +172,7 @@ def _decision_mode_detail(
         "mode": strip_mode,
         "nominal_count": spec.default_count,
         "allowed_counts": list(spec.allowed_counts),
-        "expected_separator_count": (
-            max(0, spec.default_count - 1)
-            if not partial
-            else max(0, max(spec.allowed_counts) - 1)
-        ),
+        "expected_separator_count": spec.expected_separator_count,
         "count_behavior": (
             "fixed_nominal_count" if not partial else "candidate_count_search"
         ),

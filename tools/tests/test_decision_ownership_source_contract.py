@@ -7,6 +7,21 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 
 
 class DecisionOwnershipSourceContractTest(unittest.TestCase):
+    def test_decision_gate_is_only_final_detection_factory(self) -> None:
+        decision_root = PROJECT_ROOT / "x5crop" / "detection" / "decision"
+        final_factories = []
+        status_owners = []
+        for path in decision_root.glob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            if "FinalDetection.from_candidate" in source:
+                final_factories.append(path.name)
+            if '"approved_auto"' in source or '"needs_review"' in source:
+                status_owners.append(path.name)
+
+        self.assertEqual(final_factories, ["decision_gate.py"])
+        self.assertEqual(status_owners, ["decision_gate.py"])
+        self.assertFalse((decision_root / "contract_applier.py").exists())
+
     def test_decision_contract_does_not_own_report_schema_identity(self) -> None:
         from x5crop.policies.decision.contract import DetectionDecisionContract
 
@@ -36,7 +51,7 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
 
         self.assertNotIn("risk", DetectionDecisionContract.__dataclass_fields__)
 
-    def test_decision_contract_applier_uses_current_names(self) -> None:
+    def test_decision_gate_uses_current_names(self) -> None:
         banned = (
             "apply_final_decision_policy",
             "from .pass_review",
@@ -76,21 +91,13 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
             / "decision"
             / "decision_gate.py"
         )
-        contract_applier_path = (
-            PROJECT_ROOT
-            / "x5crop"
-            / "detection"
-            / "decision"
-            / "contract_applier.py"
-        )
         gate_text = decision_gate_path.read_text(encoding="utf-8")
-        contract_text = contract_applier_path.read_text(encoding="utf-8")
 
         self.assertIn("class DecisionGateAssessment", gate_text)
-        self.assertIn('"decision_gate": decision_gate.report_detail()', contract_text)
-        self.assertNotIn("class DecisionContextReviewAssessment", contract_text)
-        self.assertNotIn(") -> tuple[list[str], list[dict[str, Any]]]", contract_text)
-        self.assertNotIn("context_reasons, context_reason_inputs", contract_text)
+        self.assertIn('"decision_gate": decision_gate.report_detail()', gate_text)
+        self.assertNotIn("class DecisionContextReviewAssessment", gate_text)
+        self.assertNotIn(") -> tuple[list[str], list[dict[str, Any]]]", gate_text)
+        self.assertNotIn("context_reasons, context_reason_inputs", gate_text)
 
     def test_decision_candidate_signal_inputs_are_current_gate_inputs(self) -> None:
         path = (
@@ -98,7 +105,7 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
             / "x5crop"
             / "detection"
             / "decision"
-            / "contract_applier.py"
+            / "decision_gate.py"
         )
         text = path.read_text(encoding="utf-8")
 
@@ -115,15 +122,15 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
                 offenders.append(str(path.relative_to(PROJECT_ROOT)))
 
         self.assertEqual(offenders, [])
-        applier = (source_root / "contract_applier.py").read_text(encoding="utf-8")
-        self.assertIn("FinalDetection.from_candidate", applier)
+        gate = (source_root / "decision_gate.py").read_text(encoding="utf-8")
+        self.assertIn("FinalDetection.from_candidate", gate)
 
     def test_decision_reason_mutation_helper_does_not_exist(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "reasons.py"
         self.assertFalse(path.exists())
 
     def test_decision_summary_uses_final_reason_and_signal_fields(self) -> None:
-        path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "contract_applier.py"
+        path = PROJECT_ROOT / "x5crop" / "detection" / "decision" / "decision_gate.py"
         text = path.read_text(encoding="utf-8")
 
         self.assertIn('"final_review_reasons"', text)

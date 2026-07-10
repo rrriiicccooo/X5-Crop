@@ -12,6 +12,7 @@ from ....geometry.detection_parameters import (
     SeparatorWidthProfileSearchParameters,
 )
 from ....geometry.gap_search import find_detected_gap
+from ....geometry.model_gaps import equal_model_gap
 from ....geometry.separator_width_profile import (
     separator_width_gap_at_with_detail,
     separator_width_profile as make_separator_width_profile,
@@ -23,7 +24,6 @@ from ....utils import clamp_int
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ..photo_size import photo_size_consistency_from_gap_edges
 from .hints import SeparatorGapHintSet
-from .model import propose_equal_model_gap
 
 
 @dataclass(frozen=True)
@@ -181,7 +181,7 @@ def _propose_standard_separator_gap_with_detail(
         detail["selected_source_role"] = "measured_width_gap"
         detail.update(_observed_width_selection_detail(width_result.detail))
     else:
-        gap = propose_equal_model_gap(index, model_expected, standard_result.model_gap_score)
+        gap = equal_model_gap(index, model_expected, standard_result.model_gap_score)
         detail["selected_source"] = "equal_model"
     detail.update(_selected_gap_detail(gap, include_width=detail.get("selected_source") == "observed_width_profile"))
     return SeparatorGapProposal(gap=gap, detail=detail)

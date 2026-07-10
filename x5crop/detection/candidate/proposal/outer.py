@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Optional
 
@@ -92,19 +91,6 @@ def outer_proposal_strategy_plan_for_policy(
     if safety_only:
         return [strategy for strategy in active if strategy.mode == "safety"]
     return [*base, *[strategy for strategy in active if strategy.mode == "always"]]
-
-
-def outer_candidate_strategy(candidate: OuterCandidate | str) -> str:
-    if isinstance(candidate, OuterCandidate):
-        return candidate.strategy
-    candidate_name = str(candidate)
-    if candidate_name in {"bw", "white_x", "mixed_boundary", "full_canvas"}:
-        return "base_outer"
-    return "unknown_outer"
-
-
-def merge_outer_proposal_candidates(candidates: Iterable[OuterCandidate]) -> list[OuterCandidate]:
-    return unique_outer_candidates(candidates)
 
 
 def edge_anchored_candidates_trusted(

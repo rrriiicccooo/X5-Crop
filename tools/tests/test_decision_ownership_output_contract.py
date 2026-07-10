@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import numpy as np
 
+from tools.tests.architecture_contracts import PROJECT_ROOT
 from tools.tests.decision_contract_support import (
     candidate_gate_detail as _candidate_gate_detail,
     content_ok_detail as _content_ok_detail,
@@ -13,7 +14,7 @@ from tools.tests.decision_contract_support import (
 )
 from x5crop.cache.analysis import make_analysis_cache
 from x5crop.detection.decision.final_decision import apply_detection_decision
-from x5crop.detection.decision.contract_applier import apply_decision_contract
+from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, DetectionCandidate
 from x5crop.formats import format_spec
@@ -24,6 +25,18 @@ from x5crop.runtime.output_protection import prepare_output_protection
 
 
 class DecisionOwnershipOutputContractTest(unittest.TestCase):
+    def test_user_docs_describe_feasible_overlap_and_variable_protection_bleed(self) -> None:
+        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+
+        self.assertNotIn("输出长轴 bleed 会提高到 50px", readme)
+        self.assertNotIn("long-axis output bleed is raised to 50px", readme)
+        self.assertNotIn(
+            "possible\n  overlap, or unstable local spacing goes to review",
+            readme,
+        )
+        self.assertIn("按实际所需的保护宽度增加", readme)
+        self.assertIn("grows by the required protection width", readme)
+
     def test_feasible_exposure_overlap_plan_does_not_block_decision(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
@@ -65,7 +78,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
         content_detail = _content_ok_detail()
         outer_alignment = {"used": True, "ok": True}
 
-        decided = apply_decision_contract(
+        decided = apply_decision_gate(
             gray,
             detection,
             config,
@@ -336,7 +349,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
             },
         )
 
-        decided = apply_decision_contract(
+        decided = apply_decision_gate(
             gray,
             detection,
             _decision_test_config(),
@@ -407,7 +420,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
             },
         )
 
-        decided = apply_decision_contract(
+        decided = apply_decision_gate(
             gray,
             detection,
             _decision_test_config(),

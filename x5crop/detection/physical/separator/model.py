@@ -6,10 +6,6 @@ from ....domain import Gap
 from ....geometry.model_gaps import equal_model_gap
 
 
-def propose_equal_model_gap(index: int, expected: float, score: float) -> Gap:
-    return equal_model_gap(index, expected, score)
-
-
 def profile_score_at(profile: np.ndarray, position: float) -> float:
     if profile.size <= 0:
         return 0.0
@@ -24,6 +20,10 @@ def propose_equal_model_gaps_from_profile(
     count: int,
 ) -> list[Gap]:
     return [
-        propose_equal_model_gap(index, origin + pitch * index, profile_score_at(profile, origin + pitch * index))
+        equal_model_gap(
+            index,
+            origin + pitch * index,
+            profile_score_at(profile, origin + pitch * index),
+        )
         for index in range(1, count)
     ]

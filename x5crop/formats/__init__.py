@@ -37,10 +37,6 @@ class FormatPhysicalSpec:
         return self.nominal_frame_size_mm.aspect
 
     @property
-    def frame_aspect(self) -> float:
-        return self.horizontal_content_aspect
-
-    @property
     def frame_geometry_profile(self) -> str:
         if self.physical_layout == "dual_lane":
             return "dual_lane"

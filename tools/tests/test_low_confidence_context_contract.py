@@ -30,14 +30,10 @@ class LowConfidenceContextContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_low_confidence_context_reasons_belong_to_contract_applier(self) -> None:
+    def test_low_confidence_context_reasons_belong_to_decision_gate(self) -> None:
         final_decision_text = (
             PROJECT_ROOT / "x5crop" / "detection" / "decision" / "final_decision.py"
         ).read_text(encoding="utf-8")
-        contract_text = (
-            PROJECT_ROOT / "x5crop" / "detection" / "decision" / "contract_applier.py"
-        ).read_text(encoding="utf-8")
-
         self.assertNotIn("_apply_low_confidence_context_reasons", final_decision_text)
         self.assertNotIn("add_final_review_reason", final_decision_text)
         self.assertNotIn("_sync_decision_summary_status", final_decision_text)
@@ -46,7 +42,7 @@ class LowConfidenceContextContractTest(unittest.TestCase):
             PROJECT_ROOT / "x5crop" / "detection" / "decision" / "decision_gate.py"
         ).read_text(encoding="utf-8")
         self.assertIn("low_confidence_context", decision_gate_text)
-        self.assertNotIn("_low_confidence_context_reason_inputs", contract_text)
+        self.assertNotIn("_low_confidence_context_reason_inputs", decision_gate_text)
 
 
 if __name__ == "__main__":

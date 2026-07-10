@@ -8,6 +8,25 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 
 
 class CandidateLifecycleSourceContractTest(unittest.TestCase):
+    def test_outer_candidate_strategy_has_one_typed_source(self) -> None:
+        execution_source = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "execution"
+            / "source_candidates.py"
+        ).read_text(encoding="utf-8")
+
+        strategy_reducer_offenders = [
+            str(path.relative_to(PROJECT_ROOT))
+            for path in (PROJECT_ROOT / "x5crop").rglob("*.py")
+            if "outer_candidate_strategy(" in path.read_text(encoding="utf-8")
+        ]
+
+        self.assertEqual(strategy_reducer_offenders, [])
+        self.assertNotIn('detail.get("family")', execution_source)
+
     def test_pending_separator_refinement_is_explicitly_policy_free(self) -> None:
         from x5crop.detection.candidate.build.separator_refinements import (
             NEARBY_SEPARATOR_REFINEMENT_FAMILY,

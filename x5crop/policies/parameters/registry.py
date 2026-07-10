@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ...formats import FORMAT_CHOICES, format_spec
+from ...formats import FormatPhysicalSpec
 from .aggregate import FormatParameters
 
 
@@ -295,14 +295,11 @@ def _with_candidate_scoring_profile(
     )
 
 
-def format_parameters(format_id: str) -> FormatParameters:
-    if format_id not in FORMAT_CHOICES:
-        raise ValueError(f"Unsupported format parameters: {format_id}")
-    fmt = format_spec(format_id)
-    profile = fmt.frame_geometry_profile
+def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
+    profile = spec.frame_geometry_profile
     params = FormatParameters()
 
-    if fmt.family == "120":
+    if spec.family == "120":
         params = _with_content_min_run(params, 0.18)
         params = _with_candidate_scoring_profile(
             params,

@@ -19,9 +19,11 @@ from x5crop.constants import (
     CANDIDATE_SOURCE_SAFETY,
     CANDIDATE_SOURCE_SEPARATOR,
 )
-from x5crop.detection.candidate.assessment.safety import SAFETY_CANDIDATE_BLOCKER
+from x5crop.detection.candidate.signals import (
+    SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE,
+)
 from x5crop.detection.decision.final_decision import apply_detection_decision
-from x5crop.detection.decision.contract_applier import apply_decision_contract
+from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.decision.decision_signals import decision_signals_for
 from x5crop.detection.modes.review_only import review_only_detection
 from x5crop.domain import Box, DetectionCandidate
@@ -79,7 +81,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         content_detail = _content_ok_detail()
         outer_alignment = {"used": True, "ok": True}
 
-        decided = apply_decision_contract(
+        decided = apply_decision_gate(
             gray,
             detection,
             config,
@@ -118,7 +120,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             gaps=[],
             confidence=0.90,
             detail={
-                "candidate_signals": [SAFETY_CANDIDATE_BLOCKER],
+                "candidate_signals": [SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE],
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
@@ -128,7 +130,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
-                    "blockers": [SAFETY_CANDIDATE_BLOCKER],
+                    "blockers": [SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE],
                     "diagnostics": [],
                 },
             },
@@ -137,7 +139,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         content_detail = _content_ok_detail()
         outer_alignment = {"used": True, "ok": True}
 
-        decided = apply_decision_contract(
+        decided = apply_decision_gate(
             gray,
             detection,
             config,
@@ -152,7 +154,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         )
         self.assertEqual(
             decided.detail["candidate_gate_input"]["blockers"],
-            [SAFETY_CANDIDATE_BLOCKER],
+            [SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE],
         )
         self.assertEqual(
             decided.final_review_reasons,
@@ -264,7 +266,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             mode_reasons,
         )
 
-        decided = apply_decision_contract(
+        decided = apply_decision_gate(
             gray,
             detection,
             config,
@@ -345,7 +347,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         }
         outer_alignment = {"used": True, "ok": True}
 
-        decided = apply_decision_contract(
+        decided = apply_decision_gate(
             gray,
             detection,
             config,
@@ -397,7 +399,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
                 },
             },
         )
-        decided = apply_decision_contract(
+        decided = apply_decision_gate(
             gray,
             detection,
             _decision_test_config(),
@@ -425,7 +427,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             gaps=[],
             confidence=0.90,
             detail={
-                "candidate_signals": [SAFETY_CANDIDATE_BLOCKER],
+                "candidate_signals": [SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE],
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
@@ -436,7 +438,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
-                    "blockers": [SAFETY_CANDIDATE_BLOCKER],
+                    "blockers": [SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE],
                     "diagnostics": [],
                 },
             },
@@ -568,7 +570,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         }
         outer_alignment = {"used": True, "ok": True}
 
-        decided = apply_decision_contract(
+        decided = apply_decision_gate(
             gray,
             detection,
             config,

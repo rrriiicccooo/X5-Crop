@@ -15,9 +15,9 @@ from ..candidate.signals import (
     SIGNAL_DUAL_LANE_OUTER_DETECTION_FAILED,
     SIGNAL_FRAME_COUNT_MISMATCH,
     add_candidate_signal,
-    candidate_signals,
     normalized_candidate_signals,
 )
+from ..detail import candidate_signals_from_detail
 from ..candidate.proposal.safety import hard_safety_detection
 from .dual_lane_context import DualLaneDetectionContext
 
@@ -76,7 +76,7 @@ def merge_dual_lane_detections(
         [
             signal
             for detection in confirmed_lanes
-            for signal in candidate_signals(detection)
+            for signal in candidate_signals_from_detail(detection)
         ]
     )
     if any(conf < config.confidence_threshold for conf in lane_confidences):
@@ -153,7 +153,7 @@ def _dual_lane_detail(
             "total_format": context.format_id,
             "total_count": context.total_count,
             "confidence": float(detection.confidence),
-            "candidate_signals": candidate_signals(detection),
+            "candidate_signals": candidate_signals_from_detail(detection),
             "work_outer": detection.detail.get("work_outer"),
             "content_evidence": detection.detail.get("content_evidence", {}),
             "outer_content_alignment": detection.detail.get("outer_content_alignment", {}),
