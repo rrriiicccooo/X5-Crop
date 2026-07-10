@@ -20,7 +20,6 @@ class LowConfidenceContextContractTest(unittest.TestCase):
         offenders: list[str] = []
         for path in (
             PROJECT_ROOT / "x5crop" / "detection" / "decision" / "final_decision.py",
-            PROJECT_ROOT / "tools" / "tests" / "test_decision_reason_contract.py",
             PROJECT_ROOT / "ARCHITECTURE.md",
             PROJECT_ROOT / "CHANGELOG.md",
         ):

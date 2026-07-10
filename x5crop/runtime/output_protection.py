@@ -11,13 +11,13 @@ from ..output.protection import (
     output_protection_plan,
 )
 from ..policies.runtime.policy import DetectionPolicy
-from .config import RuntimeConfig
+from ..run_config import RunConfig
 
 
 def prepare_output_protection(
     gray: np.ndarray,
     detection: DetectionCandidate,
-    config: RuntimeConfig,
+    config: RunConfig,
     analysis_cache: AnalysisCache,
     policy: DetectionPolicy,
 ) -> OutputProtectionPlan:

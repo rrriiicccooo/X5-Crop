@@ -11,7 +11,7 @@ from ...formats import FormatPhysicalSpec
 from ...geometry.layout import work_gray
 from ...policies.runtime.candidate import ContentGuidedSeparatorCandidatePolicy
 from ...policies.runtime.content import ContentPolicy
-from ...runtime.config import RuntimeConfig
+from ...run_config import RunConfig
 from ..evidence.content.regions import (
     CONTENT_BBOX_HINT_ROLE,
     CONTENT_RUN_HINT_ROLE,
@@ -77,7 +77,7 @@ def _content_gap_hints_from_runs(
 
 def content_guided_separator_seed_for_count(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,

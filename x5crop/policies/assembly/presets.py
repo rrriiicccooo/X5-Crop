@@ -4,8 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from ...geometry.detection_parameters import EdgePairParameters
 from ..runtime.base import FrameFitPolicy, ReviewOnlyPolicy
-from ..runtime.separator import SeparatorEdgePairPolicy
 
 if TYPE_CHECKING:
     from ...formats import FormatPhysicalSpec
@@ -33,7 +33,7 @@ class ModePolicyPreset:
 class FormatPolicyPreset:
     format_spec: FormatPhysicalSpec
     parameters: Callable[[], FormatParameters]
-    separator_edge_pair: SeparatorEdgePairPolicy = field(default_factory=SeparatorEdgePairPolicy)
+    separator_edge_pair: EdgePairParameters = field(default_factory=EdgePairParameters)
     modes: dict[str, ModePolicyPreset] = field(default_factory=dict)
 
 

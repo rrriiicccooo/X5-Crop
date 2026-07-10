@@ -10,14 +10,14 @@ from ..image.gray import make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..policies.runtime.preprocess import RuntimePreprocessPolicy
 from ..utils import clamp_float
-from .config import RuntimeConfig
+from ..run_config import RunConfig
 
 
 def apply_deskew(
     arr: Any,
     gray: Any,
     profile: ImageProfile,
-    config: RuntimeConfig,
+    config: RunConfig,
     preprocess: RuntimePreprocessPolicy,
     warnings: list[str],
 ) -> tuple[Any, Any, dict[str, Any]]:

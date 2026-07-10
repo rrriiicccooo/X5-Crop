@@ -10,13 +10,13 @@ from ...formats import FormatPhysicalSpec
 from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
 from ...policies.runtime.policy import DetectionPolicy
-from ...runtime.config import RuntimeConfig
+from ...run_config import RunConfig
 from ..candidate.signals import SIGNAL_NEEDS_MANUAL_REVIEW
 
 
 def review_only_detection(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     policy: DetectionPolicy,
 ) -> DetectionCandidate:

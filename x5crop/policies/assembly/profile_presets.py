@@ -1,24 +1,24 @@
 from __future__ import annotations
 
+from ...geometry.detection_parameters import EdgePairParameters
 from ..runtime.base import FULL, FrameFitPolicy
-from ..runtime.separator import SeparatorEdgePairPolicy
 
 
-def separator_edge_pair_profile(profile: str) -> SeparatorEdgePairPolicy:
-    medium_square_like = SeparatorEdgePairPolicy(
+def separator_edge_pair_profile(profile: str) -> EdgePairParameters:
+    medium_square_like = EdgePairParameters(
         0.100, 0.001, 0.080, 0.24, 0.02, 0.28, 0.30, 0.95, 0.030
     )
     profiles = {
-        "standard_35mm": SeparatorEdgePairPolicy(
+        "standard_35mm": EdgePairParameters(
             0.080, 0.004, 0.050, 0.42, 0.62, 0.0, 0.0, 1.0, 0.0
         ),
-        "dense_half": SeparatorEdgePairPolicy(
+        "dense_half": EdgePairParameters(
             0.090, 0.003, 0.060, 0.46, 0.66, 1.05, 0.70, 0.95, 0.040
         ),
-        "panoramic_35mm": SeparatorEdgePairPolicy(
+        "panoramic_35mm": EdgePairParameters(
             0.060, 0.002, 0.035, 0.45, 0.64, 1.03, 0.70, 0.95, 0.035
         ),
-        "medium_rectangle": SeparatorEdgePairPolicy(
+        "medium_rectangle": EdgePairParameters(
             0.075, 0.001, 0.055, 0.32, 0.20, 0.58, 0.50, 0.95, 0.035
         ),
         "medium_square": medium_square_like,

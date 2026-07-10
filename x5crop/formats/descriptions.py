@@ -94,9 +94,4 @@ FORMAT_DESCRIPTIONS: dict[str, FormatDescription] = {
     ),
 }
 
-
-def format_description(format_id: str) -> FormatDescription:
-    return FORMAT_DESCRIPTIONS[str(format_id)]
-
-
-__all__ = ["FORMAT_DESCRIPTIONS", "FormatDescription", "format_description"]
+__all__ = ["FORMAT_DESCRIPTIONS", "FormatDescription"]

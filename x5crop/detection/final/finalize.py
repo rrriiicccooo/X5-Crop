@@ -6,7 +6,7 @@ from typing import Any
 
 import numpy as np
 
-from ...runtime.config import RuntimeConfig
+from ...run_config import RunConfig
 from ...domain import FinalDetection
 from ...output.bleed import (
     apply_output_protection_plan,
@@ -32,7 +32,7 @@ def _geometry_detail(detection: FinalDetection) -> dict[str, Any]:
 def finalize_detection(
     gray: np.ndarray,
     detection: FinalDetection,
-    config: RuntimeConfig,
+    config: RunConfig,
     analysis_cache: AnalysisCache,
     policy: DetectionPolicy,
     output_protection_plan: OutputProtectionPlan,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..runtime.config import RuntimeConfig
+from ..run_config import RunConfig
 from ..domain import FinalDetection
 from ..output.surface import display_generated_path
 from ..policies.runtime.policy import DetectionPolicy
@@ -15,7 +15,7 @@ def write_debug_outputs(
     detection: FinalDetection,
     output_dir: Path,
     input_stem: str,
-    config: RuntimeConfig,
+    config: RunConfig,
     analysis_cache: Any,
     warnings: list[str],
     policy: DetectionPolicy,

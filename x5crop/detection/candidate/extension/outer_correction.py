@@ -10,7 +10,7 @@ from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.outer import OuterCorrectionFamilyPolicy
 from ....cache import AnalysisCache
-from ....runtime.config import RuntimeConfig
+from ....run_config import RunConfig
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.outer_alignment import outer_content_alignment_detail
 from .corrected_outer import build_assessed_corrected_outer_candidate
@@ -107,7 +107,7 @@ def _outer_correction_budget_reason(
 
 def outer_correction_candidate_extensions(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     detection: DetectionCandidate,
     cache: AnalysisCache,

@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ...geometry.detection_parameters import SeparatorWidthProfileSearchParameters
+from ...geometry.detection_parameters import (
+    EdgeRefineProfileParameters,
+    GapSearchParameters,
+    HardGapTrustParameters,
+    NearbySeparatorRefinementParameters,
+    SeparatorProfileParameters,
+    SeparatorWidthProfileSearchParameters,
+)
 from ...image.deskew_parameters import DeskewParameters
 from .base import PartialCountParameters, PartialEdgeHintParameters
 from .content import (
@@ -40,13 +47,8 @@ from .scoring import (
     SeparatorSupportScoreParameters,
 )
 from .separator import (
-    EdgeRefineProfileParameters,
-    GapSearchParameters,
-    HardGapTrustParameters,
     LeadingGridFailureParameters,
-    NearbySeparatorRefinementParameters,
     SeparatorGeometrySupportParameters,
-    SeparatorProfileParameters,
     SeparatorSupportParameters,
     SeparatorWidthProfileParameters,
 )

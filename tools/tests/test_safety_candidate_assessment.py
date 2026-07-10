@@ -15,11 +15,11 @@ from x5crop.detection.candidate.signals import candidate_signals
 from x5crop.domain import Box, DetectionCandidate
 from x5crop.formats import format_spec
 from x5crop.policies.registry import get_detection_policy
-from x5crop.runtime.config import RuntimeConfig
+from x5crop.run_config import RunConfig
 
 
-def _config() -> RuntimeConfig:
-    return RuntimeConfig(
+def _config() -> RunConfig:
+    return RunConfig(
         input_path=Path("synthetic.tif"),
         output_dir=None,
         film_format="135",

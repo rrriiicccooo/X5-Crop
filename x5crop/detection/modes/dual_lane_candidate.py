@@ -10,7 +10,7 @@ from ...domain import Box, DetectionCandidate
 from ...formats import FormatPhysicalSpec
 from ...geometry.boxes import translate_box
 from ...policies.runtime.policy import DetectionPolicy
-from ...runtime.config import RuntimeConfig
+from ...run_config import RunConfig
 from ..candidate.assessment.candidate import apply_candidate_assessment_policy
 from ..candidate.assessment.dual_lane import apply_dual_lane_content_assessment
 from ..candidate.build.detection import build_detection_geometry_for_outer, enrich_detection_geometry_evidence
@@ -20,7 +20,7 @@ from ..physical.outer.base import base_outer_candidates
 
 def select_dual_lane_candidate(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     lane: Box,
     lane_index: int,
     cache: AnalysisCache,
@@ -71,7 +71,7 @@ def select_dual_lane_candidate(
 
 def _assessed_lane_candidate(
     gray: np.ndarray,
-    lane_config: RuntimeConfig,
+    lane_config: RunConfig,
     lane: Box,
     lane_index: int,
     cache: AnalysisCache,

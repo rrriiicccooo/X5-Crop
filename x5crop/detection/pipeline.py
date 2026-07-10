@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ..runtime.config import RuntimeConfig
+from ..run_config import RunConfig
 from ..domain import DetectionCandidate
 from ..formats import FormatPhysicalSpec
 from ..cache.analysis import make_analysis_cache
@@ -34,7 +34,7 @@ def _attach_runtime_policy_detail(detection: DetectionCandidate, policy) -> None
 
 def choose_detection(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     policy_bundle: DetectionPolicyBundle,
     cache: Optional[AnalysisCache] = None,

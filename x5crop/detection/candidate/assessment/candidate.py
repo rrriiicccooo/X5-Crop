@@ -15,7 +15,7 @@ from ....formats import FormatPhysicalSpec
 from ....geometry.layout import work_gray
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
-from ....runtime.config import RuntimeConfig
+from ....run_config import RunConfig
 from ...confidence_caps import apply_confidence_cap
 from ...evidence.content.containment import content_containment_detail
 from ...evidence.content.frame_support import content_evidence_detail
@@ -77,7 +77,7 @@ def _candidate_confidence_caps(candidate: DetectionCandidate) -> list[dict]:
 def apply_candidate_assessment_policy(
     gray: np.ndarray,
     detection: DetectionCandidate,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     source: str,
     cache: Optional[AnalysisCache] = None,

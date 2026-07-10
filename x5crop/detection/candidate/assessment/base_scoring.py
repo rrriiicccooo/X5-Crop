@@ -15,7 +15,7 @@ from ....geometry.gap_geometry import (
     width_cv as coefficient_of_variation,
 )
 from ....policies.runtime.policy import DetectionPolicy
-from ....runtime.config import RuntimeConfig
+from ....run_config import RunConfig
 from ....utils import box_from_dict, gap_from_dict, sampled_percentile
 from ...confidence_caps import apply_confidence_cap
 from ...evidence.frame_topology import frame_topology_evidence
@@ -448,7 +448,7 @@ def base_detection_assessment(
 def apply_base_detection_scoring(
     gray_work: np.ndarray,
     detection: DetectionCandidate,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     policy: DetectionPolicy,
 ) -> DetectionCandidate:

@@ -7,7 +7,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
-from ..domain import Box, FinalDetection, Gap, ImageProfile, ProcessResult
+from ..domain import FinalDetection, ImageProfile, ProcessResult
 from ..export.crops import write_crops
 from ..output.surface import OutputSurface
 from ..image.gray import make_base_gray_u8
@@ -17,7 +17,8 @@ from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..policies.ids import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from ..report.result_builder import result_from_cached_record, result_from_detection
 from ..cache import REPORT_RECORD_CACHE
-from .config import RuntimeConfig
+from ..utils import box_from_dict, gap_from_dict
+from ..run_config import RunConfig
 
 
 def source_cache_signature(input_file: Path, profile: ImageProfile, page_index: int) -> dict[str, Any]:
@@ -34,7 +35,7 @@ def source_cache_signature(input_file: Path, profile: ImageProfile, page_index: 
     }
 
 
-def config_cache_signature(config: RuntimeConfig) -> dict[str, Any]:
+def config_cache_signature(config: RunConfig) -> dict[str, Any]:
     return {
         "film_format": config.film_format,
         "layout": config.layout,
@@ -53,29 +54,13 @@ def config_cache_signature(config: RuntimeConfig) -> dict[str, Any]:
     }
 
 
-def make_analysis_cache_metadata(input_file: Path, profile: ImageProfile, config: RuntimeConfig) -> dict[str, Any]:
+def make_analysis_cache_metadata(input_file: Path, profile: ImageProfile, config: RunConfig) -> dict[str, Any]:
     return {
         "script": SCRIPT_NAME,
         "version": VERSION,
         "source": source_cache_signature(input_file, profile, config.page),
         "config": config_cache_signature(config),
     }
-
-
-def box_from_dict(value: dict[str, Any]) -> Box:
-    return Box(int(value["left"]), int(value["top"]), int(value["right"]), int(value["bottom"]))
-
-
-def gap_from_dict(value: dict[str, Any]) -> Gap:
-    return Gap(
-        index=int(value.get("index", 0)),
-        center=float(value.get("center", 0.0)),
-        score=float(value.get("score", 0.0)),
-        method=str(value.get("method", "cached")),
-        start=(None if value.get("start") is None else float(value.get("start"))),
-        end=(None if value.get("end") is None else float(value.get("end"))),
-        lane_box=(dict(value["lane_box"]) if isinstance(value.get("lane_box"), dict) else None),
-    )
 
 
 def detection_from_record(record: dict[str, Any]) -> FinalDetection:
@@ -100,7 +85,7 @@ def cached_record_matches(
     record: dict[str, Any],
     input_file: Path,
     profile: ImageProfile,
-    config: RuntimeConfig,
+    config: RunConfig,
 ) -> bool:
     if record.get("schema_id") != REPORT_SCHEMA_ID:
         return False
@@ -182,7 +167,7 @@ def find_reusable_analysis(
     input_file: Path,
     output_dir: Path,
     profile: ImageProfile,
-    config: RuntimeConfig,
+    config: RunConfig,
 ) -> Optional[dict[str, Any]]:
     report_path = output_dir / REPORT_JSONL_NAME
     for record in load_report_records(report_path):
@@ -214,7 +199,7 @@ def apply_cached_deskew(
 
 def result_from_reusable_analysis(
     input_file: Path,
-    config: RuntimeConfig,
+    config: RunConfig,
     output_surface: OutputSurface,
     profile: ImageProfile,
     warnings: list[str],
@@ -271,12 +256,10 @@ def result_from_reusable_analysis(
 
 __all__ = [
     "apply_cached_deskew",
-    "box_from_dict",
     "cached_record_matches",
     "config_cache_signature",
     "detection_from_record",
     "find_reusable_analysis",
-    "gap_from_dict",
     "load_report_records",
     "make_analysis_cache_metadata",
     "result_from_reusable_analysis",

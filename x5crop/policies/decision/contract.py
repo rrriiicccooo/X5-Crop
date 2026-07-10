@@ -68,8 +68,6 @@ class DecisionPolicy:
 @dataclass(frozen=True)
 class DetectionDecisionContract:
     policy_id: str
-    schema_id: str
-    schema_revision: str
     format: FormatPhysicalSpec
     mode: ModePolicy
     evidence: EvidencePolicy
@@ -138,8 +136,6 @@ def decision_contract_for_policy(detection_policy: DetectionPolicy) -> Detection
     policy_id = decision_policy_id_for(spec.name, detection_policy.strip_mode)
     return DetectionDecisionContract(
         policy_id=policy_id,
-        schema_id=detection_policy.report.schema_id,
-        schema_revision=detection_policy.report.schema_revision,
         format=spec,
         mode=mode_policy_for(spec, detection_policy.strip_mode),
         evidence=evidence_policy_for_physical_spec(

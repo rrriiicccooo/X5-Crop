@@ -125,11 +125,6 @@ class SeparatorWidthProfilePolicy:
 
 
 @dataclass(frozen=True)
-class SeparatorEdgePairPolicy(EdgePairParameters):
-    """Format preset type for edge-pair parameters."""
-
-
-@dataclass(frozen=True)
 class SeparatorRefinementFamilyPolicy:
     mode: str = "off"
     phase: str = "primary"
@@ -193,7 +188,6 @@ class SeparatorPolicy:
 
 __all__ = [
     "LeadingGridFailurePolicy",
-    "SeparatorEdgePairPolicy",
     "SeparatorSupportPolicy",
     "SeparatorGeometrySupportModePolicy",
     "SeparatorGeometrySupportPolicy",

@@ -7,7 +7,7 @@ from pathlib import Path
 from ..app_info import REPORT_JSONL_NAME, SUMMARY_CSV_NAME
 from ..domain import ProcessResult
 from ..output.surface import output_directory_for
-from ..runtime.config import RuntimeConfig
+from ..run_config import RunConfig
 from ..utils import json_safe
 
 
@@ -67,7 +67,7 @@ def append_summary_csv(path: Path, result: ProcessResult) -> None:
         )
 
 
-def write_report_outputs_for_result(result: ProcessResult, config: RuntimeConfig) -> None:
+def write_report_outputs_for_result(result: ProcessResult, config: RunConfig) -> None:
     if not config.report:
         return
     output_dir = output_directory_for(Path(result.source), config)

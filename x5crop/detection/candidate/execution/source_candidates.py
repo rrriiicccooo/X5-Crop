@@ -11,7 +11,7 @@ from ....domain import DetectionCandidate, OuterCandidate
 from ....formats import FormatPhysicalSpec
 from ....geometry.layout import work_gray
 from ....policies.runtime.policy import DetectionPolicy
-from ....runtime.config import RuntimeConfig
+from ....run_config import RunConfig
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE, width_aware_gap_profile_detail
 from ...guidance.content_separator import content_guided_separator_seed_for_count
 from ..proposal.outer import (
@@ -71,7 +71,7 @@ def _attach_outer_candidate_summary(
 
 def _execute_outer_candidate_detection(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
@@ -109,7 +109,7 @@ def _execute_outer_candidate_detection(
 
 def separator_source_candidates_for_count(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
@@ -209,7 +209,7 @@ def separator_source_candidates_for_count(
 
 def content_guided_separator_candidate_for_count(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
@@ -271,7 +271,7 @@ def content_guided_separator_candidate_for_count(
 
 def safety_outer_proposal_candidates_for_count(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,

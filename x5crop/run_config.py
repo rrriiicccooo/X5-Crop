@@ -2,18 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass(frozen=True)
-class RuntimeConfig:
+class RunConfig:
     input_path: Path
-    output_dir: Optional[Path]
+    output_dir: Path | None
     film_format: str
     layout_auto: bool
     layout: str
     strip_mode: str
-    requested_count: Optional[int]
+    requested_count: int | None
     page: int
     bleed_x: int
     bleed_y: int
@@ -22,7 +21,7 @@ class RuntimeConfig:
     deskew_min_angle: float
     deskew_max_angle: float
     confidence_threshold: float
-    review_dir: Optional[Path]
+    review_dir: Path | None
     copy_review_files: bool
     export_review: bool
     compression: str
@@ -37,6 +36,4 @@ class RuntimeConfig:
     jobs: int
 
 
-__all__ = [
-    "RuntimeConfig",
-]
+__all__ = ["RunConfig"]

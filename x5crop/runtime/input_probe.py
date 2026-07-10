@@ -10,7 +10,7 @@ from ..formats import FORMATS
 from ..geometry.layout import infer_layout
 from ..output.protection import DEFAULT_OUTPUT_BLEED
 from ..utils import spatial_shape_from_shape
-from .config import RuntimeConfig
+from ..run_config import RunConfig
 
 
 def iter_input_files(path: Path) -> list[Path]:
@@ -35,7 +35,7 @@ def first_tiff_shape(path: Path, page_index: int) -> tuple[int, int]:
     return spatial_shape_from_shape(shape)
 
 
-def runtime_config_from_options(options: CliOptions) -> tuple[RuntimeConfig, list[Path]]:
+def runtime_config_from_options(options: CliOptions) -> tuple[RunConfig, list[Path]]:
     files = iter_input_files(options.input_path)
     first_file = next(iter(files), None)
     if first_file is None:
@@ -62,7 +62,7 @@ def runtime_config_from_options(options: CliOptions) -> tuple[RuntimeConfig, lis
 
     jobs_cap = 4 if options.diagnostics else 2
     jobs = max(1, min(jobs_cap, int(options.jobs)))
-    return RuntimeConfig(
+    return RunConfig(
         input_path=options.input_path,
         output_dir=options.output_dir,
         film_format=options.film_format,

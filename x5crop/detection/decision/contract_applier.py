@@ -5,7 +5,7 @@ from typing import Any
 import numpy as np
 
 from ...constants import CANDIDATE_SOURCE_REVIEW_ONLY
-from ...runtime.config import RuntimeConfig
+from ...run_config import RunConfig
 from ...domain import DetectionCandidate, FinalDetection
 from ..confidence_caps import apply_confidence_cap
 from ...policies.decision.contract import DetectionDecisionContract
@@ -60,7 +60,7 @@ def _decision_status_for(
 
 def _apply_decision_confidence_caps(
     detection: DetectionCandidate,
-    config: RuntimeConfig,
+    config: RunConfig,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
     policy: DetectionDecisionContract,
@@ -114,7 +114,7 @@ def _apply_decision_confidence_caps(
 def apply_decision_contract(
     gray: np.ndarray,
     detection: DetectionCandidate,
-    config: RuntimeConfig,
+    config: RunConfig,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
     *,
@@ -160,8 +160,6 @@ def apply_decision_contract(
     detection.detail["candidate_gate_input"] = candidate_gate_input
     detail = {
         "policy_id": policy.policy_id,
-        "schema_id": policy.schema_id,
-        "schema_revision": policy.schema_revision,
         "pass": status == "approved_auto",
         "status": status,
         "final_review_reasons": final_reasons,

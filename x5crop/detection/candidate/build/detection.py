@@ -12,7 +12,7 @@ from ....geometry.frame_fit import fit_frame_boxes_from_gaps
 from ....geometry.layout import work_gray
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
-from ....runtime.config import RuntimeConfig
+from ....run_config import RunConfig
 from ....utils import box_from_dict
 from ...evidence.separator_width import separator_width_evidence_detail
 from ...evidence.frame_topology import frame_topology_evidence
@@ -32,7 +32,7 @@ from .separator_gaps import (
 
 def build_detection_geometry_for_outer(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
@@ -145,7 +145,7 @@ def build_detection_geometry_for_outer(
 def enrich_detection_geometry_evidence(
     gray: np.ndarray,
     detection: DetectionCandidate,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     cache: Optional[AnalysisCache],
     *,
@@ -208,7 +208,7 @@ def enrich_detection_geometry_evidence(
 
 def _build_separator_gap_lifecycle(
     gray_work: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,

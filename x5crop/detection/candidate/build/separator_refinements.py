@@ -238,7 +238,7 @@ def nearby_separator_refinement_skip_reason(
     return None
 
 
-def apply_nearby_separator_refinement(
+def apply_candidate_nearby_separator_refinement(
     profile: np.ndarray,
     gaps: list[Gap],
     count: int,
@@ -299,7 +299,7 @@ def apply_nearby_separator_refinement_chain(
     pitch: float,
     policy: DetectionPolicy,
 ) -> NearbySeparatorRefinementChainResult:
-    nearby_refinement = apply_nearby_separator_refinement(
+    nearby_refinement = apply_candidate_nearby_separator_refinement(
         profile,
         gaps,
         count,
@@ -325,7 +325,7 @@ __all__ = [
     "PrimarySeparatorRefinementResult",
     "apply_edge_pair_refinement",
     "apply_nearby_separator_refinement_chain",
-    "apply_nearby_separator_refinement",
+    "apply_candidate_nearby_separator_refinement",
     "apply_primary_separator_refinements",
     "edge_pair_refinement_skip_reason",
     "nearby_separator_refinement_skip_reason",

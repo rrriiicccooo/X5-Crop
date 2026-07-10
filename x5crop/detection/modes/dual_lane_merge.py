@@ -7,7 +7,7 @@ import numpy as np
 from ...constants import CANDIDATE_SOURCE_DUAL_LANE
 from ...domain import Box, DetectionCandidate, Gap
 from ...geometry.boxes import map_work_box
-from ...runtime.config import RuntimeConfig
+from ...run_config import RunConfig
 from ...utils import box_from_dict
 from ..candidate.signals import (
     SIGNAL_DUAL_LANE_BELOW_THRESHOLD,
@@ -24,7 +24,7 @@ from .dual_lane_context import DualLaneDetectionContext
 
 def dual_lane_review_detection(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     context: DualLaneDetectionContext,
     mode_signal: str,
 ) -> DetectionCandidate:
@@ -43,7 +43,7 @@ def dual_lane_review_detection(
 
 def merge_dual_lane_detections(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     lanes: list[Box],
     lane_detections: list[DetectionCandidate | None],
     context: DualLaneDetectionContext,
@@ -129,7 +129,7 @@ def _merged_dual_lane_gaps(lane_detections: list[DetectionCandidate], lane_count
 
 
 def _dual_lane_detail(
-    config: RuntimeConfig,
+    config: RunConfig,
     context: DualLaneDetectionContext,
     lanes: list[Box],
     combined_work_outer: Box,

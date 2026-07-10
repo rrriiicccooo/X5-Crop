@@ -7,7 +7,7 @@ from ....cache import AnalysisCache
 from ....domain import DetectionCandidate
 from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
-from ....runtime.config import RuntimeConfig
+from ....run_config import RunConfig
 from ...guidance.content_model import content_detection_for_count
 from ..assessment.count_hypothesis import CountHypothesisEvaluation
 from ..assessment.safety import apply_safety_candidate_assessment
@@ -30,7 +30,7 @@ from ..selection.choose import is_partial_edge_safety_candidate, select_source_c
 
 def _assessed_candidates_for_offset(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
@@ -254,7 +254,7 @@ def _assessed_candidates_for_offset(
 
 def evaluate_count_hypothesis(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     hypothesis: CountHypothesis,
     cache: AnalysisCache,

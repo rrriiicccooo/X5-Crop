@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ...runtime.config import RuntimeConfig
+from ...run_config import RunConfig
 from ...domain import DetectionCandidate
 from ...policies.runtime.bundle import DetectionPolicyBundle
 from ...policies.runtime.policy import DetectionPolicy
@@ -15,7 +15,7 @@ from .dual_lane_split import split_dual_lanes
 
 def choose_dual_lane_detection(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     cache: AnalysisCache,
     policy: DetectionPolicy,
     policy_bundle: DetectionPolicyBundle,

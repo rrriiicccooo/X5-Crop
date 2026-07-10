@@ -112,7 +112,7 @@ class ArchitectureResidualContractTest(unittest.TestCase):
             "risky_regression",
         )
         offenders: list[str] = []
-        for root in (PROJECT_ROOT / "x5crop", PROJECT_ROOT / "tools" / "tests"):
+        for root in (PROJECT_ROOT / "x5crop",):
             self.assertTrue(root.is_dir())
             for path in root.rglob("*.py"):
                 if path == Path(__file__).resolve():
@@ -156,6 +156,17 @@ class ArchitectureResidualContractTest(unittest.TestCase):
         for path in (PROJECT_ROOT / "tools" / "regression").rglob("*.py"):
             text = path.read_text(encoding="utf-8")
             if '"review_reasons"' in text:
+                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+        self.assertEqual(offenders, [])
+
+    def test_regression_tools_are_diff_auditors_not_parity_gates(self) -> None:
+        self.assertFalse(
+            (PROJECT_ROOT / "tools" / "regression" / "historical_compare.py").exists()
+        )
+        offenders: list[str] = []
+        for path in (PROJECT_ROOT / "tools" / "regression").rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            if "fail-on-diff" in text:
                 offenders.append(str(path.relative_to(PROJECT_ROOT)))
         self.assertEqual(offenders, [])
 

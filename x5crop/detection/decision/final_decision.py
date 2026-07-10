@@ -9,7 +9,7 @@ from ...cache import AnalysisCache
 from ...domain import DetectionCandidate, FinalDetection
 from ...policies.decision.contract import DetectionDecisionContract
 from ...policies.runtime.policy import DetectionPolicy
-from ...runtime.config import RuntimeConfig
+from ...run_config import RunConfig
 from ..evidence.content.containment import content_containment_detail
 from ..evidence.content.frame_support import content_evidence_detail
 from ..evidence.outer_alignment import outer_content_alignment_detail
@@ -19,7 +19,7 @@ from .contract_applier import apply_decision_contract
 def apply_detection_decision(
     gray: np.ndarray,
     detection: DetectionCandidate,
-    config: RuntimeConfig,
+    config: RunConfig,
     analysis_cache: AnalysisCache,
     deskew_detail: dict[str, Any],
     policy: DetectionPolicy,

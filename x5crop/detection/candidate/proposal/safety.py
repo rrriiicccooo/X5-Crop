@@ -11,13 +11,13 @@ from ....geometry.boxes import map_work_box
 from ....geometry.frame_fit import frame_boxes_from_gaps
 from ....geometry.layout import work_gray
 from ....geometry.model_gaps import equal_model_gap
-from ....runtime.config import RuntimeConfig
+from ....run_config import RunConfig
 from ..signals import SIGNAL_HARD_SAFETY_NO_CANDIDATES, SIGNAL_NEEDS_MANUAL_REVIEW
 
 
 def hard_safety_detection(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
 ) -> DetectionCandidate:

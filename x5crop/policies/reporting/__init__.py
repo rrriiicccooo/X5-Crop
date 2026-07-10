@@ -160,8 +160,6 @@ def _format_spec_detail(contract: "DetectionDecisionContract") -> dict[str, Any]
 def decision_contract_report_detail(contract: "DetectionDecisionContract") -> dict[str, Any]:
     return {
         "policy_id": contract.policy_id,
-        "schema_id": contract.schema_id,
-        "schema_revision": contract.schema_revision,
         "format_spec": _format_spec_detail(contract),
         "mode_policy": asdict(contract.mode),
         "evidence_policy": asdict(contract.evidence),

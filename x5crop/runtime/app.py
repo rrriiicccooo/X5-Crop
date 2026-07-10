@@ -11,12 +11,12 @@ from ..domain import ProcessResult
 from ..entry.options import CliOptions
 from ..report.outputs import write_report_outputs_for_result
 from ..policies.runtime.bundle import DetectionPolicyBundle
-from .config import RuntimeConfig
+from ..run_config import RunConfig
 from .input_probe import runtime_config_from_options
 from .workflow import process_one_worker
 
 
-def print_run_header(config: RuntimeConfig, files: list[Path]) -> None:
+def print_run_header(config: RunConfig, files: list[Path]) -> None:
     print(f"{SCRIPT_NAME} {VERSION}")
     print(f"input: {config.input_path}")
     print(f"files: {len(files)}")
@@ -40,7 +40,7 @@ def print_run_header(config: RuntimeConfig, files: list[Path]) -> None:
         print(f"output: {config.output_dir}")
 
 
-def print_process_result(result: ProcessResult, config: RuntimeConfig) -> None:
+def print_process_result(result: ProcessResult, config: RunConfig) -> None:
     print(f"  status={result.status} confidence={result.confidence:.3f}")
     for warning in result.warnings:
         print(f"  info: {warning}")
@@ -53,8 +53,8 @@ def print_process_result(result: ProcessResult, config: RuntimeConfig) -> None:
 
 def process_parallel_files(
     files: list[Path],
-    config: RuntimeConfig,
-    worker_config: RuntimeConfig,
+    config: RunConfig,
+    worker_config: RunConfig,
 ) -> tuple[int, int, int, int]:
     ok = 0
     failed = 0
@@ -89,7 +89,7 @@ def process_parallel_files(
     return ok, failed, approved, review
 
 
-def run_runtime(config: RuntimeConfig, files: list[Path]) -> int:
+def run_runtime(config: RunConfig, files: list[Path]) -> int:
     ok = 0
     failed = 0
     approved = 0

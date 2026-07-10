@@ -8,7 +8,7 @@ from .analysis_reuse import (
     result_from_reusable_analysis,
 )
 from ..cache.analysis import make_analysis_cache
-from .config import RuntimeConfig
+from ..run_config import RunConfig
 from .output_protection import prepare_output_protection
 from .deskew import apply_deskew
 from .profile import runtime_for_profile
@@ -30,11 +30,11 @@ from ..units import scan_calibration_from_profile
 from ..detection.evidence.holder_occupancy import enrich_holder_occupancy_with_calibration
 
 
-def process_one_worker(input_file: Path, config: RuntimeConfig) -> ProcessResult:
+def process_one_worker(input_file: Path, config: RunConfig) -> ProcessResult:
     return process_one(input_file, replace(config, report=False))
 
 
-def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
+def process_one(input_file: Path, config: RunConfig) -> ProcessResult:
     output_surface = output_surface_for_input(input_file, config)
     output_dir = output_surface.root
     profile, warnings = read_tiff_profile(input_file, config.page)
@@ -121,7 +121,7 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     return _finish_result(result, config)
 
 
-def _finish_result(result: ProcessResult, config: RuntimeConfig) -> ProcessResult:
+def _finish_result(result: ProcessResult, config: RunConfig) -> ProcessResult:
     write_report_outputs_for_result(result, config)
     return result
 

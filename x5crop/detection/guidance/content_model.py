@@ -13,7 +13,7 @@ from ...geometry.layout import work_gray
 from ...geometry.model_gaps import content_model_gap
 from ...policies.runtime.content import ContentPolicy
 from ...cache import AnalysisCache
-from ...runtime.config import RuntimeConfig
+from ...run_config import RunConfig
 from ...utils import box_from_dict
 from ..evidence.content.regions import (
     CONTENT_BBOX_HINT_ROLE,
@@ -137,7 +137,7 @@ def content_candidate_signal_stats(
 
 def content_detection_for_count(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,

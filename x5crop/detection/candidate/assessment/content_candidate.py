@@ -6,7 +6,7 @@ from typing import Any
 from ....domain import DetectionCandidate
 from ...confidence_caps import apply_confidence_cap
 from ....policies.runtime.content import ContentCandidatePolicy, ContentPolicy
-from ....runtime.config import RuntimeConfig
+from ....run_config import RunConfig
 
 
 @dataclass(frozen=True)
@@ -109,7 +109,7 @@ def content_candidate_assessment_from_metrics(
 
 def content_candidate_assessment_from_proposal(
     detection: DetectionCandidate,
-    config: RuntimeConfig,
+    config: RunConfig,
     policy: ContentPolicy,
 ) -> ContentCandidateAssessment:
     proposal = detection.detail.get("content_primary", {})

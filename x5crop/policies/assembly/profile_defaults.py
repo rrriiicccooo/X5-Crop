@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from ...formats import FormatPhysicalSpec
+from ...geometry.detection_parameters import NearbySeparatorRefinementParameters
 from ..parameters.aggregate import FormatParameters
 from ..parameters.finalization import PartialHolderParameters
 from ..parameters.scoring import (
@@ -12,7 +13,6 @@ from ..parameters.scoring import (
 )
 from ..parameters.separator import (
     LeadingGridFailureParameters,
-    NearbySeparatorRefinementParameters,
     SeparatorSupportParameters,
     SeparatorGeometrySupportParameters,
 )
@@ -43,15 +43,15 @@ def _is_landscape_medium_frame(fmt: FormatPhysicalSpec) -> bool:
 
 
 def separator_support_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> SeparatorSupportParameters:
-    gate = params.separator.separator_support
+    support = params.separator.separator_support
     if _is_square_medium_frame(fmt):
         return replace(
-            gate,
+            support,
             edge_pair_min_score_without_broad_width=1.0,
             edge_pair_min_score_with_broad_width=0.0,
             min_broad_separator_width_gaps_for_auto=0,
         )
-    return gate
+    return support
 
 
 def leading_grid_failure_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> LeadingGridFailureParameters:

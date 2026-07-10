@@ -8,13 +8,13 @@ from ....cache import AnalysisCache
 from ....domain import DetectionCandidate
 from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
-from ....runtime.config import RuntimeConfig
+from ....run_config import RunConfig
 from ...physical.outer.correction.types import OuterCorrectionProposal
 
 
 def build_assessed_corrected_outer_candidate(
     gray: np.ndarray,
-    config: RuntimeConfig,
+    config: RunConfig,
     fmt: FormatPhysicalSpec,
     detection: DetectionCandidate,
     corrected: OuterCorrectionProposal,

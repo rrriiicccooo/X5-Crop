@@ -11,13 +11,13 @@ from ..geometry.boxes import map_work_box, original_box_to_work
 from ..geometry.layout import work_gray
 from ..policies.runtime.final import ApprovedGeometryAdjustmentPolicy
 from ..policies.runtime.output import EdgeBleedProtectionPolicy
-from ..runtime.config import RuntimeConfig
+from ..run_config import RunConfig
 from ..utils import clamp_float, clamp_int
 
 
 def apply_edge_bleed_protection(
     detection: FinalDetection,
-    config: RuntimeConfig,
+    config: RunConfig,
     image_w: int,
     image_h: int,
     policy: EdgeBleedProtectionPolicy,
