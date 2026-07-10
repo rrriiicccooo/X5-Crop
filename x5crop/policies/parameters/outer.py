@@ -50,6 +50,7 @@ class SeparatorOuterBandParameters:
     pair_candidate_count: int = 4
     max_candidates: int = 12
     sequence_pair_score_weight: float = 0.02
+    photo_width_cv_rank_weight: float = 0.50
     edge_margin_min_px: float = 60.0
     edge_margin_max_short_axis_ratio: float = 0.80
     prominence_min: float = 0.02

@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from x5crop.domain import Gap
+from x5crop.detection.candidate.proposal.outer import separator_sequence_rank
 from x5crop.detection.physical.photo_size import (
     photo_size_consistency_from_gap_edges,
     photo_size_consistency_from_separator_bands,
@@ -12,6 +13,7 @@ from x5crop.geometry.separator_width_profile import (
     separator_width_relation_to_theory,
     theoretical_separator_width,
 )
+from x5crop.policies.parameters.outer import SeparatorOuterBandParameters
 
 
 class PhotoSizePhysicalModelTests(unittest.TestCase):
@@ -57,7 +59,22 @@ class PhotoSizePhysicalModelTests(unittest.TestCase):
             target_photo_width=100.0,
         )
 
-        self.assertLess(stable_photo.rank_penalty(), unstable_photo.rank_penalty())
+        parameters = SeparatorOuterBandParameters()
+        stable_rank = separator_sequence_rank(
+            stable_photo,
+            0.0,
+            0.8,
+            parameters.sequence_pair_score_weight,
+            parameters.photo_width_cv_rank_weight,
+        )
+        unstable_rank = separator_sequence_rank(
+            unstable_photo,
+            0.0,
+            0.8,
+            parameters.sequence_pair_score_weight,
+            parameters.photo_width_cv_rank_weight,
+        )
+        self.assertLess(stable_rank, unstable_rank)
         self.assertGreater(stable_photo.separator_width_cv or 0.0, 0.70)
         self.assertAlmostEqual(stable_photo.photo_width_cv or 0.0, 0.0)
 

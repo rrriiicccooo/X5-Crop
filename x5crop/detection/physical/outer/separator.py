@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 
@@ -19,13 +19,18 @@ from ....policies.runtime.separator import SeparatorPolicy
 from ....cache import AnalysisCache
 from ...cache_keys import separator_outer_cache_key
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
-from ..photo_size import photo_size_consistency_from_separator_bands
+from ..photo_size import PhotoSizeConsistency, photo_size_consistency_from_separator_bands
 from .common import unique_outer_candidates
 from .separator_bands import collect_separator_outer_bands, separator_outer_band_sequences
 
 
 LOCAL_SEPARATOR_OUTER = "local"
 FULL_WIDTH_SEPARATOR_OUTER = "full_width"
+
+_SeparatorSequenceRanker = Callable[
+    [PhotoSizeConsistency, float, float, float, float],
+    float,
+]
 
 
 @dataclass(frozen=True)
@@ -83,6 +88,7 @@ def separator_derived_outer_candidates(
     outer_scopes: tuple[str, ...] | None = None,
     gap_search_profiles: tuple[str, ...] | None = None,
     explicit_count: bool = True,
+    sequence_ranker: _SeparatorSequenceRanker,
 ) -> list[OuterCandidate]:
     if strip_mode not in {"full", "partial"} or count <= 1:
         return []
@@ -123,6 +129,7 @@ def separator_derived_outer_candidates(
                     cache,
                     separator_geometry_policy,
                     separator_policy,
+                    sequence_ranker,
                 )
             )
     return unique_outer_candidates(candidates)
@@ -252,6 +259,7 @@ def _separator_outer_candidates_for_plan(
     cache: Optional[AnalysisCache],
     separator_geometry_policy: SeparatorGeometryProposalPolicy,
     separator_policy: SeparatorPolicy,
+    sequence_ranker: _SeparatorSequenceRanker,
 ) -> list[OuterCandidate]:
     if cache is not None:
         candidate_key = separator_outer_cache_key(plan.name, base_candidates, fmt, count, strip_mode)
@@ -314,6 +322,7 @@ def _separator_outer_candidates_for_plan(
             aspect,
             band_policy,
             plan,
+            sequence_ranker,
         )
         for rank, ranked_sequence in enumerate(
             ranked_sequences[: plan.sequence_candidate_count],
@@ -383,6 +392,7 @@ def _rank_separator_sequences(
     aspect: float,
     band_policy: SeparatorOuterBandParameters,
     plan: SeparatorOuterPlan,
+    sequence_ranker: _SeparatorSequenceRanker,
 ) -> list[SeparatorOuterSequenceRank]:
     candidate_bands = sorted(
         bands,
@@ -426,8 +436,13 @@ def _rank_separator_sequences(
                 float(first_band.start) - frame_long - margin
             )
             actual_ratio = proposed_width / max(1.0, short_axis)
-            rank = photo_size.rank_penalty() - plan.sequence_score_weight * sequence_score
-            rank += abs(actual_ratio - expected_ratio)
+            rank = sequence_ranker(
+                photo_size,
+                abs(actual_ratio - expected_ratio),
+                sequence_score,
+                plan.sequence_score_weight,
+                band_policy.photo_width_cv_rank_weight,
+            )
             ranked.append(
                 SeparatorOuterSequenceRank(
                     rank=float(rank),

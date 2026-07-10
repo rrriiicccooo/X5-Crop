@@ -355,7 +355,7 @@ def apply_decision_gate(
     outer_alignment: dict[str, Any],
     *,
     policy: DetectionDecisionContract,
-    deskew_detail: dict[str, Any] | None = None,
+    deskew_detail: dict[str, Any],
 ) -> FinalDetection:
     evidence = evidence_summary_for(gray, detection, content_detail, outer_alignment, policy)
     decision_signals = decision_signals_for(detection, evidence, policy)
@@ -377,7 +377,7 @@ def apply_decision_gate(
             decision_signals=decision_signals,
             policy=policy,
             candidate_gate=candidate_gate,
-            deskew_detail=deskew_detail or {},
+            deskew_detail=deskew_detail,
             confidence_caps=decision_caps,
         )
     )

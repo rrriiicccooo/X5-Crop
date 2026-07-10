@@ -53,18 +53,6 @@ class PhotoSizeConsistency:
             "separator_width_role": "observed_detail_not_stability_penalty",
         }
 
-    def rank_penalty(self) -> float:
-        if not self.used:
-            return 1.0
-        cv = 0.0 if self.photo_width_cv is None else float(self.photo_width_cv)
-        mean_error = (
-            0.0
-            if self.mean_photo_width_error_ratio is None
-            else float(self.mean_photo_width_error_ratio)
-        )
-        return mean_error + 0.50 * cv
-
-
 def _photo_width_error_ratios(
     widths: Sequence[float],
     target_photo_width: float | None,

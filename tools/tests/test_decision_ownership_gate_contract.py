@@ -88,6 +88,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             content_detail,
             outer_alignment,
             policy=_decision_contract("135", "full"),
+            deskew_detail={},
         )
 
         self.assertEqual(decided.final_review_reasons, ["evidence_combination_insufficient"])
@@ -146,6 +147,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             content_detail,
             outer_alignment,
             policy=_decision_contract("135", "full"),
+            deskew_detail={},
         )
 
         self.assertEqual(
@@ -272,6 +274,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             _content_ok_detail(),
             {"used": True, "ok": True},
             policy=_decision_contract("135-dual", "partial"),
+            deskew_detail={},
         )
 
         self.assertIn("evidence_combination_insufficient", decided.final_review_reasons)
@@ -353,6 +356,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             content_detail,
             outer_alignment,
             policy=_decision_contract("135", "full"),
+            deskew_detail={},
         )
 
         self.assertEqual(decided.final_review_reasons, ["content_evidence_insufficient"])
@@ -405,6 +409,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             _content_ok_detail(),
             {"used": True, "ok": True},
             policy=_decision_contract("135", "full"),
+            deskew_detail={},
         )
 
         self.assertEqual(decided.final_review_reasons, ["exposure_overlap_unresolved"])
@@ -576,6 +581,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             content_detail,
             outer_alignment,
             policy=_decision_contract("135", "full"),
+            deskew_detail={},
         )
 
         self.assertEqual(decided.final_review_reasons, ["candidate_competition_close"])

@@ -8,6 +8,13 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 
 
 class CandidateLifecycleSourceContractTest(unittest.TestCase):
+    def test_outer_proposal_has_no_single_call_full_width_wrapper(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "proposal" / "outer.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("def separator_full_width_outer_proposal_candidates", source)
+
     def test_outer_candidate_strategy_has_one_typed_source(self) -> None:
         execution_source = (
             PROJECT_ROOT

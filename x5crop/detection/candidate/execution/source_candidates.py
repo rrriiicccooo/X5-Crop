@@ -15,9 +15,13 @@ from ....run_config import RunConfig
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE, width_aware_gap_profile_detail
 from ...guidance.content_separator import content_guided_separator_seed_for_count
 from ...physical.outer.common import unique_outer_candidates
+from ...physical.outer.separator import (
+    FULL_WIDTH_SEPARATOR_OUTER,
+    separator_derived_outer_candidates,
+)
 from ..proposal.outer import (
     outer_proposal_candidates,
-    separator_full_width_outer_proposal_candidates,
+    separator_sequence_rank,
 )
 from ..plan.source_policy import separator_outer_gap_max_width_override
 from ..build.detection import build_detection_geometry_for_outer, enrich_detection_geometry_evidence
@@ -152,15 +156,19 @@ def separator_source_candidates_for_count(
         and separator_full_width_mode in {"always", "conditional"}
     )
     if include_full_width:
-        separator_full_width_candidates = separator_full_width_outer_proposal_candidates(
+        separator_full_width_candidates = separator_derived_outer_candidates(
             gray_work,
             outer_candidates,
             fmt,
             count,
             strip_mode,
             cache,
-            policy=policy,
+            separator_geometry_policy=policy.outer.proposal.geometry.separator,
+            separator_policy=policy.separator,
+            outer_scopes=(FULL_WIDTH_SEPARATOR_OUTER,),
+            gap_search_profiles=(WIDTH_AWARE_GAP_PROFILE,),
             explicit_count=explicit_count,
+            sequence_ranker=separator_sequence_rank,
         )
         detections.extend(
             _execute_outer_candidate_detection(

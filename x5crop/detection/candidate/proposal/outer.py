@@ -15,10 +15,10 @@ from ...guidance.content_outer_floating import floating_content_position_candida
 from ...physical.outer.base import base_outer_candidates
 from ...physical.outer.common import unique_outer_candidates
 from ...physical.outer.separator import (
-    FULL_WIDTH_SEPARATOR_OUTER,
     separator_derived_outer_candidates,
     separator_outer_scopes,
 )
+from ...physical.photo_size import PhotoSizeConsistency
 
 
 @dataclass(frozen=True)
@@ -29,6 +29,34 @@ class OuterProposalStrategy:
     @property
     def enabled(self) -> bool:
         return self.mode != "off"
+
+
+def separator_sequence_rank(
+    photo_size: PhotoSizeConsistency,
+    aspect_error: float,
+    sequence_score: float,
+    sequence_score_weight: float,
+    photo_width_cv_rank_weight: float,
+) -> float:
+    if photo_size.used:
+        photo_width_cv = (
+            0.0
+            if photo_size.photo_width_cv is None
+            else float(photo_size.photo_width_cv)
+        )
+        mean_error = (
+            0.0
+            if photo_size.mean_photo_width_error_ratio is None
+            else float(photo_size.mean_photo_width_error_ratio)
+        )
+        photo_size_penalty = mean_error + photo_width_cv_rank_weight * photo_width_cv
+    else:
+        photo_size_penalty = 1.0
+    return (
+        photo_size_penalty
+        + float(aspect_error)
+        - float(sequence_score_weight) * float(sequence_score)
+    )
 
 
 def outer_proposal_strategy_plan_for_policy(
@@ -164,33 +192,8 @@ def outer_proposal_candidates(
             ),
             gap_search_profiles=(WIDTH_AWARE_GAP_PROFILE,),
             explicit_count=explicit_count,
+            sequence_ranker=separator_sequence_rank,
         )
     if safety_only:
         return unique_outer_candidates([*edge_candidates, *separator_candidates])
     return unique_outer_candidates([*base_candidates, *edge_candidates, *floating_candidates, *separator_candidates])
-
-
-def separator_full_width_outer_proposal_candidates(
-    gray_work: np.ndarray,
-    base_candidates: list[OuterCandidate],
-    fmt: FormatPhysicalSpec,
-    count: int,
-    strip_mode: str,
-    cache: Optional[AnalysisCache],
-    *,
-    policy: DetectionPolicy,
-    explicit_count: bool = True,
-) -> list[OuterCandidate]:
-    return separator_derived_outer_candidates(
-        gray_work,
-        base_candidates,
-        fmt,
-        count,
-        strip_mode,
-        cache,
-        separator_geometry_policy=policy.outer.proposal.geometry.separator,
-        separator_policy=policy.separator,
-        outer_scopes=(FULL_WIDTH_SEPARATOR_OUTER,),
-        gap_search_profiles=(WIDTH_AWARE_GAP_PROFILE,),
-        explicit_count=explicit_count,
-    )

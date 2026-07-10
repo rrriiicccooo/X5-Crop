@@ -85,6 +85,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
             content_detail,
             outer_alignment,
             policy=_decision_contract("135", "full"),
+            deskew_detail={},
         )
 
         self.assertEqual(decided.final_review_reasons, [])

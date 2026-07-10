@@ -20,6 +20,18 @@ from x5crop.policies.runtime.separator import SeparatorGeometrySupportModePolicy
 
 
 class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
+    def test_photo_size_evidence_does_not_own_candidate_ranking(self) -> None:
+        from x5crop.policies.parameters.outer import SeparatorOuterBandParameters
+
+        source = (
+            PROJECT_ROOT / "x5crop" / "detection" / "physical" / "photo_size.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("def rank_penalty", source)
+        self.assertIn(
+            "photo_width_cv_rank_weight",
+            SeparatorOuterBandParameters.__dataclass_fields__,
+        )
+
     def test_candidate_signals_are_owned_and_emitted_only_by_candidate_layers(self) -> None:
         evidence_paths = (
             PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "frame_topology.py",

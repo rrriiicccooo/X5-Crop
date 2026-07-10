@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from inspect import Parameter, signature
 from pathlib import Path
 import unittest
 
@@ -8,6 +9,18 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 
 
 class DecisionOwnershipSourceContractTest(unittest.TestCase):
+    def test_decision_gate_requires_explicit_deskew_detail(self) -> None:
+        from x5crop.detection.decision.decision_gate import apply_decision_gate
+
+        self.assertIs(
+            signature(apply_decision_gate).parameters["deskew_detail"].default,
+            Parameter.empty,
+        )
+        source = (
+            PROJECT_ROOT / "x5crop" / "detection" / "decision" / "decision_gate.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("deskew_detail or {}", source)
+
     def test_decision_consumes_evidence_without_building_it(self) -> None:
         decision_root = PROJECT_ROOT / "x5crop" / "detection" / "decision"
         offenders = []
