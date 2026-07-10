@@ -88,9 +88,12 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
 
     def test_architecture_describes_parameter_profile_ownership_not_removed_format_field(self) -> None:
         architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(encoding="utf-8")
+        changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
 
         self.assertNotIn("frame_geometry_profile", architecture)
         self.assertIn("parameter profile", architecture.lower())
+        self.assertNotIn("`frame_geometry_profile` 由 physical", changelog)
+        self.assertNotIn("`frame_geometry_profile` is derived", changelog)
 
     def test_user_facing_strip_mode_uses_holder_occupancy_not_strip_completeness(self) -> None:
         cli = (PROJECT_ROOT / "x5crop" / "entry" / "cli.py").read_text(encoding="utf-8")
