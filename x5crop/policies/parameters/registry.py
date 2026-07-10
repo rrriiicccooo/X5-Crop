@@ -2,35 +2,35 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ...formats import FORMAT_CHOICES, FormatSpec, format_spec
+from ...formats import FORMAT_CHOICES, FormatPhysicalSpec, format_spec
 from .aggregate import FormatParameters
 
 
-def _aspect(fmt: FormatSpec) -> float:
+def _aspect(fmt: FormatPhysicalSpec) -> float:
     return float(fmt.horizontal_content_aspect or 1.0)
 
 
-def _is_standard_35mm_strip(fmt: FormatSpec) -> bool:
+def _is_standard_35mm_strip(fmt: FormatPhysicalSpec) -> bool:
     return fmt.family == "35mm" and fmt.default_count == 6 and 1.2 <= _aspect(fmt) <= 1.8
 
 
-def _is_dense_half_frame(fmt: FormatSpec) -> bool:
+def _is_dense_half_frame(fmt: FormatPhysicalSpec) -> bool:
     return fmt.family == "35mm" and fmt.default_count > 6 and _aspect(fmt) < 1.0
 
 
-def _is_panorama_35mm(fmt: FormatSpec) -> bool:
+def _is_panorama_35mm(fmt: FormatPhysicalSpec) -> bool:
     return fmt.family == "35mm" and _aspect(fmt) > 2.0
 
 
-def _is_medium_rectangle(fmt: FormatSpec) -> bool:
+def _is_medium_rectangle(fmt: FormatPhysicalSpec) -> bool:
     return fmt.family == "120" and _aspect(fmt) < 1.0
 
 
-def _is_medium_square(fmt: FormatSpec) -> bool:
+def _is_medium_square(fmt: FormatPhysicalSpec) -> bool:
     return fmt.family == "120" and abs(_aspect(fmt) - 1.0) <= 0.05
 
 
-def _is_medium_wide(fmt: FormatSpec) -> bool:
+def _is_medium_wide(fmt: FormatPhysicalSpec) -> bool:
     return fmt.family == "120" and _aspect(fmt) > 1.0
 
 

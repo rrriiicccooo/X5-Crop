@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from ...formats import FormatSpec
+from ...formats import FormatPhysicalSpec
 from ...formats.traits import runtime_traits_for_spec
 from ..runtime.base import FULL
 
 
-def mode_role_for_spec(spec: FormatSpec, strip_mode: str) -> str:
+def mode_role_for_spec(spec: FormatPhysicalSpec, strip_mode: str) -> str:
     mode = "full" if strip_mode == FULL else "partial"
     if spec.physical_layout == "dual_lane":
         posture = "isolated_detector" if mode == "full" else "review_only"
@@ -21,7 +21,7 @@ def mode_role_for_spec(spec: FormatSpec, strip_mode: str) -> str:
     return f"{mode}_{density}_{width}_{edge}"
 
 
-def mode_notes_for_spec(spec: FormatSpec, strip_mode: str) -> tuple[str, ...]:
+def mode_notes_for_spec(spec: FormatPhysicalSpec, strip_mode: str) -> tuple[str, ...]:
     if spec.physical_layout == "dual_lane" and strip_mode != FULL:
         return ("dual-lane partial scans are review-only until a physical detector contract is defined",)
     notes = [

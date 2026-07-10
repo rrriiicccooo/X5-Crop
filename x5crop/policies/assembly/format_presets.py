@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import FULL, PARTIAL, ReviewOnlyPolicy
-from ...formats import FormatSpec, format_spec
+from ...formats import FormatPhysicalSpec, format_spec
 from ...formats.traits import FormatRuntimeTraits, runtime_traits_for_spec
 from .factory import build_policy_from_preset
 from .presets import (
@@ -18,7 +18,7 @@ from .profile_presets import frame_fit_profile, separator_edge_pair_profile
 ParameterFactory = Callable[[], FormatParameters]
 
 
-def _detector_kind(spec: FormatSpec, strip_mode: str) -> str:
+def _detector_kind(spec: FormatPhysicalSpec, strip_mode: str) -> str:
     if spec.physical_layout == "dual_lane" and strip_mode == FULL:
         return "dual_lane"
     if spec.physical_layout == "dual_lane" and strip_mode == PARTIAL:
@@ -26,7 +26,7 @@ def _detector_kind(spec: FormatSpec, strip_mode: str) -> str:
     return "standard_strip"
 
 
-def _review_only(spec: FormatSpec, strip_mode: str) -> ReviewOnlyPolicy:
+def _review_only(spec: FormatPhysicalSpec, strip_mode: str) -> ReviewOnlyPolicy:
     if spec.physical_layout == "dual_lane" and strip_mode == PARTIAL:
         return ReviewOnlyPolicy(
             reason="dual_lane_partial_not_supported",

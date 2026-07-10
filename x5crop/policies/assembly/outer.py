@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...formats import FormatSpec
+from ...formats import FormatPhysicalSpec
 from ...geometry.detection_parameters import OuterBoxDetectionParameters, OuterMaskProfileParameters
 from .presets import ModePolicyPreset
 from ..parameters.aggregate import FormatParameters
@@ -109,7 +109,7 @@ def outer_policy(
     mode_preset: ModePolicyPreset,
     strip_mode: str,
     params: FormatParameters,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
 ) -> OuterPolicy:
     outer = params.outer.outer_strategy
     long_axis = params.outer.long_axis_geometry_correction

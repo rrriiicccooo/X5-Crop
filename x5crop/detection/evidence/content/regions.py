@@ -8,7 +8,7 @@ import numpy as np
 
 from ....cache import AnalysisCache
 from ....domain import Box
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....geometry.boxes import box_cache_key
 from ....policies.runtime.content import ContentPolicy
 from ....utils import bbox_from_mask, runs_from_mask, sampled_percentile, smooth_1d
@@ -82,7 +82,7 @@ def select_content_runs(runs: list[tuple[int, int]], count: int) -> list[tuple[i
 def content_mask_region_detail(
     evidence_float: np.ndarray,
     gray_work_shape: tuple[int, int],
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     cache: Optional[AnalysisCache] = None,
     *,
     content_policy: ContentPolicy,

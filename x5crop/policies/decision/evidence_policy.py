@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ...formats import FormatSpec
+from ...formats import FormatPhysicalSpec
 from ...formats.traits import runtime_traits_for_spec
 from .contract import EvidencePolicy
 
 
-def _content_aspect(spec: FormatSpec) -> float:
+def _content_aspect(spec: FormatPhysicalSpec) -> float:
     return float(spec.horizontal_content_aspect or 1.0)
 
 
-def _is_standard_35mm_strip(spec: FormatSpec) -> bool:
+def _is_standard_35mm_strip(spec: FormatPhysicalSpec) -> bool:
     return (
         spec.family == "35mm"
         and spec.physical_layout == "single_strip"
@@ -20,23 +20,23 @@ def _is_standard_35mm_strip(spec: FormatSpec) -> bool:
     )
 
 
-def _is_dense_geometry_supported_strip(spec: FormatSpec) -> bool:
+def _is_dense_geometry_supported_strip(spec: FormatPhysicalSpec) -> bool:
     return runtime_traits_for_spec(spec).geometry_support_profile == "stable_dense_grid"
 
 
-def _is_panorama_strip(spec: FormatSpec) -> bool:
+def _is_panorama_strip(spec: FormatPhysicalSpec) -> bool:
     return spec.family == "35mm" and _content_aspect(spec) > 2.0
 
 
-def _is_medium_square_strip(spec: FormatSpec) -> bool:
+def _is_medium_square_strip(spec: FormatPhysicalSpec) -> bool:
     return spec.family == "120" and abs(_content_aspect(spec) - 1.0) <= 0.05
 
 
-def _is_medium_wide_strip(spec: FormatSpec) -> bool:
+def _is_medium_wide_strip(spec: FormatPhysicalSpec) -> bool:
     return spec.family == "120" and _content_aspect(spec) > 1.1
 
 
-def _physical_evidence_policy(spec: FormatSpec, defaults: EvidencePolicy) -> EvidencePolicy:
+def _physical_evidence_policy(spec: FormatPhysicalSpec, defaults: EvidencePolicy) -> EvidencePolicy:
     if spec.physical_layout == "dual_lane":
         return replace(
             defaults,
@@ -106,7 +106,7 @@ def _partial_evidence_policy(policy: EvidencePolicy) -> EvidencePolicy:
 
 
 def evidence_policy_for_physical_spec(
-    spec: FormatSpec,
+    spec: FormatPhysicalSpec,
     strip_mode: str,
     defaults: EvidencePolicy,
     geometry_support_modes: tuple[str, ...] = (),

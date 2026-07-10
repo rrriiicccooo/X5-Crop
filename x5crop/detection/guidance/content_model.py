@@ -7,7 +7,7 @@ import numpy as np
 
 from ...constants import CANDIDATE_SOURCE_CONTENT_PRIMARY
 from ...domain import Box, DetectionCandidate, Gap
-from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ...formats import FormatPhysicalSpec
 from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
 from ...geometry.model_gaps import content_model_gap
@@ -138,7 +138,7 @@ def content_candidate_signal_stats(
 def content_detection_for_count(
     gray: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,
@@ -168,8 +168,8 @@ def content_detection_for_count(
     if outer is None:
         return None
 
-    expected_aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
-    if expected_aspect is None or expected_aspect <= 0:
+    expected_aspect = float(fmt.horizontal_content_aspect)
+    if expected_aspect <= 0:
         return None
     runs, run_detail = content_region_runs(
         evidence,

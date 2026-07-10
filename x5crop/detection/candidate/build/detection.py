@@ -6,7 +6,7 @@ from typing import Optional
 import numpy as np
 
 from ....domain import Box, DetectionCandidate
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....geometry.boxes import map_work_box
 from ....geometry.frame_fit import fit_frame_boxes_from_gaps
 from ....geometry.layout import work_gray
@@ -33,7 +33,7 @@ from .separator_gaps import (
 def build_detection_geometry_for_outer(
     gray: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     outer: Box,
@@ -146,7 +146,7 @@ def enrich_detection_geometry_evidence(
     gray: np.ndarray,
     detection: DetectionCandidate,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     cache: Optional[AnalysisCache],
     *,
     policy: DetectionPolicy,
@@ -209,7 +209,7 @@ def enrich_detection_geometry_evidence(
 def _build_separator_gap_lifecycle(
     gray_work: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     outer: Box,

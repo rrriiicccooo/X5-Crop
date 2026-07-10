@@ -7,7 +7,7 @@ import numpy as np
 
 from ...cache import AnalysisCache
 from ...domain import Box
-from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ...formats import FormatPhysicalSpec
 from ...geometry.layout import work_gray
 from ...policies.runtime.candidate import ContentGuidedSeparatorCandidatePolicy
 from ...policies.runtime.content import ContentPolicy
@@ -78,7 +78,7 @@ def _content_gap_hints_from_runs(
 def content_guided_separator_seed_for_count(
     gray: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     offset_fraction: float,
@@ -112,8 +112,8 @@ def content_guided_separator_seed_for_count(
             mask_detail=mask_detail,
         )
 
-    expected_aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
-    if expected_aspect is None or expected_aspect <= 0:
+    expected_aspect = float(fmt.horizontal_content_aspect)
+    if expected_aspect <= 0:
         return _skip_detail("missing_expected_content_aspect", format=fmt.name)
 
     runs, run_detail = content_region_runs(

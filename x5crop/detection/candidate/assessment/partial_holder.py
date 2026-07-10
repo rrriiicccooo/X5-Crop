@@ -5,7 +5,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ....domain import DetectionCandidate
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....geometry.layout import work_gray
 from ....image.evidence import make_content_evidence_gray
 from ....policies.runtime.policy import DetectionPolicy
@@ -21,7 +21,7 @@ from ..signals import (
 
 def partial_edge_safety_holder_edge_disambiguation_detail(
     detection: DetectionCandidate,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
     holder = policy.partial_holder
@@ -82,7 +82,7 @@ def partial_edge_safety_holder_edge_disambiguation_detail(
 def partial_edge_safety_leading_content_detail(
     gray: np.ndarray,
     detection: DetectionCandidate,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
@@ -163,7 +163,7 @@ def partial_edge_safety_leading_content_detail(
 def partial_edge_safety_frame_content_detail(
     content_detail: dict[str, Any],
     detection: DetectionCandidate,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
     holder = policy.partial_holder
@@ -252,7 +252,7 @@ def partial_edge_safety_assessment_detail(
     detection: DetectionCandidate,
     hard_detail: dict[str, Any],
     content_detail: dict[str, Any],
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     source: str,
     joint_score: float,
     content_score: float,

@@ -22,12 +22,14 @@ def apply_dual_lane_content_assessment(
     cache: AnalysisCache,
     lane_policy: DetectionPolicy,
     confidence_threshold: float,
+    horizontal_frame_aspect: float,
 ) -> None:
     content_detail = content_evidence_detail(
         gray,
         detection,
         cache,
         content_policy=lane_policy.content,
+        horizontal_frame_aspect=horizontal_frame_aspect,
     )
     outer_alignment = outer_content_alignment_detail(
         gray,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ....domain import DetectionCandidate
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....policies.runtime.candidate import SelectionPolicy
 from ..signals import candidate_signals
 
@@ -90,7 +90,7 @@ def _candidate_summary(candidate: DetectionCandidate) -> dict:
 
 def select_detection_candidate(
     candidates: list[DetectionCandidate],
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     threshold: float,
     selection_policy: SelectionPolicy,
 ) -> DetectionCandidate:

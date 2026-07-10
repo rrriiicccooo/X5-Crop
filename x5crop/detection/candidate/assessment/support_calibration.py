@@ -4,7 +4,7 @@ import math
 from typing import Any
 
 from ....domain import DetectionCandidate
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.separator import SeparatorGeometrySupportModePolicy
 from ...evidence.photo_width import photo_width_within_limit
@@ -24,7 +24,7 @@ def detail_float(detail: dict[str, Any], key: str, default: float) -> float:
 def hard_full_calibration_floor_applies(
     candidate: DetectionCandidate,
     hard_detail: dict[str, Any],
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     source: str,
     policy: DetectionPolicy,
 ) -> bool:
@@ -50,7 +50,7 @@ def hard_full_calibration_floor_applies(
 def separator_geometry_support_applies(
     candidate: DetectionCandidate,
     hard_detail: dict[str, Any],
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     source: str,
     support: str,
     joint_score: float,

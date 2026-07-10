@@ -58,10 +58,6 @@ class FormatPhysicalSpec:
     def frame_aspect(self) -> float:
         return self.horizontal_content_aspect
 
-
-FormatSpec = FormatPhysicalSpec
-
-
 def expected_separator_count(
     default_count: int,
     physical_layout: str,
@@ -85,7 +81,7 @@ def _format_spec(
     complete_strip_can_be_underfilled: bool = False,
     lane_count: int = 1,
     lane_format_id: FormatId | None = None,
-) -> FormatSpec:
+) -> FormatPhysicalSpec:
     name = format_id.value
     frame_options = frame_size_mm_options or (nominal_frame_size_mm,)
     return FormatPhysicalSpec(
@@ -107,7 +103,7 @@ def _format_spec(
     )
 
 
-FORMATS: dict[str, FormatSpec] = {
+FORMATS: dict[str, FormatPhysicalSpec] = {
     "135": _format_spec(
         FormatId.STANDARD_STRIP,
         6,
@@ -174,14 +170,7 @@ STRIP_CHOICES = ("full", "partial")
 DESKEW_CHOICES = ("off", "auto")
 DESKEW_FALLBACK_CHOICES = ("off", "auto", "always")
 COMPRESSION_CHOICES = ("none", "same")
-CONTENT_ASPECTS_HORIZONTAL = {
-    key: spec.horizontal_content_aspect
-    for key, spec in FORMATS.items()
-    if spec.horizontal_content_aspect is not None
-}
-
-
-def format_spec(format_id: str | FormatId) -> FormatSpec:
+def format_spec(format_id: str | FormatId) -> FormatPhysicalSpec:
     key = format_id.value if isinstance(format_id, FormatId) else str(format_id)
     return FORMATS[key]
 
@@ -193,7 +182,6 @@ def format_description(format_id: str | FormatId) -> FormatDescription:
 
 __all__ = [
     "COMPRESSION_CHOICES",
-    "CONTENT_ASPECTS_HORIZONTAL",
     "DESKEW_CHOICES",
     "DESKEW_FALLBACK_CHOICES",
     "FORMAT_CHOICES",
@@ -205,7 +193,6 @@ __all__ = [
     "FormatId",
     "FormatDescription",
     "FormatPhysicalSpec",
-    "FormatSpec",
     "StripMode",
     "expected_separator_count",
     "format_description",

@@ -8,7 +8,7 @@ import numpy as np
 from ....constants import CANDIDATE_SOURCE_SAFETY, CANDIDATE_SOURCE_SEPARATOR
 from ....cache import AnalysisCache
 from ....domain import DetectionCandidate, OuterCandidate
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....geometry.layout import work_gray
 from ....policies.runtime.policy import DetectionPolicy
 from ....runtime.config import RuntimeConfig
@@ -72,7 +72,7 @@ def _attach_outer_candidate_summary(
 def _execute_outer_candidate_detection(
     gray: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     offset_fraction: float,
@@ -110,7 +110,7 @@ def _execute_outer_candidate_detection(
 def separator_source_candidates_for_count(
     gray: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,
@@ -210,7 +210,7 @@ def separator_source_candidates_for_count(
 def content_guided_separator_candidate_for_count(
     gray: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,
@@ -272,7 +272,7 @@ def content_guided_separator_candidate_for_count(
 def safety_outer_proposal_candidates_for_count(
     gray: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,

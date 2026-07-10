@@ -4,7 +4,7 @@ from dataclasses import asdict
 from typing import Any
 
 from ...domain import Box, DetectionCandidate
-from ...formats import FormatSpec
+from ...formats import FormatPhysicalSpec
 from ...units import ScanCalibration
 from ...utils import box_from_dict
 
@@ -49,7 +49,7 @@ def _holder_reference_outer(detection: DetectionCandidate) -> Box:
     return _work_outer(detection)
 
 
-def strip_completeness_evidence(detection: DetectionCandidate, fmt: FormatSpec) -> dict[str, Any]:
+def strip_completeness_evidence(detection: DetectionCandidate, fmt: FormatPhysicalSpec) -> dict[str, Any]:
     frames = _work_frames(detection)
     valid_frame_count = len(frames)
     expected_gap_count = max(0, int(detection.count) - 1)
@@ -86,7 +86,7 @@ def _photo_width_stable(detection: DetectionCandidate) -> bool:
 
 def holder_occupancy_evidence(
     detection: DetectionCandidate,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     content_containment: dict[str, Any],
     *,
     calibration: ScanCalibration | None = None,

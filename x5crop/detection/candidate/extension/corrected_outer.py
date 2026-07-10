@@ -6,7 +6,7 @@ import numpy as np
 
 from ....cache import AnalysisCache
 from ....domain import DetectionCandidate
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....runtime.config import RuntimeConfig
 from ...physical.outer.correction.types import OuterCorrectionProposal
@@ -15,7 +15,7 @@ from ...physical.outer.correction.types import OuterCorrectionProposal
 def build_assessed_corrected_outer_candidate(
     gray: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     detection: DetectionCandidate,
     corrected: OuterCorrectionProposal,
     cache: AnalysisCache,
@@ -68,6 +68,7 @@ def build_assessed_corrected_outer_candidate(
         reassessed,
         cache,
         content_policy=policy.content,
+        horizontal_frame_aspect=fmt.horizontal_content_aspect,
     )
     reassessed.detail["outer_content_alignment"] = reassessed_alignment
     reassessed.detail["content_evidence"] = reassessed_content

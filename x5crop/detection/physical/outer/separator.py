@@ -6,7 +6,7 @@ from typing import Optional
 import numpy as np
 
 from ....domain import Box, OuterCandidate
-from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....cache.separator import cached_separator_profile
 from ....geometry.separator_band import SeparatorBand
 from ....geometry.separator_width_profile import collect_separator_width_bands, separator_width_profile
@@ -73,7 +73,7 @@ def separator_outer_scopes(
 def separator_derived_outer_candidates(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
@@ -86,8 +86,8 @@ def separator_derived_outer_candidates(
 ) -> list[OuterCandidate]:
     if strip_mode not in {"full", "partial"} or count <= 1:
         return []
-    aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
-    if aspect is None or aspect <= 0.0 or not base_candidates:
+    aspect = float(fmt.horizontal_content_aspect)
+    if aspect <= 0.0 or not base_candidates:
         return []
 
     selected_scopes = outer_scopes or separator_outer_scopes(
@@ -162,7 +162,7 @@ def _scope_profile_plan(
     gap_search_profile: str,
     separator_geometry_policy: SeparatorGeometryProposalPolicy,
     separator_policy: SeparatorPolicy,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     explicit_count: bool,
@@ -251,7 +251,7 @@ def _mode_active(
 def _separator_outer_candidates_for_plan(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     aspect: float,

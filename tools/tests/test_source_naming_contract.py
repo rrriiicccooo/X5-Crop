@@ -262,7 +262,7 @@ class SourceNamingContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertNotIn("format_spec(", text)
-        self.assertIn("spec: FormatSpec", text)
+        self.assertIn("spec: FormatPhysicalSpec", text)
 
     def test_format_preset_helpers_use_spec_and_traits_not_format_id(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "format_presets.py"

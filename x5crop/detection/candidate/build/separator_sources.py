@@ -6,7 +6,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ....domain import Box, Gap
-from ....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ...physical.separator.hints import SeparatorGapHintSet
@@ -56,7 +56,7 @@ def with_selected_gap_source(
 
 def standard_separator_gap_result(
     gray_work: np.ndarray,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     outer: Box,
     profile: np.ndarray,
     count: int,
@@ -68,7 +68,7 @@ def standard_separator_gap_result(
     forced: bool = False,
     gap_hints: Optional[SeparatorGapHintSet] = None,
 ) -> InitialSeparatorGapResult:
-    frame_aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
+    frame_aspect = float(fmt.horizontal_content_aspect)
     standard_gap_proposal = propose_separator_gap_profile_gaps_with_detail(
         gray_work,
         outer,
@@ -98,7 +98,7 @@ def standard_separator_gap_result(
 
 def model_gap_proposal_detail(
     result: InitialSeparatorGapResult,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     gap_max_width_ratio_override: Optional[float],
@@ -144,7 +144,7 @@ def with_model_gap_proposal_detail(
 def select_geometry_equal_model_gaps(
     result: InitialSeparatorGapResult,
     profile: np.ndarray,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     origin: float,
@@ -180,7 +180,7 @@ def initial_separator_gaps(
     gray_work: np.ndarray,
     outer: Box,
     profile: np.ndarray,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     origin: float,

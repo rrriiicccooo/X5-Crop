@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ...formats import FormatSpec
+    from ...formats import FormatPhysicalSpec
 
 
 FULL = "full"
@@ -60,7 +60,7 @@ class CountPolicy:
 
     def count_specs(
         self,
-        fmt: FormatSpec,
+        fmt: FormatPhysicalSpec,
         strip_mode: str,
         requested_count: int,
         count_override: int | None,

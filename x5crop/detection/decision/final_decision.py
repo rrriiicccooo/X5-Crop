@@ -32,6 +32,7 @@ def apply_detection_decision(
         detection,
         analysis_cache,
         content_policy=policy.content,
+        horizontal_frame_aspect=decision_contract.format.horizontal_content_aspect,
     )
     content_detail = content_containment_detail(
         raw_content_detail,

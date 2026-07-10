@@ -11,7 +11,7 @@ from ....constants import (
     CANDIDATE_SOURCE_SEPARATOR,
 )
 from ....domain import DetectionCandidate
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....geometry.layout import work_gray
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
@@ -78,7 +78,7 @@ def apply_candidate_assessment_policy(
     gray: np.ndarray,
     detection: DetectionCandidate,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     source: str,
     cache: Optional[AnalysisCache] = None,
     *,
@@ -136,6 +136,7 @@ def apply_candidate_assessment_policy(
         candidate,
         cache,
         content_policy=policy.content,
+        horizontal_frame_aspect=fmt.horizontal_content_aspect,
     )
     containment_detail = content_containment_detail(
         content_detail,

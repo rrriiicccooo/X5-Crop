@@ -6,7 +6,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ....domain import Box, DetectionCandidate, Gap
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....geometry.frame_fit import frame_boxes_from_gaps
 from ....geometry.gap_geometry import (
     gap_width_cv,
@@ -203,7 +203,7 @@ def base_detection_assessment(
     gaps: list[Gap],
     boxes: list[Box],
     count: int,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     strip_mode: str,
     policy: DetectionPolicy,
     origin: float | None = None,
@@ -448,7 +448,7 @@ def apply_base_detection_scoring(
     gray_work: np.ndarray,
     detection: DetectionCandidate,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     policy: DetectionPolicy,
 ) -> DetectionCandidate:
     """Apply separator base assessment to a built candidate."""

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from x5crop.formats import CONTENT_ASPECTS_HORIZONTAL, FORMATS, FormatId
+from x5crop.formats import FORMATS, FormatId
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.reporting import detection_policy_report_detail
 
@@ -28,12 +28,6 @@ class FormatPhysicalSpecTests(unittest.TestCase):
                     spec.nominal_frame_size_mm.width_mm / spec.nominal_frame_size_mm.height_mm,
                     expected,
                 )
-
-    def test_content_aspect_map_is_derived_from_format_specs(self) -> None:
-        self.assertEqual(
-            CONTENT_ASPECTS_HORIZONTAL,
-            {format_id: spec.horizontal_content_aspect for format_id, spec in FORMATS.items()},
-        )
 
     def test_dual_lane_composition_is_a_physical_format_fact(self) -> None:
         dual = FORMATS["135-dual"]

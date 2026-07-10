@@ -4,7 +4,7 @@ import numpy as np
 
 from ....cache import AnalysisCache
 from ....domain import DetectionCandidate
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....runtime.config import RuntimeConfig
 from .candidate import apply_candidate_assessment_policy
@@ -14,7 +14,7 @@ def assess_source_candidates(
     gray: np.ndarray,
     detections: tuple[DetectionCandidate, ...],
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     source: str,
     cache: AnalysisCache,
     policy: DetectionPolicy,

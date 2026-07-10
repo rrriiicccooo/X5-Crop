@@ -5,7 +5,7 @@ from typing import Optional
 import numpy as np
 
 from ...domain import Box, OuterCandidate
-from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ...formats import FormatPhysicalSpec
 from ...policies.runtime.outer import PartialPlacementGeometryPolicy
 from ...cache import AnalysisCache
 from ...utils import bbox_from_mask, clamp_int
@@ -24,7 +24,7 @@ def _edge_anchor_side(content_center: float, edge_limit: float) -> str | None:
 def edge_anchored_outer_candidates(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
@@ -36,8 +36,8 @@ def edge_anchored_outer_candidates(
         return []
     if strip_mode != "partial" or count <= 0:
         return []
-    aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
-    if aspect is None or aspect <= 0.0:
+    aspect = float(fmt.horizontal_content_aspect)
+    if aspect <= 0.0:
         return []
     if not base_candidates:
         return []

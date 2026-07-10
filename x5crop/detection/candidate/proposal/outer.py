@@ -8,7 +8,7 @@ import numpy as np
 
 from ....cache import AnalysisCache
 from ....domain import OuterCandidate
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
 from ...guidance.content_outer_edge import edge_anchored_outer_candidates
@@ -136,7 +136,7 @@ def edge_anchored_candidates_trusted(
 
 def outer_proposal_candidates(
     gray_work: np.ndarray,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,
@@ -203,7 +203,7 @@ def outer_proposal_candidates(
 def separator_full_width_outer_proposal_candidates(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     cache: Optional[AnalysisCache] = None,

@@ -6,7 +6,7 @@ import numpy as np
 
 from ....constants import CANDIDATE_SOURCE_HARD_SAFETY
 from ....domain import DetectionCandidate
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....policies.runtime.outer import OuterCorrectionFamilyPolicy
 from ....cache import AnalysisCache
@@ -108,7 +108,7 @@ def _outer_correction_budget_reason(
 def outer_correction_candidate_extensions(
     gray: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     detection: DetectionCandidate,
     cache: AnalysisCache,
     policy: DetectionPolicy,
@@ -128,6 +128,7 @@ def outer_correction_candidate_extensions(
         detection,
         cache,
         content_policy=policy.content,
+        horizontal_frame_aspect=fmt.horizontal_content_aspect,
     )
     detection.detail["content_evidence"] = content_detail
     outer_alignment = (

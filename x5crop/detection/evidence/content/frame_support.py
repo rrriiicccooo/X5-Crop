@@ -6,7 +6,6 @@ from typing import Any, Optional
 import numpy as np
 
 from ....domain import Box, DetectionCandidate
-from ....formats import CONTENT_ASPECTS_HORIZONTAL
 from ....geometry.boxes import original_box_to_work
 from ....policies.runtime.content import ContentEvidencePolicy, ContentPolicy
 from ....cache import AnalysisCache
@@ -19,10 +18,10 @@ from .signal import (
 )
 
 
-def expected_content_aspect(format_name: str, layout: str) -> Optional[float]:
-    aspect = CONTENT_ASPECTS_HORIZONTAL.get(format_name)
-    if aspect is None:
-        return None
+def oriented_frame_aspect(horizontal_frame_aspect: float, layout: str) -> float:
+    aspect = float(horizontal_frame_aspect)
+    if aspect <= 0.0:
+        raise ValueError("horizontal_frame_aspect must be positive")
     if layout == "vertical":
         return 1.0 / aspect
     return aspect
@@ -118,6 +117,7 @@ def content_evidence_detail(
     cache: Optional[AnalysisCache] = None,
     *,
     content_policy: ContentPolicy,
+    horizontal_frame_aspect: float,
 ) -> dict[str, Any]:
     if cache is not None and cache.layout == detection.layout:
         return content_evidence_detail_from_cache(
@@ -125,6 +125,7 @@ def content_evidence_detail(
             detection,
             cache,
             content_policy=content_policy,
+            horizontal_frame_aspect=horizontal_frame_aspect,
         )
     evidence_params = content_policy.evidence
 
@@ -138,7 +139,7 @@ def content_evidence_detail(
 
     signal = content_signal_from_gray(source_crop, content_policy.evidence_image)
     threshold = content_evidence_threshold(signal.evidence_float, evidence_params)
-    expected_aspect = expected_content_aspect(detection.film_format, detection.layout)
+    expected_aspect = oriented_frame_aspect(horizontal_frame_aspect, detection.layout)
     return content_frame_support_detail(
         signal.evidence_float,
         outer,
@@ -157,10 +158,16 @@ def content_evidence_detail_from_cache(
     cache: AnalysisCache,
     *,
     content_policy: ContentPolicy,
+    horizontal_frame_aspect: float,
 ) -> dict[str, Any]:
     evidence_params = content_policy.evidence
     source_h, source_w = gray.shape
-    detail_key = content_detail_cache_key(detection, source_w, source_h, content_policy_cache_key(content_policy))
+    detail_key = content_detail_cache_key(
+        detection,
+        source_w,
+        source_h,
+        (*content_policy_cache_key(content_policy), float(horizontal_frame_aspect)),
+    )
     cached = cache.content_evidence_details.get(detail_key)
     if cached is not None:
         return copy.deepcopy(cached)
@@ -174,7 +181,7 @@ def content_evidence_detail_from_cache(
         return {"used": False, "reason": "empty_outer"}
 
     threshold = content_evidence_threshold(evidence, evidence_params)
-    expected_aspect = CONTENT_ASPECTS_HORIZONTAL.get(detection.film_format)
+    expected_aspect = float(horizontal_frame_aspect)
     frames_work = [
         original_box_to_work(frame, detection.layout, source_w, source_h)
         for frame in detection.frames

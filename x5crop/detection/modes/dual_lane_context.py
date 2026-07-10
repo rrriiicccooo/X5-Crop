@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...formats import FormatSpec
+from ...formats import FormatPhysicalSpec
 from ...policies.runtime.bundle import DetectionPolicyBundle
 from ...policies.runtime.policy import DetectionPolicy
 
@@ -10,9 +10,9 @@ from ...policies.runtime.policy import DetectionPolicy
 @dataclass(frozen=True)
 class DualLaneDetectionContext:
     format_id: str
-    format_spec: FormatSpec
+    format_spec: FormatPhysicalSpec
     lane_format_id: str
-    lane_format_spec: FormatSpec
+    lane_format_spec: FormatPhysicalSpec
     lane_policy: DetectionPolicy
     lane_count: int
     total_count: int

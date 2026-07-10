@@ -7,7 +7,7 @@ from .profile_defaults import (
     scoring_calibration_parameters,
     separator_support_score_parameters,
 )
-from ...formats import FormatSpec
+from ...formats import FormatPhysicalSpec
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import PARTIAL
 from ..runtime.candidate import (
@@ -26,7 +26,7 @@ from ..runtime.candidate import (
 
 
 def partial_holder_policy(
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     mode_preset: ModePolicyPreset,
     strip_mode: str,
     params: FormatParameters,
@@ -73,7 +73,7 @@ def partial_holder_policy(
     )
 
 
-def scoring_policy(fmt: FormatSpec, params: FormatParameters) -> ScoringPolicy:
+def scoring_policy(fmt: FormatPhysicalSpec, params: FormatParameters) -> ScoringPolicy:
     calibration = scoring_calibration_parameters(fmt, params)
     competition = params.candidate.candidate_competition
     base_score = base_detection_score_parameters(fmt, params)

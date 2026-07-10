@@ -7,7 +7,7 @@ import numpy as np
 
 from ...cache import AnalysisCache
 from ...domain import Box, DetectionCandidate
-from ...formats import FormatSpec
+from ...formats import FormatPhysicalSpec
 from ...geometry.boxes import translate_box
 from ...policies.runtime.policy import DetectionPolicy
 from ...runtime.config import RuntimeConfig
@@ -25,7 +25,7 @@ def select_dual_lane_candidate(
     lane_index: int,
     cache: AnalysisCache,
     lane_format_id: str,
-    lane_format_spec: FormatSpec,
+    lane_format_spec: FormatPhysicalSpec,
     lane_policy: DetectionPolicy,
 ) -> Optional[DetectionCandidate]:
     lane_crop = cache.gray_work[lane.top:lane.bottom, lane.left:lane.right]
@@ -59,7 +59,14 @@ def select_dual_lane_candidate(
         return None
 
     best = select_source_candidate(candidates, config.confidence_threshold)
-    apply_dual_lane_content_assessment(gray, best, cache, lane_policy, config.confidence_threshold)
+    apply_dual_lane_content_assessment(
+        gray,
+        best,
+        cache,
+        lane_policy,
+        config.confidence_threshold,
+        lane_format_spec.horizontal_content_aspect,
+    )
     return best
 
 
@@ -69,7 +76,7 @@ def _assessed_lane_candidate(
     lane: Box,
     lane_index: int,
     cache: AnalysisCache,
-    lane_format_spec: FormatSpec,
+    lane_format_spec: FormatPhysicalSpec,
     lane_policy: DetectionPolicy,
     outer_candidate,
 ) -> DetectionCandidate:

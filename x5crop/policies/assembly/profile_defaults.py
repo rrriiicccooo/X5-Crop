@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ...formats import FormatSpec
+from ...formats import FormatPhysicalSpec
 from ..parameters.aggregate import FormatParameters
 from ..parameters.base import PartialCountParameters
 from ..parameters.finalization import PartialHolderParameters
@@ -19,37 +19,37 @@ from ..parameters.separator import (
 )
 
 
-def _content_aspect(fmt: FormatSpec) -> float:
+def _content_aspect(fmt: FormatPhysicalSpec) -> float:
     return float(fmt.horizontal_content_aspect or 1.0)
 
 
-def _is_standard_35mm_strip(fmt: FormatSpec) -> bool:
+def _is_standard_35mm_strip(fmt: FormatPhysicalSpec) -> bool:
     return fmt.family == "35mm" and fmt.default_count == 6 and 1.2 <= _content_aspect(fmt) <= 1.8
 
 
-def _is_dense_half_frame(fmt: FormatSpec) -> bool:
+def _is_dense_half_frame(fmt: FormatPhysicalSpec) -> bool:
     return fmt.family == "35mm" and fmt.default_count > 6 and _content_aspect(fmt) < 1.0
 
 
-def _is_panorama_frame(fmt: FormatSpec) -> bool:
+def _is_panorama_frame(fmt: FormatPhysicalSpec) -> bool:
     return fmt.family == "35mm" and _content_aspect(fmt) > 2.0
 
 
-def _is_square_medium_frame(fmt: FormatSpec) -> bool:
+def _is_square_medium_frame(fmt: FormatPhysicalSpec) -> bool:
     return fmt.family == "120" and abs(_content_aspect(fmt) - 1.0) <= 0.05
 
 
-def _is_landscape_medium_frame(fmt: FormatSpec) -> bool:
+def _is_landscape_medium_frame(fmt: FormatPhysicalSpec) -> bool:
     return fmt.family == "120" and _content_aspect(fmt) > 1.1
 
 
-def partial_count_parameters(fmt: FormatSpec, params: FormatParameters) -> PartialCountParameters:
+def partial_count_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> PartialCountParameters:
     partial = params.candidate.partial_counts
     include_default = bool(fmt.complete_strip_can_be_underfilled)
     return replace(partial, include_default_auto=include_default)
 
 
-def separator_support_parameters(fmt: FormatSpec, params: FormatParameters) -> SeparatorSupportParameters:
+def separator_support_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> SeparatorSupportParameters:
     gate = params.separator.separator_support
     if _is_square_medium_frame(fmt):
         return replace(
@@ -61,14 +61,14 @@ def separator_support_parameters(fmt: FormatSpec, params: FormatParameters) -> S
     return gate
 
 
-def leading_grid_failure_parameters(fmt: FormatSpec, params: FormatParameters) -> LeadingGridFailureParameters:
+def leading_grid_failure_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> LeadingGridFailureParameters:
     return replace(
         params.separator.leading_grid_failure,
         enabled=_is_standard_35mm_strip(fmt),
     )
 
 
-def base_detection_score_parameters(fmt: FormatSpec, params: FormatParameters) -> BaseDetectionScoreParameters:
+def base_detection_score_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> BaseDetectionScoreParameters:
     score = params.candidate.base_detection_score
     if _is_dense_half_frame(fmt):
         score = replace(score, full_photo_width_cv=0.008)
@@ -88,7 +88,7 @@ def base_detection_score_parameters(fmt: FormatSpec, params: FormatParameters) -
     return score
 
 
-def scoring_calibration_parameters(fmt: FormatSpec, params: FormatParameters) -> ScoringCalibrationParameters:
+def scoring_calibration_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> ScoringCalibrationParameters:
     calibration = params.candidate.scoring_calibration
     if fmt.family == "120":
         calibration = replace(
@@ -102,7 +102,7 @@ def scoring_calibration_parameters(fmt: FormatSpec, params: FormatParameters) ->
     return calibration
 
 
-def separator_support_score_parameters(fmt: FormatSpec, params: FormatParameters) -> SeparatorSupportScoreParameters:
+def separator_support_score_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> SeparatorSupportScoreParameters:
     support = params.candidate.separator_support_score
     if _is_dense_half_frame(fmt):
         return replace(support, model_grid_credit=0.25, model_equal_credit=0.08)
@@ -114,7 +114,7 @@ def separator_support_score_parameters(fmt: FormatSpec, params: FormatParameters
 
 
 def separator_geometry_support_parameters(
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     params: FormatParameters,
 ) -> SeparatorGeometrySupportParameters:
     support = params.separator.separator_geometry_support
@@ -126,7 +126,7 @@ def separator_geometry_support_parameters(
     )
 
 
-def partial_holder_parameters(fmt: FormatSpec, params: FormatParameters) -> PartialHolderParameters:
+def partial_holder_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> PartialHolderParameters:
     holder = params.candidate.partial_holder
     if _is_square_medium_frame(fmt):
         holder = replace(
@@ -139,7 +139,7 @@ def partial_holder_parameters(fmt: FormatSpec, params: FormatParameters) -> Part
 
 
 def nearby_separator_refinement_parameters(
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     params: FormatParameters,
 ) -> NearbySeparatorRefinementParameters:
     nearby = params.separator.nearby_separator_refinement

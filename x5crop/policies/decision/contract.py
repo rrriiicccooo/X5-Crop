@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
-from ...formats import FormatSpec, format_spec
+from ...formats import FormatPhysicalSpec, format_spec
 from ..ids import decision_policy_id_for
 
 if TYPE_CHECKING:
@@ -70,7 +70,7 @@ class DetectionDecisionContract:
     policy_id: str
     schema_id: str
     schema_revision: str
-    format: FormatSpec
+    format: FormatPhysicalSpec
     mode: ModePolicy
     evidence: EvidencePolicy
     decision: DecisionPolicy
@@ -80,7 +80,7 @@ class DetectionDecisionContract:
 
         return decision_contract_report_detail(self)
 
-def mode_policy_for(spec: FormatSpec, strip_mode: str) -> ModePolicy:
+def mode_policy_for(spec: FormatPhysicalSpec, strip_mode: str) -> ModePolicy:
     partial = strip_mode == "partial"
     return ModePolicy(
         mode=strip_mode,

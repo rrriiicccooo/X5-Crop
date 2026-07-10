@@ -6,7 +6,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ....domain import Box, Gap
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....cache.separator import cached_separator_profile
 from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
@@ -41,7 +41,7 @@ class SeparatorGapBuildResult:
 
 def separator_origin_pitch(
     outer: Box,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     offset_fraction: float,
@@ -56,7 +56,7 @@ def separator_origin_pitch(
 
 def build_primary_separator_gaps_for_outer(
     gray_work: np.ndarray,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     outer: Box,

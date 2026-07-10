@@ -6,7 +6,7 @@ import numpy as np
 
 from ....constants import CANDIDATE_SOURCE_HARD_SAFETY
 from ....domain import Box, DetectionCandidate
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....geometry.boxes import map_work_box
 from ....geometry.frame_fit import frame_boxes_from_gaps
 from ....geometry.layout import work_gray
@@ -15,7 +15,7 @@ from ....runtime.config import RuntimeConfig
 from ..signals import SIGNAL_HARD_SAFETY_NO_CANDIDATES, SIGNAL_NEEDS_MANUAL_REVIEW
 
 
-def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatSpec) -> DetectionCandidate:
+def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatPhysicalSpec) -> DetectionCandidate:
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
     count = max(1, int(config.count))

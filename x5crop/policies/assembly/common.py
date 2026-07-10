@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...formats import FormatSpec
+from ...formats import FormatPhysicalSpec
 from .profile_defaults import partial_count_parameters
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import (
@@ -10,7 +10,7 @@ from ..runtime.base import (
 )
 
 
-def partial_frame_fit(fmt: FormatSpec) -> FrameFitPolicy:
+def partial_frame_fit(fmt: FormatPhysicalSpec) -> FrameFitPolicy:
     return FrameFitPolicy(
         name=f"{fmt.name}-partial",
         edge_evidence=False,
@@ -18,7 +18,7 @@ def partial_frame_fit(fmt: FormatSpec) -> FrameFitPolicy:
     )
 
 
-def count_policy(fmt: FormatSpec, strip_mode: str, params: FormatParameters) -> CountPolicy:
+def count_policy(fmt: FormatPhysicalSpec, strip_mode: str, params: FormatParameters) -> CountPolicy:
     if strip_mode == FULL:
         return CountPolicy(fixed_count=None, auto_counts=(fmt.default_count,))
     partial = partial_count_parameters(fmt, params)

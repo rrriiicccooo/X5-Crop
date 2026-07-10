@@ -6,7 +6,7 @@ import numpy as np
 
 from ...constants import CANDIDATE_SOURCE_REVIEW_ONLY
 from ...domain import Box, DetectionCandidate
-from ...formats import FormatSpec
+from ...formats import FormatPhysicalSpec
 from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
 from ...policies.runtime.policy import DetectionPolicy
@@ -17,7 +17,7 @@ from ..candidate.signals import SIGNAL_NEEDS_MANUAL_REVIEW
 def review_only_detection(
     gray: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     policy: DetectionPolicy,
 ) -> DetectionCandidate:
     gray_work = work_gray(gray, config.layout)

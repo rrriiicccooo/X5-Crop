@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from ....formats import FormatSpec
+from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....runtime.config import RuntimeConfig
 
 def candidate_counts_for_format(
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     policy: DetectionPolicy,
 ) -> list[tuple[int, str, tuple[float, ...]]]:
     return policy.counts.count_specs(

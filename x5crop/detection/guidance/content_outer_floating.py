@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ...domain import Box, OuterCandidate
-from ...formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from ...formats import FormatPhysicalSpec
 from ...policies.runtime.outer import PartialPlacementGeometryPolicy
 from ...utils import bbox_from_mask, clamp_int
 from ..physical.outer.common import unique_outer_candidates
@@ -12,7 +12,7 @@ from ..physical.outer.common import unique_outer_candidates
 def floating_content_position_candidates(
     gray_work: np.ndarray,
     base_candidates: list[OuterCandidate],
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     partial_placement: PartialPlacementGeometryPolicy,
@@ -22,8 +22,8 @@ def floating_content_position_candidates(
         return []
     if strip_mode != "partial" or count <= 0:
         return []
-    aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
-    if aspect is None or aspect <= 0.0:
+    aspect = float(fmt.horizontal_content_aspect)
+    if aspect <= 0.0:
         return []
     if not base_candidates:
         return []

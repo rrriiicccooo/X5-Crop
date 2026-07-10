@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...formats import FormatSpec, format_spec
+from ...formats import FormatPhysicalSpec, format_spec
 from ..registry import get_detection_policy
 from .policy import DetectionPolicy
 
@@ -11,7 +11,7 @@ from .policy import DetectionPolicy
 class DetectionPolicyBundle:
     initial_policy: DetectionPolicy
     resolved_policies: tuple[DetectionPolicy, ...]
-    resolved_formats: tuple[FormatSpec, ...]
+    resolved_formats: tuple[FormatPhysicalSpec, ...]
 
     @classmethod
     def for_format_mode(cls, format_id: str, strip_mode: str) -> "DetectionPolicyBundle":
@@ -38,7 +38,7 @@ class DetectionPolicyBundle:
                 return policy
         raise KeyError(f"Unresolved detection policy: {format_id}/{strip_mode}")
 
-    def format_for(self, format_id: str) -> FormatSpec:
+    def format_for(self, format_id: str) -> FormatPhysicalSpec:
         for spec in self.resolved_formats:
             if spec.name == format_id:
                 return spec

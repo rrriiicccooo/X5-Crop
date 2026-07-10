@@ -48,6 +48,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
                 object(),
                 policy,
                 confidence_threshold=0.85,
+                horizontal_frame_aspect=1.5,
             )
 
         self.assertEqual(detection.confidence, 0.82)

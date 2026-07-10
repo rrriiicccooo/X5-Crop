@@ -7,7 +7,7 @@ import numpy as np
 
 from ..runtime.config import RuntimeConfig
 from ..domain import DetectionCandidate
-from ..formats import FormatSpec
+from ..formats import FormatPhysicalSpec
 from ..cache.analysis import make_analysis_cache
 from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..policies.runtime.policy import DetectionPolicy
@@ -34,7 +34,7 @@ def _attach_runtime_policy_detail(detection: DetectionCandidate, policy) -> None
 def choose_detection(
     gray: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     policy_bundle: DetectionPolicyBundle,
     cache: Optional[AnalysisCache] = None,
 ) -> CandidatePipelineResult:

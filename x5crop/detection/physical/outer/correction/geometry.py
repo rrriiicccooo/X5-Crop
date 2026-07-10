@@ -6,7 +6,7 @@ from typing import Any, Optional
 import numpy as np
 
 from .....domain import Box, DetectionCandidate
-from .....formats import CONTENT_ASPECTS_HORIZONTAL, FormatSpec
+from .....formats import FormatPhysicalSpec
 from .....gap_methods import is_hard_gap_method
 from .....geometry.boxes import original_box_to_work
 from .....policies.runtime.outer import GeometryConsistencyCorrectionPolicy
@@ -18,7 +18,7 @@ from .types import OuterCorrectionProposal
 
 def corrected_outer_for_short_axis_geometry(
     gray: np.ndarray,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     detection: DetectionCandidate,
     content_detail: dict[str, Any],
     cache: AnalysisCache,
@@ -42,7 +42,7 @@ def corrected_outer_for_short_axis_geometry(
     pitch = float(outer.width) / float(max(1, detection.count))
     target_aspect = float(short_axis.target_aspect)
     if target_aspect <= 0.0:
-        target_aspect = float(CONTENT_ASPECTS_HORIZONTAL.get(fmt.name) or 1.0)
+        target_aspect = float(fmt.horizontal_content_aspect)
     target_aspect = max(0.01, target_aspect)
     target_height = pitch / target_aspect
     if target_height <= float(outer.height):
@@ -81,13 +81,13 @@ def corrected_outer_for_short_axis_geometry(
 def geometry_consistency_model_detail(
     gray: np.ndarray,
     detection: DetectionCandidate,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     cache: AnalysisCache,
 ) -> dict[str, Any]:
     if detection.count <= 0:
         return {"used": False, "reason": "invalid_count"}
-    aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
-    if aspect is None or aspect <= 0.0:
+    aspect = float(fmt.horizontal_content_aspect)
+    if aspect <= 0.0:
         return {"used": False, "reason": "unknown_format_aspect"}
     source_h, source_w = gray.shape
     work_h, work_w = cache.gray_work.shape
@@ -130,7 +130,7 @@ def geometry_consistency_model_detail(
 
 def corrected_outer_from_long_axis_geometry(
     detection: DetectionCandidate,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     geometry_detail: dict[str, Any],
     alignment: dict[str, Any],
     cache: AnalysisCache,
@@ -155,8 +155,8 @@ def corrected_outer_from_long_axis_geometry(
         return None
     if not outer.valid():
         return None
-    aspect = CONTENT_ASPECTS_HORIZONTAL.get(fmt.name)
-    if aspect is None or aspect <= 0.0:
+    aspect = float(fmt.horizontal_content_aspect)
+    if aspect <= 0.0:
         return None
 
     gap_widths: list[float] = []
@@ -228,7 +228,7 @@ def corrected_outer_from_long_axis_geometry(
 
 def geometry_consistency_correction_proposal(
     gray: np.ndarray,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     detection: DetectionCandidate,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],

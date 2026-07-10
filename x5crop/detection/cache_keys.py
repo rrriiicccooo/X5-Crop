@@ -3,14 +3,14 @@ from __future__ import annotations
 from typing import Any
 
 from ..domain import OuterCandidate
-from ..formats import FormatSpec
+from ..formats import FormatPhysicalSpec
 from ..geometry.boxes import box_cache_key
 
 
 def separator_outer_cache_key(
     variant: str,
     base_candidates: list[OuterCandidate],
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
 ) -> tuple[Any, ...]:
@@ -26,7 +26,7 @@ def separator_outer_cache_key(
 
 def edge_anchored_outer_cache_key(
     base_candidates: list[OuterCandidate],
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
 ) -> tuple[Any, ...]:

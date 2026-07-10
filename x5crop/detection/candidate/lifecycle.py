@@ -5,7 +5,7 @@ import numpy as np
 from ...constants import CANDIDATE_SOURCE_SAFETY
 from ...cache import AnalysisCache
 from ...domain import DetectionCandidate
-from ...formats import FormatSpec
+from ...formats import FormatPhysicalSpec
 from ...policies.runtime.policy import DetectionPolicy
 from ...runtime.config import RuntimeConfig
 from ..guidance.content_model import content_detection_for_count
@@ -29,7 +29,7 @@ from .selection.choose import is_partial_edge_safety_candidate, select_source_ca
 def calibrated_candidates_for_count(
     gray: np.ndarray,
     config: RuntimeConfig,
-    fmt: FormatSpec,
+    fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     offset: float,
