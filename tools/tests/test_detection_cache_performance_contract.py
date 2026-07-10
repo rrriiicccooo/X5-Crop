@@ -21,6 +21,7 @@ from x5crop.detection.evidence.content.frame_support import (
 from x5crop.domain import Box, DetectionCandidate, OuterCandidate
 from x5crop.formats import format_spec
 from x5crop.geometry.detection_parameters import SeparatorWidthProfileSearchParameters
+from x5crop.geometry.separator_width_profile import sampling_step_for_limit
 from x5crop.policies.registry import get_detection_policy
 
 
@@ -34,6 +35,12 @@ def _cache(gray: np.ndarray) -> AnalysisCache:
 
 
 class DetectionCachePerformanceContractTest(unittest.TestCase):
+    def test_separator_profile_sampling_limit_is_a_hard_upper_bound(self) -> None:
+        step = sampling_step_for_limit(999, 500)
+
+        self.assertEqual(step, 2)
+        self.assertLessEqual(len(range(0, 999, step)), 500)
+
     def test_separator_width_profile_is_cached_by_outer_and_parameters(self) -> None:
         gray = np.zeros((20, 100), dtype=np.uint8)
         cache = _cache(gray)

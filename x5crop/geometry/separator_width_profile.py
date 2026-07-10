@@ -123,6 +123,11 @@ class TheoreticalSeparatorWidth:
         }
 
 
+def sampling_step_for_limit(length: int, sample_limit: int) -> int:
+    limit = max(1, int(sample_limit))
+    return max(1, (max(0, int(length)) + limit - 1) // limit)
+
+
 def separator_width_relation_to_theory(
     width: float,
     theory: TheoreticalSeparatorWidth | None,
@@ -173,13 +178,13 @@ def separator_width_profile(
 ) -> np.ndarray:
     if crop.size == 0:
         return np.array([], dtype=np.float32)
-    short_axis_step = max(
-        1,
-        crop.shape[0] // max(1, int(params.sample_short_axis_max)),
+    short_axis_step = sampling_step_for_limit(
+        crop.shape[0],
+        params.sample_short_axis_max,
     )
-    long_axis_step = max(
-        1,
-        crop.shape[1] // max(1, int(params.sample_long_axis_max)),
+    long_axis_step = sampling_step_for_limit(
+        crop.shape[1],
+        params.sample_long_axis_max,
     )
     profile_sample = crop[::short_axis_step, :]
     percentile_sample = profile_sample[:, ::long_axis_step]
