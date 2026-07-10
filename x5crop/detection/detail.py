@@ -8,6 +8,7 @@ from ..domain import DetectionCandidate, FinalDetection
 CANDIDATE_COMPETITION = "candidate_competition"
 CANDIDATE_ASSESSMENT = "candidate_assessment"
 CANDIDATE_SIGNALS = "candidate_signals"
+COUNT_SELECTION = "count_selection"
 CONTENT_EVIDENCE = "content_evidence"
 DECISION_POLICY_DETAIL = "decision_policy_detail"
 DECISION_GEOMETRY = "decision_geometry"

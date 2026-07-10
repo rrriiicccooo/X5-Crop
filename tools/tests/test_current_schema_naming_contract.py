@@ -365,6 +365,14 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             "decision:120-66:partial",
         )
 
+    def test_current_changelog_names_the_current_report_schema(self) -> None:
+        from x5crop.report.identity import REPORT_SCHEMA_REVISION
+
+        changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        chinese, english = changelog.split("## English Changelog", maxsplit=1)
+        for section in (chinese, english):
+            self.assertIn(f"`{REPORT_SCHEMA_REVISION}`", section)
+
 
 
 if __name__ == "__main__":

@@ -270,29 +270,6 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
     )
 
 
-def _detail_list(value: Any) -> list[Any]:
-    return list(value) if isinstance(value, list) else []
-
-
-def _candidate_gate_input(detection: DetectionCandidate) -> dict[str, Any]:
-    assessment = detection.detail.get("candidate_assessment", {})
-    assessment = dict(assessment) if isinstance(assessment, dict) else {}
-    competition = detection.detail.get("candidate_competition", {})
-    competition = dict(competition) if isinstance(competition, dict) else {}
-    gate = assessment.get("candidate_gate")
-    gate = dict(gate) if isinstance(gate, dict) else {}
-    return {
-        "blockers": [str(reason) for reason in _detail_list(assessment.get("blockers"))],
-        "diagnostics": [
-            str(reason) for reason in _detail_list(assessment.get("diagnostics"))
-        ],
-        "candidate_gate": gate,
-        "selection_uncertainty_inputs": _detail_list(
-            competition.get("selection_uncertainty_inputs")
-        ),
-    }
-
-
 def _apply_decision_confidence_caps(
     detection: DetectionCandidate,
     config: RunConfig,
@@ -300,10 +277,7 @@ def _apply_decision_confidence_caps(
     outer_alignment: dict[str, Any],
     policy: DetectionDecisionContract,
 ) -> list[dict[str, Any]]:
-    decision_caps = detection.detail.setdefault("decision_confidence_caps", [])
-    if not isinstance(decision_caps, list):
-        decision_caps = []
-        detection.detail["decision_confidence_caps"] = decision_caps
+    decision_caps: list[dict[str, Any]] = []
 
     review_only_mode = detection.detail.get("candidate_source") == CANDIDATE_SOURCE_REVIEW_ONLY
     support = str(content_detail.get("support", ""))
@@ -395,20 +369,11 @@ def apply_decision_gate(
         if decision_gate.passed and detection.confidence >= config.confidence_threshold
         else "needs_review"
     )
-    candidate_gate_input = _candidate_gate_input(detection)
-    detection.detail["candidate_gate_input"] = candidate_gate_input
     detection.detail["decision_summary"] = {
-        "policy_id": policy.policy_id,
-        "decision_reason_inputs": decision_gate.reason_inputs,
-        "decision_confidence_caps": decision_caps,
         "decision_gate": decision_gate.report_detail(),
-        "candidate_gate_input": candidate_gate_input,
-        "evidence_summary": evidence,
-        "decision_signals": decision_signals,
     }
     detection.detail["evidence_summary"] = evidence
     detection.detail["decision_signals"] = decision_signals
-    detection.detail["decision_reason_inputs"] = decision_gate.reason_inputs
     detection.detail["policy_id"] = policy.policy_id
     return FinalDetection.from_candidate(
         detection,

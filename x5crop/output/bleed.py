@@ -33,13 +33,6 @@ def apply_output_bleed(
         map_work_box(frame, detection.layout, image_w, image_h)
         for frame in adjusted_work
     ]
-    detection.detail["output_bleed"] = {
-        "used": True,
-        "output_long_axis_bleed": int(output_bleed.long_axis),
-        "output_short_axis_bleed": int(output_bleed.short_axis),
-    }
-
-
 def apply_output_protection_plan(
     detection: FinalDetection,
     plan: OutputProtectionPlan,

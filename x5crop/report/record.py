@@ -5,6 +5,7 @@ from dataclasses import asdict
 from ..app_info import VERSION
 from ..detection.detail import (
     CANDIDATE_ASSESSMENT,
+    COUNT_SELECTION,
     CONTENT_EVIDENCE,
     DECISION_GEOMETRY,
     DECISION_POLICY_DETAIL,
@@ -92,6 +93,7 @@ def report_record_for_final_detection(
         "strip_mode": detection.strip_mode,
         "layout": detection.layout,
         "count": int(detection.count),
+        "count_selection": detail_dict(detection, COUNT_SELECTION),
         "strip_completeness": detail_dict(detection, STRIP_COMPLETENESS),
         "holder_occupancy": detail_dict(detection, HOLDER_OCCUPANCY),
         "status": detection.status,

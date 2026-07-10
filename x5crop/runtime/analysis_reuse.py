@@ -106,6 +106,7 @@ def cached_record_matches(
         "layout",
         "strip_mode",
         "count",
+        "count_selection",
         "status",
         "confidence",
         "final_review_reasons",

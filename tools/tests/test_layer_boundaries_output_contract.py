@@ -338,6 +338,19 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertEqual(offenders, [])
         self.assertTrue((PROJECT_ROOT / "x5crop" / "output" / "bleed.py").is_file())
 
+    def test_output_helpers_do_not_write_unreachable_detail(self) -> None:
+        output_root = PROJECT_ROOT / "x5crop" / "output"
+        source = "\n".join(
+            (output_root / name).read_text(encoding="utf-8")
+            for name in ("geometry_adjustment.py", "bleed.py")
+        )
+        for key in (
+            'detection.detail["approved_geometry_adjustment"]',
+            'detection.detail["edge_bleed_protection"]',
+            'detection.detail["output_bleed"]',
+        ):
+            self.assertNotIn(key, source)
+
 
 if __name__ == "__main__":
     unittest.main()

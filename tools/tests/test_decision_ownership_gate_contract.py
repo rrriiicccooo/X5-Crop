@@ -30,6 +30,10 @@ from x5crop.run_config import RunConfig
 from x5crop.runtime.output_protection import prepare_output_protection
 
 
+def _decision_gate_detail(detection) -> dict:
+    return detection.detail["decision_summary"]["decision_gate"]
+
+
 class DecisionOwnershipGateContractTest(unittest.TestCase):
     def test_decision_contract_report_does_not_expose_unused_candidate_policy(self) -> None:
         from x5crop.policies.reporting import decision_contract_report_detail
@@ -67,7 +71,10 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
                 "photo_width_cv": 0.0,
                 "candidate_assessment": {
                     "source": "separator",
-                    "candidate_gate": _candidate_gate_detail(False),
+                    "candidate_gate": _candidate_gate_detail(
+                        False,
+                        diagnostics=["content_coverage_weak"],
+                    ),
                     "geometry_score": 1.0,
                     "content_score": 1.0,
                     "content_quality_score": 1.0,
@@ -92,16 +99,16 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
 
         self.assertEqual(decided.final_review_reasons, ["evidence_combination_insufficient"])
         self.assertEqual(
-            decided.detail["candidate_gate_input"]["diagnostics"],
+            decided.detail["candidate_assessment"]["candidate_gate"]["diagnostics"],
             ["content_coverage_weak"],
         )
         self.assertNotIn("candidate_final_review_reasons_before_decision", decided.detail)
         self.assertNotIn("final_review_reasons", decided.detail)
         self.assertEqual(
-            decided.detail["decision_reason_inputs"][0]["signal"],
+            _decision_gate_detail(decided)["reason_inputs"][0]["signal"],
             "candidate_gate_failed",
         )
-        self.assertIn("decision_confidence_caps", decided.detail["decision_summary"])
+        self.assertIn("confidence_caps", _decision_gate_detail(decided))
         self.assertNotIn("final_review_reasons", decided.detail["decision_summary"])
         self.assertNotIn("final_review_reasons_added", decided.detail["decision_summary"])
         self.assertNotIn("final_review_reasons_added", decided.detail["decision_summary"])
@@ -221,7 +228,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         self.assertIn("evidence_combination_insufficient", decided.final_review_reasons)
         self.assertIn("separator_evidence_incomplete", decided.final_review_reasons)
         decision_signals = [
-            item["signal"] for item in decided.detail["decision_reason_inputs"]
+            item["signal"] for item in _decision_gate_detail(decided)["reason_inputs"]
         ]
         self.assertIn("safety_or_review_only", decision_signals)
         self.assertIn("separator_support_incomplete", decision_signals)
@@ -302,7 +309,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
 
         self.assertEqual(decided.final_review_reasons, ["content_evidence_insufficient"])
         self.assertEqual(
-            [item["signal"] for item in decided.detail["decision_reason_inputs"]],
+            [item["signal"] for item in _decision_gate_detail(decided)["reason_inputs"]],
             ["content_integrity_failed"],
         )
 
@@ -356,7 +363,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         self.assertEqual(decided.final_review_reasons, ["exposure_overlap_unresolved"])
         self.assertTrue(decided.detail["decision_signals"]["exposure_overlap_unresolved"])
         self.assertEqual(
-            [item["signal"] for item in decided.detail["decision_reason_inputs"]],
+            [item["signal"] for item in _decision_gate_detail(decided)["reason_inputs"]],
             ["exposure_overlap_unresolved"],
         )
 
@@ -441,7 +448,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         self.assertEqual(decided.final_review_reasons, ["candidate_competition_close"])
         self.assertEqual(decided.confidence, 0.84)
         self.assertEqual(
-            decided.detail["decision_reason_inputs"][0]["signal"],
+            _decision_gate_detail(decided)["reason_inputs"][0]["signal"],
             "candidate_competition_close",
         )
         self.assertEqual(

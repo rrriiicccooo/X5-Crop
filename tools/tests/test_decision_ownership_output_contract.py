@@ -24,7 +24,31 @@ from x5crop.policies.decision.contract import decision_contract_for_policy
 from x5crop.runtime.output_protection import prepare_output_protection
 
 
+def _decision_gate_detail(detection) -> dict:
+    return detection.detail["decision_summary"]["decision_gate"]
+
+
 class DecisionOwnershipOutputContractTest(unittest.TestCase):
+    def test_decision_detail_has_one_canonical_shape(self) -> None:
+        source = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "decision"
+            / "decision_gate.py"
+        ).read_text(encoding="utf-8")
+        for duplicate in (
+            'detection.detail["candidate_gate_input"]',
+            'detection.detail["decision_reason_inputs"]',
+            '"decision_reason_inputs": decision_gate.reason_inputs',
+            '"decision_confidence_caps": decision_caps',
+            '"candidate_gate_input": candidate_gate_input',
+            '"evidence_summary": evidence',
+            '"decision_signals": decision_signals',
+            '"policy_id": policy.policy_id',
+        ):
+            self.assertNotIn(duplicate, source)
+
     def test_decision_summary_does_not_duplicate_canonical_final_fields(self) -> None:
         decision_source = (
             PROJECT_ROOT
@@ -113,7 +137,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
             "exposure_overlap_protection_planned",
         )
         self.assertEqual(
-            [item["signal"] for item in decided.detail["decision_reason_inputs"]],
+            [item["signal"] for item in _decision_gate_detail(decided)["reason_inputs"]],
             [],
         )
 
@@ -200,7 +224,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
         self.assertTrue(protection_plan.feasible)
         self.assertEqual(protection_plan.output_bleed.long_axis, 20)
         self.assertEqual(
-            [item["signal"] for item in decision.detail["decision_reason_inputs"]],
+            [item["signal"] for item in _decision_gate_detail(decision)["reason_inputs"]],
             [],
         )
 
@@ -384,14 +408,14 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
         )
         self.assertNotIn("final_review_reasons_added", decided.detail["decision_summary"])
         decision_signals = [
-            item["signal"] for item in decided.detail["decision_summary"]["decision_reason_inputs"]
+            item["signal"] for item in _decision_gate_detail(decided)["reason_inputs"]
         ]
         self.assertEqual(
             decision_signals,
         ["confidence_below_threshold", "outer_area_spread"],
         )
         self.assertEqual(
-            decided.detail["decision_summary"]["decision_reason_inputs"][1]["bucket"],
+            _decision_gate_detail(decided)["reason_inputs"][1]["bucket"],
             "low_confidence_context",
         )
         selected = decided.detail["candidate_competition"]["selected_candidate"]
@@ -450,7 +474,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
 
         self.assertEqual(decided.final_review_reasons, [])
         self.assertNotIn("final_review_reasons", decided.detail["decision_summary"])
-        self.assertEqual(decided.detail["decision_summary"]["decision_reason_inputs"], [])
+        self.assertEqual(_decision_gate_detail(decided)["reason_inputs"], [])
 
 
 

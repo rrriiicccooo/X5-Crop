@@ -51,6 +51,16 @@ def _report_record(
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_count_selection_is_a_current_schema_section(self) -> None:
+        detection = _detection({"count_selection": {"marker": "count-selection"}})
+        record = _report_record(detection)
+        self.assertEqual(record["count_selection"], {"marker": "count-selection"})
+
+        reuse_source = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "analysis_reuse.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn('"count_selection",', reuse_source)
+
     def test_process_result_has_one_canonical_record_surface(self) -> None:
         from x5crop.domain import ProcessResult
 

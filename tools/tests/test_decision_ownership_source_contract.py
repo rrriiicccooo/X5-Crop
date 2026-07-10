@@ -160,7 +160,8 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
         text = path.read_text(encoding="utf-8")
 
         self.assertNotIn('"normalized_candidate_signals"', text)
-        self.assertIn('"candidate_gate_input"', text)
+        self.assertIn("candidate_gate=candidate_gate", text)
+        self.assertNotIn('"candidate_gate_input"', text)
 
     def test_decision_layer_constructs_final_reasons_once(self) -> None:
         offenders: list[str] = []
