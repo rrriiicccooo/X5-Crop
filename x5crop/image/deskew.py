@@ -13,9 +13,9 @@ from .deskew_parameters import DeskewParameters
 def fit_line(
     points: list[tuple[float, float]],
     *,
-    min_points: int = 4,
-    tolerance_min: float = 2.0,
-    tolerance_multiplier: float = 3.0,
+    min_points: int,
+    tolerance_min: float,
+    tolerance_multiplier: float,
 ) -> Optional[dict[str, Any]]:
     if len(points) < min_points:
         return None
@@ -101,15 +101,15 @@ def fit_edge_angle(gray: np.ndarray, layout: str, deskew: DeskewParameters) -> t
     }
 
 
-def deskew_quality(detail: dict[str, Any]) -> float:
+def deskew_quality(detail: dict[str, Any], deskew: DeskewParameters) -> float:
     if detail.get("reason"):
         return -1.0
     fits = [detail.get("top"), detail.get("bottom")]
     score = 0.0
     for fit in fits:
         if isinstance(fit, dict):
-            score += float(fit.get("inliers", 0)) * 2.0
-            score -= float(fit.get("median_residual", 10.0))
+            score += float(fit["inliers"]) * deskew.quality_inlier_weight
+            score -= float(fit["median_residual"])
     return score
 
 
@@ -124,7 +124,7 @@ def choose_deskew_angle(
     base_detail["source"] = "base"
     if deskew_fallback == "off":
         return base_angle, base_detail
-    if deskew_fallback == "auto" and deskew_quality(base_detail) >= deskew.auto_quality_ok:
+    if deskew_fallback == "auto" and deskew_quality(base_detail, deskew) >= deskew.auto_quality_ok:
         base_detail["fallback_candidate"] = {"skipped": "auto_base_quality_ok"}
         return base_angle, base_detail
     fallback_gray = make_deskew_fallback_gray(
@@ -133,7 +133,7 @@ def choose_deskew_angle(
     )
     fallback_angle, fallback_detail = fit_edge_angle(fallback_gray, layout, deskew)
     fallback_detail["source"] = "fallback"
-    if deskew_quality(fallback_detail) > deskew_quality(base_detail) + deskew.fallback_quality_gain:
+    if deskew_quality(fallback_detail, deskew) > deskew_quality(base_detail, deskew) + deskew.fallback_quality_gain:
         fallback_detail["base_candidate"] = base_detail
         return fallback_angle, fallback_detail
     base_detail["fallback_candidate"] = fallback_detail

@@ -17,9 +17,9 @@ def detection_gap_cache_key(
         (
             int(gap.index),
             str(gap.method),
-            round(float(gap.center), 4),
-            None if gap.start is None else round(float(gap.start), 4),
-            None if gap.end is None else round(float(gap.end), 4),
+            float(gap.center),
+            None if gap.start is None else float(gap.start),
+            None if gap.end is None else float(gap.end),
         )
         for gap in detection.gaps
     )
@@ -29,7 +29,7 @@ def content_detail_cache_key(
     detection: DetectionCandidate,
     source_w: int,
     source_h: int,
-    policy_key: tuple[Any, ...] = (),
+    policy_key: tuple[Any, ...],
 ) -> tuple[Any, ...]:
     return (
         str(detection.format_id),

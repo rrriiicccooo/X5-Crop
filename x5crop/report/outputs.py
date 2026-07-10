@@ -23,18 +23,12 @@ def append_summary_csv(path: Path, result: ProcessResult) -> None:
     if not result.report_record:
         raise ValueError("Current report record is missing")
     record = result.report_record
-    version = record.get("version", {})
-    script_version = (
-        version.get("script_version")
-        if isinstance(version, dict)
-        else str(version)
-    )
-    output = record.get("output", {})
-    output_files = output.get("output_files", []) if isinstance(output, dict) else []
+    script_version = record["script_version"]
+    output_files = record["output"]["output_files"]
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = [
         "source",
-        "version",
+        "script_version",
         "policy_id",
         "status",
         "confidence",
@@ -53,15 +47,15 @@ def append_summary_csv(path: Path, result: ProcessResult) -> None:
         writer.writerow(
             {
                 "source": result.source,
-                "version": script_version,
-                "policy_id": record.get("policy_id", ""),
-                "status": record.get("status", ""),
-                "confidence": f"{float(record.get('confidence', 0.0)):.3f}",
-                "format_id": record.get("format_id", ""),
-                "layout": record.get("layout", ""),
-                "strip_mode": record.get("strip_mode", ""),
-                "count": record.get("count", ""),
-                "final_review_reasons": ";".join(record.get("final_review_reasons", [])),
+                "script_version": script_version,
+                "policy_id": record["policy_id"],
+                "status": record["status"],
+                "confidence": f"{float(record['confidence']):.3f}",
+                "format_id": record["format_id"],
+                "layout": record["layout"],
+                "strip_mode": record["strip_mode"],
+                "count": record["count"],
+                "final_review_reasons": ";".join(record["final_review_reasons"]),
                 "output_count": len(output_files),
             }
         )

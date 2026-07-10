@@ -9,7 +9,8 @@ from ....image.evidence import (
     ContentEvidenceImageParameters,
     make_content_evidence_gray,
 )
-from ....policies.runtime.content import ContentEvidencePolicy, ContentPolicy
+from ....policies.parameters.content import ContentEvidenceParameters
+from ....policies.runtime.content import ContentPolicy
 from ....utils import sampled_percentile
 
 CONTENT_SIGNAL_COMPOSITE = "gradient+neighbor_texture+local_contrast+tonal_presence"
@@ -43,7 +44,7 @@ def content_signal_from_gray(
 
 def content_evidence_threshold(
     evidence_float: np.ndarray,
-    evidence_params: ContentEvidencePolicy,
+    evidence_params: ContentEvidenceParameters,
 ) -> float:
     outer_p70 = float(sampled_percentile(evidence_float, [evidence_params.percentile])[0])
     return max(

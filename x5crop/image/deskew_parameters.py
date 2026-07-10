@@ -21,6 +21,7 @@ class DeskewParameters:
     fit_min_points: int = 4
     fit_tolerance_min: float = 2.0
     fit_tolerance_multiplier: float = 3.0
+    quality_inlier_weight: float = 2.0
     span_skip_ratio: float = 0.0005
     span_skip_min: float = 3.0
     span_skip_max: float = 12.0

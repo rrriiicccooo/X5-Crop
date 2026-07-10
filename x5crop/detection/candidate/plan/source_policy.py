@@ -15,8 +15,6 @@ def separator_full_width_can_compete(
     policy: DetectionPolicy,
 ) -> bool:
     competition = policy.candidate_plan.separator_full_width_competition
-    if not competition.enabled:
-        return False
     outer_candidate_strategy = str(detection.detail.get("outer_candidate_strategy", ""))
     frames = [original_box_to_work(frame, detection.layout, gray.shape[1], gray.shape[0]) for frame in detection.frames]
     aspects = [
@@ -28,22 +26,18 @@ def separator_full_width_can_compete(
         return False
     median_aspect = float(np.median(np.array(aspects, dtype=np.float32)))
     if (
-        outer_candidate_strategy in competition.content_outer_max_median_aspect_strategies
-        and detection.strip_mode in competition.content_outer_max_median_aspect_strip_modes
+        outer_candidate_strategy == "content_outer"
+        and detection.strip_mode == "partial"
     ):
         return median_aspect <= competition.content_outer_max_median_aspect
     return median_aspect >= competition.general_min_median_aspect
 
 
 def safety_candidate_outer_proposals_enabled(policy: DetectionPolicy) -> bool:
-    safety_candidate = policy.candidate_plan.safety_candidate
-    if not safety_candidate.use_outer_proposals:
-        return False
     separator_policy = policy.outer.proposal.geometry.separator
-    strategies = set(safety_candidate.strategies)
     return bool(
-        (separator_policy.local.mode == "safety" and "separator_outer" in strategies)
-        or (separator_policy.full_width.mode == "safety" and "separator_outer" in strategies)
+        separator_policy.local.mode == "safety"
+        or separator_policy.full_width.mode == "safety"
     )
 
 

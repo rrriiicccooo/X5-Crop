@@ -5,7 +5,6 @@ from typing import Any, Optional
 import numpy as np
 
 from ....domain import DetectionCandidate
-from ....formats import FormatPhysicalSpec
 from ....geometry.layout import work_gray
 from ....image.evidence import make_content_evidence_gray
 from ....policies.runtime.policy import DetectionPolicy
@@ -13,69 +12,9 @@ from ....cache import AnalysisCache
 from ....utils import clamp_int
 from ...evidence.photo_width import photo_width_stability_detail
 from ...evidence.separator_summary import separator_support_detail_summary
-from ...evidence.separator_width import separator_width_evidence_detail, separator_width_requirement_detail
 from ..signals import (
     SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
 )
-
-
-def partial_edge_safety_holder_edge_disambiguation_detail(
-    detection: DetectionCandidate,
-    policy: DetectionPolicy,
-) -> dict[str, Any]:
-    holder = policy.partial_holder
-    min_required = int(holder.requires_broad_separator_width_gaps)
-    if min_required <= 0 or detection.strip_mode != "partial":
-        return {
-            "used": False,
-            "reason": "disabled",
-            "holder_edge_disambiguation_gaps": 0,
-            "min_holder_edge_disambiguation_gaps": min_required,
-        }
-
-    existing_detail = detection.detail.get("separator_width_evidence")
-    if isinstance(existing_detail, dict) and bool(existing_detail.get("used", False)):
-        width_detail = separator_width_requirement_detail(existing_detail, min_required)
-        count = int(width_detail.get("separator_width_gap_count", width_detail.get("broad_separator_width_gaps", 0)) or 0)
-        ok = count >= min_required
-        return {
-            "used": True,
-            "ok": bool(ok),
-            "reason": "ok" if ok else "holder_edge_disambiguation_weak",
-            "evidence_source": "separator_width_evidence",
-            "holder_edge_disambiguation_gaps": int(count),
-            "min_holder_edge_disambiguation_gaps": int(min_required),
-            "separator_width_evidence": width_detail,
-        }
-
-    work_outer_detail = detection.detail.get("work_outer", {})
-    short_axis = 0.0
-    if isinstance(work_outer_detail, dict):
-        try:
-            short_axis = float(work_outer_detail.get("bottom", 0.0)) - float(work_outer_detail.get("top", 0.0))
-        except (TypeError, ValueError):
-            short_axis = 0.0
-    if short_axis <= 0.0:
-        frames = [frame for frame in detection.frames if frame.valid()]
-        short_axis = float(np.median(np.array([frame.width for frame in frames], dtype=np.float32))) if frames else 0.0
-
-    width_detail = separator_width_evidence_detail(
-        detection.gaps,
-        short_axis,
-        float(holder.broad_separator_width_min_ratio),
-        min_required,
-    )
-    count = int(width_detail.get("separator_width_gap_count", width_detail.get("broad_separator_width_gaps", 0)) or 0)
-    ok = count >= min_required
-    return {
-        "used": True,
-        "ok": bool(ok),
-        "reason": "ok" if ok else "holder_edge_disambiguation_weak",
-        "evidence_source": "separator_width_evidence",
-        "holder_edge_disambiguation_gaps": int(count),
-        "min_holder_edge_disambiguation_gaps": int(min_required),
-        "separator_width_evidence": width_detail,
-    }
 
 
 def partial_edge_safety_leading_content_detail(
@@ -84,8 +23,9 @@ def partial_edge_safety_leading_content_detail(
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
-    holder = policy.partial_holder
-    if not holder.checks_leading_content or detection.strip_mode != "partial":
+    holder_policy = policy.partial_holder
+    holder = holder_policy.parameters
+    if not holder_policy.enabled or detection.strip_mode != "partial":
         return {"used": False, "reason": "disabled"}
     if str(detection.detail.get("outer_candidate_strategy", "")) != "content_outer":
         return {"used": False, "reason": "not_content_outer"}
@@ -163,8 +103,9 @@ def partial_edge_safety_frame_content_detail(
     detection: DetectionCandidate,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
-    holder = policy.partial_holder
-    if not holder.checks_frame_content or detection.strip_mode != "partial":
+    holder_policy = policy.partial_holder
+    holder = holder_policy.parameters
+    if not holder_policy.enabled or detection.strip_mode != "partial":
         return {"used": False, "reason": "disabled"}
     frame_scores = content_detail.get("frame_scores", [])
     if not isinstance(frame_scores, list) or not frame_scores:
@@ -172,7 +113,7 @@ def partial_edge_safety_frame_content_detail(
 
     min_mean = float(holder.min_frame_mean)
     min_coverage = float(holder.min_frame_coverage)
-    max_aspect_error = float(holder.max_frame_aspect_error)
+    max_aspect_error = float(holder_policy.max_frame_aspect_error)
     weak_frames: list[int] = []
     aspect_conflict_frames: list[int] = []
     normalized_scores: list[dict[str, Any]] = []
@@ -249,17 +190,17 @@ def partial_edge_safety_assessment_detail(
     detection: DetectionCandidate,
     hard_detail: dict[str, Any],
     content_detail: dict[str, Any],
-    fmt: FormatPhysicalSpec,
     source: str,
     joint_score: float,
     content_score: float,
     geometry_score: float,
     holder_occupancy: dict[str, Any],
-    cache: Optional[AnalysisCache] = None,
+    cache: Optional[AnalysisCache],
     *,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
-    holder = policy.partial_holder
+    holder_policy = policy.partial_holder
+    holder = holder_policy.parameters
     separator_evidence = separator_support_detail_summary(hard_detail)
     expected = separator_evidence.expected_gaps
     hard = separator_evidence.hard_separator_gaps
@@ -269,24 +210,18 @@ def partial_edge_safety_assessment_detail(
     width_cv = 1.0 if width_cv_value is None else float(width_cv_value)
     width_cv_source = str(detection.detail.get("width_cv_source") or "unknown")
     outer_area = float(detection.detail.get("outer_area_ratio", 1.0) or 1.0)
-    min_count = holder.min_count_35mm if fmt.default_count >= 6 else holder.min_count_small
+    min_count = holder.minimum_observed_frame_count
     hard_ratio = 1.0 if expected <= 0 else hard / float(max(1, expected))
-    holder_edge_detail = partial_edge_safety_holder_edge_disambiguation_detail(detection, policy)
     leading_content = partial_edge_safety_leading_content_detail(gray, detection, cache, policy)
     frame_content = partial_edge_safety_frame_content_detail(content_detail, detection, policy)
     complete_underfilled_strip = bool(holder_occupancy.get("complete_underfilled_strip", False))
     disqualifiers: list[str] = []
     occupancy_diagnostics: list[str] = []
-    holder_edge_disambiguation_weak = (
-        bool(holder_edge_detail.get("used", False))
-        and int(holder_edge_detail.get("holder_edge_disambiguation_gaps", 0) or 0)
-        < int(holder_edge_detail.get("min_holder_edge_disambiguation_gaps", 0) or 0)
-    )
     leading_content_strong = (
         bool(leading_content.get("used", False))
         and not bool(leading_content.get("ok", True))
     )
-    if not holder.allow_empty_holder_frames:
+    if not holder_policy.enabled:
         disqualifiers.append("disabled")
     if detection.strip_mode != "partial":
         disqualifiers.append("not_partial")
@@ -304,10 +239,6 @@ def partial_edge_safety_assessment_detail(
         disqualifiers.append("too_few_hard_gaps")
     if hard_ratio < holder.min_hard_ratio:
         disqualifiers.append("hard_gap_ratio_low")
-    if not complete_underfilled_strip and holder_edge_disambiguation_weak:
-        disqualifiers.append("holder_edge_disambiguation_weak")
-    elif complete_underfilled_strip and holder_edge_disambiguation_weak:
-        occupancy_diagnostics.append("holder_edge_disambiguation_not_required_for_complete_underfilled_strip")
     if equal > holder.max_equal_gaps:
         disqualifiers.append("equal_gap_used")
     photo_width_stability = photo_width_stability_detail(
@@ -358,13 +289,9 @@ def partial_edge_safety_assessment_detail(
         },
         "policy_id": policy.policy_id,
         "holder_policy": {
-            "allow_empty_holder_frames": holder.allow_empty_holder_frames,
-            "requires_holder_edge_disambiguation_gaps": holder.requires_broad_separator_width_gaps,
-            "checks_leading_content": holder.checks_leading_content,
-            "checks_frame_content": holder.checks_frame_content,
-            "max_frame_aspect_error": holder.max_frame_aspect_error,
+            "enabled": holder_policy.enabled,
+            "max_frame_aspect_error": holder_policy.max_frame_aspect_error,
         },
-        "holder_edge_disambiguation": holder_edge_detail,
         "leading_content": leading_content,
         "frame_content": frame_content,
     }

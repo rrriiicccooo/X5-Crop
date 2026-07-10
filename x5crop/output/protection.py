@@ -22,7 +22,6 @@ class ExposureOverlapProtectionPolicyLike(Protocol):
 
 
 class OutputProtectionPolicyLike(Protocol):
-    apply_output_bleed: bool
     exposure_overlap_protection: ExposureOverlapProtectionPolicyLike
 
 
@@ -76,13 +75,9 @@ def output_protection_plan(
         int(base_bleed.long_axis),
         int(protection.long_axis_bleed_capacity_px),
     )
-    protection_enabled = bool(policy.apply_output_bleed)
-    feasible = bool(not detected or (protection_enabled and required <= available))
+    feasible = bool(not detected or required <= available)
     if not detected:
         reason = "no_exposure_overlap"
-        output_long_axis = int(base_bleed.long_axis)
-    elif not protection_enabled:
-        reason = "output_bleed_disabled"
         output_long_axis = int(base_bleed.long_axis)
     elif feasible:
         reason = "exposure_overlap_protection_planned"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 import unittest
 
 import numpy as np
@@ -7,7 +8,6 @@ import numpy as np
 from x5crop.detection.candidate.assessment.evidence_independence import evidence_independence_detail
 from x5crop.detection.candidate.assessment.partial_holder import partial_edge_safety_assessment_detail
 from x5crop.detection.candidate.assessment.support_calibration import (
-    hard_full_calibration_floor_applies,
     separator_geometry_support_applies,
 )
 from x5crop.domain import Box, DetectionCandidate, Gap
@@ -19,7 +19,51 @@ from x5crop.policies.runtime.separator import SeparatorGeometrySupportModePolicy
 
 
 class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
-    def test_partial_holder_uses_holder_edge_disambiguation_reason(self) -> None:
+    def test_separator_width_variation_is_not_a_candidate_gate_requirement(self) -> None:
+        project_root = Path(__file__).resolve().parents[2]
+        self.assertFalse(
+            (
+                project_root
+                / "x5crop"
+                / "detection"
+                / "evidence"
+                / "separator_width.py"
+            ).exists()
+        )
+        banned = (
+            "requires_broad_separator_width_gaps",
+            "min_broad_separator_width_gaps",
+            "edge_pair_min_score_without_broad_width",
+            "edge_pair_min_score_with_broad_width",
+            "separator_support_broad_width_support_assessment",
+            "holder_edge_disambiguation_gaps",
+        )
+        offenders: list[str] = []
+        for root in (
+            project_root / "x5crop" / "detection" / "candidate",
+            project_root / "x5crop" / "policies",
+        ):
+            for path in root.rglob("*.py"):
+                text = path.read_text(encoding="utf-8")
+                for term in banned:
+                    if term in text:
+                        offenders.append(f"{path.relative_to(project_root)}:{term}")
+        self.assertEqual(offenders, [])
+
+    def test_partial_content_safety_checks_are_universal_for_standard_strips(self) -> None:
+        from x5crop.formats import FORMATS
+        from x5crop.policies.registry import get_detection_policy
+
+        for spec in FORMATS.values():
+            if spec.physical_layout != "single_strip":
+                continue
+            holder = get_detection_policy(
+                spec.format_id,
+                "partial",
+            ).partial_holder
+            self.assertTrue(holder.enabled)
+
+    def test_partial_holder_does_not_treat_separator_width_as_edge_safety(self) -> None:
         policy = get_detection_policy("120-66", "partial")
         detection = DetectionCandidate(
             format_id="120-66",
@@ -38,11 +82,6 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "outer_area_ratio": 0.80,
-                "separator_width_evidence": {
-                    "used": True,
-                    "separator_width_gap_count": 0,
-                    "broad_separator_width_gaps": 0,
-                },
             },
         )
         content_detail = {
@@ -62,23 +101,18 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             detection,
             {"expected_gaps": 2, "hard_gaps": 1, "grid_gaps": 1, "equal_gaps": 0},
             content_detail,
-            format_spec("120-66"),
             "separator",
             joint_score=0.90,
             content_score=0.10,
             geometry_score=0.90,
             holder_occupancy={"complete_underfilled_strip": False, "strip_completeness": {}},
+            cache=None,
             policy=policy,
         )
 
-        self.assertIn("holder_edge_disambiguation_weak", detail["disqualifiers"])
-        self.assertNotIn("too_few_broad_separator_width_gaps", detail["disqualifiers"])
+        self.assertNotIn("holder_edge_disambiguation_weak", detail["disqualifiers"])
         self.assertNotIn("content_score_low", detail["disqualifiers"])
-        self.assertIn("holder_edge_disambiguation", detail)
-        self.assertEqual(
-            detail["holder_edge_disambiguation"]["reason"],
-            "holder_edge_disambiguation_weak",
-        )
+        self.assertNotIn("holder_edge_disambiguation", detail)
         self.assertEqual(
             detail["content_quality"]["role"],
             "quality_diagnostic_not_boundary_evidence",
@@ -175,14 +209,11 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
         self.assertFalse(detail["photo_width_stability"]["used"])
         self.assertEqual(detail["photo_width_stability"]["role"], "diagnostic_until_photo_edges")
 
-    def test_support_calibration_checks_only_photo_edge_width_when_available(self) -> None:
+    def test_geometry_support_checks_only_photo_edge_width_when_available(self) -> None:
         fmt = format_spec("120-66")
-        policy = get_detection_policy("120-66", "full")
         hard_detail = {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0}
         mode_policy = SeparatorGeometrySupportModePolicy(
-            enabled=True,
             min_hard_ratio=0.50,
-            allow_grid=True,
             max_equal_gaps=0,
             required_content_support="ok",
             min_joint_score=0.70,
@@ -225,24 +256,6 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             },
         )
 
-        self.assertTrue(
-            hard_full_calibration_floor_applies(
-                frame_box_detail_candidate,
-                hard_detail,
-                fmt,
-                "separator",
-                policy,
-            )
-        )
-        self.assertFalse(
-            hard_full_calibration_floor_applies(
-                unstable_photo_candidate,
-                hard_detail,
-                fmt,
-                "separator",
-                policy,
-            )
-        )
         self.assertTrue(
             separator_geometry_support_applies(
                 frame_box_detail_candidate,
@@ -288,11 +301,6 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
                 "width_cv": 0.20,
                 "width_cv_source": "frame_boxes",
                 "outer_area_ratio": 0.80,
-                "separator_width_evidence": {
-                    "used": True,
-                    "separator_width_gap_count": 2,
-                    "broad_separator_width_gaps": 2,
-                },
             },
         )
         content_detail = {
@@ -312,12 +320,12 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             detection,
             {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0},
             content_detail,
-            format_spec("120-66"),
             "separator",
             joint_score=0.90,
             content_score=0.90,
             geometry_score=0.90,
             holder_occupancy={"complete_underfilled_strip": False, "strip_completeness": {}},
+            cache=None,
             policy=policy,
         )
 

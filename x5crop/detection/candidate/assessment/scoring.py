@@ -14,29 +14,30 @@ def content_quality_score(
 ) -> float:
     if not bool(detail.get("used", False)):
         return 0.0
-    mean_score = min(1.0, float(detail.get("median_mean", 0.0)) / content_policy.support_mean_norm)
-    coverage_score = min(1.0, float(detail.get("median_coverage", 0.0)) / content_policy.support_coverage_norm)
+    support_policy = content_policy.support
+    mean_score = min(1.0, float(detail.get("median_mean", 0.0)) / support_policy.mean_norm)
+    coverage_score = min(1.0, float(detail.get("median_coverage", 0.0)) / support_policy.coverage_norm)
     aspect_error = detail.get("max_aspect_error")
     aspect_score = (
-        content_policy.support_missing_aspect_score
+        support_policy.missing_aspect_score
         if aspect_error is None
-        else max(0.0, min(1.0, 1.0 - float(aspect_error) / content_policy.support_aspect_norm))
+        else max(0.0, min(1.0, 1.0 - float(aspect_error) / support_policy.aspect_norm))
     )
     support = str(detail.get("support", ""))
     support_score = {
-        "ok": content_policy.support_score_ok,
-        "weak": content_policy.support_score_weak,
-        "low_content": content_policy.support_score_low_content,
-        "aspect_conflict": content_policy.support_score_aspect_conflict,
-    }.get(support, content_policy.support_score_unknown)
+        "ok": support_policy.score_ok,
+        "weak": support_policy.score_weak,
+        "low_content": support_policy.score_low_content,
+        "aspect_conflict": support_policy.score_aspect_conflict,
+    }.get(support, support_policy.score_unknown)
     return max(
         0.0,
         min(
             1.0,
             (
-                content_policy.support_coverage_weight * coverage_score
-                + content_policy.support_mean_weight * mean_score
-                + content_policy.support_aspect_weight * aspect_score
+                support_policy.coverage_weight * coverage_score
+                + support_policy.mean_weight * mean_score
+                + support_policy.aspect_weight * aspect_score
             )
             * support_score,
         ),
@@ -130,12 +131,12 @@ def joint_support_score(
     source: str,
     policy: DetectionPolicy,
 ) -> float:
-    scoring_policy = policy.scoring
-    source_bias = scoring_policy.separator_source_bias if source == "separator" else 0.0
+    calibration = policy.scoring.calibration
+    source_bias = calibration.separator_source_bias if source == "separator" else 0.0
     joint_score = (
-        scoring_policy.geometry_weight * geometry_score
-        + scoring_policy.content_weight * content_score
-        + scoring_policy.separator_weight * separator_score
+        calibration.geometry_weight * geometry_score
+        + calibration.content_weight * content_score
+        + calibration.separator_weight * separator_score
         + source_bias
     )
     return max(0.0, min(1.0, joint_score))

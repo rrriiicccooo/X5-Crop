@@ -7,7 +7,7 @@ import numpy as np
 from ...cache import AnalysisCache
 from ...domain import DetectionCandidate
 from ...geometry.layout import work_gray
-from ...policies.runtime.exposure_overlap import ExposureOverlapEvidencePolicy
+from ...policies.parameters.exposure_overlap import ExposureOverlapEvidenceParameters
 from ...policies.runtime.separator import SeparatorPolicy
 from .gap_evidence import gap_evidence_record
 
@@ -28,10 +28,10 @@ def _overlap_band_width_px(record: dict[str, Any]) -> float:
 def exposure_overlap_evidence_detail(
     gray: np.ndarray,
     detection: DetectionCandidate,
-    cache: AnalysisCache | None = None,
+    cache: AnalysisCache | None,
     *,
     separator_policy: SeparatorPolicy,
-    exposure_overlap_policy: ExposureOverlapEvidencePolicy,
+    exposure_overlap_policy: ExposureOverlapEvidenceParameters,
 ) -> dict[str, Any]:
     if not detection.gaps:
         return {

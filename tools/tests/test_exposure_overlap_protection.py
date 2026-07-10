@@ -69,6 +69,7 @@ class ExposureOverlapProtectionTest(unittest.TestCase):
             evidence = exposure_overlap_evidence_detail(
                 np.zeros((80, 120), dtype=np.uint8),
                 detection,
+                cache=None,
                 separator_policy=policy.separator,
                 exposure_overlap_policy=policy.exposure_overlap_evidence,
             )
@@ -122,7 +123,6 @@ class ExposureOverlapProtectionTest(unittest.TestCase):
 
         apply_output_protection_plan(
             detection,
-            AxisBleedParameters(long_axis=0, short_axis=0),
             plan,
             image_w=100,
             image_h=60,

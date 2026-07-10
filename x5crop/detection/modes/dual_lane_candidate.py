@@ -6,7 +6,7 @@ from typing import Optional
 import numpy as np
 
 from ...cache import AnalysisCache
-from ...domain import Box, DetectionCandidate
+from ...domain import Box, DetectionCandidate, OuterCandidate
 from ...formats import FormatPhysicalSpec
 from ...geometry.boxes import translate_box
 from ...policies.runtime.policy import DetectionPolicy
@@ -77,7 +77,7 @@ def _assessed_lane_candidate(
     cache: AnalysisCache,
     lane_format_spec: FormatPhysicalSpec,
     lane_policy: DetectionPolicy,
-    outer_candidate,
+    outer_candidate: OuterCandidate,
 ) -> DetectionCandidate:
     lane_outer = translate_box(outer_candidate.box, lane.left, lane.top)
     raw = build_detection_geometry_for_outer(

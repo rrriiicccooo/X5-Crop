@@ -4,13 +4,12 @@ from typing import Optional
 
 import numpy as np
 
-from ...app_info import VERSION
 from ...domain import DetectionCandidate
 from ...geometry.layout import work_gray
 from ...cache import AnalysisCache
 from ...gap_methods import gap_method_roles
 from ...policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
-from ...policies.runtime.exposure_overlap import ExposureOverlapEvidencePolicy
+from ...policies.parameters.exposure_overlap import ExposureOverlapEvidenceParameters
 from ...policies.runtime.separator import SeparatorPolicy
 from .gap_evidence import gap_evidence_record, gap_work_outer
 from .nearby_separator_diagnostics import nearby_separator_diagnostic_detail
@@ -19,11 +18,11 @@ from .nearby_separator_diagnostics import nearby_separator_diagnostic_detail
 def attach_read_only_diagnostics(
     gray: np.ndarray,
     detection: DetectionCandidate,
-    cache: Optional[AnalysisCache] = None,
+    cache: Optional[AnalysisCache],
     *,
     separator_policy: SeparatorPolicy,
     diagnostics_policy: RuntimeDiagnosticsPolicy,
-    exposure_overlap_policy: ExposureOverlapEvidencePolicy,
+    exposure_overlap_policy: ExposureOverlapEvidenceParameters,
 ) -> None:
     gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
     gap_records = []
@@ -71,7 +70,6 @@ def attach_read_only_diagnostics(
     )
     method_roles = gap_method_roles()
     detection.detail["diagnostics"] = {
-        "version": VERSION,
         "diagnostic_only": True,
         "effects": {
             "output": False,

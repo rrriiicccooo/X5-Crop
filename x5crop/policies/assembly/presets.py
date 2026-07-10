@@ -13,20 +13,10 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class SeparatorWidthProfilePreset:
-    mode: str = "off"
-    separator_outer_allow_oversized_band: bool = False
-    separator_outer_oversized_band_max_ratio: float = 0.45
-    separator_outer_oversized_band_score_penalty: float = 0.08
-
-
-@dataclass(frozen=True)
 class ModePolicyPreset:
     detector_kind: str = "standard_strip"
     frame_fit: FrameFitPolicy | None = None
-    review_only: ReviewOnlyPolicy = field(default_factory=ReviewOnlyPolicy)
-    separator_width_profile: SeparatorWidthProfilePreset = field(default_factory=SeparatorWidthProfilePreset)
-    separator_geometry_support_modes: tuple[str, ...] = ()
+    review_only: ReviewOnlyPolicy | None = None
 
 
 @dataclass(frozen=True)

@@ -8,7 +8,7 @@ from ....constants import CANDIDATE_SOURCE_HARD_SAFETY
 from ....domain import Box, DetectionCandidate
 from ....formats import FormatPhysicalSpec
 from ....geometry.boxes import map_work_box
-from ....geometry.frame_fit import frame_boxes_from_gaps
+from ....geometry.frame_fit import FrameFitParameters, frame_boxes_from_gaps
 from ....geometry.layout import work_gray
 from ....geometry.model_gaps import equal_model_gap
 from ....run_config import RunConfig
@@ -20,6 +20,7 @@ def hard_safety_detection(
     config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
+    frame_fit: FrameFitParameters,
 ) -> DetectionCandidate:
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
@@ -41,13 +42,13 @@ def hard_safety_detection(
         config.bleed_y,
         origin=0.0,
         pitch=pitch,
-        geometry_parameters=None,
+        geometry_parameters=frame_fit,
     )
     source_h, source_w = gray.shape
     boxes = [map_work_box(box, config.layout, source_w, source_h) for box in boxes_work]
     outer_original = map_work_box(outer, config.layout, source_w, source_h)
     return DetectionCandidate(
-        format_id=fmt.format_id.value,
+        format_id=fmt.format_id,
         layout=config.layout,
         strip_mode=config.strip_mode,
         count=count,
@@ -62,7 +63,7 @@ def hard_safety_detection(
             "candidate_contract": "hard_safety_review_input",
             "candidate_gate_eligible": False,
             "layout": config.layout,
-            "format_id": fmt.format_id.value,
+            "format_id": fmt.format_id,
             "strip_mode": config.strip_mode,
             "count": int(count),
             "work_outer": asdict(outer),

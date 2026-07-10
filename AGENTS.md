@@ -202,10 +202,9 @@ macOS installer behavior:
 
 ## Regression Priorities
 
-When detection changes are made, use V4.9 classification with
-`python3 -m tools.regression.reference_classify --candidate-root <root>` or
-raw comparison with `python3 -m tools.regression.compare` to locate changes.
-Reference diffs are audit material, not historical-parity blockers.
+When detection changes are made, use
+`python3 -m tools.regression.compare <baseline> <candidate>` to locate changes
+between current-schema reports. Diffs are audit material, not parity blockers.
 
 Common fields to inspect:
 
@@ -223,7 +222,7 @@ Key local reference sets:
 - `Test/135` full: 135 full reference examples.
 - `Test/new_135` full: wide 135 spacing examples.
 - `Test/半格/full` and `Test/半格/partial`: half-frame gate and partial behavior.
-- `Test/120/66` full/partial: broad separator width / separator-derived outer behavior.
+- `Test/120/66` full/partial: variable separator width / separator-derived outer behavior.
 - `Test/120/67` full: 120-67 reference examples.
 
 For source or policy changes, also run:

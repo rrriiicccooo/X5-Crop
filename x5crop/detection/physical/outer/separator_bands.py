@@ -6,7 +6,7 @@ import numpy as np
 
 from ....geometry.detection_parameters import GapSearchParameters
 from ....geometry.separator_band import SeparatorBand
-from ....policies.runtime.outer import SeparatorGeometryProposalPolicy, SeparatorOuterBandPolicy
+from ....policies.parameters.outer import SeparatorOuterBandParameters
 from ....utils import clamp_float, clamp_int, runs_from_mask
 
 
@@ -20,7 +20,7 @@ def separator_outer_band_sequences(
     bands: list[SeparatorBand],
     expected_gaps: int,
     frame_long: float,
-    band_policy: SeparatorOuterBandPolicy,
+    band_policy: SeparatorOuterBandParameters,
 ) -> list[tuple[SeparatorBand, ...]]:
     ordered = sorted(bands, key=lambda band: float(band.center))
     if expected_gaps <= 0 or len(ordered) < expected_gaps:
@@ -88,9 +88,8 @@ def collect_separator_outer_bands(
     profile: np.ndarray,
     short_axis: float,
     coordinate_limit: float,
-    band_policy: SeparatorOuterBandPolicy,
+    band_policy: SeparatorOuterBandParameters,
     gap_search_config: GapSearchParameters,
-    separator_policy: SeparatorGeometryProposalPolicy,
 ) -> SeparatorOuterBandCollection:
     peak_threshold = float(band_policy.min_score)
     band_threshold = max(
@@ -127,9 +126,8 @@ def collect_separator_outer_bands(
             band_end += 1
         width = band_end - band_start
         oversized_band = (
-            separator_policy.separator_outer_allow_oversized_band
-            and width > max_width
-            and width <= short_axis * separator_policy.separator_outer_oversized_band_max_ratio
+            width > max_width
+            and width <= short_axis * band_policy.oversized_band_max_short_axis_ratio
         )
         if width < min_width or (width > max_width and not oversized_band):
             continue
@@ -157,7 +155,7 @@ def collect_separator_outer_bands(
                 score=float(
                     mean_score
                     + float(band_policy.prominence_score_weight) * prominence
-                    - (separator_policy.separator_outer_oversized_band_score_penalty if oversized_band else 0.0)
+                    - (band_policy.oversized_band_score_penalty if oversized_band else 0.0)
                 ),
             )
         )

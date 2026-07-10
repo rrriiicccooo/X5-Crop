@@ -85,7 +85,6 @@ def frame_fit_profile(profile: str, strip_mode: str) -> FrameFitPolicy | None:
         "standard_35mm": FrameFitPolicy(
             name="standard_strip_frame_fit",
             edge_evidence=True,
-            geometry_fallback=True,
             min_edge_samples=2,
             nominal_min_ratio=0.72,
             nominal_max_ratio=1.10,
@@ -94,12 +93,10 @@ def frame_fit_profile(profile: str, strip_mode: str) -> FrameFitPolicy | None:
         "dual_lane": FrameFitPolicy(
             name="dual_lane_frame_fit",
             edge_evidence=False,
-            geometry_fallback=True,
         ),
         "dense_half": FrameFitPolicy(
             name="dense_half_frame_fit",
             edge_evidence=True,
-            geometry_fallback=True,
             min_edge_samples=4,
             nominal_min_ratio=0.78,
             nominal_max_ratio=1.08,
@@ -108,7 +105,6 @@ def frame_fit_profile(profile: str, strip_mode: str) -> FrameFitPolicy | None:
         "panoramic_35mm": FrameFitPolicy(
             name="panoramic_strip_frame_fit",
             edge_evidence=True,
-            geometry_fallback=True,
             min_edge_samples=2,
             nominal_min_ratio=0.70,
             nominal_max_ratio=1.12,
@@ -117,7 +113,6 @@ def frame_fit_profile(profile: str, strip_mode: str) -> FrameFitPolicy | None:
         "medium_rectangle": FrameFitPolicy(
             name="medium_rectangle_frame_fit",
             edge_evidence=True,
-            geometry_fallback=True,
             min_edge_samples=2,
             nominal_min_ratio=0.70,
             nominal_max_ratio=1.15,
@@ -126,7 +121,6 @@ def frame_fit_profile(profile: str, strip_mode: str) -> FrameFitPolicy | None:
         "medium_square": FrameFitPolicy(
             name="medium_square_frame_fit",
             edge_evidence=True,
-            geometry_fallback=True,
             min_edge_samples=2,
             nominal_min_ratio=0.65,
             nominal_max_ratio=1.20,
@@ -135,7 +129,6 @@ def frame_fit_profile(profile: str, strip_mode: str) -> FrameFitPolicy | None:
         "medium_wide": FrameFitPolicy(
             name="medium_wide_frame_fit",
             edge_evidence=True,
-            geometry_fallback=True,
             min_edge_samples=2,
             nominal_min_ratio=0.65,
             nominal_max_ratio=1.20,

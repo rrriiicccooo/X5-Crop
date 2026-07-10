@@ -75,7 +75,6 @@ class HardGapTrustParameters:
 
 @dataclass(frozen=True)
 class NearbySeparatorRefinementParameters:
-    enabled: bool = True
     window_ratio: float = 0.040
     window_min: int = 16
     window_max: int = 320

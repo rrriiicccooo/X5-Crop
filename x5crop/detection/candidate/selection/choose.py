@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ....domain import DetectionCandidate
 from ....formats import FormatPhysicalSpec
-from ....policies.runtime.candidate import SelectionPolicy
+from ....policies.parameters.scoring import CandidateCompetitionParameters
 from ..signals import candidate_signals
 
 
@@ -82,7 +82,7 @@ def select_detection_candidate(
     candidates: list[DetectionCandidate],
     fmt: FormatPhysicalSpec,
     threshold: float,
-    selection_policy: SelectionPolicy,
+    selection_policy: CandidateCompetitionParameters,
 ) -> DetectionCandidate:
     candidates = sorted(candidates, key=lambda d: calibrated_candidate_rank(d, threshold), reverse=True)
     best = candidates[0]
@@ -97,7 +97,7 @@ def select_detection_candidate(
     ]
     best.detail["candidate_competition"] = {
         "candidate_count": len(candidates),
-        "format_ids": [fmt.format_id.value],
+        "format_ids": [fmt.format_id],
         "selected_candidate": _candidate_summary(best),
         "top_candidates": competition,
     }

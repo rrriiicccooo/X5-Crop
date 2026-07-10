@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 import numpy as np
@@ -12,9 +12,9 @@ from ....geometry.separator_band import SeparatorBand
 from ....geometry.separator_width_profile import collect_separator_width_bands, separator_width_profile
 from ....policies.runtime.outer import (
     SeparatorGeometryProposalPolicy,
-    SeparatorOuterBandPolicy,
     SeparatorOuterFamilyPolicy,
 )
+from ....policies.parameters.outer import SeparatorOuterBandParameters
 from ....policies.runtime.separator import SeparatorPolicy
 from ....cache import AnalysisCache
 from ...cache_keys import separator_outer_cache_key
@@ -76,7 +76,7 @@ def separator_derived_outer_candidates(
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
-    cache: Optional[AnalysisCache] = None,
+    cache: Optional[AnalysisCache],
     *,
     separator_geometry_policy: SeparatorGeometryProposalPolicy,
     separator_policy: SeparatorPolicy,
@@ -143,17 +143,14 @@ def _candidate_prefix(outer_scope: str, gap_search_profile: str) -> str | None:
 def _width_profile_bands_available(
     separator_geometry_policy: SeparatorGeometryProposalPolicy,
     separator_policy: SeparatorPolicy,
-    count: int,
     strip_mode: str,
     explicit_count: bool,
 ) -> bool:
     family = separator_geometry_policy.width_profile_family
     width_policy = separator_policy.width_profile
-    required_count = int(width_policy.required_count)
     return bool(
         family.available_for(strip_mode, explicit_count)
         and width_policy.mode != "off"
-        and (required_count <= 0 or count == required_count)
     )
 
 
@@ -174,7 +171,6 @@ def _scope_profile_plan(
     uses_width_aware_bands = _width_profile_bands_available(
         separator_geometry_policy,
         separator_policy,
-        count,
         strip_mode,
         explicit_count,
     )
@@ -208,9 +204,6 @@ def _scope_profile_plan(
         family = separator_geometry_policy.full_width
         geometry_policy = separator_geometry_policy.full_width_outer
         if not family.available_for(strip_mode, explicit_count):
-            return None
-        expected_count = int(geometry_policy.required_count)
-        if expected_count > 0 and count != expected_count:
             return None
         candidate_prefix = _candidate_prefix(outer_scope, WIDTH_AWARE_GAP_PROFILE)
         if candidate_prefix is None:
@@ -295,7 +288,6 @@ def _separator_outer_candidates_for_plan(
             float(outer.width),
             band_policy,
             separator_policy.gap_search,
-            separator_geometry_policy,
         )
         bands = list(band_collection.bands)
         edge_margin = band_collection.edge_margin
@@ -389,7 +381,7 @@ def _rank_separator_sequences(
     short_axis: float,
     count: float,
     aspect: float,
-    band_policy: SeparatorOuterBandPolicy,
+    band_policy: SeparatorOuterBandParameters,
     plan: SeparatorOuterPlan,
 ) -> list[SeparatorOuterSequenceRank]:
     candidate_bands = sorted(
@@ -449,26 +441,15 @@ def _rank_separator_sequences(
 
 
 def _sequence_band_policy(
-    band_policy: SeparatorOuterBandPolicy,
+    band_policy: SeparatorOuterBandParameters,
     plan: SeparatorOuterPlan,
-) -> SeparatorOuterBandPolicy:
-    return SeparatorOuterBandPolicy(
-        min_score=band_policy.min_score,
-        band_score=band_policy.band_score,
-        min_width_ratio=band_policy.min_width_ratio,
-        max_width_ratio=band_policy.max_width_ratio,
+) -> SeparatorOuterBandParameters:
+    return replace(
+        band_policy,
         spacing_min_ratio=plan.spacing_min_ratio,
         spacing_max_ratio=plan.spacing_max_ratio,
         frame_error_max=plan.frame_error_max if plan.frame_error_max is not None else band_policy.frame_error_max,
-        edge_margin_ratio=band_policy.edge_margin_ratio,
-        source_candidate_count=band_policy.source_candidate_count,
         band_candidate_count=plan.band_candidate_count,
         pair_candidate_count=plan.sequence_candidate_count,
         max_candidates=plan.max_candidates,
-        sequence_pair_score_weight=band_policy.sequence_pair_score_weight,
-        edge_margin_min_px=band_policy.edge_margin_min_px,
-        edge_margin_max_short_axis_ratio=band_policy.edge_margin_max_short_axis_ratio,
-        prominence_min=band_policy.prominence_min,
-        high_mean_prominence_bypass=band_policy.high_mean_prominence_bypass,
-        prominence_score_weight=band_policy.prominence_score_weight,
     )

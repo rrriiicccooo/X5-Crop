@@ -169,13 +169,11 @@ def apply_decision_contract(
         "candidate_gate_input": candidate_gate_input,
         "evidence_summary": evidence,
         "decision_signals": decision_signals,
-        "decision_policy_detail": policy.report_detail(),
     }
     detection.detail["decision_summary"] = detail
     detection.detail["evidence_summary"] = evidence
     detection.detail["decision_signals"] = decision_signals
     detection.detail["decision_reason_inputs"] = decision_gate.reason_inputs
-    detection.detail["decision_policy_detail"] = policy.report_detail()
     detection.detail["policy_id"] = policy.policy_id
     return FinalDetection.from_candidate(
         detection,

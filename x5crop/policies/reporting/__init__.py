@@ -4,10 +4,12 @@ from dataclasses import asdict, fields, is_dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from ...formats import FormatPhysicalSpec
     from ..runtime.policy import DetectionPolicy
     from ..decision.contract import DetectionDecisionContract
 
 from ...formats import format_description
+from ...constants import HARD_GAP_METHODS, MODEL_GAP_METHODS
 from .mode_descriptions import mode_notes_for_spec, mode_role_for_spec
 
 
@@ -49,7 +51,6 @@ def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "count_hypotheses": _plain(policy.count_hypotheses),
         "outer": {
             "proposal_families": {
-                "base": policy.outer.proposal.base.enabled,
                 "partial_placement": policy.outer.proposal.geometry.partial_placement.enabled,
                 "separator_geometry": True,
             },
@@ -57,14 +58,12 @@ def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         },
         "separator": {
             "support_mode": "unified_physical_support",
-            "hard_required_all_gaps": policy.separator.hard_required_all_gaps,
             "width_profile_mode": policy.separator.width_profile.mode,
-            "geometry_support_modes": list(policy.separator.geometry_support_modes),
-            "hard_methods": list(policy.separator.hard_methods),
-            "model_methods": list(policy.separator.model_methods),
+            "geometry_support_modes": list(policy.separator.geometry_support.active_modes()),
+            "hard_methods": sorted(HARD_GAP_METHODS),
+            "model_methods": sorted(MODEL_GAP_METHODS),
         },
         "content": {
-            "validates_candidates": bool(policy.content.validates_candidates),
             "evidence": _plain(policy.content.evidence),
             "profile": _plain(policy.content.profile),
             "mask": _plain(policy.content.mask),
@@ -80,11 +79,10 @@ def _candidate_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "partial_edge_hint": _plain(policy.partial_edge_hint),
         "selection": _plain(policy.candidate_selection),
         "scoring": {
-            "hard_full_confidence_floor": policy.scoring.hard_full_confidence_floor,
             "weights": {
-                "geometry": policy.scoring.geometry_weight,
-                "content": policy.scoring.content_weight,
-                "separator": policy.scoring.separator_weight,
+                "geometry": policy.scoring.calibration.geometry_weight,
+                "content": policy.scoring.calibration.content_weight,
+                "separator": policy.scoring.calibration.separator_weight,
             },
         },
     }
@@ -106,9 +104,6 @@ def _diagnostics_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "debug_panel_titles": {
             panel.panel_id: panel.title for panel in policy.diagnostics.debug_panel_titles
         },
-        "report_schema_id": policy.report.schema_id,
-        "report_schema_revision": policy.report.schema_revision,
-        "report_sections": list(policy.report.sections),
     }
 
 
@@ -116,7 +111,7 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     spec = policy.physical_spec
     return {
         "policy_id": policy.policy_id,
-        "format_id": spec.format_id.value,
+        "format_id": spec.format_id,
         "strip_mode": policy.strip_mode,
         "role": mode_role_for_spec(spec, policy.strip_mode),
         "physical": _physical_detail(policy),
@@ -136,7 +131,7 @@ def _format_spec_detail(contract: "DetectionDecisionContract") -> dict[str, Any]
     spec = contract.physical_spec
     description = format_description(spec.format_id)
     return {
-        "format_id": spec.format_id.value,
+        "format_id": spec.format_id,
         "family": spec.family,
         "nominal_frame_count": spec.default_count,
         "allowed_count_range": list(spec.allowed_counts),
@@ -159,7 +154,43 @@ def decision_contract_report_detail(contract: "DetectionDecisionContract") -> di
     return {
         "policy_id": contract.policy_id,
         "format_spec": _format_spec_detail(contract),
-        "mode_policy": asdict(contract.mode),
+        "mode_policy": _decision_mode_detail(
+            contract.physical_spec,
+            contract.strip_mode,
+        ),
         "evidence_policy": asdict(contract.evidence),
         "decision_policy": asdict(contract.decision),
+    }
+
+
+def _decision_mode_detail(
+    spec: "FormatPhysicalSpec",
+    strip_mode: str,
+) -> dict[str, Any]:
+    partial = strip_mode == "partial"
+    return {
+        "mode": strip_mode,
+        "nominal_count": spec.default_count,
+        "allowed_counts": list(spec.allowed_counts),
+        "expected_separator_count": (
+            max(0, spec.default_count - 1)
+            if not partial
+            else max(0, max(spec.allowed_counts) - 1)
+        ),
+        "count_behavior": (
+            "fixed_nominal_count" if not partial else "candidate_count_search"
+        ),
+        "outer_behavior": (
+            "outer_must_match_content_and_geometry"
+            if not partial
+            else "outer_edges_are_untrusted_until_supported"
+        ),
+        "stop_condition": (
+            "all_expected_internal_separators_supported"
+            if not partial
+            else "first_safe_candidate_or_review"
+        ),
+        "partial_edge_trust": (
+            "not_applicable" if not partial else "requires_safe_edge_evidence"
+        ),
     }

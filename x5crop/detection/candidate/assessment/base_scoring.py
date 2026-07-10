@@ -15,6 +15,7 @@ from ....geometry.gap_geometry import (
     width_cv as coefficient_of_variation,
 )
 from ....policies.runtime.policy import DetectionPolicy
+from ....policies.parameters.scoring import BaseDetectionScoreParameters
 from ....run_config import RunConfig
 from ....utils import box_from_dict, gap_from_dict, sampled_percentile
 from ...confidence_caps import apply_confidence_cap
@@ -30,7 +31,6 @@ from ..signals import (
     SIGNAL_PARTIAL_COUNT_AMBIGUOUS,
     SIGNAL_PHOTO_WIDTH_UNSTABLE,
     SIGNAL_SEPARATOR_CROSS_AXIS_CONTINUITY_WEAK,
-    SIGNAL_SEPARATOR_EXPECTED_SUPPORT_INCOMPLETE,
     SIGNAL_SEPARATOR_HARD_GAP_FLOOR_FAILED,
     SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
     SIGNAL_SEPARATOR_MODEL_GAP_OVERUSED,
@@ -148,7 +148,10 @@ def _candidate_width_metrics(
     }
 
 
-def _outer_area_profile(outer_area: float, base_score) -> dict[str, Any]:
+def _outer_area_profile(
+    outer_area: float,
+    base_score: BaseDetectionScoreParameters,
+) -> dict[str, Any]:
     if outer_area < base_score.outer_min_area:
         status = "below_profile"
     elif outer_area > base_score.outer_max_area:
@@ -165,7 +168,10 @@ def _outer_area_profile(outer_area: float, base_score) -> dict[str, Any]:
     }
 
 
-def _photo_width_stability_profile(width_metrics: dict[str, Any], base_score) -> dict[str, Any]:
+def _photo_width_stability_profile(
+    width_metrics: dict[str, Any],
+    base_score: BaseDetectionScoreParameters,
+) -> dict[str, Any]:
     frame_box_cv_value = width_metrics.get("frame_box_width_cv")
     try:
         frame_box_cv = 1.0 if frame_box_cv_value is None else float(frame_box_cv_value)
@@ -245,9 +251,7 @@ def base_detection_assessment(
         0,
         origin=origin or 0.0,
         pitch=pitch,
-        geometry_parameters=(
-            policy.frame_fit if policy.frame_fit.geometry_fallback else None
-        ),
+        geometry_parameters=policy.frame_fit,
     )
     topology_evidence = frame_topology_evidence(topology_boxes, count)
     separator_continuity = separator_cross_axis_continuity_evidence(
@@ -271,7 +275,7 @@ def base_detection_assessment(
     hard_support_floor_checks_enabled = (
         expected_gaps >= base_score.hard_support_floor_min_expected_gaps
     )
-    geometry_support_allowed = separator_support.allow_geometry_support and bool(policy.separator.geometry_support_modes)
+    geometry_support_allowed = bool(policy.separator.geometry_support.active_modes())
     enough_profile_separator_evidence = (
         not hard_support_floor_checks_enabled
         or expected_gaps <= 1
@@ -300,7 +304,6 @@ def base_detection_assessment(
             photo_width_within_full_limit
             or (
                 hard_support_floor_checks_enabled
-                and separator_support.allow_full_detected_geometry
                 and gap_evidence.separator_support_count == expected_gaps
             )
         )
@@ -340,8 +343,6 @@ def base_detection_assessment(
         candidate_signals.append(SIGNAL_SEPARATOR_HARD_GAP_FLOOR_FAILED)
     if bool(photo_width_stability.get("unstable", False)):
         candidate_signals.append(SIGNAL_PHOTO_WIDTH_UNSTABLE)
-    if fmt.family == "120" and gap_evidence.separator_support_count < expected_gaps:
-        candidate_signals.append(SIGNAL_SEPARATOR_EXPECTED_SUPPORT_INCOMPLETE)
     if not bool(separator_continuity.get("ok", True)):
         candidate_signals.append(SIGNAL_SEPARATOR_CROSS_AXIS_CONTINUITY_WEAK)
     if len(boxes) != count:
@@ -375,17 +376,17 @@ def base_detection_assessment(
             partial_count_assessment["intrinsically_ambiguous"] = True
         elif (
             count <= base_score.partial_ambiguous_count_max
-            and fmt.default_count >= base_score.partial_dense_strip_min_default_count
+            and fmt.default_count >= base_score.partial_dense_sequence_min_nominal_count
         ):
             confidence, cap_detail = apply_confidence_cap(
                 confidence,
-                base_score.partial_two_35mm_cap,
+                base_score.partial_two_frame_dense_sequence_cap,
                 owner="candidate.assessment",
-                reason="partial_two_frame_35mm_ambiguity",
+                reason="partial_two_frame_dense_sequence_ambiguity",
             )
             confidence_caps.append(cap_detail)
             candidate_signals.append(SIGNAL_PARTIAL_COUNT_AMBIGUOUS)
-            partial_count_assessment["reason"] = "two_frame_35mm_partial"
+            partial_count_assessment["reason"] = "two_frame_dense_sequence_partial"
             partial_count_assessment["intrinsically_ambiguous"] = True
         else:
             partial_count_assessment["reason"] = "enough_frames_for_physical_assessment"
@@ -514,9 +515,7 @@ def apply_base_detection_scoring(
             config.bleed_y,
             origin=origin,
             pitch=pitch,
-            geometry_parameters=(
-                policy.frame_fit if policy.frame_fit.geometry_fallback else None
-            ),
+            geometry_parameters=policy.frame_fit,
         )
         pre_nearby_assessment = base_detection_assessment(
             gray_work,
@@ -540,9 +539,7 @@ def apply_base_detection_scoring(
             config.bleed_y,
             origin=origin,
             pitch=pitch,
-            geometry_parameters=(
-                policy.frame_fit if policy.frame_fit.geometry_fallback else None
-            ),
+            geometry_parameters=policy.frame_fit,
         )
         geometry_assessment = base_detection_assessment(
             gray_work,

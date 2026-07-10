@@ -23,6 +23,35 @@ from x5crop.run_config import RunConfig
 
 
 class CandidateLifecycleGateContractTest(unittest.TestCase):
+    def test_candidate_gate_cannot_raise_evidence_confidence(self) -> None:
+        from x5crop.policies.parameters.scoring import ScoringCalibrationParameters
+        from x5crop.policies.runtime.candidate import ScoringPolicy
+
+        for policy_type in (ScoringCalibrationParameters, ScoringPolicy):
+            self.assertNotIn(
+                "candidate_gate_pass_boost_cap",
+                policy_type.__dataclass_fields__,
+            )
+            self.assertNotIn(
+                "candidate_gate_pass_boost_ratio",
+                policy_type.__dataclass_fields__,
+            )
+            self.assertNotIn(
+                "hard_full_confidence_floor",
+                policy_type.__dataclass_fields__,
+            )
+        source = (
+            Path(__file__).resolve().parents[2]
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "assessment"
+            / "candidate.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("gate_pass_boost", source)
+        self.assertNotIn("hard_full_calibration_floor", source)
+        self.assertNotIn("config.confidence_threshold +", source)
+
     def test_outer_size_uncertainty_is_candidate_diagnostic_not_gate_blocker(self) -> None:
         gate = candidate_gate_assessment(
             source="separator",
@@ -243,6 +272,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
             config,
             format_spec("135"),
             "separator",
+            cache=None,
             policy=policy,
         )
 

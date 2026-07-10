@@ -10,7 +10,7 @@ from ...domain import Box, DetectionCandidate
 from ...gap_methods import is_hard_gap_method
 from ...geometry.boxes import box_cache_key, original_box_to_work
 from ...geometry.layout import work_gray
-from ...policies.runtime.outer import OuterAlignmentEvidencePolicy
+from ...policies.parameters.outer import OuterAlignmentEvidenceParameters
 from ...cache import AnalysisCache
 from ...utils import bbox_from_mask, clamp_int
 from .evidence_cache_keys import detection_gap_cache_key
@@ -32,9 +32,9 @@ def outer_alignment_cache_key(detection: DetectionCandidate, source_w: int, sour
 def outer_content_alignment_detail(
     gray: np.ndarray,
     detection: DetectionCandidate,
-    cache: Optional[AnalysisCache] = None,
+    cache: Optional[AnalysisCache],
     *,
-    alignment_policy: OuterAlignmentEvidencePolicy,
+    alignment_policy: OuterAlignmentEvidenceParameters,
 ) -> dict[str, Any]:
     gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
     work_h, work_w = gray_work.shape

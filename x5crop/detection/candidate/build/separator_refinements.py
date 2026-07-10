@@ -44,7 +44,7 @@ class GapRefinementResult:
 def _gap_refinement_detail(
     family: str,
     detail: dict[str, Any],
-    family_policy: Optional[SeparatorRefinementFamilyPolicy] = None,
+    family_policy: Optional[SeparatorRefinementFamilyPolicy],
     *,
     eligible: Optional[bool] = None,
     skipped_reason: Optional[str] = None,
@@ -89,7 +89,7 @@ def _gap_refinement_result(
     gaps: list[Gap],
     detail: dict[str, Any],
     *,
-    family_policy: Optional[SeparatorRefinementFamilyPolicy] = None,
+    family_policy: Optional[SeparatorRefinementFamilyPolicy],
     eligible: bool = True,
     skipped_reason: Optional[str] = None,
     pre_refinement_gaps: Optional[list[Gap]] = None,
@@ -113,7 +113,7 @@ def _skipped_gap_refinement_result(
     gaps: list[Gap],
     reason: str,
     *,
-    family_policy: Optional[SeparatorRefinementFamilyPolicy] = None,
+    family_policy: Optional[SeparatorRefinementFamilyPolicy],
     eligible: bool = False,
 ) -> GapRefinementResult:
     return _gap_refinement_result(

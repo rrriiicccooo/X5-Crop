@@ -10,7 +10,6 @@ from ...run_config import RunConfig
 from ...domain import FinalDetection
 from ...output.bleed import (
     apply_output_protection_plan,
-    detection_bleed_parameters,
 )
 from ...output.protection import OutputProtectionPlan
 from ...policies.runtime.policy import DetectionPolicy
@@ -39,34 +38,30 @@ def finalize_detection(
 ) -> FinalDetection:
     output_detection = deepcopy(detection)
     output_detection.detail["decision_geometry"] = _geometry_detail(detection)
-    detection_bleed = detection_bleed_parameters(policy.output)
-    if policy.finalization.apply_approved_geometry_adjustment:
-        apply_approved_geometry_adjustment(
-            output_detection,
-            gray,
-            policy.finalization.approved_geometry_adjustment,
-        )
+    apply_approved_geometry_adjustment(
+        output_detection,
+        gray,
+        policy.finalization.approved_geometry_adjustment,
+    )
     output_config = replace(
         config,
         bleed_x=output_protection_plan.output_bleed.long_axis,
         bleed_y=output_protection_plan.output_bleed.short_axis,
     )
-    if policy.output.apply_output_bleed:
-        apply_output_protection_plan(
-            output_detection,
-            detection_bleed,
-            output_protection_plan,
-            gray.shape[1],
-            gray.shape[0],
-        )
-        apply_edge_bleed_protection(
-            output_detection,
-            output_config,
-            gray.shape[1],
-            gray.shape[0],
-            policy.output.edge_bleed_protection,
-        )
-    if not policy.diagnostics.attach_read_only_when_requested or config.diagnostics:
+    apply_output_protection_plan(
+        output_detection,
+        output_protection_plan,
+        gray.shape[1],
+        gray.shape[0],
+    )
+    apply_edge_bleed_protection(
+        output_detection,
+        output_config,
+        gray.shape[1],
+        gray.shape[0],
+        policy.output.edge_bleed_protection,
+    )
+    if config.diagnostics:
         attach_read_only_diagnostics(
             gray,
             output_detection,

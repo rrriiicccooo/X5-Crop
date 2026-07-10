@@ -6,7 +6,6 @@ from typing import Any, Optional
 
 from ..detection.detail import policy_id_from_detail
 from ..domain import FinalDetection, ImageProfile, ProcessResult
-from ..policies.runtime.policy import DetectionPolicy
 from ..utils import json_safe
 from .record import report_record_for_final_detection
 
@@ -18,7 +17,6 @@ def result_from_detection(
     output_files: list[str],
     review_copy: Optional[str],
     warnings: list[str],
-    policy: DetectionPolicy,
     detail_extra: dict[str, Any] | None = None,
 ) -> ProcessResult:
     detail = dict(detection.detail)
@@ -40,7 +38,7 @@ def result_from_detection(
         warnings=warnings,
         policy_id=policy_id_from_detail(detection),
     )
-    result.report_record = report_record_for_final_detection(detection, result, policy=policy)
+    result.report_record = report_record_for_final_detection(detection, result)
     return result
 
 
@@ -50,7 +48,7 @@ def result_from_cached_record(
     profile: ImageProfile,
     warnings: list[str],
 ) -> ProcessResult:
-    output_detail = dict(cached_record.get("output", {})) if isinstance(cached_record.get("output"), dict) else {}
+    output_detail = dict(cached_record["output"])
     result = ProcessResult(
         source=str(input_file),
         status=str(cached_record["status"]),
@@ -60,16 +58,16 @@ def result_from_cached_record(
         strip_mode=str(cached_record["strip_mode"]),
         count=int(cached_record["count"]),
         final_review_reasons=list(cached_record["final_review_reasons"]),
-        output_files=list(output_detail.get("output_files", [])),
-        review_copy=output_detail.get("review_copy"),
-        detail={**dict(cached_record.get("detail", {})), "reused_analysis": True},
+        output_files=list(output_detail["output_files"]),
+        review_copy=output_detail["review_copy"],
+        detail={**dict(cached_record["detail"]), "reused_analysis": True},
         profile=json_safe(asdict(profile)),
         warnings=warnings,
-        policy_id=str(cached_record.get("policy_id", "")),
+        policy_id=str(cached_record["policy_id"]),
     )
     report_record = dict(cached_record)
     report_record["detail"] = dict(result.detail)
-    output_detail = dict(report_record.get("output", {})) if isinstance(report_record.get("output"), dict) else {}
+    output_detail = dict(report_record["output"])
     output_detail["warnings"] = list(warnings)
     report_record["output"] = output_detail
     result.report_record = report_record

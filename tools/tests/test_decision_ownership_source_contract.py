@@ -55,14 +55,18 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_evidence_policy_uses_signal_names_for_candidate_gate_inputs(self) -> None:
+    def test_evidence_policy_does_not_own_candidate_signal_labels(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "candidate.py"
         text = path.read_text(encoding="utf-8")
+        signal_text = (
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "signals.py"
+        ).read_text(encoding="utf-8")
 
         self.assertNotIn("review_reason:", text)
         self.assertNotIn(".review_reason", text)
         self.assertNotIn("candidate_blocker", text)
-        self.assertIn("candidate_signal", text)
+        self.assertNotIn("candidate_signal", text)
+        self.assertIn("SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED", signal_text)
 
     def test_decision_gate_uses_explicit_assessment(self) -> None:
         decision_gate_path = (

@@ -28,6 +28,8 @@ from ..physical.separator.hints import SeparatorGapHint, SeparatorGapHintSet
 
 
 CONTENT_GUIDED_SEPARATOR_FAMILY = "content_guided_separator"
+CONTENT_GUIDED_SEPARATOR_ROLE = "content_guided_separator_search"
+CONTENT_REGION_HINT_SOURCE = "content_region_hints"
 
 
 @dataclass(frozen=True)
@@ -86,8 +88,6 @@ def content_guided_separator_seed_for_count(
     content_policy: ContentPolicy,
     guidance_policy: ContentGuidedSeparatorCandidatePolicy,
 ) -> ContentGuidedSeparatorSeedResult:
-    if not guidance_policy.available_for(strip_mode):
-        return _skip_detail("disabled_for_strip_mode", strip_mode=strip_mode)
     if count <= 1:
         return _skip_detail("count_has_no_internal_separators", count=int(count))
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
@@ -116,19 +116,19 @@ def content_guided_separator_seed_for_count(
     if expected_aspect <= 0:
         return _skip_detail(
             "missing_expected_content_aspect",
-            format_id=fmt.format_id.value,
+            format_id=fmt.format_id,
         )
 
     runs, run_detail = content_region_runs(
         evidence,
         outer,
         count,
-        fmt.format_id.value,
+        fmt.format_id,
         cache,
         content_policy=content_policy,
     )
     selected_runs = select_content_runs(runs, count)
-    if guidance_policy.requires_exact_content_runs and len(selected_runs) != count:
+    if len(selected_runs) != count:
         return _skip_detail(
             "content_run_count_not_exact",
             signal_source=signal_source,
@@ -173,8 +173,8 @@ def content_guided_separator_seed_for_count(
         )
 
     hint_set = SeparatorGapHintSet(
-        source=guidance_policy.guidance_source,
-        role=guidance_policy.proposal_role,
+        source=CONTENT_REGION_HINT_SOURCE,
+        role=CONTENT_GUIDED_SEPARATOR_ROLE,
         hints=gap_hints,
         max_offset_ratio=float(guidance_policy.max_hint_offset_ratio),
         max_offset_min=int(guidance_policy.max_hint_offset_min),
@@ -190,7 +190,7 @@ def content_guided_separator_seed_for_count(
     detail = {
         "used": True,
         "proposal_family": CONTENT_GUIDED_SEPARATOR_FAMILY,
-        "proposal_role": guidance_policy.proposal_role,
+        "proposal_role": CONTENT_GUIDED_SEPARATOR_ROLE,
         "evidence_contract": "separator_evidence_required",
         "signal_source": signal_source,
         "outer": asdict(outer),

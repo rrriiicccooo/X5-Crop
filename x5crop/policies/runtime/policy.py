@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from ...formats import FormatPhysicalSpec
+from ..parameters.base import PartialEdgeHintParameters
+from ..parameters.decision import DecisionReviewParameters
+from ..parameters.exposure_overlap import ExposureOverlapEvidenceParameters
+from ..parameters.scoring import CandidateCompetitionParameters
 from .base import (
     CountHypothesisPolicy,
     DetectorPolicy,
@@ -11,19 +14,14 @@ from .base import (
 )
 from .candidate import (
     CandidatePlanPolicy,
-    PartialEdgeHintPolicy,
     PartialHolderPolicy,
     ScoringPolicy,
-    SelectionPolicy,
 )
 from .content import ContentPolicy
 from .diagnostics import RuntimeDiagnosticsPolicy
-from .decision import RuntimeDecisionPolicy
 from .final import FinalizationPolicy
 from .outer import OuterPolicy
 from .output import OutputPolicy
-from .report import ReportPolicy
-from .exposure_overlap import ExposureOverlapEvidencePolicy
 from .preprocess import RuntimePreprocessPolicy
 from .separator import SeparatorPolicy
 
@@ -40,19 +38,13 @@ class DetectionPolicy:
     separator: SeparatorPolicy
     content: ContentPolicy
     partial_holder: PartialHolderPolicy
-    partial_edge_hint: PartialEdgeHintPolicy
+    partial_edge_hint: PartialEdgeHintParameters
     frame_fit: FrameFitPolicy
     scoring: ScoringPolicy
-    candidate_selection: SelectionPolicy
+    candidate_selection: CandidateCompetitionParameters
     candidate_plan: CandidatePlanPolicy
-    exposure_overlap_evidence: ExposureOverlapEvidencePolicy
-    decision: RuntimeDecisionPolicy
+    exposure_overlap_evidence: ExposureOverlapEvidenceParameters
+    decision: DecisionReviewParameters
     finalization: FinalizationPolicy
     output: OutputPolicy
     diagnostics: RuntimeDiagnosticsPolicy
-    report: ReportPolicy
-
-    def report_detail(self) -> dict[str, Any]:
-        from ..reporting import detection_policy_report_detail
-
-        return detection_policy_report_detail(self)

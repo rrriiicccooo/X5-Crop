@@ -22,9 +22,14 @@ from ..detection.detail import (
     STRIP_COMPLETENESS,
 )
 from ..domain import FinalDetection, ProcessResult
-from ..policies.runtime.policy import DetectionPolicy
+from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from ..utils import json_safe
-from .sections import candidate_gate_detail, candidate_table, decision_gate_detail, selected_candidate
+from .read_models import (
+    candidate_gate_detail,
+    candidate_table,
+    decision_gate_detail,
+    selected_candidate,
+)
 
 
 def _missing_schema_diagnostic(owner: str, reason: str) -> dict[str, str]:
@@ -48,27 +53,19 @@ def _schema_validation(detection: FinalDetection, runtime_policy: dict, decision
 
 def report_record_for_final_detection(
     detection: FinalDetection,
-    result: ProcessResult | None = None,
-    *,
-    policy: DetectionPolicy,
+    result: ProcessResult,
 ) -> dict:
-    report_policy = policy.report
     output = {
         "protection_plan": detail_dict(detection, OUTPUT_PROTECTION_PLAN),
     }
-    source = ""
-    profile = {}
-    report_detail = json_safe(dict(detection.detail))
-    if result is not None:
-        source = str(result.source)
-        profile = dict(result.profile)
-        report_detail = json_safe(dict(result.detail))
-        output.update({
-            "status": result.status,
-            "output_files": list(result.output_files),
-            "review_copy": result.review_copy,
-            "warnings": list(result.warnings),
-        })
+    source = str(result.source)
+    profile = dict(result.profile)
+    report_detail = json_safe(dict(result.detail))
+    output.update({
+        "output_files": list(result.output_files),
+        "review_copy": result.review_copy,
+        "warnings": list(result.warnings),
+    })
     runtime_policy = runtime_policy_detail(detection)
     decision_policy = detail_dict(detection, DECISION_POLICY_DETAIL)
     schema_validation = _schema_validation(detection, runtime_policy, decision_policy)
@@ -79,89 +76,47 @@ def report_record_for_final_detection(
     evidence_summary = detail_dict(detection, EVIDENCE_SUMMARY)
     decision_signals = detail_dict(detection, DECISION_SIGNALS)
     policy_id = policy_id_from_detail(detection)
-    section_values = {
-        "version": {
-            "script_version": VERSION,
-            "schema_id": report_policy.schema_id,
-            "schema_revision": report_policy.schema_revision,
-        },
+    schema = {
+        "schema_id": REPORT_SCHEMA_ID,
+        "schema_revision": REPORT_SCHEMA_REVISION,
+        "script_version": VERSION,
         "source": source,
         "profile": profile,
         "detail": report_detail,
-        "format": {
-            "format_id": detection.format_id,
-            "strip_mode": detection.strip_mode,
-            "count": int(detection.count),
-            "layout": detection.layout,
-            "strip_completeness": detail_dict(detection, STRIP_COMPLETENESS),
-            "holder_occupancy": detail_dict(detection, HOLDER_OCCUPANCY),
-        },
-        "result": {
-            "status": detection.status,
-            "confidence": float(detection.confidence),
-            "final_review_reasons": list(detection.final_review_reasons),
-            "outer_box": asdict(detection.outer),
-            "frame_boxes": [asdict(box) for box in detection.frames],
-            "gaps": [asdict(gap) for gap in detection.gaps],
-        },
-        "selected_candidate": selected_candidate(detection),
-        "candidate_table": candidate_table(detection),
-        "policy": policy_detail,
-        "evidence": {
-            "content": detail_dict(detection, CONTENT_EVIDENCE),
-            "separator": detail_dict(detection, CANDIDATE_ASSESSMENT).get("separator_support", {}),
-            "outer_content_alignment": detail_dict(detection, OUTER_CONTENT_ALIGNMENT),
-            "strip_completeness": detail_dict(detection, STRIP_COMPLETENESS),
-            "holder_occupancy": detail_dict(detection, HOLDER_OCCUPANCY),
-            "exposure_overlap": detail_dict(detection, EXPOSURE_OVERLAP_EVIDENCE),
-        },
-        "candidate_gate": candidate_gate_detail(detection),
-        "decision_gate": decision_gate_detail(detection),
-        "diagnostics": {
-            "schema_validation": schema_validation,
-            "deskew": detail_dict(detection, DESKEW),
-            "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
-        },
-        "schema_validation": schema_validation,
-        "evidence_summary": evidence_summary,
-        "decision_signals": decision_signals,
-        "decision_policy_detail": policy_detail["decision_policy"],
-        "policy_id": policy_id,
-        "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
-        "strip_completeness": detail_dict(detection, STRIP_COMPLETENESS),
-        "holder_occupancy": detail_dict(detection, HOLDER_OCCUPANCY),
-        "output": output,
-    }
-    schema = {
-        "schema_id": report_policy.schema_id,
-        "schema_revision": report_policy.schema_revision,
-        "version": VERSION,
-        "source": section_values["source"],
-        "profile": section_values["profile"],
-        "detail": section_values["detail"],
         "format_id": detection.format_id,
         "strip_mode": detection.strip_mode,
         "layout": detection.layout,
         "count": int(detection.count),
-        "status": section_values["result"]["status"],
-        "confidence": section_values["result"]["confidence"],
-        "final_review_reasons": section_values["result"]["final_review_reasons"],
-        "outer_box": section_values["result"]["outer_box"],
-        "frame_boxes": section_values["result"]["frame_boxes"],
-        "gaps": section_values["result"]["gaps"],
-        "selected_candidate": section_values["selected_candidate"],
-        "evidence_summary": section_values["evidence_summary"],
-        "decision_signals": section_values["decision_signals"],
-        "candidate_gate": section_values["candidate_gate"],
-        "decision_gate": section_values["decision_gate"],
-        "decision_policy_detail": section_values["decision_policy_detail"],
-        "scan_calibration": section_values["scan_calibration"],
-        "strip_completeness": section_values["strip_completeness"],
-        "holder_occupancy": section_values["holder_occupancy"],
-        "policy_id": section_values["policy_id"],
-        "schema_validation": section_values["schema_validation"],
+        "strip_completeness": detail_dict(detection, STRIP_COMPLETENESS),
+        "holder_occupancy": detail_dict(detection, HOLDER_OCCUPANCY),
+        "status": detection.status,
+        "confidence": float(detection.confidence),
+        "final_review_reasons": list(detection.final_review_reasons),
+        "outer_box": asdict(detection.outer),
+        "frame_boxes": [asdict(box) for box in detection.frames],
+        "gaps": [asdict(gap) for gap in detection.gaps],
+        "selected_candidate": selected_candidate(detection),
+        "candidate_table": candidate_table(detection),
+        "policy": policy_detail,
+        "policy_id": policy_id,
+        "evidence": {
+            "content": detail_dict(detection, CONTENT_EVIDENCE),
+            "separator": detail_dict(detection, CANDIDATE_ASSESSMENT).get(
+                "separator_support",
+                {},
+            ),
+            "outer_content_alignment": detail_dict(detection, OUTER_CONTENT_ALIGNMENT),
+            "exposure_overlap": detail_dict(detection, EXPOSURE_OVERLAP_EVIDENCE),
+        },
+        "evidence_summary": evidence_summary,
+        "candidate_gate": candidate_gate_detail(detection),
+        "decision_signals": decision_signals,
+        "decision_gate": decision_gate_detail(detection),
+        "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
+        "schema_validation": schema_validation,
+        "diagnostics": {
+            "deskew": detail_dict(detection, DESKEW),
+        },
+        "output": output,
     }
-    for section in report_policy.sections:
-        if section in section_values:
-            schema[section] = section_values[section]
     return json_safe(schema)

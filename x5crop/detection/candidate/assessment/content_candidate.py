@@ -5,7 +5,8 @@ from typing import Any
 
 from ....domain import DetectionCandidate
 from ...confidence_caps import apply_confidence_cap
-from ....policies.runtime.content import ContentCandidatePolicy, ContentPolicy
+from ....policies.parameters.content import ContentCandidateParameters
+from ....policies.runtime.content import ContentPolicy
 from ....run_config import RunConfig
 
 
@@ -27,7 +28,7 @@ def content_candidate_assessment_from_metrics(
     median_coverage: float,
     max_aspect_error: float,
     confidence_threshold: float,
-    candidate_policy: ContentCandidatePolicy,
+    candidate_policy: ContentCandidateParameters,
 ) -> ContentCandidateAssessment:
     run_conf = min(1.0, selected_run_count / float(max(1, count)))
     coverage_conf = min(1.0, median_coverage / candidate_policy.coverage_norm)

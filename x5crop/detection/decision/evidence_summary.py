@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -30,7 +31,10 @@ def _float(value: Any, default: float = 0.0) -> float:
         return float(default)
 
 
-def _gap_method_count(detection: DetectionCandidate, predicate) -> int:
+def _gap_method_count(
+    detection: DetectionCandidate,
+    predicate: Callable[[str], bool],
+) -> int:
     return sum(1 for gap in detection.gaps if predicate(gap.method))
 
 

@@ -1,22 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 
 from .descriptions import FORMAT_DESCRIPTIONS, FormatDescription
-
-
-class FormatId(str, Enum):
-    STANDARD_STRIP = "135"
-    DUAL_LANE = "135-dual"
-    HALF = "half"
-    XPAN = "xpan"
-    MEDIUM_RECTANGLE = "120-645"
-    MEDIUM_SQUARE = "120-66"
-    MEDIUM_WIDE = "120-67"
-
-
-
 
 @dataclass(frozen=True)
 class FrameSizeMm:
@@ -31,7 +17,7 @@ class FrameSizeMm:
 
 @dataclass(frozen=True)
 class FormatPhysicalSpec:
-    format_id: FormatId
+    format_id: str
     default_count: int
     allowed_counts: tuple[int, ...]
     family: str
@@ -40,7 +26,7 @@ class FormatPhysicalSpec:
     physical_layout: str = "single_strip"
     complete_strip_can_be_underfilled: bool = False
     lane_count: int = 1
-    lane_format_id: FormatId | None = None
+    lane_format_id: str | None = None
 
     @property
     def nominal_frame_size_mm(self) -> FrameSizeMm:
@@ -73,6 +59,7 @@ class FormatPhysicalSpec:
             return "medium_wide"
         raise ValueError(f"Unsupported physical format family: {self.family}")
 
+
 def expected_separator_count(
     default_count: int,
     physical_layout: str,
@@ -86,7 +73,7 @@ def expected_separator_count(
 
 
 def _format_spec(
-    format_id: FormatId,
+    format_id: str,
     default_count: int,
     allowed_counts: tuple[int, ...],
     family: str,
@@ -95,7 +82,7 @@ def _format_spec(
     physical_layout: str = "single_strip",
     complete_strip_can_be_underfilled: bool = False,
     lane_count: int = 1,
-    lane_format_id: FormatId | None = None,
+    lane_format_id: str | None = None,
 ) -> FormatPhysicalSpec:
     frame_options = frame_size_mm_options or (nominal_frame_size_mm,)
     return FormatPhysicalSpec(
@@ -118,31 +105,31 @@ def _format_spec(
 
 FORMATS: dict[str, FormatPhysicalSpec] = {
     "135": _format_spec(
-        FormatId.STANDARD_STRIP,
+        "135",
         6,
         tuple(range(1, 7)),
         "35mm",
         FrameSizeMm(36.0, 24.0),
     ),
     "135-dual": _format_spec(
-        FormatId.DUAL_LANE,
+        "135-dual",
         12,
         (12,),
         "35mm",
         FrameSizeMm(36.0, 24.0),
         physical_layout="dual_lane",
         lane_count=2,
-        lane_format_id=FormatId.STANDARD_STRIP,
+        lane_format_id="135",
     ),
     "half": _format_spec(
-        FormatId.HALF,
+        "half",
         12,
         tuple(range(1, 13)),
         "35mm",
         FrameSizeMm(18.0, 24.0),
     ),
     "xpan": _format_spec(
-        FormatId.XPAN,
+        "xpan",
         3,
         (1, 2, 3),
         "35mm",
@@ -150,14 +137,14 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         complete_strip_can_be_underfilled=True,
     ),
     "120-645": _format_spec(
-        FormatId.MEDIUM_RECTANGLE,
+        "120-645",
         4,
         (1, 2, 3, 4),
         "120",
         FrameSizeMm(42.0, 56.0),
     ),
     "120-66": _format_spec(
-        FormatId.MEDIUM_SQUARE,
+        "120-66",
         3,
         (1, 2, 3),
         "120",
@@ -169,7 +156,7 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         complete_strip_can_be_underfilled=True,
     ),
     "120-67": _format_spec(
-        FormatId.MEDIUM_WIDE,
+        "120-67",
         3,
         (1, 2, 3),
         "120",
@@ -183,11 +170,11 @@ STRIP_CHOICES = ("full", "partial")
 DESKEW_CHOICES = ("off", "auto")
 DESKEW_FALLBACK_CHOICES = ("off", "auto", "always")
 COMPRESSION_CHOICES = ("none", "same")
-def format_spec(format_id: str | FormatId) -> FormatPhysicalSpec:
-    key = format_id.value if isinstance(format_id, FormatId) else str(format_id)
-    return FORMATS[key]
 
 
-def format_description(format_id: str | FormatId) -> FormatDescription:
-    key = format_id.value if isinstance(format_id, FormatId) else str(format_id)
-    return FORMAT_DESCRIPTIONS[key]
+def format_spec(format_id: str) -> FormatPhysicalSpec:
+    return FORMATS[format_id]
+
+
+def format_description(format_id: str) -> FormatDescription:
+    return FORMAT_DESCRIPTIONS[format_id]

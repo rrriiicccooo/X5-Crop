@@ -29,7 +29,7 @@ X5_Crop.py / launchers
 | 阶段 | 主要职责 | 主要位置 |
 |---|---|---|
 | Entry | 解析 CLI / interactive 输入，形成入口选项。 | `X5_Crop.py`, `x5crop.entry`, launchers |
-| Runtime bootstrap | 探测输入、解析 layout、装配 runtime config 和 active policy bundle。 | `x5crop.runtime.config`, `input_probe`, `app`, `policies.runtime.bundle` |
+| Runtime bootstrap | 探测输入、解析 layout、装配 runtime config 和 active policy bundle。 | `x5crop.run_config`, `x5crop.runtime.input_probe`, `runtime.app`, `policies.runtime.bundle` |
 | Workflow | 编排单图处理顺序，不拥有检测策略。 | `x5crop.runtime.workflow` |
 | Preprocess | 读取 TIFF、生成基础灰度、执行 deskew、准备证据输入和 cache。 | `x5crop.io`, `x5crop.image`, `x5crop.cache`, `x5crop.runtime.deskew` |
 | Detection | 生成候选、证据、候选评估、候选扩展和候选选择。 | `x5crop.detection` |
@@ -67,7 +67,8 @@ read TIFF
   -> export / report / debug
 ```
 
-workflow 可以决定是否复用已匹配的 analysis report，但不能把复用结果解释成新的检测策略。
+workflow 可以决定是否复用已匹配的 analysis report，但 cache record 必须同时匹配 current
+schema、输入/config identity 和 active policy fingerprint。复用结果不能被解释成新的检测策略。
 检测策略必须来自 active runtime policy，并通过 detection / decision 层执行。
 workflow 只计算输出 surface 路径；只有 crop、review copy、debug 或 report 真的写出时才创建输出目录。
 workflow 从 TIFF resolution metadata 建立 `ScanCalibration` detail；该 detail 只进入
@@ -102,6 +103,8 @@ candidate plan
 | Decision | 将 selected `DetectionCandidate` 转成唯一拥有 status / final reasons 的 `FinalDetection`。 |
 
 candidate assessment 只产生候选级解释；最终用户可见原因只由 decision 产生。
+CandidateGate 只能阻断或限制候选，不能把分数反向抬高；separator 宽度变化属于 evidence
+detail，不是独立 blocker。
 用户入口 `strip_mode` 仍表示照片是否铺满片夹；detection 内部另行记录
 `strip_completeness` 和 `holder_occupancy`。因此 XPAN / 120-66 可以在 partial
 入口下被解释为 `complete_underfilled_strip`：完整张数存在，但片夹前后仍有 holder slack。
@@ -113,7 +116,7 @@ decision 之后的层级只消费结果：
 - `detection.final` 只编排已决策结果的 output-adjacent finalization。
 - `x5crop.output` 提供 output surface、`OutputProtectionPlan`、approved geometry adjustment 和 bleed 执行。
 - `x5crop.export` 写自动裁切 TIFF 或 `needs_review/` copy。
-- `x5crop.report` 写 JSONL / CSV / report sections。
+- `x5crop.report` 写 canonical JSONL record 和 CSV 摘要。
 - `x5crop.debug` 生成 Debug Analysis 面板。
 
 这些层级不能重新判断 PASS / REVIEW，也不能根据 confidence 自行推导最终状态。
@@ -129,9 +132,10 @@ JSONL 每行就是 current `detection_report` record；不再包裹旧 ProcessRe
 | 层级 | 主要职责 |
 |---|---|
 | `x5crop.entry` | 用户入口和选项解析。 |
-| `x5crop.runtime` | 运行配置、输入探测、workflow、deskew runtime、policy context、analysis reuse。 |
+| `x5crop.run_config` | 唯一运行配置模型。 |
+| `x5crop.runtime` | 输入探测、workflow、deskew runtime、policy context、analysis reuse。 |
 | `x5crop.formats` | format identity、family、count、frame size mm、derived aspect、lane composition 和物理 facts。 |
-| `x5crop.units` | `ScanCalibration`、`PhysicalLength` 和 `PixelKernel` 等单位模型。 |
+| `x5crop.units` | `ScanCalibration` 和 `PhysicalLength` 单位模型。 |
 | `x5crop.policies` | runtime policy、parameter ownership、policy assembly、decision contract、policy reporting。 |
 | `x5crop.cache` | analysis / separator cache adapters。 |
 | `x5crop.geometry` | box、gap、separator profile、edge pair、frame fit、layout、outer box 等纯几何能力。 |
@@ -140,7 +144,7 @@ JSONL 每行就是 current `detection_report` record；不再包裹旧 ProcessRe
 | `x5crop.detection` | 候选、证据、assessment、selection、decision、finalization。 |
 | `x5crop.output` | output protection plan、bleed 执行、output surface 和输出几何 helper。 |
 | `x5crop.export` | crop 写出、review copy 和 export actions。 |
-| `x5crop.report` | report result / record 构建、sections、outputs 和 schema validation。 |
+| `x5crop.report` | report result / canonical record 构建、read models、outputs 和 schema validation。 |
 | `x5crop.debug` | Debug Analysis canvas、panels、gap overlay、writer、status。 |
 | `tools` | regression、build、unit tests 和开发辅助工具；不进入 runtime package。 |
 
@@ -148,13 +152,12 @@ JSONL 每行就是 current `detection_report` record；不再包裹旧 ProcessRe
 
 | 子层 | 职责 |
 |---|---|
-| `runtime.config` | 运行配置模型。 |
+| `x5crop.run_config` | 运行配置模型。 |
 | `runtime.input_probe` | 输入 TIFF 探测和 layout 识别。 |
 | `runtime.app` | 批处理启动、worker 调度和用户可见启动摘要。 |
 | `runtime.workflow` | 单图处理主流程。 |
 | `runtime.deskew` | deskew runtime 调度和 detail 组装。 |
-| `runtime.analysis_reuse` | 匹配当前 schema 的 Debug Analysis report 并复用已决策输出几何。 |
-| `runtime.profile` | runtime profiling / timing read model。 |
+| `runtime.analysis_reuse` | 匹配 current schema、输入/config identity 和 policy fingerprint 后复用已决策输出几何。 |
 
 runtime 可以编排，但不拥有底层几何算法、候选算法或最终 decision contract。
 
@@ -162,21 +165,26 @@ runtime 可以编排，但不拥有底层几何算法、候选算法或最终 de
 
 | 子层 | 职责 |
 |---|---|
-| `policies.parameters` | 分组参数 dataclass 和 central typed parameter factory。 |
-| `policies.runtime` | active `DetectionPolicy` 和 runtime subpolicy dataclass，包括 preprocess / physical / candidate / decision / output / diagnostics。 |
+| `policies.parameters` | canonical 分组参数 dataclass 和 central typed parameter factory。 |
+| `policies.runtime` | active `DetectionPolicy` 及只表达派生 eligibility / composition 的复合 subpolicy。 |
 | `policies.assembly` | 从 format facts、mode posture 和分组参数组装 runtime policy。 |
 | `policies.decision` | final PASS / REVIEW decision contract，以及由 physical traits 推导的 final evidence policy。 |
-| `policies.reporting` | policy detail serialization。 |
-| `policies.registry` / `consistency` / `ids` | policy lookup、consistency smoke、policy id 和 schema id。 |
+| `policies.reporting` | policy detail 的只读 serialization。 |
+| `policies.registry` / `consistency` / `identity` | policy lookup、consistency smoke 和 policy identity。 |
+| `report.identity` | current report schema identity；不属于 runtime policy。 |
 
 `FormatParameters` 只是装配入口，内部固定分为 `preprocess`、`content`、`outer`、
 `separator`、`candidate`、`decision`、`output` 和 `diagnostics` 参数组。assembly 只能从这些
 明确分组读取参数，不能恢复扁平 property view、string override path 或 per-format builder。
 `FormatParameters` 不保存 format 名称；assembly 接收已解析 `FormatPhysicalSpec`，不能把它
 退化成字符串后再次查询 format registry。
+`DetectionPolicy` 直接聚合 canonical parameter objects 和真正需要组合语义的 runtime
+subpolicies；同一组参数不得再复制成形状相同的 runtime dataclass。Report schema identity
+只由 `x5crop.report.identity` 拥有，不能进入 policy 或 policy detail。
 
-format 文件不承载算法开关，也不保存 runtime profile 名称；能力启用由 physical facts
-在 `policies.assembly` / `policies.reporting` 中推导为 runtime traits，再进入 runtime policy。
+format 文件不承载算法开关。`FormatPhysicalSpec.frame_geometry_profile` 是从 family、frame
+aspect、count 和 physical layout 派生的唯一几何分类；policy assembly 消费该物理分类，
+reporting 只读取并描述它。
 decision evidence policy 不使用 format-id override 表；format 名称只作为 `FormatPhysicalSpec`
 查询入口，实际差异来自 family、frame size mm 派生的 aspect、physical layout、
 complete-underfilled strip trait 等物理事实。Aspect 是底片物理尺寸 fact，不是经验 tuning。
@@ -232,8 +240,8 @@ foundation 层不反向依赖 runtime、detection、report、debug、export 或 
 它们接收参数对象，不接收完整 runtime policy 或 `strip_mode` 字符串。
 foundation helper 不隐式生成默认参数；调用方必须显式传入 geometry / image evidence
 参数对象；默认值由 runtime policy assembly 明确提供。
-frame fitting 也遵守该契约：调用方必须显式传入 frame-fit parameters，或显式声明只按
-原始 gaps 构造 frame；底层不再根据 optional config 猜测行为。
+frame fitting 也遵守该契约：调用方必须显式传入 frame-fit parameters；geometry model
+始终提供基础 frame，edge evidence 在可用时进一步拟合，底层不再根据 optional config 猜测行为。
 单位规则固定为：物理长度优先由可信 `ScanCalibration` 的 mm 转 px；缺少可信 calibration
 时使用 frame / pitch reference ratio；最后才用 min/max px clamp。content coverage、
 cross-axis continuity、photo-width CV、aspect error、confidence 等仍是 normalized evidence，
@@ -245,11 +253,11 @@ cross-axis continuity、photo-width CV、aspect error、confidence 等仍是 nor
 |---|---|
 | `output` | output surface、approved geometry adjustment、bleed / overlap helper 和输出几何 read model。 |
 | `export` | TIFF crop、review copy 和文件动作。 |
-| `report` | ProcessResult 到 JSONL / CSV / sections 的转换。 |
+| `report` | ProcessResult 到 canonical JSONL record 和 CSV 摘要的转换。 |
 | `debug` | Debug Analysis 图像渲染和状态面板。 |
 
-output surface 只消费 `ProcessResult`、`FinalDetection.detail` 的稳定 read helper 和最终
-decision summary。它们不生成候选，不评分，不决定 PASS / REVIEW。
+output 只消费 final domain types 和 output evidence；report / debug 只通过稳定 detail reader
+解释最终结果。它们不生成候选，不评分，不决定 PASS / REVIEW。
 approved geometry adjustment 属于 output-adjacent adjustment：它只在 decision 已 approved
 且没有 final review reasons 后调整最终输出范围，不是 detection correction。
 
@@ -273,7 +281,7 @@ X5_Crop.py / launchers
 | Stage | Responsibility | Main location |
 |---|---|---|
 | Entry | Parse CLI / interactive input into entry options. | `X5_Crop.py`, `x5crop.entry`, launchers |
-| Runtime bootstrap | Probe input, resolve layout, assemble runtime config and active policy bundle. | `x5crop.runtime.config`, `input_probe`, `app`, `policies.runtime.bundle` |
+| Runtime bootstrap | Probe input, resolve layout, assemble runtime config and active policy bundle. | `x5crop.run_config`, `x5crop.runtime.input_probe`, `runtime.app`, `policies.runtime.bundle` |
 | Workflow | Orchestrate one-image processing without owning detection policy. | `x5crop.runtime.workflow` |
 | Preprocess | Read TIFF, build gray/evidence input, deskew, and prepare cache. | `x5crop.io`, `x5crop.image`, `x5crop.cache`, `x5crop.runtime.deskew` |
 | Detection | Build candidates, evidence, assessment, extension, and selection. | `x5crop.detection` |
@@ -304,7 +312,9 @@ candidate plan
 ```
 
 Candidate assessment explains candidate qualification. Final user-visible
-reasons are produced by decision.
+reasons are produced by decision. CandidateGate may block or cap a candidate,
+but it cannot raise its score. Separator-width variation is evidence detail,
+not a standalone blocker.
 User-facing `strip_mode` still means whether the image fills the holder.
 Detection records separate `strip_completeness` and `holder_occupancy` evidence,
 so XPAN / 120-66 may be reported as `complete_underfilled_strip`: the default
@@ -324,9 +334,10 @@ Source layering describes which package owns which knowledge.
 | Layer | Responsibility |
 |---|---|
 | `x5crop.entry` | User entry and option parsing. |
-| `x5crop.runtime` | Runtime config, input probing, workflow, deskew runtime, and analysis reuse. |
+| `x5crop.run_config` | Canonical runtime configuration model. |
+| `x5crop.runtime` | Input probing, workflow, deskew runtime, and analysis reuse. |
 | `x5crop.formats` | Format identity, family, count, frame size mm, derived aspect, and physical facts. |
-| `x5crop.units` | `ScanCalibration`, `PhysicalLength`, and `PixelKernel` unit models. |
+| `x5crop.units` | `ScanCalibration` and `PhysicalLength` unit models. |
 | `x5crop.policies` | Runtime policy, parameter ownership, policy assembly, decision contract, policy reporting. |
 | `x5crop.cache` | Analysis / separator cache adapters. |
 | `x5crop.geometry` | Pure geometry, separator profiles, edge pairs, frame fit, layout, outer boxes. |
@@ -335,16 +346,17 @@ Source layering describes which package owns which knowledge.
 | `x5crop.detection` | Candidates, evidence, assessment, selection, decision, finalization. |
 | `x5crop.output` | Output protection planning, bleed execution, output surfaces, and output geometry helpers. |
 | `x5crop.export` | Crop writing, review copies, and export actions. |
-| `x5crop.report` | Report result/record building, sections, outputs, and schema validation. |
+| `x5crop.report` | Report result/canonical-record building, read models, outputs, and schema validation. |
 | `x5crop.debug` | Debug Analysis canvas, panels, gap overlay, writer, status. |
 | `tools` | Regression, build, unit tests, and developer utilities outside the runtime package. |
 
 #### 2.2 Runtime Sublayers
 
-`runtime.config` owns runtime config; `runtime.input_probe` owns TIFF probing and
+`x5crop.run_config` owns runtime config; `runtime.input_probe` owns TIFF probing and
 layout; `runtime.app` owns batch startup and workers; `runtime.workflow` owns the
 single-image process; `runtime.deskew` owns deskew runtime detail;
-`runtime.analysis_reuse` owns current-schema report reuse. Runtime creates a
+`runtime.analysis_reuse` owns reuse after current schema, input/config identity,
+and policy fingerprint all match. Runtime creates a
 `DetectionPolicyBundle` at the boundary and passes explicit policies downward.
 Each policy owns one resolved `FormatPhysicalSpec`; the bundle does not maintain
 a second format-identity collection.
@@ -354,9 +366,9 @@ or the final decision contract.
 
 #### 2.3 Policy Sublayers
 
-`policies.parameters` owns grouped parameter dataclasses and the central typed parameter
-factory. `policies.runtime` owns active runtime policy dataclasses, including
-preprocess / physical / candidate / decision / output / diagnostics subpolicies.
+`policies.parameters` owns canonical grouped parameter dataclasses and the central typed
+parameter factory. `policies.runtime` owns `DetectionPolicy` plus composite
+subpolicies that express derived eligibility or composition.
 `policies.assembly` builds active policy from format facts, mode posture, and
 grouped parameters. `policies.decision` owns the
 final decision contract and derives final evidence policy from physical traits.
@@ -367,10 +379,15 @@ and `diagnostics`; assembly reads those explicit groups and must not restore fla
 property views, string override paths, or per-format builders.
 `FormatParameters` does not store a format name. Assembly receives a resolved
 `FormatPhysicalSpec` and may not degrade it to a string for another registry lookup.
+`DetectionPolicy` directly aggregates canonical parameter objects and only those
+runtime subpolicies that add real composition semantics; it must not duplicate the
+same parameters into shape-identical runtime dataclasses. Current report schema
+identity belongs solely to `x5crop.report.identity`, never to policy or policy detail.
 
-Format files do not carry algorithm switches or runtime profile names.
-Capability enablement is derived from physical facts in `policies.assembly` /
-`policies.reporting`, then expressed by runtime policy.
+Format files do not carry algorithm switches. The canonical
+`FormatPhysicalSpec.frame_geometry_profile` is derived from family, frame aspect,
+count, and physical layout. Policy assembly consumes that physical
+classification; reporting only reads and describes it.
 Decision evidence policy does not use format-id override tables. A format name is
 only a `FormatPhysicalSpec` lookup key; behavior differences come from physical facts
 such as family, frame-size-mm-derived aspect, physical layout, and
@@ -432,9 +449,9 @@ plain parameters and return facts or transformed data. They must not depend back
 on runtime, detection, report, debug, export, or the policy registry. Foundation
 helpers do not create implicit default parameters; callers pass explicit
 parameter objects supplied by runtime policy assembly.
-Frame fitting follows the same contract: callers pass frame-fit parameters or
-explicitly request raw-gap frame construction; geometry does not infer behavior
-from an optional config.
+Frame fitting follows the same contract: callers pass frame-fit parameters;
+the geometry model always supplies the baseline frames and edge evidence refines
+them when available. Geometry does not infer behavior from an optional config.
 Physical lengths resolve by trusted `ScanCalibration` first, frame / pitch
 reference ratio second, and min/max pixel clamp last. Content coverage,
 cross-axis continuity, photo-width CV, aspect error, and confidence remain

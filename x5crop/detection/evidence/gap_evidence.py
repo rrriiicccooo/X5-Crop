@@ -12,7 +12,7 @@ from ...geometry.gap_trust import (
     hard_gap_tonal_separator_like,
     hard_gap_width_ratio,
 )
-from ...policies.runtime.exposure_overlap import ExposureOverlapEvidencePolicy
+from ...policies.parameters.exposure_overlap import ExposureOverlapEvidenceParameters
 from ...policies.runtime.separator import SeparatorPolicy
 from ...utils import clamp_int
 
@@ -38,7 +38,7 @@ def gap_evidence_record(
     gap: Gap,
     *,
     separator_policy: SeparatorPolicy,
-    exposure_overlap_policy: ExposureOverlapEvidencePolicy,
+    exposure_overlap_policy: ExposureOverlapEvidenceParameters,
 ) -> dict[str, Any]:
     hard_gap_trust_policy = separator_policy.hard_gap_trust
     work_outer = gap_work_outer(detection, gap)

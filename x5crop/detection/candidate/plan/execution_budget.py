@@ -15,8 +15,7 @@ def separator_extension_families(
     families: list[str] = []
     if separator_policy.full_width.available_for(strip_mode, explicit_count):
         families.append("separator_full_width")
-    if policy.candidate_plan.content_guided_separator.available_for(strip_mode):
-        families.append("content_guided_separator")
+    families.append("content_guided_separator")
     return families
 
 

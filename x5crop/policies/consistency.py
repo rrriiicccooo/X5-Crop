@@ -5,7 +5,7 @@ from typing import Iterable
 
 from ..formats import FORMAT_CHOICES, STRIP_CHOICES
 from .decision.contract import decision_contract_for_policy
-from .ids import decision_policy_id_for
+from .identity import decision_policy_id_for
 from .registry import get_detection_policy
 from .runtime.policy import DetectionPolicy
 
@@ -34,7 +34,7 @@ def _issue(
     if runtime_value == decision_value:
         return None
     return PolicyConsistencyIssue(
-        policy.physical_spec.format_id.value,
+        policy.physical_spec.format_id,
         policy.strip_mode,
         field,
         runtime_value,
@@ -47,20 +47,15 @@ def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsist
     checks: list[tuple[str, object, object]] = [
         (
             "decision.policy_id",
-            decision_policy_id_for(policy.physical_spec.format_id.value, policy.strip_mode),
+            decision_policy_id_for(policy.physical_spec.format_id, policy.strip_mode),
             contract.policy_id,
         ),
         (
             "format_id",
-            policy.physical_spec.format_id.value,
-            contract.physical_spec.format_id.value,
+            policy.physical_spec.format_id,
+            contract.physical_spec.format_id,
         ),
-        ("strip_mode", policy.strip_mode, contract.mode.mode),
-        (
-            "decision.confidence_threshold_default",
-            policy.scoring.confidence_threshold_default,
-            contract.decision.confidence_threshold_default,
-        ),
+        ("strip_mode", policy.strip_mode, contract.strip_mode),
         (
             "decision.review_confidence_cap",
             policy.candidate_selection.confidence_cap,
@@ -83,7 +78,7 @@ def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsist
         ),
         (
             "evidence.allow_geometry_supported_separator",
-            bool(policy.separator.geometry_support_modes),
+            bool(policy.separator.geometry_support.active_modes()),
             contract.evidence.allow_geometry_supported_separator,
         ),
         (

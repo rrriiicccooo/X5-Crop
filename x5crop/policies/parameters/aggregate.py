@@ -7,11 +7,13 @@ from ...geometry.detection_parameters import (
     GapSearchParameters,
     HardGapTrustParameters,
     NearbySeparatorRefinementParameters,
+    OuterBoxDetectionParameters,
     SeparatorProfileParameters,
     SeparatorWidthProfileSearchParameters,
 )
 from ...image.deskew_parameters import DeskewParameters
 from .base import PartialCountParameters, PartialEdgeHintParameters
+from .candidate import PartialHolderParameters
 from .content import (
     ContentCandidateParameters,
     ContentEvidenceParameters,
@@ -21,9 +23,8 @@ from .content import (
 )
 from .decision import DecisionReviewParameters
 from .diagnostics import DebugGapOverlayParameters, NearbySeparatorDiagnosticsParameters
-from .finalization import ApprovedGeometryAdjustmentParameters, PartialHolderParameters
+from .finalization import ApprovedGeometryAdjustmentParameters
 from .outer import (
-    BaseOuterCandidateParameters,
     ContentContainmentCorrectionParameters,
     EdgeAnchoredContentPositionParameters,
     FloatingContentPositionParameters,
@@ -73,7 +74,7 @@ class OuterParameters:
     outer_strategy: OuterStrategyParameters = field(default_factory=OuterStrategyParameters)
     floating_content_position: FloatingContentPositionParameters = field(default_factory=FloatingContentPositionParameters)
     edge_anchored_content_position: EdgeAnchoredContentPositionParameters = field(default_factory=EdgeAnchoredContentPositionParameters)
-    base_outer_candidates: BaseOuterCandidateParameters = field(default_factory=BaseOuterCandidateParameters)
+    base_outer_candidates: OuterBoxDetectionParameters = field(default_factory=OuterBoxDetectionParameters)
     separator_outer_band: SeparatorOuterBandParameters = field(default_factory=SeparatorOuterBandParameters)
     separator_full_width_outer: FullWidthSeparatorOuterParameters = field(default_factory=FullWidthSeparatorOuterParameters)
     long_axis_geometry_correction: LongAxisGeometryCorrectionParameters = field(default_factory=LongAxisGeometryCorrectionParameters)

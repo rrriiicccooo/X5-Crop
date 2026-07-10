@@ -14,7 +14,6 @@ from ....policies.runtime.content import ContentPolicy
 from ....utils import bbox_from_mask, runs_from_mask, sampled_percentile, smooth_1d
 
 
-CONTENT_REGION_HINT_ROLE = "content_region_hint"
 CONTENT_BBOX_HINT_ROLE = "content_bbox_hint"
 CONTENT_RUN_HINT_ROLE = "content_run_hint"
 
@@ -23,15 +22,15 @@ def content_region_runs(
     evidence: np.ndarray,
     outer: Box,
     count: int,
-    format_name: str,
-    cache: Optional[AnalysisCache] = None,
+    format_id: str,
+    cache: Optional[AnalysisCache],
     *,
     content_policy: ContentPolicy,
 ) -> tuple[list[tuple[int, int]], dict[str, Any]]:
     profile_policy = content_policy.profile
     cache_key: Optional[tuple[Any, ...]] = None
     if cache is not None and evidence is cache.content_evidence_work:
-        cache_key = (str(format_name), int(count), *box_cache_key(outer), profile_policy)
+        cache_key = (str(format_id), int(count), *box_cache_key(outer), profile_policy)
         cached = cache.content_region_runs.get(cache_key)
         if cached is not None:
             runs, detail = cached
@@ -94,12 +93,12 @@ def content_mask_region_detail(
     evidence_float: np.ndarray,
     gray_work_shape: tuple[int, int],
     fmt: FormatPhysicalSpec,
-    cache: Optional[AnalysisCache] = None,
+    cache: Optional[AnalysisCache],
     *,
     content_policy: ContentPolicy,
 ) -> dict[str, Any]:
     mask_policy = content_policy.mask
-    cache_key = (fmt.format_id.value, mask_policy)
+    cache_key = (fmt.format_id, mask_policy)
     if cache is not None:
         cached = cache.content_mask_details.get(cache_key)
         if cached is not None:

@@ -7,7 +7,8 @@ import numpy as np
 
 from ....domain import Box, DetectionCandidate
 from ....geometry.boxes import original_box_to_work
-from ....policies.runtime.content import ContentEvidencePolicy, ContentPolicy
+from ....policies.parameters.content import ContentEvidenceParameters
+from ....policies.runtime.content import ContentPolicy
 from ....cache import AnalysisCache
 from ..evidence_cache_keys import content_detail_cache_key
 from .signal import (
@@ -35,7 +36,7 @@ def content_frame_support_detail(
     *,
     threshold: float,
     expected_aspect: Optional[float],
-    evidence_params: ContentEvidencePolicy,
+    evidence_params: ContentEvidenceParameters,
     composite: str,
 ) -> dict[str, Any]:
     canvas_h, canvas_w = canvas_shape
@@ -114,7 +115,7 @@ def content_frame_support_detail(
 def content_evidence_detail(
     gray: np.ndarray,
     detection: DetectionCandidate,
-    cache: Optional[AnalysisCache] = None,
+    cache: Optional[AnalysisCache],
     *,
     content_policy: ContentPolicy,
     horizontal_frame_aspect: float,

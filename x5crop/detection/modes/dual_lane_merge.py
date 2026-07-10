@@ -33,6 +33,7 @@ def dual_lane_review_detection(
         config,
         context.format_spec,
         context.total_count,
+        context.lane_policy.frame_fit,
     )
     add_candidate_signal(detection, mode_signal)
     mode_diagnostics = detection.detail.setdefault("mode_diagnostics", [])
@@ -81,13 +82,13 @@ def merge_dual_lane_detections(
     if any(conf < config.confidence_threshold for conf in lane_confidences):
         confidence = min(
             confidence,
-            context.lane_policy.scoring.dual_lane_below_threshold_cap,
+            context.lane_policy.scoring.calibration.dual_lane_below_threshold_cap,
         )
         mode_signals.append(SIGNAL_DUAL_LANE_BELOW_THRESHOLD)
     if len(frames) != context.total_count:
         confidence = min(
             confidence,
-            context.lane_policy.scoring.dual_lane_frame_count_mismatch_cap,
+            context.lane_policy.scoring.calibration.dual_lane_frame_count_mismatch_cap,
         )
         mode_signals.append(SIGNAL_FRAME_COUNT_MISMATCH)
 
@@ -182,7 +183,6 @@ def _dual_lane_detail(
                 "confidence": float(confidence),
                 "candidate_signals": sorted(set(mode_signals)),
             },
-            "selection_override": None,
             "top_candidates": lane_summaries,
         },
     }

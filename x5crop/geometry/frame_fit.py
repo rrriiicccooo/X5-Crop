@@ -16,7 +16,6 @@ from ..utils import clamp_float
 class FrameFitParameters(Protocol):
     name: str
     edge_evidence: bool
-    geometry_fallback: bool
     min_edge_samples: int
     nominal_min_ratio: float
     nominal_max_ratio: float
@@ -246,7 +245,7 @@ def fit_frame_boxes_from_gaps(
         bleed_y,
         origin=origin,
         pitch=pitch,
-        geometry_parameters=config if config.geometry_fallback else None,
+        geometry_parameters=config,
     )
     fitted_boxes, detail = fit_boxes_by_edge_evidence(
         outer,
@@ -262,7 +261,6 @@ def fit_frame_boxes_from_gaps(
     detail["parameters"] = {
         "name": config.name,
         "edge_evidence": bool(config.edge_evidence),
-        "geometry_fallback": bool(config.geometry_fallback),
         "min_edge_samples": int(config.min_edge_samples),
         "nominal_min_ratio": float(config.nominal_min_ratio),
         "nominal_max_ratio": float(config.nominal_max_ratio),
@@ -282,7 +280,7 @@ def fit_frame_boxes_from_gaps(
     }
     if fitted_boxes is not None:
         return fitted_boxes, detail
-    detail.setdefault("method", "geometry_fallback" if config.geometry_fallback else "raw_gaps")
+    detail.setdefault("method", "geometry_fallback")
     return base_boxes, detail
 
 

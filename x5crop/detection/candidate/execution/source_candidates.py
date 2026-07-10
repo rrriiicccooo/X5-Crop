@@ -113,8 +113,8 @@ def separator_source_candidates_for_count(
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,
-    cache: Optional[AnalysisCache] = None,
     *,
+    cache: Optional[AnalysisCache],
     gap_max_width_ratio_override: Optional[float] = None,
     policy: DetectionPolicy,
     include_extension_outer: bool = True,
@@ -213,8 +213,8 @@ def content_guided_separator_candidate_for_count(
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,
-    cache: Optional[AnalysisCache] = None,
     *,
+    cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> tuple[Optional[DetectionCandidate], dict]:
     guidance_policy = policy.candidate_plan.content_guided_separator
@@ -275,8 +275,8 @@ def safety_outer_proposal_candidates_for_count(
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,
-    cache: Optional[AnalysisCache] = None,
     *,
+    cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> SourceCandidateBatch:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)

@@ -27,12 +27,12 @@ def edge_anchored_outer_candidates(
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
-    cache: Optional[AnalysisCache] = None,
+    cache: Optional[AnalysisCache],
     *,
     partial_placement: PartialPlacementGeometryPolicy,
 ) -> list[OuterCandidate]:
     edge_anchor_policy = partial_placement.edge_anchor
-    if not partial_placement.enabled or not edge_anchor_policy.enabled:
+    if not partial_placement.enabled:
         return []
     if strip_mode != "partial" or count <= 0:
         return []

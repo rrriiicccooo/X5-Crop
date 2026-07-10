@@ -4,8 +4,15 @@ from pathlib import Path
 
 from ..app_info import SCRIPT_NAME, VERSION
 from ..formats import FORMATS
-from ..runtime.app import run_cli_options
-from .options import CliOptions
+from .invocation import run_entry_options
+from .options import (
+    DEFAULT_CONFIDENCE_THRESHOLD,
+    DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
+    DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
+    DIAGNOSTICS_JOB_LIMIT,
+    STANDARD_JOB_LIMIT,
+    CliOptions,
+)
 
 
 FORMAT_ALIASES = {
@@ -131,9 +138,9 @@ def interactive_options(diagnostics: bool = False) -> CliOptions:
         bleed_y=None,
         deskew="auto",
         deskew_fallback="auto",
-        deskew_min_angle=0.03,
-        deskew_max_angle=2.0,
-        confidence_threshold=0.85,
+        deskew_min_angle=DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
+        deskew_max_angle=DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
+        confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD,
         review_dir=None,
         copy_review_files=False if diagnostics else True,
         export_review=False,
@@ -146,9 +153,9 @@ def interactive_options(diagnostics: bool = False) -> CliOptions:
         report=debug_analysis or diagnostics,
         debug_errors=False,
         reuse_analysis=False if diagnostics else True,
-        jobs=4 if diagnostics else 2,
+        jobs=DIAGNOSTICS_JOB_LIMIT if diagnostics else STANDARD_JOB_LIMIT,
     )
 
 
 def run_interactive(diagnostics: bool = False) -> int:
-    return run_cli_options(interactive_options(diagnostics=diagnostics))
+    return run_entry_options(interactive_options(diagnostics=diagnostics))

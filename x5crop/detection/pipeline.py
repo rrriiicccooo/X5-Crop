@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
 from ..run_config import RunConfig
 from ..domain import DetectionCandidate
 from ..formats import FormatPhysicalSpec
-from ..cache.analysis import make_analysis_cache
 from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..policies.runtime.policy import DetectionPolicy
 from ..cache import AnalysisCache
@@ -28,31 +26,22 @@ class CandidatePipelineResult:
     policy: DetectionPolicy
 
 
-def _attach_runtime_policy_detail(detection: DetectionCandidate, policy) -> None:
-    detection.detail["runtime_policy_detail"] = policy.report_detail()
-
-
 def choose_detection(
     gray: np.ndarray,
     config: RunConfig,
     fmt: FormatPhysicalSpec,
     policy_bundle: DetectionPolicyBundle,
-    cache: Optional[AnalysisCache] = None,
+    cache: AnalysisCache,
 ) -> CandidatePipelineResult:
     candidates: list[DetectionCandidate] = []
-    policy = policy_bundle.policy_for(fmt.format_id.value, config.strip_mode)
-    cache = (
-        cache
-        if cache is not None and cache.layout == config.layout
-        else make_analysis_cache(gray, config.layout, policy.preprocess.content_evidence_image)
-    )
+    policy = policy_bundle.policy_for(fmt.format_id, config.strip_mode)
+    if cache.layout != config.layout:
+        raise ValueError("Analysis cache layout does not match runtime layout")
     if policy.detector.kind == "dual_lane":
         candidate = choose_dual_lane_detection(gray, config, cache, policy, policy_bundle)
-        _attach_runtime_policy_detail(candidate, policy)
         return CandidatePipelineResult(candidate=candidate, policy=policy)
     if policy.detector.kind == "review_only":
         candidate = review_only_detection(gray, config, fmt, policy)
-        _attach_runtime_policy_detail(candidate, policy)
         return CandidatePipelineResult(candidate=candidate, policy=policy)
     count_plan = count_hypothesis_plan(
         strip_mode=config.strip_mode,
@@ -76,13 +65,18 @@ def choose_detection(
             break
 
     if not candidates:
-        candidate = hard_safety_detection(gray, config, fmt, count_plan.fallback_count)
+        candidate = hard_safety_detection(
+            gray,
+            config,
+            fmt,
+            count_plan.fallback_count,
+            policy.frame_fit,
+        )
         candidate.detail["count_selection"] = count_selection_detail(
             candidate,
             count_plan,
             count_evaluations,
         )
-        _attach_runtime_policy_detail(candidate, policy)
         return CandidatePipelineResult(candidate=candidate, policy=policy)
 
     provisional = select_detection_candidate(
@@ -117,5 +111,4 @@ def choose_detection(
         count_plan,
         count_evaluations,
     )
-    _attach_runtime_policy_detail(selected_candidate, selected_policy)
     return CandidatePipelineResult(candidate=selected_candidate, policy=selected_policy)

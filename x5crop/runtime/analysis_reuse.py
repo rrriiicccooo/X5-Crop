@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+from hashlib import sha256
 import json
 from pathlib import Path
 from typing import Any, Optional
@@ -10,11 +12,12 @@ from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
 from ..domain import FinalDetection, ImageProfile, ProcessResult
 from ..export.crops import write_crops
 from ..output.surface import OutputSurface
-from ..image.gray import make_base_gray_u8
+from ..image.gray import BaseGrayParameters, make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..io.tiff import read_tiff
 from ..policies.runtime.bundle import DetectionPolicyBundle
-from ..policies.ids import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
+from ..policies.runtime.policy import DetectionPolicy
+from ..report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from ..report.result_builder import result_from_cached_record, result_from_detection
 from ..cache import REPORT_RECORD_CACHE
 from ..utils import box_from_dict, gap_from_dict
@@ -54,12 +57,28 @@ def config_cache_signature(config: RunConfig) -> dict[str, Any]:
     }
 
 
-def make_analysis_cache_metadata(input_file: Path, profile: ImageProfile, config: RunConfig) -> dict[str, Any]:
+def analysis_policy_fingerprint(policy: DetectionPolicy) -> str:
+    payload = json.dumps(
+        asdict(policy),
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    ).encode("utf-8")
+    return sha256(payload).hexdigest()
+
+
+def make_analysis_cache_metadata(
+    input_file: Path,
+    profile: ImageProfile,
+    config: RunConfig,
+    policy: DetectionPolicy,
+) -> dict[str, Any]:
     return {
         "script": SCRIPT_NAME,
-        "version": VERSION,
+        "script_version": VERSION,
         "source": source_cache_signature(input_file, profile, config.page),
         "config": config_cache_signature(config),
+        "policy_fingerprint": analysis_policy_fingerprint(policy),
     }
 
 
@@ -70,10 +89,10 @@ def detection_from_record(record: dict[str, Any]) -> FinalDetection:
         strip_mode=str(record["strip_mode"]),
         count=int(record["count"]),
         outer=box_from_dict(record["outer_box"]),
-        frames=[box_from_dict(box) for box in record.get("frame_boxes", [])],
-        gaps=[gap_from_dict(gap) for gap in record.get("gaps", [])],
+        frames=[box_from_dict(box) for box in record["frame_boxes"]],
+        gaps=[gap_from_dict(gap) for gap in record["gaps"]],
         confidence=float(record["confidence"]),
-        detail=dict(record.get("detail", {})),
+        detail=dict(record["detail"]),
         status=str(record["status"]),
         final_review_reasons=list(record["final_review_reasons"]),
     )
@@ -84,6 +103,7 @@ def cached_record_matches(
     input_file: Path,
     profile: ImageProfile,
     config: RunConfig,
+    policy: DetectionPolicy,
 ) -> bool:
     if record.get("schema_id") != REPORT_SCHEMA_ID:
         return False
@@ -91,6 +111,7 @@ def cached_record_matches(
         return False
     required_schema_keys = (
         "source",
+        "script_version",
         "format_id",
         "layout",
         "strip_mode",
@@ -105,17 +126,26 @@ def cached_record_matches(
         "decision_gate",
         "decision_signals",
         "evidence_summary",
+        "policy_id",
         "schema_validation",
         "output",
         "detail",
     )
     if any(key not in record for key in required_schema_keys):
         return False
-    detail = record.get("detail")
+    if record["script_version"] != VERSION:
+        return False
+    if record["schema_validation"]:
+        return False
+    detail = record["detail"]
     if not isinstance(detail, dict):
         return False
     decision_summary = detail.get("decision_summary")
     if not isinstance(decision_summary, dict) or not isinstance(decision_summary.get("final_review_reasons"), list):
+        return False
+    if decision_summary["final_review_reasons"] != record["final_review_reasons"]:
+        return False
+    if decision_summary.get("status") != record["status"]:
         return False
     if not isinstance(detail.get("output_geometry"), dict):
         return False
@@ -125,10 +155,22 @@ def cached_record_matches(
         return False
     if not isinstance(detail.get("output_protection_plan"), dict):
         return False
+    deskew_detail = detail.get("deskew")
+    if not isinstance(deskew_detail, dict) or "applied" not in deskew_detail:
+        return False
+    if bool(deskew_detail["applied"]) and "angle" not in deskew_detail:
+        return False
+    output = record["output"]
+    if not isinstance(output, dict):
+        return False
+    if any(key not in output for key in ("output_files", "review_copy", "warnings")):
+        return False
     cache = detail.get("analysis_cache")
     if not isinstance(cache, dict):
         return False
-    if cache.get("script") != SCRIPT_NAME or cache.get("version") != VERSION:
+    if cache.get("script") != SCRIPT_NAME or cache.get("script_version") != VERSION:
+        return False
+    if cache.get("policy_fingerprint") != analysis_policy_fingerprint(policy):
         return False
     expected_source = source_cache_signature(input_file, profile, config.page)
     expected_config = config_cache_signature(config)
@@ -139,7 +181,7 @@ def cached_record_matches(
         return False
     if cached_config != expected_config:
         return False
-    return str(record.get("status", "")) in {"approved_auto", "needs_review"}
+    return str(record["status"]) in {"approved_auto", "needs_review"}
 
 
 def load_report_records(report_path: Path) -> list[dict[str, Any]]:
@@ -174,12 +216,13 @@ def find_reusable_analysis(
     output_dir: Path,
     profile: ImageProfile,
     config: RunConfig,
+    policy: DetectionPolicy,
 ) -> Optional[dict[str, Any]]:
     report_path = output_dir / REPORT_JSONL_NAME
     for record in load_report_records(report_path):
-        if Path(str(record.get("source", ""))).name != input_file.name:
+        if not cached_record_matches(record, input_file, profile, config, policy):
             continue
-        if cached_record_matches(record, input_file, profile, config):
+        if Path(str(record["source"])).name == input_file.name:
             return record
     return None
 
@@ -189,14 +232,14 @@ def apply_cached_deskew(
     gray: np.ndarray,
     axes: str,
     photometric: str,
-    base_gray_params,
+    base_gray_params: BaseGrayParameters,
     detail: dict[str, Any],
     warnings: list[str],
 ) -> tuple[np.ndarray, np.ndarray, bool]:
-    deskew_detail = detail.get("deskew")
-    if not isinstance(deskew_detail, dict) or not bool(deskew_detail.get("applied", False)):
+    deskew_detail = detail["deskew"]
+    if not bool(deskew_detail["applied"]):
         return arr, gray, False
-    angle = float(deskew_detail.get("angle", 0.0))
+    angle = float(deskew_detail["angle"])
     arr = rotate_array_expand(arr, -angle, axes)
     gray = make_base_gray_u8(arr, axes, photometric, base_gray_params)
     warnings.append(f"reused deskew: {-angle:.4f} degrees")
@@ -213,7 +256,13 @@ def result_from_reusable_analysis(
 ) -> ProcessResult | None:
     if not (config.reuse_analysis and not config.dry_run and not config.debug_analysis):
         return None
-    cached_record = find_reusable_analysis(input_file, output_surface.root, profile, config)
+    cached_record = find_reusable_analysis(
+        input_file,
+        output_surface.root,
+        profile,
+        config,
+        policy_bundle.initial_policy,
+    )
     if cached_record is None:
         return None
 
@@ -253,8 +302,7 @@ def result_from_reusable_analysis(
         detection,
         profile,
         output_files,
-        cached_record.get("review_copy"),
+        cached_record["output"]["review_copy"],
         warnings,
-        policy=policy,
         detail_extra={"reused_analysis": True},
     )

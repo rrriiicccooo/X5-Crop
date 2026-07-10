@@ -19,5 +19,4 @@ def apply_safety_candidate_assessment(
         "candidate_blocker_signal": SAFETY_CANDIDATE_BLOCKER,
         "separator_local_mode": policy.outer.proposal.geometry.separator.local.mode,
         "separator_full_width_mode": policy.outer.proposal.geometry.separator.full_width.mode,
-        "strategies": list(policy.candidate_plan.safety_candidate.strategies),
     }

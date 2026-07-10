@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ....policies.runtime.content import ContentEvidencePolicy
+from ....policies.parameters.content import ContentEvidenceParameters
 from .holder_texture import holder_texture_evidence_detail
 
 
@@ -39,7 +39,7 @@ def _leading_trailing_internal_empty_counts(
 
 def content_containment_detail(
     content_detail: dict[str, Any],
-    evidence_policy: ContentEvidencePolicy,
+    evidence_policy: ContentEvidenceParameters,
     *,
     expected_count: int | None = None,
 ) -> dict[str, Any]:

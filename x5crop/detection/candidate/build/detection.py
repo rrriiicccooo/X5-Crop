@@ -14,7 +14,6 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....cache import AnalysisCache
 from ....run_config import RunConfig
 from ....utils import box_from_dict
-from ...evidence.separator_width import separator_width_evidence_detail
 from ...evidence.frame_topology import frame_topology_evidence
 from ...evidence.separator_continuity import separator_cross_axis_continuity_evidence
 from ...gap_profiles import WIDTH_AWARE_GAP_PROFILE
@@ -41,12 +40,12 @@ def build_detection_geometry_for_outer(
     outer_candidate_name: str = "unknown",
     outer_candidate_strategy_name: str | None = None,
     outer_candidate_detail: Optional[dict] = None,
-    cache: Optional[AnalysisCache] = None,
     allow_outer_refine: bool = True,
     gap_max_width_ratio_override: Optional[float] = None,
     gap_search_profile: str = WIDTH_AWARE_GAP_PROFILE,
     separator_gap_hints: Optional[SeparatorGapHintSet] = None,
     *,
+    cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> DetectionCandidate:
     if gap_search_profile != WIDTH_AWARE_GAP_PROFILE:
@@ -129,7 +128,7 @@ def build_detection_geometry_for_outer(
     if separator_gaps.pre_nearby_gaps is not None:
         detail["pre_nearby_gaps"] = [asdict(gap) for gap in separator_gaps.pre_nearby_gaps]
     return DetectionCandidate(
-        format_id=fmt.format_id.value,
+        format_id=fmt.format_id,
         layout=config.layout,
         strip_mode=strip_mode,
         count=count,
@@ -167,15 +166,6 @@ def enrich_detection_geometry_evidence(
         pitch=pitch,
         frame_fit=policy.frame_fit,
     )
-    separator_width_evidence = separator_width_evidence_detail(
-        detection.gaps,
-        float(outer.height),
-        float(policy.partial_holder.broad_separator_width_min_ratio),
-        max(
-            int(policy.partial_holder.requires_broad_separator_width_gaps),
-            int(policy.separator.support.min_broad_separator_width_gaps_for_auto),
-        ),
-    )
     frame_aspect = float(fmt.horizontal_content_aspect or 0.0)
     target_photo_width = float(outer.height) * frame_aspect if frame_aspect > 0.0 else None
     photo_size_consistency = photo_size_consistency_from_gap_edges(
@@ -189,7 +179,6 @@ def enrich_detection_geometry_evidence(
         {
             "frame_topology_evidence": frame_topology_evidence(topology_boxes_work, detection.count),
             "photo_size_consistency": photo_size_consistency.detail(),
-            "separator_width_evidence": separator_width_evidence,
             "separator_cross_axis_continuity": separator_cross_axis_continuity_evidence(
                 gray_work,
                 outer,
@@ -197,9 +186,6 @@ def enrich_detection_geometry_evidence(
                 pitch,
                 policy.separator.hard_gap_trust,
             ),
-            "broad_separator_width_gaps": int(separator_width_evidence.get("broad_separator_width_gaps", 0) or 0),
-            "broad_separator_width_gap_indexes": list(separator_width_evidence.get("broad_separator_width_gap_indexes", [])),
-            "separator_width_min_px": float(separator_width_evidence.get("separator_width_min_px", 0.0) or 0.0),
         }
     )
     return detection

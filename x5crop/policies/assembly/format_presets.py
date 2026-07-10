@@ -9,7 +9,6 @@ from .factory import build_policy_from_preset
 from .presets import (
     FormatPolicyPreset,
     ModePolicyPreset,
-    SeparatorWidthProfilePreset,
 )
 from .profile_presets import frame_fit_profile, separator_edge_pair_profile
 
@@ -25,31 +24,15 @@ def _detector_kind(spec: FormatPhysicalSpec, strip_mode: str) -> str:
     return "standard_strip"
 
 
-def _review_only(spec: FormatPhysicalSpec, strip_mode: str) -> ReviewOnlyPolicy:
+def _review_only(
+    spec: FormatPhysicalSpec,
+    strip_mode: str,
+) -> ReviewOnlyPolicy | None:
     if spec.physical_layout == "dual_lane" and strip_mode == PARTIAL:
         return ReviewOnlyPolicy(
             reason="dual_lane_partial_not_supported",
-            selection_override="dual_lane_partial_review_only",
         )
-    return ReviewOnlyPolicy()
-
-
-def _separator_width_profile(spec: FormatPhysicalSpec) -> SeparatorWidthProfilePreset:
-    if spec.physical_layout != "single_strip":
-        return SeparatorWidthProfilePreset()
-    return SeparatorWidthProfilePreset(
-        mode="conditional",
-        separator_outer_allow_oversized_band=True,
-    )
-
-
-def _separator_geometry_support_modes(
-    spec: FormatPhysicalSpec,
-    strip_mode: str,
-) -> tuple[str, ...]:
-    if spec.frame_geometry_profile == "dense_half" and strip_mode == FULL:
-        return ("detected_geometry", "stable_grid")
-    return ()
+    return None
 
 
 def mode_policy_preset(format_id: str, strip_mode: str) -> ModePolicyPreset:
@@ -58,11 +41,6 @@ def mode_policy_preset(format_id: str, strip_mode: str) -> ModePolicyPreset:
         detector_kind=_detector_kind(spec, strip_mode),
         frame_fit=frame_fit_profile(spec.frame_geometry_profile, strip_mode),
         review_only=_review_only(spec, strip_mode),
-        separator_width_profile=_separator_width_profile(spec),
-        separator_geometry_support_modes=_separator_geometry_support_modes(
-            spec,
-            strip_mode,
-        ),
     )
 
 

@@ -15,6 +15,7 @@ def corrected_outer_from_alignment(
     count: int,
     content_containment_policy: ContentContainmentCorrectionPolicy,
 ) -> Optional[Box]:
+    parameters = content_containment_policy.parameters
     if not bool(alignment.get("used", False)) or bool(alignment.get("ok", True)):
         return None
     try:
@@ -27,37 +28,37 @@ def corrected_outer_from_alignment(
 
     pitch = float(outer.width) / float(max(1, count))
     alignment_margin_x = clamp_int(
-        pitch * content_containment_policy.margin_x_ratio,
-        content_containment_policy.margin_x_min,
-        content_containment_policy.margin_x_max,
+        pitch * parameters.margin_x_ratio,
+        parameters.margin_x_min,
+        parameters.margin_x_max,
     )
     alignment_margin_y = clamp_int(
-        float(outer.height) * content_containment_policy.margin_y_ratio,
-        content_containment_policy.margin_y_min,
-        content_containment_policy.margin_y_max,
+        float(outer.height) * parameters.margin_y_ratio,
+        parameters.margin_y_min,
+        parameters.margin_y_max,
     )
     long_margin_cap = clamp_int(
-        pitch * content_containment_policy.long_margin_cap_ratio,
-        content_containment_policy.long_margin_cap_min,
-        content_containment_policy.long_margin_cap_max,
+        pitch * parameters.long_margin_cap_ratio,
+        parameters.long_margin_cap_min,
+        parameters.long_margin_cap_max,
     )
     short_margin_cap = clamp_int(
-        float(outer.height) * content_containment_policy.short_margin_cap_ratio,
-        content_containment_policy.short_margin_cap_min,
-        content_containment_policy.short_margin_cap_max,
+        float(outer.height) * parameters.short_margin_cap_ratio,
+        parameters.short_margin_cap_min,
+        parameters.short_margin_cap_max,
     )
     long_margin = max(
         alignment_margin_x,
         min(
             long_margin_cap,
-            int(round(pitch * content_containment_policy.long_margin_ratio)),
+            int(round(pitch * parameters.long_margin_ratio)),
         ),
     )
     short_margin = max(
         alignment_margin_y,
         min(
             short_margin_cap,
-            int(round(float(outer.height) * content_containment_policy.short_margin_ratio)),
+            int(round(float(outer.height) * parameters.short_margin_ratio)),
         ),
     )
     left, top, right, bottom = outer.left, outer.top, outer.right, outer.bottom
@@ -75,13 +76,13 @@ def corrected_outer_from_alignment(
     if not corrected.valid():
         return None
     if corrected.width < max(
-        int(content_containment_policy.min_corrected_width_px),
-        int(round(outer.width * content_containment_policy.min_corrected_size_ratio)),
+        int(parameters.min_corrected_width_px),
+        int(round(outer.width * parameters.min_corrected_size_ratio)),
     ):
         return None
     if corrected.height < max(
-        int(content_containment_policy.min_corrected_height_px),
-        int(round(outer.height * content_containment_policy.min_corrected_size_ratio)),
+        int(parameters.min_corrected_height_px),
+        int(round(outer.height * parameters.min_corrected_size_ratio)),
     ):
         return None
     if corrected == outer:

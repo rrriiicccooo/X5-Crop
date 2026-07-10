@@ -48,11 +48,6 @@ def decision_summary(detection: DetectionCandidate) -> dict[str, Any]:
     return detail_dict(detection, DECISION_SUMMARY)
 
 
-def has_current_decision_summary(detection: FinalDetection) -> bool:
-    summary = detection.detail.get(DECISION_SUMMARY)
-    return isinstance(summary, dict) and isinstance(summary.get("final_review_reasons"), list)
-
-
 def decision_schema_diagnostics(detection: FinalDetection) -> list[dict[str, str]]:
     diagnostics: list[dict[str, str]] = []
     summary = detection.detail.get(DECISION_SUMMARY)

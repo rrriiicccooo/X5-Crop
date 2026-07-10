@@ -73,6 +73,7 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
             _config(),
             format_spec("135"),
             CANDIDATE_SOURCE_SAFETY,
+            cache=None,
             policy=policy,
         )
 

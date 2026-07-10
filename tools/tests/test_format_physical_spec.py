@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import unittest
 
-from x5crop.formats import FORMATS, FormatId
+from x5crop.formats import FORMATS
 from x5crop.detection.candidate.plan.count_hypotheses import count_hypothesis_plan
+from x5crop.detection.modes.dual_lane_context import build_dual_lane_context
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.reporting import detection_policy_report_detail
+from x5crop.policies.runtime.bundle import DetectionPolicyBundle
 
 
 class FormatPhysicalSpecTests(unittest.TestCase):
@@ -34,7 +36,7 @@ class FormatPhysicalSpecTests(unittest.TestCase):
         dual = FORMATS["135-dual"]
         self.assertEqual(dual.physical_layout, "dual_lane")
         self.assertEqual(dual.lane_count, 2)
-        self.assertEqual(dual.lane_format_id, FormatId.STANDARD_STRIP)
+        self.assertEqual(dual.lane_format_id, "135")
         self.assertEqual(dual.expected_separator_count, 10)
 
         for format_id, spec in FORMATS.items():
@@ -42,6 +44,14 @@ class FormatPhysicalSpecTests(unittest.TestCase):
                 continue
             self.assertEqual(spec.lane_count, 1)
             self.assertIsNone(spec.lane_format_id)
+
+    def test_dual_lane_context_uses_canonical_string_identity(self) -> None:
+        bundle = DetectionPolicyBundle.for_format_mode("135-dual", "full")
+
+        context = build_dual_lane_context(bundle.initial_policy, bundle)
+
+        self.assertEqual(context.format_id, "135-dual")
+        self.assertEqual(context.lane_format_id, "135")
 
     def test_medium_square_records_same_aspect_size_variant(self) -> None:
         spec = FORMATS["120-66"]

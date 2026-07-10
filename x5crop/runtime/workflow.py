@@ -11,22 +11,27 @@ from ..cache.analysis import make_analysis_cache
 from ..run_config import RunConfig
 from .output_protection import prepare_output_protection
 from .deskew import apply_deskew
-from .profile import runtime_for_profile
 from ..debug.outputs import write_debug_outputs
 from ..detection.decision.final_decision import apply_detection_decision
+from ..detection.detail import DECISION_POLICY_DETAIL, RUNTIME_POLICY_DETAIL
 from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
 from ..domain import ProcessResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
+from ..geometry.layout import infer_layout
 from ..image.gray import make_base_gray_u8
 from ..io.tiff import read_tiff, read_tiff_profile
-from ..output.bleed import detection_bleed_parameters
 from ..output.surface import output_surface_for_input
 from ..policies.decision.contract import decision_contract_for_policy
+from ..policies.reporting import (
+    decision_contract_report_detail,
+    detection_policy_report_detail,
+)
 from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..report.outputs import write_report_outputs_for_result
 from ..report.result_builder import result_from_detection
 from ..units import scan_calibration_from_profile
+from ..utils import spatial_shape_from_shape
 from ..detection.evidence.holder_occupancy import enrich_holder_occupancy_with_calibration
 
 
@@ -38,7 +43,9 @@ def process_one(input_file: Path, config: RunConfig) -> ProcessResult:
     output_surface = output_surface_for_input(input_file, config)
     output_dir = output_surface.root
     profile, warnings = read_tiff_profile(input_file, config.page)
-    config = runtime_for_profile(config, profile)
+    height, width = spatial_shape_from_shape(profile.shape)
+    layout = infer_layout(width, height) if config.layout_auto else config.layout
+    config = replace(config, layout=layout)
     policy_bundle = DetectionPolicyBundle.for_format_mode(config.format_id, config.strip_mode)
     initial_policy = policy_bundle.initial_policy
     fmt = initial_policy.physical_spec
@@ -56,11 +63,11 @@ def process_one(input_file: Path, config: RunConfig) -> ProcessResult:
     scan_calibration = scan_calibration_from_profile(profile, initial_policy.preprocess.scan_calibration_trust)
     analysis_cache = make_analysis_cache(gray, config.layout, initial_policy.preprocess.content_evidence_image)
     policy = initial_policy
-    detection_bleed = detection_bleed_parameters(policy.output)
-    detection_config = replace(config, bleed_x=detection_bleed.long_axis, bleed_y=detection_bleed.short_axis)
+    detection_config = replace(config, bleed_x=0, bleed_y=0)
     detection_result = choose_detection(gray, detection_config, fmt, policy_bundle, analysis_cache)
     detection = detection_result.candidate
     selected_policy = detection_result.policy
+    detection.detail[RUNTIME_POLICY_DETAIL] = detection_policy_report_detail(selected_policy)
     detection.detail["scan_calibration"] = scan_calibration.detail()
     holder_occupancy = detection.detail.get("holder_occupancy")
     if isinstance(holder_occupancy, dict):
@@ -75,6 +82,7 @@ def process_one(input_file: Path, config: RunConfig) -> ProcessResult:
         analysis_cache,
         selected_policy,
     )
+    decision_contract = decision_contract_for_policy(selected_policy)
     decided_detection = apply_detection_decision(
         gray,
         detection,
@@ -82,7 +90,10 @@ def process_one(input_file: Path, config: RunConfig) -> ProcessResult:
         analysis_cache,
         deskew_detail,
         selected_policy,
-        decision_contract_for_policy(selected_policy),
+        decision_contract,
+    )
+    decided_detection.detail[DECISION_POLICY_DETAIL] = decision_contract_report_detail(
+        decision_contract
     )
     detection = finalize_detection(
         gray,
@@ -112,10 +123,14 @@ def process_one(input_file: Path, config: RunConfig) -> ProcessResult:
         output_files,
         review_copy,
         warnings,
-        policy=selected_policy,
         detail_extra={
             "deskew": deskew_detail,
-            "analysis_cache": make_analysis_cache_metadata(input_file, profile, config),
+            "analysis_cache": make_analysis_cache_metadata(
+                input_file,
+                profile,
+                config,
+                selected_policy,
+            ),
         },
     )
     return _finish_result(result, config)

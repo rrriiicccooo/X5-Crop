@@ -1,173 +1,40 @@
 from __future__ import annotations
 
 from .presets import ModePolicyPreset
-from .profile_defaults import (
-    base_detection_score_parameters,
-    partial_holder_parameters,
-    scoring_calibration_parameters,
-    separator_support_score_parameters,
-)
-from ...formats import FormatPhysicalSpec
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import PARTIAL
 from ..runtime.candidate import (
-    BaseDetectionScorePolicy,
     CandidatePlanPolicy,
-    SafetyCandidatePolicy,
-    GeometrySupportScorePolicy,
-    OuterCorrectionCandidateExtensionPolicy,
-    PartialEdgeHintPolicy,
     PartialHolderPolicy,
-    PartialStopPolicy,
     ScoringPolicy,
-    SelectionPolicy,
-    SeparatorSupportScorePolicy,
 )
 
 
 def partial_holder_policy(
-    fmt: FormatPhysicalSpec,
     mode_preset: ModePolicyPreset,
     strip_mode: str,
     params: FormatParameters,
 ) -> PartialHolderPolicy:
-    holder = partial_holder_parameters(fmt, params)
-    if mode_preset.detector_kind == "review_only":
-        holder_enabled = False
-    else:
-        holder_enabled = bool(holder.enabled)
+    holder = params.candidate.partial_holder
     content_evidence = params.content.content_evidence
-    partial_edge_safety_enabled = strip_mode == PARTIAL and holder_enabled
+    partial_edge_safety_enabled = bool(
+        strip_mode == PARTIAL and mode_preset.detector_kind != "review_only"
+    )
     return PartialHolderPolicy(
-        allow_empty_holder_frames=partial_edge_safety_enabled,
-        requires_broad_separator_width_gaps=(
-            int(holder.min_broad_separator_width_gaps)
-            if partial_edge_safety_enabled
-            else 0
-        ),
-        checks_leading_content=bool(
-            partial_edge_safety_enabled and holder.leading_content_check
-        ),
-        checks_frame_content=bool(
-            partial_edge_safety_enabled and holder.frame_content_check
-        ),
-        min_count_35mm=int(holder.min_count_35mm),
-        min_count_small=int(holder.min_count_small),
-        min_hard_gaps=int(holder.min_hard_gaps),
-        min_hard_ratio=float(holder.min_hard_ratio),
-        max_equal_gaps=int(holder.max_equal_gaps),
-        max_photo_width_cv=float(holder.max_photo_width_cv),
-        min_joint_score=float(holder.min_joint_score),
-        min_content_score=float(holder.min_content_score),
-        min_geometry_score=float(holder.min_geometry_score),
-        broad_separator_width_min_ratio=float(holder.broad_separator_width_min_ratio),
-        leading_content_max_mean=float(holder.leading_content_max_mean),
-        leading_content_max_coverage=float(holder.leading_content_max_coverage),
-        leading_content_band_ratio=float(holder.leading_content_band_ratio),
-        leading_content_band_min_px=int(holder.leading_content_band_min_px),
-        leading_content_band_max_ratio=float(holder.leading_content_band_max_ratio),
-        leading_content_signal_threshold=float(holder.leading_content_signal_threshold),
-        min_frame_mean=float(holder.min_frame_mean),
-        min_frame_coverage=float(holder.min_frame_coverage),
+        enabled=partial_edge_safety_enabled,
+        parameters=holder,
         max_frame_aspect_error=float(content_evidence.aspect_ok_max),
     )
 
 
-def scoring_policy(fmt: FormatPhysicalSpec, params: FormatParameters) -> ScoringPolicy:
-    calibration = scoring_calibration_parameters(fmt, params)
-    competition = params.candidate.candidate_competition
-    base_score = base_detection_score_parameters(fmt, params)
-    geometry_support = params.candidate.geometry_support_score
-    separator_support = separator_support_score_parameters(fmt, params)
+def scoring_policy(params: FormatParameters) -> ScoringPolicy:
     return ScoringPolicy(
-        hard_full_confidence_floor=float(calibration.hard_full_confidence_floor),
-        geometry_weight=float(calibration.geometry_weight),
-        content_weight=float(calibration.content_weight),
-        separator_weight=float(calibration.separator_weight),
-        separator_source_bias=float(calibration.separator_source_bias),
-        no_auto_cap_full=float(calibration.no_auto_cap_full),
-        no_auto_cap_partial=float(calibration.no_auto_cap_partial),
-        candidate_gate_pass_boost_cap=float(calibration.candidate_gate_pass_boost_cap),
-        candidate_gate_pass_boost_ratio=float(calibration.candidate_gate_pass_boost_ratio),
-        dual_lane_below_threshold_cap=float(calibration.dual_lane_below_threshold_cap),
-        dual_lane_frame_count_mismatch_cap=float(
-            calibration.dual_lane_frame_count_mismatch_cap
-        ),
-        base_detection=BaseDetectionScorePolicy(
-            photo_width_cv_norm=float(base_score.photo_width_cv_norm),
-            gap_weight=float(base_score.gap_weight),
-            photo_width_weight=float(base_score.photo_width_weight),
-            outer_min_area=float(base_score.outer_min_area),
-            outer_max_area=float(base_score.outer_max_area),
-            outer_too_large=float(base_score.outer_too_large),
-            image_quality_contrast_min=float(base_score.image_quality_contrast_min),
-            full_photo_width_cv=float(base_score.full_photo_width_cv),
-            geometry_floor_tight_photo_width_cv=float(base_score.geometry_floor_tight_photo_width_cv),
-            geometry_floor_high=float(base_score.geometry_floor_high),
-            geometry_floor_low=float(base_score.geometry_floor_low),
-            unstable_photo_width_cv=float(base_score.unstable_photo_width_cv),
-            full_outer_min_area=float(base_score.full_outer_min_area),
-            low_confidence_floor=float(base_score.low_confidence_floor),
-            partial_one_cap=float(base_score.partial_one_cap),
-            partial_two_35mm_cap=float(base_score.partial_two_35mm_cap),
-            image_quality_percentiles=tuple(
-                float(value) for value in base_score.image_quality_percentiles
-            ),
-            hard_support_floor_min_expected_gaps=int(
-                base_score.hard_support_floor_min_expected_gaps
-            ),
-            hard_gap_floor_min_count=int(base_score.hard_gap_floor_min_count),
-            model_gap_overuse_min_count=int(base_score.model_gap_overuse_min_count),
-            partial_ambiguous_count_max=int(base_score.partial_ambiguous_count_max),
-            partial_dense_strip_min_default_count=int(
-                base_score.partial_dense_strip_min_default_count
-            ),
-        ),
-        geometry_support=GeometrySupportScorePolicy(
-            photo_width_cv_norm=float(geometry_support.photo_width_cv_norm),
-            aspect_norm=float(geometry_support.aspect_norm),
-            photo_width_weight=float(geometry_support.photo_width_weight),
-            aspect_weight=float(geometry_support.aspect_weight),
-            count_weight=float(geometry_support.count_weight),
-        ),
-        separator_support=SeparatorSupportScorePolicy(
-            model_grid_credit=float(separator_support.model_grid_credit),
-            model_equal_credit=float(separator_support.model_equal_credit),
-            hard_weight=float(separator_support.hard_weight),
-            model_weight=float(separator_support.model_weight),
-            no_expected_confidence_threshold=float(separator_support.no_expected_confidence_threshold),
-            no_expected_confidence_cap=float(separator_support.no_expected_confidence_cap),
-        ),
+        calibration=params.candidate.scoring_calibration,
+        base_detection=params.candidate.base_detection_score,
+        geometry_support=params.candidate.geometry_support_score,
+        separator_support=params.candidate.separator_support_score,
     )
 
 
-def selection_policy(
-    params: FormatParameters,
-) -> SelectionPolicy:
-    competition = params.candidate.candidate_competition
-    return SelectionPolicy(
-        top_n=int(competition.top_n),
-        close_margin=float(competition.close_margin),
-        confidence_cap=float(competition.confidence_cap),
-    )
-
-
-def candidate_plan_policy(
-    mode_preset: ModePolicyPreset,
-) -> CandidatePlanPolicy:
-    return CandidatePlanPolicy(
-        safety_candidate=SafetyCandidatePolicy(),
-        partial_stop=PartialStopPolicy(),
-        outer_correction_extension=OuterCorrectionCandidateExtensionPolicy(
-            enabled=mode_preset.detector_kind == "standard_strip",
-        ),
-    )
-
-
-def partial_edge_hint_policy(params: FormatParameters) -> PartialEdgeHintPolicy:
-    hint = params.candidate.partial_edge_hint
-    return PartialEdgeHintPolicy(
-        window_ratio=float(hint.window_ratio),
-        window_min=int(hint.window_min),
-        window_max=int(hint.window_max),
-    )
+def candidate_plan_policy() -> CandidatePlanPolicy:
+    return CandidatePlanPolicy()

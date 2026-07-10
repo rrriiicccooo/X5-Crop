@@ -7,9 +7,8 @@ from ..runtime.base import CountHypothesisPolicy, FrameFitPolicy
 
 def partial_frame_fit(fmt: FormatPhysicalSpec) -> FrameFitPolicy:
     return FrameFitPolicy(
-        name=f"{fmt.format_id.value}-partial",
+        name=f"{fmt.format_id}-partial",
         edge_evidence=False,
-        geometry_fallback=True,
     )
 
 

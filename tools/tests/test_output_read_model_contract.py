@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from inspect import Parameter, signature
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -10,7 +11,7 @@ import unittest
 from tools.tests.architecture_contracts import PROJECT_ROOT
 from x5crop.debug.status import debug_status_parts
 from x5crop.detection.detail import candidate_signals_from_detail
-from x5crop.domain import Box, FinalDetection, ImageProfile
+from x5crop.domain import Box, FinalDetection, ImageProfile, ProcessResult
 from x5crop.export.actions import copy_for_review_if_needed
 from x5crop.report.outputs import append_report_jsonl
 from x5crop.policies.registry import get_detection_policy
@@ -39,7 +40,115 @@ def _detection(
     )
 
 
+def _process_result(detection: FinalDetection) -> ProcessResult:
+    return ProcessResult(
+        source="input.tif",
+        status=detection.status,
+        confidence=detection.confidence,
+        format_id=detection.format_id,
+        layout=detection.layout,
+        strip_mode=detection.strip_mode,
+        count=detection.count,
+        final_review_reasons=list(detection.final_review_reasons),
+        output_files=[],
+        review_copy=None,
+        detail=dict(detection.detail),
+        profile={},
+        warnings=[],
+    )
+
+
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_script_version_identity_has_one_canonical_key(self) -> None:
+        cache_source = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "analysis_reuse.py"
+        ).read_text(encoding="utf-8")
+        output_source = (
+            PROJECT_ROOT / "x5crop" / "report" / "outputs.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('"script_version": VERSION', cache_source)
+        self.assertNotIn('"version": VERSION', cache_source)
+        self.assertIn('"script_version",', output_source)
+        self.assertNotIn('"version",', output_source)
+
+    def test_report_schema_has_no_duplicate_section_projections(self) -> None:
+        self.assertIs(
+            signature(report_record_for_final_detection).parameters["result"].default,
+            Parameter.empty,
+        )
+
+        detection = _detection()
+        schema = report_record_for_final_detection(
+            detection,
+            _process_result(detection),
+        )
+
+        self.assertEqual(schema["schema_revision"], "canonical_result_and_decision")
+        for duplicate in (
+            "version",
+            "format",
+            "result",
+            "decision_policy_detail",
+        ):
+            self.assertNotIn(duplicate, schema)
+        self.assertIn("script_version", schema)
+        self.assertIn("policy", schema)
+        self.assertIn("schema_validation", schema)
+        self.assertNotIn("schema_validation", schema["diagnostics"])
+        self.assertNotIn("scan_calibration", schema["diagnostics"])
+        source = (
+            PROJECT_ROOT / "x5crop" / "report" / "record.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn('"status": result.status', source)
+
+    def test_selected_candidate_does_not_duplicate_final_decision(self) -> None:
+        from x5crop.report.read_models import selected_candidate
+
+        detection = _detection(
+            {
+                "candidate_competition": {
+                    "selected_candidate": {"format_id": "135", "confidence": 0.8}
+                }
+            }
+        )
+
+        selected = selected_candidate(detection)
+
+        for duplicate in ("final_confidence", "final_review_reasons", "decision_status"):
+            self.assertNotIn(duplicate, selected)
+
+    def test_summary_writer_requires_current_schema_fields(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "report" / "outputs.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        function = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "append_summary_csv"
+        )
+        fallback_reads = [
+            node.lineno
+            for node in ast.walk(function)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+        ]
+
+        self.assertEqual(fallback_reads, [])
+
+    def test_regression_tools_read_current_report_schema_only(self) -> None:
+        from tools.regression.compare import report_key
+
+        detection = _detection()
+        current = report_record_for_final_detection(
+            detection,
+            _process_result(detection),
+        )
+        current["source"] = "current.tif"
+        self.assertEqual(report_key(current), "current.tif")
+        with self.assertRaises(ValueError):
+            report_key({"input_file": "superseded.tif"})
+
     def test_report_builder_does_not_overwrite_policy_input(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "report" / "record.py"
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -73,18 +182,20 @@ class OutputReadModelContractTest(unittest.TestCase):
             },
             ["separator_evidence_insufficient"],
         )
-        decided_schema = report_record_for_final_detection(decided, policy=self._policy())
+        decided_schema = report_record_for_final_detection(
+            decided,
+            _process_result(decided),
+        )
 
         self.assertEqual(decided_schema["status"], "needs_review")
-        self.assertEqual(decided_schema["result"]["status"], "needs_review")
         self.assertEqual(
-            decided_schema["result"]["final_review_reasons"],
+            decided_schema["final_review_reasons"],
             ["separator_evidence_insufficient"],
         )
 
         approved = report_record_for_final_detection(
-            _detection(status="approved_auto"),
-            policy=self._policy(),
+            (approved_detection := _detection(status="approved_auto")),
+            _process_result(approved_detection),
         )
         self.assertEqual(approved["status"], "approved_auto")
 
@@ -121,8 +232,11 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertIn("outer_content_mismatch", warnings[0])
         self.assertNotIn("candidate_level_stale_reason", warnings[0])
 
-        schema = report_record_for_final_detection(detection, policy=self._policy())
-        self.assertEqual(schema["result"]["final_review_reasons"], ["outer_content_mismatch"])
+        schema = report_record_for_final_detection(
+            detection,
+            _process_result(detection),
+        )
+        self.assertEqual(schema["final_review_reasons"], ["outer_content_mismatch"])
 
         profile = ImageProfile(
             shape=(100, 100),
@@ -145,7 +259,6 @@ class OutputReadModelContractTest(unittest.TestCase):
             [],
             None,
             [],
-            self._policy(),
         )
         self.assertEqual(result.final_review_reasons, ["outer_content_mismatch"])
 
@@ -180,8 +293,12 @@ class OutputReadModelContractTest(unittest.TestCase):
             [],
             None,
             [],
-            self._policy(),
-            detail_extra={"analysis_cache": {"script": "X5_Crop.py", "version": "test"}},
+            detail_extra={
+                "analysis_cache": {
+                    "script": "X5_Crop.py",
+                    "script_version": "test",
+                }
+            },
         )
 
         with TemporaryDirectory() as tmp:
@@ -214,6 +331,38 @@ class OutputReadModelContractTest(unittest.TestCase):
             self.assertNotIn('cached_record.get("format")', source)
             self.assertNotIn('get("layout") or format_detail.get("layout")', source)
             self.assertNotIn('get("count") or format_detail.get("count")', source)
+        for term in (
+            'record.get("frame_boxes", [])',
+            'record.get("gaps", [])',
+            'record.get("detail", {})',
+            'cached_record.get("review_copy")',
+            'deskew_detail.get("angle", 0.0)',
+        ):
+            self.assertNotIn(term, reuse_source)
+        for term in (
+            'cached_record.get("detail", {})',
+            'cached_record.get("policy_id", "")',
+            'output_detail.get("output_files", [])',
+        ):
+            self.assertNotIn(term, result_source)
+
+    def test_analysis_cache_identity_changes_with_runtime_policy(self) -> None:
+        from dataclasses import replace
+
+        from x5crop.runtime.analysis_reuse import analysis_policy_fingerprint
+
+        policy = self._policy()
+        changed = replace(
+            policy,
+            decision=replace(
+                policy.decision,
+                outer_mismatch_cap=policy.decision.outer_mismatch_cap - 0.01,
+            ),
+        )
+        self.assertNotEqual(
+            analysis_policy_fingerprint(policy),
+            analysis_policy_fingerprint(changed),
+        )
 
     def test_policy_id_has_no_secondary_detail_fallback(self) -> None:
         source = (
@@ -252,7 +401,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         cached_record = {
             "schema_id": "detection_report",
-            "schema_revision": "physical_count_and_output_protection",
+            "schema_revision": "canonical_result_and_decision",
             "source": "input.tif",
             "status": "needs_review",
             "confidence": 0.84,
@@ -264,6 +413,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             "outer_box": {"left": 0, "top": 0, "right": 10, "bottom": 10},
             "frame_boxes": [],
             "gaps": [],
+            "policy_id": "decision:135:full",
             "detail": {"analysis_cache": {"script": "X5_Crop.py"}},
             "output": {"output_files": [], "review_copy": None, "warnings": []},
         }
@@ -276,14 +426,18 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(result.report_record["output"]["warnings"], ["reused"])
 
     def test_report_schema_uses_diagnostics_section_not_finalization(self) -> None:
-        schema = report_record_for_final_detection(_detection(), policy=self._policy())
+        detection = _detection()
+        schema = report_record_for_final_detection(
+            detection,
+            _process_result(detection),
+        )
 
         self.assertIn("diagnostics", schema)
         self.assertNotIn("finalization", schema)
 
     def test_report_schema_exposes_evidence_and_candidate_gate_sections(self) -> None:
         schema = report_record_for_final_detection(
-            _detection(
+            (detection := _detection(
                 {
                     "candidate_assessment": {
                         "candidate_gate": {
@@ -304,8 +458,8 @@ class OutputReadModelContractTest(unittest.TestCase):
                         }
                     },
                 }
-            ),
-            policy=self._policy(),
+            )),
+            _process_result(detection),
         )
 
         self.assertIn("evidence", schema)

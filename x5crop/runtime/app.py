@@ -8,11 +8,9 @@ from pathlib import Path
 
 from ..app_info import SCRIPT_NAME, VERSION
 from ..domain import ProcessResult
-from ..entry.options import CliOptions
 from ..report.outputs import write_report_outputs_for_result
 from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..run_config import RunConfig
-from .input_probe import runtime_config_from_options
 from .workflow import process_one_worker
 
 
@@ -116,9 +114,3 @@ def run_runtime(config: RunConfig, files: list[Path]) -> int:
 
     print(f"\ndone: ok={ok} failed={failed} approved={approved} review={review}")
     return 0 if failed == 0 else 1
-
-
-def run_cli_options(options: CliOptions) -> int:
-    config, files = runtime_config_from_options(options)
-    print_run_header(config, files)
-    return run_runtime(config, files)

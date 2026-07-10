@@ -16,7 +16,13 @@ from ..formats import (
     STRIP_CHOICES,
 )
 from ..output.protection import DEFAULT_OUTPUT_BLEED
-from .options import CliOptions
+from .options import (
+    DEFAULT_CONFIDENCE_THRESHOLD,
+    DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
+    DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
+    STANDARD_JOB_LIMIT,
+    CliOptions,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,9 +40,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--deskew", choices=DESKEW_CHOICES, default="auto", help="Deskew strip before detection/export.")
     parser.add_argument("--deskew-fallback", choices=DESKEW_FALLBACK_CHOICES, default="auto", help="Fallback edge fitting for deskew angle selection. auto runs the fallback only when base deskew quality is weak; always evaluates it; off disables the fallback.")
     parser.add_argument("--compression", choices=COMPRESSION_CHOICES, default="same", help="TIFF output compression: same for known lossless source compression, or none.")
-    parser.add_argument("--deskew-min-angle", type=float, default=0.03, help="Minimum absolute deskew angle in degrees.")
-    parser.add_argument("--deskew-max-angle", type=float, default=2.0, help="Maximum absolute deskew angle in degrees.")
-    parser.add_argument("--confidence-threshold", type=float, default=0.85, help="Minimum confidence for automatic export.")
+    parser.add_argument("--deskew-min-angle", type=float, default=DEFAULT_DESKEW_MIN_ANGLE_DEGREES, help="Minimum absolute deskew angle in degrees.")
+    parser.add_argument("--deskew-max-angle", type=float, default=DEFAULT_DESKEW_MAX_ANGLE_DEGREES, help="Maximum absolute deskew angle in degrees.")
+    parser.add_argument("--confidence-threshold", type=float, default=DEFAULT_CONFIDENCE_THRESHOLD, help="Minimum confidence for automatic export.")
     parser.add_argument("--copy-review-files", dest="copy_review_files", action="store_true", default=True, help="Copy low-confidence source TIFFs to review folder; default on.")
     parser.add_argument("--no-copy-review-files", dest="copy_review_files", action="store_false", help="Do not copy low-confidence source TIFFs to review folder.")
     parser.add_argument("--review-dir", default=None, help="Review folder; default output/needs_review.")
@@ -48,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with original gray, debug boxes, and separator evidence.")
     parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --dry-run --no-copy-review-files --no-reuse-analysis.")
     parser.add_argument("--no-reuse-analysis", dest="reuse_analysis", action="store_false", default=True, help="Do not reuse matching Debug Analysis report data for non-dry-run export.")
-    parser.add_argument("--jobs", type=int, default=2, help="Parallel TIFF workers. Default 2. Normal runs cap at 2; diagnostics runs cap at 4.")
+    parser.add_argument("--jobs", type=int, default=STANDARD_JOB_LIMIT, help="Parallel TIFF workers. Default 2. Normal runs cap at 2; diagnostics runs cap at 4.")
     parser.add_argument("--debug-errors", action="store_true", help="Print tracebacks on errors.")
     parser.add_argument("--interactive", action="store_true", help="Prompt for format, mode, and Debug Analysis options.")
     parser.add_argument("--interactive-diagnostics", action="store_true", help="Prompt for diagnostics options and run read-only diagnostics.")
@@ -116,9 +122,9 @@ def main(argv: list[str] | None = None) -> int:
             from .interactive import run_interactive
 
             return run_interactive(diagnostics=bool(args.interactive_diagnostics))
-        from ..runtime.app import run_cli_options
+        from .invocation import run_entry_options
 
-        return run_cli_options(options_from_args(args))
+        return run_entry_options(options_from_args(args))
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         if "args" in locals() and bool(getattr(args, "debug_errors", False)):

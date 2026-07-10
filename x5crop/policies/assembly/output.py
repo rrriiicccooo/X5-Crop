@@ -1,18 +1,10 @@
 from __future__ import annotations
 
 from ..parameters.aggregate import FormatParameters
-from ..runtime.output import ExposureOverlapProtectionPolicy, OutputPolicy
+from ..runtime.output import OutputPolicy
 
 
 def output_policy(params: FormatParameters) -> OutputPolicy:
-    protection = params.output.exposure_overlap_protection
     return OutputPolicy(
-        exposure_overlap_protection=ExposureOverlapProtectionPolicy(
-            required_bleed_window_fraction=float(
-                protection.required_bleed_window_fraction
-            ),
-            required_bleed_padding_px=int(protection.required_bleed_padding_px),
-            required_bleed_min_px=int(protection.required_bleed_min_px),
-            long_axis_bleed_capacity_px=int(protection.long_axis_bleed_capacity_px),
-        )
+        exposure_overlap_protection=params.output.exposure_overlap_protection,
     )

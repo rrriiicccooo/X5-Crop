@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import ast
 from dataclasses import fields
 from pathlib import Path
 import unittest
 
+from tools.tests.architecture_contracts import (
+    duplicate_dataclass_models,
+    translated_parameter_models,
+)
 from x5crop.policies.parameters.aggregate import FormatParameters
 
 
@@ -11,6 +16,311 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class ArchitectureResidualContractTest(unittest.TestCase):
+    def test_static_schema_and_gap_taxonomy_are_not_runtime_policy_fields(self) -> None:
+        from x5crop.policies.runtime.policy import DetectionPolicy
+        from x5crop.policies.runtime.separator import SeparatorPolicy
+
+        self.assertNotIn("report", DetectionPolicy.__dataclass_fields__)
+        self.assertNotIn("hard_methods", SeparatorPolicy.__dataclass_fields__)
+        self.assertNotIn("model_methods", SeparatorPolicy.__dataclass_fields__)
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop" / "policies" / "runtime" / "report.py").exists()
+        )
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "report.py").exists()
+        )
+
+    def test_contract_test_modules_stay_below_single_responsibility_size_limit(self) -> None:
+        offenders = [
+            str(path.relative_to(PROJECT_ROOT))
+            for path in (PROJECT_ROOT / "tools" / "tests").glob("test_*_contract.py")
+            if len(path.read_text(encoding="utf-8").splitlines()) > 800
+        ]
+        self.assertEqual(offenders, [])
+
+    def test_policy_parameters_do_not_duplicate_foundation_parameter_models(self) -> None:
+        self.assertEqual(
+            duplicate_dataclass_models(
+                "x5crop.geometry.detection_parameters",
+                "x5crop.policies.parameters",
+            ),
+            [],
+        )
+
+    def test_runtime_policy_does_not_translate_parameter_models_by_suffix(self) -> None:
+        self.assertEqual(translated_parameter_models(), [])
+
+    def test_parameter_and_runtime_policy_layers_do_not_duplicate_models(self) -> None:
+        self.assertEqual(
+            duplicate_dataclass_models(
+                "x5crop.policies.parameters",
+                "x5crop.policies.runtime",
+            ),
+            [],
+        )
+
+    def test_report_read_models_are_not_named_as_schema_sections(self) -> None:
+        self.assertFalse((PROJECT_ROOT / "x5crop" / "report" / "sections.py").exists())
+        self.assertTrue((PROJECT_ROOT / "x5crop" / "report" / "read_models.py").exists())
+
+    def test_partial_holder_has_one_runtime_eligibility_field(self) -> None:
+        from x5crop.policies.parameters.candidate import PartialHolderParameters
+        from x5crop.policies.runtime.candidate import PartialHolderPolicy
+
+        for field_name in (
+            "enabled",
+            "leading_content_check",
+            "frame_content_check",
+        ):
+            self.assertNotIn(field_name, PartialHolderParameters.__dataclass_fields__)
+        self.assertIn("enabled", PartialHolderPolicy.__dataclass_fields__)
+        for field_name in (
+            "allow_empty_holder_frames",
+            "checks_leading_content",
+            "checks_frame_content",
+        ):
+            self.assertNotIn(field_name, PartialHolderPolicy.__dataclass_fields__)
+
+    def test_regression_tools_have_no_historical_reference_classifier(self) -> None:
+        self.assertFalse(
+            (PROJECT_ROOT / "tools" / "regression" / "reference_classify.py").exists()
+        )
+
+    def test_decision_policy_owns_thresholds_not_identity_reasons_or_descriptions(self) -> None:
+        from x5crop.policies.decision import contract
+        from x5crop.policies.parameters.decision import DecisionReviewParameters
+
+        self.assertFalse(hasattr(contract, "ModePolicy"))
+        self.assertIn(
+            "strip_mode",
+            contract.DetectionDecisionContract.__dataclass_fields__,
+        )
+        self.assertNotIn(
+            "mode",
+            contract.DetectionDecisionContract.__dataclass_fields__,
+        )
+        banned = {
+            "policy_id",
+            "suppress_close_competition_when_partial_edge_safe",
+            "outer_candidate_disagreement_review_reason",
+            "deskew_uncertain_review_reason",
+            "separator_incomplete_reason",
+            "geometry_unstable_reason",
+            "outer_content_mismatch_reason",
+            "candidate_competition_close_reason",
+            "exposure_overlap_unresolved_reason",
+            "content_only_evidence_reason",
+            "content_evidence_insufficient_reason",
+            "partial_edge_uncertain_reason",
+            "decision_insufficient_reason",
+        }
+        self.assertTrue(banned.isdisjoint(contract.DecisionPolicy.__dataclass_fields__))
+        self.assertTrue(banned.isdisjoint(DecisionReviewParameters.__dataclass_fields__))
+
+    def test_candidate_plan_policy_contains_parameters_not_static_labels(self) -> None:
+        from x5crop.policies.runtime import candidate
+        from x5crop.policies.parameters.content import ContentCandidateParameters
+
+        for class_name in (
+            "SafetyCandidatePolicy",
+            "PartialStopPolicy",
+            "ContentCandidatePlanPolicy",
+        ):
+            self.assertFalse(hasattr(candidate, class_name))
+        self.assertTrue(
+            {
+                "content_guided_separator",
+                "separator_full_width_competition",
+                "execution_budget",
+                "evidence_independence",
+            }.issuperset(candidate.CandidatePlanPolicy.__dataclass_fields__)
+        )
+        banned_fields = {
+            candidate.ContentGuidedSeparatorCandidatePolicy: {
+                "proposal_role",
+                "guidance_source",
+                "requires_hard_separator_signal",
+            },
+            candidate.SeparatorFullWidthCompetitionPolicy: {
+                "content_outer_max_median_aspect_strategies",
+                "content_outer_max_median_aspect_strip_modes",
+            },
+            candidate.CandidateExecutionBudgetPolicy: {"requires_content_support"},
+            candidate.EvidenceIndependencePolicy: {
+                "dependent_outer_strategies",
+                "dependent_gap_sources",
+                "require_content_support",
+                "candidate_signal",
+            },
+        }
+        for policy_type, fields in banned_fields.items():
+            self.assertTrue(fields.isdisjoint(policy_type.__dataclass_fields__))
+        self.assertTrue(
+            {
+                "candidate_contract",
+                "proposal_role",
+                "model_gap_evidence_kind",
+            }.isdisjoint(ContentCandidateParameters.__dataclass_fields__)
+        )
+
+    def test_review_only_policy_exists_only_for_review_only_detectors(self) -> None:
+        from x5crop.policies.registry import get_detection_policy
+
+        for format_id, strip_mode in (
+            ("135", "full"),
+            ("135", "partial"),
+            ("135-dual", "full"),
+        ):
+            with self.subTest(format_id=format_id, strip_mode=strip_mode):
+                self.assertIsNone(
+                    get_detection_policy(format_id, strip_mode).detector.review_only
+                )
+        self.assertIsNotNone(
+            get_detection_policy("135-dual", "partial").detector.review_only
+        )
+
+    def test_separator_width_capability_has_no_format_preset_or_boolean_switch(self) -> None:
+        from x5crop.policies.assembly import presets
+        from x5crop.policies.parameters.outer import SeparatorOuterBandParameters
+        from x5crop.policies.runtime.outer import SeparatorGeometryProposalPolicy
+
+        self.assertFalse(hasattr(presets, "SeparatorWidthProfilePreset"))
+        self.assertNotIn(
+            "separator_width_profile",
+            presets.ModePolicyPreset.__dataclass_fields__,
+        )
+        self.assertNotIn(
+            "separator_outer_allow_oversized_band",
+            SeparatorGeometryProposalPolicy.__dataclass_fields__,
+        )
+        self.assertIn(
+            "oversized_band_max_short_axis_ratio",
+            SeparatorOuterBandParameters.__dataclass_fields__,
+        )
+
+    def test_separator_geometry_support_has_no_mode_preset_switch(self) -> None:
+        from x5crop.policies.assembly.presets import ModePolicyPreset
+
+        self.assertNotIn(
+            "separator_geometry_support_modes",
+            ModePolicyPreset.__dataclass_fields__,
+        )
+
+    def test_review_only_mode_does_not_claim_selection_ownership(self) -> None:
+        from x5crop.policies.runtime.base import ReviewOnlyPolicy
+
+        self.assertNotIn("selection_override", ReviewOnlyPolicy.__dataclass_fields__)
+        offenders: list[str] = []
+        for path in (PROJECT_ROOT / "x5crop").rglob("*.py"):
+            if "selection_override" in path.read_text(encoding="utf-8"):
+                offenders.append(str(path.relative_to(PROJECT_ROOT)))
+        self.assertEqual(offenders, [])
+
+    def test_evidence_cache_keys_preserve_exact_inputs(self) -> None:
+        from inspect import Parameter, signature
+
+        from x5crop.detection.evidence.evidence_cache_keys import content_detail_cache_key
+
+        paths = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "evidence"
+            / "evidence_cache_keys.py",
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "evidence"
+            / "nearby_separator_diagnostics.py",
+        )
+        offenders = [
+            str(path.relative_to(PROJECT_ROOT))
+            for path in paths
+            if "round(" in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(offenders, [])
+        self.assertIs(
+            signature(content_detail_cache_key).parameters["policy_key"].default,
+            Parameter.empty,
+        )
+
+    def test_policy_assembly_does_not_own_tuning_literals(self) -> None:
+        allowed_numeric_owners = {"presets.py", "profile_presets.py", "registry.py"}
+        offenders: list[str] = []
+        assembly_root = PROJECT_ROOT / "x5crop" / "policies" / "assembly"
+        for path in assembly_root.glob("*.py"):
+            if path.name in allowed_numeric_owners:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Constant):
+                    continue
+                value = node.value
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    continue
+                if value in (0, 1):
+                    continue
+                offenders.append(
+                    f"{path.relative_to(PROJECT_ROOT)}:{node.lineno}: {value}"
+                )
+
+        self.assertEqual(offenders, [])
+
+    def test_short_axis_correction_owns_its_expand_limit(self) -> None:
+        from x5crop.policies.parameters.outer import ShortAxisGeometryCorrectionParameters
+
+        self.assertIn(
+            "max_expand_ratio",
+            ShortAxisGeometryCorrectionParameters.__dataclass_fields__,
+        )
+
+    def test_runtime_confidence_threshold_has_one_entry_owned_default(self) -> None:
+        from x5crop.policies.decision.contract import DecisionPolicy
+        from x5crop.policies.runtime.candidate import ScoringPolicy
+
+        self.assertNotIn("confidence_threshold_default", ScoringPolicy.__dataclass_fields__)
+        self.assertNotIn("confidence_threshold_default", DecisionPolicy.__dataclass_fields__)
+        consistency_source = (
+            PROJECT_ROOT / "x5crop" / "policies" / "consistency.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("confidence_threshold_default", consistency_source)
+
+    def test_partial_candidate_parameters_use_physical_sequence_terms(self) -> None:
+        from x5crop.policies.parameters.candidate import PartialHolderParameters
+        from x5crop.policies.parameters.scoring import BaseDetectionScoreParameters
+
+        self.assertIn("minimum_observed_frame_count", PartialHolderParameters.__dataclass_fields__)
+        self.assertNotIn("min_count_35mm", PartialHolderParameters.__dataclass_fields__)
+        self.assertNotIn("min_count_small", PartialHolderParameters.__dataclass_fields__)
+        self.assertIn(
+            "partial_two_frame_dense_sequence_cap",
+            BaseDetectionScoreParameters.__dataclass_fields__,
+        )
+        self.assertIn(
+            "partial_dense_sequence_min_nominal_count",
+            BaseDetectionScoreParameters.__dataclass_fields__,
+        )
+        self.assertNotIn(
+            "partial_two_35mm_cap",
+            BaseDetectionScoreParameters.__dataclass_fields__,
+        )
+        self.assertNotIn(
+            "partial_dense_strip_min_default_count",
+            BaseDetectionScoreParameters.__dataclass_fields__,
+        )
+
+        assessment_root = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "assessment"
+        offenders = []
+        for path in assessment_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in ("35mm", "min_count_small"):
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+        self.assertEqual(offenders, [])
+
+    def test_runtime_has_no_ambiguous_profile_layout_wrapper(self) -> None:
+        self.assertFalse((PROJECT_ROOT / "x5crop" / "runtime" / "profile.py").exists())
+
     def test_format_parameters_expose_only_fixed_parameter_groups(self) -> None:
         field_names = [field.name for field in fields(FormatParameters)]
         self.assertEqual(
@@ -199,6 +509,25 @@ class ArchitectureResidualContractTest(unittest.TestCase):
         self.assertNotIn("output_dir.mkdir", text)
         self.assertIn("output_surface_for_input", text)
 
+    def test_entry_surfaces_share_one_canonical_default_source(self) -> None:
+        from x5crop.entry.options import (
+            DEFAULT_CONFIDENCE_THRESHOLD,
+            DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
+            DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
+            DIAGNOSTICS_JOB_LIMIT,
+            STANDARD_JOB_LIMIT,
+        )
+
+        self.assertEqual(DEFAULT_DESKEW_MIN_ANGLE_DEGREES, 0.03)
+        self.assertEqual(DEFAULT_DESKEW_MAX_ANGLE_DEGREES, 2.0)
+        self.assertEqual(DEFAULT_CONFIDENCE_THRESHOLD, 0.85)
+        self.assertEqual(STANDARD_JOB_LIMIT, 2)
+        self.assertEqual(DIAGNOSTICS_JOB_LIMIT, 4)
+        for relative_path in ("entry/cli.py", "entry/interactive.py"):
+            text = (PROJECT_ROOT / "x5crop" / relative_path).read_text(encoding="utf-8")
+            for literal in ("default=0.03", "default=0.85", "deskew_min_angle=0.03", "confidence_threshold=0.85"):
+                self.assertNotIn(literal, text)
+
     def test_regression_tools_use_current_final_reason_field(self) -> None:
         offenders: list[str] = []
         for path in (PROJECT_ROOT / "tools" / "regression").rglob("*.py"):
@@ -219,16 +548,21 @@ class ArchitectureResidualContractTest(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_crop_and_decision_thresholds_have_explicit_policy_owners(self) -> None:
-        from x5crop.policies.runtime.candidate import BaseDetectionScorePolicy, ScoringPolicy
-        from x5crop.policies.runtime.content import ContentProfilePolicy
-        from x5crop.policies.runtime.content import ContentPolicy
-        from x5crop.policies.runtime.decision import RuntimeDecisionPolicy
-        from x5crop.policies.runtime.outer import (
-            EdgeAnchoredContentPositionPolicy,
-            FloatingContentPositionPolicy,
-            LongAxisGeometryCorrectionPolicy,
-            SeparatorOuterBandPolicy,
+        from x5crop.policies.parameters.scoring import (
+            BaseDetectionScoreParameters,
+            ScoringCalibrationParameters,
         )
+        from x5crop.policies.parameters.content import (
+            ContentProfileParameters,
+            ContentSupportParameters,
+        )
+        from x5crop.policies.parameters.outer import (
+            EdgeAnchoredContentPositionParameters,
+            FloatingContentPositionParameters,
+            LongAxisGeometryCorrectionParameters,
+            SeparatorOuterBandParameters,
+        )
+        from x5crop.policies.parameters.decision import DecisionReviewParameters
         from x5crop.geometry.detection_parameters import (
             EdgePairParameters,
             NearbySeparatorRefinementParameters,
@@ -236,42 +570,42 @@ class ArchitectureResidualContractTest(unittest.TestCase):
         )
 
         required_fields = {
-            ScoringPolicy: {
+            ScoringCalibrationParameters: {
                 "dual_lane_below_threshold_cap",
                 "dual_lane_frame_count_mismatch_cap",
             },
-            RuntimeDecisionPolicy: {"outer_candidate_disagreement_min_spread_ratio"},
-            FloatingContentPositionPolicy: {
+            DecisionReviewParameters: {"outer_candidate_disagreement_min_spread_ratio"},
+            FloatingContentPositionParameters: {
                 "content_bbox_min_fraction",
                 "min_short_axis_px",
                 "min_short_axis_ratio",
                 "min_width_px",
             },
-            EdgeAnchoredContentPositionPolicy: {
+            EdgeAnchoredContentPositionParameters: {
                 "content_bbox_min_fraction",
                 "min_short_axis_px",
                 "min_short_axis_ratio",
                 "min_width_px",
             },
-            LongAxisGeometryCorrectionPolicy: {
+            LongAxisGeometryCorrectionParameters: {
                 "min_corrected_width_ratio",
                 "min_corrected_width_px",
             },
-            ContentProfilePolicy: {
+            ContentProfileParameters: {
                 "percentiles",
                 "smooth_min_px",
                 "min_run_width_px",
             },
-            ContentPolicy: {"support_missing_aspect_score"},
-            BaseDetectionScorePolicy: {
+            ContentSupportParameters: {"missing_aspect_score"},
+            BaseDetectionScoreParameters: {
                 "image_quality_percentiles",
                 "hard_support_floor_min_expected_gaps",
                 "hard_gap_floor_min_count",
                 "model_gap_overuse_min_count",
                 "partial_ambiguous_count_max",
-                "partial_dense_strip_min_default_count",
+                "partial_dense_sequence_min_nominal_count",
             },
-            SeparatorOuterBandPolicy: {
+            SeparatorOuterBandParameters: {
                 "band_to_peak_ratio",
                 "pair_candidate_expansion",
             },

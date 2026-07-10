@@ -18,7 +18,7 @@ def floating_content_position_candidates(
     partial_placement: PartialPlacementGeometryPolicy,
 ) -> list[OuterCandidate]:
     floating_policy = partial_placement.floating
-    if not partial_placement.enabled or not floating_policy.enabled:
+    if not partial_placement.enabled:
         return []
     if strip_mode != "partial" or count <= 0:
         return []

@@ -64,17 +64,17 @@ def outer_proposal_strategy_plan_for_policy(
     base = [
         OuterProposalStrategy(
             "base",
-            "always" if proposal_policy.base.enabled else "off",
+            "always",
         ),
     ]
     partial_positions = {
         "edge_anchor": OuterProposalStrategy(
             "edge_anchor",
-            "always" if partial_placement.enabled and partial_placement.edge_anchor.enabled else "off",
+            "always" if partial_placement.enabled else "off",
         ),
         "floating": OuterProposalStrategy(
             "floating",
-            "always" if partial_placement.enabled and partial_placement.floating.enabled else "off",
+            "always" if partial_placement.enabled else "off",
         ),
     }
     ordered_partial_positions = [
@@ -114,7 +114,6 @@ def edge_anchored_candidates_trusted(
     partial_placement = policy.outer.proposal.geometry.partial_placement
     return bool(
         partial_placement.enabled
-        and partial_placement.skip_floating_when_edge_trusted
         and len(candidates) >= int(partial_placement.edge_trust_min_candidates)
     )
 
@@ -124,7 +123,7 @@ def outer_proposal_candidates(
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
-    cache: Optional[AnalysisCache] = None,
+    cache: Optional[AnalysisCache],
     *,
     safety_only: bool = False,
     policy: DetectionPolicy,
@@ -191,7 +190,7 @@ def separator_full_width_outer_proposal_candidates(
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
-    cache: Optional[AnalysisCache] = None,
+    cache: Optional[AnalysisCache],
     *,
     policy: DetectionPolicy,
     explicit_count: bool = True,

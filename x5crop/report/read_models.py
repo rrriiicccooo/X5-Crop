@@ -16,14 +16,9 @@ def candidate_table(detection: FinalDetection) -> list[dict[str, Any]]:
 
 
 def selected_candidate(detection: FinalDetection) -> dict[str, Any]:
-    competition = candidate_competition(detection)
-    selected = competition.get("selected_candidate")
+    selected = candidate_competition(detection).get("selected_candidate")
     if isinstance(selected, dict):
-        detail = dict(selected)
-        detail["final_confidence"] = float(detection.confidence)
-        detail["final_review_reasons"] = list(detection.final_review_reasons)
-        detail["decision_status"] = detection.status
-        return detail
+        return dict(selected)
     return {
         "missing": True,
         "reason": "candidate_competition_missing",
@@ -31,8 +26,7 @@ def selected_candidate(detection: FinalDetection) -> dict[str, Any]:
 
 
 def candidate_gate_detail(detection: FinalDetection) -> dict[str, Any]:
-    assessment = candidate_assessment(detection)
-    candidate_gate = assessment.get("candidate_gate")
+    candidate_gate = candidate_assessment(detection).get("candidate_gate")
     return dict(candidate_gate) if isinstance(candidate_gate, dict) else {}
 
 

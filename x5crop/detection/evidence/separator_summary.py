@@ -31,14 +31,6 @@ class GapMethodEvidenceSummary:
     leading_grid_scores: tuple[float, ...]
 
     @property
-    def separator_support_gaps(self) -> int:
-        return self.separator_support_count
-
-    @property
-    def reliable_support_gaps(self) -> int:
-        return self.reliable_support_count
-
-    @property
     def geometry_model_gaps(self) -> int:
         return self.grid_model_gaps + self.equal_model_gaps
 
@@ -61,10 +53,6 @@ class SeparatorSupportDetailSummary:
     @property
     def separator_support_count(self) -> int:
         return self.hard_separator_gaps + self.grid_model_gaps
-
-    @property
-    def separator_support_gaps(self) -> int:
-        return self.separator_support_count
 
     @property
     def model_gaps(self) -> int:

@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ....policies.runtime.content import ContentEvidencePolicy
+from ....policies.parameters.content import ContentEvidenceParameters
 
 
 def _score_float(item: dict[str, Any], key: str) -> float:
@@ -19,7 +19,7 @@ def holder_texture_evidence_detail(
     *,
     content_indexes: list[int],
     empty_indexes: list[int],
-    evidence_policy: ContentEvidencePolicy,
+    evidence_policy: ContentEvidenceParameters,
 ) -> dict[str, Any]:
     score_by_index = {
         int(item.get("index", 0)): item

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import ast
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import MISSING, dataclass, fields, is_dataclass
+import importlib
+import inspect
 from importlib.util import resolve_name
 from pathlib import Path
 
@@ -16,9 +18,34 @@ STANDALONE_TOOL_ROOTS = frozenset(
     {
         "tools.build_standalone",
         "tools.regression.compare",
-        "tools.regression.reference_classify",
     }
 )
+
+SOURCE_LAYER_PREFIXES: dict[str, tuple[str, ...]] = {
+    "core": (
+        "x5crop",
+        "x5crop.app_info",
+        "x5crop.constants",
+        "x5crop.domain",
+        "x5crop.gap_methods",
+        "x5crop.run_config",
+        "x5crop.units",
+        "x5crop.utils",
+    ),
+    "entry": ("x5crop.entry",),
+    "runtime": ("x5crop.runtime",),
+    "formats": ("x5crop.formats",),
+    "policies": ("x5crop.policies",),
+    "cache": ("x5crop.cache",),
+    "geometry": ("x5crop.geometry",),
+    "image": ("x5crop.image",),
+    "io": ("x5crop.io",),
+    "detection": ("x5crop.detection",),
+    "output": ("x5crop.output",),
+    "export": ("x5crop.export",),
+    "report": ("x5crop.report",),
+    "debug": ("x5crop.debug",),
+}
 
 
 @dataclass(frozen=True)
@@ -102,6 +129,19 @@ def source_import_graph() -> dict[str, frozenset[str]]:
     }
 
 
+def source_layer_memberships(module_name: str) -> tuple[str, ...]:
+    return tuple(
+        layer
+        for layer, prefixes in SOURCE_LAYER_PREFIXES.items()
+        if module_has_prefix(module_name, prefixes)
+        and not (
+            layer == "core"
+            and module_name.startswith("x5crop.")
+            and module_name not in prefixes
+        )
+    )
+
+
 def module_has_prefix(module: str, prefixes: Iterable[str]) -> bool:
     return any(module == prefix or module.startswith(f"{prefix}.") for prefix in prefixes)
 
@@ -148,6 +188,89 @@ def pass_through_classes() -> list[str]:
     return sorted(offenders)
 
 
+def duplicate_dataclass_models(
+    left_prefix: str,
+    right_prefix: str,
+) -> list[tuple[str, str]]:
+    models: dict[tuple[str, ...], list[str]] = {}
+    for module in source_modules().values():
+        if not module_has_prefix(module.name, (left_prefix, right_prefix)):
+            continue
+        for node in parsed_source(module).body:
+            if not isinstance(node, ast.ClassDef):
+                continue
+            is_dataclass = any(
+                (isinstance(decorator, ast.Name) and decorator.id == "dataclass")
+                or (
+                    isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Name)
+                    and decorator.func.id == "dataclass"
+                )
+                for decorator in node.decorator_list
+            )
+            if not is_dataclass:
+                continue
+            field_names = tuple(
+                statement.target.id
+                for statement in node.body
+                if isinstance(statement, ast.AnnAssign)
+                and isinstance(statement.target, ast.Name)
+            )
+            if field_names:
+                models.setdefault(field_names, []).append(f"{module.name}.{node.name}")
+
+    offenders: list[tuple[str, str]] = []
+    for names in models.values():
+        left = [name for name in names if module_has_prefix(name, (left_prefix,))]
+        right = [name for name in names if module_has_prefix(name, (right_prefix,))]
+        offenders.extend((left_name, right_name) for left_name in left for right_name in right)
+    return sorted(offenders)
+
+
+def translated_parameter_models() -> list[tuple[str, str]]:
+    parameter_models: dict[str, tuple[str, frozenset[str]]] = {}
+    runtime_models: dict[str, tuple[str, frozenset[str]]] = {}
+    for module in source_modules().values():
+        if not module_has_prefix(
+            module.name,
+            ("x5crop.policies.parameters", "x5crop.policies.runtime"),
+        ):
+            continue
+        for node in parsed_source(module).body:
+            if not isinstance(node, ast.ClassDef):
+                continue
+            is_dataclass = any(
+                (isinstance(decorator, ast.Name) and decorator.id == "dataclass")
+                or (
+                    isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Name)
+                    and decorator.func.id == "dataclass"
+                )
+                for decorator in node.decorator_list
+            )
+            if not is_dataclass:
+                continue
+            stem = node.name.removesuffix("Parameters").removesuffix("Policy")
+            qualified = f"{module.name}.{node.name}"
+            field_names = frozenset(
+                statement.target.id
+                for statement in node.body
+                if isinstance(statement, ast.AnnAssign)
+                and isinstance(statement.target, ast.Name)
+            )
+            if module.name.startswith("x5crop.policies.parameters"):
+                if module.name == "x5crop.policies.parameters.aggregate":
+                    continue
+                parameter_models[stem] = (qualified, field_names)
+            else:
+                runtime_models[stem.removeprefix("Runtime")] = (qualified, field_names)
+    return sorted(
+        (parameter_models[stem][0], runtime_models[stem][0])
+        for stem in parameter_models.keys() & runtime_models.keys()
+        if len(parameter_models[stem][1] & runtime_models[stem][1]) >= 4
+    )
+
+
 def unreferenced_top_level_symbols() -> list[str]:
     modules = source_modules()
     references: set[tuple[str, str]] = set()
@@ -191,6 +314,54 @@ def unreferenced_top_level_symbols() -> list[str]:
             if (module.name, node.name) not in references:
                 unreferenced.append(f"{module.name}.{node.name}")
     return sorted(unreferenced)
+
+
+def unreferenced_public_assignments() -> list[str]:
+    modules = source_modules()
+    references: set[tuple[str, str]] = set()
+    for module in modules.values():
+        tree = parsed_source(module)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                references.add((module.name, node.id))
+            elif isinstance(node, ast.ImportFrom):
+                if node.level:
+                    relative = "." * node.level + (node.module or "")
+                    base = resolve_name(relative, module.package)
+                else:
+                    base = node.module or ""
+                for alias in node.names:
+                    references.add((base, alias.name))
+
+    for path in (PROJECT_ROOT / "tools").rglob("*.py"):
+        module_name = ".".join(path.relative_to(PROJECT_ROOT).with_suffix("").parts)
+        package = module_name if path.name == "__init__.py" else module_name.rpartition(".")[0]
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if node.level:
+                relative = "." * node.level + (node.module or "")
+                base = resolve_name(relative, package)
+            else:
+                base = node.module or ""
+            for alias in node.names:
+                references.add((base, alias.name))
+
+    offenders: list[str] = []
+    for module in modules.values():
+        for node in parsed_source(module).body:
+            targets: list[ast.expr] = []
+            if isinstance(node, ast.Assign):
+                targets = list(node.targets)
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            for target in targets:
+                if not isinstance(target, ast.Name) or target.id.startswith("_"):
+                    continue
+                if (module.name, target.id) not in references:
+                    offenders.append(f"{module.name}.{target.id}")
+    return sorted(offenders)
 
 
 def unreferenced_public_symbols() -> list[str]:
@@ -246,6 +417,63 @@ def functions_with_unused_parameters() -> list[str]:
                     f"{module.name}:{node.lineno}:{node.name}({', '.join(unused)})"
                 )
     return sorted(offenders)
+
+
+def functions_with_untyped_parameters() -> list[str]:
+    offenders: list[str] = []
+    for module in source_modules().values():
+        for node in ast.walk(parsed_source(module)):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            arguments = [
+                *node.args.posonlyargs,
+                *node.args.args,
+                *node.args.kwonlyargs,
+            ]
+            missing = [
+                argument.arg
+                for argument in arguments
+                if argument.arg not in {"self", "cls"}
+                and argument.annotation is None
+            ]
+            if missing:
+                offenders.append(
+                    f"{module.name}:{node.lineno}:{node.name}({', '.join(missing)})"
+                )
+    return sorted(offenders)
+
+
+def invalid_dataclass_default_factories(module_prefix: str) -> list[str]:
+    offenders: list[str] = []
+    for module_name in source_modules():
+        if not module_has_prefix(module_name, (module_prefix,)):
+            continue
+        module = importlib.import_module(module_name)
+        for value in vars(module).values():
+            if not isinstance(value, type) or not is_dataclass(value):
+                continue
+            for model_field in fields(value):
+                if model_field.default_factory is MISSING:
+                    continue
+                try:
+                    signature = inspect.signature(model_field.default_factory)
+                except (TypeError, ValueError):
+                    continue
+                required = [
+                    parameter.name
+                    for parameter in signature.parameters.values()
+                    if parameter.default is inspect.Parameter.empty
+                    and parameter.kind
+                    not in (
+                        inspect.Parameter.VAR_POSITIONAL,
+                        inspect.Parameter.VAR_KEYWORD,
+                    )
+                ]
+                if required:
+                    offenders.append(
+                        f"{module_name}.{value.__name__}.{model_field.name}({', '.join(required)})"
+                    )
+    return sorted(set(offenders))
 
 
 def unreferenced_dataclass_fields() -> list[str]:
@@ -321,6 +549,28 @@ def unused_imports() -> list[str]:
             for name, line_number in aliases:
                 if name not in loaded_names:
                     offenders.append(f"{module.name}:{line_number}:{name}")
+    return sorted(offenders)
+
+
+def unreferenced_methods() -> list[str]:
+    modules = source_modules()
+    referenced_attributes = {
+        node.attr
+        for module in modules.values()
+        for node in ast.walk(parsed_source(module))
+        if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load)
+    }
+    offenders: list[str] = []
+    for module in modules.values():
+        for class_node in parsed_source(module).body:
+            if not isinstance(class_node, ast.ClassDef):
+                continue
+            for node in class_node.body:
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                if node.name.startswith("__") or node.name in referenced_attributes:
+                    continue
+                offenders.append(f"{module.name}.{class_node.name}.{node.name}")
     return sorted(offenders)
 
 

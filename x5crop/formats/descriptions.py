@@ -84,7 +84,7 @@ FORMAT_DESCRIPTIONS: dict[str, FormatDescription] = {
     "120-67": FormatDescription(
         full_mode_behavior="fixed nominal 3-frame strip",
         partial_mode_behavior="review-biased count search with uncertain leading/trailing edges",
-        outer_trust_profile="medium_format_broad_separator_width_guarded",
+        outer_trust_profile="medium_format_holder_boundary_guarded",
         separator_visibility="variable_width_internal_gaps",
         geometry_tolerance="medium_format_aspect_sensitive",
         known_physical_notes=(

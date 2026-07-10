@@ -17,7 +17,7 @@ from x5crop.detection.decision.contract_applier import apply_decision_contract
 from x5crop.detection.candidate.selection.choose import select_detection_candidate
 from x5crop.domain import Box, DetectionCandidate
 from x5crop.formats import format_spec
-from x5crop.report.sections import selected_candidate
+from x5crop.report.read_models import selected_candidate
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.decision.contract import decision_contract_for_policy
 from x5crop.runtime.output_protection import prepare_output_protection
@@ -368,10 +368,12 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
         self.assertNotIn("decision_status", selected)
         report_selected = selected_candidate(decided)
         self.assertEqual(
-            report_selected["final_review_reasons"],
+            decided.final_review_reasons,
             ["evidence_combination_insufficient", "outer_candidate_disagreement"],
         )
-        self.assertEqual(report_selected["decision_status"], "needs_review")
+        self.assertEqual(decided.status, "needs_review")
+        self.assertNotIn("final_review_reasons", report_selected)
+        self.assertNotIn("decision_status", report_selected)
         self.assertNotIn(
             "final_review_reasons",
             decided.detail["candidate_competition"]["top_candidates"][0],

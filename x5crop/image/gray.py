@@ -14,7 +14,6 @@ class BaseGrayParameters:
     blue_weight: float = 0.0722
     low_percentile: float = 0.2
     high_percentile: float = 99.8
-    miniswhite_inverts: bool = True
 
 
 def make_base_gray_u8(
@@ -55,6 +54,6 @@ def make_base_gray_u8(
         out = np.zeros(gray.shape, dtype=np.uint8)
     else:
         out = np.clip((gray - lo) * (255.0 / (hi - lo)), 0, 255).astype(np.uint8)
-    if params.miniswhite_inverts and photometric.upper() == "MINISWHITE":
+    if photometric.upper() == "MINISWHITE":
         out = 255 - out
     return out

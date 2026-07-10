@@ -38,7 +38,6 @@ def _assessed_candidates_for_offset(
     cache: AnalysisCache,
     policy: DetectionPolicy,
 ) -> tuple[list[DetectionCandidate], bool]:
-    content_policy = policy.candidate_plan.content_candidate
     candidates: list[DetectionCandidate] = []
     stop_after_this_count = False
     explicit_count = bool(config.requested_count is not None)
@@ -202,29 +201,24 @@ def _assessed_candidates_for_offset(
         separator_support_candidate,
         config.confidence_threshold,
     )
-    if partial_edge_safety_candidate and policy.candidate_plan.partial_stop.stop_after_safe_candidate:
+    if partial_edge_safety_candidate:
         stop_after_this_count = True
     if (
-        content_policy.skip_after_reliable_separator_candidate
-        and strip_mode in content_policy.reliable_separator_candidate_skip_strip_modes
+        strip_mode == "full"
         and separator_candidate_passed
         and separator_support_candidate.confidence >= config.confidence_threshold
     ):
         separator_support_candidate.detail["content_candidate_skipped"] = (
-            content_policy.reliable_separator_candidate_skip_reason
+            "reliable_separator_candidate_selected"
         )
         return candidates, stop_after_this_count
     if (
-        policy.candidate_plan.partial_stop.skip_content_after_safe_candidate
-        and strip_mode in policy.candidate_plan.partial_stop.skip_content_after_safe_candidate_strip_modes
+        strip_mode == "partial"
         and partial_edge_safety_candidate
     ):
         separator_support_candidate.detail["content_candidate_skipped"] = (
-            policy.candidate_plan.partial_stop.skip_content_after_safe_candidate_reason
+            "partial_edge_safety_separator_candidate_selected"
         )
-        return candidates, stop_after_this_count
-    if not content_policy.enabled:
-        separator_support_candidate.detail["content_candidate_skipped"] = content_policy.disabled_skip_reason
         return candidates, stop_after_this_count
     content = content_detection_for_count(
         gray,

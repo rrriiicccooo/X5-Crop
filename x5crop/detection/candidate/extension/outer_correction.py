@@ -41,11 +41,9 @@ def _correction_skip_reason(
 ) -> str | None:
     if family.mode == "off":
         return "mode_off"
-    if detection.strip_mode not in family.strip_modes:
-        return "strip_mode_not_enabled"
-    if detection.strip_mode == "partial" and family.requires_explicit_count_for_partial and not explicit_count:
+    if detection.strip_mode == "partial" and not explicit_count:
         return "partial_requires_explicit_count"
-    if family.requires_separator_assessment and not _candidate_is_separator_assessed(detection):
+    if not _candidate_is_separator_assessed(detection):
         return "requires_separator_assessment"
     if name == "short_axis_geometry" and not _candidate_separator_support_ok(detection):
         return "requires_separator_support"
@@ -92,12 +90,9 @@ def _outer_correction_plan_detail(
 
 def _outer_correction_budget_reason(
     *,
-    skip_after_reliable_selection: bool,
     reliable_selection: bool,
     outer_alignment_ok: bool,
 ) -> str:
-    if not skip_after_reliable_selection:
-        return "skip_after_reliable_selection_disabled"
     if not reliable_selection:
         return "selection_not_reliable"
     if not outer_alignment_ok:
@@ -115,8 +110,6 @@ def outer_correction_candidate_extensions(
 ) -> list[DetectionCandidate]:
     if detection.detail.get("candidate_source") == CANDIDATE_SOURCE_HARD_SAFETY:
         return []
-    if not bool(policy.candidate_plan.outer_correction_extension.enabled):
-        return []
     explicit_count = bool(config.requested_count is not None)
     correction_plan = _outer_correction_plan_detail(detection, policy, explicit_count)
     detection.detail["outer_correction_candidate_plan"] = correction_plan
@@ -131,30 +124,22 @@ def outer_correction_candidate_extensions(
         horizontal_frame_aspect=fmt.horizontal_content_aspect,
     )
     detection.detail["content_evidence"] = content_detail
-    outer_alignment = (
-        outer_content_alignment_detail(
-            gray,
-            detection,
-            cache,
-            alignment_policy=policy.outer.alignment_evidence,
-        )
-        if policy.decision.align_outer_to_content
-        else {"used": False, "reason": policy.decision.outer_alignment_disabled_reason}
+    outer_alignment = outer_content_alignment_detail(
+        gray,
+        detection,
+        cache,
+        alignment_policy=policy.outer.alignment_evidence,
     )
     detection.detail["outer_content_alignment"] = outer_alignment
     reliable_selection = candidate_is_reliable_for_execution_budget(detection, config.confidence_threshold, policy)
     outer_alignment_ok = (not bool(outer_alignment.get("used", False))) or bool(outer_alignment.get("ok", True))
-    skip_after_reliable_selection = bool(
-        policy.candidate_plan.execution_budget.skip_outer_correction_after_reliable_selection
-    )
     correction_plan["reliable_selection"] = bool(reliable_selection)
     correction_plan["outer_alignment_ok"] = bool(outer_alignment_ok)
     budget_reason = _outer_correction_budget_reason(
-        skip_after_reliable_selection=skip_after_reliable_selection,
         reliable_selection=bool(reliable_selection),
         outer_alignment_ok=bool(outer_alignment_ok),
     )
-    should_skip_correction = skip_after_reliable_selection and reliable_selection and outer_alignment_ok
+    should_skip_correction = reliable_selection and outer_alignment_ok
     correction_plan["execution_budget"] = {
         "stage": "selected_candidate",
         "action": "skip_outer_correction_candidates" if should_skip_correction else "run_outer_correction_candidates",

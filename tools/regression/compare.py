@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
 
+from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
+
 
 DEFAULT_FIELDS = (
     "status",
@@ -30,10 +32,20 @@ class ReportDiff:
 def field_value(row: dict[str, Any], field: str) -> Any:
     value: Any = row
     for part in str(field).split("."):
-        if not isinstance(value, dict):
-            return None
-        value = value.get(part)
+        if not isinstance(value, dict) or part not in value:
+            raise ValueError(f"Current report field is missing: {field}")
+        value = value[part]
     return value
+
+
+def validate_report_row(row: dict[str, Any]) -> None:
+    if row.get("schema_id") != REPORT_SCHEMA_ID:
+        raise ValueError("Report row does not use the current schema id")
+    if row.get("schema_revision") != REPORT_SCHEMA_REVISION:
+        raise ValueError("Report row does not use the current schema revision")
+    missing = [field for field in ("source", *DEFAULT_FIELDS) if field not in row]
+    if missing:
+        raise ValueError(f"Current report fields are missing: {', '.join(missing)}")
 
 
 def load_jsonl_report(path: Path) -> list[dict[str, Any]]:
@@ -47,7 +59,8 @@ def load_jsonl_report(path: Path) -> list[dict[str, Any]]:
 
 
 def report_key(row: dict[str, Any]) -> str:
-    return str(row.get("input_file") or row.get("source") or row.get("input") or row.get("stem") or "")
+    validate_report_row(row)
+    return str(row["source"])
 
 
 def compare_report_rows(

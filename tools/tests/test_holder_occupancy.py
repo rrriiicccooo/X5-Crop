@@ -35,11 +35,6 @@ def _complete_underfilled_medium_square_detection() -> DetectionCandidate:
             "photo_width_cv": 0.0,
             "photo_width_stability": {"used": True, "unstable": False},
             "outer_area_ratio": 0.80,
-            "separator_width_evidence": {
-                "used": True,
-                "separator_width_gap_count": 0,
-                "broad_separator_width_gaps": 0,
-            },
         },
     )
 
@@ -67,7 +62,7 @@ class HolderOccupancyTests(unittest.TestCase):
             "occupancy_detail_not_candidate_gate_blocker",
         )
 
-    def test_complete_underfilled_strip_does_not_require_holder_edge_width(self) -> None:
+    def test_complete_underfilled_strip_uses_the_same_partial_safety_contract(self) -> None:
         detection = _complete_underfilled_medium_square_detection()
         policy = get_detection_policy("120-66", "partial")
         content_detail = {
@@ -92,21 +87,18 @@ class HolderOccupancyTests(unittest.TestCase):
             detection,
             {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0},
             content_detail,
-            format_spec("120-66"),
             "separator",
             joint_score=0.90,
             content_score=0.90,
             geometry_score=0.90,
             holder_occupancy=occupancy,
+            cache=None,
             policy=policy,
         )
 
         self.assertTrue(detail["complete_underfilled_strip"])
         self.assertNotIn("holder_edge_disambiguation_weak", detail["disqualifiers"])
-        self.assertIn(
-            "holder_edge_disambiguation_not_required_for_complete_underfilled_strip",
-            detail["occupancy_diagnostics"],
-        )
+        self.assertNotIn("holder_edge_disambiguation", detail)
 
 
 if __name__ == "__main__":

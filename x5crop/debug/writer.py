@@ -18,7 +18,7 @@ def write_debug_preview(
     detection: FinalDetection,
     output_path: Path,
     threshold: float,
-    cache: Optional[AnalysisCache] = None,
+    cache: Optional[AnalysisCache],
 ) -> None:
     rgb = add_status_bar(make_debug_preview_rgb(gray, detection, cache), detection, threshold)
     write_rgb_jpeg(rgb, output_path)
@@ -31,7 +31,7 @@ def write_debug_analysis(
     stem: str,
     threshold: float,
     policy: DetectionPolicy,
-    cache: Optional[AnalysisCache] = None,
+    cache: Optional[AnalysisCache],
 ) -> list[str]:
     analysis_dir = output_dir / "_debug_analysis"
     panel_path = analysis_dir / f"{stem}_debug_analysis.jpg"

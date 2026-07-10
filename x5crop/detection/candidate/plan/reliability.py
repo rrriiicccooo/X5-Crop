@@ -26,20 +26,13 @@ def candidate_reliability_detail(
     gate = dict(gate) if isinstance(gate, dict) else {}
     candidate_gate_allows_auto = bool(gate.get("passed", False))
     raw_hard_separator_ok = bool(separator_detail.get("ok", False))
-    source_ok = (not budget.requires_separator_source) or source == "separator"
-    candidate_gate_requirement_satisfied = (
-        not budget.requires_candidate_gate
-    ) or candidate_gate_allows_auto
-    hard_separator_requirement_ok = (not budget.requires_hard_separator_ok) or raw_hard_separator_ok
-    content_ok = (
-        not budget.requires_content_support
-        or content_support == budget.requires_content_support
-    )
+    source_ok = source == "separator"
+    candidate_gate_requirement_satisfied = candidate_gate_allows_auto
+    hard_separator_requirement_ok = raw_hard_separator_ok
+    content_ok = content_support == "ok"
     confidence_ok = float(detection.confidence) >= required_confidence
     signals = candidate_signals(detection)
-    candidate_signals_ok = (
-        not budget.requires_no_candidate_signals
-    ) or not signals
+    candidate_signals_ok = not signals
     reliable = all(
         (
             source_ok,
@@ -57,7 +50,6 @@ def candidate_reliability_detail(
         "source": source,
         "source_ok": bool(source_ok),
         "candidate_gate": {
-            "required": bool(budget.requires_candidate_gate),
             "passed": bool(candidate_gate_allows_auto),
         },
         "candidate_gate_requirement_satisfied": bool(candidate_gate_requirement_satisfied),
@@ -75,6 +67,4 @@ def candidate_is_reliable_for_execution_budget(
     threshold: float,
     policy: DetectionPolicy,
 ) -> bool:
-    if not policy.candidate_plan.execution_budget.stop_after_reliable_primary:
-        return False
     return bool(candidate_reliability_detail(detection, threshold, policy).get("reliable", False))

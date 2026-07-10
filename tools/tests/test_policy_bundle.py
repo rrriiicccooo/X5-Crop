@@ -22,7 +22,7 @@ class DetectionPolicyBundleTests(unittest.TestCase):
         ):
             self.assertIs(bundle.policy_for("135-dual", "full"), bundle.initial_policy)
             self.assertEqual(
-                bundle.policy_for("135", "full").physical_spec.format_id.value,
+                bundle.policy_for("135", "full").physical_spec.format_id,
                 "135",
             )
             self.assertEqual(bundle.initial_policy.physical_spec.lane_count, 2)
@@ -49,7 +49,7 @@ class DetectionPolicyBundleTests(unittest.TestCase):
         self.assertIn("physical_spec", field_names)
         self.assertTrue({"format_id", "family", "default_count"}.isdisjoint(field_names))
 
-        runtime_surfaces = {"output", "diagnostics", "report"}
+        runtime_surfaces = {"output", "diagnostics"}
         defaults = {
             field.name: (field.default, field.default_factory)
             for field in fields(DetectionPolicy)

@@ -1,16 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
-
-
-@dataclass(frozen=True)
-class OuterMaskProfile:
-    name: str
-    low: Optional[int]
-    high: Optional[int]
-    min_row_fraction: float = 0.012
-    min_col_fraction: float = 0.012
 
 @dataclass(frozen=True)
 class OuterStrategyParameters:
@@ -46,39 +36,6 @@ class EdgeAnchoredContentPositionParameters:
     max_candidates: int = 8
 
 @dataclass(frozen=True)
-class BaseOuterCandidateParameters:
-    white_x_width_multiplier: float = 1.80
-    white_x_extra_ratio: float = 0.060
-    candidate_max_area: float = 0.94
-    mask_expand_ratio: float = 0.002
-    mask_profiles: tuple[OuterMaskProfile, ...] = (
-        OuterMaskProfile("mask_not_white_246", None, 246),
-        OuterMaskProfile("mask_not_white_225", None, 225),
-        OuterMaskProfile("mask_mid_8_246", 8, 246),
-    )
-    min_width_ratio: float = 0.10
-    min_height_ratio: float = 0.10
-    min_width_px: int = 20
-    min_height_px: int = 20
-    bw_not_white_threshold: int = 246
-    bw_dark_threshold: int = 210
-    bw_min_fraction: float = 0.015
-    bw_min_width_ratio: float = 0.10
-    bw_min_height_ratio: float = 0.10
-    bw_margin_ratio: float = 0.002
-    bw_margin_min: int = 2
-    white_border_ratio: float = 0.985
-    white_run_ratio: float = 0.003
-    white_run_min: int = 2
-    white_run_max: int = 80
-    white_dark_threshold: int = 30
-    white_light_threshold: int = 225
-    white_min_width_ratio: float = 0.10
-    white_min_height_ratio: float = 0.10
-    white_margin_ratio: float = 0.002
-    white_margin_min: int = 2
-
-@dataclass(frozen=True)
 class SeparatorOuterBandParameters:
     min_score: float = 0.58
     band_score: float = 0.36
@@ -100,10 +57,11 @@ class SeparatorOuterBandParameters:
     prominence_score_weight: float = 0.8
     band_to_peak_ratio: float = 0.58
     pair_candidate_expansion: int = 3
+    oversized_band_max_short_axis_ratio: float = 0.45
+    oversized_band_score_penalty: float = 0.08
 
 @dataclass(frozen=True)
 class FullWidthSeparatorOuterParameters:
-    required_count: int = 0
     source_candidate_count: int = 3
     margin_ratios: tuple[float, ...] = (0.00, 0.018, 0.035)
     max_candidates: int = 8
@@ -130,6 +88,7 @@ class GridOuterRefineParameters:
 class ShortAxisGeometryCorrectionParameters:
     min_error: float = 0.24
     target_aspect: float = 0.0
+    max_expand_ratio: float = 0.60
     margin_ratio: float = 0.008
     margin_min: int = 12
     margin_max: int = 80

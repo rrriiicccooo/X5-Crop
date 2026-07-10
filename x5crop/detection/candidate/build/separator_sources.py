@@ -117,15 +117,11 @@ def model_gap_proposal_detail(
     )
     return {
         "family": GEOMETRY_EQUAL_MODEL_SOURCE,
-        "policy_enabled": bool(model_policy.geometry_equal_model_enabled),
         "available": block_reason is None,
         "reason": "available" if block_reason is None else block_reason,
         "expected_gaps": int(expected_gaps),
         "hard_gaps": int(hard_gaps),
         "strip_modes": list(model_policy.geometry_equal_model_strip_modes),
-        "requires_default_count": bool(model_policy.requires_default_count),
-        "requires_standard_width_search": bool(model_policy.requires_standard_width_search),
-        "requires_incomplete_hard_gaps": bool(model_policy.requires_incomplete_hard_gaps),
     }
 
 

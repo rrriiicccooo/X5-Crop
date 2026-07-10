@@ -44,15 +44,11 @@ def apply_detection_decision(
     )
     detection.detail["content_evidence"] = raw_content_detail
     detection.detail["content_containment"] = content_detail
-    outer_alignment = (
-        outer_content_alignment_detail(
-            gray,
-            detection,
-            analysis_cache,
-            alignment_policy=policy.outer.alignment_evidence,
-        )
-        if policy.decision.align_outer_to_content
-        else {"used": False, "reason": policy.decision.outer_alignment_disabled_reason}
+    outer_alignment = outer_content_alignment_detail(
+        gray,
+        detection,
+        analysis_cache,
+        alignment_policy=policy.outer.alignment_evidence,
     )
     detection.detail["outer_content_alignment"] = outer_alignment
     return apply_decision_contract(

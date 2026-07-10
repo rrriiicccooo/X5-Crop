@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ....policies.runtime.candidate import PartialEdgeHintPolicy
+from ....policies.parameters.base import PartialEdgeHintParameters
 from ....utils import clamp_int
 
 
@@ -13,7 +13,7 @@ def partial_edge_hint(
     origin: float,
     pitch: float,
     count: int,
-    policy: PartialEdgeHintPolicy,
+    policy: PartialEdgeHintParameters,
 ) -> dict[str, Any]:
     if profile.size == 0 or count <= 0:
         return {}

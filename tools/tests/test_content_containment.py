@@ -6,7 +6,7 @@ from x5crop.domain import Box, DetectionCandidate
 from x5crop.detection.evidence.content.containment import content_containment_detail
 from x5crop.detection.evidence.outer_alignment import outer_content_alignment_detail
 from x5crop.policies.registry import get_detection_policy
-from x5crop.policies.runtime.content import ContentEvidencePolicy
+from x5crop.policies.parameters.content import ContentEvidenceParameters
 
 
 class ContentContainmentTest(unittest.TestCase):
@@ -24,7 +24,7 @@ class ContentContainmentTest(unittest.TestCase):
 
         containment = content_containment_detail(
             detail,
-            ContentEvidencePolicy(),
+            ContentEvidenceParameters(),
             expected_count=4,
         )
 
@@ -53,7 +53,7 @@ class ContentContainmentTest(unittest.TestCase):
 
         containment = content_containment_detail(
             detail,
-            ContentEvidencePolicy(),
+            ContentEvidenceParameters(),
             expected_count=2,
         )
 
@@ -72,7 +72,7 @@ class ContentContainmentTest(unittest.TestCase):
 
         containment = content_containment_detail(
             detail,
-            ContentEvidencePolicy(),
+            ContentEvidenceParameters(),
             expected_count=2,
         )
 
@@ -99,6 +99,7 @@ class ContentContainmentTest(unittest.TestCase):
         alignment = outer_content_alignment_detail(
             gray,
             detection,
+            cache=None,
             alignment_policy=policy.outer.alignment_evidence,
         )
 
@@ -127,6 +128,7 @@ class ContentContainmentTest(unittest.TestCase):
         alignment = outer_content_alignment_detail(
             gray,
             detection,
+            cache=None,
             alignment_policy=policy.outer.alignment_evidence,
         )
 

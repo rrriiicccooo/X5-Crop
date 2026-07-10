@@ -12,6 +12,7 @@ from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
 from ...geometry.model_gaps import content_model_gap
 from ...policies.runtime.content import ContentPolicy
+from ...policies.parameters.content import ContentMaskParameters
 from ...cache import AnalysisCache
 from ...run_config import RunConfig
 from ...utils import box_from_dict
@@ -25,6 +26,9 @@ from ..evidence.content.regions import (
 from ..evidence.content.signal import content_signal_from_gray
 
 CONTENT_PROPOSAL_FAMILY = "content"
+CONTENT_PROPOSAL_ROLE = "weak_content_model_proposal"
+CONTENT_CANDIDATE_CONTRACT = "content_guidance_assessment_required"
+CONTENT_GAP_EVIDENCE_KIND = "content_model_gap"
 
 
 def content_signal_arrays_for_candidate(
@@ -42,7 +46,7 @@ def content_signal_arrays_for_candidate(
 def content_candidate_outer_from_mask(
     mask_detail: dict,
     gray_work_shape: tuple[int, int],
-    mask_policy,
+    mask_policy: ContentMaskParameters,
 ) -> Optional[Box]:
     wh, ww = gray_work_shape
     outer_raw = mask_detail.get("outer")
@@ -142,8 +146,8 @@ def content_detection_for_count(
     count: int,
     strip_mode: str,
     offset_fraction: float = 0.0,
-    cache: Optional[AnalysisCache] = None,
     *,
+    cache: Optional[AnalysisCache],
     content_policy: ContentPolicy,
 ) -> Optional[DetectionCandidate]:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
@@ -175,7 +179,7 @@ def content_detection_for_count(
         evidence,
         outer,
         count,
-        fmt.format_id.value,
+        fmt.format_id,
         cache,
         content_policy=content_policy,
     )
@@ -209,9 +213,9 @@ def content_detection_for_count(
 
     detail = {
         "proposal_family": CONTENT_PROPOSAL_FAMILY,
-        "proposal_role": candidate_policy.proposal_role,
-        "candidate_contract": candidate_policy.candidate_contract,
-        "content_gap_evidence_kind": candidate_policy.model_gap_evidence_kind,
+        "proposal_role": CONTENT_PROPOSAL_ROLE,
+        "candidate_contract": CONTENT_CANDIDATE_CONTRACT,
+        "content_gap_evidence_kind": CONTENT_GAP_EVIDENCE_KIND,
         "candidate_source": CANDIDATE_SOURCE_CONTENT_PRIMARY,
         "candidate_count": count,
         "offset_fraction": float(offset_fraction),
@@ -220,8 +224,8 @@ def content_detection_for_count(
         "work_outer": asdict(outer),
         "content_primary": {
             "used": True,
-            "proposal_role": candidate_policy.proposal_role,
-            "candidate_contract": candidate_policy.candidate_contract,
+            "proposal_role": CONTENT_PROPOSAL_ROLE,
+            "candidate_contract": CONTENT_CANDIDATE_CONTRACT,
             "region_roles": {
                 "bbox": CONTENT_BBOX_HINT_ROLE,
                 "runs": CONTENT_RUN_HINT_ROLE,
@@ -244,7 +248,7 @@ def content_detection_for_count(
         "gap_methods": [gap.method for gap in gaps],
     }
     return DetectionCandidate(
-        format_id=fmt.format_id.value,
+        format_id=fmt.format_id,
         layout=config.layout,
         strip_mode=strip_mode,
         count=count,

@@ -27,7 +27,7 @@ from ..signals import (
     SIGNAL_CONTENT_GUIDED_HARD_SEPARATOR_MISSING,
     SIGNAL_CONTENT_ONLY_NOT_ENOUGH_FOR_AUTO,
     SIGNAL_EDGE_ANCHOR_HARD_SEPARATOR_MISSING,
-    SIGNAL_HOLDER_EDGE_DISAMBIGUATION_WEAK,
+    SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED,
     SIGNAL_PARTIAL_COUNT_AMBIGUOUS,
     SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
     SIGNAL_PARTIAL_FRAME_CONTENT_UNSTABLE,
@@ -39,10 +39,7 @@ from ..signals import (
 from .base_scoring import apply_base_detection_scoring
 from .content_candidate import content_candidate_assessment_from_proposal
 from .evidence_independence import evidence_independence_detail
-from .support_calibration import (
-    hard_full_calibration_floor_applies,
-    separator_geometry_support_applies,
-)
+from .support_calibration import separator_geometry_support_applies
 from .candidate_gate import candidate_gate_assessment
 from .partial_holder import partial_edge_safety_assessment_detail
 from .separator_support import assess_separator_support
@@ -80,7 +77,7 @@ def apply_candidate_assessment_policy(
     config: RunConfig,
     fmt: FormatPhysicalSpec,
     source: str,
-    cache: Optional[AnalysisCache] = None,
+    cache: Optional[AnalysisCache],
     *,
     policy: DetectionPolicy,
 ) -> DetectionCandidate:
@@ -144,33 +141,6 @@ def apply_candidate_assessment_policy(
         expected_count=candidate.count,
     )
     scoring_policy = policy.scoring
-    floor_applies = hard_full_calibration_floor_applies(
-        candidate,
-        separator_support_detail,
-        fmt,
-        source,
-        policy,
-    )
-    if floor_applies:
-        gate_candidate = replace(
-            candidate,
-            confidence=max(
-                float(candidate.confidence),
-                scoring_policy.hard_full_confidence_floor,
-            ),
-        )
-        separator_support_result = assess_separator_support(
-            gate_candidate,
-            config.confidence_threshold,
-            policy,
-        )
-        separator_support_ok = separator_support_result.ok
-        separator_support_detail = separator_support_result.detail
-        separator_support_detail = dict(separator_support_detail)
-        separator_support_detail["calibrate_hard_full_confidence_floor_applied"] = True
-        separator_support_detail["calibrate_hard_full_confidence_floor"] = float(
-            scoring_policy.hard_full_confidence_floor
-        )
     content_score = content_support_score(containment_detail)
     content_quality = content_quality_score(containment_detail, policy.content)
     geometry_score = geometry_support_score(candidate, containment_detail, policy)
@@ -201,8 +171,8 @@ def apply_candidate_assessment_policy(
     detected_geometry_policy = policy.separator.geometry_support.detected_geometry
     stable_grid_policy = policy.separator.geometry_support.stable_grid
     detected_geometry_support = (
-        (not separator_support_ok)
-        and detected_geometry_policy.enabled
+        detected_geometry_policy is not None
+        and (not separator_support_ok)
     ) and separator_geometry_support_applies(
         candidate,
         separator_support_detail,
@@ -215,7 +185,7 @@ def apply_candidate_assessment_policy(
     stable_grid_support = (
         False
         if detected_geometry_support
-        or not stable_grid_policy.enabled
+        or stable_grid_policy is None
         else separator_geometry_support_applies(
             candidate,
             separator_support_detail,
@@ -257,7 +227,7 @@ def apply_candidate_assessment_policy(
             separator_support_ok = False
             separator_support_detail = dict(separator_support_detail)
             separator_support_detail["ok"] = False
-            separator_support_detail["reason"] = policy.candidate_plan.content_guided_separator.requires_hard_separator_signal
+            separator_support_detail["reason"] = SIGNAL_CONTENT_GUIDED_HARD_SEPARATOR_MISSING
             separator_support_detail["content_guided_separator_needs_hard_separator"] = True
             signals.append(SIGNAL_CONTENT_GUIDED_HARD_SEPARATOR_MISSING)
 
@@ -273,14 +243,11 @@ def apply_candidate_assessment_policy(
         signals.append(SIGNAL_CONTENT_ONLY_NOT_ENOUGH_FOR_AUTO)
 
     confidence = max(float(candidate.confidence), joint_score)
-    if floor_applies:
-        confidence = max(confidence, scoring_policy.hard_full_confidence_floor)
     partial_edge_safety = partial_edge_safety_assessment_detail(
         gray,
         candidate,
         separator_support_detail,
         containment_detail,
-        fmt,
         source,
         joint_score,
         content_quality,
@@ -298,7 +265,6 @@ def apply_candidate_assessment_policy(
         partial_edge_safety.get("disqualifiers", [])
     )
     partial_signal_map = {
-        "holder_edge_disambiguation_weak": SIGNAL_HOLDER_EDGE_DISAMBIGUATION_WEAK,
         SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT: SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
         "partial_frame_content_unstable": SIGNAL_PARTIAL_FRAME_CONTENT_UNSTABLE,
     }
@@ -308,16 +274,13 @@ def apply_candidate_assessment_policy(
         if disqualifier in partial_signal_map
     }
     partial_edge_safety_blocks_auto = (
-        policy.partial_holder.allow_empty_holder_frames
-        and policy.partial_holder.checks_leading_content
-        and policy.partial_holder.checks_frame_content
+        policy.partial_holder.enabled
         and candidate.strip_mode == "partial"
         and _uses_separator_evidence(source)
         and bool(partial_edge_safety.get("used", False))
         and bool(
             partial_edge_safety_blocker_signals.intersection(
                 {
-                    SIGNAL_HOLDER_EDGE_DISAMBIGUATION_WEAK,
                     SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
                     SIGNAL_PARTIAL_FRAME_CONTENT_UNSTABLE,
                 }
@@ -363,7 +326,7 @@ def apply_candidate_assessment_policy(
         signals.append(
             str(
                 independence_detail.get("reason")
-                or policy.candidate_plan.evidence_independence.candidate_signal
+                or SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED
             )
         )
     candidate_gate = candidate_gate_assessment(
@@ -384,10 +347,11 @@ def apply_candidate_assessment_policy(
     )
     confidence_caps = _candidate_confidence_caps(candidate)
     if not candidate_gate.passed:
+        calibration = scoring_policy.calibration
         cap = (
-            scoring_policy.no_auto_cap_partial
+            calibration.no_auto_cap_partial
             if candidate.strip_mode == "partial"
-            else scoring_policy.no_auto_cap_full
+            else calibration.no_auto_cap_full
         )
         confidence, cap_detail = apply_confidence_cap(
             confidence,
@@ -396,12 +360,6 @@ def apply_candidate_assessment_policy(
             reason="candidate_gate_failed",
         )
         confidence_caps.append(cap_detail)
-    else:
-        gate_pass_boost = min(
-            float(scoring_policy.candidate_gate_pass_boost_cap),
-            float(joint_score) * float(scoring_policy.candidate_gate_pass_boost_ratio),
-        )
-        confidence = max(confidence, float(config.confidence_threshold) + gate_pass_boost)
     candidate_gate = candidate_gate.with_confidence_caps(confidence_caps)
     candidate.confidence = float(max(0.0, min(1.0, confidence)))
     set_candidate_signals(candidate, signals)

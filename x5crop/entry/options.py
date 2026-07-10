@@ -5,6 +5,13 @@ from pathlib import Path
 from typing import Optional
 
 
+DEFAULT_DESKEW_MIN_ANGLE_DEGREES = 0.03
+DEFAULT_DESKEW_MAX_ANGLE_DEGREES = 2.0
+DEFAULT_CONFIDENCE_THRESHOLD = 0.85
+STANDARD_JOB_LIMIT = 2
+DIAGNOSTICS_JOB_LIMIT = 4
+
+
 @dataclass(frozen=True)
 class CliOptions:
     input_path: Path

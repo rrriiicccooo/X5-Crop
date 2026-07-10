@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 import unittest
 
 from tools.tests.architecture_contracts import PROJECT_ROOT
@@ -10,14 +9,19 @@ from tools.tests.architecture_contracts import (
     STANDALONE_ROOTS,
     STANDALONE_TOOL_ROOTS,
     forbidden_import_edges,
+    functions_with_untyped_parameters,
     functions_with_unused_parameters,
+    invalid_dataclass_default_factories,
     modules_with_export_lists,
     pass_through_classes,
     public_top_level_symbols,
     reachable_source_modules,
     source_modules,
+    source_layer_memberships,
     standalone_tool_modules,
     unreferenced_top_level_symbols,
+    unreferenced_methods,
+    unreferenced_public_assignments,
     unreferenced_public_symbols,
     unreferenced_dataclass_fields,
     unused_imports,
@@ -25,6 +29,165 @@ from tools.tests.architecture_contracts import (
 
 
 class LayerBoundariesContractTest(unittest.TestCase):
+    def test_active_source_has_no_unreferenced_public_assignments(self) -> None:
+        self.assertEqual(unreferenced_public_assignments(), [])
+
+    def test_every_active_module_has_one_source_layer(self) -> None:
+        offenders = {
+            module_name: source_layer_memberships(module_name)
+            for module_name in source_modules()
+            if len(source_layer_memberships(module_name)) != 1
+        }
+        self.assertEqual(offenders, {})
+
+    def test_runtime_policy_default_factories_are_callable_without_hidden_inputs(self) -> None:
+        self.assertEqual(
+            invalid_dataclass_default_factories("x5crop.policies.runtime"),
+            [],
+        )
+
+    def test_active_interfaces_have_explicit_parameter_types(self) -> None:
+        self.assertEqual(functions_with_untyped_parameters(), [])
+
+    def test_detection_does_not_disable_foundation_parameters_with_none(self) -> None:
+        offenders: list[str] = []
+        root = PROJECT_ROOT / "x5crop" / "detection"
+        for path in root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                for keyword in node.keywords:
+                    if (
+                        keyword.arg in {"geometry_parameters", "frame_fit", "parameters"}
+                        and isinstance(keyword.value, ast.Constant)
+                        and keyword.value.value is None
+                    ):
+                        offenders.append(
+                            f"{path.relative_to(PROJECT_ROOT)}:{node.lineno}:{keyword.arg}"
+                        )
+
+        self.assertEqual(offenders, [])
+
+    def test_detection_and_debug_helpers_do_not_hide_optional_runtime_inputs(self) -> None:
+        offenders: list[str] = []
+        for root in (
+            PROJECT_ROOT / "x5crop" / "detection",
+            PROJECT_ROOT / "x5crop" / "debug",
+        ):
+            for path in root.rglob("*.py"):
+                tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+                for node in ast.walk(tree):
+                    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        continue
+                    positional = [*node.args.posonlyargs, *node.args.args]
+                    positional_defaults = [
+                        None,
+                    ] * (len(positional) - len(node.args.defaults)) + list(node.args.defaults)
+                    defaults = {
+                        argument.arg: default
+                        for argument, default in zip(positional, positional_defaults)
+                    }
+                    defaults.update(
+                        {
+                            argument.arg: default
+                            for argument, default in zip(
+                                node.args.kwonlyargs,
+                                node.args.kw_defaults,
+                            )
+                        }
+                    )
+                    for parameter in ("cache", "family_policy"):
+                        default = defaults.get(parameter)
+                        if isinstance(default, ast.Constant) and default.value is None:
+                            offenders.append(
+                                f"{path.relative_to(PROJECT_ROOT)}:{node.lineno}:{node.name}:{parameter}"
+                            )
+
+        self.assertEqual(offenders, [])
+
+    def test_evidence_does_not_embed_application_identity(self) -> None:
+        self.assertEqual(
+            forbidden_import_edges(
+                ("x5crop.detection.evidence",),
+                ("x5crop.app_info",),
+            ),
+            [],
+        )
+
+    def test_output_consumes_final_domain_types_not_detection_detail_schema(self) -> None:
+        self.assertEqual(
+            forbidden_import_edges(("x5crop.output",), ("x5crop.detection",)),
+            [],
+        )
+
+    def test_runtime_does_not_depend_on_entry_models(self) -> None:
+        self.assertEqual(
+            forbidden_import_edges(("x5crop.runtime",), ("x5crop.entry",)),
+            [],
+        )
+
+    def test_policy_models_do_not_own_report_serialization(self) -> None:
+        from x5crop.policies.decision.contract import DetectionDecisionContract
+        from x5crop.policies.runtime.policy import DetectionPolicy
+
+        self.assertNotIn("report_detail", DetectionPolicy.__dict__)
+        self.assertNotIn("report_detail", DetectionDecisionContract.__dict__)
+
+        pipeline_source = (
+            PROJECT_ROOT / "x5crop" / "detection" / "pipeline.py"
+        ).read_text(encoding="utf-8")
+        decision_source = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "decision"
+            / "contract_applier.py"
+        ).read_text(encoding="utf-8")
+        workflow_source = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "workflow.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("runtime_policy_detail", pipeline_source)
+        self.assertNotIn("decision_policy_detail", decision_source)
+        self.assertIn("detection_policy_report_detail", workflow_source)
+        self.assertIn("decision_contract_report_detail", workflow_source)
+
+    def test_deskew_quality_uses_explicit_parameters_without_numeric_fallbacks(self) -> None:
+        from x5crop.image.deskew_parameters import DeskewParameters
+
+        self.assertIn("quality_inlier_weight", DeskewParameters.__dataclass_fields__)
+        path = PROJECT_ROOT / "x5crop" / "image" / "deskew.py"
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        functions = {
+            node.name: node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+        }
+        self.assertEqual(functions["fit_line"].args.defaults, [])
+        self.assertEqual(functions["fit_line"].args.kw_defaults, [None, None, None])
+        self.assertEqual(
+            [argument.arg for argument in functions["deskew_quality"].args.args],
+            ["detail", "deskew"],
+        )
+        deskew_quality_source = ast.get_source_segment(
+            source,
+            functions["deskew_quality"],
+        )
+        self.assertNotIn('get("median_residual", 10.0)', deskew_quality_source)
+
+    def test_detection_pipeline_requires_runtime_owned_analysis_cache(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "detection" / "pipeline.py"
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        choose_detection = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "choose_detection"
+        )
+        self.assertEqual(choose_detection.args.defaults, [])
+        self.assertNotIn("make_analysis_cache", source)
+
     def test_every_active_module_is_reachable_from_a_registered_root(self) -> None:
         modules = set(source_modules())
         reached = set(reachable_source_modules(RUNTIME_ROOTS | STANDALONE_ROOTS))
@@ -240,6 +403,9 @@ class LayerBoundariesContractTest(unittest.TestCase):
     def test_active_source_has_no_unreferenced_top_level_helpers(self) -> None:
         self.assertEqual(unreferenced_top_level_symbols(), [])
 
+    def test_active_source_has_no_unreferenced_methods(self) -> None:
+        self.assertEqual(unreferenced_methods(), [])
+
     def test_internal_modules_do_not_publish_unused_export_lists(self) -> None:
         self.assertEqual(modules_with_export_lists(), [])
 
@@ -344,7 +510,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
 
         for name in banned:
             self.assertFalse(hasattr(final, name))
-        self.assertTrue(hasattr(final, "ApprovedGeometryAdjustmentPolicy"))
         self.assertTrue(hasattr(final, "FinalizationPolicy"))
 
     def test_output_policy_is_owned_by_runtime_output_module(self) -> None:
@@ -354,8 +519,128 @@ class LayerBoundariesContractTest(unittest.TestCase):
         )
 
         self.assertIn("edge_bleed_protection", OutputPolicy.__dataclass_fields__)
-        self.assertIn("apply_output_bleed", OutputPolicy.__dataclass_fields__)
         self.assertIn("guard_ratio", EdgeBleedProtectionPolicy.__dataclass_fields__)
+
+    def test_universal_capabilities_do_not_have_constant_policy_switches(self) -> None:
+        from x5crop.policies.parameters.separator import (
+            LeadingGridFailureParameters,
+            SeparatorSupportParameters,
+            SeparatorWidthProfileParameters,
+        )
+        from x5crop.policies.parameters.outer import (
+            EdgeAnchoredContentPositionParameters,
+            FloatingContentPositionParameters,
+            FullWidthSeparatorOuterParameters,
+        )
+        from x5crop.geometry.detection_parameters import NearbySeparatorRefinementParameters
+        from x5crop.image.gray import BaseGrayParameters
+        from x5crop.policies.runtime.candidate import (
+            CandidateExecutionBudgetPolicy,
+            CandidatePlanPolicy,
+            ContentGuidedSeparatorCandidatePolicy,
+            EvidenceIndependencePolicy,
+            SeparatorFullWidthCompetitionPolicy,
+        )
+        from x5crop.policies.runtime.base import FrameFitPolicy
+        from x5crop.policies.decision.contract import DecisionPolicy
+        from x5crop.policies.runtime.content import ContentPolicy
+        from x5crop.policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
+        from x5crop.policies.parameters.decision import DecisionReviewParameters
+        from x5crop.policies.runtime.final import FinalizationPolicy
+        from x5crop.policies.runtime.outer import (
+            BaseOuterProposalPolicy,
+            LongAxisGeometryCorrectionPolicy,
+            PartialPlacementGeometryPolicy,
+            OuterCorrectionFamilyPolicy,
+            ShortAxisGeometryCorrectionPolicy,
+        )
+        from x5crop.policies.runtime.output import EdgeBleedProtectionPolicy, OutputPolicy
+        from x5crop.policies.runtime.separator import (
+            SeparatorGeometrySupportModePolicy,
+            SeparatorModelGapProposalPolicy,
+            SeparatorPolicy,
+            SeparatorRefinementFamilyPolicy,
+            SeparatorWidthProfilePolicy,
+        )
+
+        switches = {
+            FinalizationPolicy: "apply_approved_geometry_adjustment",
+            OutputPolicy: "apply_output_bleed",
+            RuntimeDiagnosticsPolicy: "attach_read_only_when_requested",
+            ContentPolicy: "validates_candidates",
+            EdgeBleedProtectionPolicy: "enabled",
+            BaseOuterProposalPolicy: "enabled",
+            EdgeAnchoredContentPositionParameters: "enabled",
+            FloatingContentPositionParameters: "enabled",
+            LongAxisGeometryCorrectionPolicy: "enabled",
+            ShortAxisGeometryCorrectionPolicy: "enabled",
+            LeadingGridFailureParameters: "enabled",
+            SeparatorWidthProfileParameters: "full_enabled",
+            SeparatorFullWidthCompetitionPolicy: "enabled",
+            EvidenceIndependencePolicy: "enabled",
+            DecisionReviewParameters: "align_outer_to_content",
+            DecisionPolicy: "align_outer_to_content",
+            ContentGuidedSeparatorCandidatePolicy: "requires_exact_content_runs",
+            SeparatorSupportParameters: "allow_geometry_support",
+            SeparatorGeometrySupportModePolicy: "allow_grid",
+            SeparatorGeometrySupportModePolicy: "enabled",
+            SeparatorModelGapProposalPolicy: "geometry_equal_model_enabled",
+            NearbySeparatorRefinementParameters: "enabled",
+            FrameFitPolicy: "geometry_fallback",
+            BaseGrayParameters: "miniswhite_inverts",
+            PartialPlacementGeometryPolicy: "skip_floating_when_edge_trusted",
+        }
+        for policy_type, field_name in switches.items():
+            self.assertNotIn(field_name, policy_type.__dataclass_fields__)
+        self.assertNotIn("partial_enabled", SeparatorWidthProfileParameters.__dataclass_fields__)
+        for field_name in (
+            "stop_after_reliable_primary",
+            "skip_outer_correction_after_reliable_selection",
+            "requires_separator_source",
+            "requires_candidate_gate",
+            "requires_hard_separator_ok",
+            "requires_no_candidate_signals",
+        ):
+            self.assertNotIn(
+                field_name,
+                CandidateExecutionBudgetPolicy.__dataclass_fields__,
+            )
+        self.assertNotIn(
+            "outer_correction_extension",
+            CandidatePlanPolicy.__dataclass_fields__,
+        )
+        self.assertNotIn("hard_required_all_gaps", SeparatorPolicy.__dataclass_fields__)
+        self.assertNotIn("geometry_support_modes", SeparatorPolicy.__dataclass_fields__)
+        self.assertNotIn("detection_long_axis_bleed", OutputPolicy.__dataclass_fields__)
+        self.assertNotIn("detection_short_axis_bleed", OutputPolicy.__dataclass_fields__)
+        for field_name in (
+            "requires_explicit_count_for_partial",
+            "requires_separator_assessment",
+            "strip_modes",
+        ):
+            self.assertNotIn(field_name, OuterCorrectionFamilyPolicy.__dataclass_fields__)
+        self.assertNotIn(
+            "requires_explicit_count_for_partial",
+            SeparatorRefinementFamilyPolicy.__dataclass_fields__,
+        )
+        self.assertNotIn("required_count", SeparatorWidthProfilePolicy.__dataclass_fields__)
+        self.assertNotIn("required_count", FullWidthSeparatorOuterParameters.__dataclass_fields__)
+        for policy_type, field_names in (
+            (ContentGuidedSeparatorCandidatePolicy, ("enabled",)),
+            (SeparatorSupportParameters, ("allow_full_detected_geometry",)),
+            (SeparatorGeometrySupportModePolicy, ("allow_grid",)),
+        ):
+            for field_name in field_names:
+                self.assertNotIn(field_name, policy_type.__dataclass_fields__)
+        for field_name in (
+            "requires_default_count",
+            "requires_standard_width_search",
+            "requires_incomplete_hard_gaps",
+        ):
+            self.assertNotIn(
+                field_name,
+                SeparatorModelGapProposalPolicy.__dataclass_fields__,
+            )
 
     def test_finalization_assembly_does_not_own_diagnostics_policy(self) -> None:
         from x5crop.policies.assembly import finalization
@@ -397,7 +682,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
     def test_format_physical_count_does_not_branch_on_format_id(self) -> None:
         text = (PROJECT_ROOT / "x5crop" / "formats" / "__init__.py").read_text(encoding="utf-8")
 
-        self.assertNotIn("format_id == FormatId.DUAL_LANE.value", text)
+        self.assertNotIn("format_id == FormatId.F135_DUAL.value", text)
         self.assertIn('physical_layout == "dual_lane"', text)
 
     def test_decision_evidence_policy_receives_physical_spec(self) -> None:
@@ -485,100 +770,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
         import_from_nodes = [node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
 
         self.assertEqual(import_from_nodes, [])
-
-    def test_finalization_does_not_generate_exposure_overlap_evidence(self) -> None:
-        banned = (
-            "exposure_overlap_evidence_detail",
-            "get_detection_policy",
-            "policies.registry",
-        )
-        offenders: list[str] = []
-        source_root = PROJECT_ROOT / "x5crop" / "detection" / "final"
-        self.assertTrue(source_root.is_dir())
-        for path in source_root.rglob("*.py"):
-            text = path.read_text(encoding="utf-8")
-            for term in banned:
-                if term in text:
-                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
-
-        self.assertEqual(offenders, [])
-
-    def test_exposure_evidence_output_plan_and_decision_keep_one_way_dependencies(self) -> None:
-        exposure_text = (
-            PROJECT_ROOT
-            / "x5crop"
-            / "detection"
-            / "evidence"
-            / "exposure_overlap.py"
-        ).read_text(encoding="utf-8")
-        output_plan_text = (
-            PROJECT_ROOT / "x5crop" / "output" / "protection.py"
-        ).read_text(encoding="utf-8")
-        decision_text = (
-            PROJECT_ROOT
-            / "x5crop"
-            / "detection"
-            / "decision"
-            / "final_decision.py"
-        ).read_text(encoding="utf-8")
-
-        self.assertNotIn("runtime.diagnostics", exposure_text)
-        self.assertNotIn("output.protection", exposure_text)
-        self.assertNotIn("decision", exposure_text)
-        self.assertNotIn("x5crop.detection", output_plan_text)
-        self.assertNotIn("policies.registry", output_plan_text)
-        self.assertNotIn("evidence.exposure_overlap", decision_text)
-        self.assertNotIn("output.protection", decision_text)
-
-    def test_outer_alignment_evidence_does_not_own_correction_policy(self) -> None:
-        path = PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "outer_alignment.py"
-        text = path.read_text(encoding="utf-8")
-
-        self.assertIn("OuterAlignmentEvidencePolicy", text)
-        self.assertNotIn("ContentContainmentCorrectionPolicy", text)
-        self.assertNotIn("corrected_outer_from_alignment", text)
-
-    def test_runtime_policy_lookup_stays_out_of_output_and_detection_layers(self) -> None:
-        banned = ("get_detection_policy", "policies.registry")
-        checked_paths = [
-            PROJECT_ROOT / "x5crop" / "detection",
-            PROJECT_ROOT / "x5crop" / "debug",
-            PROJECT_ROOT / "x5crop" / "report",
-            PROJECT_ROOT / "x5crop" / "runtime" / "analysis_reuse.py",
-        ]
-        offenders: list[str] = []
-        for root in checked_paths:
-            paths = [root] if root.is_file() else list(root.rglob("*.py"))
-            for path in paths:
-                text = path.read_text(encoding="utf-8")
-                for term in banned:
-                    if term in text:
-                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
-
-        self.assertEqual(offenders, [])
-
-    def test_output_bleed_helpers_live_in_output_layer(self) -> None:
-        offenders: list[str] = []
-        banned = (
-            "detection.final.output_bleed",
-            "from .output_bleed",
-            "final.output_bleed",
-        )
-        for root in (PROJECT_ROOT / "x5crop",):
-            self.assertTrue(root.is_dir())
-            for path in root.rglob("*.py"):
-                if path == Path(__file__).resolve():
-                    continue
-                text = path.read_text(encoding="utf-8")
-                for term in banned:
-                    if term in text:
-                        offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
-
-        self.assertEqual(offenders, [])
-
-        self.assertTrue((PROJECT_ROOT / "x5crop" / "output" / "bleed.py").is_file())
-
-
 
 if __name__ == "__main__":
     unittest.main()

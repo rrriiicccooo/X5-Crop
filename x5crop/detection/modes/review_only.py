@@ -20,13 +20,16 @@ def review_only_detection(
     fmt: FormatPhysicalSpec,
     policy: DetectionPolicy,
 ) -> DetectionCandidate:
+    review_only_policy = policy.detector.review_only
+    if review_only_policy is None:
+        raise ValueError("Review-only detector requires review-only policy")
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
     outer = Box(0, 0, ww, wh)
     source_h, source_w = gray.shape
-    mode_diagnostics = [policy.detector.review_only.reason, SIGNAL_NEEDS_MANUAL_REVIEW]
+    mode_diagnostics = [review_only_policy.reason, SIGNAL_NEEDS_MANUAL_REVIEW]
     return DetectionCandidate(
-        format_id=fmt.format_id.value,
+        format_id=fmt.format_id,
         layout=config.layout,
         strip_mode=config.strip_mode,
         count=fmt.default_count,
@@ -43,15 +46,14 @@ def review_only_detection(
             "work_outer": asdict(outer),
             "candidate_competition": {
                 "candidate_count": 0,
-                "format_ids": [fmt.format_id.value],
+                "format_ids": [fmt.format_id],
                 "selected_candidate": {
-                    "format_id": fmt.format_id.value,
+                    "format_id": fmt.format_id,
                     "count": fmt.default_count,
                     "strip_mode": config.strip_mode,
                     "confidence": 0.0,
                     "candidate_signals": list(mode_diagnostics),
                 },
-                "selection_override": policy.detector.review_only.selection_override,
                 "top_candidates": [],
             },
         },

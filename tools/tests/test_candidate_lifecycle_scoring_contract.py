@@ -20,6 +20,21 @@ from x5crop.run_config import RunConfig
 
 
 class CandidateLifecycleScoringContractTest(unittest.TestCase):
+    def test_candidate_scoring_does_not_branch_on_format_family(self) -> None:
+        source_root = (
+            Path(__file__).resolve().parents[2]
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "assessment"
+        )
+        offenders = [
+            str(path.relative_to(Path(__file__).resolve().parents[2]))
+            for path in source_root.rglob("*.py")
+            if ".family" in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(offenders, [])
+
     def _decision_contract(self, format_id: str, strip_mode: str):
         return decision_contract_for_policy(get_detection_policy(format_id, strip_mode))
 
@@ -199,7 +214,7 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
             0.0,
         )
 
-    def test_broad_separator_width_does_not_cap_confidence_by_itself(self) -> None:
+    def test_separator_width_class_is_not_required_for_candidate_gate(self) -> None:
         gray = np.zeros((100, 300), dtype=np.uint8)
         gray[:, ::2] = 255
         policy = get_detection_policy("120-66", "full")
@@ -225,7 +240,6 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
-                "broad_separator_width_gaps": 2,
                 "standard_gap_search": {
                     "entries": [
                         {"selected_source": "standard_detected"},
@@ -271,17 +285,16 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
             config,
             format_spec("120-66"),
             "separator",
+            cache=None,
             policy=policy,
         )
 
         self.assertGreater(assessed.confidence, 0.95)
         assessment = assessed.detail["candidate_assessment"]
         self.assertTrue(assessment["candidate_gate"]["passed"])
-        self.assertEqual(
-            assessed.detail["candidate_assessment"]["separator_support"][
-                "broad_separator_width_gaps"
-            ],
-            2,
+        self.assertNotIn(
+            "broad_separator_width_gaps",
+            assessment["separator_support"],
         )
 
     def test_safe_outer_overcut_and_low_content_quality_do_not_fail_final_evidence(self) -> None:

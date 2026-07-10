@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 FULL = "full"
 PARTIAL = "partial"
 
@@ -8,14 +8,12 @@ PARTIAL = "partial"
 @dataclass(frozen=True)
 class ReviewOnlyPolicy:
     reason: str = "review_only_mode"
-    selection_override: str = "review_only_mode"
 
 
 @dataclass(frozen=True)
 class FrameFitPolicy:
     name: str
     edge_evidence: bool
-    geometry_fallback: bool
     min_edge_samples: int = 2
     nominal_min_ratio: float = 0.72
     nominal_max_ratio: float = 1.10
@@ -40,7 +38,7 @@ class FrameFitPolicy:
 @dataclass(frozen=True)
 class DetectorPolicy:
     kind: str = "standard_strip"
-    review_only: ReviewOnlyPolicy = field(default_factory=ReviewOnlyPolicy)
+    review_only: ReviewOnlyPolicy | None = None
 
 
 @dataclass(frozen=True)

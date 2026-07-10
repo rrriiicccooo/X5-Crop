@@ -34,16 +34,18 @@ from x5crop.runtime.output_protection import prepare_output_protection
 
 class DecisionOwnershipGateContractTest(unittest.TestCase):
     def test_decision_contract_report_does_not_expose_unused_candidate_policy(self) -> None:
-        detail = _decision_contract("135", "full").report_detail()
+        from x5crop.policies.reporting import decision_contract_report_detail
+
+        detail = decision_contract_report_detail(_decision_contract("135", "full"))
 
         self.assertNotIn("candidate_policy", detail)
         self.assertNotIn("risk_policy", detail)
         self.assertIn("decision_policy", detail)
         self.assertNotIn("output_policy", detail)
         self.assertNotIn("diagnostics_policy", detail)
-        self.assertEqual(
-            detail["decision_policy"]["content_evidence_insufficient_reason"],
-            "content_evidence_insufficient",
+        self.assertNotIn(
+            "content_evidence_insufficient_reason",
+            detail["decision_policy"],
         )
 
     def test_final_review_reasons_are_owned_by_decision_inputs(self) -> None:

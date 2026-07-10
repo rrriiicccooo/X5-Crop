@@ -24,9 +24,10 @@ def corrected_outer_for_short_axis_geometry(
     cache: AnalysisCache,
     correction_policy: GeometryConsistencyCorrectionPolicy,
 ) -> Optional[Box]:
-    short_axis = correction_policy.short_axis
-    family = short_axis.family
-    if not short_axis.enabled:
+    short_axis_policy = correction_policy.short_axis
+    short_axis = short_axis_policy.parameters
+    family = short_axis_policy.family
+    if family.mode == "off":
         return None
     if str(content_detail.get("support", "")) != "aspect_conflict":
         return None
@@ -110,7 +111,7 @@ def geometry_consistency_model_detail(
     expected_ratio_from_measured = base_ratio + measured_separator_total / max(1.0, float(outer.height))
     return {
         "used": True,
-        "format_id": fmt.format_id.value,
+        "format_id": fmt.format_id,
         "count": int(detection.count),
         "frame_aspect": float(aspect),
         "base_ratio": float(base_ratio),
@@ -136,9 +137,10 @@ def corrected_outer_from_long_axis_geometry(
     cache: AnalysisCache,
     correction_policy: GeometryConsistencyCorrectionPolicy,
 ) -> Optional[Box]:
-    long_axis = correction_policy.long_axis
-    family = long_axis.family
-    if not long_axis.enabled:
+    long_axis_policy = correction_policy.long_axis
+    long_axis = long_axis_policy.parameters
+    family = long_axis_policy.family
+    if family.mode == "off":
         return None
     if not bool(geometry_detail.get("used", False)):
         return None

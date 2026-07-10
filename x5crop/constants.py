@@ -23,7 +23,3 @@ MODEL_GAP_METHODS = {
     GAP_EQUAL,
     GAP_CONTENT,
 }
-
-REASON_SEPARATOR_SUPPORT_WEAK = "separator_support_weak"
-REASON_CONTENT_EVIDENCE_WEAK = "content_evidence_weak"
-REASON_CONTENT_ASPECT_CONFLICT = "content_aspect_conflict"

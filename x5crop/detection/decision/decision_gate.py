@@ -6,6 +6,19 @@ from typing import Any
 from ...domain import DetectionCandidate
 from ...policies.decision.contract import DetectionDecisionContract
 from ..gate_checks import GateCheck, gate_check_details
+from .final_reasons import (
+    FINAL_REASON_CANDIDATE_COMPETITION_CLOSE,
+    FINAL_REASON_CONTENT_INSUFFICIENT,
+    FINAL_REASON_CONTENT_ONLY_EVIDENCE,
+    FINAL_REASON_DESKEW_UNCERTAIN,
+    FINAL_REASON_EVIDENCE_INSUFFICIENT,
+    FINAL_REASON_EXPOSURE_OVERLAP_UNRESOLVED,
+    FINAL_REASON_GEOMETRY_UNSTABLE,
+    FINAL_REASON_OUTER_CANDIDATE_DISAGREEMENT,
+    FINAL_REASON_OUTER_CONTENT_MISMATCH,
+    FINAL_REASON_PARTIAL_EDGE_UNCERTAIN,
+    FINAL_REASON_SEPARATOR_INCOMPLETE,
+)
 
 
 @dataclass(frozen=True)
@@ -18,9 +31,6 @@ class DecisionGateAssessment:
 
     def with_confidence_caps(self, confidence_caps: list[dict[str, Any]]) -> "DecisionGateAssessment":
         return replace(self, confidence_caps=list(confidence_caps))
-
-    def with_final_review_reasons(self, reasons: list[str]) -> "DecisionGateAssessment":
-        return replace(self, final_review_reasons=list(reasons))
 
     def report_detail(self) -> dict[str, Any]:
         return {
@@ -105,7 +115,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
             bucket="source",
             triggered=bool(decision_signals["content_only_evidence"]),
             signal="content_only_evidence",
-            final_review_reason=policy.decision.content_only_evidence_reason,
+            final_review_reason=FINAL_REASON_CONTENT_ONLY_EVIDENCE,
         )
     )
     checks.append(
@@ -114,7 +124,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
             bucket="source",
             triggered=bool(decision_signals["safety_or_review_only"]),
             signal="safety_or_review_only",
-            final_review_reason=policy.decision.decision_insufficient_reason,
+            final_review_reason=FINAL_REASON_EVIDENCE_INSUFFICIENT,
         )
     )
     checks.append(
@@ -123,7 +133,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
             bucket="outer",
             triggered=bool(decision_signals["outer_content_alignment_failed"]),
             signal="outer_content_alignment_failed",
-            final_review_reason=policy.decision.outer_content_mismatch_reason,
+            final_review_reason=FINAL_REASON_OUTER_CONTENT_MISMATCH,
         )
     )
     checks.append(
@@ -132,7 +142,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
             bucket="separator",
             triggered=bool(decision_signals["separator_support_incomplete"]),
             signal="separator_support_incomplete",
-            final_review_reason=policy.decision.separator_incomplete_reason,
+            final_review_reason=FINAL_REASON_SEPARATOR_INCOMPLETE,
         )
     )
     checks.append(
@@ -141,7 +151,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
             bucket="geometry",
             triggered=bool(decision_signals["photo_geometry_unstable"]),
             signal="photo_geometry_unstable",
-            final_review_reason=policy.decision.geometry_unstable_reason,
+            final_review_reason=FINAL_REASON_GEOMETRY_UNSTABLE,
         )
     )
     checks.append(
@@ -150,7 +160,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
             bucket="content",
             triggered=bool(decision_signals["content_integrity_failed"]),
             signal="content_integrity_failed",
-            final_review_reason=policy.decision.content_evidence_insufficient_reason,
+            final_review_reason=FINAL_REASON_CONTENT_INSUFFICIENT,
         )
     )
     checks.append(
@@ -159,7 +169,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
             bucket="selection",
             triggered=bool(decision_signals["candidate_competition_close"]),
             signal="candidate_competition_close",
-            final_review_reason=policy.decision.candidate_competition_close_reason,
+            final_review_reason=FINAL_REASON_CANDIDATE_COMPETITION_CLOSE,
         )
     )
     checks.append(
@@ -168,7 +178,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
             bucket="output",
             triggered=bool(decision_signals["exposure_overlap_unresolved"]),
             signal="exposure_overlap_unresolved",
-            final_review_reason=policy.decision.exposure_overlap_unresolved_reason,
+            final_review_reason=FINAL_REASON_EXPOSURE_OVERLAP_UNRESOLVED,
         )
     )
     checks.append(
@@ -177,7 +187,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
             bucket="partial_edge",
             triggered=bool(decision_signals["partial_edge_uncertain"]),
             signal="partial_edge_uncertain",
-            final_review_reason=policy.decision.partial_edge_uncertain_reason,
+            final_review_reason=FINAL_REASON_PARTIAL_EDGE_UNCERTAIN,
         )
     )
     checks.append(
@@ -186,7 +196,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
             bucket="candidate_assessment",
             triggered=not candidate_gate_allows_auto,
             signal="candidate_gate_failed",
-            final_review_reason=policy.decision.decision_insufficient_reason,
+            final_review_reason=FINAL_REASON_EVIDENCE_INSUFFICIENT,
         )
     )
 
@@ -198,7 +208,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
             bucket="confidence",
             triggered=confidence_below_threshold,
             signal="confidence_below_threshold",
-            final_review_reason=policy.decision.decision_insufficient_reason,
+            final_review_reason=FINAL_REASON_EVIDENCE_INSUFFICIENT,
             severity="diagnostic" if failed_before_confidence_floor else "blocker",
             detail={
                 "confidence": float(detection.confidence),
@@ -221,7 +231,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
                 >= policy.decision.outer_candidate_disagreement_min_spread_ratio
             ),
             signal="outer_area_spread",
-            final_review_reason=policy.decision.outer_candidate_disagreement_review_reason,
+            final_review_reason=FINAL_REASON_OUTER_CANDIDATE_DISAGREEMENT,
         )
     )
     checks.append(
@@ -236,7 +246,7 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
                 )
             ),
             signal="deskew_uncertain",
-            final_review_reason=policy.decision.deskew_uncertain_review_reason,
+            final_review_reason=FINAL_REASON_DESKEW_UNCERTAIN,
         )
     )
 

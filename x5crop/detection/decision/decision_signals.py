@@ -69,10 +69,7 @@ def decision_signals_for(
             )
             or partial_full_conflict
         )
-        and not (
-            partial_edge_safe
-            and policy.decision.suppress_close_competition_when_partial_edge_safe
-        )
+        and not partial_edge_safe
     )
     active_signals: list[str] = []
     if content_only_evidence:

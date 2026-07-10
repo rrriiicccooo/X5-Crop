@@ -12,7 +12,7 @@ from ...gap_methods import is_hard_gap_method
 from ...geometry.boxes import box_cache_key
 from ...geometry.detection_parameters import SeparatorProfileParameters
 from ...geometry.nearby_separator import nearby_separator_search_detail
-from ...policies.runtime.diagnostics import NearbySeparatorDiagnosticsPolicy
+from ...policies.parameters.diagnostics import NearbySeparatorDiagnosticsParameters
 
 
 def nearby_separator_diagnostic_detail(
@@ -22,9 +22,9 @@ def nearby_separator_diagnostic_detail(
     pitch: float,
     start: int,
     end: int,
-    nearby_policy: NearbySeparatorDiagnosticsPolicy,
+    nearby_policy: NearbySeparatorDiagnosticsParameters,
     profile_policy: SeparatorProfileParameters,
-    cache: AnalysisCache | None = None,
+    cache: AnalysisCache | None,
 ) -> dict[str, Any]:
     if not is_hard_gap_method(gap.method) or pitch <= 0:
         return {"searched": False, "reason": "not_hard_gap"}
@@ -37,11 +37,11 @@ def nearby_separator_diagnostic_detail(
             box_cache_key(work_outer),
             int(gap.index),
             str(gap.method),
-            round(float(gap.center), 4),
-            round(float(gap.score), 6),
-            None if gap.start is None else round(float(gap.start), 4),
-            None if gap.end is None else round(float(gap.end), 4),
-            round(float(pitch), 4),
+            float(gap.center),
+            float(gap.score),
+            None if gap.start is None else float(gap.start),
+            None if gap.end is None else float(gap.end),
+            float(pitch),
             int(start),
             int(end),
         )

@@ -406,7 +406,7 @@ def apply_nearby_separator_refinement(
     count: int,
     refinement_config: NearbySeparatorRefinementParameters,
 ) -> NearbySeparatorRefinementResult:
-    if not refinement_config.enabled or count <= 1 or len(gaps) != count - 1:
+    if count <= 1 or len(gaps) != count - 1:
         return NearbySeparatorRefinementResult(gaps, {"used": False, "reason": "not_applicable"})
     if profile.size == 0:
         return NearbySeparatorRefinementResult(gaps, {"used": False, "reason": "empty_profile"})

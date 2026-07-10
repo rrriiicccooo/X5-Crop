@@ -1,1 +1,1 @@
-"""Report schema, sections, outputs, and result assembly."""
+"""Canonical report records, read models, outputs, and result assembly."""

@@ -202,15 +202,118 @@ def _with_outer_alignment_evidence(
     )
 
 
-def format_parameters(format_name: str) -> FormatParameters:
-    if format_name not in FORMAT_CHOICES:
-        raise ValueError(f"Unsupported format parameters: {format_name}")
-    fmt = format_spec(format_name)
+def _with_candidate_scoring_profile(
+    params: FormatParameters,
+    *,
+    full_photo_width_cv: float | None = None,
+    outer_max_area: float | None = None,
+    outer_too_large: float | None = None,
+    separator_weight: float | None = None,
+    geometry_weight: float | None = None,
+    content_weight: float | None = None,
+    model_grid_credit: float | None = None,
+    model_equal_credit: float | None = None,
+    nearby_separator_score_multiplier: float | None = None,
+) -> FormatParameters:
+    base_score = params.candidate.base_detection_score
+    calibration = params.candidate.scoring_calibration
+    support_score = params.candidate.separator_support_score
+    geometry_support = params.separator.separator_geometry_support
+    nearby = params.separator.nearby_separator_refinement
+    resolved_photo_width_cv = (
+        base_score.full_photo_width_cv
+        if full_photo_width_cv is None
+        else float(full_photo_width_cv)
+    )
+    resolved_outer_max_area = (
+        base_score.outer_max_area
+        if outer_max_area is None
+        else float(outer_max_area)
+    )
+    return replace(
+        params,
+        candidate=replace(
+            params.candidate,
+            base_detection_score=replace(
+                base_score,
+                full_photo_width_cv=resolved_photo_width_cv,
+                outer_max_area=resolved_outer_max_area,
+                outer_too_large=(
+                    base_score.outer_too_large
+                    if outer_too_large is None
+                    else float(outer_too_large)
+                ),
+            ),
+            scoring_calibration=replace(
+                calibration,
+                separator_weight=(
+                    calibration.separator_weight
+                    if separator_weight is None
+                    else float(separator_weight)
+                ),
+                geometry_weight=(
+                    calibration.geometry_weight
+                    if geometry_weight is None
+                    else float(geometry_weight)
+                ),
+                content_weight=(
+                    calibration.content_weight
+                    if content_weight is None
+                    else float(content_weight)
+                ),
+            ),
+            separator_support_score=replace(
+                support_score,
+                model_grid_credit=(
+                    support_score.model_grid_credit
+                    if model_grid_credit is None
+                    else float(model_grid_credit)
+                ),
+                model_equal_credit=(
+                    support_score.model_equal_credit
+                    if model_equal_credit is None
+                    else float(model_equal_credit)
+                ),
+            ),
+        ),
+        separator=replace(
+            params.separator,
+            separator_geometry_support=replace(
+                geometry_support,
+                max_photo_width_cv=resolved_photo_width_cv,
+                max_outer_area_ratio=resolved_outer_max_area,
+            ),
+            nearby_separator_refinement=replace(
+                nearby,
+                score_multiplier=(
+                    nearby.score_multiplier
+                    if nearby_separator_score_multiplier is None
+                    else float(nearby_separator_score_multiplier)
+                ),
+            ),
+        ),
+    )
+
+
+def format_parameters(format_id: str) -> FormatParameters:
+    if format_id not in FORMAT_CHOICES:
+        raise ValueError(f"Unsupported format parameters: {format_id}")
+    fmt = format_spec(format_id)
     profile = fmt.frame_geometry_profile
     params = FormatParameters()
 
     if fmt.family == "120":
         params = _with_content_min_run(params, 0.18)
+        params = _with_candidate_scoring_profile(
+            params,
+            full_photo_width_cv=0.012,
+            separator_weight=0.36,
+            geometry_weight=0.32,
+            content_weight=0.32,
+            model_grid_credit=0.18,
+            model_equal_credit=0.04,
+            nearby_separator_score_multiplier=1.28,
+        )
 
     if profile == "standard_35mm":
         params = _with_separator_outer(
@@ -229,6 +332,12 @@ def format_parameters(format_name: str) -> FormatParameters:
         )
         params = _with_partial_edge(params, ratio_extras=(0.02, 0.04), max_candidates=4)
     elif profile == "dense_half":
+        params = _with_candidate_scoring_profile(
+            params,
+            full_photo_width_cv=0.008,
+            model_grid_credit=0.25,
+            model_equal_credit=0.08,
+        )
         params = _with_content_min_run(params, 0.16)
         params = _with_separator_width_max(params, 0.100)
         params = _with_separator_outer(
@@ -247,6 +356,11 @@ def format_parameters(format_name: str) -> FormatParameters:
         )
         params = _with_partial_edge(params, ratio_extras=(0.04, 0.06), max_candidates=4)
     elif profile == "panoramic_35mm":
+        params = _with_candidate_scoring_profile(
+            params,
+            model_grid_credit=0.20,
+            model_equal_credit=0.06,
+        )
         params = _with_content_min_run(params, 0.24)
         params = _with_content_containment_correction(
             params,
@@ -284,6 +398,11 @@ def format_parameters(format_name: str) -> FormatParameters:
         )
         params = _with_partial_edge(params, ratio_extras=(0.04, 0.08), max_candidates=4)
     elif profile == "medium_square":
+        params = _with_candidate_scoring_profile(
+            params,
+            outer_max_area=1.0,
+            outer_too_large=1.0,
+        )
         params = replace(
             params,
             separator=replace(
@@ -310,6 +429,10 @@ def format_parameters(format_name: str) -> FormatParameters:
             source_candidates=3,
         )
     elif profile == "medium_wide":
+        params = _with_candidate_scoring_profile(
+            params,
+            outer_too_large=0.995,
+        )
         params = _with_separator_width_max(params, 0.090)
         params = _with_outer_alignment_evidence(
             params,
