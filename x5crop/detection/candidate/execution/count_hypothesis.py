@@ -8,22 +8,73 @@ from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ....run_config import RunConfig
 from ...guidance.content_model import content_candidate_proposal_for_count
+from ...guidance.content_separator import content_guided_separator_seed_for_count
 from ..build.content import build_content_candidate
 from ..assessment.count_hypothesis import CountHypothesisEvaluation
 from ..assessment.source_batch import assess_source_candidates
 from .source_candidates import (
-    content_guided_separator_candidate_for_count,
-    separator_source_candidates_for_count,
+    SeparatorOuterCandidatePlan,
+    build_separator_candidate_for_outer,
+    content_guided_separator_candidate_from_seed,
+    separator_extension_outer_plan,
+    separator_primary_outer_plan,
 )
 from ..plan.count_hypotheses import CountHypothesis
-from .budget import (
-    attach_execution_budget_to_candidates,
-    separator_extension_families,
-    set_execution_budget_detail,
-)
+from .budget import attach_execution_budget_to_candidates
 from ..assessment.reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
 from .source_policy import separator_full_width_can_compete
 from ..selection.choose import is_partial_edge_safety_candidate, select_source_candidate
+
+
+def _assess_separator_outer_plan(
+    gray: np.ndarray,
+    config: RunConfig,
+    fmt: FormatPhysicalSpec,
+    count: int,
+    strip_mode: str,
+    offset: float,
+    cache: AnalysisCache,
+    policy: DetectionPolicy,
+    plan: SeparatorOuterCandidatePlan,
+    existing_candidates: tuple[DetectionCandidate, ...],
+) -> list[DetectionCandidate]:
+    assessed: list[DetectionCandidate] = []
+    for outer_candidate in plan.outer_candidates:
+        detection = build_separator_candidate_for_outer(
+            gray,
+            config,
+            fmt,
+            count,
+            strip_mode,
+            offset,
+            cache,
+            policy,
+            outer_candidate,
+            plan=plan,
+            gap_max_width_ratio_override=None,
+        )
+        assessed.extend(
+            assess_source_candidates(
+                gray,
+                (detection,),
+                config,
+                fmt,
+                "separator",
+                cache,
+                policy,
+            )
+        )
+        selected = select_source_candidate(
+            [*existing_candidates, *assessed],
+            config.confidence_threshold,
+        )
+        if candidate_is_reliable_for_execution_budget(
+            selected,
+            config.confidence_threshold,
+            policy,
+        ):
+            break
+    return assessed
 
 
 def _assessed_candidates_for_offset(
@@ -39,27 +90,33 @@ def _assessed_candidates_for_offset(
     candidates: list[DetectionCandidate] = []
     stop_after_this_count = False
     explicit_count = bool(config.requested_count is not None)
-    extension_families = separator_extension_families(policy, strip_mode, explicit_count)
+    full_width_family = policy.outer.proposal.geometry.separator.full_width
+    available_physical_families = (
+        ["separator_full_width"]
+        if full_width_family.available_for(strip_mode, explicit_count)
+        else []
+    )
 
-    primary_batch = separator_source_candidates_for_count(
+    primary_plan = separator_primary_outer_plan(
+        gray,
+        config,
+        fmt,
+        count,
+        strip_mode,
+        cache=cache,
+        policy=policy,
+    )
+    primary_candidates = _assess_separator_outer_plan(
         gray,
         config,
         fmt,
         count,
         strip_mode,
         offset,
-        cache=cache,
-        policy=policy,
-        include_extension_outer=False,
-    )
-    primary_candidates = assess_source_candidates(
-        gray,
-        primary_batch.detections,
-        config,
-        fmt,
-        "separator",
         cache,
         policy,
+        primary_plan,
+        (),
     )
     if not primary_candidates:
         return candidates, stop_after_this_count
@@ -75,87 +132,110 @@ def _assessed_candidates_for_offset(
         config.confidence_threshold,
         policy,
     )
-    primary_can_skip_extensions = (
-        primary_reliable
-        or not extension_families
-        or (
-            "separator_full_width" in extension_families
-            and not separator_full_width_can_compete(primary_separator, gray, policy)
-            and "content_guided_separator" not in extension_families
-        )
-    )
-    if primary_can_skip_extensions:
-        separator_candidates = primary_candidates
-        separator_candidate = primary_separator
-        skipped_reason = "reliable_primary" if primary_reliable else "no_extension_families"
-        attach_execution_budget_to_candidates(
-            separator_candidates,
-            primary_reliability=primary_reliability,
-            expanded_after_primary=False,
-            extension_families=extension_families,
-            skipped_reason=skipped_reason,
-        )
-    else:
-        expanded_batch = separator_source_candidates_for_count(
-            gray,
-            config,
-            fmt,
-            count,
-            strip_mode,
-            offset,
-            cache=cache,
-            policy=policy,
-        )
-        separator_candidates = assess_source_candidates(
-            gray,
-            expanded_batch.detections,
-            config,
-            fmt,
-            "separator",
-            cache,
+    extension_families: list[str] = []
+    separator_candidates = list(primary_candidates)
+    separator_candidate = primary_separator
+    if not primary_reliable:
+        if (
+            "separator_full_width" in available_physical_families
+            and separator_full_width_can_compete(primary_separator, gray, policy)
+        ):
+            extension_families.append("separator_full_width")
+        if "separator_full_width" in extension_families:
+            extension_plan = separator_extension_outer_plan(
+                gray,
+                config,
+                fmt,
+                count,
+                strip_mode,
+                cache=cache,
+                policy=policy,
+                primary_outer_candidates=primary_plan.outer_candidates,
+            )
+            separator_candidates.extend(
+                _assess_separator_outer_plan(
+                    gray,
+                    config,
+                    fmt,
+                    count,
+                    strip_mode,
+                    offset,
+                    cache,
+                    policy,
+                    extension_plan,
+                    tuple(separator_candidates),
+                )
+            )
+            separator_candidate = select_source_candidate(
+                separator_candidates,
+                config.confidence_threshold,
+            )
+        extension_reliable = candidate_is_reliable_for_execution_budget(
+            separator_candidate,
+            config.confidence_threshold,
             policy,
         )
-        if not separator_candidates:
-            separator_candidates = primary_candidates
-        separator_candidate = select_source_candidate(separator_candidates, config.confidence_threshold)
-        attach_execution_budget_to_candidates(
-            separator_candidates,
-            primary_reliability=primary_reliability,
-            expanded_after_primary=True,
-            extension_families=extension_families,
-        )
-        if "content_guided_separator" in extension_families:
-            content_guided_separator, guidance_detail = content_guided_separator_candidate_for_count(
+        if not extension_reliable:
+            guidance_seed = content_guided_separator_seed_for_count(
                 gray,
                 config,
                 fmt,
                 count,
                 strip_mode,
                 offset,
-                cache=cache,
-                policy=policy,
+                cache,
+                policy.content,
+                policy.candidate_plan.content_guided_separator,
             )
-            if content_guided_separator is None:
-                separator_candidate.detail.setdefault("candidate_plan", {})[
-                    "content_guided_separator"
-                ] = guidance_detail
-            else:
-                content_guided_candidate = assess_source_candidates(
+            if guidance_seed.seed is not None:
+                extension_families.append("content_guided_separator")
+                content_guided_separator = content_guided_separator_candidate_from_seed(
                     gray,
-                    (content_guided_separator,),
                     config,
                     fmt,
-                    "separator",
-                    cache,
-                    policy,
-                )[0]
-                set_execution_budget_detail(
-                    content_guided_candidate,
-                    primary_reliability=primary_reliability,
-                    expanded_after_primary=True,
-                    extension_families=extension_families,
+                    count,
+                    strip_mode,
+                    offset,
+                    seed_result=guidance_seed,
+                    cache=cache,
+                    policy=policy,
                 )
-                separator_candidates.append(content_guided_candidate)
+                separator_candidates.extend(
+                    assess_source_candidates(
+                        gray,
+                        (content_guided_separator,),
+                        config,
+                        fmt,
+                        "separator",
+                        cache,
+                        policy,
+                    )
+                )
+                separator_candidate = select_source_candidate(
+                    separator_candidates,
+                    config.confidence_threshold,
+                )
+
+    expanded = bool(extension_families)
+    if expanded:
+        attach_execution_budget_to_candidates(
+            separator_candidates,
+            primary_reliability=primary_reliability,
+            expanded_after_primary=True,
+            extension_families=extension_families,
+        )
+    else:
+        attach_execution_budget_to_candidates(
+            separator_candidates,
+            primary_reliability=primary_reliability,
+            expanded_after_primary=False,
+            extension_families=available_physical_families,
+            skipped_reason=(
+                "reliable_primary"
+                if primary_reliable
+                else "no_applicable_extension_families"
+            ),
+        )
 
     candidates.extend(separator_candidates)
     separator_support_candidate = separator_candidate
@@ -241,8 +321,13 @@ def evaluate_count_hypothesis(
             policy,
         )
         candidates.extend(offset_candidates)
+        for candidate in offset_candidates:
+            plan_detail = candidate.detail.setdefault("candidate_plan", {})
+            if isinstance(plan_detail, dict):
+                plan_detail["count_hypothesis"] = hypothesis.report_detail()
         if supported:
             supporting_offsets.append(float(offset))
+            break
     return CountHypothesisEvaluation(
         hypothesis=hypothesis,
         candidates=tuple(candidates),

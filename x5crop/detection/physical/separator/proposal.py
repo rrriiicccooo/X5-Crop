@@ -15,7 +15,6 @@ from ....geometry.gap_search import find_detected_gap
 from ....geometry.model_gaps import equal_model_gap
 from ....geometry.separator_width_profile import (
     separator_width_gap_at_with_detail,
-    separator_width_profile as make_separator_width_profile,
     TheoreticalSeparatorWidth,
     theoretical_separator_width,
 )
@@ -186,9 +185,9 @@ def _propose_standard_separator_gap_with_detail(
 
 
 def propose_separator_gaps_with_detail(
-    gray_work: np.ndarray,
     outer: Box,
     profile: np.ndarray,
+    width_profile: np.ndarray,
     origin: float,
     pitch: float,
     count: int,
@@ -199,12 +198,6 @@ def propose_separator_gaps_with_detail(
     width_profile_search: SeparatorWidthProfileSearchParameters,
     gap_hints: Optional[SeparatorGapHintSet] = None,
 ) -> SeparatorGapSearchResult:
-    crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-    width_profile = (
-        make_separator_width_profile(crop, width_profile_search)
-        if width_profile_policy.mode != "off" and crop.size > 0 and outer.valid()
-        else np.array([], dtype=np.float32)
-    )
     separator_width_theory = theoretical_separator_width(
         float(outer.width),
         float(outer.height),

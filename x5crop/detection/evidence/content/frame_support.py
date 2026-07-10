@@ -6,7 +6,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ....domain import Box, DetectionCandidate
-from ....geometry.boxes import original_box_to_work
+from ....geometry.boxes import box_cache_key, original_box_to_work
 from ....policies.parameters.content import ContentEvidenceParameters
 from ....policies.runtime.content import ContentPolicy
 from ....cache import AnalysisCache
@@ -26,6 +26,20 @@ def oriented_frame_aspect(horizontal_frame_aspect: float, layout: str) -> float:
     if layout == "vertical":
         return 1.0 / aspect
     return aspect
+
+
+def _cached_content_evidence_threshold(
+    cache: AnalysisCache,
+    evidence: np.ndarray,
+    outer: Box,
+    evidence_params: ContentEvidenceParameters,
+) -> float:
+    key = (evidence_params, *box_cache_key(outer))
+    threshold = cache.content_evidence_thresholds.get(key)
+    if threshold is None:
+        threshold = content_evidence_threshold(evidence, evidence_params)
+        cache.content_evidence_thresholds[key] = float(threshold)
+    return float(threshold)
 
 
 def content_frame_support_detail(
@@ -181,7 +195,12 @@ def content_evidence_detail_from_cache(
     if evidence.size == 0:
         return {"used": False, "reason": "empty_outer"}
 
-    threshold = content_evidence_threshold(evidence, evidence_params)
+    threshold = _cached_content_evidence_threshold(
+        cache,
+        evidence,
+        outer,
+        evidence_params,
+    )
     expected_aspect = float(horizontal_frame_aspect)
     frames_work = [
         original_box_to_work(frame, detection.layout, source_w, source_h)

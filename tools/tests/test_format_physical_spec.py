@@ -4,6 +4,7 @@ import unittest
 
 from x5crop.formats import FORMATS, format_description
 from x5crop.detection.candidate.plan.count_hypotheses import count_hypothesis_plan
+from x5crop.detection.evidence.count_planning import CountPlanningEvidence
 from x5crop.detection.modes.dual_lane_context import build_dual_lane_context
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.decision.contract import decision_contract_for_policy
@@ -138,6 +139,7 @@ class FormatPhysicalSpecTests(unittest.TestCase):
                     requested_count=None,
                     fmt=spec,
                     partial_offsets=policy.partial_count_offsets,
+                    planning_evidence=CountPlanningEvidence.unavailable(),
                 )
                 counts = [hypothesis.count for hypothesis in plan.hypotheses]
                 self.assertIn(spec.default_count, counts)
@@ -152,6 +154,7 @@ class FormatPhysicalSpecTests(unittest.TestCase):
                     requested_count=None,
                     fmt=spec,
                     partial_offsets=policy.partial_count_offsets,
+                    planning_evidence=CountPlanningEvidence.unavailable(),
                 )
                 counts = [hypothesis.count for hypothesis in plan.hypotheses]
                 self.assertNotIn(spec.default_count, counts)

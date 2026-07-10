@@ -173,14 +173,20 @@ def separator_width_profile(
 ) -> np.ndarray:
     if crop.size == 0:
         return np.array([], dtype=np.float32)
-    sample = crop[
-        :: max(1, crop.shape[0] // max(1, int(params.sample_short_axis_max))),
-        :: max(1, crop.shape[1] // max(1, int(params.sample_long_axis_max))),
-    ]
-    low, high = sampled_percentile(sample, params.normalization_percentiles)
+    short_axis_step = max(
+        1,
+        crop.shape[0] // max(1, int(params.sample_short_axis_max)),
+    )
+    long_axis_step = max(
+        1,
+        crop.shape[1] // max(1, int(params.sample_long_axis_max)),
+    )
+    profile_sample = crop[::short_axis_step, :]
+    percentile_sample = profile_sample[:, ::long_axis_step]
+    low, high = sampled_percentile(percentile_sample, params.normalization_percentiles)
     span = max(1.0, float(high - low))
     threshold = float(low) + span * params.threshold_span_ratio
-    profile = (crop <= threshold).mean(axis=0).astype(np.float32)
+    profile = (profile_sample <= threshold).mean(axis=0).astype(np.float32)
     return smooth_1d(
         profile,
         max(

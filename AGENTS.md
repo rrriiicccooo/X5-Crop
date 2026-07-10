@@ -270,12 +270,9 @@ Current state:
 
 Recent verified baseline:
 
-- Architecture status is `architecture closure candidate`, not formally closed.
-  The audited candidate source commit is
-  `d828c6268f6fa9ec908cda6a93ce9a332e52d5f1`.
-- Audit A and an independent fresh-context Audit B both found zero frozen-contract
-  violations. A new Codex task must rerun the complete two-audit plan before
-  changing the status to `architecture closed`.
+- The previous architecture closure candidate was superseded by the partial
+  auto-count and execution-budget performance refactor. Architecture is not
+  closed; the complete two-audit plan must restart from the resulting commit.
 - `python3 X5_Crop.py --version` printed `X5_Crop.py 4.9`.
 - The full architecture and runtime contract suite passed.
 - Full compile across the V4.9 package and regression tools passed.

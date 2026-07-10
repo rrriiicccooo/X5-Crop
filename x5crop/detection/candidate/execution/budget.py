@@ -3,22 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from ....domain import DetectionCandidate
-from ....policies.runtime.policy import DetectionPolicy
-
-
-def separator_extension_families(
-    policy: DetectionPolicy,
-    strip_mode: str,
-    explicit_count: bool,
-) -> list[str]:
-    separator_policy = policy.outer.proposal.geometry.separator
-    families: list[str] = []
-    if separator_policy.full_width.available_for(strip_mode, explicit_count):
-        families.append("separator_full_width")
-    families.append("content_guided_separator")
-    return families
-
-
 def set_execution_budget_detail(
     detection: DetectionCandidate,
     *,

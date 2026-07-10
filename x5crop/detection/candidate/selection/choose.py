@@ -14,7 +14,7 @@ def _candidate_assessment(candidate: DetectionCandidate) -> dict:
 def calibrated_candidate_rank(
     detection: DetectionCandidate,
     threshold: float,
-) -> tuple[int, float, float, float]:
+) -> tuple[int, int, float, float, float]:
     candidate = detection.detail.get("candidate_assessment", {})
     joint = float(candidate.get("joint_score", 0.0)) if isinstance(candidate, dict) else 0.0
     partial_edge_safety_supported = bool(
@@ -22,14 +22,26 @@ def calibrated_candidate_rank(
         and isinstance(candidate.get("partial_edge_safety"), dict)
         and candidate["partial_edge_safety"].get("ok", False)
     )
+    candidate_plan = detection.detail.get("candidate_plan", {})
+    count_hypothesis = (
+        candidate_plan.get("count_hypothesis", {})
+        if isinstance(candidate_plan, dict)
+        else {}
+    )
+    physically_supported_count = bool(
+        isinstance(count_hypothesis, dict)
+        and count_hypothesis.get("physically_supported", False)
+    )
     if partial_edge_safety_supported:
         return (
+            1 if physically_supported_count else 0,
             1 if detection.confidence >= threshold else 0,
             float(detection.count),
             float(detection.confidence),
             joint,
         )
     return (
+        1 if physically_supported_count else 0,
         1 if detection.confidence >= threshold else 0,
         float(detection.confidence),
         int(detection.count),

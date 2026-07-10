@@ -126,6 +126,9 @@ debug analysis? [y/n, return=no]:
 ```
 
 只有开启 partial mode 后才会询问 `count`。按 Return 或输入 `auto` 表示自动判断张数。
+auto count 会先读取不依赖 count 的 hard separator 位置，用它排列 count hypotheses 并估算
+连续 placement；只有证据不足时才继续其余张数和位置。该预判只缩小搜索范围，最终候选仍须
+完成相同的 evidence、CandidateGate 和 DecisionGate。
 
 ### Format 和张数
 
@@ -399,6 +402,10 @@ debug analysis? [y/n, return=no]:
 
 It asks for `count` only when partial mode is enabled. Press Return or type
 `auto` to let the script estimate the partial count.
+Auto count first reads count-independent hard separator positions to order count
+hypotheses and estimate continuous placement. It expands to the remaining counts
+and positions only when that evidence is insufficient; every resulting candidate
+still passes through the same evidence, CandidateGate, and DecisionGate flow.
 
 ### Formats
 

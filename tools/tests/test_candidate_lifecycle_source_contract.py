@@ -98,8 +98,17 @@ class CandidateLifecycleSourceContractTest(unittest.TestCase):
         )
         tree = ast.parse(source_path.read_text(encoding="utf-8"))
         explicit_runtime_inputs = {
-            "separator_source_candidates_for_count": {"cache", "policy"},
-            "content_guided_separator_candidate_for_count": {"cache", "policy"},
+            "separator_primary_outer_plan": {"cache", "policy"},
+            "separator_extension_outer_plan": {
+                "cache",
+                "policy",
+                "primary_outer_candidates",
+            },
+            "content_guided_separator_candidate_from_seed": {
+                "cache",
+                "policy",
+                "seed_result",
+            },
             "content_candidate_proposal_for_count": {"cache", "content_policy"},
         }
         calls = [
@@ -117,6 +126,58 @@ class CandidateLifecycleSourceContractTest(unittest.TestCase):
             self.assertTrue(
                 explicit_runtime_inputs[call.func.id].issubset(keyword_names)
             )
+
+    def test_separator_primary_and_extension_have_distinct_execution_entries(self) -> None:
+        source = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "execution"
+            / "source_candidates.py"
+        ).read_text(encoding="utf-8")
+        count_execution = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "execution"
+            / "count_hypothesis.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("def separator_primary_outer_plan", source)
+        self.assertIn("def separator_extension_outer_plan", source)
+        self.assertIn("def build_separator_candidate_for_outer", source)
+        self.assertNotIn("def separator_source_candidates_for_count", source)
+        self.assertNotIn("include_extension_outer", source)
+        self.assertNotIn("detections:", source)
+        self.assertEqual(count_execution.count("separator_primary_outer_plan("), 1)
+        self.assertEqual(count_execution.count("separator_extension_outer_plan("), 1)
+
+    def test_content_guided_extension_requires_a_precomputed_seed(self) -> None:
+        budget = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "execution"
+            / "budget.py"
+        ).read_text(encoding="utf-8")
+        sources = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "execution"
+            / "source_candidates.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn('families.append("content_guided_separator")', budget)
+        self.assertIn("def content_guided_separator_candidate_from_seed", sources)
+        function_source = sources.split(
+            "def content_guided_separator_candidate_from_seed", 1
+        )[1]
+        self.assertNotIn("content_guided_separator_seed_for_count(", function_source)
 
     def test_separator_refinement_detail_reads_only_current_family_policy_fields(self) -> None:
         source = (

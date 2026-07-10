@@ -12,7 +12,7 @@ from ....formats import FormatPhysicalSpec
 from ....geometry.layout import work_gray
 from ....policies.runtime.policy import DetectionPolicy
 from ....run_config import RunConfig
-from ...guidance.content_separator import content_guided_separator_seed_for_count
+from ...guidance.content_separator import ContentGuidedSeparatorSeedResult
 from ...physical.outer.common import unique_outer_candidates
 from ...physical.outer.separator import (
     FULL_WIDTH_SEPARATOR_OUTER,
@@ -28,8 +28,9 @@ from ..build.detection import build_detection_geometry_for_outer, enrich_detecti
 
 
 @dataclass(frozen=True)
-class SourceCandidateBatch:
-    detections: tuple[DetectionCandidate, ...]
+class SeparatorOuterCandidatePlan:
+    outer_candidates: tuple[OuterCandidate, ...]
+    comparison_outer_candidates: tuple[OuterCandidate, ...]
     detail: dict
 
 
@@ -52,7 +53,7 @@ def _attach_outer_candidate_summary(
         detection.detail["holder_reference_outer_box"] = asdict(holder_outer)
 
 
-def _execute_outer_candidate_detection(
+def build_separator_candidate_for_outer(
     gray: np.ndarray,
     config: RunConfig,
     fmt: FormatPhysicalSpec,
@@ -63,6 +64,7 @@ def _execute_outer_candidate_detection(
     policy: DetectionPolicy,
     candidate: OuterCandidate,
     *,
+    plan: SeparatorOuterCandidatePlan,
     gap_max_width_ratio_override: Optional[float],
 ) -> DetectionCandidate:
     candidate_gap_override = gap_max_width_ratio_override
@@ -87,22 +89,36 @@ def _execute_outer_candidate_detection(
     detection.detail["separator_gap_search"] = separator_gap_search_detail(
         policy.separator.width_profile
     )
+    _attach_outer_candidate_summary(
+        detection,
+        list(plan.comparison_outer_candidates),
+    )
+    detection.detail["candidate_plan"] = dict(plan.detail)
     return detection
 
 
-def separator_source_candidates_for_count(
+def _outer_candidate_plan(
+    outer_candidates: list[OuterCandidate],
+    comparison_outer_candidates: list[OuterCandidate],
+    detail: dict,
+) -> SeparatorOuterCandidatePlan:
+    return SeparatorOuterCandidatePlan(
+        outer_candidates=tuple(outer_candidates),
+        comparison_outer_candidates=tuple(comparison_outer_candidates),
+        detail=detail,
+    )
+
+
+def separator_primary_outer_plan(
     gray: np.ndarray,
     config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
-    offset_fraction: float = 0.0,
     *,
     cache: Optional[AnalysisCache],
-    gap_max_width_ratio_override: Optional[float] = None,
     policy: DetectionPolicy,
-    include_extension_outer: bool = True,
-) -> SourceCandidateBatch:
+) -> SeparatorOuterCandidatePlan:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     explicit_count = bool(config.requested_count is not None)
     outer_candidates = outer_proposal_candidates(
@@ -114,33 +130,43 @@ def separator_source_candidates_for_count(
         policy=policy,
         explicit_count=explicit_count,
     )
-    detections = [
-        _execute_outer_candidate_detection(
-            gray,
-            config,
-            fmt,
-            count,
-            strip_mode,
-            offset_fraction,
-            cache,
-            policy,
-            candidate,
-            gap_max_width_ratio_override=gap_max_width_ratio_override,
-        )
-        for candidate in outer_candidates
-    ]
+    detail = {
+        "source": CANDIDATE_SOURCE_SEPARATOR,
+        "count_explicit": bool(explicit_count),
+        "outer_execution_stage": "primary",
+        "separator_gap_search": separator_gap_search_detail(
+            policy.separator.width_profile
+        ),
+        "outer_candidate_count": int(len(outer_candidates)),
+        "separator_full_width_included": False,
+        "width_aware_proposal": True,
+    }
+    return _outer_candidate_plan(outer_candidates, outer_candidates, detail)
 
-    separator_full_width_family = policy.outer.proposal.geometry.separator.full_width
-    separator_full_width_mode = separator_full_width_family.mode
-    include_full_width = (
-        include_extension_outer
-        and separator_full_width_family.available_for(strip_mode, explicit_count)
-        and separator_full_width_mode in {"always", "conditional"}
+
+def separator_extension_outer_plan(
+    gray: np.ndarray,
+    config: RunConfig,
+    fmt: FormatPhysicalSpec,
+    count: int,
+    strip_mode: str,
+    *,
+    cache: Optional[AnalysisCache],
+    policy: DetectionPolicy,
+    primary_outer_candidates: tuple[OuterCandidate, ...],
+) -> SeparatorOuterCandidatePlan:
+    gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
+    explicit_count = bool(config.requested_count is not None)
+    family = policy.outer.proposal.geometry.separator.full_width
+    eligible = bool(
+        family.available_for(strip_mode, explicit_count)
+        and family.mode in {"always", "conditional"}
     )
-    if include_full_width:
-        separator_full_width_candidates = separator_derived_outer_candidates(
+    extension_outer_candidates: list[OuterCandidate] = []
+    if eligible:
+        proposed = separator_derived_outer_candidates(
             gray_work,
-            outer_candidates,
+            list(primary_outer_candidates),
             fmt,
             count,
             strip_mode,
@@ -151,43 +177,31 @@ def separator_source_candidates_for_count(
             explicit_count=explicit_count,
             sequence_ranker=separator_sequence_rank,
         )
-        detections.extend(
-            _execute_outer_candidate_detection(
-                gray,
-                config,
-                fmt,
-                count,
-                strip_mode,
-                offset_fraction,
-                cache,
-                policy,
-                candidate,
-                gap_max_width_ratio_override=gap_max_width_ratio_override,
-            )
-            for candidate in separator_full_width_candidates
-        )
-        outer_candidates = unique_outer_candidates([*outer_candidates, *separator_full_width_candidates])
-
+        primary_boxes = {candidate.box for candidate in primary_outer_candidates}
+        extension_outer_candidates = [
+            candidate for candidate in proposed if candidate.box not in primary_boxes
+        ]
+    all_outer_candidates = unique_outer_candidates(
+        [*primary_outer_candidates, *extension_outer_candidates]
+    )
     detail = {
         "source": CANDIDATE_SOURCE_SEPARATOR,
         "count_explicit": bool(explicit_count),
-        "outer_execution_stage": "complete" if include_extension_outer else "primary",
-        "extension_outer_enabled": bool(include_extension_outer),
-        "separator_gap_search": separator_gap_search_detail(
-            policy.separator.width_profile
-        ),
-        "outer_candidate_count": int(len(outer_candidates)),
-        "separator_full_width_eligible": bool(separator_full_width_family.available_for(strip_mode, explicit_count)),
-        "separator_full_width_included": bool(include_full_width),
+        "outer_execution_stage": "extension",
+        "separator_gap_search": separator_gap_search_detail(policy.separator.width_profile),
+        "outer_candidate_count": int(len(extension_outer_candidates)),
+        "separator_full_width_eligible": eligible,
+        "separator_full_width_included": bool(extension_outer_candidates),
         "width_aware_proposal": True,
     }
-    for detection in detections:
-        _attach_outer_candidate_summary(detection, outer_candidates)
-        detection.detail["candidate_plan"] = dict(detail)
-    return SourceCandidateBatch(tuple(detections), detail)
+    return _outer_candidate_plan(
+        extension_outer_candidates,
+        all_outer_candidates,
+        detail,
+    )
 
 
-def content_guided_separator_candidate_for_count(
+def content_guided_separator_candidate_from_seed(
     gray: np.ndarray,
     config: RunConfig,
     fmt: FormatPhysicalSpec,
@@ -195,23 +209,12 @@ def content_guided_separator_candidate_for_count(
     strip_mode: str,
     offset_fraction: float = 0.0,
     *,
+    seed_result: ContentGuidedSeparatorSeedResult,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
-) -> tuple[Optional[DetectionCandidate], dict]:
-    guidance_policy = policy.candidate_plan.content_guided_separator
-    seed_result = content_guided_separator_seed_for_count(
-        gray,
-        config,
-        fmt,
-        count,
-        strip_mode,
-        offset_fraction,
-        cache,
-        policy.content,
-        guidance_policy,
-    )
+) -> DetectionCandidate:
     if seed_result.seed is None:
-        return None, seed_result.detail
+        raise ValueError("content-guided separator candidate requires a seed")
 
     detection = build_detection_geometry_for_outer(
         gray,
@@ -249,4 +252,4 @@ def content_guided_separator_candidate_for_count(
         ),
         "content_guidance": seed_result.seed.gap_hints.summary(),
     }
-    return detection, seed_result.detail
+    return detection

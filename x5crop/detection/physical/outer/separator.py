@@ -7,9 +7,9 @@ import numpy as np
 
 from ....domain import Box, OuterCandidate
 from ....formats import FormatPhysicalSpec
-from ....cache.separator import cached_separator_profile
+from ....cache.separator import cached_separator_profile, cached_separator_width_profile
 from ....geometry.separator_band import SeparatorBand
-from ....geometry.separator_width_profile import collect_separator_width_bands, separator_width_profile
+from ....geometry.separator_width_profile import collect_separator_width_bands
 from ....policies.runtime.outer import (
     SeparatorGeometryProposalPolicy,
     SeparatorOuterFamilyPolicy,
@@ -270,8 +270,12 @@ def _separator_outer_candidates_for_plan(
         bands = list(band_collection.bands)
         edge_margin = band_collection.edge_margin
         if plan.uses_width_aware_bands:
-            crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-            width_profile = separator_width_profile(crop, separator_policy.width_profile_search)
+            width_profile = cached_separator_width_profile(
+                cache,
+                gray_work,
+                outer,
+                separator_policy.width_profile_search,
+            )
             width_band_collection = collect_separator_width_bands(
                 width_profile,
                 short_axis,

@@ -10,9 +10,11 @@ from ..geometry.boxes import box_cache_key, crop_work_outer, full_work_box, is_f
 from ..geometry.detection_parameters import (
     EdgeRefineProfileParameters,
     SeparatorProfileParameters,
+    SeparatorWidthProfileSearchParameters,
 )
 from ..geometry.edge_refine_profile import edge_refine_profiles
 from ..geometry.separator_profile import separator_profile
+from ..geometry.separator_width_profile import separator_width_profile
 from ..image.evidence import (
     SeparatorEvidenceImageParameters,
     make_separator_evidence_gray,
@@ -73,6 +75,22 @@ def cached_separator_profile(
     if profile is None:
         profile = separator_profile(crop_work_outer(cache.gray_work, outer), profile_config)
         cache.separator_profiles[key] = profile
+    return profile
+
+
+def cached_separator_width_profile(
+    cache: Optional[AnalysisCache],
+    gray_work: np.ndarray,
+    outer: Box,
+    params: SeparatorWidthProfileSearchParameters,
+) -> np.ndarray:
+    if cache is None:
+        return separator_width_profile(crop_work_outer(gray_work, outer), params)
+    key = (params, *box_cache_key(outer))
+    profile = cache.separator_width_profiles.get(key)
+    if profile is None:
+        profile = separator_width_profile(crop_work_outer(cache.gray_work, outer), params)
+        cache.separator_width_profiles[key] = profile
     return profile
 
 

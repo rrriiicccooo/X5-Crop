@@ -17,6 +17,7 @@ from .modes.review_only import review_only_detection
 from .candidate.proposal.hard_safety import hard_safety_detection
 from .candidate.selection.choose import select_detection_candidate
 from .candidate.selection.count_hypothesis import count_selection_detail
+from .evidence.count_planning import CountPlanningEvidence, count_planning_evidence
 from .candidate.extension.outer_correction import outer_correction_candidate_extensions
 
 
@@ -55,11 +56,26 @@ def choose_detection(
             policy.candidate_selection,
         )
         return CandidatePipelineResult(candidate=candidate, policy=policy)
+    planning_evidence = (
+        count_planning_evidence(
+            cache.gray_work,
+            fmt,
+            cache,
+            outer_parameters=policy.outer.proposal.base,
+            separator_profile_parameters=policy.separator.profile,
+            gap_search_parameters=policy.separator.gap_search,
+            separator_band_parameters=policy.outer.proposal.geometry.separator.band,
+            width_profile_parameters=policy.separator.width_profile_search,
+        )
+        if config.strip_mode == "partial" and config.requested_count is None
+        else CountPlanningEvidence.unavailable()
+    )
     count_plan = count_hypothesis_plan(
         strip_mode=config.strip_mode,
         requested_count=config.requested_count,
         fmt=fmt,
         partial_offsets=policy.partial_count_offsets,
+        planning_evidence=planning_evidence,
     )
     count_evaluations = []
     for hypothesis in count_plan.hypotheses:

@@ -5,6 +5,8 @@ from typing import Any, Optional
 
 import numpy as np
 
+from ....cache import AnalysisCache
+from ....cache.separator import cached_separator_width_profile
 from ....domain import Box, Gap
 from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
@@ -63,15 +65,26 @@ def standard_separator_gap_result(
     pitch: float,
     gap_max_width_ratio_override: Optional[float],
     policy: DetectionPolicy,
+    cache: Optional[AnalysisCache],
     *,
     forced: bool = False,
     gap_hints: Optional[SeparatorGapHintSet] = None,
 ) -> InitialSeparatorGapResult:
     frame_aspect = float(fmt.horizontal_content_aspect)
+    width_profile = (
+        cached_separator_width_profile(
+            cache,
+            gray_work,
+            outer,
+            policy.separator.width_profile_search,
+        )
+        if policy.separator.width_profile.mode != "off"
+        else np.array([], dtype=np.float32)
+    )
     standard_gap_proposal = propose_separator_gaps_with_detail(
-        gray_work,
         outer,
         profile,
+        width_profile,
         origin,
         pitch,
         count,
@@ -181,6 +194,7 @@ def initial_separator_gaps(
     pitch: float,
     gap_max_width_ratio_override: Optional[float],
     policy: DetectionPolicy,
+    cache: Optional[AnalysisCache],
 ) -> InitialSeparatorGapResult:
     result = standard_separator_gap_result(
         gray_work,
@@ -192,6 +206,7 @@ def initial_separator_gaps(
         pitch,
         gap_max_width_ratio_override,
         policy,
+        cache,
     )
     return select_geometry_equal_model_gaps(
         result,

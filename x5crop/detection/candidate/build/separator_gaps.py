@@ -87,6 +87,7 @@ def build_primary_separator_gaps_for_outer(
             pitch,
             gap_max_width_ratio_override,
             policy,
+            cache,
             forced=True,
             gap_hints=gap_hints,
         )
@@ -112,6 +113,7 @@ def build_primary_separator_gaps_for_outer(
             pitch,
             gap_max_width_ratio_override,
             policy,
+            cache,
         )
     primary_refinement = apply_primary_separator_refinements(
         outer,
