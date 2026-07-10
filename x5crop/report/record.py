@@ -6,13 +6,15 @@ from ..app_info import VERSION
 from ..detection.detail import (
     CANDIDATE_ASSESSMENT,
     CONTENT_EVIDENCE,
+    DECISION_GEOMETRY,
     DECISION_POLICY_DETAIL,
-    DESKEW,
     DECISION_SIGNALS,
+    DIAGNOSTICS,
     EVIDENCE_SUMMARY,
     EXPOSURE_OVERLAP_EVIDENCE,
     OUTER_CONTENT_ALIGNMENT,
     OUTPUT_PROTECTION_PLAN,
+    OUTPUT_GEOMETRY,
     decision_schema_diagnostics,
     detail_dict,
     HOLDER_OCCUPANCY,
@@ -21,7 +23,7 @@ from ..detection.detail import (
     SCAN_CALIBRATION,
     STRIP_COMPLETENESS,
 )
-from ..domain import FinalDetection, ProcessResult
+from ..domain import FinalDetection
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from ..utils import json_safe
 from .read_models import (
@@ -53,18 +55,22 @@ def _schema_validation(detection: FinalDetection, runtime_policy: dict, decision
 
 def report_record_for_final_detection(
     detection: FinalDetection,
-    result: ProcessResult,
+    *,
+    source: str,
+    profile: dict,
+    output_files: list[str],
+    review_copy: str | None,
+    warnings: list[str],
+    deskew_detail: dict,
+    analysis_cache_metadata: dict,
 ) -> dict:
     output = {
         "protection_plan": detail_dict(detection, OUTPUT_PROTECTION_PLAN),
     }
-    source = str(result.source)
-    profile = dict(result.profile)
-    report_detail = json_safe(dict(result.detail))
     output.update({
-        "output_files": list(result.output_files),
-        "review_copy": result.review_copy,
-        "warnings": list(result.warnings),
+        "output_files": list(output_files),
+        "review_copy": review_copy,
+        "warnings": list(warnings),
     })
     runtime_policy = runtime_policy_detail(detection)
     decision_policy = detail_dict(detection, DECISION_POLICY_DETAIL)
@@ -80,9 +86,8 @@ def report_record_for_final_detection(
         "schema_id": REPORT_SCHEMA_ID,
         "schema_revision": REPORT_SCHEMA_REVISION,
         "script_version": VERSION,
-        "source": source,
-        "profile": profile,
-        "detail": report_detail,
+        "source": str(source),
+        "profile": dict(profile),
         "format_id": detection.format_id,
         "strip_mode": detection.strip_mode,
         "layout": detection.layout,
@@ -113,9 +118,14 @@ def report_record_for_final_detection(
         "decision_signals": decision_signals,
         "decision_gate": decision_gate_detail(detection),
         "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
+        "decision_geometry": detail_dict(detection, DECISION_GEOMETRY),
+        "output_geometry": detail_dict(detection, OUTPUT_GEOMETRY),
+        "analysis_cache": dict(analysis_cache_metadata),
+        "analysis_reuse": {"used": False},
         "schema_validation": schema_validation,
         "diagnostics": {
-            "deskew": detail_dict(detection, DESKEW),
+            "deskew": dict(deskew_detail),
+            "detection": detail_dict(detection, DIAGNOSTICS),
         },
         "output": output,
     }

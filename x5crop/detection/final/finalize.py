@@ -14,6 +14,7 @@ from ...output.bleed import (
 from ...output.protection import OutputProtectionPlan
 from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
+from ..detail import DECISION_GEOMETRY, OUTPUT_GEOMETRY
 from ..evidence.read_only import attach_read_only_diagnostics
 from ...output.geometry_adjustment import (
     apply_approved_geometry_adjustment,
@@ -37,7 +38,7 @@ def finalize_detection(
     output_protection_plan: OutputProtectionPlan,
 ) -> FinalDetection:
     output_detection = deepcopy(detection)
-    output_detection.detail["decision_geometry"] = _geometry_detail(detection)
+    output_detection.detail[DECISION_GEOMETRY] = _geometry_detail(detection)
     apply_approved_geometry_adjustment(
         output_detection,
         gray,
@@ -69,5 +70,5 @@ def finalize_detection(
             separator_policy=policy.separator,
             diagnostics_policy=policy.diagnostics,
         )
-    output_detection.detail["output_geometry"] = _geometry_detail(output_detection)
+    output_detection.detail[OUTPUT_GEOMETRY] = _geometry_detail(output_detection)
     return output_detection

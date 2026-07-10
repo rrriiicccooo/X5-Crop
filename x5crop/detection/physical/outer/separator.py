@@ -63,12 +63,11 @@ def separator_outer_scopes(
     separator_geometry_policy: SeparatorGeometryProposalPolicy,
     strip_mode: str = "full",
     explicit_count: bool = True,
-    safety_only: bool = False,
 ) -> tuple[str, ...]:
     scopes: list[str] = []
-    if _mode_active(separator_geometry_policy.local, strip_mode, explicit_count, safety_only):
+    if _mode_active(separator_geometry_policy.local, strip_mode, explicit_count):
         scopes.append(LOCAL_SEPARATOR_OUTER)
-    if _mode_active(separator_geometry_policy.full_width, strip_mode, explicit_count, safety_only):
+    if _mode_active(separator_geometry_policy.full_width, strip_mode, explicit_count):
         scopes.append(FULL_WIDTH_SEPARATOR_OUTER)
     return tuple(scopes)
 
@@ -138,17 +137,9 @@ def _candidate_prefix(outer_scope: str) -> str | None:
 
 
 def _width_profile_bands_available(
-    separator_geometry_policy: SeparatorGeometryProposalPolicy,
     separator_policy: SeparatorPolicy,
-    strip_mode: str,
-    explicit_count: bool,
 ) -> bool:
-    family = separator_geometry_policy.width_profile_family
-    width_policy = separator_policy.width_profile
-    return bool(
-        family.available_for(strip_mode, explicit_count)
-        and width_policy.mode != "off"
-    )
+    return separator_policy.width_profile.mode != "off"
 
 
 def _scope_plan(
@@ -163,10 +154,7 @@ def _scope_plan(
     band_policy = separator_geometry_policy.band
     width_policy = separator_policy.width_profile
     uses_width_aware_bands = _width_profile_bands_available(
-        separator_geometry_policy,
         separator_policy,
-        strip_mode,
-        explicit_count,
     )
     if outer_scope == LOCAL_SEPARATOR_OUTER:
         family = separator_geometry_policy.local
@@ -224,12 +212,9 @@ def _mode_active(
     family: SeparatorOuterFamilyPolicy,
     strip_mode: str,
     explicit_count: bool,
-    safety_only: bool,
 ) -> bool:
     if not family.available_for(strip_mode, explicit_count):
         return False
-    if safety_only:
-        return family.mode == "safety"
     return family.phase == "primary" and family.mode in {"always", "conditional"}
 
 

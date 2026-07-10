@@ -41,13 +41,15 @@ def print_run_header(invocation: RuntimeInvocation) -> None:
 
 
 def print_process_result(result: ProcessResult, config: RunConfig) -> None:
-    print(f"  status={result.status} confidence={result.confidence:.3f}")
-    for warning in result.warnings:
+    record = result.record
+    print(f"  status={record['status']} confidence={float(record['confidence']):.3f}")
+    for warning in record["output"]["warnings"]:
         print(f"  info: {warning}")
-    if result.output_files:
-        print(f"  wrote: {len(result.output_files)} TIFF files")
+    output_files = record["output"]["output_files"]
+    if output_files:
+        print(f"  wrote: {len(output_files)} TIFF files")
         if config.output_dir is not None:
-            for out in result.output_files:
+            for out in output_files:
                 print(f"    {Path(out).name}")
 
 
@@ -83,8 +85,8 @@ def process_parallel_files(
             try:
                 result = future.result()
                 ok += 1
-                approved += int(result.status == "approved_auto")
-                review += int(result.status == "needs_review")
+                approved += int(result.record["status"] == "approved_auto")
+                review += int(result.record["status"] == "needs_review")
                 write_report_outputs_for_result(result, config)
                 print_process_result(result, config)
             except Exception as exc:
@@ -115,8 +117,8 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
             try:
                 result = process_one(path, worker_config, invocation.policy_bundle)
                 ok += 1
-                approved += int(result.status == "approved_auto")
-                review += int(result.status == "needs_review")
+                approved += int(result.record["status"] == "approved_auto")
+                review += int(result.record["status"] == "needs_review")
                 write_report_outputs_for_result(result, config)
                 print_process_result(result, config)
             except Exception as exc:

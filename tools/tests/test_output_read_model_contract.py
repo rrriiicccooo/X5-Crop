@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-from inspect import Parameter, signature
+from inspect import signature
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -12,7 +12,7 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 from tools.tests.decision_contract_support import final_detection_fixture
 from x5crop.debug.status import debug_status_parts
 from x5crop.detection.detail import candidate_signals_from_detail
-from x5crop.domain import FinalDetection, ImageProfile, ProcessResult
+from x5crop.domain import FinalDetection, ImageProfile
 from x5crop.export.actions import copy_for_review_if_needed
 from x5crop.report.outputs import append_report_jsonl
 from x5crop.policies.registry import get_detection_policy
@@ -33,25 +33,35 @@ def _detection(
     )
 
 
-def _process_result(detection: FinalDetection) -> ProcessResult:
-    return ProcessResult(
+def _report_record(
+    detection: FinalDetection,
+    *,
+    analysis_cache_metadata: dict | None = None,
+) -> dict:
+    return report_record_for_final_detection(
+        detection,
         source="input.tif",
-        status=detection.status,
-        confidence=detection.confidence,
-        format_id=detection.format_id,
-        layout=detection.layout,
-        strip_mode=detection.strip_mode,
-        count=detection.count,
-        final_review_reasons=list(detection.final_review_reasons),
+        profile={},
         output_files=[],
         review_copy=None,
-        detail=dict(detection.detail),
-        profile={},
         warnings=[],
+        deskew_detail={"applied": False},
+        analysis_cache_metadata=analysis_cache_metadata or {},
     )
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_process_result_has_one_canonical_record_surface(self) -> None:
+        from x5crop.domain import ProcessResult
+
+        self.assertEqual(set(ProcessResult.__dataclass_fields__), {"record"})
+
+    def test_report_record_has_no_duplicate_detail_projection(self) -> None:
+        detection = _detection()
+        record = _report_record(detection)
+
+        self.assertNotIn("detail", record)
+
     def test_cache_export_uses_final_frame_read_model_not_detection_models(self) -> None:
         reuse_source = (
             PROJECT_ROOT / "x5crop" / "runtime" / "analysis_reuse.py"
@@ -117,18 +127,12 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertNotIn('"version",', output_source)
 
     def test_report_schema_has_no_duplicate_section_projections(self) -> None:
-        self.assertIs(
-            signature(report_record_for_final_detection).parameters["result"].default,
-            Parameter.empty,
-        )
+        self.assertNotIn("result", signature(report_record_for_final_detection).parameters)
 
         detection = _detection()
-        schema = report_record_for_final_detection(
-            detection,
-            _process_result(detection),
-        )
+        schema = _report_record(detection)
 
-        self.assertEqual(schema["schema_revision"], "canonical_result_and_decision")
+        self.assertEqual(schema["schema_revision"], "canonical_final_record")
         for duplicate in (
             "version",
             "format",
@@ -184,10 +188,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         from tools.regression.compare import report_key
 
         detection = _detection()
-        current = report_record_for_final_detection(
-            detection,
-            _process_result(detection),
-        )
+        current = _report_record(detection)
         current["source"] = "current.tif"
         self.assertEqual(report_key(current), "current.tif")
         with self.assertRaises(ValueError):
@@ -226,10 +227,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             },
             ["separator_evidence_incomplete"],
         )
-        decided_schema = report_record_for_final_detection(
-            decided,
-            _process_result(decided),
-        )
+        decided_schema = _report_record(decided)
 
         self.assertEqual(decided_schema["status"], "needs_review")
         self.assertEqual(
@@ -237,10 +235,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             ["separator_evidence_incomplete"],
         )
 
-        approved = report_record_for_final_detection(
-            (approved_detection := _detection(status="approved_auto")),
-            _process_result(approved_detection),
-        )
+        approved = _report_record(_detection(status="approved_auto"))
         self.assertEqual(approved["status"], "approved_auto")
 
     def test_output_read_models_use_canonical_final_reasons(self) -> None:
@@ -276,10 +271,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertIn("outer_content_mismatch", warnings[0])
         self.assertNotIn("candidate_level_stale_reason", warnings[0])
 
-        schema = report_record_for_final_detection(
-            detection,
-            _process_result(detection),
-        )
+        schema = _report_record(detection)
         self.assertEqual(schema["final_review_reasons"], ["outer_content_mismatch"])
 
         profile = ImageProfile(
@@ -303,8 +295,10 @@ class OutputReadModelContractTest(unittest.TestCase):
             [],
             None,
             [],
+            deskew_detail={"applied": False},
+            analysis_cache_metadata={},
         )
-        self.assertEqual(result.final_review_reasons, ["outer_content_mismatch"])
+        self.assertEqual(result.record["final_review_reasons"], ["outer_content_mismatch"])
 
     def test_report_jsonl_writes_current_schema_without_legacy_wrapper(self) -> None:
         detection = _detection(
@@ -337,11 +331,10 @@ class OutputReadModelContractTest(unittest.TestCase):
             [],
             None,
             [],
-            detail_extra={
-                "analysis_cache": {
-                    "script": "X5_Crop.py",
-                    "script_version": "test",
-                }
+            deskew_detail={"applied": False},
+            analysis_cache_metadata={
+                "script": "X5_Crop.py",
+                "script_version": "test",
             },
         )
 
@@ -356,7 +349,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertIn("final_review_reasons", record)
         self.assertNotIn("report_schema", record)
         self.assertEqual(record["format_id"], "135")
-        self.assertEqual(record["detail"]["analysis_cache"]["script"], "X5_Crop.py")
+        self.assertEqual(record["analysis_cache"]["script"], "X5_Crop.py")
 
     def test_candidate_signals_do_not_fallback_to_final_review_reasons(self) -> None:
         detection = _detection(final_review_reasons=["outer_content_mismatch"])
@@ -445,7 +438,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         cached_record = {
             "schema_id": "detection_report",
-            "schema_revision": "canonical_result_and_decision",
+            "schema_revision": "canonical_final_record",
             "source": "input.tif",
             "status": "needs_review",
             "confidence": 0.84,
@@ -458,7 +451,8 @@ class OutputReadModelContractTest(unittest.TestCase):
             "frame_boxes": [],
             "gaps": [],
             "policy_id": "decision:135:full",
-            "detail": {"analysis_cache": {"script": "X5_Crop.py"}},
+            "analysis_cache": {"script": "X5_Crop.py"},
+            "analysis_reuse": {"used": False},
             "output": {"output_files": [], "review_copy": None, "warnings": []},
         }
 
@@ -468,27 +462,23 @@ class OutputReadModelContractTest(unittest.TestCase):
             profile,
             ["reused"],
             output_files=[],
-            detail_extra={"reused_analysis": True},
         )
 
-        self.assertEqual(result.report_record["schema_id"], "detection_report")
-        self.assertNotIn("report_schema", result.report_record)
-        self.assertTrue(result.report_record["detail"]["reused_analysis"])
-        self.assertEqual(result.report_record["output"]["warnings"], ["reused"])
+        self.assertEqual(result.record["schema_id"], "detection_report")
+        self.assertNotIn("report_schema", result.record)
+        self.assertTrue(result.record["analysis_reuse"]["used"])
+        self.assertEqual(result.record["output"]["warnings"], ["reused"])
 
     def test_report_schema_uses_diagnostics_section_not_finalization(self) -> None:
         detection = _detection()
-        schema = report_record_for_final_detection(
-            detection,
-            _process_result(detection),
-        )
+        schema = _report_record(detection)
 
         self.assertIn("diagnostics", schema)
         self.assertNotIn("finalization", schema)
 
     def test_report_schema_exposes_evidence_and_candidate_gate_sections(self) -> None:
-        schema = report_record_for_final_detection(
-            (detection := _detection(
+        schema = _report_record(
+            _detection(
                 {
                     "candidate_assessment": {
                         "candidate_gate": {
@@ -509,8 +499,7 @@ class OutputReadModelContractTest(unittest.TestCase):
                         }
                     },
                 }
-            )),
-            _process_result(detection),
+            )
         )
 
         self.assertIn("evidence", schema)

@@ -60,7 +60,7 @@ def hard_safety_detection(
         detail={
             "candidate_signals": [SIGNAL_HARD_SAFETY_NO_CANDIDATES, SIGNAL_NEEDS_MANUAL_REVIEW],
             "candidate_source": CANDIDATE_SOURCE_HARD_SAFETY,
-            "safety_candidate_kind": "hard_safety_equal_split",
+            "hard_safety_kind": "equal_split",
             "candidate_contract": "hard_safety_review_input",
             "candidate_gate_eligible": False,
             "layout": config.layout,

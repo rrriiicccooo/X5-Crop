@@ -37,17 +37,17 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         format_source = (
             PROJECT_ROOT / "x5crop" / "formats" / "__init__.py"
         ).read_text(encoding="utf-8")
-        safety_source = (
+        safety_path = (
             PROJECT_ROOT
             / "x5crop"
             / "detection"
             / "candidate"
             / "assessment"
             / "safety.py"
-        ).read_text(encoding="utf-8")
+        )
 
         self.assertNotIn("def frame_aspect", format_source)
-        self.assertNotIn("SAFETY_CANDIDATE_BLOCKER", safety_source)
+        self.assertFalse(safety_path.exists())
 
     def test_regression_compare_rejects_non_current_schema_rows(self) -> None:
         from tools.regression.compare import compare_report_rows
@@ -109,8 +109,9 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         from x5crop.policies.decision.contract import DetectionDecisionContract
         from x5crop.run_config import RunConfig
 
-        for contract in (DetectionCandidate, ProcessResult, CliOptions, RunConfig):
+        for contract in (DetectionCandidate, CliOptions, RunConfig):
             self.assertIn("format_id", contract.__dataclass_fields__)
+        self.assertEqual(set(ProcessResult.__dataclass_fields__), {"record"})
         self.assertNotIn("name", FormatPhysicalSpec.__dataclass_fields__)
         self.assertIn("physical_spec", DetectionDecisionContract.__dataclass_fields__)
         self.assertNotIn("format", DetectionDecisionContract.__dataclass_fields__)

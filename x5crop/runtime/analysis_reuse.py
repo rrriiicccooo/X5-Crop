@@ -119,7 +119,12 @@ def cached_record_matches(
         "policy_id",
         "schema_validation",
         "output",
-        "detail",
+        "analysis_cache",
+        "analysis_reuse",
+        "decision_geometry",
+        "output_geometry",
+        "diagnostics",
+        "evidence",
     )
     if any(key not in record for key in required_schema_keys):
         return False
@@ -135,21 +140,19 @@ def cached_record_matches(
         return False
     if record["schema_validation"]:
         return False
-    detail = record["detail"]
-    if not isinstance(detail, dict):
+    if not isinstance(record["decision_gate"], dict):
         return False
-    decision_summary = detail.get("decision_summary")
-    if not isinstance(decision_summary, dict) or not isinstance(decision_summary.get("decision_gate"), dict):
+    if not isinstance(record["output_geometry"], dict):
         return False
-    if not isinstance(detail.get("output_geometry"), dict):
+    if not isinstance(record["decision_geometry"], dict):
         return False
-    if not isinstance(detail.get("decision_geometry"), dict):
+    evidence = record["evidence"]
+    if not isinstance(evidence, dict) or not isinstance(evidence.get("exposure_overlap"), dict):
         return False
-    if not isinstance(detail.get("exposure_overlap_evidence"), dict):
+    diagnostics = record["diagnostics"]
+    if not isinstance(diagnostics, dict):
         return False
-    if not isinstance(detail.get("output_protection_plan"), dict):
-        return False
-    deskew_detail = detail.get("deskew")
+    deskew_detail = diagnostics.get("deskew")
     if not isinstance(deskew_detail, dict) or "applied" not in deskew_detail:
         return False
     if bool(deskew_detail["applied"]) and "angle" not in deskew_detail:
@@ -157,9 +160,11 @@ def cached_record_matches(
     output = record["output"]
     if not isinstance(output, dict):
         return False
-    if any(key not in output for key in ("output_files", "review_copy", "warnings")):
+    if any(key not in output for key in ("output_files", "review_copy", "warnings", "protection_plan")):
         return False
-    cache = detail.get("analysis_cache")
+    if not isinstance(output["protection_plan"], dict):
+        return False
+    cache = record["analysis_cache"]
     if not isinstance(cache, dict):
         return False
     if cache.get("script") != SCRIPT_NAME or cache.get("script_version") != VERSION:
@@ -227,10 +232,9 @@ def apply_cached_deskew(
     axes: str,
     photometric: str,
     base_gray_params: BaseGrayParameters,
-    detail: dict[str, Any],
+    deskew_detail: dict[str, Any],
     warnings: list[str],
 ) -> tuple[np.ndarray, np.ndarray, bool]:
-    deskew_detail = detail["deskew"]
     if not bool(deskew_detail["applied"]):
         return arr, gray, False
     angle = float(deskew_detail["angle"])
@@ -270,7 +274,6 @@ def result_from_reusable_analysis(
             profile,
             warnings,
             output_files=[],
-            detail_extra={"reused_analysis": True},
         )
 
     arr, profile, page_warnings = read_tiff(input_file, config.page)
@@ -284,7 +287,7 @@ def result_from_reusable_analysis(
         profile.axes,
         profile.photometric,
         policy.preprocess.base_gray,
-        cached_record["detail"],
+        cached_record["diagnostics"]["deskew"],
         warnings,
     )
     output_files = write_crops(
@@ -303,5 +306,4 @@ def result_from_reusable_analysis(
         profile,
         warnings,
         output_files=output_files,
-        detail_extra={"reused_analysis": True},
     )

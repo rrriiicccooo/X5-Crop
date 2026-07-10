@@ -7,7 +7,6 @@ import numpy as np
 
 from ....constants import (
     CANDIDATE_SOURCE_CONTENT,
-    CANDIDATE_SOURCE_SAFETY,
     CANDIDATE_SOURCE_SEPARATOR,
 )
 from ....domain import DetectionCandidate
@@ -53,7 +52,7 @@ from .scoring import (
 
 
 def _uses_separator_evidence(source: str) -> bool:
-    return source in {"separator", CANDIDATE_SOURCE_SEPARATOR, CANDIDATE_SOURCE_SAFETY}
+    return source in {"separator", CANDIDATE_SOURCE_SEPARATOR}
 
 
 def _detail_float(detail: dict, key: str, default: float) -> float:
@@ -366,8 +365,6 @@ def apply_candidate_assessment_policy(
     candidate.detail["candidate_source"] = (
         CANDIDATE_SOURCE_SEPARATOR
         if source in {"separator", CANDIDATE_SOURCE_SEPARATOR}
-        else source
-        if source == CANDIDATE_SOURCE_SAFETY
         else CANDIDATE_SOURCE_CONTENT
     )
     candidate.detail["content_evidence"] = content_detail

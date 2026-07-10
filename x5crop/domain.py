@@ -121,20 +121,6 @@ class ImageProfile:
     icc_profile: Optional[bytes]
 
 
-@dataclass
+@dataclass(frozen=True)
 class ProcessResult:
-    source: str
-    status: str
-    confidence: float
-    format_id: str
-    layout: str
-    strip_mode: str
-    count: int
-    final_review_reasons: list[str]
-    output_files: list[str]
-    review_copy: Optional[str]
-    detail: dict[str, Any]
-    profile: dict[str, Any]
-    warnings: list[str]
-    policy_id: str = ""
-    report_record: dict[str, Any] = field(default_factory=dict)
+    record: dict[str, Any]

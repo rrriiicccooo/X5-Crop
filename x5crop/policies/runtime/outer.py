@@ -78,7 +78,6 @@ class SeparatorGeometryProposalPolicy:
     full_width_outer: FullWidthSeparatorOuterParameters
     local: SeparatorOuterFamilyPolicy = field(default_factory=SeparatorOuterFamilyPolicy)
     full_width: SeparatorOuterFamilyPolicy = field(default_factory=SeparatorOuterFamilyPolicy)
-    width_profile_family: SeparatorOuterFamilyPolicy = field(default_factory=SeparatorOuterFamilyPolicy)
     separator_gap_search_max_width_ratio: float = 0.095
 
 

@@ -38,8 +38,6 @@ SIGNAL_OUTER_OVERCONTAINS_HOLDER_AREA = "outer_overcontains_holder_area"
 SIGNAL_OUTER_SCOPE_UNCERTAIN = "outer_scope_uncertain"
 
 SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED = "evidence_dependency_cycle_detected"
-SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE = "safety_candidate_not_auto_eligible"
-
 SIGNAL_HARD_SAFETY_NO_CANDIDATES = "hard_safety_no_candidates"
 SIGNAL_NEEDS_MANUAL_REVIEW = "needs_manual_review"
 SIGNAL_DUAL_LANE_DETECTION_FAILED = "dual_lane_detection_failed"
@@ -107,11 +105,6 @@ EVIDENCE_INDEPENDENCE_BLOCKER_SIGNALS = frozenset(
         SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED,
     }
 )
-SAFETY_BLOCKER_SIGNALS = frozenset(
-    {
-        SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE,
-    }
-)
 MODE_DIAGNOSTIC_SIGNALS = frozenset(
     {
         SIGNAL_HARD_SAFETY_NO_CANDIDATES,
@@ -131,7 +124,6 @@ GATE_BLOCKER_SIGNALS = frozenset(
         *CONTENT_INTEGRITY_BLOCKER_SIGNALS,
         *PARTIAL_HOLDER_EDGE_BLOCKER_SIGNALS,
         *EVIDENCE_INDEPENDENCE_BLOCKER_SIGNALS,
-        *SAFETY_BLOCKER_SIGNALS,
     }
 )
 GATE_DIAGNOSTIC_SIGNALS = frozenset(
@@ -157,7 +149,6 @@ SIGNAL_BUCKETS = {
     **{signal: "partial_edge" for signal in PARTIAL_HOLDER_EDGE_BLOCKER_SIGNALS},
     **{signal: "outer" for signal in OUTER_SCOPE_DIAGNOSTIC_SIGNALS},
     **{signal: "evidence" for signal in EVIDENCE_INDEPENDENCE_BLOCKER_SIGNALS},
-    **{signal: "source" for signal in SAFETY_BLOCKER_SIGNALS},
     **{signal: "mode" for signal in MODE_DIAGNOSTIC_SIGNALS},
 }
 

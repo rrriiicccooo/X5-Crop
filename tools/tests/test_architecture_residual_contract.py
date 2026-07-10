@@ -16,6 +16,45 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class ArchitectureResidualContractTest(unittest.TestCase):
+    def test_inactive_safety_candidate_lifecycle_does_not_exist(self) -> None:
+        self.assertFalse(
+            (
+                PROJECT_ROOT
+                / "x5crop"
+                / "detection"
+                / "candidate"
+                / "assessment"
+                / "safety.py"
+            ).exists()
+        )
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (PROJECT_ROOT / "x5crop").rglob("*.py")
+        )
+        self.assertNotIn("CANDIDATE_SOURCE_SAFETY", source)
+
+    def test_outer_execution_has_no_fake_supplemental_phase(self) -> None:
+        from x5crop.policies.runtime.outer import SeparatorGeometryProposalPolicy
+
+        self.assertNotIn(
+            "width_profile_family",
+            SeparatorGeometryProposalPolicy.__dataclass_fields__,
+        )
+        source = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "execution"
+            / "source_candidates.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("include_supplemental_outer", source)
+
+    def test_preprocess_constructor_is_inlined_in_central_factory(self) -> None:
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "preprocess.py").exists()
+        )
+
     def test_policy_assembly_has_no_single_use_constructor_modules(self) -> None:
         assembly = PROJECT_ROOT / "x5crop" / "policies" / "assembly"
         obsolete = {

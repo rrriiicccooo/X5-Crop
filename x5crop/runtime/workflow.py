@@ -132,15 +132,13 @@ def process_one(
         output_files,
         review_copy,
         warnings,
-        detail_extra={
-            "deskew": deskew_detail,
-            "analysis_cache": make_analysis_cache_metadata(
-                input_file,
-                profile,
-                config,
-                selected_policy,
-            ),
-        },
+        deskew_detail=deskew_detail,
+        analysis_cache_metadata=make_analysis_cache_metadata(
+            input_file,
+            profile,
+            config,
+            selected_policy,
+        ),
     )
     return result
 

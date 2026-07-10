@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ....constants import CANDIDATE_SOURCE_SAFETY, CANDIDATE_SOURCE_SEPARATOR
+from ....constants import CANDIDATE_SOURCE_SEPARATOR
 from ....cache import AnalysisCache
 from ....domain import DetectionCandidate, OuterCandidate
 from ....formats import FormatPhysicalSpec
@@ -118,7 +118,6 @@ def separator_source_candidates_for_count(
     gap_max_width_ratio_override: Optional[float] = None,
     policy: DetectionPolicy,
     include_extension_outer: bool = True,
-    include_supplemental_outer: bool = True,
 ) -> SourceCandidateBatch:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
     explicit_count = bool(config.requested_count is not None)
@@ -188,13 +187,8 @@ def separator_source_candidates_for_count(
     detail = {
         "source": CANDIDATE_SOURCE_SEPARATOR,
         "count_explicit": bool(explicit_count),
-        "outer_execution_stage": (
-            "complete"
-            if include_extension_outer and include_supplemental_outer
-            else "primary"
-        ),
+        "outer_execution_stage": "complete" if include_extension_outer else "primary",
         "extension_outer_enabled": bool(include_extension_outer),
-        "supplemental_outer_enabled": bool(include_supplemental_outer),
         "separator_gap_search": separator_gap_search_detail(
             policy.separator.width_profile
         ),
@@ -272,54 +266,3 @@ def content_guided_separator_candidate_for_count(
         "content_guidance": seed_result.seed.gap_hints.summary(),
     }
     return detection, seed_result.detail
-
-
-def safety_outer_proposal_candidates_for_count(
-    gray: np.ndarray,
-    config: RunConfig,
-    fmt: FormatPhysicalSpec,
-    count: int,
-    strip_mode: str,
-    offset_fraction: float = 0.0,
-    *,
-    cache: Optional[AnalysisCache],
-    policy: DetectionPolicy,
-) -> SourceCandidateBatch:
-    gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
-    outer_candidates = outer_proposal_candidates(
-        gray_work,
-        fmt,
-        count,
-        strip_mode,
-        cache,
-        safety_only=True,
-        policy=policy,
-        explicit_count=bool(config.requested_count is not None),
-    )
-    detections = [
-        _execute_outer_candidate_detection(
-            gray,
-            config,
-            fmt,
-            count,
-            strip_mode,
-            offset_fraction,
-            cache,
-            policy,
-            candidate,
-            gap_max_width_ratio_override=separator_outer_gap_max_width_override(policy),
-        )
-        for candidate in outer_candidates
-    ]
-    detail = {
-        "source": CANDIDATE_SOURCE_SAFETY,
-        "separator_gap_search": separator_gap_search_detail(
-            policy.separator.width_profile
-        ),
-        "outer_candidate_count": int(len(outer_candidates)),
-        "candidate_gate_eligible": False,
-    }
-    for detection in detections:
-        _attach_outer_candidate_summary(detection, outer_candidates)
-        detection.detail["candidate_plan"] = dict(detail)
-    return SourceCandidateBatch(tuple(detections), detail)

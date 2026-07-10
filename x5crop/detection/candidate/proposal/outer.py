@@ -62,29 +62,13 @@ def outer_proposal_strategy_plan_for_policy(
     policy: DetectionPolicy,
     strip_mode: str = "full",
     explicit_count: bool = True,
-    safety_only: bool = False,
 ) -> list[OuterProposalStrategy]:
     proposal_policy = policy.outer.proposal
     partial_placement = proposal_policy.geometry.partial_placement
     separator_geometry = proposal_policy.geometry.separator
     separator_mode = (
-        "safety"
-        if safety_only and separator_outer_scopes(
-            separator_geometry,
-            strip_mode,
-            explicit_count,
-            safety_only=True,
-        )
-        else "always"
-        if (
-            not safety_only
-            and separator_outer_scopes(
-                separator_geometry,
-                strip_mode,
-                explicit_count,
-                safety_only=False,
-            )
-        )
+        "always"
+        if separator_outer_scopes(separator_geometry, strip_mode, explicit_count)
         else "off"
     )
     base = [
@@ -115,8 +99,6 @@ def outer_proposal_strategy_plan_for_policy(
             separator_mode,
         ),
     ]
-    if safety_only:
-        return [strategy for strategy in active if strategy.mode == "safety"]
     return [*base, *[strategy for strategy in active if strategy.mode == "always"]]
 
 
@@ -138,7 +120,6 @@ def outer_proposal_candidates(
     strip_mode: str,
     cache: Optional[AnalysisCache],
     *,
-    safety_only: bool = False,
     policy: DetectionPolicy,
     explicit_count: bool = True,
 ) -> list[OuterCandidate]:
@@ -146,7 +127,6 @@ def outer_proposal_candidates(
         policy,
         strip_mode=strip_mode,
         explicit_count=explicit_count,
-        safety_only=safety_only,
     )
     enabled_strategy_names = {strategy.name for strategy in strategy_plan if strategy.enabled}
     base_candidates = base_outer_candidates(gray_work, policy.outer.proposal.base.candidates)
@@ -187,11 +167,8 @@ def outer_proposal_candidates(
                 policy.outer.proposal.geometry.separator,
                 strip_mode,
                 explicit_count,
-                safety_only=safety_only,
             ),
             explicit_count=explicit_count,
             sequence_ranker=separator_sequence_rank,
         )
-    if safety_only:
-        return unique_outer_candidates([*edge_candidates, *separator_candidates])
     return unique_outer_candidates([*base_candidates, *edge_candidates, *floating_candidates, *separator_candidates])

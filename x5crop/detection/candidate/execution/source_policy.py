@@ -33,14 +33,6 @@ def separator_full_width_can_compete(
     return median_aspect >= competition.general_min_median_aspect
 
 
-def safety_candidate_outer_proposals_enabled(policy: DetectionPolicy) -> bool:
-    separator_policy = policy.outer.proposal.geometry.separator
-    return bool(
-        separator_policy.local.mode == "safety"
-        or separator_policy.full_width.mode == "safety"
-    )
-
-
 def separator_outer_gap_max_width_override(
     policy: DetectionPolicy,
     current_override: Optional[float] = None,

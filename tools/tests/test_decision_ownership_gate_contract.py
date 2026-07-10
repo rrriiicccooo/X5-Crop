@@ -17,11 +17,7 @@ from x5crop.cache.analysis import make_analysis_cache
 from x5crop.constants import (
     CANDIDATE_SOURCE_CONTENT,
     CANDIDATE_SOURCE_HARD_SAFETY,
-    CANDIDATE_SOURCE_SAFETY,
     CANDIDATE_SOURCE_SEPARATOR,
-)
-from x5crop.detection.candidate.signals import (
-    SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE,
 )
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.decision.decision_signals import decision_signals_for
@@ -111,64 +107,6 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         self.assertNotIn("final_review_reasons_added", decided.detail["decision_summary"])
         self.assertNotIn("candidate_blockers_before_decision", decided.detail)
         self.assertNotIn("candidate_diagnostics_before_decision", decided.detail)
-
-    def test_safety_candidate_blocker_is_explained_by_decision_signal(self) -> None:
-        gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = DetectionCandidate(
-            format_id="135",
-            layout="horizontal",
-            strip_mode="full",
-            count=1,
-            outer=Box(10, 10, 90, 90),
-            frames=[Box(10, 10, 90, 90)],
-            gaps=[],
-            confidence=0.90,
-            detail={
-                "candidate_signals": [SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE],
-                "width_cv": 0.0,
-                "width_cv_source": "photo_edges",
-                "photo_width_cv": 0.0,
-                "candidate_assessment": {
-                    "source": CANDIDATE_SOURCE_SAFETY,
-                    "candidate_gate": _candidate_gate_detail(False),
-                    "geometry_score": 1.0,
-                    "content_score": 1.0,
-                    "content_quality_score": 1.0,
-                    "blockers": [SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE],
-                    "diagnostics": [],
-                },
-            },
-        )
-        config = _decision_test_config()
-        content_detail = _content_ok_detail()
-        outer_alignment = {"used": True, "ok": True}
-
-        decided = apply_decision_gate(
-            gray,
-            detection,
-            config,
-            content_detail,
-            outer_alignment,
-            policy=_decision_contract("135", "full"),
-            deskew_detail={},
-        )
-
-        self.assertEqual(
-            decided.detail["decision_signals"]["safety_or_review_only"],
-            True,
-        )
-        self.assertEqual(
-            decided.detail["candidate_gate_input"]["blockers"],
-            [SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE],
-        )
-        self.assertEqual(
-            decided.final_review_reasons,
-            ["evidence_combination_insufficient"],
-        )
-        self.assertEqual(
-            [item["signal"] for item in decided.detail["decision_reason_inputs"]],
-            ["safety_or_review_only", "candidate_gate_failed"],
-        )
 
     def test_decision_signals_separate_assessment_source_from_candidate_source(self) -> None:
         policy = _decision_contract("135", "full")
@@ -421,90 +359,6 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
             ["exposure_overlap_unresolved"],
         )
-
-    def test_final_status_requires_no_final_review_reasons_with_low_threshold(self) -> None:
-        gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = DetectionCandidate(
-            format_id="135",
-            layout="horizontal",
-            strip_mode="full",
-            count=1,
-            outer=Box(10, 10, 90, 90),
-            frames=[Box(10, 10, 90, 90)],
-            gaps=[],
-            confidence=0.90,
-            detail={
-                "candidate_signals": [SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE],
-                "width_cv": 0.0,
-                "width_cv_source": "photo_edges",
-                "photo_width_cv": 0.0,
-                "candidate_source": CANDIDATE_SOURCE_SAFETY,
-                "candidate_assessment": {
-                    "source": CANDIDATE_SOURCE_SAFETY,
-                    "candidate_gate": _candidate_gate_detail(False),
-                    "geometry_score": 1.0,
-                    "content_score": 1.0,
-                    "content_quality_score": 1.0,
-                    "blockers": [SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE],
-                    "diagnostics": [],
-                },
-            },
-        )
-        config = RunConfig(
-            input_path=Path("synthetic.tif"),
-            output_dir=None,
-            format_id="135",
-            layout_auto=False,
-            layout="horizontal",
-            strip_mode="full",
-            requested_count=1,
-            page=0,
-            bleed_x=0,
-            bleed_y=0,
-            deskew="off",
-            deskew_fallback="off",
-            deskew_min_angle=-2.0,
-            deskew_max_angle=2.0,
-            confidence_threshold=0.70,
-            review_dir=None,
-            copy_review_files=False,
-            export_review=False,
-            diagnostics=False,
-            compression="auto",
-            debug=False,
-            debug_analysis=False,
-            dry_run=True,
-            overwrite=True,
-            report=True,
-            debug_errors=False,
-            reuse_analysis=False,
-            jobs=1,
-        )
-
-        policy = get_detection_policy("135", "full")
-        cache = make_analysis_cache(
-            gray,
-            "horizontal",
-            policy.preprocess.content_evidence_image,
-        )
-        prepare_output_protection(gray, detection, config, cache, policy)
-        decision = apply_detection_decision(
-            gray,
-            detection,
-            config,
-            cache,
-            {},
-            policy,
-            decision_contract_for_policy(policy),
-        )
-
-        self.assertEqual(decision.status, "needs_review")
-        self.assertEqual(decision.confidence, 0.84)
-        self.assertEqual(
-            decision.final_review_reasons,
-            ["evidence_combination_insufficient", "content_evidence_insufficient"],
-        )
-        self.assertNotIn("status", decision.detail["decision_summary"])
 
     def test_close_competition_is_final_decision_reason(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)

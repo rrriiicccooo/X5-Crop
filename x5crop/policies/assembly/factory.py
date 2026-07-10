@@ -3,11 +3,16 @@ from __future__ import annotations
 from dataclasses import replace
 
 from ...formats import FormatPhysicalSpec
+from ...image.evidence import (
+    ContentEvidenceImageParameters,
+    DeskewFallbackEvidenceParameters,
+    SeparatorEvidenceImageParameters,
+)
+from ...image.gray import BaseGrayParameters
 from ..parameters.aggregate import FormatParameters
 from ..runtime.base import FULL, PARTIAL
 from .candidate import partial_holder_policy
 from .outer import outer_policy
-from .preprocess import preprocess_policy
 from .separator import separator_policy
 from ..identity import detection_policy_id_for
 from ..runtime.base import CountHypothesisPolicy, DetectorPolicy
@@ -17,6 +22,7 @@ from ..runtime.diagnostics import RuntimeDiagnosticsPolicy
 from ..runtime.final import FinalizationPolicy
 from ..runtime.output import OutputPolicy
 from ..runtime.policy import DetectionPolicy
+from ..runtime.preprocess import RuntimePreprocessPolicy
 
 
 def _detector_kind(spec: FormatPhysicalSpec, strip_mode: str) -> str:
@@ -33,7 +39,13 @@ def build_detection_policy(
     strip_mode: str,
 ) -> DetectionPolicy:
     detector_kind = _detector_kind(spec, strip_mode)
-    preprocess = preprocess_policy(params)
+    preprocess = RuntimePreprocessPolicy(
+        base_gray=BaseGrayParameters(),
+        deskew=params.preprocess.deskew,
+        deskew_fallback_evidence=DeskewFallbackEvidenceParameters(),
+        separator_evidence_image=SeparatorEvidenceImageParameters(),
+        content_evidence_image=ContentEvidenceImageParameters(),
+    )
     separator = separator_policy(strip_mode, detector_kind, params)
     decision_evidence = (
         params.decision.partial_evidence

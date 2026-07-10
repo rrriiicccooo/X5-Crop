@@ -558,48 +558,5 @@ class CandidateLifecycleSourceContractTest(unittest.TestCase):
         self.assertNotIn("REASON_CONTENT_ASPECT_CONFLICT", text)
         self.assertIn("apply_dual_lane_content_assessment", text)
 
-    def test_candidate_plan_delegates_safety_candidate_assessment(self) -> None:
-        path = (
-            PROJECT_ROOT
-            / "x5crop"
-            / "detection"
-            / "candidate"
-            / "execution"
-            / "count_hypothesis.py"
-        )
-        text = path.read_text(encoding="utf-8")
-
-        self.assertNotIn("safety_candidate.confidence = min", text)
-        self.assertNotIn("safety_candidate.final_review_reasons.append", text)
-        self.assertNotIn('"safety_candidate_review_only"', text)
-        self.assertNotIn('assessment["auto_gate"] = False', text)
-        self.assertIn("apply_safety_candidate_assessment", text)
-
-    def test_safety_candidate_detail_uses_candidate_and_decision_names(self) -> None:
-        banned = (
-            "SAFETY_CANDIDATE_REVIEW_ONLY_REASON",
-            "safety_candidate_review_only",
-            "review_only_safety_equal_split",
-            "changes_pass_review",
-            '"review_only": True',
-            "auto_pass_eligible",
-            "changes_final_decision",
-        )
-        offenders: list[str] = []
-        for path in (
-            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "assessment" / "safety.py",
-            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "proposal" / "safety.py",
-            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "execution" / "source_candidates.py",
-            PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "read_only.py",
-        ):
-            text = path.read_text(encoding="utf-8")
-            for term in banned:
-                if term in text:
-                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
-
-        self.assertEqual(offenders, [])
-
-
-
 if __name__ == "__main__":
     unittest.main()

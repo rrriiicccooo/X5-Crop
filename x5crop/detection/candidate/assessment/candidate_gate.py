@@ -5,7 +5,6 @@ from typing import Any
 
 from ....constants import (
     CANDIDATE_SOURCE_CONTENT,
-    CANDIDATE_SOURCE_SAFETY,
     CANDIDATE_SOURCE_SEPARATOR,
 )
 from ...gate_checks import GateCheck, gate_check_details, unique_signals
@@ -21,7 +20,6 @@ from ..signals import (
     SIGNAL_CONTENT_ONLY_NOT_ENOUGH_FOR_AUTO,
     SIGNAL_CONTENT_INTEGRITY_FAILED,
     SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED,
-    SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE,
     SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
     unknown_candidate_signals,
 )
@@ -58,7 +56,7 @@ def _failed_check_signals(checks: list[GateCheck], severity: str) -> list[str]:
 
 
 def _source_uses_separator_evidence(source: str) -> bool:
-    return source in {"separator", CANDIDATE_SOURCE_SEPARATOR, CANDIDATE_SOURCE_SAFETY}
+    return source in {"separator", CANDIDATE_SOURCE_SEPARATOR}
 
 
 def candidate_signal_gate_checks(
@@ -113,9 +111,7 @@ def candidate_gate_assessment(
 ) -> CandidateGateAssessment:
     checks: list[GateCheck] = []
     source_auto_allowed = source in {"separator", CANDIDATE_SOURCE_SEPARATOR}
-    if source == CANDIDATE_SOURCE_SAFETY:
-        source_signal = SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE
-    elif source == CANDIDATE_SOURCE_CONTENT:
+    if source == CANDIDATE_SOURCE_CONTENT:
         source_signal = SIGNAL_CONTENT_ONLY_NOT_ENOUGH_FOR_AUTO
     else:
         source_signal = "candidate_source_not_auto_allowed"

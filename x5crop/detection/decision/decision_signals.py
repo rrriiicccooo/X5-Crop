@@ -7,7 +7,6 @@ from ...constants import (
     CANDIDATE_SOURCE_CONTENT_PRIMARY,
     CANDIDATE_SOURCE_HARD_SAFETY,
     CANDIDATE_SOURCE_REVIEW_ONLY,
-    CANDIDATE_SOURCE_SAFETY,
 )
 from ...domain import DetectionCandidate
 from ...policies.decision.contract import DetectionDecisionContract
@@ -53,10 +52,7 @@ def decision_signals_for(
     candidate_source = str(detection.detail.get("candidate_source") or "")
     source = assessment_source or candidate_source
     content_only_evidence = source in _CONTENT_EVIDENCE_CANDIDATE_SOURCES
-    safety_or_review_only = (
-        assessment_source == CANDIDATE_SOURCE_SAFETY
-        or candidate_source in _NON_AUTO_CANDIDATE_SOURCES
-    )
+    safety_or_review_only = candidate_source in _NON_AUTO_CANDIDATE_SOURCES
     margin_raw = competition.get("margin_to_second")
     margin = None if margin_raw is None else _float(margin_raw)
     partial_edge_safe = bool(evidence["partial_edge"]["ok"])
@@ -98,11 +94,7 @@ def decision_signals_for(
             "candidate_source": candidate_source,
             "content_only_evidence_source": source if content_only_evidence else "",
             "safety_or_review_only_source": (
-                assessment_source
-                if assessment_source == CANDIDATE_SOURCE_SAFETY
-                else candidate_source
-                if candidate_source in _NON_AUTO_CANDIDATE_SOURCES
-                else ""
+                candidate_source if candidate_source in _NON_AUTO_CANDIDATE_SOURCES else ""
             ),
         },
         "content_only_evidence": bool(content_only_evidence),

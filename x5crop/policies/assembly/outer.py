@@ -26,7 +26,7 @@ from ..runtime.outer import (
 def separator_outer_family_policies(
     detector_kind: str,
     params: FormatParameters,
-) -> tuple[SeparatorOuterFamilyPolicy, SeparatorOuterFamilyPolicy, SeparatorOuterFamilyPolicy]:
+) -> tuple[SeparatorOuterFamilyPolicy, SeparatorOuterFamilyPolicy]:
     is_standard_strip = detector_kind == "standard_strip"
     full_width_outer = params.outer.separator_full_width_outer
     return (
@@ -41,12 +41,6 @@ def separator_outer_family_policies(
             phase="extension",
             requires_explicit_count_for_partial=True,
             max_candidates=int(full_width_outer.max_candidates),
-        ),
-        SeparatorOuterFamilyPolicy(
-            mode="conditional" if is_standard_strip else "off",
-            phase="supplemental",
-            requires_explicit_count_for_partial=True,
-            max_candidates=0,
         ),
     )
 
@@ -102,7 +96,7 @@ def outer_policy(
     separator_outer = params.outer.separator_outer_band
     separator_full_width = params.outer.separator_full_width_outer
     partial_content_enabled = bool(strip_mode == PARTIAL and detector_kind != "review_only")
-    local_family, full_width_family, width_profile_family = separator_outer_family_policies(detector_kind, params)
+    local_family, full_width_family = separator_outer_family_policies(detector_kind, params)
     long_correction_family, short_correction_family, content_correction_family = outer_correction_family_policies(
         detector_kind,
         long_axis,
@@ -122,7 +116,6 @@ def outer_policy(
                 separator=SeparatorGeometryProposalPolicy(
                     local=local_family,
                     full_width=full_width_family,
-                    width_profile_family=width_profile_family,
                     separator_gap_search_max_width_ratio=float(outer.separator_gap_search_max_width_ratio),
                     band=separator_outer,
                     full_width_outer=separator_full_width,
