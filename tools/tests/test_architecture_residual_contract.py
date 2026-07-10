@@ -33,6 +33,12 @@ class ArchitectureResidualContractTest(unittest.TestCase):
         )
         self.assertNotIn("CANDIDATE_SOURCE_SAFETY", source)
 
+    def test_hard_safety_has_one_named_source_and_no_shadow_gate_flag(self) -> None:
+        proposal = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "proposal"
+        self.assertFalse((proposal / "safety.py").exists())
+        source = (proposal / "hard_safety.py").read_text(encoding="utf-8")
+        self.assertNotIn("candidate_gate_eligible", source)
+
     def test_outer_execution_has_no_fake_supplemental_phase(self) -> None:
         from x5crop.policies.runtime.outer import SeparatorGeometryProposalPolicy
 

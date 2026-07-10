@@ -14,7 +14,7 @@ from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
 from .candidate.plan.count_hypotheses import count_hypothesis_plan
 from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import review_only_detection
-from .candidate.proposal.safety import hard_safety_detection
+from .candidate.proposal.hard_safety import hard_safety_detection
 from .candidate.selection.choose import select_detection_candidate
 from .candidate.selection.count_hypothesis import count_selection_detail
 from .candidate.extension.outer_correction import outer_correction_candidate_extensions

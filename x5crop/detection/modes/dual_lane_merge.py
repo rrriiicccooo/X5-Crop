@@ -18,7 +18,7 @@ from ..candidate.signals import (
     normalized_candidate_signals,
 )
 from ..detail import candidate_signals_from_detail
-from ..candidate.proposal.safety import hard_safety_detection
+from ..candidate.proposal.hard_safety import hard_safety_detection
 from .dual_lane_context import DualLaneDetectionContext
 
 
