@@ -113,6 +113,7 @@ def cached_record_matches(
         "decision_signals",
         "evidence_summary",
         "schema_validation",
+        "output",
         "detail",
     )
     if any(key not in record for key in required_schema_keys):
@@ -128,6 +129,10 @@ def cached_record_matches(
     if not isinstance(detail.get("output_geometry"), dict):
         return False
     if not isinstance(detail.get("decision_geometry"), dict):
+        return False
+    if not isinstance(detail.get("exposure_overlap_evidence"), dict):
+        return False
+    if not isinstance(detail.get("output_protection_plan"), dict):
         return False
     cache = detail.get("analysis_cache")
     if not isinstance(cache, dict):

@@ -26,6 +26,7 @@ from x5crop.report.sections import selected_candidate
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.decision.contract import decision_contract_for_policy
 from x5crop.runtime.config import RuntimeConfig
+from x5crop.runtime.output_protection import prepare_output_protection
 
 
 def _decision_test_config(*, threshold: float = 0.85) -> RuntimeConfig:
@@ -415,7 +416,7 @@ class DecisionReasonContractTest(unittest.TestCase):
             ["content_integrity_failed"],
         )
 
-    def test_output_overlap_evidence_is_output_protection_signal(self) -> None:
+    def test_feasible_exposure_overlap_plan_does_not_block_decision(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
             film_format="135",
@@ -430,12 +431,16 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
-                "output_overlap_evidence": {
+                "exposure_overlap_evidence": {
                     "used": True,
-                    "output_overlap_detected": True,
-                    "output_overlap_protected_by_bleed": True,
-                    "output_overlap_unresolved": False,
-                    "reason": "output_overlap_protected_by_bleed",
+                    "exposure_overlap_detected": True,
+                    "widest_overlap_band_px": 40.0,
+                    "reason": "exposure_overlap_detected",
+                },
+                "output_protection_plan": {
+                    "exposure_overlap_detected": True,
+                    "feasible": True,
+                    "reason": "exposure_overlap_protection_planned",
                 },
                 "candidate_assessment": {
                     "source": "separator",
@@ -462,21 +467,18 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
 
         self.assertEqual(decided.final_review_reasons, [])
-        self.assertTrue(decided.detail["decision_signals"]["output_overlap_detected"])
-        self.assertTrue(
-            decided.detail["decision_signals"]["output_overlap_protected_by_bleed"]
-        )
-        self.assertFalse(decided.detail["decision_signals"]["output_overlap_unresolved"])
+        self.assertTrue(decided.detail["decision_signals"]["exposure_overlap_detected"])
+        self.assertFalse(decided.detail["decision_signals"]["exposure_overlap_unresolved"])
         self.assertEqual(
-            decided.detail["decision_signals"]["output_overlap_evidence"]["reason"],
-            "output_overlap_protected_by_bleed",
+            decided.detail["decision_signals"]["output_protection_plan"]["reason"],
+            "exposure_overlap_protection_planned",
         )
         self.assertEqual(
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
             [],
         )
 
-    def test_unresolved_output_overlap_is_final_decision_signal(self) -> None:
+    def test_unresolved_exposure_overlap_is_final_decision_signal(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
             film_format="135",
@@ -491,12 +493,16 @@ class DecisionReasonContractTest(unittest.TestCase):
                 "width_cv": 0.0,
                 "width_cv_source": "photo_edges",
                 "photo_width_cv": 0.0,
-                "output_overlap_evidence": {
+                "exposure_overlap_evidence": {
                     "used": True,
-                    "output_overlap_detected": True,
-                    "output_overlap_protected_by_bleed": False,
-                    "output_overlap_unresolved": True,
-                    "reason": "output_overlap_unresolved",
+                    "exposure_overlap_detected": True,
+                    "widest_overlap_band_px": 140.0,
+                    "reason": "exposure_overlap_detected",
+                },
+                "output_protection_plan": {
+                    "exposure_overlap_detected": True,
+                    "feasible": False,
+                    "reason": "exposure_overlap_exceeds_bleed_capacity",
                 },
                 "candidate_assessment": {
                     "source": "separator",
@@ -518,14 +524,14 @@ class DecisionReasonContractTest(unittest.TestCase):
             policy=_decision_contract("135", "full"),
         )
 
-        self.assertEqual(decided.final_review_reasons, ["output_overlap_unresolved"])
-        self.assertTrue(decided.detail["decision_signals"]["output_overlap_unresolved"])
+        self.assertEqual(decided.final_review_reasons, ["exposure_overlap_unresolved"])
+        self.assertTrue(decided.detail["decision_signals"]["exposure_overlap_unresolved"])
         self.assertEqual(
             [item["signal"] for item in decided.detail["decision_reason_inputs"]],
-            ["output_overlap_unresolved"],
+            ["exposure_overlap_unresolved"],
         )
 
-    def test_output_overlap_evidence_is_attached_before_final_decision(self) -> None:
+    def test_exposure_overlap_plan_is_attached_before_final_decision(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
             film_format="135",
@@ -551,16 +557,12 @@ class DecisionReasonContractTest(unittest.TestCase):
                 },
             },
         )
-        base_policy = get_detection_policy("135", "full")
-        policy = replace(
-            base_policy,
-            output_evidence=replace(
-                base_policy.output_evidence,
-                output_overlap=replace(
-                    base_policy.output_evidence.output_overlap,
-                    enabled=True,
-                ),
-            ),
+        policy = get_detection_policy("135", "full")
+        config = _decision_test_config()
+        cache = make_analysis_cache(
+            gray,
+            "horizontal",
+            policy.preprocess.content_evidence_image,
         )
 
         with (
@@ -577,21 +579,27 @@ class DecisionReasonContractTest(unittest.TestCase):
                 return_value={"used": True, "ok": True},
             ),
             patch(
-                "x5crop.detection.decision.final_decision.output_overlap_evidence_detail",
+                "x5crop.runtime.output_protection.exposure_overlap_evidence_detail",
                 return_value={
                     "used": True,
-                    "output_overlap_detected": True,
-                    "output_overlap_protected_by_bleed": True,
-                    "output_overlap_unresolved": False,
-                    "reason": "output_overlap_protected_by_bleed",
+                    "exposure_overlap_detected": True,
+                    "widest_overlap_band_px": 40.0,
+                    "reason": "exposure_overlap_detected",
                 },
             ),
         ):
+            protection_plan = prepare_output_protection(
+                gray,
+                detection,
+                config,
+                cache,
+                policy,
+            )
             decision = apply_detection_decision(
                 gray,
                 detection,
-                _decision_test_config(),
-                make_analysis_cache(gray, "horizontal", policy.preprocess.content_evidence_image),
+                config,
+                cache,
                 {},
                 policy,
                 decision_contract_for_policy(policy),
@@ -600,9 +608,11 @@ class DecisionReasonContractTest(unittest.TestCase):
         self.assertEqual(decision.status, "approved_auto")
         self.assertEqual(decision.final_review_reasons, [])
         self.assertEqual(
-            decision.detail["output_overlap_evidence"]["reason"],
-            "output_overlap_protected_by_bleed",
+            decision.detail["exposure_overlap_evidence"]["reason"],
+            "exposure_overlap_detected",
         )
+        self.assertTrue(protection_plan.feasible)
+        self.assertEqual(protection_plan.output_bleed.long_axis, 20)
         self.assertEqual(
             [item["signal"] for item in decision.detail["decision_reason_inputs"]],
             [],
@@ -668,11 +678,17 @@ class DecisionReasonContractTest(unittest.TestCase):
         )
 
         policy = get_detection_policy("135", "full")
+        cache = make_analysis_cache(
+            gray,
+            "horizontal",
+            policy.preprocess.content_evidence_image,
+        )
+        prepare_output_protection(gray, detection, config, cache, policy)
         decision = apply_detection_decision(
             gray,
             detection,
             config,
-            make_analysis_cache(gray, "horizontal", policy.preprocess.content_evidence_image),
+            cache,
             {},
             policy,
             decision_contract_for_policy(policy),

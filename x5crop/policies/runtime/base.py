@@ -44,18 +44,16 @@ class DetectorPolicy:
 
 
 @dataclass(frozen=True)
-class CountPolicy:
-    """Permitted automatic count hypotheses and placement offsets."""
+class CountHypothesisPolicy:
+    """Placement offsets used while evaluating partial count hypotheses."""
 
-    auto_counts: tuple[int, ...]
     partial_offsets: tuple[float, ...] = (0.0,)
-    include_default_in_partial_auto: bool = False
 
 
 __all__ = [
     "FULL",
     "PARTIAL",
-    "CountPolicy",
+    "CountHypothesisPolicy",
     "DetectorPolicy",
     "FrameFitPolicy",
     "ReviewOnlyPolicy",

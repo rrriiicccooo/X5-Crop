@@ -106,18 +106,18 @@ def draw_gap_overlay(rgb: np.ndarray, detection: FinalDetection, scale: float, d
                 draw_preview_line(rgb, tick, scale, color, debug_gap.model_line_width)
             else:
                 draw_preview_hline(rgb, tick, scale, color, debug_gap.model_line_width)
-    draw_gap_diagnostic_overlay(rgb, detection, scale, debug_gap)
+    draw_gap_evidence_overlay(rgb, detection, scale, debug_gap)
 
 
-def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: FinalDetection, scale: float, debug_gap: Any) -> None:
+def draw_gap_evidence_overlay(rgb: np.ndarray, detection: FinalDetection, scale: float, debug_gap: Any) -> None:
     diagnostics = detection.detail.get("diagnostics")
     records: Any = None
     if isinstance(diagnostics, dict):
-        records = diagnostics.get("gap_diagnostics", [])
+        records = diagnostics.get("gap_evidence", [])
     if not isinstance(records, list):
-        output_overlap = detection.detail.get("output_overlap_evidence")
-        if isinstance(output_overlap, dict):
-            records = output_overlap.get("gap_diagnostics", [])
+        exposure_overlap = detection.detail.get("exposure_overlap_evidence")
+        if isinstance(exposure_overlap, dict):
+            records = exposure_overlap.get("gap_evidence", [])
     if not isinstance(records, list):
         return
     gaps_by_index = {gap.index: gap for gap in detection.gaps}
@@ -135,7 +135,12 @@ def draw_gap_diagnostic_overlay(rgb: np.ndarray, detection: FinalDetection, scal
             "geometry_conflict",
         }:
             color = (255, 0, 220)
-        elif str(record.get("output_overlap_class", "none")) in {"medium", "strong"}:
+        elif bool(
+            isinstance(record.get("nearby_separator_diagnostic"), dict)
+            and record["nearby_separator_diagnostic"].get("stronger_found", False)
+        ):
+            color = (255, 0, 220)
+        elif str(record.get("exposure_overlap_class", "none")) in {"medium", "strong"}:
             color = (0, 220, 255)
         if color is None:
             continue

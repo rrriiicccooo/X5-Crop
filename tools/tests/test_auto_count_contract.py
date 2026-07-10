@@ -5,7 +5,7 @@ import unittest
 from x5crop.detection.candidate.assessment.count_hypothesis import (
     CountHypothesisEvaluation,
 )
-from x5crop.detection.candidate.plan.counts import count_hypothesis_plan
+from x5crop.detection.candidate.plan.count_hypotheses import count_hypothesis_plan
 from x5crop.detection.candidate.selection.count_hypothesis import (
     count_selection_detail,
 )
@@ -36,7 +36,7 @@ class AutoCountContractTest(unittest.TestCase):
             strip_mode="partial",
             requested_count=requested_count,
             fmt=fmt,
-            policy=policy.counts,
+            policy=policy.count_hypotheses,
         )
 
     def test_partial_auto_searches_largest_count_first(self) -> None:

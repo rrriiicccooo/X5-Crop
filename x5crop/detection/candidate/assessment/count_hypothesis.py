@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from ....domain import DetectionCandidate
-from ..plan.counts import CountHypothesis
+from ..plan.count_hypotheses import CountHypothesis
 
 
 def _candidate_passes_gate(candidate: DetectionCandidate) -> bool:

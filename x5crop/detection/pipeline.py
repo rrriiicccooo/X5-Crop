@@ -13,7 +13,7 @@ from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..policies.runtime.policy import DetectionPolicy
 from ..cache import AnalysisCache
 from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
-from .candidate.plan.counts import count_hypothesis_plan
+from .candidate.plan.count_hypotheses import count_hypothesis_plan
 from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import review_only_detection
 from .candidate.proposal.safety import hard_safety_detection
@@ -58,7 +58,7 @@ def choose_detection(
         strip_mode=config.strip_mode,
         requested_count=config.requested_count,
         fmt=fmt,
-        policy=policy.counts,
+        policy=policy.count_hypotheses,
     )
     count_evaluations = []
     for hypothesis in count_plan.hypotheses:

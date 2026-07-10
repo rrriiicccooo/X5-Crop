@@ -53,12 +53,6 @@ def _separator_geometry_support_modes(
     return ()
 
 
-def _output_overlap_enabled(traits: FormatRuntimeTraits, strip_mode: str) -> bool:
-    if strip_mode == PARTIAL:
-        return True
-    return traits.output_overlap_profile == "sensitive"
-
-
 def mode_policy_preset(format_id: str, strip_mode: str) -> ModePolicyPreset:
     spec = format_spec(format_id)
     traits = runtime_traits_for_spec(spec)
@@ -71,7 +65,6 @@ def mode_policy_preset(format_id: str, strip_mode: str) -> ModePolicyPreset:
             traits,
             strip_mode,
         ),
-        output_overlap_enabled=_output_overlap_enabled(traits, strip_mode),
     )
 
 

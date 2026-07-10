@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 REPORT_SCHEMA_ID = "detection_report"
-REPORT_SCHEMA_REVISION = "physical_decision_output_bleed"
+REPORT_SCHEMA_REVISION = "physical_count_and_output_protection"
 
 _POLICY_ID_STEMS = {
     "135": "standard_strip",

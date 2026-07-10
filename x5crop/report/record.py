@@ -10,8 +10,9 @@ from ..detection.detail import (
     DESKEW,
     DECISION_SIGNALS,
     EVIDENCE_SUMMARY,
+    EXPOSURE_OVERLAP_EVIDENCE,
     OUTER_CONTENT_ALIGNMENT,
-    OUTPUT_OVERLAP_EVIDENCE,
+    OUTPUT_PROTECTION_PLAN,
     decision_schema_diagnostics,
     detail_dict,
     HOLDER_OCCUPANCY,
@@ -52,7 +53,9 @@ def report_record_for_final_detection(
     policy: DetectionPolicy,
 ) -> dict:
     report_policy = policy.report
-    output = {}
+    output = {
+        "protection_plan": detail_dict(detection, OUTPUT_PROTECTION_PLAN),
+    }
     source = ""
     profile = {}
     report_detail = json_safe(dict(detection.detail))
@@ -60,12 +63,12 @@ def report_record_for_final_detection(
         source = str(result.source)
         profile = dict(result.profile)
         report_detail = json_safe(dict(result.detail))
-        output = {
+        output.update({
             "status": result.status,
             "output_files": list(result.output_files),
             "review_copy": result.review_copy,
             "warnings": list(result.warnings),
-        }
+        })
     runtime_policy = runtime_policy_detail(detection)
     decision_policy = detail_dict(detection, DECISION_POLICY_DETAIL)
     schema_validation = _schema_validation(detection, runtime_policy, decision_policy)
@@ -110,12 +113,12 @@ def report_record_for_final_detection(
             "outer_content_alignment": detail_dict(detection, OUTER_CONTENT_ALIGNMENT),
             "strip_completeness": detail_dict(detection, STRIP_COMPLETENESS),
             "holder_occupancy": detail_dict(detection, HOLDER_OCCUPANCY),
+            "exposure_overlap": detail_dict(detection, EXPOSURE_OVERLAP_EVIDENCE),
         },
         "candidate_gate": candidate_gate_detail(detection),
         "decision_gate": decision_gate_detail(detection),
         "diagnostics": {
             "schema_validation": schema_validation,
-            "output_overlap_evidence": detail_dict(detection, OUTPUT_OVERLAP_EVIDENCE),
             "deskew": detail_dict(detection, DESKEW),
             "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
         },

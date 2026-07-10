@@ -48,7 +48,7 @@ def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
             "kind": policy.detector.kind,
             "review_only": _plain(policy.detector.review_only),
         },
-        "counts": _plain(policy.counts),
+        "count_hypotheses": _plain(policy.count_hypotheses),
         "outer": {
             "proposal_families": {
                 "base": policy.outer.proposal.base.enabled,
@@ -95,9 +95,10 @@ def _candidate_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
 def _decision_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     return {
         "decision": _plain(policy.decision),
-        "output_evidence": {
-            "output_overlap": _plain(policy.output_evidence.output_overlap),
-        },
+        "exposure_overlap_evidence": _plain(policy.exposure_overlap_evidence),
+        "exposure_overlap_protection": _plain(
+            policy.output.exposure_overlap_protection
+        ),
     }
 
 

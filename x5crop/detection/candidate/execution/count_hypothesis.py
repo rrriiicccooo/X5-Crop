@@ -17,7 +17,7 @@ from .source_candidates import (
     safety_outer_proposal_candidates_for_count,
     separator_source_candidates_for_count,
 )
-from ..plan.counts import CountHypothesis
+from ..plan.count_hypotheses import CountHypothesis
 from ..plan.execution_budget import (
     attach_execution_budget_to_candidates,
     separator_extension_families,

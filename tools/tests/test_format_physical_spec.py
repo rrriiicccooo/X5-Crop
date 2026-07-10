@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from x5crop.formats import FORMATS, FormatId
-from x5crop.detection.candidate.plan.counts import count_hypothesis_plan
+from x5crop.detection.candidate.plan.count_hypotheses import count_hypothesis_plan
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.reporting import detection_policy_report_detail
 
@@ -94,7 +94,7 @@ class FormatPhysicalSpecTests(unittest.TestCase):
                     strip_mode="partial",
                     requested_count=None,
                     fmt=spec,
-                    policy=policy.counts,
+                    policy=policy.count_hypotheses,
                 )
                 counts = [hypothesis.count for hypothesis in plan.hypotheses]
                 self.assertIn(spec.default_count, counts)
@@ -108,7 +108,7 @@ class FormatPhysicalSpecTests(unittest.TestCase):
                     strip_mode="partial",
                     requested_count=None,
                     fmt=spec,
-                    policy=policy.counts,
+                    policy=policy.count_hypotheses,
                 )
                 counts = [hypothesis.count for hypothesis in plan.hypotheses]
                 self.assertNotIn(spec.default_count, counts)

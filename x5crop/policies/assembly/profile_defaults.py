@@ -4,7 +4,6 @@ from dataclasses import replace
 
 from ...formats import FormatPhysicalSpec
 from ..parameters.aggregate import FormatParameters
-from ..parameters.base import PartialCountParameters
 from ..parameters.finalization import PartialHolderParameters
 from ..parameters.scoring import (
     BaseDetectionScoreParameters,
@@ -41,12 +40,6 @@ def _is_square_medium_frame(fmt: FormatPhysicalSpec) -> bool:
 
 def _is_landscape_medium_frame(fmt: FormatPhysicalSpec) -> bool:
     return fmt.family == "120" and _content_aspect(fmt) > 1.1
-
-
-def partial_count_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> PartialCountParameters:
-    partial = params.candidate.partial_counts
-    include_default = bool(fmt.complete_strip_can_be_underfilled)
-    return replace(partial, include_default_auto=include_default)
 
 
 def separator_support_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> SeparatorSupportParameters:
@@ -152,7 +145,6 @@ __all__ = [
     "base_detection_score_parameters",
     "leading_grid_failure_parameters",
     "nearby_separator_refinement_parameters",
-    "partial_count_parameters",
     "partial_holder_parameters",
     "scoring_calibration_parameters",
     "separator_support_parameters",

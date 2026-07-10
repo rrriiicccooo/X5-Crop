@@ -164,11 +164,11 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
     )
     checks.append(
         _review_check(
-            code="output_overlap",
+            code="exposure_overlap_protection",
             bucket="output",
-            triggered=bool(decision_signals["output_overlap_unresolved"]),
-            signal="output_overlap_unresolved",
-            final_review_reason=policy.decision.output_overlap_unresolved_reason,
+            triggered=bool(decision_signals["exposure_overlap_unresolved"]),
+            signal="exposure_overlap_unresolved",
+            final_review_reason=policy.decision.exposure_overlap_unresolved_reason,
         )
     )
     checks.append(

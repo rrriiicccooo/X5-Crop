@@ -8,6 +8,7 @@ from ..app_info import TIFF_SUFFIXES
 from ..entry.options import CliOptions
 from ..formats import FORMATS
 from ..geometry.layout import infer_layout
+from ..output.protection import DEFAULT_OUTPUT_BLEED
 from ..utils import spatial_shape_from_shape
 from .config import RuntimeConfig
 
@@ -48,8 +49,12 @@ def runtime_config_from_options(options: CliOptions) -> tuple[RuntimeConfig, lis
 
     layout_auto = options.layout == "auto"
     layout = infer_layout(width, height) if layout_auto else options.layout
-    bleed_x_default = 20 if options.bleed is None else int(options.bleed)
-    bleed_y_default = 10 if options.bleed is None else int(options.bleed)
+    bleed_x_default = (
+        DEFAULT_OUTPUT_BLEED.long_axis if options.bleed is None else int(options.bleed)
+    )
+    bleed_y_default = (
+        DEFAULT_OUTPUT_BLEED.short_axis if options.bleed is None else int(options.bleed)
+    )
     bleed_x = int(bleed_x_default if options.bleed_x is None else options.bleed_x)
     bleed_y = int(bleed_y_default if options.bleed_y is None else options.bleed_y)
     if bleed_x < 0 or bleed_y < 0:

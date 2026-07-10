@@ -4,7 +4,7 @@ from typing import Any
 
 from ....domain import DetectionCandidate
 from ..assessment.count_hypothesis import CountHypothesisEvaluation
-from ..plan.counts import CountHypothesisPlan
+from ..plan.count_hypotheses import CountHypothesisPlan
 
 
 def count_selection_detail(
@@ -23,7 +23,7 @@ def count_selection_detail(
     if plan.requested_count is not None:
         reason = "requested_count"
     elif not plan.automatic:
-        reason = "mode_default_count"
+        reason = "format_default_count"
     elif selected_evaluation is not None and selected_evaluation.search_satisfied:
         reason = "largest_physically_supported_count"
     else:

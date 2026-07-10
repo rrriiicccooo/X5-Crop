@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .base import (
-    CountPolicy,
+    CountHypothesisPolicy,
     DetectorPolicy,
     FrameFitPolicy,
 )
@@ -22,7 +22,7 @@ from .final import FinalizationPolicy
 from .outer import OuterPolicy
 from .output import OutputPolicy
 from .report import ReportPolicy
-from .output_evidence import RuntimeOutputEvidencePolicy
+from .exposure_overlap import ExposureOverlapEvidencePolicy
 from .preprocess import RuntimePreprocessPolicy
 from .separator import SeparatorPolicy
 
@@ -36,7 +36,7 @@ class DetectionPolicy:
     default_count: int
     preprocess: RuntimePreprocessPolicy
     detector: DetectorPolicy
-    counts: CountPolicy
+    count_hypotheses: CountHypothesisPolicy
     outer: OuterPolicy
     separator: SeparatorPolicy
     content: ContentPolicy
@@ -46,7 +46,7 @@ class DetectionPolicy:
     scoring: ScoringPolicy
     candidate_selection: SelectionPolicy
     candidate_plan: CandidatePlanPolicy
-    output_evidence: RuntimeOutputEvidencePolicy
+    exposure_overlap_evidence: ExposureOverlapEvidencePolicy
     decision: RuntimeDecisionPolicy
     finalization: FinalizationPolicy
     output: OutputPolicy

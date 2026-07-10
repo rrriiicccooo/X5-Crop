@@ -28,7 +28,10 @@ from .outer import (
     SeparatorOuterBandParameters,
     ShortAxisGeometryCorrectionParameters,
 )
-from .output_evidence import OutputOverlapEvidenceParameters
+from .exposure_overlap import (
+    ExposureOverlapEvidenceParameters,
+    ExposureOverlapProtectionParameters,
+)
 from .scoring import (
     BaseDetectionScoreParameters,
     CandidateCompetitionParameters,
@@ -111,7 +114,12 @@ class DecisionParameters:
 
 @dataclass(frozen=True)
 class OutputParameters:
-    output_overlap: OutputOverlapEvidenceParameters = field(default_factory=OutputOverlapEvidenceParameters)
+    exposure_overlap_evidence: ExposureOverlapEvidenceParameters = field(
+        default_factory=ExposureOverlapEvidenceParameters
+    )
+    exposure_overlap_protection: ExposureOverlapProtectionParameters = field(
+        default_factory=ExposureOverlapProtectionParameters
+    )
     approved_geometry_adjustment: ApprovedGeometryAdjustmentParameters = field(default_factory=ApprovedGeometryAdjustmentParameters)
 
 

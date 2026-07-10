@@ -13,7 +13,6 @@ from ...runtime.config import RuntimeConfig
 from ..evidence.content.containment import content_containment_detail
 from ..evidence.content.frame_support import content_evidence_detail
 from ..evidence.outer_alignment import outer_content_alignment_detail
-from ..evidence.output_overlap import output_overlap_evidence_detail
 from .contract_applier import apply_decision_contract
 
 
@@ -27,6 +26,10 @@ def apply_detection_decision(
     decision_contract: DetectionDecisionContract,
 ) -> FinalDetection:
     detection = deepcopy(detection)
+    if not isinstance(detection.detail.get("exposure_overlap_evidence"), dict):
+        raise ValueError("decision requires exposure_overlap_evidence")
+    if not isinstance(detection.detail.get("output_protection_plan"), dict):
+        raise ValueError("decision requires output_protection_plan")
     raw_content_detail = content_evidence_detail(
         gray,
         detection,
@@ -52,13 +55,6 @@ def apply_detection_decision(
         else {"used": False, "reason": policy.decision.outer_alignment_disabled_reason}
     )
     detection.detail["outer_content_alignment"] = outer_alignment
-    _attach_decision_output_evidence(
-        gray,
-        detection,
-        config,
-        policy,
-        analysis_cache,
-    )
     return apply_decision_contract(
         gray,
         detection,
@@ -68,32 +64,6 @@ def apply_detection_decision(
         policy=decision_contract,
         deskew_detail=deskew_detail,
     )
-
-
-def _attach_decision_output_evidence(
-    gray: np.ndarray,
-    detection: DetectionCandidate,
-    config: RuntimeConfig,
-    policy: DetectionPolicy,
-    analysis_cache: AnalysisCache,
-) -> None:
-    if (
-        policy.output_evidence.output_overlap.enabled
-        and not isinstance(detection.detail.get("output_overlap_evidence"), dict)
-    ):
-        available_output_bleed_px = max(
-            int(config.bleed_x),
-            int(policy.output.output_overlap_long_axis_bleed_capacity),
-        ) if policy.output.apply_output_bleed else int(config.bleed_x)
-        detection.detail["output_overlap_evidence"] = output_overlap_evidence_detail(
-            gray,
-            detection,
-            analysis_cache,
-            separator_policy=policy.separator,
-            nearby_policy=policy.diagnostics.nearby_separator,
-            output_overlap_policy=policy.output_evidence.output_overlap,
-            available_output_bleed_px=available_output_bleed_px,
-        )
 
 
 __all__ = [

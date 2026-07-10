@@ -198,7 +198,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         cached_record = {
             "schema_id": "detection_report",
-            "schema_revision": "physical_decision_output_bleed",
+            "schema_revision": "physical_count_and_output_protection",
             "source": "input.tif",
             "status": "needs_review",
             "confidence": 0.84,

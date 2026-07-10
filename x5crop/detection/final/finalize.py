@@ -9,11 +9,10 @@ import numpy as np
 from ...runtime.config import RuntimeConfig
 from ...domain import FinalDetection
 from ...output.bleed import (
-    AxisBleedParameters,
-    apply_output_bleed,
+    apply_output_protection_plan,
     detection_bleed_parameters,
-    output_bleed_parameters_for_detection,
 )
+from ...output.protection import OutputProtectionPlan
 from ...policies.runtime.policy import DetectionPolicy
 from ...cache import AnalysisCache
 from ..evidence.read_only import attach_read_only_diagnostics
@@ -36,6 +35,7 @@ def finalize_detection(
     config: RuntimeConfig,
     analysis_cache: AnalysisCache,
     policy: DetectionPolicy,
+    output_protection_plan: OutputProtectionPlan,
 ) -> FinalDetection:
     output_detection = deepcopy(detection)
     output_detection.detail["decision_geometry"] = _geometry_detail(detection)
@@ -46,21 +46,16 @@ def finalize_detection(
             gray,
             policy.finalization.approved_geometry_adjustment,
         )
-    base_bleed = AxisBleedParameters(
-        long_axis=int(config.bleed_x),
-        short_axis=int(config.bleed_y),
-    )
-    output_bleed = output_bleed_parameters_for_detection(base_bleed, detection, policy.output)
     output_config = replace(
         config,
-        bleed_x=output_bleed.long_axis,
-        bleed_y=output_bleed.short_axis,
+        bleed_x=output_protection_plan.output_bleed.long_axis,
+        bleed_y=output_protection_plan.output_bleed.short_axis,
     )
     if policy.output.apply_output_bleed:
-        apply_output_bleed(
+        apply_output_protection_plan(
             output_detection,
             detection_bleed,
-            output_bleed,
+            output_protection_plan,
             gray.shape[1],
             gray.shape[0],
         )
@@ -78,7 +73,7 @@ def finalize_detection(
             analysis_cache,
             separator_policy=policy.separator,
             diagnostics_policy=policy.diagnostics,
-            output_evidence_policy=policy.output_evidence,
+            exposure_overlap_policy=policy.exposure_overlap_evidence,
         )
     output_detection.detail["output_geometry"] = _geometry_detail(output_detection)
     return output_detection

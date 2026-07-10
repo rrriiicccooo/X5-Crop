@@ -15,7 +15,8 @@ DESKEW = "deskew"
 DECISION_SIGNALS = "decision_signals"
 EVIDENCE_SUMMARY = "evidence_summary"
 OUTER_CONTENT_ALIGNMENT = "outer_content_alignment"
-OUTPUT_OVERLAP_EVIDENCE = "output_overlap_evidence"
+EXPOSURE_OVERLAP_EVIDENCE = "exposure_overlap_evidence"
+OUTPUT_PROTECTION_PLAN = "output_protection_plan"
 POLICY_ID = "policy_id"
 RUNTIME_POLICY_DETAIL = "runtime_policy_detail"
 SCAN_CALIBRATION = "scan_calibration"
@@ -91,8 +92,9 @@ __all__ = [
     "DECISION_SIGNALS",
     "DESKEW",
     "EVIDENCE_SUMMARY",
+    "EXPOSURE_OVERLAP_EVIDENCE",
     "OUTER_CONTENT_ALIGNMENT",
-    "OUTPUT_OVERLAP_EVIDENCE",
+    "OUTPUT_PROTECTION_PLAN",
     "POLICY_ID",
     "RUNTIME_POLICY_DETAIL",
     "SCAN_CALIBRATION",

@@ -9,6 +9,7 @@ from .analysis_reuse import (
 )
 from ..cache.analysis import make_analysis_cache
 from .config import RuntimeConfig
+from .output_protection import prepare_output_protection
 from .deskew import apply_deskew
 from .profile import runtime_for_profile
 from ..debug.outputs import write_debug_outputs
@@ -68,6 +69,13 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
             holder_occupancy,
             scan_calibration,
         )
+    output_protection_plan = prepare_output_protection(
+        gray,
+        detection,
+        config,
+        analysis_cache,
+        selected_policy,
+    )
     decided_detection = apply_detection_decision(
         gray,
         detection,
@@ -83,6 +91,7 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
         config,
         analysis_cache,
         selected_policy,
+        output_protection_plan,
     )
     review_copy = copy_for_review_if_needed(input_file, output_dir, config, detection, warnings)
     output_files = write_crops_if_allowed(

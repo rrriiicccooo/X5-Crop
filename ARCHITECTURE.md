@@ -79,6 +79,7 @@ detection 内部按候选生命周期流动：
 
 ```text
 candidate plan
+  -> count hypothesis evaluation
   -> physical proposal
   -> guidance
   -> candidate build
@@ -92,12 +93,12 @@ candidate plan
 |---|---|
 | Physical proposal | 产生 outer、separator、photo-size 等物理候选或证据。 |
 | Guidance | 使用 content-derived hint 辅助 outer / separator search。 |
-| Candidate plan | 只声明 count、offset、candidate source descriptors 和 execution budget。 |
+| Candidate plan | 生成有类型的 count hypotheses，并声明 offset、candidate source descriptors 和 execution budget。 |
 | Candidate build | 将 outer、separator gaps 和 frame geometry 组装成未评分 `DetectionCandidate`。 |
 | Candidate execution | 执行 source descriptor：调用 proposal、build geometry、补充 geometry evidence，再交给 assessment。 |
 | Candidate assessment | 计算 candidate support、candidate gate、candidate blockers、diagnostics 和 confidence caps。 |
 | Candidate extension | 对 corrected outer、content-guided separator 等候选重新 build / reassess。 |
-| Candidate selection | 在已评估候选之间选择 selected candidate，并记录 competition detail。 |
+| Candidate selection | 在已评估候选之间选择 selected candidate，并记录 count selection 与 competition detail。 |
 | Decision | 将 selected `DetectionCandidate` 转成唯一拥有 status / final reasons 的 `FinalDetection`。 |
 
 candidate assessment 只产生候选级解释；最终用户可见原因只由 decision 产生。
@@ -110,7 +111,7 @@ candidate assessment 只产生候选级解释；最终用户可见原因只由 d
 decision 之后的层级只消费结果：
 
 - `detection.final` 只编排已决策结果的 output-adjacent finalization。
-- `x5crop.output` 提供 output surface、approved geometry adjustment、bleed 和 overlap helper。
+- `x5crop.output` 提供 output surface、`OutputProtectionPlan`、approved geometry adjustment 和 bleed 执行。
 - `x5crop.export` 写自动裁切 TIFF 或 `needs_review/` copy。
 - `x5crop.report` 写 JSONL / CSV / report sections。
 - `x5crop.debug` 生成 Debug Analysis 面板。
@@ -137,7 +138,7 @@ JSONL 每行就是 current `detection_report` record；不再包裹旧 ProcessRe
 | `x5crop.image` | gray、deskew、evidence image、pixel transforms 和 crop pixels。 |
 | `x5crop.io` | TIFF 读取和写入相关 I/O。 |
 | `x5crop.detection` | 候选、证据、assessment、selection、decision、finalization。 |
-| `x5crop.output` | output-adjacent bleed / overlap read model 和输出几何 helper。 |
+| `x5crop.output` | output protection plan、bleed 执行、output surface 和输出几何 helper。 |
 | `x5crop.export` | crop 写出、review copy 和 export actions。 |
 | `x5crop.report` | report result / record 构建、sections、outputs 和 schema validation。 |
 | `x5crop.debug` | Debug Analysis canvas、panels、gap overlay、writer、status。 |
@@ -174,7 +175,7 @@ runtime 可以编排，但不拥有底层几何算法、候选算法或最终 de
 
 format 文件不承载算法开关，也不保存 runtime profile 名称；能力启用由 physical facts
 在 `policies.assembly` / `policies.reporting` 中推导为 runtime traits，再进入 runtime policy。
-decision evidence policy 不使用 format-id override 表；format 名称只作为 `FormatSpec`
+decision evidence policy 不使用 format-id override 表；format 名称只作为 `FormatPhysicalSpec`
 查询入口，实际差异来自 family、frame size mm 派生的 aspect、physical layout、
 complete-underfilled strip trait 等物理事实。Aspect 是底片物理尺寸 fact，不是经验 tuning。
 XPAN 和 120-66 的 `complete_strip_can_be_underfilled` 是 format physical trait：
@@ -188,12 +189,12 @@ XPAN 和 120-66 的 `complete_strip_can_be_underfilled` 是 format physical trai
 | `detection.modes` | special mode routing，例如 dual-lane split / merge 和 review-only。 |
 | `detection.physical` | outer、separator、photo-size 等物理 proposal / evidence helper。 |
 | `detection.guidance` | content-derived outer / separator hints 和 content-model proposal inputs。 |
-| `detection.evidence` | content、separator、photo-width、frame topology、strip completeness、holder occupancy、outer alignment、output overlap、read-only diagnostics 等证据。 |
-| `detection.candidate.plan` | count / offset / source descriptors / execution budget；不 build、不 assessment、不 selection。 |
+| `detection.evidence` | content、separator、photo-width、frame topology、strip completeness、holder occupancy、outer alignment、exposure overlap、read-only diagnostics 等证据。 |
+| `detection.candidate.plan` | 有类型的 count hypotheses、offset、source descriptors 和 execution budget；不 build、不 assessment、不 selection。 |
 | `detection.candidate.proposal` | outer 等 candidate-level proposal 执行入口。 |
 | `detection.candidate.build` | outer + gaps + frames -> unscored `DetectionCandidate`。 |
 | `detection.candidate.execution` | 将 source descriptor / proposal 输出显式串成 build -> evidence enrichment -> assessment。 |
-| `detection.candidate.assessment` | support scoring、base scoring、candidate gate、blockers、diagnostics、candidate confidence caps。 |
+| `detection.candidate.assessment` | count hypothesis evaluation、support scoring、base scoring、candidate gate、blockers、diagnostics、candidate confidence caps。 |
 | `detection.candidate.extension` | corrected outer 和其它扩展候选的 reassessment。 |
 | `detection.candidate.selection` | candidate competition 和 selected candidate。 |
 | `detection.decision` | evidence summary、decision signals、decision gate、final reasons、contract applier。 |
@@ -205,12 +206,13 @@ decision -> finalization。低层不能反向读取高层 decision 语义。
 `DetectionCandidate` 不含 status 或 final reasons。DecisionGate 是唯一
 `DetectionCandidate -> FinalDetection` 转换点；finalization 只接收并返回
 `FinalDetection`，report / debug / export 也不能接收未决候选。
-`candidate.lifecycle` 只串联候选生命周期；execution budget detail 属于
-`candidate.plan.execution_budget`，批量 assessment 属于 `candidate.assessment.source_batch`。
-`output_overlap_evidence` 是 output-protection evidence：detected、required output
-bleed、available output bleed、bleed sufficiency、protected 和 unresolved 都是独立字段。
-可由 bleed 保护的 overlap 由 finalization 扩大输出范围；只有
-`output_overlap_unresolved` 才能成为 DecisionGate blocker。
+auto count 不在 runtime config 中保存伪默认 count：`requested_count=None` 明确表示自动模式。
+`CountHypothesisPlan` 按物理允许范围从大到小生成假设，execution 对每个假设完整 build / assess，
+selection 记录最终 count 及其证据；XPAN / 120-66 的 partial auto 可以包含 nominal count。
+`exposure_overlap_evidence` 只测量 model boundary 上的连续影像和最宽 overlap band，不知道
+bleed capacity 或 REVIEW。`x5crop.output` 根据该 evidence 生成唯一 `OutputProtectionPlan`；
+DecisionGate 只阻断不可执行的 plan，finalization 严格执行同一个 plan。所有 format/mode
+共享这项物理能力，不再由 format trait 开关。
 `outer_alignment` 是 evidence policy；`content_containment` 是 correction policy。
 前者只测量 undercrop / overcontainment，后者只基于已测得 evidence 提出 corrected outer。
 
@@ -287,6 +289,7 @@ Inside detection, the flow is:
 
 ```text
 candidate plan
+  -> count hypothesis evaluation
   -> physical proposal
   -> guidance
   -> candidate build
@@ -326,7 +329,7 @@ Source layering describes which package owns which knowledge.
 | `x5crop.image` | Gray images, deskew, evidence images, pixel transforms, crop pixels. |
 | `x5crop.io` | TIFF I/O. |
 | `x5crop.detection` | Candidates, evidence, assessment, selection, decision, finalization. |
-| `x5crop.output` | Output-adjacent bleed / overlap read model and output geometry helpers. |
+| `x5crop.output` | Output protection planning, bleed execution, output surfaces, and output geometry helpers. |
 | `x5crop.export` | Crop writing, review copies, and export actions. |
 | `x5crop.report` | Report result/record building, sections, outputs, and schema validation. |
 | `x5crop.debug` | Debug Analysis canvas, panels, gap overlay, writer, status. |
@@ -361,7 +364,7 @@ Format files do not carry algorithm switches or runtime profile names.
 Capability enablement is derived from physical facts in `policies.assembly` /
 `policies.reporting`, then expressed by runtime policy.
 Decision evidence policy does not use format-id override tables. A format name is
-only a `FormatSpec` lookup key; behavior differences come from physical facts
+only a `FormatPhysicalSpec` lookup key; behavior differences come from physical facts
 such as family, frame-size-mm-derived aspect, physical layout, and
 complete-underfilled strip traits. Aspect is a film-frame physical fact, not
 empirical tuning.
@@ -380,12 +383,12 @@ declares the lane count and lane format. Detector policy does not hide a default
 | `detection.modes` | Special mode routing, such as dual-lane split / merge and review-only. |
 | `detection.physical` | Physical outer, separator, and photo-size proposal / evidence helpers. |
 | `detection.guidance` | Content-derived outer / separator hints and content-model proposal inputs. |
-| `detection.evidence` | Content, separator, photo-width, frame topology, strip completeness, holder occupancy, outer alignment, output overlap, read-only diagnostics. |
-| `detection.candidate.plan` | Count / offset / source descriptors / execution budget; no build, assessment, or selection. |
+| `detection.evidence` | Content, separator, photo-width, frame topology, strip completeness, holder occupancy, outer alignment, exposure overlap, and read-only diagnostics. |
+| `detection.candidate.plan` | Typed count hypotheses, offsets, source descriptors, and execution budget; no build, assessment, or selection. |
 | `detection.candidate.proposal` | Candidate-level outer proposal execution entries. |
 | `detection.candidate.build` | outer + gaps + frames -> unscored `DetectionCandidate`. |
 | `detection.candidate.execution` | Explicit source descriptor / proposal -> build -> evidence enrichment -> assessment orchestration. |
-| `detection.candidate.assessment` | Support scoring, base scoring, candidate gate, blockers, diagnostics, candidate confidence caps. |
+| `detection.candidate.assessment` | Count-hypothesis evaluation, support scoring, base scoring, candidate gate, blockers, diagnostics, and candidate confidence caps. |
 | `detection.candidate.extension` | Reassessment of corrected outer and other extension candidates. |
 | `detection.candidate.selection` | Candidate competition and selected candidate. |
 | `detection.decision` | Evidence summary, decision signals, decision gate, final reasons, contract applier. |
@@ -399,13 +402,17 @@ semantics.
 `DetectionCandidate -> FinalDetection` conversion point. Finalization only
 accepts and returns `FinalDetection`, and report / debug / export cannot consume
 an undecided candidate.
-`candidate.lifecycle` only orchestrates the candidate lifecycle. Execution-budget
-visibility belongs to `candidate.plan.execution_budget`; batch assessment belongs
-to `candidate.assessment.source_batch`.
-`output_overlap_evidence` is output-protection evidence: detected, required
-output bleed, available output bleed, bleed sufficiency, protected, and
-unresolved are separate fields. Protected overlap expands output geometry; only
-`output_overlap_unresolved` can block the DecisionGate.
+Auto count does not store a placeholder default count in runtime config:
+`requested_count=None` explicitly means automatic mode. `CountHypothesisPlan`
+orders physically permitted hypotheses from largest to smallest, execution fully
+builds and assesses each hypothesis, and selection records the chosen count and
+its evidence. XPAN and 120-66 partial auto may include the nominal count.
+`exposure_overlap_evidence` only measures continuous image content at model
+boundaries and the widest overlap band; it does not know bleed capacity or REVIEW.
+`x5crop.output` derives one `OutputProtectionPlan` from that evidence. DecisionGate
+blocks only an infeasible plan, and finalization executes that same plan. This
+physical capability is shared by every format and mode rather than enabled by a
+format trait.
 `outer_alignment` is evidence policy; `content_containment` is correction policy.
 The former only measures undercrop / overcontainment, and the latter only
 proposes corrected outer boxes from already-measured evidence.

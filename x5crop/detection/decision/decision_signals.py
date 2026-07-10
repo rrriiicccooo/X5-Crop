@@ -47,7 +47,8 @@ def decision_signals_for(
 ) -> dict[str, Any]:
     assessment = _dict(detection.detail.get("candidate_assessment"))
     competition = _dict(detection.detail.get("candidate_competition"))
-    output_overlap = _dict(detection.detail.get("output_overlap_evidence"))
+    exposure_overlap = _dict(detection.detail.get("exposure_overlap_evidence"))
+    output_protection = _dict(detection.detail.get("output_protection_plan"))
     assessment_source = str(assessment.get("source") or "")
     candidate_source = str(detection.detail.get("candidate_source") or "")
     source = assessment_source or candidate_source
@@ -80,10 +81,12 @@ def decision_signals_for(
         active_signals.append("safety_or_review_only")
     if candidate_competition_close:
         active_signals.append("candidate_competition_close")
-    if bool(output_overlap.get("output_overlap_protected_by_bleed", False)):
-        active_signals.append("output_overlap_protected_by_bleed")
-    if bool(output_overlap.get("output_overlap_unresolved", False)):
-        active_signals.append("output_overlap_unresolved")
+    exposure_overlap_unresolved = bool(
+        exposure_overlap.get("exposure_overlap_detected", False)
+        and not output_protection.get("feasible", False)
+    )
+    if exposure_overlap_unresolved:
+        active_signals.append("exposure_overlap_unresolved")
     partial_edge_uncertain = bool(
         detection.strip_mode == "partial"
         and policy.evidence.partial_requires_safe_edge
@@ -111,16 +114,12 @@ def decision_signals_for(
         "separator_support_incomplete": not bool(evidence["separator"]["ok"]),
         "photo_geometry_unstable": not bool(evidence["geometry"]["ok"]),
         "content_integrity_failed": not bool(evidence["content"]["ok"]),
-        "output_overlap_detected": bool(
-            output_overlap.get("output_overlap_detected", False)
+        "exposure_overlap_detected": bool(
+            exposure_overlap.get("exposure_overlap_detected", False)
         ),
-        "output_overlap_protected_by_bleed": bool(
-            output_overlap.get("output_overlap_protected_by_bleed", False)
-        ),
-        "output_overlap_unresolved": bool(
-            output_overlap.get("output_overlap_unresolved", False)
-        ),
-        "output_overlap_evidence": output_overlap,
+        "exposure_overlap_unresolved": exposure_overlap_unresolved,
+        "exposure_overlap_evidence": exposure_overlap,
+        "output_protection_plan": output_protection,
         "candidate_competition_close": bool(candidate_competition_close),
         "candidate_margin_to_second": margin,
         "partial_full_conflict": bool(partial_full_conflict),

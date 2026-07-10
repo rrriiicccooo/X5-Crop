@@ -10,9 +10,10 @@ from ...geometry.layout import work_gray
 from ...cache import AnalysisCache
 from ...gap_methods import gap_method_roles
 from ...policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
-from ...policies.runtime.output_evidence import RuntimeOutputEvidencePolicy
+from ...policies.runtime.exposure_overlap import ExposureOverlapEvidencePolicy
 from ...policies.runtime.separator import SeparatorPolicy
-from .gap_diagnostics import gap_diagnostic_record
+from .gap_evidence import gap_evidence_record, gap_work_outer
+from .nearby_separator_diagnostics import nearby_separator_diagnostic_detail
 
 
 def attach_read_only_diagnostics(
@@ -22,33 +23,46 @@ def attach_read_only_diagnostics(
     *,
     separator_policy: SeparatorPolicy,
     diagnostics_policy: RuntimeDiagnosticsPolicy,
-    output_evidence_policy: RuntimeOutputEvidencePolicy,
+    exposure_overlap_policy: ExposureOverlapEvidencePolicy,
 ) -> None:
     gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
-    gap_records = [
-        gap_diagnostic_record(
+    gap_records = []
+    for gap in detection.gaps:
+        record = gap_evidence_record(
             gray_work,
             detection,
             gap,
-            cache,
             separator_policy=separator_policy,
-            nearby_policy=diagnostics_policy.nearby_separator,
-            output_overlap_policy=output_evidence_policy.output_overlap,
+            exposure_overlap_policy=exposure_overlap_policy,
         )
-        for gap in detection.gaps
-    ]
+        work_outer = gap_work_outer(detection, gap)
+        signals = record.get("signals")
+        window = signals.get("window") if isinstance(signals, dict) else None
+        if work_outer is not None and work_outer.valid() and isinstance(window, dict):
+            record["nearby_separator_diagnostic"] = nearby_separator_diagnostic_detail(
+                gray_work,
+                work_outer,
+                gap,
+                float(detection.detail.get("pitch", 0.0) or 0.0),
+                int(window["start"]),
+                int(window["end"]),
+                diagnostics_policy.nearby_separator,
+                separator_policy.profile,
+                cache,
+            )
+        gap_records.append(record)
     hard_counts: dict[str, int] = {}
     for record in gap_records:
         trust = str(record.get("hard_trust", "not_hard_gap"))
         hard_counts[trust] = hard_counts.get(trust, 0) + 1
-    output_overlap_count = sum(
-        1 for record in gap_records if bool(record.get("output_overlap_like", False))
+    exposure_overlap_count = sum(
+        1 for record in gap_records if bool(record.get("exposure_overlap_like", False))
     )
-    output_overlap_counts: dict[str, int] = {}
+    exposure_overlap_counts: dict[str, int] = {}
     for record in gap_records:
-        output_overlap_class = str(record.get("output_overlap_class", "none"))
-        output_overlap_counts[output_overlap_class] = (
-            output_overlap_counts.get(output_overlap_class, 0) + 1
+        exposure_overlap_class = str(record.get("exposure_overlap_class", "none"))
+        exposure_overlap_counts[exposure_overlap_class] = (
+            exposure_overlap_counts.get(exposure_overlap_class, 0) + 1
         )
     strong_hard = int(hard_counts.get("strong_separator", 0))
     suspicious_hard = sum(
@@ -64,14 +78,14 @@ def attach_read_only_diagnostics(
             "confidence": False,
             "decision": False,
         },
-        "purpose": "observe hard-gap trust, output-overlap evidence, and evidence/model roles without changing crop output",
+        "purpose": "observe hard-gap trust, exposure-overlap evidence, and evidence/model roles without changing crop output",
         "method_roles": method_roles,
-        "gap_diagnostics": gap_records,
+        "gap_evidence": gap_records,
         "summary": {
             "gap_count": len(gap_records),
             "hard_trust_counts": hard_counts,
-            "output_overlap_like_model_gaps": int(output_overlap_count),
-            "output_overlap_counts": output_overlap_counts,
+            "exposure_overlap_like_model_gaps": int(exposure_overlap_count),
+            "exposure_overlap_counts": exposure_overlap_counts,
             "suspect_hard_gaps": int(hard_counts.get("suspect_internal_edge", 0)),
             "suspicious_hard_gaps": int(suspicious_hard),
             "strong_hard_gaps": int(strong_hard),
