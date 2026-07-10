@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from .base import (
@@ -49,9 +49,9 @@ class DetectionPolicy:
     output_evidence: RuntimeOutputEvidencePolicy
     decision: RuntimeDecisionPolicy
     finalization: FinalizationPolicy
-    output: OutputPolicy = field(default_factory=OutputPolicy)
-    diagnostics: RuntimeDiagnosticsPolicy = field(default_factory=RuntimeDiagnosticsPolicy)
-    report: ReportPolicy = field(default_factory=ReportPolicy)
+    output: OutputPolicy
+    diagnostics: RuntimeDiagnosticsPolicy
+    report: ReportPolicy
 
     def report_detail(self) -> dict[str, Any]:
         from ..reporting import detection_policy_report_detail

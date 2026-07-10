@@ -12,12 +12,6 @@ PARTIAL = "partial"
 
 
 @dataclass(frozen=True)
-class DualLanePolicy:
-    lane_count: int = 2
-    lane_format: str = "135"
-
-
-@dataclass(frozen=True)
 class ReviewOnlyPolicy:
     reason: str = "review_only_mode"
     selection_override: str = "review_only_mode"
@@ -52,7 +46,6 @@ class FrameFitPolicy:
 @dataclass(frozen=True)
 class DetectorPolicy:
     kind: str = "standard_strip"
-    dual_lane: DualLanePolicy = field(default_factory=DualLanePolicy)
     review_only: ReviewOnlyPolicy = field(default_factory=ReviewOnlyPolicy)
 
 
@@ -94,7 +87,6 @@ __all__ = [
     "PARTIAL",
     "CountPolicy",
     "DetectorPolicy",
-    "DualLanePolicy",
     "FrameFitPolicy",
     "ReviewOnlyPolicy",
 ]

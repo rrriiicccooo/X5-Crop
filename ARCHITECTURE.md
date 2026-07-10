@@ -46,6 +46,9 @@ X5_Crop.py / launchers
 - 双击启动器只负责找到 Python 并进入交互流程。
 - interactive 菜单由 `x5crop.entry.interactive` 处理。
 - runtime bootstrap 将入口选项、输入路径、layout、format、strip mode 和 active policy 绑定成运行上下文。
+- active policy bundle 在 runtime 边界一次性解析当前 format/mode，以及 dual-lane 所需的
+  lane format/full policy；detection 只能读取 bundle 中已经解析的对象，不能回查 policy
+  或 format registry。
 
 入口层不读取图像内容，不做候选判断，不决定 PASS / REVIEW。
 
@@ -126,7 +129,7 @@ JSONL 每行就是 current `detection_report` record；不再包裹旧 ProcessRe
 |---|---|
 | `x5crop.entry` | 用户入口和选项解析。 |
 | `x5crop.runtime` | 运行配置、输入探测、workflow、deskew runtime、policy context、analysis reuse。 |
-| `x5crop.formats` | format identity、family、count、frame size mm、derived aspect 和物理 facts。 |
+| `x5crop.formats` | format identity、family、count、frame size mm、derived aspect、lane composition 和物理 facts。 |
 | `x5crop.units` | `ScanCalibration`、`PhysicalLength` 和 `PixelKernel` 等单位模型。 |
 | `x5crop.policies` | runtime policy、parameter ownership、policy assembly、decision contract、policy reporting。 |
 | `x5crop.cache` | analysis / separator cache adapters。 |
@@ -362,6 +365,9 @@ empirical tuning.
 XPAN and 120-66 expose `complete_strip_can_be_underfilled` as a physical trait:
 it says a complete strip may not fill the holder, not that those formats own
 separate algorithms.
+Dual-lane composition is also a physical format fact: `FormatPhysicalSpec`
+declares the lane count and lane format. Detector policy does not hide a default
+`2 x 135` composition.
 
 #### 2.4 Detection Sublayers
 

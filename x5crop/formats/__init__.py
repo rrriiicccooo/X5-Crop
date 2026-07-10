@@ -43,6 +43,8 @@ class FormatPhysicalSpec:
     expected_separator_count: int
     physical_layout: str = "single_strip"
     complete_strip_can_be_underfilled: bool = False
+    lane_count: int = 1
+    lane_format_id: FormatId | None = None
 
     @property
     def nominal_frame_size_mm(self) -> FrameSizeMm:
@@ -60,11 +62,15 @@ class FormatPhysicalSpec:
 FormatSpec = FormatPhysicalSpec
 
 
-def expected_separator_count(default_count: int, physical_layout: str) -> int:
+def expected_separator_count(
+    default_count: int,
+    physical_layout: str,
+    lane_count: int = 1,
+) -> int:
     if physical_layout == "dual_lane":
-        lane_count = 2
-        lane_frame_count = max(1, int(default_count) // lane_count)
-        return lane_count * max(0, lane_frame_count - 1)
+        lanes = max(1, int(lane_count))
+        lane_frame_count = max(1, int(default_count) // lanes)
+        return lanes * max(0, lane_frame_count - 1)
     return max(0, int(default_count) - 1)
 
 
@@ -77,6 +83,8 @@ def _format_spec(
     frame_size_mm_options: tuple[FrameSizeMm, ...] = (),
     physical_layout: str = "single_strip",
     complete_strip_can_be_underfilled: bool = False,
+    lane_count: int = 1,
+    lane_format_id: FormatId | None = None,
 ) -> FormatSpec:
     name = format_id.value
     frame_options = frame_size_mm_options or (nominal_frame_size_mm,)
@@ -87,9 +95,15 @@ def _format_spec(
         allowed_counts=allowed_counts,
         family=family,
         frame_size_mm_options=frame_options,
-        expected_separator_count=expected_separator_count(default_count, physical_layout),
+        expected_separator_count=expected_separator_count(
+            default_count,
+            physical_layout,
+            lane_count,
+        ),
         physical_layout=physical_layout,
         complete_strip_can_be_underfilled=complete_strip_can_be_underfilled,
+        lane_count=lane_count,
+        lane_format_id=lane_format_id,
     )
 
 
@@ -108,6 +122,8 @@ FORMATS: dict[str, FormatSpec] = {
         "35mm",
         FrameSizeMm(36.0, 24.0),
         physical_layout="dual_lane",
+        lane_count=2,
+        lane_format_id=FormatId.STANDARD_STRIP,
     ),
     "half": _format_spec(
         FormatId.HALF,

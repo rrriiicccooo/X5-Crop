@@ -51,10 +51,6 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     gray = make_base_gray_u8(arr, profile.axes, profile.photometric, initial_policy.preprocess.base_gray)
     _extend_unique(warnings, page_warnings)
     source_arr = arr
-    config = runtime_for_profile(config, profile)
-    fmt = FORMATS[config.film_format]
-    policy_bundle = DetectionPolicyBundle.for_format_mode(fmt.name, config.strip_mode)
-    initial_policy = policy_bundle.initial_policy
 
     arr, gray, deskew_detail = apply_deskew(arr, gray, profile, config, initial_policy.preprocess, warnings)
     scan_calibration = scan_calibration_from_profile(profile, initial_policy.preprocess.scan_calibration_trust)
