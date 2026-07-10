@@ -15,10 +15,15 @@ from ....runtime.config import RuntimeConfig
 from ..signals import SIGNAL_HARD_SAFETY_NO_CANDIDATES, SIGNAL_NEEDS_MANUAL_REVIEW
 
 
-def hard_safety_detection(gray: np.ndarray, config: RuntimeConfig, fmt: FormatPhysicalSpec) -> DetectionCandidate:
+def hard_safety_detection(
+    gray: np.ndarray,
+    config: RuntimeConfig,
+    fmt: FormatPhysicalSpec,
+    count: int,
+) -> DetectionCandidate:
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
-    count = max(1, int(config.count))
+    count = max(1, int(count))
     outer = Box(0, 0, ww, wh)
     if count > 1:
         pitch = ww / float(count)

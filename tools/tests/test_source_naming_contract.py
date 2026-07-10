@@ -857,7 +857,14 @@ class SourceNamingContractTest(unittest.TestCase):
         self.assertIn("apply_dual_lane_content_assessment", text)
 
     def test_candidate_plan_delegates_safety_candidate_assessment(self) -> None:
-        path = PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "lifecycle.py"
+        path = (
+            PROJECT_ROOT
+            / "x5crop"
+            / "detection"
+            / "candidate"
+            / "execution"
+            / "count_hypothesis.py"
+        )
         text = path.read_text(encoding="utf-8")
 
         self.assertNotIn("safety_candidate.confidence = min", text)

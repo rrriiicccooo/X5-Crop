@@ -12,7 +12,7 @@ class CliOptions:
     film_format: str
     layout: str
     strip_mode: str
-    count_override: Optional[int]
+    requested_count: Optional[int]
     page: int
     bleed: Optional[int]
     bleed_x: Optional[int]

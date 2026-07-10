@@ -24,7 +24,7 @@ def print_run_header(config: RuntimeConfig, files: list[Path]) -> None:
     mode_parts = [f"layout: {layout_label}", f"strip: {config.strip_mode}"]
     policy = DetectionPolicyBundle.for_format_mode(config.film_format, config.strip_mode).initial_policy
     mode_parts.append(f"policy: {policy.policy_id}")
-    if config.strip_mode == "partial" and config.count_override is None:
+    if config.strip_mode == "partial" and config.requested_count is None:
         mode_parts.append("count: auto")
     if config.debug_analysis:
         mode_parts.append("debug analysis")

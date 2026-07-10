@@ -2,31 +2,33 @@ from __future__ import annotations
 
 import numpy as np
 
-from ...constants import CANDIDATE_SOURCE_SAFETY
-from ...cache import AnalysisCache
-from ...domain import DetectionCandidate
-from ...formats import FormatPhysicalSpec
-from ...policies.runtime.policy import DetectionPolicy
-from ...runtime.config import RuntimeConfig
-from ..guidance.content_model import content_detection_for_count
-from .assessment.safety import apply_safety_candidate_assessment
-from .assessment.source_batch import assess_source_candidates
-from .execution.source_candidates import (
+from ....constants import CANDIDATE_SOURCE_SAFETY
+from ....cache import AnalysisCache
+from ....domain import DetectionCandidate
+from ....formats import FormatPhysicalSpec
+from ....policies.runtime.policy import DetectionPolicy
+from ....runtime.config import RuntimeConfig
+from ...guidance.content_model import content_detection_for_count
+from ..assessment.count_hypothesis import CountHypothesisEvaluation
+from ..assessment.safety import apply_safety_candidate_assessment
+from ..assessment.source_batch import assess_source_candidates
+from .source_candidates import (
     content_guided_separator_candidate_for_count,
     safety_outer_proposal_candidates_for_count,
     separator_source_candidates_for_count,
 )
-from .plan.execution_budget import (
+from ..plan.counts import CountHypothesis
+from ..plan.execution_budget import (
     attach_execution_budget_to_candidates,
     separator_extension_families,
     set_execution_budget_detail,
 )
-from .plan.reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
-from .plan.source_policy import safety_candidate_outer_proposals_enabled, separator_full_width_can_compete
-from .selection.choose import is_partial_edge_safety_candidate, select_source_candidate
+from ..plan.reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
+from ..plan.source_policy import safety_candidate_outer_proposals_enabled, separator_full_width_can_compete
+from ..selection.choose import is_partial_edge_safety_candidate, select_source_candidate
 
 
-def calibrated_candidates_for_count(
+def _assessed_candidates_for_offset(
     gray: np.ndarray,
     config: RuntimeConfig,
     fmt: FormatPhysicalSpec,
@@ -39,7 +41,7 @@ def calibrated_candidates_for_count(
     content_policy = policy.candidate_plan.content_candidate
     candidates: list[DetectionCandidate] = []
     stop_after_this_count = False
-    explicit_count = bool(config.count_override is not None)
+    explicit_count = bool(config.requested_count is not None)
     extension_families = separator_extension_families(policy, strip_mode, explicit_count)
 
     primary_batch = separator_source_candidates_for_count(
@@ -250,6 +252,38 @@ def calibrated_candidates_for_count(
     return candidates, stop_after_this_count
 
 
+def evaluate_count_hypothesis(
+    gray: np.ndarray,
+    config: RuntimeConfig,
+    fmt: FormatPhysicalSpec,
+    hypothesis: CountHypothesis,
+    cache: AnalysisCache,
+    policy: DetectionPolicy,
+) -> CountHypothesisEvaluation:
+    candidates: list[DetectionCandidate] = []
+    supporting_offsets: list[float] = []
+    for offset in hypothesis.offsets:
+        offset_candidates, supported = _assessed_candidates_for_offset(
+            gray,
+            config,
+            fmt,
+            hypothesis.count,
+            hypothesis.strip_mode,
+            offset,
+            cache,
+            policy,
+        )
+        candidates.extend(offset_candidates)
+        if supported:
+            supporting_offsets.append(float(offset))
+    return CountHypothesisEvaluation(
+        hypothesis=hypothesis,
+        candidates=tuple(candidates),
+        search_satisfied=bool(supporting_offsets),
+        supporting_offsets=tuple(supporting_offsets),
+    )
+
+
 __all__ = [
-    "calibrated_candidates_for_count",
+    "evaluate_count_hypothesis",
 ]

@@ -1,12 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from ...formats import FormatPhysicalSpec
-
-
 FULL = "full"
 PARTIAL = "partial"
 
@@ -51,35 +45,11 @@ class DetectorPolicy:
 
 @dataclass(frozen=True)
 class CountPolicy:
-    """Frame-count and partial-offset policy for one format/mode pair."""
+    """Permitted automatic count hypotheses and placement offsets."""
 
-    fixed_count: int | None
     auto_counts: tuple[int, ...]
     partial_offsets: tuple[float, ...] = (0.0,)
     include_default_in_partial_auto: bool = False
-
-    def count_specs(
-        self,
-        fmt: FormatPhysicalSpec,
-        strip_mode: str,
-        requested_count: int,
-        count_override: int | None,
-    ) -> list[tuple[int, str, tuple[float, ...]]]:
-        if strip_mode == FULL:
-            count = requested_count if self.fixed_count is None else self.fixed_count
-            return [(count, FULL, (0.0,))]
-        if strip_mode != PARTIAL:
-            raise ValueError(f"Unsupported strip mode: {strip_mode}")
-        if count_override is not None:
-            return [(requested_count, PARTIAL, self.partial_offsets)]
-        counts = [
-            count
-            for count in self.auto_counts
-            if count < fmt.default_count or self.include_default_in_partial_auto
-        ]
-        return [(count, PARTIAL, self.partial_offsets) for count in counts] or [
-            (1, PARTIAL, self.partial_offsets)
-        ]
 
 
 __all__ = [

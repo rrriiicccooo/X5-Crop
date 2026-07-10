@@ -13,8 +13,7 @@ class RuntimeConfig:
     layout_auto: bool
     layout: str
     strip_mode: str
-    count: int
-    count_override: Optional[int]
+    requested_count: Optional[int]
     page: int
     bleed_x: int
     bleed_y: int

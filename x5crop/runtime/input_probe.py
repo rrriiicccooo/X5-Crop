@@ -42,8 +42,7 @@ def runtime_config_from_options(options: CliOptions) -> tuple[RuntimeConfig, lis
 
     height, width = first_tiff_shape(first_file, options.page)
     fmt = FORMATS[options.film_format]
-    count = int(fmt.default_count if options.count_override is None else options.count_override)
-    if count not in fmt.allowed_counts:
+    if options.requested_count is not None and options.requested_count not in fmt.allowed_counts:
         allowed = ", ".join(str(x) for x in fmt.allowed_counts)
         raise ValueError(f"--format {fmt.name} allows --count values: {allowed}")
 
@@ -65,8 +64,7 @@ def runtime_config_from_options(options: CliOptions) -> tuple[RuntimeConfig, lis
         layout_auto=layout_auto,
         layout=layout,
         strip_mode=options.strip_mode,
-        count=count,
-        count_override=options.count_override,
+        requested_count=options.requested_count,
         page=options.page,
         bleed_x=bleed_x,
         bleed_y=bleed_y,

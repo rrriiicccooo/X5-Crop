@@ -39,7 +39,9 @@ def config_cache_signature(config: RuntimeConfig) -> dict[str, Any]:
         "film_format": config.film_format,
         "layout": config.layout,
         "strip_mode": config.strip_mode,
-        "count": int(config.count),
+        "requested_count": (
+            None if config.requested_count is None else int(config.requested_count)
+        ),
         "page": int(config.page),
         "deskew": config.deskew,
         "deskew_fallback": config.deskew_fallback,

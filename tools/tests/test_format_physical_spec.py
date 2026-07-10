@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from x5crop.formats import FORMATS, FormatId
+from x5crop.detection.candidate.plan.counts import count_hypothesis_plan
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.reporting import detection_policy_report_detail
 
@@ -89,15 +90,13 @@ class FormatPhysicalSpecTests(unittest.TestCase):
             with self.subTest(format_id=format_id):
                 spec = FORMATS[format_id]
                 policy = get_detection_policy(format_id, "partial")
-                counts = [
-                    count
-                    for count, _strip_mode, _offsets in policy.counts.count_specs(
-                        spec,
-                        "partial",
-                        spec.default_count,
-                        None,
-                    )
-                ]
+                plan = count_hypothesis_plan(
+                    strip_mode="partial",
+                    requested_count=None,
+                    fmt=spec,
+                    policy=policy.counts,
+                )
+                counts = [hypothesis.count for hypothesis in plan.hypotheses]
                 self.assertIn(spec.default_count, counts)
 
     def test_other_formats_do_not_include_default_count_in_partial_auto(self) -> None:
@@ -105,15 +104,13 @@ class FormatPhysicalSpecTests(unittest.TestCase):
             with self.subTest(format_id=format_id):
                 spec = FORMATS[format_id]
                 policy = get_detection_policy(format_id, "partial")
-                counts = [
-                    count
-                    for count, _strip_mode, _offsets in policy.counts.count_specs(
-                        spec,
-                        "partial",
-                        spec.default_count,
-                        None,
-                    )
-                ]
+                plan = count_hypothesis_plan(
+                    strip_mode="partial",
+                    requested_count=None,
+                    fmt=spec,
+                    policy=policy.counts,
+                )
+                counts = [hypothesis.count for hypothesis in plan.hypotheses]
                 self.assertNotIn(spec.default_count, counts)
 
 

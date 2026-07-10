@@ -68,7 +68,7 @@ def build_detection_geometry_for_outer(
         gap_max_width_ratio_override,
         policy,
         ww,
-        explicit_count=bool(config.count_override is not None),
+        explicit_count=bool(config.requested_count is not None),
         gap_hints=separator_gap_hints,
     )
     outer = separator_gaps.outer

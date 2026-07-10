@@ -28,7 +28,12 @@ def dual_lane_review_detection(
     context: DualLaneDetectionContext,
     mode_signal: str,
 ) -> DetectionCandidate:
-    detection = hard_safety_detection(gray, config, context.format_spec)
+    detection = hard_safety_detection(
+        gray,
+        config,
+        context.format_spec,
+        context.total_count,
+    )
     add_candidate_signal(detection, mode_signal)
     mode_diagnostics = detection.detail.setdefault("mode_diagnostics", [])
     if isinstance(mode_diagnostics, list):

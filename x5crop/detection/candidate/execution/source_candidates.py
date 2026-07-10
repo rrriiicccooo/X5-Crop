@@ -122,7 +122,7 @@ def separator_source_candidates_for_count(
     include_supplemental_outer: bool = True,
 ) -> SourceCandidateBatch:
     gray_work = cache.gray_work if cache is not None and cache.layout == config.layout else work_gray(gray, config.layout)
-    explicit_count = bool(config.count_override is not None)
+    explicit_count = bool(config.requested_count is not None)
     outer_candidates = outer_proposal_candidates(
         gray_work,
         fmt,
@@ -289,7 +289,7 @@ def safety_outer_proposal_candidates_for_count(
         cache,
         safety_only=True,
         policy=policy,
-        explicit_count=bool(config.count_override is not None),
+        explicit_count=bool(config.requested_count is not None),
     )
     detections = [
         _execute_outer_candidate_detection(

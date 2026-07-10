@@ -20,10 +20,9 @@ def partial_frame_fit(fmt: FormatPhysicalSpec) -> FrameFitPolicy:
 
 def count_policy(fmt: FormatPhysicalSpec, strip_mode: str, params: FormatParameters) -> CountPolicy:
     if strip_mode == FULL:
-        return CountPolicy(fixed_count=None, auto_counts=(fmt.default_count,))
+        return CountPolicy(auto_counts=(fmt.default_count,))
     partial = partial_count_parameters(fmt, params)
     return CountPolicy(
-        fixed_count=None,
         auto_counts=tuple(reversed(fmt.allowed_counts)),
         partial_offsets=partial.offsets,
         include_default_in_partial_auto=bool(partial.include_default_auto),

@@ -81,7 +81,7 @@ def options_from_args(args: argparse.Namespace) -> CliOptions:
         film_format=str(args.format),
         layout=str(args.layout),
         strip_mode=str(args.strip),
-        count_override=(None if args.count is None else int(args.count)),
+        requested_count=(None if args.count is None else int(args.count)),
         page=int(args.page),
         bleed=(None if args.bleed is None else int(args.bleed)),
         bleed_x=(None if args.bleed_x is None else int(args.bleed_x)),

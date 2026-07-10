@@ -35,8 +35,7 @@ def select_dual_lane_candidate(
     lane_config = replace(
         config,
         film_format=lane_format_id,
-        count=lane_format_spec.default_count,
-        count_override=lane_format_spec.default_count,
+        requested_count=lane_format_spec.default_count,
     )
 
     candidates = [

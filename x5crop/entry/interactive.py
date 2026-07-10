@@ -100,7 +100,7 @@ def interactive_options(diagnostics: bool = False) -> CliOptions:
     film_format = ask_format()
     partial = ask_yes_no("partial mode? [y/n, return=no]: ", default=False)
     strip_mode = "partial" if partial else "full"
-    count_override = ask_partial_count(film_format) if partial else FORMATS[film_format].default_count
+    requested_count = ask_partial_count(film_format) if partial else None
     debug_analysis = True if diagnostics else ask_yes_no("debug analysis? [y/n, return=no]: ", default=False)
 
     print()
@@ -115,7 +115,7 @@ def interactive_options(diagnostics: bool = False) -> CliOptions:
         print("debug analysis: off")
     print(f"strip mode: {strip_mode}")
     if partial:
-        print(f"count: {'auto' if count_override is None else count_override}")
+        print(f"count: {'auto' if requested_count is None else requested_count}")
     print()
 
     return CliOptions(
@@ -124,7 +124,7 @@ def interactive_options(diagnostics: bool = False) -> CliOptions:
         film_format=film_format,
         layout="auto",
         strip_mode=strip_mode,
-        count_override=count_override,
+        requested_count=requested_count,
         page=0,
         bleed=None,
         bleed_x=None,
