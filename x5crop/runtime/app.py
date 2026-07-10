@@ -22,7 +22,7 @@ def print_run_header(config: RunConfig, files: list[Path]) -> None:
     print(f"files: {len(files)}")
     layout_label = f"auto(probe={config.layout})" if config.layout_auto else config.layout
     mode_parts = [f"layout: {layout_label}", f"strip: {config.strip_mode}"]
-    policy = DetectionPolicyBundle.for_format_mode(config.film_format, config.strip_mode).initial_policy
+    policy = DetectionPolicyBundle.for_format_mode(config.format_id, config.strip_mode).initial_policy
     mode_parts.append(f"policy: {policy.policy_id}")
     if config.strip_mode == "partial" and config.requested_count is None:
         mode_parts.append("count: auto")
@@ -122,12 +122,3 @@ def run_cli_options(options: CliOptions) -> int:
     config, files = runtime_config_from_options(options)
     print_run_header(config, files)
     return run_runtime(config, files)
-
-
-__all__ = [
-    "print_run_header",
-    "process_one_worker",
-    "process_parallel_files",
-    "run_cli_options",
-    "run_runtime",
-]

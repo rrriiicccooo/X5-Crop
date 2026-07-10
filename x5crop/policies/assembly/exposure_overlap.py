@@ -20,6 +20,3 @@ def exposure_overlap_evidence_policy(
         strong_continuity=float(evidence.strong_continuity),
         strong_activity=float(evidence.strong_activity),
     )
-
-
-__all__ = ["exposure_overlap_evidence_policy"]

@@ -70,9 +70,3 @@ def separator_width_evidence_detail(
         "broad_separator_width_scores": broad_scores,
     }
     return separator_width_requirement_detail(detail, min_required)
-
-
-__all__ = [
-    "separator_width_evidence_detail",
-    "separator_width_requirement_detail",
-]

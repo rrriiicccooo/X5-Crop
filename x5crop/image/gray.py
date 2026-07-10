@@ -58,9 +58,3 @@ def make_base_gray_u8(
     if params.miniswhite_inverts and photometric.upper() == "MINISWHITE":
         out = 255 - out
     return out
-
-
-__all__ = [
-    "BaseGrayParameters",
-    "make_base_gray_u8",
-]

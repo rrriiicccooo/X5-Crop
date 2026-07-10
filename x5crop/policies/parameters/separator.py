@@ -43,10 +43,3 @@ class SeparatorWidthProfileParameters:
     full_enabled: bool = True
     partial_enabled: bool = True
     max_width_ratio: float = 0.060
-
-__all__ = [
-    'SeparatorSupportParameters',
-    'LeadingGridFailureParameters',
-    'SeparatorGeometrySupportParameters',
-    'SeparatorWidthProfileParameters',
-]

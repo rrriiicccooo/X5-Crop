@@ -66,7 +66,7 @@ class OuterCandidate:
 
 @dataclass
 class DetectionCandidate:
-    film_format: str
+    format_id: str
     layout: str
     strip_mode: str
     count: int
@@ -91,7 +91,7 @@ class FinalDetection(DetectionCandidate):
         final_review_reasons: list[str],
     ) -> "FinalDetection":
         return cls(
-            film_format=candidate.film_format,
+            format_id=candidate.format_id,
             layout=candidate.layout,
             strip_mode=candidate.strip_mode,
             count=candidate.count,
@@ -126,30 +126,15 @@ class ProcessResult:
     source: str
     status: str
     confidence: float
-    film_format: str
+    format_id: str
     layout: str
     strip_mode: str
     count: int
     final_review_reasons: list[str]
     output_files: list[str]
     review_copy: Optional[str]
-    outer_box: dict[str, int]
-    frame_boxes: list[dict[str, int]]
-    gaps: list[dict[str, Any]]
     detail: dict[str, Any]
     profile: dict[str, Any]
     warnings: list[str]
-    version: str = ""
     policy_id: str = ""
     report_record: dict[str, Any] = field(default_factory=dict)
-
-
-__all__ = [
-    "Box",
-    "DetectionCandidate",
-    "FinalDetection",
-    "Gap",
-    "ImageProfile",
-    "OuterCandidate",
-    "ProcessResult",
-]

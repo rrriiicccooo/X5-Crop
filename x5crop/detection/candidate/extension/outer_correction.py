@@ -206,7 +206,6 @@ def outer_correction_candidate_extensions(
 
     if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
         proposal = content_containment_correction_proposal(
-            fmt,
             detection,
             outer_alignment,
             set(correction_plan["eligible_families"]),
@@ -231,6 +230,3 @@ def outer_correction_candidate_extensions(
         }
 
     return extensions
-
-
-__all__ = ["outer_correction_candidate_extensions"]

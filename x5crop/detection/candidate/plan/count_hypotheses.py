@@ -54,7 +54,7 @@ def count_hypothesis_plan(
     policy: CountHypothesisPolicy,
 ) -> CountHypothesisPlan:
     if requested_count is not None and requested_count not in fmt.allowed_counts:
-        raise ValueError(f"count {requested_count} is not allowed for {fmt.name}")
+        raise ValueError(f"count {requested_count} is not allowed for {fmt.format_id.value}")
 
     if strip_mode == FULL:
         count = fmt.default_count if requested_count is None else requested_count
@@ -92,7 +92,7 @@ def count_hypothesis_plan(
         if count < fmt.default_count or fmt.complete_strip_can_be_underfilled
     )
     if not counts:
-        raise ValueError(f"no automatic count hypotheses configured for {fmt.name}")
+        raise ValueError(f"no automatic count hypotheses configured for {fmt.format_id.value}")
     return CountHypothesisPlan(
         hypotheses=tuple(
             CountHypothesis(count, PARTIAL, policy.partial_offsets, "automatic_count")
@@ -101,10 +101,3 @@ def count_hypothesis_plan(
         automatic=True,
         requested_count=None,
     )
-
-
-__all__ = [
-    "CountHypothesis",
-    "CountHypothesisPlan",
-    "count_hypothesis_plan",
-]

@@ -73,22 +73,3 @@ def gap_method_roles() -> dict[str, str]:
         GAP_EQUAL: gap_method_role(GAP_EQUAL),
         GAP_CONTENT: gap_method_role(GAP_CONTENT),
     }
-
-
-__all__ = [
-    "DIRECT_HARD_GAP_METHODS",
-    "GEOMETRY_MODEL_GAP_METHODS",
-    "SEPARATOR_SUPPORT_GAP_METHODS",
-    "gap_method_role",
-    "gap_method_roles",
-    "is_content_model_gap_method",
-    "is_detected_gap_method",
-    "is_direct_hard_gap_method",
-    "is_edge_pair_gap_method",
-    "is_equal_model_gap_method",
-    "is_geometry_model_gap_method",
-    "is_grid_model_gap_method",
-    "is_hard_gap_method",
-    "is_model_gap_method",
-    "is_separator_support_gap_method",
-]

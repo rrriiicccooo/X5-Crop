@@ -145,9 +145,3 @@ def apply_approved_geometry_adjustment(
     }
     detection.outer = map_work_box(outer, detection.layout, gray.shape[1], gray.shape[0])
     detection.frames = [map_work_box(frame, detection.layout, gray.shape[1], gray.shape[0]) for frame in frames]
-
-
-__all__ = [
-    "apply_approved_geometry_adjustment",
-    "apply_edge_bleed_protection",
-]

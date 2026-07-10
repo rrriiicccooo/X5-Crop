@@ -10,7 +10,3 @@ class SeparatorBand:
     center: float
     width: float
     score: float
-    oversized: bool = False
-
-
-__all__ = ["SeparatorBand"]

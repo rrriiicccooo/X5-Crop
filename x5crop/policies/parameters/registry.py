@@ -2,36 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ...formats import FORMAT_CHOICES, FormatPhysicalSpec, format_spec
+from ...formats import FORMAT_CHOICES, format_spec
 from .aggregate import FormatParameters
-
-
-def _aspect(fmt: FormatPhysicalSpec) -> float:
-    return float(fmt.horizontal_content_aspect or 1.0)
-
-
-def _is_standard_35mm_strip(fmt: FormatPhysicalSpec) -> bool:
-    return fmt.family == "35mm" and fmt.default_count == 6 and 1.2 <= _aspect(fmt) <= 1.8
-
-
-def _is_dense_half_frame(fmt: FormatPhysicalSpec) -> bool:
-    return fmt.family == "35mm" and fmt.default_count > 6 and _aspect(fmt) < 1.0
-
-
-def _is_panorama_35mm(fmt: FormatPhysicalSpec) -> bool:
-    return fmt.family == "35mm" and _aspect(fmt) > 2.0
-
-
-def _is_medium_rectangle(fmt: FormatPhysicalSpec) -> bool:
-    return fmt.family == "120" and _aspect(fmt) < 1.0
-
-
-def _is_medium_square(fmt: FormatPhysicalSpec) -> bool:
-    return fmt.family == "120" and abs(_aspect(fmt) - 1.0) <= 0.05
-
-
-def _is_medium_wide(fmt: FormatPhysicalSpec) -> bool:
-    return fmt.family == "120" and _aspect(fmt) > 1.0
 
 
 def _with_content_min_run(params: FormatParameters, value: float) -> FormatParameters:
@@ -234,12 +206,13 @@ def format_parameters(format_name: str) -> FormatParameters:
     if format_name not in FORMAT_CHOICES:
         raise ValueError(f"Unsupported format parameters: {format_name}")
     fmt = format_spec(format_name)
+    profile = fmt.frame_geometry_profile
     params = FormatParameters()
 
     if fmt.family == "120":
         params = _with_content_min_run(params, 0.18)
 
-    if _is_standard_35mm_strip(fmt):
+    if profile == "standard_35mm":
         params = _with_separator_outer(
             params,
             min_score=0.72,
@@ -255,7 +228,7 @@ def format_parameters(format_name: str) -> FormatParameters:
             max_candidates=4,
         )
         params = _with_partial_edge(params, ratio_extras=(0.02, 0.04), max_candidates=4)
-    elif _is_dense_half_frame(fmt):
+    elif profile == "dense_half":
         params = _with_content_min_run(params, 0.16)
         params = _with_separator_width_max(params, 0.100)
         params = _with_separator_outer(
@@ -273,7 +246,7 @@ def format_parameters(format_name: str) -> FormatParameters:
             max_candidates=4,
         )
         params = _with_partial_edge(params, ratio_extras=(0.04, 0.06), max_candidates=4)
-    elif _is_panorama_35mm(fmt):
+    elif profile == "panoramic_35mm":
         params = _with_content_min_run(params, 0.24)
         params = _with_content_containment_correction(
             params,
@@ -295,7 +268,7 @@ def format_parameters(format_name: str) -> FormatParameters:
             max_candidates=4,
         )
         params = _with_partial_edge(params, ratio_extras=(0.03, 0.06), max_candidates=4)
-    elif _is_medium_rectangle(fmt):
+    elif profile == "medium_rectangle":
         params = _with_separator_outer(
             params,
             min_score=0.60,
@@ -310,7 +283,7 @@ def format_parameters(format_name: str) -> FormatParameters:
             max_candidates=8,
         )
         params = _with_partial_edge(params, ratio_extras=(0.04, 0.08), max_candidates=4)
-    elif _is_medium_square(fmt):
+    elif profile == "medium_square":
         params = replace(
             params,
             separator=replace(
@@ -336,7 +309,7 @@ def format_parameters(format_name: str) -> FormatParameters:
             max_candidates=8,
             source_candidates=3,
         )
-    elif _is_medium_wide(fmt):
+    elif profile == "medium_wide":
         params = _with_separator_width_max(params, 0.090)
         params = _with_outer_alignment_evidence(
             params,
@@ -357,6 +330,3 @@ def format_parameters(format_name: str) -> FormatParameters:
         params = _with_partial_edge(params, ratio_extras=(0.04, 0.08), max_candidates=4)
 
     return params
-
-
-__all__ = ["format_parameters"]

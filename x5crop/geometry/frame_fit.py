@@ -110,7 +110,7 @@ def frame_edge_weight(gap: Gap, config: FrameFitParameters) -> float:
     return 0.0
 
 
-def relative_ranges_from_gaps(outer: Box, gaps: list[Gap], count: int) -> list[tuple[float, float]]:
+def relative_ranges_from_gaps(outer: Box, gaps: list[Gap]) -> list[tuple[float, float]]:
     cuts = [0.0] + [float(gap.center) for gap in gaps] + [float(outer.width)]
     return [(left, right) for left, right in zip(cuts[:-1], cuts[1:])]
 
@@ -174,7 +174,7 @@ def fit_boxes_by_edge_evidence(
     if not (nominal * config.nominal_min_ratio <= target <= nominal * config.nominal_max_ratio):
         return None, {"used": False, "reason": "target_width_out_of_range", "target_width": target}
 
-    base_ranges = relative_ranges_from_gaps(outer, gaps, count)
+    base_ranges = relative_ranges_from_gaps(outer, gaps)
     max_left = max(0.0, float(outer.width) - target)
     fitted: list[tuple[float, float]] = []
     adjusted: list[int] = []

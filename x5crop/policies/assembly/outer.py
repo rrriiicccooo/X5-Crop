@@ -60,7 +60,6 @@ def separator_outer_family_policies(
 
 def outer_correction_family_policies(
     mode_preset: ModePolicyPreset,
-    strip_mode: str,
     long_axis,
 ) -> tuple[OuterCorrectionFamilyPolicy, OuterCorrectionFamilyPolicy, OuterCorrectionFamilyPolicy]:
     is_standard_strip = mode_preset.detector_kind == "standard_strip"
@@ -127,7 +126,6 @@ def outer_policy(
     local_family, full_width_family, width_profile_family = separator_outer_family_policies(mode_preset, params)
     long_correction_family, short_correction_family, content_correction_family = outer_correction_family_policies(
         mode_preset,
-        strip_mode,
         long_axis,
     )
     short_target_aspect = (
@@ -188,6 +186,12 @@ def outer_policy(
                         content_margin_min=int(floating_position.content_margin_min),
                         content_margin_max=int(floating_position.content_margin_max),
                         min_width_ratio=float(floating_position.min_width_ratio),
+                        content_bbox_min_fraction=float(
+                            floating_position.content_bbox_min_fraction
+                        ),
+                        min_short_axis_px=int(floating_position.min_short_axis_px),
+                        min_short_axis_ratio=float(floating_position.min_short_axis_ratio),
+                        min_width_px=int(floating_position.min_width_px),
                         max_candidates=int(floating_position.max_candidates),
                     ),
                     edge_anchor=EdgeAnchoredContentPositionPolicy(
@@ -199,6 +203,10 @@ def outer_policy(
                         content_margin_min=int(edge_position.content_margin_min),
                         content_margin_max=int(edge_position.content_margin_max),
                         min_width_ratio=float(edge_position.min_width_ratio),
+                        content_bbox_min_fraction=float(edge_position.content_bbox_min_fraction),
+                        min_short_axis_px=int(edge_position.min_short_axis_px),
+                        min_short_axis_ratio=float(edge_position.min_short_axis_ratio),
+                        min_width_px=int(edge_position.min_width_px),
                         max_candidates=int(edge_position.max_candidates),
                     ),
                 ),
@@ -229,6 +237,8 @@ def outer_policy(
                         prominence_min=float(separator_outer.prominence_min),
                         high_mean_prominence_bypass=float(separator_outer.high_mean_prominence_bypass),
                         prominence_score_weight=float(separator_outer.prominence_score_weight),
+                        band_to_peak_ratio=float(separator_outer.band_to_peak_ratio),
+                        pair_candidate_expansion=int(separator_outer.pair_candidate_expansion),
                     ),
                     full_width_outer=FullWidthSeparatorOuterPolicy(
                         required_count=int(separator_full_width.required_count),
@@ -256,6 +266,8 @@ def outer_policy(
                     content_margin_ratio=float(long_axis.content_margin_ratio),
                     content_margin_min=int(long_axis.content_margin_min),
                     content_margin_max=int(long_axis.content_margin_max),
+                    min_corrected_width_ratio=float(long_axis.min_corrected_width_ratio),
+                    min_corrected_width_px=int(long_axis.min_corrected_width_px),
                 ),
                 short_axis=ShortAxisGeometryCorrectionPolicy(
                     enabled=short_correction_family.mode != "off",
@@ -316,9 +328,3 @@ def outer_policy(
             border_band_ratio=float(outer_alignment.border_band_ratio),
         ),
     )
-
-__all__ = [
-    'outer_policy',
-    'outer_correction_family_policies',
-    'separator_outer_family_policies',
-]

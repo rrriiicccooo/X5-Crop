@@ -114,13 +114,16 @@ def content_guided_separator_seed_for_count(
 
     expected_aspect = float(fmt.horizontal_content_aspect)
     if expected_aspect <= 0:
-        return _skip_detail("missing_expected_content_aspect", format=fmt.name)
+        return _skip_detail(
+            "missing_expected_content_aspect",
+            format_id=fmt.format_id.value,
+        )
 
     runs, run_detail = content_region_runs(
         evidence,
         outer,
         count,
-        fmt.name,
+        fmt.format_id.value,
         cache,
         content_policy=content_policy,
     )
@@ -206,11 +209,3 @@ def content_guided_separator_seed_for_count(
         seed=ContentGuidedSeparatorSeed(outer=outer, gap_hints=hint_set, detail=detail),
         detail=detail,
     )
-
-
-__all__ = [
-    "CONTENT_GUIDED_SEPARATOR_FAMILY",
-    "ContentGuidedSeparatorSeed",
-    "ContentGuidedSeparatorSeedResult",
-    "content_guided_separator_seed_for_count",
-]

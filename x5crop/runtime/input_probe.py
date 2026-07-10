@@ -42,10 +42,10 @@ def runtime_config_from_options(options: CliOptions) -> tuple[RunConfig, list[Pa
         raise ValueError(f"No TIFF files found: {options.input_path}")
 
     height, width = first_tiff_shape(first_file, options.page)
-    fmt = FORMATS[options.film_format]
+    fmt = FORMATS[options.format_id]
     if options.requested_count is not None and options.requested_count not in fmt.allowed_counts:
         allowed = ", ".join(str(x) for x in fmt.allowed_counts)
-        raise ValueError(f"--format {fmt.name} allows --count values: {allowed}")
+        raise ValueError(f"--format {fmt.format_id.value} allows --count values: {allowed}")
 
     layout_auto = options.layout == "auto"
     layout = infer_layout(width, height) if layout_auto else options.layout
@@ -65,7 +65,7 @@ def runtime_config_from_options(options: CliOptions) -> tuple[RunConfig, list[Pa
     return RunConfig(
         input_path=options.input_path,
         output_dir=options.output_dir,
-        film_format=options.film_format,
+        format_id=options.format_id,
         layout_auto=layout_auto,
         layout=layout,
         strip_mode=options.strip_mode,
@@ -92,10 +92,3 @@ def runtime_config_from_options(options: CliOptions) -> tuple[RunConfig, list[Pa
         reuse_analysis=options.reuse_analysis,
         jobs=jobs,
     ), files
-
-
-__all__ = [
-    "first_tiff_shape",
-    "iter_input_files",
-    "runtime_config_from_options",
-]

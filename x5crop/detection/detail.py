@@ -75,38 +75,4 @@ def runtime_policy_detail(detection: DetectionCandidate) -> dict[str, Any]:
 
 
 def policy_id_from_detail(detection: DetectionCandidate) -> str:
-    policy_id = detection.detail.get(POLICY_ID)
-    if policy_id:
-        return str(policy_id)
-    policy = runtime_policy_detail(detection)
-    return str(policy.get(POLICY_ID, ""))
-
-
-__all__ = [
-    "CANDIDATE_COMPETITION",
-    "CANDIDATE_ASSESSMENT",
-    "CANDIDATE_SIGNALS",
-    "CONTENT_EVIDENCE",
-    "DECISION_POLICY_DETAIL",
-    "DECISION_SUMMARY",
-    "DECISION_SIGNALS",
-    "DESKEW",
-    "EVIDENCE_SUMMARY",
-    "EXPOSURE_OVERLAP_EVIDENCE",
-    "OUTER_CONTENT_ALIGNMENT",
-    "OUTPUT_PROTECTION_PLAN",
-    "POLICY_ID",
-    "RUNTIME_POLICY_DETAIL",
-    "SCAN_CALIBRATION",
-    "STRIP_COMPLETENESS",
-    "HOLDER_OCCUPANCY",
-    "candidate_competition",
-    "candidate_assessment",
-    "candidate_signals_from_detail",
-    "decision_schema_diagnostics",
-    "decision_summary",
-    "detail_dict",
-    "has_current_decision_summary",
-    "policy_id_from_detail",
-    "runtime_policy_detail",
-]
+    return str(detection.detail.get(POLICY_ID, ""))

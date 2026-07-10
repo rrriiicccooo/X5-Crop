@@ -188,12 +188,3 @@ def separator_policy(
         profile=profile,
         edge_refine_profile=edge_refine,
     )
-
-__all__ = [
-    'separator_support_policy',
-    'separator_geometry_support_policy',
-    'separator_model_gap_proposal_policy',
-    'separator_refinement_policy',
-    'separator_width_profile_policy',
-    'separator_policy',
-]

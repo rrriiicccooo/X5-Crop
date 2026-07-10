@@ -7,7 +7,7 @@ from ..runtime.base import CountHypothesisPolicy, FrameFitPolicy
 
 def partial_frame_fit(fmt: FormatPhysicalSpec) -> FrameFitPolicy:
     return FrameFitPolicy(
-        name=f"{fmt.name}-partial",
+        name=f"{fmt.format_id.value}-partial",
         edge_evidence=False,
         geometry_fallback=True,
     )
@@ -17,9 +17,3 @@ def count_hypothesis_policy(params: FormatParameters) -> CountHypothesisPolicy:
     return CountHypothesisPolicy(
         partial_offsets=params.candidate.partial_counts.offsets,
     )
-
-
-__all__ = [
-    "partial_frame_fit",
-    "count_hypothesis_policy",
-]

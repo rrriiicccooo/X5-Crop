@@ -24,6 +24,10 @@ class FloatingContentPositionParameters:
     content_margin_min: int = 12
     content_margin_max: int = 80
     min_width_ratio: float = 0.30
+    content_bbox_min_fraction: float = 0.010
+    min_short_axis_px: int = 40
+    min_short_axis_ratio: float = 0.65
+    min_width_px: int = 80
     max_candidates: int = 12
 
 @dataclass(frozen=True)
@@ -35,6 +39,10 @@ class EdgeAnchoredContentPositionParameters:
     content_margin_min: int = 12
     content_margin_max: int = 80
     min_width_ratio: float = 0.30
+    content_bbox_min_fraction: float = 0.010
+    min_short_axis_px: int = 40
+    min_short_axis_ratio: float = 0.65
+    min_width_px: int = 80
     max_candidates: int = 8
 
 @dataclass(frozen=True)
@@ -90,6 +98,8 @@ class SeparatorOuterBandParameters:
     prominence_min: float = 0.02
     high_mean_prominence_bypass: float = 0.88
     prominence_score_weight: float = 0.8
+    band_to_peak_ratio: float = 0.58
+    pair_candidate_expansion: int = 3
 
 @dataclass(frozen=True)
 class FullWidthSeparatorOuterParameters:
@@ -106,6 +116,8 @@ class LongAxisGeometryCorrectionParameters:
     content_margin_ratio: float = 0.010
     content_margin_min: int = 12
     content_margin_max: int = 80
+    min_corrected_width_ratio: float = 0.80
+    min_corrected_width_px: int = 80
 
 @dataclass(frozen=True)
 class GridOuterRefineParameters:
@@ -169,18 +181,3 @@ class OuterAlignmentEvidenceParameters:
     edge_short_ratio: float = 0.015
     edge_dark_max: float = 0.02
     border_band_ratio: float = 0.018
-
-__all__ = [
-    'OuterMaskProfile',
-    'OuterStrategyParameters',
-    'FloatingContentPositionParameters',
-    'EdgeAnchoredContentPositionParameters',
-    'BaseOuterCandidateParameters',
-    'SeparatorOuterBandParameters',
-    'FullWidthSeparatorOuterParameters',
-    'LongAxisGeometryCorrectionParameters',
-    'GridOuterRefineParameters',
-    'ShortAxisGeometryCorrectionParameters',
-    'ContentContainmentCorrectionParameters',
-    'OuterAlignmentEvidenceParameters',
-]

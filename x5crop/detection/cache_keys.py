@@ -17,7 +17,7 @@ def separator_outer_cache_key(
     return (
         "separator_outer",
         str(variant),
-        str(fmt.name),
+        str(fmt.format_id.value),
         int(count),
         str(strip_mode),
         tuple((candidate.name, box_cache_key(candidate.box)) for candidate in base_candidates),
@@ -31,7 +31,7 @@ def edge_anchored_outer_cache_key(
     strip_mode: str,
 ) -> tuple[Any, ...]:
     return (
-        str(fmt.name),
+        str(fmt.format_id.value),
         int(count),
         str(strip_mode),
         tuple((candidate.name, box_cache_key(candidate.box)) for candidate in base_candidates),

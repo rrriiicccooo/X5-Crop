@@ -105,9 +105,3 @@ def evidence_independence_detail(
         "photo_width_stability": photo_width_stability,
         "geometry_ok": bool(geometry_ok),
     }
-
-
-__all__ = [
-    "evidence_independence_detail",
-    "gap_source_count",
-]

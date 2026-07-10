@@ -18,8 +18,3 @@ def preprocess_policy(params: FormatParameters) -> RuntimePreprocessPolicy:
         separator_evidence_image=SeparatorEvidenceImageParameters(),
         content_evidence_image=ContentEvidenceImageParameters(),
     )
-
-
-__all__ = [
-    "preprocess_policy",
-]

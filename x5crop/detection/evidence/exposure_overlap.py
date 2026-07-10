@@ -78,6 +78,3 @@ def exposure_overlap_evidence_detail(
         "gap_evidence": records,
         "gap_count": len(records),
     }
-
-
-__all__ = ["exposure_overlap_evidence_detail"]

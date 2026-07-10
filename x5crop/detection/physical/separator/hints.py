@@ -43,9 +43,3 @@ class SeparatorGapHintSet:
             "hints": [hint.detail() for hint in self.hints],
             **dict(self.detail),
         }
-
-
-__all__ = [
-    "SeparatorGapHint",
-    "SeparatorGapHintSet",
-]

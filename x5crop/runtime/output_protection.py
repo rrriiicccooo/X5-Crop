@@ -39,6 +39,3 @@ def prepare_output_protection(
     detection.detail["exposure_overlap_evidence"] = evidence
     detection.detail["output_protection_plan"] = plan.report_detail()
     return plan
-
-
-__all__ = ["prepare_output_protection"]

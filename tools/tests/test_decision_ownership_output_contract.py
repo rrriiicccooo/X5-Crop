@@ -27,7 +27,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
     def test_feasible_exposure_overlap_plan_does_not_block_decision(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,
@@ -89,7 +89,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
     def test_exposure_overlap_plan_is_attached_before_final_decision(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,
@@ -176,7 +176,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
     def test_selection_records_competition_signal_without_candidate_review_reason(self) -> None:
         def candidate(confidence: float) -> DetectionCandidate:
             return DetectionCandidate(
-                film_format="135",
+                format_id="135",
                 layout="horizontal",
                 strip_mode="full",
                 count=6,
@@ -219,7 +219,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
 
         def content_candidate(*, diagnostics: list[str]) -> DetectionCandidate:
             return DetectionCandidate(
-                film_format="half",
+                format_id="half",
                 layout="horizontal",
                 strip_mode="full",
                 count=fmt.default_count,
@@ -238,7 +238,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
             )
 
         separator_candidate = DetectionCandidate(
-            film_format="half",
+            format_id="half",
             layout="horizontal",
             strip_mode="full",
             count=fmt.default_count,
@@ -299,7 +299,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
     def test_low_confidence_context_reasons_update_generated_summary(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,
@@ -380,7 +380,7 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
     def test_low_confidence_context_reasons_do_not_create_high_confidence_review(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,

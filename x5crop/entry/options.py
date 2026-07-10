@@ -9,7 +9,7 @@ from typing import Optional
 class CliOptions:
     input_path: Path
     output_dir: Optional[Path]
-    film_format: str
+    format_id: str
     layout: str
     strip_mode: str
     requested_count: Optional[int]
@@ -35,8 +35,3 @@ class CliOptions:
     debug_errors: bool
     reuse_analysis: bool
     jobs: int
-
-
-__all__ = [
-    "CliOptions",
-]

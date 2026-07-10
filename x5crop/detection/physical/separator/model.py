@@ -27,10 +27,3 @@ def propose_equal_model_gaps_from_profile(
         propose_equal_model_gap(index, origin + pitch * index, profile_score_at(profile, origin + pitch * index))
         for index in range(1, count)
     ]
-
-
-__all__ = [
-    "profile_score_at",
-    "propose_equal_model_gap",
-    "propose_equal_model_gaps_from_profile",
-]

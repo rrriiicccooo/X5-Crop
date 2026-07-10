@@ -32,10 +32,3 @@ def gate_check_details(checks: list[GateCheck]) -> list[dict[str, Any]]:
 
 def unique_signals(signals: list[str]) -> list[str]:
     return sorted({signal for signal in signals if signal})
-
-
-__all__ = [
-    "GateCheck",
-    "gate_check_details",
-    "unique_signals",
-]

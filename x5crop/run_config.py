@@ -8,7 +8,7 @@ from pathlib import Path
 class RunConfig:
     input_path: Path
     output_dir: Path | None
-    film_format: str
+    format_id: str
     layout_auto: bool
     layout: str
     strip_mode: str
@@ -34,6 +34,3 @@ class RunConfig:
     debug_errors: bool
     reuse_analysis: bool
     jobs: int
-
-
-__all__ = ["RunConfig"]

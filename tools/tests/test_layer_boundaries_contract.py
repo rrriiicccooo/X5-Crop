@@ -8,11 +8,19 @@ from tools.tests.architecture_contracts import PROJECT_ROOT
 from tools.tests.architecture_contracts import (
     RUNTIME_ROOTS,
     STANDALONE_ROOTS,
+    STANDALONE_TOOL_ROOTS,
     forbidden_import_edges,
+    functions_with_unused_parameters,
+    modules_with_export_lists,
     pass_through_classes,
     public_top_level_symbols,
     reachable_source_modules,
     source_modules,
+    standalone_tool_modules,
+    unreferenced_top_level_symbols,
+    unreferenced_public_symbols,
+    unreferenced_dataclass_fields,
+    unused_imports,
 )
 
 
@@ -22,6 +30,154 @@ class LayerBoundariesContractTest(unittest.TestCase):
         reached = set(reachable_source_modules(RUNTIME_ROOTS | STANDALONE_ROOTS))
 
         self.assertEqual(sorted(modules - reached), [])
+
+    def test_every_standalone_tool_is_registered_once(self) -> None:
+        self.assertEqual(standalone_tool_modules(), STANDALONE_TOOL_ROOTS)
+
+    def test_candidate_sublayers_follow_the_lifecycle_direction(self) -> None:
+        contracts = (
+            (
+                ("x5crop.detection.candidate.plan",),
+                (
+                    "x5crop.detection.candidate.build",
+                    "x5crop.detection.candidate.assessment",
+                    "x5crop.detection.candidate.selection",
+                    "x5crop.detection.candidate.extension",
+                    "x5crop.detection.decision",
+                ),
+            ),
+            (
+                ("x5crop.detection.candidate.proposal",),
+                (
+                    "x5crop.detection.candidate.build",
+                    "x5crop.detection.candidate.assessment",
+                    "x5crop.detection.candidate.selection",
+                    "x5crop.detection.candidate.extension",
+                    "x5crop.detection.decision",
+                ),
+            ),
+            (
+                ("x5crop.detection.candidate.build",),
+                (
+                    "x5crop.detection.candidate.assessment",
+                    "x5crop.detection.candidate.selection",
+                    "x5crop.detection.candidate.extension",
+                    "x5crop.detection.decision",
+                ),
+            ),
+            (
+                ("x5crop.detection.candidate.assessment",),
+                (
+                    "x5crop.detection.candidate.selection",
+                    "x5crop.detection.candidate.extension",
+                    "x5crop.detection.decision",
+                    "x5crop.detection.final",
+                ),
+            ),
+            (
+                ("x5crop.detection.candidate.selection",),
+                (
+                    "x5crop.detection.candidate.extension",
+                    "x5crop.detection.decision",
+                    "x5crop.detection.final",
+                ),
+            ),
+        )
+        offenders = [
+            edge
+            for sources, targets in contracts
+            for edge in forbidden_import_edges(sources, targets)
+        ]
+        self.assertEqual(offenders, [])
+
+    def test_detection_evidence_guidance_and_decision_do_not_import_later_stages(self) -> None:
+        contracts = (
+            (
+                ("x5crop.detection.evidence",),
+                (
+                    "x5crop.detection.candidate",
+                    "x5crop.detection.decision",
+                    "x5crop.detection.final",
+                ),
+            ),
+            (
+                ("x5crop.detection.guidance",),
+                (
+                    "x5crop.detection.candidate.assessment",
+                    "x5crop.detection.candidate.selection",
+                    "x5crop.detection.decision",
+                    "x5crop.detection.final",
+                ),
+            ),
+            (
+                ("x5crop.detection.decision",),
+                (
+                    "x5crop.detection.physical",
+                    "x5crop.detection.guidance",
+                    "x5crop.detection.candidate.build",
+                    "x5crop.detection.candidate.proposal",
+                    "x5crop.detection.candidate.selection",
+                    "x5crop.detection.final",
+                ),
+            ),
+        )
+        offenders = [
+            edge
+            for sources, targets in contracts
+            for edge in forbidden_import_edges(sources, targets)
+        ]
+        self.assertEqual(offenders, [])
+
+    def test_finalization_only_reads_finalized_evidence(self) -> None:
+        edges = forbidden_import_edges(
+            ("x5crop.detection.final",),
+            (
+                "x5crop.detection.candidate",
+                "x5crop.detection.physical",
+                "x5crop.detection.guidance",
+                "x5crop.detection.evidence",
+                "x5crop.detection.decision",
+            ),
+        )
+        self.assertEqual(
+            edges,
+            [("x5crop.detection.final.finalize", "x5crop.detection.evidence.read_only")],
+        )
+
+    def test_report_and_debug_do_not_import_detection_computation_layers(self) -> None:
+        self.assertEqual(
+            forbidden_import_edges(
+                ("x5crop.report", "x5crop.debug"),
+                (
+                    "x5crop.detection.candidate",
+                    "x5crop.detection.physical",
+                    "x5crop.detection.guidance",
+                    "x5crop.detection.evidence",
+                    "x5crop.detection.decision",
+                    "x5crop.detection.final",
+                ),
+            ),
+            [],
+        )
+
+    def test_policy_registry_is_resolved_only_at_policy_runtime_boundaries(self) -> None:
+        callers: set[str] = set()
+        for module in source_modules().values():
+            tree = ast.parse(module.path.read_text(encoding="utf-8"))
+            if any(
+                isinstance(node, ast.Name)
+                and isinstance(node.ctx, ast.Load)
+                and node.id == "get_detection_policy"
+                for node in ast.walk(tree)
+            ):
+                callers.add(module.name)
+        self.assertEqual(
+            callers,
+            {
+                "x5crop.policies.consistency",
+                "x5crop.policies.runtime.bundle",
+            },
+        )
 
     def test_lower_layers_do_not_import_runtime_orchestration(self) -> None:
         lower_layers = (
@@ -77,6 +233,24 @@ class LayerBoundariesContractTest(unittest.TestCase):
 
     def test_empty_subclass_aliases_do_not_exist(self) -> None:
         self.assertEqual(pass_through_classes(), [])
+
+    def test_active_source_has_no_unreferenced_public_symbols(self) -> None:
+        self.assertEqual(unreferenced_public_symbols(), [])
+
+    def test_active_source_has_no_unreferenced_top_level_helpers(self) -> None:
+        self.assertEqual(unreferenced_top_level_symbols(), [])
+
+    def test_internal_modules_do_not_publish_unused_export_lists(self) -> None:
+        self.assertEqual(modules_with_export_lists(), [])
+
+    def test_active_interfaces_do_not_accept_unused_parameters(self) -> None:
+        self.assertEqual(functions_with_unused_parameters(), [])
+
+    def test_runtime_dataclass_fields_have_real_consumers(self) -> None:
+        self.assertEqual(unreferenced_dataclass_fields(), [])
+
+    def test_active_source_has_no_unused_imports(self) -> None:
+        self.assertEqual(unused_imports(), [])
 
     def test_physical_layer_does_not_read_candidate_assessment_or_decision_terms(self) -> None:
         banned = (
@@ -170,10 +344,8 @@ class LayerBoundariesContractTest(unittest.TestCase):
 
         for name in banned:
             self.assertFalse(hasattr(final, name))
-        self.assertEqual(
-            tuple(final.__all__),
-            ("ApprovedGeometryAdjustmentPolicy", "FinalizationPolicy"),
-        )
+        self.assertTrue(hasattr(final, "ApprovedGeometryAdjustmentPolicy"))
+        self.assertTrue(hasattr(final, "FinalizationPolicy"))
 
     def test_output_policy_is_owned_by_runtime_output_module(self) -> None:
         from x5crop.policies.runtime.output import (
@@ -189,7 +361,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
         from x5crop.policies.assembly import finalization
 
         self.assertFalse(hasattr(finalization, "diagnostics_policy"))
-        self.assertEqual(tuple(finalization.__all__), ("finalization_policy",))
+        self.assertTrue(callable(finalization.finalization_policy))
 
     def test_report_policy_is_not_owned_by_diagnostics_modules(self) -> None:
         from x5crop.policies.assembly import common
@@ -208,7 +380,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
         )
         for name in banned:
             self.assertFalse(hasattr(runtime_diagnostics, name))
-            self.assertNotIn(name, tuple(diagnostics.__all__))
+            self.assertFalse(hasattr(diagnostics, name))
 
     def test_exposure_overlap_evidence_does_not_use_diagnostic_ownership_name(self) -> None:
         offenders: list[str] = []

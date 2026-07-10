@@ -98,15 +98,6 @@ class PhysicalLength:
         }
 
 
-@dataclass(frozen=True)
-class PixelKernel:
-    px: int
-
-    def __post_init__(self) -> None:
-        if int(self.px) <= 0:
-            raise ValueError("PixelKernel.px must be positive")
-
-
 def _numeric_value(value: Any) -> float | None:
     if value is None:
         return None
@@ -185,12 +176,3 @@ def scan_calibration_from_profile(
         trusted=True,
         warnings=(),
     )
-
-
-__all__ = [
-    "PhysicalLength",
-    "PixelKernel",
-    "ScanCalibration",
-    "ScanCalibrationTrustParameters",
-    "scan_calibration_from_profile",
-]

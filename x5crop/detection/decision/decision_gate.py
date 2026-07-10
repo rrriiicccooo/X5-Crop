@@ -217,7 +217,8 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
             bucket="low_confidence_context",
             triggered=(
                 confidence_below_threshold
-                and float(detection.detail.get("outer_area_spread_ratio", 0.0)) >= 0.20
+                and float(detection.detail.get("outer_area_spread_ratio", 0.0))
+                >= policy.decision.outer_candidate_disagreement_min_spread_ratio
             ),
             signal="outer_area_spread",
             final_review_reason=policy.decision.outer_candidate_disagreement_review_reason,
@@ -247,10 +248,3 @@ def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> Decisio
         reason_inputs=_failed_reason_inputs(checks),
         confidence_caps=list(decision_input.confidence_caps),
     )
-
-
-__all__ = [
-    "DecisionAssessmentInput",
-    "DecisionGateAssessment",
-    "decision_gate_assessment",
-]

@@ -259,13 +259,18 @@ def base_detection_assessment(
     )
     outer_area = float(outer.width * outer.height) / max(1.0, float(gray_work.shape[0] * gray_work.shape[1]))
     outer_area_profile = _outer_area_profile(outer_area, base_score)
-    p01, p50, p99 = sampled_percentile(gray_work, [1, 50, 99])
-    contrast = float(p99 - p01)
+    low_image, median_image, high_image = sampled_percentile(
+        gray_work,
+        base_score.image_quality_percentiles,
+    )
+    contrast = float(high_image - low_image)
     confidence_caps: list[dict[str, Any]] = []
 
     gap_conf = 1.0 if expected_gaps == 0 else gap_evidence.separator_support_count / float(expected_gaps)
     width_conf = photo_width_stability.get("confidence")
-    hard_support_floor_checks_enabled = expected_gaps >= 3
+    hard_support_floor_checks_enabled = (
+        expected_gaps >= base_score.hard_support_floor_min_expected_gaps
+    )
     geometry_support_allowed = separator_support.allow_geometry_support and bool(policy.separator.geometry_support_modes)
     enough_profile_separator_evidence = (
         not hard_support_floor_checks_enabled
@@ -321,12 +326,16 @@ def base_detection_assessment(
     candidate_signals: list[str] = []
     if expected_gaps and gap_evidence.separator_support_count < max(1, expected_gaps // 2) and not full_geometry_ok:
         candidate_signals.append(SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK)
-    if gap_evidence.equal_model_gaps >= max(2, expected_gaps // 2 + 1) and not full_geometry_ok:
+    if (
+        gap_evidence.equal_model_gaps
+        >= max(base_score.model_gap_overuse_min_count, expected_gaps // 2 + 1)
+        and not full_geometry_ok
+    ):
         candidate_signals.append(SIGNAL_SEPARATOR_MODEL_GAP_OVERUSED)
     if (
         hard_support_floor_checks_enabled
-        and expected_gaps >= 3
-        and gap_evidence.hard_separator_gaps < 2
+        and expected_gaps >= base_score.hard_support_floor_min_expected_gaps
+        and gap_evidence.hard_separator_gaps < base_score.hard_gap_floor_min_count
     ):
         candidate_signals.append(SIGNAL_SEPARATOR_HARD_GAP_FLOOR_FAILED)
     if bool(photo_width_stability.get("unstable", False)):
@@ -364,7 +373,10 @@ def base_detection_assessment(
             candidate_signals.append(SIGNAL_PARTIAL_COUNT_AMBIGUOUS)
             partial_count_assessment["reason"] = "single_frame_partial"
             partial_count_assessment["intrinsically_ambiguous"] = True
-        elif count <= 2 and fmt.default_count >= 6:
+        elif (
+            count <= base_score.partial_ambiguous_count_max
+            and fmt.default_count >= base_score.partial_dense_strip_min_default_count
+        ):
             confidence, cap_detail = apply_confidence_cap(
                 confidence,
                 base_score.partial_two_35mm_cap,
@@ -387,7 +399,7 @@ def base_detection_assessment(
                 reason="no_detected_hard_separator",
             )
             confidence_caps.append(cap_detail)
-        elif gap_evidence.hard_separator_gaps < 2:
+        elif gap_evidence.hard_separator_gaps < base_score.hard_gap_floor_min_count:
             confidence, cap_detail = apply_confidence_cap(
                 confidence,
                 separator_support.low_hard_confidence_cap,
@@ -395,7 +407,10 @@ def base_detection_assessment(
                 reason="too_few_detected_hard_separators",
             )
             confidence_caps.append(cap_detail)
-        elif gap_evidence.equal_model_gaps >= max(2, expected_gaps // 2 + 1):
+        elif gap_evidence.equal_model_gaps >= max(
+            base_score.model_gap_overuse_min_count,
+            expected_gaps // 2 + 1,
+        ):
             confidence, cap_detail = apply_confidence_cap(
                 confidence,
                 separator_support.mostly_equal_confidence_cap,
@@ -418,15 +433,16 @@ def base_detection_assessment(
         "outer_area_ratio": outer_area,
         "outer_area_profile": outer_area_profile,
         "image_quality": {
-            "p01": float(p01),
-            "p50": float(p50),
-            "p99": float(p99),
-            "range_1_99": contrast,
+            "low": float(low_image),
+            "median": float(median_image),
+            "high": float(high_image),
+            "percentiles": list(base_score.image_quality_percentiles),
+            "range": contrast,
             "contrast_ok": bool(contrast >= base_score.image_quality_contrast_min),
             "min_contrast": float(base_score.image_quality_contrast_min),
             "role": "diagnostic_not_crop_boundary",
         },
-        "contrast_1_99": contrast,
+        "image_quality_contrast": contrast,
         "full_geometry_ok": full_geometry_ok,
         "separator_support_policy": "unified_physical_support",
         "partial_count_assessment": partial_count_assessment,
@@ -566,10 +582,3 @@ def apply_base_detection_scoring(
         confidence=float(max(0.0, min(1.0, confidence))),
         detail=detail,
     )
-
-
-__all__ = [
-    "BaseDetectionAssessment",
-    "apply_base_detection_scoring",
-    "base_detection_assessment",
-]

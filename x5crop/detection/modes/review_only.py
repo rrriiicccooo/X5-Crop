@@ -26,7 +26,7 @@ def review_only_detection(
     source_h, source_w = gray.shape
     mode_diagnostics = [policy.detector.review_only.reason, SIGNAL_NEEDS_MANUAL_REVIEW]
     return DetectionCandidate(
-        film_format=fmt.name,
+        format_id=fmt.format_id.value,
         layout=config.layout,
         strip_mode=config.strip_mode,
         count=fmt.default_count,
@@ -43,9 +43,9 @@ def review_only_detection(
             "work_outer": asdict(outer),
             "candidate_competition": {
                 "candidate_count": 0,
-                "formats": [fmt.name],
+                "format_ids": [fmt.format_id.value],
                 "selected_candidate": {
-                    "format": fmt.name,
+                    "format_id": fmt.format_id.value,
                     "count": fmt.default_count,
                     "strip_mode": config.strip_mode,
                     "confidence": 0.0,
@@ -56,6 +56,3 @@ def review_only_detection(
             },
         },
     )
-
-
-__all__ = ["review_only_detection"]

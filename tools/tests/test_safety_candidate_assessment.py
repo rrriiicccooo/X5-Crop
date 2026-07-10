@@ -22,7 +22,7 @@ def _config() -> RunConfig:
     return RunConfig(
         input_path=Path("synthetic.tif"),
         output_dir=None,
-        film_format="135",
+        format_id="135",
         layout_auto=False,
         layout="horizontal",
         strip_mode="full",
@@ -57,7 +57,7 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
         gray = np.zeros((100, 120), dtype=np.uint8)
         gray[:, 20:100] = 120
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,
@@ -78,7 +78,6 @@ class SafetyCandidateAssessmentTest(unittest.TestCase):
 
         apply_safety_candidate_assessment(
             detection,
-            confidence_threshold=0.85,
             policy=policy,
         )
 

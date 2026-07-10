@@ -18,7 +18,7 @@ from .evidence_cache_keys import detection_gap_cache_key
 
 def outer_alignment_cache_key(detection: DetectionCandidate, source_w: int, source_h: int) -> tuple[Any, ...]:
     return (
-        str(detection.film_format),
+        str(detection.format_id),
         str(detection.layout),
         str(detection.strip_mode),
         int(detection.count),

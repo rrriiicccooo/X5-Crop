@@ -12,8 +12,3 @@ def runtime_for_profile(config: RunConfig, profile: ImageProfile) -> RunConfig:
     h, w = spatial_shape_from_shape(profile.shape)
     layout = infer_layout(w, h) if config.layout_auto else config.layout
     return replace(config, layout=layout)
-
-
-__all__ = [
-    "runtime_for_profile",
-]

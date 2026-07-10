@@ -36,8 +36,3 @@ def write_debug_outputs(
         )
         for analysis_path in analysis_paths:
             warnings.append(f"debug analysis: {display_generated_path(analysis_path, config)}")
-
-
-__all__ = [
-    "write_debug_outputs",
-]

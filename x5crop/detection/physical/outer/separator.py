@@ -472,11 +472,3 @@ def _sequence_band_policy(
         high_mean_prominence_bypass=band_policy.high_mean_prominence_bypass,
         prominence_score_weight=band_policy.prominence_score_weight,
     )
-
-
-__all__ = [
-    "FULL_WIDTH_SEPARATOR_OUTER",
-    "LOCAL_SEPARATOR_OUTER",
-    "separator_derived_outer_candidates",
-    "separator_outer_scopes",
-]

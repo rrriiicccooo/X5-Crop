@@ -19,7 +19,7 @@ from x5crop.policies.registry import get_detection_policy
 
 def _detection() -> FinalDetection:
     return FinalDetection(
-        film_format="135",
+        format_id="135",
         layout="horizontal",
         strip_mode="full",
         count=2,

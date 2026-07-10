@@ -72,7 +72,7 @@ def report_record_for_final_detection(
     runtime_policy = runtime_policy_detail(detection)
     decision_policy = detail_dict(detection, DECISION_POLICY_DETAIL)
     schema_validation = _schema_validation(detection, runtime_policy, decision_policy)
-    policy = {
+    policy_detail = {
         "runtime_policy": runtime_policy or {"missing": True, "reason": "runtime_policy_detail_missing"},
         "decision_policy": decision_policy or {"missing": True, "reason": "decision_policy_detail_missing"},
     }
@@ -89,7 +89,7 @@ def report_record_for_final_detection(
         "profile": profile,
         "detail": report_detail,
         "format": {
-            "format_id": detection.film_format,
+            "format_id": detection.format_id,
             "strip_mode": detection.strip_mode,
             "count": int(detection.count),
             "layout": detection.layout,
@@ -106,7 +106,7 @@ def report_record_for_final_detection(
         },
         "selected_candidate": selected_candidate(detection),
         "candidate_table": candidate_table(detection),
-        "policy": policy,
+        "policy": policy_detail,
         "evidence": {
             "content": detail_dict(detection, CONTENT_EVIDENCE),
             "separator": detail_dict(detection, CANDIDATE_ASSESSMENT).get("separator_support", {}),
@@ -125,7 +125,7 @@ def report_record_for_final_detection(
         "schema_validation": schema_validation,
         "evidence_summary": evidence_summary,
         "decision_signals": decision_signals,
-        "decision_policy_detail": policy["decision_policy"],
+        "decision_policy_detail": policy_detail["decision_policy"],
         "policy_id": policy_id,
         "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
         "strip_completeness": detail_dict(detection, STRIP_COMPLETENESS),
@@ -139,7 +139,7 @@ def report_record_for_final_detection(
         "source": section_values["source"],
         "profile": section_values["profile"],
         "detail": section_values["detail"],
-        "format_id": detection.film_format,
+        "format_id": detection.format_id,
         "strip_mode": detection.strip_mode,
         "layout": detection.layout,
         "count": int(detection.count),
@@ -165,8 +165,3 @@ def report_record_for_final_detection(
         if section in section_values:
             schema[section] = section_values[section]
     return json_safe(schema)
-
-
-__all__ = [
-    "report_record_for_final_detection",
-]

@@ -30,11 +30,3 @@ def display_generated_path(path: Path | str, config: RunConfig) -> str:
     if config.output_dir is None:
         return generated_path.name
     return str(generated_path)
-
-
-__all__ = [
-    "OutputSurface",
-    "display_generated_path",
-    "output_directory_for",
-    "output_surface_for_input",
-]

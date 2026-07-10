@@ -185,10 +185,3 @@ def enrich_holder_occupancy_with_calibration(
             enriched[mm_key] = None
     enriched["scan_calibration_used"] = True
     return enriched
-
-
-__all__ = [
-    "enrich_holder_occupancy_with_calibration",
-    "holder_occupancy_evidence",
-    "strip_completeness_evidence",
-]

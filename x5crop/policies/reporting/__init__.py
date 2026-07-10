@@ -8,7 +8,6 @@ if TYPE_CHECKING:
     from ..decision.contract import DetectionDecisionContract
 
 from ...formats import format_description
-from ...formats.traits import runtime_traits_for_spec
 from .mode_descriptions import mode_notes_for_spec, mode_role_for_spec
 
 
@@ -26,7 +25,6 @@ def _plain(value: Any) -> Any:
 
 def _physical_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     spec = policy.physical_spec
-    traits = runtime_traits_for_spec(spec)
     return {
         "family": spec.family,
         "physical_layout": spec.physical_layout,
@@ -36,7 +34,7 @@ def _physical_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "frame_size_mm_options": _plain(spec.frame_size_mm_options),
         "frame_aspect": spec.frame_aspect,
         "aspect_source": "frame_size_mm",
-        "runtime_traits": _plain(traits),
+        "frame_geometry_profile": spec.frame_geometry_profile,
         "complete_strip_can_be_underfilled": bool(spec.complete_strip_can_be_underfilled),
     }
 
@@ -118,7 +116,7 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     spec = policy.physical_spec
     return {
         "policy_id": policy.policy_id,
-        "format": spec.name,
+        "format_id": spec.format_id.value,
         "strip_mode": policy.strip_mode,
         "role": mode_role_for_spec(spec, policy.strip_mode),
         "physical": _physical_detail(policy),
@@ -135,7 +133,7 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
 
 
 def _format_spec_detail(contract: "DetectionDecisionContract") -> dict[str, Any]:
-    spec = contract.format
+    spec = contract.physical_spec
     description = format_description(spec.format_id)
     return {
         "format_id": spec.format_id.value,

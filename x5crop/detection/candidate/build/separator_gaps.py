@@ -168,10 +168,3 @@ def apply_nearby_separator_refinements(
         nearby_refinement_detail=nearby_refinement.nearby_refinement_detail,
         pre_nearby_gaps=nearby_refinement.pre_nearby_gaps,
     )
-
-__all__ = [
-    "SeparatorGapBuildResult",
-    "apply_nearby_separator_refinements",
-    "build_primary_separator_gaps_for_outer",
-    "separator_origin_pitch",
-]

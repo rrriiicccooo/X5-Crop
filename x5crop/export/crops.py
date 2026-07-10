@@ -45,8 +45,3 @@ def write_crops(
             raise
         output_files.append(str(out_path))
     return output_files
-
-
-__all__ = [
-    "write_crops",
-]

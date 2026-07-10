@@ -27,7 +27,6 @@ from ..build.detection import build_detection_geometry_for_outer, enrich_detecti
 @dataclass(frozen=True)
 class SourceCandidateBatch:
     detections: tuple[DetectionCandidate, ...]
-    outer_candidates: tuple[OuterCandidate, ...]
     detail: dict
 
 
@@ -204,7 +203,7 @@ def separator_source_candidates_for_count(
     for detection in detections:
         _attach_outer_candidate_summary(detection, outer_candidates)
         detection.detail["candidate_plan"] = dict(detail)
-    return SourceCandidateBatch(tuple(detections), tuple(outer_candidates), detail)
+    return SourceCandidateBatch(tuple(detections), detail)
 
 
 def content_guided_separator_candidate_for_count(
@@ -316,12 +315,4 @@ def safety_outer_proposal_candidates_for_count(
     for detection in detections:
         _attach_outer_candidate_summary(detection, outer_candidates)
         detection.detail["candidate_plan"] = dict(detail)
-    return SourceCandidateBatch(tuple(detections), tuple(outer_candidates), detail)
-
-
-__all__ = [
-    "SourceCandidateBatch",
-    "content_guided_separator_candidate_for_count",
-    "safety_outer_proposal_candidates_for_count",
-    "separator_source_candidates_for_count",
-]
+    return SourceCandidateBatch(tuple(detections), detail)

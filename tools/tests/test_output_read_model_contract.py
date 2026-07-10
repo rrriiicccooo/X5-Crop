@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 
+from tools.tests.architecture_contracts import PROJECT_ROOT
 from x5crop.debug.status import debug_status_parts
 from x5crop.detection.detail import candidate_signals_from_detail
 from x5crop.domain import Box, FinalDetection, ImageProfile
@@ -23,7 +25,7 @@ def _detection(
     status: str = "needs_review",
 ) -> FinalDetection:
     return FinalDetection(
-        film_format="135",
+        format_id="135",
         layout="horizontal",
         strip_mode="full",
         count=1,
@@ -38,6 +40,26 @@ def _detection(
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_report_builder_does_not_overwrite_policy_input(self) -> None:
+        path = PROJECT_ROOT / "x5crop" / "report" / "record.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        function = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "report_record_for_final_detection"
+        )
+        assignments = {
+            target.id
+            for node in ast.walk(function)
+            if isinstance(node, (ast.Assign, ast.AnnAssign))
+            for target in (
+                node.targets if isinstance(node, ast.Assign) else (node.target,)
+            )
+            if isinstance(target, ast.Name)
+        }
+        self.assertNotIn("policy", assignments)
+
     def _policy(self):
         return get_detection_policy("135", "full")
 
@@ -172,7 +194,6 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertIn("decision_gate", record)
         self.assertIn("final_review_reasons", record)
         self.assertNotIn("report_schema", record)
-        self.assertNotIn("film_format", record)
         self.assertEqual(record["format_id"], "135")
         self.assertEqual(record["detail"]["analysis_cache"]["script"], "X5_Crop.py")
 
@@ -180,6 +201,39 @@ class OutputReadModelContractTest(unittest.TestCase):
         detection = _detection(final_review_reasons=["outer_content_mismatch"])
 
         self.assertEqual(candidate_signals_from_detail(detection), [])
+
+    def test_cache_reuse_does_not_fallback_to_nested_report_projections(self) -> None:
+        reuse_source = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "analysis_reuse.py"
+        ).read_text(encoding="utf-8")
+        result_source = (
+            PROJECT_ROOT / "x5crop" / "report" / "result_builder.py"
+        ).read_text(encoding="utf-8")
+        for source in (reuse_source, result_source):
+            self.assertNotIn('record.get("format")', source)
+            self.assertNotIn('cached_record.get("format")', source)
+            self.assertNotIn('get("layout") or format_detail.get("layout")', source)
+            self.assertNotIn('get("count") or format_detail.get("count")', source)
+
+    def test_policy_id_has_no_secondary_detail_fallback(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop" / "detection" / "detail.py"
+        ).read_text(encoding="utf-8")
+        function = source[source.index("def policy_id_from_detail"):]
+        self.assertNotIn("runtime_policy_detail", function)
+
+    def test_result_builder_does_not_wrap_policy_identity_accessor(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop" / "report" / "result_builder.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("def policy_id_for_detection", source)
+
+    def test_process_result_does_not_duplicate_detection_geometry_or_version(self) -> None:
+        from x5crop.domain import ProcessResult
+
+        fields = ProcessResult.__dataclass_fields__
+        for name in ("outer_box", "frame_boxes", "gaps", "version"):
+            self.assertNotIn(name, fields)
 
     def test_cached_record_result_keeps_current_schema_and_marks_reuse(self) -> None:
         profile = ImageProfile(

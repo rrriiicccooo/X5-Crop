@@ -44,16 +44,25 @@ def apply_dual_lane_content_assessment(
     if bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
         if support == "aspect_conflict":
-            apply_candidate_confidence_cap(detection, 0.82, SIGNAL_CONTENT_ASPECT_CONFLICT)
+            apply_candidate_confidence_cap(
+                detection,
+                lane_policy.decision.content_aspect_conflict_cap,
+                SIGNAL_CONTENT_ASPECT_CONFLICT,
+            )
             candidate_signals.append(SIGNAL_CONTENT_ASPECT_CONFLICT)
         elif support in {"low_content", "weak"} and detection.confidence >= confidence_threshold:
-            apply_candidate_confidence_cap(detection, 0.84, SIGNAL_CONTENT_EVIDENCE_WEAK)
+            apply_candidate_confidence_cap(
+                detection,
+                lane_policy.decision.content_low_confidence_cap,
+                SIGNAL_CONTENT_EVIDENCE_WEAK,
+            )
             candidate_signals.append(SIGNAL_CONTENT_EVIDENCE_WEAK)
     if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
-        apply_candidate_confidence_cap(detection, 0.84, SIGNAL_CONTENT_OUTSIDE_OUTER)
+        apply_candidate_confidence_cap(
+            detection,
+            lane_policy.decision.outer_mismatch_cap,
+            SIGNAL_CONTENT_OUTSIDE_OUTER,
+        )
         candidate_signals.append(SIGNAL_CONTENT_OUTSIDE_OUTER)
 
     add_candidate_signals(detection, candidate_signals)
-
-
-__all__ = ["apply_dual_lane_content_assessment"]

@@ -54,6 +54,7 @@ class DecisionPolicy:
     suppress_close_competition_when_partial_edge_safe: bool = True
     outer_candidate_disagreement_review_reason: str = "outer_candidate_disagreement"
     deskew_uncertain_review_reason: str = "deskew_uncertain"
+    outer_candidate_disagreement_min_spread_ratio: float = 0.20
     separator_incomplete_reason: str = "separator_evidence_incomplete"
     geometry_unstable_reason: str = "geometry_unstable"
     outer_content_mismatch_reason: str = "outer_content_mismatch"
@@ -68,7 +69,7 @@ class DecisionPolicy:
 @dataclass(frozen=True)
 class DetectionDecisionContract:
     policy_id: str
-    format: FormatPhysicalSpec
+    physical_spec: FormatPhysicalSpec
     mode: ModePolicy
     evidence: EvidencePolicy
     decision: DecisionPolicy
@@ -110,7 +111,7 @@ def mode_policy_for(spec: FormatPhysicalSpec, strip_mode: str) -> ModePolicy:
 
 def decision_policy_for(detection_policy: DetectionPolicy) -> DecisionPolicy:
     policy_id = decision_policy_id_for(
-        detection_policy.physical_spec.name,
+        detection_policy.physical_spec.format_id.value,
         detection_policy.strip_mode,
     )
     return replace(
@@ -126,6 +127,9 @@ def decision_policy_for(detection_policy: DetectionPolicy) -> DecisionPolicy:
         candidate_close_margin=float(detection_policy.candidate_selection.close_margin),
         outer_candidate_disagreement_review_reason=detection_policy.decision.outer_candidate_disagreement_review_reason,
         deskew_uncertain_review_reason=detection_policy.decision.deskew_uncertain_review_reason,
+        outer_candidate_disagreement_min_spread_ratio=(
+            detection_policy.decision.outer_candidate_disagreement_min_spread_ratio
+        ),
     )
 
 
@@ -133,10 +137,10 @@ def decision_contract_for_policy(detection_policy: DetectionPolicy) -> Detection
     from .evidence_policy import evidence_policy_for_physical_spec
 
     spec = detection_policy.physical_spec
-    policy_id = decision_policy_id_for(spec.name, detection_policy.strip_mode)
+    policy_id = decision_policy_id_for(spec.format_id.value, detection_policy.strip_mode)
     return DetectionDecisionContract(
         policy_id=policy_id,
-        format=spec,
+        physical_spec=spec,
         mode=mode_policy_for(spec, detection_policy.strip_mode),
         evidence=evidence_policy_for_physical_spec(
             spec,
@@ -146,13 +150,3 @@ def decision_contract_for_policy(detection_policy: DetectionPolicy) -> Detection
         ),
         decision=decision_policy_for(detection_policy),
     )
-
-
-__all__ = [
-    "DetectionDecisionContract",
-    "DecisionPolicy",
-    "EvidencePolicy",
-    "ModePolicy",
-    "decision_contract_for_policy",
-    "decision_policy_for",
-]

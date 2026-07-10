@@ -17,7 +17,11 @@ def content_quality_score(
     mean_score = min(1.0, float(detail.get("median_mean", 0.0)) / content_policy.support_mean_norm)
     coverage_score = min(1.0, float(detail.get("median_coverage", 0.0)) / content_policy.support_coverage_norm)
     aspect_error = detail.get("max_aspect_error")
-    aspect_score = 0.75 if aspect_error is None else max(0.0, min(1.0, 1.0 - float(aspect_error) / content_policy.support_aspect_norm))
+    aspect_score = (
+        content_policy.support_missing_aspect_score
+        if aspect_error is None
+        else max(0.0, min(1.0, 1.0 - float(aspect_error) / content_policy.support_aspect_norm))
+    )
     support = str(detail.get("support", ""))
     support_score = {
         "ok": content_policy.support_score_ok,
@@ -135,12 +139,3 @@ def joint_support_score(
         + source_bias
     )
     return max(0.0, min(1.0, joint_score))
-
-
-__all__ = [
-    "content_quality_score",
-    "content_support_score",
-    "geometry_support_score",
-    "joint_support_score",
-    "separator_support_score",
-]

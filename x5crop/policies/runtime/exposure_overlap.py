@@ -15,6 +15,3 @@ class ExposureOverlapEvidencePolicy:
     medium_activity: float
     strong_continuity: float
     strong_activity: float
-
-
-__all__ = ["ExposureOverlapEvidencePolicy"]

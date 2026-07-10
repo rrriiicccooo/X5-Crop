@@ -190,8 +190,3 @@ def evidence_summary_for(
             "detail": partial_detail,
         },
     }
-
-
-__all__ = [
-    "evidence_summary_for",
-]

@@ -71,12 +71,3 @@ def photo_width_within_limit(
     if photo_width_cv is None:
         return bool(unavailable_ok)
     return photo_width_cv <= float(max_photo_width_cv)
-
-
-__all__ = [
-    "PHOTO_WIDTH_SOURCE",
-    "photo_width_cv_from_detail",
-    "photo_width_stability_detail",
-    "photo_width_within_limit",
-    "width_cv_source",
-]

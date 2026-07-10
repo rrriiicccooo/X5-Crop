@@ -20,9 +20,3 @@ class ApprovedGeometryAdjustmentPolicy:
 class FinalizationPolicy:
     apply_approved_geometry_adjustment: bool = True
     approved_geometry_adjustment: ApprovedGeometryAdjustmentPolicy = field(default_factory=ApprovedGeometryAdjustmentPolicy)
-
-
-__all__ = [
-    "ApprovedGeometryAdjustmentPolicy",
-    "FinalizationPolicy",
-]

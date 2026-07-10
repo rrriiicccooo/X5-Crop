@@ -48,6 +48,8 @@ class LongAxisGeometryCorrectionPolicy:
     content_margin_ratio: float = 0.010
     content_margin_min: int = 12
     content_margin_max: int = 80
+    min_corrected_width_ratio: float = 0.80
+    min_corrected_width_px: int = 80
 
 
 @dataclass(frozen=True)
@@ -118,6 +120,10 @@ class FloatingContentPositionPolicy:
     content_margin_min: int = 12
     content_margin_max: int = 80
     min_width_ratio: float = 0.30
+    content_bbox_min_fraction: float = 0.010
+    min_short_axis_px: int = 40
+    min_short_axis_ratio: float = 0.65
+    min_width_px: int = 80
     max_candidates: int = 12
 
 
@@ -131,6 +137,10 @@ class EdgeAnchoredContentPositionPolicy:
     content_margin_min: int = 12
     content_margin_max: int = 80
     min_width_ratio: float = 0.30
+    content_bbox_min_fraction: float = 0.010
+    min_short_axis_px: int = 40
+    min_short_axis_ratio: float = 0.65
+    min_width_px: int = 80
     max_candidates: int = 8
 
 
@@ -164,6 +174,8 @@ class SeparatorOuterBandPolicy:
     prominence_min: float = 0.02
     high_mean_prominence_bypass: float = 0.88
     prominence_score_weight: float = 0.8
+    band_to_peak_ratio: float = 0.58
+    pair_candidate_expansion: int = 3
 
 
 @dataclass(frozen=True)
@@ -178,7 +190,6 @@ class FullWidthSeparatorOuterPolicy:
 class SeparatorOuterFamilyPolicy:
     mode: str = "off"
     phase: str = "primary"
-    requires_known_count: bool = True
     requires_explicit_count_for_partial: bool = False
     max_candidates: int = 0
 
@@ -230,7 +241,6 @@ class GeometryConsistencyCorrectionPolicy:
 
 @dataclass(frozen=True)
 class OuterCorrectionPolicy:
-    order: tuple[str, ...] = ("geometry_consistency", "content_containment")
     geometry_consistency: GeometryConsistencyCorrectionPolicy = field(default_factory=GeometryConsistencyCorrectionPolicy)
     content_containment: ContentContainmentCorrectionPolicy = field(default_factory=ContentContainmentCorrectionPolicy)
 
@@ -240,26 +250,3 @@ class OuterPolicy:
     proposal: OuterProposalPolicy = field(default_factory=OuterProposalPolicy)
     alignment_evidence: OuterAlignmentEvidencePolicy = field(default_factory=OuterAlignmentEvidencePolicy)
     correction: OuterCorrectionPolicy = field(default_factory=OuterCorrectionPolicy)
-
-
-__all__ = [
-    "BaseOuterProposalPolicy",
-    "ContentContainmentCorrectionPolicy",
-    "EdgeAnchoredContentPositionPolicy",
-    "FloatingContentPositionPolicy",
-    "FullWidthSeparatorOuterPolicy",
-    "GeometryConsistencyCorrectionPolicy",
-    "GeometryOuterProposalPolicy",
-    "GridOuterRefinePolicy",
-    "LongAxisGeometryCorrectionPolicy",
-    "OuterCorrectionFamilyPolicy",
-    "OuterCorrectionPolicy",
-    "OuterAlignmentEvidencePolicy",
-    "OuterPolicy",
-    "OuterProposalPolicy",
-    "PartialPlacementGeometryPolicy",
-    "SeparatorOuterBandPolicy",
-    "SeparatorOuterFamilyPolicy",
-    "SeparatorGeometryProposalPolicy",
-    "ShortAxisGeometryCorrectionPolicy",
-]

@@ -28,8 +28,3 @@ class NearbySeparatorDiagnosticsParameters:
     max_width_max: int = 520
     detail_score_add: float = 0.08
     detail_score_multiplier: float = 1.18
-
-__all__ = [
-    "DebugGapOverlayParameters",
-    "NearbySeparatorDiagnosticsParameters",
-]

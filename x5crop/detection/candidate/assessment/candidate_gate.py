@@ -94,15 +94,6 @@ def candidate_signal_gate_checks(
     return checks
 
 
-def candidate_signal_blocker_signals(
-    signals: list[str],
-    *,
-    ignored_signals: set[str] | None = None,
-) -> list[str]:
-    return _failed_check_signals(
-        candidate_signal_gate_checks(signals, ignored_signals=ignored_signals),
-        "blocker",
-    )
 
 
 def candidate_gate_assessment(
@@ -272,11 +263,3 @@ def candidate_gate_assessment(
         blockers=blockers,
         diagnostics=diagnostics,
     )
-
-
-__all__ = [
-    "CandidateGateAssessment",
-    "candidate_gate_assessment",
-    "candidate_signal_blocker_signals",
-    "candidate_signal_gate_checks",
-]

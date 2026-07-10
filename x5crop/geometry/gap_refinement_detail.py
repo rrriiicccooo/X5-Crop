@@ -25,6 +25,3 @@ def gap_refinement_batch_detail(
     detail["rejected"] = _limited(rejected, rejected_limit)
     detail["rejected_count"] = len(rejected)
     return detail
-
-
-__all__ = ["gap_refinement_batch_detail"]

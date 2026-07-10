@@ -32,7 +32,7 @@ def content_detail_cache_key(
     policy_key: tuple[Any, ...] = (),
 ) -> tuple[Any, ...]:
     return (
-        str(detection.film_format),
+        str(detection.format_id),
         str(detection.layout),
         int(source_w),
         int(source_h),

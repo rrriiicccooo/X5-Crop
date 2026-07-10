@@ -42,6 +42,3 @@ def count_selection_detail(
             None,
         ),
     }
-
-
-__all__ = ["count_selection_detail"]

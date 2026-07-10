@@ -40,19 +40,25 @@ def content_region_runs(
     if crop.size == 0:
         return [], {"used": False, "role": CONTENT_RUN_HINT_ROLE, "reason": "empty_content_outer"}
     profile = crop.mean(axis=0)
-    smooth_window = max(5, int(round(max(1, outer.width) * profile_policy.smooth_ratio)))
+    smooth_window = max(
+        profile_policy.smooth_min_px,
+        int(round(max(1, outer.width) * profile_policy.smooth_ratio)),
+    )
     smoothed = smooth_1d(profile.astype(np.float32), smooth_window)
-    p35, p65, p90 = sampled_percentile(smoothed, [35, 65, 90])
+    low, mid, high = sampled_percentile(smoothed, profile_policy.percentiles)
     threshold = max(
         profile_policy.threshold_min,
         min(
             profile_policy.threshold_max,
-            float(p35 + (p90 - p35) * profile_policy.p35_weight),
-            float(p65) * profile_policy.p65_multiplier,
+            float(low + (high - low) * profile_policy.low_percentile_weight),
+            float(mid) * profile_policy.mid_percentile_multiplier,
         ),
     )
     runs = runs_from_mask(smoothed >= threshold)
-    min_width = max(6, int(round(outer.width / max(1, count) * profile_policy.min_run_ratio)))
+    min_width = max(
+        profile_policy.min_run_width_px,
+        int(round(outer.width / max(1, count) * profile_policy.min_run_ratio)),
+    )
     filtered: list[tuple[int, int]] = []
     for start, end in runs:
         if end - start >= min_width:
@@ -62,7 +68,12 @@ def content_region_runs(
         "role": CONTENT_RUN_HINT_ROLE,
         "profile_threshold": threshold,
         "profile_smooth_window": smooth_window,
-        "profile_percentiles": {"p35": float(p35), "p65": float(p65), "p90": float(p90)},
+        "profile_percentiles": {
+            "low": float(low),
+            "mid": float(mid),
+            "high": float(high),
+            "levels": list(profile_policy.percentiles),
+        },
         "raw_run_count": len(runs),
         "usable_run_count": len(filtered),
         "min_run_width": min_width,
@@ -88,7 +99,7 @@ def content_mask_region_detail(
     content_policy: ContentPolicy,
 ) -> dict[str, Any]:
     mask_policy = content_policy.mask
-    cache_key = (fmt.name, mask_policy)
+    cache_key = (fmt.format_id.value, mask_policy)
     if cache is not None:
         cached = cache.content_mask_details.get(cache_key)
         if cached is not None:
@@ -127,13 +138,3 @@ def content_mask_region_detail(
     if cache is not None:
         cache.content_mask_details[cache_key] = copy.deepcopy(detail)
     return detail
-
-
-__all__ = [
-    "CONTENT_BBOX_HINT_ROLE",
-    "CONTENT_REGION_HINT_ROLE",
-    "CONTENT_RUN_HINT_ROLE",
-    "content_mask_region_detail",
-    "content_region_runs",
-    "select_content_runs",
-]

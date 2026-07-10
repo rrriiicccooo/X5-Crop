@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 @dataclass(frozen=True)
 class PartialHolderPolicy:
     allow_empty_holder_frames: bool = False
-    allow_empty_holder_frames_strip_modes: tuple[str, ...] = ("partial",)
     requires_broad_separator_width_gaps: int = 0
     checks_leading_content: bool = False
     checks_frame_content: bool = False
@@ -65,7 +64,12 @@ class BaseDetectionScorePolicy:
     low_confidence_floor: float = 0.85
     partial_one_cap: float = 0.78
     partial_two_35mm_cap: float = 0.82
-    family_separator_uncertain_reason: str = "separator_evidence_incomplete"
+    image_quality_percentiles: tuple[float, float, float] = (1.0, 50.0, 99.0)
+    hard_support_floor_min_expected_gaps: int = 3
+    hard_gap_floor_min_count: int = 2
+    model_gap_overuse_min_count: int = 2
+    partial_ambiguous_count_max: int = 2
+    partial_dense_strip_min_default_count: int = 6
 
 
 @dataclass(frozen=True)
@@ -90,8 +94,8 @@ class ScoringPolicy:
     no_auto_cap_partial: float = 0.82
     candidate_gate_pass_boost_cap: float = 0.10
     candidate_gate_pass_boost_ratio: float = 0.08
-    competition_top_n: int = 8
-    competition_close_margin: float = 0.04
+    dual_lane_below_threshold_cap: float = 0.84
+    dual_lane_frame_count_mismatch_cap: float = 0.82
     base_detection: BaseDetectionScorePolicy = field(default_factory=BaseDetectionScorePolicy)
     geometry_support: GeometrySupportScorePolicy = field(default_factory=GeometrySupportScorePolicy)
     separator_support: SeparatorSupportScorePolicy = field(default_factory=SeparatorSupportScorePolicy)
@@ -199,23 +203,3 @@ class CandidatePlanPolicy:
     outer_correction_extension: OuterCorrectionCandidateExtensionPolicy = field(
         default_factory=OuterCorrectionCandidateExtensionPolicy
     )
-
-
-__all__ = [
-    "BaseDetectionScorePolicy",
-    "CandidateExecutionBudgetPolicy",
-    "CandidatePlanPolicy",
-    "ContentCandidatePlanPolicy",
-    "ContentGuidedSeparatorCandidatePolicy",
-    "EvidenceIndependencePolicy",
-    "GeometrySupportScorePolicy",
-    "OuterCorrectionCandidateExtensionPolicy",
-    "PartialEdgeHintPolicy",
-    "PartialHolderPolicy",
-    "PartialStopPolicy",
-    "SafetyCandidatePolicy",
-    "ScoringPolicy",
-    "SelectionPolicy",
-    "SeparatorFullWidthCompetitionPolicy",
-    "SeparatorSupportScorePolicy",
-]

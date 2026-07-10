@@ -9,7 +9,7 @@ from x5crop.policies.registry import get_detection_policy
 
 def _detection(strip_mode: str, *, source: str = "separator", hard_ok: bool = True) -> DetectionCandidate:
     return DetectionCandidate(
-        film_format="120-66",
+        format_id="120-66",
         layout="horizontal",
         strip_mode=strip_mode,
         count=3,

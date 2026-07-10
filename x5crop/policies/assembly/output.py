@@ -16,8 +16,3 @@ def output_policy(params: FormatParameters) -> OutputPolicy:
             long_axis_bleed_capacity_px=int(protection.long_axis_bleed_capacity_px),
         )
     )
-
-
-__all__ = [
-    "output_policy",
-]

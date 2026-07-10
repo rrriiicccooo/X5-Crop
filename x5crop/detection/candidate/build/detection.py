@@ -57,7 +57,6 @@ def build_detection_geometry_for_outer(
     wh, ww = gray_work.shape
     separator_gaps = _build_separator_gap_lifecycle(
         gray_work,
-        config,
         fmt,
         count,
         strip_mode,
@@ -130,7 +129,7 @@ def build_detection_geometry_for_outer(
     if separator_gaps.pre_nearby_gaps is not None:
         detail["pre_nearby_gaps"] = [asdict(gap) for gap in separator_gaps.pre_nearby_gaps]
     return DetectionCandidate(
-        film_format=fmt.name,
+        format_id=fmt.format_id.value,
         layout=config.layout,
         strip_mode=strip_mode,
         count=count,
@@ -208,7 +207,6 @@ def enrich_detection_geometry_evidence(
 
 def _build_separator_gap_lifecycle(
     gray_work: np.ndarray,
-    config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,

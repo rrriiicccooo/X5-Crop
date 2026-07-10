@@ -19,11 +19,14 @@ class ContentEvidencePolicy:
 @dataclass(frozen=True)
 class ContentProfilePolicy:
     smooth_ratio: float = 0.010
+    smooth_min_px: int = 5
     min_run_ratio: float = 0.20
+    min_run_width_px: int = 6
     threshold_min: float = 0.035
     threshold_max: float = 0.40
-    p35_weight: float = 0.38
-    p65_multiplier: float = 0.82
+    percentiles: tuple[float, float, float] = (35.0, 65.0, 90.0)
+    low_percentile_weight: float = 0.38
+    mid_percentile_multiplier: float = 0.82
 
 
 @dataclass(frozen=True)
@@ -82,12 +85,4 @@ class ContentPolicy:
     support_score_low_content: float = 0.58
     support_score_aspect_conflict: float = 0.35
     support_score_unknown: float = 0.50
-
-
-__all__ = [
-    "ContentCandidatePolicy",
-    "ContentEvidencePolicy",
-    "ContentMaskPolicy",
-    "ContentPolicy",
-    "ContentProfilePolicy",
-]
+    support_missing_aspect_score: float = 0.75

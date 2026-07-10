@@ -36,8 +36,3 @@ def diagnostics_policy(params: FormatParameters) -> RuntimeDiagnosticsPolicy:
             detail_score_multiplier=float(nearby.detail_score_multiplier),
         ),
     )
-
-
-__all__ = [
-    "diagnostics_policy",
-]

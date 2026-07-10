@@ -122,17 +122,3 @@ def interval_mean(profile: np.ndarray, start: int, end: int) -> float:
     if end <= start:
         return 0.0
     return float(profile[start:end].mean())
-
-
-__all__ = [
-    "SeparatorProfileSignals",
-    "column_gradient_score",
-    "combined_separator_profile_score",
-    "interval_mean",
-    "segmented_extreme_separator_score",
-    "separator_profile",
-    "separator_profile_signals",
-    "separator_profile_smooth_window",
-    "uniform_soft_separator_score",
-    "vertical_profile_sample",
-]

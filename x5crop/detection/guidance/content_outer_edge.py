@@ -62,8 +62,8 @@ def edge_anchored_outer_candidates(
         outer_crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
         local_content = bbox_from_mask(
             outer_crop < int(edge_anchor_policy.content_threshold),
-            min_row_fraction=0.010,
-            min_col_fraction=0.010,
+            min_row_fraction=edge_anchor_policy.content_bbox_min_fraction,
+            min_col_fraction=edge_anchor_policy.content_bbox_min_fraction,
         )
         content = None
         if local_content is not None and local_content.valid():
@@ -90,11 +90,17 @@ def edge_anchored_outer_candidates(
         if content is not None and content.valid():
             y_top = max(outer.top, content.top - margin)
             y_bottom = min(outer.bottom, content.bottom + margin)
-            if y_bottom - y_top < max(40, int(round(float(outer.height) * 0.65))):
+            if y_bottom - y_top < max(
+                edge_anchor_policy.min_short_axis_px,
+                int(round(float(outer.height) * edge_anchor_policy.min_short_axis_ratio)),
+            ):
                 y_top = outer.top
                 y_bottom = outer.bottom
         short_axis = max(1, y_bottom - y_top)
-        min_width = max(80, int(round(float(outer.width) * edge_anchor_policy.min_width_ratio)))
+        min_width = max(
+            edge_anchor_policy.min_width_px,
+            int(round(float(outer.width) * edge_anchor_policy.min_width_ratio)),
+        )
 
         for extra in edge_anchor_policy.ratio_extras:
             target_ratio = float(count) * float(aspect) + float(extra)

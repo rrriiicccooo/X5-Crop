@@ -23,8 +23,3 @@ def finalization_policy(params: FormatParameters) -> FinalizationPolicy:
             min_active_column_fraction=float(approved_adjustment.min_active_column_fraction),
         ),
     )
-
-
-__all__ = [
-    "finalization_policy",
-]

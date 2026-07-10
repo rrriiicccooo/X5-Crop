@@ -3,36 +3,8 @@ from __future__ import annotations
 import numpy as np
 
 from ..domain import Gap
-from ..gap_methods import is_hard_gap_method
-from ..utils import clamp_float
-from .detection_parameters import GapGeometryConstraintParameters
-from .model_gaps import equal_model_gap
 
 
-def constrain_gap_to_geometry(
-    gap: Gap,
-    expected: float,
-    pitch: float,
-    parameters: GapGeometryConstraintParameters,
-) -> Gap:
-    if not is_hard_gap_method(gap.method):
-        return equal_model_gap(gap.index, expected, gap.score)
-    max_shift = clamp_float(
-        pitch * parameters.shift_ratio,
-        parameters.shift_min,
-        parameters.shift_max,
-    )
-    shift = max(-max_shift, min(max_shift, gap.center - expected))
-    center = float(expected + shift)
-    method = gap.method
-    if gap.start is not None and gap.end is not None:
-        delta = center - float(gap.center)
-        start = float(gap.start + delta)
-        end = float(gap.end + delta)
-    else:
-        start = None
-        end = None
-    return Gap(gap.index, center, gap.score, method, start, end)
 
 
 def gap_width_cv(gaps: list[Gap], origin: float, pitch: float, count: int) -> float:
@@ -119,15 +91,3 @@ def local_gap_geometry_error(gaps: list[Gap], gap_index: int, origin: float, pit
     if left_w <= 1 or right_w <= 1:
         return float("inf")
     return abs(left_w - pitch) + abs(right_w - pitch)
-
-
-__all__ = [
-    "constrain_gap_to_geometry",
-    "gap_width_cv",
-    "photo_width_cv_from_gap_edges",
-    "photo_widths_from_gap_edges",
-    "separator_width_cv",
-    "separator_widths",
-    "local_gap_geometry_error",
-    "width_cv",
-]

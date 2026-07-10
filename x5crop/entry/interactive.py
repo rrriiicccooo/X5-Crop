@@ -57,15 +57,15 @@ def ask_format() -> str:
     print()
     while True:
         answer = normalized_input(input("format: "))
-        film_format = FORMAT_ALIASES.get(answer)
-        if film_format in FORMATS:
-            return film_format
+        format_id = FORMAT_ALIASES.get(answer)
+        if format_id in FORMATS:
+            return format_id
         print(f"unknown format: {answer}")
         print("use return/135, dual, xpan, half, 645, 66, or 67.")
 
 
-def ask_partial_count(film_format: str) -> int | None:
-    allowed_counts = FORMATS[film_format].allowed_counts
+def ask_partial_count(format_id: str) -> int | None:
+    allowed_counts = FORMATS[format_id].allowed_counts
     allowed_text = " ".join(str(count) for count in allowed_counts)
     while True:
         print("partial count:")
@@ -97,10 +97,10 @@ def interactive_options(diagnostics: bool = False) -> CliOptions:
         print("Existing output files will not be overwritten.")
     print()
 
-    film_format = ask_format()
+    format_id = ask_format()
     partial = ask_yes_no("partial mode? [y/n, return=no]: ", default=False)
     strip_mode = "partial" if partial else "full"
-    requested_count = ask_partial_count(film_format) if partial else None
+    requested_count = ask_partial_count(format_id) if partial else None
     debug_analysis = True if diagnostics else ask_yes_no("debug analysis? [y/n, return=no]: ", default=False)
 
     print()
@@ -121,7 +121,7 @@ def interactive_options(diagnostics: bool = False) -> CliOptions:
     return CliOptions(
         input_path=Path(".").resolve(),
         output_dir=None,
-        film_format=film_format,
+        format_id=format_id,
         layout="auto",
         strip_mode=strip_mode,
         requested_count=requested_count,
@@ -152,9 +152,3 @@ def interactive_options(diagnostics: bool = False) -> CliOptions:
 
 def run_interactive(diagnostics: bool = False) -> int:
     return run_cli_options(interactive_options(diagnostics=diagnostics))
-
-
-__all__ = [
-    "interactive_options",
-    "run_interactive",
-]

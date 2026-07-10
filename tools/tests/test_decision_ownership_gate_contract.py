@@ -49,7 +49,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
     def test_final_review_reasons_are_owned_by_decision_inputs(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,
@@ -107,7 +107,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
     def test_safety_candidate_blocker_is_explained_by_decision_signal(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,
@@ -172,7 +172,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         }
 
         content_detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,
@@ -204,7 +204,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         )
 
         hard_safety_detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,
@@ -239,7 +239,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         fmt = format_spec("135-dual")
         config = replace(
             _decision_test_config(),
-            film_format="135-dual",
+            format_id="135-dual",
             strip_mode="partial",
             requested_count=None,
         )
@@ -282,7 +282,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
     def test_content_evidence_failure_is_not_content_only_reason(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,
@@ -308,7 +308,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         config = RunConfig(
             input_path=Path("synthetic.tif"),
             output_dir=None,
-            film_format="135",
+            format_id="135",
             layout_auto=False,
             layout="horizontal",
             strip_mode="full",
@@ -361,7 +361,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
     def test_unresolved_exposure_overlap_is_final_decision_signal(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,
@@ -414,7 +414,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
     def test_final_status_requires_no_final_review_reasons_with_low_threshold(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,
@@ -442,7 +442,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         config = RunConfig(
             input_path=Path("synthetic.tif"),
             output_dir=None,
-            film_format="135",
+            format_id="135",
             layout_auto=False,
             layout="horizontal",
             strip_mode="full",
@@ -501,7 +501,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
     def test_close_competition_is_final_decision_reason(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=1,
@@ -531,7 +531,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         config = RunConfig(
             input_path=Path("synthetic.tif"),
             output_dir=None,
-            film_format="135",
+            format_id="135",
             layout_auto=False,
             layout="horizontal",
             strip_mode="full",

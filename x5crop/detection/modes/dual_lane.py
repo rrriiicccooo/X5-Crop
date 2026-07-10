@@ -39,6 +39,3 @@ def choose_dual_lane_detection(
         for index, lane in enumerate(lanes, start=1)
     ]
     return merge_dual_lane_detections(gray, config, lanes, lane_detections, context)
-
-
-__all__ = ["choose_dual_lane_detection"]

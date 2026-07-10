@@ -19,7 +19,7 @@ from x5crop.policies.registry import get_detection_policy
 class DualLaneAssessmentTest(unittest.TestCase):
     def test_content_conflict_cap_is_candidate_assessment_detail(self) -> None:
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=6,

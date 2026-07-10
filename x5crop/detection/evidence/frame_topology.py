@@ -62,6 +62,3 @@ def frame_topology_evidence(boxes: list[Box], expected_count: int) -> dict[str, 
         "candidate_signals": signals,
         "boxes": [asdict(box) for box in boxes],
     }
-
-
-__all__ = ["frame_topology_evidence"]

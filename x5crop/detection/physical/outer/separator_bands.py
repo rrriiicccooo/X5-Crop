@@ -47,7 +47,11 @@ def separator_outer_band_sequences(
         return [
             pair
             for _rank, pair in sorted(pairs, key=lambda item: item[0])[
-                : max(expected_gaps, int(band_policy.pair_candidate_count) * 3)
+                : max(
+                    expected_gaps,
+                    int(band_policy.pair_candidate_count)
+                    * int(band_policy.pair_candidate_expansion),
+                )
             ]
         ]
     sequences: list[tuple[SeparatorBand, ...]] = []
@@ -89,7 +93,10 @@ def collect_separator_outer_bands(
     separator_policy: SeparatorGeometryProposalPolicy,
 ) -> SeparatorOuterBandCollection:
     peak_threshold = float(band_policy.min_score)
-    band_threshold = max(band_policy.band_score, peak_threshold * 0.58)
+    band_threshold = max(
+        band_policy.band_score,
+        peak_threshold * band_policy.band_to_peak_ratio,
+    )
     min_width = clamp_int(
         short_axis * band_policy.min_width_ratio,
         gap_search_config.min_width_min,
@@ -152,14 +159,6 @@ def collect_separator_outer_bands(
                     + float(band_policy.prominence_score_weight) * prominence
                     - (separator_policy.separator_outer_oversized_band_score_penalty if oversized_band else 0.0)
                 ),
-                oversized=bool(oversized_band),
             )
         )
     return SeparatorOuterBandCollection(bands, float(edge_margin))
-
-
-__all__ = [
-    "collect_separator_outer_bands",
-    "SeparatorOuterBandCollection",
-    "separator_outer_band_sequences",
-]

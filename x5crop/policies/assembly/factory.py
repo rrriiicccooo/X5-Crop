@@ -33,7 +33,7 @@ def build_policy_from_preset(
     params = preset.parameters()
     preprocess = preprocess_policy(params)
     return DetectionPolicy(
-        policy_id=detection_policy_id_for(fmt.name, strip_mode),
+        policy_id=detection_policy_id_for(fmt.format_id.value, strip_mode),
         physical_spec=fmt,
         strip_mode=strip_mode,
         preprocess=preprocess,
@@ -50,7 +50,7 @@ def build_policy_from_preset(
         frame_fit=mode_preset.frame_fit or partial_frame_fit(fmt),
         scoring=scoring_policy(fmt, params),
         candidate_selection=selection_policy(params),
-        candidate_plan=candidate_plan_policy(mode_preset, strip_mode, params),
+        candidate_plan=candidate_plan_policy(mode_preset),
         exposure_overlap_evidence=exposure_overlap_evidence_policy(params),
         decision=runtime_decision_policy(params),
         finalization=finalization_policy(params),
@@ -58,8 +58,3 @@ def build_policy_from_preset(
         diagnostics=diagnostics_policy(params),
         report=report_policy(),
     )
-
-
-__all__ = [
-    "build_policy_from_preset",
-]

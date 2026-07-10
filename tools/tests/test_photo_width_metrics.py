@@ -81,7 +81,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
 
     def test_geometry_support_respects_zero_photo_width_cv(self) -> None:
         detection = DetectionCandidate(
-            film_format="120-645",
+            format_id="120-645",
             layout="horizontal",
             strip_mode="full",
             count=4,
@@ -122,7 +122,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
 
     def test_geometry_support_ignores_frame_box_width_detail(self) -> None:
         detection = DetectionCandidate(
-            film_format="120-645",
+            format_id="120-645",
             layout="horizontal",
             strip_mode="full",
             count=4,
@@ -153,7 +153,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
 
     def test_selection_rank_does_not_reward_frame_box_width_detail(self) -> None:
         stable_frame_boxes = DetectionCandidate(
-            film_format="120-645",
+            format_id="120-645",
             layout="horizontal",
             strip_mode="full",
             count=4,
@@ -164,7 +164,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
             detail={"width_cv": 0.0, "width_cv_source": "frame_boxes"},
         )
         unstable_frame_boxes = DetectionCandidate(
-            film_format="120-645",
+            format_id="120-645",
             layout="horizontal",
             strip_mode="full",
             count=4,

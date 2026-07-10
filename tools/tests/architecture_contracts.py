@@ -12,6 +12,13 @@ SOURCE_ROOT = PROJECT_ROOT / "x5crop"
 
 RUNTIME_ROOTS = frozenset({"x5crop.entry.cli"})
 STANDALONE_ROOTS = frozenset({"x5crop.policies.consistency"})
+STANDALONE_TOOL_ROOTS = frozenset(
+    {
+        "tools.build_standalone",
+        "tools.regression.compare",
+        "tools.regression.reference_classify",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -141,6 +148,182 @@ def pass_through_classes() -> list[str]:
     return sorted(offenders)
 
 
+def unreferenced_top_level_symbols() -> list[str]:
+    modules = source_modules()
+    references: set[tuple[str, str]] = set()
+    for module in modules.values():
+        tree = parsed_source(module)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                references.add((module.name, node.id))
+            elif isinstance(node, ast.ImportFrom):
+                if node.level:
+                    relative = "." * node.level + (node.module or "")
+                    base = resolve_name(relative, module.package)
+                else:
+                    base = node.module or ""
+                for alias in node.names:
+                    references.add((base, alias.name))
+
+    tools_root = PROJECT_ROOT / "tools"
+    for path in tools_root.rglob("*.py"):
+        module_name = ".".join(path.relative_to(PROJECT_ROOT).with_suffix("").parts)
+        package = module_name if path.name == "__init__.py" else module_name.rpartition(".")[0]
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if node.level:
+                relative = "." * node.level + (node.module or "")
+                base = resolve_name(relative, package)
+            else:
+                base = node.module or ""
+            for alias in node.names:
+                references.add((base, alias.name))
+
+    unreferenced: list[str] = []
+    for module in modules.values():
+        for node in parsed_source(module).body:
+            if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name == "main":
+                continue
+            if (module.name, node.name) not in references:
+                unreferenced.append(f"{module.name}.{node.name}")
+    return sorted(unreferenced)
+
+
+def unreferenced_public_symbols() -> list[str]:
+    return [
+        symbol
+        for symbol in unreferenced_top_level_symbols()
+        if not symbol.rpartition(".")[2].startswith("_")
+    ]
+
+
+def modules_with_export_lists() -> list[str]:
+    offenders: list[str] = []
+    for module in source_modules().values():
+        for node in parsed_source(module).body:
+            targets: list[ast.expr] = []
+            if isinstance(node, ast.Assign):
+                targets = list(node.targets)
+            elif isinstance(node, ast.AnnAssign):
+                targets = [node.target]
+            if any(isinstance(target, ast.Name) and target.id == "__all__" for target in targets):
+                offenders.append(module.name)
+    return sorted(offenders)
+
+
+def functions_with_unused_parameters() -> list[str]:
+    offenders: list[str] = []
+    for module in source_modules().values():
+        for node in ast.walk(parsed_source(module)):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            arguments = [
+                *node.args.posonlyargs,
+                *node.args.args,
+                *node.args.kwonlyargs,
+            ]
+            if node.args.vararg is not None:
+                arguments.append(node.args.vararg)
+            if node.args.kwarg is not None:
+                arguments.append(node.args.kwarg)
+            loaded_names = {
+                child.id
+                for child in ast.walk(node)
+                if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
+            }
+            unused = [
+                argument.arg
+                for argument in arguments
+                if argument.arg not in {"self", "cls"}
+                and argument.arg not in loaded_names
+            ]
+            if unused:
+                offenders.append(
+                    f"{module.name}:{node.lineno}:{node.name}({', '.join(unused)})"
+                )
+    return sorted(offenders)
+
+
+def unreferenced_dataclass_fields() -> list[str]:
+    modules = source_modules()
+    used_names: set[str] = set()
+    for module in modules.values():
+        for node in ast.walk(parsed_source(module)):
+            if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
+                used_names.add(node.attr)
+
+    reflected_dataclasses = {
+        "FrameSizeMm",
+        "ModePolicy",
+        "SeparatorGapHint",
+    }
+
+    offenders: list[str] = []
+    for module in modules.values():
+        for node in parsed_source(module).body:
+            if not isinstance(node, ast.ClassDef):
+                continue
+            is_dataclass = any(
+                (
+                    isinstance(decorator, ast.Name)
+                    and decorator.id == "dataclass"
+                )
+                or (
+                    isinstance(decorator, ast.Call)
+                    and isinstance(decorator.func, ast.Name)
+                    and decorator.func.id == "dataclass"
+                )
+                for decorator in node.decorator_list
+            )
+            if not is_dataclass:
+                continue
+            if node.name in reflected_dataclasses:
+                continue
+            for statement in node.body:
+                if not (
+                    isinstance(statement, ast.AnnAssign)
+                    and isinstance(statement.target, ast.Name)
+                ):
+                    continue
+                field_name = statement.target.id
+                if field_name not in used_names:
+                    offenders.append(f"{module.name}.{node.name}.{field_name}")
+    return sorted(offenders)
+
+
+def unused_imports() -> list[str]:
+    offenders: list[str] = []
+    for module in source_modules().values():
+        tree = parsed_source(module)
+        loaded_names = {
+            node.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+        }
+        for node in tree.body:
+            if isinstance(node, ast.Import):
+                aliases = (
+                    (alias.asname or alias.name.split(".")[0], node.lineno)
+                    for alias in node.names
+                )
+            elif isinstance(node, ast.ImportFrom) and node.module != "__future__":
+                aliases = (
+                    (alias.asname or alias.name, node.lineno)
+                    for alias in node.names
+                    if alias.name != "*"
+                )
+            else:
+                continue
+            for name, line_number in aliases:
+                if name not in loaded_names:
+                    offenders.append(f"{module.name}:{line_number}:{name}")
+    return sorted(offenders)
+
+
 def reachable_source_modules(roots: Iterable[str]) -> frozenset[str]:
     graph = source_import_graph()
     pending = list(roots)
@@ -167,6 +350,21 @@ def source_paths(*roots: Path) -> tuple[Path, ...]:
         for root in roots
         for path in sorted(root.rglob("*.py"))
     )
+
+
+def standalone_tool_modules() -> frozenset[str]:
+    modules: set[str] = set()
+    for path in sorted((PROJECT_ROOT / "tools").rglob("*.py")):
+        if "tests" in path.relative_to(PROJECT_ROOT / "tools").parts:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        if any(
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name == "main"
+            for node in tree.body
+        ):
+            modules.add(".".join(path.relative_to(PROJECT_ROOT).with_suffix("").parts))
+    return frozenset(modules)
 
 
 def text_offenders(paths: Iterable[Path], banned: Iterable[str]) -> list[str]:

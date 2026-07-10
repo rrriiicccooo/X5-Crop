@@ -81,10 +81,3 @@ def separator_geometry_support_applies(
         and joint_score >= mode_policy.min_joint_score
         and outer_area <= mode_policy.max_outer_area_ratio
     )
-
-
-__all__ = [
-    "detail_float",
-    "hard_full_calibration_floor_applies",
-    "separator_geometry_support_applies",
-]

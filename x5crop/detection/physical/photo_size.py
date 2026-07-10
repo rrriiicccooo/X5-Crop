@@ -150,10 +150,3 @@ def photo_size_consistency_from_separator_bands(
         mean_photo_width_error_ratio=mean_error,
         max_photo_width_error_ratio=max_error,
     )
-
-
-__all__ = [
-    "PhotoSizeConsistency",
-    "photo_size_consistency_from_gap_edges",
-    "photo_size_consistency_from_separator_bands",
-]

@@ -21,7 +21,6 @@ from ..signals import (
 
 def partial_edge_safety_holder_edge_disambiguation_detail(
     detection: DetectionCandidate,
-    fmt: FormatPhysicalSpec,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
     holder = policy.partial_holder
@@ -82,7 +81,6 @@ def partial_edge_safety_holder_edge_disambiguation_detail(
 def partial_edge_safety_leading_content_detail(
     gray: np.ndarray,
     detection: DetectionCandidate,
-    fmt: FormatPhysicalSpec,
     cache: Optional[AnalysisCache],
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
@@ -163,7 +161,6 @@ def partial_edge_safety_leading_content_detail(
 def partial_edge_safety_frame_content_detail(
     content_detail: dict[str, Any],
     detection: DetectionCandidate,
-    fmt: FormatPhysicalSpec,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
     holder = policy.partial_holder
@@ -274,9 +271,9 @@ def partial_edge_safety_assessment_detail(
     outer_area = float(detection.detail.get("outer_area_ratio", 1.0) or 1.0)
     min_count = holder.min_count_35mm if fmt.default_count >= 6 else holder.min_count_small
     hard_ratio = 1.0 if expected <= 0 else hard / float(max(1, expected))
-    holder_edge_detail = partial_edge_safety_holder_edge_disambiguation_detail(detection, fmt, policy)
-    leading_content = partial_edge_safety_leading_content_detail(gray, detection, fmt, cache, policy)
-    frame_content = partial_edge_safety_frame_content_detail(content_detail, detection, fmt, policy)
+    holder_edge_detail = partial_edge_safety_holder_edge_disambiguation_detail(detection, policy)
+    leading_content = partial_edge_safety_leading_content_detail(gray, detection, cache, policy)
+    frame_content = partial_edge_safety_frame_content_detail(content_detail, detection, policy)
     complete_underfilled_strip = bool(holder_occupancy.get("complete_underfilled_strip", False))
     disqualifiers: list[str] = []
     occupancy_diagnostics: list[str] = []
@@ -371,11 +368,3 @@ def partial_edge_safety_assessment_detail(
         "leading_content": leading_content,
         "frame_content": frame_content,
     }
-
-
-__all__ = [
-    "partial_edge_safety_assessment_detail",
-    "partial_edge_safety_frame_content_detail",
-    "partial_edge_safety_leading_content_detail",
-    "partial_edge_safety_holder_edge_disambiguation_detail",
-]

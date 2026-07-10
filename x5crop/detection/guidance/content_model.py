@@ -175,7 +175,7 @@ def content_detection_for_count(
         evidence,
         outer,
         count,
-        fmt.name,
+        fmt.format_id.value,
         cache,
         content_policy=content_policy,
     )
@@ -244,7 +244,7 @@ def content_detection_for_count(
         "gap_methods": [gap.method for gap in gaps],
     }
     return DetectionCandidate(
-        film_format=fmt.name,
+        format_id=fmt.format_id.value,
         layout=config.layout,
         strip_mode=strip_mode,
         count=count,

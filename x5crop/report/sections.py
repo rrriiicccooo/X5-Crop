@@ -39,11 +39,3 @@ def candidate_gate_detail(detection: FinalDetection) -> dict[str, Any]:
 def decision_gate_detail(detection: FinalDetection) -> dict[str, Any]:
     decision_gate = decision_summary(detection).get("decision_gate")
     return dict(decision_gate) if isinstance(decision_gate, dict) else {}
-
-
-__all__ = [
-    "candidate_table",
-    "candidate_gate_detail",
-    "decision_gate_detail",
-    "selected_candidate",
-]

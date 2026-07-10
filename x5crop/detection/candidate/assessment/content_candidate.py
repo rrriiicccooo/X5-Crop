@@ -140,10 +140,3 @@ def content_candidate_assessment_from_proposal(
             "owner": "candidate.assessment",
         },
     )
-
-
-__all__ = [
-    "ContentCandidateAssessment",
-    "content_candidate_assessment_from_proposal",
-    "content_candidate_assessment_from_metrics",
-]

@@ -22,7 +22,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
     def test_partial_holder_uses_holder_edge_disambiguation_reason(self) -> None:
         policy = get_detection_policy("120-66", "partial")
         detection = DetectionCandidate(
-            film_format="120-66",
+            format_id="120-66",
             layout="horizontal",
             strip_mode="partial",
             count=3,
@@ -87,7 +87,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
 
     def test_evidence_independence_treats_content_score_as_quality_detail(self) -> None:
         detection = DetectionCandidate(
-            film_format="120-66",
+            format_id="120-66",
             layout="horizontal",
             strip_mode="full",
             count=3,
@@ -133,7 +133,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
 
     def test_frame_box_width_detail_does_not_validate_evidence_independence(self) -> None:
         detection = DetectionCandidate(
-            film_format="120-66",
+            format_id="120-66",
             layout="horizontal",
             strip_mode="full",
             count=3,
@@ -190,7 +190,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             max_outer_area_ratio=0.99,
         )
         frame_box_detail_candidate = DetectionCandidate(
-            film_format="120-66",
+            format_id="120-66",
             layout="horizontal",
             strip_mode="full",
             count=3,
@@ -209,7 +209,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             },
         )
         unstable_photo_candidate = DetectionCandidate(
-            film_format="120-66",
+            format_id="120-66",
             layout="horizontal",
             strip_mode="full",
             count=3,
@@ -269,7 +269,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
     def test_partial_holder_does_not_treat_frame_box_width_as_photo_instability(self) -> None:
         policy = get_detection_policy("120-66", "partial")
         detection = DetectionCandidate(
-            film_format="120-66",
+            format_id="120-66",
             layout="horizontal",
             strip_mode="partial",
             count=3,

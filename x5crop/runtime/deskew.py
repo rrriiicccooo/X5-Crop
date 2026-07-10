@@ -54,8 +54,3 @@ def apply_deskew(
     else:
         deskew_detail["skipped"] = "angle_out_of_range"
     return arr, gray, deskew_detail
-
-
-__all__ = [
-    "apply_deskew",
-]

@@ -25,10 +25,7 @@ from ...physical.outer.separator import (
 @dataclass(frozen=True)
 class OuterProposalStrategy:
     name: str
-    report_strategy: str
     mode: str
-    safety_only: bool
-    uncertainty_level: str
 
     @property
     def enabled(self) -> bool:
@@ -67,26 +64,17 @@ def outer_proposal_strategy_plan_for_policy(
     base = [
         OuterProposalStrategy(
             "base",
-            "base_outer",
             "always" if proposal_policy.base.enabled else "off",
-            False,
-            "low",
         ),
     ]
     partial_positions = {
         "edge_anchor": OuterProposalStrategy(
             "edge_anchor",
-            "edge_anchor_outer",
             "always" if partial_placement.enabled and partial_placement.edge_anchor.enabled else "off",
-            False,
-            "medium",
         ),
         "floating": OuterProposalStrategy(
             "floating",
-            "content_outer",
             "always" if partial_placement.enabled and partial_placement.floating.enabled else "off",
-            False,
-            "medium",
         ),
     }
     ordered_partial_positions = [
@@ -98,10 +86,7 @@ def outer_proposal_strategy_plan_for_policy(
         *ordered_partial_positions,
         OuterProposalStrategy(
             "separator_derived",
-            "separator_outer",
             separator_mode,
-            True,
-            "medium",
         ),
     ]
     if safety_only:
@@ -224,14 +209,3 @@ def separator_full_width_outer_proposal_candidates(
         gap_search_profiles=(WIDTH_AWARE_GAP_PROFILE,),
         explicit_count=explicit_count,
     )
-
-
-__all__ = [
-    "OuterProposalStrategy",
-    "edge_anchored_candidates_trusted",
-    "merge_outer_proposal_candidates",
-    "outer_candidate_strategy",
-    "outer_proposal_candidates",
-    "outer_proposal_strategy_plan_for_policy",
-    "separator_full_width_outer_proposal_candidates",
-]

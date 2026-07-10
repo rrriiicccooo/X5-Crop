@@ -1,17 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from ....domain import DetectionCandidate
 from ....formats import FormatPhysicalSpec
 from ....policies.runtime.candidate import SelectionPolicy
 from ..signals import candidate_signals
-
-
-@dataclass(frozen=True)
-class SelectionResult:
-    selected: DetectionCandidate
-    candidates: tuple[DetectionCandidate, ...]
 
 
 def _candidate_assessment(candidate: DetectionCandidate) -> dict:
@@ -19,12 +11,10 @@ def _candidate_assessment(candidate: DetectionCandidate) -> dict:
     return dict(assessment) if isinstance(assessment, dict) else {}
 
 
-def _candidate_detail_list(candidate: DetectionCandidate, key: str) -> list:
-    value = _candidate_assessment(candidate).get(key)
-    return list(value) if isinstance(value, list) else []
-
-
-def calibrated_candidate_rank(detection: DetectionCandidate, threshold: float) -> tuple[int, float, int, float]:
+def calibrated_candidate_rank(
+    detection: DetectionCandidate,
+    threshold: float,
+) -> tuple[int, float, float, float]:
     candidate = detection.detail.get("candidate_assessment", {})
     joint = float(candidate.get("joint_score", 0.0)) if isinstance(candidate, dict) else 0.0
     partial_edge_safety_supported = bool(
@@ -36,7 +26,7 @@ def calibrated_candidate_rank(detection: DetectionCandidate, threshold: float) -
         return (
             1 if detection.confidence >= threshold else 0,
             float(detection.count),
-            int(round(float(detection.confidence) * 1000.0)),
+            float(detection.confidence),
             joint,
         )
     return (
@@ -71,7 +61,7 @@ def is_partial_edge_safety_candidate(detection: DetectionCandidate, threshold: f
 def _candidate_summary(candidate: DetectionCandidate) -> dict:
     assessment = _candidate_assessment(candidate)
     return {
-        "format": candidate.film_format,
+        "format_id": candidate.format_id,
         "count": int(candidate.count),
         "strip_mode": candidate.strip_mode,
         "confidence": float(candidate.confidence),
@@ -107,7 +97,7 @@ def select_detection_candidate(
     ]
     best.detail["candidate_competition"] = {
         "candidate_count": len(candidates),
-        "formats": [fmt.name],
+        "format_ids": [fmt.format_id.value],
         "selected_candidate": _candidate_summary(best),
         "top_candidates": competition,
     }
@@ -152,12 +142,3 @@ def select_detection_candidate(
         best.detail["candidate_competition"]["partial_full_conflict"] = bool(partial_full_conflict)
         best.detail["candidate_competition"]["close_margin"] = float(selection_policy.close_margin)
     return best
-
-
-__all__ = [
-    "SelectionResult",
-    "calibrated_candidate_rank",
-    "is_partial_edge_safety_candidate",
-    "select_source_candidate",
-    "select_detection_candidate",
-]

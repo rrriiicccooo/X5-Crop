@@ -34,7 +34,7 @@ def select_dual_lane_candidate(
 
     lane_config = replace(
         config,
-        film_format=lane_format_id,
+        format_id=lane_format_id,
         requested_count=lane_format_spec.default_count,
     )
 
@@ -111,6 +111,3 @@ def _assessed_lane_candidate(
     assessed.detail["dual_lane_index"] = lane_index
     assessed.detail["dual_lane_work_box"] = asdict(lane)
     return assessed
-
-
-__all__ = ["select_dual_lane_candidate"]

@@ -180,4 +180,3 @@ def write_rgb_jpeg(rgb: np.ndarray, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     image = Image.fromarray(np.ascontiguousarray(rgb), mode="RGB")
     image.save(output_path, format="JPEG", quality=92, optimize=True)
-

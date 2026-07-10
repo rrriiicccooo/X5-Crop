@@ -17,9 +17,3 @@ def copy_for_review(input_file: Path, review_dir: Path) -> Path:
         return target
     shutil.copy2(input_file, target)
     return target
-
-
-__all__ = [
-    "copy_for_review",
-    "review_directory_for",
-]

@@ -22,7 +22,7 @@ class DetectionPolicyBundleTests(unittest.TestCase):
         ):
             self.assertIs(bundle.policy_for("135-dual", "full"), bundle.initial_policy)
             self.assertEqual(
-                bundle.policy_for("135", "full").physical_spec.name,
+                bundle.policy_for("135", "full").physical_spec.format_id.value,
                 "135",
             )
             self.assertEqual(bundle.initial_policy.physical_spec.lane_count, 2)

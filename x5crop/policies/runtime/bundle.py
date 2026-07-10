@@ -19,7 +19,9 @@ class DetectionPolicyBundle:
         if initial_format.physical_layout == "dual_lane":
             lane_format_id = initial_format.lane_format_id
             if lane_format_id is None:
-                raise ValueError(f"Dual-lane format {initial_format.name} has no lane format")
+                raise ValueError(
+                    f"Dual-lane format {initial_format.format_id.value} has no lane format"
+                )
             policies.append(get_detection_policy(lane_format_id.value, "full"))
         return cls(
             initial_policy=initial_policy,
@@ -28,9 +30,6 @@ class DetectionPolicyBundle:
 
     def policy_for(self, format_id: str, strip_mode: str) -> DetectionPolicy:
         for policy in self.resolved_policies:
-            if policy.physical_spec.name == format_id and policy.strip_mode == strip_mode:
+            if policy.physical_spec.format_id.value == format_id and policy.strip_mode == strip_mode:
                 return policy
         raise KeyError(f"Unresolved detection policy: {format_id}/{strip_mode}")
-
-
-__all__ = ["DetectionPolicyBundle"]

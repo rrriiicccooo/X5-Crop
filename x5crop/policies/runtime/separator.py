@@ -184,16 +184,3 @@ class SeparatorPolicy:
     edge_refine_profile: EdgeRefineProfileParameters = field(default_factory=EdgeRefineProfileParameters)
     hard_methods: tuple[str, ...] = (GAP_DETECTED, GAP_EDGE_PAIR)
     model_methods: tuple[str, ...] = (GAP_GRID, GAP_EQUAL, GAP_CONTENT)
-
-
-__all__ = [
-    "LeadingGridFailurePolicy",
-    "SeparatorSupportPolicy",
-    "SeparatorGeometrySupportModePolicy",
-    "SeparatorGeometrySupportPolicy",
-    "SeparatorModelGapProposalPolicy",
-    "SeparatorPolicy",
-    "SeparatorRefinementFamilyPolicy",
-    "SeparatorRefinementPolicy",
-    "SeparatorWidthProfilePolicy",
-]

@@ -88,8 +88,3 @@ def build_assessed_corrected_outer_candidate(
     }
     reassessed.detail["outer_correction"].update(corrected.detail)
     return reassessed
-
-
-__all__ = [
-    "build_assessed_corrected_outer_candidate",
-]

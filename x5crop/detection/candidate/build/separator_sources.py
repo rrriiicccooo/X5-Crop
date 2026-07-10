@@ -210,16 +210,3 @@ def initial_separator_gaps(
         gap_max_width_ratio_override=gap_max_width_ratio_override,
         policy=policy,
     )
-
-
-__all__ = [
-    "GEOMETRY_EQUAL_MODEL_SOURCE",
-    "InitialSeparatorGapResult",
-    "initial_separator_gaps",
-    "model_gap_proposal_detail",
-    "select_geometry_equal_model_gaps",
-    "selected_gap_source_detail",
-    "standard_separator_gap_result",
-    "with_model_gap_proposal_detail",
-    "with_selected_gap_source",
-]

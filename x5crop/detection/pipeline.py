@@ -40,7 +40,7 @@ def choose_detection(
     cache: Optional[AnalysisCache] = None,
 ) -> CandidatePipelineResult:
     candidates: list[DetectionCandidate] = []
-    policy = policy_bundle.policy_for(fmt.name, config.strip_mode)
+    policy = policy_bundle.policy_for(fmt.format_id.value, config.strip_mode)
     cache = (
         cache
         if cache is not None and cache.layout == config.layout
@@ -91,7 +91,7 @@ def choose_detection(
         config.confidence_threshold,
         policy.candidate_selection,
     )
-    extension_policy = policy_bundle.policy_for(provisional.film_format, provisional.strip_mode)
+    extension_policy = policy_bundle.policy_for(provisional.format_id, provisional.strip_mode)
     extension_candidates = outer_correction_candidate_extensions(
         gray,
         config,
@@ -109,7 +109,7 @@ def choose_detection(
         extension_policy.candidate_selection,
     )
     selected_policy = policy_bundle.policy_for(
-        selected_candidate.film_format,
+        selected_candidate.format_id,
         selected_candidate.strip_mode,
     )
     selected_candidate.detail["count_selection"] = count_selection_detail(

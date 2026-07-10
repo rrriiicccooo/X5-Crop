@@ -20,6 +20,3 @@ def apply_candidate_confidence_cap(
         confidence_caps = []
         detection.detail["candidate_confidence_caps"] = confidence_caps
     confidence_caps.append(cap_detail)
-
-
-__all__ = ["apply_candidate_confidence_cap"]

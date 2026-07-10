@@ -32,6 +32,3 @@ def grid_refined_outer_box(
     ):
         return Box(proposed_left, outer.top, proposed_right, outer.bottom)
     return None
-
-
-__all__ = ["grid_refined_outer_box"]

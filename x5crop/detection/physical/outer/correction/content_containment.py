@@ -4,7 +4,6 @@ from typing import Any, Optional
 
 from .....domain import Box
 from .....domain import DetectionCandidate
-from .....formats import FormatPhysicalSpec
 from .....policies.runtime.outer import ContentContainmentCorrectionPolicy
 from .....utils import box_from_dict, clamp_int
 from .constraints import correction_axes_allowed
@@ -91,13 +90,11 @@ def corrected_outer_from_alignment(
 
 
 def content_containment_correction_proposal(
-    fmt: FormatPhysicalSpec,
     detection: DetectionCandidate,
     alignment: dict[str, Any],
     eligible_families: set[str],
     content_containment_policy: ContentContainmentCorrectionPolicy,
 ) -> Optional[OuterCorrectionProposal]:
-    del fmt
     if "content_containment" not in eligible_families:
         return None
     family = content_containment_policy.family
@@ -127,6 +124,3 @@ def content_containment_correction_proposal(
             "content_work_box": alignment.get("content_work_box"),
         },
     )
-
-
-__all__ = ["content_containment_correction_proposal", "corrected_outer_from_alignment"]

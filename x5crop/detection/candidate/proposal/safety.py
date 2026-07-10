@@ -47,7 +47,7 @@ def hard_safety_detection(
     boxes = [map_work_box(box, config.layout, source_w, source_h) for box in boxes_work]
     outer_original = map_work_box(outer, config.layout, source_w, source_h)
     return DetectionCandidate(
-        film_format=fmt.name,
+        format_id=fmt.format_id.value,
         layout=config.layout,
         strip_mode=config.strip_mode,
         count=count,
@@ -62,7 +62,7 @@ def hard_safety_detection(
             "candidate_contract": "hard_safety_review_input",
             "candidate_gate_eligible": False,
             "layout": config.layout,
-            "film_format": fmt.name,
+            "format_id": fmt.format_id.value,
             "strip_mode": config.strip_mode,
             "count": int(count),
             "work_outer": asdict(outer),

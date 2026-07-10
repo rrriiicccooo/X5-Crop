@@ -16,9 +16,6 @@ class FormatId(str, Enum):
     MEDIUM_WIDE = "120-67"
 
 
-class StripMode(str, Enum):
-    FULL = "full"
-    PARTIAL = "partial"
 
 
 @dataclass(frozen=True)
@@ -35,7 +32,6 @@ class FrameSizeMm:
 @dataclass(frozen=True)
 class FormatPhysicalSpec:
     format_id: FormatId
-    name: str
     default_count: int
     allowed_counts: tuple[int, ...]
     family: str
@@ -57,6 +53,25 @@ class FormatPhysicalSpec:
     @property
     def frame_aspect(self) -> float:
         return self.horizontal_content_aspect
+
+    @property
+    def frame_geometry_profile(self) -> str:
+        if self.physical_layout == "dual_lane":
+            return "dual_lane"
+        aspect = self.horizontal_content_aspect
+        if self.family == "35mm":
+            if self.default_count > 6 and aspect < 1.0:
+                return "dense_half"
+            if aspect > 2.0:
+                return "panoramic_35mm"
+            return "standard_35mm"
+        if self.family == "120":
+            if abs(aspect - 1.0) <= 0.05:
+                return "medium_square"
+            if aspect < 1.0:
+                return "medium_rectangle"
+            return "medium_wide"
+        raise ValueError(f"Unsupported physical format family: {self.family}")
 
 def expected_separator_count(
     default_count: int,
@@ -82,11 +97,9 @@ def _format_spec(
     lane_count: int = 1,
     lane_format_id: FormatId | None = None,
 ) -> FormatPhysicalSpec:
-    name = format_id.value
     frame_options = frame_size_mm_options or (nominal_frame_size_mm,)
     return FormatPhysicalSpec(
         format_id=format_id,
-        name=name,
         default_count=default_count,
         allowed_counts=allowed_counts,
         family=family,
@@ -178,23 +191,3 @@ def format_spec(format_id: str | FormatId) -> FormatPhysicalSpec:
 def format_description(format_id: str | FormatId) -> FormatDescription:
     key = format_id.value if isinstance(format_id, FormatId) else str(format_id)
     return FORMAT_DESCRIPTIONS[key]
-
-
-__all__ = [
-    "COMPRESSION_CHOICES",
-    "DESKEW_CHOICES",
-    "DESKEW_FALLBACK_CHOICES",
-    "FORMAT_CHOICES",
-    "FORMAT_DESCRIPTIONS",
-    "FORMATS",
-    "LAYOUT_CHOICES",
-    "STRIP_CHOICES",
-    "FrameSizeMm",
-    "FormatId",
-    "FormatDescription",
-    "FormatPhysicalSpec",
-    "StripMode",
-    "expected_separator_count",
-    "format_description",
-    "format_spec",
-]

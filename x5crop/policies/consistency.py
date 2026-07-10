@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from ..formats import FORMAT_CHOICES, STRIP_CHOICES
-from .decision.contract import DetectionDecisionContract, decision_contract_for_policy
+from .decision.contract import decision_contract_for_policy
 from .ids import decision_policy_id_for
 from .registry import get_detection_policy
 from .runtime.policy import DetectionPolicy
@@ -27,7 +27,6 @@ class PolicyConsistencyIssue:
 
 def _issue(
     policy: DetectionPolicy,
-    contract: DetectionDecisionContract,
     field: str,
     runtime_value: object,
     decision_value: object,
@@ -35,7 +34,7 @@ def _issue(
     if runtime_value == decision_value:
         return None
     return PolicyConsistencyIssue(
-        policy.physical_spec.name,
+        policy.physical_spec.format_id.value,
         policy.strip_mode,
         field,
         runtime_value,
@@ -48,10 +47,14 @@ def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsist
     checks: list[tuple[str, object, object]] = [
         (
             "decision.policy_id",
-            decision_policy_id_for(policy.physical_spec.name, policy.strip_mode),
+            decision_policy_id_for(policy.physical_spec.format_id.value, policy.strip_mode),
             contract.policy_id,
         ),
-        ("format_id", policy.physical_spec.name, contract.format.format_id.value),
+        (
+            "format_id",
+            policy.physical_spec.format_id.value,
+            contract.physical_spec.format_id.value,
+        ),
         ("strip_mode", policy.strip_mode, contract.mode.mode),
         (
             "decision.confidence_threshold_default",
@@ -92,7 +95,7 @@ def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsist
     return [
         issue
         for field, runtime_value, decision_value in checks
-        if (issue := _issue(policy, contract, field, runtime_value, decision_value)) is not None
+        if (issue := _issue(policy, field, runtime_value, decision_value)) is not None
     ]
 
 
@@ -104,11 +107,6 @@ def all_policy_consistency_issues() -> list[PolicyConsistencyIssue]:
     return issues
 
 
-def assert_policy_consistency() -> None:
-    issues = all_policy_consistency_issues()
-    if issues:
-        messages = "\n".join(issue.message() for issue in issues)
-        raise AssertionError(f"Policy consistency check failed:\n{messages}")
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -125,12 +123,3 @@ def main(argv: Iterable[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-__all__ = [
-    "PolicyConsistencyIssue",
-    "all_policy_consistency_issues",
-    "assert_policy_consistency",
-    "consistency_issues_for_policy",
-    "main",
-]

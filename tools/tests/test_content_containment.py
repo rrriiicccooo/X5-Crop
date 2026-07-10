@@ -84,7 +84,7 @@ class ContentContainmentTest(unittest.TestCase):
         gray = np.full((120, 900), 255, dtype=np.uint8)
         gray[20:100, 220:680] = 0
         detection = DetectionCandidate(
-            film_format="120-645",
+            format_id="120-645",
             layout="horizontal",
             strip_mode="full",
             count=3,
@@ -112,7 +112,7 @@ class ContentContainmentTest(unittest.TestCase):
         gray = np.full((120, 900), 255, dtype=np.uint8)
         gray[20:100, 50:850] = 0
         detection = DetectionCandidate(
-            film_format="120-645",
+            format_id="120-645",
             layout="horizontal",
             strip_mode="full",
             count=3,

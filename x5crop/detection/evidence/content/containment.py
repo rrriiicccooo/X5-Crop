@@ -156,8 +156,3 @@ def content_containment_detail(
         ),
         "source_content_support": content_detail.get("support"),
     }
-
-
-__all__ = [
-    "content_containment_detail",
-]

@@ -7,7 +7,7 @@ from .detection_parameters import EdgeRefineProfileParameters
 from .separator_profile import vertical_profile_sample
 
 
-def normalize_profile(profile: np.ndarray, high_percentile: float = 99.0) -> np.ndarray:
+def normalize_profile(profile: np.ndarray, high_percentile: float) -> np.ndarray:
     profile = profile.astype(np.float32, copy=False)
     if profile.size == 0:
         return profile
@@ -50,7 +50,14 @@ def edge_refine_profiles(
     return edge, background, activity
 
 
-def local_edge_peaks(profile: np.ndarray, lo: int, hi: int, min_strength: float) -> list[int]:
+def local_edge_peaks(
+    profile: np.ndarray,
+    lo: int,
+    hi: int,
+    min_strength: float,
+    candidate_percentile: float,
+    min_distance_px: int,
+) -> list[int]:
     width = len(profile)
     lo = max(0, min(int(lo), width))
     hi = max(lo, min(int(hi), width))
@@ -59,7 +66,10 @@ def local_edge_peaks(profile: np.ndarray, lo: int, hi: int, min_strength: float)
     local = profile[lo:hi]
     if local.size == 0:
         return []
-    threshold = max(float(min_strength), float(np.percentile(local, 84)))
+    threshold = max(
+        float(min_strength),
+        float(np.percentile(local, candidate_percentile)),
+    )
     peaks: list[int] = []
     for start, end in runs_from_mask(local >= threshold):
         if end <= start:
@@ -69,15 +79,8 @@ def local_edge_peaks(profile: np.ndarray, lo: int, hi: int, min_strength: float)
             peaks.append(int(peak))
     deduped: list[int] = []
     for peak in sorted(peaks):
-        if not deduped or peak - deduped[-1] > 2:
+        if not deduped or peak - deduped[-1] > min_distance_px:
             deduped.append(peak)
         elif profile[peak] > profile[deduped[-1]]:
             deduped[-1] = peak
     return deduped
-
-
-__all__ = [
-    "edge_refine_profiles",
-    "local_edge_peaks",
-    "normalize_profile",
-]

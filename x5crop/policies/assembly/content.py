@@ -34,11 +34,14 @@ def content_policy(
         ),
         profile=ContentProfilePolicy(
             smooth_ratio=float(profile.smooth_ratio),
+            smooth_min_px=int(profile.smooth_min_px),
             min_run_ratio=float(profile.min_run_ratio),
+            min_run_width_px=int(profile.min_run_width_px),
             threshold_min=float(profile.threshold_min),
             threshold_max=float(profile.threshold_max),
-            p35_weight=float(profile.p35_weight),
-            p65_multiplier=float(profile.p65_multiplier),
+            percentiles=tuple(float(value) for value in profile.percentiles),
+            low_percentile_weight=float(profile.low_percentile_weight),
+            mid_percentile_multiplier=float(profile.mid_percentile_multiplier),
         ),
         mask=ContentMaskPolicy(
             p55_weight=float(mask.p55_weight),
@@ -84,8 +87,5 @@ def content_policy(
         support_score_low_content=float(support.score_low_content),
         support_score_aspect_conflict=float(support.score_aspect_conflict),
         support_score_unknown=float(support.score_unknown),
+        support_missing_aspect_score=float(support.missing_aspect_score),
     )
-
-__all__ = [
-    'content_policy',
-]

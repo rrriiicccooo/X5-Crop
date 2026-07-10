@@ -16,6 +16,3 @@ class OuterCorrectionProposal:
     preserve_gap_search_profile: bool = False
     suppress_outer_mismatch: bool = False
     detail: dict[str, Any] = field(default_factory=dict)
-
-
-__all__ = ["OuterCorrectionProposal"]

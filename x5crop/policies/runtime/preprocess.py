@@ -20,8 +20,3 @@ class RuntimePreprocessPolicy:
     separator_evidence_image: SeparatorEvidenceImageParameters = field(default_factory=SeparatorEvidenceImageParameters)
     content_evidence_image: ContentEvidenceImageParameters = field(default_factory=ContentEvidenceImageParameters)
     scan_calibration_trust: ScanCalibrationTrustParameters = field(default_factory=ScanCalibrationTrustParameters)
-
-
-__all__ = [
-    "RuntimePreprocessPolicy",
-]

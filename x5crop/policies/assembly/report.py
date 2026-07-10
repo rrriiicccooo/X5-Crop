@@ -5,8 +5,3 @@ from ..runtime.report import ReportPolicy
 
 def report_policy() -> ReportPolicy:
     return ReportPolicy()
-
-
-__all__ = [
-    "report_policy",
-]

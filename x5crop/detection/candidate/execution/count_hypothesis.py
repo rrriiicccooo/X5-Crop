@@ -195,7 +195,6 @@ def _assessed_candidates_for_offset(
         for safety_candidate in safety_candidates:
             apply_safety_candidate_assessment(
                 safety_candidate,
-                confidence_threshold=config.confidence_threshold,
                 policy=policy,
             )
         candidates.extend(safety_candidates)
@@ -282,8 +281,3 @@ def evaluate_count_hypothesis(
         search_satisfied=bool(supporting_offsets),
         supporting_offsets=tuple(supporting_offsets),
     )
-
-
-__all__ = [
-    "evaluate_count_hypothesis",
-]

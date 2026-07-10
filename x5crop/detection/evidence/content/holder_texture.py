@@ -87,6 +87,3 @@ def holder_texture_evidence_detail(
         "content_holder_contrast": content_holder_contrast,
         "content_holder_coverage_contrast": coverage_contrast,
     }
-
-
-__all__ = ["holder_texture_evidence_detail"]

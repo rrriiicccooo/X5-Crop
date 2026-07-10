@@ -31,8 +31,8 @@ def floating_content_position_candidates(
     h, w = gray_work.shape
     content = bbox_from_mask(
         gray_work < int(floating_policy.content_threshold),
-        min_row_fraction=0.010,
-        min_col_fraction=0.010,
+        min_row_fraction=floating_policy.content_bbox_min_fraction,
+        min_col_fraction=floating_policy.content_bbox_min_fraction,
     )
     candidates: list[OuterCandidate] = []
     source_candidates = sorted(
@@ -55,11 +55,17 @@ def floating_content_position_candidates(
         if content is not None and content.valid():
             y_top = max(outer.top, content.top - margin)
             y_bottom = min(outer.bottom, content.bottom + margin)
-            if y_bottom - y_top < max(40, int(round(outer.height * 0.65))):
+            if y_bottom - y_top < max(
+                floating_policy.min_short_axis_px,
+                int(round(outer.height * floating_policy.min_short_axis_ratio)),
+            ):
                 y_top = outer.top
                 y_bottom = outer.bottom
         height = max(1, y_bottom - y_top)
-        min_width = max(80, int(round(float(outer.width) * floating_policy.min_width_ratio)))
+        min_width = max(
+            floating_policy.min_width_px,
+            int(round(float(outer.width) * floating_policy.min_width_ratio)),
+        )
 
         starts_from_content: list[int] = []
         if content is not None and content.valid():

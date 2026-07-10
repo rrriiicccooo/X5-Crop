@@ -89,8 +89,10 @@ def scoring_policy(fmt: FormatPhysicalSpec, params: FormatParameters) -> Scoring
         no_auto_cap_partial=float(calibration.no_auto_cap_partial),
         candidate_gate_pass_boost_cap=float(calibration.candidate_gate_pass_boost_cap),
         candidate_gate_pass_boost_ratio=float(calibration.candidate_gate_pass_boost_ratio),
-        competition_top_n=int(competition.top_n),
-        competition_close_margin=float(competition.close_margin),
+        dual_lane_below_threshold_cap=float(calibration.dual_lane_below_threshold_cap),
+        dual_lane_frame_count_mismatch_cap=float(
+            calibration.dual_lane_frame_count_mismatch_cap
+        ),
         base_detection=BaseDetectionScorePolicy(
             photo_width_cv_norm=float(base_score.photo_width_cv_norm),
             gap_weight=float(base_score.gap_weight),
@@ -108,6 +110,18 @@ def scoring_policy(fmt: FormatPhysicalSpec, params: FormatParameters) -> Scoring
             low_confidence_floor=float(base_score.low_confidence_floor),
             partial_one_cap=float(base_score.partial_one_cap),
             partial_two_35mm_cap=float(base_score.partial_two_35mm_cap),
+            image_quality_percentiles=tuple(
+                float(value) for value in base_score.image_quality_percentiles
+            ),
+            hard_support_floor_min_expected_gaps=int(
+                base_score.hard_support_floor_min_expected_gaps
+            ),
+            hard_gap_floor_min_count=int(base_score.hard_gap_floor_min_count),
+            model_gap_overuse_min_count=int(base_score.model_gap_overuse_min_count),
+            partial_ambiguous_count_max=int(base_score.partial_ambiguous_count_max),
+            partial_dense_strip_min_default_count=int(
+                base_score.partial_dense_strip_min_default_count
+            ),
         ),
         geometry_support=GeometrySupportScorePolicy(
             photo_width_cv_norm=float(geometry_support.photo_width_cv_norm),
@@ -140,10 +154,7 @@ def selection_policy(
 
 def candidate_plan_policy(
     mode_preset: ModePolicyPreset,
-    strip_mode: str,
-    params: FormatParameters,
 ) -> CandidatePlanPolicy:
-    del strip_mode, params
     return CandidatePlanPolicy(
         safety_candidate=SafetyCandidatePolicy(),
         partial_stop=PartialStopPolicy(),
@@ -160,11 +171,3 @@ def partial_edge_hint_policy(params: FormatParameters) -> PartialEdgeHintPolicy:
         window_min=int(hint.window_min),
         window_max=int(hint.window_max),
     )
-
-__all__ = [
-    'partial_holder_policy',
-    'scoring_policy',
-    'selection_policy',
-    'candidate_plan_policy',
-    'partial_edge_hint_policy',
-]

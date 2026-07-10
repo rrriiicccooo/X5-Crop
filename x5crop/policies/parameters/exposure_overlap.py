@@ -23,9 +23,3 @@ class ExposureOverlapProtectionParameters:
     required_bleed_padding_px: int = 0
     required_bleed_min_px: int = 1
     long_axis_bleed_capacity_px: int = 50
-
-
-__all__ = [
-    "ExposureOverlapEvidenceParameters",
-    "ExposureOverlapProtectionParameters",
-]

@@ -184,10 +184,3 @@ def side_boundary_outer(
     ):
         return SideBoundaryOuterResult(None, sides, "invalid_or_too_small")
     return SideBoundaryOuterResult(box, sides, "ok")
-
-
-__all__ = [
-    "OuterSideBoundary",
-    "SideBoundaryOuterResult",
-    "side_boundary_outer",
-]

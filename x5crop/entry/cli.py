@@ -79,7 +79,7 @@ def options_from_args(args: argparse.Namespace) -> CliOptions:
     return CliOptions(
         input_path=Path(args.input).expanduser().resolve(),
         output_dir=Path(args.output).expanduser().resolve() if args.output else None,
-        film_format=str(args.format),
+        format_id=str(args.format),
         layout=str(args.layout),
         strip_mode=str(args.strip),
         requested_count=(None if args.count is None else int(args.count)),
@@ -128,10 +128,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-__all__ = [
-    "build_parser",
-    "main",
-    "options_from_args",
-]

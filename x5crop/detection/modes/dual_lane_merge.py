@@ -79,16 +79,22 @@ def merge_dual_lane_detections(
         ]
     )
     if any(conf < config.confidence_threshold for conf in lane_confidences):
-        confidence = min(confidence, 0.84)
+        confidence = min(
+            confidence,
+            context.lane_policy.scoring.dual_lane_below_threshold_cap,
+        )
         mode_signals.append(SIGNAL_DUAL_LANE_BELOW_THRESHOLD)
     if len(frames) != context.total_count:
-        confidence = min(confidence, 0.82)
+        confidence = min(
+            confidence,
+            context.lane_policy.scoring.dual_lane_frame_count_mismatch_cap,
+        )
         mode_signals.append(SIGNAL_FRAME_COUNT_MISMATCH)
 
     source_h, source_w = gray.shape
     outer_original = map_work_box(combined_work_outer, config.layout, source_w, source_h)
     return DetectionCandidate(
-        film_format=context.format_id,
+        format_id=context.format_id,
         layout=config.layout,
         strip_mode="full",
         count=context.total_count,
@@ -168,9 +174,9 @@ def _dual_lane_detail(
         "gap_methods": [gap.method for gap in gaps],
         "candidate_competition": {
             "candidate_count": context.lane_count,
-            "formats": [context.format_id],
+            "format_ids": [context.format_id],
             "selected_candidate": {
-                "format": context.format_id,
+                "format_id": context.format_id,
                 "count": context.total_count,
                 "strip_mode": "full",
                 "confidence": float(confidence),
@@ -180,9 +186,3 @@ def _dual_lane_detail(
             "top_candidates": lane_summaries,
         },
     }
-
-
-__all__ = [
-    "merge_dual_lane_detections",
-    "dual_lane_review_detection",
-]

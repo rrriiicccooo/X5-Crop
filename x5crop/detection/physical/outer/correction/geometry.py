@@ -110,7 +110,7 @@ def geometry_consistency_model_detail(
     expected_ratio_from_measured = base_ratio + measured_separator_total / max(1.0, float(outer.height))
     return {
         "used": True,
-        "format": fmt.name,
+        "format_id": fmt.format_id.value,
         "count": int(detection.count),
         "frame_aspect": float(aspect),
         "base_ratio": float(base_ratio),
@@ -219,7 +219,10 @@ def corrected_outer_from_long_axis_geometry(
             if corrected.left > content.left - margin or corrected.right < content.right + margin:
                 return None
 
-    if corrected.width < max(80, int(round(outer.width * 0.80))):
+    if corrected.width < max(
+        long_axis.min_corrected_width_px,
+        int(round(outer.width * long_axis.min_corrected_width_ratio)),
+    ):
         return None
     if not correction_axes_allowed(family, outer, corrected):
         return None
@@ -282,11 +285,3 @@ def geometry_consistency_correction_proposal(
             "source_geometry_consistency": geometry_detail,
         },
     )
-
-
-__all__ = [
-    "corrected_outer_for_short_axis_geometry",
-    "corrected_outer_from_long_axis_geometry",
-    "geometry_consistency_correction_proposal",
-    "geometry_consistency_model_detail",
-]

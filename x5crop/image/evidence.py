@@ -127,7 +127,7 @@ def make_separator_evidence_gray(
     return (np.clip(evidence, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 
 
-def normalize_score_image(score: np.ndarray, percentile: float = 99.4) -> np.ndarray:
+def normalize_score_image(score: np.ndarray, percentile: float) -> np.ndarray:
     data = score.astype(np.float32, copy=False)
     hi = float(sampled_percentile(data, [percentile])[0])
     if hi <= 1e-6:
@@ -177,14 +177,3 @@ def make_content_evidence_gray(
     )
     evidence = np.clip(evidence, 0.0, 1.0)
     return (evidence * 255.0 + 0.5).astype(np.uint8)
-
-
-__all__ = [
-    "ContentEvidenceImageParameters",
-    "DeskewFallbackEvidenceParameters",
-    "SeparatorEvidenceImageParameters",
-    "make_content_evidence_gray",
-    "make_deskew_fallback_gray",
-    "make_separator_evidence_gray",
-    "normalize_score_image",
-]

@@ -16,6 +16,3 @@ def correction_axes_allowed(
         changed_axes.add("short")
     allowed = set(family.allowed_axes)
     return bool(changed_axes) and changed_axes.issubset(allowed)
-
-
-__all__ = ["correction_axes_allowed"]

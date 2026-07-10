@@ -21,13 +21,3 @@ def configure_text_output() -> None:
 
 
 configure_text_output()
-
-
-__all__ = [
-    "REPORT_JSONL_NAME",
-    "SCRIPT_NAME",
-    "SUMMARY_CSV_NAME",
-    "TIFF_SUFFIXES",
-    "VERSION",
-    "configure_text_output",
-]

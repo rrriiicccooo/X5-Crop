@@ -25,12 +25,12 @@ def build_dual_lane_context(
     format_spec = policy.physical_spec
     lane_format = format_spec.lane_format_id
     if lane_format is None:
-        raise ValueError(f"Dual-lane format {format_spec.name} has no lane format")
+        raise ValueError(f"Dual-lane format {format_spec.format_id.value} has no lane format")
     lane_format_id = lane_format.value
     lane_policy = policy_bundle.policy_for(lane_format_id, "full")
     lane_format_spec = lane_policy.physical_spec
     return DualLaneDetectionContext(
-        format_id=format_spec.name,
+        format_id=format_spec.format_id.value,
         format_spec=format_spec,
         lane_format_id=lane_format_id,
         lane_format_spec=lane_format_spec,
@@ -38,9 +38,3 @@ def build_dual_lane_context(
         lane_count=format_spec.lane_count,
         total_count=format_spec.default_count,
     )
-
-
-__all__ = [
-    "DualLaneDetectionContext",
-    "build_dual_lane_context",
-]

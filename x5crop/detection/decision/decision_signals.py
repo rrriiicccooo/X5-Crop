@@ -126,8 +126,3 @@ def decision_signals_for(
         "selection_uncertainty_inputs": competition.get("selection_uncertainty_inputs", []),
         "partial_edge_uncertain": bool(partial_edge_uncertain),
     }
-
-
-__all__ = [
-    "decision_signals_for",
-]

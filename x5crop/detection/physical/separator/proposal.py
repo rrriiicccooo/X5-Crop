@@ -319,10 +319,3 @@ def propose_separator_gap_profile_gaps_with_detail(
             gap_hints,
         )
     raise ValueError(f"Unsupported separator gap search profile: {gap_search_profile!r}")
-
-
-__all__ = [
-    "SeparatorGapProposal",
-    "SeparatorGapProfileProposal",
-    "propose_separator_gap_profile_gaps_with_detail",
-]

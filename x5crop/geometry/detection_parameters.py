@@ -57,11 +57,6 @@ class HardGapTrustParameters:
     model_delta_ratio: float = 0.040
     geometry_width_ratio: float = 0.018
     strong_min_score: float = 0.90
-    strong_width_min: float = 0.018
-    strong_width_max: float = 0.065
-    narrow_ok_score: float = 0.70
-    narrow_ok_width_min: float = 0.006
-    narrow_ok_width_max: float = 0.018
     model_conflict_score: float = 1.05
     core_content_threshold: int = 235
     core_dark_threshold: int = 55
@@ -97,13 +92,8 @@ class NearbySeparatorRefinementParameters:
     local_gain_min: float = 8.0
     local_gain_max: float = 40.0
     width_cv_slack: float = 0.0015
-
-
-@dataclass(frozen=True)
-class GapGeometryConstraintParameters:
-    shift_ratio: float = 0.045
-    shift_min: float = 20.0
-    shift_max: float = 520.0
+    candidate_threshold_percentile: float = 82.0
+    candidate_threshold_floor: float = 0.22
 
 
 @dataclass(frozen=True)
@@ -177,6 +167,7 @@ class SeparatorWidthProfileSearchParameters:
     gap_window_cap_ratio: float = 0.38
     gap_distance_penalty_weight: float = 0.35
     gap_score_base: float = 1.0
+    normalization_percentiles: tuple[float, float] = (1.0, 99.0)
 
 
 @dataclass(frozen=True)
@@ -200,6 +191,8 @@ class EdgePairParameters:
     min_gutter_ratio: float = 0.003
     max_gutter_ratio: float = 0.040
     min_strength: float = 0.45
+    candidate_peak_percentile: float = 84.0
+    candidate_peak_min_distance_px: int = 2
     min_background: float = 0.64
     min_quality_for_model_gap: float = 1.05
     min_quality_for_hard_gap: float = 0.70
@@ -220,17 +213,3 @@ class EdgePairParameters:
     max_gutter_min: int = 8
     max_gutter_max: int = 420
     background_quality_weight: float = 0.60
-
-
-__all__ = [
-    "EdgePairParameters",
-    "EdgeRefineProfileParameters",
-    "GapSearchParameters",
-    "HardGapTrustParameters",
-    "GapGeometryConstraintParameters",
-    "NearbySeparatorRefinementParameters",
-    "OuterBoxDetectionParameters",
-    "OuterMaskProfileParameters",
-    "SeparatorProfileParameters",
-    "SeparatorWidthProfileSearchParameters",
-]

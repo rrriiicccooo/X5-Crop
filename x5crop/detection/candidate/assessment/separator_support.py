@@ -148,13 +148,19 @@ def separator_support_all_internal_gaps_hard_assessment(
     return SeparatorSupportCheck(ok=ok, reason=reason)
 
 
-def hard_gap_indexes_are_tail_adjacent(hard_indexes: list[int]) -> bool:
+def hard_gap_indexes_are_tail_adjacent(
+    hard_indexes: list[int],
+    minimum_tail_index: int,
+) -> bool:
     if not hard_indexes:
         return False
     expected_sequence = list(
         range(max(hard_indexes) - len(hard_indexes) + 1, max(hard_indexes) + 1)
     )
-    return hard_indexes == expected_sequence and min(hard_indexes) >= 4
+    return (
+        hard_indexes == expected_sequence
+        and min(hard_indexes) >= minimum_tail_index
+    )
 
 
 def separator_support_leading_grid_failure_assessment(
@@ -177,7 +183,10 @@ def separator_support_leading_grid_failure_assessment(
             if score < policy.very_low_score
         ) >= policy.very_low_count
         and len(evidence.hard_gap_indexes) <= policy.max_hard_gaps
-        and hard_gap_indexes_are_tail_adjacent(evidence.hard_gap_indexes)
+        and hard_gap_indexes_are_tail_adjacent(
+            evidence.hard_gap_indexes,
+            policy.leading_count + 1,
+        )
     )
 
 
@@ -209,7 +218,6 @@ def separator_support_detail(
     evidence: SeparatorSupportEvidence,
     assessment: SeparatorSupportAssessment,
     detection: DetectionCandidate,
-    support: SeparatorSupportPolicy,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
     return {
@@ -317,27 +325,6 @@ def assess_separator_support(
             evidence,
             assessment,
             detection,
-            support,
             policy,
         ),
     )
-
-
-__all__ = [
-    "SeparatorSupportAssessment",
-    "SeparatorSupportEvidence",
-    "SeparatorSupportResult",
-    "SeparatorSupportCheck",
-    "hard_gap_indexes_are_tail_adjacent",
-    "separator_support_all_internal_gaps_hard_assessment",
-    "separator_support_broad_width_support_assessment",
-    "separator_support_edge_pair_support_assessment",
-    "separator_support_geometry_support_assessment",
-    "separator_support_leading_grid_failure_assessment",
-    "separator_support_min_hard_with_equal_cap_assessment",
-    "separator_support_needs_full_strip_supplemental_checks",
-    "separator_support_assessment",
-    "separator_support_detail",
-    "separator_support_evidence_from_detection",
-    "assess_separator_support",
-]

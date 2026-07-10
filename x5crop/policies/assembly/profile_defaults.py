@@ -18,33 +18,9 @@ from ..parameters.separator import (
 )
 
 
-def _content_aspect(fmt: FormatPhysicalSpec) -> float:
-    return float(fmt.horizontal_content_aspect or 1.0)
-
-
-def _is_standard_35mm_strip(fmt: FormatPhysicalSpec) -> bool:
-    return fmt.family == "35mm" and fmt.default_count == 6 and 1.2 <= _content_aspect(fmt) <= 1.8
-
-
-def _is_dense_half_frame(fmt: FormatPhysicalSpec) -> bool:
-    return fmt.family == "35mm" and fmt.default_count > 6 and _content_aspect(fmt) < 1.0
-
-
-def _is_panorama_frame(fmt: FormatPhysicalSpec) -> bool:
-    return fmt.family == "35mm" and _content_aspect(fmt) > 2.0
-
-
-def _is_square_medium_frame(fmt: FormatPhysicalSpec) -> bool:
-    return fmt.family == "120" and abs(_content_aspect(fmt) - 1.0) <= 0.05
-
-
-def _is_landscape_medium_frame(fmt: FormatPhysicalSpec) -> bool:
-    return fmt.family == "120" and _content_aspect(fmt) > 1.1
-
-
 def separator_support_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> SeparatorSupportParameters:
     support = params.separator.separator_support
-    if _is_square_medium_frame(fmt):
+    if fmt.frame_geometry_profile == "medium_square":
         return replace(
             support,
             edge_pair_min_score_without_broad_width=1.0,
@@ -57,23 +33,24 @@ def separator_support_parameters(fmt: FormatPhysicalSpec, params: FormatParamete
 def leading_grid_failure_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> LeadingGridFailureParameters:
     return replace(
         params.separator.leading_grid_failure,
-        enabled=_is_standard_35mm_strip(fmt),
+        enabled=fmt.frame_geometry_profile == "standard_35mm",
     )
 
 
 def base_detection_score_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> BaseDetectionScoreParameters:
     score = params.candidate.base_detection_score
-    if _is_dense_half_frame(fmt):
+    profile = fmt.frame_geometry_profile
+    if profile == "dense_half":
         score = replace(score, full_photo_width_cv=0.008)
     elif fmt.family == "120":
         score = replace(score, full_photo_width_cv=0.012)
-    if _is_square_medium_frame(fmt):
+    if profile == "medium_square":
         score = replace(
             score,
             outer_max_area=1.0,
             outer_too_large=1.0,
         )
-    elif _is_landscape_medium_frame(fmt):
+    elif profile == "medium_wide":
         score = replace(
             score,
             outer_too_large=0.995,
@@ -90,16 +67,16 @@ def scoring_calibration_parameters(fmt: FormatPhysicalSpec, params: FormatParame
             geometry_weight=0.32,
             content_weight=0.32,
         )
-    if _is_square_medium_frame(fmt) or _is_landscape_medium_frame(fmt):
+    if fmt.frame_geometry_profile in {"medium_square", "medium_wide"}:
         calibration = replace(calibration, hard_full_confidence_floor=0.86)
     return calibration
 
 
 def separator_support_score_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> SeparatorSupportScoreParameters:
     support = params.candidate.separator_support_score
-    if _is_dense_half_frame(fmt):
+    if fmt.frame_geometry_profile == "dense_half":
         return replace(support, model_grid_credit=0.25, model_equal_credit=0.08)
-    if _is_panorama_frame(fmt):
+    if fmt.frame_geometry_profile == "panoramic_35mm":
         return replace(support, model_grid_credit=0.20, model_equal_credit=0.06)
     if fmt.family == "120":
         return replace(support, model_grid_credit=0.18, model_equal_credit=0.04)
@@ -121,7 +98,7 @@ def separator_geometry_support_parameters(
 
 def partial_holder_parameters(fmt: FormatPhysicalSpec, params: FormatParameters) -> PartialHolderParameters:
     holder = params.candidate.partial_holder
-    if _is_square_medium_frame(fmt):
+    if fmt.frame_geometry_profile == "medium_square":
         holder = replace(
             holder,
             min_broad_separator_width_gaps=2,
@@ -139,15 +116,3 @@ def nearby_separator_refinement_parameters(
     if fmt.family == "120":
         return replace(nearby, score_multiplier=1.28)
     return nearby
-
-
-__all__ = [
-    "base_detection_score_parameters",
-    "leading_grid_failure_parameters",
-    "nearby_separator_refinement_parameters",
-    "partial_holder_parameters",
-    "scoring_calibration_parameters",
-    "separator_support_parameters",
-    "separator_geometry_support_parameters",
-    "separator_support_score_parameters",
-]

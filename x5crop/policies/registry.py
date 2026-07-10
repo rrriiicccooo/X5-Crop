@@ -19,6 +19,3 @@ def _build_policy(format_id: str, strip_mode: str) -> DetectionPolicy:
 @lru_cache(maxsize=None)
 def get_detection_policy(format_id: str, strip_mode: str) -> DetectionPolicy:
     return _build_policy(format_id, strip_mode)
-
-
-__all__ = ["get_detection_policy"]

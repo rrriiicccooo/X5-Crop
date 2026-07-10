@@ -51,7 +51,7 @@ FORMAT_DESCRIPTIONS: dict[str, FormatDescription] = {
         full_mode_behavior="fixed nominal 3-frame strip",
         partial_mode_behavior="review-biased count search with uncertain leading/trailing edges",
         outer_trust_profile="wide_frame_holder_boundary",
-        separator_visibility="few_wide_internal_gaps",
+        separator_visibility="few_variable_width_internal_gaps",
         geometry_tolerance="wide_frame_aspect_sensitive",
         known_physical_notes=(
             "wide_content_can_mask_separator",
@@ -73,10 +73,10 @@ FORMAT_DESCRIPTIONS: dict[str, FormatDescription] = {
         full_mode_behavior="fixed nominal 3-frame strip",
         partial_mode_behavior="review-biased count search with uncertain leading/trailing edges",
         outer_trust_profile="square_frame_holder_boundary_guarded",
-        separator_visibility="broad_internal_separator_widths",
+        separator_visibility="variable_width_internal_separators",
         geometry_tolerance="square_frame_spacing_sensitive",
         known_physical_notes=(
-            "broad_separator_width_can_be_false_frame_boundary",
+            "separator_width_variation_can_compete_with_frame_boundaries",
             "holder_edge_can_mimic_separator",
             "overlap_or_stuck_frame_note",
         ),
@@ -85,13 +85,11 @@ FORMAT_DESCRIPTIONS: dict[str, FormatDescription] = {
         full_mode_behavior="fixed nominal 3-frame strip",
         partial_mode_behavior="review-biased count search with uncertain leading/trailing edges",
         outer_trust_profile="medium_format_broad_separator_width_guarded",
-        separator_visibility="broad_internal_gap_widths_expected",
+        separator_visibility="variable_width_internal_gaps",
         geometry_tolerance="medium_format_aspect_sensitive",
         known_physical_notes=(
             "short_axis_correction_can_overtrust_holder",
-            "broad_separator_width_may_compete_with_content",
+            "separator_width_variation_may_compete_with_content",
         ),
     ),
 }
-
-__all__ = ["FORMAT_DESCRIPTIONS", "FormatDescription"]

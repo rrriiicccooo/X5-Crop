@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
 from ..domain import Box, Gap
 from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float, clamp_int
-from .nearby_separator import nearby_separator_replacement_assessment
-from .detection_parameters import HardGapTrustParameters, NearbySeparatorRefinementParameters
+from .detection_parameters import HardGapTrustParameters
 
 
 @dataclass(frozen=True)
@@ -265,50 +264,6 @@ def hard_gap_trust_assessment_result(
     )
 
 
-def runtime_hard_gap_trust_assessment(
-    gap: Gap,
-    pitch: float,
-    config: HardGapTrustParameters,
-    *,
-    width_ratio: float,
-    model_delta_ratio: float | None = None,
-    nearby_separator_conflict: bool = False,
-    signals: HardGapPixelSignals | None = None,
-) -> HardGapTrustAssessment:
-    context = hard_gap_trust_context(
-        config,
-        width_ratio=width_ratio,
-        model_delta_ratio=model_delta_ratio,
-        nearby_separator_conflict=nearby_separator_conflict,
-        signals=signals,
-    )
-
-    def assessment(trust: str, reason: str) -> HardGapTrustAssessment:
-        return hard_gap_trust_assessment_result(context, trust, reason)
-
-    if not is_hard_gap_method(gap.method) or pitch <= 0:
-        return assessment("not_hard_gap", "not_hard_gap_or_invalid_pitch")
-    if nearby_separator_conflict:
-        return assessment("nearby_separator_conflict", "nearby_separator_candidate_stronger")
-    if model_delta_ratio is not None and hard_gap_geometry_conflict(width_ratio, gap.score, model_delta_ratio, config):
-        return assessment("geometry_conflict", "model_delta_or_score_conflict")
-    if signals is not None:
-        flags = context.signal_flags
-        tonal_separator_like = bool(flags.get("tonal_separator_like", False))
-        if width_ratio < config.frame_border_width_ratio and tonal_separator_like:
-            return assessment("suspect_frame_border", "too_narrow_separator_band")
-        if hard_gap_is_narrow(gap, pitch, config) and (
-            bool(flags.get("content_continuous", False))
-            or bool(flags.get("low_contrast_tonal_gap", False))
-        ):
-            return assessment("suspect_internal_edge", "narrow_content_continuity_or_low_contrast_tonal")
-        if bool(flags.get("cross_axis_continuity_weak", False)):
-            return assessment("weak_or_ambiguous_separator", "cross_axis_continuity_weak")
-    if gap.score >= config.strong_min_score and config.strong_width_min <= width_ratio <= config.strong_width_max:
-        return assessment("strong_separator", "score_and_width_in_strong_range")
-    if gap.score >= config.narrow_ok_score and config.narrow_ok_width_min <= width_ratio < config.narrow_ok_width_max:
-        return assessment("narrow_but_ok", "narrow_score_and_width_ok")
-    return assessment("weak_or_ambiguous_separator", "no_strong_runtime_trust_rule")
 
 
 def diagnostic_hard_gap_trust_assessment(
@@ -354,102 +309,3 @@ def diagnostic_hard_gap_trust_assessment(
     if tonal_separator_like or signals.core_content <= config.strong_core_content_max or gap.score >= config.strong_min_score:
         return assessment("strong_separator", "tonal_or_low_content_or_high_score")
     return assessment("weak_or_ambiguous_separator", "no_strong_diagnostic_trust_rule")
-
-
-def runtime_signal_detail(signals: HardGapPixelSignals) -> dict[str, Any]:
-    return {
-        "core_mean": signals.core_mean,
-        "core_content": signals.core_content,
-        "core_dark": signals.core_dark,
-        "core_activity": signals.core_activity,
-        "cross_axis_coverage_ratio": signals.cross_axis_coverage_ratio,
-        "cross_axis_continuity_ratio": signals.cross_axis_continuity_ratio,
-        "cross_axis_break_count": signals.cross_axis_break_count,
-        "separator_band_straightness": signals.separator_band_straightness,
-        "left_content": signals.left_content,
-        "right_content": signals.right_content,
-        "side_content": signals.side_content,
-        "side_balance": signals.side_balance,
-        "continuity": signals.continuity,
-        "window": {
-            "start": int(signals.start),
-            "end": int(signals.end),
-            "guard": int(signals.guard),
-        },
-    }
-
-
-def light_hard_gap_trust(
-    gap: Gap,
-    pitch: float,
-    *,
-    predicted: Optional[float] = None,
-    profile: Optional[np.ndarray] = None,
-    gray_work: Optional[np.ndarray] = None,
-    outer: Optional[Box] = None,
-    hard_gap_trust: HardGapTrustParameters,
-    nearby_refinement: NearbySeparatorRefinementParameters,
-) -> tuple[str, dict[str, Any]]:
-    if not is_hard_gap_method(gap.method) or pitch <= 0:
-        assessment = runtime_hard_gap_trust_assessment(
-            gap,
-            pitch,
-            hard_gap_trust,
-            width_ratio=0.0,
-        )
-        return "not_hard_gap", {
-            "reason": "not_hard_gap",
-            "classification": assessment.detail(),
-        }
-    width_ratio = hard_gap_width_ratio(gap, pitch)
-    detail: dict[str, Any] = {
-        "width_ratio": float(width_ratio),
-        "score": float(gap.score),
-    }
-    nearby_conflict = False
-    if profile is not None:
-        nearby_assessment = nearby_separator_replacement_assessment(profile, gap, pitch, nearby_refinement)
-        detail["nearby_separator_assessment"] = nearby_assessment.detail(gap)
-        if nearby_assessment.replacement is not None:
-            detail["nearby_separator_candidate"] = nearby_assessment.replacement
-            nearby_conflict = True
-    if nearby_conflict:
-        assessment = runtime_hard_gap_trust_assessment(
-            gap,
-            pitch,
-            hard_gap_trust,
-            width_ratio=width_ratio,
-            nearby_separator_conflict=True,
-        )
-        detail["classification"] = assessment.detail()
-        return assessment.trust, detail
-    model_delta_ratio = None
-    if predicted is not None:
-        model_delta_ratio = abs(float(gap.center) - float(predicted)) / max(1.0, float(pitch))
-        detail["model_delta_ratio"] = float(model_delta_ratio)
-        if hard_gap_geometry_conflict(width_ratio, gap.score, model_delta_ratio, hard_gap_trust):
-            assessment = runtime_hard_gap_trust_assessment(
-                gap,
-                pitch,
-                hard_gap_trust,
-                width_ratio=width_ratio,
-                model_delta_ratio=model_delta_ratio,
-            )
-            detail["classification"] = assessment.detail()
-            return assessment.trust, detail
-    signals = None
-    if gray_work is not None and outer is not None and gap.start is not None and gap.end is not None:
-        signals = hard_gap_pixel_signals(gray_work, outer, gap, pitch, hard_gap_trust)
-        if signals is not None:
-            detail["signals"] = runtime_signal_detail(signals)
-    assessment = runtime_hard_gap_trust_assessment(
-        gap,
-        pitch,
-        hard_gap_trust,
-        width_ratio=width_ratio,
-        model_delta_ratio=model_delta_ratio,
-        nearby_separator_conflict=nearby_conflict,
-        signals=signals,
-    )
-    detail["classification"] = assessment.detail()
-    return assessment.trust, detail

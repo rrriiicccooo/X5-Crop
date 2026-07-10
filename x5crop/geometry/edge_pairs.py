@@ -240,7 +240,14 @@ def edge_pair_candidates_for_gap(
     x0 = int(round(gap.center))
     lo = max(1, x0 - limits.window)
     hi = min(width - 1, x0 + limits.window)
-    peaks = local_edge_peaks(edge, lo, hi, params.min_strength)
+    peaks = local_edge_peaks(
+        edge,
+        lo,
+        hi,
+        params.min_strength,
+        params.candidate_peak_percentile,
+        params.candidate_peak_min_distance_px,
+    )
     candidates: list[EdgePairCandidate] = []
     for i, a in enumerate(peaks):
         for b in peaks[i + 1:]:
@@ -401,22 +408,3 @@ def refine_gaps_with_edge_profiles(
             **gap_refinement_batch_detail(accepted=accepted, rejected=rejected),
         },
     )
-
-
-__all__ = [
-    "EdgePairCandidate",
-    "EdgePairRefinementResult",
-    "EdgePairReplacementAssessment",
-    "EdgePairSearchLimits",
-    "EdgePairSearchResult",
-    "assess_edge_pair_hard_gap_replacement",
-    "assess_edge_pair_replacement",
-    "best_edge_pair_candidate",
-    "edge_pair_gap_from_candidate",
-    "edge_pair_candidates_for_gap",
-    "edge_pair_replacement_evidence_role_detail",
-    "edge_pair_replacement_role",
-    "edge_pair_search_result_for_gap",
-    "edge_pair_search_limits",
-    "refine_gaps_with_edge_profiles",
-]

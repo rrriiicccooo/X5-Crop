@@ -38,7 +38,7 @@ def append_summary_csv(path: Path, result: ProcessResult) -> None:
         "policy_id",
         "status",
         "confidence",
-        "film_format",
+        "format_id",
         "layout",
         "strip_mode",
         "count",
@@ -57,7 +57,7 @@ def append_summary_csv(path: Path, result: ProcessResult) -> None:
                 "policy_id": record.get("policy_id", ""),
                 "status": record.get("status", ""),
                 "confidence": f"{float(record.get('confidence', 0.0)):.3f}",
-                "film_format": record.get("format_id", ""),
+                "format_id": record.get("format_id", ""),
                 "layout": record.get("layout", ""),
                 "strip_mode": record.get("strip_mode", ""),
                 "count": record.get("count", ""),
@@ -73,10 +73,3 @@ def write_report_outputs_for_result(result: ProcessResult, config: RunConfig) ->
     output_dir = output_directory_for(Path(result.source), config)
     append_report_jsonl(output_dir / REPORT_JSONL_NAME, result)
     append_summary_csv(output_dir / SUMMARY_CSV_NAME, result)
-
-
-__all__ = [
-    "append_report_jsonl",
-    "write_report_outputs_for_result",
-    "append_summary_csv",
-]

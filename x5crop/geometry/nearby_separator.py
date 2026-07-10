@@ -111,6 +111,9 @@ class NearbySeparatorSearchConfig(Protocol):
     max_width_ratio: float
     max_width_min: int
     max_width_max: int
+    candidate_threshold_percentile: float
+    candidate_threshold_floor: float
+    distance_ratio: float
 
 
 def nearby_separator_search_context(
@@ -143,7 +146,15 @@ def nearby_separator_search_context(
         lo=int(lo),
         hi=int(hi),
         current_score=float(interval_mean(profile, current_start, current_end)),
-        threshold=max(0.22, float(np.percentile(profile[lo:hi], 82))),
+        threshold=max(
+            config.candidate_threshold_floor,
+            float(
+                np.percentile(
+                    profile[lo:hi],
+                    config.candidate_threshold_percentile,
+                )
+            ),
+        ),
     )
 
 
@@ -168,14 +179,12 @@ def nearby_separator_candidates(
         score = interval_mean(profile, abs_start, abs_end)
         candidate_center = (abs_start + abs_end - 1) / 2.0
         distance = candidate_center - gap.center
-        distance_ratio = getattr(config, "distance_ratio", None)
-        if distance_ratio is not None:
-            if abs(distance) > clamp_float(
-                pitch * float(distance_ratio),
-                float(config.window_min),
-                float(config.window_max),
-            ):
-                continue
+        if abs(distance) > clamp_float(
+            pitch * float(config.distance_ratio),
+            float(config.window_min),
+            float(config.window_max),
+        ):
+            continue
         candidates.append(
             NearbySeparatorCandidate(
                 center=float(candidate_center),

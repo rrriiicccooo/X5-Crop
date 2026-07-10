@@ -186,7 +186,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
         gray = np.zeros((100, 300), dtype=np.uint8)
         policy = get_detection_policy("135", "full")
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="full",
             count=3,
@@ -209,7 +209,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
         config = RunConfig(
             input_path=Path("synthetic.tif"),
             output_dir=None,
-            film_format="135",
+            format_id="135",
             layout_auto=False,
             layout="horizontal",
             strip_mode="full",
@@ -321,7 +321,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
 
     def test_content_candidate_assessment_uses_candidate_assessment_owner(self) -> None:
         detection = DetectionCandidate(
-            film_format="135",
+            format_id="135",
             layout="horizontal",
             strip_mode="partial",
             count=3,

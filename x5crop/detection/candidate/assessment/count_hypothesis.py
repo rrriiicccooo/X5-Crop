@@ -34,6 +34,3 @@ class CountHypothesisEvaluation:
             "search_satisfied": bool(self.search_satisfied),
             "supporting_offsets": [float(offset) for offset in self.supporting_offsets],
         }
-
-
-__all__ = ["CountHypothesisEvaluation"]

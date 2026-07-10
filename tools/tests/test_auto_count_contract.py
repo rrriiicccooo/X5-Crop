@@ -16,7 +16,7 @@ from x5crop.policies.registry import get_detection_policy
 
 def _candidate(format_id: str, count: int) -> DetectionCandidate:
     return DetectionCandidate(
-        film_format=format_id,
+        format_id=format_id,
         layout="horizontal",
         strip_mode="partial",
         count=count,

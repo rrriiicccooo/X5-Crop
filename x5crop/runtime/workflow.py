@@ -39,7 +39,7 @@ def process_one(input_file: Path, config: RunConfig) -> ProcessResult:
     output_dir = output_surface.root
     profile, warnings = read_tiff_profile(input_file, config.page)
     config = runtime_for_profile(config, profile)
-    policy_bundle = DetectionPolicyBundle.for_format_mode(config.film_format, config.strip_mode)
+    policy_bundle = DetectionPolicyBundle.for_format_mode(config.format_id, config.strip_mode)
     initial_policy = policy_bundle.initial_policy
     fmt = initial_policy.physical_spec
 
@@ -128,9 +128,3 @@ def _finish_result(result: ProcessResult, config: RunConfig) -> ProcessResult:
 
 def _extend_unique(items: list[str], additions: list[str]) -> None:
     items.extend(item for item in additions if item not in items)
-
-
-__all__ = [
-    "process_one",
-    "process_one_worker",
-]

@@ -37,9 +37,3 @@ def apply_confidence_cap(
         confidence_before=before,
         confidence_after=after,
     )
-
-
-__all__ = [
-    "apply_confidence_cap",
-    "confidence_cap_record",
-]

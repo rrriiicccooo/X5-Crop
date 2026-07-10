@@ -56,9 +56,3 @@ def write_crops_if_allowed(
         deskew_applied,
         output_dir,
     )
-
-
-__all__ = [
-    "copy_for_review_if_needed",
-    "write_crops_if_allowed",
-]

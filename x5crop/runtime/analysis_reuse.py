@@ -37,7 +37,7 @@ def source_cache_signature(input_file: Path, profile: ImageProfile, page_index: 
 
 def config_cache_signature(config: RunConfig) -> dict[str, Any]:
     return {
-        "film_format": config.film_format,
+        "format_id": config.format_id,
         "layout": config.layout,
         "strip_mode": config.strip_mode,
         "requested_count": (
@@ -64,13 +64,11 @@ def make_analysis_cache_metadata(input_file: Path, profile: ImageProfile, config
 
 
 def detection_from_record(record: dict[str, Any]) -> FinalDetection:
-    format_detail = record.get("format")
-    format_detail = dict(format_detail) if isinstance(format_detail, dict) else {}
     return FinalDetection(
-        film_format=str(record["format_id"]),
-        layout=str(record.get("layout") or format_detail.get("layout")),
+        format_id=str(record["format_id"]),
+        layout=str(record["layout"]),
         strip_mode=str(record["strip_mode"]),
-        count=int(record.get("count") or format_detail.get("count")),
+        count=int(record["count"]),
         outer=box_from_dict(record["outer_box"]),
         frames=[box_from_dict(box) for box in record.get("frame_boxes", [])],
         gaps=[gap_from_dict(gap) for gap in record.get("gaps", [])],
@@ -92,7 +90,17 @@ def cached_record_matches(
     if record.get("schema_revision") != REPORT_SCHEMA_REVISION:
         return False
     required_schema_keys = (
+        "source",
+        "format_id",
+        "layout",
+        "strip_mode",
+        "count",
+        "status",
+        "confidence",
         "final_review_reasons",
+        "outer_box",
+        "frame_boxes",
+        "gaps",
         "candidate_gate",
         "decision_gate",
         "decision_signals",
@@ -102,8 +110,6 @@ def cached_record_matches(
         "detail",
     )
     if any(key not in record for key in required_schema_keys):
-        return False
-    if "final_review_reasons" not in record:
         return False
     detail = record.get("detail")
     if not isinstance(detail, dict):
@@ -252,16 +258,3 @@ def result_from_reusable_analysis(
         policy=policy,
         detail_extra={"reused_analysis": True},
     )
-
-
-__all__ = [
-    "apply_cached_deskew",
-    "cached_record_matches",
-    "config_cache_signature",
-    "detection_from_record",
-    "find_reusable_analysis",
-    "load_report_records",
-    "make_analysis_cache_metadata",
-    "result_from_reusable_analysis",
-    "source_cache_signature",
-]

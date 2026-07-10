@@ -204,7 +204,7 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
         gray[:, ::2] = 255
         policy = get_detection_policy("120-66", "full")
         detection = DetectionCandidate(
-            film_format="120-66",
+            format_id="120-66",
             layout="horizontal",
             strip_mode="full",
             count=3,
@@ -237,7 +237,7 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
         config = RunConfig(
             input_path=Path("synthetic.tif"),
             output_dir=None,
-            film_format="120-66",
+            format_id="120-66",
             layout_auto=False,
             layout="horizontal",
             strip_mode="full",
@@ -287,7 +287,7 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
     def test_safe_outer_overcut_and_low_content_quality_do_not_fail_final_evidence(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
-            film_format="120-66",
+            format_id="120-66",
             layout="horizontal",
             strip_mode="full",
             count=3,
@@ -360,7 +360,7 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
             "max_aspect_error": 0.0,
         }
         profile_outer = DetectionCandidate(
-            film_format="120-66",
+            format_id="120-66",
             layout="horizontal",
             strip_mode="full",
             count=3,
@@ -376,7 +376,7 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
             },
         )
         overcut_outer = DetectionCandidate(
-            film_format="120-66",
+            format_id="120-66",
             layout="horizontal",
             strip_mode="full",
             count=3,
@@ -399,7 +399,7 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
 
     def test_geometry_support_score_does_not_penalize_missing_aspect_evidence(self) -> None:
         detection = DetectionCandidate(
-            film_format="120-66",
+            format_id="120-66",
             layout="horizontal",
             strip_mode="full",
             count=3,
@@ -431,7 +431,7 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
     def test_final_evidence_does_not_gate_on_frame_box_width_detail(self) -> None:
         gray = np.zeros((100, 100), dtype=np.uint8)
         detection = DetectionCandidate(
-            film_format="120-66",
+            format_id="120-66",
             layout="horizontal",
             strip_mode="full",
             count=3,

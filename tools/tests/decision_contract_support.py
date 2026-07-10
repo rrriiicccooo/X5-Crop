@@ -11,7 +11,7 @@ def decision_test_config(*, threshold: float = 0.85) -> RunConfig:
     return RunConfig(
         input_path=Path("synthetic.tif"),
         output_dir=None,
-        film_format="135",
+        format_id="135",
         layout_auto=False,
         layout="horizontal",
         strip_mode="full",

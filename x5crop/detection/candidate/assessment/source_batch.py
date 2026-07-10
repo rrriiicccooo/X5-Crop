@@ -31,6 +31,3 @@ def assess_source_candidates(
         )
         for detection in detections
     ]
-
-
-__all__ = ["assess_source_candidates"]

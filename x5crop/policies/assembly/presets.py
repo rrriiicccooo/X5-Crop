@@ -35,10 +35,3 @@ class FormatPolicyPreset:
     parameters: Callable[[], FormatParameters]
     separator_edge_pair: EdgePairParameters = field(default_factory=EdgePairParameters)
     modes: dict[str, ModePolicyPreset] = field(default_factory=dict)
-
-
-__all__ = [
-    "FormatPolicyPreset",
-    "ModePolicyPreset",
-    "SeparatorWidthProfilePreset",
-]

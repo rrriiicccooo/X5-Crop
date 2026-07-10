@@ -75,6 +75,3 @@ def nearby_separator_diagnostic_detail(
     if cache_key is not None and cache is not None:
         cache.nearby_separator_details[cache_key] = copy.deepcopy(detail)
     return detail
-
-
-__all__ = ["nearby_separator_diagnostic_detail"]

@@ -26,8 +26,3 @@ class ReportPolicy:
         "diagnostics",
         "output",
     )
-
-
-__all__ = [
-    "ReportPolicy",
-]

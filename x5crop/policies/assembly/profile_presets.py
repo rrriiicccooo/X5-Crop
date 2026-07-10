@@ -6,22 +6,74 @@ from ..runtime.base import FULL, FrameFitPolicy
 
 def separator_edge_pair_profile(profile: str) -> EdgePairParameters:
     medium_square_like = EdgePairParameters(
-        0.100, 0.001, 0.080, 0.24, 0.02, 0.28, 0.30, 0.95, 0.030
+        window_ratio=0.100,
+        min_gutter_ratio=0.001,
+        max_gutter_ratio=0.080,
+        min_strength=0.24,
+        min_background=0.02,
+        min_quality_for_model_gap=0.28,
+        min_quality_for_hard_gap=0.30,
+        hard_gap_quality_ratio=0.95,
+        max_hard_shift_ratio=0.030,
     )
     profiles = {
         "standard_35mm": EdgePairParameters(
-            0.080, 0.004, 0.050, 0.42, 0.62, 0.0, 0.0, 1.0, 0.0
+            window_ratio=0.080,
+            min_gutter_ratio=0.004,
+            max_gutter_ratio=0.050,
+            min_strength=0.42,
+            min_background=0.62,
+            min_quality_for_model_gap=0.0,
+            min_quality_for_hard_gap=0.0,
+            hard_gap_quality_ratio=1.0,
+            max_hard_shift_ratio=0.0,
         ),
         "dense_half": EdgePairParameters(
-            0.090, 0.003, 0.060, 0.46, 0.66, 1.05, 0.70, 0.95, 0.040
+            window_ratio=0.090,
+            min_gutter_ratio=0.003,
+            max_gutter_ratio=0.060,
+            min_strength=0.46,
+            min_background=0.66,
+            min_quality_for_model_gap=1.05,
+            min_quality_for_hard_gap=0.70,
+            hard_gap_quality_ratio=0.95,
+            max_hard_shift_ratio=0.040,
         ),
         "panoramic_35mm": EdgePairParameters(
-            0.060, 0.002, 0.035, 0.45, 0.64, 1.03, 0.70, 0.95, 0.035
+            window_ratio=0.060,
+            min_gutter_ratio=0.002,
+            max_gutter_ratio=0.035,
+            min_strength=0.45,
+            min_background=0.64,
+            min_quality_for_model_gap=1.03,
+            min_quality_for_hard_gap=0.70,
+            hard_gap_quality_ratio=0.95,
+            max_hard_shift_ratio=0.035,
         ),
         "medium_rectangle": EdgePairParameters(
-            0.075, 0.001, 0.055, 0.32, 0.20, 0.58, 0.50, 0.95, 0.035
+            window_ratio=0.075,
+            min_gutter_ratio=0.001,
+            max_gutter_ratio=0.055,
+            min_strength=0.32,
+            min_background=0.20,
+            min_quality_for_model_gap=0.58,
+            min_quality_for_hard_gap=0.50,
+            hard_gap_quality_ratio=0.95,
+            max_hard_shift_ratio=0.035,
         ),
         "medium_square": medium_square_like,
+        "medium_wide": medium_square_like,
+        "dual_lane": EdgePairParameters(
+            window_ratio=0.080,
+            min_gutter_ratio=0.004,
+            max_gutter_ratio=0.050,
+            min_strength=0.42,
+            min_background=0.62,
+            min_quality_for_model_gap=0.0,
+            min_quality_for_hard_gap=0.0,
+            hard_gap_quality_ratio=1.0,
+            max_hard_shift_ratio=0.0,
+        ),
     }
     return profiles[profile]
 
@@ -30,7 +82,7 @@ def frame_fit_profile(profile: str, strip_mode: str) -> FrameFitPolicy | None:
     if strip_mode != FULL:
         return None
     profiles = {
-        "standard_strip": FrameFitPolicy(
+        "standard_35mm": FrameFitPolicy(
             name="standard_strip_frame_fit",
             edge_evidence=True,
             geometry_fallback=True,
@@ -91,6 +143,3 @@ def frame_fit_profile(profile: str, strip_mode: str) -> FrameFitPolicy | None:
         ),
     }
     return profiles[profile]
-
-
-__all__ = ["frame_fit_profile", "separator_edge_pair_profile"]

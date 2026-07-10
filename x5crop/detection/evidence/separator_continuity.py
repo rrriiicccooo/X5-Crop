@@ -72,6 +72,3 @@ def separator_cross_axis_continuity_evidence(
         },
         "candidate_signals": [] if ok else ["separator_cross_axis_continuity_weak"],
     }
-
-
-__all__ = ["separator_cross_axis_continuity_evidence"]

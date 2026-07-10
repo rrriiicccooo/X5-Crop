@@ -14,7 +14,7 @@ from x5crop.policies.registry import get_detection_policy
 
 def _complete_underfilled_medium_square_detection() -> DetectionCandidate:
     return DetectionCandidate(
-        film_format="120-66",
+        format_id="120-66",
         layout="horizontal",
         strip_mode="partial",
         count=3,

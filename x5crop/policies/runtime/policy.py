@@ -56,8 +56,3 @@ class DetectionPolicy:
         from ..reporting import detection_policy_report_detail
 
         return detection_policy_report_detail(self)
-
-
-__all__ = [
-    "DetectionPolicy",
-]

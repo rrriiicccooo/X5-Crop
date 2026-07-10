@@ -11,7 +11,6 @@ SAFETY_CANDIDATE_BLOCKER = SIGNAL_SAFETY_CANDIDATE_NOT_AUTO_ELIGIBLE
 def apply_safety_candidate_assessment(
     detection: DetectionCandidate,
     *,
-    confidence_threshold: float,
     policy: DetectionPolicy,
 ) -> None:
     detection.detail["safety_candidate"] = {
@@ -22,9 +21,3 @@ def apply_safety_candidate_assessment(
         "separator_full_width_mode": policy.outer.proposal.geometry.separator.full_width.mode,
         "strategies": list(policy.candidate_plan.safety_candidate.strategies),
     }
-
-
-__all__ = [
-    "SAFETY_CANDIDATE_BLOCKER",
-    "apply_safety_candidate_assessment",
-]
