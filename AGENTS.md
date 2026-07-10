@@ -131,6 +131,22 @@ Enforcement and closure:
   the current model cannot express. A sample-specific crop or threshold issue goes
   to calibration, not another project-wide architecture rewrite.
 
+## Performance And Detection Work
+
+- Profile one fixed real sample before optimizing. Record total and detection time,
+  candidate builds, repeated measurements, and the actual call-stack hotspot.
+- Separate necessary one-time measurement, repeated pure measurement, and avoidable
+  candidate expansion. Optimize the latter two without moving decision authority.
+- Add a failing contract test for every newly found residue before fixing its root
+  cause; search and remove the whole class of residue in the same change.
+- Early-stop only from explicit physical resolution or typed execution-budget
+  reliability. Keep physical resolution separate from CandidateGate and DecisionGate.
+- Cache only exact, count/offset-independent measurements with typed keys. Never
+  cache candidates, gates, decisions, final reasons, or approximate geometry.
+- Re-profile the same sample after each optimization wave, then run full contracts,
+  representative format/mode smokes, current-schema validation, and visual Debug
+  Analysis inspection. Treat output diffs as later calibration material.
+
 ## Completion And Sync
 
 - When the user asks Codex to change repository source, docs, config, launchers,
