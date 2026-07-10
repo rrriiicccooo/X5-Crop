@@ -246,7 +246,7 @@ unless the edit changes commands or release behavior.
 
 ## Current Handoff
 
-Date: 2026-07-10
+Date: 2026-07-11
 Computer: primary macOS machine
 Branch: main
 Latest documentation state: root documents have distinct responsibilities.
@@ -270,6 +270,12 @@ Current state:
 
 Recent verified baseline:
 
+- Architecture status is `architecture closure candidate`, not formally closed.
+  The audited candidate source commit is
+  `d828c6268f6fa9ec908cda6a93ce9a332e52d5f1`.
+- Audit A and an independent fresh-context Audit B both found zero frozen-contract
+  violations. A new Codex task must rerun the complete two-audit plan before
+  changing the status to `architecture closed`.
 - `python3 X5_Crop.py --version` printed `X5_Crop.py 4.9`.
 - The full architecture and runtime contract suite passed.
 - Full compile across the V4.9 package and regression tools passed.
@@ -279,8 +285,9 @@ Recent verified baseline:
   `120-67/full` report/debug smokes completed against the current schema.
 - All four smoke reports had empty `schema_validation`; horizontal and vertical
   Debug Analysis outputs were visually confirmed as three-panel images.
-- Architecture closure Audit A found zero remaining frozen-contract violations.
-  Independent Audit B is still required before marking architecture closed.
+- Current-schema cache reuse completed a real second-run reuse path.
+- A native two-worker ProcessPool completed a multi-file run without thread fallback.
+- A synthetic `135-dual/full` input completed the dual-lane pipeline with twelve frames.
 - Seven local V4.5.4 reference sets have been used as comparison material for
   locating changes.
 - V4.9 no longer treats V4.5.4 or V4.7 as a field-parity oracle. In the current
