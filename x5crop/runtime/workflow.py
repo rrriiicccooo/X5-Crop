@@ -18,7 +18,6 @@ from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
 from ..domain import ProcessResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
-from ..formats import FORMATS
 from ..image.gray import make_base_gray_u8
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..output.bleed import detection_bleed_parameters
@@ -40,9 +39,9 @@ def process_one(input_file: Path, config: RuntimeConfig) -> ProcessResult:
     output_dir = output_surface.root
     profile, warnings = read_tiff_profile(input_file, config.page)
     config = runtime_for_profile(config, profile)
-    fmt = FORMATS[config.film_format]
-    policy_bundle = DetectionPolicyBundle.for_format_mode(fmt.name, config.strip_mode)
+    policy_bundle = DetectionPolicyBundle.for_format_mode(config.film_format, config.strip_mode)
     initial_policy = policy_bundle.initial_policy
+    fmt = initial_policy.physical_spec
 
     cached_result = result_from_reusable_analysis(input_file, config, output_surface, profile, warnings, policy_bundle)
     if cached_result is not None:

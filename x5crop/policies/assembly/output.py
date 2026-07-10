@@ -8,7 +8,6 @@ def output_policy(params: FormatParameters) -> OutputPolicy:
     protection = params.output.exposure_overlap_protection
     return OutputPolicy(
         exposure_overlap_protection=ExposureOverlapProtectionPolicy(
-            enabled=bool(protection.enabled),
             required_bleed_window_fraction=float(
                 protection.required_bleed_window_fraction
             ),

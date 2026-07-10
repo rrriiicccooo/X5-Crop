@@ -13,7 +13,6 @@ class EdgeBleedProtectionPolicy:
 
 @dataclass(frozen=True)
 class ExposureOverlapProtectionPolicy:
-    enabled: bool
     required_bleed_window_fraction: float
     required_bleed_padding_px: int
     required_bleed_min_px: int

@@ -31,7 +31,18 @@ def hard_safety_detection(
     else:
         pitch = float(ww)
         gaps = []
-    boxes_work = frame_boxes_from_gaps(outer, gaps, count, ww, wh, config.bleed_x, config.bleed_y, origin=0.0, pitch=pitch)
+    boxes_work = frame_boxes_from_gaps(
+        outer,
+        gaps,
+        count,
+        ww,
+        wh,
+        config.bleed_x,
+        config.bleed_y,
+        origin=0.0,
+        pitch=pitch,
+        geometry_parameters=None,
+    )
     source_h, source_w = gray.shape
     boxes = [map_work_box(box, config.layout, source_w, source_h) for box in boxes_work]
     outer_original = map_work_box(outer, config.layout, source_w, source_h)

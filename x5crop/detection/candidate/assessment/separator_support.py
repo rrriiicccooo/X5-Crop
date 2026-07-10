@@ -303,7 +303,13 @@ def assess_separator_support(
 ) -> SeparatorSupportResult:
     support = policy.separator.support
     evidence = separator_support_evidence_from_detection(detection)
-    assessment = separator_support_assessment(detection, threshold, evidence, support, policy.default_count)
+    assessment = separator_support_assessment(
+        detection,
+        threshold,
+        evidence,
+        support,
+        policy.physical_spec.default_count,
+    )
 
     return SeparatorSupportResult(
         ok=assessment.ok,

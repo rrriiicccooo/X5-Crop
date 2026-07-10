@@ -19,7 +19,6 @@ class ExposureOverlapEvidenceParameters:
 
 @dataclass(frozen=True)
 class ExposureOverlapProtectionParameters:
-    enabled: bool = True
     required_bleed_window_fraction: float = 0.5
     required_bleed_padding_px: int = 0
     required_bleed_min_px: int = 1

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ...formats import FormatPhysicalSpec
 from .base import (
     CountHypothesisPolicy,
     DetectorPolicy,
@@ -30,10 +31,8 @@ from .separator import SeparatorPolicy
 @dataclass(frozen=True)
 class DetectionPolicy:
     policy_id: str
-    format_id: str
+    physical_spec: FormatPhysicalSpec
     strip_mode: str
-    family: str
-    default_count: int
     preprocess: RuntimePreprocessPolicy
     detector: DetectorPolicy
     count_hypotheses: CountHypothesisPolicy

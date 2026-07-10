@@ -35,7 +35,7 @@ def _issue(
     if runtime_value == decision_value:
         return None
     return PolicyConsistencyIssue(
-        policy.format_id,
+        policy.physical_spec.name,
         policy.strip_mode,
         field,
         runtime_value,
@@ -46,10 +46,14 @@ def _issue(
 def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsistencyIssue]:
     contract = decision_contract_for_policy(policy)
     checks: list[tuple[str, object, object]] = [
-        ("decision.policy_id", decision_policy_id_for(policy.format_id, policy.strip_mode), contract.policy_id),
+        (
+            "decision.policy_id",
+            decision_policy_id_for(policy.physical_spec.name, policy.strip_mode),
+            contract.policy_id,
+        ),
         ("schema_id", policy.report.schema_id, contract.schema_id),
         ("schema_revision", policy.report.schema_revision, contract.schema_revision),
-        ("format_id", policy.format_id, contract.format.format_id.value),
+        ("format_id", policy.physical_spec.name, contract.format.format_id.value),
         ("strip_mode", policy.strip_mode, contract.mode.mode),
         (
             "decision.confidence_threshold_default",

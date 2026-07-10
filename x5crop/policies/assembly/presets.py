@@ -8,6 +8,7 @@ from ..runtime.base import FrameFitPolicy, ReviewOnlyPolicy
 from ..runtime.separator import SeparatorEdgePairPolicy
 
 if TYPE_CHECKING:
+    from ...formats import FormatPhysicalSpec
     from ..parameters.aggregate import FormatParameters
 
 
@@ -30,7 +31,7 @@ class ModePolicyPreset:
 
 @dataclass(frozen=True)
 class FormatPolicyPreset:
-    format_id: str
+    format_spec: FormatPhysicalSpec
     parameters: Callable[[], FormatParameters]
     separator_edge_pair: SeparatorEdgePairPolicy = field(default_factory=SeparatorEdgePairPolicy)
     modes: dict[str, ModePolicyPreset] = field(default_factory=dict)

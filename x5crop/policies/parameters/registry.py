@@ -234,7 +234,7 @@ def format_parameters(format_name: str) -> FormatParameters:
     if format_name not in FORMAT_CHOICES:
         raise ValueError(f"Unsupported format parameters: {format_name}")
     fmt = format_spec(format_name)
-    params = FormatParameters(fmt.name)
+    params = FormatParameters()
 
     if fmt.family == "120":
         params = _with_content_min_run(params, 0.18)

@@ -46,19 +46,17 @@ def frame_boxes_from_gaps(
     image_h: int,
     bleed_x: int,
     bleed_y: int,
-    origin: float = 0.0,
-    pitch: float | None = None,
-    apply_geometry_fit: bool = True,
-    geometry_config: FrameFitParameters | None = None,
+    *,
+    origin: float,
+    pitch: float | None,
+    geometry_parameters: FrameFitParameters | None,
 ) -> list[Box]:
     if pitch is None:
         cuts = [float(outer.left)] + [gap.center + outer.left for gap in gaps] + [float(outer.right)]
     else:
         cuts = [outer.left + origin] + [outer.left + gap.center for gap in gaps] + [outer.left + origin + pitch * count]
-    if apply_geometry_fit:
-        if geometry_config is None:
-            raise ValueError("geometry_config is required when geometry fit is enabled")
-        cuts = fit_cuts_by_geometry(cuts, outer, count, pitch, geometry_config)
+    if geometry_parameters is not None:
+        cuts = fit_cuts_by_geometry(cuts, outer, count, pitch, geometry_parameters)
     boxes: list[Box] = []
     for left, right in zip(cuts[:-1], cuts[1:]):
         box = Box(int(round(left)), outer.top, int(round(right)), outer.bottom)
@@ -232,12 +230,11 @@ def fit_frame_boxes_from_gaps(
     image_h: int,
     bleed_x: int,
     bleed_y: int,
-    origin: float = 0.0,
-    pitch: float | None = None,
-    frame_fit: FrameFitParameters | None = None,
+    *,
+    origin: float,
+    pitch: float | None,
+    frame_fit: FrameFitParameters,
 ) -> tuple[list[Box], dict[str, Any]]:
-    if frame_fit is None:
-        raise ValueError("frame_fit config is required")
     config = frame_fit
     base_boxes = frame_boxes_from_gaps(
         outer,
@@ -249,8 +246,7 @@ def fit_frame_boxes_from_gaps(
         bleed_y,
         origin=origin,
         pitch=pitch,
-        apply_geometry_fit=config.geometry_fallback,
-        geometry_config=config,
+        geometry_parameters=config if config.geometry_fallback else None,
     )
     fitted_boxes, detail = fit_boxes_by_edge_evidence(
         outer,

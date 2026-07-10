@@ -75,7 +75,7 @@ def format_policy_preset(
     spec = format_spec(format_id)
     traits = runtime_traits_for_spec(spec)
     return FormatPolicyPreset(
-        format_id=format_id,
+        format_spec=spec,
         parameters=parameters,
         separator_edge_pair=separator_edge_pair_profile(traits.edge_pair_profile),
         modes={

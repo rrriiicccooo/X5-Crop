@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from ..runtime.policy import DetectionPolicy
     from ..decision.contract import DetectionDecisionContract
 
-from ...formats import format_description, format_spec
+from ...formats import format_description
 from ...formats.traits import runtime_traits_for_spec
 from .mode_descriptions import mode_notes_for_spec, mode_role_for_spec
 
@@ -25,7 +25,7 @@ def _plain(value: Any) -> Any:
 
 
 def _physical_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    spec = format_spec(policy.format_id)
+    spec = policy.physical_spec
     traits = runtime_traits_for_spec(spec)
     return {
         "family": spec.family,
@@ -115,10 +115,10 @@ def _diagnostics_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
 
 
 def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    spec = format_spec(policy.format_id)
+    spec = policy.physical_spec
     return {
         "policy_id": policy.policy_id,
-        "format": policy.format_id,
+        "format": spec.name,
         "strip_mode": policy.strip_mode,
         "role": mode_role_for_spec(spec, policy.strip_mode),
         "physical": _physical_detail(policy),

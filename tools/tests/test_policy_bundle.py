@@ -21,17 +21,17 @@ class DetectionPolicyBundleTests(unittest.TestCase):
             side_effect=AssertionError("policy lookup escaped the runtime boundary"),
         ):
             self.assertIs(bundle.policy_for("135-dual", "full"), bundle.initial_policy)
-            self.assertEqual(bundle.policy_for("135", "full").format_id, "135")
-            self.assertEqual(bundle.format_for("135-dual").lane_count, 2)
-            self.assertEqual(bundle.format_for("135").name, "135")
+            self.assertEqual(
+                bundle.policy_for("135", "full").physical_spec.name,
+                "135",
+            )
+            self.assertEqual(bundle.initial_policy.physical_spec.lane_count, 2)
 
-    def test_bundle_rejects_unresolved_policy_and_format_requests(self) -> None:
+    def test_bundle_rejects_unresolved_policy_requests(self) -> None:
         bundle = DetectionPolicyBundle.for_format_mode("135", "full")
 
         with self.assertRaises(KeyError):
             bundle.policy_for("135", "partial")
-        with self.assertRaises(KeyError):
-            bundle.format_for("half")
 
     def test_detection_layers_do_not_resolve_policy_or_format_registries(self) -> None:
         banned = ("get_detection_policy", "FORMATS[")
@@ -45,6 +45,10 @@ class DetectionPolicyBundleTests(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_detection_policy_requires_all_runtime_surfaces(self) -> None:
+        field_names = {field.name for field in fields(DetectionPolicy)}
+        self.assertIn("physical_spec", field_names)
+        self.assertTrue({"format_id", "family", "default_count"}.isdisjoint(field_names))
+
         runtime_surfaces = {"output", "diagnostics", "report"}
         defaults = {
             field.name: (field.default, field.default_factory)

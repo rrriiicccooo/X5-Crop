@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
-from ...formats import FormatPhysicalSpec, format_spec
+from ...formats import FormatPhysicalSpec
 from ..ids import decision_policy_id_for
 
 if TYPE_CHECKING:
@@ -110,24 +110,11 @@ def mode_policy_for(spec: FormatPhysicalSpec, strip_mode: str) -> ModePolicy:
     )
 
 
-def evidence_policy_for(
-    format_id: str,
-    strip_mode: str,
-    geometry_support_modes: tuple[str, ...] = (),
-) -> EvidencePolicy:
-    from ...formats import format_spec
-    from .evidence_policy import evidence_policy_for_physical_spec
-
-    return evidence_policy_for_physical_spec(
-        format_spec(format_id),
-        strip_mode,
-        EvidencePolicy(),
-        geometry_support_modes,
-    )
-
-
 def decision_policy_for(detection_policy: DetectionPolicy) -> DecisionPolicy:
-    policy_id = decision_policy_id_for(detection_policy.format_id, detection_policy.strip_mode)
+    policy_id = decision_policy_id_for(
+        detection_policy.physical_spec.name,
+        detection_policy.strip_mode,
+    )
     return replace(
         DecisionPolicy(),
         policy_id=policy_id,
@@ -145,17 +132,20 @@ def decision_policy_for(detection_policy: DetectionPolicy) -> DecisionPolicy:
 
 
 def decision_contract_for_policy(detection_policy: DetectionPolicy) -> DetectionDecisionContract:
-    spec = format_spec(detection_policy.format_id)
-    policy_id = decision_policy_id_for(detection_policy.format_id, detection_policy.strip_mode)
+    from .evidence_policy import evidence_policy_for_physical_spec
+
+    spec = detection_policy.physical_spec
+    policy_id = decision_policy_id_for(spec.name, detection_policy.strip_mode)
     return DetectionDecisionContract(
         policy_id=policy_id,
         schema_id=detection_policy.report.schema_id,
         schema_revision=detection_policy.report.schema_revision,
         format=spec,
         mode=mode_policy_for(spec, detection_policy.strip_mode),
-        evidence=evidence_policy_for(
-            detection_policy.format_id,
+        evidence=evidence_policy_for_physical_spec(
+            spec,
             detection_policy.strip_mode,
+            EvidencePolicy(),
             detection_policy.separator.geometry_support_modes,
         ),
         decision=decision_policy_for(detection_policy),
@@ -169,5 +159,4 @@ __all__ = [
     "ModePolicy",
     "decision_contract_for_policy",
     "decision_policy_for",
-    "evidence_policy_for",
 ]

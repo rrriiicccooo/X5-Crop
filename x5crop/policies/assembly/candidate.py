@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .presets import FormatPolicyPreset, ModePolicyPreset
+from .presets import ModePolicyPreset
 from .profile_defaults import (
     base_detection_score_parameters,
     partial_holder_parameters,
@@ -128,11 +128,8 @@ def scoring_policy(fmt: FormatPhysicalSpec, params: FormatParameters) -> Scoring
 
 
 def selection_policy(
-    preset: FormatPolicyPreset,
-    strip_mode: str,
     params: FormatParameters,
 ) -> SelectionPolicy:
-    del preset, strip_mode
     competition = params.candidate.candidate_competition
     return SelectionPolicy(
         top_n=int(competition.top_n),

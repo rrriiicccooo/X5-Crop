@@ -16,7 +16,6 @@ class ArchitectureResidualContractTest(unittest.TestCase):
         self.assertEqual(
             field_names,
             [
-                "name",
                 "preprocess",
                 "content",
                 "outer",
@@ -50,6 +49,17 @@ class ArchitectureResidualContractTest(unittest.TestCase):
         for path in source_root.rglob("*.py"):
             text = path.read_text(encoding="utf-8")
             for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+
+        self.assertEqual(offenders, [])
+
+    def test_policy_assembly_receives_resolved_format_specs(self) -> None:
+        offenders: list[str] = []
+        source_root = PROJECT_ROOT / "x5crop" / "policies" / "assembly"
+        for path in source_root.rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in ("FORMATS[", "preset.format_id"):
                 if term in text:
                     offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
 
@@ -175,6 +185,12 @@ class ArchitectureResidualContractTest(unittest.TestCase):
                         offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
 
         self.assertEqual(offenders, [])
+
+        frame_fit_source = (
+            PROJECT_ROOT / "x5crop" / "geometry" / "frame_fit.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("geometry_config", frame_fit_source)
+        self.assertNotIn("frame_fit: FrameFitParameters | None = None", frame_fit_source)
 
     def test_foundation_physical_evidence_and_guidance_do_not_accept_full_detection_policy(self) -> None:
         checked_roots = (

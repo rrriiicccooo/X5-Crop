@@ -131,7 +131,6 @@ class DiagnosticsParameters:
 
 @dataclass(frozen=True)
 class FormatParameters:
-    name: str
     preprocess: PreprocessParameters = field(default_factory=PreprocessParameters)
     content: ContentParameters = field(default_factory=ContentParameters)
     outer: OuterParameters = field(default_factory=OuterParameters)

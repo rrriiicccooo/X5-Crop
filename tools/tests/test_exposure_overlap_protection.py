@@ -50,6 +50,9 @@ class ExposureOverlapProtectionTest(unittest.TestCase):
                     policy = get_detection_policy(format_id, strip_mode)
                     self.assertEqual(policy.exposure_overlap_evidence, reference)
                     self.assertFalse(hasattr(policy.exposure_overlap_evidence, "enabled"))
+                    self.assertFalse(
+                        hasattr(policy.output.exposure_overlap_protection, "enabled")
+                    )
 
     def test_evidence_only_measures_physical_overlap(self) -> None:
         detection = _detection()

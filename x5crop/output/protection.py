@@ -15,7 +15,6 @@ DEFAULT_OUTPUT_BLEED = AxisBleedParameters(long_axis=20, short_axis=10)
 
 
 class ExposureOverlapProtectionPolicyLike(Protocol):
-    enabled: bool
     required_bleed_window_fraction: float
     required_bleed_padding_px: int
     required_bleed_min_px: int
@@ -77,13 +76,13 @@ def output_protection_plan(
         int(base_bleed.long_axis),
         int(protection.long_axis_bleed_capacity_px),
     )
-    protection_enabled = bool(policy.apply_output_bleed and protection.enabled)
+    protection_enabled = bool(policy.apply_output_bleed)
     feasible = bool(not detected or (protection_enabled and required <= available))
     if not detected:
         reason = "no_exposure_overlap"
         output_long_axis = int(base_bleed.long_axis)
     elif not protection_enabled:
-        reason = "exposure_overlap_protection_disabled"
+        reason = "output_bleed_disabled"
         output_long_axis = int(base_bleed.long_axis)
     elif feasible:
         reason = "exposure_overlap_protection_planned"
