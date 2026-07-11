@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from math import ceil
-from typing import Any
-
 from ..domain import AxisBleedParameters, OutputProtectionPlan
 from ..policies.parameters.exposure_overlap import ExposureOverlapProtectionParameters
 
@@ -11,15 +9,15 @@ DEFAULT_OUTPUT_BLEED = AxisBleedParameters(long_axis=20, short_axis=10)
 
 
 def output_protection_plan(
-    exposure_overlap_evidence: dict[str, Any],
+    overlap_detected: bool,
+    widest_overlap_band_px: float,
     base_bleed: AxisBleedParameters,
     protection: ExposureOverlapProtectionParameters,
+    *,
+    long_axis_bleed_capacity_px: int,
 ) -> OutputProtectionPlan:
-    detected = bool(exposure_overlap_evidence.get("exposure_overlap_detected", False))
-    widest_band = max(
-        0.0,
-        float(exposure_overlap_evidence.get("widest_overlap_band_px", 0.0) or 0.0),
-    )
+    detected = bool(overlap_detected)
+    widest_band = max(0.0, float(widest_overlap_band_px))
     required = 0
     if detected:
         required = max(
@@ -33,7 +31,7 @@ def output_protection_plan(
         )
     available = max(
         int(base_bleed.long_axis),
-        int(protection.long_axis_bleed_capacity_px),
+        int(long_axis_bleed_capacity_px),
     )
     feasible = bool(not detected or required <= available)
     if not detected:

@@ -110,7 +110,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertTrue(SeparatorBandObservation.__dataclass_params__.frozen)
         self.assertEqual(
             tuple(MeasurementProvenance.__dataclass_fields__),
-            ("root_measurement", "source", "dependencies"),
+            ("root_measurement", "source", "dependencies", "boundary_anchors"),
         )
         source = "\n".join(
             path.read_text(encoding="utf-8")
@@ -118,15 +118,19 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         )
         self.assertNotIn("class Gap:", source)
 
-    def test_content_candidate_source_has_one_canonical_identity(self) -> None:
+    def test_content_is_guidance_not_a_candidate_source(self) -> None:
         source = "\n".join(
             path.read_text(encoding="utf-8")
             for path in (PROJECT_ROOT / "x5crop").rglob("*.py")
         )
 
-        self.assertNotIn("CANDIDATE_SOURCE_CONTENT_PRIMARY", source)
-        self.assertNotIn("_CONTENT_EVIDENCE_CANDIDATE_SOURCES", source)
-        self.assertNotIn('"content_primary"', source)
+        self.assertNotIn("CANDIDATE_SOURCE_CONTENT", source)
+        self.assertFalse(
+            (
+                PROJECT_ROOT
+                / "x5crop/detection/candidate/build/content.py"
+            ).exists()
+        )
 
     def test_contract_tests_reference_only_current_paths(self) -> None:
         contract_source = (
@@ -242,13 +246,14 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_format_identity_has_one_canonical_name(self) -> None:
-        from x5crop.domain import DetectionCandidate, ProcessResult
+        from x5crop.detection.geometry import CandidateGeometry
+        from x5crop.domain import ProcessResult
         from x5crop.runtime.options import RuntimeOptions
         from x5crop.formats import FormatPhysicalSpec
         from x5crop.policies.runtime.policy import DetectionPolicy
         from x5crop.run_config import RunConfig
 
-        for contract in (DetectionCandidate, RuntimeOptions, RunConfig):
+        for contract in (CandidateGeometry, RuntimeOptions, RunConfig):
             self.assertIn("format_id", contract.__dataclass_fields__)
         self.assertEqual(set(ProcessResult.__dataclass_fields__), {"record"})
         self.assertNotIn("name", FormatPhysicalSpec.__dataclass_fields__)
@@ -320,18 +325,16 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
                     "conditional",
                 )
 
-    def test_full_strip_geometry_support_is_a_universal_physical_capability(self) -> None:
+    def test_full_strip_geometry_support_has_no_policy_switch(self) -> None:
         from x5crop.formats import FORMATS
         from x5crop.policies.registry import get_detection_policy
 
         for spec in FORMATS.values():
             policy = get_detection_policy(spec.format_id, "full")
-            expected = (
-                ("detected_geometry",)
-                if spec.physical_layout == "single_strip"
-                else ()
+            self.assertNotIn(
+                "geometry_support",
+                policy.separator.__dataclass_fields__,
             )
-            self.assertEqual(policy.separator.geometry_support.active_modes(), expected)
 
     def test_active_detection_has_no_grid_gap_family(self) -> None:
         banned = (

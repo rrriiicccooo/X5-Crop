@@ -19,7 +19,6 @@ from ..parameters.outer import (
 class OuterCorrectionFamilyPolicy:
     mode: str = "off"
     phase: str = "extension"
-    requires_complete_hard_gaps: bool = False
     allowed_axes: tuple[str, ...] = ()
     max_shrink_ratio: float = 0.0
     max_expand_ratio: float = 0.0
@@ -48,7 +47,6 @@ class PartialPlacementGeometryPolicy:
     edge_anchor: EdgeAnchoredContentPositionParameters
     enabled: bool = False
     position_order: tuple[str, ...] = ("edge_anchor", "floating")
-    edge_trust_min_candidates: int = 2
 
 
 @dataclass(frozen=True)

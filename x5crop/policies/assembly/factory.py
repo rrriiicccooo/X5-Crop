@@ -9,7 +9,6 @@ from ...image.evidence import (
 from ...image.gray import BaseGrayParameters
 from ..parameters.aggregate import FormatParameters
 from ...strip_modes import FULL, PARTIAL
-from .candidate import partial_holder_policy
 from .outer import outer_policy
 from .separator import separator_policy
 from ..runtime.candidate import ScoringPolicy
@@ -41,7 +40,7 @@ def build_detection_policy(
         separator_evidence_image=SeparatorEvidenceImageParameters(),
         content_evidence_image=ContentEvidenceImageParameters(),
     )
-    separator = separator_policy(strip_mode, detector_kind, params)
+    separator = separator_policy(detector_kind, params)
     return DetectionPolicy(
         physical_spec=spec,
         strip_mode=strip_mode,
@@ -51,19 +50,10 @@ def build_detection_policy(
         outer=outer_policy(detector_kind, strip_mode, params),
         separator=separator,
         content=ContentPolicy(
-            evidence_image=preprocess.content_evidence_image,
             evidence=params.content.content_evidence,
             profile=params.content.content_profile,
             mask=params.content.content_mask,
-            candidate=params.content.content_candidate,
             support=params.content.content_support,
-        ),
-        partial_holder=partial_holder_policy(detector_kind, strip_mode, params),
-        partial_edge_hint=params.candidate.partial_edge_hint,
-        frame_fit=(
-            params.candidate.partial_frame_fit
-            if strip_mode == "partial"
-            else params.candidate.full_frame_fit
         ),
         scoring=ScoringPolicy(
             calibration=params.candidate.scoring_calibration,
@@ -81,7 +71,5 @@ def build_detection_policy(
         ),
         diagnostics=RuntimeDiagnosticsPolicy(
             debug_gap_overlay=params.diagnostics.debug_gap_overlay,
-            nearby_separator_search=params.separator.nearby_separator_refinement,
-            nearby_separator_comparison=params.diagnostics.nearby_separator_diagnostics,
         ),
     )

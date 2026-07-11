@@ -2,21 +2,22 @@ from __future__ import annotations
 
 import numpy as np
 
-from ...domain import Box, OuterCandidate
+from ...domain import Box, MeasurementProvenance
 from ...formats import FormatPhysicalSpec
 from ...policies.runtime.outer import PartialPlacementGeometryPolicy
 from ...utils import bbox_from_mask, clamp_int
-from ..physical.outer.common import unique_outer_candidates
+from ..physical.outer.common import unique_outer_proposals
+from ..physical.outer.types import OuterProposal
 
 
 def floating_content_position_candidates(
     gray_work: np.ndarray,
-    base_candidates: list[OuterCandidate],
+    base_candidates: list[OuterProposal],
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     partial_placement: PartialPlacementGeometryPolicy,
-) -> list[OuterCandidate]:
+) -> list[OuterProposal]:
     floating_policy = partial_placement.floating
     if not partial_placement.enabled:
         return []
@@ -34,7 +35,7 @@ def floating_content_position_candidates(
         min_row_fraction=floating_policy.content_bbox_min_fraction,
         min_col_fraction=floating_policy.content_bbox_min_fraction,
     )
-    candidates: list[OuterCandidate] = []
+    candidates: list[OuterProposal] = []
     source_candidates = sorted(
         [candidate for candidate in base_candidates if candidate.box.valid()],
         key=lambda candidate: candidate.box.width * candidate.box.height,
@@ -102,18 +103,16 @@ def floating_content_position_candidates(
                 if not box.valid() or box.width < min_width:
                     continue
                 candidates.append(
-                    OuterCandidate(
+                    OuterProposal(
                         f"floating_{strip_mode}_{source.name}_r{target_ratio:.3f}",
                         box,
                         "content_outer",
-                        {
-                            "family": "content_outer",
-                            "placement": "floating",
-                            "source_outer": source.name,
-                            "target_ratio": float(target_ratio),
-                            "content_guidance_role": "outer_position_hint",
-                        },
+                        MeasurementProvenance(
+                            "content_guidance",
+                            "floating_content_position",
+                            (source.provenance.root_measurement, "content_bbox"),
+                        ),
                     )
                 )
 
-    return unique_outer_candidates(candidates)[: int(floating_policy.max_candidates)]
+    return unique_outer_proposals(candidates)[: int(floating_policy.max_candidates)]

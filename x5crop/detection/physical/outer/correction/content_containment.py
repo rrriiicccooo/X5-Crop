@@ -1,126 +1,71 @@
 from __future__ import annotations
 
-from typing import Any, Optional
-
 from .....domain import Box
-from .....domain import DetectionCandidate
 from .....policies.runtime.outer import ContentContainmentCorrectionPolicy
-from .....utils import box_from_dict, clamp_int
+from .....utils import clamp_int
+from ....geometry import CandidateGeometry
+from ....evidence.outer_alignment import OuterAlignmentEvidence
+from ...spans import FilmSpan
 from .constraints import correction_axes_allowed
 from .types import OuterCorrectionProposal
 
 
-def corrected_outer_from_alignment(
-    alignment: dict[str, Any],
-    count: int,
-    content_containment_policy: ContentContainmentCorrectionPolicy,
-) -> Optional[Box]:
-    parameters = content_containment_policy.parameters
-    if not bool(alignment.get("used", False)) or bool(alignment.get("ok", True)):
+def content_containment_correction_proposal(
+    geometry: CandidateGeometry,
+    alignment: OuterAlignmentEvidence,
+    canvas_width: int,
+    canvas_height: int,
+    policy: ContentContainmentCorrectionPolicy,
+) -> OuterCorrectionProposal | None:
+    family = policy.family
+    content = alignment.content_span
+    original = geometry.film_span.box
+    if (
+        family.mode == "off"
+        or content is None
+        or not content.valid()
+        or not alignment.confirmed_undercrop
+    ):
         return None
-    try:
-        outer = box_from_dict(alignment["outer_work_box"])
-        content = box_from_dict(alignment["content_work_box"])
-    except Exception:
-        return None
-    if not outer.valid() or not content.valid():
-        return None
-
-    pitch = float(outer.width) / float(max(1, count))
-    alignment_margin_x = clamp_int(
-        pitch * parameters.margin_x_ratio,
-        parameters.margin_x_min,
-        parameters.margin_x_max,
-    )
-    alignment_margin_y = clamp_int(
-        float(outer.height) * parameters.margin_y_ratio,
-        parameters.margin_y_min,
-        parameters.margin_y_max,
-    )
-    long_margin_cap = clamp_int(
-        pitch * parameters.long_margin_cap_ratio,
+    parameters = policy.parameters
+    pitch = float(original.width) / float(max(1, geometry.count))
+    long_margin = clamp_int(
+        pitch * parameters.long_margin_ratio,
         parameters.long_margin_cap_min,
         parameters.long_margin_cap_max,
     )
-    short_margin_cap = clamp_int(
-        float(outer.height) * parameters.short_margin_cap_ratio,
+    short_margin = clamp_int(
+        float(original.height) * parameters.short_margin_ratio,
         parameters.short_margin_cap_min,
         parameters.short_margin_cap_max,
     )
-    long_margin = max(
-        alignment_margin_x,
-        min(
-            long_margin_cap,
-            int(round(pitch * parameters.long_margin_ratio)),
-        ),
+    corrected = Box(
+        max(0, min(original.left, content.left - long_margin)),
+        max(0, min(original.top, content.top - short_margin)),
+        min(canvas_width, max(original.right, content.right + long_margin)),
+        min(canvas_height, max(original.bottom, content.bottom + short_margin)),
     )
-    short_margin = max(
-        alignment_margin_y,
-        min(
-            short_margin_cap,
-            int(round(float(outer.height) * parameters.short_margin_ratio)),
-        ),
+    if not corrected.valid() or corrected == original:
+        return None
+    if corrected.width < original.width or corrected.height < original.height:
+        raise AssertionError("content containment correction must only expand")
+    long_expansion = float(corrected.width - original.width) / max(
+        1.0,
+        float(original.width),
     )
-    left, top, right, bottom = outer.left, outer.top, outer.right, outer.bottom
-
-    if int(alignment.get("long_slack_left", 0)) > 0:
-        left = max(outer.left, content.left - long_margin)
-    if int(alignment.get("long_slack_right", 0)) > 0:
-        right = min(outer.right, content.right + long_margin)
-    if int(alignment.get("short_slack_top", 0)) > 0 and str(alignment.get("reason", "")) == "outer_short_axis_excess":
-        top = max(outer.top, content.top - short_margin)
-    if int(alignment.get("short_slack_bottom", 0)) > 0 and str(alignment.get("reason", "")) == "outer_short_axis_excess":
-        bottom = min(outer.bottom, content.bottom + short_margin)
-
-    corrected = Box(left, top, right, bottom)
-    if not corrected.valid():
-        return None
-    if corrected.width < max(
-        int(parameters.min_corrected_width_px),
-        int(round(outer.width * parameters.min_corrected_size_ratio)),
-    ):
-        return None
-    if corrected.height < max(
-        int(parameters.min_corrected_height_px),
-        int(round(outer.height * parameters.min_corrected_size_ratio)),
-    ):
-        return None
-    if corrected == outer:
-        return None
-    return corrected
-
-
-def content_containment_correction_proposal(
-    detection: DetectionCandidate,
-    alignment: dict[str, Any],
-    eligible_families: set[str],
-    content_containment_policy: ContentContainmentCorrectionPolicy,
-) -> Optional[OuterCorrectionProposal]:
-    if "content_containment" not in eligible_families:
-        return None
-    family = content_containment_policy.family
-    corrected_outer = corrected_outer_from_alignment(
-        alignment,
-        detection.count,
-        content_containment_policy,
+    short_expansion = float(corrected.height - original.height) / max(
+        1.0,
+        float(original.height),
     )
-    if corrected_outer is None:
+    if family.max_expand_ratio > 0.0 and max(
+        long_expansion,
+        short_expansion,
+    ) > family.max_expand_ratio:
         return None
-    try:
-        original_outer = box_from_dict(alignment["outer_work_box"])
-    except Exception:
-        return None
-    if not correction_axes_allowed(family, original_outer, corrected_outer):
+    if not correction_axes_allowed(family, original, corrected):
         return None
     return OuterCorrectionProposal(
-        box=corrected_outer,
-        name="content_containment_outer",
-        strategy="content_containment_correction",
-        source_reason=str(alignment.get("reason", "")),
-        original_outer_work_box=alignment.get("outer_work_box"),
-        detail={
-            "source_edge_hard_anchors": bool(alignment.get("edge_hard_anchors", False)),
-            "source_white_edge_slack": bool(alignment.get("white_edge_slack", False)),
-            "content_work_box": alignment.get("content_work_box"),
-        },
+        corrected_span=FilmSpan(corrected),
+        family="content_containment",
+        reason=alignment.reason,
     )

@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from ...geometry.detection_parameters import (
     EdgePairParameters,
     EdgeRefineProfileParameters,
-    FrameFitParameters,
     GapSearchParameters,
     HardGapTrustParameters,
     NearbySeparatorRefinementParameters,
@@ -14,16 +13,15 @@ from ...geometry.detection_parameters import (
     SeparatorWidthProfileSearchParameters,
 )
 from ...image.deskew_parameters import DeskewParameters
-from .base import PartialCountParameters, PartialEdgeHintParameters
-from .candidate import CandidatePlanParameters, PartialHolderParameters
+from .base import PartialCountParameters
+from .candidate import CandidatePlanParameters
 from .content import (
-    ContentCandidateParameters,
     ContentEvidenceParameters,
     ContentMaskParameters,
     ContentProfileParameters,
     ContentSupportParameters,
 )
-from .diagnostics import DebugGapOverlayParameters, NearbySeparatorDiagnosticsParameters
+from .diagnostics import DebugGapOverlayParameters
 from .finalization import ApprovedGeometryAdjustmentParameters
 from .outer import (
     ContentContainmentCorrectionParameters,
@@ -49,8 +47,6 @@ from .scoring import (
     SeparatorSupportScoreParameters,
 )
 from .separator import (
-    SeparatorGeometrySupportParameters,
-    SeparatorSupportParameters,
     SeparatorWidthProfileParameters,
 )
 
@@ -65,7 +61,6 @@ class ContentParameters:
     content_evidence: ContentEvidenceParameters = field(default_factory=ContentEvidenceParameters)
     content_profile: ContentProfileParameters = field(default_factory=ContentProfileParameters)
     content_mask: ContentMaskParameters = field(default_factory=ContentMaskParameters)
-    content_candidate: ContentCandidateParameters = field(default_factory=ContentCandidateParameters)
     content_support: ContentSupportParameters = field(default_factory=ContentSupportParameters)
 
 
@@ -85,8 +80,6 @@ class OuterParameters:
 
 @dataclass(frozen=True)
 class SeparatorParameters:
-    separator_support: SeparatorSupportParameters = field(default_factory=SeparatorSupportParameters)
-    separator_geometry_support: SeparatorGeometrySupportParameters = field(default_factory=SeparatorGeometrySupportParameters)
     separator_width_profile: SeparatorWidthProfileParameters = field(default_factory=SeparatorWidthProfileParameters)
     separator_width_profile_search: SeparatorWidthProfileSearchParameters = field(default_factory=SeparatorWidthProfileSearchParameters)
     edge_pair: EdgePairParameters = field(default_factory=EdgePairParameters)
@@ -100,15 +93,6 @@ class SeparatorParameters:
 @dataclass(frozen=True)
 class CandidateParameters:
     partial_counts: PartialCountParameters = field(default_factory=PartialCountParameters)
-    partial_edge_hint: PartialEdgeHintParameters = field(default_factory=PartialEdgeHintParameters)
-    partial_holder: PartialHolderParameters = field(default_factory=PartialHolderParameters)
-    full_frame_fit: FrameFitParameters = field(default_factory=FrameFitParameters)
-    partial_frame_fit: FrameFitParameters = field(
-        default_factory=lambda: FrameFitParameters(
-            name="partial_strip_frame_fit",
-            edge_evidence=False,
-        )
-    )
     candidate_plan: CandidatePlanParameters = field(default_factory=CandidatePlanParameters)
     scoring_calibration: ScoringCalibrationParameters = field(default_factory=ScoringCalibrationParameters)
     base_detection_score: BaseDetectionScoreParameters = field(default_factory=BaseDetectionScoreParameters)
@@ -134,7 +118,6 @@ class OutputParameters:
 @dataclass(frozen=True)
 class DiagnosticsParameters:
     debug_gap_overlay: DebugGapOverlayParameters = field(default_factory=DebugGapOverlayParameters)
-    nearby_separator_diagnostics: NearbySeparatorDiagnosticsParameters = field(default_factory=NearbySeparatorDiagnosticsParameters)
 
 
 @dataclass(frozen=True)

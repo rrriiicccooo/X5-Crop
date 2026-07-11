@@ -1,53 +1,67 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-
-import numpy as np
-
 from ...constants import CANDIDATE_SOURCE_REVIEW_ONLY
-from ...domain import Box, DetectionCandidate
-from ...formats import FormatPhysicalSpec
+from ...domain import Box, MeasurementProvenance
 from ...geometry.boxes import map_work_box
-from ...geometry.layout import work_gray
-from ...run_config import RunConfig
-from ..candidate.assessment.mode import apply_mode_candidate_assessment
+from ..candidate.model import BuiltCandidate
+from ..candidate.plan.count_hypotheses import CountHypothesis
+from ..context import DetectionContext
+from ..geometry import CandidateGeometry
+from ..physical.spans import FilmSpan, HolderSpan
 
 
-def review_only_detection(
-    gray: np.ndarray,
-    config: RunConfig,
-    fmt: FormatPhysicalSpec,
-) -> DetectionCandidate:
-    if fmt.physical_layout != "dual_lane" or config.strip_mode != "partial":
-        raise ValueError("Review-only detector requires dual-lane partial input")
-    gray_work = work_gray(gray, config.layout)
-    wh, ww = gray_work.shape
-    outer = Box(0, 0, ww, wh)
-    source_h, source_w = gray.shape
-    mode_diagnostics = [
-        "dual_lane_partial_not_supported",
-        "manual_processing_required",
-    ]
-    detection = DetectionCandidate(
-        format_id=fmt.format_id,
-        layout=config.layout,
-        strip_mode=config.strip_mode,
-        count=fmt.default_count,
-        outer=map_work_box(outer, config.layout, source_w, source_h),
-        frames=[],
-        gaps=[],
-        confidence=0.0,
-        detail={
-            "candidate_source": CANDIDATE_SOURCE_REVIEW_ONLY,
-            "candidate_count": 0,
-            "mode_diagnostics": list(mode_diagnostics),
-            "layout": config.layout,
-            "work_outer": asdict(outer),
-        },
-    )
-    return apply_mode_candidate_assessment(
-        detection,
-        source=CANDIDATE_SOURCE_REVIEW_ONLY,
-        automatic_processing_supported=False,
-        component_candidate_gates=[],
+def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
+    physical_spec = context.policy.physical_spec
+    if (
+        physical_spec.physical_layout != "dual_lane"
+        or context.request.strip_mode != "partial"
+    ):
+        raise ValueError("review-only mode requires dual-lane partial input")
+    height, width = context.measurement_cache.gray_work.shape
+    span = Box(0, 0, width, height)
+    source_height, source_width = context.source_gray.shape
+    count = physical_spec.default_count
+    return BuiltCandidate(
+        geometry=CandidateGeometry(
+            format_id=physical_spec.format_id,
+            layout=context.request.layout,
+            strip_mode=context.request.strip_mode,
+            count=count,
+            holder_span=HolderSpan(span),
+            film_span=FilmSpan(span),
+            work_frames=(),
+            image_outer=map_work_box(
+                span,
+                context.request.layout,
+                source_width,
+                source_height,
+            ),
+            image_frames=(),
+            separators=(),
+            origin=0.0,
+            pitch=float(width) / float(max(1, count)),
+            offset_fraction=0.0,
+            source=CANDIDATE_SOURCE_REVIEW_ONLY,
+            automatic_processing_supported=False,
+            contract="review_only_mode",
+            outer_proposal_name="review_only_canvas",
+            outer_proposal_strategy="review_only_outer",
+            outer_provenance=MeasurementProvenance(
+                root_measurement="review_only_mode",
+                source="review_only_canvas",
+                dependencies=("canvas",),
+            ),
+        ),
+        count_hypothesis=CountHypothesis(
+            count=count,
+            strip_mode=context.request.strip_mode,
+            offsets=(),
+            placement_source="not_applicable",
+            source="mode_contract",
+            allowed_by_physical_spec=True,
+        ),
+        build_diagnostics=(
+            "dual_lane_partial_not_supported",
+            "automatic_processing_not_supported",
+        ),
     )

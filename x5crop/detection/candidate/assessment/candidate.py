@@ -1,395 +1,258 @@
 from __future__ import annotations
 
-from dataclasses import asdict, replace
-from typing import Any, Optional
+from dataclasses import replace
 
-import numpy as np
-
-from ....cache import AnalysisCache
-from ....constants import CANDIDATE_SOURCE_CONTENT, CANDIDATE_SOURCE_SEPARATOR
-from ....domain import DetectionCandidate
-from ....formats import FormatPhysicalSpec
-from ....geometry.layout import work_gray
-from ....policies.runtime.policy import DetectionPolicy
-from ....run_config import RunConfig
-from ...evidence.content.frame_support import content_evidence_detail
-from ...evidence.content.support import frame_content_support_detail
-from ...evidence.frame_coverage import FrameCoverageEvidence, frame_coverage_evidence
-from ...evidence.frame_topology import frame_topology_evidence
+from ...context import DetectionContext
+from ...evidence.content.frame_support import frame_content_evidence
+from ...evidence.content.holder_texture import holder_texture_evidence
+from ...evidence.content.preservation import content_preservation_evidence
+from ...evidence.frame_coverage import frame_coverage_evidence
 from ...evidence.holder_occupancy import holder_occupancy_evidence
-from ...evidence.separator_summary import separator_support_detail_summary
+from ...evidence.outer_alignment import outer_content_alignment_evidence
+from ...evidence.partial_edge import partial_edge_safety_evidence
 from ...evidence.state import EvidenceState
-from .base_scoring import apply_base_detection_scoring
+from ..model import (
+    AssessedCandidate,
+    BuiltCandidate,
+    CandidateAssessment,
+    CandidateEvidence,
+)
+from .base_scoring import base_physical_assessment
 from .candidate_gate import (
     BoundaryProofPath,
     CandidateGateInput,
     candidate_gate_assessment,
 )
-from .content_candidate import content_candidate_assessment_from_proposal
-from .evidence_independence import evidence_independence_detail
-from .partial_holder import partial_edge_safety_assessment_detail
-from .scoring import (
-    content_quality_score,
-    content_support_score,
-    geometry_support_score,
-    joint_support_score,
-    separator_support_score,
-)
-from .separator_support import assess_separator_support
-
-
-def _uses_separator_evidence(source: str) -> bool:
-    return source in {"separator", CANDIDATE_SOURCE_SEPARATOR}
-
-
-def _detail_float(detail: dict[str, Any], key: str, default: float) -> float:
-    value = detail.get(key)
-    try:
-        return float(default if value is None else value)
-    except (TypeError, ValueError):
-        return float(default)
-
-
-def _topology_detail(candidate: DetectionCandidate) -> dict[str, Any]:
-    detail = candidate.detail.get("frame_topology_evidence")
-    if isinstance(detail, dict):
-        return dict(detail)
-    return frame_topology_evidence(candidate.frames, candidate.count)
-
-
-def _topology_state(detail: dict[str, Any]) -> EvidenceState:
-    return (
-        EvidenceState.SUPPORTED
-        if bool(detail.get("ok", False))
-        else EvidenceState.CONTRADICTED
-    )
-
-
-def _photo_geometry_state(candidate: DetectionCandidate) -> EvidenceState:
-    detail = candidate.detail.get("photo_width_stability")
-    if not isinstance(detail, dict) or not bool(detail.get("used", False)):
-        return EvidenceState.UNAVAILABLE
-    return (
-        EvidenceState.CONTRADICTED
-        if bool(detail.get("unstable", False))
-        else EvidenceState.SUPPORTED
-    )
-
-
-def _independence_state(detail: dict[str, Any]) -> EvidenceState:
-    if not bool(detail.get("used", False)):
-        return EvidenceState.NOT_APPLICABLE
-    return (
-        EvidenceState.SUPPORTED
-        if bool(detail.get("ok", False))
-        else EvidenceState.CONTRADICTED
-    )
-
-
-def candidate_content_preservation_state(
-    content_support: dict[str, Any],
-    partial_edge: dict[str, Any],
-    frame_coverage: FrameCoverageEvidence,
-) -> EvidenceState:
-    if frame_coverage.state == EvidenceState.CONTRADICTED:
-        return EvidenceState.CONTRADICTED
-    if str(partial_edge.get("state", "not_applicable")) == "contradicted":
-        return EvidenceState.CONTRADICTED
-    if bool(content_support.get("frame_content_support_available", False)):
-        return EvidenceState.SUPPORTED
-    return EvidenceState.UNAVAILABLE
+from .evidence_independence import evidence_independence_evidence
+from .scoring import candidate_scores
+from .separator_support import separator_sequence_evidence
 
 
 def _boundary_proof_paths(
-    candidate: DetectionCandidate,
-    source: str,
-    separator_detail: dict[str, Any],
-    topology_state: EvidenceState,
-    photo_state: EvidenceState,
-    independence_state: EvidenceState,
-    partial_edge: dict[str, Any],
+    candidate: BuiltCandidate,
+    evidence: CandidateEvidence,
 ) -> tuple[BoundaryProofPath, ...]:
-    separator = separator_support_detail_summary(separator_detail)
-    expected = int(separator.expected_gaps)
-    hard = int(separator.hard_separator_gaps)
-    hard_complete = hard >= expected
-    continuity = candidate.detail.get("separator_cross_axis_continuity", {})
-    continuity = dict(continuity) if isinstance(continuity, dict) else {}
-    weak_gap_indexes = list(continuity.get("weak_gap_indexes", []))
-    continuity_supported = bool(continuity.get("ok", False))
-    one_weak_gap_corroborated = bool(
-        len(weak_gap_indexes) == 1
-        and hard_complete
-        and photo_state == EvidenceState.SUPPORTED
+    geometry = candidate.geometry
+    common = bool(
+        evidence.frame_topology.state == EvidenceState.SUPPORTED
+        and evidence.frame_coverage.state == EvidenceState.SUPPORTED
+        and evidence.content_preservation.state == EvidenceState.SUPPORTED
+        and evidence.independence.state
+        in {EvidenceState.SUPPORTED, EvidenceState.NOT_APPLICABLE}
     )
-    common_supported = topology_state == EvidenceState.SUPPORTED and independence_state in {
-        EvidenceState.SUPPORTED,
-        EvidenceState.NOT_APPLICABLE,
-    }
     separator_led = bool(
-        expected > 0
-        and _uses_separator_evidence(source)
-        and common_supported
-        and hard_complete
-        and bool(separator_detail.get("ok", False))
-        and (continuity_supported or one_weak_gap_corroborated)
+        geometry.source == "separator"
+        and geometry.count > 1
+        and common
+        and evidence.separator_sequence.state == EvidenceState.SUPPORTED
+        and evidence.separator_continuity.state == EvidenceState.SUPPORTED
+    )
+    hard_anchor_count = evidence.separator_sequence.hard_count
+    single_frame_boundary_anchors = set(
+        geometry.outer_provenance.boundary_anchors
+    )
+    single_frame_physical_boundaries = bool(
+        geometry.count == 1
+        and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
+        and geometry.outer_provenance.root_measurement != "content_guidance"
+        and evidence.content_preservation.state == EvidenceState.SUPPORTED
+        and (
+            evidence.frame_dimensions.calibration_used
+            or len(single_frame_boundary_anchors) >= 2
+        )
     )
     geometry_led = bool(
-        expected > 0
-        and _uses_separator_evidence(source)
-        and common_supported
-        and photo_state == EvidenceState.SUPPORTED
-        and hard >= 1
+        geometry.source == "separator"
+        and evidence.frame_topology.state == EvidenceState.SUPPORTED
+        and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
+        and (
+            single_frame_physical_boundaries
+            or (
+                common
+                and geometry.count > 1
+                and hard_anchor_count >= 1
+            )
+        )
     )
-    partial_state = str(partial_edge.get("state", "not_applicable"))
+    count_hypothesis = candidate.count_hypothesis
     partial_occupancy_led = bool(
-        candidate.strip_mode == "partial"
-        and _uses_separator_evidence(source)
-        and common_supported
-        and partial_state == EvidenceState.SUPPORTED.value
-        and bool(partial_edge.get("boundary_support", False))
+        geometry.source == "separator"
+        and geometry.strip_mode == "partial"
+        and count_hypothesis is not None
+        and count_hypothesis.allowed_by_physical_spec
+        and evidence.partial_edge_safety.state == EvidenceState.SUPPORTED
+        and evidence.holder_occupancy.state == EvidenceState.SUPPORTED
+        and common
     )
     return (
         BoundaryProofPath(
-            code="separator_led",
-            state=(
-                EvidenceState.SUPPORTED
-                if separator_led
-                else EvidenceState.UNAVAILABLE
+            "separator_led",
+            EvidenceState.SUPPORTED
+            if separator_led
+            else EvidenceState.UNAVAILABLE,
+            (
+                "complete_hard_separator_sequence",
+                "cross_axis_separator_continuity",
+                "frame_union_content_coverage",
             ),
-            detail={
-                "expected_gaps": expected,
-                "hard_gaps": hard,
-                "hard_gap_sequence_complete": hard_complete,
-                "continuity_supported": continuity_supported,
-                "one_weak_gap_corroborated": one_weak_gap_corroborated,
-            },
         ),
         BoundaryProofPath(
-            code="geometry_led",
-            state=(
-                EvidenceState.SUPPORTED
-                if geometry_led
-                else EvidenceState.UNAVAILABLE
-            ),
-            detail={
-                "photo_geometry_state": photo_state.value,
-                "independent_hard_separator_anchors": hard,
-            },
-        ),
-        BoundaryProofPath(
-            code="partial_occupancy_led",
-            state=(
-                EvidenceState.SUPPORTED
-                if partial_occupancy_led
-                else (
-                    EvidenceState.UNAVAILABLE
-                    if candidate.strip_mode == "partial"
-                    else EvidenceState.NOT_APPLICABLE
-                )
-            ),
-            detail={
-                "partial_edge_state": partial_state,
-                "boundary_support": bool(partial_edge.get("boundary_support", False)),
-                "complete_underfilled_strip": bool(
-                    partial_edge.get("complete_underfilled_strip", False)
+            "geometry_led",
+            EvidenceState.SUPPORTED
+            if geometry_led
+            else EvidenceState.UNAVAILABLE,
+            (
+                "physical_frame_dimensions",
+                (
+                    "calibrated_two_side_frame_boundaries"
+                    if evidence.frame_dimensions.calibration_used
+                    else "independent_two_side_frame_boundaries"
+                    if single_frame_physical_boundaries
+                    else "independent_separator_anchor"
                 ),
-            },
+            ),
+        ),
+        BoundaryProofPath(
+            "partial_occupancy_led",
+            EvidenceState.SUPPORTED
+            if partial_occupancy_led
+            else (
+                EvidenceState.UNAVAILABLE
+                if geometry.strip_mode == "partial"
+                else EvidenceState.NOT_APPLICABLE
+            ),
+            (
+                "partial_edge_content_preservation",
+                "holder_occupancy",
+                "resolved_frame_sequence",
+            ),
         ),
     )
 
 
-def apply_candidate_assessment_policy(
-    gray: np.ndarray,
-    detection: DetectionCandidate,
-    config: RunConfig,
-    fmt: FormatPhysicalSpec,
-    source: str,
-    cache: Optional[AnalysisCache],
-    *,
-    policy: DetectionPolicy,
-) -> DetectionCandidate:
-    candidate = replace(detection, detail=dict(detection.detail))
-    diagnostics: list[str] = []
-    if _uses_separator_evidence(source):
-        gray_work = (
-            cache.gray_work
-            if cache is not None and cache.layout == config.layout
-            else work_gray(gray, config.layout)
-        )
-        candidate = apply_base_detection_scoring(
-            gray_work,
-            candidate,
-            config,
-            fmt,
-            policy,
-        )
-    elif source == "content":
-        proposal_assessment = content_candidate_assessment_from_proposal(
-            candidate,
-            policy.content,
-        )
-        candidate.confidence = max(
-            float(candidate.confidence),
-            float(proposal_assessment.confidence),
-        )
-        diagnostics.extend(proposal_assessment.diagnostics)
-        content_proposal = candidate.detail.get("content_proposal")
-        if isinstance(content_proposal, dict):
-            content_proposal["candidate_assessment"] = proposal_assessment.detail
-
-    separator_result = assess_separator_support(candidate, policy)
-    separator_ok = bool(separator_result.ok)
-    separator_detail = dict(separator_result.detail)
-    hard_count = separator_support_detail_summary(separator_detail).hard_separator_gaps
-    outer_strategy = str(candidate.detail.get("outer_candidate_strategy", ""))
-    content_guided = candidate.detail.get("content_guided_separator", {})
-    content_guided_used = bool(
-        isinstance(content_guided, dict) and content_guided.get("used", False)
-    )
-    if _uses_separator_evidence(source) and (
-        (outer_strategy == "edge_anchor_outer" and hard_count <= 0)
-        or (content_guided_used and hard_count <= 0)
-    ):
-        separator_ok = False
-        separator_detail["ok"] = False
-        separator_detail["reason"] = "independent_hard_separator_missing"
-
-    content_detail = content_evidence_detail(
-        gray,
+def assess_candidate(
+    candidate: BuiltCandidate,
+    context: DetectionContext,
+) -> AssessedCandidate:
+    physical_spec = context.policy.physical_spec
+    if candidate.geometry.format_id != physical_spec.format_id:
+        raise ValueError("candidate and detection context format do not match")
+    base = base_physical_assessment(
+        context.measurement_cache.gray_work,
         candidate,
-        cache,
-        content_policy=policy.content,
-        horizontal_frame_aspect=fmt.horizontal_content_aspect,
+        physical_spec,
+        context.scan_calibration,
+        context.policy.scoring,
+        context.policy.separator.hard_gap_trust,
     )
-    content_support = frame_content_support_detail(
-        content_detail,
-        policy.content.evidence,
-        expected_count=candidate.count,
+    geometry = replace(
+        candidate.geometry,
+        separators=base.separator_continuity.observations,
     )
-    content_score = content_support_score(content_support)
-    content_quality = content_quality_score(content_support, policy.content)
-    geometry_score = geometry_support_score(candidate, content_support, policy)
-    separator_score = (
-        separator_support_score(separator_detail, policy)
-        if _uses_separator_evidence(source)
-        else 0.0
+    candidate = replace(candidate, geometry=geometry)
+    coverage = frame_coverage_evidence(
+        geometry.holder_span,
+        geometry.film_span,
+        geometry.work_frames,
+        physical_spec,
+        context.measurement_cache,
+        context.policy.content,
     )
-    joint_score = joint_support_score(
-        geometry_score=geometry_score,
-        content_score=content_score,
-        separator_score=separator_score,
-        source=source,
-        policy=policy,
+    content = frame_content_evidence(
+        geometry,
+        context.measurement_cache,
+        context.policy.content,
     )
-    frame_content_supported = bool(
-        content_support.get("frame_content_support_available", False)
+    holder_texture = holder_texture_evidence(
+        geometry,
+        context.measurement_cache,
+        content,
+        context.policy.content.evidence,
     )
-    if str(content_support.get("support", "")) in {"low_content", "weak"}:
-        diagnostics.append("content_quality_low")
-    if str(content_support.get("support", "")) == "aspect_conflict":
-        diagnostics.append("content_aspect_uncertain")
-
-    coverage = frame_coverage_evidence(candidate, fmt, cache, policy.content)
-    candidate.detail["frame_coverage_evidence"] = {
-        **asdict(coverage),
-        "state": coverage.state.value,
-    }
-    holder_occupancy = holder_occupancy_evidence(
-        candidate,
-        fmt,
-        content_support,
+    alignment = outer_content_alignment_evidence(
+        geometry,
+        context.measurement_cache,
+        context.policy.outer.alignment_evidence,
+    )
+    sequence = separator_sequence_evidence(
+        geometry,
+        base.separator_continuity,
+    )
+    occupancy = holder_occupancy_evidence(
+        layout=geometry.layout,
+        strip_mode=geometry.strip_mode,
+        count=geometry.count,
+        holder_span=geometry.holder_span,
+        film_span=geometry.film_span,
+        work_frames=geometry.work_frames,
+        separators=geometry.separators,
+        physical_spec=physical_spec,
+        content_support_available=content.support_available,
         frame_coverage=coverage,
+        frame_dimensions=base.frame_dimensions,
+        calibration=context.scan_calibration,
     )
-    strip_completeness = dict(holder_occupancy.get("strip_completeness", {}))
-    candidate.detail["strip_completeness"] = strip_completeness
-    candidate.detail["holder_occupancy"] = holder_occupancy
-    partial_edge = partial_edge_safety_assessment_detail(
-        gray,
-        candidate,
-        separator_detail,
-        content_support,
-        source,
-        holder_occupancy,
-        cache,
-        policy=policy,
+    partial_edge = partial_edge_safety_evidence(
+        geometry,
+        coverage,
+        base.frame_dimensions,
+        content,
+        occupancy,
     )
-    topology = _topology_detail(candidate)
-    topology_state = _topology_state(topology)
-    content_state = candidate_content_preservation_state(
-        content_support,
+    preservation = content_preservation_evidence(
+        content,
+        alignment,
         partial_edge,
         coverage,
     )
-    photo_state = _photo_geometry_state(candidate)
-    independence = evidence_independence_detail(
-        candidate,
-        source=source,
-        frame_content_support_available=frame_content_supported,
-        photo_geometry_supported=photo_state == EvidenceState.SUPPORTED,
-        policy=policy.candidate_plan.evidence_independence,
+    independence = evidence_independence_evidence(geometry)
+    evidence = CandidateEvidence(
+        frame_topology=base.frame_topology,
+        frame_coverage=coverage,
+        separator_sequence=sequence,
+        separator_continuity=base.separator_continuity,
+        frame_dimensions=base.frame_dimensions,
+        frame_content=content,
+        holder_texture=holder_texture,
+        content_preservation=preservation,
+        outer_alignment=alignment,
+        holder_occupancy=occupancy,
+        partial_edge_safety=partial_edge,
+        independence=independence,
     )
-    independence_state = _independence_state(independence)
-    separator_detail["evidence_independence"] = independence
-    proof_paths = _boundary_proof_paths(
-        candidate,
-        source,
-        separator_detail,
-        topology_state,
-        photo_state,
-        independence_state,
-        partial_edge,
-    )
+    proof_paths = _boundary_proof_paths(candidate, evidence)
+    diagnostics = list(candidate.build_diagnostics)
+    diagnostics.extend(partial_edge.diagnostics)
+    if alignment.overcontains_long_axis or alignment.overcontains_short_axis:
+        diagnostics.append("film_span_overcontains_holder_area")
+    if content.state == EvidenceState.UNAVAILABLE:
+        diagnostics.append("frame_content_unavailable")
+    if holder_texture.state == EvidenceState.CONTRADICTED:
+        diagnostics.append("content_like_signal_in_holder_slack")
     gate = candidate_gate_assessment(
         CandidateGateInput(
-            frame_topology=topology_state,
-            content_preservation=content_state,
-            photo_geometry=photo_state,
-            evidence_independence=independence_state,
+            frame_topology=evidence.frame_topology.state,
+            content_preservation=evidence.content_preservation.state,
+            photo_geometry=evidence.frame_dimensions.state,
+            evidence_independence=evidence.independence.state,
             proof_paths=proof_paths,
             diagnostics=tuple(diagnostics),
-            detail={
-                "source": source,
-                "separator_support": separator_ok,
-            },
         )
     )
-
-    candidate.confidence = float(
-        max(0.0, min(1.0, max(float(candidate.confidence), joint_score)))
+    scores = candidate_scores(
+        evidence,
+        geometry.source,
+        base.confidence,
+        context.policy.scoring,
+        context.policy.content.support,
     )
-    candidate.detail["candidate_source"] = (
-        CANDIDATE_SOURCE_SEPARATOR
-        if _uses_separator_evidence(source)
-        else CANDIDATE_SOURCE_CONTENT
+    return AssessedCandidate(
+        geometry=geometry,
+        count_hypothesis=candidate.count_hypothesis,
+        assessment=CandidateAssessment(
+            evidence=evidence,
+            scores=scores,
+            gate=gate,
+            diagnostics=tuple(sorted(set(diagnostics))),
+        ),
     )
-    candidate.detail["content_evidence"] = content_detail
-    candidate.detail["frame_content_support"] = content_support
-    candidate.detail["candidate_assessment"] = {
-        "source": source,
-        "joint_score": float(joint_score),
-        "candidate_gate": gate.report_detail(),
-        "failed_checks": list(gate.failed_checks),
-        "diagnostics": list(gate.diagnostics),
-        "geometry_score": float(geometry_score),
-        "separator_score": float(separator_score),
-        "content_score": float(content_score),
-        "content_score_role": "frame_content_support",
-        "content_quality_score": float(content_quality),
-        "content_quality_score_role": "quality_diagnostic_not_boundary_evidence",
-        "width_cv": _detail_float(candidate.detail, "width_cv", 1.0),
-        "width_cv_source": str(candidate.detail.get("width_cv_source") or "unknown"),
-        "photo_width_cv": candidate.detail.get("photo_width_cv"),
-        "frame_box_width_cv": candidate.detail.get("frame_box_width_cv"),
-        "separator_width_cv": candidate.detail.get("separator_width_cv"),
-        "content_support": str(content_support.get("support", "")),
-        "content_preservation_state": content_state.value,
-        "frame_content_support": content_support,
-        "frame_coverage": candidate.detail["frame_coverage_evidence"],
-        "strip_completeness": strip_completeness,
-        "holder_occupancy": holder_occupancy,
-        "separator_support": separator_detail,
-        "evidence_independence": independence,
-        "partial_edge_safety": partial_edge,
-    }
-    return candidate

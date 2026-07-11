@@ -4,6 +4,8 @@ import unittest
 
 from x5crop.domain import ImageProfile
 from x5crop.units import (
+    PhysicalLength,
+    ScanCalibration,
     ScanCalibrationTrustParameters,
     scan_calibration_from_profile,
 )
@@ -37,7 +39,7 @@ class UnitModelTests(unittest.TestCase):
             "inferred_from_frame_short_axis",
             calibration.__dataclass_fields__,
         )
-        self.assertNotIn("inferred_from_frame_short_axis", calibration.detail())
+        self.assertEqual(calibration.source, "unavailable")
 
     def test_scan_calibration_from_inch_resolution(self) -> None:
         calibration = scan_calibration_from_profile(_profile(((300, 1), (300, 1)), 2), TRUST_PARAMETERS)
@@ -63,6 +65,56 @@ class UnitModelTests(unittest.TestCase):
         self.assertIn("resolution_unit_has_no_absolute_length", invalid.warnings)
         self.assertFalse(unsupported.trusted)
         self.assertIn("unsupported_resolution_unit:99", unsupported.warnings)
+
+    def test_physical_length_prefers_trusted_mm(self) -> None:
+        length = PhysicalLength(2.0, 0.10, 1, 500)
+        calibration = ScanCalibration(20.0, 20.0, "tiff_resolution", True)
+        self.assertEqual(
+            length.resolve_px(calibration, axis="x", reference_px=100.0),
+            40,
+        )
+
+    def test_physical_length_falls_back_to_reference_ratio(self) -> None:
+        length = PhysicalLength(2.0, 0.10, 1, 500)
+        calibration = ScanCalibration(None, None, "unavailable", False)
+        self.assertEqual(
+            length.resolve_px(calibration, axis="x", reference_px=100.0),
+            10,
+        )
+
+    def test_physical_length_clamps_pixel_result(self) -> None:
+        length = PhysicalLength(None, 0.50, 8, 20)
+        calibration = ScanCalibration(None, None, "unavailable", False)
+        self.assertEqual(length.resolve_px(calibration, axis="x", reference_px=4), 8)
+        self.assertEqual(length.resolve_px(calibration, axis="x", reference_px=100), 20)
+
+    def test_separator_edge_margins_use_physical_length(self) -> None:
+        from x5crop.geometry.detection_parameters import (
+            SeparatorWidthProfileSearchParameters,
+        )
+        from x5crop.policies.parameters.outer import SeparatorOuterBandParameters
+
+        outer_margin = SeparatorOuterBandParameters().edge_margin
+        width_margin = SeparatorWidthProfileSearchParameters().edge_margin
+
+        self.assertIsInstance(outer_margin, PhysicalLength)
+        self.assertIsInstance(width_margin, PhysicalLength)
+        for parameters in (
+            SeparatorOuterBandParameters,
+            SeparatorWidthProfileSearchParameters,
+        ):
+            self.assertNotIn("edge_margin_ratio", parameters.__dataclass_fields__)
+
+    def test_output_edge_guard_uses_physical_length(self) -> None:
+        from x5crop.policies.parameters.exposure_overlap import (
+            EdgeBleedProtectionParameters,
+        )
+
+        parameters = EdgeBleedProtectionParameters()
+        self.assertIsInstance(parameters.guard, PhysicalLength)
+        self.assertNotIn("guard_ratio", parameters.__dataclass_fields__)
+        self.assertNotIn("guard_min", parameters.__dataclass_fields__)
+        self.assertNotIn("guard_max", parameters.__dataclass_fields__)
 
 if __name__ == "__main__":
     unittest.main()

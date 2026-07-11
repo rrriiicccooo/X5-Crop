@@ -1,134 +1,121 @@
 from __future__ import annotations
 
-from typing import Any
+from ....policies.parameters.content import ContentSupportParameters
+from ....policies.runtime.candidate import ScoringPolicy
+from ..model import CandidateEvidence, CandidateScores
 
-from ....domain import DetectionCandidate
-from ...evidence.photo_width import photo_width_cv_from_detail
-from ...evidence.separator_summary import separator_support_detail_summary
-from ....policies.runtime.content import ContentPolicy
-from ....policies.runtime.policy import DetectionPolicy
 
-def content_quality_score(
-    detail: dict[str, Any],
-    content_policy: ContentPolicy,
-) -> float:
-    if not bool(detail.get("used", False)):
-        return 0.0
-    support_policy = content_policy.support
-    mean_score = min(1.0, float(detail.get("median_mean", 0.0)) / support_policy.mean_norm)
-    coverage_score = min(1.0, float(detail.get("median_coverage", 0.0)) / support_policy.coverage_norm)
-    aspect_error = detail.get("max_aspect_error")
-    aspect_score = (
-        support_policy.missing_aspect_score
-        if aspect_error is None
-        else max(0.0, min(1.0, 1.0 - float(aspect_error) / support_policy.aspect_norm))
-    )
-    support = str(detail.get("support", ""))
-    support_score = {
-        "ok": support_policy.score_ok,
-        "weak": support_policy.score_weak,
-        "low_content": support_policy.score_low_content,
-        "aspect_conflict": support_policy.score_aspect_conflict,
-    }.get(support, support_policy.score_unknown)
-    return max(
-        0.0,
-        min(
+def candidate_scores(
+    evidence: CandidateEvidence,
+    source: str,
+    base_confidence: float,
+    scoring_policy: ScoringPolicy,
+    content_support: ContentSupportParameters,
+) -> CandidateScores:
+    content_policy = content_support
+    if evidence.frame_content.median_mean is None:
+        content = 0.0
+    else:
+        mean_score = min(
             1.0,
-            (
-                support_policy.coverage_weight * coverage_score
-                + support_policy.mean_weight * mean_score
-                + support_policy.aspect_weight * aspect_score
-            )
-            * support_score,
-        ),
-    )
+            float(evidence.frame_content.median_mean) / content_policy.mean_norm,
+        )
+        coverage_score = min(
+            1.0,
+            float(evidence.frame_content.median_coverage or 0.0)
+            / content_policy.coverage_norm,
+        )
+        content = max(
+            0.0,
+            min(
+                1.0,
+                content_policy.coverage_weight * coverage_score
+                + content_policy.mean_weight * mean_score,
+            ),
+        )
 
-
-def content_support_score(
-    detail: dict[str, Any],
-) -> float:
-    if not bool(detail.get("used", False)):
-        return 0.0
-    return 1.0 if bool(detail.get("frame_content_support_available", False)) else 0.0
-
-
-def geometry_support_score(
-    detection: DetectionCandidate,
-    content_detail: dict[str, Any],
-    policy: DetectionPolicy,
-) -> float:
-    geometry_policy = policy.scoring.geometry_support
-    photo_width_cv = photo_width_cv_from_detail(detection.detail)
+    dimensions = evidence.frame_dimensions
     width_score = (
-        max(0.0, min(1.0, 1.0 - photo_width_cv / geometry_policy.photo_width_cv_norm))
-        if photo_width_cv is not None
-        else None
+        None
+        if dimensions.photo_width_cv is None
+        else max(
+            0.0,
+            min(
+                1.0,
+                1.0
+                - float(dimensions.photo_width_cv)
+                / scoring_policy.geometry_support.photo_width_cv_norm,
+            ),
+        )
     )
-    aspect_error = content_detail.get("max_aspect_error")
     aspect_score = (
-        max(0.0, min(1.0, 1.0 - float(aspect_error) / geometry_policy.aspect_norm))
-        if aspect_error is not None
-        else None
+        None
+        if dimensions.maximum_dimension_error_ratio is None
+        else max(
+            0.0,
+            min(
+                1.0,
+                1.0
+                - float(dimensions.maximum_dimension_error_ratio)
+                / scoring_policy.geometry_support.aspect_norm,
+            ),
+        )
     )
-    count_score = 1.0 if len(detection.frames) == detection.count else 0.0
-    weighted_scores = [
-        (geometry_policy.count_weight, count_score),
+    weighted_geometry: list[tuple[float, float]] = [
+        (
+            scoring_policy.geometry_support.count_weight,
+            1.0 if evidence.frame_topology.count_matches else 0.0,
+        )
     ]
     if width_score is not None:
-        weighted_scores.append((geometry_policy.photo_width_weight, width_score))
-    if aspect_score is not None:
-        weighted_scores.append((geometry_policy.aspect_weight, aspect_score))
-    weight_total = max(1e-6, sum(weight for weight, _score in weighted_scores))
-    return max(
-        0.0,
-        min(
-            1.0,
-            sum(weight * score for weight, score in weighted_scores) / weight_total,
-        ),
-    )
-
-
-def separator_support_score(
-    hard_detail: dict[str, Any],
-    policy: DetectionPolicy,
-) -> float:
-    support_policy = policy.scoring.separator_support
-    evidence = separator_support_detail_summary(hard_detail)
-    if evidence.expected_gaps == 0:
-        return 1.0
-    hard_ratio = min(1.0, evidence.hard_separator_gaps / float(max(1, evidence.expected_gaps)))
-    model_ratio = min(
-        1.0,
-        (
-            evidence.hard_separator_gaps
-            + support_policy.model_equal_credit * evidence.equal_model_gaps
+        weighted_geometry.append(
+            (scoring_policy.geometry_support.photo_width_weight, width_score)
         )
-        / float(max(1, evidence.expected_gaps)),
+    if aspect_score is not None:
+        weighted_geometry.append(
+            (scoring_policy.geometry_support.aspect_weight, aspect_score)
+        )
+    geometry_weight = max(
+        1e-6,
+        sum(weight for weight, _score in weighted_geometry),
     )
-    return max(
-        0.0,
-        min(
+    geometry = sum(
+        weight * score for weight, score in weighted_geometry
+    ) / geometry_weight
+
+    sequence = evidence.separator_sequence
+    if sequence.expected_count == 0:
+        separator = 0.0
+    else:
+        hard_ratio = min(
             1.0,
-            support_policy.hard_weight * hard_ratio
-            + support_policy.model_weight * model_ratio,
-        ),
-    )
+            float(sequence.hard_count) / float(sequence.expected_count),
+        )
+        model_ratio = min(
+            1.0,
+            float(sequence.hard_count)
+            + scoring_policy.separator_support.model_equal_credit
+            * float(sequence.model_count),
+        ) / float(sequence.expected_count)
+        separator = (
+            scoring_policy.separator_support.hard_weight * hard_ratio
+            + scoring_policy.separator_support.model_weight * model_ratio
+        )
 
-
-def joint_support_score(
-    *,
-    geometry_score: float,
-    content_score: float,
-    separator_score: float,
-    source: str,
-    policy: DetectionPolicy,
-) -> float:
-    calibration = policy.scoring.calibration
-    source_bias = calibration.separator_source_bias if source == "separator" else 0.0
-    joint_score = (
-        calibration.geometry_weight * geometry_score
-        + calibration.content_weight * content_score
-        + calibration.separator_weight * separator_score
-        + source_bias
+    calibration = scoring_policy.calibration
+    joint = (
+        calibration.geometry_weight * geometry
+        + calibration.content_weight * content
+        + calibration.separator_weight * separator
+        + (calibration.separator_source_bias if source == "separator" else 0.0)
     )
-    return max(0.0, min(1.0, joint_score))
+    joint = float(max(0.0, min(1.0, joint)))
+    confidence = float(max(0.0, min(1.0, max(base_confidence, joint))))
+    return CandidateScores(
+        confidence=confidence,
+        base=float(base_confidence),
+        geometry=float(geometry),
+        separator=float(separator),
+        content=float(content),
+        joint=joint,
+    )

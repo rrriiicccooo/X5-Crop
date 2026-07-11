@@ -12,6 +12,27 @@ from tools.tests.architecture_contracts import (
 
 
 class LayerBoundariesOutputContractTest(unittest.TestCase):
+    def test_runtime_reuse_does_not_deserialize_report_schema(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop" / "runtime" / "analysis_reuse.py"
+        ).read_text(encoding="utf-8")
+        for forbidden in (
+            "DecisionGateAssessment(",
+            "GateCheck(",
+            "FinalDetection.restore(",
+            "def _box_from_record",
+            "def _geometry_from_record",
+            "def _separator_observation_from_record",
+        ):
+            self.assertNotIn(forbidden, source)
+        self.assertIn(
+            "final_detection_from_record as _final_detection_from_record",
+            source,
+        )
+        self.assertTrue(
+            (PROJECT_ROOT / "x5crop" / "report" / "restoration.py").is_file()
+        )
+
     def test_report_output_has_one_runtime_owner(self) -> None:
         owners = []
         for path in (PROJECT_ROOT / "x5crop" / "runtime").glob("*.py"):
@@ -25,16 +46,12 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         debug_source = (PROJECT_ROOT / "x5crop" / "debug" / "gaps.py").read_text(
             encoding="utf-8"
         )
-        diagnostics_source = (
-            PROJECT_ROOT
-            / "x5crop"
-            / "detection"
-            / "evidence"
-            / "read_only.py"
-        ).read_text(encoding="utf-8")
-
-        self.assertNotIn('diagnostics.get("gap_evidence"', debug_source)
-        self.assertNotIn('"gap_evidence": gap_records', diagnostics_source)
+        self.assertIn("FinalDetection", debug_source)
+        self.assertIn("detection.separator_observations", debug_source)
+        self.assertNotIn(".detail", debug_source)
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop/detection/evidence/read_only.py").exists()
+        )
 
     def test_every_debug_panel_is_reachable_from_active_policy(self) -> None:
         from x5crop.formats import FORMAT_CHOICES
@@ -141,9 +158,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         workflow = (
             PROJECT_ROOT / "x5crop" / "runtime" / "workflow.py"
         ).read_text(encoding="utf-8")
-        detail = (
-            PROJECT_ROOT / "x5crop" / "detection" / "detail.py"
-        ).read_text(encoding="utf-8")
+        self.assertFalse((PROJECT_ROOT / "x5crop/detection/detail.py").exists())
 
         for field_name in (
             "RUNTIME_POLICY_DETAIL",
@@ -151,7 +166,6 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             "POLICY_ID",
         ):
             self.assertNotIn(field_name, workflow)
-            self.assertNotIn(field_name, detail)
 
     def test_output_protection_consumes_the_canonical_parameter_type(self) -> None:
         source = (
@@ -160,6 +174,17 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
 
         self.assertNotIn("PolicyLike", source)
         self.assertIn("ExposureOverlapProtectionParameters", source)
+
+    def test_output_protection_receives_base_bleed_explicitly(self) -> None:
+        from inspect import signature
+
+        from x5crop.runtime.output_protection import prepare_output_protection
+
+        source = (
+            PROJECT_ROOT / "x5crop/runtime/output_protection.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("base_bleed", signature(prepare_output_protection).parameters)
+        self.assertNotIn("context.config", source)
 
     def test_debug_receives_only_the_subpolicies_it_uses(self) -> None:
         source = "\n".join(
@@ -209,23 +234,16 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             self.assertNotIn(f"class {class_name}", source)
 
     def test_candidate_runtime_does_not_write_unconsumed_detail(self) -> None:
-        source_paths = (
-            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "execution" / "count_hypothesis.py",
-            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "execution" / "source_candidates.py",
-            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "extension" / "outer_correction.py",
-            PROJECT_ROOT / "x5crop" / "detection" / "modes" / "dual_lane_candidate.py",
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for root in (
+                PROJECT_ROOT / "x5crop/detection/candidate",
+                PROJECT_ROOT / "x5crop/detection/modes",
+            )
+            for path in sorted(root.rglob("*.py"))
         )
-        source = "\n".join(path.read_text(encoding="utf-8") for path in source_paths)
-
-        for detail_key in (
-            'detail["content_candidate_skipped"]',
-            'detail["outer_candidate_count"]',
-            'detail["outer_candidates"]',
-            'detail["outer_correction_candidate_plan"]',
-            'detail["dual_lane_index"]',
-            'detail["dual_lane_work_box"]',
-        ):
-            self.assertNotIn(detail_key, source)
+        self.assertNotIn(".detail", source)
+        self.assertNotIn("detail=", source)
 
     def test_decision_evidence_policy_surface_is_removed(self) -> None:
         decision_parameters = (
@@ -253,7 +271,8 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         ).read_text(encoding="utf-8")
         profile_presets = PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "profile_presets.py"
 
-        self.assertIn("class FrameFitParameters", geometry_parameters)
+        self.assertNotIn("class FrameFitParameters", geometry_parameters)
+        self.assertIn("PhysicalLength", geometry_parameters)
         self.assertIn("class CandidatePlanParameters", candidate_parameters)
         self.assertNotIn("sequence_score_weight", runtime_separator)
         self.assertIn("separator_width_profile_search", aggregate_parameters)
@@ -279,7 +298,10 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             PROJECT_ROOT / "x5crop" / "geometry" / "gap_geometry.py"
         ).read_text(encoding="utf-8")
 
-        self.assertNotIn("class PhysicalLength", units_source)
+        self.assertIn("class PhysicalLength", units_source)
+        self.assertIn("PhysicalLength", (
+            PROJECT_ROOT / "x5crop/geometry/detection_parameters.py"
+        ).read_text(encoding="utf-8"))
         self.assertNotIn("def photo_width_cv_from_gap_edges", gap_geometry_source)
 
     def test_runtime_has_no_process_one_worker_forwarder(self) -> None:
@@ -406,7 +428,6 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertNotIn("decision", exposure_text)
         self.assertNotIn("x5crop.detection", output_plan_text)
         self.assertNotIn("policies.registry", output_plan_text)
-        self.assertNotIn("evidence.exposure_overlap", decision_text)
         self.assertNotIn("output.protection", decision_text)
 
     def test_outer_alignment_evidence_does_not_own_correction_policy(self) -> None:

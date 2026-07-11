@@ -1,109 +1,81 @@
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from ....domain import DetectionCandidate
-from ....policies.parameters.candidate import EvidenceIndependenceParameters
-from ...evidence.photo_width import photo_width_stability_detail
+from ....gap_methods import is_hard_gap_method
+from ...evidence.state import EvidenceState
 
-
-DEPENDENT_OUTER_STRATEGY = "separator_outer"
-DEPENDENT_GAP_SOURCES = ("observed_width_profile",)
-
-
-def _dict(value: Any) -> dict[str, Any]:
-    return dict(value) if isinstance(value, dict) else {}
+if TYPE_CHECKING:
+    from ...geometry import CandidateGeometry
 
 
-def _float(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return float(default)
+@dataclass(frozen=True)
+class EvidenceIndependenceEvidence:
+    state: EvidenceState
+    reason: str
+    outer_root_measurement: str
+    separator_root_measurements: tuple[str, ...]
+    cyclic_measurements: tuple[str, ...]
 
-
-def _entries(detail: dict[str, Any]) -> list[dict[str, Any]]:
-    entries = detail.get("entries", [])
-    if not isinstance(entries, list):
-        return []
-    return [entry for entry in entries if isinstance(entry, dict)]
-
-
-def gap_source_count(detail: dict[str, Any], sources: tuple[str, ...]) -> int:
-    wanted = set(sources)
-    return sum(1 for entry in _entries(detail) if str(entry.get("selected_source", "")) in wanted)
-
-
-def evidence_independence_detail(
-    detection: DetectionCandidate,
-    *,
-    source: str,
-    frame_content_support_available: bool,
-    photo_geometry_supported: bool,
-    policy: EvidenceIndependenceParameters,
-) -> dict[str, Any]:
-    if source != "separator":
-        return {
-            "used": False,
-            "state": "not_applicable",
-            "ok": True,
-            "reason": "non_separator_source",
-        }
-
-    outer_strategy = str(detection.detail.get("outer_candidate_strategy", ""))
-    separator_detail = _dict(detection.detail.get("standard_gap_search"))
-    measurement_dependencies = sorted(
-        {
-            dependency
-            for gap in detection.gaps
-            for dependency in gap.provenance.dependencies
-        }
+def evidence_independence_evidence(
+    geometry: CandidateGeometry,
+) -> EvidenceIndependenceEvidence:
+    if geometry.source != "separator":
+        return EvidenceIndependenceEvidence(
+            EvidenceState.NOT_APPLICABLE,
+            "non_separator_candidate",
+            geometry.outer_provenance.root_measurement,
+            (),
+            (),
+        )
+    hard_observations = tuple(
+        observation
+        for observation in geometry.separators
+        if is_hard_gap_method(observation.method)
     )
-    dependent_outer = outer_strategy == DEPENDENT_OUTER_STRATEGY
-    dependent_gap_count = gap_source_count(
-        separator_detail,
-        DEPENDENT_GAP_SOURCES,
+    hard_roots = tuple(
+        sorted(
+            {
+                observation.provenance.root_measurement
+                for observation in hard_observations
+            }
+        )
     )
-    requires_validation = (
-        dependent_outer
-        and dependent_gap_count > int(policy.max_dependent_gap_count_without_validation)
-    )
-    standard_detected_gaps = gap_source_count(separator_detail, ("standard_detected",))
-    photo_width_stability = photo_width_stability_detail(
-        detection.detail,
-        float(policy.max_photo_width_cv),
-        used_role="evidence_independence_geometry_check",
-    )
-    standard_ok = standard_detected_gaps >= int(policy.min_standard_detected_gaps)
-    content_support_available = bool(frame_content_support_available)
-    geometry_ok = bool(photo_geometry_supported)
-    ok = (
-        True
-        if not requires_validation
-        else bool(standard_ok and content_support_available and geometry_ok)
-    )
-    reason = "ok" if ok else "evidence_dependency_cycle_detected"
-    return {
-        "used": True,
-        "state": "supported" if ok else "contradicted",
-        "ok": bool(ok),
-        "reason": reason,
-        "requires_validation": bool(requires_validation),
-        "outer_candidate_strategy": outer_strategy,
-        "dependent_outer": bool(dependent_outer),
-        "dependent_gap_sources": list(DEPENDENT_GAP_SOURCES),
-        "measurement_dependencies": measurement_dependencies,
-        "dependent_gap_count": int(dependent_gap_count),
-        "max_dependent_gap_count_without_validation": int(
-            policy.max_dependent_gap_count_without_validation
-        ),
-        "standard_detected_gaps": int(standard_detected_gaps),
-        "min_standard_detected_gaps": int(policy.min_standard_detected_gaps),
-        "standard_ok": bool(standard_ok),
-        "frame_content_support_available": bool(content_support_available),
-        "width_cv": _float(detection.detail.get("width_cv"), 1.0),
-        "width_cv_source": str(detection.detail.get("width_cv_source") or "unknown"),
-        "max_photo_width_cv": float(policy.max_photo_width_cv),
-        "photo_width_stability": photo_width_stability,
-        "geometry_ok": bool(geometry_ok),
+    outer_root = geometry.outer_provenance.root_measurement
+    outer_dependencies = set(geometry.outer_provenance.dependencies)
+    separator_dependencies = {
+        dependency
+        for observation in hard_observations
+        for dependency in observation.provenance.dependencies
     }
+    dependency_cycle = {
+        dependency
+        for dependency in (
+            *((outer_root,) if outer_root in separator_dependencies else ()),
+            *(root for root in hard_roots if root in outer_dependencies),
+        )
+    }
+    cyclic_measurements = tuple(
+        sorted(dependency_cycle)
+    )
+    root_reused = outer_root in set(hard_roots)
+    if root_reused:
+        state = EvidenceState.CONTRADICTED
+        reason = "outer_and_separator_share_root_measurement"
+    elif cyclic_measurements:
+        state = EvidenceState.CONTRADICTED
+        reason = "outer_and_separator_share_measurement_dependency"
+    elif not hard_roots:
+        state = EvidenceState.UNAVAILABLE
+        reason = "hard_separator_measurement_unavailable"
+    else:
+        state = EvidenceState.SUPPORTED
+        reason = "independent_outer_and_separator_measurements"
+    return EvidenceIndependenceEvidence(
+        state=state,
+        reason=reason,
+        outer_root_measurement=outer_root,
+        separator_root_measurements=hard_roots,
+        cyclic_measurements=cyclic_measurements,
+    )

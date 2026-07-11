@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from ..app_info import SCRIPT_NAME, VERSION
-from ..domain import FinalDetection
+from ..detection.decision.model import FinalDetection
 
 
 def debug_status_parts(detection: FinalDetection) -> tuple[str, str, tuple[int, int, int]]:

@@ -4,19 +4,19 @@ from dataclasses import replace
 from pathlib import Path
 
 from .analysis_reuse import (
-    make_analysis_cache_metadata,
+    make_analysis_reuse_signature,
     result_from_reusable_analysis,
 )
-from ..cache.analysis import make_analysis_cache
+from ..cache.analysis import make_measurement_cache
+from ..detection.context import DetectionContext, DetectionRequest
 from ..run_config import RunConfig
 from .output_protection import prepare_output_protection
 from .deskew import apply_deskew
 from ..debug.outputs import write_debug_outputs
 from ..detection.decision.decision_gate import apply_decision_gate
-from ..detection.evidence.selected_candidate import complete_selected_candidate_evidence
 from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
-from ..domain import ProcessResult
+from ..domain import AxisBleedParameters, ProcessResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from ..geometry.layout import infer_layout
 from ..image.gray import make_base_gray_u8
@@ -27,7 +27,6 @@ from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..report.result_builder import result_from_detection
 from ..units import scan_calibration_from_profile
 from ..utils import spatial_shape_from_shape
-from ..detection.evidence.holder_occupancy import enrich_holder_occupancy_with_calibration
 
 
 def process_one(
@@ -53,55 +52,62 @@ def process_one(
     _extend_unique(warnings, page_warnings)
     source_arr = arr
 
-    arr, gray, deskew_detail = apply_deskew(arr, gray, profile, config, initial_policy.preprocess, warnings)
-    scan_calibration = scan_calibration_from_profile(profile, initial_policy.preprocess.scan_calibration_trust)
-    analysis_cache = make_analysis_cache(gray, config.layout, initial_policy.preprocess.content_evidence_image)
-    policy = initial_policy
-    detection_config = replace(config, bleed_x=0, bleed_y=0)
-    detection_result = choose_detection(gray, detection_config, fmt, policy_bundle, analysis_cache)
-    detection = detection_result.candidate
-    selected_policy = detection_result.policy
-    detection.detail["scan_calibration"] = scan_calibration.detail()
-    holder_occupancy = detection.detail.get("holder_occupancy")
-    if isinstance(holder_occupancy, dict):
-        detection.detail["holder_occupancy"] = enrich_holder_occupancy_with_calibration(
-            holder_occupancy,
-            scan_calibration,
-        )
-    output_protection_plan = prepare_output_protection(
+    arr, gray, transform_geometry = apply_deskew(
+        arr,
         gray,
-        detection,
+        profile,
         config,
-        analysis_cache,
-        selected_policy,
+        initial_policy.preprocess,
+        warnings,
     )
-    selected_evidence = complete_selected_candidate_evidence(
+    scan_calibration = scan_calibration_from_profile(profile, initial_policy.preprocess.scan_calibration_trust)
+    measurement_cache = make_measurement_cache(
         gray,
-        detection,
-        analysis_cache,
-        content_policy=selected_policy.content,
-        alignment_parameters=selected_policy.outer.alignment_evidence,
-        physical_spec=selected_policy.physical_spec,
+        config.layout,
+        initial_policy.preprocess.content_evidence_image,
+    )
+    detection_context = DetectionContext(
+        source_gray=gray,
+        image_profile=profile,
+        scan_calibration=scan_calibration,
+        request=DetectionRequest(
+            layout=config.layout,
+            strip_mode=config.strip_mode,
+            requested_count=config.requested_count,
+        ),
+        policy=initial_policy,
+        lane_policy=(
+            None
+            if fmt.lane_format_id is None
+            else policy_bundle.policy_for(fmt.lane_format_id, "full")
+        ),
+        measurement_cache=measurement_cache,
+    )
+    selection = choose_detection(detection_context)
+    selected_policy = detection_context.policy
+    prepared_output_protection = prepare_output_protection(
+        selection.selected,
+        detection_context,
+        AxisBleedParameters(
+            long_axis=int(config.bleed_x),
+            short_axis=int(config.bleed_y),
+        ),
     )
     decided_detection = apply_decision_gate(
-        selected_evidence.candidate,
-        selected_evidence.content,
-        selected_evidence.outer_alignment,
-        selected_evidence.frame_coverage,
-        deskew_detail=deskew_detail,
-        output_protection_plan=output_protection_plan,
+        selection,
+        prepared_output_protection.plan,
+        prepared_output_protection.evidence,
+        transform_geometry,
+        scan_calibration,
     )
     runtime_policy_detail = detection_policy_report_detail(selected_policy)
     detection = finalize_detection(
         gray,
         decided_detection,
-        analysis_cache,
-        output_protection_plan,
-        diagnostics_enabled=config.diagnostics,
-        approved_geometry_adjustment=selected_policy.approved_geometry_adjustment,
-        edge_bleed_protection=selected_policy.output.edge_bleed_protection,
-        separator_policy=selected_policy.separator,
-        diagnostics_policy=selected_policy.diagnostics,
+        approved_geometry_parameters=(
+            selected_policy.approved_geometry_adjustment
+        ),
+        edge_bleed_parameters=selected_policy.output.edge_bleed_protection,
     )
     review_copy = copy_for_review_if_needed(input_file, output_dir, config, detection, warnings)
     output_files = write_crops_if_allowed(
@@ -111,7 +117,7 @@ def process_one(
         profile,
         detection,
         config,
-        bool(deskew_detail["applied"]),
+        transform_geometry.applied,
         output_surface,
     )
     write_debug_outputs(
@@ -120,7 +126,6 @@ def process_one(
         output_dir,
         input_file.stem,
         config,
-        analysis_cache,
         warnings,
         selected_policy.diagnostics,
         selected_policy.preprocess.separator_evidence_image,
@@ -135,8 +140,8 @@ def process_one(
         warnings,
         policy_id=selected_policy.policy_id,
         runtime_policy_detail=runtime_policy_detail,
-        deskew_detail=deskew_detail,
-        analysis_cache_metadata=make_analysis_cache_metadata(
+        transform_geometry=transform_geometry,
+        analysis_reuse_signature=make_analysis_reuse_signature(
             input_file,
             profile,
             config,

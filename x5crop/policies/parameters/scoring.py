@@ -13,20 +13,7 @@ class BaseDetectionScoreParameters:
     photo_width_cv_norm: float = 0.030
     gap_weight: float = 0.40
     photo_width_weight: float = 0.30
-    outer_min_area: float = 0.35
-    outer_max_area: float = 0.995
-    outer_too_large: float = 0.94
-    image_quality_contrast_min: float = 35.0
-    full_photo_width_cv: float = 0.040
-    geometry_floor_tight_photo_width_cv: float = 0.006
-    geometry_floor_high: float = 0.92
-    geometry_floor_low: float = 0.88
     unstable_photo_width_cv: float = 0.030
-    full_outer_min_area: float = 0.40
-    image_quality_percentiles: tuple[float, float, float] = (1.0, 50.0, 99.0)
-    hard_support_floor_min_expected_gaps: int = 3
-    partial_ambiguous_count_max: int = 2
-    partial_dense_sequence_min_nominal_count: int = 6
 
 @dataclass(frozen=True)
 class SeparatorSupportScoreParameters:
@@ -44,6 +31,5 @@ class GeometrySupportScoreParameters:
 
 @dataclass(frozen=True)
 class SelectionConsensusParameters:
-    top_n: int = 8
     confidence_tie_margin: float = 0.04
     geometry_tolerance_ratio: float = 0.04

@@ -1,212 +1,136 @@
 from __future__ import annotations
 
-from typing import Any
-
-import numpy as np
-
-from ....constants import CANDIDATE_SOURCE_HARD_SAFETY
-from ....domain import DetectionCandidate
-from ....formats import FormatPhysicalSpec
-from ....policies.runtime.policy import DetectionPolicy
-from ....policies.runtime.outer import OuterCorrectionFamilyPolicy
-from ....cache import AnalysisCache
-from ....run_config import RunConfig
-from ...evidence.content.frame_support import content_evidence_detail
-from ...evidence.outer_alignment import outer_content_alignment_detail
-from .corrected_outer import build_assessed_corrected_outer_candidate
-from ..assessment.reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
-from ...physical.outer.correction.content_containment import content_containment_correction_proposal
-from ...physical.outer.correction.geometry import geometry_consistency_correction_proposal, geometry_consistency_model_detail
+from ....domain import MeasurementProvenance
+from ....gap_methods import is_hard_gap_method
+from ...context import DetectionContext
+from ...physical.outer.correction.content_containment import (
+    content_containment_correction_proposal,
+)
+from ...physical.outer.correction.geometry import (
+    geometry_consistency_correction_proposals,
+)
+from ...physical.outer.correction.types import OuterCorrectionProposal
+from ..assessment.candidate import assess_candidate
+from ..build.detection import build_detection_geometry_for_outer
+from ..model import AssessedCandidate
+from ..selection.model import SelectionResult
 
 
-def _candidate_assessment_detail(detection: DetectionCandidate) -> dict[str, Any]:
-    assessment = detection.detail.get("candidate_assessment", {})
-    return dict(assessment) if isinstance(assessment, dict) else {}
-
-
-def _candidate_is_separator_assessed(detection: DetectionCandidate) -> bool:
-    return _candidate_assessment_detail(detection).get("source") == "separator"
-
-
-def _candidate_separator_support_ok(detection: DetectionCandidate) -> bool:
-    hard_detail = _candidate_assessment_detail(detection).get("separator_support", {})
-    return isinstance(hard_detail, dict) and bool(hard_detail.get("ok", False))
-
-
-def _correction_skip_reason(
-    name: str,
-    family: OuterCorrectionFamilyPolicy,
-    detection: DetectionCandidate,
-    explicit_count: bool,
-) -> str | None:
-    if family.mode == "off":
-        return "mode_off"
-    if detection.strip_mode == "partial" and not explicit_count:
-        return "partial_requires_explicit_count"
-    if not _candidate_is_separator_assessed(detection):
-        return "requires_separator_assessment"
-    if name == "short_axis_geometry" and not _candidate_separator_support_ok(detection):
-        return "requires_separator_support"
-    return None
-
-
-def _correction_family_eligible_for_candidate(
-    name: str,
-    family: OuterCorrectionFamilyPolicy,
-    detection: DetectionCandidate,
-    explicit_count: bool,
-) -> bool:
-    return _correction_skip_reason(name, family, detection, explicit_count) is None
-
-
-def _outer_correction_plan_detail(
-    detection: DetectionCandidate,
-    policy: DetectionPolicy,
-    explicit_count: bool,
-) -> dict[str, Any]:
-    correction = policy.outer.correction
+def _eligible_families(
+    candidate: AssessedCandidate,
+    context: DetectionContext,
+) -> frozenset[str]:
+    geometry = candidate.geometry
+    if (
+        geometry.source != "separator"
+        or not geometry.automatic_processing_supported
+        or geometry.lane_boxes
+    ):
+        return frozenset()
+    if (
+        geometry.strip_mode == "partial"
+        and context.request.requested_count is None
+    ):
+        return frozenset()
+    correction = context.policy.outer.correction
     families = {
         "long_axis_geometry": correction.geometry_consistency.long_axis.family,
         "short_axis_geometry": correction.geometry_consistency.short_axis.family,
         "content_containment": correction.content_containment.family,
     }
-    eligible = [
-        name
-        for name, family in families.items()
-        if _correction_family_eligible_for_candidate(name, family, detection, explicit_count)
-    ]
-    skipped = {
-        name: reason
-        for name, family in families.items()
-        if (reason := _correction_skip_reason(name, family, detection, explicit_count)) is not None
-    }
-    return {
-        "count_explicit": bool(explicit_count),
-        "eligibility_owner": "candidate.extension",
-        "eligible_families": eligible,
-        "skipped_reasons": skipped,
-    }
+    return frozenset(
+        name for name, family in families.items() if family.mode != "off"
+    )
 
 
-def _outer_correction_budget_reason(
-    *,
-    reliable_selection: bool,
-    outer_alignment_ok: bool,
-) -> str:
-    if not reliable_selection:
-        return "selection_not_reliable"
-    if not outer_alignment_ok:
-        return "outer_alignment_conflict"
-    return "reliable_selection"
+def _correction_provenance(
+    source: AssessedCandidate,
+    proposal: OuterCorrectionProposal,
+) -> MeasurementProvenance:
+    original = source.geometry.outer_provenance
+    dependencies = set(original.dependencies)
+    if proposal.family in {"long_axis_geometry", "short_axis_geometry"}:
+        dependencies.update(
+            observation.provenance.root_measurement
+            for observation in source.geometry.separators
+            if is_hard_gap_method(observation.method)
+        )
+    elif proposal.family == "content_containment":
+        dependencies.add("content_evidence")
+    return MeasurementProvenance(
+        root_measurement=original.root_measurement,
+        source=f"outer_correction:{proposal.family}",
+        dependencies=tuple(sorted(dependencies)),
+        boundary_anchors=original.boundary_anchors,
+    )
+
+
+def _build_corrected_candidate(
+    source: AssessedCandidate,
+    proposal: OuterCorrectionProposal,
+    context: DetectionContext,
+) -> AssessedCandidate:
+    geometry = source.geometry
+    built = build_detection_geometry_for_outer(
+        context.source_gray,
+        context.request,
+        context.policy.physical_spec,
+        geometry.count,
+        geometry.strip_mode,
+        proposal.box,
+        geometry.offset_fraction,
+        geometry.holder_span,
+        geometry.source,
+        geometry.automatic_processing_supported,
+        geometry.contract,
+        source.count_hypothesis,
+        f"{proposal.family}_outer",
+        "outer_correction",
+        _correction_provenance(source, proposal),
+        context.scan_calibration,
+        None,
+        None,
+        (f"outer_correction:{proposal.family}:{proposal.reason}",),
+        cache=context.measurement_cache,
+        separator_policy=context.policy.separator,
+    )
+    return assess_candidate(built, context)
 
 
 def outer_correction_candidate_extensions(
-    gray: np.ndarray,
-    config: RunConfig,
-    fmt: FormatPhysicalSpec,
-    detection: DetectionCandidate,
-    cache: AnalysisCache,
-    policy: DetectionPolicy,
-) -> list[DetectionCandidate]:
-    if detection.detail.get("candidate_source") == CANDIDATE_SOURCE_HARD_SAFETY:
-        return []
-    explicit_count = bool(config.requested_count is not None)
-    correction_plan = _outer_correction_plan_detail(detection, policy, explicit_count)
-    if not correction_plan["eligible_families"]:
-        return []
-
-    content_detail = content_evidence_detail(
-        gray,
-        detection,
-        cache,
-        content_policy=policy.content,
-        horizontal_frame_aspect=fmt.horizontal_content_aspect,
+    selection: SelectionResult,
+    context: DetectionContext,
+) -> tuple[AssessedCandidate, ...]:
+    if selection.geometry_resolution.supported:
+        return ()
+    selected = selection.selected
+    eligible = _eligible_families(selected, context)
+    if not eligible:
+        return ()
+    evidence = selected.assessment.evidence
+    proposals = list(
+        geometry_consistency_correction_proposals(
+            selected.geometry,
+            evidence.frame_dimensions,
+            evidence.outer_alignment,
+            context.policy.physical_spec,
+            context.policy.outer.correction.geometry_consistency,
+            canvas_width=context.measurement_cache.gray_work.shape[1],
+            canvas_height=context.measurement_cache.gray_work.shape[0],
+            eligible_families=eligible,
+        )
     )
-    detection.detail["content_evidence"] = content_detail
-    outer_alignment = outer_content_alignment_detail(
-        gray,
-        detection,
-        cache,
-        alignment_policy=policy.outer.alignment_evidence,
-    )
-    detection.detail["outer_content_alignment"] = outer_alignment
-    reliable_selection = candidate_is_reliable_for_execution_budget(detection)
-    outer_alignment_ok = (not bool(outer_alignment.get("used", False))) or bool(outer_alignment.get("ok", True))
-    correction_plan["reliable_selection"] = bool(reliable_selection)
-    correction_plan["outer_alignment_ok"] = bool(outer_alignment_ok)
-    budget_reason = _outer_correction_budget_reason(
-        reliable_selection=bool(reliable_selection),
-        outer_alignment_ok=bool(outer_alignment_ok),
-    )
-    should_skip_correction = reliable_selection and outer_alignment_ok
-    correction_plan["execution_budget"] = {
-        "stage": "selected_candidate",
-        "action": "skip_outer_correction_candidates" if should_skip_correction else "run_outer_correction_candidates",
-        "reason": budget_reason,
-        "reliable_selection": bool(reliable_selection),
-        "outer_alignment_ok": bool(outer_alignment_ok),
-    }
-    if should_skip_correction:
-        correction_plan["skipped_due_to_reliable_selection"] = True
-        correction_plan["reliability"] = candidate_reliability_detail(detection)
-        correction_plan["skipped_reasons"] = {
-            **correction_plan.get("skipped_reasons", {}),
-            "outer_correction_candidate": "reliable_selection",
-        }
-        return []
-
-    extensions: list[DetectionCandidate] = []
-    proposal = geometry_consistency_correction_proposal(
-        gray,
-        fmt,
-        detection,
-        content_detail,
-        outer_alignment,
-        cache,
-        set(correction_plan["eligible_families"]),
-        policy.outer.correction.geometry_consistency,
-    )
-    if proposal is not None:
-        reassessed = build_assessed_corrected_outer_candidate(gray, config, fmt, detection, proposal, cache, policy)
-        if "source_geometry_consistency" in proposal.detail:
-            reassessed_geometry = geometry_consistency_model_detail(gray, reassessed, config, fmt, cache)
-            reassessed.detail["geometry_consistency_model"] = reassessed_geometry
-            reassessed.detail["outer_correction"]["reassessed_geometry_consistency"] = reassessed_geometry
-        reassessed.detail["candidate_plan"] = {
-            "source": "outer_correction_candidate",
-            "extension_of": detection.detail.get("candidate_plan", {}),
-            "outer_correction": {
-                **correction_plan,
-                "attempted_family": f"{proposal.detail.get('correction_kind', 'unknown')}_geometry",
-                "correction_order": "geometry_consistency",
-            },
-        }
-        extensions.append(reassessed)
-        return extensions
-
-    if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
+    if "content_containment" in eligible:
         proposal = content_containment_correction_proposal(
-            detection,
-            outer_alignment,
-            set(correction_plan["eligible_families"]),
-            policy.outer.correction.content_containment,
+            selected.geometry,
+            evidence.outer_alignment,
+            context.measurement_cache.gray_work.shape[1],
+            context.measurement_cache.gray_work.shape[0],
+            context.policy.outer.correction.content_containment,
         )
         if proposal is not None:
-            reassessed = build_assessed_corrected_outer_candidate(gray, config, fmt, detection, proposal, cache, policy)
-            reassessed.detail["candidate_plan"] = {
-                "source": "outer_correction_candidate",
-                "extension_of": detection.detail.get("candidate_plan", {}),
-                "outer_correction": {
-                    **correction_plan,
-                    "attempted_family": "content_containment",
-                    "correction_order": "content_containment",
-                },
-            }
-            extensions.append(reassessed)
-            return extensions
-        detection.detail["outer_correction"] = {
-            "used": False,
-            "reason": "no_valid_content_containment_correction",
-        }
-
-    return extensions
+            proposals.append(proposal)
+    return tuple(
+        _build_corrected_candidate(selected, proposal, context)
+        for proposal in proposals
+    )

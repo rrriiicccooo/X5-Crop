@@ -1,139 +1,114 @@
 from __future__ import annotations
 
-import copy
-from dataclasses import asdict
-from typing import Any, Optional
-
 import numpy as np
 
-from ....cache import AnalysisCache
+from ....cache import MeasurementCache
 from ....domain import Box
-from ....formats import FormatPhysicalSpec
-from ....geometry.boxes import box_cache_key
 from ....policies.runtime.content import ContentPolicy
 from ....utils import bbox_from_mask, runs_from_mask, sampled_percentile, smooth_1d
-
-
-CONTENT_BBOX_HINT_ROLE = "content_bbox_hint"
-CONTENT_RUN_HINT_ROLE = "content_run_hint"
 
 
 def content_region_runs(
     evidence: np.ndarray,
     outer: Box,
     count: int,
-    format_id: str,
-    cache: Optional[AnalysisCache],
     *,
     content_policy: ContentPolicy,
-) -> tuple[list[tuple[int, int]], dict[str, Any]]:
-    profile_policy = content_policy.profile
-    cache_key: Optional[tuple[Any, ...]] = None
-    if cache is not None and evidence is cache.content_evidence_work:
-        cache_key = (str(format_id), int(count), *box_cache_key(outer), profile_policy)
-        cached = cache.content_region_runs.get(cache_key)
-        if cached is not None:
-            runs, detail = cached
-            return list(runs), copy.deepcopy(detail)
-    crop = evidence[outer.top:outer.bottom, outer.left:outer.right].astype(np.float32) / 255.0
+) -> tuple[tuple[int, int], ...]:
+    profile_parameters = content_policy.profile
+    crop = evidence[outer.top : outer.bottom, outer.left : outer.right].astype(
+        np.float32
+    ) / 255.0
     if crop.size == 0:
-        return [], {"used": False, "role": CONTENT_RUN_HINT_ROLE, "reason": "empty_content_outer"}
+        return ()
     profile = crop.mean(axis=0)
     smooth_window = max(
-        profile_policy.smooth_min_px,
-        int(round(max(1, outer.width) * profile_policy.smooth_ratio)),
+        profile_parameters.smooth_min_px,
+        int(round(max(1, outer.width) * profile_parameters.smooth_ratio)),
     )
     smoothed = smooth_1d(profile.astype(np.float32), smooth_window)
-    low, mid, high = sampled_percentile(smoothed, profile_policy.percentiles)
+    low, middle, high = sampled_percentile(
+        smoothed,
+        profile_parameters.percentiles,
+    )
     threshold = max(
-        profile_policy.threshold_min,
+        profile_parameters.threshold_min,
         min(
-            profile_policy.threshold_max,
-            float(low + (high - low) * profile_policy.low_percentile_weight),
-            float(mid) * profile_policy.mid_percentile_multiplier,
+            profile_parameters.threshold_max,
+            float(
+                low
+                + (high - low) * profile_parameters.low_percentile_weight
+            ),
+            float(middle) * profile_parameters.mid_percentile_multiplier,
         ),
     )
-    runs = runs_from_mask(smoothed >= threshold)
-    min_width = max(
-        profile_policy.min_run_width_px,
-        int(round(outer.width / max(1, count) * profile_policy.min_run_ratio)),
+    minimum_width = max(
+        profile_parameters.min_run_width_px,
+        int(
+            round(
+                outer.width
+                / max(1, count)
+                * profile_parameters.min_run_ratio
+            )
+        ),
     )
-    filtered: list[tuple[int, int]] = []
-    for start, end in runs:
-        if end - start >= min_width:
-            filtered.append((outer.left + start, outer.left + end))
-    detail = {
-        "used": True,
-        "role": CONTENT_RUN_HINT_ROLE,
-        "profile_threshold": threshold,
-        "profile_smooth_window": smooth_window,
-        "profile_percentiles": {
-            "low": float(low),
-            "mid": float(mid),
-            "high": float(high),
-            "levels": list(profile_policy.percentiles),
-        },
-        "raw_run_count": len(runs),
-        "usable_run_count": len(filtered),
-        "min_run_width": min_width,
-    }
-    if cache_key is not None:
-        cache.content_region_runs[cache_key] = (list(filtered), copy.deepcopy(detail))
-    return filtered, detail
+    filtered = tuple(
+        (outer.left + start, outer.left + end)
+        for start, end in runs_from_mask(smoothed >= threshold)
+        if end - start >= minimum_width
+    )
+    return filtered
 
 
-def select_content_runs(runs: list[tuple[int, int]], count: int) -> list[tuple[int, int]]:
+def select_content_runs(
+    runs: tuple[tuple[int, int], ...],
+    count: int,
+) -> tuple[tuple[int, int], ...]:
     if len(runs) <= count:
         return runs
-    ordered = sorted(runs, key=lambda run: run[1] - run[0], reverse=True)[:count]
-    return sorted(ordered)
+    selected = sorted(
+        runs,
+        key=lambda run: run[1] - run[0],
+        reverse=True,
+    )[:count]
+    return tuple(sorted(selected))
 
 
-def content_mask_region_detail(
+def content_mask_region(
     evidence_float: np.ndarray,
     gray_work_shape: tuple[int, int],
-    fmt: FormatPhysicalSpec,
-    cache: Optional[AnalysisCache],
+    cache: MeasurementCache,
     *,
     content_policy: ContentPolicy,
-) -> dict[str, Any]:
-    mask_policy = content_policy.mask
-    cache_key = (fmt.format_id, mask_policy)
-    if cache is not None:
-        cached = cache.content_mask_details.get(cache_key)
-        if cached is not None:
-            return copy.deepcopy(cached)
-    wh, ww = gray_work_shape
-    p55, p75, p92 = sampled_percentile(evidence_float, mask_policy.percentiles)
-    mask_threshold = max(
-        mask_policy.threshold_min,
+) -> Box | None:
+    parameters = content_policy.mask
+    cache_key = (parameters,)
+    if cache_key in cache.content_mask_regions:
+        return cache.content_mask_regions[cache_key]
+    work_height, work_width = gray_work_shape
+    low, middle, high = sampled_percentile(
+        evidence_float,
+        parameters.percentiles,
+    )
+    threshold = max(
+        parameters.threshold_min,
         min(
-            mask_policy.threshold_max,
-            float(p55 + (p92 - p55) * mask_policy.p55_weight),
-            float(p75) * mask_policy.p75_multiplier,
+            parameters.threshold_max,
+            float(low + (high - low) * parameters.p55_weight),
+            float(middle) * parameters.p75_multiplier,
         ),
     )
-    mask = evidence_float >= mask_threshold
-    outer = bbox_from_mask(
-        mask,
-        min_row_fraction=mask_policy.bbox_min_fraction,
-        min_col_fraction=mask_policy.bbox_min_fraction,
+    region = bbox_from_mask(
+        evidence_float >= threshold,
+        min_row_fraction=parameters.bbox_min_fraction,
+        min_col_fraction=parameters.bbox_min_fraction,
     )
-    detail: dict[str, Any] = {
-        "used": True,
-        "role": CONTENT_BBOX_HINT_ROLE,
-        "mask_threshold": float(mask_threshold),
-        "mask_percentiles": {"p55": float(p55), "p75": float(p75), "p92": float(p92)},
-        "outer": None if outer is None else asdict(outer),
-    }
-    if outer is not None and outer.valid():
-        expanded = outer.expand(
-            max(2, int(round(ww * mask_policy.outer_expand_ratio))),
-            max(2, int(round(wh * mask_policy.outer_expand_ratio))),
-            ww,
-            wh,
+    if region is not None and region.valid():
+        region = region.expand(
+            max(2, int(round(work_width * parameters.outer_expand_ratio))),
+            max(2, int(round(work_height * parameters.outer_expand_ratio))),
+            work_width,
+            work_height,
         )
-        detail["outer"] = asdict(expanded)
-    if cache is not None:
-        cache.content_mask_details[cache_key] = copy.deepcopy(detail)
-    return detail
+    cache.content_mask_regions[cache_key] = region
+    return region

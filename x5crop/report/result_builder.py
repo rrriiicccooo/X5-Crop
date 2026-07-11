@@ -4,7 +4,9 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Optional
 
-from ..domain import FinalDetection, ImageProfile, ProcessResult
+from ..detection.decision.model import FinalDetection
+from ..detection.evidence.transform_geometry import TransformGeometryEvidence
+from ..domain import ImageProfile, ProcessResult
 from ..utils import json_safe
 from .record import report_record_for_final_detection
 
@@ -19,8 +21,8 @@ def result_from_detection(
     *,
     policy_id: str,
     runtime_policy_detail: dict[str, Any],
-    deskew_detail: dict[str, Any],
-    analysis_cache_metadata: dict[str, Any],
+    transform_geometry: TransformGeometryEvidence,
+    analysis_reuse_signature: dict[str, Any],
 ) -> ProcessResult:
     record = report_record_for_final_detection(
         detection,
@@ -31,8 +33,8 @@ def result_from_detection(
         warnings=warnings,
         policy_id=policy_id,
         runtime_policy=runtime_policy_detail,
-        deskew_detail=deskew_detail,
-        analysis_cache_metadata=analysis_cache_metadata,
+        transform_geometry=transform_geometry,
+        analysis_reuse_signature=analysis_reuse_signature,
     )
     return ProcessResult(record=record)
 
@@ -44,6 +46,7 @@ def result_from_cached_record(
     warnings: list[str],
     *,
     output_files: list[str],
+    review_copy: str | None,
 ) -> ProcessResult:
     report_record = dict(cached_record)
     report_record["source"] = str(input_file)
@@ -51,6 +54,7 @@ def result_from_cached_record(
     report_record["analysis_reuse"] = {"used": True}
     output_detail = dict(cached_record["output"])
     output_detail["output_files"] = list(output_files)
+    output_detail["review_copy"] = review_copy
     output_detail["warnings"] = list(warnings)
     report_record["output"] = output_detail
     return ProcessResult(record=json_safe(report_record))

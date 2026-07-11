@@ -13,9 +13,3 @@ class DebugGapOverlayParameters:
     hard_line_width: int = 2
     model_line_width: int = 2
     diagnostic_line_width: int = 3
-
-
-@dataclass(frozen=True)
-class NearbySeparatorDiagnosticsParameters:
-    detail_score_add: float = 0.08
-    detail_score_multiplier: float = 1.18

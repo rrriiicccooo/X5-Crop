@@ -9,103 +9,97 @@ from x5crop.detection.physical.photo_size import (
     photo_size_consistency_from_separator_bands,
 )
 from x5crop.geometry.separator_band import SeparatorBand
-from x5crop.geometry.separator_width_profile import (
-    separator_width_relation_to_theory,
-    theoretical_separator_width,
-)
 from x5crop.policies.parameters.outer import SeparatorOuterBandParameters
 
 
 class PhotoSizePhysicalModelTests(unittest.TestCase):
     def test_separator_width_variation_does_not_make_photo_size_unstable(self) -> None:
-        gaps = [
-            separator_observation(1, 105.0, 1.0, "detected", 100.0, 110.0),
-            separator_observation(2, 245.0, 1.0, "detected", 210.0, 280.0),
-            separator_observation(3, 390.0, 1.0, "detected", 380.0, 400.0),
-        ]
-
-        detail = photo_size_consistency_from_gap_edges(
-            gaps,
+        result = photo_size_consistency_from_gap_edges(
+            [
+                separator_observation(1, 110.0, start=100.0, end=120.0),
+                separator_observation(2, 235.0, start=220.0, end=250.0),
+            ],
             origin=0.0,
-            pitch=125.0,
-            count=4,
-            target_photo_width=100.0,
-        ).detail()
-
-        self.assertTrue(detail["used"])
-        self.assertEqual(detail["photo_widths"], [100.0, 100.0, 100.0, 100.0])
-        self.assertAlmostEqual(detail["photo_width_cv"], 0.0)
-        self.assertGreater(detail["separator_width_cv"], 0.70)
-        self.assertEqual(detail["separator_width_role"], "observed_detail_not_stability_penalty")
-
-    def test_band_sequence_rank_penalty_prefers_photo_width_consistency(self) -> None:
-        variable_separator_stable_photo = [
-            SeparatorBand(100.0, 110.0, 105.0, 10.0, 0.8),
-            SeparatorBand(210.0, 280.0, 245.0, 70.0, 0.8),
-            SeparatorBand(380.0, 400.0, 390.0, 20.0, 0.8),
-        ]
-        stable_separator_unstable_photo = [
-            SeparatorBand(100.0, 120.0, 110.0, 20.0, 0.8),
-            SeparatorBand(200.0, 220.0, 210.0, 20.0, 0.8),
-            SeparatorBand(340.0, 360.0, 350.0, 20.0, 0.8),
-        ]
-
-        stable_photo = photo_size_consistency_from_separator_bands(
-            variable_separator_stable_photo,
+            pitch=350.0 / 3.0,
+            count=3,
             target_photo_width=100.0,
         )
-        unstable_photo = photo_size_consistency_from_separator_bands(
-            stable_separator_unstable_photo,
+        self.assertTrue(result.used)
+        self.assertEqual(result.photo_widths, (100.0, 100.0, 100.0))
+        self.assertEqual(result.photo_width_cv, 0.0)
+        self.assertGreater(result.separator_width_cv or 0.0, 0.0)
+
+    def test_sequence_rank_prefers_photo_width_consistency(self) -> None:
+        stable = photo_size_consistency_from_separator_bands(
+            [
+                SeparatorBand(100, 120, 110, 20, 0.8),
+                SeparatorBand(220, 250, 235, 30, 0.8),
+                SeparatorBand(350, 360, 355, 10, 0.8),
+            ],
             target_photo_width=100.0,
         )
-
+        unstable = photo_size_consistency_from_separator_bands(
+            [
+                SeparatorBand(100, 120, 110, 20, 0.8),
+                SeparatorBand(190, 210, 200, 20, 0.8),
+                SeparatorBand(340, 360, 350, 20, 0.8),
+            ],
+            target_photo_width=100.0,
+        )
         parameters = SeparatorOuterBandParameters()
-        stable_rank = separator_sequence_rank(
-            stable_photo,
-            0.0,
-            0.8,
-            parameters.sequence_pair_score_weight,
-            parameters.photo_width_cv_rank_weight,
+        self.assertLess(
+            separator_sequence_rank(
+                stable,
+                0.0,
+                0.8,
+                parameters.sequence_pair_score_weight,
+                parameters.photo_width_cv_rank_weight,
+            ),
+            separator_sequence_rank(
+                unstable,
+                0.0,
+                0.8,
+                parameters.sequence_pair_score_weight,
+                parameters.photo_width_cv_rank_weight,
+            ),
         )
-        unstable_rank = separator_sequence_rank(
-            unstable_photo,
-            0.0,
-            0.8,
-            parameters.sequence_pair_score_weight,
-            parameters.photo_width_cv_rank_weight,
-        )
-        self.assertLess(stable_rank, unstable_rank)
-        self.assertGreater(stable_photo.separator_width_cv or 0.0, 0.70)
-        self.assertAlmostEqual(stable_photo.photo_width_cv or 0.0, 0.0)
 
-    def test_incomplete_gap_edges_keep_target_photo_width_detail(self) -> None:
-        detail = photo_size_consistency_from_gap_edges(
-            [separator_observation(1, 100.0, 1.0, "equal")],
-            origin=0.0,
-            pitch=120.0,
-            count=2,
+    def test_incomplete_edges_are_unavailable_not_equal_pitch_proof(self) -> None:
+        result = photo_size_consistency_from_gap_edges(
+            [separator_observation(1, 100.0, method="equal")],
+            0.0,
+            120.0,
+            2,
             target_photo_width=96.0,
-        ).detail()
-
-        self.assertFalse(detail["used"])
-        self.assertEqual(detail["reason"], "incomplete_separator_edges")
-        self.assertEqual(detail["target_photo_width"], 96.0)
-
-    def test_separator_width_theory_is_descriptive_not_a_prior(self) -> None:
-        theory = theoretical_separator_width(
-            long_axis=445.0,
-            short_axis=100.0,
-            count=4,
-            frame_aspect=1.0,
         )
-        detail = theory.detail()
+        self.assertFalse(result.used)
+        self.assertEqual(
+            result.reason,
+            "insufficient_edge_bounded_photo_measurements",
+        )
 
-        self.assertTrue(detail["used"])
-        self.assertEqual(detail["reason"], "ok")
-        self.assertEqual(detail["mean_separator_width_if_even"], 15.0)
-        self.assertEqual(detail["target_photo_width"], 100.0)
-        self.assertEqual(separator_width_relation_to_theory(10.0, theory), "narrower_than_theory")
-        self.assertEqual(separator_width_relation_to_theory(20.0, theory), "broader_than_theory")
+    def test_model_edges_are_not_photo_dimension_measurements(self) -> None:
+        result = photo_size_consistency_from_gap_edges(
+            [
+                separator_observation(
+                    1,
+                    100.0,
+                    method="equal",
+                    start=95.0,
+                    end=105.0,
+                )
+            ],
+            0.0,
+            200.0,
+            2,
+            target_photo_width=95.0,
+        )
+
+        self.assertFalse(result.used)
+        self.assertEqual(
+            result.reason,
+            "insufficient_edge_bounded_photo_measurements",
+        )
 
 
 if __name__ == "__main__":

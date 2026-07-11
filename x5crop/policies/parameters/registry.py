@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from ...formats import FormatPhysicalSpec
-from ...geometry.detection_parameters import EdgePairParameters, FrameFitParameters
+from ...geometry.detection_parameters import EdgePairParameters
 from .aggregate import FormatParameters
 
 
@@ -100,81 +100,59 @@ def _edge_pair_parameters(spec: FormatPhysicalSpec) -> EdgePairParameters:
     return profiles[profile]
 
 
-def _frame_fit_parameters(spec: FormatPhysicalSpec) -> FrameFitParameters:
-    profile = parameter_profile_for_spec(spec)
-    profiles = {
-        "standard_35mm": FrameFitParameters(
-            name="standard_strip_frame_fit",
-            edge_evidence=True,
-            min_edge_samples=2,
-            nominal_min_ratio=0.72,
-            nominal_max_ratio=1.10,
-            inlier_tolerance_ratio=0.035,
-        ),
-        "dual_lane": FrameFitParameters(
-            name="dual_lane_frame_fit",
-            edge_evidence=False,
-        ),
-        "dense_half": FrameFitParameters(
-            name="dense_half_frame_fit",
-            edge_evidence=True,
-            min_edge_samples=4,
-            nominal_min_ratio=0.78,
-            nominal_max_ratio=1.08,
-            inlier_tolerance_ratio=0.030,
-        ),
-        "panoramic_35mm": FrameFitParameters(
-            name="panoramic_strip_frame_fit",
-            edge_evidence=True,
-            min_edge_samples=2,
-            nominal_min_ratio=0.70,
-            nominal_max_ratio=1.12,
-            inlier_tolerance_ratio=0.035,
-        ),
-        "medium_rectangle": FrameFitParameters(
-            name="medium_rectangle_frame_fit",
-            edge_evidence=True,
-            min_edge_samples=2,
-            nominal_min_ratio=0.70,
-            nominal_max_ratio=1.15,
-            inlier_tolerance_ratio=0.040,
-        ),
-        "medium_square": FrameFitParameters(
-            name="medium_square_frame_fit",
-            edge_evidence=True,
-            min_edge_samples=2,
-            nominal_min_ratio=0.65,
-            nominal_max_ratio=1.20,
-            inlier_tolerance_ratio=0.045,
-        ),
-        "medium_wide": FrameFitParameters(
-            name="medium_wide_frame_fit",
-            edge_evidence=True,
-            min_edge_samples=2,
-            nominal_min_ratio=0.65,
-            nominal_max_ratio=1.20,
-            inlier_tolerance_ratio=0.045,
-        ),
-    }
-    return profiles[profile]
-
-
 def _with_profile_parameters(
     params: FormatParameters,
     spec: FormatPhysicalSpec,
 ) -> FormatParameters:
+    nominal_width_mm = float(spec.nominal_frame_size_mm.width_mm)
+    nominal_height_mm = float(spec.nominal_frame_size_mm.height_mm)
+    gap_search = params.separator.gap_search
     return replace(
         params,
         separator=replace(
             params.separator,
             edge_pair=_edge_pair_parameters(spec),
+            gap_search=replace(
+                gap_search,
+                radius=replace(
+                    gap_search.radius,
+                    mm=nominal_width_mm * gap_search.radius.fallback_ratio,
+                ),
+                max_width=replace(
+                    gap_search.max_width,
+                    mm=nominal_width_mm * gap_search.max_width.fallback_ratio,
+                ),
+                min_width=replace(
+                    gap_search.min_width,
+                    mm=nominal_width_mm * gap_search.min_width.fallback_ratio,
+                ),
+                guard=replace(
+                    gap_search.guard,
+                    mm=nominal_width_mm * gap_search.guard.fallback_ratio,
+                ),
+            ),
+            separator_width_profile_search=replace(
+                params.separator.separator_width_profile_search,
+                edge_margin=replace(
+                    params.separator.separator_width_profile_search.edge_margin,
+                    mm=(
+                        nominal_height_mm
+                        * params.separator.separator_width_profile_search.edge_margin.fallback_ratio
+                    ),
+                ),
+            ),
         ),
-        candidate=replace(
-            params.candidate,
-            full_frame_fit=_frame_fit_parameters(spec),
-            partial_frame_fit=FrameFitParameters(
-                name=f"{parameter_profile_for_spec(spec)}_partial_frame_fit",
-                edge_evidence=False,
+        outer=replace(
+            params.outer,
+            separator_outer_band=replace(
+                params.outer.separator_outer_band,
+                edge_margin=replace(
+                    params.outer.separator_outer_band.edge_margin,
+                    mm=(
+                        nominal_height_mm
+                        * params.outer.separator_outer_band.edge_margin.fallback_ratio
+                    ),
+                ),
             ),
         ),
     )
@@ -305,7 +283,6 @@ def _with_content_containment_correction(
     params: FormatParameters,
     *,
     long_margin_ratio: float | None = None,
-    long_margin_cap_ratio: float | None = None,
 ) -> FormatParameters:
     current = params.outer.content_containment_correction
     return replace(
@@ -318,11 +295,6 @@ def _with_content_containment_correction(
                     current.long_margin_ratio
                     if long_margin_ratio is None
                     else float(long_margin_ratio)
-                ),
-                long_margin_cap_ratio=(
-                    current.long_margin_cap_ratio
-                    if long_margin_cap_ratio is None
-                    else float(long_margin_cap_ratio)
                 ),
             ),
         ),
@@ -367,8 +339,6 @@ def _with_candidate_scoring_profile(
     params: FormatParameters,
     *,
     full_photo_width_cv: float | None = None,
-    outer_max_area: float | None = None,
-    outer_too_large: float | None = None,
     separator_weight: float | None = None,
     geometry_weight: float | None = None,
     content_weight: float | None = None,
@@ -378,17 +348,12 @@ def _with_candidate_scoring_profile(
     base_score = params.candidate.base_detection_score
     calibration = params.candidate.scoring_calibration
     support_score = params.candidate.separator_support_score
-    geometry_support = params.separator.separator_geometry_support
+    geometry_support = params.candidate.geometry_support_score
     nearby = params.separator.nearby_separator_refinement
     resolved_photo_width_cv = (
-        base_score.full_photo_width_cv
+        base_score.unstable_photo_width_cv
         if full_photo_width_cv is None
         else float(full_photo_width_cv)
-    )
-    resolved_outer_max_area = (
-        base_score.outer_max_area
-        if outer_max_area is None
-        else float(outer_max_area)
     )
     return replace(
         params,
@@ -396,13 +361,8 @@ def _with_candidate_scoring_profile(
             params.candidate,
             base_detection_score=replace(
                 base_score,
-                full_photo_width_cv=resolved_photo_width_cv,
-                outer_max_area=resolved_outer_max_area,
-                outer_too_large=(
-                    base_score.outer_too_large
-                    if outer_too_large is None
-                    else float(outer_too_large)
-                ),
+                photo_width_cv_norm=resolved_photo_width_cv,
+                unstable_photo_width_cv=resolved_photo_width_cv,
             ),
             scoring_calibration=replace(
                 calibration,
@@ -430,14 +390,13 @@ def _with_candidate_scoring_profile(
                     else float(model_equal_credit)
                 ),
             ),
+            geometry_support_score=replace(
+                geometry_support,
+                photo_width_cv_norm=resolved_photo_width_cv,
+            ),
         ),
         separator=replace(
             params.separator,
-            separator_geometry_support=replace(
-                geometry_support,
-                max_photo_width_cv=resolved_photo_width_cv,
-                max_outer_area_ratio=resolved_outer_max_area,
-            ),
             nearby_separator_refinement=replace(
                 nearby,
                 score_multiplier=(
@@ -513,7 +472,6 @@ def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
         params = _with_content_containment_correction(
             params,
             long_margin_ratio=0.008,
-            long_margin_cap_ratio=0.012,
         )
         params = _with_separator_outer(
             params,
@@ -546,16 +504,17 @@ def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
         )
         params = _with_partial_edge(params, ratio_extras=(0.04, 0.08), max_candidates=4)
     elif profile == "medium_square":
-        params = _with_candidate_scoring_profile(
-            params,
-            outer_max_area=1.0,
-            outer_too_large=1.0,
-        )
         params = replace(
             params,
             separator=replace(
                 params.separator,
-                gap_search=replace(params.separator.gap_search, max_width_max=720),
+                gap_search=replace(
+                    params.separator.gap_search,
+                    max_width=replace(
+                        params.separator.gap_search.max_width,
+                        max_px=720,
+                    ),
+                ),
             ),
         )
         params = replace(
@@ -576,10 +535,6 @@ def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
             source_candidates=3,
         )
     elif profile == "medium_wide":
-        params = _with_candidate_scoring_profile(
-            params,
-            outer_too_large=0.995,
-        )
         params = _with_outer_alignment_evidence(
             params,
             short_excess_ratio=0.024,

@@ -275,43 +275,45 @@ architecture; no `docs/` mirror is kept.
 Current state:
 
 - Active script is `X5_Crop.py` V4.9.
-- V4.9 is the active development line over the V4.7 source layout.
-- Source layout is layered: thin entry, explicit `entry/`, `runtime/`,
-  `cache/`, `formats/`, `report/`, `detection/candidate/*`, and `policies/*`
-  subpackages, split geometry helpers, and explicit debug/export/tool surfaces.
+- Detection now follows the typed physical flow documented in `ARCHITECTURE.md`:
+  observations -> count/placement hypotheses -> geometry -> evidence ->
+  CandidateGate -> GeometryResolution -> selection -> DecisionGate.
+- `HolderSpan` and `FilmSpan` are distinct identities. Confirmed cross-axis
+  separator continuity is required before a band can support hard sequence or
+  photo-size evidence.
+- `GeometryResolution` is the only execution early-stop input. CandidateGate
+  and confidence do not own execution budget.
+- Report serialization, validation, and current-schema restoration all belong
+  to `x5crop.report`; debug rendering does not touch detection measurement cache.
 - Runtime flow and source-layer structure live in `ARCHITECTURE.md`.
 - Version history and validation summaries live in `CHANGELOG.md`.
 - User setup and usage live in `README.md` and `快速启动_Quick_Start.md`.
-- Documentation changes must meet the standing extreme cleanliness and elegance
-  bar: concise, current, structurally clear, and non-overlapping.
-- The binding definition and closure procedure for extreme cleanliness now live
-  in this file. Future work must apply it without asking the user to restate it.
 
 Recent verified baseline:
 
-- The previous architecture closure candidate was superseded by the physical-proof
-  Gate refactor. Architecture is not closed; the complete two-audit plan must restart
-  from the resulting commit.
-- CandidateGate now blocks only explicit physical contradictions and requires an
-  independent boundary proof path. DecisionGate owns final status and specific
-  final reasons; confidence is ranking and explanatory data only.
-- Low content, uncertain aspect, and empty frames now mean frame-content support is
-  unavailable. They do not claim content damage; confirmed boundary/undercrop
-  evidence owns content-preservation contradictions.
-- `python3 X5_Crop.py --version` printed `X5_Crop.py 4.9`.
-- The full architecture and runtime contract suite passed.
-- Full compile across the V4.9 package and regression tools passed.
-- `git diff --check` passed.
-- Decision contract policy smoke passed for 14 format / strip-mode combinations.
-- Representative `135/full`, `120-66/partial auto`, `half/full`, and
-  `120-67/full` report/debug smokes completed against the current schema.
-- All four smoke reports had empty `schema_validation`; horizontal and vertical
-  Debug Analysis outputs were visually confirmed as three-panel images.
-- Current-schema cache reuse completed a real second-run reuse path.
-- A native two-worker ProcessPool completed a multi-file run without thread fallback.
-- A synthetic `135-dual/full` input completed the dual-lane pipeline with twelve frames.
-- Seven local V4.5.4 reference sets have been used as comparison material for
-  locating changes.
-- V4.9 no longer treats V4.5.4 or V4.7 as a field-parity oracle. In the current
-  project phase, any historical reference diff can be accepted; diffs should be
-  used to locate and explain changes, not to block acceptance by themselves.
+- The previous closure candidate is superseded by the physical detection model
+  refactor. Architecture is not closed; the fixed two-audit closure plan must
+  restart from the resulting commit.
+- The architecture suite covers 197 active modules and 751 acyclic internal
+  import edges; all active modules are reachable and uniquely layered.
+- 340 contract and behavior tests pass. Full package and regression compile,
+  policy consistency, launcher syntax, version, and whitespace checks pass.
+- `135/full`, `135/partial auto`, `135/partial -n 3`, `120-66/partial auto`,
+  `half/full`, and `120-67/full|partial` real samples produced valid
+  `physical_resolution` reports. Horizontal and vertical Debug Analysis images
+  were visually confirmed as three-panel output.
+- `X5_00034 partial auto` selected count 5 and covered all three real photos with
+  allowed empty frames. `X5_00033 partial auto` did not auto-pass as count 1.
+- The 120-66 sample preserved `complete_underfilled_strip`; it did not use that
+  occupancy fact to suppress content-preservation evidence.
+- Synthetic off-center `135-dual/full` used a measured lane divider and produced
+  twelve frames through the common lane pipeline.
+- Current-schema cache reuse completed the same review/export actions as a fresh
+  result. Exported TIFFs retained uint16 data, 600 dpi resolution metadata, and
+  DEFLATE compression. A native two-worker ProcessPool completed without fallback.
+- Current representative samples are REVIEW after the structural rewrite. This
+  does not block architecture work; proof thresholds and sample calibration are a
+  separate project.
+- Unresolved partial samples currently expand 106-196 candidates. Optimize this
+  later through GeometryResolution-aware candidate planning and exact measurement
+  reuse, never through CandidateGate, DecisionGate, or confidence shortcuts.

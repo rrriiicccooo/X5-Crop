@@ -1,288 +1,200 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-from typing import Any, Optional
-
 import numpy as np
 
-from .....domain import Box, DetectionCandidate
+from .....domain import Box
 from .....formats import FormatPhysicalSpec
 from .....gap_methods import is_hard_gap_method
-from .....geometry.boxes import original_box_to_work
 from .....policies.runtime.outer import GeometryConsistencyCorrectionPolicy
-from .....cache import AnalysisCache
-from .....utils import box_from_dict, clamp_int
+from .....utils import clamp_int
+from ....geometry import CandidateGeometry
+from ....evidence.outer_alignment import OuterAlignmentEvidence
+from ...photo_size import FrameDimensionEvidence
+from ...spans import FilmSpan
 from .constraints import correction_axes_allowed
 from .types import OuterCorrectionProposal
 
 
-def corrected_outer_for_short_axis_geometry(
-    gray: np.ndarray,
-    fmt: FormatPhysicalSpec,
-    detection: DetectionCandidate,
-    content_detail: dict[str, Any],
-    cache: AnalysisCache,
-    correction_policy: GeometryConsistencyCorrectionPolicy,
-) -> Optional[Box]:
-    short_axis_policy = correction_policy.short_axis
-    short_axis = short_axis_policy.parameters
-    family = short_axis_policy.family
-    if family.mode == "off":
+def _long_axis_geometry_proposal(
+    geometry: CandidateGeometry,
+    physical_spec: FormatPhysicalSpec,
+    alignment: OuterAlignmentEvidence,
+    policy: GeometryConsistencyCorrectionPolicy,
+    canvas_width: int,
+) -> OuterCorrectionProposal | None:
+    family = policy.long_axis.family
+    parameters = policy.long_axis.parameters
+    original = geometry.film_span.box
+    if family.mode == "off" or geometry.count <= 1:
         return None
-    if str(content_detail.get("support", "")) != "aspect_conflict":
-        return None
-    max_aspect_error = content_detail.get("max_aspect_error")
-    if max_aspect_error is None or float(max_aspect_error) < short_axis.min_error:
-        return None
-
-    source_h, source_w = gray.shape
-    work_h, work_w = cache.gray_work.shape
-    outer = original_box_to_work(detection.outer, detection.layout, source_w, source_h).clamp(work_w, work_h)
-    if not outer.valid():
-        return None
-    pitch = float(outer.width) / float(max(1, detection.count))
-    target_aspect = float(short_axis.target_aspect)
-    if target_aspect <= 0.0:
-        target_aspect = float(fmt.horizontal_content_aspect)
-    target_aspect = max(0.01, target_aspect)
-    target_height = pitch / target_aspect
-    if target_height <= float(outer.height):
-        return None
-
-    margin = clamp_int(
-        pitch * short_axis.margin_ratio,
-        short_axis.margin_min,
-        short_axis.margin_max,
+    separators = tuple(
+        observation
+        for observation in geometry.separators
+        if is_hard_gap_method(observation.method)
     )
-    target_height = min(float(work_h), target_height + float(margin * 2))
-    center = (float(outer.top) + float(outer.bottom)) * 0.5
-    top = int(round(center - target_height * 0.5))
-    bottom = int(round(center + target_height * 0.5))
+    if (
+        len(separators) != geometry.count - 1
+        or any(
+            observation.start is None or observation.end is None
+            for observation in separators
+        )
+    ):
+        return None
+    frame_width = float(original.height) * float(
+        physical_spec.horizontal_content_aspect
+    )
+    separator_widths = [
+        float(observation.end) - float(observation.start)
+        for observation in separators
+    ]
+    left_estimates: list[float] = []
+    right_estimates: list[float] = []
+    for observation in separators:
+        index = int(observation.index)
+        preceding = sum(separator_widths[: max(0, index - 1)])
+        following = sum(separator_widths[index:])
+        left_estimates.append(
+            float(original.left)
+            + float(observation.start)
+            - (float(index) * frame_width + preceding)
+        )
+        right_estimates.append(
+            float(original.left)
+            + float(observation.end)
+            + (float(geometry.count - index) * frame_width + following)
+        )
+    corrected = Box(
+        max(0, min(canvas_width - 1, int(round(np.median(left_estimates))))),
+        original.top,
+        max(1, min(canvas_width, int(round(np.median(right_estimates))))),
+        original.bottom,
+    )
+    if not corrected.valid() or corrected.width >= original.width:
+        return None
+    shrink_ratio = float(original.width - corrected.width) / max(
+        1.0,
+        float(original.width),
+    )
+    if not (
+        parameters.min_shrink_ratio
+        <= shrink_ratio
+        <= parameters.max_shrink_ratio
+    ):
+        return None
+    if (
+        family.max_shrink_ratio > 0.0
+        and shrink_ratio > family.max_shrink_ratio
+    ):
+        return None
+    content = alignment.content_span
+    if content is not None and content.valid():
+        margin = clamp_int(
+            float(original.height) * parameters.content_margin_ratio,
+            parameters.content_margin_min,
+            parameters.content_margin_max,
+        )
+        if (
+            corrected.left > content.left - margin
+            or corrected.right < content.right + margin
+        ):
+            return None
+    if not correction_axes_allowed(family, original, corrected):
+        return None
+    return OuterCorrectionProposal(
+        corrected_span=FilmSpan(corrected),
+        family="long_axis_geometry",
+        reason="separator_edges_explain_smaller_film_span",
+    )
+
+
+def _short_axis_geometry_proposal(
+    geometry: CandidateGeometry,
+    dimensions: FrameDimensionEvidence,
+    physical_spec: FormatPhysicalSpec,
+    policy: GeometryConsistencyCorrectionPolicy,
+    canvas_height: int,
+) -> OuterCorrectionProposal | None:
+    family = policy.short_axis.family
+    parameters = policy.short_axis.parameters
+    original = geometry.film_span.box
+    if family.mode == "off" or dimensions.maximum_dimension_error_ratio is None:
+        return None
+    if dimensions.maximum_dimension_error_ratio < parameters.min_error:
+        return None
+    measured_photo_width = (
+        float(np.median(dimensions.photo_widths_px))
+        if dimensions.photo_widths_px
+        else float(geometry.pitch)
+    )
+    target_height = measured_photo_width / max(
+        1e-6,
+        float(physical_spec.horizontal_content_aspect),
+    )
+    if target_height <= float(original.height):
+        return None
+    margin = clamp_int(
+        geometry.pitch * parameters.margin_ratio,
+        parameters.margin_min,
+        parameters.margin_max,
+    )
+    target_height = min(float(canvas_height), target_height + 2.0 * margin)
+    center = 0.5 * float(original.top + original.bottom)
+    top = int(round(center - 0.5 * target_height))
+    bottom = int(round(center + 0.5 * target_height))
     if top < 0:
         bottom -= top
         top = 0
-    if bottom > work_h:
-        top -= bottom - work_h
-        bottom = work_h
-    top = max(0, top)
-    bottom = min(work_h, bottom)
-    corrected = Box(outer.left, top, outer.right, bottom)
-    if not corrected.valid() or corrected == outer:
+    if bottom > canvas_height:
+        top -= bottom - canvas_height
+        bottom = canvas_height
+    corrected = Box(original.left, max(0, top), original.right, min(canvas_height, bottom))
+    if not corrected.valid() or corrected.height <= original.height:
         return None
-    if corrected.height <= outer.height:
-        return None
-    expand_ratio = float(corrected.height - outer.height) / max(1.0, float(outer.height))
-    if family.max_expand_ratio > 0.0 and expand_ratio > family.max_expand_ratio:
-        return None
-    if not correction_axes_allowed(family, outer, corrected):
-        return None
-    return corrected
-
-
-def geometry_consistency_model_detail(
-    gray: np.ndarray,
-    detection: DetectionCandidate,
-    fmt: FormatPhysicalSpec,
-    cache: AnalysisCache,
-) -> dict[str, Any]:
-    if detection.count <= 0:
-        return {"used": False, "reason": "invalid_count"}
-    aspect = float(fmt.horizontal_content_aspect)
-    if aspect <= 0.0:
-        return {"used": False, "reason": "unknown_format_aspect"}
-    source_h, source_w = gray.shape
-    work_h, work_w = cache.gray_work.shape
-    outer = original_box_to_work(detection.outer, detection.layout, source_w, source_h).clamp(work_w, work_h)
-    if not outer.valid() or outer.height <= 0:
-        return {"used": False, "reason": "invalid_outer"}
-
-    hard_gaps = [gap for gap in detection.gaps if is_hard_gap_method(gap.method)]
-    measured_widths: list[float] = []
-    complete_measured = True
-    for gap in detection.gaps:
-        if not is_hard_gap_method(gap.method) or gap.start is None or gap.end is None:
-            complete_measured = False
-            continue
-        measured_widths.append(max(0.0, float(gap.end) - float(gap.start)))
-
-    base_ratio = float(detection.count) * float(aspect)
-    measured_separator_total = float(sum(measured_widths))
-    actual_ratio = float(outer.width) / max(1.0, float(outer.height))
-    expected_ratio_from_measured = base_ratio + measured_separator_total / max(1.0, float(outer.height))
-    return {
-        "used": True,
-        "format_id": fmt.format_id,
-        "count": int(detection.count),
-        "frame_aspect": float(aspect),
-        "base_ratio": float(base_ratio),
-        "actual_outer_ratio": float(actual_ratio),
-        "measured_separator_total": float(measured_separator_total),
-        "expected_ratio_from_measured_separators": float(expected_ratio_from_measured),
-        "extra_ratio": float(actual_ratio - base_ratio),
-        "unexplained_extra_ratio": float(actual_ratio - expected_ratio_from_measured),
-        "hard_gap_count": int(len(hard_gaps)),
-        "expected_gap_count": int(max(0, detection.count - 1)),
-        "complete_measured_hard_gaps": bool(complete_measured and len(measured_widths) == max(0, detection.count - 1)),
-        "outer_work_box": asdict(outer),
-        "work_width": int(work_w),
-        "work_height": int(work_h),
-    }
-
-
-def corrected_outer_from_long_axis_geometry(
-    detection: DetectionCandidate,
-    fmt: FormatPhysicalSpec,
-    geometry_detail: dict[str, Any],
-    alignment: dict[str, Any],
-    cache: AnalysisCache,
-    correction_policy: GeometryConsistencyCorrectionPolicy,
-) -> Optional[Box]:
-    long_axis_policy = correction_policy.long_axis
-    long_axis = long_axis_policy.parameters
-    family = long_axis_policy.family
-    if family.mode == "off":
-        return None
-    if not bool(geometry_detail.get("used", False)):
-        return None
-    if family.requires_complete_hard_gaps and not bool(geometry_detail.get("complete_measured_hard_gaps", False)):
-        return None
-
-    unexplained = float(geometry_detail.get("unexplained_extra_ratio", 0.0) or 0.0)
-    if unexplained <= long_axis.ratio_tolerance:
-        return None
-
-    try:
-        outer = box_from_dict(geometry_detail["outer_work_box"])
-    except Exception:
-        return None
-    if not outer.valid():
-        return None
-    aspect = float(fmt.horizontal_content_aspect)
-    if aspect <= 0.0:
-        return None
-
-    gap_widths: list[float] = []
-    for gap in detection.gaps:
-        if not is_hard_gap_method(gap.method) or gap.start is None or gap.end is None:
-            return None
-        gap_widths.append(max(0.0, float(gap.end) - float(gap.start)))
-
-    frame_long = float(outer.height) * float(aspect)
-    left_estimates: list[float] = []
-    right_estimates: list[float] = []
-    for gap in detection.gaps:
-        index = int(gap.index)
-        width = max(0.0, float(gap.end) - float(gap.start))
-        previous_width = float(sum(gap_widths[: max(0, index - 1)]))
-        next_width = float(sum(gap_widths[index:]))
-        left_estimates.append(float(outer.left) + float(gap.start) - (float(index) * frame_long + previous_width))
-        right_estimates.append(float(outer.left) + float(gap.end) + (float(detection.count - index) * frame_long + next_width))
-
-    if not left_estimates or not right_estimates:
-        return None
-
-    proposed_left = int(round(float(np.median(np.array(left_estimates, dtype=np.float64)))))
-    proposed_right = int(round(float(np.median(np.array(right_estimates, dtype=np.float64)))))
-    work_w = int(geometry_detail.get("work_width", cache.gray_work.shape[1]))
-    proposed_left = max(0, min(proposed_left, work_w - 1))
-    proposed_right = max(proposed_left + 1, min(proposed_right, work_w))
-    corrected = Box(proposed_left, outer.top, proposed_right, outer.bottom)
-    if not corrected.valid() or corrected == outer:
-        return None
-
-    shrink = float(outer.width - corrected.width)
-    if shrink <= 0:
-        return None
-    shrink_ratio = shrink / max(1.0, float(outer.width))
-    if shrink_ratio < long_axis.min_shrink_ratio:
-        return None
-    if shrink_ratio > long_axis.max_shrink_ratio:
-        return None
-    if family.max_shrink_ratio > 0.0 and shrink_ratio > family.max_shrink_ratio:
-        return None
-
-    actual_ratio = float(geometry_detail.get("actual_outer_ratio", 0.0) or 0.0)
-    expected_ratio = float(geometry_detail.get("expected_ratio_from_measured_separators", 0.0) or 0.0)
-    corrected_ratio = float(corrected.width) / max(1.0, float(corrected.height))
-    if abs(corrected_ratio - expected_ratio) >= abs(actual_ratio - expected_ratio):
-        return None
-
-    if bool(alignment.get("used", False)) and "content_work_box" in alignment:
-        try:
-            content = box_from_dict(alignment["content_work_box"])
-        except Exception:
-            content = None
-        if content is not None and content.valid():
-            margin = clamp_int(
-                float(outer.height) * long_axis.content_margin_ratio,
-                long_axis.content_margin_min,
-                long_axis.content_margin_max,
-            )
-            if corrected.left > content.left - margin or corrected.right < content.right + margin:
-                return None
-
-    if corrected.width < max(
-        long_axis.min_corrected_width_px,
-        int(round(outer.width * long_axis.min_corrected_width_ratio)),
-    ):
-        return None
-    if not correction_axes_allowed(family, outer, corrected):
-        return None
-    return corrected
-
-
-def geometry_consistency_correction_proposal(
-    gray: np.ndarray,
-    fmt: FormatPhysicalSpec,
-    detection: DetectionCandidate,
-    content_detail: dict[str, Any],
-    outer_alignment: dict[str, Any],
-    cache: AnalysisCache,
-    eligible_families: set[str],
-    correction_policy: GeometryConsistencyCorrectionPolicy,
-) -> Optional[OuterCorrectionProposal]:
-    if "short_axis_geometry" in eligible_families:
-        corrected_outer = corrected_outer_for_short_axis_geometry(
-            gray,
-            fmt,
-            detection,
-            content_detail,
-            cache,
-            correction_policy=correction_policy,
-        )
-        if corrected_outer is not None:
-            return OuterCorrectionProposal(
-                box=corrected_outer,
-                name="geometry_consistency_short_axis_outer",
-                strategy="geometry_consistency_correction",
-                source_reason="short_axis_aspect_conflict",
-                original_outer_work_box=detection.detail.get("work_outer"),
-                suppress_outer_mismatch=True,
-                detail={"correction_kind": "short_axis"},
-            )
-    if "long_axis_geometry" not in eligible_families:
-        return None
-
-    geometry_detail = geometry_consistency_model_detail(gray, detection, fmt, cache)
-    corrected_outer = corrected_outer_from_long_axis_geometry(
-        detection,
-        fmt,
-        geometry_detail,
-        outer_alignment,
-        cache,
-        correction_policy=correction_policy,
+    expansion_ratio = float(corrected.height - original.height) / max(
+        1.0,
+        float(original.height),
     )
-    if corrected_outer is None:
+    if family.max_expand_ratio > 0.0 and expansion_ratio > family.max_expand_ratio:
         return None
-
+    if not correction_axes_allowed(family, original, corrected):
+        return None
     return OuterCorrectionProposal(
-        box=corrected_outer,
-        name="geometry_consistency_long_axis_outer",
-        strategy="geometry_consistency_correction",
-        source_reason="long_axis_geometry_unexplained_outer_extra",
-        original_outer_work_box=geometry_detail.get("outer_work_box"),
-        detail={
-            "correction_kind": "long_axis",
-            "source_geometry_consistency": geometry_detail,
-        },
+        corrected_span=FilmSpan(corrected),
+        family="short_axis_geometry",
+        reason="physical_frame_aspect_requires_short_axis_expansion",
     )
+
+
+def geometry_consistency_correction_proposals(
+    geometry: CandidateGeometry,
+    dimensions: FrameDimensionEvidence,
+    alignment: OuterAlignmentEvidence,
+    physical_spec: FormatPhysicalSpec,
+    policy: GeometryConsistencyCorrectionPolicy,
+    *,
+    canvas_width: int,
+    canvas_height: int,
+    eligible_families: frozenset[str],
+) -> tuple[OuterCorrectionProposal, ...]:
+    proposals: list[OuterCorrectionProposal] = []
+    if "long_axis_geometry" in eligible_families:
+        proposal = _long_axis_geometry_proposal(
+            geometry,
+            physical_spec,
+            alignment,
+            policy,
+            canvas_width,
+        )
+        if proposal is not None:
+            proposals.append(proposal)
+    if "short_axis_geometry" in eligible_families:
+        proposal = _short_axis_geometry_proposal(
+            geometry,
+            dimensions,
+            physical_spec,
+            policy,
+            canvas_height,
+        )
+        if proposal is not None:
+            proposals.append(proposal)
+    return tuple(proposals)

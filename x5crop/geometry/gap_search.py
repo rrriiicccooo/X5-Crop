@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 
 from ..constants import GAP_DETECTED
 from ..domain import MeasurementProvenance, SeparatorBandObservation
+from ..units import ScanCalibration
 from ..utils import clamp_int, runs_from_mask
 from .detection_parameters import GapSearchParameters
-from .gap_search_detail import attach_gap_run_evaluation_summary
 
 
 @dataclass(frozen=True)
@@ -33,11 +33,6 @@ class GapAcceptanceLimits:
     weak_prominence_mean_override: float
     separator_width_min_mean: float
     separator_width_min_prominence: float
-
-
-@dataclass(frozen=True)
-class GapRankingWeights:
-    quality_prominence_weight: float
 
 
 @dataclass(frozen=True)
@@ -79,7 +74,6 @@ class DetectedGapBandEvidence:
     end: float
     width: int
     mean_score: float
-    side_score: float
     prominence: float
 
 
@@ -95,44 +89,12 @@ class DetectedGapBandAssessment:
     reason: str
     evidence: Optional[DetectedGapBandEvidence] = None
 
-    def detail(self) -> dict[str, Any]:
-        out: dict[str, Any] = {
-            "accepted": bool(self.accepted),
-            "reason": self.reason,
-        }
-        if self.evidence is not None:
-            out.update(
-                {
-                    "center": float(self.evidence.center),
-                    "start": float(self.evidence.start),
-                    "end": float(self.evidence.end),
-                    "width": int(self.evidence.width),
-                    "mean_score": float(self.evidence.mean_score),
-                    "side_score": float(self.evidence.side_score),
-                    "prominence": float(self.evidence.prominence),
-                }
-            )
-        return out
-
-
-@dataclass(frozen=True)
-class DetectedGapRunAssessment:
-    candidate: Optional[DetectedGapCandidate]
-    detail: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class DetectedGapCandidateSearchResult:
-    candidates: list[DetectedGapCandidate]
-    evaluations: list[dict[str, Any]]
-
 
 @dataclass(frozen=True)
 class GapSearchResult:
     detected_gap: Optional[SeparatorBandObservation]
     model_gap_score: float
     reason: str
-    detail: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -144,7 +106,7 @@ class GapSearchContext:
     limits: GapWidthLimits
     thresholds: GapScoreThresholds
     acceptance: GapAcceptanceLimits
-    ranking: GapRankingWeights
+    quality_prominence_weight: float
     max_width_ratio_override: Optional[float]
 
 
@@ -153,8 +115,14 @@ def gap_search_window(
     expected: float,
     pitch: float,
     config: GapSearchParameters,
+    calibration: ScanCalibration,
+    axis: str,
 ) -> GapSearchWindow:
-    radius = clamp_int(pitch * config.radius_ratio, config.radius_min, config.radius_max)
+    radius = config.radius.resolve_px(
+        calibration,
+        axis=axis,
+        reference_px=pitch,
+    )
     lo = max(1, int(round(expected)) - radius)
     hi = min(profile_length - 1, int(round(expected)) + radius + 1)
     return GapSearchWindow(int(lo), int(hi))
@@ -164,12 +132,33 @@ def gap_width_limits(
     pitch: float,
     max_width_ratio_override: Optional[float],
     config: GapSearchParameters,
+    calibration: ScanCalibration,
+    axis: str,
 ) -> GapWidthLimits:
-    normal_max_gap_w = clamp_int(pitch * config.max_width_ratio, config.max_width_min, config.max_width_max)
-    max_width_ratio = config.max_width_ratio if max_width_ratio_override is None else max_width_ratio_override
-    max_gap_w = clamp_int(pitch * max_width_ratio, config.max_width_min, config.max_width_max)
-    min_gap_w = clamp_int(pitch * config.min_width_ratio, config.min_width_min, config.min_width_max)
-    guard_w = clamp_int(pitch * config.guard_ratio, config.guard_min, config.guard_max)
+    normal_max_gap_w = config.max_width.resolve_px(
+        calibration,
+        axis=axis,
+        reference_px=pitch,
+    )
+    max_gap_w = (
+        normal_max_gap_w
+        if max_width_ratio_override is None
+        else clamp_int(
+            pitch * max_width_ratio_override,
+            config.max_width.min_px,
+            config.max_width.max_px,
+        )
+    )
+    min_gap_w = config.min_width.resolve_px(
+        calibration,
+        axis=axis,
+        reference_px=pitch,
+    )
+    guard_w = config.guard.resolve_px(
+        calibration,
+        axis=axis,
+        reference_px=pitch,
+    )
     return GapWidthLimits(normal_max_gap_w, max_gap_w, min_gap_w, guard_w)
 
 
@@ -193,12 +182,6 @@ def gap_acceptance_limits(config: GapSearchParameters) -> GapAcceptanceLimits:
     )
 
 
-def gap_ranking_weights(config: GapSearchParameters) -> GapRankingWeights:
-    return GapRankingWeights(
-        quality_prominence_weight=float(config.quality_prominence_weight),
-    )
-
-
 def gap_search_context(
     local: np.ndarray,
     lo: int,
@@ -207,8 +190,16 @@ def gap_search_context(
     local_max: float,
     max_width_ratio_override: Optional[float],
     config: GapSearchParameters,
+    calibration: ScanCalibration,
+    axis: str,
 ) -> GapSearchContext:
-    limits = gap_width_limits(pitch, max_width_ratio_override, config)
+    limits = gap_width_limits(
+        pitch,
+        max_width_ratio_override,
+        config,
+        calibration,
+        axis,
+    )
     thresholds = gap_score_thresholds(local_max, config)
     return GapSearchContext(
         local=local,
@@ -218,7 +209,7 @@ def gap_search_context(
         limits=limits,
         thresholds=thresholds,
         acceptance=gap_acceptance_limits(config),
-        ranking=gap_ranking_weights(config),
+        quality_prominence_weight=float(config.quality_prominence_weight),
         max_width_ratio_override=max_width_ratio_override,
     )
 
@@ -301,7 +292,6 @@ def detected_gap_band_assessment(
         end=float(lo + band_end),
         width=band_width,
         mean_score=mean_score,
-        side_score=side_score,
         prominence=mean_score - side_score,
     )
     acceptance = detected_gap_acceptance(evidence, context)
@@ -313,7 +303,10 @@ def detected_gap_candidate_from_evidence(
     context: GapSearchContext,
 ) -> DetectedGapCandidate:
     distance = abs(evidence.center - context.expected) / max(1.0, context.pitch)
-    quality = evidence.mean_score + context.ranking.quality_prominence_weight * evidence.prominence
+    quality = (
+        evidence.mean_score
+        + context.quality_prominence_weight * evidence.prominence
+    )
     return DetectedGapCandidate(distance, quality, evidence.mean_score, evidence.center, evidence.start, evidence.end)
 
 
@@ -321,7 +314,7 @@ def detected_gap_run_assessment(
     run_start: int,
     run_end: int,
     context: GapSearchContext,
-) -> DetectedGapRunAssessment:
+) -> DetectedGapCandidate | None:
     band_start, band_end = expanded_gap_band(
         context.local,
         run_start,
@@ -336,32 +329,20 @@ def detected_gap_run_assessment(
         band_end,
         context,
     )
-    detail = {
-        "run_start": int(context.lo + run_start),
-        "run_end": int(context.lo + run_end),
-        "band_start": int(context.lo + band_start),
-        "band_end": int(context.lo + band_end),
-    }
-    detail.update(assessment.detail())
     if not assessment.accepted or assessment.evidence is None:
-        return DetectedGapRunAssessment(None, detail)
-    candidate = detected_gap_candidate_from_evidence(assessment.evidence, context)
-    detail["distance"] = float(candidate.distance)
-    detail["quality"] = float(candidate.quality)
-    return DetectedGapRunAssessment(candidate, detail)
+        return None
+    return detected_gap_candidate_from_evidence(assessment.evidence, context)
 
 
-def detected_gap_candidates_with_detail(
+def detected_gap_candidates(
     context: GapSearchContext,
-) -> DetectedGapCandidateSearchResult:
+) -> list[DetectedGapCandidate]:
     candidates: list[DetectedGapCandidate] = []
-    evaluations: list[dict[str, Any]] = []
     for run_start, run_end in runs_from_mask(context.local >= context.thresholds.peak):
-        assessment = detected_gap_run_assessment(run_start, run_end, context)
-        evaluations.append(assessment.detail)
-        if assessment.candidate is not None:
-            candidates.append(assessment.candidate)
-    return DetectedGapCandidateSearchResult(candidates, evaluations)
+        candidate = detected_gap_run_assessment(run_start, run_end, context)
+        if candidate is not None:
+            candidates.append(candidate)
+    return candidates
 
 
 def best_detected_gap_candidate(candidates: list[DetectedGapCandidate]) -> Optional[DetectedGapCandidate]:
@@ -387,65 +368,32 @@ def detected_gap_from_candidate(index: int, candidate: DetectedGapCandidate) -> 
     )
 
 
-def gap_search_detail(
-    index: int,
-    expected: float,
-    pitch: float,
-    window: GapSearchWindow,
-    local_max: float,
-    context: GapSearchContext | None,
-    evaluations: list[dict[str, Any]] | None = None,
-    selected: DetectedGapCandidate | None = None,
-) -> dict[str, Any]:
-    detail: dict[str, Any] = {
-        "index": int(index),
-        "expected": float(expected),
-        "pitch": float(pitch),
-        "window": {"lo": int(window.lo), "hi": int(window.hi), "local_max": float(local_max)},
-    }
-    if context is not None:
-        detail["window"].update(
-            {
-                "peak_threshold": float(context.thresholds.peak),
-                "band_threshold": float(context.thresholds.band),
-                "min_width": int(context.limits.min_width),
-                "max_width": int(context.limits.max_width),
-                "normal_max_width": int(context.limits.normal_max),
-                "guard": int(context.limits.guard),
-                "max_width_ratio_override": context.max_width_ratio_override,
-            }
-        )
-    detail = attach_gap_run_evaluation_summary(detail, evaluations)
-    if selected is not None:
-        detail["selected"] = {
-            "center": float(selected.center),
-            "start": float(selected.start),
-            "end": float(selected.end),
-            "distance": float(selected.distance),
-            "quality": float(selected.quality),
-            "mean_score": float(selected.mean_score),
-            "method": selected.method,
-        }
-    return detail
-
-
 def find_detected_gap(
     profile: np.ndarray,
     expected: float,
     pitch: float,
     index: int,
     gap_search: GapSearchParameters,
+    calibration: ScanCalibration,
+    axis: str,
     *,
     max_width_ratio_override: Optional[float] = None,
 ) -> GapSearchResult:
-    window = gap_search_window(len(profile), expected, pitch, gap_search)
+    window = gap_search_window(
+        len(profile),
+        expected,
+        pitch,
+        gap_search,
+        calibration,
+        axis,
+    )
     if window.empty:
-        return GapSearchResult(None, 0.0, "empty_window", gap_search_detail(index, expected, pitch, window, 0.0, None))
+        return GapSearchResult(None, 0.0, "empty_window")
     local = profile[window.lo:window.hi]
     local_max = float(local.max()) if local.size else 0.0
     min_score = gap_search.min_score
     if local.size == 0 or local_max < min_score:
-        return GapSearchResult(None, local_max, "below_min_score", gap_search_detail(index, expected, pitch, window, local_max, None))
+        return GapSearchResult(None, local_max, "below_min_score")
 
     context = gap_search_context(
         local,
@@ -455,29 +403,19 @@ def find_detected_gap(
         local_max,
         max_width_ratio_override,
         gap_search,
+        calibration,
+        axis,
     )
-    candidate_search = detected_gap_candidates_with_detail(context)
-    candidate = best_detected_gap_candidate(candidate_search.candidates)
+    candidate = best_detected_gap_candidate(detected_gap_candidates(context))
     if candidate is not None:
         return GapSearchResult(
             detected_gap_from_candidate(index, candidate),
             local_max,
             GAP_DETECTED,
-            gap_search_detail(
-                index,
-                expected,
-                pitch,
-                window,
-                local_max,
-                context,
-                candidate_search.evaluations,
-                candidate,
-            ),
         )
 
     return GapSearchResult(
         None,
         local_max,
         "no_detected_candidate",
-        gap_search_detail(index, expected, pitch, window, local_max, context, candidate_search.evaluations),
     )

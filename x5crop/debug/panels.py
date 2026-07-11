@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
-from ..domain import Box, FinalDetection
-from ..cache.separator import cached_separator_evidence_crop
+from ..detection.decision.model import FinalDetection
 from ..image.evidence import (
     SeparatorEvidenceImageParameters,
     make_separator_evidence_gray,
 )
 from ..policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
-from ..cache import AnalysisCache
 from .canvas import (
+    DebugRenderCache,
     FRAME_FILL_COLORS,
     add_panel_label,
     cached_labeled_preview_gray,
@@ -27,27 +26,21 @@ from .status import add_status_bar
 def make_debug_preview_rgb(
     gray: np.ndarray,
     detection: FinalDetection,
-    cache: Optional[AnalysisCache],
+    render_cache: DebugRenderCache,
 ) -> np.ndarray:
-    rgb, scale = cached_preview_gray(cache, "original_gray", gray)
-    for index, box in enumerate(detection.frames):
+    rgb, scale = cached_preview_gray(render_cache, "original_gray", gray)
+    for index, box in enumerate(detection.output_geometry.frames):
         color = FRAME_FILL_COLORS[index % len(FRAME_FILL_COLORS)]
         fill_preview_rect(rgb, box, scale, color, 0.26)
         draw_preview_rect(rgb, box, scale, color, 1)
-    draw_preview_rect(rgb, detection.outer, scale, (0, 255, 0), 3)
+    draw_preview_rect(
+        rgb,
+        detection.output_geometry.outer,
+        scale,
+        (0, 255, 0),
+        3,
+    )
     return rgb
-
-
-def work_evidence_to_original_shape(evidence_work: np.ndarray, gray: np.ndarray, layout: str) -> np.ndarray:
-    patch = evidence_work if layout == "horizontal" else evidence_work.T
-    if patch.shape == gray.shape:
-        return patch.astype(np.uint8, copy=False)
-    out = np.full(gray.shape, 235, dtype=np.uint8)
-    ph = min(out.shape[0], patch.shape[0])
-    pw = min(out.shape[1], patch.shape[1])
-    if ph > 0 and pw > 0:
-        out[:ph, :pw] = patch[:ph, :pw]
-    return out
 
 
 def draw_evidence_context_overlay(
@@ -56,28 +49,24 @@ def draw_evidence_context_overlay(
     scale: float,
     include_frames: bool = False,
 ) -> None:
-    draw_preview_rect(rgb, detection.outer, scale, (0, 255, 0), 2)
+    draw_preview_rect(
+        rgb,
+        detection.output_geometry.outer,
+        scale,
+        (0, 255, 0),
+        2,
+    )
     if include_frames:
-        for index, box in enumerate(detection.frames):
+        for index, box in enumerate(detection.output_geometry.frames):
             color = FRAME_FILL_COLORS[index % len(FRAME_FILL_COLORS)]
             draw_preview_rect(rgb, box, scale, color, 1)
 
 
 def make_separator_evidence_debug_gray(
     gray: np.ndarray,
-    detection: FinalDetection,
     params: SeparatorEvidenceImageParameters,
-    cache: Optional[AnalysisCache],
 ) -> np.ndarray:
-    if cache is not None and cache.layout == detection.layout:
-        full_work = Box(0, 0, cache.gray_work.shape[1], cache.gray_work.shape[0])
-        evidence = cached_separator_evidence_crop(cache, cache.gray_work, full_work, params)
-        if evidence.size:
-            return work_evidence_to_original_shape(evidence, gray, detection.layout)
-    return make_separator_evidence_gray(
-        gray,
-        params,
-    )
+    return make_separator_evidence_gray(gray, params)
 
 
 def make_separator_evidence_debug_rgb(
@@ -85,10 +74,17 @@ def make_separator_evidence_debug_rgb(
     detection: FinalDetection,
     debug_gap: Any,
     params: SeparatorEvidenceImageParameters,
-    cache: Optional[AnalysisCache],
+    render_cache: DebugRenderCache,
 ) -> np.ndarray:
-    evidence = make_separator_evidence_debug_gray(gray, detection, params, cache)
-    rgb, scale = cached_preview_gray(cache, "separator_evidence_full", evidence)
+    evidence = make_separator_evidence_debug_gray(
+        gray,
+        params,
+    )
+    rgb, scale = cached_preview_gray(
+        render_cache,
+        "separator_evidence_full",
+        evidence,
+    )
     draw_evidence_context_overlay(rgb, detection, scale)
     draw_gap_overlay(rgb, detection, scale, debug_gap)
     return rgb
@@ -99,19 +95,27 @@ def make_debug_analysis_panel(
     detection: FinalDetection,
     diagnostics: RuntimeDiagnosticsPolicy,
     separator_evidence_image: SeparatorEvidenceImageParameters,
-    cache: Optional[AnalysisCache],
+    render_cache: DebugRenderCache,
 ) -> np.ndarray:
     debug_gap = diagnostics.debug_gap_overlay
     panel_builders = {
-        "original_gray": lambda title: cached_labeled_preview_gray(cache, "original_gray", title, gray)[0],
-        "debug_boxes": lambda title: add_panel_label(make_debug_preview_rgb(gray, detection, cache), title),
+        "original_gray": lambda title: cached_labeled_preview_gray(
+            render_cache,
+            "original_gray",
+            title,
+            gray,
+        )[0],
+        "debug_boxes": lambda title: add_panel_label(
+            make_debug_preview_rgb(gray, detection, render_cache),
+            title,
+        ),
         "separator_evidence": lambda title: add_panel_label(
             make_separator_evidence_debug_rgb(
                 gray,
                 detection,
                 debug_gap,
                 separator_evidence_image,
-                cache,
+                render_cache,
             ),
             title,
         ),

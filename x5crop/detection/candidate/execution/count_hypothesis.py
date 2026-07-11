@@ -1,282 +1,169 @@
 from __future__ import annotations
 
-from typing import Any
-
-import numpy as np
-
-from ....cache import AnalysisCache
-from ....domain import DetectionCandidate
-from ....formats import FormatPhysicalSpec
-from ....policies.runtime.policy import DetectionPolicy
-from ....run_config import RunConfig
-from ...guidance.content_model import content_candidate_proposal_for_count
-from ...guidance.content_separator import content_guided_separator_seed_for_count
-from ..build.content import build_content_candidate
-from ..assessment.count_hypothesis import (
-    CountHypothesisEvaluation,
-    physical_count_resolution,
-)
-from ..assessment.source_batch import assess_source_candidates
+from ...context import DetectionContext
+from ...guidance.content_separator import content_separator_guidance_for_count
+from ..assessment.candidate import assess_candidate
+from ..model import AssessedCandidate
+from ..plan.count_hypotheses import CountHypothesis
+from ..selection.choose import select_candidates
 from .source_candidates import (
-    SeparatorOuterCandidatePlan,
-    build_separator_candidate_for_outer,
-    content_guided_separator_candidate_from_seed,
+    SeparatorOuterProposalPlan,
+    build_separator_candidate_for_proposal,
+    build_separator_candidate_with_guidance,
     separator_extension_outer_plan,
     separator_primary_outer_plan,
 )
-from ..plan.count_hypotheses import CountHypothesis
-from .budget import attach_execution_budget_to_candidates
-from .source_policy import separator_full_width_can_compete
-from ..selection.choose import select_source_candidate
+from .model import CountHypothesisEvaluation, OffsetEvaluation
 
 
-def _assess_separator_outer_plan(
-    gray: np.ndarray,
-    config: RunConfig,
-    fmt: FormatPhysicalSpec,
-    count: int,
-    strip_mode: str,
-    offset: float,
-    cache: AnalysisCache,
-    policy: DetectionPolicy,
-    plan: SeparatorOuterCandidatePlan,
-) -> list[DetectionCandidate]:
-    assessed: list[DetectionCandidate] = []
-    for cohort in plan.cohorts:
-        for outer_candidate in cohort.candidates:
-            detection = build_separator_candidate_for_outer(
-                gray,
-                config,
-                fmt,
-                count,
-                strip_mode,
-                offset,
-                cache,
-                policy,
-                outer_candidate,
-                plan=plan,
-                gap_max_width_ratio_override=None,
-            )
-            assessed.extend(
-                assess_source_candidates(
-                    gray,
-                    (detection,),
-                    config,
-                    fmt,
-                    "separator",
-                    cache,
-                    policy,
-                )
-            )
-    return assessed
-
-
-def _assessed_candidates_for_offset(
-    gray: np.ndarray,
-    config: RunConfig,
-    fmt: FormatPhysicalSpec,
-    count: int,
-    strip_mode: str,
-    offset: float,
-    cache: AnalysisCache,
-    policy: DetectionPolicy,
-) -> list[DetectionCandidate]:
-    candidates: list[DetectionCandidate] = []
-    explicit_count = bool(config.requested_count is not None)
-    full_width_family = policy.outer.proposal.geometry.separator.full_width
-    available_physical_families = (
-        ["separator_full_width"]
-        if full_width_family.available_for(strip_mode, explicit_count)
-        else []
-    )
-
-    primary_plan = separator_primary_outer_plan(
-        gray,
-        config,
-        fmt,
-        count,
-        strip_mode,
-        cache=cache,
-        policy=policy,
-    )
-    primary_candidates = _assess_separator_outer_plan(
-        gray,
-        config,
-        fmt,
-        count,
-        strip_mode,
-        offset,
-        cache,
-        policy,
-        primary_plan,
-    )
-    if not primary_candidates:
-        return candidates
-
-    extension_families: list[str] = []
-    separator_candidates = list(primary_candidates)
-    primary_separator = select_source_candidate(primary_candidates)
-    if (
-        "separator_full_width" in available_physical_families
-        and separator_full_width_can_compete(primary_separator, gray, policy)
-    ):
-        extension_families.append("separator_full_width")
-        extension_plan = separator_extension_outer_plan(
-            gray,
-            config,
-            fmt,
-            count,
-            strip_mode,
-            cache=cache,
-            policy=policy,
-            primary_outer_candidates=primary_plan.comparison_candidates,
-        )
-        separator_candidates.extend(
-            _assess_separator_outer_plan(
-                gray,
-                config,
-                fmt,
-                count,
-                strip_mode,
-                offset,
-                cache,
-                policy,
-                extension_plan,
-            )
-        )
-    guidance_seed = content_guided_separator_seed_for_count(
-        gray,
-        config,
-        fmt,
-        count,
-        strip_mode,
-        offset,
-        cache,
-        policy.content,
-        policy.candidate_plan.content_guided_separator,
-    )
-    if guidance_seed.seed is not None:
-        extension_families.append("content_guided_separator")
-        content_guided_separator = content_guided_separator_candidate_from_seed(
-            gray,
-            config,
-            fmt,
-            count,
-            strip_mode,
-            offset,
-            seed_result=guidance_seed,
-            cache=cache,
-            policy=policy,
-        )
-        separator_candidates.extend(
-            assess_source_candidates(
-                gray,
-                (content_guided_separator,),
-                config,
-                fmt,
-                "separator",
-                cache,
-                policy,
-            )
-        )
-
-    expanded = bool(extension_families)
-    if expanded:
-        attach_execution_budget_to_candidates(
-            separator_candidates,
-            expanded_after_primary=True,
-            extension_families=extension_families,
-        )
-    else:
-        attach_execution_budget_to_candidates(
-            separator_candidates,
-            expanded_after_primary=False,
-            extension_families=available_physical_families,
-            skipped_reason="no_applicable_extension_families",
-        )
-
-    candidates.extend(separator_candidates)
-    content_proposal = content_candidate_proposal_for_count(
-        gray,
-        config.layout,
-        fmt,
-        count,
-        strip_mode,
-        offset,
-        cache=cache,
-        content_policy=policy.content,
-    )
-    if content_proposal is not None:
-        content = build_content_candidate(
-            content_proposal,
-            gray,
-            config,
-            fmt,
-            count,
-            strip_mode,
-            offset,
-        )
-        candidates.extend(
-            assess_source_candidates(
-                gray,
-                (content,),
-                config,
-                fmt,
-                "content",
-                cache,
-                policy,
-            )
-        )
-    return candidates
-
-
-def evaluate_count_hypothesis(
-    gray: np.ndarray,
-    config: RunConfig,
-    fmt: FormatPhysicalSpec,
+def _assess_outer_plan(
+    context: DetectionContext,
     hypothesis: CountHypothesis,
-    cache: AnalysisCache,
-    policy: DetectionPolicy,
-) -> CountHypothesisEvaluation:
-    candidates: list[DetectionCandidate] = []
-    resolved_offsets: list[float] = []
-    count_resolved = False
-    placement_resolved = False
-    resolution_checks: list[dict[str, Any]] = []
-    for offset in hypothesis.offsets:
-        offset_candidates = _assessed_candidates_for_offset(
-            gray,
-            config,
-            fmt,
+    offset: float,
+    plan: SeparatorOuterProposalPlan,
+) -> list[AssessedCandidate]:
+    assessed: list[AssessedCandidate] = []
+    for outer_proposal in plan.proposals:
+        built = build_separator_candidate_for_proposal(
+            context.source_gray,
+            context.request,
+            context.policy.physical_spec,
             hypothesis.count,
             hypothesis.strip_mode,
             offset,
-            cache,
-            policy,
+            cache=context.measurement_cache,
+            outer_policy=context.policy.outer,
+            separator_policy=context.policy.separator,
+            scan_calibration=context.scan_calibration,
+            proposal=outer_proposal,
+            plan=plan,
+            gap_max_width_ratio_override=None,
         )
-        candidates.extend(offset_candidates)
-        for candidate in offset_candidates:
-            plan_detail = candidate.detail.setdefault("candidate_plan", {})
-            if isinstance(plan_detail, dict):
-                plan_detail["count_hypothesis"] = hypothesis.report_detail()
-        if not offset_candidates:
-            continue
-        selected = select_source_candidate(offset_candidates)
-        resolution = physical_count_resolution(selected, hypothesis)
-        resolution_checks.append(
-            {"offset": float(offset), **resolution.report_detail()}
+        assessed.append(assess_candidate(built, context))
+    return assessed
+
+
+def _candidates_for_offset(
+    context: DetectionContext,
+    hypothesis: CountHypothesis,
+    offset: float,
+    *,
+    larger_counts_evaluated: bool = True,
+) -> OffsetEvaluation:
+    candidates: list[AssessedCandidate] = []
+    physical_spec = context.policy.physical_spec
+    primary_plan = separator_primary_outer_plan(
+        context.request,
+        physical_spec,
+        hypothesis.count,
+        hypothesis.strip_mode,
+        hypothesis,
+        cache=context.measurement_cache,
+        outer_policy=context.policy.outer,
+        separator_policy=context.policy.separator,
+        scan_calibration=context.scan_calibration,
+    )
+    candidates.extend(
+        _assess_outer_plan(context, hypothesis, offset, primary_plan)
+    )
+    primary_selection = (
+        None
+        if not candidates
+        else select_candidates(
+            tuple(candidates),
+            context.policy.candidate_selection,
+            larger_counts_evaluated=larger_counts_evaluated,
         )
-        count_resolved = count_resolved or resolution.count_resolved
-        placement_resolved = placement_resolved or resolution.placement_resolved
-        if resolution.placement_resolved:
-            resolved_offsets.append(float(offset))
-        if resolution.placement_resolved:
+    )
+    if (
+        primary_selection is not None
+        and primary_selection.geometry_resolution.supported
+    ):
+        return OffsetEvaluation(tuple(candidates), primary_selection)
+
+    extension_plan = separator_extension_outer_plan(
+        context.request,
+        physical_spec,
+        hypothesis.count,
+        hypothesis.strip_mode,
+        hypothesis,
+        cache=context.measurement_cache,
+        outer_policy=context.policy.outer,
+        separator_policy=context.policy.separator,
+        scan_calibration=context.scan_calibration,
+        primary_outer_proposals=primary_plan.comparison_proposals,
+    )
+    candidates.extend(
+        _assess_outer_plan(context, hypothesis, offset, extension_plan)
+    )
+
+    guidance = content_separator_guidance_for_count(
+        context.request,
+        hypothesis.count,
+        context.measurement_cache,
+        context.policy.content,
+        context.policy.candidate_plan.content_separator_guidance,
+    )
+    if guidance is not None:
+        candidates.extend(
+            assess_candidate(
+                build_separator_candidate_with_guidance(
+                    context.source_gray,
+                    context.request,
+                    physical_spec,
+                    hypothesis.count,
+                    hypothesis.strip_mode,
+                    hypothesis,
+                    offset_fraction=offset,
+                    outer_proposal=outer_proposal,
+                    guidance=guidance,
+                    cache=context.measurement_cache,
+                    separator_policy=context.policy.separator,
+                    scan_calibration=context.scan_calibration,
+                ),
+                context,
+            )
+            for outer_proposal in extension_plan.comparison_proposals
+        )
+    selection = (
+        None
+        if not candidates
+        else select_candidates(
+            tuple(candidates),
+            context.policy.candidate_selection,
+            larger_counts_evaluated=larger_counts_evaluated,
+        )
+    )
+    return OffsetEvaluation(tuple(candidates), selection)
+
+
+def evaluate_count_hypothesis(
+    context: DetectionContext,
+    hypothesis: CountHypothesis,
+    *,
+    larger_counts_evaluated: bool,
+) -> CountHypothesisEvaluation:
+    candidates: list[AssessedCandidate] = []
+    selection = None
+    for offset in hypothesis.offsets:
+        evaluation = _candidates_for_offset(
+            context,
+            hypothesis,
+            offset,
+            larger_counts_evaluated=larger_counts_evaluated,
+        )
+        candidates.extend(evaluation.candidates)
+        if evaluation.geometry_resolved:
+            selection = evaluation.selection
             break
+    if selection is None and candidates:
+        selection = select_candidates(
+            tuple(candidates),
+            context.policy.candidate_selection,
+            larger_counts_evaluated=larger_counts_evaluated,
+        )
     return CountHypothesisEvaluation(
         hypothesis=hypothesis,
         candidates=tuple(candidates),
-        count_resolved=bool(count_resolved),
-        placement_resolved=bool(placement_resolved),
-        resolved_offsets=tuple(resolved_offsets),
-        resolution_checks=tuple(resolution_checks),
+        selection=selection,
     )

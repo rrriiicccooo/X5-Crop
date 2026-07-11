@@ -1,11 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from ...geometry.detection_parameters import NearbySeparatorRefinementParameters
-from ..parameters.diagnostics import (
-    DebugGapOverlayParameters,
-    NearbySeparatorDiagnosticsParameters,
-)
+from ..parameters.diagnostics import DebugGapOverlayParameters
 
 
 @dataclass(frozen=True)
@@ -17,8 +13,6 @@ class DebugPanelPolicy:
 @dataclass(frozen=True)
 class RuntimeDiagnosticsPolicy:
     debug_gap_overlay: DebugGapOverlayParameters
-    nearby_separator_search: NearbySeparatorRefinementParameters
-    nearby_separator_comparison: NearbySeparatorDiagnosticsParameters
     debug_panels: tuple[str, ...] = (
         "original_gray",
         "debug_boxes",

@@ -420,6 +420,32 @@ def functions_with_unused_parameters() -> list[str]:
     return sorted(offenders)
 
 
+def functions_with_unused_local_assignments() -> list[str]:
+    offenders: list[str] = []
+    for module in source_modules().values():
+        for node in ast.walk(parsed_source(module)):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            stored = {
+                child.id
+                for child in ast.walk(node)
+                if isinstance(child, ast.Name)
+                and isinstance(child.ctx, ast.Store)
+                and not child.id.startswith("_")
+            }
+            loaded = {
+                child.id
+                for child in ast.walk(node)
+                if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load)
+            }
+            unused = sorted(stored - loaded)
+            if unused:
+                offenders.append(
+                    f"{module.name}:{node.lineno}:{node.name}({', '.join(unused)})"
+                )
+    return sorted(offenders)
+
+
 def functions_with_untyped_parameters() -> list[str]:
     offenders: list[str] = []
     for module in source_modules().values():

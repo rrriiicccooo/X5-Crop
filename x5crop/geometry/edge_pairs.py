@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from typing import Any
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -11,12 +10,11 @@ from ..gap_methods import is_detected_gap_method, is_hard_gap_method
 from ..utils import clamp_float, clamp_int
 from .detection_parameters import EdgePairParameters
 from .edge_refine_profile import local_edge_peaks
-from .gap_refinement_detail import gap_refinement_batch_detail
 from .separator_profile import interval_mean
 
 
 @dataclass(frozen=True)
-class EdgePairCandidate:
+class _EdgePairCandidate:
     distance: float
     quality: float
     background_score: float
@@ -32,257 +30,160 @@ class EdgePairCandidate:
             self.right,
         )
 
-    def detail(self) -> dict[str, Any]:
-        center = (int(self.left) + int(self.right)) / 2.0
-        return {
-            "left": int(self.left),
-            "right": int(self.right),
-            "center": float(center),
-            "width": int(self.right - self.left + 1),
-            "distance": float(self.distance),
-            "quality": float(self.quality),
-            "background_score": float(self.background_score),
-            "rank_key": [
-                float(self.distance),
-                float(-self.quality),
-                float(-self.background_score),
-                int(self.left),
-                int(self.right),
-            ],
-        }
-
 
 @dataclass(frozen=True)
-class EdgePairSearchLimits:
+class _EdgePairSearchLimits:
     window: int
     min_gutter: int
     max_gutter: int
 
 
-@dataclass(frozen=True)
-class EdgePairSearchResult:
-    gap: SeparatorBandObservation
-    candidates: list[EdgePairCandidate]
-    selected_candidate: EdgePairCandidate | None
-    selected_gap: SeparatorBandObservation | None
-
-    def detail(self, *, candidate_limit: int = 5) -> dict[str, Any]:
-        return {
-            "index": int(self.gap.index),
-            "input_method": self.gap.method,
-            "input_center": float(self.gap.center),
-            "candidate_count": len(self.candidates),
-            "selected": (
-                None
-                if self.selected_candidate is None
-                else self.selected_candidate.detail()
-            ),
-            "candidates": [
-                candidate.detail()
-                for candidate in sorted(self.candidates, key=lambda item: item.rank_key())[:candidate_limit]
-            ],
-        }
-
-
-@dataclass(frozen=True)
-class EdgePairReplacementAssessment:
-    ok: bool
-    reason: str
-    delta_px: float
-    shift_limit: float | None = None
-    min_quality: float | None = None
-    close_shift_limit: float | None = None
-
-    def detail(self) -> dict[str, Any]:
-        out: dict[str, Any] = {
-            "ok": bool(self.ok),
-            "reason": self.reason,
-            "delta_px": float(self.delta_px),
-        }
-        if self.shift_limit is not None:
-            out["shift_limit"] = float(self.shift_limit)
-        if self.min_quality is not None:
-            out["min_quality"] = float(self.min_quality)
-        if self.close_shift_limit is not None:
-            out["close_shift_limit"] = float(self.close_shift_limit)
-        return out
-
-
-@dataclass(frozen=True)
-class EdgePairRefinementResult:
-    gaps: list[SeparatorBandObservation]
-    detail: dict[str, Any]
-
-
-def assess_edge_pair_hard_gap_replacement(
+def _hard_gap_replacement_allowed(
     gap: SeparatorBandObservation,
     edge_gap: SeparatorBandObservation,
     pitch: float,
-    params: EdgePairParameters,
-) -> EdgePairReplacementAssessment:
+    parameters: EdgePairParameters,
+) -> bool:
+    if (
+        gap.start is not None
+        and gap.end is not None
+        and (
+            edge_gap.start is None
+            or edge_gap.end is None
+            or float(edge_gap.start) < float(gap.start)
+            or float(edge_gap.end) > float(gap.end)
+        )
+    ):
+        return False
     delta = abs(edge_gap.center - gap.center)
-    if params.max_hard_shift_ratio <= 0.0:
+    if parameters.max_hard_shift_ratio <= 0.0:
         shift_limit = max(
             clamp_float(
-                pitch * params.zero_hard_shift_ratio,
-                params.zero_hard_shift_limit_min,
-                params.zero_hard_shift_limit_max,
+                pitch * parameters.zero_hard_shift_ratio,
+                parameters.zero_hard_shift_limit_min,
+                parameters.zero_hard_shift_limit_max,
             ),
             edge_gap.width,
         )
-        return EdgePairReplacementAssessment(
-            ok=delta <= shift_limit,
-            reason="hard_shift_ok" if delta <= shift_limit else "hard_shift_too_large",
-            delta_px=float(delta),
-            shift_limit=float(shift_limit),
-        )
+        return delta <= shift_limit
     shift_limit = max(
-        edge_gap.width * params.hard_shift_edge_width_multiplier,
+        edge_gap.width * parameters.hard_shift_edge_width_multiplier,
         clamp_float(
-            pitch * params.max_hard_shift_ratio,
-            params.hard_shift_limit_min,
-            params.hard_shift_limit_max,
+            pitch * parameters.max_hard_shift_ratio,
+            parameters.hard_shift_limit_min,
+            parameters.hard_shift_limit_max,
         ),
     )
     if delta > shift_limit:
-        return EdgePairReplacementAssessment(
-            ok=False,
-            reason="hard_shift_too_large",
-            delta_px=float(delta),
-            shift_limit=float(shift_limit),
-        )
-    min_quality = max(params.min_quality_for_hard_gap, gap.score * params.hard_gap_quality_ratio)
-    if edge_gap.score >= min_quality:
-        return EdgePairReplacementAssessment(
-            ok=True,
-            reason="hard_quality_ok",
-            delta_px=float(delta),
-            shift_limit=float(shift_limit),
-            min_quality=float(min_quality),
-        )
+        return False
+    minimum_quality = max(
+        parameters.min_quality_for_hard_gap,
+        gap.score * parameters.hard_gap_quality_ratio,
+    )
+    if edge_gap.score >= minimum_quality:
+        return True
     close_shift_limit = max(
-        params.close_shift_limit_min,
-        edge_gap.width * params.close_shift_edge_width_multiplier,
+        parameters.close_shift_limit_min,
+        edge_gap.width * parameters.close_shift_edge_width_multiplier,
     )
-    close_shift_ok = delta <= close_shift_limit
-    return EdgePairReplacementAssessment(
-        ok=close_shift_ok,
-        reason="hard_close_shift_ok" if close_shift_ok else "hard_quality_weak",
-        delta_px=float(delta),
-        shift_limit=float(shift_limit),
-        min_quality=float(min_quality),
-        close_shift_limit=float(close_shift_limit),
-    )
+    return delta <= close_shift_limit
 
 
-def assess_edge_pair_replacement(
+def _replacement_allowed(
     gap: SeparatorBandObservation,
     edge_gap: SeparatorBandObservation,
     pitch: float,
-    params: EdgePairParameters,
-) -> EdgePairReplacementAssessment:
-    delta = abs(edge_gap.center - gap.center)
+    parameters: EdgePairParameters,
+) -> bool:
     if not is_hard_gap_method(gap.method):
-        ok = edge_gap.score >= params.min_quality_for_model_gap
-        return EdgePairReplacementAssessment(
-            ok=ok,
-            reason="model_quality_ok" if ok else "model_quality_weak",
-            delta_px=float(delta),
-            min_quality=float(params.min_quality_for_model_gap),
-        )
+        return edge_gap.score >= parameters.min_quality_for_model_gap
     if is_detected_gap_method(gap.method):
-        return assess_edge_pair_hard_gap_replacement(gap, edge_gap, pitch, params)
-    return EdgePairReplacementAssessment(
-        ok=True,
-        reason="edge_pair_refresh",
-        delta_px=float(delta),
+        return _hard_gap_replacement_allowed(gap, edge_gap, pitch, parameters)
+    return True
+
+
+def _search_limits(
+    pitch: float,
+    parameters: EdgePairParameters,
+) -> _EdgePairSearchLimits:
+    minimum = clamp_int(
+        pitch * parameters.min_gutter_ratio,
+        parameters.min_gutter_min,
+        parameters.min_gutter_max,
+    )
+    return _EdgePairSearchLimits(
+        window=clamp_int(
+            pitch * parameters.window_ratio,
+            parameters.search_window_min,
+            parameters.search_window_max,
+        ),
+        min_gutter=minimum,
+        max_gutter=max(
+            minimum + 1,
+            clamp_int(
+                pitch * parameters.max_gutter_ratio,
+                parameters.max_gutter_min,
+                parameters.max_gutter_max,
+            ),
+        ),
     )
 
 
-def edge_pair_replacement_role(gap: SeparatorBandObservation) -> str:
-    if not is_hard_gap_method(gap.method):
-        return "model_gap_promotion"
-    if is_detected_gap_method(gap.method):
-        return "hard_gap_refresh"
-    return "edge_pair_refresh"
-
-
-def edge_pair_replacement_evidence_role_detail(gap: SeparatorBandObservation, edge_gap: SeparatorBandObservation) -> dict[str, Any]:
-    role = edge_pair_replacement_role(gap)
-    return {
-        "replacement_role": role,
-        "source_method": gap.method,
-        "result_method": edge_gap.method,
-        "promoted_from_model_gap": bool(role == "model_gap_promotion"),
-        "refreshed_hard_gap": bool(role in {"hard_gap_refresh", "edge_pair_refresh"}),
-    }
-
-
-def edge_pair_search_limits(pitch: float, params: EdgePairParameters) -> EdgePairSearchLimits:
-    window = clamp_int(pitch * params.window_ratio, params.search_window_min, params.search_window_max)
-    min_gutter = clamp_int(pitch * params.min_gutter_ratio, params.min_gutter_min, params.min_gutter_max)
-    max_gutter = max(
-        min_gutter + 1,
-        clamp_int(pitch * params.max_gutter_ratio, params.max_gutter_min, params.max_gutter_max),
-    )
-    return EdgePairSearchLimits(int(window), int(min_gutter), int(max_gutter))
-
-
-def edge_pair_candidates_for_gap(
+def _candidates_for_gap(
     edge: np.ndarray,
     background: np.ndarray,
     gap: SeparatorBandObservation,
     pitch: float,
-    params: EdgePairParameters,
-    limits: EdgePairSearchLimits,
-) -> list[EdgePairCandidate]:
+    parameters: EdgePairParameters,
+    limits: _EdgePairSearchLimits,
+) -> list[_EdgePairCandidate]:
     width = len(edge)
-    x0 = int(round(gap.center))
-    lo = max(1, x0 - limits.window)
-    hi = min(width - 1, x0 + limits.window)
+    expected = int(round(gap.center))
+    lower = max(1, expected - limits.window)
+    upper = min(width - 1, expected + limits.window)
     peaks = local_edge_peaks(
         edge,
-        lo,
-        hi,
-        params.min_strength,
-        params.candidate_peak_percentile,
-        params.candidate_peak_min_distance_px,
+        lower,
+        upper,
+        parameters.min_strength,
+        parameters.candidate_peak_percentile,
+        parameters.candidate_peak_min_distance_px,
     )
-    candidates: list[EdgePairCandidate] = []
-    for i, a in enumerate(peaks):
-        for b in peaks[i + 1:]:
-            gutter_w = b - a
-            if gutter_w < limits.min_gutter or gutter_w > limits.max_gutter:
+    candidates: list[_EdgePairCandidate] = []
+    for position, left in enumerate(peaks):
+        for right in peaks[position + 1 :]:
+            width_px = right - left
+            if width_px < limits.min_gutter or width_px > limits.max_gutter:
                 continue
-            center = (a + b) / 2.0
-            if abs(center - x0) > limits.window:
+            center = (left + right) / 2.0
+            if abs(center - expected) > limits.window:
                 continue
-            bg_between = interval_mean(background, a, b + 1)
-            if bg_between < params.min_background:
+            background_score = interval_mean(background, left, right + 1)
+            if background_score < parameters.min_background:
                 continue
-            strength = (float(edge[a]) + float(edge[b])) / 2.0
-            quality = strength + params.background_quality_weight * bg_between
-            distance = abs(center - x0) / max(1.0, pitch)
+            strength = (float(edge[left]) + float(edge[right])) / 2.0
             candidates.append(
-                EdgePairCandidate(
-                    distance=float(distance),
-                    quality=float(quality),
-                    background_score=float(bg_between),
-                    left=int(a),
-                    right=int(b),
+                _EdgePairCandidate(
+                    distance=float(abs(center - expected) / max(1.0, pitch)),
+                    quality=float(
+                        strength
+                        + parameters.background_quality_weight * background_score
+                    ),
+                    background_score=float(background_score),
+                    left=int(left),
+                    right=int(right),
                 )
             )
     return candidates
 
 
-def edge_pair_gap_from_candidate(
+def _gap_from_candidate(
     gap: SeparatorBandObservation,
-    candidate: EdgePairCandidate,
+    candidate: _EdgePairCandidate,
 ) -> SeparatorBandObservation:
-    center = (candidate.left + candidate.right) / 2.0
     return SeparatorBandObservation(
         index=gap.index,
-        center=float(center),
+        center=float((candidate.left + candidate.right) / 2.0),
         score=float(candidate.quality),
         method=GAP_EDGE_PAIR,
         provenance=MeasurementProvenance(
@@ -297,121 +198,37 @@ def edge_pair_gap_from_candidate(
     )
 
 
-def best_edge_pair_candidate(candidates: list[EdgePairCandidate]) -> EdgePairCandidate | None:
-    if not candidates:
-        return None
-    return min(candidates, key=lambda item: item.rank_key())
-
-
-def edge_pair_search_result_for_gap(
-    edge: np.ndarray,
-    background: np.ndarray,
-    gap: SeparatorBandObservation,
-    pitch: float,
-    params: EdgePairParameters,
-    limits: EdgePairSearchLimits,
-) -> EdgePairSearchResult:
-    candidates = edge_pair_candidates_for_gap(
-        edge,
-        background,
-        gap,
-        pitch,
-        params,
-        limits,
-    )
-    selected_candidate = best_edge_pair_candidate(candidates)
-    selected_gap = (
-        None
-        if selected_candidate is None
-        else edge_pair_gap_from_candidate(gap, selected_candidate)
-    )
-    return EdgePairSearchResult(
-        gap=gap,
-        candidates=candidates,
-        selected_candidate=selected_candidate,
-        selected_gap=selected_gap,
-    )
-
-
 def refine_gaps_with_edge_profiles(
     edge: np.ndarray,
     background: np.ndarray,
     gaps: list[SeparatorBandObservation],
     count: int,
-    edge_pair_parameters: EdgePairParameters,
-) -> EdgePairRefinementResult:
-    width = len(edge)
-    if count <= 1 or width <= 1 or background.size <= 0 or not gaps:
-        return EdgePairRefinementResult(gaps, {"used": False, "reason": "empty"})
-    pitch = width / float(max(1, count))
-    params = edge_pair_parameters
-    search_limits = edge_pair_search_limits(pitch, params)
+    parameters: EdgePairParameters,
+) -> list[SeparatorBandObservation]:
+    if count <= 1 or len(edge) <= 1 or background.size <= 0 or not gaps:
+        return list(gaps)
+    pitch = len(edge) / float(count)
+    limits = _search_limits(pitch, parameters)
     refined: list[SeparatorBandObservation] = []
-    accepted: list[dict[str, Any]] = []
-    rejected: list[dict[str, Any]] = []
     for gap in gaps:
-        search = edge_pair_search_result_for_gap(
+        candidates = _candidates_for_gap(
             edge,
             background,
             gap,
             pitch,
-            params,
-            search_limits,
+            parameters,
+            limits,
         )
-        edge_gap = search.selected_gap
-        if edge_gap is None:
+        if not candidates:
             refined.append(gap)
-            rejected.append(
-                {
-                    "index": int(gap.index),
-                    "reason": "no_edge_pair_candidate",
-                    "kept_method": gap.method,
-                    "search": search.detail(),
-                }
-            )
             continue
-        assessment = assess_edge_pair_replacement(gap, edge_gap, pitch, params)
-        if not assessment.ok:
-            refined.append(gap)
-            rejected_detail = {
-                "index": int(gap.index),
-                "center": float(edge_gap.center),
-                "width": float(edge_gap.width),
-                "score": float(edge_gap.score),
-                "kept_method": gap.method,
-                "search": search.detail(),
-            }
-            rejected_detail.update(edge_pair_replacement_evidence_role_detail(gap, edge_gap))
-            rejected_detail.update(assessment.detail())
-            rejected.append(rejected_detail)
-            continue
-        refined.append(edge_gap)
-        accepted_detail = {
-            "index": int(gap.index),
-            "center": float(edge_gap.center),
-            "width": float(edge_gap.width),
-            "score": float(edge_gap.score),
-            "replaced_method": gap.method,
-            "search": search.detail(),
-            "replacement": assessment.detail(),
-        }
-        accepted_detail.update(edge_pair_replacement_evidence_role_detail(gap, edge_gap))
-        accepted.append(accepted_detail)
-    model_promotion_count = sum(1 for item in accepted if item.get("promoted_from_model_gap"))
-    hard_refresh_count = sum(1 for item in accepted if item.get("refreshed_hard_gap"))
-    return EdgePairRefinementResult(
-        refined,
-        {
-            "used": True,
-            "params": asdict(params),
-            "model_gap_promotion_count": int(model_promotion_count),
-            "hard_gap_refresh_count": int(hard_refresh_count),
-            "search_limits": {
-                "pitch": float(pitch),
-                "window_px": int(search_limits.window),
-                "min_gutter_px": int(search_limits.min_gutter),
-                "max_gutter_px": int(search_limits.max_gutter),
-            },
-            **gap_refinement_batch_detail(accepted=accepted, rejected=rejected),
-        },
-    )
+        edge_gap = _gap_from_candidate(
+            gap,
+            min(candidates, key=lambda item: item.rank_key()),
+        )
+        refined.append(
+            edge_gap
+            if _replacement_allowed(gap, edge_gap, pitch, parameters)
+            else gap
+        )
+    return refined

@@ -4,22 +4,29 @@ from dataclasses import asdict
 from hashlib import sha256
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
-from ..domain import Box, ImageProfile, ProcessResult
-from ..export.crops import write_crops
+from ..detection.evidence.transform_geometry import TransformGeometryEvidence
+from ..domain import (
+    ImageProfile,
+    ProcessResult,
+)
+from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from ..output.surface import OutputSurface
 from ..image.gray import BaseGrayParameters, make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..io.tiff import read_tiff
 from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..policies.runtime.policy import DetectionPolicy
+from ..report.restoration import (
+    final_detection_from_record as _final_detection_from_record,
+    transform_geometry_from_record as _transform_geometry_from_record,
+)
 from ..report.validation import current_report_record_errors
 from ..report.result_builder import result_from_cached_record
-from ..utils import box_from_dict
 from ..run_config import RunConfig
 
 
@@ -68,7 +75,7 @@ def analysis_policy_fingerprint(policy: DetectionPolicy) -> str:
     return sha256(payload).hexdigest()
 
 
-def make_analysis_cache_metadata(
+def make_analysis_reuse_signature(
     input_file: Path,
     profile: ImageProfile,
     config: RunConfig,
@@ -83,10 +90,6 @@ def make_analysis_cache_metadata(
     }
 
 
-def final_frame_boxes_from_record(record: dict[str, Any]) -> list[Box]:
-    return [box_from_dict(box) for box in record["frame_boxes"]]
-
-
 def cached_record_matches(
     record: dict[str, Any],
     input_file: Path,
@@ -98,7 +101,7 @@ def cached_record_matches(
         return False
     if record["script_version"] != VERSION:
         return False
-    cache = record["analysis_cache"]
+    cache = record["analysis_reuse_signature"]
     if not isinstance(cache, dict):
         return False
     if cache.get("script") != SCRIPT_NAME or cache.get("script_version") != VERSION:
@@ -150,7 +153,7 @@ def find_reusable_analysis(
     profile: ImageProfile,
     config: RunConfig,
     policy: DetectionPolicy,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     report_path = output_dir / REPORT_JSONL_NAME
     for record in load_report_records(report_path):
         if not cached_record_matches(record, input_file, profile, config, policy):
@@ -160,21 +163,21 @@ def find_reusable_analysis(
     return None
 
 
-def apply_cached_deskew(
+def apply_cached_transform(
     arr: np.ndarray,
     gray: np.ndarray,
     axes: str,
     photometric: str,
     base_gray_params: BaseGrayParameters,
-    deskew_detail: dict[str, Any],
+    transform_geometry: TransformGeometryEvidence,
     warnings: list[str],
 ) -> tuple[np.ndarray, np.ndarray, bool]:
-    if not bool(deskew_detail["applied"]):
+    if not transform_geometry.applied:
         return arr, gray, False
-    angle = float(deskew_detail["angle"])
-    arr = rotate_array_expand(arr, -angle, axes)
+    angle = float(transform_geometry.applied_angle_degrees)
+    arr = rotate_array_expand(arr, angle, axes)
     gray = make_base_gray_u8(arr, axes, photometric, base_gray_params)
-    warnings.append(f"reused deskew: {-angle:.4f} degrees")
+    warnings.append(f"reused deskew: {angle:.4f} degrees")
     return arr, gray, True
 
 
@@ -198,41 +201,58 @@ def result_from_reusable_analysis(
     if cached_record is None:
         return None
 
-    status = str(cached_record["status"])
+    detection = _final_detection_from_record(cached_record)
     warnings.append(f"reused analysis report: {REPORT_JSONL_NAME}")
-    if status == "needs_review":
-        warnings.append("cached status is needs_review; skipped export")
+    review_copy = copy_for_review_if_needed(
+        input_file,
+        output_surface.root,
+        config,
+        detection,
+        warnings,
+    )
+    if detection.status == "needs_review" and not config.export_review:
+        warnings.append("cached status is needs_review; crop export not requested")
         return result_from_cached_record(
             input_file,
             cached_record,
             profile,
             warnings,
             output_files=[],
+            review_copy=review_copy,
         )
 
     arr, profile, page_warnings = read_tiff(input_file, config.page)
-    policy = policy_bundle.policy_for(str(cached_record["format_id"]), str(cached_record["strip_mode"]))
-    gray = make_base_gray_u8(arr, profile.axes, profile.photometric, policy.preprocess.base_gray)
+    policy = policy_bundle.policy_for(
+        str(cached_record["format_id"]),
+        str(cached_record["strip_mode"]),
+    )
+    gray = make_base_gray_u8(
+        arr,
+        profile.axes,
+        profile.photometric,
+        policy.preprocess.base_gray,
+    )
     warnings.extend(warning for warning in page_warnings if warning not in warnings)
     source_arr = arr
-    arr, gray, deskew_applied = apply_cached_deskew(
+    transform_geometry = _transform_geometry_from_record(cached_record)
+    arr, gray, deskew_applied = apply_cached_transform(
         arr,
         gray,
         profile.axes,
         profile.photometric,
         policy.preprocess.base_gray,
-        cached_record["diagnostics"]["deskew"],
+        transform_geometry,
         warnings,
     )
-    output_files = write_crops(
+    output_files = write_crops_if_allowed(
         input_file,
         arr,
         source_arr,
         profile,
-        final_frame_boxes_from_record(cached_record),
+        detection,
         config,
         deskew_applied,
-        output_surface.ensure_root(),
+        output_surface,
     )
     return result_from_cached_record(
         input_file,
@@ -240,4 +260,5 @@ def result_from_reusable_analysis(
         profile,
         warnings,
         output_files=output_files,
+        review_copy=review_copy,
     )

@@ -5,7 +5,6 @@ import unittest
 from x5crop.formats import FORMATS
 from x5crop.detection.candidate.plan.count_hypotheses import count_hypothesis_plan
 from x5crop.detection.evidence.count_planning import CountPlanningEvidence
-from x5crop.detection.modes.dual_lane_context import build_dual_lane_context
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.reporting import detection_policy_report_detail
 from x5crop.policies.runtime.bundle import DetectionPolicyBundle
@@ -65,17 +64,16 @@ class FormatPhysicalSpecTests(unittest.TestCase):
             self.assertEqual(spec.lane_count, 1)
             self.assertIsNone(spec.lane_format_id)
 
-    def test_dual_lane_context_uses_canonical_string_identity(self) -> None:
+    def test_dual_lane_bundle_resolves_the_physical_lane_policy(self) -> None:
         bundle = DetectionPolicyBundle.for_format_mode("135-dual", "full")
-
-        context = build_dual_lane_context(bundle.initial_policy, bundle)
-
         self.assertEqual(
-            set(context.__dataclass_fields__),
-            {"policy", "lane_policy"},
+            bundle.initial_policy.physical_spec.format_id,
+            "135-dual",
         )
-        self.assertEqual(context.policy.physical_spec.format_id, "135-dual")
-        self.assertEqual(context.lane_policy.physical_spec.format_id, "135")
+        self.assertEqual(
+            bundle.policy_for("135", "full").physical_spec.format_id,
+            "135",
+        )
 
     def test_medium_square_records_same_aspect_size_variant(self) -> None:
         spec = FORMATS["120-66"]

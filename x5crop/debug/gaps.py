@@ -1,162 +1,168 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
 from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_EQUAL
-from ..domain import Box, FinalDetection, SeparatorBandObservation
+from ..detection.decision.model import FinalDetection
+from ..domain import Box, SeparatorBandObservation
 from ..gap_methods import is_hard_gap_method
+from ..geometry.boxes import map_work_box
 from ..utils import clamp_float
-from .canvas import (
-    draw_preview_hline,
-    draw_preview_line,
-    draw_preview_mark,
-)
+from .canvas import draw_preview_line, draw_preview_mark
 
 
-def gap_mark_box(detection: FinalDetection, gap: SeparatorBandObservation) -> Optional[Box]:
-    work_outer = gap.lane_box
-    if work_outer is None:
-        work_outer_raw = detection.detail.get("work_outer")
-        if not isinstance(work_outer_raw, dict):
-            return None
-        try:
-            work_outer = Box(
-                int(work_outer_raw["left"]),
-                int(work_outer_raw["top"]),
-                int(work_outer_raw["right"]),
-                int(work_outer_raw["bottom"]),
-            )
-        except (KeyError, TypeError, ValueError):
-            return None
-    if is_hard_gap_method(gap.method) and gap.start is not None and gap.end is not None:
-        start = int(round(work_outer.left + min(gap.start, gap.end)))
-        end = int(round(work_outer.left + max(gap.start, gap.end)))
-        if end <= start:
-            end = start + 1
-        if detection.layout == "horizontal":
-            return Box(start, work_outer.top, end, work_outer.bottom)
-        return Box(work_outer.top, start, work_outer.bottom, end)
-
-    x = int(round(work_outer.left + gap.center))
-    if detection.layout == "horizontal":
-        return Box(x, work_outer.top, x + 1, work_outer.bottom)
-    return Box(work_outer.top, x, work_outer.bottom, x + 1)
+def _work_outer(
+    detection: FinalDetection,
+    observation: SeparatorBandObservation,
+) -> Box:
+    return observation.lane_box or detection.work_film_span
 
 
-def gap_tick_boxes(detection: FinalDetection, gap: SeparatorBandObservation, debug_gap: Any) -> list[Box]:
-    work_outer = gap.lane_box
-    if work_outer is None:
-        work_outer_raw = detection.detail.get("work_outer")
-        if not isinstance(work_outer_raw, dict):
-            return []
-        try:
-            work_outer = Box(
-                int(work_outer_raw["left"]),
-                int(work_outer_raw["top"]),
-                int(work_outer_raw["right"]),
-                int(work_outer_raw["bottom"]),
-            )
-        except (KeyError, TypeError, ValueError):
-            return []
-    tick_axis = work_outer.height if detection.layout == "horizontal" else work_outer.width
+def gap_mark_box(
+    detection: FinalDetection,
+    observation: SeparatorBandObservation,
+    image_width: int,
+    image_height: int,
+) -> Box:
+    outer = _work_outer(detection, observation)
+    if (
+        is_hard_gap_method(observation.method)
+        and observation.start is not None
+        and observation.end is not None
+    ):
+        start = int(round(outer.left + min(observation.start, observation.end)))
+        end = max(
+            start + 1,
+            int(round(outer.left + max(observation.start, observation.end))),
+        )
+    else:
+        start = int(round(outer.left + observation.center))
+        end = start + 1
+    return map_work_box(
+        Box(start, outer.top, end, outer.bottom),
+        detection.layout,
+        image_width,
+        image_height,
+    )
+
+
+def gap_tick_boxes(
+    detection: FinalDetection,
+    observation: SeparatorBandObservation,
+    debug_gap: Any,
+    image_width: int,
+    image_height: int,
+) -> tuple[Box, Box]:
+    outer = _work_outer(detection, observation)
     tick = max(
         int(debug_gap.tick_length_min),
-        int(round(tick_axis * float(debug_gap.tick_length_ratio))),
+        int(round(outer.height * float(debug_gap.tick_length_ratio))),
     )
-    if detection.layout == "horizontal":
-        x = int(round(work_outer.left + gap.center))
-        return [
-            Box(x, work_outer.top, x + 1, min(work_outer.bottom, work_outer.top + tick)),
-            Box(x, max(work_outer.top, work_outer.bottom - tick), x + 1, work_outer.bottom),
-        ]
-    y = int(round(work_outer.left + gap.center))
-    return [
-        Box(work_outer.top, y, min(work_outer.bottom, work_outer.top + tick), y + 1),
-        Box(max(work_outer.top, work_outer.bottom - tick), y, work_outer.bottom, y + 1),
-    ]
+    x = int(round(outer.left + observation.center))
+    work_ticks = (
+        Box(x, outer.top, x + 1, min(outer.bottom, outer.top + tick)),
+        Box(x, max(outer.top, outer.bottom - tick), x + 1, outer.bottom),
+    )
+    return tuple(
+        map_work_box(
+            box,
+            detection.layout,
+            image_width,
+            image_height,
+        )
+        for box in work_ticks
+    )
 
 
-def draw_gap_overlay(rgb: np.ndarray, detection: FinalDetection, scale: float, debug_gap: Any) -> None:
-    gap_colors = {
+def draw_gap_overlay(
+    rgb: np.ndarray,
+    detection: FinalDetection,
+    scale: float,
+    debug_gap: Any,
+) -> None:
+    colors = {
         GAP_DETECTED: (255, 0, 0),
         GAP_EDGE_PAIR: (255, 0, 0),
         GAP_EQUAL: (190, 80, 255),
     }
-    pitch = float(detection.detail.get("pitch", 0.0) or 0.0)
-    detected_centers = [gap.center for gap in detection.gaps if is_hard_gap_method(gap.method)]
+    pitch = float(detection.pitch)
+    hard_centers = [
+        observation.center
+        for observation in detection.separator_observations
+        if is_hard_gap_method(observation.method)
+    ]
     overlap_tolerance = clamp_float(
         pitch * debug_gap.overlap_tolerance_ratio,
         debug_gap.overlap_tolerance_min,
         debug_gap.overlap_tolerance_max,
     )
-    for gap in detection.gaps:
-        if not is_hard_gap_method(gap.method):
+    image_height = max(1, int(round(rgb.shape[0] / max(scale, 1e-9))))
+    image_width = max(1, int(round(rgb.shape[1] / max(scale, 1e-9))))
+    for observation in detection.separator_observations:
+        if is_hard_gap_method(observation.method):
+            draw_preview_mark(
+                rgb,
+                gap_mark_box(
+                    detection,
+                    observation,
+                    image_width,
+                    image_height,
+                ),
+                scale,
+                colors.get(observation.method, (255, 255, 255)),
+                debug_gap.hard_line_width,
+            )
             continue
-        mark = gap_mark_box(detection, gap)
-        if mark is not None:
-            color = gap_colors.get(gap.method, (255, 255, 255))
-            draw_preview_mark(rgb, mark, scale, color, debug_gap.hard_line_width)
-    for gap in detection.gaps:
-        if is_hard_gap_method(gap.method):
+        if any(
+            abs(observation.center - center) <= overlap_tolerance
+            for center in hard_centers
+        ):
             continue
-        if any(abs(gap.center - center) <= overlap_tolerance for center in detected_centers):
+        for tick in gap_tick_boxes(
+            detection,
+            observation,
+            debug_gap,
+            image_width,
+            image_height,
+        ):
+            draw_preview_line(
+                rgb,
+                tick,
+                scale,
+                colors.get(observation.method, (255, 255, 255)),
+                debug_gap.model_line_width,
+            )
+    exposure_overlap = detection.require_trace().exposure_overlap
+    records = {record.index: record for record in exposure_overlap.gaps}
+    for observation in detection.separator_observations:
+        record = records.get(observation.index)
+        if record is None:
             continue
-        color = gap_colors.get(gap.method, (255, 255, 255))
-        for tick in gap_tick_boxes(detection, gap, debug_gap):
-            if detection.layout == "horizontal":
-                draw_preview_line(rgb, tick, scale, color, debug_gap.model_line_width)
-            else:
-                draw_preview_hline(rgb, tick, scale, color, debug_gap.model_line_width)
-    draw_gap_evidence_overlay(rgb, detection, scale, debug_gap)
-
-
-def draw_gap_evidence_overlay(rgb: np.ndarray, detection: FinalDetection, scale: float, debug_gap: Any) -> None:
-    exposure_overlap = detection.detail.get("exposure_overlap_evidence")
-    records: Any = (
-        exposure_overlap.get("gap_evidence", [])
-        if isinstance(exposure_overlap, dict)
-        else []
-    )
-    if not isinstance(records, list):
-        return
-    diagnostics = detection.detail.get("diagnostics")
-    nearby_records = (
-        diagnostics.get("nearby_separator_diagnostics", [])
-        if isinstance(diagnostics, dict)
-        else []
-    )
-    nearby_by_index = {
-        int(item["index"]): item["detail"]
-        for item in nearby_records
-        if isinstance(item, dict)
-        and isinstance(item.get("index"), int)
-        and isinstance(item.get("detail"), dict)
-    }
-    gaps_by_index = {gap.index: gap for gap in detection.gaps}
-    for record in records:
-        if not isinstance(record, dict):
-            continue
-        gap = gaps_by_index.get(int(record.get("index", -1)))
-        if gap is None:
-            continue
-        color: Optional[tuple[int, int, int]] = None
-        if record.get("hard_trust") in {
+        color = None
+        if record.hard_trust in {
             "suspect_internal_edge",
             "suspect_frame_border",
             "nearby_separator_conflict",
             "geometry_conflict",
         }:
             color = (255, 0, 220)
-        elif bool(nearby_by_index.get(gap.index, {}).get("stronger_found", False)):
-            color = (255, 0, 220)
-        elif str(record.get("exposure_overlap_class", "none")) in {"medium", "strong"}:
+        elif record.exposure_overlap_like:
             color = (0, 220, 255)
         if color is None:
             continue
-        for tick in gap_tick_boxes(detection, gap, debug_gap):
-            if detection.layout == "horizontal":
-                draw_preview_line(rgb, tick, scale, color, debug_gap.diagnostic_line_width)
-            else:
-                draw_preview_hline(rgb, tick, scale, color, debug_gap.diagnostic_line_width)
+        for tick in gap_tick_boxes(
+            detection,
+            observation,
+            debug_gap,
+            image_width,
+            image_height,
+        ):
+            draw_preview_line(
+                rgb,
+                tick,
+                scale,
+                color,
+                debug_gap.diagnostic_line_width,
+            )

@@ -1,66 +1,39 @@
 from __future__ import annotations
 
-from ....domain import Box, DetectionCandidate
+from ....domain import Box
 from ....policies.parameters.scoring import SelectionConsensusParameters
+from ...evidence.state import EvidenceState
+from ..model import AssessedCandidate
+from .model import GeometryCluster, GeometryResolution, SelectionResult
 
 
-def _candidate_assessment(candidate: DetectionCandidate) -> dict:
-    assessment = candidate.detail.get("candidate_assessment", {})
-    return dict(assessment) if isinstance(assessment, dict) else {}
-
-
-def _candidate_gate_allows_selection(candidate: DetectionCandidate) -> bool:
-    gate = _candidate_assessment(candidate).get("candidate_gate", {})
-    return bool(isinstance(gate, dict) and gate.get("passed", False))
-
-
-def calibrated_candidate_rank(
-    detection: DetectionCandidate,
-) -> tuple[int, int, float, float, int]:
-    assessment = _candidate_assessment(detection)
-    joint = float(assessment.get("joint_score", 0.0))
-    plan = detection.detail.get("candidate_plan", {})
-    hypothesis = plan.get("count_hypothesis", {}) if isinstance(plan, dict) else {}
-    physically_supported_count = bool(
-        isinstance(hypothesis, dict) and hypothesis.get("physically_supported", False)
+def candidate_rank(
+    candidate: AssessedCandidate,
+) -> tuple[int, int, int, int, int, float, float]:
+    evidence = candidate.assessment.evidence
+    contradictions = sum(
+        state == EvidenceState.CONTRADICTED
+        for state in (
+            evidence.frame_topology.state,
+            evidence.frame_coverage.state,
+            evidence.frame_dimensions.state,
+            evidence.content_preservation.state,
+            evidence.independence.state,
+        )
+    )
+    proof_supported = any(
+        path.state == EvidenceState.SUPPORTED
+        for path in candidate.assessment.gate.proof_paths
     )
     return (
-        1 if _candidate_gate_allows_selection(detection) else 0,
-        1 if physically_supported_count else 0,
-        float(detection.confidence),
-        joint,
-        int(detection.count),
+        1 if proof_supported else 0,
+        1 if candidate.geometry.automatic_processing_supported else 0,
+        1 if candidate.assessment.gate.passed else 0,
+        1 if evidence.frame_coverage.state == EvidenceState.SUPPORTED else 0,
+        -int(contradictions),
+        float(candidate.geometry.count),
+        float(candidate.assessment.scores.confidence),
     )
-
-
-def select_source_candidate(candidates: list[DetectionCandidate]) -> DetectionCandidate:
-    return max(candidates, key=calibrated_candidate_rank)
-
-
-def _candidate_summary(candidate: DetectionCandidate) -> dict:
-    assessment = _candidate_assessment(candidate)
-    return {
-        "format_id": candidate.format_id,
-        "count": int(candidate.count),
-        "strip_mode": candidate.strip_mode,
-        "confidence": float(candidate.confidence),
-        "candidate_gate": assessment.get("candidate_gate", {}),
-        "failed_checks": list(assessment.get("failed_checks", [])),
-        "diagnostics": list(assessment.get("diagnostics", [])),
-        "candidate_scores": {
-            key: assessment[key]
-            for key in (
-                "joint_score",
-                "geometry_score",
-                "separator_score",
-                "content_score",
-                "content_quality_score",
-            )
-            if key in assessment
-        },
-        "candidate_plan": candidate.detail.get("candidate_plan", {}),
-        "separator_gap_search": candidate.detail.get("separator_gap_search", {}),
-    }
 
 
 def _box_edge_distance(left: Box, right: Box, scale: float) -> float:
@@ -72,87 +45,169 @@ def _box_edge_distance(left: Box, right: Box, scale: float) -> float:
     ) / max(1.0, scale)
 
 
-def _geometry_distance(left: DetectionCandidate, right: DetectionCandidate) -> float | None:
-    if left.count != right.count or left.strip_mode != right.strip_mode:
+def geometry_distance(
+    left: AssessedCandidate,
+    right: AssessedCandidate,
+) -> float | None:
+    left_geometry = left.geometry
+    right_geometry = right.geometry
+    if (
+        left_geometry.count != right_geometry.count
+        or left_geometry.strip_mode != right_geometry.strip_mode
+        or len(left_geometry.work_frames) != len(right_geometry.work_frames)
+    ):
         return None
-    if len(left.frames) != len(right.frames):
-        return None
-    long_extent = max(
-        left.outer.width if left.layout == "horizontal" else left.outer.height,
-        right.outer.width if right.layout == "horizontal" else right.outer.height,
+    scale = max(
+        1.0,
+        float(left_geometry.pitch),
+        float(right_geometry.pitch),
     )
-    pitch = float(long_extent) / max(1, left.count)
-    distances = [_box_edge_distance(left.outer, right.outer, pitch)]
+    distances = [
+        _box_edge_distance(
+            left_geometry.film_span.box,
+            right_geometry.film_span.box,
+            scale,
+        )
+    ]
     distances.extend(
-        _box_edge_distance(left_box, right_box, pitch)
-        for left_box, right_box in zip(left.frames, right.frames)
+        _box_edge_distance(left_box, right_box, scale)
+        for left_box, right_box in zip(
+            left_geometry.work_frames,
+            right_geometry.work_frames,
+        )
     )
     return max(distances, default=0.0)
 
 
-def _geometry_clusters(
-    candidates: list[DetectionCandidate],
+def geometry_clusters(
+    candidates: tuple[AssessedCandidate, ...],
     tolerance: float,
-) -> list[list[DetectionCandidate]]:
-    clusters: list[list[DetectionCandidate]] = []
+) -> tuple[GeometryCluster, ...]:
+    groups: list[list[AssessedCandidate]] = []
     for candidate in candidates:
-        for cluster in clusters:
-            distance = _geometry_distance(candidate, cluster[0])
+        for group in groups:
+            distance = geometry_distance(candidate, group[0])
             if distance is not None and distance <= tolerance:
-                cluster.append(candidate)
+                group.append(candidate)
                 break
         else:
-            clusters.append([candidate])
-    return clusters
+            groups.append([candidate])
+    return tuple(
+        GeometryCluster(
+            candidates=tuple(group),
+            representative=max(group, key=candidate_rank),
+        )
+        for group in groups
+    )
 
 
-def select_detection_candidate(
-    candidates: list[DetectionCandidate],
-    selection_policy: SelectionConsensusParameters,
-) -> DetectionCandidate:
-    ranked = sorted(candidates, key=calibrated_candidate_rank, reverse=True)
-    best = ranked[0]
-    eligible = [candidate for candidate in ranked if _candidate_gate_allows_selection(candidate)]
-    consensus_candidates = eligible or [best]
-    clusters = _geometry_clusters(
-        consensus_candidates,
-        selection_policy.geometry_tolerance_ratio,
+def geometry_resolution_for_selection(
+    selected: AssessedCandidate,
+    *,
+    consensus: str,
+    larger_counts_evaluated: bool,
+) -> GeometryResolution:
+    evidence = selected.assessment.evidence
+    hypothesis = selected.count_hypothesis
+    boundary_supported = any(
+        path.state == EvidenceState.SUPPORTED
+        for path in selected.assessment.gate.proof_paths
     )
-    selected_cluster = next(cluster for cluster in clusters if best in cluster)
-    competing = [cluster[0] for cluster in clusters if cluster is not selected_cluster]
-    next_cluster = max(competing, key=calibrated_candidate_rank) if competing else None
-    confidence_margin = (
-        None
-        if next_cluster is None
-        else float(best.confidence) - float(next_cluster.confidence)
+    count_resolved = bool(
+        hypothesis is not None
+        and hypothesis.allowed_by_physical_spec
+        and evidence.frame_topology.state == EvidenceState.SUPPORTED
+        and evidence.frame_coverage.state == EvidenceState.SUPPORTED
+        and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
+        and boundary_supported
     )
-    geometry_disagreement = bool(
-        next_cluster is not None
-        and confidence_margin is not None
-        and confidence_margin < selection_policy.confidence_tie_margin
+    placement_resolved = bool(
+        count_resolved
+        and selected.geometry.film_span.box.valid()
+        and len(selected.geometry.work_frames) == selected.geometry.count
     )
-    best.detail["selection_geometry_consensus"] = {
-        "agreed": not geometry_disagreement,
-        "geometry_disagreement": geometry_disagreement,
-        "cluster_count": len(clusters),
-        "eligible_candidate_count": len(eligible),
-        "eligible_cluster_count": len(clusters) if eligible else 0,
-        "selected_cluster_size": len(selected_cluster),
-        "geometry_tolerance_ratio": float(selection_policy.geometry_tolerance_ratio),
-        "confidence_tie_margin": float(selection_policy.confidence_tie_margin),
-        "margin_to_competing_cluster": confidence_margin,
-        "format_id": best.format_id,
-        "top_candidates": [
-            {"rank": index, "selected": candidate is best, **_candidate_summary(candidate)}
-            for index, candidate in enumerate(ranked[: selection_policy.top_n], start=1)
-        ],
-        "clusters": [
-            {
-                "index": index,
-                "candidate_count": len(cluster),
-                "representative": _candidate_summary(cluster[0]),
-            }
-            for index, cluster in enumerate(clusters, start=1)
-        ],
-    }
-    return best
+    boundaries_resolved = bool(boundary_supported)
+    coverage_resolved = (
+        evidence.frame_coverage.state == EvidenceState.SUPPORTED
+    )
+    alternative_geometries_resolved = consensus != "disagreed"
+    reasons: list[str] = []
+    if not count_resolved:
+        reasons.append("count_unresolved")
+    if not placement_resolved:
+        reasons.append("placement_unresolved")
+    if not boundaries_resolved:
+        reasons.append("boundaries_unresolved")
+    if not coverage_resolved:
+        reasons.append("coverage_unresolved")
+    if not larger_counts_evaluated:
+        reasons.append("larger_counts_not_evaluated")
+    if not alternative_geometries_resolved:
+        reasons.append("geometry_clusters_disagree")
+    supported = not reasons
+    return GeometryResolution(
+        state=(
+            EvidenceState.SUPPORTED
+            if supported
+            else EvidenceState.UNAVAILABLE
+        ),
+        count_resolved=count_resolved,
+        placement_resolved=placement_resolved,
+        boundaries_resolved=boundaries_resolved,
+        coverage_resolved=coverage_resolved,
+        larger_counts_evaluated=larger_counts_evaluated,
+        alternative_geometries_resolved=alternative_geometries_resolved,
+        reasons=tuple(reasons),
+    )
+
+
+def select_candidates(
+    candidates: tuple[AssessedCandidate, ...],
+    parameters: SelectionConsensusParameters,
+    *,
+    larger_counts_evaluated: bool,
+) -> SelectionResult:
+    if not candidates:
+        raise ValueError("candidate selection requires at least one candidate")
+    ranked = tuple(sorted(candidates, key=candidate_rank, reverse=True))
+    clusters = geometry_clusters(ranked, parameters.geometry_tolerance_ratio)
+    selected = ranked[0]
+    selected_cluster = next(
+        cluster for cluster in clusters if selected in cluster.candidates
+    )
+    competing = tuple(
+        cluster for cluster in clusters if cluster is not selected_cluster
+    )
+    nearest_competitor = (
+        max(competing, key=lambda cluster: candidate_rank(cluster.representative))
+        if competing
+        else None
+    )
+    disagreement = bool(
+        nearest_competitor is not None
+        and candidate_rank(nearest_competitor.representative)[:5]
+        == candidate_rank(selected)[:5]
+        and abs(
+            selected.assessment.scores.confidence
+            - nearest_competitor.representative.assessment.scores.confidence
+        )
+        < parameters.confidence_tie_margin
+    )
+    if disagreement:
+        consensus = "disagreed"
+    elif len(selected_cluster.candidates) > 1:
+        consensus = "agreed"
+    else:
+        consensus = "uncontested"
+    resolution = geometry_resolution_for_selection(
+        selected,
+        consensus=consensus,
+        larger_counts_evaluated=larger_counts_evaluated,
+    )
+    return SelectionResult(
+        selected=selected,
+        ranked_candidates=ranked,
+        clusters=clusters,
+        consensus=consensus,
+        geometry_resolution=resolution,
+    )

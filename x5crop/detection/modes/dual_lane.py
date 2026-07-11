@@ -1,43 +1,226 @@
 from __future__ import annotations
 
-import numpy as np
+from dataclasses import replace
+from typing import Callable
 
-from ...run_config import RunConfig
-from ...domain import DetectionCandidate
-from ...policies.runtime.bundle import DetectionPolicyBundle
-from ...policies.runtime.policy import DetectionPolicy
-from ...cache import AnalysisCache
-from .dual_lane_context import build_dual_lane_context
-from .dual_lane_candidate import select_dual_lane_candidate
-from .dual_lane_merge import merge_dual_lane_detections
-from .dual_lane_split import split_dual_lanes
+from ...cache.analysis import make_measurement_cache
+from ...constants import CANDIDATE_SOURCE_DUAL_LANE
+from ...domain import Box, MeasurementProvenance
+from ...geometry.boxes import map_work_box, translate_box
+from ...units import ScanCalibration
+from ..candidate.assessment.dual_lane import assess_dual_lane_candidate
+from ..candidate.model import BuiltCandidate
+from ..candidate.plan.count_hypotheses import CountHypothesis
+from ..candidate.proposal.hard_safety import hard_safety_candidate
+from ..candidate.assessment.candidate import assess_candidate
+from ..candidate.selection.choose import select_candidates
+from ..candidate.selection.model import SelectionResult
+from ..context import DetectionContext
+from ..geometry import CandidateGeometry
+from ..physical.spans import FilmSpan, HolderSpan
+from .dual_lane_split import LaneDividerProposal, lane_divider_proposals
+
+
+StandardDetector = Callable[[DetectionContext], SelectionResult]
+
+
+def _lane_calibration(context: DetectionContext) -> ScanCalibration:
+    calibration = context.scan_calibration
+    if context.request.layout == "horizontal":
+        return calibration
+    return ScanCalibration(
+        x_px_per_mm=calibration.y_px_per_mm,
+        y_px_per_mm=calibration.x_px_per_mm,
+        source=calibration.source,
+        trusted=calibration.trusted,
+        warnings=calibration.warnings,
+    )
+
+
+def _lane_context(
+    context: DetectionContext,
+    lane: Box,
+) -> DetectionContext:
+    lane_policy = context.lane_policy
+    if lane_policy is None:
+        raise ValueError("dual-lane context requires a resolved lane policy")
+    lane_gray = context.measurement_cache.gray_work[lane.top : lane.bottom, lane.left : lane.right]
+    lane_request = replace(
+        context.request,
+        layout="horizontal",
+        strip_mode="full",
+        requested_count=lane_policy.physical_spec.default_count,
+    )
+    cache = make_measurement_cache(
+        lane_gray,
+        "horizontal",
+        lane_policy.preprocess.content_evidence_image,
+    )
+    profile = replace(
+        context.image_profile,
+        shape=tuple(lane_gray.shape),
+        axes="YX",
+    )
+    return DetectionContext(
+        source_gray=lane_gray,
+        image_profile=profile,
+        scan_calibration=_lane_calibration(context),
+        request=lane_request,
+        policy=lane_policy,
+        lane_policy=None,
+        measurement_cache=cache,
+    )
+
+
+def _parent_candidate(
+    context: DetectionContext,
+    divider: LaneDividerProposal,
+    lane_boxes: tuple[Box, Box],
+    lanes: tuple[SelectionResult, SelectionResult],
+) -> BuiltCandidate:
+    physical_spec = context.policy.physical_spec
+    lane_candidates = tuple(selection.selected for selection in lanes)
+    work_frames = tuple(
+        translate_box(frame, lane.left, lane.top)
+        for lane, candidate in zip(lane_boxes, lane_candidates)
+        for frame in candidate.geometry.work_frames
+    )
+    film_boxes = tuple(
+        translate_box(
+            candidate.geometry.film_span.box,
+            lane.left,
+            lane.top,
+        )
+        for lane, candidate in zip(lane_boxes, lane_candidates)
+    )
+    film_span = Box(
+        min(box.left for box in film_boxes),
+        min(box.top for box in film_boxes),
+        max(box.right for box in film_boxes),
+        max(box.bottom for box in film_boxes),
+    )
+    separators = []
+    index_offset = 0
+    for lane, candidate in zip(lane_boxes, lane_candidates):
+        for observation in candidate.geometry.separators:
+            separators.append(
+                replace(
+                    observation,
+                    index=index_offset + observation.index,
+                    lane_box=lane,
+                )
+            )
+        index_offset += max(0, candidate.geometry.count - 1)
+    source_height, source_width = context.source_gray.shape
+    image_frames = tuple(
+        map_work_box(
+            frame,
+            context.request.layout,
+            source_width,
+            source_height,
+        )
+        for frame in work_frames
+    )
+    count = sum(candidate.geometry.count for candidate in lane_candidates)
+    return BuiltCandidate(
+        geometry=CandidateGeometry(
+            format_id=physical_spec.format_id,
+            layout=context.request.layout,
+            strip_mode="full",
+            count=count,
+            holder_span=HolderSpan(
+                Box(0, 0, context.measurement_cache.gray_work.shape[1], context.measurement_cache.gray_work.shape[0])
+            ),
+            film_span=FilmSpan(film_span),
+            work_frames=work_frames,
+            image_outer=map_work_box(
+                film_span,
+                context.request.layout,
+                source_width,
+                source_height,
+            ),
+            image_frames=image_frames,
+            separators=tuple(separators),
+            origin=float(film_span.left),
+            pitch=min(candidate.geometry.pitch for candidate in lane_candidates),
+            offset_fraction=0.0,
+            source=CANDIDATE_SOURCE_DUAL_LANE,
+            automatic_processing_supported=divider.source != "center_safety",
+            contract="dual_lane_component_evidence",
+            outer_proposal_name="measured_lane_divider",
+            outer_proposal_strategy="dual_lane_outer",
+            outer_provenance=MeasurementProvenance(
+                root_measurement="holder_gutter_profile",
+                source=divider.source,
+                dependencies=("content_evidence", "holder_texture"),
+            ),
+            lane_boxes=lane_boxes,
+        ),
+        count_hypothesis=CountHypothesis(
+            count=count,
+            strip_mode="full",
+            offsets=(),
+            placement_source=divider.source,
+            source="physical_spec",
+            allowed_by_physical_spec=count
+            in physical_spec.allowed_counts,
+        ),
+        build_diagnostics=(
+            ("center_safety_lane_divider",)
+            if divider.source == "center_safety"
+            else ()
+        ),
+    )
 
 
 def choose_dual_lane_detection(
-    gray: np.ndarray,
-    config: RunConfig,
-    cache: AnalysisCache,
-    policy: DetectionPolicy,
-    policy_bundle: DetectionPolicyBundle,
-) -> DetectionCandidate:
-    context = build_dual_lane_context(policy, policy_bundle)
-    if config.strip_mode != "full":
+    context: DetectionContext,
+    standard_detector: StandardDetector,
+) -> SelectionResult:
+    physical_spec = context.policy.physical_spec
+    if context.request.strip_mode != "full":
         raise ValueError("dual-lane detector is only valid for full mode")
-
-    parent_spec = context.policy.physical_spec
-    lane_spec = context.lane_policy.physical_spec
-    lanes = split_dual_lanes(cache.gray_work, parent_spec.lane_count)
-    lane_detections = [
-        select_dual_lane_candidate(
-            gray,
-            config,
-            lane,
-            index,
-            cache,
-            lane_spec.format_id,
-            lane_spec,
-            context.lane_policy,
+    if physical_spec.lane_count != 2:
+        raise ValueError("dual-lane detector supports exactly two lanes")
+    proposals = lane_divider_proposals(
+        context.measurement_cache.content_evidence_float_work,
+        context.policy.candidate_plan.dual_lane_divider,
+    )
+    parent_candidates = []
+    for proposal in proposals:
+        lanes = proposal.lane_boxes(
+            context.measurement_cache.gray_work.shape[1],
+            context.measurement_cache.gray_work.shape[0],
         )
-        for index, lane in enumerate(lanes, start=1)
-    ]
-    return merge_dual_lane_detections(gray, config, lanes, lane_detections, context)
+        if any(not lane.valid() for lane in lanes):
+            continue
+        lane_selections = tuple(
+            standard_detector(_lane_context(context, lane)) for lane in lanes
+        )
+        built = _parent_candidate(
+            context,
+            proposal,
+            lanes,
+            lane_selections,
+        )
+        parent_candidates.append(
+            assess_dual_lane_candidate(
+                built,
+                tuple(selection.selected for selection in lane_selections),
+            )
+        )
+    if not parent_candidates:
+        parent_candidates.append(
+            assess_candidate(
+                hard_safety_candidate(
+                    context,
+                    physical_spec.default_count,
+                ),
+                context,
+            )
+        )
+    return select_candidates(
+        tuple(parent_candidates),
+        context.policy.candidate_selection,
+        larger_counts_evaluated=True,
+    )

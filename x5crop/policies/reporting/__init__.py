@@ -53,7 +53,6 @@ def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "separator": {
             "support_mode": "unified_physical_support",
             "width_profile_mode": policy.separator.width_profile.mode,
-            "geometry_support_modes": list(policy.separator.geometry_support.active_modes()),
             "hard_methods": sorted(HARD_GAP_METHODS),
             "model_methods": sorted(MODEL_GAP_METHODS),
         },
@@ -61,7 +60,6 @@ def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
             "evidence": _plain(policy.content.evidence),
             "profile": _plain(policy.content.profile),
             "mask": _plain(policy.content.mask),
-            "candidate": _plain(policy.content.candidate),
         },
     }
 
@@ -69,8 +67,6 @@ def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
 def _candidate_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     return {
         "candidate_plan": _plain(policy.candidate_plan),
-        "partial_holder": _plain(policy.partial_holder),
-        "partial_edge_hint": _plain(policy.partial_edge_hint),
         "selection": _plain(policy.candidate_selection),
         "scoring": {
             "weights": {

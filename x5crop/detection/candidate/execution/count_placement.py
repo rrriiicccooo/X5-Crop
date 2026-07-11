@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from ....cache import AnalysisCache
+from ....cache import MeasurementCache
 from ....domain import Box
 from ....formats import FormatPhysicalSpec
-from ....policies.runtime.policy import DetectionPolicy
+from ....policies.runtime.content import ContentPolicy
+from ....geometry.detection_parameters import (
+    SeparatorWidthProfileSearchParameters,
+)
+from ....units import ScanCalibration
 from ...evidence.count_planning import supplemental_count_placement_evidence
 from ...guidance.count_placement import content_count_placement_guidance
 from ..plan.count_hypotheses import (
@@ -16,9 +20,12 @@ from ..plan.count_hypotheses import (
 def resolve_automatic_count_placement(
     plan: CountHypothesisPlan,
     hypothesis: CountHypothesis,
-    cache: AnalysisCache,
+    cache: MeasurementCache,
     fmt: FormatPhysicalSpec,
-    policy: DetectionPolicy,
+    content_policy: ContentPolicy,
+    width_profile_parameters: SeparatorWidthProfileSearchParameters,
+    calibration: ScanCalibration,
+    long_axis: str,
 ) -> tuple[CountHypothesisPlan, CountHypothesis]:
     if not plan.automatic or hypothesis.offsets:
         return plan, hypothesis
@@ -35,28 +42,27 @@ def resolve_automatic_count_placement(
             fmt,
             hypothesis.count,
             source_outer,
-            policy.content,
+            content_policy,
         )
         return with_count_hypothesis_placement(
             plan,
             hypothesis,
             guidance.offsets,
             guidance.source,
-            guidance.detail,
         )
 
     evidence = supplemental_count_placement_evidence(
-        cache.gray_work,
         fmt,
         hypothesis.count,
         cache,
         plan.planning_evidence,
-        width_profile_parameters=policy.separator.width_profile_search,
+        width_profile_parameters=width_profile_parameters,
+        calibration=calibration,
+        long_axis=long_axis,
     )
     if evidence.offsets:
         offsets = evidence.offsets
         source = evidence.source
-        detail = evidence.detail
     else:
         source_outer = plan.planning_evidence.source_outer or Box(
             0,
@@ -69,18 +75,13 @@ def resolve_automatic_count_placement(
             fmt,
             hypothesis.count,
             source_outer,
-            policy.content,
+            content_policy,
         )
         offsets = guidance.offsets
         source = guidance.source
-        detail = {
-            **guidance.detail,
-            "separator_width_evidence": evidence.detail,
-        }
     return with_count_hypothesis_placement(
         plan,
         hypothesis,
         offsets,
         source,
-        detail,
     )

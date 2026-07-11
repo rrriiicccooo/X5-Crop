@@ -7,20 +7,20 @@ from ..image.evidence import (
     make_content_evidence_gray,
 )
 from ..geometry.layout import work_gray
-from . import AnalysisCache
+from . import MeasurementCache
 
 
-def make_analysis_cache(
+def make_measurement_cache(
     gray: np.ndarray,
     layout: str,
     content_evidence_params: ContentEvidenceImageParameters,
-) -> AnalysisCache:
+) -> MeasurementCache:
     gray_work = work_gray(gray, layout)
     content_evidence = make_content_evidence_gray(
         gray_work,
         content_evidence_params,
     )
-    return AnalysisCache(
+    return MeasurementCache(
         layout=layout,
         gray_work=gray_work,
         content_evidence_work=content_evidence,

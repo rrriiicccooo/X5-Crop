@@ -1,50 +1,35 @@
 from __future__ import annotations
 
-from ..domain import AxisBleedParameters, Box, FinalDetection, OutputProtectionPlan
+from ..domain import AxisBleedParameters
 from ..geometry.boxes import map_work_box, original_box_to_work
+from .model import OutputGeometry
 
 
-def apply_output_bleed(
-    detection: FinalDetection,
+def output_bleed_geometry(
+    geometry: OutputGeometry,
     output_bleed: AxisBleedParameters,
-    image_w: int,
-    image_h: int,
-) -> None:
-    if int(output_bleed.long_axis) == 0 and int(output_bleed.short_axis) == 0:
-        return
-    frames_work = [
-        original_box_to_work(frame, detection.layout, image_w, image_h)
-        for frame in detection.frames
-    ]
-    work_w = image_w if detection.layout == "horizontal" else image_h
-    work_h = image_h if detection.layout == "horizontal" else image_w
-    adjusted_work: list[Box] = []
-    for frame in frames_work:
-        adjusted_work.append(
-            frame.expand(
-                int(output_bleed.long_axis),
-                int(output_bleed.short_axis),
-                work_w,
-                work_h,
-            )
+    *,
+    layout: str,
+    image_width: int,
+    image_height: int,
+) -> OutputGeometry:
+    if output_bleed.long_axis == 0 and output_bleed.short_axis == 0:
+        return geometry
+    work_width = image_width if layout == "horizontal" else image_height
+    work_height = image_height if layout == "horizontal" else image_width
+    frames = tuple(
+        original_box_to_work(frame, layout, image_width, image_height).expand(
+            int(output_bleed.long_axis),
+            int(output_bleed.short_axis),
+            work_width,
+            work_height,
         )
-    detection.frames = [
-        map_work_box(frame, detection.layout, image_w, image_h)
-        for frame in adjusted_work
-    ]
-def apply_output_protection_plan(
-    detection: FinalDetection,
-    plan: OutputProtectionPlan,
-    image_w: int,
-    image_h: int,
-) -> None:
-    apply_output_bleed(
-        detection,
-        plan.output_bleed,
-        image_w,
-        image_h,
+        for frame in geometry.frames
     )
-    detection.detail["output_protection_plan"] = {
-        **plan.report_detail(),
-        "applied": True,
-    }
+    return OutputGeometry(
+        outer=geometry.outer,
+        frames=tuple(
+            map_work_box(frame, layout, image_width, image_height)
+            for frame in frames
+        ),
+    )

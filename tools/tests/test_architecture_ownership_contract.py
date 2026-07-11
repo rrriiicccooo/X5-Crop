@@ -146,23 +146,17 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
         self.assertFalse((PROJECT_ROOT / "x5crop" / "report" / "sections.py").exists())
         self.assertTrue((PROJECT_ROOT / "x5crop" / "report" / "read_models.py").exists())
 
-    def test_partial_holder_has_one_runtime_eligibility_field(self) -> None:
-        from x5crop.policies.parameters.candidate import PartialHolderParameters
-        from x5crop.policies.runtime.candidate import PartialHolderPolicy
+    def test_partial_edge_safety_is_evidence_not_policy_eligibility(self) -> None:
+        from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
+        from x5crop.policies.parameters import candidate as candidate_parameters
+        from x5crop.policies.runtime import candidate as runtime_candidate
 
-        for field_name in (
-            "enabled",
-            "leading_content_check",
-            "frame_content_check",
-        ):
-            self.assertNotIn(field_name, PartialHolderParameters.__dataclass_fields__)
-        self.assertIn("enabled", PartialHolderPolicy.__dataclass_fields__)
-        for field_name in (
-            "allow_empty_holder_frames",
-            "checks_leading_content",
-            "checks_frame_content",
-        ):
-            self.assertNotIn(field_name, PartialHolderPolicy.__dataclass_fields__)
+        self.assertFalse(hasattr(candidate_parameters, "PartialHolderParameters"))
+        self.assertFalse(hasattr(runtime_candidate, "PartialHolderPolicy"))
+        self.assertIn(
+            "complete_underfilled_strip",
+            PartialEdgeSafetyEvidence.__dataclass_fields__,
+        )
 
     def test_regression_tools_have_no_historical_reference_classifier(self) -> None:
         self.assertFalse(
@@ -179,7 +173,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
     def test_candidate_plan_policy_contains_parameters_not_static_labels(self) -> None:
         from x5crop.policies.runtime import candidate
         from x5crop.policies.parameters import candidate as candidate_parameters
-        from x5crop.policies.parameters.content import ContentCandidateParameters
+        from x5crop.policies.parameters import content as content_parameters
 
         for class_name in (
             "SafetyCandidatePolicy",
@@ -187,41 +181,26 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             "ContentCandidatePlanPolicy",
         ):
             self.assertFalse(hasattr(candidate, class_name))
+        self.assertEqual(
+            tuple(candidate_parameters.CandidatePlanParameters.__dataclass_fields__),
+            ("content_separator_guidance", "dual_lane_divider"),
+        )
+        for removed in (
+            "SeparatorFullWidthCompetitionParameters",
+            "CandidateExecutionBudgetParameters",
+            "EvidenceIndependenceParameters",
+        ):
+            self.assertFalse(hasattr(candidate_parameters, removed))
         self.assertTrue(
             {
-                "content_guided_separator",
-                "separator_full_width_competition",
-                "execution_budget",
-                "evidence_independence",
-            }.issuperset(candidate_parameters.CandidatePlanParameters.__dataclass_fields__)
-        )
-        banned_fields = {
-            candidate_parameters.ContentGuidedSeparatorCandidateParameters: {
                 "proposal_role",
                 "guidance_source",
                 "requires_hard_separator_signal",
-            },
-            candidate_parameters.SeparatorFullWidthCompetitionParameters: {
-                "content_outer_max_median_aspect_strategies",
-                "content_outer_max_median_aspect_strip_modes",
-            },
-            candidate_parameters.CandidateExecutionBudgetParameters: {"requires_content_support"},
-            candidate_parameters.EvidenceIndependenceParameters: {
-                "dependent_outer_strategies",
-                "dependent_gap_sources",
-                "require_content_support",
-                "candidate_signal",
-            },
-        }
-        for policy_type, fields in banned_fields.items():
-            self.assertTrue(fields.isdisjoint(policy_type.__dataclass_fields__))
-        self.assertTrue(
-            {
-                "candidate_contract",
-                "proposal_role",
-                "model_gap_evidence_kind",
-            }.isdisjoint(ContentCandidateParameters.__dataclass_fields__)
+            }.isdisjoint(
+                candidate_parameters.ContentSeparatorGuidanceParameters.__dataclass_fields__
+            )
         )
+        self.assertFalse(hasattr(content_parameters, "ContentCandidateParameters"))
 
     def test_review_only_detector_is_derived_only_for_dual_lane_partial(self) -> None:
         from x5crop.policies.registry import get_detection_policy
@@ -275,31 +254,26 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_evidence_cache_keys_preserve_exact_inputs(self) -> None:
-        from inspect import Parameter, signature
+        frame_support = (
+            PROJECT_ROOT / "x5crop/detection/evidence/content/frame_support.py"
+        ).read_text(encoding="utf-8")
+        regions = (
+            PROJECT_ROOT / "x5crop/detection/evidence/content/regions.py"
+        ).read_text(encoding="utf-8")
+        separator_cache = (
+            PROJECT_ROOT / "x5crop/cache/separator.py"
+        ).read_text(encoding="utf-8")
 
-        from x5crop.detection.evidence.evidence_cache_keys import content_detail_cache_key
-
-        paths = (
-            PROJECT_ROOT
-            / "x5crop"
-            / "detection"
-            / "evidence"
-            / "evidence_cache_keys.py",
-            PROJECT_ROOT
-            / "x5crop"
-            / "detection"
-            / "evidence"
-            / "nearby_separator_diagnostics.py",
+        self.assertIn("key = (parameters, *box_cache_key(outer))", frame_support)
+        self.assertIn(
+            "statistics_key = (parameters, *box_cache_key(outer), float(threshold))",
+            frame_support,
         )
-        offenders = [
-            str(path.relative_to(PROJECT_ROOT))
-            for path in paths
-            if "round(" in path.read_text(encoding="utf-8")
-        ]
-        self.assertEqual(offenders, [])
-        self.assertIs(
-            signature(content_detail_cache_key).parameters["policy_key"].default,
-            Parameter.empty,
+        self.assertNotIn("content_region_runs", separator_cache)
+        self.assertNotIn("cache.content_region_runs", regions)
+        self.assertIn("return (profile_config, *box_cache_key(outer))", separator_cache)
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop/detection/evidence/evidence_cache_keys.py").exists()
         )
 
     def test_policy_assembly_does_not_own_tuning_literals(self) -> None:
@@ -337,17 +311,15 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
         self.assertNotIn("confidence_threshold", RuntimeOptions.__dataclass_fields__)
 
     def test_partial_candidate_parameters_use_physical_sequence_terms(self) -> None:
-        from x5crop.policies.parameters.candidate import PartialHolderParameters
+        from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
         from x5crop.policies.parameters.scoring import BaseDetectionScoreParameters
 
-        self.assertIn("minimum_observed_frame_count", PartialHolderParameters.__dataclass_fields__)
-        self.assertNotIn("min_count_35mm", PartialHolderParameters.__dataclass_fields__)
-        self.assertNotIn("min_count_small", PartialHolderParameters.__dataclass_fields__)
+        self.assertIn("expected_separator_count", PartialEdgeSafetyEvidence.__dataclass_fields__)
         self.assertNotIn(
             "partial_two_frame_dense_sequence_cap",
             BaseDetectionScoreParameters.__dataclass_fields__,
         )
-        self.assertIn(
+        self.assertNotIn(
             "partial_dense_sequence_min_nominal_count",
             BaseDetectionScoreParameters.__dataclass_fields__,
         )
@@ -639,20 +611,22 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 "min_width_px",
             },
             LongAxisGeometryCorrectionParameters: {
-                "min_corrected_width_ratio",
-                "min_corrected_width_px",
+                "min_shrink_ratio",
+                "max_shrink_ratio",
             },
             ContentProfileParameters: {
                 "percentiles",
                 "smooth_min_px",
                 "min_run_width_px",
             },
-            ContentSupportParameters: {"missing_aspect_score"},
+            ContentSupportParameters: {
+                "coverage_norm",
+                "mean_norm",
+            },
             BaseDetectionScoreParameters: {
-                "image_quality_percentiles",
-                "hard_support_floor_min_expected_gaps",
-                "partial_ambiguous_count_max",
-                "partial_dense_sequence_min_nominal_count",
+                "photo_width_cv_norm",
+                "gap_weight",
+                "photo_width_weight",
             },
             SeparatorOuterBandParameters: {
                 "band_to_peak_ratio",
@@ -703,6 +677,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             PROJECT_ROOT / "x5crop" / "detection" / "physical",
             PROJECT_ROOT / "x5crop" / "detection" / "evidence",
             PROJECT_ROOT / "x5crop" / "detection" / "guidance",
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "build",
         )
         offenders: list[str] = []
         for root in checked_roots:
@@ -730,6 +705,10 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             PROJECT_ROOT / "x5crop" / "detection" / "physical",
             PROJECT_ROOT / "x5crop" / "detection" / "evidence",
             PROJECT_ROOT / "x5crop" / "detection" / "guidance",
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "build",
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "assessment",
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "execution",
+            PROJECT_ROOT / "x5crop" / "detection" / "candidate" / "proposal",
         )
         offenders: list[str] = []
         for root in checked_roots:

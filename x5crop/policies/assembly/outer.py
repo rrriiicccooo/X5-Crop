@@ -57,7 +57,6 @@ def outer_correction_family_policies(
         OuterCorrectionFamilyPolicy(
             mode=long_mode,
             phase="geometry_consistency",
-            requires_complete_hard_gaps=True,
             allowed_axes=("long",),
             max_shrink_ratio=float(long_axis.max_shrink_ratio),
             max_expand_ratio=0.0,
@@ -65,7 +64,6 @@ def outer_correction_family_policies(
         OuterCorrectionFamilyPolicy(
             mode=short_mode,
             phase="geometry_consistency",
-            requires_complete_hard_gaps=False,
             allowed_axes=("short",),
             max_shrink_ratio=0.0,
             max_expand_ratio=float(short_axis.max_expand_ratio),
@@ -73,7 +71,6 @@ def outer_correction_family_policies(
         OuterCorrectionFamilyPolicy(
             mode=content_mode,
             phase="content_containment",
-            requires_complete_hard_gaps=False,
             allowed_axes=("long", "short"),
             max_shrink_ratio=float(long_axis.max_shrink_ratio),
             max_expand_ratio=0.0,

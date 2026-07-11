@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
-from . import AnalysisCache
+from . import MeasurementCache
 from ..domain import Box
 from ..geometry.boxes import box_cache_key, crop_work_outer, full_work_box, is_full_work_box
 from ..geometry.detection_parameters import (
@@ -22,16 +22,18 @@ from ..image.evidence import (
 
 
 def cached_full_separator_evidence(
-    cache: Optional[AnalysisCache],
-    gray_work: np.ndarray,
+    cache: MeasurementCache,
     params: SeparatorEvidenceImageParameters,
 ) -> np.ndarray:
-    if cache is None:
-        return make_separator_evidence_gray(gray_work, params)
-    if cache.separator_evidence_work_full is None:
-        cache.separator_evidence_work_full = make_separator_evidence_gray(cache.gray_work, params)
-        cache.separator_evidence_crops[box_cache_key(full_work_box(cache.gray_work))] = cache.separator_evidence_work_full
-    return cache.separator_evidence_work_full
+    key = (params, *box_cache_key(full_work_box(cache.gray_work)))
+    evidence = cache.separator_evidence_crops.get(key)
+    if evidence is None:
+        evidence = make_separator_evidence_gray(
+            cache.gray_work,
+            params,
+        )
+        cache.separator_evidence_crops[key] = evidence
+    return evidence
 
 
 def separator_profile_cache_key(
@@ -55,20 +57,22 @@ def edge_refine_profile_cache_key(
 
 
 def cached_separator_profile(
-    cache: Optional[AnalysisCache],
-    gray_work: np.ndarray,
+    cache: MeasurementCache,
     outer: Box,
     profile_config: SeparatorProfileParameters,
 ) -> np.ndarray:
-    if cache is None:
-        return separator_profile(crop_work_outer(gray_work, outer), profile_config)
     if is_full_work_box(cache.gray_work, outer):
         full_key = separator_profile_full_cache_key(profile_config)
         profile = cache.separator_profiles_full.get(full_key)
         if profile is None:
             profile = separator_profile(cache.gray_work, profile_config)
             cache.separator_profiles_full[full_key] = profile
-            cache.separator_profiles[separator_profile_cache_key(full_work_box(cache.gray_work), profile_config)] = profile
+            cache.separator_profiles[
+                separator_profile_cache_key(
+                    full_work_box(cache.gray_work),
+                    profile_config,
+                )
+            ] = profile
         return profile
     key = separator_profile_cache_key(outer, profile_config)
     profile = cache.separator_profiles.get(key)
@@ -79,13 +83,10 @@ def cached_separator_profile(
 
 
 def cached_separator_width_profile(
-    cache: Optional[AnalysisCache],
-    gray_work: np.ndarray,
+    cache: MeasurementCache,
     outer: Box,
     params: SeparatorWidthProfileSearchParameters,
 ) -> np.ndarray:
-    if cache is None:
-        return separator_width_profile(crop_work_outer(gray_work, outer), params)
     key = (params, *box_cache_key(outer))
     profile = cache.separator_width_profiles.get(key)
     if profile is None:
@@ -95,16 +96,13 @@ def cached_separator_width_profile(
 
 
 def cached_separator_evidence_crop(
-    cache: Optional[AnalysisCache],
-    gray_work: np.ndarray,
+    cache: MeasurementCache,
     outer: Box,
     params: SeparatorEvidenceImageParameters,
 ) -> np.ndarray:
-    if cache is None:
-        return make_separator_evidence_gray(crop_work_outer(gray_work, outer), params)
     if is_full_work_box(cache.gray_work, outer):
-        return cached_full_separator_evidence(cache, cache.gray_work, params)
-    key = box_cache_key(outer)
+        return cached_full_separator_evidence(cache, params)
+    key = (params, *box_cache_key(outer))
     evidence = cache.separator_evidence_crops.get(key)
     if evidence is None:
         evidence = make_separator_evidence_gray(crop_work_outer(cache.gray_work, outer), params)
@@ -113,13 +111,10 @@ def cached_separator_evidence_crop(
 
 
 def cached_edge_refine_profiles(
-    cache: Optional[AnalysisCache],
-    crop: np.ndarray,
+    cache: MeasurementCache,
     outer: Box,
     edge_refine_config: EdgeRefineProfileParameters,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    if cache is None:
-        return edge_refine_profiles(crop, edge_refine_config)
     key = edge_refine_profile_cache_key(outer, edge_refine_config)
     profiles = cache.edge_refine_profiles.get(key)
     if profiles is None:

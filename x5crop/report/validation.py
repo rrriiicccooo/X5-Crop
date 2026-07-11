@@ -16,25 +16,26 @@ CURRENT_REPORT_SECTIONS = (
     "strip_mode",
     "layout",
     "count",
-    "count_selection",
+    "count_resolution",
+    "film_span",
+    "pitch",
     "strip_completeness",
     "holder_occupancy",
     "status",
     "confidence",
     "final_review_reasons",
-    "outer_box",
-    "frame_boxes",
-    "gaps",
+    "separator_observations",
     "candidate_table",
+    "selection",
     "policy",
     "policy_id",
-    "evidence",
     "evidence_summary",
     "candidate_gate",
     "decision_gate",
     "scan_calibration",
     "decision_geometry",
-    "analysis_cache",
+    "output_geometry",
+    "analysis_reuse_signature",
     "analysis_reuse",
     "schema_validation",
     "diagnostics",
@@ -43,18 +44,53 @@ CURRENT_REPORT_SECTIONS = (
 
 
 def _box_valid(value: Any) -> bool:
-    if not isinstance(value, dict):
-        return False
-    if not {"left", "top", "right", "bottom"}.issubset(value):
-        return False
-    return int(value["right"]) > int(value["left"]) and int(value["bottom"]) > int(value["top"])
+    return bool(
+        isinstance(value, dict)
+        and {"left", "top", "right", "bottom"}.issubset(value)
+        and int(value["right"]) > int(value["left"])
+        and int(value["bottom"]) > int(value["top"])
+    )
 
 
 def _geometry_valid(value: Any) -> bool:
-    if not isinstance(value, dict) or not _box_valid(value.get("outer_box")):
+    return bool(
+        isinstance(value, dict)
+        and _box_valid(value.get("outer_box"))
+        and isinstance(value.get("frame_boxes"), list)
+        and all(_box_valid(frame) for frame in value["frame_boxes"])
+    )
+
+
+def _separator_observation_valid(value: Any) -> bool:
+    required = {
+        "index",
+        "center",
+        "score",
+        "method",
+        "provenance",
+        "start",
+        "end",
+        "lane_box",
+        "continuity",
+        "tonal_evidence",
+    }
+    if not isinstance(value, dict) or not required.issubset(value):
         return False
-    frames = value.get("frame_boxes")
-    return isinstance(frames, list) and all(_box_valid(frame) for frame in frames)
+    provenance = value["provenance"]
+    if not (
+        isinstance(provenance, dict)
+        and {
+            "root_measurement",
+            "source",
+            "dependencies",
+            "boundary_anchors",
+        }.issubset(provenance)
+        and isinstance(provenance["dependencies"], list)
+        and isinstance(provenance["boundary_anchors"], list)
+    ):
+        return False
+    lane_box = value["lane_box"]
+    return lane_box is None or _box_valid(lane_box)
 
 
 def current_report_record_errors(record: dict[str, Any]) -> list[str]:
@@ -73,32 +109,36 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
         errors.append("invalid_status")
     if record["schema_validation"]:
         errors.append("schema_validation_not_empty")
-    if not _box_valid(record["outer_box"]):
-        errors.append("outer_box_invalid")
-    frames = record["frame_boxes"]
-    if not isinstance(frames, list) or any(not _box_valid(frame) for frame in frames):
-        errors.append("frame_boxes_invalid")
     if not _geometry_valid(record["decision_geometry"]):
         errors.append("decision_geometry_invalid")
-    expected_mappings = (
+    if not _geometry_valid(record["output_geometry"]):
+        errors.append("output_geometry_invalid")
+    if not _box_valid(record["film_span"]):
+        errors.append("film_span_invalid")
+    if not isinstance(record["pitch"], (int, float)) or float(record["pitch"]) <= 0.0:
+        errors.append("pitch_invalid")
+    for key in (
         "profile",
-        "count_selection",
         "strip_completeness",
         "holder_occupancy",
+        "selection",
         "policy",
-        "evidence",
         "evidence_summary",
         "candidate_gate",
         "decision_gate",
         "scan_calibration",
-        "analysis_cache",
+        "analysis_reuse_signature",
         "analysis_reuse",
         "diagnostics",
         "output",
-    )
-    for key in expected_mappings:
+    ):
         if not isinstance(record[key], dict):
             errors.append(f"section_not_mapping:{key}")
+    if record["count_resolution"] is not None and not isinstance(
+        record["count_resolution"],
+        dict,
+    ):
+        errors.append("count_resolution_invalid")
     candidate_gate = record["candidate_gate"]
     if not (
         isinstance(candidate_gate, dict)
@@ -119,30 +159,54 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
         )
     ):
         errors.append("decision_gate_incomplete")
-    elif bool(decision_gate["passed"]) != (record["status"] == "approved_auto"):
-        errors.append("decision_gate_status_mismatch")
+    else:
+        blocking_checks = [
+            check
+            for check in decision_gate["checks"]
+            if isinstance(check, dict)
+            and check.get("consequence") == "blocker"
+            and check.get("state") == "contradicted"
+        ]
+        derived_passed = not blocking_checks
+        derived_reasons = list(
+            dict.fromkeys(
+                str(check["final_review_reason"])
+                for check in blocking_checks
+                if check.get("final_review_reason") is not None
+            )
+        )
+        if bool(decision_gate["passed"]) != derived_passed:
+            errors.append("decision_gate_passed_mismatch")
+        if bool(decision_gate["passed"]) != (
+            record["status"] == "approved_auto"
+        ):
+            errors.append("decision_gate_status_mismatch")
+        if derived_reasons != record["final_review_reasons"]:
+            errors.append("decision_gate_reason_mismatch")
     if not isinstance(record["candidate_table"], list):
         errors.append("candidate_table_not_list")
-    if not isinstance(record["gaps"], list):
-        errors.append("gaps_not_list")
-    else:
-        gap_fields = {
-            "index",
-            "center",
-            "score",
-            "method",
-            "provenance",
-            "start",
-            "end",
-            "lane_box",
-            "continuity",
-            "tonal_evidence",
-        }
-        if any(
-            not isinstance(gap, dict) or not gap_fields.issubset(gap)
-            for gap in record["gaps"]
-        ):
-            errors.append("gap_record_invalid")
+    observations = record["separator_observations"]
+    if not isinstance(observations, list):
+        errors.append("separator_observations_not_list")
+    elif any(not _separator_observation_valid(observation) for observation in observations):
+        errors.append("separator_observation_invalid")
+    diagnostics = record["diagnostics"]
+    transform_fields = {
+        "state",
+        "applied",
+        "estimated_angle_degrees",
+        "applied_angle_degrees",
+        "reason",
+        "span_px",
+        "span_threshold_px",
+    }
+    if not (
+        isinstance(diagnostics, dict)
+        and isinstance(diagnostics.get("detection"), list)
+        and isinstance(diagnostics.get("transform_geometry"), dict)
+        and transform_fields.issubset(diagnostics["transform_geometry"])
+    ):
+        errors.append("transform_geometry_incomplete")
     final_reasons = record["final_review_reasons"]
     if not isinstance(final_reasons, list):
         errors.append("final_review_reasons_not_list")
@@ -158,14 +222,19 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
             errors.append("needs_review_missing_final_review_reason")
     diagnostics = record["diagnostics"]
     if isinstance(diagnostics, dict):
-        deskew = diagnostics.get("deskew")
-        if not isinstance(deskew, dict) or "applied" not in deskew:
-            errors.append("deskew_diagnostic_invalid")
-        elif bool(deskew["applied"]) and "angle" not in deskew:
-            errors.append("deskew_angle_missing")
+        transform = diagnostics.get("transform_geometry")
+        if not isinstance(transform, dict) or "applied" not in transform:
+            errors.append("transform_geometry_diagnostic_invalid")
+        elif bool(transform["applied"]) and "applied_angle_degrees" not in transform:
+            errors.append("transform_geometry_angle_missing")
     output = record["output"]
     if isinstance(output, dict):
-        required_output = {"output_files", "review_copy", "warnings", "protection_plan"}
+        required_output = {
+            "output_files",
+            "review_copy",
+            "warnings",
+            "protection_plan",
+        }
         if not required_output.issubset(output):
             errors.append("output_section_incomplete")
         elif not isinstance(output["protection_plan"], dict):

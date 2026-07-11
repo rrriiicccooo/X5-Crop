@@ -2,116 +2,203 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..domain import AxisBleedParameters, Box, FinalDetection
+from ..domain import AxisBleedParameters, Box
+from .model import OutputGeometry
 from ..geometry.boxes import map_work_box, original_box_to_work
 from ..geometry.layout import work_gray
-from ..policies.parameters.finalization import ApprovedGeometryAdjustmentParameters
 from ..policies.parameters.exposure_overlap import EdgeBleedProtectionParameters
-from ..utils import clamp_float, clamp_int
+from ..policies.parameters.finalization import ApprovedGeometryAdjustmentParameters
+from ..units import ScanCalibration
+from ..utils import clamp_int
 
 
-def apply_edge_bleed_protection(
-    detection: FinalDetection,
+def edge_bleed_protected_geometry(
+    geometry: OutputGeometry,
+    *,
+    layout: str,
+    strip_mode: str,
+    count: int,
     output_bleed: AxisBleedParameters,
-    image_w: int,
-    image_h: int,
-    policy: EdgeBleedProtectionParameters,
-) -> None:
-    if detection.strip_mode != "full" or detection.count <= 1 or len(detection.frames) != detection.count:
-        return
-    outer_work = original_box_to_work(detection.outer, detection.layout, image_w, image_h)
-    frames_work = [original_box_to_work(frame, detection.layout, image_w, image_h) for frame in detection.frames]
-    if not outer_work.valid() or any(not frame.valid() for frame in frames_work):
-        return
-
-    work_w = image_w if detection.layout == "horizontal" else image_h
-    nominal = float(outer_work.width) / float(max(1, detection.count))
-    edge_guard = clamp_float(
-        nominal * policy.guard_ratio,
-        policy.guard_min,
-        policy.guard_max,
+    image_width: int,
+    image_height: int,
+    calibration: ScanCalibration,
+    parameters: EdgeBleedProtectionParameters,
+) -> OutputGeometry:
+    if (
+        strip_mode != "full"
+        or count <= 1
+        or len(geometry.frames) != count
+    ):
+        return geometry
+    outer = original_box_to_work(
+        geometry.outer,
+        layout,
+        image_width,
+        image_height,
     )
-    changed = False
-
-    first_target = max(0, outer_work.left - int(output_bleed.long_axis))
-    if frames_work[0].left > first_target + edge_guard:
-        frames_work[0] = Box(first_target, frames_work[0].top, frames_work[0].right, frames_work[0].bottom)
-        changed = True
-
-    last_target = min(work_w, outer_work.right + int(output_bleed.long_axis))
-    if frames_work[-1].right < last_target - edge_guard:
-        frames_work[-1] = Box(frames_work[-1].left, frames_work[-1].top, last_target, frames_work[-1].bottom)
-        changed = True
-
-    if not changed or any(not frame.valid() for frame in frames_work):
-        return
-
-    detection.frames = [map_work_box(frame, detection.layout, image_w, image_h) for frame in frames_work]
-
-
-def apply_approved_geometry_adjustment(
-    detection: FinalDetection,
-    gray: np.ndarray,
-    policy: ApprovedGeometryAdjustmentParameters,
-) -> None:
-    if detection.status != "approved_auto" or detection.strip_mode != "full" or len(detection.frames) != detection.count:
-        return
-    if detection.final_review_reasons:
-        return
-    gray_work = work_gray(gray, detection.layout)
-    h, w = gray_work.shape
-    outer = original_box_to_work(detection.outer, detection.layout, gray.shape[1], gray.shape[0])
-    frames = [original_box_to_work(frame, detection.layout, gray.shape[1], gray.shape[0]) for frame in detection.frames]
+    frames = [
+        original_box_to_work(frame, layout, image_width, image_height)
+        for frame in geometry.frames
+    ]
     if not outer.valid() or any(not frame.valid() for frame in frames):
-        return
-
-    long_limit = clamp_int(
-        (outer.width / float(max(1, detection.count))) * policy.long_limit_ratio,
-        policy.long_limit_min,
-        policy.long_limit_max,
+        return geometry
+    work_width = image_width if layout == "horizontal" else image_height
+    nominal = float(outer.width) / float(max(1, count))
+    guard = parameters.guard.resolve_px(
+        calibration,
+        axis="x" if layout == "horizontal" else "y",
+        reference_px=nominal,
     )
-    band_top = outer.top + int(round(outer.height * policy.side_band_trim_ratio))
-    band_bottom = outer.bottom - int(round(outer.height * policy.side_band_trim_ratio))
+    first_target = max(0, outer.left - int(output_bleed.long_axis))
+    if frames[0].left > first_target + guard:
+        frames[0] = Box(
+            first_target,
+            frames[0].top,
+            frames[0].right,
+            frames[0].bottom,
+        )
+    last_target = min(work_width, outer.right + int(output_bleed.long_axis))
+    if frames[-1].right < last_target - guard:
+        frames[-1] = Box(
+            frames[-1].left,
+            frames[-1].top,
+            last_target,
+            frames[-1].bottom,
+        )
+    if any(not frame.valid() for frame in frames):
+        return geometry
+    return OutputGeometry(
+        outer=geometry.outer,
+        frames=tuple(
+            map_work_box(frame, layout, image_width, image_height)
+            for frame in frames
+        ),
+    )
+
+
+def approved_geometry_adjustment(
+    geometry: OutputGeometry,
+    gray: np.ndarray,
+    *,
+    layout: str,
+    strip_mode: str,
+    count: int,
+    approved: bool,
+    parameters: ApprovedGeometryAdjustmentParameters,
+) -> OutputGeometry:
+    if (
+        not approved
+        or strip_mode != "full"
+        or len(geometry.frames) != count
+    ):
+        return geometry
+    gray_work = work_gray(gray, layout)
+    width = gray_work.shape[1]
+    outer = original_box_to_work(
+        geometry.outer,
+        layout,
+        gray.shape[1],
+        gray.shape[0],
+    )
+    frames = [
+        original_box_to_work(
+            frame,
+            layout,
+            gray.shape[1],
+            gray.shape[0],
+        )
+        for frame in geometry.frames
+    ]
+    if not outer.valid() or any(not frame.valid() for frame in frames):
+        return geometry
+    long_limit = clamp_int(
+        (outer.width / float(max(1, count))) * parameters.long_limit_ratio,
+        parameters.long_limit_min,
+        parameters.long_limit_max,
+    )
+    band_top = outer.top + int(
+        round(outer.height * parameters.side_band_trim_ratio)
+    )
+    band_bottom = outer.bottom - int(
+        round(outer.height * parameters.side_band_trim_ratio)
+    )
     if band_bottom <= band_top:
         band_top, band_bottom = outer.top, outer.bottom
 
     def side_extension(side: str) -> int:
         if side == "left":
-            lo, hi = max(0, outer.left - long_limit), outer.left
+            low, high = max(0, outer.left - long_limit), outer.left
         else:
-            lo, hi = outer.right, min(w, outer.right + long_limit)
-        if hi <= lo:
+            low, high = outer.right, min(width, outer.right + long_limit)
+        if high <= low:
             return 0
-        strip = gray_work[band_top:band_bottom, lo:hi]
-        if strip.size == 0:
+        strip = gray_work[band_top:band_bottom, low:high]
+        if not strip.size:
             return 0
-        col_content = (strip < policy.content_threshold_u8).mean(axis=0)
-        active = np.where(col_content > policy.min_active_column_fraction)[0]
+        active_fraction = (
+            strip < parameters.content_threshold_u8
+        ).mean(axis=0)
+        active = np.where(
+            active_fraction > parameters.min_active_column_fraction
+        )[0]
+        if not active.size:
+            return 0
         if side == "left":
-            return int(hi - (lo + int(active[0]))) if active.size else 0
-        return int(int(active[-1]) + 1) if active.size else 0
+            return int(high - (low + int(active[0])))
+        return int(active[-1]) + 1
 
-    pitch = float(outer.width) / float(max(1, detection.count))
-    min_long_ext = clamp_int(
-        pitch * policy.min_ext_ratio,
-        policy.min_ext_min,
-        policy.min_ext_max,
+    pitch = float(outer.width) / float(max(1, count))
+    minimum_extension = clamp_int(
+        pitch * parameters.min_ext_ratio,
+        parameters.min_ext_min,
+        parameters.min_ext_max,
     )
-    left_ext = side_extension("left")
-    right_ext = side_extension("right")
-    left_ext = left_ext if left_ext >= min_long_ext else 0
-    right_ext = right_ext if right_ext >= min_long_ext else 0
-    adjusted = False
-    if 0 < left_ext <= long_limit:
-        outer = Box(max(0, outer.left - left_ext), outer.top, outer.right, outer.bottom)
-        frames[0] = Box(outer.left, frames[0].top, frames[0].right, frames[0].bottom)
-        adjusted = True
-    if 0 < right_ext <= long_limit:
-        outer = Box(outer.left, outer.top, min(w, outer.right + right_ext), outer.bottom)
-        frames[-1] = Box(frames[-1].left, frames[-1].top, outer.right, frames[-1].bottom)
-        adjusted = True
-
-    if not adjusted or not outer.valid() or any(not frame.valid() for frame in frames):
-        return
-    detection.outer = map_work_box(outer, detection.layout, gray.shape[1], gray.shape[0])
-    detection.frames = [map_work_box(frame, detection.layout, gray.shape[1], gray.shape[0]) for frame in frames]
+    left_extension = side_extension("left")
+    right_extension = side_extension("right")
+    left_extension = left_extension if left_extension >= minimum_extension else 0
+    right_extension = right_extension if right_extension >= minimum_extension else 0
+    if 0 < left_extension <= long_limit:
+        outer = Box(
+            max(0, outer.left - left_extension),
+            outer.top,
+            outer.right,
+            outer.bottom,
+        )
+        frames[0] = Box(
+            outer.left,
+            frames[0].top,
+            frames[0].right,
+            frames[0].bottom,
+        )
+    if 0 < right_extension <= long_limit:
+        outer = Box(
+            outer.left,
+            outer.top,
+            min(width, outer.right + right_extension),
+            outer.bottom,
+        )
+        frames[-1] = Box(
+            frames[-1].left,
+            frames[-1].top,
+            outer.right,
+            frames[-1].bottom,
+        )
+    if not outer.valid() or any(not frame.valid() for frame in frames):
+        return geometry
+    return OutputGeometry(
+        outer=map_work_box(
+            outer,
+            layout,
+            gray.shape[1],
+            gray.shape[0],
+        ),
+        frames=tuple(
+            map_work_box(
+                frame,
+                layout,
+                gray.shape[1],
+                gray.shape[0],
+            )
+            for frame in frames
+        ),
+    )

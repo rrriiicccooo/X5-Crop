@@ -1,140 +1,146 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import replace
 
-import numpy as np
-
-from ..run_config import RunConfig
-from ..domain import DetectionCandidate
-from ..formats import FormatPhysicalSpec
-from ..policies.runtime.bundle import DetectionPolicyBundle
-from ..policies.runtime.policy import DetectionPolicy
-from ..cache import AnalysisCache
+from .candidate.assessment.candidate import assess_candidate
 from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
+from .candidate.execution.model import CountHypothesisEvaluation
 from .candidate.execution.count_placement import resolve_automatic_count_placement
+from .candidate.extension.outer_correction import (
+    outer_correction_candidate_extensions,
+)
 from .candidate.plan.count_hypotheses import count_hypothesis_plan
-from .modes.dual_lane import choose_dual_lane_detection
-from .modes.review_only import review_only_detection
-from .candidate.proposal.hard_safety import hard_safety_detection
-from .candidate.selection.choose import select_detection_candidate
-from .candidate.selection.count_hypothesis import count_selection_detail
+from .candidate.proposal.hard_safety import hard_safety_candidate
+from .candidate.selection.choose import select_candidates
+from .candidate.selection.model import CountResolution, SelectionResult
+from .context import DetectionContext
 from .evidence.count_planning import CountPlanningEvidence, count_planning_evidence
-from .candidate.extension.outer_correction import outer_correction_candidate_extensions
+from .modes.dual_lane import choose_dual_lane_detection
+from .modes.review_only import review_only_candidate
+
+def _count_resolution(
+    selection: SelectionResult,
+    search_order: tuple[int, ...],
+    evaluations: tuple[CountHypothesisEvaluation, ...],
+    stopped_after_count: int | None,
+    requested_count: int | None,
+) -> CountResolution:
+    if requested_count is not None:
+        reason = "requested_count"
+    elif selection.geometry_resolution.supported:
+        reason = "largest_physically_resolved_count"
+    else:
+        reason = "best_coverage_without_physical_resolution"
+    return CountResolution(
+        selected_count=selection.selected.geometry.count,
+        search_order=search_order,
+        evaluated_counts=tuple(
+            evaluation.hypothesis.count for evaluation in evaluations
+        ),
+        stopped_after_count=stopped_after_count,
+        reason=reason,
+    )
 
 
-@dataclass(frozen=True)
-class CandidatePipelineResult:
-    candidate: DetectionCandidate
-    policy: DetectionPolicy
-
-
-def choose_detection(
-    gray: np.ndarray,
-    config: RunConfig,
-    fmt: FormatPhysicalSpec,
-    policy_bundle: DetectionPolicyBundle,
-    cache: AnalysisCache,
-) -> CandidatePipelineResult:
-    candidates: list[DetectionCandidate] = []
-    policy = policy_bundle.policy_for(fmt.format_id, config.strip_mode)
-    if cache.layout != config.layout:
-        raise ValueError("Analysis cache layout does not match runtime layout")
-    if policy.detector_kind == "dual_lane":
-        candidate = choose_dual_lane_detection(gray, config, cache, policy, policy_bundle)
-        candidate = select_detection_candidate(
-            [candidate],
-            policy.candidate_selection,
-        )
-        return CandidatePipelineResult(candidate=candidate, policy=policy)
-    if policy.detector_kind == "review_only":
-        candidate = review_only_detection(gray, config, fmt)
-        candidate = select_detection_candidate(
-            [candidate],
-            policy.candidate_selection,
-        )
-        return CandidatePipelineResult(candidate=candidate, policy=policy)
+def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
+    policy = context.policy
+    physical_spec = policy.physical_spec
     planning_evidence = (
         count_planning_evidence(
-            cache.gray_work,
-            fmt,
-            cache,
+            context.measurement_cache.gray_work,
+            physical_spec,
+            context.measurement_cache,
             outer_parameters=policy.outer.proposal.base,
             separator_profile_parameters=policy.separator.profile,
             gap_search_parameters=policy.separator.gap_search,
-            separator_band_parameters=policy.outer.proposal.geometry.separator.band,
+            separator_band_parameters=(
+                policy.outer.proposal.geometry.separator.band
+            ),
+            calibration=context.scan_calibration,
+            long_axis=(
+                "x" if context.request.layout == "horizontal" else "y"
+            ),
         )
-        if config.strip_mode == "partial" and config.requested_count is None
+        if (
+            context.request.strip_mode == "partial"
+            and context.request.requested_count is None
+        )
         else CountPlanningEvidence.unavailable()
     )
-    count_plan = count_hypothesis_plan(
-        strip_mode=config.strip_mode,
-        requested_count=config.requested_count,
-        fmt=fmt,
+    plan = count_hypothesis_plan(
+        strip_mode=context.request.strip_mode,
+        requested_count=context.request.requested_count,
+        fmt=physical_spec,
         partial_offsets=policy.partial_count_offsets,
         planning_evidence=planning_evidence,
     )
-    count_evaluations = []
-    for hypothesis in count_plan.hypotheses:
-        count_plan, hypothesis = resolve_automatic_count_placement(
-            count_plan,
+    evaluations: list[CountHypothesisEvaluation] = []
+    candidates = []
+    stopped_after_count: int | None = None
+    for hypothesis in plan.hypotheses:
+        plan, resolved_hypothesis = resolve_automatic_count_placement(
+            plan,
             hypothesis,
-            cache,
-            fmt,
-            policy,
+            context.measurement_cache,
+            physical_spec,
+            policy.content,
+            policy.separator.width_profile_search,
+            context.scan_calibration,
+            "x" if context.request.layout == "horizontal" else "y",
         )
         evaluation = evaluate_count_hypothesis(
-            gray,
-            config,
-            fmt,
-            hypothesis,
-            cache,
-            policy,
+            context,
+            resolved_hypothesis,
+            larger_counts_evaluated=True,
         )
-        count_evaluations.append(evaluation)
+        evaluations.append(evaluation)
         candidates.extend(evaluation.candidates)
-        if count_plan.automatic and evaluation.count_resolved:
+        if plan.automatic and evaluation.geometry_resolved:
+            stopped_after_count = resolved_hypothesis.count
             break
 
     if not candidates:
-        candidate = hard_safety_detection(
-            gray,
-            config,
-            fmt,
-            count_plan.hard_safety_count,
-        )
-        candidate.detail["count_selection"] = count_selection_detail(
-            candidate,
-            count_plan,
-            count_evaluations,
-        )
-        return CandidatePipelineResult(candidate=candidate, policy=policy)
-
-    provisional = select_detection_candidate(
-        candidates,
+        built = hard_safety_candidate(context, plan.hard_safety_count)
+        candidates.append(assess_candidate(built, context))
+    selection = select_candidates(
+        tuple(candidates),
         policy.candidate_selection,
+        larger_counts_evaluated=True,
     )
-    extension_policy = policy_bundle.policy_for(provisional.format_id, provisional.strip_mode)
-    extension_candidates = outer_correction_candidate_extensions(
-        gray,
-        config,
-        fmt,
-        provisional,
-        cache,
-        extension_policy,
+    extensions = outer_correction_candidate_extensions(selection, context)
+    if extensions:
+        candidates.extend(extensions)
+        selection = select_candidates(
+            tuple(candidates),
+            policy.candidate_selection,
+            larger_counts_evaluated=True,
+        )
+    count_resolution = _count_resolution(
+        selection,
+        tuple(hypothesis.count for hypothesis in plan.hypotheses),
+        tuple(evaluations),
+        stopped_after_count,
+        plan.requested_count,
     )
-    if extension_candidates:
-        candidates.extend(extension_candidates)
-    selected_candidate = select_detection_candidate(
-        candidates,
-        extension_policy.candidate_selection,
-    )
-    selected_policy = policy_bundle.policy_for(
-        selected_candidate.format_id,
-        selected_candidate.strip_mode,
-    )
-    selected_candidate.detail["count_selection"] = count_selection_detail(
-        selected_candidate,
-        count_plan,
-        count_evaluations,
-    )
-    return CandidatePipelineResult(candidate=selected_candidate, policy=selected_policy)
+    return replace(selection, count_resolution=count_resolution)
+
+
+def choose_detection(context: DetectionContext) -> SelectionResult:
+    policy = context.policy
+    if context.measurement_cache.layout != context.request.layout:
+        raise ValueError("analysis cache layout does not match detection context")
+    if policy.detector_kind == "dual_lane":
+        selection = choose_dual_lane_detection(
+            context,
+            _choose_standard_detection,
+        )
+    elif policy.detector_kind == "review_only":
+        assessed = assess_candidate(review_only_candidate(context), context)
+        selection = select_candidates(
+            (assessed,),
+            policy.candidate_selection,
+            larger_counts_evaluated=True,
+        )
+    else:
+        selection = _choose_standard_detection(context)
+    return selection

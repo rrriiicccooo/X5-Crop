@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 CANDIDATE_SOURCE_SEPARATOR = "separator_candidate"
-CANDIDATE_SOURCE_CONTENT = "content_candidate"
 CANDIDATE_SOURCE_HARD_SAFETY = "hard_safety"
 CANDIDATE_SOURCE_REVIEW_ONLY = "review_only_mode"
 CANDIDATE_SOURCE_DUAL_LANE = "dual_lane_strip"
@@ -33,7 +32,6 @@ FINAL_REVIEW_REASONS = frozenset(
 GAP_DETECTED = "detected"
 GAP_EDGE_PAIR = "edge-pair"
 GAP_EQUAL = "equal"
-GAP_CONTENT = "content"
 
 HARD_GAP_METHODS = frozenset({
     GAP_DETECTED,
@@ -41,5 +39,4 @@ HARD_GAP_METHODS = frozenset({
 })
 MODEL_GAP_METHODS = frozenset({
     GAP_EQUAL,
-    GAP_CONTENT,
 })

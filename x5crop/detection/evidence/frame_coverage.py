@@ -2,15 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...cache import AnalysisCache
-from ...domain import DetectionCandidate
+from ...cache import MeasurementCache
+from ...domain import Box
 from ...formats import FormatPhysicalSpec
 from ...policies.runtime.content import ContentPolicy
-from ..physical.spans import (
-    candidate_work_frames,
-    film_span_from_frames,
-    holder_span_from_candidate,
-)
+from ..physical.spans import FilmSpan, HolderSpan
 from .content.regions import content_region_runs
 from .state import EvidenceState
 
@@ -24,6 +20,7 @@ class FrameCoverageEvidence:
     frame_intervals: tuple[tuple[int, int], ...]
     content_runs: tuple[tuple[int, int], ...]
     uncovered_content: tuple[tuple[int, int], ...]
+    unexplained_content_region_count: int
 
 
 def _merged_intervals(intervals: list[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
@@ -58,29 +55,27 @@ def _uncovered_segments(
 
 
 def frame_coverage_evidence(
-    candidate: DetectionCandidate,
+    holder_span: HolderSpan,
+    film_span: FilmSpan,
+    work_frames: tuple[Box, ...],
     fmt: FormatPhysicalSpec,
-    cache: AnalysisCache,
+    cache: MeasurementCache,
     content_policy: ContentPolicy,
 ) -> FrameCoverageEvidence:
-    holder = holder_span_from_candidate(candidate).box.clamp(
+    holder = holder_span.box.clamp(
         cache.gray_work.shape[1],
         cache.gray_work.shape[0],
     )
-    frames = candidate_work_frames(candidate)
-    film = film_span_from_frames(frames)
     frame_intervals = _merged_intervals(
         [
             (max(holder.left, frame.left), min(holder.right, frame.right))
-            for frame in frames
+            for frame in work_frames
         ]
     )
-    runs, _detail = content_region_runs(
+    runs = content_region_runs(
         cache.content_evidence_work,
         holder,
         fmt.default_count,
-        fmt.format_id,
-        cache,
         content_policy=content_policy,
     )
     tolerance = max(1, int(content_policy.profile.min_run_width_px))
@@ -90,12 +85,16 @@ def frame_coverage_evidence(
         for segment in _uncovered_segments(run, frame_intervals)
         if segment[1] - segment[0] >= tolerance
     )
+    unexplained_region_count = max(0, len(runs) - len(work_frames))
     if not runs:
         state = EvidenceState.UNAVAILABLE
         reason = "content_runs_unavailable"
     elif uncovered:
         state = EvidenceState.CONTRADICTED
         reason = "content_outside_frame_union"
+    elif unexplained_region_count:
+        state = EvidenceState.CONTRADICTED
+        reason = "content_region_count_exceeds_frame_count"
     else:
         state = EvidenceState.SUPPORTED
         reason = "content_runs_covered"
@@ -103,8 +102,9 @@ def frame_coverage_evidence(
         state=state,
         reason=reason,
         holder_interval=(holder.left, holder.right),
-        film_interval=(None if film is None else (film.box.left, film.box.right)),
+        film_interval=(film_span.box.left, film_span.box.right),
         frame_intervals=frame_intervals,
         content_runs=tuple(runs),
         uncovered_content=uncovered,
+        unexplained_content_region_count=unexplained_region_count,
     )

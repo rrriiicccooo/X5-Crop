@@ -4,7 +4,8 @@ from pathlib import Path
 from typing import Any
 
 from ..run_config import RunConfig
-from ..domain import FinalDetection, ImageProfile
+from ..detection.decision.model import FinalDetection
+from ..domain import ImageProfile
 from ..output.surface import OutputSurface
 from .crops import write_crops
 from .review import copy_for_review, review_directory_for
@@ -50,7 +51,7 @@ def write_crops_if_allowed(
         arr,
         source_arr,
         profile,
-        detection.frames,
+        detection.output_geometry.frames,
         config,
         deskew_applied,
         output_dir,

@@ -3,17 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...formats import FormatPhysicalSpec
-from ...geometry.detection_parameters import FrameFitParameters
 from ..identity import detection_policy_id_for
-from ..parameters.base import PartialEdgeHintParameters
 from ..parameters.candidate import CandidatePlanParameters
 from ..parameters.exposure_overlap import ExposureOverlapEvidenceParameters
 from ..parameters.finalization import ApprovedGeometryAdjustmentParameters
 from ..parameters.scoring import SelectionConsensusParameters
-from .candidate import (
-    PartialHolderPolicy,
-    ScoringPolicy,
-)
+from .candidate import ScoringPolicy
 from .content import ContentPolicy
 from .diagnostics import RuntimeDiagnosticsPolicy
 from .outer import OuterPolicy
@@ -32,9 +27,6 @@ class DetectionPolicy:
     outer: OuterPolicy
     separator: SeparatorPolicy
     content: ContentPolicy
-    partial_holder: PartialHolderPolicy
-    partial_edge_hint: PartialEdgeHintParameters
-    frame_fit: FrameFitParameters
     scoring: ScoringPolicy
     candidate_selection: SelectionConsensusParameters
     candidate_plan: CandidatePlanParameters

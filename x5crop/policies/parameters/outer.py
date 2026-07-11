@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from ...units import PhysicalLength
 
 @dataclass(frozen=True)
 class OuterStrategyParameters:
@@ -44,15 +46,15 @@ class SeparatorOuterBandParameters:
     spacing_min_ratio: float = 0.82
     spacing_max_ratio: float = 1.24
     frame_error_max: float = 0.18
-    edge_margin_ratio: float = 0.18
+    edge_margin: PhysicalLength = field(
+        default_factory=lambda: PhysicalLength(None, 0.18, 60, 2000)
+    )
     source_candidate_count: int = 2
     band_candidate_count: int = 10
     pair_candidate_count: int = 4
     max_candidates: int = 12
     sequence_pair_score_weight: float = 0.02
     photo_width_cv_rank_weight: float = 0.50
-    edge_margin_min_px: float = 60.0
-    edge_margin_max_short_axis_ratio: float = 0.80
     prominence_min: float = 0.02
     high_mean_prominence_bypass: float = 0.88
     prominence_score_weight: float = 0.8
@@ -69,19 +71,15 @@ class FullWidthSeparatorOuterParameters:
 
 @dataclass(frozen=True)
 class LongAxisGeometryCorrectionParameters:
-    ratio_tolerance: float = 0.025
     min_shrink_ratio: float = 0.003
     max_shrink_ratio: float = 0.120
     content_margin_ratio: float = 0.010
     content_margin_min: int = 12
     content_margin_max: int = 80
-    min_corrected_width_ratio: float = 0.80
-    min_corrected_width_px: int = 80
 
 @dataclass(frozen=True)
 class ShortAxisGeometryCorrectionParameters:
     min_error: float = 0.24
-    target_aspect: float = 0.0
     max_expand_ratio: float = 0.60
     margin_ratio: float = 0.008
     margin_min: int = 12
@@ -89,23 +87,12 @@ class ShortAxisGeometryCorrectionParameters:
 
 @dataclass(frozen=True)
 class ContentContainmentCorrectionParameters:
-    margin_x_ratio: float = 0.0030
-    margin_x_min: int = 15
-    margin_x_max: int = 30
-    margin_y_ratio: float = 0.0030
-    margin_y_min: int = 10
-    margin_y_max: int = 20
     long_margin_ratio: float = 0.012
-    long_margin_cap_ratio: float = 0.0170
     long_margin_cap_min: int = 80
     long_margin_cap_max: int = 160
     short_margin_ratio: float = 0.010
-    short_margin_cap_ratio: float = 0.010
     short_margin_cap_min: int = 40
     short_margin_cap_max: int = 80
-    min_corrected_size_ratio: float = 0.80
-    min_corrected_width_px: int = 80
-    min_corrected_height_px: int = 40
 
 @dataclass(frozen=True)
 class OuterAlignmentEvidenceParameters:

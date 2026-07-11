@@ -1,86 +1,61 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
+from ..partial_edge import PartialEdgeSafetyEvidence
 from ..frame_coverage import FrameCoverageEvidence
+from ..outer_alignment import OuterAlignmentEvidence
 from ..state import EvidenceState
+from .frame_support import FrameContentEvidence
 
 
 @dataclass(frozen=True)
 class ContentPreservationEvidence:
     state: EvidenceState
     reason: str
-    detail: dict[str, Any]
-
-    def report_detail(self) -> dict[str, Any]:
-        return {
-            "state": self.state.value,
-            "reason": self.reason,
-            "detail": dict(self.detail),
-        }
-
+    uncovered_content: tuple[tuple[int, int], ...]
+    boundary_contact_frame_indexes: tuple[int, ...]
+    confirmed_outer_undercrop_sides: tuple[str, ...]
+    partial_edge_state: EvidenceState
 
 def content_preservation_evidence(
-    content: dict[str, Any],
-    outer_alignment: dict[str, Any],
-    partial_edge: dict[str, Any],
+    frame_content: FrameContentEvidence,
+    outer_alignment: OuterAlignmentEvidence,
+    partial_edge: PartialEdgeSafetyEvidence,
     frame_coverage: FrameCoverageEvidence,
 ) -> ContentPreservationEvidence:
-    partial_failures = set(partial_edge.get("preservation_failures", []))
-    complete_underfilled_strip = bool(partial_edge.get("complete_underfilled_strip", False))
-    direct_undercrop = bool(
-        "partial_edge_content_present" in partial_failures
-        or outer_alignment.get("confirmed_undercrop", False)
-    )
-    corroborated_undercrop = bool(
-        content.get("content_boundary_contact", False)
-        and outer_alignment.get("used", False)
-        and not outer_alignment.get("ok", True)
-    )
-    if frame_coverage.state == EvidenceState.CONTRADICTED:
-        return ContentPreservationEvidence(
-            EvidenceState.CONTRADICTED,
-            "content_outside_frame_union",
-            {
-                "uncovered_content": list(frame_coverage.uncovered_content),
-                "frame_intervals": list(frame_coverage.frame_intervals),
-                "content_runs": list(frame_coverage.content_runs),
-            },
-        )
-    if direct_undercrop or corroborated_undercrop:
-        return ContentPreservationEvidence(
-            EvidenceState.CONTRADICTED,
-            "content_undercrop_confirmed",
-            {
-                "outer_alignment": dict(outer_alignment),
-                "partial_preservation_failures": sorted(partial_failures),
-                "frame_boundary_contact": bool(
-                    content.get("content_boundary_contact", False)
-                ),
-                "complete_underfilled_strip": complete_underfilled_strip,
-            },
-        )
-    if not bool(outer_alignment.get("used", False)):
-        return ContentPreservationEvidence(
-            EvidenceState.UNAVAILABLE,
-            "outer_alignment_unavailable",
-            {"outer_alignment": dict(outer_alignment)},
-        )
-    if bool(outer_alignment.get("ok", True)):
-        return ContentPreservationEvidence(
-            EvidenceState.SUPPORTED,
-            "content_inside_outer",
-            {"outer_alignment": dict(outer_alignment)},
-        )
+    uncovered = tuple(frame_coverage.uncovered_content)
+    contacts = frame_content.boundary_contact_frame_indexes
+    confirmed_sides = tuple(outer_alignment.confirmed_undercrop_sides)
+    if uncovered:
+        state = EvidenceState.CONTRADICTED
+        reason = "content_outside_frame_union"
+    elif frame_coverage.unexplained_content_region_count:
+        state = EvidenceState.CONTRADICTED
+        reason = "content_region_count_exceeds_frame_count"
+    elif contacts:
+        state = EvidenceState.CONTRADICTED
+        reason = "content_contacts_frame_boundary"
+    elif confirmed_sides:
+        state = EvidenceState.CONTRADICTED
+        reason = "content_outside_film_span_confirmed"
+    elif partial_edge.state == EvidenceState.CONTRADICTED:
+        state = EvidenceState.CONTRADICTED
+        reason = partial_edge.reason
+    elif (
+        frame_coverage.state == EvidenceState.SUPPORTED
+        or outer_alignment.state == EvidenceState.SUPPORTED
+    ):
+        state = EvidenceState.SUPPORTED
+        reason = "content_preserved"
+    else:
+        state = EvidenceState.UNAVAILABLE
+        reason = "content_preservation_unresolved"
     return ContentPreservationEvidence(
-        EvidenceState.UNAVAILABLE,
-        "global_bbox_conflicts_with_frame_evidence",
-        {
-            "outer_alignment": dict(outer_alignment),
-            "frame_content_support_available": bool(
-                content.get("frame_content_support_available", False)
-            ),
-            "complete_underfilled_strip": complete_underfilled_strip,
-        },
+        state=state,
+        reason=reason,
+        uncovered_content=uncovered,
+        boundary_contact_frame_indexes=contacts,
+        confirmed_outer_undercrop_sides=confirmed_sides,
+        partial_edge_state=partial_edge.state,
     )

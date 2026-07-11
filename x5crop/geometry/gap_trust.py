@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
-
 import numpy as np
 
 from ..domain import Box, SeparatorBandObservation
@@ -32,10 +30,6 @@ class HardGapPixelSignals:
         return min(self.left_content, self.right_content)
 
     @property
-    def side_balance(self) -> float:
-        return abs(self.left_content - self.right_content)
-
-    @property
     def continuity(self) -> float:
         return min(self.core_content, self.side_content)
 
@@ -47,21 +41,15 @@ class HardGapTrustAssessment:
     width_ratio: float
     model_delta_ratio: float | None
     nearby_separator_conflict: bool
-    signal_flags: dict[str, bool]
+    signal_flags: "HardGapSignalFlags | None"
 
-    def detail(self) -> dict[str, Any]:
-        return {
-            "trust": self.trust,
-            "reason": self.reason,
-            "width_ratio": float(self.width_ratio),
-            "model_delta_ratio": (
-                None
-                if self.model_delta_ratio is None
-                else float(self.model_delta_ratio)
-            ),
-            "nearby_separator_conflict": bool(self.nearby_separator_conflict),
-            "signal_flags": dict(self.signal_flags),
-        }
+
+@dataclass(frozen=True)
+class HardGapSignalFlags:
+    tonal_separator_like: bool
+    low_contrast_tonal_gap: bool
+    content_continuous: bool
+    cross_axis_continuity_weak: bool
 
 
 @dataclass(frozen=True)
@@ -69,7 +57,7 @@ class HardGapTrustContext:
     width_ratio: float
     model_delta_ratio: float | None
     nearby_separator_conflict: bool
-    signal_flags: dict[str, bool]
+    signal_flags: HardGapSignalFlags | None
 
 
 def hard_gap_width_ratio(gap: SeparatorBandObservation, pitch: float) -> float:
@@ -219,18 +207,18 @@ def hard_gap_geometry_conflict(
 def hard_gap_signal_flags(
     signals: HardGapPixelSignals | None,
     config: HardGapTrustParameters,
-) -> dict[str, bool]:
+) -> HardGapSignalFlags | None:
     if signals is None:
-        return {}
-    return {
-        "tonal_separator_like": hard_gap_tonal_separator_like(signals, config),
-        "low_contrast_tonal_gap": hard_gap_low_contrast_tonal_gap(signals, config),
-        "content_continuous": hard_gap_content_continuous(signals, config),
-        "cross_axis_continuity_weak": (
+        return None
+    return HardGapSignalFlags(
+        tonal_separator_like=hard_gap_tonal_separator_like(signals, config),
+        low_contrast_tonal_gap=hard_gap_low_contrast_tonal_gap(signals, config),
+        content_continuous=hard_gap_content_continuous(signals, config),
+        cross_axis_continuity_weak=(
             signals.cross_axis_coverage_ratio < config.cross_axis_coverage_min
             or signals.cross_axis_continuity_ratio < config.cross_axis_continuity_min
         ),
-    }
+    )
 
 
 def hard_gap_trust_context(
@@ -290,7 +278,7 @@ def diagnostic_hard_gap_trust_assessment(
     if not is_hard_gap_method(gap.method):
         return assessment("not_hard_gap", "not_hard_gap")
     flags = context.signal_flags
-    tonal_separator_like = bool(flags.get("tonal_separator_like", False))
+    tonal_separator_like = bool(flags and flags.tonal_separator_like)
     if nearby_separator_conflict:
         return assessment("nearby_separator_conflict", "nearby_separator_candidate_stronger")
     if hard_gap_geometry_conflict(width_ratio, gap.score, model_delta_ratio, config):
@@ -298,11 +286,11 @@ def diagnostic_hard_gap_trust_assessment(
     if width_ratio < config.frame_border_width_ratio and tonal_separator_like:
         return assessment("suspect_frame_border", "too_narrow_separator_band")
     if hard_gap_is_narrow(gap, pitch, config) and (
-        bool(flags.get("content_continuous", False))
-        or bool(flags.get("low_contrast_tonal_gap", False))
+        bool(flags and flags.content_continuous)
+        or bool(flags and flags.low_contrast_tonal_gap)
     ):
         return assessment("suspect_internal_edge", "narrow_content_continuity_or_low_contrast_tonal")
-    if bool(flags.get("cross_axis_continuity_weak", False)):
+    if bool(flags and flags.cross_axis_continuity_weak):
         return assessment("weak_or_ambiguous_separator", "cross_axis_continuity_weak")
     if hard_gap_is_narrow(gap, pitch, config):
         return assessment("narrow_but_ok", "narrow_without_content_continuity")

@@ -41,7 +41,7 @@ def fit_line(
 
 def fit_edge_angle(gray: np.ndarray, layout: str, deskew: DeskewParameters) -> tuple[float, dict[str, Any]]:
     work = work_gray(gray, layout)
-    h, w = work.shape
+    h = work.shape[0]
     mask = work < deskew.outer_dark_threshold
     outer = bbox_from_mask(mask, deskew.outer_min_fraction, deskew.outer_min_fraction)
     if outer is None or outer.width < deskew.min_outer_width:

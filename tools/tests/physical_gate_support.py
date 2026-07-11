@@ -1,26 +1,68 @@
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import replace
 
+from x5crop.detection.candidate.assessment.candidate_gate import (
+    BoundaryProofPath,
+    CandidateGateAssessment,
+)
+from x5crop.detection.candidate.assessment.evidence_independence import (
+    EvidenceIndependenceEvidence,
+)
+from x5crop.detection.candidate.assessment.separator_support import (
+    SeparatorSequenceEvidence,
+)
+from x5crop.detection.candidate.model import (
+    AssessedCandidate,
+    CandidateAssessment,
+    CandidateEvidence,
+    CandidateScores,
+)
+from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
+from x5crop.detection.candidate.selection.model import (
+    GeometryCluster,
+    GeometryResolution,
+    SelectionResult,
+)
 from x5crop.detection.decision.decision_gate import apply_decision_gate
+from x5crop.detection.decision.model import FinalDetection
+from x5crop.detection.evidence.content.frame_support import (
+    FrameContentEvidence,
+    FrameContentObservation,
+)
+from x5crop.detection.evidence.content.holder_texture import HolderTextureEvidence
+from x5crop.detection.evidence.content.preservation import ContentPreservationEvidence
+from x5crop.detection.evidence.exposure_overlap import ExposureOverlapEvidence
 from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
+from x5crop.detection.evidence.frame_topology import FrameTopologyEvidence
+from x5crop.detection.evidence.holder_occupancy import (
+    HolderOccupancyEvidence,
+    StripCompletenessEvidence,
+)
+from x5crop.detection.evidence.outer_alignment import OuterAlignmentEvidence
+from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
+from x5crop.detection.evidence.separator_continuity import SeparatorContinuityEvidence
 from x5crop.detection.evidence.state import EvidenceState
+from x5crop.detection.evidence.transform_geometry import TransformGeometryEvidence
+from x5crop.detection.gate_checks import GateCheck
+from x5crop.detection.geometry import CandidateGeometry
+from x5crop.detection.physical.photo_size import FrameDimensionEvidence
+from x5crop.detection.physical.spans import FilmSpan, HolderSpan
 from x5crop.domain import (
     AxisBleedParameters,
     Box,
-    DetectionCandidate,
-    FinalDetection,
     MeasurementProvenance,
     OutputProtectionPlan,
     SeparatorBandObservation,
 )
+from x5crop.units import ScanCalibration
 
 
 def separator_observation(
     index: int,
     center: float,
-    score: float,
-    method: str,
+    score: float = 1.0,
+    method: str = "detected",
     start: float | None = None,
     end: float | None = None,
 ) -> SeparatorBandObservation:
@@ -30,9 +72,9 @@ def separator_observation(
         score=score,
         method=method,
         provenance=MeasurementProvenance(
-            root_measurement="test_fixture",
-            source=method,
-            dependencies=(),
+            root_measurement="separator_profile",
+            source="test_fixture",
+            dependencies=("gray_work",),
         ),
         start=start,
         end=end,
@@ -40,86 +82,297 @@ def separator_observation(
     )
 
 
-def candidate_gate_detail(
+def candidate_gate_fixture(
     *,
     passed: bool = True,
     failed_check: str = "boundary_proof",
-) -> dict[str, Any]:
-    checks = []
-    if not passed:
-        checks.append(
-            {
-                "code": failed_check,
-                "stage": "candidate",
-                "state": "contradicted",
-                "consequence": "blocker",
-                "blocks": True,
-                "detail": {},
-            }
+) -> CandidateGateAssessment:
+    codes = (
+        "frame_topology_integrity",
+        "content_preservation",
+        "photo_geometry_consistency",
+        "evidence_independence",
+        "boundary_proof",
+    )
+    checks = tuple(
+        GateCheck(
+            code=code,
+            stage="candidate",
+            state=(
+                EvidenceState.CONTRADICTED
+                if not passed and code == failed_check
+                else EvidenceState.SUPPORTED
+            ),
+            consequence="blocker",
         )
-    return {
-        "passed": passed,
-        "checks": checks,
-        "proof_paths": (
-            [
-                {
-                    "code": "separator_led",
-                    "state": "supported",
-                    "detail": {},
-                }
-            ]
-            if passed
-            else []
+        for code in codes
+    )
+    proof_paths = (
+        BoundaryProofPath(
+            code="separator_led",
+            state=(EvidenceState.SUPPORTED if passed else EvidenceState.UNAVAILABLE),
+            supporting_evidence=("test_fixture",),
         ),
-        "failed_checks": [] if passed else [failed_check],
-        "diagnostics": [],
-    }
+    )
+    return CandidateGateAssessment(
+        checks=checks,
+        proof_paths=proof_paths,
+        diagnostics=(),
+    )
+
+
+def candidate_evidence_fixture(
+    *,
+    content_preservation: EvidenceState = EvidenceState.SUPPORTED,
+) -> CandidateEvidence:
+    outer = Box(0, 0, 200, 100)
+    frames = (Box(0, 0, 100, 100), Box(100, 0, 200, 100))
+    holder = HolderSpan(outer)
+    film = FilmSpan(outer)
+    completeness = StripCompletenessEvidence(True, True, 2, 2, 2, 1, 1)
+    return CandidateEvidence(
+        frame_topology=FrameTopologyEvidence(
+            EvidenceState.SUPPORTED,
+            2,
+            2,
+            True,
+            True,
+            True,
+            True,
+            (),
+            (),
+            (),
+            frames,
+        ),
+        frame_coverage=FrameCoverageEvidence(
+            EvidenceState.SUPPORTED,
+            "content_runs_covered",
+            (0, 200),
+            (0, 200),
+            ((0, 100), (100, 200)),
+            ((10, 190),),
+            (),
+            0,
+        ),
+        separator_sequence=SeparatorSequenceEvidence(
+            EvidenceState.SUPPORTED,
+            "complete_hard_sequence",
+            1,
+            1,
+            0,
+            (1,),
+            (),
+            (1.0,),
+        ),
+        separator_continuity=SeparatorContinuityEvidence(
+            EvidenceState.SUPPORTED,
+            "supported",
+            (),
+            (separator_observation(1, 100.0, start=95.0, end=105.0),),
+            0.62,
+            0.55,
+        ),
+        frame_dimensions=FrameDimensionEvidence(
+            EvidenceState.SUPPORTED,
+            "photo_widths_consistent",
+            36.0,
+            24.0,
+            1.5,
+            (95.0, 95.0),
+            0.0,
+            (10.0,),
+            0.0,
+            None,
+            None,
+            2.0,
+            0.0,
+            0.0,
+            False,
+        ),
+        frame_content=FrameContentEvidence(
+            EvidenceState.SUPPORTED,
+            "supported",
+            0.5,
+            0.8,
+            0.8,
+            (
+                FrameContentObservation(1, 0.8, 0.8, True, ()),
+                FrameContentObservation(2, 0.8, 0.8, True, ()),
+            ),
+            "synthetic",
+        ),
+        holder_texture=HolderTextureEvidence(
+            EvidenceState.UNAVAILABLE,
+            "holder_slack_unavailable",
+            (),
+            None,
+            None,
+        ),
+        content_preservation=ContentPreservationEvidence(
+            content_preservation,
+            (
+                "content_undercrop_confirmed"
+                if content_preservation == EvidenceState.CONTRADICTED
+                else "supported"
+            ),
+            (),
+            (),
+            (("left",) if content_preservation == EvidenceState.CONTRADICTED else ()),
+            EvidenceState.NOT_APPLICABLE,
+        ),
+        outer_alignment=OuterAlignmentEvidence(
+            EvidenceState.SUPPORTED,
+            "content_contained",
+            outer,
+            Box(10, 10, 190, 90),
+            ("synthetic",),
+            (),
+            (),
+            False,
+            False,
+            10,
+            10,
+            10,
+            10,
+            (),
+        ),
+        holder_occupancy=HolderOccupancyEvidence(
+            EvidenceState.SUPPORTED,
+            completeness,
+            None,
+            200.0,
+            0.0,
+            0.0,
+            None,
+            None,
+            1.0,
+            "filled",
+            False,
+            True,
+            EvidenceState.SUPPORTED,
+            True,
+            holder,
+            film,
+            False,
+        ),
+        partial_edge_safety=PartialEdgeSafetyEvidence(
+            EvidenceState.NOT_APPLICABLE,
+            "full_strip",
+            False,
+            1,
+            1,
+            EvidenceState.SUPPORTED,
+            EvidenceState.SUPPORTED,
+            False,
+            (),
+        ),
+        independence=EvidenceIndependenceEvidence(
+            EvidenceState.SUPPORTED,
+            "independent_outer_and_separator_measurements",
+            "holder_boundary_profile",
+            ("separator_profile",),
+            (),
+        ),
+    )
 
 
 def candidate_fixture(
     *,
     confidence: float = 0.90,
-    candidate_gate_passed: bool = True,
-    failed_check: str = "boundary_proof",
+    failed_candidate_check: str | None = None,
     automatic_processing_supported: bool = True,
-    geometry_disagreement: bool = False,
-) -> DetectionCandidate:
-    return DetectionCandidate(
+    content_preservation: EvidenceState = EvidenceState.SUPPORTED,
+) -> AssessedCandidate:
+    outer = Box(0, 0, 200, 100)
+    frames = (Box(0, 0, 100, 100), Box(100, 0, 200, 100))
+    geometry = CandidateGeometry(
         format_id="135",
         layout="horizontal",
         strip_mode="full",
         count=2,
-        outer=Box(0, 0, 200, 100),
-        frames=[Box(0, 0, 100, 100), Box(100, 0, 200, 100)],
-        gaps=[],
-        confidence=confidence,
-        detail={
-            "automatic_processing_supported": automatic_processing_supported,
-            "candidate_assessment": {
-                "source": "separator",
-                "candidate_gate": candidate_gate_detail(
-                    passed=candidate_gate_passed,
-                    failed_check=failed_check,
+        holder_span=HolderSpan(outer),
+        film_span=FilmSpan(outer),
+        work_frames=frames,
+        image_outer=outer,
+        image_frames=frames,
+        separators=(separator_observation(1, 100.0, start=95.0, end=105.0),),
+        origin=0.0,
+        pitch=100.0,
+        offset_fraction=0.0,
+        source="separator",
+        automatic_processing_supported=automatic_processing_supported,
+        contract="physical_boundary_evidence",
+        outer_proposal_name="synthetic_outer",
+        outer_proposal_strategy="base_outer",
+        outer_provenance=MeasurementProvenance(
+            "holder_boundary_profile",
+            "synthetic_outer",
+            ("gray_work",),
+            ("left", "right"),
+        ),
+    )
+    return AssessedCandidate(
+        geometry=geometry,
+        count_hypothesis=CountHypothesis(
+            count=2,
+            strip_mode="full",
+            offsets=(0.0,),
+            placement_source="test_fixture",
+            source="test_fixture",
+            allowed_by_physical_spec=True,
+        ),
+        assessment=CandidateAssessment(
+            evidence=candidate_evidence_fixture(
+                content_preservation=content_preservation,
+            ),
+            scores=CandidateScores(confidence, confidence, 1.0, 1.0, 1.0, confidence),
+            gate=candidate_gate_fixture(
+                passed=failed_candidate_check is None,
+                failed_check=(
+                    "boundary_proof"
+                    if failed_candidate_check is None
+                    else failed_candidate_check
                 ),
-            },
-            "selection_geometry_consensus": {
-                "agreed": not geometry_disagreement,
-                "geometry_disagreement": geometry_disagreement,
-                "cluster_count": 2 if geometry_disagreement else 1,
-            },
-        },
+            ),
+            diagnostics=(),
+        ),
+    )
+
+
+def selection_fixture(
+    candidate: AssessedCandidate | None = None,
+    *,
+    geometry_disagreement: bool = False,
+) -> SelectionResult:
+    selected = candidate or candidate_fixture()
+    cluster = GeometryCluster((selected,), selected)
+    return SelectionResult(
+        selected=selected,
+        ranked_candidates=(selected,),
+        clusters=(cluster,),
+        consensus="disagreed" if geometry_disagreement else "uncontested",
+        geometry_resolution=GeometryResolution(
+            EvidenceState.SUPPORTED,
+            True,
+            True,
+            True,
+            True,
+            True,
+            True,
+            (),
+        ),
     )
 
 
 def output_protection_fixture(*, feasible: bool = True) -> OutputProtectionPlan:
     return OutputProtectionPlan(
-        base_bleed=AxisBleedParameters(20, 10),
-        output_bleed=AxisBleedParameters(40 if feasible else 50, 10),
-        exposure_overlap_detected=True,
-        required_long_axis_bleed_px=40 if feasible else 80,
-        available_long_axis_bleed_px=50,
-        feasible=feasible,
-        reason=(
+        AxisBleedParameters(20, 10),
+        AxisBleedParameters(40 if feasible else 50, 10),
+        True,
+        40 if feasible else 80,
+        50,
+        feasible,
+        (
             "exposure_overlap_protection_planned"
             if feasible
             else "exposure_overlap_exceeds_bleed_capacity"
@@ -127,62 +380,63 @@ def output_protection_fixture(*, feasible: bool = True) -> OutputProtectionPlan:
     )
 
 
-def supported_frame_coverage() -> FrameCoverageEvidence:
-    return FrameCoverageEvidence(
-        state=EvidenceState.SUPPORTED,
-        reason="content_runs_covered",
-        holder_interval=(0, 200),
-        film_interval=(0, 200),
-        frame_intervals=((0, 200),),
-        content_runs=((0, 200),),
-        uncovered_content=(),
-    )
+def transform_geometry_fixture(
+    state: EvidenceState = EvidenceState.SUPPORTED,
+) -> TransformGeometryEvidence:
+    return TransformGeometryEvidence(state, False, 0.0, 0.0, "test_fixture", 0.0, 1.0)
 
 
 def decide_candidate(
-    candidate: DetectionCandidate | None = None,
+    candidate: AssessedCandidate | None = None,
     *,
-    content_detail: dict[str, Any] | None = None,
-    outer_alignment: dict[str, Any] | None = None,
-    deskew_detail: dict[str, Any] | None = None,
+    geometry_disagreement: bool = False,
     output_protection_feasible: bool = True,
+    transform_state: EvidenceState = EvidenceState.SUPPORTED,
 ) -> FinalDetection:
     return apply_decision_gate(
-        candidate or candidate_fixture(),
-        content_detail
-        or {
-            "used": True,
-            "frame_content_support_available": True,
-        },
-        outer_alignment or {"used": True, "ok": True},
-        supported_frame_coverage(),
-        deskew_detail=deskew_detail or {"applied": False},
-        output_protection_plan=output_protection_fixture(
-            feasible=output_protection_feasible,
+        selection_fixture(
+            candidate,
+            geometry_disagreement=geometry_disagreement,
         ),
+        output_protection_fixture(feasible=output_protection_feasible),
+        ExposureOverlapEvidence(
+            EvidenceState.UNAVAILABLE,
+            "no_exposure_overlap",
+            False,
+            0.0,
+            (),
+            (),
+        ),
+        transform_geometry_fixture(transform_state),
+        ScanCalibration(None, None, "unavailable", False),
     )
 
 
 def final_detection_fixture(
     *,
-    status: str = "approved_auto",
     confidence: float = 0.90,
-    final_review_reasons: list[str] | None = None,
-    detail: dict[str, Any] | None = None,
+    failed_candidate_check: str | None = None,
 ) -> FinalDetection:
-    candidate = candidate_fixture(confidence=confidence)
-    if detail is not None:
-        candidate.detail = dict(detail)
-    else:
-        candidate.detail["decision_summary"] = {
-            "decision_gate": {
-                "passed": status == "approved_auto",
-                "checks": [],
-                "reason_inputs": [],
-            }
-        }
-    return FinalDetection.from_candidate(
+    return decide_candidate(
+        candidate_fixture(
+            confidence=confidence,
+            failed_candidate_check=failed_candidate_check,
+        )
+    )
+
+
+def with_content_preservation(
+    candidate: AssessedCandidate,
+    state: EvidenceState,
+) -> AssessedCandidate:
+    evidence = replace(
+        candidate.assessment.evidence,
+        content_preservation=replace(
+            candidate.assessment.evidence.content_preservation,
+            state=state,
+        ),
+    )
+    return replace(
         candidate,
-        status=status,
-        final_review_reasons=list(final_review_reasons or []),
+        assessment=replace(candidate.assessment, evidence=evidence),
     )

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Callable, Optional
+from typing import Callable
 
 import numpy as np
 
-from ....domain import Box, OuterCandidate
+from ....domain import Box, MeasurementProvenance
 from ....formats import FormatPhysicalSpec
 from ....cache.separator import cached_separator_profile, cached_separator_width_profile
 from ....geometry.separator_band import SeparatorBand
@@ -16,11 +16,12 @@ from ....policies.runtime.outer import (
 )
 from ....policies.parameters.outer import SeparatorOuterBandParameters
 from ....policies.runtime.separator import SeparatorPolicy
-from ....cache import AnalysisCache
-from ...cache_keys import separator_outer_cache_key
+from ....cache import MeasurementCache
+from ....units import ScanCalibration
 from ..photo_size import PhotoSizeConsistency, photo_size_consistency_from_separator_bands
-from .common import unique_outer_candidates
+from .common import unique_outer_proposals
 from .separator_bands import collect_separator_outer_bands, separator_outer_band_sequences
+from .types import OuterProposal
 
 
 LOCAL_SEPARATOR_OUTER = "local"
@@ -34,7 +35,6 @@ _SeparatorSequenceRanker = Callable[
 
 @dataclass(frozen=True)
 class SeparatorOuterPlan:
-    outer_scope: str
     name: str
     candidate_prefix: str
     full_width: bool
@@ -55,8 +55,6 @@ class SeparatorOuterSequenceRank:
     rank: float
     sequence: tuple[SeparatorBand, ...]
     expected_ratio: float
-    photo_size_detail: dict
-    sequence_score: float
 
 
 def separator_outer_scopes(
@@ -74,18 +72,20 @@ def separator_outer_scopes(
 
 def separator_derived_outer_candidates(
     gray_work: np.ndarray,
-    base_candidates: list[OuterCandidate],
+    base_candidates: list[OuterProposal],
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
-    cache: Optional[AnalysisCache],
+    cache: MeasurementCache,
+    calibration: ScanCalibration,
+    long_axis: str,
     *,
     separator_geometry_policy: SeparatorGeometryProposalPolicy,
     separator_policy: SeparatorPolicy,
     outer_scopes: tuple[str, ...] | None = None,
     explicit_count: bool = True,
     sequence_ranker: _SeparatorSequenceRanker,
-) -> list[OuterCandidate]:
+) -> list[OuterProposal]:
     if strip_mode not in {"full", "partial"} or count <= 1:
         return []
     aspect = float(fmt.horizontal_content_aspect)
@@ -97,7 +97,7 @@ def separator_derived_outer_candidates(
         strip_mode,
         explicit_count,
     )
-    candidates: list[OuterCandidate] = []
+    candidates: list[OuterProposal] = []
     for outer_scope in selected_scopes:
         plan = _scope_plan(
             outer_scope,
@@ -114,18 +114,18 @@ def separator_derived_outer_candidates(
             _separator_outer_candidates_for_plan(
                 gray_work,
                 base_candidates,
-                fmt,
                 count,
-                strip_mode,
                 float(aspect),
                 plan,
                 cache,
+                calibration,
+                long_axis,
                 separator_geometry_policy,
                 separator_policy,
                 sequence_ranker,
             )
         )
-    return unique_outer_candidates(candidates)
+    return unique_outer_proposals(candidates)
 
 
 def _candidate_prefix(outer_scope: str) -> str | None:
@@ -166,7 +166,6 @@ def _scope_plan(
         if candidate_prefix is None:
             return None
         return SeparatorOuterPlan(
-            outer_scope=LOCAL_SEPARATOR_OUTER,
             name=LOCAL_SEPARATOR_OUTER,
             candidate_prefix=candidate_prefix,
             full_width=False,
@@ -190,7 +189,6 @@ def _scope_plan(
         if candidate_prefix is None:
             return None
         return SeparatorOuterPlan(
-            outer_scope=FULL_WIDTH_SEPARATOR_OUTER,
             name=FULL_WIDTH_SEPARATOR_OUTER,
             candidate_prefix=candidate_prefix,
             full_width=True,
@@ -220,30 +218,24 @@ def _mode_active(
 
 def _separator_outer_candidates_for_plan(
     gray_work: np.ndarray,
-    base_candidates: list[OuterCandidate],
-    fmt: FormatPhysicalSpec,
+    base_candidates: list[OuterProposal],
     count: int,
-    strip_mode: str,
     aspect: float,
     plan: SeparatorOuterPlan,
-    cache: Optional[AnalysisCache],
+    cache: MeasurementCache,
+    calibration: ScanCalibration,
+    long_axis: str,
     separator_geometry_policy: SeparatorGeometryProposalPolicy,
     separator_policy: SeparatorPolicy,
     sequence_ranker: _SeparatorSequenceRanker,
-) -> list[OuterCandidate]:
-    if cache is not None:
-        candidate_key = separator_outer_cache_key(plan.name, base_candidates, fmt, count, strip_mode)
-        cached_candidates = cache.separator_outer_candidates.get(candidate_key)
-        if cached_candidates is not None:
-            return list(cached_candidates)
-
+) -> list[OuterProposal]:
     h, w = gray_work.shape
     source_candidates = sorted(
         [candidate for candidate in base_candidates if candidate.box.valid()],
         key=lambda candidate: candidate.box.width * candidate.box.height,
         reverse=True,
     )[: plan.source_candidate_count]
-    candidates: list[OuterCandidate] = []
+    candidates: list[OuterProposal] = []
     expected_gaps = count - 1
     band_policy = separator_geometry_policy.band
 
@@ -259,20 +251,25 @@ def _separator_outer_candidates_for_plan(
         if frame_long <= 1.0:
             continue
 
-        profile = cached_separator_profile(cache, gray_work, outer, separator_policy.profile)
+        profile = cached_separator_profile(
+            cache,
+            outer,
+            separator_policy.profile,
+        )
         band_collection = collect_separator_outer_bands(
             profile,
             short_axis,
             float(outer.width),
             band_policy,
             separator_policy.gap_search,
+            calibration,
+            long_axis,
         )
         bands = list(band_collection.bands)
         edge_margin = band_collection.edge_margin
         if plan.uses_width_aware_bands:
             width_profile = cached_separator_width_profile(
                 cache,
-                gray_work,
                 outer,
                 separator_policy.width_profile_search,
             )
@@ -281,6 +278,8 @@ def _separator_outer_candidates_for_plan(
                 short_axis,
                 float(outer.width),
                 separator_policy.width_profile_search,
+                calibration,
+                long_axis,
             )
             bands.extend(width_band_collection.bands)
             edge_margin = max(float(edge_margin), float(width_band_collection.edge_margin))
@@ -326,35 +325,23 @@ def _separator_outer_candidates_for_plan(
                 continue
             ratio_suffix = f"_r{expected_ratio:.3f}"
             candidates.append(
-                OuterCandidate(
+                OuterProposal(
                     f"{plan.candidate_prefix}_{source.name}_{rank}{ratio_suffix}",
                     proposed,
                     "separator_outer",
-                    {
-                        "family": "separator_derived_outer",
-                        "outer_scope": plan.outer_scope,
-                        "separator_gap_search": "standard_and_observed_width",
-                        "source_outer": source.name,
-                        "photo_size_consistency": ranked_sequence.photo_size_detail,
-                        "separator_sequence_score": float(ranked_sequence.sequence_score),
-                        "separator_bands": [
-                            {
-                                "start": float(band.start),
-                                "end": float(band.end),
-                                "center": float(band.center),
-                                "width": float(band.width),
-                                "score": float(band.score),
-                            }
-                            for band in sequence
-                        ],
-                    },
+                    MeasurementProvenance(
+                        root_measurement="separator_profile",
+                        source=plan.name,
+                        dependencies=(
+                            source.provenance.root_measurement,
+                            "count",
+                            "placement",
+                        ),
+                    ),
                 )
             )
 
-    result = unique_outer_candidates(candidates)[: plan.max_candidates]
-    if cache is not None:
-        cache.separator_outer_candidates[candidate_key] = list(result)
-    return result
+    return unique_outer_proposals(candidates)[: plan.max_candidates]
 
 
 def _rank_separator_sequences(
@@ -422,8 +409,6 @@ def _rank_separator_sequences(
                     rank=float(rank),
                     sequence=sequence,
                     expected_ratio=float(expected_ratio),
-                    photo_size_detail=photo_size.detail(),
-                    sequence_score=float(sequence_score),
                 )
             )
     return sorted(ranked, key=lambda item: item.rank)

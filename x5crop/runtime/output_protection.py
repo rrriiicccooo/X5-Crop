@@ -1,38 +1,48 @@
 from __future__ import annotations
 
-import numpy as np
+from dataclasses import dataclass
 
-from ..cache import AnalysisCache
-from ..domain import AxisBleedParameters, DetectionCandidate, OutputProtectionPlan
-from ..detection.evidence.exposure_overlap import exposure_overlap_evidence_detail
-from ..output.protection import (
-    output_protection_plan,
+from ..domain import AxisBleedParameters, OutputProtectionPlan
+from ..detection.candidate.model import AssessedCandidate
+from ..detection.evidence.exposure_overlap import (
+    ExposureOverlapEvidence,
+    exposure_overlap_evidence,
 )
-from ..policies.runtime.policy import DetectionPolicy
-from ..run_config import RunConfig
+from ..detection.context import DetectionContext
+from ..output.protection import output_protection_plan
+
+
+@dataclass(frozen=True)
+class PreparedOutputProtection:
+    evidence: ExposureOverlapEvidence
+    plan: OutputProtectionPlan
 
 
 def prepare_output_protection(
-    gray: np.ndarray,
-    detection: DetectionCandidate,
-    config: RunConfig,
-    analysis_cache: AnalysisCache,
-    policy: DetectionPolicy,
-) -> OutputProtectionPlan:
-    evidence = exposure_overlap_evidence_detail(
-        gray,
-        detection,
-        analysis_cache,
-        separator_policy=policy.separator,
-        exposure_overlap_policy=policy.exposure_overlap_evidence,
+    candidate: AssessedCandidate,
+    context: DetectionContext,
+    base_bleed: AxisBleedParameters,
+) -> PreparedOutputProtection:
+    evidence = exposure_overlap_evidence(
+        candidate.geometry,
+        context.measurement_cache,
+        separator_policy=context.policy.separator,
+        parameters=context.policy.exposure_overlap_evidence,
+    )
+    geometry = candidate.geometry
+    long_axis = "x" if geometry.layout == "horizontal" else "y"
+    long_axis_bleed_capacity_px = (
+        context.policy.output.exposure_overlap_protection.long_axis_bleed_capacity.resolve_px(
+            context.scan_calibration,
+            axis=long_axis,
+            reference_px=max(1.0, float(geometry.pitch)),
+        )
     )
     plan = output_protection_plan(
-        evidence,
-        AxisBleedParameters(
-            long_axis=int(config.bleed_x),
-            short_axis=int(config.bleed_y),
-        ),
-        policy.output.exposure_overlap_protection,
+        evidence.detected,
+        evidence.widest_overlap_band_px,
+        base_bleed,
+        context.policy.output.exposure_overlap_protection,
+        long_axis_bleed_capacity_px=long_axis_bleed_capacity_px,
     )
-    detection.detail["exposure_overlap_evidence"] = evidence
-    return plan
+    return PreparedOutputProtection(evidence=evidence, plan=plan)

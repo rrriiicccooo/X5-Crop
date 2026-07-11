@@ -11,30 +11,8 @@ from ...geometry.detection_parameters import (
     SeparatorProfileParameters,
     SeparatorWidthProfileSearchParameters,
 )
-from ..parameters.separator import (
-    SeparatorSupportParameters,
-    SeparatorWidthProfileParameters,
-)
+from ..parameters.separator import SeparatorWidthProfileParameters
 from ...strip_modes import FULL, PARTIAL
-
-
-@dataclass(frozen=True)
-class SeparatorGeometrySupportModePolicy:
-    min_hard_ratio: float = 0.0
-    max_equal_gaps: int = 0
-    max_photo_width_cv: float = 0.040
-    max_outer_area_ratio: float = 0.995
-
-
-@dataclass(frozen=True)
-class SeparatorGeometrySupportPolicy:
-    detected_geometry: SeparatorGeometrySupportModePolicy | None = None
-
-    def active_modes(self) -> tuple[str, ...]:
-        modes: list[str] = []
-        if self.detected_geometry is not None:
-            modes.append("detected_geometry")
-        return tuple(modes)
 
 
 @dataclass(frozen=True)
@@ -50,8 +28,6 @@ class SeparatorRefinementFamilyPolicy:
     mode: str = "off"
     phase: str = "primary"
     strip_modes: tuple[str, ...] = (FULL,)
-    target_gap_methods: tuple[str, ...] = ()
-    model_promotion_gap_methods: tuple[str, ...] = ()
 
     def available_for(self, strip_mode: str, explicit_count: bool) -> bool:
         if self.mode == "off":
@@ -86,11 +62,9 @@ class SeparatorRefinementPolicy:
 
 @dataclass(frozen=True)
 class SeparatorPolicy:
-    support: SeparatorSupportParameters
     width_profile: SeparatorWidthProfilePolicy = field(default_factory=SeparatorWidthProfilePolicy)
     width_profile_search: SeparatorWidthProfileSearchParameters = field(default_factory=SeparatorWidthProfileSearchParameters)
     refinement: SeparatorRefinementPolicy = field(default_factory=SeparatorRefinementPolicy)
-    geometry_support: SeparatorGeometrySupportPolicy = field(default_factory=SeparatorGeometrySupportPolicy)
     edge_pair: EdgePairParameters = field(default_factory=EdgePairParameters)
     hard_gap_trust: HardGapTrustParameters = field(default_factory=HardGapTrustParameters)
     nearby_refinement: NearbySeparatorRefinementParameters = field(default_factory=NearbySeparatorRefinementParameters)

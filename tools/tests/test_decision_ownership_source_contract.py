@@ -16,7 +16,13 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
         from x5crop.detection.decision.decision_gate import apply_decision_gate
 
         parameters = signature(apply_decision_gate).parameters
-        for name in ("deskew_detail", "output_protection_plan"):
+        for name in (
+            "selection",
+            "output_protection_plan",
+            "exposure_overlap",
+            "transform_geometry",
+            "scan_calibration",
+        ):
             self.assertIs(parameters[name].default, Parameter.empty)
 
     def test_decision_consumes_evidence_without_generating_candidates(self) -> None:
@@ -38,6 +44,7 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
 
     def test_decision_gate_is_the_only_runtime_final_detection_factory(self) -> None:
         offenders: list[str] = []
+        restoration = PROJECT_ROOT / "x5crop" / "report" / "restoration.py"
         for path in (PROJECT_ROOT / "x5crop").rglob("*.py"):
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(tree):
@@ -45,7 +52,11 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
                     continue
                 direct = isinstance(node.func, ast.Name) and node.func.id == "FinalDetection"
                 factory = isinstance(node.func, ast.Attribute) and node.func.attr == "from_candidate"
-                if (direct or factory) and path.name != "decision_gate.py":
+                if (
+                    (direct or factory)
+                    and path.name != "decision_gate.py"
+                    and path != restoration
+                ):
                     offenders.append(str(path.relative_to(PROJECT_ROOT)))
         self.assertEqual(sorted(set(offenders)), [])
 
@@ -54,12 +65,12 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
         status_owners: list[str] = []
         for path in DECISION_ROOT.glob("*.py"):
             source = path.read_text(encoding="utf-8")
-            if "FinalDetection.from_candidate" in source:
+            if "FinalDetection(" in source:
                 factories.append(path.name)
             if '"approved_auto"' in source or '"needs_review"' in source:
                 status_owners.append(path.name)
         self.assertEqual(factories, ["decision_gate.py"])
-        self.assertEqual(status_owners, ["decision_gate.py"])
+        self.assertEqual(status_owners, ["model.py"])
 
     def test_only_candidate_and_decision_gate_types_exist(self) -> None:
         gate_classes: set[str] = set()
@@ -76,11 +87,13 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
         )
 
     def test_decision_gate_uses_typed_assessment_and_specific_projection(self) -> None:
-        source = (DECISION_ROOT / "decision_gate.py").read_text(encoding="utf-8")
-        self.assertIn("class DecisionGateInput", source)
-        self.assertIn("class DecisionGateAssessment", source)
-        self.assertIn("_CANDIDATE_REASON_BY_CHECK", source)
-        self.assertIn('"decision_gate": decision_gate.report_detail()', source)
+        gate_source = (DECISION_ROOT / "decision_gate.py").read_text(encoding="utf-8")
+        model_source = (DECISION_ROOT / "model.py").read_text(encoding="utf-8")
+        self.assertIn("class DecisionGateAssessment", model_source)
+        self.assertIn("class FinalDetection", model_source)
+        self.assertIn("_CANDIDATE_REASON_BY_CHECK", gate_source)
+        self.assertNotIn("report_detail", gate_source)
+        self.assertNotIn(".detail", gate_source)
 
     def test_decision_has_no_legacy_signal_cap_or_reducer_surface(self) -> None:
         source = "\n".join(
@@ -98,11 +111,14 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, source)
 
-    def test_decision_summary_contains_only_decision_gate(self) -> None:
-        source = (DECISION_ROOT / "decision_gate.py").read_text(encoding="utf-8")
-        self.assertIn('working.detail["decision_summary"] = {', source)
-        self.assertNotIn('"final_review_reasons":', source)
-        self.assertNotIn('"status":', source)
+    def test_decision_does_not_serialize_report_schema(self) -> None:
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted(DECISION_ROOT.rglob("*.py"))
+        )
+        self.assertNotIn("decision_summary", source)
+        self.assertNotIn("schema_revision", source)
+        self.assertNotIn("typed_read_model", source)
 
     def test_final_reason_mutation_helper_does_not_exist(self) -> None:
         self.assertFalse((DECISION_ROOT / "reasons.py").exists())

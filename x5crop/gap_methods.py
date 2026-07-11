@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from .constants import (
-    GAP_CONTENT,
     GAP_DETECTED,
-    GAP_EDGE_PAIR,
     GAP_EQUAL,
     HARD_GAP_METHODS,
     MODEL_GAP_METHODS,
@@ -14,10 +12,6 @@ GEOMETRY_MODEL_GAP_METHODS = frozenset({GAP_EQUAL})
 
 def is_detected_gap_method(method: str) -> bool:
     return method == GAP_DETECTED
-
-
-def is_edge_pair_gap_method(method: str) -> bool:
-    return method == GAP_EDGE_PAIR
 
 
 def is_hard_gap_method(method: str) -> bool:
@@ -32,28 +26,9 @@ def is_geometry_model_gap_method(method: str) -> bool:
     return method in GEOMETRY_MODEL_GAP_METHODS
 
 
-def is_equal_model_gap_method(method: str) -> bool:
-    return method == GAP_EQUAL
-
-
-def is_content_model_gap_method(method: str) -> bool:
-    return method == GAP_CONTENT
-
-
 def gap_method_role(method: str) -> str:
     if is_hard_gap_method(method):
         return "separator_evidence"
     if is_geometry_model_gap_method(method):
         return "geometry_model"
-    if is_content_model_gap_method(method):
-        return "content_model"
     return "unknown"
-
-
-def gap_method_roles() -> dict[str, str]:
-    return {
-        GAP_DETECTED: gap_method_role(GAP_DETECTED),
-        GAP_EDGE_PAIR: gap_method_role(GAP_EDGE_PAIR),
-        GAP_EQUAL: gap_method_role(GAP_EQUAL),
-        GAP_CONTENT: gap_method_role(GAP_CONTENT),
-    }

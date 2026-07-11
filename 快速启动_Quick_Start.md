@@ -98,7 +98,8 @@ Windows: 双击 X5_Crop_win.bat
 x5_crop_output/
 ```
 
-高置信结果会导出为新的单张 TIFF。低置信或困难图片会进入：
+同时通过物理 `CandidateGate` 和最终 `DecisionGate` 的结果会导出为新的单张 TIFF。
+其他图片会进入：
 
 ```text
 x5_crop_output/needs_review/
@@ -215,8 +216,8 @@ Output folder:
 x5_crop_output/
 ```
 
-High-confidence results are exported as new TIFF files. Weak or difficult files
-go to:
+Results that pass both the physical `CandidateGate` and final `DecisionGate` are
+exported as new TIFF files. All other files go to:
 
 ```text
 x5_crop_output/needs_review/

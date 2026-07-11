@@ -7,7 +7,6 @@ class ContentEvidenceParameters:
     threshold_multiplier: float = 0.70
     threshold_min: float = 0.08
     threshold_max: float = 0.45
-    aspect_ok_max: float = 0.22
     present_mean_min: float = 0.075
     present_coverage_min: float = 0.18
     boundary_band_ratio: float = 0.02
@@ -33,36 +32,11 @@ class ContentMaskParameters:
     threshold_max: float = 0.45
     percentiles: tuple[float, float, float] = (55.0, 75.0, 92.0)
     bbox_min_fraction: float = 0.008
-    outer_min_width_ratio: float = 0.08
-    outer_min_height_ratio: float = 0.08
-    outer_min_width_px: int = 60
-    outer_min_height_px: int = 30
     outer_expand_ratio: float = 0.002
-
-@dataclass(frozen=True)
-class ContentCandidateParameters:
-    expected_width_min_px: float = 8.0
-    coverage_weight: float = 0.38
-    mean_weight: float = 0.30
-    run_weight: float = 0.22
-    aspect_weight: float = 0.10
-    coverage_norm: float = 0.22
-    mean_norm: float = 0.16
-    aspect_norm: float = 0.18
-    weak_coverage: float = 0.14
-    aspect_uncertain: float = 0.18
 
 @dataclass(frozen=True)
 class ContentSupportParameters:
     coverage_norm: float = 0.22
     mean_norm: float = 0.16
-    aspect_norm: float = 0.22
     coverage_weight: float = 0.42
     mean_weight: float = 0.40
-    aspect_weight: float = 0.18
-    score_ok: float = 1.0
-    score_weak: float = 0.72
-    score_low_content: float = 0.58
-    score_aspect_conflict: float = 0.35
-    score_unknown: float = 0.50
-    missing_aspect_score: float = 0.75

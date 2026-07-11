@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from ..units import PhysicalLength
 
 
 @dataclass(frozen=True)
@@ -16,7 +18,6 @@ class OuterMaskProfileParameters:
 class OuterBoxDetectionParameters:
     white_x_width_multiplier: float = 1.80
     white_x_extra_ratio: float = 0.060
-    candidate_max_area: float = 0.94
     mask_expand_ratio: float = 0.002
     mask_profiles: tuple[OuterMaskProfileParameters, ...] = (
         OuterMaskProfileParameters("mask_not_white_246", None, 246),
@@ -44,6 +45,8 @@ class OuterBoxDetectionParameters:
     white_min_height_ratio: float = 0.10
     white_margin_ratio: float = 0.002
     white_margin_min: int = 2
+    tonal_footprint_min_fraction: float = 0.015
+    texture_activity_min: float = 0.040
 
 
 @dataclass(frozen=True)
@@ -92,38 +95,11 @@ class NearbySeparatorRefinementParameters:
 
 
 @dataclass(frozen=True)
-class FrameFitParameters:
-    name: str = "standard_strip_frame_fit"
-    edge_evidence: bool = True
-    min_edge_samples: int = 2
-    nominal_min_ratio: float = 0.72
-    nominal_max_ratio: float = 1.10
-    inlier_tolerance_ratio: float = 0.035
-    min_inlier_tolerance_px: float = 3.0
-    edge_candidate_weight_with_edges: float = 0.18
-    edge_candidate_weight_without_edges: float = 1.0
-    edge_adjust_tolerance_ratio: float = 0.0
-    edge_adjust_tolerance_min: float = 1.0
-    edge_adjust_tolerance_max: float = 1.0
-    edge_pair_score_cap: float = 1.8
-    edge_pair_weight_multiplier: float = 1.20
-    detected_gap_score_cap: float = 1.5
-
-
-@dataclass(frozen=True)
 class GapSearchParameters:
-    radius_ratio: float = 0.16
-    radius_min: int = 6
-    radius_max: int = 900
-    max_width_ratio: float = 0.045
-    max_width_min: int = 2
-    max_width_max: int = 420
-    min_width_ratio: float = 0.001
-    min_width_min: int = 1
-    min_width_max: int = 12
-    guard_ratio: float = 0.035
-    guard_min: int = 3
-    guard_max: int = 220
+    radius: PhysicalLength = PhysicalLength(None, 0.16, 6, 900)
+    max_width: PhysicalLength = PhysicalLength(None, 0.045, 2, 420)
+    min_width: PhysicalLength = PhysicalLength(None, 0.001, 1, 12)
+    guard: PhysicalLength = PhysicalLength(None, 0.035, 3, 220)
     min_score: float = 0.22
     peak_multiplier: float = 0.90
     band_multiplier: float = 0.62
@@ -133,6 +109,7 @@ class GapSearchParameters:
     quality_prominence_weight: float = 0.80
     separator_width_min_mean: float = 0.95
     separator_width_min_prominence: float = 0.02
+    observation_dedup_center_tolerance_ratio: float = 0.01
 
 
 @dataclass(frozen=True)
@@ -173,9 +150,9 @@ class SeparatorWidthProfileSearchParameters:
     max_width_floor: int = 600
     max_width_cap_ratio: float = 0.55
     core_width_cap_ratio: float = 0.20
-    edge_margin_ratio: float = 0.18
-    edge_margin_min: float = 60.0
-    edge_margin_cap_ratio: float = 0.80
+    edge_margin: PhysicalLength = field(
+        default_factory=lambda: PhysicalLength(None, 0.18, 60, 2000)
+    )
     gap_window_ratio: float = 0.28
     gap_window_min: int = 260
     gap_window_floor: int = 300

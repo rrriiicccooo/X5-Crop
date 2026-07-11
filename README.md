@@ -11,13 +11,13 @@
 > those are development source trees, not user-ready release packages.
 
 X5 Crop 是用于 Hasselblad / Imacon X5 胶片片夹长图的 TIFF 自动裁切工具。
-它会将同一文件夹里的长条 TIFF 扫描图拆成单张 TIFF。只有高置信结果会自动导出；
-低置信或证据冲突的图片会进入复核。
+它会将同一文件夹里的长条 TIFF 扫描图拆成单张 TIFF。只有同时通过物理
+`CandidateGate` 和最终 `DecisionGate` 的结果会自动导出；其余图片进入复核。
 
 X5 Crop is a TIFF cropper for long film-strip scans from Hasselblad / Imacon X5
 holders. It splits long-strip TIFF scans into individual TIFF frames. Only
-high-confidence detections are exported automatically; weak or conflicting cases
-are sent to review.
+detections that pass both the physical `CandidateGate` and final `DecisionGate`
+are exported automatically; all other cases are sent to review.
 
 当前 active 脚本版本：V4.9
 
@@ -36,10 +36,8 @@ Current stable release: v4.2.8
 - `needs_review/` 里的文件是原始 TIFF 的复制，用于人工处理。
 - 自动裁切输出会保留原 TIFF 的位深、通道结构、ICC / 色彩空间、resolution、
   metadata 和已知无损压缩行为。
-- 检测阶段保持保守；证据不足、证据冲突或局部片距异常时进入复核。可由输出
+- 检测阶段依据物理证据决定自动导出或复核。可由输出
   bleed 保护的叠片 / 近似叠片证据只扩大最终输出范围，不天然阻断自动裁切。
-- 当前 active policy 更保守；旧版本可 PASS 的困难图片如果
-  证据组合不足，可能改为 `REVIEW`。
 
 ### 推荐下载
 
@@ -126,8 +124,8 @@ debug analysis? [y/n, return=no]:
 ```
 
 只有开启 partial mode 后才会询问 `count`。按 Return 或输入 `auto` 表示自动判断张数。
-auto count 会先读取不依赖 count 的 hard separator 位置，用它排列 count hypotheses 并估算
-连续 placement；只有当前 count 缺少 placement 时才按需测量 observed-width evidence。
+auto count 始终按 format 允许的张数从大到小评估；不依赖 count 的 hard separator 只用于
+估算 placement。只有当前 count 缺少 placement 时才按需测量 observed-width evidence。
 物理 count / placement 是否已确定，与候选能否自动通过分开记录：物理证据已完整时不再搜索
 更小 count，即使最终结果仍需 REVIEW。缺少物理 placement 的 count 使用 content position
 生成最多三个定位提示，不再固定扫描五个比例位置。所有实际候选仍须完成相同的 evidence、
@@ -280,7 +278,7 @@ python3 X5_Crop.py . --format 135 --strip full --deskew-fallback off
 python3 X5_Crop.py . --format 135 --strip full --jobs 1
 ```
 
-低置信结果也强制导出：
+`REVIEW` 结果也强制导出：
 
 ```bash
 python3 X5_Crop.py . --format 135 --strip full --export-review

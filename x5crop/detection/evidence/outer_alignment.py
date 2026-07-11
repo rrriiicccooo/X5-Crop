@@ -1,225 +1,238 @@
 from __future__ import annotations
 
-import copy
-from dataclasses import asdict
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-import numpy as np
-
-from ...domain import Box, DetectionCandidate
+from ...cache import MeasurementCache
+from ...domain import Box
 from ...gap_methods import is_hard_gap_method
-from ...geometry.boxes import box_cache_key, original_box_to_work
-from ...geometry.layout import work_gray
 from ...policies.parameters.outer import OuterAlignmentEvidenceParameters
-from ...cache import AnalysisCache
 from ...utils import bbox_from_mask, clamp_int
-from .evidence_cache_keys import detection_gap_cache_key
+from .state import EvidenceState
+
+if TYPE_CHECKING:
+    from ..geometry import CandidateGeometry
 
 
-def outer_alignment_cache_key(detection: DetectionCandidate, source_w: int, source_h: int) -> tuple[Any, ...]:
-    return (
-        str(detection.format_id),
-        str(detection.layout),
-        str(detection.strip_mode),
-        int(detection.count),
-        int(source_w),
-        int(source_h),
-        box_cache_key(detection.outer),
-        tuple(detection_gap_cache_key(detection)),
-    )
+@dataclass(frozen=True)
+class OuterAlignmentEvidence:
+    state: EvidenceState
+    reason: str
+    film_span: Box
+    content_span: Box | None
+    content_measurement_sources: tuple[str, ...]
+    confirmed_undercrop_sides: tuple[str, ...]
+    unconfirmed_undercrop_sides: tuple[str, ...]
+    overcontains_long_axis: bool
+    overcontains_short_axis: bool
+    leading_slack_px: int
+    trailing_slack_px: int
+    top_slack_px: int
+    bottom_slack_px: int
+    border_tonal_fraction: tuple[tuple[str, float], ...]
 
+    @property
+    def confirmed_undercrop(self) -> bool:
+        return bool(self.confirmed_undercrop_sides)
 
-def outer_content_alignment_detail(
-    gray: np.ndarray,
-    detection: DetectionCandidate,
-    cache: Optional[AnalysisCache],
-    *,
-    alignment_policy: OuterAlignmentEvidenceParameters,
-) -> dict[str, Any]:
-    gray_work = cache.gray_work if cache is not None and cache.layout == detection.layout else work_gray(gray, detection.layout)
-    work_h, work_w = gray_work.shape
-    source_h, source_w = gray.shape
-    detail_key: Optional[tuple[Any, ...]] = None
-    if cache is not None and cache.layout == detection.layout:
-        detail_key = outer_alignment_cache_key(detection, source_w, source_h)
-        cached = cache.outer_alignment_details.get(detail_key)
-        if cached is not None:
-            return copy.deepcopy(cached)
-    outer = original_box_to_work(detection.outer, detection.layout, source_w, source_h).clamp(work_w, work_h)
-    if not outer.valid():
-        return {"used": False, "reason": "invalid_outer"}
+def outer_content_alignment_evidence(
+    geometry: CandidateGeometry,
+    cache: MeasurementCache,
+    parameters: OuterAlignmentEvidenceParameters,
+) -> OuterAlignmentEvidence:
+    if cache.layout != geometry.layout:
+        raise ValueError("outer alignment requires matching analysis cache")
+    work_height, work_width = cache.gray_work.shape
+    film = geometry.film_span.box.clamp(work_width, work_height)
+    if not film.valid():
+        return OuterAlignmentEvidence(
+            EvidenceState.UNAVAILABLE,
+            "invalid_film_span",
+            film,
+            None,
+            (),
+            (),
+            (),
+            False,
+            False,
+            0,
+            0,
+            0,
+            0,
+            (),
+        )
 
-    candidates: list[tuple[str, Box]] = []
-    for threshold in alignment_policy.content_bbox_thresholds:
+    measured: list[tuple[str, Box]] = []
+    for threshold in parameters.content_bbox_thresholds:
         box = bbox_from_mask(
-            gray_work < int(threshold),
-            min_row_fraction=float(alignment_policy.content_bbox_min_row_fraction),
-            min_col_fraction=float(alignment_policy.content_bbox_min_col_fraction),
+            cache.gray_work < int(threshold),
+            min_row_fraction=float(parameters.content_bbox_min_row_fraction),
+            min_col_fraction=float(parameters.content_bbox_min_col_fraction),
         )
         if box is not None and box.valid():
-            candidates.append((f"gray_lt_{threshold}", box))
-    if not candidates:
-        return {"used": False, "reason": "no_content_bbox"}
+            measured.append((f"gray_lt_{threshold}", box))
+    if not measured:
+        return OuterAlignmentEvidence(
+            EvidenceState.UNAVAILABLE,
+            "content_span_unavailable",
+            film,
+            None,
+            (),
+            (),
+            (),
+            False,
+            False,
+            0,
+            0,
+            0,
+            0,
+            (),
+        )
 
-    source, content_box = candidates[0]
-    pitch = float(outer.width) / float(max(1, detection.count))
-    long_slack_left = max(0, content_box.left - outer.left)
-    long_slack_right = max(0, outer.right - content_box.right)
-    short_slack_top = max(0, content_box.top - outer.top)
-    short_slack_bottom = max(0, outer.bottom - content_box.bottom)
-    long_undercrop_left = max(0, outer.left - content_box.left)
-    long_undercrop_right = max(0, content_box.right - outer.right)
-    short_undercrop_top = max(0, outer.top - content_box.top)
-    short_undercrop_bottom = max(0, content_box.bottom - outer.bottom)
-    max_long_slack = max(long_slack_left, long_slack_right)
-    max_short_slack = max(short_slack_top, short_slack_bottom)
-    max_long_undercrop = max(long_undercrop_left, long_undercrop_right)
-    max_short_undercrop = max(short_undercrop_top, short_undercrop_bottom)
-    long_slack_ratio = float(max_long_slack) / max(1.0, pitch)
-    short_slack_ratio = float(max_short_slack) / max(1.0, float(outer.height))
-    long_undercrop_ratio = float(max_long_undercrop) / max(1.0, pitch)
-    short_undercrop_ratio = float(max_short_undercrop) / max(1.0, float(outer.height))
-    content_width_ratio = float(content_box.width) / max(1.0, float(outer.width))
-    content_height_ratio = float(content_box.height) / max(1.0, float(outer.height))
-    white_edge_long_slack_min = clamp_int(
-        pitch * alignment_policy.white_edge_long_ratio,
-        alignment_policy.white_edge_long_min,
-        alignment_policy.white_edge_long_max,
+    content = measured[0][1]
+    pitch = float(film.width) / float(max(1, geometry.count))
+    long_threshold = clamp_int(
+        pitch * parameters.long_threshold_ratio,
+        parameters.long_threshold_min,
+        parameters.long_threshold_max,
     )
-    long_slack_pixel_threshold = clamp_int(
-        pitch * alignment_policy.long_threshold_ratio,
-        alignment_policy.long_threshold_min,
-        alignment_policy.long_threshold_max,
+    short_threshold = clamp_int(
+        float(film.height) * parameters.short_threshold_ratio,
+        parameters.short_threshold_min,
+        parameters.short_threshold_max,
     )
-    short_slack_pixel_threshold = clamp_int(
-        float(outer.height) * alignment_policy.short_threshold_ratio,
-        alignment_policy.short_threshold_min,
-        alignment_policy.short_threshold_max,
-    )
-    undercrop_measurement_counts = {
+    counts = {
         "left": sum(
-            max(0, outer.left - box.left) >= long_slack_pixel_threshold
-            for _source, box in candidates
+            max(0, film.left - box.left) >= long_threshold
+            for _source, box in measured
         ),
         "right": sum(
-            max(0, box.right - outer.right) >= long_slack_pixel_threshold
-            for _source, box in candidates
+            max(0, box.right - film.right) >= long_threshold
+            for _source, box in measured
         ),
         "top": sum(
-            max(0, outer.top - box.top) >= short_slack_pixel_threshold
-            for _source, box in candidates
+            max(0, film.top - box.top) >= short_threshold
+            for _source, box in measured
         ),
         "bottom": sum(
-            max(0, box.bottom - outer.bottom) >= short_slack_pixel_threshold
-            for _source, box in candidates
+            max(0, box.bottom - film.bottom) >= short_threshold
+            for _source, box in measured
         ),
     }
-    confirmed_undercrop_sides = sorted(
-        side
-        for side, count in undercrop_measurement_counts.items()
-        if count >= int(alignment_policy.undercrop_confirmation_min_measurements)
+    minimum = int(parameters.undercrop_confirmation_min_measurements)
+    confirmed = tuple(side for side, count in counts.items() if count >= minimum)
+    unconfirmed = tuple(
+        side for side, count in counts.items() if 0 < count < minimum
     )
 
+    leading_slack = max(0, content.left - film.left)
+    trailing_slack = max(0, film.right - content.right)
+    top_slack = max(0, content.top - film.top)
+    bottom_slack = max(0, film.bottom - content.bottom)
+    max_long_slack = max(leading_slack, trailing_slack)
+    max_short_slack = max(top_slack, bottom_slack)
+    long_slack_ratio = float(max_long_slack) / max(1.0, pitch)
+    short_slack_ratio = float(max_short_slack) / max(1.0, float(film.height))
+
+    crop = cache.gray_work[film.top : film.bottom, film.left : film.right]
     edge_band = max(
-        int(alignment_policy.border_band_min_px),
+        int(parameters.border_band_min_px),
         min(
-            int(alignment_policy.border_band_max_px),
-            int(round(min(outer.width, outer.height) * alignment_policy.border_band_ratio)),
+            int(parameters.border_band_max_px),
+            int(round(min(film.width, film.height) * parameters.border_band_ratio)),
         ),
     )
-    outer_crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
-    if outer_crop.size:
-        left_band = outer_crop[:, :min(edge_band, outer_crop.shape[1])]
-        right_band = outer_crop[:, max(0, outer_crop.shape[1] - edge_band):]
-        top_band = outer_crop[:min(edge_band, outer_crop.shape[0]), :]
-        bottom_band = outer_crop[max(0, outer_crop.shape[0] - edge_band):, :]
-        border_dark_fraction = {
-            "left": float((left_band < alignment_policy.border_dark_threshold).mean()) if left_band.size else 0.0,
-            "right": float((right_band < alignment_policy.border_dark_threshold).mean()) if right_band.size else 0.0,
-            "top": float((top_band < alignment_policy.border_dark_threshold).mean()) if top_band.size else 0.0,
-            "bottom": float((bottom_band < alignment_policy.border_dark_threshold).mean()) if bottom_band.size else 0.0,
+    if crop.size:
+        samples = {
+            "left": crop[:, : min(edge_band, crop.shape[1])],
+            "right": crop[:, max(0, crop.shape[1] - edge_band) :],
+            "top": crop[: min(edge_band, crop.shape[0]), :],
+            "bottom": crop[max(0, crop.shape[0] - edge_band) :, :],
         }
+        tonal = tuple(
+            (
+                side,
+                float((sample < parameters.border_dark_threshold).mean())
+                if sample.size
+                else 0.0,
+            )
+            for side, sample in samples.items()
+        )
     else:
-        border_dark_fraction = {"left": 0.0, "right": 0.0, "top": 0.0, "bottom": 0.0}
+        tonal = ()
 
-    edge_hard_anchors = (
-        detection.strip_mode == "full"
-        and len(detection.gaps) >= 2
-        and is_hard_gap_method(detection.gaps[0].method)
-        and is_hard_gap_method(detection.gaps[-1].method)
+    edge_hard_anchors = bool(
+        geometry.strip_mode == "full"
+        and len(geometry.separators) >= 2
+        and is_hard_gap_method(geometry.separators[0].method)
+        and is_hard_gap_method(geometry.separators[-1].method)
     )
-    white_edge_slack = (
+    content_width_ratio = float(content.width) / max(1.0, float(film.width))
+    white_edge_threshold = clamp_int(
+        pitch * parameters.white_edge_long_ratio,
+        parameters.white_edge_long_min,
+        parameters.white_edge_long_max,
+    )
+    tonal_by_side = dict(tonal)
+    white_holder_slack = bool(
         edge_hard_anchors
-        and content_width_ratio >= alignment_policy.content_width_min
-        and max_short_slack <= max(
-            int(alignment_policy.edge_short_min_px),
-            int(round(float(outer.height) * alignment_policy.edge_short_ratio)),
+        and content_width_ratio >= parameters.content_width_min
+        and max_short_slack
+        <= max(
+            int(parameters.edge_short_min_px),
+            int(round(float(film.height) * parameters.edge_short_ratio)),
         )
         and (
-            (long_slack_left >= white_edge_long_slack_min and float(border_dark_fraction.get("left", 1.0)) <= alignment_policy.edge_dark_max)
-            or (long_slack_right >= white_edge_long_slack_min and float(border_dark_fraction.get("right", 1.0)) <= alignment_policy.edge_dark_max)
+            leading_slack >= white_edge_threshold
+            and tonal_by_side.get("left", 1.0) <= parameters.edge_dark_max
+            or trailing_slack >= white_edge_threshold
+            and tonal_by_side.get("right", 1.0) <= parameters.edge_dark_max
         )
     )
-    short_axis_semantic_ok = True
-    if alignment_policy.short_requires_hard_anchors:
-        short_axis_semantic_ok = short_axis_semantic_ok and edge_hard_anchors
-    if alignment_policy.short_content_height_max < 1.0:
-        short_axis_semantic_ok = short_axis_semantic_ok and content_height_ratio <= alignment_policy.short_content_height_max
+    overcontains_long = bool(
+        long_slack_ratio > parameters.long_excess_ratio
+        or (
+            max_long_slack >= long_threshold
+            and long_slack_ratio > parameters.long_excess_threshold_ratio
+        )
+        or white_holder_slack
+    )
+    short_semantic = bool(
+        (not parameters.short_requires_hard_anchors or edge_hard_anchors)
+        and (
+            parameters.short_content_height_max >= 1.0
+            or float(content.height) / max(1.0, float(film.height))
+            <= parameters.short_content_height_max
+        )
+    )
+    overcontains_short = bool(
+        short_semantic
+        and short_slack_ratio > parameters.short_excess_ratio
+        and max_short_slack >= short_threshold
+    )
 
-    overcontains_long = long_slack_ratio > alignment_policy.long_excess_ratio or (max_long_slack >= long_slack_pixel_threshold and long_slack_ratio > alignment_policy.long_excess_threshold_ratio) or white_edge_slack
-    overcontains_short = short_axis_semantic_ok and short_slack_ratio > alignment_policy.short_excess_ratio and max_short_slack >= short_slack_pixel_threshold
-    undercrops_long = max_long_undercrop >= long_slack_pixel_threshold
-    undercrops_short = max_short_undercrop >= short_slack_pixel_threshold
-    ok = not (undercrops_long or undercrops_short)
-    reason = "ok"
-    if undercrops_long:
-        reason = "content_outside_outer_long_axis"
-    elif undercrops_short:
-        reason = "content_outside_outer_short_axis"
-
-    detail = {
-        "used": True,
-        "ok": ok,
-        "reason": reason,
-        "overcontainment_allowed": True,
-        "content_bbox_source": source,
-        "outer_work_box": asdict(outer),
-        "content_work_box": asdict(content_box),
-        "long_slack_left": int(long_slack_left),
-        "long_slack_right": int(long_slack_right),
-        "short_slack_top": int(short_slack_top),
-        "short_slack_bottom": int(short_slack_bottom),
-        "long_undercrop_left": int(long_undercrop_left),
-        "long_undercrop_right": int(long_undercrop_right),
-        "short_undercrop_top": int(short_undercrop_top),
-        "short_undercrop_bottom": int(short_undercrop_bottom),
-        "max_long_slack": int(max_long_slack),
-        "max_short_slack": int(max_short_slack),
-        "max_long_undercrop": int(max_long_undercrop),
-        "max_short_undercrop": int(max_short_undercrop),
-        "long_slack_ratio": long_slack_ratio,
-        "short_slack_ratio": short_slack_ratio,
-        "long_undercrop_ratio": long_undercrop_ratio,
-        "short_undercrop_ratio": short_undercrop_ratio,
-        "content_width_ratio": content_width_ratio,
-        "content_height_ratio": content_height_ratio,
-        "overcontains_long_axis": bool(overcontains_long),
-        "overcontains_short_axis": bool(overcontains_short),
-        "white_edge_long_slack_min": int(white_edge_long_slack_min),
-        "long_slack_pixel_threshold": int(long_slack_pixel_threshold),
-        "short_slack_pixel_threshold": int(short_slack_pixel_threshold),
-        "border_dark_fraction": border_dark_fraction,
-        "edge_hard_anchors": edge_hard_anchors,
-        "white_edge_slack": white_edge_slack,
-        "short_axis_semantic_ok": bool(short_axis_semantic_ok),
-        "short_content_height_max": float(alignment_policy.short_content_height_max),
-        "undercrop_measurement_counts": undercrop_measurement_counts,
-        "undercrop_confirmation_min_measurements": int(
-            alignment_policy.undercrop_confirmation_min_measurements
-        ),
-        "confirmed_undercrop_sides": confirmed_undercrop_sides,
-        "confirmed_undercrop": bool(confirmed_undercrop_sides),
-    }
-    if detail_key is not None:
-        cache.outer_alignment_details[detail_key] = copy.deepcopy(detail)
-    return detail
+    if confirmed:
+        state = EvidenceState.CONTRADICTED
+        reason = "content_outside_film_span_confirmed"
+    elif unconfirmed:
+        state = EvidenceState.UNAVAILABLE
+        reason = "content_span_measurements_disagree"
+    else:
+        state = EvidenceState.SUPPORTED
+        reason = "content_inside_film_span"
+    return OuterAlignmentEvidence(
+        state=state,
+        reason=reason,
+        film_span=film,
+        content_span=content,
+        content_measurement_sources=tuple(source for source, _box in measured),
+        confirmed_undercrop_sides=confirmed,
+        unconfirmed_undercrop_sides=unconfirmed,
+        overcontains_long_axis=overcontains_long,
+        overcontains_short_axis=overcontains_short,
+        leading_slack_px=int(leading_slack),
+        trailing_slack_px=int(trailing_slack),
+        top_slack_px=int(top_slack),
+        bottom_slack_px=int(bottom_slack),
+        border_tonal_fraction=tonal,
+    )

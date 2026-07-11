@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
 
 
@@ -45,6 +44,7 @@ class MeasurementProvenance:
     root_measurement: str
     source: str
     dependencies: tuple[str, ...]
+    boundary_anchors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -65,55 +65,6 @@ class SeparatorBandObservation:
         if self.start is None or self.end is None:
             return 0.0
         return max(0.0, float(self.end) - float(self.start))
-
-
-@dataclass(frozen=True)
-class OuterCandidate:
-    name: str
-    box: Box
-    strategy: str = "unknown_outer"
-    detail: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class DetectionCandidate:
-    format_id: str
-    layout: str
-    strip_mode: str
-    count: int
-    outer: Box
-    frames: list[Box]
-    gaps: list[SeparatorBandObservation]
-    confidence: float
-    detail: dict[str, Any]
-
-
-@dataclass
-class FinalDetection(DetectionCandidate):
-    status: str
-    final_review_reasons: list[str]
-
-    @classmethod
-    def from_candidate(
-        cls,
-        candidate: DetectionCandidate,
-        *,
-        status: str,
-        final_review_reasons: list[str],
-    ) -> "FinalDetection":
-        return cls(
-            format_id=candidate.format_id,
-            layout=candidate.layout,
-            strip_mode=candidate.strip_mode,
-            count=candidate.count,
-            outer=candidate.outer,
-            frames=deepcopy(candidate.frames),
-            gaps=deepcopy(candidate.gaps),
-            confidence=candidate.confidence,
-            detail=deepcopy(candidate.detail),
-            status=status,
-            final_review_reasons=list(final_review_reasons),
-        )
 
 
 @dataclass
@@ -147,20 +98,6 @@ class OutputProtectionPlan:
     available_long_axis_bleed_px: int
     feasible: bool
     reason: str
-
-    def report_detail(self) -> dict[str, Any]:
-        return {
-            "base_long_axis_bleed_px": int(self.base_bleed.long_axis),
-            "base_short_axis_bleed_px": int(self.base_bleed.short_axis),
-            "output_long_axis_bleed_px": int(self.output_bleed.long_axis),
-            "output_short_axis_bleed_px": int(self.output_bleed.short_axis),
-            "exposure_overlap_detected": bool(self.exposure_overlap_detected),
-            "required_long_axis_bleed_px": int(self.required_long_axis_bleed_px),
-            "available_long_axis_bleed_px": int(self.available_long_axis_bleed_px),
-            "feasible": bool(self.feasible),
-            "reason": self.reason,
-        }
-
 
 @dataclass(frozen=True)
 class ProcessResult:

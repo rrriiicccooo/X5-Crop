@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
-from .....domain import Box
+from ...spans import FilmSpan
 
 
 @dataclass(frozen=True)
 class OuterCorrectionProposal:
-    box: Box
-    name: str
-    strategy: str
-    source_reason: str
-    original_outer_work_box: Any
-    suppress_outer_mismatch: bool = False
-    detail: dict[str, Any] = field(default_factory=dict)
+    corrected_span: FilmSpan
+    family: str
+    reason: str
+
+    @property
+    def box(self):
+        return self.corrected_span.box

@@ -1,25 +1,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from copy import deepcopy
-from typing import Optional
-
 import numpy as np
 
-from ....cache import AnalysisCache
-from ....cache.outer import cached_base_outer_candidates
-from ....domain import OuterCandidate
+from ....cache import MeasurementCache
 from ....formats import FormatPhysicalSpec
-from ....policies.runtime.policy import DetectionPolicy
+from ....policies.runtime.outer import OuterPolicy
+from ....policies.runtime.separator import SeparatorPolicy
+from ....units import ScanCalibration
 from ...guidance.content_outer_edge import edge_anchored_outer_candidates
 from ...guidance.content_outer_floating import floating_content_position_candidates
 from ...physical.outer.base import base_outer_candidates
-from ...physical.outer.common import unique_outer_candidates
+from ...physical.outer.common import unique_outer_proposals
 from ...physical.outer.separator import (
     separator_derived_outer_candidates,
     separator_outer_scopes,
 )
 from ...physical.photo_size import PhotoSizeConsistency
+from ...physical.outer.types import OuterProposal
 
 
 @dataclass(frozen=True)
@@ -61,11 +59,11 @@ def separator_sequence_rank(
 
 
 def outer_proposal_strategy_plan_for_policy(
-    policy: DetectionPolicy,
+    outer_policy: OuterPolicy,
     strip_mode: str = "full",
     explicit_count: bool = True,
 ) -> list[OuterProposalStrategy]:
-    proposal_policy = policy.outer.proposal
+    proposal_policy = outer_policy.proposal
     partial_placement = proposal_policy.geometry.partial_placement
     separator_geometry = proposal_policy.geometry.separator
     separator_mode = (
@@ -104,51 +102,31 @@ def outer_proposal_strategy_plan_for_policy(
     return [*base, *[strategy for strategy in active if strategy.mode == "always"]]
 
 
-def edge_anchored_candidates_trusted(
-    candidates: list[OuterCandidate],
-    policy: DetectionPolicy,
-) -> bool:
-    partial_placement = policy.outer.proposal.geometry.partial_placement
-    return bool(
-        partial_placement.enabled
-        and len(candidates) >= int(partial_placement.edge_trust_min_candidates)
-    )
-
-
 def outer_proposal_candidates(
     gray_work: np.ndarray,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
-    cache: Optional[AnalysisCache],
+    cache: MeasurementCache,
+    scan_calibration: ScanCalibration,
+    long_axis: str,
     *,
-    policy: DetectionPolicy,
+    outer_policy: OuterPolicy,
+    separator_policy: SeparatorPolicy,
+    separator_scopes: tuple[str, ...],
     explicit_count: bool = True,
-) -> list[OuterCandidate]:
-    proposal_key = (
-        fmt.format_id,
-        int(count),
-        str(strip_mode),
-        bool(explicit_count),
-        policy.outer.proposal,
-        policy.separator,
-    )
-    if cache is not None:
-        cached = cache.outer_proposal_candidates.get(proposal_key)
-        if cached is not None:
-            return deepcopy(cached)
+) -> list[OuterProposal]:
     strategy_plan = outer_proposal_strategy_plan_for_policy(
-        policy,
+        outer_policy,
         strip_mode=strip_mode,
         explicit_count=explicit_count,
     )
     enabled_strategy_names = {strategy.name for strategy in strategy_plan if strategy.enabled}
-    base_candidates = cached_base_outer_candidates(
-        cache,
-        policy.outer.proposal.base,
-        lambda: base_outer_candidates(gray_work, policy.outer.proposal.base),
+    base_candidates = base_outer_candidates(
+        gray_work,
+        outer_policy.proposal.base,
     )
-    edge_candidates: list[OuterCandidate] = []
+    edge_candidates: list[OuterProposal] = []
     if "edge_anchor" in enabled_strategy_names:
         edge_candidates = edge_anchored_outer_candidates(
             gray_work,
@@ -156,21 +134,20 @@ def outer_proposal_candidates(
             fmt,
             count,
             strip_mode,
-            cache,
-            partial_placement=policy.outer.proposal.geometry.partial_placement,
+            partial_placement=outer_policy.proposal.geometry.partial_placement,
         )
-    floating_candidates: list[OuterCandidate] = []
-    if "floating" in enabled_strategy_names and not edge_anchored_candidates_trusted(edge_candidates, policy):
+    floating_candidates: list[OuterProposal] = []
+    if "floating" in enabled_strategy_names:
         floating_candidates = floating_content_position_candidates(
             gray_work,
             base_candidates,
             fmt,
             count,
             strip_mode,
-            policy.outer.proposal.geometry.partial_placement,
+            outer_policy.proposal.geometry.partial_placement,
         )
-    pre_separator_candidates = unique_outer_candidates([*base_candidates, *edge_candidates, *floating_candidates])
-    separator_candidates: list[OuterCandidate] = []
+    pre_separator_candidates = unique_outer_proposals([*base_candidates, *edge_candidates, *floating_candidates])
+    separator_candidates: list[OuterProposal] = []
     if "separator_derived" in enabled_strategy_names:
         separator_candidates = separator_derived_outer_candidates(
             gray_work,
@@ -179,19 +156,14 @@ def outer_proposal_candidates(
             count,
             strip_mode,
             cache,
-            separator_geometry_policy=policy.outer.proposal.geometry.separator,
-            separator_policy=policy.separator,
-            outer_scopes=separator_outer_scopes(
-                policy.outer.proposal.geometry.separator,
-                strip_mode,
-                explicit_count,
-            ),
+            scan_calibration,
+            long_axis,
+            separator_geometry_policy=outer_policy.proposal.geometry.separator,
+            separator_policy=separator_policy,
+            outer_scopes=separator_scopes,
             explicit_count=explicit_count,
             sequence_ranker=separator_sequence_rank,
         )
-    result = unique_outer_candidates(
+    return unique_outer_proposals(
         [*base_candidates, *edge_candidates, *floating_candidates, *separator_candidates]
     )
-    if cache is not None:
-        cache.outer_proposal_candidates[proposal_key] = deepcopy(result)
-    return result

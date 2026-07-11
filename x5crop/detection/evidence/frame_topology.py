@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-from typing import Any
+from dataclasses import dataclass
 
 from ...domain import Box
+from .state import EvidenceState
 
 
 def _overlap_pairs(boxes: list[Box]) -> list[tuple[int, int]]:
@@ -22,7 +22,28 @@ def _order_invalid_indexes(boxes: list[Box]) -> list[int]:
     return invalid
 
 
-def frame_topology_evidence(boxes: list[Box], expected_count: int) -> dict[str, Any]:
+@dataclass(frozen=True)
+class FrameTopologyEvidence:
+    state: EvidenceState
+    expected_count: int
+    actual_count: int
+    count_matches: bool
+    extent_valid: bool
+    order_valid: bool
+    overlap_absent: bool
+    invalid_extent_indexes: tuple[int, ...]
+    order_invalid_indexes: tuple[int, ...]
+    overlap_pairs: tuple[tuple[int, int], ...]
+    boxes: tuple[Box, ...]
+
+    @property
+    def supported(self) -> bool:
+        return self.state == EvidenceState.SUPPORTED
+
+def frame_topology_evidence(
+    boxes: list[Box] | tuple[Box, ...],
+    expected_count: int,
+) -> FrameTopologyEvidence:
     invalid_extent_indexes = [
         index
         for index, box in enumerate(boxes, start=1)
@@ -35,20 +56,16 @@ def frame_topology_evidence(boxes: list[Box], expected_count: int) -> dict[str, 
     overlap_absent = not overlap_pairs
     order_valid = not order_invalid_indexes
     ok = count_matches and extent_valid and overlap_absent and order_valid
-    return {
-        "used": True,
-        "evidence_role": "frame_geometry_topology",
-        "physical_rule": "strip_frames_are_ordered_and_non_overlapping",
-        "ok": bool(ok),
-        "expected_count": int(expected_count),
-        "actual_count": int(len(boxes)),
-        "count_matches": bool(count_matches),
-        "frame_extent_valid": bool(extent_valid),
-        "frame_order_valid": bool(order_valid),
-        "frame_monotonicity_ok": bool(order_valid),
-        "frame_overlap_absent": bool(overlap_absent),
-        "invalid_extent_indexes": invalid_extent_indexes,
-        "order_invalid_indexes": order_invalid_indexes,
-        "overlap_pairs": [[left, right] for left, right in overlap_pairs],
-        "boxes": [asdict(box) for box in boxes],
-    }
+    return FrameTopologyEvidence(
+        state=EvidenceState.SUPPORTED if ok else EvidenceState.CONTRADICTED,
+        expected_count=int(expected_count),
+        actual_count=len(boxes),
+        count_matches=count_matches,
+        extent_valid=extent_valid,
+        order_valid=order_valid,
+        overlap_absent=overlap_absent,
+        invalid_extent_indexes=tuple(invalid_extent_indexes),
+        order_invalid_indexes=tuple(order_invalid_indexes),
+        overlap_pairs=tuple(overlap_pairs),
+        boxes=tuple(boxes),
+    )

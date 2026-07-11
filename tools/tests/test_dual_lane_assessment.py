@@ -1,57 +1,67 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
-from unittest.mock import patch
 
-import numpy as np
+from tools.tests.physical_gate_support import candidate_fixture, separator_observation
+from x5crop.detection.candidate.assessment.dual_lane import assess_dual_lane_candidate
+from x5crop.detection.candidate.model import BuiltCandidate
+from x5crop.detection.evidence.state import EvidenceState
+from x5crop.detection.physical.spans import FilmSpan, HolderSpan
+from x5crop.domain import Box, MeasurementProvenance
 
-from x5crop.detection.candidate.assessment.dual_lane import (
-    apply_dual_lane_content_assessment,
-)
-from x5crop.domain import Box, DetectionCandidate
-from x5crop.policies.registry import get_detection_policy
+
+def _parent(lane):
+    frames = tuple(Box(index * 100, 0, (index + 1) * 100, 100) for index in range(4))
+    geometry = replace(
+        lane.geometry,
+        format_id="135-dual",
+        count=4,
+        holder_span=HolderSpan(Box(0, 0, 400, 100)),
+        film_span=FilmSpan(Box(0, 0, 400, 100)),
+        work_frames=frames,
+        image_outer=Box(0, 0, 400, 100),
+        image_frames=frames,
+        separators=(
+            separator_observation(1, 100.0, start=95.0, end=105.0),
+            separator_observation(2, 200.0, start=195.0, end=205.0),
+        ),
+        outer_provenance=MeasurementProvenance(
+            "lane_divider_profile",
+            "measured_gutter",
+            ("gray_work",),
+        ),
+        lane_boxes=(Box(0, 0, 400, 50), Box(0, 50, 400, 100)),
+    )
+    return BuiltCandidate(geometry, lane.count_hypothesis, ("dual_lane",))
 
 
 class DualLaneAssessmentTest(unittest.TestCase):
-    def test_content_conflict_is_diagnostic_not_a_cap_or_final_reason(self) -> None:
-        detection = DetectionCandidate(
-            format_id="135",
-            layout="horizontal",
-            strip_mode="full",
-            count=6,
-            outer=Box(0, 0, 120, 20),
-            frames=[],
-            gaps=[],
-            confidence=0.96,
-            detail={"candidate_assessment": {"diagnostics": []}},
-        )
-        policy = get_detection_policy("135", "full")
+    def test_dual_lane_uses_minimum_component_scores(self) -> None:
+        first = candidate_fixture(confidence=0.90)
+        second = candidate_fixture(confidence=0.70)
+        assessed = assess_dual_lane_candidate(_parent(first), (first, second))
+        self.assertEqual(assessed.assessment.scores.confidence, 0.70)
+        self.assertTrue(assessed.assessment.gate.passed)
 
-        with (
-            patch(
-                "x5crop.detection.candidate.assessment.dual_lane.content_evidence_detail",
-                return_value={"used": True, "support": "aspect_conflict"},
-            ),
-            patch(
-                "x5crop.detection.candidate.assessment.dual_lane.outer_content_alignment_detail",
-                return_value={"used": False},
-            ),
-        ):
-            apply_dual_lane_content_assessment(
-                np.zeros((20, 120), dtype=np.uint8),
-                detection,
-                object(),
-                policy,
-                horizontal_frame_aspect=1.5,
-            )
-
-        self.assertEqual(detection.confidence, 0.96)
-        self.assertFalse(hasattr(detection, "final_review_reasons"))
-        self.assertEqual(
-            detection.detail["candidate_assessment"]["diagnostics"],
-            ["content_aspect_uncertain"],
+    def test_failed_lane_blocks_mode_composition_proof(self) -> None:
+        first = candidate_fixture()
+        second = candidate_fixture(
+            failed_candidate_check="boundary_proof",
         )
-        self.assertNotIn("candidate_confidence_caps", detection.detail)
+        assessed = assess_dual_lane_candidate(_parent(first), (first, second))
+        path = assessed.assessment.gate.proof_paths[0]
+        self.assertEqual(path.code, "mode_composition")
+        self.assertEqual(path.state, EvidenceState.CONTRADICTED)
+        self.assertFalse(assessed.assessment.gate.passed)
+
+    def test_dual_lane_assessment_never_creates_final_status(self) -> None:
+        assessed = assess_dual_lane_candidate(
+            _parent(candidate_fixture()),
+            (candidate_fixture(), candidate_fixture()),
+        )
+        self.assertFalse(hasattr(assessed, "status"))
+        self.assertFalse(hasattr(assessed, "final_review_reasons"))
 
 
 if __name__ == "__main__":

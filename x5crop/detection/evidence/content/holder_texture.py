@@ -1,88 +1,113 @@
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
 
 import numpy as np
 
+from ....cache import MeasurementCache
+from ....domain import Box
 from ....policies.parameters.content import ContentEvidenceParameters
+from ...geometry import CandidateGeometry
+from ..state import EvidenceState
+from .frame_support import FrameContentEvidence
 
 
-def _score_float(item: dict[str, Any], key: str) -> float:
-    try:
-        return float(item.get(key, 0.0))
-    except (TypeError, ValueError):
-        return 0.0
+@dataclass(frozen=True)
+class HolderTextureRegion:
+    name: str
+    box: Box
+    mean: float
+    coverage: float
+    texture: float
 
+@dataclass(frozen=True)
+class HolderTextureEvidence:
+    state: EvidenceState
+    reason: str
+    regions: tuple[HolderTextureRegion, ...]
+    content_holder_mean_contrast: float | None
+    content_holder_coverage_contrast: float | None
 
-def holder_texture_evidence_detail(
-    frame_scores: list[dict[str, Any]],
-    *,
-    content_indexes: list[int],
-    empty_indexes: list[int],
-    evidence_policy: ContentEvidenceParameters,
-) -> dict[str, Any]:
-    score_by_index = {
-        int(item.get("index", 0)): item
-        for item in frame_scores
-        if isinstance(item, dict)
-    }
-    content_scores = [
-        score_by_index[index]
-        for index in content_indexes
-        if index in score_by_index
-    ]
-    holder_scores = [
-        score_by_index[index]
-        for index in empty_indexes
-        if index in score_by_index
-    ]
-    if not holder_scores:
-        return {
-            "used": False,
-            "reason": "no_empty_holder_frames",
-            "evidence_role": "holder_texture_guidance",
-        }
-    holder_means = [_score_float(item, "mean") for item in holder_scores]
-    holder_coverages = [_score_float(item, "coverage") for item in holder_scores]
-    content_means = [_score_float(item, "mean") for item in content_scores]
-    content_coverages = [_score_float(item, "coverage") for item in content_scores]
-    holder_texture_low = (
-        max(holder_means, default=0.0) < float(evidence_policy.present_mean_min)
-        and max(holder_coverages, default=0.0) < float(evidence_policy.present_coverage_min)
+def holder_texture_evidence(
+    geometry: CandidateGeometry,
+    cache: MeasurementCache,
+    frame_content: FrameContentEvidence,
+    parameters: ContentEvidenceParameters,
+) -> HolderTextureEvidence:
+    if cache.layout != geometry.layout or frame_content.threshold is None:
+        return HolderTextureEvidence(
+            EvidenceState.UNAVAILABLE,
+            "content_measurement_unavailable",
+            (),
+            None,
+            None,
+        )
+    holder = geometry.holder_span.box.clamp(
+        cache.gray_work.shape[1],
+        cache.gray_work.shape[0],
     )
-    median_holder_mean = float(np.median(np.array(holder_means, dtype=np.float32)))
-    median_holder_coverage = float(np.median(np.array(holder_coverages, dtype=np.float32)))
-    median_content_mean = (
-        float(np.median(np.array(content_means, dtype=np.float32)))
-        if content_means
-        else None
+    film = geometry.film_span.box.clamp(
+        cache.gray_work.shape[1],
+        cache.gray_work.shape[0],
     )
-    median_content_coverage = (
-        float(np.median(np.array(content_coverages, dtype=np.float32)))
-        if content_coverages
-        else None
+    boxes = (
+        ("leading_holder_slack", Box(holder.left, holder.top, film.left, holder.bottom)),
+        ("trailing_holder_slack", Box(film.right, holder.top, holder.right, holder.bottom)),
     )
-    content_holder_contrast = (
-        None
-        if median_content_mean is None
-        else float(median_content_mean - median_holder_mean)
+    regions: list[HolderTextureRegion] = []
+    for name, box in boxes:
+        if not box.valid():
+            continue
+        sample = cache.content_evidence_float_work[
+            box.top : box.bottom,
+            box.left : box.right,
+        ]
+        if not sample.size:
+            continue
+        regions.append(
+            HolderTextureRegion(
+                name=name,
+                box=box,
+                mean=float(sample.mean()),
+                coverage=float((sample >= frame_content.threshold).mean()),
+                texture=float(sample.std()),
+            )
+        )
+    if not regions:
+        return HolderTextureEvidence(
+            EvidenceState.NOT_APPLICABLE,
+            "no_holder_slack",
+            (),
+            None,
+            None,
+        )
+    holder_mean = float(np.median([region.mean for region in regions]))
+    holder_coverage = float(np.median([region.coverage for region in regions]))
+    holder_low = all(
+        region.mean < float(parameters.present_mean_min)
+        and region.coverage < float(parameters.present_coverage_min)
+        for region in regions
     )
-    coverage_contrast = (
-        None
-        if median_content_coverage is None
-        else float(median_content_coverage - median_holder_coverage)
+    content_mean = frame_content.median_mean
+    content_coverage = frame_content.median_coverage
+    return HolderTextureEvidence(
+        state=(
+            EvidenceState.SUPPORTED
+            if holder_low
+            else EvidenceState.CONTRADICTED
+        ),
+        reason=(
+            "holder_slack_low_texture"
+            if holder_low
+            else "content_like_signal_in_holder_slack"
+        ),
+        regions=tuple(regions),
+        content_holder_mean_contrast=(
+            None if content_mean is None else float(content_mean - holder_mean)
+        ),
+        content_holder_coverage_contrast=(
+            None
+            if content_coverage is None
+            else float(content_coverage - holder_coverage)
+        ),
     )
-    return {
-        "used": True,
-        "evidence_role": "holder_texture_guidance",
-        "physical_rule": "holder_area_is_low_texture_low_content",
-        "holder_texture_low": bool(holder_texture_low),
-        "holder_frame_indexes": list(empty_indexes),
-        "content_frame_indexes": list(content_indexes),
-        "median_holder_mean": median_holder_mean,
-        "median_holder_coverage": median_holder_coverage,
-        "median_content_mean": median_content_mean,
-        "median_content_coverage": median_content_coverage,
-        "content_holder_contrast": content_holder_contrast,
-        "content_holder_coverage_contrast": coverage_contrast,
-    }

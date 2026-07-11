@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import numpy as np
 
-from ...domain import Box, OuterCandidate
+from ...domain import Box, MeasurementProvenance
 from ...formats import FormatPhysicalSpec
 from ...policies.runtime.outer import PartialPlacementGeometryPolicy
-from ...cache import AnalysisCache
 from ...utils import bbox_from_mask, clamp_int
-from ..cache_keys import edge_anchored_outer_cache_key
-from ..physical.outer.common import unique_outer_candidates
+from ..physical.outer.common import unique_outer_proposals
+from ..physical.outer.types import OuterProposal
 
 
 def _edge_anchor_side(content_center: float, edge_limit: float) -> str | None:
@@ -23,14 +20,13 @@ def _edge_anchor_side(content_center: float, edge_limit: float) -> str | None:
 
 def edge_anchored_outer_candidates(
     gray_work: np.ndarray,
-    base_candidates: list[OuterCandidate],
+    base_candidates: list[OuterProposal],
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
-    cache: Optional[AnalysisCache],
     *,
     partial_placement: PartialPlacementGeometryPolicy,
-) -> list[OuterCandidate]:
+) -> list[OuterProposal]:
     edge_anchor_policy = partial_placement.edge_anchor
     if not partial_placement.enabled:
         return []
@@ -41,19 +37,13 @@ def edge_anchored_outer_candidates(
         return []
     if not base_candidates:
         return []
-    if cache is not None:
-        candidate_key = edge_anchored_outer_cache_key(base_candidates, fmt, count, strip_mode)
-        cached_candidates = cache.edge_anchored_outer_candidates.get(candidate_key)
-        if cached_candidates is not None:
-            return list(cached_candidates)
-
     h, w = gray_work.shape
     source_candidates = sorted(
         [candidate for candidate in base_candidates if candidate.box.valid()],
         key=lambda candidate: candidate.box.width * candidate.box.height,
         reverse=True,
     )[:1]
-    candidates: list[OuterCandidate] = []
+    candidates: list[OuterProposal] = []
 
     for source in source_candidates:
         outer = source.box.clamp(w, h)
@@ -119,22 +109,16 @@ def edge_anchored_outer_candidates(
                 if not box.valid() or box.width < min_width:
                     continue
                 candidates.append(
-                    OuterCandidate(
+                    OuterProposal(
                         f"edge_anchor_{strip_mode}_{anchor_name}_{source.name}_r{target_ratio:.3f}",
                         box,
                         "edge_anchor_outer",
-                        {
-                            "family": "content_outer",
-                            "placement": "edge_anchor",
-                            "anchor": anchor_name,
-                            "source_outer": source.name,
-                            "target_ratio": float(target_ratio),
-                            "content_guidance_role": "outer_position_hint",
-                        },
+                        MeasurementProvenance(
+                            "content_guidance",
+                            f"edge_anchor_{anchor_name}",
+                            (source.provenance.root_measurement, "content_bbox"),
+                        ),
                     )
                 )
 
-    result = unique_outer_candidates(candidates)[: int(edge_anchor_policy.max_candidates)]
-    if cache is not None:
-        cache.edge_anchored_outer_candidates[candidate_key] = list(result)
-    return result
+    return unique_outer_proposals(candidates)[: int(edge_anchor_policy.max_candidates)]

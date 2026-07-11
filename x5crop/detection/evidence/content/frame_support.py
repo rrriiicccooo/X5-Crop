@@ -1,280 +1,232 @@
 from __future__ import annotations
 
-import copy
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ....domain import Box, DetectionCandidate
-from ....geometry.boxes import box_cache_key, original_box_to_work
+from ....cache import MeasurementCache
+from ....cache.content_statistics import ContentColumnStatistics
+from ....domain import Box
+from ....geometry.boxes import box_cache_key
 from ....policies.parameters.content import ContentEvidenceParameters
 from ....policies.runtime.content import ContentPolicy
-from ....cache import AnalysisCache
-from ....cache.content_statistics import ContentColumnStatistics
-from ..evidence_cache_keys import content_detail_cache_key
-from .signal import (
-    CACHED_CONTENT_SIGNAL_COMPOSITE,
-    content_evidence_threshold,
-    content_policy_cache_key,
-    content_signal_from_gray,
+from ....utils import sampled_percentile
+from ..state import EvidenceState
+
+if TYPE_CHECKING:
+    from ...geometry import CandidateGeometry
+
+
+CACHED_CONTENT_SIGNAL_COMPOSITE = (
+    "cached_gradient+neighbor_texture+local_contrast+tonal_presence"
 )
 
 
-def oriented_frame_aspect(horizontal_frame_aspect: float, layout: str) -> float:
-    aspect = float(horizontal_frame_aspect)
-    if aspect <= 0.0:
-        raise ValueError("horizontal_frame_aspect must be positive")
-    if layout == "vertical":
-        return 1.0 / aspect
-    return aspect
+def content_evidence_threshold(
+    evidence_float: np.ndarray,
+    parameters: ContentEvidenceParameters,
+) -> float:
+    percentile_value = float(
+        sampled_percentile(
+            evidence_float,
+            [parameters.percentile],
+        )[0]
+    )
+    return max(
+        parameters.threshold_min,
+        min(
+            parameters.threshold_max,
+            percentile_value * parameters.threshold_multiplier,
+        ),
+    )
 
+
+@dataclass(frozen=True)
+class FrameContentObservation:
+    index: int
+    mean: float
+    coverage: float
+    content_present: bool
+    boundary_contact_sides: tuple[str, ...]
+
+@dataclass(frozen=True)
+class FrameContentEvidence:
+    state: EvidenceState
+    reason: str
+    threshold: float | None
+    median_mean: float | None
+    median_coverage: float | None
+    observations: tuple[FrameContentObservation, ...]
+    composite: str
+
+    @property
+    def support_available(self) -> bool:
+        return self.state == EvidenceState.SUPPORTED
+
+    @property
+    def boundary_contact_frame_indexes(self) -> tuple[int, ...]:
+        return tuple(
+            observation.index
+            for observation in self.observations
+            if observation.boundary_contact_sides
+        )
 
 def _cached_content_evidence_threshold(
-    cache: AnalysisCache,
+    cache: MeasurementCache,
     evidence: np.ndarray,
     outer: Box,
-    evidence_params: ContentEvidenceParameters,
+    parameters: ContentEvidenceParameters,
 ) -> float:
-    key = (evidence_params, *box_cache_key(outer))
+    key = (parameters, *box_cache_key(outer))
     threshold = cache.content_evidence_thresholds.get(key)
     if threshold is None:
-        threshold = content_evidence_threshold(evidence, evidence_params)
+        threshold = content_evidence_threshold(evidence, parameters)
         cache.content_evidence_thresholds[key] = float(threshold)
     return float(threshold)
 
 
-def _frame_boundary_contact_detail(
+def _boundary_contact_sides(
     crop: np.ndarray,
     threshold: float,
-    evidence_params: ContentEvidenceParameters,
-) -> dict[str, Any]:
+    parameters: ContentEvidenceParameters,
+) -> tuple[str, ...]:
     band = max(
-        int(evidence_params.boundary_band_min_px),
-        int(round(min(crop.shape) * float(evidence_params.boundary_band_ratio))),
+        int(parameters.boundary_band_min_px),
+        int(round(min(crop.shape) * float(parameters.boundary_band_ratio))),
     )
     band_y = min(crop.shape[0], band)
     band_x = min(crop.shape[1], band)
-    bands = {
+    samples = {
         "left": crop[:, :band_x],
         "right": crop[:, crop.shape[1] - band_x :],
         "top": crop[:band_y, :],
         "bottom": crop[crop.shape[0] - band_y :, :],
     }
-    coverages = {
-        side: float((sample >= threshold).mean()) if sample.size else 0.0
-        for side, sample in bands.items()
-    }
-    contact_sides = sorted(
+    return tuple(
         side
-        for side, coverage in coverages.items()
-        if coverage >= float(evidence_params.present_coverage_min)
+        for side, sample in samples.items()
+        if sample.size
+        and float((sample >= threshold).mean())
+        >= float(parameters.present_coverage_min)
     )
-    return {
-        "boundary_band_px": int(band),
-        "boundary_contact_coverage_min": float(
-            evidence_params.present_coverage_min
-        ),
-        "boundary_coverages": coverages,
-        "boundary_contact_sides": contact_sides,
-    }
 
 
-def content_frame_support_detail(
-    evidence: np.ndarray,
-    outer: Box,
-    frames: list[Box],
-    canvas_shape: tuple[int, int],
-    *,
-    threshold: float,
-    expected_aspect: Optional[float],
-    evidence_params: ContentEvidenceParameters,
-    composite: str,
-    column_statistics: ContentColumnStatistics | None = None,
-) -> dict[str, Any]:
-    canvas_h, canvas_w = canvas_shape
-    frame_scores: list[dict[str, Any]] = []
-    means: list[float] = []
-    coverages: list[float] = []
-    aspect_errors: list[float] = []
-    boundary_contact_frame_indexes: list[int] = []
-
-    for index, frame in enumerate(frames, start=1):
-        absolute_box = frame.clamp(canvas_w, canvas_h)
-        box = Box(
-            max(0, absolute_box.left - outer.left),
-            max(0, absolute_box.top - outer.top),
-            min(outer.width, absolute_box.right - outer.left),
-            min(outer.height, absolute_box.bottom - outer.top),
-        )
-        if not box.valid():
-            continue
-        crop = evidence[box.top:box.bottom, box.left:box.right]
-        if crop.size == 0:
-            continue
-        full_short_axis = box.top == 0 and box.bottom == outer.height
-        if column_statistics is not None and full_short_axis:
-            mean, coverage = column_statistics.interval(box.left, box.right)
-        else:
-            mean = float(crop.mean())
-            coverage = float((crop >= threshold).mean())
-        boundary = _frame_boundary_contact_detail(crop, threshold, evidence_params)
-        if boundary["boundary_contact_sides"]:
-            boundary_contact_frame_indexes.append(index)
-        means.append(mean)
-        coverages.append(coverage)
-        actual_aspect = float(absolute_box.width) / max(1.0, float(absolute_box.height))
-        aspect_error: Optional[float] = None
-        if expected_aspect is not None and expected_aspect > 0:
-            aspect_error = abs(actual_aspect - expected_aspect) / expected_aspect
-            aspect_errors.append(float(aspect_error))
-        frame_scores.append(
-            {
-                "index": index,
-                "mean": mean,
-                "coverage": coverage,
-                "actual_aspect": actual_aspect,
-                "expected_aspect": expected_aspect,
-                "aspect_error": aspect_error,
-                **boundary,
-            }
-        )
-
-    if not frame_scores:
-        return {
-            "used": False,
-            "evidence_role": "content_support_assessment",
-            "reason": "no_valid_frames",
-        }
-
-    median_mean = float(np.median(np.array(means, dtype=np.float32))) if means else 0.0
-    min_mean = float(min(means)) if means else 0.0
-    median_coverage = float(np.median(np.array(coverages, dtype=np.float32))) if coverages else 0.0
-    max_aspect_error = float(max(aspect_errors)) if aspect_errors else None
-    aspect_ok = max_aspect_error is None or max_aspect_error <= evidence_params.aspect_ok_max
-    content_present = median_mean >= evidence_params.present_mean_min or median_coverage >= evidence_params.present_coverage_min
-    support = "ok" if content_present and aspect_ok else "weak"
-    if not aspect_ok:
-        support = "aspect_conflict"
-    elif not content_present:
-        support = "low_content"
-
-    return {
-        "used": True,
-        "evidence_role": "content_support_assessment",
-        "support": support,
-        "composite": composite,
-        "threshold": threshold,
-        "median_mean": median_mean,
-        "min_mean": min_mean,
-        "median_coverage": median_coverage,
-        "expected_aspect": expected_aspect,
-        "max_aspect_error": max_aspect_error,
-        "content_boundary_contact": bool(boundary_contact_frame_indexes),
-        "boundary_contact_frame_indexes": boundary_contact_frame_indexes,
-        "frame_scores": frame_scores,
-    }
-
-
-def content_evidence_detail(
-    gray: np.ndarray,
-    detection: DetectionCandidate,
-    cache: Optional[AnalysisCache],
-    *,
-    content_policy: ContentPolicy,
-    horizontal_frame_aspect: float,
-) -> dict[str, Any]:
-    if cache is not None and cache.layout == detection.layout:
-        return content_evidence_detail_from_cache(
-            gray,
-            detection,
-            cache,
-            content_policy=content_policy,
-            horizontal_frame_aspect=horizontal_frame_aspect,
-        )
-    evidence_params = content_policy.evidence
-
-    outer = detection.outer.clamp(gray.shape[1], gray.shape[0])
+def frame_content_evidence(
+    geometry: CandidateGeometry,
+    cache: MeasurementCache,
+    policy: ContentPolicy,
+) -> FrameContentEvidence:
+    if cache.layout != geometry.layout:
+        raise ValueError("content evidence requires matching analysis cache")
+    outer = geometry.film_span.box.clamp(
+        cache.gray_work.shape[1],
+        cache.gray_work.shape[0],
+    )
     if not outer.valid():
-        return {"used": False, "reason": "invalid_outer"}
-
-    source_crop = gray[outer.top:outer.bottom, outer.left:outer.right]
-    if source_crop.size == 0:
-        return {"used": False, "reason": "empty_outer"}
-
-    signal = content_signal_from_gray(source_crop, content_policy.evidence_image)
-    threshold = content_evidence_threshold(signal.evidence_float, evidence_params)
-    expected_aspect = oriented_frame_aspect(horizontal_frame_aspect, detection.layout)
-    return content_frame_support_detail(
-        signal.evidence_float,
-        outer,
-        detection.frames,
-        gray.shape,
-        threshold=threshold,
-        expected_aspect=expected_aspect,
-        evidence_params=evidence_params,
-        composite=signal.composite,
-    )
-
-
-def content_evidence_detail_from_cache(
-    gray: np.ndarray,
-    detection: DetectionCandidate,
-    cache: AnalysisCache,
-    *,
-    content_policy: ContentPolicy,
-    horizontal_frame_aspect: float,
-) -> dict[str, Any]:
-    evidence_params = content_policy.evidence
-    source_h, source_w = gray.shape
-    detail_key = content_detail_cache_key(
-        detection,
-        source_w,
-        source_h,
-        (*content_policy_cache_key(content_policy), float(horizontal_frame_aspect)),
-    )
-    cached = cache.content_evidence_details.get(detail_key)
-    if cached is not None:
-        return copy.deepcopy(cached)
-    work_h, work_w = cache.gray_work.shape
-    outer = original_box_to_work(detection.outer, detection.layout, source_w, source_h).clamp(work_w, work_h)
-    if not outer.valid():
-        return {"used": False, "reason": "invalid_outer"}
-
-    evidence = cache.content_evidence_float_work[outer.top:outer.bottom, outer.left:outer.right]
-    if evidence.size == 0:
-        return {"used": False, "reason": "empty_outer"}
-
+        return FrameContentEvidence(
+            EvidenceState.UNAVAILABLE,
+            "invalid_film_span",
+            None,
+            None,
+            None,
+            (),
+            CACHED_CONTENT_SIGNAL_COMPOSITE,
+        )
+    evidence = cache.content_evidence_float_work[
+        outer.top : outer.bottom,
+        outer.left : outer.right,
+    ]
+    if not evidence.size:
+        return FrameContentEvidence(
+            EvidenceState.UNAVAILABLE,
+            "empty_film_span",
+            None,
+            None,
+            None,
+            (),
+            CACHED_CONTENT_SIGNAL_COMPOSITE,
+        )
+    parameters = policy.evidence
     threshold = _cached_content_evidence_threshold(
         cache,
         evidence,
         outer,
-        evidence_params,
+        parameters,
     )
-    expected_aspect = float(horizontal_frame_aspect)
-    statistics_key = (
-        evidence_params,
-        *box_cache_key(outer),
-        float(threshold),
-    )
-    column_statistics = cache.content_column_statistics.get(statistics_key)
-    if column_statistics is None:
-        column_statistics = ContentColumnStatistics.from_evidence(evidence, threshold)
-        cache.content_column_statistics[statistics_key] = column_statistics
-    frames_work = [
-        original_box_to_work(frame, detection.layout, source_w, source_h)
-        for frame in detection.frames
-    ]
-    detail = content_frame_support_detail(
-        evidence,
-        outer,
-        frames_work,
-        cache.gray_work.shape,
-        threshold=threshold,
-        expected_aspect=expected_aspect,
-        evidence_params=evidence_params,
+    statistics_key = (parameters, *box_cache_key(outer), float(threshold))
+    statistics = cache.content_column_statistics.get(statistics_key)
+    if statistics is None:
+        statistics = ContentColumnStatistics.from_evidence(evidence, threshold)
+        cache.content_column_statistics[statistics_key] = statistics
+
+    observations: list[FrameContentObservation] = []
+    for index, frame in enumerate(geometry.work_frames, start=1):
+        absolute = frame.clamp(
+            cache.gray_work.shape[1],
+            cache.gray_work.shape[0],
+        )
+        relative = Box(
+            max(0, absolute.left - outer.left),
+            max(0, absolute.top - outer.top),
+            min(outer.width, absolute.right - outer.left),
+            min(outer.height, absolute.bottom - outer.top),
+        )
+        if not relative.valid():
+            continue
+        crop = evidence[
+            relative.top : relative.bottom,
+            relative.left : relative.right,
+        ]
+        if not crop.size:
+            continue
+        if relative.top == 0 and relative.bottom == outer.height:
+            mean, coverage = statistics.interval(relative.left, relative.right)
+        else:
+            mean = float(crop.mean())
+            coverage = float((crop >= threshold).mean())
+        content_present = bool(
+            mean >= float(parameters.present_mean_min)
+            or coverage >= float(parameters.present_coverage_min)
+        )
+        observations.append(
+            FrameContentObservation(
+                index=index,
+                mean=float(mean),
+                coverage=float(coverage),
+                content_present=content_present,
+                boundary_contact_sides=_boundary_contact_sides(
+                    crop,
+                    threshold,
+                    parameters,
+                ),
+            )
+        )
+
+    if not observations:
+        state = EvidenceState.UNAVAILABLE
+        reason = "no_valid_frames"
+        median_mean = None
+        median_coverage = None
+    else:
+        median_mean = float(
+            np.median(np.asarray([item.mean for item in observations]))
+        )
+        median_coverage = float(
+            np.median(np.asarray([item.coverage for item in observations]))
+        )
+        if any(item.content_present for item in observations):
+            state = EvidenceState.SUPPORTED
+            reason = "content_observed"
+        else:
+            state = EvidenceState.UNAVAILABLE
+            reason = "content_not_observed"
+    return FrameContentEvidence(
+        state=state,
+        reason=reason,
+        threshold=float(threshold),
+        median_mean=median_mean,
+        median_coverage=median_coverage,
+        observations=tuple(observations),
         composite=CACHED_CONTENT_SIGNAL_COMPOSITE,
-        column_statistics=column_statistics,
     )
-    if bool(detail.get("used", False)):
-        cache.content_evidence_details[detail_key] = copy.deepcopy(detail)
-    return detail

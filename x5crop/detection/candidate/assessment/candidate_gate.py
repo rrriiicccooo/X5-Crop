@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 from ...evidence.state import EvidenceState
-from ...gate_checks import GateCheck, gate_check_details
+from ...gate_checks import GateCheck
 
 
 BOUNDARY_PROOF_PATH_CODES = frozenset(
@@ -21,14 +20,7 @@ BOUNDARY_PROOF_PATH_CODES = frozenset(
 class BoundaryProofPath:
     code: str
     state: EvidenceState
-    detail: dict[str, Any] = field(default_factory=dict)
-
-    def report_detail(self) -> dict[str, Any]:
-        return {
-            "code": self.code,
-            "state": self.state.value,
-            "detail": dict(self.detail),
-        }
+    supporting_evidence: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -39,25 +31,21 @@ class CandidateGateInput:
     evidence_independence: EvidenceState
     proof_paths: tuple[BoundaryProofPath, ...]
     diagnostics: tuple[str, ...] = ()
-    detail: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class CandidateGateAssessment:
-    passed: bool
     checks: tuple[GateCheck, ...]
     proof_paths: tuple[BoundaryProofPath, ...]
-    failed_checks: tuple[str, ...]
     diagnostics: tuple[str, ...]
 
-    def report_detail(self) -> dict[str, Any]:
-        return {
-            "passed": bool(self.passed),
-            "checks": gate_check_details(list(self.checks)),
-            "proof_paths": [path.report_detail() for path in self.proof_paths],
-            "failed_checks": list(self.failed_checks),
-            "diagnostics": list(self.diagnostics),
-        }
+    @property
+    def failed_checks(self) -> tuple[str, ...]:
+        return tuple(check.code for check in self.checks if check.blocks)
+
+    @property
+    def passed(self) -> bool:
+        return not self.failed_checks
 
 
 def candidate_gate_assessment(gate_input: CandidateGateInput) -> CandidateGateAssessment:
@@ -101,21 +89,10 @@ def candidate_gate_assessment(gate_input: CandidateGateInput) -> CandidateGateAs
             stage="candidate",
             state=boundary_state,
             consequence="blocker",
-            detail={
-                "supported_paths": [
-                    path.code
-                    for path in gate_input.proof_paths
-                    if path.state == EvidenceState.SUPPORTED
-                ],
-                **dict(gate_input.detail),
-            },
         ),
     )
-    failed_checks = tuple(check.code for check in checks if check.blocks)
     return CandidateGateAssessment(
-        passed=not failed_checks,
         checks=checks,
         proof_paths=gate_input.proof_paths,
-        failed_checks=failed_checks,
         diagnostics=tuple(sorted(set(gate_input.diagnostics))),
     )

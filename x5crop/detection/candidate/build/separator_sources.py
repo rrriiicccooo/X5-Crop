@@ -1,193 +1,108 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Optional
-
 import numpy as np
 
-from ....cache import AnalysisCache
+from ....cache import MeasurementCache
 from ....cache.separator import cached_separator_width_profile
 from ....domain import Box, SeparatorBandObservation
 from ....formats import FormatPhysicalSpec
-from ....policies.runtime.policy import DetectionPolicy
+from ....gap_methods import is_hard_gap_method
+from ....policies.runtime.separator import SeparatorPolicy
+from ....units import ScanCalibration
 from ...physical.separator.hints import SeparatorGapHintSet
 from ...physical.separator.model import propose_equal_model_gaps_from_profile
-from ...physical.separator.proposal import (
-    propose_separator_gaps_with_detail,
-)
-
-
-GEOMETRY_EQUAL_MODEL_SOURCE = "geometry_equal_model"
-
-
-@dataclass(frozen=True)
-class InitialSeparatorGapResult:
-    gaps: list[SeparatorBandObservation]
-    standard_gap_search_detail: dict[str, Any]
-
-
-def selected_gap_source_detail(
-    detail: dict[str, Any],
-    source: str,
-    extra: Optional[dict[str, Any]] = None,
-) -> dict[str, Any]:
-    result = dict(detail)
-    result["selected_gap_source"] = source
-    if extra:
-        result.update(extra)
-    return result
-
-
-def with_selected_gap_source(
-    result: InitialSeparatorGapResult,
-    source: str,
-    *,
-    gaps: Optional[list[SeparatorBandObservation]] = None,
-    extra_standard_detail: Optional[dict[str, Any]] = None,
-) -> InitialSeparatorGapResult:
-    return InitialSeparatorGapResult(
-        gaps=result.gaps if gaps is None else gaps,
-        standard_gap_search_detail=selected_gap_source_detail(
-            result.standard_gap_search_detail,
-            source,
-            extra_standard_detail,
-        ),
-    )
-
+from ...physical.separator.proposal import propose_separator_gaps
 
 def standard_separator_gap_result(
-    gray_work: np.ndarray,
-    fmt: FormatPhysicalSpec,
     outer: Box,
     profile: np.ndarray,
     count: int,
     origin: float,
     pitch: float,
-    gap_max_width_ratio_override: Optional[float],
-    policy: DetectionPolicy,
-    cache: Optional[AnalysisCache],
+    gap_max_width_ratio_override: float | None,
+    separator_policy: SeparatorPolicy,
+    cache: MeasurementCache,
+    calibration: ScanCalibration,
+    long_axis: str,
     *,
-    forced: bool = False,
-    gap_hints: Optional[SeparatorGapHintSet] = None,
-) -> InitialSeparatorGapResult:
-    frame_aspect = float(fmt.horizontal_content_aspect)
+    gap_hints: SeparatorGapHintSet | None = None,
+) -> tuple[SeparatorBandObservation, ...]:
     width_profile = (
         cached_separator_width_profile(
             cache,
-            gray_work,
             outer,
-            policy.separator.width_profile_search,
+            separator_policy.width_profile_search,
         )
-        if policy.separator.width_profile.mode != "off"
+        if separator_policy.width_profile.mode != "off"
         else np.array([], dtype=np.float32)
     )
-    standard_gap_proposal = propose_separator_gaps_with_detail(
+    result = propose_separator_gaps(
         outer,
         profile,
         width_profile,
         origin,
         pitch,
         count,
-        frame_aspect,
         gap_max_width_ratio_override,
-        policy.separator.gap_search,
-        policy.separator.width_profile,
-        policy.separator.width_profile_search,
+        separator_policy.gap_search,
+        separator_policy.width_profile,
+        separator_policy.width_profile_search,
+        calibration,
+        long_axis,
         gap_hints,
     )
-    standard_gap_search_detail = selected_gap_source_detail(
-        standard_gap_proposal.search_detail,
-        "standard_and_observed_width",
-    )
-    if forced:
-        standard_gap_search_detail["forced"] = True
-    return InitialSeparatorGapResult(
-        gaps=standard_gap_proposal.gaps,
-        standard_gap_search_detail=standard_gap_search_detail,
-    )
+    return tuple(result)
 
 
-def model_gap_proposal_detail(
-    result: InitialSeparatorGapResult,
+def _equal_model_available(
+    gaps: tuple[SeparatorBandObservation, ...],
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
-    gap_max_width_ratio_override: Optional[float],
-) -> dict[str, Any]:
-    expected_gaps = max(0, int(count) - 1)
-    hard_gaps = int(result.standard_gap_search_detail.get("detected_count", 0) or 0)
-    if strip_mode != "full":
-        block_reason = "requires_full_strip"
-    elif int(count) != int(fmt.default_count):
-        block_reason = "non_default_count"
-    elif gap_max_width_ratio_override is not None:
-        block_reason = "width_override_active"
-    elif expected_gaps <= 0:
-        block_reason = "single_frame"
-    elif hard_gaps >= expected_gaps:
-        block_reason = "hard_gaps_complete"
-    else:
-        block_reason = None
-    return {
-        "family": GEOMETRY_EQUAL_MODEL_SOURCE,
-        "available": block_reason is None,
-        "reason": "available" if block_reason is None else block_reason,
-        "expected_gaps": int(expected_gaps),
-        "hard_gaps": int(hard_gaps),
-        "eligibility": "full_default_count",
-    }
-
-
-def with_model_gap_proposal_detail(
-    result: InitialSeparatorGapResult,
-    detail: dict[str, Any],
-) -> InitialSeparatorGapResult:
-    standard_detail = dict(result.standard_gap_search_detail)
-    standard_detail["model_gap_proposal"] = detail
-    return InitialSeparatorGapResult(
-        gaps=result.gaps,
-        standard_gap_search_detail=standard_detail,
+    gap_max_width_ratio_override: float | None,
+) -> bool:
+    expected = max(0, count - 1)
+    hard = sum(is_hard_gap_method(gap.method) for gap in gaps)
+    return bool(
+        strip_mode == "full"
+        and count == fmt.default_count
+        and gap_max_width_ratio_override is None
+        and expected > 0
+        and hard < expected
     )
 
 
 def select_geometry_equal_model_gaps(
-    result: InitialSeparatorGapResult,
+    gaps: tuple[SeparatorBandObservation, ...],
     profile: np.ndarray,
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     origin: float,
     pitch: float,
-    gap_max_width_ratio_override: Optional[float],
-) -> InitialSeparatorGapResult:
-    model_detail = model_gap_proposal_detail(
-        result,
+    gap_max_width_ratio_override: float | None,
+) -> tuple[SeparatorBandObservation, ...]:
+    if not _equal_model_available(
+        gaps,
         fmt,
         count,
         strip_mode,
         gap_max_width_ratio_override,
+    ):
+        return gaps
+    model_gaps = propose_equal_model_gaps_from_profile(
+        profile,
+        origin,
+        pitch,
+        count,
     )
-    result = with_model_gap_proposal_detail(result, model_detail)
-    if not bool(model_detail.get("available", False)):
-        return result
-    model_gaps = propose_equal_model_gaps_from_profile(profile, origin, pitch, count)
-    measured_by_index = {int(gap.index): gap for gap in result.gaps}
-    completed = [measured_by_index.get(int(gap.index), gap) for gap in model_gaps]
-    return with_selected_gap_source(
-        result,
-        GEOMETRY_EQUAL_MODEL_SOURCE,
-        gaps=completed,
-        extra_standard_detail={
-            "model_gap_proposal": {
-                **model_detail,
-                "selected": True,
-            }
-        },
+    measured_by_index = {gap.index: gap for gap in gaps}
+    return tuple(
+        measured_by_index.get(gap.index, gap) for gap in model_gaps
     )
 
 
 def initial_separator_gaps(
-    gray_work: np.ndarray,
     outer: Box,
     profile: np.ndarray,
     fmt: FormatPhysicalSpec,
@@ -195,29 +110,34 @@ def initial_separator_gaps(
     strip_mode: str,
     origin: float,
     pitch: float,
-    gap_max_width_ratio_override: Optional[float],
-    policy: DetectionPolicy,
-    cache: Optional[AnalysisCache],
-) -> InitialSeparatorGapResult:
+    gap_max_width_ratio_override: float | None,
+    separator_policy: SeparatorPolicy,
+    cache: MeasurementCache,
+    calibration: ScanCalibration,
+    long_axis: str,
+    *,
+    gap_hints: SeparatorGapHintSet | None = None,
+) -> tuple[SeparatorBandObservation, ...]:
     result = standard_separator_gap_result(
-        gray_work,
-        fmt,
         outer,
         profile,
         count,
         origin,
         pitch,
         gap_max_width_ratio_override,
-        policy,
+        separator_policy,
         cache,
+        calibration,
+        long_axis,
+        gap_hints=gap_hints,
     )
     return select_geometry_equal_model_gaps(
         result,
         profile,
         fmt,
-        count=count,
-        strip_mode=strip_mode,
-        origin=origin,
-        pitch=pitch,
-        gap_max_width_ratio_override=gap_max_width_ratio_override,
+        count,
+        strip_mode,
+        origin,
+        pitch,
+        gap_max_width_ratio_override,
     )

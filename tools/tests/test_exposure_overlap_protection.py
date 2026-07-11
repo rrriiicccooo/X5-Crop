@@ -5,30 +5,20 @@ from unittest.mock import patch
 
 import numpy as np
 
-from tools.tests.physical_gate_support import final_detection_fixture, separator_observation
-from x5crop.detection.evidence.exposure_overlap import (
-    exposure_overlap_evidence_detail,
-)
-from x5crop.domain import AxisBleedParameters, Box, FinalDetection
-from x5crop.output.bleed import apply_output_protection_plan
+from tools.tests.physical_gate_support import candidate_fixture
+from x5crop.cache import MeasurementCache
+from x5crop.detection.evidence.exposure_overlap import exposure_overlap_evidence
+from x5crop.detection.evidence.gap_evidence import GapEvidenceRecord
+from x5crop.domain import AxisBleedParameters, Box
+from x5crop.output.bleed import output_bleed_geometry
+from x5crop.output.model import OutputGeometry
 from x5crop.output.protection import output_protection_plan
 from x5crop.policies.registry import get_detection_policy
 
 
-def _detection() -> FinalDetection:
-    detection = final_detection_fixture(status="approved_auto")
-    detection.count = 2
-    detection.outer = Box(0, 0, 100, 60)
-    detection.frames = [Box(0, 0, 50, 60), Box(50, 0, 100, 60)]
-    detection.gaps = [separator_observation(1, 50.0, 0.5, "equal")]
-    detection.confidence = 0.95
-    detection.detail = {}
-    return detection
-
-
 class ExposureOverlapProtectionTest(unittest.TestCase):
-    def test_evidence_capability_is_universal_across_format_modes(self) -> None:
-        reference = get_detection_policy("135", "full").exposure_overlap_evidence
+    def test_evidence_and_protection_are_universal_capabilities(self) -> None:
+        reference = get_detection_policy("135", "full")
         for format_id in (
             "135",
             "135-dual",
@@ -39,94 +29,90 @@ class ExposureOverlapProtectionTest(unittest.TestCase):
             "120-67",
         ):
             for strip_mode in ("full", "partial"):
-                with self.subTest(format_id=format_id, strip_mode=strip_mode):
-                    policy = get_detection_policy(format_id, strip_mode)
-                    self.assertEqual(policy.exposure_overlap_evidence, reference)
-                    self.assertFalse(hasattr(policy.exposure_overlap_evidence, "enabled"))
-                    self.assertFalse(
-                        hasattr(policy.output.exposure_overlap_protection, "enabled")
-                    )
+                policy = get_detection_policy(format_id, strip_mode)
+                self.assertEqual(
+                    policy.exposure_overlap_evidence,
+                    reference.exposure_overlap_evidence,
+                )
+                self.assertFalse(hasattr(policy.exposure_overlap_evidence, "enabled"))
 
-    def test_evidence_only_measures_physical_overlap(self) -> None:
-        detection = _detection()
-        record = {
-            "exposure_overlap_class": "medium",
-            "width_px": 0.0,
-            "signals": {"window": {"start": 10, "end": 50}},
-        }
+    def test_evidence_only_reports_physical_overlap(self) -> None:
+        candidate = candidate_fixture()
+        gray = np.zeros((100, 200), dtype=np.uint8)
+        cache = MeasurementCache(
+            "horizontal",
+            gray,
+            gray,
+            gray.astype(np.float32),
+        )
+        record = GapEvidenceRecord(
+            1,
+            "equal",
+            "geometry_model",
+            100.0,
+            100.0,
+            0.0,
+            40.0,
+            "not_hard_separator",
+            "medium",
+            True,
+            (80, 120),
+            None,
+        )
         policy = get_detection_policy("135", "full")
         with patch(
             "x5crop.detection.evidence.exposure_overlap.gap_evidence_record",
             return_value=record,
         ):
-            evidence = exposure_overlap_evidence_detail(
-                np.zeros((80, 120), dtype=np.uint8),
-                detection,
-                cache=None,
+            evidence = exposure_overlap_evidence(
+                candidate.geometry,
+                cache,
                 separator_policy=policy.separator,
-                exposure_overlap_policy=policy.exposure_overlap_evidence,
+                parameters=policy.exposure_overlap_evidence,
             )
-
-        self.assertTrue(evidence["exposure_overlap_detected"])
-        self.assertEqual(evidence["widest_overlap_band_px"], 40.0)
-        self.assertNotIn("feasible", evidence)
-        self.assertNotIn("final_review_reason", evidence)
+        self.assertTrue(evidence.detected)
+        self.assertEqual(evidence.widest_overlap_band_px, 40.0)
+        self.assertFalse(hasattr(evidence, "feasible"))
 
     def test_feasible_plan_increases_long_axis_bleed(self) -> None:
         policy = get_detection_policy("135", "full")
         plan = output_protection_plan(
-            {
-                "exposure_overlap_detected": True,
-                "widest_overlap_band_px": 72.0,
-            },
-            AxisBleedParameters(long_axis=20, short_axis=10),
+            True,
+            72.0,
+            AxisBleedParameters(20, 10),
             policy.output.exposure_overlap_protection,
+            long_axis_bleed_capacity_px=50,
         )
-
         self.assertTrue(plan.feasible)
-        self.assertEqual(plan.required_long_axis_bleed_px, 36)
         self.assertEqual(plan.output_bleed, AxisBleedParameters(36, 10))
 
-    def test_unresolved_plan_uses_available_capacity_for_review_output(self) -> None:
+    def test_unresolved_plan_uses_available_capacity(self) -> None:
         policy = get_detection_policy("135", "full")
         plan = output_protection_plan(
-            {
-                "exposure_overlap_detected": True,
-                "widest_overlap_band_px": 140.0,
-            },
-            AxisBleedParameters(long_axis=20, short_axis=10),
+            True,
+            140.0,
+            AxisBleedParameters(20, 10),
             policy.output.exposure_overlap_protection,
+            long_axis_bleed_capacity_px=50,
         )
-
         self.assertFalse(plan.feasible)
         self.assertEqual(plan.required_long_axis_bleed_px, 70)
-        self.assertEqual(plan.output_bleed, AxisBleedParameters(50, 10))
+        self.assertEqual(plan.output_bleed.long_axis, 50)
 
-    def test_finalization_applies_the_same_plan(self) -> None:
-        detection = _detection()
-        policy = get_detection_policy("135", "full")
-        plan = output_protection_plan(
-            {
-                "exposure_overlap_detected": True,
-                "widest_overlap_band_px": 72.0,
-            },
-            AxisBleedParameters(long_axis=20, short_axis=10),
-            policy.output.exposure_overlap_protection,
+    def test_output_bleed_expands_frame_geometry_only(self) -> None:
+        geometry = OutputGeometry(
+            Box(0, 0, 100, 60),
+            (Box(0, 0, 50, 60), Box(50, 0, 100, 60)),
         )
-
-        apply_output_protection_plan(
-            detection,
-            plan,
-            image_w=100,
-            image_h=60,
+        expanded = output_bleed_geometry(
+            geometry,
+            AxisBleedParameters(36, 0),
+            layout="horizontal",
+            image_width=100,
+            image_height=60,
         )
-
-        self.assertEqual(detection.frames[0], Box(0, 0, 86, 60))
-        self.assertEqual(detection.frames[1], Box(14, 0, 100, 60))
-        self.assertEqual(
-            detection.detail["output_protection_plan"],
-            {**plan.report_detail(), "applied": True},
-        )
+        self.assertEqual(expanded.frames[0], Box(0, 0, 86, 60))
+        self.assertEqual(expanded.frames[1], Box(14, 0, 100, 60))
 
 
 if __name__ == "__main__":

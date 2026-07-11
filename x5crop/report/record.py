@@ -1,51 +1,33 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-
 from ..app_info import VERSION
-from ..detection.detail import (
-    CANDIDATE_ASSESSMENT,
-    COUNT_SELECTION,
-    CONTENT_EVIDENCE,
-    DECISION_GEOMETRY,
-    DIAGNOSTICS,
-    EVIDENCE_SUMMARY,
-    EXPOSURE_OVERLAP_EVIDENCE,
-    OUTER_CONTENT_ALIGNMENT,
-    OUTPUT_PROTECTION_PLAN,
-    decision_schema_diagnostics,
-    detail_dict,
-    HOLDER_OCCUPANCY,
-    SCAN_CALIBRATION,
-    STRIP_COMPLETENESS,
-)
-from ..domain import FinalDetection
-from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
+from ..detection.decision.model import FinalDetection
+from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..utils import json_safe
+from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from .read_models import (
-    candidate_gate_detail,
+    candidate_evidence_read_model,
+    candidate_gate_read_model,
     candidate_table,
     decision_gate_detail,
+    exposure_overlap_read_model,
+    output_protection_read_model,
+    scan_calibration_read_model,
+    selection_read_model,
+    typed_read_model,
 )
 
 
-def _missing_schema_diagnostic(owner: str, reason: str) -> dict[str, str]:
-    return {"owner": owner, "reason": reason}
-
-
-def _schema_validation(
-    detection: FinalDetection,
-    policy_id: str,
-    runtime_policy: dict,
-) -> list[dict[str, str]]:
-    diagnostics = decision_schema_diagnostics(detection)
-    if not runtime_policy:
-        diagnostics.append(_missing_schema_diagnostic("runtime_policy", "runtime_policy_detail_missing"))
-    if not detail_dict(detection, EVIDENCE_SUMMARY):
-        diagnostics.append(_missing_schema_diagnostic("evidence_summary", "evidence_summary_missing"))
-    if not policy_id:
-        diagnostics.append(_missing_schema_diagnostic("policy", "policy_id_missing"))
-    return diagnostics
+def _transform_detail(transform: TransformGeometryEvidence) -> dict[str, object]:
+    return {
+        "state": transform.state.value,
+        "applied": bool(transform.applied),
+        "estimated_angle_degrees": float(transform.estimated_angle_degrees),
+        "applied_angle_degrees": float(transform.applied_angle_degrees),
+        "reason": transform.reason,
+        "span_px": transform.span_px,
+        "span_threshold_px": transform.span_threshold_px,
+    }
 
 
 def report_record_for_final_detection(
@@ -58,24 +40,14 @@ def report_record_for_final_detection(
     warnings: list[str],
     policy_id: str,
     runtime_policy: dict,
-    deskew_detail: dict,
-    analysis_cache_metadata: dict,
+    transform_geometry: TransformGeometryEvidence,
+    analysis_reuse_signature: dict,
 ) -> dict:
-    output = {
-        "protection_plan": detail_dict(detection, OUTPUT_PROTECTION_PLAN),
-    }
-    output.update({
-        "output_files": list(output_files),
-        "review_copy": review_copy,
-        "warnings": list(warnings),
-    })
-    schema_validation = _schema_validation(
-        detection,
-        policy_id,
-        runtime_policy,
-    )
-    evidence_summary = detail_dict(detection, EVIDENCE_SUMMARY)
-    schema = {
+    trace = detection.require_trace()
+    selection = trace.selection
+    selected_evidence = selection.selected.assessment.evidence
+    selected_candidate = selection.selected
+    record = {
         "schema_id": REPORT_SCHEMA_ID,
         "schema_revision": REPORT_SCHEMA_REVISION,
         "script_version": VERSION,
@@ -85,39 +57,60 @@ def report_record_for_final_detection(
         "strip_mode": detection.strip_mode,
         "layout": detection.layout,
         "count": int(detection.count),
-        "count_selection": detail_dict(detection, COUNT_SELECTION),
-        "strip_completeness": detail_dict(detection, STRIP_COMPLETENESS),
-        "holder_occupancy": detail_dict(detection, HOLDER_OCCUPANCY),
+        "count_resolution": (
+            None
+            if selection.count_resolution is None
+            else typed_read_model(selection.count_resolution)
+        ),
+        "film_span": typed_read_model(detection.work_film_span),
+        "pitch": float(detection.pitch),
+        "strip_completeness": typed_read_model(
+            selected_evidence.holder_occupancy.strip_completeness
+        ),
+        "holder_occupancy": typed_read_model(selected_evidence.holder_occupancy),
         "status": detection.status,
         "confidence": float(detection.confidence),
         "final_review_reasons": list(detection.final_review_reasons),
-        "outer_box": asdict(detection.outer),
-        "frame_boxes": [asdict(box) for box in detection.frames],
-        "gaps": [asdict(gap) for gap in detection.gaps],
+        "decision_geometry": {
+            "outer_box": typed_read_model(detection.decision_geometry.outer),
+            "frame_boxes": typed_read_model(detection.decision_geometry.frames),
+        },
+        "output_geometry": {
+            "outer_box": typed_read_model(detection.output_geometry.outer),
+            "frame_boxes": typed_read_model(detection.output_geometry.frames),
+        },
+        "separator_observations": typed_read_model(
+            detection.separator_observations
+        ),
         "candidate_table": candidate_table(detection),
+        "selection": selection_read_model(detection),
         "policy": dict(runtime_policy),
         "policy_id": policy_id,
-        "evidence": {
-            "content": detail_dict(detection, CONTENT_EVIDENCE),
-            "separator": detail_dict(detection, CANDIDATE_ASSESSMENT).get(
-                "separator_support",
-                {},
+        "evidence_summary": {
+            **candidate_evidence_read_model(selected_candidate),
+            "exposure_overlap": exposure_overlap_read_model(
+                trace.exposure_overlap
             ),
-            "outer_content_alignment": detail_dict(detection, OUTER_CONTENT_ALIGNMENT),
-            "exposure_overlap": detail_dict(detection, EXPOSURE_OVERLAP_EVIDENCE),
         },
-        "evidence_summary": evidence_summary,
-        "candidate_gate": candidate_gate_detail(detection),
+        "candidate_gate": candidate_gate_read_model(selected_candidate),
         "decision_gate": decision_gate_detail(detection),
-        "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
-        "decision_geometry": detail_dict(detection, DECISION_GEOMETRY),
-        "analysis_cache": dict(analysis_cache_metadata),
+        "scan_calibration": scan_calibration_read_model(
+            detection.scan_calibration
+        ),
+        "analysis_reuse_signature": dict(analysis_reuse_signature),
         "analysis_reuse": {"used": False},
-        "schema_validation": schema_validation,
+        "schema_validation": [],
         "diagnostics": {
-            "deskew": dict(deskew_detail),
-            "detection": detail_dict(detection, DIAGNOSTICS),
+            "transform_geometry": _transform_detail(transform_geometry),
+            "detection": list(detection.diagnostics),
         },
-        "output": output,
+        "output": {
+            "protection_plan": output_protection_read_model(
+                detection.output_protection
+            ),
+            "output_files": list(output_files),
+            "review_copy": review_copy,
+            "warnings": list(warnings),
+        },
     }
-    return json_safe(schema)
+    return json_safe(record)

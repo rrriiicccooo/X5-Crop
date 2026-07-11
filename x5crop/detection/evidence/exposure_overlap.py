@@ -1,80 +1,55 @@
 from __future__ import annotations
 
-from typing import Any
+from dataclasses import dataclass
 
-import numpy as np
-
-from ...cache import AnalysisCache
-from ...domain import DetectionCandidate
-from ...geometry.layout import work_gray
+from ...cache import MeasurementCache
 from ...policies.parameters.exposure_overlap import ExposureOverlapEvidenceParameters
 from ...policies.runtime.separator import SeparatorPolicy
-from .gap_evidence import gap_evidence_record
+from ..geometry import CandidateGeometry
+from .gap_evidence import GapEvidenceRecord, gap_evidence_record
+from .state import EvidenceState
 
 
-def _overlap_band_width_px(record: dict[str, Any]) -> float:
-    width = float(record.get("width_px", 0.0) or 0.0)
-    signals = record.get("signals")
-    if isinstance(signals, dict):
-        window = signals.get("window")
-        if isinstance(window, dict):
-            try:
-                width = max(width, float(window["end"]) - float(window["start"]))
-            except (KeyError, TypeError, ValueError):
-                pass
-    return max(0.0, width)
+@dataclass(frozen=True)
+class ExposureOverlapEvidence:
+    state: EvidenceState
+    reason: str
+    detected: bool
+    widest_overlap_band_px: float
+    class_counts: tuple[tuple[str, int], ...]
+    gaps: tuple[GapEvidenceRecord, ...]
 
-
-def exposure_overlap_evidence_detail(
-    gray: np.ndarray,
-    detection: DetectionCandidate,
-    cache: AnalysisCache | None,
+def exposure_overlap_evidence(
+    geometry: CandidateGeometry,
+    cache: MeasurementCache,
     *,
     separator_policy: SeparatorPolicy,
-    exposure_overlap_policy: ExposureOverlapEvidenceParameters,
-) -> dict[str, Any]:
-    if not detection.gaps:
-        return {
-            "used": False,
-            "exposure_overlap_detected": False,
-            "widest_overlap_band_px": 0.0,
-            "reason": "no_gaps",
-            "exposure_overlap_counts": {},
-            "gap_evidence": [],
-        }
-    gray_work = (
-        cache.gray_work
-        if cache is not None and cache.layout == detection.layout
-        else work_gray(gray, detection.layout)
-    )
-    records = [
+    parameters: ExposureOverlapEvidenceParameters,
+) -> ExposureOverlapEvidence:
+    records = tuple(
         gap_evidence_record(
-            gray_work,
-            detection,
-            gap,
+            cache.gray_work,
+            geometry,
+            observation,
             separator_policy=separator_policy,
-            exposure_overlap_policy=exposure_overlap_policy,
+            exposure_overlap_policy=parameters,
         )
-        for gap in detection.gaps
-    ]
-    counts: dict[str, int] = {}
-    overlap_records: list[dict[str, Any]] = []
-    for record in records:
-        overlap_class = str(record.get("exposure_overlap_class", "none"))
-        counts[overlap_class] = counts.get(overlap_class, 0) + 1
-        if overlap_class in {"medium", "strong"}:
-            overlap_records.append(record)
-    detected = bool(overlap_records)
-    widest_band = max(
-        (_overlap_band_width_px(record) for record in overlap_records),
-        default=0.0,
+        for observation in geometry.separators
     )
-    return {
-        "used": True,
-        "exposure_overlap_detected": detected,
-        "widest_overlap_band_px": float(widest_band),
-        "reason": "exposure_overlap_detected" if detected else "no_exposure_overlap",
-        "exposure_overlap_counts": counts,
-        "gap_evidence": records,
-        "gap_count": len(records),
-    }
+    counts: dict[str, int] = {}
+    overlap = []
+    for record in records:
+        counts[record.exposure_overlap_class] = (
+            counts.get(record.exposure_overlap_class, 0) + 1
+        )
+        if record.exposure_overlap_like:
+            overlap.append(record)
+    widest = max((record.width_px for record in overlap), default=0.0)
+    return ExposureOverlapEvidence(
+        state=(EvidenceState.SUPPORTED if records else EvidenceState.UNAVAILABLE),
+        reason=("exposure_overlap_detected" if overlap else "no_exposure_overlap"),
+        detected=bool(overlap),
+        widest_overlap_band_px=float(widest),
+        class_counts=tuple(sorted(counts.items())),
+        gaps=records,
+    )

@@ -1,25 +1,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
-
-from ...cache import AnalysisCache
+from ...cache import MeasurementCache
 from ...domain import Box
 from ...formats import FormatPhysicalSpec
 from ...policies.runtime.content import ContentPolicy
-from ...utils import box_from_dict
-from ..evidence.content.regions import content_mask_region_detail
+from ..evidence.content.regions import content_mask_region
 
 
 @dataclass(frozen=True)
 class CountPlacementGuidance:
     offsets: tuple[float, ...]
     source: str
-    detail: dict[str, Any]
 
 
 def content_count_placement_guidance(
-    cache: AnalysisCache,
+    cache: MeasurementCache,
     fmt: FormatPhysicalSpec,
     count: int,
     source_outer: Box,
@@ -32,7 +28,6 @@ def content_count_placement_guidance(
         return CountPlacementGuidance(
             (0.5,),
             "neutral_center",
-            {"used": False, "reason": "invalid_outer"},
         )
 
     frame_span = min(
@@ -44,23 +39,18 @@ def content_count_placement_guidance(
         return CountPlacementGuidance(
             (0.0,),
             "full_span",
-            {"used": True, "reason": "no_placement_range"},
         )
 
-    mask_detail = content_mask_region_detail(
+    content = content_mask_region(
         cache.content_evidence_float_work,
         cache.gray_work.shape,
-        fmt,
         cache,
         content_policy=content_policy,
     )
-    content_raw = mask_detail.get("outer") if isinstance(mask_detail, dict) else None
-    content = box_from_dict(content_raw) if isinstance(content_raw, dict) else None
     if content is None or not content.valid():
         return CountPlacementGuidance(
             (0.5,),
             "neutral_center",
-            {"used": False, "reason": "content_position_unavailable"},
         )
 
     local_left = float(content.left - outer.left)
@@ -79,12 +69,4 @@ def content_count_placement_guidance(
     return CountPlacementGuidance(
         tuple(offsets),
         "content_position_guidance",
-        {
-            "used": True,
-            "role": "placement_guidance_only",
-            "count": int(count),
-            "frame_span": float(frame_span),
-            "placement_range": float(available),
-            "content_outer": content_raw,
-        },
     )

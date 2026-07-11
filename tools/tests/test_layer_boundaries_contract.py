@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from graphlib import TopologicalSorter
 import unittest
 
 from tools.tests.architecture_contracts import PROJECT_ROOT
@@ -10,6 +11,7 @@ from tools.tests.architecture_contracts import (
     STANDALONE_TOOL_ROOTS,
     forbidden_import_edges,
     functions_with_untyped_parameters,
+    functions_with_unused_local_assignments,
     functions_with_unused_parameters,
     invalid_dataclass_default_factories,
     modules_with_export_lists,
@@ -18,6 +20,7 @@ from tools.tests.architecture_contracts import (
     reachable_source_modules,
     source_modules,
     source_layer_memberships,
+    source_import_graph,
     standalone_tool_modules,
     unreferenced_top_level_symbols,
     unreferenced_methods,
@@ -29,6 +32,13 @@ from tools.tests.architecture_contracts import (
 
 
 class LayerBoundariesContractTest(unittest.TestCase):
+    def test_active_source_import_graph_is_acyclic(self) -> None:
+        graph = source_import_graph()
+        self.assertEqual(
+            set(TopologicalSorter(graph).static_order()),
+            set(graph),
+        )
+
     def test_application_identity_import_has_no_runtime_side_effect(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "app_info.py"
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -199,7 +209,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
         )
         self.assertNotIn('get("median_residual", 10.0)', deskew_quality_source)
 
-    def test_detection_pipeline_requires_runtime_owned_analysis_cache(self) -> None:
+    def test_detection_pipeline_requires_runtime_owned_measurement_cache(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "detection" / "pipeline.py"
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source)
@@ -209,7 +219,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
             if isinstance(node, ast.FunctionDef) and node.name == "choose_detection"
         )
         self.assertEqual(choose_detection.args.defaults, [])
-        self.assertNotIn("make_analysis_cache", source)
+        self.assertNotIn("make_measurement_cache", source)
 
     def test_every_active_module_is_reachable_from_a_registered_root(self) -> None:
         modules = set(source_modules())
@@ -307,10 +317,21 @@ class LayerBoundariesContractTest(unittest.TestCase):
                 ),
             ),
         )
+        allowed_model_edges = {
+            (
+                "x5crop.detection.decision.decision_gate",
+                "x5crop.detection.candidate.selection.model",
+            ),
+            (
+                "x5crop.detection.decision.model",
+                "x5crop.detection.candidate.selection.model",
+            ),
+        }
         offenders = [
             edge
             for sources, targets in contracts
             for edge in forbidden_import_edges(sources, targets)
+            if edge not in allowed_model_edges
         ]
         self.assertEqual(offenders, [])
 
@@ -327,12 +348,19 @@ class LayerBoundariesContractTest(unittest.TestCase):
         )
         self.assertEqual(
             edges,
-            [("x5crop.detection.final.finalize", "x5crop.detection.evidence.read_only")],
+            [("x5crop.detection.final.finalize", "x5crop.detection.decision.model")],
         )
 
     def test_report_and_debug_do_not_import_detection_computation_layers(self) -> None:
-        self.assertEqual(
-            forbidden_import_edges(
+        allowed_passive_models = {
+            "x5crop.detection.candidate.model",
+            "x5crop.detection.decision.model",
+            "x5crop.detection.evidence.state",
+            "x5crop.detection.evidence.transform_geometry",
+        }
+        offenders = [
+            edge
+            for edge in forbidden_import_edges(
                 ("x5crop.report", "x5crop.debug"),
                 (
                     "x5crop.detection.candidate",
@@ -342,9 +370,17 @@ class LayerBoundariesContractTest(unittest.TestCase):
                     "x5crop.detection.decision",
                     "x5crop.detection.final",
                 ),
-            ),
-            [],
+            )
+            if edge[1] not in allowed_passive_models
+        ]
+        self.assertEqual(offenders, [])
+
+    def test_debug_rendering_does_not_mutate_detection_measurement_cache(self) -> None:
+        offenders = forbidden_import_edges(
+            ("x5crop.debug",),
+            ("x5crop.cache",),
         )
+        self.assertEqual(offenders, [])
 
     def test_policy_registry_is_resolved_only_at_policy_runtime_boundaries(self) -> None:
         callers: set[str] = set()
@@ -364,6 +400,28 @@ class LayerBoundariesContractTest(unittest.TestCase):
                 "x5crop.policies.runtime.bundle",
             },
         )
+
+    def test_detection_context_receives_resolved_policies_not_runtime_bundle(self) -> None:
+        from x5crop.detection.context import DetectionContext, DetectionRequest
+
+        fields = DetectionContext.__dataclass_fields__
+        self.assertNotIn("policy_bundle", fields)
+        self.assertIn("lane_policy", fields)
+        self.assertIn("request", fields)
+        self.assertNotIn("physical_spec", fields)
+        self.assertNotIn("config", fields)
+        self.assertNotIn("work_gray", fields)
+        self.assertIn("measurement_cache", fields)
+        self.assertEqual(
+            tuple(DetectionRequest.__dataclass_fields__),
+            ("layout", "strip_mode", "requested_count"),
+        )
+        offenders = [
+            str(path.relative_to(PROJECT_ROOT))
+            for path in (PROJECT_ROOT / "x5crop/detection").rglob("*.py")
+            if "RunConfig" in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(offenders, [])
 
     def test_lower_layers_do_not_import_runtime_orchestration(self) -> None:
         lower_layers = (
@@ -435,11 +493,34 @@ class LayerBoundariesContractTest(unittest.TestCase):
     def test_active_interfaces_do_not_accept_unused_parameters(self) -> None:
         self.assertEqual(functions_with_unused_parameters(), [])
 
+    def test_active_functions_do_not_keep_unused_local_assignments(self) -> None:
+        self.assertEqual(functions_with_unused_local_assignments(), [])
+
     def test_runtime_dataclass_fields_have_real_consumers(self) -> None:
         self.assertEqual(unreferenced_dataclass_fields(), [])
 
     def test_active_source_has_no_unused_imports(self) -> None:
         self.assertEqual(unused_imports(), [])
+
+    def test_active_source_has_no_adjacent_duplicate_assignments(self) -> None:
+        offenders: list[str] = []
+        for module in source_modules().values():
+            tree = ast.parse(module.path.read_text(encoding="utf-8"))
+            for owner in ast.walk(tree):
+                body = getattr(owner, "body", None)
+                if not isinstance(body, list):
+                    continue
+                for left, right in zip(body, body[1:]):
+                    if not isinstance(left, (ast.Assign, ast.AnnAssign)):
+                        continue
+                    if type(left) is not type(right):
+                        continue
+                    if ast.dump(left, include_attributes=False) == ast.dump(
+                        right,
+                        include_attributes=False,
+                    ):
+                        offenders.append(f"{module.name}:{right.lineno}")
+        self.assertEqual(offenders, [])
 
     def test_physical_layer_does_not_read_candidate_assessment_or_decision_terms(self) -> None:
         banned = (
@@ -528,7 +609,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
 
         self.assertNotIn("Protocol", frame_fit)
         self.assertNotIn("Protocol", nearby)
-        self.assertIn("class FrameFitParameters", parameters)
+        self.assertNotIn("class FrameFitParameters", parameters)
 
     def test_format_module_owns_only_format_vocabulary(self) -> None:
         formats = (
@@ -574,27 +655,19 @@ class LayerBoundariesContractTest(unittest.TestCase):
         from x5crop.policies.runtime.output import OutputPolicy
 
         self.assertIn("edge_bleed_protection", OutputPolicy.__dataclass_fields__)
-        self.assertIn("guard_ratio", EdgeBleedProtectionParameters.__dataclass_fields__)
+        self.assertIn("guard", EdgeBleedProtectionParameters.__dataclass_fields__)
 
     def test_universal_capabilities_do_not_have_constant_policy_switches(self) -> None:
-        from x5crop.policies.parameters.separator import SeparatorSupportParameters
         from x5crop.policies.parameters.outer import (
             EdgeAnchoredContentPositionParameters,
             FloatingContentPositionParameters,
             FullWidthSeparatorOuterParameters,
         )
         from x5crop.geometry.detection_parameters import (
-            FrameFitParameters,
             NearbySeparatorRefinementParameters,
         )
         from x5crop.image.gray import BaseGrayParameters
-        from x5crop.policies.parameters.candidate import (
-            CandidateExecutionBudgetParameters,
-            CandidatePlanParameters,
-            ContentGuidedSeparatorCandidateParameters,
-            EvidenceIndependenceParameters,
-            SeparatorFullWidthCompetitionParameters,
-        )
+        from x5crop.policies.parameters.candidate import CandidatePlanParameters
         from x5crop.policies.runtime.content import ContentPolicy
         from x5crop.policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
         from x5crop.policies.runtime.outer import (
@@ -606,7 +679,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
         from x5crop.policies.parameters.exposure_overlap import EdgeBleedProtectionParameters
         from x5crop.policies.runtime.output import OutputPolicy
         from x5crop.policies.runtime.separator import (
-            SeparatorGeometrySupportModePolicy,
             SeparatorPolicy,
             SeparatorRefinementFamilyPolicy,
             SeparatorWidthProfilePolicy,
@@ -621,30 +693,12 @@ class LayerBoundariesContractTest(unittest.TestCase):
             FloatingContentPositionParameters: "enabled",
             LongAxisGeometryCorrectionPolicy: "enabled",
             ShortAxisGeometryCorrectionPolicy: "enabled",
-            SeparatorFullWidthCompetitionParameters: "enabled",
-            EvidenceIndependenceParameters: "enabled",
-            ContentGuidedSeparatorCandidateParameters: "requires_exact_content_runs",
-            SeparatorSupportParameters: "allow_geometry_support",
-            SeparatorGeometrySupportModePolicy: "allow_grid",
-            SeparatorGeometrySupportModePolicy: "enabled",
             NearbySeparatorRefinementParameters: "enabled",
             BaseGrayParameters: "miniswhite_inverts",
             PartialPlacementGeometryPolicy: "skip_floating_when_edge_trusted",
         }
         for policy_type, field_name in switches.items():
             self.assertNotIn(field_name, policy_type.__dataclass_fields__)
-        for field_name in (
-            "stop_after_reliable_primary",
-            "skip_outer_correction_after_reliable_selection",
-            "requires_separator_source",
-            "requires_candidate_gate",
-            "requires_hard_separator_ok",
-            "requires_no_candidate_signals",
-        ):
-            self.assertNotIn(
-                field_name,
-                CandidateExecutionBudgetParameters.__dataclass_fields__,
-            )
         self.assertNotIn(
             "outer_correction_extension",
             CandidatePlanParameters.__dataclass_fields__,
@@ -665,13 +719,16 @@ class LayerBoundariesContractTest(unittest.TestCase):
         )
         self.assertNotIn("required_count", SeparatorWidthProfilePolicy.__dataclass_fields__)
         self.assertNotIn("required_count", FullWidthSeparatorOuterParameters.__dataclass_fields__)
-        for policy_type, field_names in (
-            (ContentGuidedSeparatorCandidateParameters, ("enabled",)),
-            (SeparatorSupportParameters, ("allow_full_detected_geometry",)),
-            (SeparatorGeometrySupportModePolicy, ("allow_grid",)),
+        from x5crop.policies.parameters import candidate as candidate_parameters
+        from x5crop.policies.parameters import separator as separator_parameters
+
+        for removed in (
+            "CandidateExecutionBudgetParameters",
+            "EvidenceIndependenceParameters",
+            "SeparatorFullWidthCompetitionParameters",
         ):
-            for field_name in field_names:
-                self.assertNotIn(field_name, policy_type.__dataclass_fields__)
+            self.assertFalse(hasattr(candidate_parameters, removed))
+        self.assertFalse(hasattr(separator_parameters, "SeparatorSupportParameters"))
     def test_report_policy_is_not_owned_by_diagnostics_modules(self) -> None:
         from x5crop.policies.runtime import diagnostics
 
