@@ -42,15 +42,14 @@ def _complete_underfilled_medium_square_detection() -> DetectionCandidate:
 class HolderOccupancyTests(unittest.TestCase):
     def test_default_count_partial_medium_square_can_be_complete_underfilled(self) -> None:
         detection = _complete_underfilled_medium_square_detection()
-        content_containment = {
-            "content_containment_ok": True,
-            "content_integrity_failed": False,
+        frame_content_support = {
+            "frame_content_support_available": True,
         }
 
         evidence = holder_occupancy_evidence(
             detection,
             format_spec("120-66"),
-            content_containment,
+            frame_content_support,
         )
 
         self.assertTrue(evidence["strip_frame_count_complete"])
@@ -64,8 +63,7 @@ class HolderOccupancyTests(unittest.TestCase):
         content_detail = {
             "used": True,
             "support": "ok",
-            "content_containment_ok": True,
-            "content_integrity_failed": False,
+            "frame_content_support_available": True,
             "frame_scores": [
                 {"index": 1, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
                 {"index": 2, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
@@ -84,17 +82,41 @@ class HolderOccupancyTests(unittest.TestCase):
             {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0},
             content_detail,
             "separator",
-            joint_score=0.90,
-            content_score=0.90,
-            geometry_score=0.90,
             holder_occupancy=occupancy,
             cache=None,
             policy=policy,
         )
 
         self.assertTrue(detail["complete_underfilled_strip"])
-        self.assertNotIn("holder_edge_disambiguation_weak", detail["disqualifiers"])
-        self.assertNotIn("holder_edge_disambiguation", detail)
+        self.assertEqual(detail["state"], "supported")
+        self.assertEqual(detail["preservation_failures"], [])
+
+    def test_low_content_and_empty_frames_do_not_create_content_harm(self) -> None:
+        detection = _complete_underfilled_medium_square_detection()
+        policy = get_detection_policy("120-66", "partial")
+
+        detail = partial_edge_safety_assessment_detail(
+            np.zeros((120, 360), dtype=np.uint8),
+            detection,
+            {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0},
+            {
+                "used": True,
+                "support": "low_content",
+                "frame_content_support_available": False,
+                "frame_scores": [],
+            },
+            "separator",
+            holder_occupancy={},
+            cache=None,
+            policy=policy,
+        )
+
+        self.assertEqual(detail["state"], "supported")
+        self.assertEqual(detail["preservation_failures"], [])
+        self.assertIn(
+            "partial_frame_content_measurement_unavailable",
+            detail["occupancy_diagnostics"],
+        )
 
 
 if __name__ == "__main__":

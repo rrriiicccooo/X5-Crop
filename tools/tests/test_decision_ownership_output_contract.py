@@ -1,556 +1,77 @@
 from __future__ import annotations
 
-from copy import deepcopy
-from inspect import signature
+from pathlib import Path
+import inspect
 import unittest
-from unittest.mock import patch
 
-import numpy as np
-
-from tools.tests.architecture_contracts import PROJECT_ROOT
-from tools.tests.decision_contract_support import (
-    apply_test_detection_decision as apply_detection_decision,
-    candidate_gate_detail as _candidate_gate_detail,
-    content_ok_detail as _content_ok_detail,
-    decision_contract as _decision_contract,
-    decision_test_config as _decision_test_config,
-    output_protection_plan_fixture as _output_protection_plan,
-)
-from x5crop.cache.analysis import make_analysis_cache
+from tools.tests.physical_gate_support import candidate_fixture, decide_candidate
 from x5crop.detection.decision.decision_gate import apply_decision_gate
-from x5crop.detection.candidate.selection.choose import select_detection_candidate
-from x5crop.domain import Box, DetectionCandidate
-from x5crop.formats import format_spec
-from x5crop.policies.registry import get_detection_policy
-from x5crop.policies.decision.contract import decision_contract_for_policy
-from x5crop.runtime.output_protection import prepare_output_protection
+from x5crop.report.read_models import candidate_gate_detail, decision_gate_detail
 
 
-def _decision_gate_detail(detection) -> dict:
-    return detection.detail["decision_summary"]["decision_gate"]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class DecisionOwnershipOutputContractTest(unittest.TestCase):
-    def test_decision_conversion_does_not_mutate_or_alias_candidate(self) -> None:
-        gray = np.zeros((100, 100), dtype=np.uint8)
-        candidate = DetectionCandidate(
-            format_id="135",
-            layout="horizontal",
-            strip_mode="full",
-            count=1,
-            outer=Box(10, 10, 90, 90),
-            frames=[Box(10, 10, 90, 90)],
-            gaps=[],
-            confidence=0.90,
-            detail={
-                "candidate_source": "separator",
-                "candidate_assessment": {
-                    "candidate_gate": _candidate_gate_detail(True),
-                    "geometry_score": 1.0,
-                    "content_score": 1.0,
-                    "content_quality_score": 1.0,
-                },
-                "width_cv": 0.0,
-                "width_cv_source": "photo_edges",
-                "photo_width_cv": 0.0,
-                "exposure_overlap_evidence": {"exposure_overlap_detected": False},
-                "output_protection_plan": {"feasible": True},
-            },
-        )
-        before = deepcopy(candidate)
-        final = apply_decision_gate(
-            gray,
-            candidate,
-            _decision_test_config(),
-            _content_ok_detail(),
-            {"used": True, "ok": True},
-            policy=_decision_contract("135", "full"),
-            deskew_detail={},
-            output_protection_plan=_output_protection_plan(),
-        )
+    def test_decision_requires_typed_output_protection_plan(self) -> None:
+        annotation = inspect.signature(apply_decision_gate).parameters[
+            "output_protection_plan"
+        ].annotation
+        self.assertEqual(annotation, "OutputProtectionPlan")
 
-        self.assertEqual(candidate, before)
-        self.assertIsNot(final.detail, candidate.detail)
-        self.assertIsNot(final.frames, candidate.frames)
-        self.assertIsNot(final.gaps, candidate.gaps)
+    def test_final_fields_exist_only_on_final_detection(self) -> None:
+        candidate = candidate_fixture()
+        self.assertFalse(hasattr(candidate, "status"))
+        self.assertFalse(hasattr(candidate, "final_review_reasons"))
 
-    def test_decision_requires_the_typed_output_protection_plan(self) -> None:
-        parameters = signature(apply_decision_gate).parameters
-        self.assertIn("output_protection_plan", parameters)
-        signals_source = (
-            PROJECT_ROOT
-            / "x5crop"
-            / "detection"
-            / "decision"
-            / "decision_signals.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn('"exposure_overlap_evidence": exposure_overlap', signals_source)
-        self.assertNotIn('"output_protection_plan": output_protection', signals_source)
+        decided = decide_candidate(candidate)
+        self.assertEqual(decided.status, "approved_auto")
+        self.assertEqual(decided.final_review_reasons, [])
 
-    def test_decision_detail_has_one_canonical_shape(self) -> None:
+    def test_report_read_models_project_current_gate_sections(self) -> None:
+        decided = decide_candidate()
+
+        self.assertTrue(candidate_gate_detail(decided)["passed"])
+        self.assertTrue(decision_gate_detail(decided)["passed"])
+
+    def test_decision_summary_does_not_duplicate_final_fields(self) -> None:
+        decided = decide_candidate()
+        summary = decided.detail["decision_summary"]
+
+        self.assertEqual(set(summary), {"decision_gate"})
+        self.assertNotIn("status", summary)
+        self.assertNotIn("final_review_reasons", summary)
+
+    def test_workflow_builds_output_protection_before_decision(self) -> None:
         source = (
-            PROJECT_ROOT
-            / "x5crop"
-            / "detection"
-            / "decision"
-            / "decision_gate.py"
+            PROJECT_ROOT / "x5crop/runtime/workflow.py"
         ).read_text(encoding="utf-8")
-        for duplicate in (
-            'detection.detail["candidate_gate_input"]',
-            'detection.detail["decision_reason_inputs"]',
-            '"decision_reason_inputs": decision_gate.reason_inputs',
-            '"decision_confidence_caps": decision_caps',
-            '"candidate_gate_input": candidate_gate_input',
-            '"evidence_summary": evidence',
-            '"decision_signals": decision_signals',
-            '"policy_id": policy.policy_id',
+
+        self.assertLess(
+            source.index("prepare_output_protection("),
+            source.index("apply_decision_gate("),
+        )
+
+    def test_decision_source_has_no_signal_cap_or_threshold_compatibility(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop/detection/decision/decision_gate.py"
+        ).read_text(encoding="utf-8")
+
+        for legacy in (
+            "decision_signals",
+            "confidence_cap",
+            "confidence_floor",
+            "candidate_competition",
+            "candidate_gate_failed",
+            "evidence_combination_insufficient",
         ):
-            self.assertNotIn(duplicate, source)
+            self.assertNotIn(legacy, source)
 
-    def test_decision_summary_does_not_duplicate_canonical_final_fields(self) -> None:
-        decision_source = (
-            PROJECT_ROOT
-            / "x5crop"
-            / "detection"
-            / "decision"
-            / "decision_gate.py"
+    def test_debug_status_has_no_confidence_threshold(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop/debug/status.py"
         ).read_text(encoding="utf-8")
-        reuse_source = (
-            PROJECT_ROOT / "x5crop" / "runtime" / "analysis_reuse.py"
-        ).read_text(encoding="utf-8")
-
-        self.assertNotIn('"status": status', decision_source)
-        self.assertNotIn('"final_review_reasons": final_reasons', decision_source)
-        self.assertNotIn('decision_summary["final_review_reasons"]', reuse_source)
-        self.assertNotIn('decision_summary.get("status")', reuse_source)
-
-    def test_user_docs_describe_feasible_overlap_and_variable_protection_bleed(self) -> None:
-        readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-
-        self.assertNotIn("输出长轴 bleed 会提高到 50px", readme)
-        self.assertNotIn("long-axis output bleed is raised to 50px", readme)
-        self.assertNotIn(
-            "possible\n  overlap, or unstable local spacing goes to review",
-            readme,
-        )
-        self.assertIn("按实际所需的保护宽度增加", readme)
-        self.assertIn("grows by the required protection width", readme)
-
-    def test_feasible_exposure_overlap_plan_does_not_block_decision(self) -> None:
-        gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = DetectionCandidate(
-            format_id="135",
-            layout="horizontal",
-            strip_mode="full",
-            count=1,
-            outer=Box(10, 10, 90, 90),
-            frames=[Box(10, 10, 90, 90)],
-            gaps=[],
-            confidence=0.90,
-            detail={
-                "width_cv": 0.0,
-                "width_cv_source": "photo_edges",
-                "photo_width_cv": 0.0,
-                "exposure_overlap_evidence": {
-                    "used": True,
-                    "exposure_overlap_detected": True,
-                    "widest_overlap_band_px": 40.0,
-                    "reason": "exposure_overlap_detected",
-                },
-                "output_protection_plan": {
-                    "exposure_overlap_detected": True,
-                    "feasible": True,
-                    "reason": "exposure_overlap_protection_planned",
-                },
-                "candidate_assessment": {
-                    "source": "separator",
-                    "candidate_gate": _candidate_gate_detail(True),
-                    "geometry_score": 1.0,
-                    "content_score": 1.0,
-                    "content_quality_score": 1.0,
-                    "blockers": [],
-                    "diagnostics": [],
-                },
-            },
-        )
-        config = _decision_test_config()
-        content_detail = _content_ok_detail()
-        outer_alignment = {"used": True, "ok": True}
-
-        decided = apply_decision_gate(
-            gray,
-            detection,
-            config,
-            content_detail,
-            outer_alignment,
-            policy=_decision_contract("135", "full"),
-            deskew_detail={},
-            output_protection_plan=_output_protection_plan(detected=True, feasible=True),
-        )
-
-        self.assertEqual(decided.final_review_reasons, [])
-        self.assertTrue(decided.detail["decision_signals"]["exposure_overlap_detected"])
-        self.assertFalse(decided.detail["decision_signals"]["exposure_overlap_unresolved"])
-        self.assertEqual(
-            [item["signal"] for item in _decision_gate_detail(decided)["reason_inputs"]],
-            [],
-        )
-
-    def test_exposure_overlap_plan_is_attached_before_final_decision(self) -> None:
-        gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = DetectionCandidate(
-            format_id="135",
-            layout="horizontal",
-            strip_mode="full",
-            count=1,
-            outer=Box(10, 10, 90, 90),
-            frames=[Box(10, 10, 90, 90)],
-            gaps=[],
-            confidence=0.90,
-            detail={
-                "width_cv": 0.0,
-                "width_cv_source": "photo_edges",
-                "photo_width_cv": 0.0,
-                "candidate_assessment": {
-                    "source": "separator",
-                    "candidate_gate": _candidate_gate_detail(True),
-                    "geometry_score": 1.0,
-                    "content_score": 1.0,
-                    "content_quality_score": 1.0,
-                    "blockers": [],
-                    "diagnostics": [],
-                },
-            },
-        )
-        policy = get_detection_policy("135", "full")
-        config = _decision_test_config()
-        cache = make_analysis_cache(
-            gray,
-            "horizontal",
-            policy.preprocess.content_evidence_image,
-        )
-
-        with (
-            patch(
-                "x5crop.detection.evidence.selected_candidate.content_evidence_detail",
-                return_value={"used": True},
-            ),
-            patch(
-                "x5crop.detection.evidence.selected_candidate.content_containment_detail",
-                return_value=_content_ok_detail(),
-            ),
-            patch(
-                "x5crop.detection.evidence.selected_candidate.outer_content_alignment_detail",
-                return_value={"used": True, "ok": True},
-            ),
-            patch(
-                "x5crop.runtime.output_protection.exposure_overlap_evidence_detail",
-                return_value={
-                    "used": True,
-                    "exposure_overlap_detected": True,
-                    "widest_overlap_band_px": 40.0,
-                    "reason": "exposure_overlap_detected",
-                },
-            ),
-        ):
-            protection_plan = prepare_output_protection(
-                gray,
-                detection,
-                config,
-                cache,
-                policy,
-            )
-            decision = apply_detection_decision(
-                gray,
-                detection,
-                config,
-                cache,
-                {},
-                policy,
-                decision_contract_for_policy(policy),
-            )
-
-        self.assertEqual(decision.status, "approved_auto")
-        self.assertEqual(decision.final_review_reasons, [])
-        self.assertEqual(
-            decision.detail["exposure_overlap_evidence"]["reason"],
-            "exposure_overlap_detected",
-        )
-        self.assertTrue(protection_plan.feasible)
-        self.assertEqual(protection_plan.output_bleed.long_axis, 20)
-        self.assertEqual(
-            [item["signal"] for item in _decision_gate_detail(decision)["reason_inputs"]],
-            [],
-        )
-
-    def test_selection_records_competition_signal_without_candidate_review_reason(self) -> None:
-        def candidate(confidence: float) -> DetectionCandidate:
-            return DetectionCandidate(
-                format_id="135",
-                layout="horizontal",
-                strip_mode="full",
-                count=6,
-                outer=Box(0, 0, 120, 20),
-                frames=[],
-                gaps=[],
-                confidence=confidence,
-                detail={
-                    "candidate_assessment": {
-                        "source": "separator",
-                        "joint_score": confidence,
-                    },
-                },
-            )
-
-        selected = select_detection_candidate(
-            [candidate(0.90), candidate(0.875)],
-            format_spec("135"),
-            threshold=0.85,
-            selection_policy=get_detection_policy("135", "full").candidate_selection,
-        )
-
-        self.assertEqual(selected.confidence, 0.90)
-        self.assertFalse(hasattr(selected, "final_review_reasons"))
-        self.assertEqual(
-            selected.detail["candidate_competition"]["selection_uncertainty_inputs"][0]["signal"],
-            "candidate_competition_close",
-        )
-        self.assertNotIn(
-            "recommended_final_review_reason",
-            selected.detail["candidate_competition"]["selection_uncertainty_inputs"][0],
-        )
-        self.assertTrue(
-            selected.detail["candidate_competition"]["second_candidate_close"]
-        )
-
-    def test_outer_disagreement_uses_assessed_candidates_not_proposal_inventory(self) -> None:
-        def candidate(confidence: float, width: int) -> DetectionCandidate:
-            return DetectionCandidate(
-                format_id="135",
-                layout="horizontal",
-                strip_mode="full",
-                count=6,
-                outer=Box(0, 0, width, 20),
-                frames=[],
-                gaps=[],
-                confidence=confidence,
-                detail={"candidate_assessment": {"source": "separator"}},
-            )
-
-        selected = select_detection_candidate(
-            [candidate(0.90, 120), candidate(0.89, 80)],
-            format_spec("135"),
-            threshold=0.85,
-            selection_policy=get_detection_policy("135", "full").candidate_selection,
-        )
-
-        self.assertAlmostEqual(selected.detail["outer_area_spread_ratio"], 1.0 / 3.0)
-        build_source = (
-            PROJECT_ROOT
-            / "x5crop/detection/candidate/execution/source_candidates.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn('detection.detail["outer_area_spread_ratio"]', build_source)
-
-    def test_content_mismatch_diagnostics_do_not_override_selection(self) -> None:
-        fmt = format_spec("half")
-        policy = get_detection_policy("half", "full")
-
-        def content_candidate(*, diagnostics: list[str]) -> DetectionCandidate:
-            return DetectionCandidate(
-                format_id="half",
-                layout="horizontal",
-                strip_mode="full",
-                count=fmt.default_count,
-                outer=Box(0, 0, 1200, 100),
-                frames=[],
-                gaps=[],
-                confidence=0.90,
-                detail={
-                    "candidate_assessment": {
-                        "source": "content",
-                        "joint_score": 0.90,
-                        "diagnostics": diagnostics,
-                        "blockers": [],
-                    },
-                },
-            )
-
-        separator_candidate = DetectionCandidate(
-            format_id="half",
-            layout="horizontal",
-            strip_mode="full",
-            count=fmt.default_count,
-            outer=Box(0, 0, 1200, 100),
-            frames=[],
-            gaps=[],
-            confidence=0.84,
-            detail={
-                "candidate_assessment": {
-                    "source": "separator",
-                    "joint_score": 0.84,
-                    "content_support": "ok",
-                    "diagnostics": [],
-                    "blockers": [],
-                    "separator_support": {
-                        "expected_gaps": fmt.default_count - 1,
-                        "hard_gaps": 6,
-                        "equal_gaps": 0,
-                    },
-                },
-            },
-        )
-
-        selected_without_diagnostic = select_detection_candidate(
-            [
-                content_candidate(
-                    diagnostics=[],
-                ),
-                separator_candidate,
-            ],
-            fmt,
-            threshold=0.85,
-            selection_policy=policy.candidate_selection,
-        )
-        self.assertEqual(
-            selected_without_diagnostic.detail["candidate_assessment"]["source"],
-            "content",
-        )
-        self.assertNotIn("content_candidate_mismatch", selected_without_diagnostic.detail)
-
-        selected_with_diagnostic = select_detection_candidate(
-            [
-                content_candidate(
-                    diagnostics=["content_run_count_mismatch"],
-                ),
-                separator_candidate,
-            ],
-            fmt,
-            threshold=0.85,
-            selection_policy=policy.candidate_selection,
-        )
-        self.assertEqual(
-            selected_with_diagnostic.detail["candidate_assessment"]["source"],
-            "content",
-        )
-        self.assertNotIn("content_candidate_mismatch", selected_with_diagnostic.detail)
-
-    def test_low_confidence_context_reasons_update_generated_summary(self) -> None:
-        gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = DetectionCandidate(
-            format_id="135",
-            layout="horizontal",
-            strip_mode="full",
-            count=1,
-            outer=Box(10, 10, 90, 90),
-            frames=[Box(10, 10, 90, 90)],
-            gaps=[],
-            confidence=0.83,
-            detail={
-                "outer_area_spread_ratio": 0.25,
-                "width_cv": 0.0,
-                "width_cv_source": "photo_edges",
-                "photo_width_cv": 0.0,
-                "candidate_assessment": {
-                    "source": "separator",
-                    "candidate_gate": _candidate_gate_detail(True),
-                    "geometry_score": 1.0,
-                    "content_score": 1.0,
-                    "content_quality_score": 1.0,
-                    "blockers": [],
-                    "diagnostics": [],
-                },
-                "candidate_competition": {
-                    "top_candidates": [
-                        {
-                            "selected": True,
-                            "candidate_assessment": {"source": "separator"},
-                        }
-                    ],
-                },
-            },
-        )
-
-        decided = apply_decision_gate(
-            gray,
-            detection,
-            _decision_test_config(),
-            _content_ok_detail(),
-            {"used": True, "ok": True},
-            policy=_decision_contract("135", "full"),
-            deskew_detail={},
-            output_protection_plan=_output_protection_plan(),
-        )
-
-        self.assertNotIn("final_review_reasons", decided.detail)
-        self.assertEqual(
-            decided.final_review_reasons,
-            ["evidence_combination_insufficient", "outer_candidate_disagreement"],
-        )
-        self.assertNotIn("final_review_reasons_added", decided.detail["decision_summary"])
-        decision_signals = [
-            item["signal"] for item in _decision_gate_detail(decided)["reason_inputs"]
-        ]
-        self.assertEqual(
-            decision_signals,
-        ["confidence_below_threshold", "outer_area_spread"],
-        )
-        self.assertEqual(
-            _decision_gate_detail(decided)["reason_inputs"][1]["bucket"],
-            "low_confidence_context",
-        )
-        self.assertEqual(
-            decided.final_review_reasons,
-            ["evidence_combination_insufficient", "outer_candidate_disagreement"],
-        )
-        self.assertEqual(decided.status, "needs_review")
-        self.assertNotIn(
-            "final_review_reasons",
-            decided.detail["candidate_competition"]["top_candidates"][0],
-        )
-
-    def test_low_confidence_context_reasons_do_not_create_high_confidence_review(self) -> None:
-        gray = np.zeros((100, 100), dtype=np.uint8)
-        detection = DetectionCandidate(
-            format_id="135",
-            layout="horizontal",
-            strip_mode="full",
-            count=1,
-            outer=Box(10, 10, 90, 90),
-            frames=[Box(10, 10, 90, 90)],
-            gaps=[],
-            confidence=0.90,
-            detail={
-                "outer_area_spread_ratio": 0.25,
-                "width_cv": 0.0,
-                "width_cv_source": "photo_edges",
-                "photo_width_cv": 0.0,
-                "candidate_assessment": {
-                    "source": "separator",
-                    "candidate_gate": _candidate_gate_detail(True),
-                    "geometry_score": 1.0,
-                    "content_score": 1.0,
-                    "content_quality_score": 1.0,
-                    "blockers": [],
-                    "diagnostics": [],
-                },
-            },
-        )
-
-        decided = apply_decision_gate(
-            gray,
-            detection,
-            _decision_test_config(),
-            _content_ok_detail(),
-            {"used": True, "ok": True},
-            policy=_decision_contract("135", "full"),
-            deskew_detail={"reason": "no_outer"},
-            output_protection_plan=_output_protection_plan(),
-        )
-
-        self.assertEqual(decided.final_review_reasons, [])
-        self.assertNotIn("final_review_reasons", decided.detail["decision_summary"])
-        self.assertEqual(_decision_gate_detail(decided)["reason_inputs"], [])
-
+        self.assertNotIn("threshold", source)
 
 
 if __name__ == "__main__":

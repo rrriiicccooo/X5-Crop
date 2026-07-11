@@ -18,16 +18,11 @@ from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
 from ..domain import ProcessResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
-from ..formats import format_description
 from ..geometry.layout import infer_layout
 from ..image.gray import make_base_gray_u8
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..output.surface import output_surface_for_input
-from ..policies.decision.contract import decision_contract_for_policy
-from ..policies.reporting import (
-    decision_contract_report_detail,
-    detection_policy_report_detail,
-)
+from ..policies.reporting import detection_policy_report_detail
 from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..report.result_builder import result_from_detection
 from ..units import scan_calibration_from_profile
@@ -80,30 +75,22 @@ def process_one(
         analysis_cache,
         selected_policy,
     )
-    decision_contract = decision_contract_for_policy(selected_policy)
     selected_evidence = complete_selected_candidate_evidence(
         gray,
         detection,
         analysis_cache,
         content_policy=selected_policy.content,
         alignment_parameters=selected_policy.outer.alignment_evidence,
-        horizontal_frame_aspect=decision_contract.physical_spec.horizontal_content_aspect,
+        horizontal_frame_aspect=selected_policy.physical_spec.horizontal_content_aspect,
     )
     decided_detection = apply_decision_gate(
-        gray,
         selected_evidence.candidate,
-        config,
         selected_evidence.content,
         selected_evidence.outer_alignment,
-        policy=decision_contract,
         deskew_detail=deskew_detail,
         output_protection_plan=output_protection_plan,
     )
     runtime_policy_detail = detection_policy_report_detail(selected_policy)
-    decision_policy_detail = decision_contract_report_detail(
-        decision_contract,
-        format_description(decision_contract.physical_spec.format_id),
-    )
     detection = finalize_detection(
         gray,
         decided_detection,
@@ -147,7 +134,6 @@ def process_one(
         warnings,
         policy_id=selected_policy.policy_id,
         runtime_policy_detail=runtime_policy_detail,
-        decision_policy_detail=decision_policy_detail,
         deskew_detail=deskew_detail,
         analysis_cache_metadata=make_analysis_cache_metadata(
             input_file,

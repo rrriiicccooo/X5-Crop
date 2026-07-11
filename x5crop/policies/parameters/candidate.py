@@ -11,7 +11,6 @@ class SeparatorFullWidthCompetitionParameters:
 
 @dataclass(frozen=True)
 class CandidateExecutionBudgetParameters:
-    reliable_confidence_margin: float = 0.02
     physical_primary_candidate_count: int = 2
 
 
@@ -19,8 +18,6 @@ class CandidateExecutionBudgetParameters:
 class EvidenceIndependenceParameters:
     max_dependent_gap_count_without_validation: int = 0
     min_standard_detected_gaps: int = 1
-    min_content_score: float = 0.72
-    min_geometry_score: float = 0.72
     max_photo_width_cv: float = 0.040
 
 
@@ -54,9 +51,6 @@ class PartialHolderParameters:
     min_hard_ratio: float = 0.15
     max_equal_gaps: int = 0
     max_photo_width_cv: float = 0.055
-    min_joint_score: float = 0.65
-    min_content_score: float = 0.72
-    min_geometry_score: float = 0.72
     leading_content_max_mean: float = 0.20
     leading_content_max_coverage: float = 0.34
     leading_content_band_ratio: float = 0.04

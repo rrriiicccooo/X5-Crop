@@ -227,15 +227,15 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         ):
             self.assertNotIn(detail_key, source)
 
-    def test_decision_evidence_thresholds_are_parameter_owned(self) -> None:
+    def test_decision_evidence_policy_surface_is_removed(self) -> None:
         decision_parameters = (
             PROJECT_ROOT / "x5crop" / "policies" / "parameters" / "decision.py"
-        ).read_text(encoding="utf-8")
+        )
         evidence_policy = (
             PROJECT_ROOT / "x5crop" / "policies" / "decision" / "evidence_policy.py"
         )
 
-        self.assertIn("class DecisionEvidenceParameters", decision_parameters)
+        self.assertFalse(decision_parameters.exists())
         self.assertFalse(evidence_policy.exists())
 
     def test_crop_decision_output_tuning_is_format_parameter_owned(self) -> None:

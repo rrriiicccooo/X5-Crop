@@ -5,7 +5,6 @@ from dataclasses import replace
 from ...formats import FormatPhysicalSpec
 from ...geometry.detection_parameters import EdgePairParameters, FrameFitParameters
 from .aggregate import FormatParameters
-from .decision import DecisionEvidenceParameters
 
 
 def parameter_profile_for_spec(spec: FormatPhysicalSpec) -> str:
@@ -177,87 +176,6 @@ def _with_profile_parameters(
                 name=f"{parameter_profile_for_spec(spec)}_partial_frame_fit",
                 edge_evidence=False,
             ),
-        ),
-    )
-
-
-def _decision_evidence_parameters(spec: FormatPhysicalSpec) -> DecisionEvidenceParameters:
-    evidence = DecisionEvidenceParameters()
-    profile = parameter_profile_for_spec(spec)
-    if spec.physical_layout == "dual_lane":
-        return replace(
-            evidence,
-            min_hard_separator_ratio=0.50,
-            min_hard_separator_count=2,
-            max_photo_width_cv_ratio=0.035,
-        )
-    if profile == "dense_half":
-        return replace(
-            evidence,
-            min_hard_separator_ratio=0.55,
-            min_hard_separator_count=2,
-            max_photo_width_cv_ratio=0.012,
-            geometry_supported_min_hard_ratio=0.20,
-            geometry_supported_max_photo_width_cv_ratio=0.010,
-            max_outer_area_ratio=0.990,
-        )
-    if profile == "standard_35mm":
-        return replace(
-            evidence,
-            min_hard_separator_ratio=0.35,
-            min_hard_separator_count=2,
-            max_photo_width_cv_ratio=0.030,
-            max_model_gap_share=0.70,
-        )
-    if profile == "panoramic_35mm":
-        return replace(
-            evidence,
-            min_hard_separator_ratio=0.67,
-            min_hard_separator_count=1,
-            max_photo_width_cv_ratio=0.035,
-        )
-    if profile == "medium_square":
-        return replace(
-            evidence,
-            min_hard_separator_ratio=0.90,
-            min_hard_separator_count=2,
-            max_photo_width_cv_ratio=0.040,
-            max_outer_area_ratio=0.990,
-        )
-    if profile == "medium_wide":
-        return replace(
-            evidence,
-            min_hard_separator_ratio=0.75,
-            min_hard_separator_count=2,
-            max_photo_width_cv_ratio=0.040,
-        )
-    if spec.family == "120":
-        return replace(
-            evidence,
-            min_hard_separator_ratio=0.67,
-            min_hard_separator_count=2,
-            max_photo_width_cv_ratio=0.035,
-        )
-    return evidence
-
-
-def _with_decision_evidence(
-    params: FormatParameters,
-    spec: FormatPhysicalSpec,
-) -> FormatParameters:
-    full = _decision_evidence_parameters(spec)
-    partial = replace(
-        full,
-        min_hard_separator_ratio=min(full.min_hard_separator_ratio, 0.35),
-        max_photo_width_cv_ratio=max(full.max_photo_width_cv_ratio, 0.045),
-        max_outer_area_ratio=max(full.max_outer_area_ratio, 0.990),
-    )
-    return replace(
-        params,
-        decision=replace(
-            params.decision,
-            full_evidence=full,
-            partial_evidence=partial,
         ),
     )
 
@@ -689,4 +607,4 @@ def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
         )
         params = _with_partial_edge(params, ratio_extras=(0.04, 0.08), max_candidates=4)
 
-    return _with_decision_evidence(params, spec)
+    return params

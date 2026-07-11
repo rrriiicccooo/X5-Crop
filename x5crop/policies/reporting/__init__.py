@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import asdict, fields, is_dataclass
+from dataclasses import fields, is_dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ...formats import FormatDescription, FormatPhysicalSpec
     from ..runtime.policy import DetectionPolicy
-    from ..decision.contract import DetectionDecisionContract
 
 from ...constants import HARD_GAP_METHODS, MODEL_GAP_METHODS
 from .mode_descriptions import mode_notes_for_spec, mode_role_for_spec
@@ -30,6 +28,7 @@ def _physical_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "family": spec.family,
         "physical_layout": spec.physical_layout,
         "default_count": int(spec.default_count),
+        "expected_separator_count": int(spec.expected_separator_count),
         "allowed_counts": list(spec.allowed_counts),
         "nominal_frame_size_mm": _plain(spec.nominal_frame_size_mm),
         "frame_size_mm_options": _plain(spec.frame_size_mm_options),
@@ -83,13 +82,9 @@ def _candidate_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     }
 
 
-def _decision_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
+def _evidence_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     return {
-        "decision": _plain(policy.decision),
         "exposure_overlap_evidence": _plain(policy.exposure_overlap_evidence),
-        "exposure_overlap_protection": _plain(
-            policy.output.exposure_overlap_protection
-        ),
     }
 
 
@@ -112,82 +107,11 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "physical": _physical_detail(policy),
         "physical_runtime": _physical_runtime_detail(policy),
         "candidate_runtime": _candidate_runtime_detail(policy),
-        "decision_runtime": _decision_runtime_detail(policy),
+        "evidence_runtime": _evidence_runtime_detail(policy),
         "output_runtime": {
             "approved_geometry_adjustment": _plain(policy.approved_geometry_adjustment),
             "output": _plain(policy.output),
         },
         "diagnostics_runtime": _diagnostics_runtime_detail(policy),
         "notes": list(mode_notes_for_spec(spec, policy.strip_mode)),
-    }
-
-
-def _format_spec_detail(
-    contract: "DetectionDecisionContract",
-    description: "FormatDescription",
-) -> dict[str, Any]:
-    spec = contract.physical_spec
-    return {
-        "format_id": spec.format_id,
-        "family": spec.family,
-        "nominal_frame_count": spec.default_count,
-        "allowed_count_range": list(spec.allowed_counts),
-        "nominal_frame_size_mm": _plain(spec.nominal_frame_size_mm),
-        "frame_size_mm_options": _plain(spec.frame_size_mm_options),
-        "frame_aspect": spec.horizontal_content_aspect,
-        "aspect_source": "frame_size_mm",
-        "expected_separator_count": spec.expected_separator_count,
-        "complete_strip_can_be_underfilled": bool(spec.complete_strip_can_be_underfilled),
-        "full_mode_behavior": description.full_mode_behavior,
-        "partial_mode_behavior": description.partial_mode_behavior,
-        "outer_trust_profile": description.outer_trust_profile,
-        "separator_visibility_expectation": description.separator_visibility,
-        "geometry_tolerance": description.geometry_tolerance,
-        "known_physical_notes": list(description.known_physical_notes),
-    }
-
-
-def decision_contract_report_detail(
-    contract: "DetectionDecisionContract",
-    description: "FormatDescription",
-) -> dict[str, Any]:
-    return {
-        "policy_id": contract.policy_id,
-        "format_spec": _format_spec_detail(contract, description),
-        "mode_policy": _decision_mode_detail(
-            contract.physical_spec,
-            contract.strip_mode,
-        ),
-        "evidence_policy": asdict(contract.evidence),
-        "decision_policy": asdict(contract.decision),
-        "candidate_selection_policy": asdict(contract.candidate_selection),
-    }
-
-
-def _decision_mode_detail(
-    spec: "FormatPhysicalSpec",
-    strip_mode: str,
-) -> dict[str, Any]:
-    partial = strip_mode == "partial"
-    return {
-        "mode": strip_mode,
-        "nominal_count": spec.default_count,
-        "allowed_counts": list(spec.allowed_counts),
-        "expected_separator_count": spec.expected_separator_count,
-        "count_behavior": (
-            "fixed_nominal_count" if not partial else "candidate_count_search"
-        ),
-        "outer_behavior": (
-            "outer_must_match_content_and_geometry"
-            if not partial
-            else "outer_edges_are_untrusted_until_supported"
-        ),
-        "stop_condition": (
-            "all_expected_internal_separators_supported"
-            if not partial
-            else "first_safe_candidate_or_review"
-        ),
-        "partial_edge_trust": (
-            "not_applicable" if not partial else "requires_safe_edge_evidence"
-        ),
     }

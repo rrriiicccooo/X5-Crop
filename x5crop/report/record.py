@@ -8,7 +8,6 @@ from ..detection.detail import (
     COUNT_SELECTION,
     CONTENT_EVIDENCE,
     DECISION_GEOMETRY,
-    DECISION_SIGNALS,
     DIAGNOSTICS,
     EVIDENCE_SUMMARY,
     EXPOSURE_OVERLAP_EVIDENCE,
@@ -38,17 +37,12 @@ def _schema_validation(
     detection: FinalDetection,
     policy_id: str,
     runtime_policy: dict,
-    decision_policy: dict,
 ) -> list[dict[str, str]]:
     diagnostics = decision_schema_diagnostics(detection)
     if not runtime_policy:
         diagnostics.append(_missing_schema_diagnostic("runtime_policy", "runtime_policy_detail_missing"))
-    if not decision_policy:
-        diagnostics.append(_missing_schema_diagnostic("decision_policy", "decision_policy_detail_missing"))
     if not detail_dict(detection, EVIDENCE_SUMMARY):
         diagnostics.append(_missing_schema_diagnostic("evidence_summary", "evidence_summary_missing"))
-    if not detail_dict(detection, DECISION_SIGNALS):
-        diagnostics.append(_missing_schema_diagnostic("decision_signals", "decision_signals_missing"))
     if not policy_id:
         diagnostics.append(_missing_schema_diagnostic("policy", "policy_id_missing"))
     return diagnostics
@@ -64,7 +58,6 @@ def report_record_for_final_detection(
     warnings: list[str],
     policy_id: str,
     runtime_policy: dict,
-    decision_policy: dict,
     deskew_detail: dict,
     analysis_cache_metadata: dict,
 ) -> dict:
@@ -80,14 +73,8 @@ def report_record_for_final_detection(
         detection,
         policy_id,
         runtime_policy,
-        decision_policy,
     )
-    policy_detail = {
-        "runtime_policy": dict(runtime_policy),
-        "decision_policy": dict(decision_policy),
-    }
     evidence_summary = detail_dict(detection, EVIDENCE_SUMMARY)
-    decision_signals = detail_dict(detection, DECISION_SIGNALS)
     schema = {
         "schema_id": REPORT_SCHEMA_ID,
         "schema_revision": REPORT_SCHEMA_REVISION,
@@ -108,7 +95,7 @@ def report_record_for_final_detection(
         "frame_boxes": [asdict(box) for box in detection.frames],
         "gaps": [asdict(gap) for gap in detection.gaps],
         "candidate_table": candidate_table(detection),
-        "policy": policy_detail,
+        "policy": dict(runtime_policy),
         "policy_id": policy_id,
         "evidence": {
             "content": detail_dict(detection, CONTENT_EVIDENCE),
@@ -121,7 +108,6 @@ def report_record_for_final_detection(
         },
         "evidence_summary": evidence_summary,
         "candidate_gate": candidate_gate_detail(detection),
-        "decision_signals": decision_signals,
         "decision_gate": decision_gate_detail(detection),
         "scan_calibration": detail_dict(detection, SCAN_CALIBRATION),
         "decision_geometry": detail_dict(detection, DECISION_GEOMETRY),

@@ -1,261 +1,121 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any
 
-from ....constants import (
-    CANDIDATE_SOURCE_CONTENT,
-    CANDIDATE_SOURCE_SEPARATOR,
+from ...evidence.state import EvidenceState
+from ...gate_checks import GateCheck, gate_check_details
+
+
+BOUNDARY_PROOF_PATH_CODES = frozenset(
+    {
+        "separator_led",
+        "geometry_led",
+        "partial_occupancy_led",
+        "mode_composition",
+    }
 )
-from ...gate_checks import GateCheck, gate_check_details, unique_signals
-from ..signals import (
-    GATE_BLOCKER_SIGNALS,
-    GATE_DIAGNOSTIC_SIGNALS,
-    FRAME_TOPOLOGY_BLOCKER_SIGNALS,
-    MODE_DIAGNOSTIC_SIGNALS,
-    PHOTO_SIZE_BLOCKER_SIGNALS,
-    SIGNAL_BUCKETS,
-    SIGNAL_CONTENT_ASPECT_CONFLICT,
-    SIGNAL_CONTENT_EVIDENCE_WEAK,
-    SIGNAL_CONTENT_ONLY_NOT_ENOUGH_FOR_AUTO,
-    SIGNAL_CONTENT_INTEGRITY_FAILED,
-    SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED,
-    SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
-    unknown_candidate_signals,
-)
+
+
+@dataclass(frozen=True)
+class BoundaryProofPath:
+    code: str
+    state: EvidenceState
+    detail: dict[str, Any] = field(default_factory=dict)
+
+    def report_detail(self) -> dict[str, Any]:
+        return {
+            "code": self.code,
+            "state": self.state.value,
+            "detail": dict(self.detail),
+        }
+
+
+@dataclass(frozen=True)
+class CandidateGateInput:
+    frame_topology: EvidenceState
+    content_preservation: EvidenceState
+    photo_geometry: EvidenceState
+    evidence_independence: EvidenceState
+    proof_paths: tuple[BoundaryProofPath, ...]
+    diagnostics: tuple[str, ...] = ()
+    detail: dict[str, Any] = field(default_factory=dict)
+
 
 @dataclass(frozen=True)
 class CandidateGateAssessment:
     passed: bool
-    checks: list[GateCheck]
-    blockers: list[str]
-    diagnostics: list[str]
-    confidence_caps: list[dict[str, Any]] = field(default_factory=list)
-
-    def with_confidence_caps(self, confidence_caps: list[dict[str, Any]]) -> "CandidateGateAssessment":
-        return replace(self, confidence_caps=list(confidence_caps))
+    checks: tuple[GateCheck, ...]
+    proof_paths: tuple[BoundaryProofPath, ...]
+    failed_checks: tuple[str, ...]
+    diagnostics: tuple[str, ...]
 
     def report_detail(self) -> dict[str, Any]:
         return {
             "passed": bool(self.passed),
-            "checks": gate_check_details(self.checks),
-            "blockers": list(self.blockers),
+            "checks": gate_check_details(list(self.checks)),
+            "proof_paths": [path.report_detail() for path in self.proof_paths],
+            "failed_checks": list(self.failed_checks),
             "diagnostics": list(self.diagnostics),
-            "confidence_caps": list(self.confidence_caps),
         }
 
 
-def _failed_check_signals(checks: list[GateCheck], severity: str) -> list[str]:
-    return unique_signals(
-        [
-            check.signal
-            for check in checks
-            if not check.passed and check.severity == severity
-        ]
+def candidate_gate_assessment(gate_input: CandidateGateInput) -> CandidateGateAssessment:
+    unknown_paths = sorted(
+        {path.code for path in gate_input.proof_paths} - BOUNDARY_PROOF_PATH_CODES
     )
-
-
-def _source_uses_separator_evidence(source: str) -> bool:
-    return source in {"separator", CANDIDATE_SOURCE_SEPARATOR}
-
-
-def candidate_signal_gate_checks(
-    signals: list[str],
-    *,
-    ignored_signals: set[str] | None = None,
-) -> list[GateCheck]:
-    ignored = ignored_signals or set()
-    unknown = unknown_candidate_signals(signals, ignored=ignored)
-    if unknown:
-        raise ValueError(f"unowned candidate signals: {', '.join(unknown)}")
-    checks: list[GateCheck] = []
-    for signal in unique_signals([str(signal) for signal in signals]):
-        if signal in ignored or signal in MODE_DIAGNOSTIC_SIGNALS:
-            continue
-        if signal in GATE_BLOCKER_SIGNALS:
-            severity = "blocker"
-        elif signal in GATE_DIAGNOSTIC_SIGNALS:
-            severity = "diagnostic"
-        else:
-            continue
-        bucket = SIGNAL_BUCKETS.get(signal, "candidate")
-        checks.append(
-            GateCheck(
-                code=f"{bucket}_signal",
-                stage="candidate",
-                bucket=bucket,
-                passed=False,
-                severity=severity,
-                signal=signal,
-            )
-        )
-    return checks
-
-
-
-
-def candidate_gate_assessment(
-    *,
-    source: str,
-    separator_support_ok: bool,
-    separator_support_detail: dict[str, Any],
-    partial_edge_safety_candidate_support_ok: bool,
-    partial_edge_safety_blocks_auto: bool,
-    partial_edge_safety_disqualifiers: set[str],
-    content_containment_ok: bool,
-    content_integrity_failed: bool,
-    content_support: str,
-    evidence_independence_ok: bool,
-    evidence_independence_detail: dict[str, Any],
-    signals: list[str],
-) -> CandidateGateAssessment:
-    checks: list[GateCheck] = []
-    source_auto_allowed = source in {"separator", CANDIDATE_SOURCE_SEPARATOR}
-    if source == CANDIDATE_SOURCE_CONTENT:
-        source_signal = SIGNAL_CONTENT_ONLY_NOT_ENOUGH_FOR_AUTO
-    else:
-        source_signal = "candidate_source_not_auto_allowed"
-    checks.append(
+    if unknown_paths:
+        raise ValueError(f"unowned boundary proof path: {','.join(unknown_paths)}")
+    boundary_state = (
+        EvidenceState.SUPPORTED
+        if any(path.state == EvidenceState.SUPPORTED for path in gate_input.proof_paths)
+        else EvidenceState.CONTRADICTED
+    )
+    checks = (
         GateCheck(
-            code="candidate_source_auto_allowed",
+            code="frame_topology_integrity",
             stage="candidate",
-            bucket="source",
-            passed=source_auto_allowed,
-            severity="blocker",
-            signal=source_signal,
-            detail={"source": source},
-        )
-    )
-
-    separator_support = (
-        not _source_uses_separator_evidence(source)
-        or separator_support_ok
-        or partial_edge_safety_candidate_support_ok
-    )
-    checks.append(
+            state=gate_input.frame_topology,
+            consequence="blocker",
+        ),
         GateCheck(
-            code="separator_support",
+            code="content_preservation",
             stage="candidate",
-            bucket="separator",
-            passed=separator_support,
-            severity="blocker",
-            signal=SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
-            detail={
-                "separator_support_ok": bool(separator_support_ok),
-                "partial_edge_safety_candidate_support_ok": bool(
-                    partial_edge_safety_candidate_support_ok
-                ),
-                "separator_support": dict(separator_support_detail),
-            },
-        )
-    )
-
-    content_signal = (
-        SIGNAL_CONTENT_ASPECT_CONFLICT
-        if content_support == "aspect_conflict"
-        else SIGNAL_CONTENT_EVIDENCE_WEAK
-    )
-    content_integrity_ok = content_containment_ok and not content_integrity_failed
-    if content_integrity_ok:
-        content_integrity_signal = "content_integrity_ok"
-    elif not content_containment_ok:
-        content_integrity_signal = content_signal
-    else:
-        content_integrity_signal = SIGNAL_CONTENT_INTEGRITY_FAILED
-    checks.append(
+            state=gate_input.content_preservation,
+            consequence="blocker",
+        ),
         GateCheck(
-            code="content_integrity",
+            code="photo_geometry_consistency",
             stage="candidate",
-            bucket="content",
-            passed=content_integrity_ok,
-            severity="blocker",
-            signal=content_integrity_signal,
-            detail={
-                "content_support": content_support,
-                "content_containment_ok": bool(content_containment_ok),
-                "content_integrity_failed": bool(content_integrity_failed),
-            },
-        )
-    )
-
-    independence_signal = str(
-        evidence_independence_detail.get("reason")
-        or SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED
-    )
-    checks.append(
+            state=gate_input.photo_geometry,
+            consequence="blocker",
+        ),
         GateCheck(
             code="evidence_independence",
             stage="candidate",
-            bucket="evidence",
-            passed=evidence_independence_ok,
-            severity="blocker",
-            signal=independence_signal,
-            detail=dict(evidence_independence_detail),
-        )
-    )
-
-    checks.append(
+            state=gate_input.evidence_independence,
+            consequence="blocker",
+        ),
         GateCheck(
-            code="partial_edge_safety",
+            code="boundary_proof",
             stage="candidate",
-            bucket="partial_edge",
-            passed=not partial_edge_safety_blocks_auto,
-            severity="blocker",
-            signal="partial_edge_safety_blocked",
-            detail={"disqualifiers": sorted(partial_edge_safety_disqualifiers)},
-        )
+            state=boundary_state,
+            consequence="blocker",
+            detail={
+                "supported_paths": [
+                    path.code
+                    for path in gate_input.proof_paths
+                    if path.state == EvidenceState.SUPPORTED
+                ],
+                **dict(gate_input.detail),
+            },
+        ),
     )
-
-    photo_width_signals = PHOTO_SIZE_BLOCKER_SIGNALS.intersection(signals)
-    checks.append(
-        GateCheck(
-            code="photo_size_consistency",
-            stage="candidate",
-            bucket="photo_size",
-            passed=not photo_width_signals,
-            severity="blocker",
-            signal=next(iter(sorted(photo_width_signals)), "photo_width_stable"),
-            detail={"signals": sorted(photo_width_signals)},
-        )
-    )
-    frame_topology_signals = FRAME_TOPOLOGY_BLOCKER_SIGNALS.intersection(signals)
-    checks.append(
-        GateCheck(
-            code="frame_topology",
-            stage="candidate",
-            bucket="frame_topology",
-            passed=not frame_topology_signals,
-            severity="blocker",
-            signal=next(iter(sorted(frame_topology_signals)), "frame_topology_ok"),
-            detail={"signals": sorted(frame_topology_signals)},
-        )
-    )
-
-    handled_signals = {
-        SIGNAL_CONTENT_INTEGRITY_FAILED,
-        "partial_edge_safety_blocked",
-        SIGNAL_CONTENT_ASPECT_CONFLICT,
-        SIGNAL_CONTENT_EVIDENCE_WEAK,
-        SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
-        source_signal,
-        *partial_edge_safety_disqualifiers,
-        *photo_width_signals,
-        *frame_topology_signals,
-        independence_signal,
-    }
-    checks.extend(
-        candidate_signal_gate_checks(
-            signals,
-            ignored_signals=handled_signals,
-        )
-    )
-
-    blockers = _failed_check_signals(checks, "blocker")
-    diagnostics = _failed_check_signals(checks, "diagnostic")
-    passed = not blockers
+    failed_checks = tuple(check.code for check in checks if check.blocks)
     return CandidateGateAssessment(
-        passed=passed,
+        passed=not failed_checks,
         checks=checks,
-        blockers=blockers,
-        diagnostics=diagnostics,
+        proof_paths=gate_input.proof_paths,
+        failed_checks=failed_checks,
+        diagnostics=tuple(sorted(set(gate_input.diagnostics))),
     )

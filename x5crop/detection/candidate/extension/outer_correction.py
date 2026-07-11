@@ -130,7 +130,7 @@ def outer_correction_candidate_extensions(
         alignment_policy=policy.outer.alignment_evidence,
     )
     detection.detail["outer_content_alignment"] = outer_alignment
-    reliable_selection = candidate_is_reliable_for_execution_budget(detection, config.confidence_threshold, policy)
+    reliable_selection = candidate_is_reliable_for_execution_budget(detection)
     outer_alignment_ok = (not bool(outer_alignment.get("used", False))) or bool(outer_alignment.get("ok", True))
     correction_plan["reliable_selection"] = bool(reliable_selection)
     correction_plan["outer_alignment_ok"] = bool(outer_alignment_ok)
@@ -148,11 +148,7 @@ def outer_correction_candidate_extensions(
     }
     if should_skip_correction:
         correction_plan["skipped_due_to_reliable_selection"] = True
-        correction_plan["reliability"] = candidate_reliability_detail(
-            detection,
-            config.confidence_threshold,
-            policy,
-        )
+        correction_plan["reliability"] = candidate_reliability_detail(detection)
         correction_plan["skipped_reasons"] = {
             **correction_plan.get("skipped_reasons", {}),
             "outer_correction_candidate": "reliable_selection",

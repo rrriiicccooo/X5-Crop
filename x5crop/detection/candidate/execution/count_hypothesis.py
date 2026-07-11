@@ -28,7 +28,7 @@ from ..plan.count_hypotheses import CountHypothesis
 from .budget import attach_execution_budget_to_candidates
 from ..assessment.reliability import candidate_is_reliable_for_execution_budget, candidate_reliability_detail
 from .source_policy import separator_full_width_can_compete
-from ..selection.choose import is_partial_edge_safety_candidate, select_source_candidate
+from ..selection.choose import is_partial_occupancy_candidate, select_source_candidate
 
 
 def _assess_separator_outer_plan(
@@ -70,15 +70,8 @@ def _assess_separator_outer_plan(
                     policy,
                 )
             )
-        selected = select_source_candidate(
-            [*existing_candidates, *assessed],
-            config.confidence_threshold,
-        )
-        if candidate_is_reliable_for_execution_budget(
-            selected,
-            config.confidence_threshold,
-            policy,
-        ):
+        selected = select_source_candidate([*existing_candidates, *assessed])
+        if candidate_is_reliable_for_execution_budget(selected):
             return assessed
     return assessed
 
@@ -126,17 +119,9 @@ def _assessed_candidates_for_offset(
     if not primary_candidates:
         return candidates
 
-    primary_separator = select_source_candidate(primary_candidates, config.confidence_threshold)
-    primary_reliability = candidate_reliability_detail(
-        primary_separator,
-        config.confidence_threshold,
-        policy,
-    )
-    primary_reliable = candidate_is_reliable_for_execution_budget(
-        primary_separator,
-        config.confidence_threshold,
-        policy,
-    )
+    primary_separator = select_source_candidate(primary_candidates)
+    primary_reliability = candidate_reliability_detail(primary_separator)
+    primary_reliable = candidate_is_reliable_for_execution_budget(primary_separator)
     extension_families: list[str] = []
     separator_candidates = list(primary_candidates)
     separator_candidate = primary_separator
@@ -171,15 +156,8 @@ def _assessed_candidates_for_offset(
                     tuple(separator_candidates),
                 )
             )
-            separator_candidate = select_source_candidate(
-                separator_candidates,
-                config.confidence_threshold,
-            )
-        extension_reliable = candidate_is_reliable_for_execution_budget(
-            separator_candidate,
-            config.confidence_threshold,
-            policy,
-        )
+            separator_candidate = select_source_candidate(separator_candidates)
+        extension_reliable = candidate_is_reliable_for_execution_budget(separator_candidate)
         if not extension_reliable:
             guidance_seed = content_guided_separator_seed_for_count(
                 gray,
@@ -216,10 +194,7 @@ def _assessed_candidates_for_offset(
                         policy,
                     )
                 )
-                separator_candidate = select_source_candidate(
-                    separator_candidates,
-                    config.confidence_threshold,
-                )
+                separator_candidate = select_source_candidate(separator_candidates)
 
     expanded = bool(extension_families)
     if expanded:
@@ -253,16 +228,11 @@ def _assessed_candidates_for_offset(
         dict(separator_candidate_gate) if isinstance(separator_candidate_gate, dict) else {}
     )
     separator_candidate_passed = bool(separator_candidate_gate.get("passed", False))
-    partial_edge_safety_candidate = is_partial_edge_safety_candidate(
-        separator_support_candidate,
-        config.confidence_threshold,
-    )
-    if partial_edge_safety_candidate:
+    if is_partial_occupancy_candidate(separator_support_candidate):
         return candidates
     if (
         strip_mode == "full"
         and separator_candidate_passed
-        and separator_support_candidate.confidence >= config.confidence_threshold
     ):
         return candidates
     content_proposal = content_candidate_proposal_for_count(
@@ -331,18 +301,14 @@ def evaluate_count_hypothesis(
                 plan_detail["count_hypothesis"] = hypothesis.report_detail()
         if not offset_candidates:
             continue
-        selected = select_source_candidate(offset_candidates, config.confidence_threshold)
+        selected = select_source_candidate(offset_candidates)
         resolution = physical_count_resolution(selected, hypothesis)
         resolution_checks.append(
             {"offset": float(offset), **resolution.report_detail()}
         )
         count_resolved = count_resolved or resolution.count_resolved
         placement_resolved = placement_resolved or resolution.placement_resolved
-        candidate_auto_ready = candidate_auto_ready or candidate_is_reliable_for_execution_budget(
-            selected,
-            config.confidence_threshold,
-            policy,
-        )
+        candidate_auto_ready = candidate_auto_ready or candidate_is_reliable_for_execution_budget(selected)
         if resolution.placement_resolved:
             resolved_offsets.append(float(offset))
         if resolution.placement_resolved or candidate_auto_ready:

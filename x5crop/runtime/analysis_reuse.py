@@ -53,7 +53,6 @@ def config_cache_signature(config: RunConfig) -> dict[str, Any]:
         "deskew_fallback": config.deskew_fallback,
         "deskew_min_angle": float(config.deskew_min_angle),
         "deskew_max_angle": float(config.deskew_max_angle),
-        "confidence_threshold": float(config.confidence_threshold),
         "bleed_x": int(config.bleed_x),
         "bleed_y": int(config.bleed_y),
     }

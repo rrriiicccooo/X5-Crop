@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from ....domain import DetectionCandidate
-from ....formats import FormatPhysicalSpec
-from ....policies.parameters.scoring import CandidateCompetitionParameters
-from ...detail import candidate_signals_from_detail
+from ....domain import Box, DetectionCandidate
+from ....policies.parameters.scoring import SelectionConsensusParameters
 
 
 def _candidate_assessment(candidate: DetectionCandidate) -> dict:
@@ -11,62 +9,44 @@ def _candidate_assessment(candidate: DetectionCandidate) -> dict:
     return dict(assessment) if isinstance(assessment, dict) else {}
 
 
+def _candidate_gate_allows_selection(candidate: DetectionCandidate) -> bool:
+    gate = _candidate_assessment(candidate).get("candidate_gate", {})
+    return bool(isinstance(gate, dict) and gate.get("passed", False))
+
+
 def calibrated_candidate_rank(
     detection: DetectionCandidate,
-    threshold: float,
-) -> tuple[int, int, float, float, float]:
-    candidate = detection.detail.get("candidate_assessment", {})
-    joint = float(candidate.get("joint_score", 0.0)) if isinstance(candidate, dict) else 0.0
-    partial_edge_safety_supported = bool(
-        isinstance(candidate, dict)
-        and isinstance(candidate.get("partial_edge_safety"), dict)
-        and candidate["partial_edge_safety"].get("ok", False)
-    )
-    candidate_plan = detection.detail.get("candidate_plan", {})
-    count_hypothesis = (
-        candidate_plan.get("count_hypothesis", {})
-        if isinstance(candidate_plan, dict)
-        else {}
-    )
+) -> tuple[int, int, float, float, int]:
+    assessment = _candidate_assessment(detection)
+    joint = float(assessment.get("joint_score", 0.0))
+    plan = detection.detail.get("candidate_plan", {})
+    hypothesis = plan.get("count_hypothesis", {}) if isinstance(plan, dict) else {}
     physically_supported_count = bool(
-        isinstance(count_hypothesis, dict)
-        and count_hypothesis.get("physically_supported", False)
+        isinstance(hypothesis, dict) and hypothesis.get("physically_supported", False)
     )
-    if partial_edge_safety_supported:
-        return (
-            1 if physically_supported_count else 0,
-            1 if detection.confidence >= threshold else 0,
-            float(detection.count),
-            float(detection.confidence),
-            joint,
-        )
     return (
+        1 if _candidate_gate_allows_selection(detection) else 0,
         1 if physically_supported_count else 0,
-        1 if detection.confidence >= threshold else 0,
         float(detection.confidence),
-        int(detection.count),
         joint,
+        int(detection.count),
     )
 
 
-def select_source_candidate(candidates: list[DetectionCandidate], threshold: float) -> DetectionCandidate:
-    return max(candidates, key=lambda detection: calibrated_candidate_rank(detection, threshold))
+def select_source_candidate(candidates: list[DetectionCandidate]) -> DetectionCandidate:
+    return max(candidates, key=calibrated_candidate_rank)
 
 
-def is_partial_edge_safety_candidate(detection: DetectionCandidate, threshold: float) -> bool:
-    candidate = detection.detail.get("candidate_assessment", {})
-    candidate_gate = {}
-    if isinstance(candidate, dict):
-        gate = candidate.get("candidate_gate")
-        candidate_gate = dict(gate) if isinstance(gate, dict) else {}
-    candidate_gate_allows_auto = bool(candidate_gate.get("passed", False))
-    return bool(
-        detection.strip_mode == "partial"
-        and detection.confidence >= threshold
-        and isinstance(candidate, dict)
-        and isinstance(candidate.get("partial_edge_safety"), dict)
-        and candidate["partial_edge_safety"].get("ok", False)
-        and candidate_gate_allows_auto
+def is_partial_occupancy_candidate(detection: DetectionCandidate) -> bool:
+    if detection.strip_mode != "partial" or not _candidate_gate_allows_selection(detection):
+        return False
+    gate = _candidate_assessment(detection).get("candidate_gate", {})
+    paths = gate.get("proof_paths", []) if isinstance(gate, dict) else []
+    return any(
+        isinstance(path, dict)
+        and path.get("code") == "partial_occupancy_led"
+        and path.get("state") == "supported"
+        for path in paths
     )
 
 
@@ -77,13 +57,9 @@ def _candidate_summary(candidate: DetectionCandidate) -> dict:
         "count": int(candidate.count),
         "strip_mode": candidate.strip_mode,
         "confidence": float(candidate.confidence),
-        "candidate_signals": candidate_signals_from_detail(candidate),
-        "candidate_blockers": list(assessment.get("blockers", []))
-        if isinstance(assessment.get("blockers"), list)
-        else [],
-        "candidate_diagnostics": list(assessment.get("diagnostics", []))
-        if isinstance(assessment.get("diagnostics"), list)
-        else [],
+        "candidate_gate": assessment.get("candidate_gate", {}),
+        "failed_checks": list(assessment.get("failed_checks", [])),
+        "diagnostics": list(assessment.get("diagnostics", [])),
         "candidate_scores": {
             key: assessment[key]
             for key in (
@@ -100,77 +76,96 @@ def _candidate_summary(candidate: DetectionCandidate) -> dict:
     }
 
 
+def _box_edge_distance(left: Box, right: Box, scale: float) -> float:
+    return max(
+        abs(left.left - right.left),
+        abs(left.top - right.top),
+        abs(left.right - right.right),
+        abs(left.bottom - right.bottom),
+    ) / max(1.0, scale)
+
+
+def _geometry_distance(left: DetectionCandidate, right: DetectionCandidate) -> float | None:
+    if left.count != right.count or left.strip_mode != right.strip_mode:
+        return None
+    if len(left.frames) != len(right.frames):
+        return None
+    long_extent = max(
+        left.outer.width if left.layout == "horizontal" else left.outer.height,
+        right.outer.width if right.layout == "horizontal" else right.outer.height,
+    )
+    pitch = float(long_extent) / max(1, left.count)
+    distances = [_box_edge_distance(left.outer, right.outer, pitch)]
+    distances.extend(
+        _box_edge_distance(left_box, right_box, pitch)
+        for left_box, right_box in zip(left.frames, right.frames)
+    )
+    return max(distances, default=0.0)
+
+
+def _geometry_clusters(
+    candidates: list[DetectionCandidate],
+    tolerance: float,
+) -> list[list[DetectionCandidate]]:
+    clusters: list[list[DetectionCandidate]] = []
+    for candidate in candidates:
+        for cluster in clusters:
+            distance = _geometry_distance(candidate, cluster[0])
+            if distance is not None and distance <= tolerance:
+                cluster.append(candidate)
+                break
+        else:
+            clusters.append([candidate])
+    return clusters
+
+
 def select_detection_candidate(
     candidates: list[DetectionCandidate],
-    fmt: FormatPhysicalSpec,
-    threshold: float,
-    selection_policy: CandidateCompetitionParameters,
+    selection_policy: SelectionConsensusParameters,
 ) -> DetectionCandidate:
-    candidates = sorted(candidates, key=lambda d: calibrated_candidate_rank(d, threshold), reverse=True)
-    best = candidates[0]
-    comparable_areas = [
-        candidate.outer.width * candidate.outer.height
-        for candidate in candidates
-        if candidate.count == best.count
-        and candidate.strip_mode == best.strip_mode
-        and candidate.outer.valid()
-    ]
-    if comparable_areas:
-        best.detail["outer_area_spread_ratio"] = (
-            max(comparable_areas) - min(comparable_areas)
-        ) / max(1.0, float(max(comparable_areas)))
-    second = next((candidate for candidate in candidates if candidate is not best), None)
-    competition = [
-        {
-            "rank": index,
-            "selected": candidate is best,
-            **_candidate_summary(candidate),
-        }
-        for index, candidate in enumerate(candidates[: selection_policy.top_n], start=1)
-    ]
-    best.detail["candidate_competition"] = {
-        "candidate_count": len(candidates),
-        "format_ids": [fmt.format_id],
-        "top_candidates": competition,
-    }
-    if second is not None:
-        margin = float(best.confidence) - float(second.confidence)
-        best.detail["candidate_competition"]["margin_to_second"] = margin
-        second_close = margin < selection_policy.close_margin
-        partial_full_conflict = (
-            best.strip_mode != second.strip_mode
-            and min(best.confidence, second.confidence) >= threshold
-        )
-        best_assessment = best.detail.get("candidate_assessment", {})
-        best_partial_edge_safety_supported = bool(
-            isinstance(best_assessment, dict)
-            and isinstance(best_assessment.get("partial_edge_safety"), dict)
-            and best_assessment["partial_edge_safety"].get("ok", False)
-        )
-        if (
-            best.confidence >= threshold
-            and not best_partial_edge_safety_supported
-            and (second_close or partial_full_conflict)
-        ):
-            uncertainty_input = {
-                "bucket": "candidate_selection",
-                "signal": (
-                    "partial_full_conflict"
-                    if partial_full_conflict and not second_close
-                    else "candidate_competition_close"
-                ),
-                "margin_to_second": float(margin),
-                "close_margin": float(selection_policy.close_margin),
-                "partial_full_conflict": bool(partial_full_conflict),
+    ranked = sorted(candidates, key=calibrated_candidate_rank, reverse=True)
+    best = ranked[0]
+    eligible = [candidate for candidate in ranked if _candidate_gate_allows_selection(candidate)]
+    consensus_candidates = eligible or [best]
+    clusters = _geometry_clusters(
+        consensus_candidates,
+        selection_policy.geometry_tolerance_ratio,
+    )
+    selected_cluster = next(cluster for cluster in clusters if best in cluster)
+    competing = [cluster[0] for cluster in clusters if cluster is not selected_cluster]
+    next_cluster = max(competing, key=calibrated_candidate_rank) if competing else None
+    confidence_margin = (
+        None
+        if next_cluster is None
+        else float(best.confidence) - float(next_cluster.confidence)
+    )
+    geometry_disagreement = bool(
+        next_cluster is not None
+        and confidence_margin is not None
+        and confidence_margin < selection_policy.confidence_tie_margin
+    )
+    best.detail["selection_geometry_consensus"] = {
+        "agreed": not geometry_disagreement,
+        "geometry_disagreement": geometry_disagreement,
+        "cluster_count": len(clusters),
+        "eligible_candidate_count": len(eligible),
+        "eligible_cluster_count": len(clusters) if eligible else 0,
+        "selected_cluster_size": len(selected_cluster),
+        "geometry_tolerance_ratio": float(selection_policy.geometry_tolerance_ratio),
+        "confidence_tie_margin": float(selection_policy.confidence_tie_margin),
+        "margin_to_competing_cluster": confidence_margin,
+        "format_id": best.format_id,
+        "top_candidates": [
+            {"rank": index, "selected": candidate is best, **_candidate_summary(candidate)}
+            for index, candidate in enumerate(ranked[: selection_policy.top_n], start=1)
+        ],
+        "clusters": [
+            {
+                "index": index,
+                "candidate_count": len(cluster),
+                "representative": _candidate_summary(cluster[0]),
             }
-            uncertainty_inputs = list(
-                best.detail["candidate_competition"].get("selection_uncertainty_inputs", [])
-            )
-            uncertainty_inputs.append(uncertainty_input)
-            best.detail["candidate_competition"]["selection_uncertainty_inputs"] = list(
-                uncertainty_inputs
-            )
-        best.detail["candidate_competition"]["second_candidate_close"] = bool(second_close)
-        best.detail["candidate_competition"]["partial_full_conflict"] = bool(partial_full_conflict)
-        best.detail["candidate_competition"]["close_margin"] = float(selection_policy.close_margin)
+            for index, cluster in enumerate(clusters, start=1)
+        ],
+    }
     return best

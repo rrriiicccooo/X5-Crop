@@ -43,6 +43,42 @@ def _cached_content_evidence_threshold(
     return float(threshold)
 
 
+def _frame_boundary_contact_detail(
+    crop: np.ndarray,
+    threshold: float,
+    evidence_params: ContentEvidenceParameters,
+) -> dict[str, Any]:
+    band = max(
+        int(evidence_params.boundary_band_min_px),
+        int(round(min(crop.shape) * float(evidence_params.boundary_band_ratio))),
+    )
+    band_y = min(crop.shape[0], band)
+    band_x = min(crop.shape[1], band)
+    bands = {
+        "left": crop[:, :band_x],
+        "right": crop[:, crop.shape[1] - band_x :],
+        "top": crop[:band_y, :],
+        "bottom": crop[crop.shape[0] - band_y :, :],
+    }
+    coverages = {
+        side: float((sample >= threshold).mean()) if sample.size else 0.0
+        for side, sample in bands.items()
+    }
+    contact_sides = sorted(
+        side
+        for side, coverage in coverages.items()
+        if coverage >= float(evidence_params.present_coverage_min)
+    )
+    return {
+        "boundary_band_px": int(band),
+        "boundary_contact_coverage_min": float(
+            evidence_params.present_coverage_min
+        ),
+        "boundary_coverages": coverages,
+        "boundary_contact_sides": contact_sides,
+    }
+
+
 def content_frame_support_detail(
     evidence: np.ndarray,
     outer: Box,
@@ -60,6 +96,7 @@ def content_frame_support_detail(
     means: list[float] = []
     coverages: list[float] = []
     aspect_errors: list[float] = []
+    boundary_contact_frame_indexes: list[int] = []
 
     for index, frame in enumerate(frames, start=1):
         absolute_box = frame.clamp(canvas_w, canvas_h)
@@ -71,15 +108,18 @@ def content_frame_support_detail(
         )
         if not box.valid():
             continue
+        crop = evidence[box.top:box.bottom, box.left:box.right]
+        if crop.size == 0:
+            continue
         full_short_axis = box.top == 0 and box.bottom == outer.height
         if column_statistics is not None and full_short_axis:
             mean, coverage = column_statistics.interval(box.left, box.right)
         else:
-            crop = evidence[box.top:box.bottom, box.left:box.right]
-            if crop.size == 0:
-                continue
             mean = float(crop.mean())
             coverage = float((crop >= threshold).mean())
+        boundary = _frame_boundary_contact_detail(crop, threshold, evidence_params)
+        if boundary["boundary_contact_sides"]:
+            boundary_contact_frame_indexes.append(index)
         means.append(mean)
         coverages.append(coverage)
         actual_aspect = float(absolute_box.width) / max(1.0, float(absolute_box.height))
@@ -95,6 +135,7 @@ def content_frame_support_detail(
                 "actual_aspect": actual_aspect,
                 "expected_aspect": expected_aspect,
                 "aspect_error": aspect_error,
+                **boundary,
             }
         )
 
@@ -128,6 +169,8 @@ def content_frame_support_detail(
         "median_coverage": median_coverage,
         "expected_aspect": expected_aspect,
         "max_aspect_error": max_aspect_error,
+        "content_boundary_contact": bool(boundary_contact_frame_indexes),
+        "boundary_contact_frame_indexes": boundary_contact_frame_indexes,
         "frame_scores": frame_scores,
     }
 

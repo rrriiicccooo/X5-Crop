@@ -8,14 +8,6 @@ from ...evidence.separator_summary import separator_support_detail_summary
 from ..plan.count_hypotheses import CountHypothesis
 
 
-def _candidate_passes_gate(candidate: DetectionCandidate) -> bool:
-    assessment = candidate.detail.get("candidate_assessment")
-    if not isinstance(assessment, dict):
-        return False
-    gate = assessment.get("candidate_gate")
-    return bool(isinstance(gate, dict) and gate.get("passed", False))
-
-
 @dataclass(frozen=True)
 class PhysicalCountResolution:
     count_resolved: bool
@@ -41,8 +33,6 @@ def physical_count_resolution(
     separator_summary = separator_support_detail_summary(separator)
     topology = candidate.detail.get("frame_topology_evidence", {})
     topology = dict(topology) if isinstance(topology, dict) else {}
-    continuity = candidate.detail.get("separator_cross_axis_continuity", {})
-    continuity = dict(continuity) if isinstance(continuity, dict) else {}
     photo_size = candidate.detail.get("photo_width_stability", {})
     photo_size = dict(photo_size) if isinstance(photo_size, dict) else {}
 
@@ -59,7 +49,6 @@ def physical_count_resolution(
             "frame_overlap_absent",
         )
     )
-    separator_continuous = bool(continuity.get("ok", False))
     photo_size_consistent = bool(
         photo_size.get("used", False) and not photo_size.get("unstable", True)
     )
@@ -69,7 +58,6 @@ def physical_count_resolution(
             int(candidate.count) == int(hypothesis.count),
             hard_separator_complete,
             topology_valid,
-            separator_continuous,
             photo_size_consistent,
         )
     )
@@ -81,7 +69,6 @@ def physical_count_resolution(
             "expected_gap_count": int(expected_gaps),
             "hard_separator_gap_count": int(separator_summary.hard_separator_gaps),
             "hard_separator_complete": bool(hard_separator_complete),
-            "separator_cross_axis_continuity_ok": bool(separator_continuous),
             "photo_size_consistent": bool(photo_size_consistent),
             "frame_topology_valid": bool(topology_valid),
         },
@@ -103,9 +90,6 @@ class CountHypothesisEvaluation:
         return {
             **self.hypothesis.report_detail(),
             "candidate_count": len(self.candidates),
-            "candidate_gate_pass_count": sum(
-                1 for candidate in self.candidates if _candidate_passes_gate(candidate)
-            ),
             "max_confidence": max(confidences) if confidences else None,
             "count_resolved": bool(self.count_resolved),
             "placement_resolved": bool(self.placement_resolved),

@@ -10,8 +10,8 @@ from ...cache import AnalysisCache
 from ...domain import DetectionCandidate
 from ...policies.parameters.outer import OuterAlignmentEvidenceParameters
 from ...policies.runtime.content import ContentPolicy
-from .content.containment import content_containment_detail
 from .content.frame_support import content_evidence_detail
+from .content.support import frame_content_support_detail
 from .outer_alignment import outer_content_alignment_detail
 
 
@@ -41,7 +41,7 @@ def complete_selected_candidate_evidence(
         content_policy=content_policy,
         horizontal_frame_aspect=horizontal_frame_aspect,
     )
-    content = content_containment_detail(
+    content = frame_content_support_detail(
         raw_content,
         content_policy.evidence,
         expected_count=candidate.count,
@@ -53,7 +53,7 @@ def complete_selected_candidate_evidence(
         alignment_policy=alignment_parameters,
     )
     candidate.detail["content_evidence"] = raw_content
-    candidate.detail["content_containment"] = content
+    candidate.detail["frame_content_support"] = content
     candidate.detail["outer_content_alignment"] = outer_alignment
     return SelectedCandidateEvidence(
         candidate=candidate,

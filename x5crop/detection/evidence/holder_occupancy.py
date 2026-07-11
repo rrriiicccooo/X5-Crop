@@ -87,7 +87,7 @@ def _photo_width_stable(detection: DetectionCandidate) -> bool:
 def holder_occupancy_evidence(
     detection: DetectionCandidate,
     fmt: FormatPhysicalSpec,
-    content_containment: dict[str, Any],
+    frame_content_support: dict[str, Any],
     *,
     calibration: ScanCalibration | None = None,
 ) -> dict[str, Any]:
@@ -115,15 +115,15 @@ def holder_occupancy_evidence(
         if int(detection.count) > 0
         else None
     )
-    content_contained = bool(content_containment.get("content_containment_ok", False)) and not bool(
-        content_containment.get("content_integrity_failed", True)
+    frame_content_support_available = bool(
+        frame_content_support.get("frame_content_support_available", False)
     )
     photo_width_stable = _photo_width_stable(detection)
     complete_underfilled = bool(
         fmt.complete_strip_can_be_underfilled
         and detection.strip_mode == "partial"
         and strip_completeness["frame_sequence_complete"]
-        and content_contained
+        and frame_content_support_available
         and photo_width_stable
     )
     if detection.strip_mode == "full":
@@ -148,7 +148,7 @@ def holder_occupancy_evidence(
         "holder_fill_ratio": holder_fill_ratio,
         "occupancy_status": occupancy_status,
         "complete_underfilled_strip": complete_underfilled,
-        "content_contained": content_contained,
+        "frame_content_support_available": frame_content_support_available,
         "photo_width_stable": photo_width_stable,
         "holder_reference_outer_box": asdict(holder_outer),
         "film_span": (

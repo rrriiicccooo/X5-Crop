@@ -42,11 +42,6 @@ def build_detection_policy(
         content_evidence_image=ContentEvidenceImageParameters(),
     )
     separator = separator_policy(strip_mode, detector_kind, params)
-    decision_evidence = (
-        params.decision.partial_evidence
-        if strip_mode == "partial"
-        else params.decision.full_evidence
-    )
     return DetectionPolicy(
         physical_spec=spec,
         strip_mode=strip_mode,
@@ -76,11 +71,9 @@ def build_detection_policy(
             geometry_support=params.candidate.geometry_support_score,
             separator_support=params.candidate.separator_support_score,
         ),
-        candidate_selection=params.candidate.candidate_competition,
+        candidate_selection=params.candidate.selection_consensus,
         candidate_plan=params.candidate.candidate_plan,
         exposure_overlap_evidence=params.output.exposure_overlap_evidence,
-        decision_evidence=decision_evidence,
-        decision=params.decision.decision_review,
         approved_geometry_adjustment=params.output.approved_geometry_adjustment,
         output=OutputPolicy(
             exposure_overlap_protection=params.output.exposure_overlap_protection,

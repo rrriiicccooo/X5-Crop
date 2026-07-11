@@ -49,9 +49,7 @@ def content_support_score(
 ) -> float:
     if not bool(detail.get("used", False)):
         return 0.0
-    containment_ok = bool(detail.get("content_containment_ok", False))
-    content_integrity_failed = bool(detail.get("content_integrity_failed", True))
-    return 1.0 if containment_ok and not content_integrity_failed else 0.0
+    return 1.0 if bool(detail.get("frame_content_support_available", False)) else 0.0
 
 
 def geometry_support_score(
@@ -91,18 +89,13 @@ def geometry_support_score(
 
 
 def separator_support_score(
-    detection: DetectionCandidate,
     hard_detail: dict[str, Any],
     policy: DetectionPolicy,
 ) -> float:
     support_policy = policy.scoring.separator_support
     evidence = separator_support_detail_summary(hard_detail)
     if evidence.expected_gaps == 0:
-        return (
-            1.0
-            if detection.confidence >= support_policy.no_expected_confidence_threshold
-            else min(support_policy.no_expected_confidence_cap, detection.confidence)
-        )
+        return 1.0
     hard_ratio = min(1.0, evidence.hard_separator_gaps / float(max(1, evidence.expected_gaps)))
     model_ratio = min(
         1.0,

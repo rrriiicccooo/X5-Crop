@@ -184,7 +184,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         ):
             assessed = _assess_separator_outer_plan(
                 gray=None,
-                config=SimpleNamespace(confidence_threshold=0.85),
+                config=SimpleNamespace(),
                 fmt=None,
                 count=6,
                 strip_mode="full",

@@ -96,6 +96,29 @@ def outer_content_alignment_detail(
         alignment_policy.short_threshold_min,
         alignment_policy.short_threshold_max,
     )
+    undercrop_measurement_counts = {
+        "left": sum(
+            max(0, outer.left - box.left) >= long_slack_pixel_threshold
+            for _source, box in candidates
+        ),
+        "right": sum(
+            max(0, box.right - outer.right) >= long_slack_pixel_threshold
+            for _source, box in candidates
+        ),
+        "top": sum(
+            max(0, outer.top - box.top) >= short_slack_pixel_threshold
+            for _source, box in candidates
+        ),
+        "bottom": sum(
+            max(0, box.bottom - outer.bottom) >= short_slack_pixel_threshold
+            for _source, box in candidates
+        ),
+    }
+    confirmed_undercrop_sides = sorted(
+        side
+        for side, count in undercrop_measurement_counts.items()
+        if count >= int(alignment_policy.undercrop_confirmation_min_measurements)
+    )
 
     edge_band = max(
         int(alignment_policy.border_band_min_px),
@@ -190,6 +213,12 @@ def outer_content_alignment_detail(
         "white_edge_slack": white_edge_slack,
         "short_axis_semantic_ok": bool(short_axis_semantic_ok),
         "short_content_height_max": float(alignment_policy.short_content_height_max),
+        "undercrop_measurement_counts": undercrop_measurement_counts,
+        "undercrop_confirmation_min_measurements": int(
+            alignment_policy.undercrop_confirmation_min_measurements
+        ),
+        "confirmed_undercrop_sides": confirmed_undercrop_sides,
+        "confirmed_undercrop": bool(confirmed_undercrop_sides),
     }
     if detail_key is not None:
         cache.outer_alignment_details[detail_key] = copy.deepcopy(detail)

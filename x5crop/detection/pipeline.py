@@ -43,8 +43,6 @@ def choose_detection(
         candidate = choose_dual_lane_detection(gray, config, cache, policy, policy_bundle)
         candidate = select_detection_candidate(
             [candidate],
-            fmt,
-            config.confidence_threshold,
             policy.candidate_selection,
         )
         return CandidatePipelineResult(candidate=candidate, policy=policy)
@@ -52,8 +50,6 @@ def choose_detection(
         candidate = review_only_detection(gray, config, fmt)
         candidate = select_detection_candidate(
             [candidate],
-            fmt,
-            config.confidence_threshold,
             policy.candidate_selection,
         )
         return CandidatePipelineResult(candidate=candidate, policy=policy)
@@ -116,8 +112,6 @@ def choose_detection(
 
     provisional = select_detection_candidate(
         candidates,
-        fmt,
-        config.confidence_threshold,
         policy.candidate_selection,
     )
     extension_policy = policy_bundle.policy_for(provisional.format_id, provisional.strip_mode)
@@ -133,8 +127,6 @@ def choose_detection(
         candidates.extend(extension_candidates)
     selected_candidate = select_detection_candidate(
         candidates,
-        fmt,
-        config.confidence_threshold,
         extension_policy.candidate_selection,
     )
     selected_policy = policy_bundle.policy_for(

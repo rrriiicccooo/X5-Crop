@@ -62,21 +62,6 @@ def separator_support_min_hard_with_equal_cap_assessment(
     )
 
 
-def separator_support_geometry_support_assessment(
-    detection: DetectionCandidate,
-    threshold: float,
-    evidence: SeparatorSupportEvidence,
-) -> SeparatorSupportCheck:
-    ok = (
-        detection.confidence >= threshold
-        and evidence.equal_gaps <= evidence.expected_gaps
-    )
-    return SeparatorSupportCheck(
-        ok=ok,
-        reason="separator_geometry_support" if ok else "separator_geometry_support_weak",
-    )
-
-
 def separator_support_needs_full_strip_supplemental_checks(detection: DetectionCandidate, default_count: int) -> bool:
     return detection.strip_mode == "full" and detection.count == int(default_count)
 
@@ -174,7 +159,6 @@ def separator_support_evidence_from_detection(detection: DetectionCandidate) -> 
 def separator_support_detail(
     evidence: SeparatorSupportEvidence,
     assessment: SeparatorSupportAssessment,
-    detection: DetectionCandidate,
     policy: DetectionPolicy,
 ) -> dict[str, Any]:
     return {
@@ -191,14 +175,12 @@ def separator_support_detail(
         "detected_scores": evidence.detected_scores,
         "leading_grid_scores": evidence.leading_grid_scores,
         "leading_grid_separator_failure": bool(assessment.leading_grid_failure),
-        "separator_confidence": float(detection.confidence),
         "policy_id": policy.policy_id,
     }
 
 
 def separator_support_assessment(
     detection: DetectionCandidate,
-    threshold: float,
     evidence: SeparatorSupportEvidence,
     support: SeparatorSupportParameters,
     leading_grid_parameters: LeadingGridFailureParameters,
@@ -212,17 +194,8 @@ def separator_support_assessment(
 
     if evidence.expected_gaps == 0:
         support_assessment = SeparatorSupportCheck(
-            ok=detection.confidence >= threshold,
-            reason=(
-                "single_frame_no_separator_needed"
-                if detection.confidence >= threshold
-                else "single_frame_low_confidence"
-            ),
-        )
-    elif detection.confidence < threshold:
-        support_assessment = SeparatorSupportCheck(
-            ok=False,
-            reason="separator_below_threshold",
+            ok=True,
+            reason="single_frame_no_separator_needed",
         )
     elif leading_grid_failed:
         support_assessment = SeparatorSupportCheck(
@@ -241,11 +214,6 @@ def separator_support_assessment(
                 evidence,
                 support,
             ),
-            separator_support_geometry_support_assessment(
-                detection,
-                threshold,
-                evidence,
-            ),
         ]
         support_assessment = next(
             (check for check in checks if check.ok),
@@ -261,14 +229,12 @@ def separator_support_assessment(
 
 def assess_separator_support(
     detection: DetectionCandidate,
-    threshold: float,
     policy: DetectionPolicy,
 ) -> SeparatorSupportResult:
     support = policy.separator.support
     evidence = separator_support_evidence_from_detection(detection)
     assessment = separator_support_assessment(
         detection,
-        threshold,
         evidence,
         support,
         policy.separator.leading_grid_failure,
@@ -280,7 +246,6 @@ def assess_separator_support(
         detail=separator_support_detail(
             evidence,
             assessment,
-            detection,
             policy,
         ),
     )

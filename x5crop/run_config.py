@@ -20,7 +20,6 @@ class RunConfig:
     deskew_fallback: str
     deskew_min_angle: float
     deskew_max_angle: float
-    confidence_threshold: float
     review_dir: Path | None
     copy_review_files: bool
     export_review: bool

@@ -4,10 +4,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from ....domain import DetectionCandidate
-from ...confidence_caps import apply_confidence_cap
 from ....policies.parameters.content import ContentCandidateParameters
 from ....policies.runtime.content import ContentPolicy
-from ....run_config import RunConfig
 
 
 @dataclass(frozen=True)
@@ -27,7 +25,6 @@ def content_candidate_assessment_from_metrics(
     median_mean: float,
     median_coverage: float,
     max_aspect_error: float,
-    confidence_threshold: float,
     candidate_policy: ContentCandidateParameters,
 ) -> ContentCandidateAssessment:
     run_conf = min(1.0, selected_run_count / float(max(1, count)))
@@ -40,55 +37,17 @@ def content_candidate_assessment_from_metrics(
         + candidate_policy.run_weight * run_conf
         + candidate_policy.aspect_weight * aspect_conf
     )
-    confidence_caps: list[dict[str, Any]] = []
     diagnostics: list[str] = []
     if placement != "content_runs":
-        confidence, cap_detail = apply_confidence_cap(
-            confidence,
-            candidate_policy.grid_placement_cap,
-            owner="candidate.assessment",
-            reason="content_grid_placement",
-        )
-        confidence_caps.append(cap_detail)
         diagnostics.append("content_grid_placement")
     if runs_count != count:
-        confidence, cap_detail = apply_confidence_cap(
-            confidence,
-            candidate_policy.run_mismatch_cap,
-            owner="candidate.assessment",
-            reason="content_run_count_mismatch",
-        )
-        confidence_caps.append(cap_detail)
         diagnostics.append("content_run_count_mismatch")
     if run_conf < 1.0:
-        confidence, cap_detail = apply_confidence_cap(
-            confidence,
-            candidate_policy.runs_incomplete_cap,
-            owner="candidate.assessment",
-            reason="content_runs_incomplete",
-        )
-        confidence_caps.append(cap_detail)
         diagnostics.append("content_runs_incomplete")
     if median_coverage < candidate_policy.weak_coverage:
-        confidence, cap_detail = apply_confidence_cap(
-            confidence,
-            candidate_policy.weak_coverage_cap,
-            owner="candidate.assessment",
-            reason="content_coverage_weak",
-        )
-        confidence_caps.append(cap_detail)
         diagnostics.append("content_coverage_weak")
     if max_aspect_error > candidate_policy.aspect_uncertain:
-        confidence, cap_detail = apply_confidence_cap(
-            confidence,
-            candidate_policy.aspect_uncertain_cap,
-            owner="candidate.assessment",
-            reason="content_aspect_uncertain",
-        )
-        confidence_caps.append(cap_detail)
         diagnostics.append("content_aspect_uncertain")
-    if confidence < confidence_threshold and not diagnostics:
-        diagnostics.append("content_confidence_low")
     detail = {
         "run_conf": run_conf,
         "coverage_conf": coverage_conf,
@@ -99,7 +58,6 @@ def content_candidate_assessment_from_metrics(
             if strip_mode == "partial"
             else "content_guidance"
         ),
-        "confidence_caps": confidence_caps,
     }
     return ContentCandidateAssessment(
         confidence=float(confidence),
@@ -110,7 +68,6 @@ def content_candidate_assessment_from_metrics(
 
 def content_candidate_assessment_from_proposal(
     detection: DetectionCandidate,
-    config: RunConfig,
     policy: ContentPolicy,
 ) -> ContentCandidateAssessment:
     proposal = detection.detail.get("content_proposal", {})
@@ -129,7 +86,6 @@ def content_candidate_assessment_from_proposal(
         median_mean=float(proposal.get("median_mean", 0.0)),
         median_coverage=float(proposal.get("median_coverage", 0.0)),
         max_aspect_error=float(proposal.get("max_aspect_error", 1.0)),
-        confidence_threshold=float(config.confidence_threshold),
         candidate_policy=policy.candidate,
     )
     return ContentCandidateAssessment(

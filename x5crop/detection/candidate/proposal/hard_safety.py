@@ -13,7 +13,6 @@ from ....geometry.layout import work_gray
 from ....geometry.model_gaps import equal_model_gap
 from ....geometry.detection_parameters import FrameFitParameters
 from ....run_config import RunConfig
-from ..signals import SIGNAL_HARD_SAFETY_NO_CANDIDATES, SIGNAL_NEEDS_MANUAL_REVIEW
 
 
 def hard_safety_detection(
@@ -58,11 +57,12 @@ def hard_safety_detection(
         gaps=gaps,
         confidence=0.0,
         detail={
-            "candidate_signals": [
-                SIGNAL_HARD_SAFETY_NO_CANDIDATES,
-                SIGNAL_NEEDS_MANUAL_REVIEW,
-            ],
             "candidate_source": CANDIDATE_SOURCE_HARD_SAFETY,
+            "mode_diagnostics": [
+                "no_physical_candidates",
+                "manual_processing_required",
+            ],
+            "automatic_processing_supported": False,
             "hard_safety_kind": "equal_split",
             "candidate_contract": "hard_safety_review_input",
             "layout": config.layout,

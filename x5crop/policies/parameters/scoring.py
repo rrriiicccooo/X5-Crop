@@ -7,10 +7,6 @@ class ScoringCalibrationParameters:
     content_weight: float = 0.33
     separator_weight: float = 0.33
     separator_source_bias: float = 0.03
-    no_auto_cap_partial: float = 0.82
-    no_auto_cap_full: float = 0.84
-    dual_lane_below_threshold_cap: float = 0.84
-    dual_lane_frame_count_mismatch_cap: float = 0.82
 
 @dataclass(frozen=True)
 class BaseDetectionScoreParameters:
@@ -27,13 +23,8 @@ class BaseDetectionScoreParameters:
     geometry_floor_low: float = 0.88
     unstable_photo_width_cv: float = 0.030
     full_outer_min_area: float = 0.40
-    low_confidence_floor: float = 0.85
-    partial_one_cap: float = 0.78
-    partial_two_frame_dense_sequence_cap: float = 0.82
     image_quality_percentiles: tuple[float, float, float] = (1.0, 50.0, 99.0)
     hard_support_floor_min_expected_gaps: int = 3
-    hard_gap_floor_min_count: int = 2
-    model_gap_overuse_min_count: int = 2
     partial_ambiguous_count_max: int = 2
     partial_dense_sequence_min_nominal_count: int = 6
 
@@ -43,8 +34,6 @@ class SeparatorSupportScoreParameters:
     model_equal_credit: float = 0.12
     hard_weight: float = 0.78
     model_weight: float = 0.22
-    no_expected_confidence_threshold: float = 0.85
-    no_expected_confidence_cap: float = 0.75
 
 @dataclass(frozen=True)
 class GeometrySupportScoreParameters:
@@ -55,7 +44,7 @@ class GeometrySupportScoreParameters:
     count_weight: float = 0.16
 
 @dataclass(frozen=True)
-class CandidateCompetitionParameters:
+class SelectionConsensusParameters:
     top_n: int = 8
-    close_margin: float = 0.04
-    confidence_cap: float = 0.84
+    confidence_tie_margin: float = 0.04
+    geometry_tolerance_ratio: float = 0.04

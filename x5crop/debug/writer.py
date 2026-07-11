@@ -18,10 +18,9 @@ def write_debug_preview(
     gray: np.ndarray,
     detection: FinalDetection,
     output_path: Path,
-    threshold: float,
     cache: Optional[AnalysisCache],
 ) -> None:
-    rgb = add_status_bar(make_debug_preview_rgb(gray, detection, cache), detection, threshold)
+    rgb = add_status_bar(make_debug_preview_rgb(gray, detection, cache), detection)
     write_rgb_jpeg(rgb, output_path)
 
 
@@ -30,7 +29,6 @@ def write_debug_analysis(
     detection: FinalDetection,
     output_dir: Path,
     stem: str,
-    threshold: float,
     diagnostics: RuntimeDiagnosticsPolicy,
     separator_evidence_image: SeparatorEvidenceImageParameters,
     cache: Optional[AnalysisCache],
@@ -41,7 +39,6 @@ def write_debug_analysis(
         make_debug_analysis_panel(
             gray,
             detection,
-            threshold,
             diagnostics,
             separator_evidence_image,
             cache,

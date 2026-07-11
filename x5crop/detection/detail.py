@@ -5,14 +5,12 @@ from typing import Any
 from ..domain import DetectionCandidate, FinalDetection
 
 
-CANDIDATE_COMPETITION = "candidate_competition"
 CANDIDATE_ASSESSMENT = "candidate_assessment"
-CANDIDATE_SIGNALS = "candidate_signals"
+SELECTION_GEOMETRY_CONSENSUS = "selection_geometry_consensus"
 COUNT_SELECTION = "count_selection"
 CONTENT_EVIDENCE = "content_evidence"
 DECISION_GEOMETRY = "decision_geometry"
 DECISION_SUMMARY = "decision_summary"
-DECISION_SIGNALS = "decision_signals"
 DIAGNOSTICS = "diagnostics"
 EVIDENCE_SUMMARY = "evidence_summary"
 OUTER_CONTENT_ALIGNMENT = "outer_content_alignment"
@@ -28,19 +26,12 @@ def detail_dict(detection: DetectionCandidate, key: str) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
-def candidate_competition(detection: DetectionCandidate) -> dict[str, Any]:
-    return detail_dict(detection, CANDIDATE_COMPETITION)
+def selection_geometry_consensus(detection: DetectionCandidate) -> dict[str, Any]:
+    return detail_dict(detection, SELECTION_GEOMETRY_CONSENSUS)
 
 
 def candidate_assessment(detection: DetectionCandidate) -> dict[str, Any]:
     return detail_dict(detection, CANDIDATE_ASSESSMENT)
-
-
-def candidate_signals_from_detail(detection: DetectionCandidate) -> list[str]:
-    signals = detection.detail.get(CANDIDATE_SIGNALS)
-    if isinstance(signals, list):
-        return [str(signal) for signal in signals if signal]
-    return []
 
 
 def decision_summary(detection: DetectionCandidate) -> dict[str, Any]:

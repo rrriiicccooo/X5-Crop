@@ -131,7 +131,7 @@ class AutoCountContractTest(unittest.TestCase):
         ):
             evaluation = evaluate_count_hypothesis(
                 gray=None,
-                config=SimpleNamespace(confidence_threshold=0.85),
+                config=SimpleNamespace(),
                 fmt=None,
                 hypothesis=hypothesis,
                 cache=None,

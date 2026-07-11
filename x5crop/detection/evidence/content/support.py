@@ -37,7 +37,7 @@ def _leading_trailing_internal_empty_counts(
     return leading, trailing, internal
 
 
-def content_containment_detail(
+def frame_content_support_detail(
     content_detail: dict[str, Any],
     evidence_policy: ContentEvidenceParameters,
     *,
@@ -47,10 +47,9 @@ def content_containment_detail(
         return {
             "used": False,
             "reason": content_detail.get("reason", "content_evidence_not_used"),
-            "content_containment_ok": False,
-            "content_integrity_failed": True,
+            "frame_content_support_available": False,
             "support": "unknown",
-            "empty_frame_policy": "allowed_when_content_is_contained",
+            "empty_frames_allowed": True,
         }
 
     scores = _frame_scores(content_detail)
@@ -61,6 +60,7 @@ def content_containment_detail(
     content_indexes: list[int] = []
     empty_indexes: list[int] = []
     aspect_conflict_indexes: list[int] = []
+    boundary_contact_indexes: list[int] = []
     normalized: list[dict[str, Any]] = []
     content_means: list[float] = []
     content_coverages: list[float] = []
@@ -78,6 +78,13 @@ def content_containment_detail(
             mean >= float(evidence_policy.present_mean_min)
             or coverage >= float(evidence_policy.present_coverage_min)
         )
+        boundary_contact_sides = sorted(
+            str(side)
+            for side in item.get("boundary_contact_sides", [])
+            if isinstance(side, str)
+        )
+        if boundary_contact_sides:
+            boundary_contact_indexes.append(index)
         if content_present:
             content_indexes.append(index)
             content_means.append(mean)
@@ -95,6 +102,8 @@ def content_containment_detail(
                 "coverage": float(coverage),
                 "aspect_error": aspect_error,
                 "content_present": bool(content_present),
+                "boundary_contact_sides": boundary_contact_sides,
+                "boundary_coverages": dict(item.get("boundary_coverages", {})),
             }
         )
 
@@ -113,9 +122,8 @@ def content_containment_detail(
 
     has_content = bool(content_indexes)
     aspect_conflict = bool(aspect_conflict_indexes)
-    content_integrity_failed = (not has_content) or aspect_conflict
-    containment_ok = has_content and not content_integrity_failed
-    support = "ok" if containment_ok else ("aspect_conflict" if aspect_conflict else "low_content")
+    support_available = has_content and not aspect_conflict
+    support = "ok" if support_available else ("aspect_conflict" if aspect_conflict else "low_content")
     reason = "ok"
     if not has_content:
         reason = "no_content_detected"
@@ -129,12 +137,11 @@ def content_containment_detail(
 
     return {
         "used": True,
-        "evidence_role": "content_containment_assessment",
+        "evidence_role": "frame_content_support",
         "support": support,
         "reason": reason,
-        "content_containment_ok": bool(containment_ok),
-        "content_integrity_failed": bool(content_integrity_failed),
-        "empty_frame_policy": "allowed_when_content_is_contained",
+        "frame_content_support_available": bool(support_available),
+        "empty_frames_allowed": True,
         "expected_count": int(expected),
         "content_bearing_frame_indexes": content_indexes,
         "empty_frame_indexes": empty_indexes,
@@ -142,6 +149,8 @@ def content_containment_detail(
         "trailing_empty_count": int(trailing_empty),
         "internal_empty_count": int(internal_empty),
         "aspect_conflict_frame_indexes": aspect_conflict_indexes,
+        "content_boundary_contact": bool(boundary_contact_indexes),
+        "boundary_contact_frame_indexes": sorted(set(boundary_contact_indexes)),
         "median_mean": median_mean,
         "min_mean": min_mean,
         "median_coverage": median_coverage,

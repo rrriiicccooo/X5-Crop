@@ -58,7 +58,6 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         deskew_fallback=options.deskew_fallback,
         deskew_min_angle=options.deskew_min_angle,
         deskew_max_angle=options.deskew_max_angle,
-        confidence_threshold=options.confidence_threshold,
         review_dir=options.review_dir,
         copy_review_files=options.copy_review_files,
         export_review=options.export_review,

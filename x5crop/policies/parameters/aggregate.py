@@ -23,7 +23,6 @@ from .content import (
     ContentProfileParameters,
     ContentSupportParameters,
 )
-from .decision import DecisionEvidenceParameters, DecisionReviewParameters
 from .diagnostics import DebugGapOverlayParameters, NearbySeparatorDiagnosticsParameters
 from .finalization import ApprovedGeometryAdjustmentParameters
 from .outer import (
@@ -45,7 +44,7 @@ from .exposure_overlap import (
 )
 from .scoring import (
     BaseDetectionScoreParameters,
-    CandidateCompetitionParameters,
+    SelectionConsensusParameters,
     GeometrySupportScoreParameters,
     ScoringCalibrationParameters,
     SeparatorSupportScoreParameters,
@@ -119,20 +118,7 @@ class CandidateParameters:
     base_detection_score: BaseDetectionScoreParameters = field(default_factory=BaseDetectionScoreParameters)
     separator_support_score: SeparatorSupportScoreParameters = field(default_factory=SeparatorSupportScoreParameters)
     geometry_support_score: GeometrySupportScoreParameters = field(default_factory=GeometrySupportScoreParameters)
-    candidate_competition: CandidateCompetitionParameters = field(default_factory=CandidateCompetitionParameters)
-
-
-@dataclass(frozen=True)
-class DecisionParameters:
-    decision_review: DecisionReviewParameters = field(default_factory=DecisionReviewParameters)
-    full_evidence: DecisionEvidenceParameters = field(default_factory=DecisionEvidenceParameters)
-    partial_evidence: DecisionEvidenceParameters = field(
-        default_factory=lambda: DecisionEvidenceParameters(
-            min_hard_separator_ratio=0.35,
-            max_photo_width_cv_ratio=0.045,
-            max_outer_area_ratio=0.990,
-        )
-    )
+    selection_consensus: SelectionConsensusParameters = field(default_factory=SelectionConsensusParameters)
 
 
 @dataclass(frozen=True)
@@ -162,6 +148,5 @@ class FormatParameters:
     outer: OuterParameters = field(default_factory=OuterParameters)
     separator: SeparatorParameters = field(default_factory=SeparatorParameters)
     candidate: CandidateParameters = field(default_factory=CandidateParameters)
-    decision: DecisionParameters = field(default_factory=DecisionParameters)
     output: OutputParameters = field(default_factory=OutputParameters)
     diagnostics: DiagnosticsParameters = field(default_factory=DiagnosticsParameters)

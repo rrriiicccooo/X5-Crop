@@ -1,389 +1,238 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
-
-from ...constants import CANDIDATE_SOURCE_REVIEW_ONLY
-from ...domain import DetectionCandidate, FinalDetection, OutputProtectionPlan
-from ...policies.decision.contract import DetectionDecisionContract
-from ...run_config import RunConfig
-from ..confidence_caps import apply_confidence_cap
-from ..gate_checks import GateCheck, gate_check_details
-from .decision_signals import decision_signals_for
-from .evidence_summary import evidence_summary_for
-from .final_reasons import (
-    FINAL_REASON_CANDIDATE_COMPETITION_CLOSE,
-    FINAL_REASON_CONTENT_INSUFFICIENT,
-    FINAL_REASON_CONTENT_ONLY_EVIDENCE,
-    FINAL_REASON_DESKEW_UNCERTAIN,
-    FINAL_REASON_EVIDENCE_INSUFFICIENT,
-    FINAL_REASON_EXPOSURE_OVERLAP_UNRESOLVED,
-    FINAL_REASON_GEOMETRY_UNSTABLE,
-    FINAL_REASON_OUTER_CANDIDATE_DISAGREEMENT,
-    FINAL_REASON_OUTER_CONTENT_MISMATCH,
-    FINAL_REASON_PARTIAL_EDGE_UNCERTAIN,
-    FINAL_REASON_SEPARATOR_INCOMPLETE,
+from ...constants import (
+    CANDIDATE_SOURCE_HARD_SAFETY,
+    CANDIDATE_SOURCE_REVIEW_ONLY,
+    FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
+    FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
+    FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
+    FINAL_REASON_EVIDENCE_INDEPENDENCE_FAILED,
+    FINAL_REASON_FRAME_TOPOLOGY_INVALID,
+    FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
+    FINAL_REASON_PHOTO_GEOMETRY_CONTRADICTED,
+    FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
+    FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
 )
+from ...domain import DetectionCandidate, FinalDetection, OutputProtectionPlan
+from ..evidence.content.preservation import ContentPreservationEvidence, content_preservation_evidence
+from ..evidence.state import EvidenceState
+from ..gate_checks import GateCheck, gate_check_details
+from .evidence_summary import evidence_summary_for
+
+
+_CANDIDATE_REASON_BY_CHECK = {
+    "frame_topology_integrity": FINAL_REASON_FRAME_TOPOLOGY_INVALID,
+    "content_preservation": FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
+    "photo_geometry_consistency": FINAL_REASON_PHOTO_GEOMETRY_CONTRADICTED,
+    "evidence_independence": FINAL_REASON_EVIDENCE_INDEPENDENCE_FAILED,
+    "boundary_proof": FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
+}
+
+
+@dataclass(frozen=True)
+class DecisionGateInput:
+    candidate_gate: dict[str, Any]
+    automatic_processing: EvidenceState
+    content_preservation: ContentPreservationEvidence
+    selection_consensus: EvidenceState
+    output_protection: EvidenceState
+    transform_geometry: EvidenceState
 
 
 @dataclass(frozen=True)
 class DecisionGateAssessment:
     passed: bool
-    checks: list[GateCheck]
-    final_review_reasons: list[str]
-    reason_inputs: list[dict[str, Any]]
-    confidence_caps: list[dict[str, Any]] = field(default_factory=list)
-
-    def with_confidence_caps(self, confidence_caps: list[dict[str, Any]]) -> "DecisionGateAssessment":
-        return replace(self, confidence_caps=list(confidence_caps))
+    checks: tuple[GateCheck, ...]
+    final_review_reasons: tuple[str, ...]
+    reason_inputs: tuple[dict[str, str], ...]
 
     def report_detail(self) -> dict[str, Any]:
         return {
             "passed": bool(self.passed),
-            "checks": gate_check_details(self.checks),
-            "reason_inputs": list(self.reason_inputs),
-            "confidence_caps": list(self.confidence_caps),
+            "checks": gate_check_details(list(self.checks)),
+            "reason_inputs": [dict(item) for item in self.reason_inputs],
         }
 
 
-@dataclass(frozen=True)
-class DecisionAssessmentInput:
-    detection: DetectionCandidate
-    confidence_threshold: float
-    decision_signals: dict[str, Any]
-    policy: DetectionDecisionContract
-    candidate_gate: dict[str, Any]
-    deskew_detail: dict[str, Any]
-    confidence_caps: list[dict[str, Any]] = field(default_factory=list)
-
-
-def _review_check(
-    *,
+def _decision_check(
     code: str,
-    bucket: str,
-    triggered: bool,
-    signal: str,
-    final_review_reason: str,
-    severity: str = "blocker",
+    state: EvidenceState,
+    final_reason: str,
+    *,
     detail: dict[str, Any] | None = None,
 ) -> GateCheck:
     return GateCheck(
         code=code,
         stage="decision",
-        bucket=bucket,
-        passed=not triggered,
-        severity=severity,
-        signal=signal,
-        detail={
-            **(detail or {}),
-            "final_review_reason": final_review_reason,
-        },
+        state=state,
+        consequence="blocker",
+        detail={"final_review_reason": final_reason, **(detail or {})},
     )
 
 
-def _failed_reason_inputs(checks: list[GateCheck]) -> list[dict[str, Any]]:
-    return [
+def _project_candidate_checks(candidate_gate: dict[str, Any]) -> list[GateCheck]:
+    projected: list[GateCheck] = []
+    checks = candidate_gate.get("checks", [])
+    if not isinstance(checks, list):
+        return projected
+    for check in checks:
+        if not isinstance(check, dict) or not bool(check.get("blocks", False)):
+            continue
+        code = str(check.get("code", ""))
+        final_reason = _CANDIDATE_REASON_BY_CHECK.get(code)
+        if final_reason is None:
+            raise ValueError(f"unowned candidate gate check: {code}")
+        projected.append(
+            _decision_check(
+                code=f"candidate_{code}",
+                state=EvidenceState.CONTRADICTED,
+                final_reason=final_reason,
+                detail={"candidate_check": code},
+            )
+        )
+    return projected
+
+
+def _required_candidate_gate(assessment: dict[str, Any]) -> dict[str, Any]:
+    candidate_gate = assessment.get("candidate_gate")
+    if not isinstance(candidate_gate, dict):
+        raise ValueError("decision requires candidate gate")
+    if not isinstance(candidate_gate.get("passed"), bool):
+        raise ValueError("decision requires candidate gate passed state")
+    for field in ("checks", "proof_paths", "failed_checks", "diagnostics"):
+        if not isinstance(candidate_gate.get(field), list):
+            raise ValueError(f"decision requires candidate gate {field}")
+    return dict(candidate_gate)
+
+
+def decision_gate_assessment(decision_input: DecisionGateInput) -> DecisionGateAssessment:
+    checks = [
+        *_project_candidate_checks(decision_input.candidate_gate),
+        _decision_check(
+            "automatic_processing_eligibility",
+            decision_input.automatic_processing,
+            FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
+        ),
+        _decision_check(
+            "selected_content_preservation",
+            decision_input.content_preservation.state,
+            FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
+            detail=decision_input.content_preservation.report_detail(),
+        ),
+        _decision_check(
+            "selection_geometry_consensus",
+            decision_input.selection_consensus,
+            FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
+        ),
+        _decision_check(
+            "output_content_protection",
+            decision_input.output_protection,
+            FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
+        ),
+        _decision_check(
+            "transform_geometry_integrity",
+            decision_input.transform_geometry,
+            FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
+        ),
+    ]
+    blocking = [check for check in checks if check.blocks]
+    reasons = tuple(
+        dict.fromkeys(
+            str(check.detail["final_review_reason"])
+            for check in blocking
+        )
+    )
+    reason_inputs = tuple(
         {
-            "bucket": check.bucket,
-            "signal": check.signal,
-            "final_review_reason": str(check.detail.get("final_review_reason", "")),
+            "check": check.code,
+            "final_review_reason": str(check.detail["final_review_reason"]),
         }
-        for check in checks
-        if not check.passed
-        and check.severity == "blocker"
-        and check.detail.get("final_review_reason")
-    ]
-
-
-def _failed_reasons(checks: list[GateCheck]) -> list[str]:
-    return [
-        str(check.detail.get("final_review_reason"))
-        for check in checks
-        if not check.passed
-        and check.severity == "blocker"
-        and check.detail.get("final_review_reason")
-    ]
-
-
-def _unique_reasons(reasons: list[str]) -> list[str]:
-    return list(dict.fromkeys(str(reason) for reason in reasons if reason))
-
-
-def decision_gate_assessment(decision_input: DecisionAssessmentInput) -> DecisionGateAssessment:
-    detection = decision_input.detection
-    confidence_threshold = decision_input.confidence_threshold
-    decision_signals = decision_input.decision_signals
-    policy = decision_input.policy
-    candidate_gate_allows_auto = bool(decision_input.candidate_gate.get("passed", False))
-    deskew_detail = decision_input.deskew_detail
-    checks: list[GateCheck] = []
-    checks.append(
-        _review_check(
-            code="content_only_evidence",
-            bucket="source",
-            triggered=bool(decision_signals["content_only_evidence"]),
-            signal="content_only_evidence",
-            final_review_reason=FINAL_REASON_CONTENT_ONLY_EVIDENCE,
-        )
+        for check in blocking
     )
-    checks.append(
-        _review_check(
-            code="safety_or_review_only",
-            bucket="source",
-            triggered=bool(decision_signals["safety_or_review_only"]),
-            signal="safety_or_review_only",
-            final_review_reason=FINAL_REASON_EVIDENCE_INSUFFICIENT,
-        )
-    )
-    checks.append(
-        _review_check(
-            code="outer_content_alignment",
-            bucket="outer",
-            triggered=bool(decision_signals["outer_content_alignment_failed"]),
-            signal="outer_content_alignment_failed",
-            final_review_reason=FINAL_REASON_OUTER_CONTENT_MISMATCH,
-        )
-    )
-    checks.append(
-        _review_check(
-            code="separator_support",
-            bucket="separator",
-            triggered=bool(decision_signals["separator_support_incomplete"]),
-            signal="separator_support_incomplete",
-            final_review_reason=FINAL_REASON_SEPARATOR_INCOMPLETE,
-        )
-    )
-    checks.append(
-        _review_check(
-            code="geometry_support",
-            bucket="geometry",
-            triggered=bool(decision_signals["photo_geometry_unstable"]),
-            signal="photo_geometry_unstable",
-            final_review_reason=FINAL_REASON_GEOMETRY_UNSTABLE,
-        )
-    )
-    checks.append(
-        _review_check(
-            code="content_support",
-            bucket="content",
-            triggered=bool(decision_signals["content_integrity_failed"]),
-            signal="content_integrity_failed",
-            final_review_reason=FINAL_REASON_CONTENT_INSUFFICIENT,
-        )
-    )
-    checks.append(
-        _review_check(
-            code="candidate_competition",
-            bucket="selection",
-            triggered=bool(decision_signals["candidate_competition_close"]),
-            signal="candidate_competition_close",
-            final_review_reason=FINAL_REASON_CANDIDATE_COMPETITION_CLOSE,
-        )
-    )
-    checks.append(
-        _review_check(
-            code="exposure_overlap_protection",
-            bucket="output",
-            triggered=bool(decision_signals["exposure_overlap_unresolved"]),
-            signal="exposure_overlap_unresolved",
-            final_review_reason=FINAL_REASON_EXPOSURE_OVERLAP_UNRESOLVED,
-        )
-    )
-    checks.append(
-        _review_check(
-            code="partial_edge_safety",
-            bucket="partial_edge",
-            triggered=bool(decision_signals["partial_edge_uncertain"]),
-            signal="partial_edge_uncertain",
-            final_review_reason=FINAL_REASON_PARTIAL_EDGE_UNCERTAIN,
-        )
-    )
-    checks.append(
-        _review_check(
-            code="candidate_gate",
-            bucket="candidate_assessment",
-            triggered=not candidate_gate_allows_auto,
-            signal="candidate_gate_failed",
-            final_review_reason=FINAL_REASON_EVIDENCE_INSUFFICIENT,
-        )
-    )
-
-    failed_before_confidence_floor = bool(_failed_reasons(checks))
-    confidence_below_threshold = float(detection.confidence) < float(confidence_threshold)
-    checks.append(
-        _review_check(
-            code="confidence_floor",
-            bucket="confidence",
-            triggered=confidence_below_threshold,
-            signal="confidence_below_threshold",
-            final_review_reason=FINAL_REASON_EVIDENCE_INSUFFICIENT,
-            severity="diagnostic" if failed_before_confidence_floor else "blocker",
-            detail={
-                "confidence": float(detection.confidence),
-                "confidence_threshold": float(confidence_threshold),
-                "reason_visibility": (
-                    "diagnostic_because_specific_reason_exists"
-                    if failed_before_confidence_floor
-                    else "final_reason"
-                ),
-            },
-        )
-    )
-    checks.append(
-        _review_check(
-            code="outer_candidate_disagreement",
-            bucket="low_confidence_context",
-            triggered=(
-                confidence_below_threshold
-                and float(detection.detail.get("outer_area_spread_ratio", 0.0))
-                >= policy.decision.outer_candidate_disagreement_min_spread_ratio
-            ),
-            signal="outer_area_spread",
-            final_review_reason=FINAL_REASON_OUTER_CANDIDATE_DISAGREEMENT,
-        )
-    )
-    checks.append(
-        _review_check(
-            code="deskew_uncertain",
-            bucket="low_confidence_context",
-            triggered=(
-                confidence_below_threshold
-                and (
-                    deskew_detail.get("skipped") == "angle_out_of_range"
-                    or bool(deskew_detail.get("reason"))
-                )
-            ),
-            signal="deskew_uncertain",
-            final_review_reason=FINAL_REASON_DESKEW_UNCERTAIN,
-        )
-    )
-
-    reasons = _unique_reasons(_failed_reasons(checks))
     return DecisionGateAssessment(
-        passed=not reasons,
-        checks=checks,
+        passed=not blocking,
+        checks=tuple(checks),
         final_review_reasons=reasons,
-        reason_inputs=_failed_reason_inputs(checks),
-        confidence_caps=list(decision_input.confidence_caps),
+        reason_inputs=reason_inputs,
     )
 
 
-def _apply_decision_confidence_caps(
-    detection: DetectionCandidate,
-    config: RunConfig,
-    content_detail: dict[str, Any],
-    outer_alignment: dict[str, Any],
-    policy: DetectionDecisionContract,
-) -> list[dict[str, Any]]:
-    decision_caps: list[dict[str, Any]] = []
+def _automatic_processing_state(detection: DetectionCandidate) -> EvidenceState:
+    if detection.detail.get("automatic_processing_supported") is False:
+        return EvidenceState.CONTRADICTED
+    source = str(detection.detail.get("candidate_source", ""))
+    if source in {CANDIDATE_SOURCE_HARD_SAFETY, CANDIDATE_SOURCE_REVIEW_ONLY}:
+        return EvidenceState.CONTRADICTED
+    if detection.detail.get("candidate_contract") == "hard_safety_review_input":
+        return EvidenceState.CONTRADICTED
+    return EvidenceState.SUPPORTED
 
-    review_only_mode = detection.detail.get("candidate_source") == CANDIDATE_SOURCE_REVIEW_ONLY
-    support = str(content_detail.get("support", ""))
-    if not review_only_mode:
-        if support == "aspect_conflict" and detection.confidence >= config.confidence_threshold:
-            detection.confidence, cap_detail = apply_confidence_cap(
-                float(detection.confidence),
-                policy.decision.content_aspect_conflict_cap,
-                owner="decision",
-                reason="content_aspect_conflict",
-            )
-            decision_caps.append(cap_detail)
-        elif support == "low_content" and detection.confidence >= config.confidence_threshold:
-            detection.confidence, cap_detail = apply_confidence_cap(
-                float(detection.confidence),
-                policy.decision.content_low_confidence_cap,
-                owner="decision",
-                reason="content_low_confidence",
-            )
-            decision_caps.append(cap_detail)
 
-    outer_correction_detail = detection.detail.get("outer_correction", {})
-    suppress_outer_mismatch = bool(
-        isinstance(outer_correction_detail, dict)
-        and outer_correction_detail.get("suppress_outer_mismatch", False)
+def _selection_consensus_state(detection: DetectionCandidate) -> EvidenceState:
+    detail = detection.detail.get("selection_geometry_consensus")
+    if not isinstance(detail, dict):
+        return EvidenceState.NOT_APPLICABLE
+    return (
+        EvidenceState.CONTRADICTED
+        if bool(detail.get("geometry_disagreement", False))
+        else EvidenceState.SUPPORTED
     )
-    if (
-        not review_only_mode
-        and not suppress_outer_mismatch
-        and bool(outer_alignment.get("used", False))
-        and not bool(outer_alignment.get("ok", True))
-    ):
-        detection.confidence, cap_detail = apply_confidence_cap(
-            float(detection.confidence),
-            policy.decision.outer_mismatch_cap,
-            owner="decision",
-            reason="outer_content_mismatch",
-        )
-        decision_caps.append(cap_detail)
-    return decision_caps
+
+
+def _transform_geometry_state(deskew_detail: dict[str, Any]) -> EvidenceState:
+    uncertain = bool(
+        deskew_detail.get("geometry_uncertain", False)
+        or deskew_detail.get("skipped") == "angle_out_of_range"
+    )
+    return EvidenceState.CONTRADICTED if uncertain else EvidenceState.SUPPORTED
 
 
 def apply_decision_gate(
-    gray: np.ndarray,
     detection: DetectionCandidate,
-    config: RunConfig,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
     *,
-    policy: DetectionDecisionContract,
     deskew_detail: dict[str, Any],
     output_protection_plan: OutputProtectionPlan,
 ) -> FinalDetection:
     working = deepcopy(detection)
-    evidence = evidence_summary_for(gray, working, content_detail, outer_alignment, policy)
-    decision_signals = decision_signals_for(
-        working,
-        evidence,
-        policy,
-        output_protection_plan,
-    )
-    assessment = working.detail.get("candidate_assessment", {})
-    assessment = dict(assessment) if isinstance(assessment, dict) else {}
-    candidate_gate = assessment.get("candidate_gate")
-    candidate_gate = dict(candidate_gate) if isinstance(candidate_gate, dict) else {}
-    decision_caps = _apply_decision_confidence_caps(
-        working,
-        config,
+    assessment = working.detail.get("candidate_assessment")
+    if not isinstance(assessment, dict):
+        raise ValueError("decision requires candidate assessment")
+    candidate_gate = _required_candidate_gate(assessment)
+    partial_edge = assessment.get("partial_edge_safety", {})
+    partial_edge = dict(partial_edge) if isinstance(partial_edge, dict) else {}
+    preservation = content_preservation_evidence(
         content_detail,
         outer_alignment,
-        policy,
+        partial_edge,
     )
     decision_gate = decision_gate_assessment(
-        DecisionAssessmentInput(
-            detection=working,
-            confidence_threshold=config.confidence_threshold,
-            decision_signals=decision_signals,
-            policy=policy,
+        DecisionGateInput(
             candidate_gate=candidate_gate,
-            deskew_detail=deskew_detail,
-            confidence_caps=decision_caps,
+            automatic_processing=_automatic_processing_state(working),
+            content_preservation=preservation,
+            selection_consensus=_selection_consensus_state(working),
+            output_protection=(
+                EvidenceState.SUPPORTED
+                if output_protection_plan.feasible
+                else EvidenceState.CONTRADICTED
+            ),
+            transform_geometry=_transform_geometry_state(deskew_detail),
         )
     )
-    final_reasons = list(decision_gate.final_review_reasons)
-    if working.confidence < config.confidence_threshold or final_reasons:
-        working.confidence, cap_detail = apply_confidence_cap(
-            float(working.confidence),
-            policy.candidate_selection.confidence_cap,
-            owner="decision",
-            reason="final_review",
-        )
-        decision_caps.append(cap_detail)
-    decision_gate = decision_gate.with_confidence_caps(decision_caps)
-    status = (
-        "approved_auto"
-        if decision_gate.passed and working.confidence >= config.confidence_threshold
-        else "needs_review"
-    )
+    evidence = evidence_summary_for(working, content_detail, outer_alignment)
+    evidence["content_preservation"] = preservation.report_detail()
     working.detail["decision_summary"] = {
         "decision_gate": decision_gate.report_detail(),
     }
     working.detail["evidence_summary"] = evidence
-    working.detail["decision_signals"] = decision_signals
     return FinalDetection.from_candidate(
         working,
-        status=status,
-        final_review_reasons=final_reasons,
+        status="approved_auto" if decision_gate.passed else "needs_review",
+        final_review_reasons=list(decision_gate.final_review_reasons),
     )

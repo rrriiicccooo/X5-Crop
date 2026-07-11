@@ -12,7 +12,6 @@ from ..runtime.bootstrap import run_options
 from ..runtime.limits import STANDARD_JOB_LIMIT
 from ..runtime.options import (
     COMPRESSION_CHOICES,
-    DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
     DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
     DESKEW_CHOICES,
@@ -46,11 +45,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--compression", choices=COMPRESSION_CHOICES, default="same", help="TIFF output compression: same for known lossless source compression, or none.")
     parser.add_argument("--deskew-min-angle", type=float, default=DEFAULT_DESKEW_MIN_ANGLE_DEGREES, help="Minimum absolute deskew angle in degrees.")
     parser.add_argument("--deskew-max-angle", type=float, default=DEFAULT_DESKEW_MAX_ANGLE_DEGREES, help="Maximum absolute deskew angle in degrees.")
-    parser.add_argument("--confidence-threshold", type=float, default=DEFAULT_CONFIDENCE_THRESHOLD, help="Minimum confidence for automatic export.")
-    parser.add_argument("--copy-review-files", dest="copy_review_files", action="store_true", default=True, help="Copy low-confidence source TIFFs to review folder; default on.")
-    parser.add_argument("--no-copy-review-files", dest="copy_review_files", action="store_false", help="Do not copy low-confidence source TIFFs to review folder.")
+    parser.add_argument("--copy-review-files", dest="copy_review_files", action="store_true", default=True, help="Copy source TIFFs that require review to the review folder; default on.")
+    parser.add_argument("--no-copy-review-files", dest="copy_review_files", action="store_false", help="Do not copy source TIFFs that require review.")
     parser.add_argument("--review-dir", default=None, help="Review folder; default output/needs_review.")
-    parser.add_argument("--export-review", action="store_true", help="Export crops even when confidence is below threshold.")
+    parser.add_argument("--export-review", action="store_true", help="Export crops even when the result requires review.")
     parser.add_argument("--dry-run", action="store_true", help="Detect only; do not write cropped TIFFs.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing outputs.")
     parser.add_argument("--report", action="store_true", help=f"Write {REPORT_JSONL_NAME} and {SUMMARY_CSV_NAME}.")
@@ -75,8 +73,6 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         value = getattr(args, name)
         if value is not None and int(value) < 0:
             raise ValueError("Bleed cannot be negative")
-    if not (0.0 <= float(args.confidence_threshold) <= 1.0):
-        raise ValueError("--confidence-threshold must be between 0 and 1")
     if float(args.deskew_min_angle) < 0 or float(args.deskew_max_angle) <= 0:
         raise ValueError("Deskew angle limits are invalid")
     if int(args.jobs) < 1:
@@ -98,7 +94,6 @@ def options_from_args(args: argparse.Namespace) -> RuntimeOptions:
         deskew_fallback=str(args.deskew_fallback),
         deskew_min_angle=float(args.deskew_min_angle),
         deskew_max_angle=float(args.deskew_max_angle),
-        confidence_threshold=float(args.confidence_threshold),
         review_dir=Path(args.review_dir).expanduser().resolve() if args.review_dir else None,
         copy_review_files=False if diagnostics else bool(args.copy_review_files),
         export_review=bool(args.export_review),

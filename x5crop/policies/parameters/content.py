@@ -10,6 +10,8 @@ class ContentEvidenceParameters:
     aspect_ok_max: float = 0.22
     present_mean_min: float = 0.075
     present_coverage_min: float = 0.18
+    boundary_band_ratio: float = 0.02
+    boundary_band_min_px: int = 2
 
 @dataclass(frozen=True)
 class ContentProfileParameters:
@@ -49,11 +51,6 @@ class ContentCandidateParameters:
     aspect_norm: float = 0.18
     weak_coverage: float = 0.14
     aspect_uncertain: float = 0.18
-    grid_placement_cap: float = 0.82
-    run_mismatch_cap: float = 0.84
-    runs_incomplete_cap: float = 0.84
-    weak_coverage_cap: float = 0.82
-    aspect_uncertain_cap: float = 0.82
 
 @dataclass(frozen=True)
 class ContentSupportParameters:

@@ -97,7 +97,6 @@ def make_separator_evidence_debug_rgb(
 def make_debug_analysis_panel(
     gray: np.ndarray,
     detection: FinalDetection,
-    threshold: float,
     diagnostics: RuntimeDiagnosticsPolicy,
     separator_evidence_image: SeparatorEvidenceImageParameters,
     cache: Optional[AnalysisCache],
@@ -122,7 +121,7 @@ def make_debug_analysis_panel(
         for name in diagnostics.debug_panels
     ]
     canvas = stack_debug_panels(panels, horizontal=gray.shape[1] < gray.shape[0])
-    return add_status_bar(canvas, detection, threshold)
+    return add_status_bar(canvas, detection)
 
 
 def stack_debug_panels(panels: list[np.ndarray], horizontal: bool) -> np.ndarray:

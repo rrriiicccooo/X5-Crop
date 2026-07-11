@@ -6,9 +6,46 @@ import re
 import unittest
 
 from tools.tests.architecture_contracts import PROJECT_ROOT
+from x5crop.constants import FINAL_REVIEW_REASONS
 
 
 class CurrentSchemaNamingContractTest(unittest.TestCase):
+    def test_test_fixtures_use_only_current_decision_schema(self) -> None:
+        invalid_reason_entries: list[str] = []
+        removed_schema_entries: list[str] = []
+        for path in (PROJECT_ROOT / "tools" / "tests").rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Dict):
+                    for key, value in zip(node.keys, node.values):
+                        if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
+                            continue
+                        if key.value == "confidence_caps":
+                            removed_schema_entries.append(
+                                f"{path.relative_to(PROJECT_ROOT)}:{key.lineno}:confidence_caps"
+                            )
+                        if key.value != "final_review_reasons" or not isinstance(
+                            value, (ast.List, ast.Tuple)
+                        ):
+                            continue
+                        for item in value.elts:
+                            if (
+                                isinstance(item, ast.Constant)
+                                and isinstance(item.value, str)
+                                and item.value not in FINAL_REVIEW_REASONS
+                            ):
+                                invalid_reason_entries.append(
+                                    f"{path.relative_to(PROJECT_ROOT)}:{item.lineno}:{item.value}"
+                                )
+                if isinstance(node, ast.Call):
+                    for keyword in node.keywords:
+                        if keyword.arg == "confidence_threshold":
+                            removed_schema_entries.append(
+                                f"{path.relative_to(PROJECT_ROOT)}:{keyword.value.lineno}:confidence_threshold"
+                            )
+        self.assertEqual(invalid_reason_entries, [])
+        self.assertEqual(removed_schema_entries, [])
+
     def test_contract_tests_do_not_keep_inactive_source_exemptions(self) -> None:
         source = (
             PROJECT_ROOT / "tools" / "tests" / "test_architecture_ownership_contract.py"
@@ -179,15 +216,15 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         from x5crop.domain import DetectionCandidate, ProcessResult
         from x5crop.runtime.options import RuntimeOptions
         from x5crop.formats import FormatPhysicalSpec
-        from x5crop.policies.decision.contract import DetectionDecisionContract
+        from x5crop.policies.runtime.policy import DetectionPolicy
         from x5crop.run_config import RunConfig
 
         for contract in (DetectionCandidate, RuntimeOptions, RunConfig):
             self.assertIn("format_id", contract.__dataclass_fields__)
         self.assertEqual(set(ProcessResult.__dataclass_fields__), {"record"})
         self.assertNotIn("name", FormatPhysicalSpec.__dataclass_fields__)
-        self.assertIn("physical_spec", DetectionDecisionContract.__dataclass_fields__)
-        self.assertNotIn("format", DetectionDecisionContract.__dataclass_fields__)
+        self.assertIn("physical_spec", DetectionPolicy.__dataclass_fields__)
+        self.assertNotIn("format", DetectionPolicy.__dataclass_fields__)
 
         offenders: list[str] = []
         for path in (PROJECT_ROOT / "x5crop").rglob("*.py"):
@@ -269,15 +306,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
 
     def test_format_descriptions_do_not_claim_format_specific_separator_widths(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "formats" / "descriptions.py"
-        text = path.read_text(encoding="utf-8")
-        banned = (
-            "few_wide_internal_gaps",
-            "broad_internal_separator_widths",
-            "broad_internal_gap_widths_expected",
-            "broad_separator_width_can_be_false_frame_boundary",
-            "broad_separator_width_may_compete_with_content",
-        )
-        self.assertEqual([term for term in banned if term in text], [])
+        self.assertFalse(path.exists())
 
     def test_separator_support_is_not_locally_named_as_a_gate(self) -> None:
         paths = (
@@ -425,17 +454,12 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("policy_id_stem_for", source)
 
         from x5crop.policies.identity import (
-            decision_policy_id_for,
             detection_policy_id_for,
         )
 
         self.assertEqual(
             detection_policy_id_for("120-66", "partial"),
             "detection:120-66:partial",
-        )
-        self.assertEqual(
-            decision_policy_id_for("120-66", "partial"),
-            "decision:120-66:partial",
         )
 
     def test_current_changelog_names_the_current_report_schema(self) -> None:

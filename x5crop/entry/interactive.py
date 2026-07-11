@@ -7,7 +7,6 @@ from ..formats import FORMATS
 from ..runtime.bootstrap import run_options
 from ..runtime.limits import DIAGNOSTICS_JOB_LIMIT, STANDARD_JOB_LIMIT
 from ..runtime.options import (
-    DEFAULT_CONFIDENCE_THRESHOLD,
     DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
     DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
     RuntimeOptions,
@@ -139,7 +138,6 @@ def interactive_options(diagnostics: bool = False) -> RuntimeOptions:
         deskew_fallback="auto",
         deskew_min_angle=DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
         deskew_max_angle=DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
-        confidence_threshold=DEFAULT_CONFIDENCE_THRESHOLD,
         review_dir=None,
         copy_review_files=False if diagnostics else True,
         export_review=False,

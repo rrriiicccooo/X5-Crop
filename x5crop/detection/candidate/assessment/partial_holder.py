@@ -12,9 +12,6 @@ from ....cache import AnalysisCache
 from ....utils import clamp_int
 from ...evidence.photo_width import photo_width_stability_detail
 from ...evidence.separator_summary import separator_support_detail_summary
-from ..signals import (
-    SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT,
-)
 
 
 def partial_edge_safety_leading_content_detail(
@@ -191,9 +188,6 @@ def partial_edge_safety_assessment_detail(
     hard_detail: dict[str, Any],
     content_detail: dict[str, Any],
     source: str,
-    joint_score: float,
-    content_score: float,
-    geometry_score: float,
     holder_occupancy: dict[str, Any],
     cache: Optional[AnalysisCache],
     *,
@@ -215,55 +209,55 @@ def partial_edge_safety_assessment_detail(
     leading_content = partial_edge_safety_leading_content_detail(gray, detection, cache, policy)
     frame_content = partial_edge_safety_frame_content_detail(content_detail, detection, policy)
     complete_underfilled_strip = bool(holder_occupancy.get("complete_underfilled_strip", False))
-    disqualifiers: list[str] = []
+    applicable = bool(
+        holder_policy.enabled
+        and detection.strip_mode == "partial"
+        and source == "separator"
+    )
+    if not applicable:
+        return {
+            "used": False,
+            "state": "not_applicable",
+            "reason": "not_partial_separator_candidate",
+            "count": int(detection.count),
+            "holder_policy": {"enabled": holder_policy.enabled},
+        }
+
+    preservation_failures: list[str] = []
     occupancy_diagnostics: list[str] = []
     leading_content_strong = (
         bool(leading_content.get("used", False))
         and not bool(leading_content.get("ok", True))
     )
-    if not holder_policy.enabled:
-        disqualifiers.append("disabled")
-    if detection.strip_mode != "partial":
-        disqualifiers.append("not_partial")
-    if source != "separator":
-        disqualifiers.append("not_separator_candidate")
-    if detection.count < min_count:
-        disqualifiers.append("count_too_small")
-    if expected <= 0:
-        disqualifiers.append("no_internal_gaps")
-    content_containment_ok = bool(content_detail.get("content_containment_ok", False))
-    content_integrity_failed = bool(content_detail.get("content_integrity_failed", True))
-    if not content_containment_ok or content_integrity_failed:
-        disqualifiers.append("content_integrity_failed")
-    if hard < holder.min_hard_gaps:
-        disqualifiers.append("too_few_hard_gaps")
-    if hard_ratio < holder.min_hard_ratio:
-        disqualifiers.append("hard_gap_ratio_low")
-    if equal > holder.max_equal_gaps:
-        disqualifiers.append("equal_gap_used")
     photo_width_stability = photo_width_stability_detail(
         detection.detail,
         float(holder.max_photo_width_cv),
         used_role="photo_width_assessment",
     )
-    if bool(photo_width_stability["unstable"]):
-        disqualifiers.append("photo_width_unstable")
-    if joint_score < holder.min_joint_score:
-        disqualifiers.append("joint_score_low")
-    content_quality_ok = content_score >= holder.min_content_score
-    if geometry_score < holder.min_geometry_score:
-        disqualifiers.append("geometry_score_low")
     if not complete_underfilled_strip and leading_content_strong:
-        disqualifiers.append(SIGNAL_PARTIAL_EDGE_CONTENT_PRESENT)
+        preservation_failures.append("partial_edge_content_present")
     elif complete_underfilled_strip and leading_content_strong:
         occupancy_diagnostics.append("leading_content_not_used_as_holder_edge_blocker_for_complete_underfilled_strip")
     if bool(frame_content.get("used", False)) and not bool(frame_content.get("ok", True)):
-        disqualifiers.append("partial_frame_content_unstable")
+        occupancy_diagnostics.append("partial_frame_content_measurement_unavailable")
+    boundary_support = bool(
+        detection.count >= min_count
+        and expected > 0
+        and hard >= holder.min_hard_gaps
+        and hard_ratio >= holder.min_hard_ratio
+        and equal <= holder.max_equal_gaps
+        and not bool(photo_width_stability["unstable"])
+    )
     return {
         "used": True,
-        "ok": not disqualifiers,
-        "reason": "empty_holder_frames_allowed" if not disqualifiers else "partial_edge_safety_failed",
-        "disqualifiers": disqualifiers,
+        "state": "contradicted" if preservation_failures else "supported",
+        "reason": (
+            "partial_edge_safety_supported"
+            if not preservation_failures
+            else "partial_edge_content_contradicted"
+        ),
+        "preservation_failures": preservation_failures,
+        "boundary_support": boundary_support,
         "count": int(detection.count),
         "expected_gaps": int(expected),
         "hard_gaps": int(hard),
@@ -278,15 +272,6 @@ def partial_edge_safety_assessment_detail(
         "holder_occupancy": holder_occupancy,
         "complete_underfilled_strip": complete_underfilled_strip,
         "occupancy_diagnostics": occupancy_diagnostics,
-        "joint_score": float(joint_score),
-        "content_score": float(content_score),
-        "geometry_score": float(geometry_score),
-        "content_quality": {
-            "score": float(content_score),
-            "min_quality_score": float(holder.min_content_score),
-            "quality_ok": bool(content_quality_ok),
-            "role": "quality_diagnostic_not_boundary_evidence",
-        },
         "policy_id": policy.policy_id,
         "holder_policy": {
             "enabled": holder_policy.enabled,

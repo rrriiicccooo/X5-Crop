@@ -117,6 +117,7 @@ class ContentContainmentCorrectionParameters:
 @dataclass(frozen=True)
 class OuterAlignmentEvidenceParameters:
     content_bbox_thresholds: tuple[int, ...] = (225, 210, 190)
+    undercrop_confirmation_min_measurements: int = 2
     content_bbox_min_row_fraction: float = 0.015
     content_bbox_min_col_fraction: float = 0.015
     border_dark_threshold: int = 245

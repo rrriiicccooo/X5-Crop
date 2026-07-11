@@ -4,14 +4,14 @@ from typing import Any
 
 from ..detection.detail import (
     candidate_assessment,
-    candidate_competition,
     decision_summary,
+    selection_geometry_consensus,
 )
 from ..domain import FinalDetection
 
 
 def candidate_table(detection: FinalDetection) -> list[dict[str, Any]]:
-    candidates = candidate_competition(detection).get("top_candidates", [])
+    candidates = selection_geometry_consensus(detection).get("top_candidates", [])
     if not isinstance(candidates, list):
         return []
     return [

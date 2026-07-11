@@ -7,10 +7,9 @@ from ...geometry.detection_parameters import FrameFitParameters
 from ..identity import detection_policy_id_for
 from ..parameters.base import PartialEdgeHintParameters
 from ..parameters.candidate import CandidatePlanParameters
-from ..parameters.decision import DecisionEvidenceParameters, DecisionReviewParameters
 from ..parameters.exposure_overlap import ExposureOverlapEvidenceParameters
 from ..parameters.finalization import ApprovedGeometryAdjustmentParameters
-from ..parameters.scoring import CandidateCompetitionParameters
+from ..parameters.scoring import SelectionConsensusParameters
 from .candidate import (
     PartialHolderPolicy,
     ScoringPolicy,
@@ -37,11 +36,9 @@ class DetectionPolicy:
     partial_edge_hint: PartialEdgeHintParameters
     frame_fit: FrameFitParameters
     scoring: ScoringPolicy
-    candidate_selection: CandidateCompetitionParameters
+    candidate_selection: SelectionConsensusParameters
     candidate_plan: CandidatePlanParameters
     exposure_overlap_evidence: ExposureOverlapEvidenceParameters
-    decision_evidence: DecisionEvidenceParameters
-    decision: DecisionReviewParameters
     approved_geometry_adjustment: ApprovedGeometryAdjustmentParameters
     output: OutputPolicy
     diagnostics: RuntimeDiagnosticsPolicy

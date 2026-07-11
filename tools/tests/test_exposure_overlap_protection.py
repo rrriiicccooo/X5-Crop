@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from tools.tests.decision_contract_support import final_detection_fixture
+from tools.tests.physical_gate_support import final_detection_fixture
 from x5crop.detection.evidence.exposure_overlap import (
     exposure_overlap_evidence_detail,
 )

@@ -7,13 +7,10 @@ from ..app_info import SCRIPT_NAME, VERSION
 from ..domain import FinalDetection
 
 
-def debug_status_parts(detection: FinalDetection, threshold: float) -> tuple[str, str, tuple[int, int, int]]:
+def debug_status_parts(detection: FinalDetection) -> tuple[str, str, tuple[int, int, int]]:
     passed = detection.status == "approved_auto"
     status = "PASS" if passed else "REVIEW"
-    detail = (
-        f"decision status {detection.status}; "
-        f"confidence {detection.confidence:.3f}; threshold {threshold:.3f}"
-    )
+    detail = f"status: {detection.status} | confidence: {detection.confidence:.3f}"
     color = (40, 180, 90) if passed else (230, 80, 70)
     reasons = detection.final_review_reasons
     if reasons:
@@ -41,8 +38,8 @@ def draw_large_status(
     return width + 3, height + 3
 
 
-def add_status_bar(rgb: np.ndarray, detection: FinalDetection, threshold: float) -> np.ndarray:
-    status, detail, color = debug_status_parts(detection, threshold)
+def add_status_bar(rgb: np.ndarray, detection: FinalDetection) -> np.ndarray:
+    status, detail, color = debug_status_parts(detection)
     detail = f"{SCRIPT_NAME} {VERSION} | {detail}"
     bar_h = 48
     h, w = rgb.shape[:2]

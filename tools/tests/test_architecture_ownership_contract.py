@@ -76,23 +76,19 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             [],
         )
 
-    def test_decision_contract_uses_canonical_parameter_objects(self) -> None:
-        from x5crop.policies.decision import contract
-
-        self.assertFalse(hasattr(contract, "DecisionPolicy"))
-        self.assertFalse(hasattr(contract, "decision_policy_for"))
-        self.assertIn(
-            "candidate_selection",
-            contract.DetectionDecisionContract.__dataclass_fields__,
+    def test_decision_contract_policy_surface_is_removed(self) -> None:
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop/policies/decision/contract.py").exists()
+        )
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop/policies/parameters/decision.py").exists()
         )
 
     def test_policy_identity_is_derived_from_format_and_mode(self) -> None:
-        from x5crop.policies.decision.contract import DetectionDecisionContract
         from x5crop.policies.runtime.policy import DetectionPolicy
 
-        for policy_type in (DetectionPolicy, DetectionDecisionContract):
-            self.assertNotIn("policy_id", policy_type.__dataclass_fields__)
-            self.assertIsInstance(policy_type.policy_id, property)
+        self.assertNotIn("policy_id", DetectionPolicy.__dataclass_fields__)
+        self.assertIsInstance(DetectionPolicy.policy_id, property)
 
     def test_separator_model_gap_has_no_singleton_policy_selector(self) -> None:
         from x5crop.policies.runtime import separator
@@ -173,35 +169,12 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             (PROJECT_ROOT / "tools" / "regression" / "reference_classify.py").exists()
         )
 
-    def test_decision_policy_owns_thresholds_not_identity_reasons_or_descriptions(self) -> None:
-        from x5crop.policies.decision import contract
-        from x5crop.policies.parameters.decision import DecisionReviewParameters
+    def test_decision_has_no_threshold_or_reason_policy(self) -> None:
+        from x5crop.policies.parameters.aggregate import FormatParameters
+        from x5crop.policies.runtime.policy import DetectionPolicy
 
-        self.assertFalse(hasattr(contract, "ModePolicy"))
-        self.assertIn(
-            "strip_mode",
-            contract.DetectionDecisionContract.__dataclass_fields__,
-        )
-        self.assertNotIn(
-            "mode",
-            contract.DetectionDecisionContract.__dataclass_fields__,
-        )
-        banned = {
-            "policy_id",
-            "suppress_close_competition_when_partial_edge_safe",
-            "outer_candidate_disagreement_review_reason",
-            "deskew_uncertain_review_reason",
-            "separator_incomplete_reason",
-            "geometry_unstable_reason",
-            "outer_content_mismatch_reason",
-            "candidate_competition_close_reason",
-            "exposure_overlap_unresolved_reason",
-            "content_only_evidence_reason",
-            "content_evidence_insufficient_reason",
-            "partial_edge_uncertain_reason",
-            "decision_insufficient_reason",
-        }
-        self.assertTrue(banned.isdisjoint(DecisionReviewParameters.__dataclass_fields__))
+        self.assertNotIn("decision", FormatParameters.__dataclass_fields__)
+        self.assertNotIn("decision", DetectionPolicy.__dataclass_fields__)
 
     def test_candidate_plan_policy_contains_parameters_not_static_labels(self) -> None:
         from x5crop.policies.runtime import candidate
@@ -356,14 +329,12 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             ShortAxisGeometryCorrectionParameters.__dataclass_fields__,
         )
 
-    def test_runtime_confidence_threshold_has_one_entry_owned_default(self) -> None:
-        from x5crop.policies.runtime.candidate import ScoringPolicy
+    def test_runtime_has_no_automatic_processing_confidence_threshold(self) -> None:
+        from x5crop.run_config import RunConfig
+        from x5crop.runtime.options import RuntimeOptions
 
-        self.assertNotIn("confidence_threshold_default", ScoringPolicy.__dataclass_fields__)
-        consistency_source = (
-            PROJECT_ROOT / "x5crop" / "policies" / "consistency.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("confidence_threshold_default", consistency_source)
+        self.assertNotIn("confidence_threshold", RunConfig.__dataclass_fields__)
+        self.assertNotIn("confidence_threshold", RuntimeOptions.__dataclass_fields__)
 
     def test_partial_candidate_parameters_use_physical_sequence_terms(self) -> None:
         from x5crop.policies.parameters.candidate import PartialHolderParameters
@@ -372,7 +343,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
         self.assertIn("minimum_observed_frame_count", PartialHolderParameters.__dataclass_fields__)
         self.assertNotIn("min_count_35mm", PartialHolderParameters.__dataclass_fields__)
         self.assertNotIn("min_count_small", PartialHolderParameters.__dataclass_fields__)
-        self.assertIn(
+        self.assertNotIn(
             "partial_two_frame_dense_sequence_cap",
             BaseDetectionScoreParameters.__dataclass_fields__,
         )
@@ -411,7 +382,6 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 "outer",
                 "separator",
                 "candidate",
-                "decision",
                 "output",
                 "diagnostics",
             ],
@@ -596,7 +566,6 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
 
     def test_entry_surfaces_share_one_canonical_default_source(self) -> None:
         from x5crop.runtime.options import (
-            DEFAULT_CONFIDENCE_THRESHOLD,
             DEFAULT_DESKEW_MAX_ANGLE_DEGREES,
             DEFAULT_DESKEW_MIN_ANGLE_DEGREES,
         )
@@ -604,12 +573,11 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
 
         self.assertEqual(DEFAULT_DESKEW_MIN_ANGLE_DEGREES, 0.03)
         self.assertEqual(DEFAULT_DESKEW_MAX_ANGLE_DEGREES, 2.0)
-        self.assertEqual(DEFAULT_CONFIDENCE_THRESHOLD, 0.85)
         self.assertEqual(STANDARD_JOB_LIMIT, 2)
         self.assertEqual(DIAGNOSTICS_JOB_LIMIT, 4)
         for relative_path in ("entry/cli.py", "entry/interactive.py"):
             text = (PROJECT_ROOT / "x5crop" / relative_path).read_text(encoding="utf-8")
-            for literal in ("default=0.03", "default=0.85", "deskew_min_angle=0.03", "confidence_threshold=0.85"):
+            for literal in ("default=0.03", "deskew_min_angle=0.03", "confidence_threshold"):
                 self.assertNotIn(literal, text)
 
     def test_regression_tools_use_current_final_reason_field(self) -> None:
@@ -631,7 +599,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 offenders.append(str(path.relative_to(PROJECT_ROOT)))
         self.assertEqual(offenders, [])
 
-    def test_crop_and_decision_thresholds_have_explicit_policy_owners(self) -> None:
+    def test_crop_and_scoring_parameters_have_explicit_owners(self) -> None:
         from x5crop.policies.parameters.scoring import (
             BaseDetectionScoreParameters,
             ScoringCalibrationParameters,
@@ -646,7 +614,6 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             LongAxisGeometryCorrectionParameters,
             SeparatorOuterBandParameters,
         )
-        from x5crop.policies.parameters.decision import DecisionReviewParameters
         from x5crop.geometry.detection_parameters import (
             EdgePairParameters,
             NearbySeparatorRefinementParameters,
@@ -655,10 +622,10 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
 
         required_fields = {
             ScoringCalibrationParameters: {
-                "dual_lane_below_threshold_cap",
-                "dual_lane_frame_count_mismatch_cap",
+                "geometry_weight",
+                "content_weight",
+                "separator_weight",
             },
-            DecisionReviewParameters: {"outer_candidate_disagreement_min_spread_ratio"},
             FloatingContentPositionParameters: {
                 "content_bbox_min_fraction",
                 "min_short_axis_px",
@@ -684,8 +651,6 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             BaseDetectionScoreParameters: {
                 "image_quality_percentiles",
                 "hard_support_floor_min_expected_gaps",
-                "hard_gap_floor_min_count",
-                "model_gap_overuse_min_count",
                 "partial_ambiguous_count_max",
                 "partial_dense_sequence_min_nominal_count",
             },

@@ -18,30 +18,15 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....policies.parameters.scoring import BaseDetectionScoreParameters
 from ....run_config import RunConfig
 from ....utils import box_from_dict, gap_from_dict, sampled_percentile
-from ...confidence_caps import apply_confidence_cap
 from ...evidence.frame_topology import frame_topology_evidence
 from ...evidence.separator_continuity import separator_cross_axis_continuity_evidence
 from ...physical.photo_size import photo_size_consistency_from_gap_edges
 from ...evidence.separator_summary import gap_method_evidence_summary
-from ..signals import (
-    SIGNAL_FRAME_COUNT_MISMATCH,
-    SIGNAL_FRAME_EXTENT_INVALID,
-    SIGNAL_FRAME_ORDER_INVALID,
-    SIGNAL_FRAME_OVERLAP_DETECTED,
-    SIGNAL_PARTIAL_COUNT_AMBIGUOUS,
-    SIGNAL_PHOTO_WIDTH_UNSTABLE,
-    SIGNAL_SEPARATOR_CROSS_AXIS_CONTINUITY_WEAK,
-    SIGNAL_SEPARATOR_HARD_GAP_FLOOR_FAILED,
-    SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK,
-    SIGNAL_SEPARATOR_MODEL_GAP_OVERUSED,
-    merged_candidate_signals,
-)
 
 
 @dataclass(frozen=True)
 class BaseDetectionAssessment:
     confidence: float
-    candidate_signals: list[str]
     detail: dict[str, Any]
 
 
@@ -268,7 +253,6 @@ def base_detection_assessment(
         base_score.image_quality_percentiles,
     )
     contrast = float(high_image - low_image)
-    confidence_caps: list[dict[str, Any]] = []
 
     gap_conf = 1.0 if expected_gaps == 0 else gap_evidence.separator_support_count / float(expected_gaps)
     width_conf = photo_width_stability.get("confidence")
@@ -326,34 +310,6 @@ def base_detection_assessment(
             else base_score.geometry_floor_low
         )
         confidence = max(confidence, geometry_floor)
-    candidate_signals: list[str] = []
-    if expected_gaps and gap_evidence.separator_support_count < max(1, expected_gaps // 2) and not full_geometry_ok:
-        candidate_signals.append(SIGNAL_SEPARATOR_HARD_SUPPORT_WEAK)
-    if (
-        gap_evidence.equal_model_gaps
-        >= max(base_score.model_gap_overuse_min_count, expected_gaps // 2 + 1)
-        and not full_geometry_ok
-    ):
-        candidate_signals.append(SIGNAL_SEPARATOR_MODEL_GAP_OVERUSED)
-    if (
-        hard_support_floor_checks_enabled
-        and expected_gaps >= base_score.hard_support_floor_min_expected_gaps
-        and gap_evidence.hard_separator_gaps < base_score.hard_gap_floor_min_count
-    ):
-        candidate_signals.append(SIGNAL_SEPARATOR_HARD_GAP_FLOOR_FAILED)
-    if bool(photo_width_stability.get("unstable", False)):
-        candidate_signals.append(SIGNAL_PHOTO_WIDTH_UNSTABLE)
-    if not bool(separator_continuity.get("ok", True)):
-        candidate_signals.append(SIGNAL_SEPARATOR_CROSS_AXIS_CONTINUITY_WEAK)
-    if len(boxes) != count:
-        candidate_signals.append(SIGNAL_FRAME_COUNT_MISMATCH)
-    if not bool(topology_evidence.get("frame_extent_valid", True)):
-        candidate_signals.append(SIGNAL_FRAME_EXTENT_INVALID)
-    if not bool(topology_evidence.get("frame_order_valid", True)):
-        candidate_signals.append(SIGNAL_FRAME_ORDER_INVALID)
-    if not bool(topology_evidence.get("frame_overlap_absent", True)):
-        candidate_signals.append(SIGNAL_FRAME_OVERLAP_DETECTED)
-
     partial_count_assessment = {
         "used": bool(strip_mode == "partial" and count < fmt.default_count),
         "reason": "not_partial_or_default_count",
@@ -364,61 +320,17 @@ def base_detection_assessment(
     }
     if strip_mode == "partial" and count < fmt.default_count:
         if count <= 1:
-            confidence, cap_detail = apply_confidence_cap(
-                confidence,
-                base_score.partial_one_cap,
-                owner="candidate.assessment",
-                reason="partial_single_frame_ambiguity",
-            )
-            confidence_caps.append(cap_detail)
-            candidate_signals.append(SIGNAL_PARTIAL_COUNT_AMBIGUOUS)
             partial_count_assessment["reason"] = "single_frame_partial"
             partial_count_assessment["intrinsically_ambiguous"] = True
         elif (
             count <= base_score.partial_ambiguous_count_max
             and fmt.default_count >= base_score.partial_dense_sequence_min_nominal_count
         ):
-            confidence, cap_detail = apply_confidence_cap(
-                confidence,
-                base_score.partial_two_frame_dense_sequence_cap,
-                owner="candidate.assessment",
-                reason="partial_two_frame_dense_sequence_ambiguity",
-            )
-            confidence_caps.append(cap_detail)
-            candidate_signals.append(SIGNAL_PARTIAL_COUNT_AMBIGUOUS)
             partial_count_assessment["reason"] = "two_frame_dense_sequence_partial"
             partial_count_assessment["intrinsically_ambiguous"] = True
         else:
             partial_count_assessment["reason"] = "enough_frames_for_physical_assessment"
 
-    if hard_support_floor_checks_enabled:
-        if gap_evidence.hard_separator_gaps < 1:
-            confidence, cap_detail = apply_confidence_cap(
-                confidence,
-                separator_support.low_hard_confidence_cap,
-                owner="candidate.assessment",
-                reason="no_detected_hard_separator",
-            )
-            confidence_caps.append(cap_detail)
-        elif gap_evidence.hard_separator_gaps < base_score.hard_gap_floor_min_count:
-            confidence, cap_detail = apply_confidence_cap(
-                confidence,
-                separator_support.low_hard_confidence_cap,
-                owner="candidate.assessment",
-                reason="too_few_detected_hard_separators",
-            )
-            confidence_caps.append(cap_detail)
-        elif gap_evidence.equal_model_gaps >= max(
-            base_score.model_gap_overuse_min_count,
-            expected_gaps // 2 + 1,
-        ):
-            confidence, cap_detail = apply_confidence_cap(
-                confidence,
-                separator_support.mostly_equal_confidence_cap,
-                owner="candidate.assessment",
-                reason="mostly_equal_model_gaps",
-            )
-            confidence_caps.append(cap_detail)
     detail = {
         "detected_gaps": gap_evidence.separator_support_count,
         "separator_support_count": gap_evidence.separator_support_count,
@@ -447,17 +359,9 @@ def base_detection_assessment(
         "full_geometry_ok": full_geometry_ok,
         "separator_support_policy": "unified_physical_support",
         "partial_count_assessment": partial_count_assessment,
-        "candidate_confidence_caps": confidence_caps,
-        "confidence_floor": {
-            "ok": bool(confidence >= base_score.low_confidence_floor),
-            "confidence": float(confidence),
-            "floor": float(base_score.low_confidence_floor),
-            "role": "numeric_state_not_physical_signal",
-        },
     }
     return BaseDetectionAssessment(
         confidence=float(max(0.0, min(1.0, confidence))),
-        candidate_signals=sorted(set(candidate_signals)),
         detail=detail,
     )
 
@@ -500,7 +404,6 @@ def apply_base_detection_scoring(
         pitch=pitch,
     )
     confidence = assessment.confidence
-    candidate_signals = assessment.candidate_signals
     base_detail = assessment.detail
     pre_nearby_gaps = _gaps_from_detail(detail, "pre_nearby_gaps")
     if pre_nearby_gaps:
@@ -553,22 +456,15 @@ def apply_base_detection_scoring(
             origin=origin,
             pitch=pitch,
         )
-        confidence, cap_detail = apply_confidence_cap(
-            confidence,
-            geometry_assessment.confidence,
-            owner="candidate.assessment",
-            reason="nearby_separator_refinement_geometry_reassessment",
-        )
-        base_detail["nearby_separator_refinement_confidence_cap"] = float(
+        confidence = min(confidence, geometry_assessment.confidence)
+        base_detail["nearby_separator_refinement_pre_score"] = float(
             pre_nearby_assessment.confidence
         )
-        base_detail["nearby_separator_refinement_geometry_confidence_cap"] = float(
+        base_detail["nearby_separator_refinement_geometry_score"] = float(
             geometry_assessment.confidence
         )
-        base_detail.setdefault("candidate_confidence_caps", []).append(cap_detail)
 
     detail.update(base_detail)
-    detail["candidate_signals"] = merged_candidate_signals(detection, candidate_signals)
     detail["base_candidate_scoring"] = {
         "applied": True,
         "owner": "candidate.assessment",

@@ -1,439 +1,155 @@
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 import unittest
 
-import numpy as np
-
 from tools.tests.architecture_contracts import PROJECT_ROOT
-from x5crop.detection.candidate.assessment.evidence_independence import evidence_independence_detail
-from x5crop.detection.candidate.assessment.partial_holder import partial_edge_safety_assessment_detail
-from x5crop.detection.candidate.assessment.support_calibration import (
-    separator_geometry_support_applies,
+from x5crop.detection.candidate.assessment.evidence_independence import (
+    evidence_independence_detail,
 )
-from x5crop.domain import Box, DetectionCandidate, Gap
-from x5crop.formats import format_spec
-from x5crop.gap_methods import GAP_DETECTED
-from x5crop.policies.registry import get_detection_policy
+from x5crop.domain import Box, DetectionCandidate
 from x5crop.policies.parameters.candidate import EvidenceIndependenceParameters
-from x5crop.policies.runtime.separator import SeparatorGeometrySupportModePolicy
+
+
+def _candidate(*, photo_edges: bool = True) -> DetectionCandidate:
+    detail = {
+        "outer_candidate_strategy": "separator_outer",
+        "standard_gap_search": {
+            "entries": [
+                {"selected_source": "standard_detected"},
+                {"selected_source": "observed_width_profile"},
+            ]
+        },
+    }
+    if photo_edges:
+        detail.update(
+            {
+                "width_cv": 0.0,
+                "width_cv_source": "photo_edges",
+                "photo_width_cv": 0.0,
+            }
+        )
+    else:
+        detail.update(
+            {
+                "width_cv": 0.20,
+                "width_cv_source": "frame_boxes",
+                "frame_box_width_cv": 0.20,
+            }
+        )
+    return DetectionCandidate(
+        format_id="120-66",
+        layout="horizontal",
+        strip_mode="full",
+        count=3,
+        outer=Box(0, 0, 300, 100),
+        frames=[],
+        gaps=[],
+        confidence=0.90,
+        detail=detail,
+    )
 
 
 class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
     def test_evidence_strings_do_not_claim_gate_or_review_authority(self) -> None:
         offenders: list[str] = []
-        evidence_root = PROJECT_ROOT / "x5crop" / "detection" / "evidence"
-        for path in evidence_root.rglob("*.py"):
-            tree = ast.parse(path.read_text(encoding="utf-8"))
+        root = PROJECT_ROOT / "x5crop/detection/evidence"
+        for path in root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
                     continue
                 value = node.value.lower()
                 if any(term in value for term in ("gate", "blocker", "review", "pass")):
-                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {node.value}")
-
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}:{node.value}")
         self.assertEqual(offenders, [])
 
-    def test_photo_size_evidence_does_not_own_candidate_ranking(self) -> None:
-        from x5crop.policies.parameters.outer import SeparatorOuterBandParameters
-
-        source = (
-            PROJECT_ROOT / "x5crop" / "detection" / "physical" / "photo_size.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("def rank_penalty", source)
-        self.assertIn(
-            "photo_width_cv_rank_weight",
-            SeparatorOuterBandParameters.__dataclass_fields__,
-        )
-
-    def test_candidate_signals_are_owned_and_emitted_only_by_candidate_layers(self) -> None:
-        evidence_paths = (
-            PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "frame_topology.py",
-            PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "separator_continuity.py",
-        )
-        for path in evidence_paths:
-            with self.subTest(path=path.name):
-                self.assertNotIn(
-                    '"candidate_signals"',
-                    path.read_text(encoding="utf-8"),
-                )
-
-        policy_factory = (
-            PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "factory.py"
-        ).read_text(encoding="utf-8")
-        runtime_policy_source = "\n".join(
-            path.read_text(encoding="utf-8")
-            for path in (PROJECT_ROOT / "x5crop" / "policies" / "runtime").rglob("*.py")
-        )
-        self.assertNotIn("dual_lane_partial_not_supported", policy_factory)
-        self.assertNotIn("class ReviewOnlyPolicy", runtime_policy_source)
-
-    def test_guidance_layer_does_not_own_final_candidate_scoring(self) -> None:
+    def test_guidance_does_not_own_final_scoring_or_decision(self) -> None:
         banned = (
-            "content_candidate_confidence_and_reasons",
             "final_review_reasons",
-            "decision_contract",
-            "policy_allows_auto",
+            "DecisionGate",
+            "CandidateGate",
+            "approved_auto",
+            "needs_review",
         )
         offenders: list[str] = []
-        source_root = PROJECT_ROOT / "x5crop" / "detection" / "guidance"
-        self.assertTrue(source_root.is_dir())
-        for path in source_root.rglob("*.py"):
-            text = path.read_text(encoding="utf-8")
-            for term in banned:
-                if term in text:
-                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
-
+        for path in (PROJECT_ROOT / "x5crop/detection/guidance").rglob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            offenders.extend(
+                f"{path.relative_to(PROJECT_ROOT)}:{term}"
+                for term in banned
+                if term in source
+            )
         self.assertEqual(offenders, [])
 
-    def test_evidence_layer_does_not_name_evidence_as_final_decision_input(self) -> None:
-        offenders: list[str] = []
-        source_root = PROJECT_ROOT / "x5crop" / "detection" / "evidence"
-        self.assertTrue(source_root.is_dir())
-        for path in source_root.rglob("*.py"):
-            if "used_for_decision" in path.read_text(encoding="utf-8"):
-                offenders.append(str(path.relative_to(PROJECT_ROOT)))
-
-        self.assertEqual(offenders, [])
-
-    def test_read_only_diagnostics_use_effects_detail(self) -> None:
-        path = PROJECT_ROOT / "x5crop" / "detection" / "evidence" / "read_only.py"
-        text = path.read_text(encoding="utf-8")
-
-        self.assertIn('"effects"', text)
-        self.assertIn('"output": False', text)
-        self.assertIn('"confidence": False', text)
-        self.assertIn('"decision": False', text)
-        self.assertIn("exposure_overlap_counts", text)
-        self.assertNotIn("changes_output", text)
-        self.assertNotIn("changes_confidence", text)
-        self.assertNotIn("changes_final_decision", text)
-
-    def test_nearby_separator_diagnostics_separate_search_from_comparison_parameters(self) -> None:
-        from inspect import signature
-
-        from x5crop.detection.evidence.nearby_separator_diagnostics import (
-            nearby_separator_diagnostic_detail,
-        )
-
-        parameters = signature(nearby_separator_diagnostic_detail).parameters
-        self.assertIn("search_parameters", parameters)
-        self.assertIn("comparison_parameters", parameters)
-        self.assertNotIn("nearby_policy", parameters)
-
-    def test_separator_width_variation_is_not_a_candidate_gate_requirement(self) -> None:
-        project_root = Path(__file__).resolve().parents[2]
-        self.assertFalse(
-            (
-                project_root
-                / "x5crop"
-                / "detection"
-                / "evidence"
-                / "separator_width.py"
-            ).exists()
-        )
-        banned = (
-            "requires_broad_separator_width_gaps",
-            "min_broad_separator_width_gaps",
-            "edge_pair_min_score_without_broad_width",
-            "edge_pair_min_score_with_broad_width",
-            "separator_support_broad_width_support_assessment",
-            "holder_edge_disambiguation_gaps",
-        )
-        offenders: list[str] = []
-        for root in (
-            project_root / "x5crop" / "detection" / "candidate",
-            project_root / "x5crop" / "policies",
-        ):
-            for path in root.rglob("*.py"):
-                text = path.read_text(encoding="utf-8")
-                for term in banned:
-                    if term in text:
-                        offenders.append(f"{path.relative_to(project_root)}:{term}")
-        self.assertEqual(offenders, [])
-
-    def test_partial_content_safety_checks_are_universal_for_standard_strips(self) -> None:
-        from x5crop.formats import FORMATS
-        from x5crop.policies.registry import get_detection_policy
-
-        for spec in FORMATS.values():
-            if spec.physical_layout != "single_strip":
-                continue
-            holder = get_detection_policy(
-                spec.format_id,
-                "partial",
-            ).partial_holder
-            self.assertTrue(holder.enabled)
-
-    def test_partial_holder_does_not_treat_separator_width_as_edge_safety(self) -> None:
-        policy = get_detection_policy("120-66", "partial")
-        detection = DetectionCandidate(
-            format_id="120-66",
-            layout="horizontal",
-            strip_mode="partial",
-            count=3,
-            outer=Box(0, 0, 300, 100),
-            frames=[
-                Box(0, 0, 95, 100),
-                Box(105, 0, 195, 100),
-                Box(205, 0, 300, 100),
-            ],
-            gaps=[Gap(1, 100.0, 1.0, GAP_DETECTED, 95.0, 105.0)],
-            confidence=0.90,
-            detail={
-                "width_cv": 0.0,
-                "width_cv_source": "photo_edges",
-                "outer_area_ratio": 0.80,
-            },
-        )
-        content_detail = {
-            "used": True,
-            "support": "ok",
-            "content_containment_ok": True,
-            "content_integrity_failed": False,
-            "frame_scores": [
-                {"index": 1, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
-                {"index": 2, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
-                {"index": 3, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
-            ],
-        }
-
-        detail = partial_edge_safety_assessment_detail(
-            np.zeros((100, 300), dtype=np.uint8),
-            detection,
-            {"expected_gaps": 2, "hard_gaps": 1, "grid_gaps": 1, "equal_gaps": 0},
-            content_detail,
-            "separator",
-            joint_score=0.90,
-            content_score=0.10,
-            geometry_score=0.90,
-            holder_occupancy={"complete_underfilled_strip": False, "strip_completeness": {}},
-            cache=None,
-            policy=policy,
-        )
-
-        self.assertNotIn("holder_edge_disambiguation_weak", detail["disqualifiers"])
-        self.assertNotIn("content_score_low", detail["disqualifiers"])
-        self.assertNotIn("holder_edge_disambiguation", detail)
-        self.assertEqual(
-            detail["content_quality"]["role"],
-            "quality_diagnostic_not_boundary_evidence",
-        )
-        self.assertFalse(detail["content_quality"]["quality_ok"])
-
-    def test_evidence_independence_treats_content_score_as_quality_detail(self) -> None:
-        detection = DetectionCandidate(
-            format_id="120-66",
-            layout="horizontal",
-            strip_mode="full",
-            count=3,
-            outer=Box(0, 0, 300, 100),
-            frames=[
-                Box(0, 0, 95, 100),
-                Box(105, 0, 195, 100),
-                Box(205, 0, 300, 100),
-            ],
-            gaps=[
-                Gap(1, 100.0, 1.0, GAP_DETECTED, 95.0, 105.0),
-                Gap(2, 200.0, 1.0, GAP_DETECTED, 195.0, 205.0),
-            ],
-            confidence=0.90,
-            detail={
-                "outer_candidate_strategy": "separator_outer",
-                "width_cv": 0.0,
-                "width_cv_source": "photo_edges",
-                "photo_width_cv": 0.0,
-                "standard_gap_search": {
-                    "entries": [
-                        {"selected_source": "standard_detected"},
-                        {"selected_source": "observed_width_profile"},
-                    ],
-                },
-            },
-        )
-
+    def test_dependent_separator_geometry_requires_independent_validation(self) -> None:
         detail = evidence_independence_detail(
-            detection,
+            _candidate(),
             source="separator",
-            content_support="ok",
-            content_score=0.10,
-            geometry_score=0.90,
+            frame_content_support_available=True,
+            photo_geometry_supported=True,
             policy=EvidenceIndependenceParameters(),
         )
-
         self.assertTrue(detail["requires_validation"])
-        self.assertTrue(detail["content_ok"])
-        self.assertFalse(detail["content_quality_ok"])
-        self.assertEqual(detail["content_score_role"], "quality_diagnostic_not_boundary_evidence")
+        self.assertTrue(detail["ok"])
+        self.assertEqual(detail["state"], "supported")
+
+    def test_dependency_cycle_is_a_physical_contradiction(self) -> None:
+        detail = evidence_independence_detail(
+            _candidate(),
+            source="separator",
+            frame_content_support_available=False,
+            photo_geometry_supported=False,
+            policy=EvidenceIndependenceParameters(),
+        )
+        self.assertFalse(detail["ok"])
+        self.assertEqual(detail["state"], "contradicted")
+        self.assertEqual(detail["reason"], "evidence_dependency_cycle_detected")
+
+    def test_frame_box_width_does_not_validate_photo_geometry(self) -> None:
+        detail = evidence_independence_detail(
+            _candidate(photo_edges=False),
+            source="separator",
+            frame_content_support_available=True,
+            photo_geometry_supported=False,
+            policy=EvidenceIndependenceParameters(),
+        )
+        self.assertFalse(detail["photo_width_stability"]["used"])
+        self.assertFalse(detail["geometry_ok"])
+        self.assertFalse(detail["ok"])
+
+    def test_non_separator_source_is_not_applicable(self) -> None:
+        detail = evidence_independence_detail(
+            _candidate(),
+            source="content",
+            frame_content_support_available=True,
+            photo_geometry_supported=True,
+            policy=EvidenceIndependenceParameters(),
+        )
+        self.assertEqual(detail["state"], "not_applicable")
         self.assertTrue(detail["ok"])
 
-    def test_frame_box_width_detail_does_not_validate_evidence_independence(self) -> None:
-        detection = DetectionCandidate(
-            format_id="120-66",
-            layout="horizontal",
-            strip_mode="full",
-            count=3,
-            outer=Box(0, 0, 300, 100),
-            frames=[
-                Box(0, 0, 80, 100),
-                Box(95, 0, 205, 100),
-                Box(220, 0, 300, 100),
-            ],
-            gaps=[
-                Gap(1, 100.0, 1.0, GAP_DETECTED, 95.0, 105.0),
-                Gap(2, 200.0, 1.0, GAP_DETECTED, 195.0, 205.0),
-            ],
-            confidence=0.90,
-            detail={
-                "outer_candidate_strategy": "separator_outer",
-                "width_cv": 0.0,
-                "width_cv_source": "frame_boxes",
-                "standard_gap_search": {
-                    "entries": [
-                        {"selected_source": "standard_detected"},
-                        {"selected_source": "observed_width_profile"},
-                    ],
-                },
-            },
-        )
+    def test_partial_edge_safety_has_no_composite_score_inputs(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop/detection/candidate/assessment/partial_holder.py"
+        ).read_text(encoding="utf-8")
+        for forbidden in (
+            "joint_score",
+            "geometry_score",
+            "content_score",
+            "min_content_score",
+        ):
+            self.assertNotIn(forbidden, source)
 
-        detail = evidence_independence_detail(
-            detection,
-            source="separator",
-            content_support="ok",
-            content_score=0.90,
-            geometry_score=0.90,
-            policy=EvidenceIndependenceParameters(),
+    def test_separator_width_variation_is_not_a_gate_requirement(self) -> None:
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (
+                PROJECT_ROOT / "x5crop/detection/candidate/assessment"
+            ).rglob("*.py")
         )
-
-        self.assertTrue(detail["requires_validation"])
-        self.assertFalse(detail["ok"])
-        self.assertFalse(detail["photo_width_stability"]["used"])
-        self.assertEqual(detail["photo_width_stability"]["role"], "diagnostic_until_photo_edges")
-
-    def test_geometry_support_checks_only_photo_edge_width_when_available(self) -> None:
-        fmt = format_spec("120-66")
-        hard_detail = {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0}
-        mode_policy = SeparatorGeometrySupportModePolicy(
-            min_hard_ratio=0.50,
-            max_equal_gaps=0,
-            required_content_support="ok",
-            min_joint_score=0.70,
-            max_photo_width_cv=0.040,
-            max_outer_area_ratio=0.99,
-        )
-        frame_box_detail_candidate = DetectionCandidate(
-            format_id="120-66",
-            layout="horizontal",
-            strip_mode="full",
-            count=3,
-            outer=Box(0, 0, 300, 100),
-            frames=[
-                Box(0, 0, 80, 100),
-                Box(95, 0, 205, 100),
-                Box(220, 0, 300, 100),
-            ],
-            gaps=[],
-            confidence=0.90,
-            detail={
-                "width_cv": 0.20,
-                "width_cv_source": "frame_boxes",
-                "outer_area_ratio": 0.80,
-            },
-        )
-        unstable_photo_candidate = DetectionCandidate(
-            format_id="120-66",
-            layout="horizontal",
-            strip_mode="full",
-            count=3,
-            outer=Box(0, 0, 300, 100),
-            frames=frame_box_detail_candidate.frames,
-            gaps=[],
-            confidence=0.90,
-            detail={
-                "width_cv": 0.20,
-                "width_cv_source": "photo_edges",
-                "photo_width_cv": 0.20,
-                "outer_area_ratio": 0.80,
-            },
-        )
-
-        self.assertTrue(
-            separator_geometry_support_applies(
-                frame_box_detail_candidate,
-                hard_detail,
-                fmt,
-                "separator",
-                "ok",
-                0.90,
-                mode_policy,
-            )
-        )
-        self.assertFalse(
-            separator_geometry_support_applies(
-                unstable_photo_candidate,
-                hard_detail,
-                fmt,
-                "separator",
-                "ok",
-                0.90,
-                mode_policy,
-            )
-        )
-
-    def test_partial_holder_does_not_treat_frame_box_width_as_photo_instability(self) -> None:
-        policy = get_detection_policy("120-66", "partial")
-        detection = DetectionCandidate(
-            format_id="120-66",
-            layout="horizontal",
-            strip_mode="partial",
-            count=3,
-            outer=Box(0, 0, 300, 100),
-            frames=[
-                Box(0, 0, 80, 100),
-                Box(95, 0, 205, 100),
-                Box(220, 0, 300, 100),
-            ],
-            gaps=[
-                Gap(1, 87.5, 1.0, GAP_DETECTED, 80.0, 95.0),
-                Gap(2, 212.5, 1.0, GAP_DETECTED, 205.0, 220.0),
-            ],
-            confidence=0.90,
-            detail={
-                "width_cv": 0.20,
-                "width_cv_source": "frame_boxes",
-                "outer_area_ratio": 0.80,
-            },
-        )
-        content_detail = {
-            "used": True,
-            "support": "ok",
-            "content_containment_ok": True,
-            "content_integrity_failed": False,
-            "frame_scores": [
-                {"index": 1, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
-                {"index": 2, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
-                {"index": 3, "mean": 0.20, "coverage": 0.30, "content_present": True, "aspect_error": 0.01},
-            ],
-        }
-
-        detail = partial_edge_safety_assessment_detail(
-            np.zeros((100, 300), dtype=np.uint8),
-            detection,
-            {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0},
-            content_detail,
-            "separator",
-            joint_score=0.90,
-            content_score=0.90,
-            geometry_score=0.90,
-            holder_occupancy={"complete_underfilled_strip": False, "strip_completeness": {}},
-            cache=None,
-            policy=policy,
-        )
-
-        self.assertNotIn("photo_width_unstable", detail["disqualifiers"])
-        self.assertEqual(detail["photo_width_stability"]["role"], "diagnostic_until_photo_edges")
+        self.assertNotIn("separator_width_cv >", source)
+        self.assertNotIn("separator_width_unstable", source)
 
 
 if __name__ == "__main__":

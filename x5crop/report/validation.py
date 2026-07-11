@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..constants import FINAL_REVIEW_REASONS
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 
 
@@ -30,7 +31,6 @@ CURRENT_REPORT_SECTIONS = (
     "evidence",
     "evidence_summary",
     "candidate_gate",
-    "decision_signals",
     "decision_gate",
     "scan_calibration",
     "decision_geometry",
@@ -89,7 +89,6 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
         "evidence",
         "evidence_summary",
         "candidate_gate",
-        "decision_signals",
         "decision_gate",
         "scan_calibration",
         "analysis_cache",
@@ -100,6 +99,28 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
     for key in expected_mappings:
         if not isinstance(record[key], dict):
             errors.append(f"section_not_mapping:{key}")
+    candidate_gate = record["candidate_gate"]
+    if not (
+        isinstance(candidate_gate, dict)
+        and isinstance(candidate_gate.get("passed"), bool)
+        and all(
+            isinstance(candidate_gate.get(field), list)
+            for field in ("checks", "proof_paths", "failed_checks", "diagnostics")
+        )
+    ):
+        errors.append("candidate_gate_incomplete")
+    decision_gate = record["decision_gate"]
+    if not (
+        isinstance(decision_gate, dict)
+        and isinstance(decision_gate.get("passed"), bool)
+        and all(
+            isinstance(decision_gate.get(field), list)
+            for field in ("checks", "reason_inputs")
+        )
+    ):
+        errors.append("decision_gate_incomplete")
+    elif bool(decision_gate["passed"]) != (record["status"] == "approved_auto"):
+        errors.append("decision_gate_status_mismatch")
     if not isinstance(record["candidate_table"], list):
         errors.append("candidate_table_not_list")
     if not isinstance(record["gaps"], list):
@@ -111,8 +132,19 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
             for gap in record["gaps"]
         ):
             errors.append("gap_record_invalid")
-    if not isinstance(record["final_review_reasons"], list):
+    final_reasons = record["final_review_reasons"]
+    if not isinstance(final_reasons, list):
         errors.append("final_review_reasons_not_list")
+    else:
+        for reason in final_reasons:
+            if not isinstance(reason, str):
+                errors.append("final_review_reason_not_string")
+            elif reason not in FINAL_REVIEW_REASONS:
+                errors.append(f"unknown_final_review_reason:{reason}")
+        if record["status"] == "approved_auto" and final_reasons:
+            errors.append("approved_auto_has_final_review_reasons")
+        if record["status"] == "needs_review" and not final_reasons:
+            errors.append("needs_review_missing_final_review_reason")
     diagnostics = record["diagnostics"]
     if isinstance(diagnostics, dict):
         deskew = diagnostics.get("deskew")

@@ -72,7 +72,7 @@ class PhotoWidthMetricsTest(unittest.TestCase):
         self.assertAlmostEqual(assessment.detail["photo_width_cv"], 0.0)
         self.assertGreater(assessment.detail["frame_box_width_cv"], 0.05)
         self.assertGreater(assessment.detail["separator_width_cv"], 0.70)
-        self.assertNotIn("photo_width_unstable", assessment.candidate_signals)
+        self.assertFalse(hasattr(assessment, "candidate_signals"))
 
     def test_geometry_support_respects_zero_photo_width_cv(self) -> None:
         detection = DetectionCandidate(
@@ -171,8 +171,8 @@ class PhotoWidthMetricsTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            calibrated_candidate_rank(stable_frame_boxes, 0.85),
-            calibrated_candidate_rank(unstable_frame_boxes, 0.85),
+            calibrated_candidate_rank(stable_frame_boxes),
+            calibrated_candidate_rank(unstable_frame_boxes),
         )
 
 

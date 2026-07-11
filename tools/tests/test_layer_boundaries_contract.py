@@ -154,11 +154,9 @@ class LayerBoundariesContractTest(unittest.TestCase):
         )
 
     def test_policy_models_do_not_own_report_serialization(self) -> None:
-        from x5crop.policies.decision.contract import DetectionDecisionContract
         from x5crop.policies.runtime.policy import DetectionPolicy
 
         self.assertNotIn("report_detail", DetectionPolicy.__dict__)
-        self.assertNotIn("report_detail", DetectionDecisionContract.__dict__)
 
         pipeline_source = (
             PROJECT_ROOT / "x5crop" / "detection" / "pipeline.py"
@@ -176,7 +174,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
         self.assertNotIn("runtime_policy_detail", pipeline_source)
         self.assertNotIn("decision_policy_detail", decision_source)
         self.assertIn("detection_policy_report_detail", workflow_source)
-        self.assertIn("decision_contract_report_detail", workflow_source)
 
     def test_deskew_quality_uses_explicit_parameters_without_numeric_fallbacks(self) -> None:
         from x5crop.image.deskew_parameters import DeskewParameters
@@ -513,17 +510,10 @@ class LayerBoundariesContractTest(unittest.TestCase):
 
         self.assertEqual(offenders, [])
 
-    def test_decision_evidence_uses_thresholds_not_capability_switches(self) -> None:
-        from x5crop.policies.parameters.decision import DecisionEvidenceParameters
-
-        for field_name in (
-            "allow_geometry_supported_separator",
-            "partial_requires_safe_edge",
-        ):
-            self.assertNotIn(
-                field_name,
-                DecisionEvidenceParameters.__dataclass_fields__,
-            )
+    def test_decision_has_no_evidence_capability_policy(self) -> None:
+        self.assertFalse(
+            (PROJECT_ROOT / "x5crop/policies/parameters/decision.py").exists()
+        )
 
     def test_foundation_parameter_models_have_no_protocol_mirrors(self) -> None:
         frame_fit = (
@@ -610,7 +600,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
         )
         from x5crop.policies.runtime.content import ContentPolicy
         from x5crop.policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
-        from x5crop.policies.parameters.decision import DecisionReviewParameters
         from x5crop.policies.runtime.outer import (
             LongAxisGeometryCorrectionPolicy,
             PartialPlacementGeometryPolicy,
@@ -638,7 +627,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
             LeadingGridFailureParameters: "enabled",
             SeparatorFullWidthCompetitionParameters: "enabled",
             EvidenceIndependenceParameters: "enabled",
-            DecisionReviewParameters: "align_outer_to_content",
             ContentGuidedSeparatorCandidateParameters: "requires_exact_content_runs",
             SeparatorSupportParameters: "allow_geometry_support",
             SeparatorGeometrySupportModePolicy: "allow_grid",
@@ -721,13 +709,13 @@ class LayerBoundariesContractTest(unittest.TestCase):
         self.assertNotIn("format_id == FormatId.F135_DUAL.value", text)
         self.assertIn('physical_layout == "dual_lane"', text)
 
-    def test_decision_evidence_parameters_are_derived_from_physical_spec(self) -> None:
+    def test_parameter_registry_has_no_decision_evidence_derivation(self) -> None:
         text = (
             PROJECT_ROOT / "x5crop" / "policies" / "parameters" / "registry.py"
         ).read_text(encoding="utf-8")
 
         self.assertNotIn("format_spec(", text)
-        self.assertIn("_decision_evidence_parameters(spec: FormatPhysicalSpec)", text)
+        self.assertNotIn("decision_evidence", text)
 
     def test_policy_assembly_helpers_use_spec_and_traits_not_format_id(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "policies" / "assembly" / "factory.py"
@@ -744,15 +732,13 @@ class LayerBoundariesContractTest(unittest.TestCase):
         }
         self.assertEqual(offenders, {})
 
-    def test_decision_contract_does_not_own_output_or_diagnostics_policy(self) -> None:
-        from x5crop.policies.decision.contract import DetectionDecisionContract
-
-        banned = {
-            "output",
-            "diagnostics",
-        }
-
-        self.assertTrue(banned.isdisjoint(DetectionDecisionContract.__dataclass_fields__))
+    def test_decision_package_does_not_import_output_or_diagnostics_policy(self) -> None:
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (PROJECT_ROOT / "x5crop/detection/decision").glob("*.py")
+        )
+        self.assertNotIn("RuntimeDiagnosticsPolicy", source)
+        self.assertNotIn("OutputPolicy", source)
 
 if __name__ == "__main__":
     unittest.main()

@@ -59,15 +59,3 @@ def photo_width_stability_detail(
         "ok": bool(ok),
         "unstable": not bool(ok),
     }
-
-
-def photo_width_within_limit(
-    detail: dict[str, Any],
-    max_photo_width_cv: float,
-    *,
-    unavailable_ok: bool,
-) -> bool:
-    photo_width_cv = photo_width_cv_from_detail(detail)
-    if photo_width_cv is None:
-        return bool(unavailable_ok)
-    return photo_width_cv <= float(max_photo_width_cv)

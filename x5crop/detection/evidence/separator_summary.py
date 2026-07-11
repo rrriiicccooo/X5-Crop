@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from ...domain import Gap
@@ -11,7 +11,6 @@ from ...gap_methods import (
     is_edge_pair_gap_method,
     is_equal_model_gap_method,
     is_grid_model_gap_method,
-    is_hard_gap_method,
     is_separator_support_gap_method,
 )
 
@@ -30,15 +29,6 @@ class GapMethodEvidenceSummary:
     detected_scores: tuple[float, ...]
     leading_grid_scores: tuple[float, ...]
 
-    @property
-    def geometry_model_gaps(self) -> int:
-        return self.grid_model_gaps + self.equal_model_gaps
-
-    @property
-    def model_gaps(self) -> int:
-        return self.geometry_model_gaps + self.content_model_gaps
-
-
 @dataclass(frozen=True)
 class SeparatorSupportDetailSummary:
     expected_gaps: int
@@ -46,42 +36,6 @@ class SeparatorSupportDetailSummary:
     grid_model_gaps: int
     equal_model_gaps: int
     content_model_gaps: int = 0
-    support_reason: Any = None
-    geometry_support_mode: Any = None
-    hard_detail: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def separator_support_count(self) -> int:
-        return self.hard_separator_gaps + self.grid_model_gaps
-
-    @property
-    def model_gaps(self) -> int:
-        return self.grid_model_gaps + self.equal_model_gaps + self.content_model_gaps
-
-    @property
-    def hard_gap_ratio(self) -> float:
-        return self.hard_separator_gaps / float(max(1, self.expected_gaps))
-
-    @property
-    def model_gap_share(self) -> float:
-        return self.model_gaps / float(max(1, self.expected_gaps))
-
-    def evidence_detail(self) -> dict[str, Any]:
-        return {
-            "expected_gaps": self.expected_gaps,
-            "hard_gaps": self.hard_separator_gaps,
-            "grid_gaps": self.grid_model_gaps,
-            "equal_gaps": self.equal_model_gaps,
-            "content_gaps": self.content_model_gaps,
-            "model_gaps": self.model_gaps,
-            "separator_support_count": self.separator_support_count,
-            "hard_gap_ratio": self.hard_gap_ratio,
-            "model_gap_share": self.model_gap_share,
-            "support_reason": self.support_reason,
-            "geometry_support_mode": self.geometry_support_mode,
-            "hard_detail": self.hard_detail,
-        }
-
 
 def _dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
@@ -164,7 +118,4 @@ def separator_support_detail_summary(
         grid_model_gaps=_int(detail.get("grid_gaps"), grid_default),
         equal_model_gaps=_int(detail.get("equal_gaps"), equal_default),
         content_model_gaps=_int(detail.get("content_gaps"), content_default),
-        support_reason=detail.get("reason"),
-        geometry_support_mode=detail.get("separator_geometry_support_mode"),
-        hard_detail=detail,
     )

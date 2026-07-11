@@ -3,13 +3,13 @@ import unittest
 import numpy as np
 
 from x5crop.domain import Box, DetectionCandidate
-from x5crop.detection.evidence.content.containment import content_containment_detail
+from x5crop.detection.evidence.content.support import frame_content_support_detail
 from x5crop.detection.evidence.outer_alignment import outer_content_alignment_detail
 from x5crop.policies.registry import get_detection_policy
 from x5crop.policies.parameters.content import ContentEvidenceParameters
 
 
-class ContentContainmentTest(unittest.TestCase):
+class FrameContentSupportTest(unittest.TestCase):
     def test_empty_edge_frames_are_allowed_when_content_frames_are_intact(self) -> None:
         detail = {
             "used": True,
@@ -22,27 +22,27 @@ class ContentContainmentTest(unittest.TestCase):
             ],
         }
 
-        containment = content_containment_detail(
+        support = frame_content_support_detail(
             detail,
             ContentEvidenceParameters(),
             expected_count=4,
         )
 
-        self.assertTrue(containment["content_containment_ok"])
-        self.assertFalse(containment["content_integrity_failed"])
-        self.assertEqual(containment["support"], "ok")
-        self.assertEqual(containment["content_bearing_frame_indexes"], [2, 3])
-        self.assertEqual(containment["empty_frame_indexes"], [1, 4])
-        self.assertEqual(containment["leading_empty_count"], 1)
-        self.assertEqual(containment["trailing_empty_count"], 1)
-        self.assertEqual(containment["internal_empty_count"], 0)
-        holder_texture = containment["holder_texture_evidence"]
+        self.assertTrue(support["frame_content_support_available"])
+        self.assertTrue(support["empty_frames_allowed"])
+        self.assertEqual(support["support"], "ok")
+        self.assertEqual(support["content_bearing_frame_indexes"], [2, 3])
+        self.assertEqual(support["empty_frame_indexes"], [1, 4])
+        self.assertEqual(support["leading_empty_count"], 1)
+        self.assertEqual(support["trailing_empty_count"], 1)
+        self.assertEqual(support["internal_empty_count"], 0)
+        holder_texture = support["holder_texture_evidence"]
         self.assertTrue(holder_texture["used"])
         self.assertEqual(holder_texture["evidence_role"], "holder_texture_guidance")
         self.assertTrue(holder_texture["holder_texture_low"])
         self.assertEqual(holder_texture["holder_frame_indexes"], [1, 4])
 
-    def test_no_content_is_still_not_safe(self) -> None:
+    def test_no_content_makes_support_unavailable_without_claiming_damage(self) -> None:
         detail = {
             "used": True,
             "frame_scores": [
@@ -51,17 +51,17 @@ class ContentContainmentTest(unittest.TestCase):
             ],
         }
 
-        containment = content_containment_detail(
+        support = frame_content_support_detail(
             detail,
             ContentEvidenceParameters(),
             expected_count=2,
         )
 
-        self.assertFalse(containment["content_containment_ok"])
-        self.assertTrue(containment["content_integrity_failed"])
-        self.assertEqual(containment["support"], "low_content")
+        self.assertFalse(support["frame_content_support_available"])
+        self.assertTrue(support["empty_frames_allowed"])
+        self.assertEqual(support["support"], "low_content")
 
-    def test_aspect_conflict_on_content_frame_is_integrity_failure(self) -> None:
+    def test_aspect_conflict_makes_content_support_unavailable(self) -> None:
         detail = {
             "used": True,
             "frame_scores": [
@@ -70,15 +70,14 @@ class ContentContainmentTest(unittest.TestCase):
             ],
         }
 
-        containment = content_containment_detail(
+        support = frame_content_support_detail(
             detail,
             ContentEvidenceParameters(),
             expected_count=2,
         )
 
-        self.assertFalse(containment["content_containment_ok"])
-        self.assertTrue(containment["content_integrity_failed"])
-        self.assertEqual(containment["support"], "aspect_conflict")
+        self.assertFalse(support["frame_content_support_available"])
+        self.assertEqual(support["support"], "aspect_conflict")
 
     def test_outer_overcontainment_is_allowed(self) -> None:
         gray = np.full((120, 900), 255, dtype=np.uint8)
@@ -136,6 +135,9 @@ class ContentContainmentTest(unittest.TestCase):
         self.assertFalse(alignment["ok"])
         self.assertEqual(alignment["reason"], "content_outside_outer_long_axis")
         self.assertGreater(alignment["max_long_undercrop"], 0)
+        self.assertTrue(alignment["confirmed_undercrop"])
+        self.assertIn("left", alignment["confirmed_undercrop_sides"])
+        self.assertIn("right", alignment["confirmed_undercrop_sides"])
 
 
 if __name__ == "__main__":

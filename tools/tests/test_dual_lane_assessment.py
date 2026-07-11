@@ -8,16 +8,12 @@ import numpy as np
 from x5crop.detection.candidate.assessment.dual_lane import (
     apply_dual_lane_content_assessment,
 )
-from x5crop.detection.candidate.signals import (
-    SIGNAL_CONTENT_ASPECT_CONFLICT,
-)
-from x5crop.detection.detail import candidate_signals_from_detail
 from x5crop.domain import Box, DetectionCandidate
 from x5crop.policies.registry import get_detection_policy
 
 
 class DualLaneAssessmentTest(unittest.TestCase):
-    def test_content_conflict_cap_is_candidate_assessment_detail(self) -> None:
+    def test_content_conflict_is_diagnostic_not_a_cap_or_final_reason(self) -> None:
         detection = DetectionCandidate(
             format_id="135",
             layout="horizontal",
@@ -27,10 +23,9 @@ class DualLaneAssessmentTest(unittest.TestCase):
             frames=[],
             gaps=[],
             confidence=0.96,
-            detail={},
+            detail={"candidate_assessment": {"diagnostics": []}},
         )
         policy = get_detection_policy("135", "full")
-        gray = np.zeros((20, 120), dtype=np.uint8)
 
         with (
             patch(
@@ -43,33 +38,20 @@ class DualLaneAssessmentTest(unittest.TestCase):
             ),
         ):
             apply_dual_lane_content_assessment(
-                gray,
+                np.zeros((20, 120), dtype=np.uint8),
                 detection,
                 object(),
                 policy,
-                confidence_threshold=0.85,
                 horizontal_frame_aspect=1.5,
             )
 
-        self.assertEqual(detection.confidence, 0.82)
+        self.assertEqual(detection.confidence, 0.96)
         self.assertFalse(hasattr(detection, "final_review_reasons"))
         self.assertEqual(
-            candidate_signals_from_detail(detection),
-            [SIGNAL_CONTENT_ASPECT_CONFLICT],
+            detection.detail["candidate_assessment"]["diagnostics"],
+            ["content_aspect_uncertain"],
         )
-        self.assertEqual(
-            detection.detail["candidate_confidence_caps"],
-            [
-                {
-                    "owner": "candidate.assessment",
-                    "reason": SIGNAL_CONTENT_ASPECT_CONFLICT,
-                    "cap_value": 0.82,
-                    "confidence_before": 0.96,
-                    "confidence_after": 0.82,
-                    "changed": True,
-                }
-            ],
-        )
+        self.assertNotIn("candidate_confidence_caps", detection.detail)
 
 
 if __name__ == "__main__":

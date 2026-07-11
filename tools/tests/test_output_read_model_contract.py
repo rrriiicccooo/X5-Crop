@@ -9,9 +9,8 @@ from types import SimpleNamespace
 import unittest
 
 from tools.tests.architecture_contracts import PROJECT_ROOT
-from tools.tests.decision_contract_support import final_detection_fixture
+from tools.tests.physical_gate_support import final_detection_fixture
 from x5crop.debug.status import debug_status_parts
-from x5crop.detection.detail import candidate_signals_from_detail
 from x5crop.domain import FinalDetection, ImageProfile
 from x5crop.export.actions import copy_for_review_if_needed
 from x5crop.report.outputs import append_report_jsonl
@@ -24,10 +23,14 @@ def _detection(
     detail: dict | None = None,
     final_review_reasons: list[str] | None = None,
     *,
-    status: str = "needs_review",
+    status: str | None = None,
 ) -> FinalDetection:
     return final_detection_fixture(
-        status=status,
+        status=(
+            status
+            if status is not None
+            else ("needs_review" if final_review_reasons else "approved_auto")
+        ),
         final_review_reasons=final_review_reasons,
         detail=detail,
     )
@@ -47,7 +50,6 @@ def _report_record(
         warnings=[],
         policy_id="test_policy",
         runtime_policy={"test": True},
-        decision_policy={"test": True},
         deskew_detail={"applied": False},
         analysis_cache_metadata=analysis_cache_metadata or {},
     )
@@ -73,11 +75,79 @@ class OutputReadModelContractTest(unittest.TestCase):
         empty_geometry = dict(record)
         empty_geometry["decision_geometry"] = {}
         self.assertTrue(current_report_record_errors(empty_geometry))
+
+    def test_current_schema_validator_rejects_unknown_final_reason(self) -> None:
+        from x5crop.report.validation import current_report_record_errors
+
+        record = _report_record(_detection())
+        record["schema_validation"] = []
+        record["decision_geometry"] = {
+            "outer_box": dict(record["outer_box"]),
+            "frame_boxes": list(record["frame_boxes"]),
+        }
+        unknown_reason = "_".join(("unknown", "physical", "reason"))
+        record["final_review_reasons"] = [unknown_reason]
+
+        self.assertIn(
+            f"unknown_final_review_reason:{unknown_reason}",
+            current_report_record_errors(record),
+        )
+
+    def test_current_schema_validator_requires_status_reason_consistency(self) -> None:
+        from x5crop.report.validation import current_report_record_errors
+
+        approved = _report_record(_detection(status="approved_auto"))
+        approved["schema_validation"] = []
+        approved["final_review_reasons"] = ["boundary_evidence_insufficient"]
+        review = dict(approved)
+        review["status"] = "needs_review"
+        review["final_review_reasons"] = []
+        gate_mismatch = dict(approved)
+        gate_mismatch["decision_gate"] = {
+            **dict(approved["decision_gate"]),
+            "passed": False,
+        }
+
+        self.assertIn(
+            "approved_auto_has_final_review_reasons",
+            current_report_record_errors(approved),
+        )
+        self.assertIn(
+            "needs_review_missing_final_review_reason",
+            current_report_record_errors(review),
+        )
+        self.assertIn(
+            "decision_gate_status_mismatch",
+            current_report_record_errors(gate_mismatch),
+        )
+
+    def test_current_schema_validator_requires_complete_gate_sections(self) -> None:
+        from x5crop.report.validation import current_report_record_errors
+
+        record = _report_record(_detection(status="approved_auto"))
+        record["schema_validation"] = []
+        record["decision_geometry"] = {
+            "outer_box": dict(record["outer_box"]),
+            "frame_boxes": list(record["frame_boxes"]),
+        }
+        missing_candidate_gate = dict(record)
+        missing_candidate_gate["candidate_gate"] = {}
+        missing_decision_gate = dict(record)
+        missing_decision_gate["decision_gate"] = {}
+
+        self.assertIn(
+            "candidate_gate_incomplete",
+            current_report_record_errors(missing_candidate_gate),
+        )
+        self.assertIn(
+            "decision_gate_incomplete",
+            current_report_record_errors(missing_decision_gate),
+        )
+
     def test_report_has_one_candidate_and_final_geometry_projection(self) -> None:
         detection = _detection(
             {
-                "candidate_competition": {
-                    "selected_candidate": {"format_id": "135"},
+                "selection_geometry_consensus": {
                     "top_candidates": [
                         {
                             "rank": 1,
@@ -189,7 +259,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         detection = _detection()
         schema = _report_record(detection)
 
-        self.assertEqual(schema["schema_revision"], "canonical_final_record")
+        self.assertEqual(schema["schema_revision"], "physical_gate_proof_paths")
         for duplicate in (
             "version",
             "format",
@@ -268,17 +338,17 @@ class OutputReadModelContractTest(unittest.TestCase):
             {
                 "decision_summary": {
                     "status": "needs_review",
-                    "final_review_reasons": ["separator_evidence_incomplete"],
+                    "final_review_reasons": ["boundary_evidence_insufficient"],
                 }
             },
-            ["separator_evidence_incomplete"],
+            ["boundary_evidence_insufficient"],
         )
         decided_schema = _report_record(decided)
 
         self.assertEqual(decided_schema["status"], "needs_review")
         self.assertEqual(
             decided_schema["final_review_reasons"],
-            ["separator_evidence_incomplete"],
+            ["boundary_evidence_insufficient"],
         )
 
         approved = _report_record(_detection(status="approved_auto"))
@@ -289,23 +359,20 @@ class OutputReadModelContractTest(unittest.TestCase):
             {
                 "decision_summary": {
                     "status": "needs_review",
-                    "final_review_reasons": ["candidate_level_stale_reason"],
+                    "final_review_reasons": ["photo_geometry_contradicted"],
                 }
             },
-            ["outer_content_mismatch"],
+            ["content_preservation_unresolved"],
         )
 
-        status, detail, _color = debug_status_parts(detection, 0.85)
+        status, detail, _color = debug_status_parts(detection)
 
         self.assertEqual(status, "REVIEW")
-        self.assertIn("outer_content_mismatch", detail)
-        self.assertNotIn("candidate_level_stale_reason", detail)
+        self.assertIn("content_preservation_unresolved", detail)
+        self.assertNotIn("photo_geometry_contradicted", detail)
 
         warnings: list[str] = []
-        config = SimpleNamespace(
-            confidence_threshold=0.85,
-            copy_review_files=False,
-        )
+        config = SimpleNamespace(copy_review_files=False)
         copy_for_review_if_needed(
             Path("input.tif"),
             Path("out"),
@@ -314,11 +381,14 @@ class OutputReadModelContractTest(unittest.TestCase):
             warnings,
         )
 
-        self.assertIn("outer_content_mismatch", warnings[0])
-        self.assertNotIn("candidate_level_stale_reason", warnings[0])
+        self.assertIn("content_preservation_unresolved", warnings[0])
+        self.assertNotIn("photo_geometry_contradicted", warnings[0])
 
         schema = _report_record(detection)
-        self.assertEqual(schema["final_review_reasons"], ["outer_content_mismatch"])
+        self.assertEqual(
+            schema["final_review_reasons"],
+            ["content_preservation_unresolved"],
+        )
 
         profile = ImageProfile(
             shape=(100, 100),
@@ -343,21 +413,23 @@ class OutputReadModelContractTest(unittest.TestCase):
             [],
             policy_id="test_policy",
             runtime_policy_detail={"test": True},
-            decision_policy_detail={"test": True},
             deskew_detail={"applied": False},
             analysis_cache_metadata={},
         )
-        self.assertEqual(result.record["final_review_reasons"], ["outer_content_mismatch"])
+        self.assertEqual(
+            result.record["final_review_reasons"],
+            ["content_preservation_unresolved"],
+        )
 
     def test_report_jsonl_writes_current_schema_without_legacy_wrapper(self) -> None:
         detection = _detection(
             {
                 "decision_summary": {
                     "status": "needs_review",
-                    "final_review_reasons": ["outer_content_mismatch"],
+                    "final_review_reasons": ["content_preservation_unresolved"],
                 }
             },
-            ["outer_content_mismatch"],
+            ["content_preservation_unresolved"],
         )
         profile = ImageProfile(
             shape=(100, 100),
@@ -382,7 +454,6 @@ class OutputReadModelContractTest(unittest.TestCase):
             [],
             policy_id="test_policy",
             runtime_policy_detail={"test": True},
-            decision_policy_detail={"test": True},
             deskew_detail={"applied": False},
             analysis_cache_metadata={
                 "script": "X5_Crop.py",
@@ -402,11 +473,6 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertNotIn("report_schema", record)
         self.assertEqual(record["format_id"], "135")
         self.assertEqual(record["analysis_cache"]["script"], "X5_Crop.py")
-
-    def test_candidate_signals_do_not_fallback_to_final_review_reasons(self) -> None:
-        detection = _detection(final_review_reasons=["outer_content_mismatch"])
-
-        self.assertEqual(candidate_signals_from_detail(detection), [])
 
     def test_cache_reuse_does_not_fallback_to_nested_report_projections(self) -> None:
         reuse_source = (
@@ -443,9 +509,11 @@ class OutputReadModelContractTest(unittest.TestCase):
         policy = self._policy()
         changed = replace(
             policy,
-            decision=replace(
-                policy.decision,
-                outer_mismatch_cap=policy.decision.outer_mismatch_cap - 0.01,
+            candidate_selection=replace(
+                policy.candidate_selection,
+                geometry_tolerance_ratio=(
+                    policy.candidate_selection.geometry_tolerance_ratio - 0.001
+                ),
             ),
         )
         self.assertNotEqual(
@@ -488,25 +556,12 @@ class OutputReadModelContractTest(unittest.TestCase):
             resolution_unit=None,
             icc_profile=None,
         )
-        cached_record = {
-            "schema_id": "detection_report",
-            "schema_revision": "canonical_final_record",
-            "source": "input.tif",
-            "status": "needs_review",
-            "confidence": 0.84,
-            "format_id": "135",
-            "strip_mode": "full",
-            "layout": "horizontal",
-            "count": 6,
-            "final_review_reasons": ["candidate_competition_close"],
-            "outer_box": {"left": 0, "top": 0, "right": 10, "bottom": 10},
-            "frame_boxes": [],
-            "gaps": [],
-            "policy_id": "decision:135:full",
-            "analysis_cache": {"script": "X5_Crop.py"},
-            "analysis_reuse": {"used": False},
-            "output": {"output_files": [], "review_copy": None, "warnings": []},
-        }
+        cached_record = _report_record(
+            _detection(
+                final_review_reasons=["selection_geometry_disagreement"],
+            ),
+            analysis_cache_metadata={"script": "X5_Crop.py"},
+        )
 
         result = result_from_cached_record(
             Path("input.tif"),
@@ -536,18 +591,16 @@ class OutputReadModelContractTest(unittest.TestCase):
                         "candidate_gate": {
                             "passed": True,
                             "checks": [],
-                            "blockers": [],
+                            "proof_paths": [],
+                            "failed_checks": [],
                             "diagnostics": [],
-                            "confidence_caps": [],
                         }
                     },
                     "decision_summary": {
                         "decision_gate": {
                             "passed": True,
                             "checks": [],
-                            "final_review_reasons": [],
                             "reason_inputs": [],
-                            "confidence_caps": [],
                         }
                     },
                 }
@@ -567,19 +620,15 @@ class OutputReadModelContractTest(unittest.TestCase):
                 {"decision_summary": {"status": "stale_detail_value"}},
                 status="approved_auto",
             ),
-            0.85,
         )
 
         self.assertEqual(status, "PASS")
-        self.assertIn("decision status approved_auto", detail)
+        self.assertEqual(detail, "status: approved_auto | confidence: 0.900")
         self.assertEqual(color, (40, 180, 90))
 
     def test_review_copy_warning_is_decision_neutral(self) -> None:
         warnings: list[str] = []
-        config = SimpleNamespace(
-            confidence_threshold=0.85,
-            copy_review_files=False,
-        )
+        config = SimpleNamespace(copy_review_files=False)
 
         copy_for_review_if_needed(
             Path("input.tif"),
@@ -588,17 +637,17 @@ class OutputReadModelContractTest(unittest.TestCase):
             _detection(
                 {
                     "decision_summary": {
-                        "final_review_reasons": ["candidate_competition_close"],
+                        "final_review_reasons": ["selection_geometry_disagreement"],
                     },
                 },
-                ["candidate_competition_close"],
+                ["selection_geometry_disagreement"],
             ),
             warnings,
         )
 
         self.assertEqual(len(warnings), 1)
         self.assertIn("review required", warnings[0])
-        self.assertIn("candidate_competition_close", warnings[0])
+        self.assertIn("selection_geometry_disagreement", warnings[0])
         self.assertNotIn("low confidence", warnings[0])
 
 

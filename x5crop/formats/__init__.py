@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .descriptions import FORMAT_DESCRIPTIONS, FormatDescription
-
 @dataclass(frozen=True)
 class FrameSizeMm:
     width_mm: float
@@ -147,7 +145,3 @@ FORMAT_CHOICES = tuple(FORMATS.keys())
 
 def format_spec(format_id: str) -> FormatPhysicalSpec:
     return FORMATS[format_id]
-
-
-def format_description(format_id: str) -> FormatDescription:
-    return FORMAT_DESCRIPTIONS[format_id]

@@ -22,10 +22,8 @@ from ...strip_modes import FULL, PARTIAL
 @dataclass(frozen=True)
 class SeparatorGeometrySupportModePolicy:
     min_hard_ratio: float = 0.0
-    min_joint_score: float = 1.0
     max_equal_gaps: int = 0
     max_photo_width_cv: float = 0.040
-    required_content_support: str = "ok"
     max_outer_area_ratio: float = 0.995
 
 

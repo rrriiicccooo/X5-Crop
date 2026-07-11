@@ -7,13 +7,6 @@ from ....domain import DetectionCandidate
 from ....policies.runtime.policy import DetectionPolicy
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.outer_alignment import outer_content_alignment_detail
-from ..signals import (
-    SIGNAL_CONTENT_ASPECT_CONFLICT,
-    SIGNAL_CONTENT_EVIDENCE_WEAK,
-    SIGNAL_CONTENT_OUTSIDE_OUTER,
-    add_candidate_signals,
-)
-from .confidence_caps import apply_candidate_confidence_cap
 
 
 def apply_dual_lane_content_assessment(
@@ -21,7 +14,6 @@ def apply_dual_lane_content_assessment(
     detection: DetectionCandidate,
     cache: AnalysisCache,
     lane_policy: DetectionPolicy,
-    confidence_threshold: float,
     horizontal_frame_aspect: float,
 ) -> None:
     content_detail = content_evidence_detail(
@@ -40,29 +32,17 @@ def apply_dual_lane_content_assessment(
     detection.detail["content_evidence"] = content_detail
     detection.detail["outer_content_alignment"] = outer_alignment
 
-    candidate_signals: list[str] = []
+    diagnostics: list[str] = []
     if bool(content_detail.get("used", False)):
         support = str(content_detail.get("support", ""))
         if support == "aspect_conflict":
-            apply_candidate_confidence_cap(
-                detection,
-                lane_policy.decision.content_aspect_conflict_cap,
-                SIGNAL_CONTENT_ASPECT_CONFLICT,
-            )
-            candidate_signals.append(SIGNAL_CONTENT_ASPECT_CONFLICT)
-        elif support in {"low_content", "weak"} and detection.confidence >= confidence_threshold:
-            apply_candidate_confidence_cap(
-                detection,
-                lane_policy.decision.content_low_confidence_cap,
-                SIGNAL_CONTENT_EVIDENCE_WEAK,
-            )
-            candidate_signals.append(SIGNAL_CONTENT_EVIDENCE_WEAK)
+            diagnostics.append("content_aspect_uncertain")
+        elif support in {"low_content", "weak"}:
+            diagnostics.append("content_quality_low")
     if bool(outer_alignment.get("used", False)) and not bool(outer_alignment.get("ok", True)):
-        apply_candidate_confidence_cap(
-            detection,
-            lane_policy.decision.outer_mismatch_cap,
-            SIGNAL_CONTENT_OUTSIDE_OUTER,
+        diagnostics.append("outer_alignment_measurement_conflict")
+    assessment = detection.detail.get("candidate_assessment")
+    if isinstance(assessment, dict):
+        assessment["diagnostics"] = sorted(
+            set([*assessment.get("diagnostics", []), *diagnostics])
         )
-        candidate_signals.append(SIGNAL_CONTENT_OUTSIDE_OUTER)
-
-    add_candidate_signals(detection, candidate_signals)

@@ -289,10 +289,15 @@ Current state:
 
 Recent verified baseline:
 
-- The previous architecture closure candidate was superseded by the partial
-  auto-count, physical-resolution, outer-cohort, sampling, and cache performance
-  refactors. Architecture is not closed; the complete two-audit plan must restart
+- The previous architecture closure candidate was superseded by the physical-proof
+  Gate refactor. Architecture is not closed; the complete two-audit plan must restart
   from the resulting commit.
+- CandidateGate now blocks only explicit physical contradictions and requires an
+  independent boundary proof path. DecisionGate owns final status and specific
+  final reasons; confidence is ranking and explanatory data only.
+- Low content, uncertain aspect, and empty frames now mean frame-content support is
+  unavailable. They do not claim content damage; confirmed boundary/undercrop
+  evidence owns content-preservation contradictions.
 - `python3 X5_Crop.py --version` printed `X5_Crop.py 4.9`.
 - The full architecture and runtime contract suite passed.
 - Full compile across the V4.9 package and regression tools passed.

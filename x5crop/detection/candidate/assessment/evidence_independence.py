@@ -5,7 +5,6 @@ from typing import Any
 from ....domain import DetectionCandidate
 from ....policies.parameters.candidate import EvidenceIndependenceParameters
 from ...evidence.photo_width import photo_width_stability_detail
-from ..signals import SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED
 
 
 DEPENDENT_OUTER_STRATEGY = "separator_outer"
@@ -39,13 +38,17 @@ def evidence_independence_detail(
     detection: DetectionCandidate,
     *,
     source: str,
-    content_support: str,
-    content_score: float,
-    geometry_score: float,
+    frame_content_support_available: bool,
+    photo_geometry_supported: bool,
     policy: EvidenceIndependenceParameters,
 ) -> dict[str, Any]:
     if source != "separator":
-        return {"used": False, "ok": True, "reason": "non_separator_source"}
+        return {
+            "used": False,
+            "state": "not_applicable",
+            "ok": True,
+            "reason": "non_separator_source",
+        }
 
     outer_strategy = str(detection.detail.get("outer_candidate_strategy", ""))
     separator_detail = _dict(detection.detail.get("standard_gap_search"))
@@ -65,21 +68,17 @@ def evidence_independence_detail(
         used_role="evidence_independence_geometry_check",
     )
     standard_ok = standard_detected_gaps >= int(policy.min_standard_detected_gaps)
-    content_ok = content_support == "ok"
-    content_quality_ok = float(content_score) >= float(policy.min_content_score)
-    geometry_ok = (
-        float(geometry_score) >= float(policy.min_geometry_score)
-        and bool(photo_width_stability.get("used", False))
-        and bool(photo_width_stability.get("ok", False))
-    )
+    content_support_available = bool(frame_content_support_available)
+    geometry_ok = bool(photo_geometry_supported)
     ok = (
         True
         if not requires_validation
-        else bool(standard_ok and content_ok and geometry_ok)
+        else bool(standard_ok and content_support_available and geometry_ok)
     )
-    reason = "ok" if ok else SIGNAL_EVIDENCE_DEPENDENCY_CYCLE_DETECTED
+    reason = "ok" if ok else "evidence_dependency_cycle_detected"
     return {
         "used": True,
+        "state": "supported" if ok else "contradicted",
         "ok": bool(ok),
         "reason": reason,
         "requires_validation": bool(requires_validation),
@@ -93,15 +92,7 @@ def evidence_independence_detail(
         "standard_detected_gaps": int(standard_detected_gaps),
         "min_standard_detected_gaps": int(policy.min_standard_detected_gaps),
         "standard_ok": bool(standard_ok),
-        "content_support": content_support,
-        "required_content_support": "ok",
-        "content_score": float(content_score),
-        "min_content_score": float(policy.min_content_score),
-        "content_ok": bool(content_ok),
-        "content_quality_ok": bool(content_quality_ok),
-        "content_score_role": "quality_diagnostic_not_boundary_evidence",
-        "geometry_score": float(geometry_score),
-        "min_geometry_score": float(policy.min_geometry_score),
+        "frame_content_support_available": bool(content_support_available),
         "width_cv": _float(detection.detail.get("width_cv"), 1.0),
         "width_cv_source": str(detection.detail.get("width_cv_source") or "unknown"),
         "max_photo_width_cv": float(policy.max_photo_width_cv),

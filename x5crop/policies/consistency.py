@@ -5,8 +5,7 @@ from typing import Iterable
 
 from ..formats import FORMAT_CHOICES
 from ..strip_modes import STRIP_MODES
-from .decision.contract import decision_contract_for_policy
-from .identity import decision_policy_id_for
+from .identity import detection_policy_id_for
 from .registry import get_detection_policy
 from .runtime.policy import DetectionPolicy
 
@@ -44,38 +43,11 @@ def _issue(
 
 
 def consistency_issues_for_policy(policy: DetectionPolicy) -> list[PolicyConsistencyIssue]:
-    contract = decision_contract_for_policy(policy)
     checks: list[tuple[str, object, object]] = [
         (
-            "decision.policy_id",
-            decision_policy_id_for(policy.physical_spec.format_id, policy.strip_mode),
-            contract.policy_id,
-        ),
-        (
-            "format_id",
-            policy.physical_spec.format_id,
-            contract.physical_spec.format_id,
-        ),
-        ("strip_mode", policy.strip_mode, contract.strip_mode),
-        (
-            "decision.review_confidence_cap",
-            policy.candidate_selection.confidence_cap,
-            contract.candidate_selection.confidence_cap,
-        ),
-        (
-            "decision.content_aspect_conflict_cap",
-            policy.decision.content_aspect_conflict_cap,
-            contract.decision.content_aspect_conflict_cap,
-        ),
-        (
-            "decision.content_low_confidence_cap",
-            policy.decision.content_low_confidence_cap,
-            contract.decision.content_low_confidence_cap,
-        ),
-        (
-            "decision.outer_mismatch_cap",
-            policy.decision.outer_mismatch_cap,
-            contract.decision.outer_mismatch_cap,
+            "detection.policy_id",
+            detection_policy_id_for(policy.physical_spec.format_id, policy.strip_mode),
+            policy.policy_id,
         ),
     ]
     return [

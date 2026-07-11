@@ -23,18 +23,14 @@ def separator_geometry_support_policy(
     support = params.separator.separator_geometry_support
     mode_policy = SeparatorGeometrySupportModePolicy(
         min_hard_ratio=float(support.detected_geometry_min_hard_ratio),
-        min_joint_score=float(support.detected_geometry_min_joint_score),
         max_equal_gaps=0,
         max_photo_width_cv=float(support.max_photo_width_cv),
-        required_content_support="ok",
         max_outer_area_ratio=float(support.max_outer_area_ratio),
     )
     stable_grid_policy = SeparatorGeometrySupportModePolicy(
         min_hard_ratio=float(support.stable_grid_min_hard_ratio),
-        min_joint_score=float(support.stable_grid_min_joint_score),
         max_equal_gaps=0,
         max_photo_width_cv=float(support.max_photo_width_cv),
-        required_content_support="ok",
         max_outer_area_ratio=float(support.max_outer_area_ratio),
     )
     return SeparatorGeometrySupportPolicy(

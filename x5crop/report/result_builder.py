@@ -19,7 +19,6 @@ def result_from_detection(
     *,
     policy_id: str,
     runtime_policy_detail: dict[str, Any],
-    decision_policy_detail: dict[str, Any],
     deskew_detail: dict[str, Any],
     analysis_cache_metadata: dict[str, Any],
 ) -> ProcessResult:
@@ -32,7 +31,6 @@ def result_from_detection(
         warnings=warnings,
         policy_id=policy_id,
         runtime_policy=runtime_policy_detail,
-        decision_policy=decision_policy_detail,
         deskew_detail=deskew_detail,
         analysis_cache_metadata=analysis_cache_metadata,
     )

@@ -10,10 +10,6 @@ from ...formats import FormatPhysicalSpec
 from ...geometry.boxes import map_work_box
 from ...geometry.layout import work_gray
 from ...run_config import RunConfig
-from ..candidate.signals import (
-    SIGNAL_DUAL_LANE_PARTIAL_NOT_SUPPORTED,
-    SIGNAL_NEEDS_MANUAL_REVIEW,
-)
 from ..candidate.assessment.mode import apply_mode_candidate_assessment
 
 
@@ -29,8 +25,8 @@ def review_only_detection(
     outer = Box(0, 0, ww, wh)
     source_h, source_w = gray.shape
     mode_diagnostics = [
-        SIGNAL_DUAL_LANE_PARTIAL_NOT_SUPPORTED,
-        SIGNAL_NEEDS_MANUAL_REVIEW,
+        "dual_lane_partial_not_supported",
+        "manual_processing_required",
     ]
     detection = DetectionCandidate(
         format_id=fmt.format_id,
@@ -42,7 +38,6 @@ def review_only_detection(
         gaps=[],
         confidence=0.0,
         detail={
-            "candidate_signals": list(mode_diagnostics),
             "candidate_source": CANDIDATE_SOURCE_REVIEW_ONLY,
             "candidate_count": 0,
             "mode_diagnostics": list(mode_diagnostics),
@@ -53,6 +48,6 @@ def review_only_detection(
     return apply_mode_candidate_assessment(
         detection,
         source=CANDIDATE_SOURCE_REVIEW_ONLY,
-        source_auto_allowed=False,
+        automatic_processing_supported=False,
         component_candidate_gates=[],
     )

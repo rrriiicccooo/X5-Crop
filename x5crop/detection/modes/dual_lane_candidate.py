@@ -57,13 +57,12 @@ def select_dual_lane_candidate(
     if not candidates:
         return None
 
-    best = select_source_candidate(candidates, config.confidence_threshold)
+    best = select_source_candidate(candidates)
     apply_dual_lane_content_assessment(
         gray,
         best,
         cache,
         lane_policy,
-        config.confidence_threshold,
         lane_format_spec.horizontal_content_aspect,
     )
     return best
