@@ -10,6 +10,7 @@ from ...evidence.content.frame_support import (
 from ...evidence.content.holder_texture import HolderTextureEvidence
 from ...evidence.content.preservation import ContentPreservationEvidence
 from ...evidence.frame_coverage import FrameCoverageEvidence
+from ...evidence.frame_sequence import FrameSequenceEvidence
 from ...evidence.frame_topology import FrameTopologyEvidence
 from ...evidence.holder_occupancy import (
     HolderOccupancyEvidence,
@@ -20,6 +21,9 @@ from ...evidence.partial_edge import PartialEdgeSafetyEvidence
 from ...evidence.separator_continuity import SeparatorContinuityEvidence
 from ...evidence.state import EvidenceState
 from ...physical.photo_size import FrameDimensionEvidence
+from ...physical.boundary import HolderOcclusionEvidence
+from ...physical.intervals import PixelInterval
+from ...physical.spacing import SequenceConservationEvidence
 from ..model import (
     AssessedCandidate,
     BuiltCandidate,
@@ -378,6 +382,19 @@ def assess_dual_lane_candidate(
     evidence = CandidateEvidence(
         frame_topology=topology,
         frame_coverage=coverage,
+        frame_sequence=FrameSequenceEvidence(
+            holder_occlusion=HolderOcclusionEvidence.not_applicable(),
+            spacings=(),
+            conservation=SequenceConservationEvidence(
+                EvidenceState.NOT_APPLICABLE,
+                "dual_lane_components_own_sequence_conservation",
+                PixelInterval.exact(float(geometry.film_span.box.width)),
+                PixelInterval.zero(),
+                PixelInterval.zero(),
+                PixelInterval.zero(),
+                PixelInterval.zero(),
+            ),
+        ),
         separator_sequence=sequence,
         separator_continuity=continuity,
         frame_dimensions=dimensions,
@@ -395,6 +412,7 @@ def assess_dual_lane_candidate(
             frame_topology=topology.state,
             content_preservation=preservation.state,
             photo_geometry=dimensions.state,
+            sequence_conservation=EvidenceState.NOT_APPLICABLE,
             evidence_independence=independence.state,
             proof_paths=(
                 BoundaryProofPath(

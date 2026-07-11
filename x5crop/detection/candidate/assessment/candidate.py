@@ -7,6 +7,7 @@ from ...evidence.content.frame_support import frame_content_evidence
 from ...evidence.content.holder_texture import holder_texture_evidence
 from ...evidence.content.preservation import content_preservation_evidence
 from ...evidence.frame_coverage import frame_coverage_evidence
+from ...evidence.frame_sequence import frame_sequence_evidence
 from ...evidence.holder_occupancy import holder_occupancy_evidence
 from ...evidence.outer_alignment import outer_content_alignment_evidence
 from ...evidence.partial_edge import partial_edge_safety_evidence
@@ -37,6 +38,8 @@ def _boundary_proof_paths(
         evidence.frame_topology.state == EvidenceState.SUPPORTED
         and evidence.frame_coverage.state == EvidenceState.SUPPORTED
         and evidence.content_preservation.state == EvidenceState.SUPPORTED
+        and evidence.frame_sequence.conservation.state
+        != EvidenceState.CONTRADICTED
         and evidence.independence.state
         in {EvidenceState.SUPPORTED, EvidenceState.NOT_APPLICABLE}
     )
@@ -158,6 +161,7 @@ def assess_candidate(
         context.measurement_cache,
         context.policy.content,
     )
+    frame_sequence = frame_sequence_evidence(geometry, physical_spec)
     content = frame_content_evidence(
         geometry,
         context.measurement_cache,
@@ -209,6 +213,7 @@ def assess_candidate(
     evidence = CandidateEvidence(
         frame_topology=base.frame_topology,
         frame_coverage=coverage,
+        frame_sequence=frame_sequence,
         separator_sequence=sequence,
         separator_continuity=base.separator_continuity,
         frame_dimensions=base.frame_dimensions,
@@ -234,6 +239,7 @@ def assess_candidate(
             frame_topology=evidence.frame_topology.state,
             content_preservation=evidence.content_preservation.state,
             photo_geometry=evidence.frame_dimensions.state,
+            sequence_conservation=evidence.frame_sequence.conservation.state,
             evidence_independence=evidence.independence.state,
             proof_paths=proof_paths,
             diagnostics=tuple(diagnostics),

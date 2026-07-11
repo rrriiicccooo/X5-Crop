@@ -34,6 +34,7 @@ from x5crop.detection.evidence.content.holder_texture import HolderTextureEviden
 from x5crop.detection.evidence.content.preservation import ContentPreservationEvidence
 from x5crop.detection.evidence.exposure_overlap import ExposureOverlapEvidence
 from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
+from x5crop.detection.evidence.frame_sequence import FrameSequenceEvidence
 from x5crop.detection.evidence.frame_topology import FrameTopologyEvidence
 from x5crop.detection.evidence.holder_occupancy import (
     HolderOccupancyEvidence,
@@ -47,6 +48,12 @@ from x5crop.detection.evidence.transform_geometry import TransformGeometryEviden
 from x5crop.detection.gate_checks import GateCheck
 from x5crop.detection.geometry import CandidateGeometry
 from x5crop.detection.physical.photo_size import FrameDimensionEvidence
+from x5crop.detection.physical.boundary import HolderOcclusionEvidence
+from x5crop.detection.physical.intervals import PixelInterval
+from x5crop.detection.physical.spacing import (
+    SequenceConservationEvidence,
+    inter_frame_spacing_evidence,
+)
 from x5crop.detection.physical.spans import FilmSpan, HolderSpan
 from x5crop.domain import (
     AxisBleedParameters,
@@ -91,6 +98,7 @@ def candidate_gate_fixture(
         "frame_topology_integrity",
         "content_preservation",
         "photo_geometry_consistency",
+        "frame_sequence_conservation",
         "evidence_independence",
         "boundary_proof",
     )
@@ -153,6 +161,21 @@ def candidate_evidence_fixture(
             ((10, 190),),
             (),
             0,
+        ),
+        frame_sequence=FrameSequenceEvidence(
+            holder_occlusion=HolderOcclusionEvidence.not_applicable(),
+            spacings=(
+                inter_frame_spacing_evidence(1, PixelInterval.exact(0.0)),
+            ),
+            conservation=SequenceConservationEvidence(
+                EvidenceState.SUPPORTED,
+                "frame_sequence_conserved",
+                PixelInterval.exact(200.0),
+                PixelInterval.zero(),
+                PixelInterval.exact(200.0),
+                PixelInterval.zero(),
+                PixelInterval.exact(200.0),
+            ),
         ),
         separator_sequence=SeparatorSequenceEvidence(
             EvidenceState.SUPPORTED,

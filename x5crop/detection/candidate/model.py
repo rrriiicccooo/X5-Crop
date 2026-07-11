@@ -9,6 +9,7 @@ from ..evidence.content.preservation import ContentPreservationEvidence
 from ..evidence.content.frame_support import FrameContentEvidence
 from ..evidence.content.holder_texture import HolderTextureEvidence
 from ..evidence.frame_coverage import FrameCoverageEvidence
+from ..evidence.frame_sequence import FrameSequenceEvidence
 from ..evidence.frame_topology import FrameTopologyEvidence
 from ..evidence.holder_occupancy import HolderOccupancyEvidence
 from ..evidence.outer_alignment import OuterAlignmentEvidence
@@ -30,6 +31,7 @@ class BuiltCandidate:
 class CandidateEvidence:
     frame_topology: FrameTopologyEvidence
     frame_coverage: FrameCoverageEvidence
+    frame_sequence: FrameSequenceEvidence
     separator_sequence: SeparatorSequenceEvidence
     separator_continuity: SeparatorContinuityEvidence
     frame_dimensions: FrameDimensionEvidence

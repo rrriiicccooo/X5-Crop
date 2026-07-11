@@ -89,6 +89,78 @@ def scan_calibration_read_model(calibration: Any) -> dict[str, Any]:
     }
 
 
+def pixel_interval_read_model(interval: Any) -> dict[str, float]:
+    return {
+        "minimum": float(interval.minimum),
+        "maximum": float(interval.maximum),
+    }
+
+
+def boundary_observation_read_model(observation: Any) -> dict[str, Any] | None:
+    if observation is None:
+        return None
+    return {
+        "side": observation.side,
+        "position": pixel_interval_read_model(observation.position),
+        "kind": observation.kind,
+        "provenance": typed_read_model(observation.provenance),
+    }
+
+
+def holder_occlusion_read_model(evidence: Any) -> dict[str, Any]:
+    def side_read_model(side: Any) -> dict[str, Any]:
+        return {
+            "side": side.side,
+            "state": side.state.value,
+            "hidden_width_px": pixel_interval_read_model(side.hidden_width_px),
+            "reason": side.reason,
+            "boundary": boundary_observation_read_model(side.boundary),
+        }
+
+    return {
+        "leading": side_read_model(evidence.leading),
+        "trailing": side_read_model(evidence.trailing),
+    }
+
+
+def frame_sequence_read_model(evidence: Any) -> dict[str, Any]:
+    conservation = evidence.conservation
+    return {
+        "holder_occlusion": holder_occlusion_read_model(evidence.holder_occlusion),
+        "spacings": [
+            {
+                "index": spacing.index,
+                "state": spacing.state.value,
+                "kind": spacing.kind,
+                "signed_width_px": pixel_interval_read_model(
+                    spacing.signed_width_px
+                ),
+                "reason": spacing.reason,
+            }
+            for spacing in evidence.spacings
+        ],
+        "conservation": {
+            "state": conservation.state.value,
+            "reason": conservation.reason,
+            "visible_length_px": pixel_interval_read_model(
+                conservation.visible_length_px
+            ),
+            "holder_occlusion_px": pixel_interval_read_model(
+                conservation.holder_occlusion_px
+            ),
+            "frame_total_px": pixel_interval_read_model(
+                conservation.frame_total_px
+            ),
+            "spacing_total_px": pixel_interval_read_model(
+                conservation.spacing_total_px
+            ),
+            "physical_sequence_px": pixel_interval_read_model(
+                conservation.physical_sequence_px
+            ),
+        },
+    }
+
+
 def candidate_gate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
     gate = candidate.assessment.gate
     return {
@@ -111,6 +183,7 @@ def candidate_evidence_read_model(candidate: AssessedCandidate) -> dict[str, Any
     evidence = candidate.assessment.evidence
     topology = evidence.frame_topology
     coverage = evidence.frame_coverage
+    frame_sequence = evidence.frame_sequence
     sequence = evidence.separator_sequence
     continuity = evidence.separator_continuity
     dimensions = evidence.frame_dimensions
@@ -148,6 +221,7 @@ def candidate_evidence_read_model(candidate: AssessedCandidate) -> dict[str, Any
                 coverage.unexplained_content_region_count
             ),
         },
+        "frame_sequence": frame_sequence_read_model(frame_sequence),
         "separator_sequence": {
             "state": sequence.state.value,
             "reason": sequence.reason,

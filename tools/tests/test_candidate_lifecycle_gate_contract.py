@@ -19,18 +19,21 @@ def _gate(
     frame_topology: EvidenceState = EvidenceState.SUPPORTED,
     content_preservation: EvidenceState = EvidenceState.SUPPORTED,
     photo_geometry: EvidenceState = EvidenceState.SUPPORTED,
+    sequence_conservation: EvidenceState = EvidenceState.SUPPORTED,
     evidence_independence: EvidenceState = EvidenceState.SUPPORTED,
     proof_paths: tuple[BoundaryProofPath, ...] | None = None,
     diagnostics: tuple[str, ...] = (),
 ):
     return candidate_gate_assessment(
         CandidateGateInput(
-            frame_topology,
-            content_preservation,
-            photo_geometry,
-            evidence_independence,
-            proof_paths or (_path("separator_led", EvidenceState.SUPPORTED),),
-            diagnostics,
+            frame_topology=frame_topology,
+            content_preservation=content_preservation,
+            photo_geometry=photo_geometry,
+            sequence_conservation=sequence_conservation,
+            evidence_independence=evidence_independence,
+            proof_paths=proof_paths
+            or (_path("separator_led", EvidenceState.SUPPORTED),),
+            diagnostics=diagnostics,
         )
     )
 
@@ -43,6 +46,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
                 "frame_topology_integrity",
                 "content_preservation",
                 "photo_geometry_consistency",
+                "frame_sequence_conservation",
                 "evidence_independence",
                 "boundary_proof",
             ),
@@ -53,6 +57,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
             ("frame_topology", "frame_topology_integrity"),
             ("content_preservation", "content_preservation"),
             ("photo_geometry", "photo_geometry_consistency"),
+            ("sequence_conservation", "frame_sequence_conservation"),
             ("evidence_independence", "evidence_independence"),
         )
         for argument, expected in cases:

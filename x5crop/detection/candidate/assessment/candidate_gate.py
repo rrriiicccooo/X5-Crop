@@ -28,6 +28,7 @@ class CandidateGateInput:
     frame_topology: EvidenceState
     content_preservation: EvidenceState
     photo_geometry: EvidenceState
+    sequence_conservation: EvidenceState
     evidence_independence: EvidenceState
     proof_paths: tuple[BoundaryProofPath, ...]
     diagnostics: tuple[str, ...] = ()
@@ -76,6 +77,12 @@ def candidate_gate_assessment(gate_input: CandidateGateInput) -> CandidateGateAs
             code="photo_geometry_consistency",
             stage="candidate",
             state=gate_input.photo_geometry,
+            consequence="blocker",
+        ),
+        GateCheck(
+            code="frame_sequence_conservation",
+            stage="candidate",
+            state=gate_input.sequence_conservation,
             consequence="blocker",
         ),
         GateCheck(
