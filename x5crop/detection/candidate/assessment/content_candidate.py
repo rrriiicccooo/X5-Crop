@@ -39,7 +39,7 @@ def content_candidate_assessment_from_metrics(
     )
     diagnostics: list[str] = []
     if placement != "content_runs":
-        diagnostics.append("content_grid_placement")
+        diagnostics.append("content_model_placement")
     if runs_count != count:
         diagnostics.append("content_run_count_mismatch")
     if run_conf < 1.0:

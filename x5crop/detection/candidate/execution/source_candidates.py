@@ -269,7 +269,6 @@ def content_guided_separator_candidate_from_seed(
             "content_guidance": seed_result.seed.detail,
         },
         cache=cache,
-        allow_outer_refine=False,
         separator_gap_hints=seed_result.seed.gap_hints,
         policy=policy,
     )

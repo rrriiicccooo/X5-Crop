@@ -8,7 +8,6 @@ from ..parameters.outer import (
     EdgeAnchoredContentPositionParameters,
     FloatingContentPositionParameters,
     FullWidthSeparatorOuterParameters,
-    GridOuterRefineParameters,
     LongAxisGeometryCorrectionParameters,
     OuterAlignmentEvidenceParameters,
     SeparatorOuterBandParameters,
@@ -78,7 +77,6 @@ class SeparatorGeometryProposalPolicy:
 
 @dataclass(frozen=True)
 class GeometryOuterProposalPolicy:
-    grid_refine: GridOuterRefineParameters
     partial_placement: PartialPlacementGeometryPolicy
     separator: SeparatorGeometryProposalPolicy
 

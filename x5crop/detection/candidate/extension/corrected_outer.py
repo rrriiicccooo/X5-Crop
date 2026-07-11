@@ -44,7 +44,6 @@ def build_assessed_corrected_outer_candidate(
             **corrected.detail,
         },
         cache=cache,
-        allow_outer_refine=False,
         gap_max_width_ratio_override=None,
         policy=policy,
     )

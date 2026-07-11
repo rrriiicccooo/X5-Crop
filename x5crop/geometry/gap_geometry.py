@@ -68,14 +68,3 @@ def photo_widths_from_gap_edges(
     if len(widths) != count or any(width <= 1.0 for width in widths):
         return None
     return widths
-
-
-def local_gap_geometry_error(gaps: list[Gap], gap_index: int, origin: float, pitch: float, count: int) -> float:
-    if count <= 1 or gap_index < 1 or gap_index >= count:
-        return 0.0
-    cuts = [float(origin)] + [float(gap.center) for gap in gaps] + [float(origin + pitch * count)]
-    left_w = cuts[gap_index] - cuts[gap_index - 1]
-    right_w = cuts[gap_index + 1] - cuts[gap_index]
-    if left_w <= 1 or right_w <= 1:
-        return float("inf")
-    return abs(left_w - pitch) + abs(right_w - pitch)

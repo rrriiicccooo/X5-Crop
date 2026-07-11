@@ -79,13 +79,6 @@ class LongAxisGeometryCorrectionParameters:
     min_corrected_width_px: int = 80
 
 @dataclass(frozen=True)
-class GridOuterRefineParameters:
-    shift_ratio: float = 0.080
-    shift_min: int = 8
-    shift_max: int = 420
-    max_width_change: float = 0.12
-
-@dataclass(frozen=True)
 class ShortAxisGeometryCorrectionParameters:
     min_error: float = 0.24
     target_aspect: float = 0.0

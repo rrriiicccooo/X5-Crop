@@ -78,7 +78,7 @@ def content_candidate_raw_frame_boxes(
 ) -> tuple[list[Box], str]:
     wh, ww = work_shape
     raw_boxes: list[Box] = []
-    placement = "content_runs" if len(selected_runs) >= count else "content_grid_placement"
+    placement = "content_runs" if len(selected_runs) >= count else "content_model_placement"
     if placement == "content_runs":
         for start, end in selected_runs[:count]:
             center = (float(start) + float(end)) * 0.5

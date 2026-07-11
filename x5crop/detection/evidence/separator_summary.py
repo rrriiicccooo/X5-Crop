@@ -10,8 +10,6 @@ from ...gap_methods import (
     is_hard_gap_method,
     is_edge_pair_gap_method,
     is_equal_model_gap_method,
-    is_grid_model_gap_method,
-    is_separator_support_gap_method,
 )
 
 
@@ -19,7 +17,6 @@ from ...gap_methods import (
 class GapMethodEvidenceSummary:
     direct_hard_gaps: int
     hard_separator_gaps: int
-    grid_model_gaps: int
     equal_model_gaps: int
     content_model_gaps: int
     separator_support_count: int
@@ -27,13 +24,11 @@ class GapMethodEvidenceSummary:
     hard_gap_indexes: tuple[int, ...]
     edge_pair_scores: tuple[float, ...]
     detected_scores: tuple[float, ...]
-    leading_grid_scores: tuple[float, ...]
 
 @dataclass(frozen=True)
 class SeparatorSupportDetailSummary:
     expected_gaps: int
     hard_separator_gaps: int
-    grid_model_gaps: int
     equal_model_gaps: int
     content_model_gaps: int = 0
 
@@ -52,26 +47,17 @@ def gap_method_evidence_summary(
     reliable_min_score: float,
 ) -> GapMethodEvidenceSummary:
     direct_hard_gaps = 0
-    grid_model_gaps = 0
     equal_model_gaps = 0
     content_model_gaps = 0
     reliable_support_count = 0
     hard_gap_indexes: list[int] = []
     edge_pair_scores: list[float] = []
     detected_scores: list[float] = []
-    leading_grid_scores: list[float] = []
-    leading_grid_open = True
 
     for gap in gaps:
         method = gap.method
         if is_hard_gap_method(method):
             direct_hard_gaps += 1
-        if is_grid_model_gap_method(method):
-            grid_model_gaps += 1
-            if leading_grid_open:
-                leading_grid_scores.append(float(gap.score))
-        else:
-            leading_grid_open = False
         if is_equal_model_gap_method(method):
             equal_model_gaps += 1
         if is_content_model_gap_method(method):
@@ -82,15 +68,14 @@ def gap_method_evidence_summary(
             edge_pair_scores.append(float(gap.score))
         if is_detected_gap_method(method):
             detected_scores.append(float(gap.score))
-        if is_separator_support_gap_method(method) and gap.score >= reliable_min_score:
+        if is_hard_gap_method(method) and gap.score >= reliable_min_score:
             reliable_support_count += 1
 
     hard_separator_gaps = direct_hard_gaps
-    separator_support_count = hard_separator_gaps + grid_model_gaps
+    separator_support_count = hard_separator_gaps
     return GapMethodEvidenceSummary(
         direct_hard_gaps=direct_hard_gaps,
         hard_separator_gaps=hard_separator_gaps,
-        grid_model_gaps=grid_model_gaps,
         equal_model_gaps=equal_model_gaps,
         content_model_gaps=content_model_gaps,
         separator_support_count=separator_support_count,
@@ -98,7 +83,6 @@ def gap_method_evidence_summary(
         hard_gap_indexes=tuple(hard_gap_indexes),
         edge_pair_scores=tuple(edge_pair_scores),
         detected_scores=tuple(detected_scores),
-        leading_grid_scores=tuple(leading_grid_scores),
     )
 
 
@@ -107,7 +91,6 @@ def separator_support_detail_summary(
     *,
     expected_default: int = 0,
     hard_default: int = 0,
-    grid_default: int = 0,
     equal_default: int = 0,
     content_default: int = 0,
 ) -> SeparatorSupportDetailSummary:
@@ -115,7 +98,6 @@ def separator_support_detail_summary(
     return SeparatorSupportDetailSummary(
         expected_gaps=max(0, _int(detail.get("expected_gaps"), expected_default)),
         hard_separator_gaps=_int(detail.get("hard_gaps"), hard_default),
-        grid_model_gaps=_int(detail.get("grid_gaps"), grid_default),
         equal_model_gaps=_int(detail.get("equal_gaps"), equal_default),
         content_model_gaps=_int(detail.get("content_gaps"), content_default),
     )

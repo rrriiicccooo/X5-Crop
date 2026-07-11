@@ -117,7 +117,6 @@ def outer_policy(
                     band=separator_outer,
                     full_width_outer=separator_full_width,
                 ),
-                grid_refine=params.outer.grid_outer_refine,
             ),
         ),
         correction=OuterCorrectionPolicy(

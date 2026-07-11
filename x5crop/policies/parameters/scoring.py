@@ -30,7 +30,6 @@ class BaseDetectionScoreParameters:
 
 @dataclass(frozen=True)
 class SeparatorSupportScoreParameters:
-    model_grid_credit: float = 0.35
     model_equal_credit: float = 0.12
     hard_weight: float = 0.78
     model_weight: float = 0.22

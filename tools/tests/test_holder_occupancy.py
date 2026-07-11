@@ -95,7 +95,7 @@ class HolderOccupancyTests(unittest.TestCase):
         detail = partial_edge_safety_assessment_detail(
             np.zeros((120, 360), dtype=np.uint8),
             detection,
-            {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0},
+            {"expected_gaps": 2, "hard_gaps": 2, "equal_gaps": 0},
             content_detail,
             "separator",
             holder_occupancy=occupancy,
@@ -114,7 +114,7 @@ class HolderOccupancyTests(unittest.TestCase):
         detail = partial_edge_safety_assessment_detail(
             np.zeros((120, 360), dtype=np.uint8),
             detection,
-            {"expected_gaps": 2, "hard_gaps": 2, "grid_gaps": 0, "equal_gaps": 0},
+            {"expected_gaps": 2, "hard_gaps": 2, "equal_gaps": 0},
             {
                 "used": True,
                 "support": "low_content",

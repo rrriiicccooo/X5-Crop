@@ -12,7 +12,6 @@ from ...geometry.detection_parameters import (
     SeparatorWidthProfileSearchParameters,
 )
 from ..parameters.separator import (
-    LeadingGridFailureParameters,
     SeparatorSupportParameters,
     SeparatorWidthProfileParameters,
 )
@@ -30,14 +29,11 @@ class SeparatorGeometrySupportModePolicy:
 @dataclass(frozen=True)
 class SeparatorGeometrySupportPolicy:
     detected_geometry: SeparatorGeometrySupportModePolicy | None = None
-    stable_grid: SeparatorGeometrySupportModePolicy | None = None
 
     def active_modes(self) -> tuple[str, ...]:
         modes: list[str] = []
         if self.detected_geometry is not None:
             modes.append("detected_geometry")
-        if self.stable_grid is not None:
-            modes.append("stable_grid")
         return tuple(modes)
 
 
@@ -91,7 +87,6 @@ class SeparatorRefinementPolicy:
 @dataclass(frozen=True)
 class SeparatorPolicy:
     support: SeparatorSupportParameters
-    leading_grid_failure: LeadingGridFailureParameters
     width_profile: SeparatorWidthProfilePolicy = field(default_factory=SeparatorWidthProfilePolicy)
     width_profile_search: SeparatorWidthProfileSearchParameters = field(default_factory=SeparatorWidthProfileSearchParameters)
     refinement: SeparatorRefinementPolicy = field(default_factory=SeparatorRefinementPolicy)

@@ -32,7 +32,6 @@ def evidence_summary_for(
             "state": "supported" if separator_detail.get("ok", False) else "unavailable",
             "expected_gaps": int(separator.expected_gaps),
             "hard_gaps": int(separator.hard_separator_gaps),
-            "grid_gaps": int(separator.grid_model_gaps),
             "equal_gaps": int(separator.equal_model_gaps),
             "content_gaps": int(separator.content_model_gaps),
             "detail": separator_detail,

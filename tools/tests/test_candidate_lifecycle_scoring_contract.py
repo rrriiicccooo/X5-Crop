@@ -94,7 +94,6 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
         narrow = {
             "expected_gaps": 3,
             "hard_gaps": 3,
-            "grid_gaps": 0,
             "equal_gaps": 0,
             "separator_width_cv": 0.0,
         }
@@ -109,14 +108,12 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
         hard = {
             "expected_gaps": 3,
             "hard_gaps": 3,
-            "grid_gaps": 0,
             "equal_gaps": 0,
         }
         model = {
             "expected_gaps": 3,
             "hard_gaps": 0,
-            "grid_gaps": 2,
-            "equal_gaps": 1,
+            "equal_gaps": 3,
         }
         self.assertGreater(
             separator_support_score(hard, policy),

@@ -199,7 +199,6 @@ def partial_edge_safety_assessment_detail(
     expected = separator_evidence.expected_gaps
     hard = separator_evidence.hard_separator_gaps
     equal = separator_evidence.equal_model_gaps
-    grid = separator_evidence.grid_model_gaps
     width_cv_value = detection.detail.get("width_cv", None)
     width_cv = 1.0 if width_cv_value is None else float(width_cv_value)
     width_cv_source = str(detection.detail.get("width_cv_source") or "unknown")
@@ -261,7 +260,6 @@ def partial_edge_safety_assessment_detail(
         "count": int(detection.count),
         "expected_gaps": int(expected),
         "hard_gaps": int(hard),
-        "grid_gaps": int(grid),
         "equal_gaps": int(equal),
         "hard_ratio": float(hard_ratio),
         "width_cv": float(width_cv),

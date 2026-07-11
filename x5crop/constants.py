@@ -32,7 +32,6 @@ FINAL_REVIEW_REASONS = frozenset(
 
 GAP_DETECTED = "detected"
 GAP_EDGE_PAIR = "edge-pair"
-GAP_GRID = "grid"
 GAP_EQUAL = "equal"
 GAP_CONTENT = "content"
 
@@ -41,7 +40,6 @@ HARD_GAP_METHODS = frozenset({
     GAP_EDGE_PAIR,
 })
 MODEL_GAP_METHODS = frozenset({
-    GAP_GRID,
     GAP_EQUAL,
     GAP_CONTENT,
 })

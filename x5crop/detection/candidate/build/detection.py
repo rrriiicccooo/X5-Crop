@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, replace
+from dataclasses import asdict
 from typing import Optional
 
 import numpy as np
@@ -16,7 +16,6 @@ from ....run_config import RunConfig
 from ....utils import box_from_dict
 from ...evidence.frame_topology import frame_topology_evidence
 from ...evidence.separator_continuity import separator_cross_axis_continuity_evidence
-from ...physical.outer.grid_refine import grid_refined_outer_box
 from ...physical.photo_size import photo_size_consistency_from_gap_edges
 from ...physical.separator.hints import SeparatorGapHintSet
 from .partial_edge import partial_edge_hint
@@ -38,7 +37,6 @@ def build_detection_geometry_for_outer(
     outer_candidate_name: str,
     outer_candidate_strategy: str,
     outer_candidate_detail: Optional[dict] = None,
-    allow_outer_refine: bool = True,
     gap_max_width_ratio_override: Optional[float] = None,
     separator_gap_hints: Optional[SeparatorGapHintSet] = None,
     *,
@@ -56,10 +54,8 @@ def build_detection_geometry_for_outer(
         outer,
         offset_fraction,
         cache,
-        allow_outer_refine,
         gap_max_width_ratio_override,
         policy,
-        ww,
         explicit_count=bool(config.requested_count is not None),
         gap_hints=separator_gap_hints,
     )
@@ -99,9 +95,6 @@ def build_detection_geometry_for_outer(
             "outer_candidate_detail": dict(outer_candidate_detail or {}),
             "work_outer": asdict(outer),
             "work_frame_boxes": [asdict(box) for box in boxes_work],
-            "grid": separator_gaps.grid_detail,
-            "grid_residual": separator_gaps.grid_detail.get("grid_residual"),
-            "grid_used": bool(separator_gaps.grid_detail.get("grid_used", False)),
             "standard_gap_search": separator_gaps.standard_gap_search_detail,
             "separator_gap_hints": (
                 separator_gap_hints.summary()
@@ -192,10 +185,8 @@ def _build_separator_gap_lifecycle(
     outer: Box,
     offset_fraction: float,
     cache: Optional[AnalysisCache],
-    allow_outer_refine: bool,
     gap_max_width_ratio_override: Optional[float],
     policy: DetectionPolicy,
-    work_width: int,
     *,
     explicit_count: bool,
     gap_hints: Optional[SeparatorGapHintSet] = None,
@@ -213,53 +204,10 @@ def _build_separator_gap_lifecycle(
         explicit_count=explicit_count,
         gap_hints=gap_hints,
     )
-    if not allow_outer_refine or strip_mode != "full":
-        return apply_nearby_separator_refinements(
-            count,
-            strip_mode,
-            separator_gaps,
-            policy,
-            explicit_count=explicit_count,
-        )
-
-    refined_outer = grid_refined_outer_box(
-        separator_gaps.outer,
-        separator_gaps.grid_detail,
-        count,
-        separator_gaps.pitch,
-        work_width,
-        policy.outer.proposal.geometry.grid_refine,
-    )
-    if refined_outer is None:
-        return apply_nearby_separator_refinements(
-            count,
-            strip_mode,
-            separator_gaps,
-            policy,
-            explicit_count=explicit_count,
-        )
-
-    refined_separator_gaps = build_primary_separator_gaps_for_outer(
-        gray_work,
-        fmt,
-        count,
-        strip_mode,
-        refined_outer,
-        offset_fraction,
-        cache,
-        gap_max_width_ratio_override,
-        policy,
-        explicit_count=explicit_count,
-        force_standard_gap_search=True,
-        gap_hints=gap_hints,
-    )
-    grid_detail = dict(refined_separator_gaps.grid_detail)
-    grid_detail["outer_refined"] = True
-    refined_separator_gaps = replace(refined_separator_gaps, grid_detail=grid_detail)
     return apply_nearby_separator_refinements(
         count,
         strip_mode,
-        refined_separator_gaps,
+        separator_gaps,
         policy,
         explicit_count=explicit_count,
     )

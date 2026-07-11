@@ -87,10 +87,6 @@ class NearbySeparatorRefinementParameters:
     distance_ratio: float = 0.040
     score_add: float = 0.10
     score_multiplier: float = 1.22
-    local_gain_ratio: float = 0.006
-    local_gain_min: float = 8.0
-    local_gain_max: float = 40.0
-    width_cv_slack: float = 0.0015
     candidate_threshold_percentile: float = 82.0
     candidate_threshold_floor: float = 0.22
 

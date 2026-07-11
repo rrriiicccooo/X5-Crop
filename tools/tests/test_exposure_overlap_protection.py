@@ -20,7 +20,7 @@ def _detection() -> FinalDetection:
     detection.count = 2
     detection.outer = Box(0, 0, 100, 60)
     detection.frames = [Box(0, 0, 50, 60), Box(50, 0, 100, 60)]
-    detection.gaps = [Gap(1, 50.0, 0.5, "grid")]
+    detection.gaps = [Gap(1, 50.0, 0.5, "equal")]
     detection.confidence = 0.95
     detection.detail = {}
     return detection

@@ -577,10 +577,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
         self.assertIn("guard_ratio", EdgeBleedProtectionParameters.__dataclass_fields__)
 
     def test_universal_capabilities_do_not_have_constant_policy_switches(self) -> None:
-        from x5crop.policies.parameters.separator import (
-            LeadingGridFailureParameters,
-            SeparatorSupportParameters,
-        )
+        from x5crop.policies.parameters.separator import SeparatorSupportParameters
         from x5crop.policies.parameters.outer import (
             EdgeAnchoredContentPositionParameters,
             FloatingContentPositionParameters,
@@ -624,7 +621,6 @@ class LayerBoundariesContractTest(unittest.TestCase):
             FloatingContentPositionParameters: "enabled",
             LongAxisGeometryCorrectionPolicy: "enabled",
             ShortAxisGeometryCorrectionPolicy: "enabled",
-            LeadingGridFailureParameters: "enabled",
             SeparatorFullWidthCompetitionParameters: "enabled",
             EvidenceIndependenceParameters: "enabled",
             ContentGuidedSeparatorCandidateParameters: "requires_exact_content_runs",

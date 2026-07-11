@@ -6,9 +6,9 @@ from typing import Any
 import numpy as np
 
 from ..domain import Gap
-from ..gap_methods import is_hard_gap_method
+from ..constants import GAP_DETECTED
+from ..gap_methods import is_model_gap_method
 from ..utils import clamp_float, clamp_int, runs_from_mask
-from .gap_geometry import gap_width_cv, local_gap_geometry_error
 from .gap_refinement_detail import gap_refinement_batch_detail
 from .detection_parameters import NearbySeparatorRefinementParameters
 from .separator_profile import interval_mean
@@ -261,12 +261,12 @@ def nearby_separator_replacement_assessment(
     pitch: float,
     refinement_config: NearbySeparatorRefinementParameters,
 ) -> NearbySeparatorReplacementAssessment:
-    if not is_hard_gap_method(gap.method):
+    if not is_model_gap_method(gap.method):
         return NearbySeparatorReplacementAssessment(
             False,
-            "not_hard_gap",
+            "measured_separator_preserved",
             None,
-            {"searched": False, "reason": "not_hard_gap"},
+            {"searched": False, "reason": "measured_separator_preserved"},
         )
     if pitch <= 0:
         return NearbySeparatorReplacementAssessment(
@@ -310,7 +310,7 @@ def nearby_separator_gap_from_candidate(gap: Gap, candidate: dict[str, Any]) -> 
         gap.index,
         float(candidate["center"]),
         float(candidate["score"]),
-        gap.method,
+        GAP_DETECTED,
         float(candidate["start"]),
         float(candidate["end"]),
         gap.lane_box,
@@ -321,31 +321,14 @@ def nearby_separator_reject_detail(
     gap: Gap,
     reason: str,
     candidate: dict[str, Any],
-    before_local: float | None = None,
-    after_local: float | None = None,
-    before_cv: float | None = None,
-    after_cv: float | None = None,
 ) -> dict[str, Any]:
-    detail: dict[str, Any] = {"index": int(gap.index), "reason": reason, "candidate": candidate}
-    if before_local is not None:
-        detail["before_local_error"] = float(before_local)
-    if after_local is not None:
-        detail["after_local_error"] = float(after_local)
-    if before_cv is not None:
-        detail["before_width_cv"] = float(before_cv)
-    if after_cv is not None:
-        detail["after_width_cv"] = float(after_cv)
-    return detail
+    return {"index": int(gap.index), "reason": reason, "candidate": candidate}
 
 
 def nearby_separator_accept_detail(
     gap: Gap,
     proposed_gap: Gap,
     replacement: dict[str, Any],
-    before_local: float,
-    after_local: float,
-    before_cv: float,
-    after_cv: float,
 ) -> dict[str, Any]:
     return {
         "index": int(gap.index),
@@ -356,37 +339,13 @@ def nearby_separator_accept_detail(
         "to_score": float(proposed_gap.score),
         "from_method": gap.method,
         "to_method": proposed_gap.method,
-        "before_local_error": float(before_local),
-        "after_local_error": float(after_local),
-        "before_width_cv": float(before_cv),
-        "after_width_cv": float(after_cv),
         "nearby_separator_candidate": replacement,
     }
-
-
-def nearby_separator_geometry_is_better(
-    before_local: float,
-    after_local: float,
-    before_cv: float,
-    after_cv: float,
-    original_cv: float,
-    pitch: float,
-    config: NearbySeparatorRefinementParameters,
-) -> bool:
-    local_gain = before_local - after_local
-    local_ok = local_gain >= clamp_float(
-        pitch * config.local_gain_ratio,
-        config.local_gain_min,
-        config.local_gain_max,
-    )
-    cv_ok = after_cv <= before_cv + config.width_cv_slack and after_cv <= original_cv + config.width_cv_slack
-    return local_ok and cv_ok
 
 
 def apply_nearby_separator_refinement(
     profile: np.ndarray,
     gaps: list[Gap],
-    origin: float,
     pitch: float,
     count: int,
     refinement_config: NearbySeparatorRefinementParameters,
@@ -395,7 +354,6 @@ def apply_nearby_separator_refinement(
         return NearbySeparatorRefinementResult(gaps, {"used": False, "reason": "not_applicable"})
     if profile.size == 0:
         return NearbySeparatorRefinementResult(gaps, {"used": False, "reason": "empty_profile"})
-    original_cv = gap_width_cv(gaps, origin, pitch, count)
     corrected = list(gaps)
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
@@ -413,41 +371,12 @@ def apply_nearby_separator_refinement(
         if any(b.center <= a.center for a, b in zip(proposed[:-1], proposed[1:])):
             rejected.append(nearby_separator_reject_detail(gap, "non_monotonic", best))
             continue
-        before_local = local_gap_geometry_error(corrected, gap.index, origin, pitch, count)
-        after_local = local_gap_geometry_error(proposed, gap.index, origin, pitch, count)
-        before_cv = gap_width_cv(corrected, origin, pitch, count)
-        after_cv = gap_width_cv(proposed, origin, pitch, count)
-        if not nearby_separator_geometry_is_better(
-            before_local,
-            after_local,
-            before_cv,
-            after_cv,
-            original_cv,
-            pitch,
-            refinement_config,
-        ):
-            rejected.append(
-                nearby_separator_reject_detail(
-                    gap,
-                    "geometry_not_better",
-                    best,
-                    before_local,
-                    after_local,
-                    before_cv,
-                    after_cv,
-                )
-            )
-            continue
         corrected = proposed
         accepted.append(
             nearby_separator_accept_detail(
                 gap,
                 proposed_gap,
                 replacement,
-                before_local,
-                after_local,
-                before_cv,
-                after_cv,
             )
         )
     return NearbySeparatorRefinementResult(
@@ -460,7 +389,5 @@ def apply_nearby_separator_refinement(
                 accepted=accepted,
                 rejected=rejected,
             ),
-            "original_width_cv": float(original_cv),
-            "final_width_cv": float(gap_width_cv(corrected, origin, pitch, count)),
         },
     )

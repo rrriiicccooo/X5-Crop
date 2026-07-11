@@ -18,12 +18,17 @@ from x5crop.detection.candidate.plan.count_hypotheses import (
 )
 from x5crop.detection.evidence.content.preservation import content_preservation_evidence
 from x5crop.detection.evidence.count_planning import CountPlanningEvidence
+from x5crop.detection.evidence.count_planning import _merged_separator_bands
 from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
 from x5crop.detection.evidence.state import EvidenceState
 from x5crop.detection.physical.photo_size import photo_size_consistency_from_gap_edges
+from x5crop.constants import GAP_DETECTED, GAP_EQUAL
 from x5crop.domain import Box, DetectionCandidate, Gap
 from x5crop.formats import format_spec
 from x5crop.geometry.frame_fit import frame_boxes_from_gaps
+from x5crop.geometry.separator_band import SeparatorBand
+from x5crop.geometry.nearby_separator import apply_nearby_separator_refinement
+from x5crop.geometry.detection_parameters import NearbySeparatorRefinementParameters
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -67,7 +72,6 @@ def _resolved_candidate(count: int) -> DetectionCandidate:
                     "ok": True,
                     "expected_gaps": max(0, count - 1),
                     "hard_gaps": max(0, count - 1),
-                    "grid_gaps": 0,
                     "equal_gaps": 0,
                 }
             },
@@ -108,7 +112,6 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                 "ok": True,
                 "expected_gaps": 0,
                 "hard_gaps": 0,
-                "grid_gaps": 0,
                 "equal_gaps": 0,
             },
             EvidenceState.SUPPORTED,
@@ -136,7 +139,6 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                 "ok": True,
                 "expected_gaps": 2,
                 "hard_gaps": 1,
-                "grid_gaps": 0,
                 "equal_gaps": 1,
             },
             EvidenceState.SUPPORTED,
@@ -186,6 +188,15 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         self.assertEqual([hypothesis.count for hypothesis in plan.hypotheses], [5, 4, 3, 2, 1])
         self.assertTrue(next(item for item in plan.hypotheses if item.count == 2).physically_supported)
 
+    def test_count_planning_deduplicates_overlapping_separator_bands(self) -> None:
+        stronger = SeparatorBand(90.0, 110.0, 100.0, 20.0, 1.0)
+        overlap = SeparatorBand(96.0, 116.0, 106.0, 20.0, 0.8)
+        separate = SeparatorBand(190.0, 210.0, 200.0, 20.0, 0.9)
+
+        merged = _merged_separator_bands([stronger, overlap], [separate])
+
+        self.assertEqual(merged, [stronger, separate])
+
     def test_equal_model_fills_missing_indexes_without_replacing_hard_gaps(self) -> None:
         hard = Gap(index=3, center=300.0, score=1.2, method="detected", start=295.0, end=305.0)
         result = select_geometry_equal_model_gaps(
@@ -205,6 +216,39 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         self.assertEqual(len(result.gaps), 5)
         self.assertIs(next(gap for gap in result.gaps if gap.index == 3), hard)
         self.assertEqual(sum(gap.method == "detected" for gap in result.gaps), 1)
+
+    def test_nearby_refinement_never_moves_measured_separator_band(self) -> None:
+        measured = Gap(1, 50.0, 0.2, GAP_DETECTED, 45.0, 55.0)
+        profile = np.zeros(120, dtype=np.float32)
+        profile[64:67] = 1.0
+
+        result = apply_nearby_separator_refinement(
+            profile,
+            [measured],
+            pitch=100.0,
+            count=2,
+            refinement_config=NearbySeparatorRefinementParameters(),
+        )
+
+        self.assertIs(result.gaps[0], measured)
+
+    def test_nearby_refinement_can_promote_model_gap_to_observed_band(self) -> None:
+        model = Gap(1, 50.0, 0.0, GAP_EQUAL, 49.0, 51.0)
+        profile = np.zeros(120, dtype=np.float32)
+        profile[64:67] = 1.0
+
+        result = apply_nearby_separator_refinement(
+            profile,
+            [model],
+            pitch=100.0,
+            count=2,
+            refinement_config=NearbySeparatorRefinementParameters(),
+        )
+
+        promoted = result.gaps[0]
+        self.assertEqual(promoted.method, GAP_DETECTED)
+        self.assertEqual((promoted.start, promoted.end), (64.0, 67.0))
+        self.assertEqual(promoted.center, 65.0)
 
     def test_frame_fit_does_not_replace_irregular_separator_cuts_with_equal_pitch(self) -> None:
         frames = frame_boxes_from_gaps(

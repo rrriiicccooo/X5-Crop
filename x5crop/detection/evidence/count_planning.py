@@ -76,17 +76,22 @@ def _merged_separator_bands(
     hard_bands: list[SeparatorBand],
     width_bands: list[SeparatorBand],
 ) -> list[SeparatorBand]:
-    merged = sorted(hard_bands, key=lambda band: band.center)
-    for band in sorted(width_bands, key=lambda item: item.center):
+    merged: list[SeparatorBand] = []
+    ordered = [
+        *sorted(hard_bands, key=lambda band: float(band.score), reverse=True),
+        *sorted(width_bands, key=lambda band: float(band.score), reverse=True),
+    ]
+    for band in ordered:
         if any(
-            abs(float(existing.center) - float(band.center))
+            min(float(existing.end), float(band.end))
+            > max(float(existing.start), float(band.start))
+            or abs(float(existing.center) - float(band.center))
             <= max(float(existing.width), float(band.width)) * 0.5
             for existing in merged
         ):
             continue
         merged.append(band)
-        merged.sort(key=lambda item: item.center)
-    return merged
+    return sorted(merged, key=lambda item: item.center)
 
 
 def _placement_offsets(
@@ -158,7 +163,7 @@ def count_planning_evidence(
         separator_band_parameters,
         gap_search_parameters,
     )
-    hard_bands = sorted(hard_collection.bands, key=lambda band: band.center)
+    hard_bands = _merged_separator_bands(list(hard_collection.bands), [])
     inferred_count = len(hard_bands) + 1 if hard_bands else None
     supported_count = (
         int(inferred_count)

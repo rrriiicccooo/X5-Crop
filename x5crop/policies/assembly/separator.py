@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...constants import GAP_CONTENT, GAP_DETECTED, GAP_EDGE_PAIR, GAP_EQUAL, GAP_GRID
+from ...constants import GAP_CONTENT, GAP_DETECTED, GAP_EDGE_PAIR, GAP_EQUAL
 from ..parameters.aggregate import FormatParameters
 from ...strip_modes import FULL, PARTIAL
 from ..runtime.separator import (
@@ -27,15 +27,8 @@ def separator_geometry_support_policy(
         max_photo_width_cv=float(support.max_photo_width_cv),
         max_outer_area_ratio=float(support.max_outer_area_ratio),
     )
-    stable_grid_policy = SeparatorGeometrySupportModePolicy(
-        min_hard_ratio=float(support.stable_grid_min_hard_ratio),
-        max_equal_gaps=0,
-        max_photo_width_cv=float(support.max_photo_width_cv),
-        max_outer_area_ratio=float(support.max_outer_area_ratio),
-    )
     return SeparatorGeometrySupportPolicy(
         detected_geometry=mode_policy,
-        stable_grid=stable_grid_policy,
     )
 
 
@@ -66,7 +59,7 @@ def separator_refinement_policy(
             phase="primary",
             strip_modes=standard_strip_modes,
             target_gap_methods=(GAP_DETECTED, GAP_EDGE_PAIR),
-            model_promotion_gap_methods=(GAP_GRID, GAP_EQUAL, GAP_CONTENT),
+            model_promotion_gap_methods=(GAP_EQUAL, GAP_CONTENT),
         ),
         nearby=SeparatorRefinementFamilyPolicy(
             mode="conditional",
@@ -89,7 +82,6 @@ def separator_policy(
     edge_refine = params.separator.edge_refine_profile
     return SeparatorPolicy(
         support=params.separator.separator_support,
-        leading_grid_failure=params.separator.leading_grid_failure,
         width_profile=separator_width_profile_policy(
             detector_kind,
             params,

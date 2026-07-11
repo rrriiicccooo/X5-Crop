@@ -298,11 +298,29 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         for spec in FORMATS.values():
             policy = get_detection_policy(spec.format_id, "full")
             expected = (
-                ("detected_geometry", "stable_grid")
+                ("detected_geometry",)
                 if spec.physical_layout == "single_strip"
                 else ()
             )
             self.assertEqual(policy.separator.geometry_support.active_modes(), expected)
+
+    def test_active_detection_has_no_grid_gap_family(self) -> None:
+        banned = (
+            "GAP_GRID",
+            "grid_model_gap",
+            "stable_grid",
+            "leading_grid",
+            "grid_refine",
+            "grid_outer_refine",
+            "content_grid_placement",
+        )
+        offenders: list[str] = []
+        for path in (PROJECT_ROOT / "x5crop").rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for term in banned:
+                if term in text:
+                    offenders.append(f"{path.relative_to(PROJECT_ROOT)}: {term}")
+        self.assertEqual(offenders, [])
 
     def test_format_descriptions_do_not_claim_format_specific_separator_widths(self) -> None:
         path = PROJECT_ROOT / "x5crop" / "formats" / "descriptions.py"

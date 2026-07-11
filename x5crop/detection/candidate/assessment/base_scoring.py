@@ -334,7 +334,6 @@ def base_detection_assessment(
         "detected_gaps": gap_evidence.separator_support_count,
         "separator_support_count": gap_evidence.separator_support_count,
         "actual_detected_gaps": gap_evidence.direct_hard_gaps,
-        "grid_gaps": gap_evidence.grid_model_gaps,
         "reliable_gaps": gap_evidence.reliable_support_count,
         "reliable_support_count": gap_evidence.reliable_support_count,
         "equal_gaps": gap_evidence.equal_model_gaps,

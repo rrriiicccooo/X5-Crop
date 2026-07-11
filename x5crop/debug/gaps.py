@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_EQUAL, GAP_GRID
+from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_EQUAL
 from ..domain import Box, FinalDetection, Gap
 from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float
@@ -78,7 +78,6 @@ def draw_gap_overlay(rgb: np.ndarray, detection: FinalDetection, scale: float, d
     gap_colors = {
         GAP_DETECTED: (255, 0, 0),
         GAP_EDGE_PAIR: (255, 0, 0),
-        GAP_GRID: (255, 220, 30),
         GAP_EQUAL: (190, 80, 255),
     }
     pitch = float(detection.detail.get("pitch", 0.0) or 0.0)

@@ -30,7 +30,6 @@ from .outer import (
     EdgeAnchoredContentPositionParameters,
     FloatingContentPositionParameters,
     FullWidthSeparatorOuterParameters,
-    GridOuterRefineParameters,
     LongAxisGeometryCorrectionParameters,
     OuterAlignmentEvidenceParameters,
     OuterStrategyParameters,
@@ -50,7 +49,6 @@ from .scoring import (
     SeparatorSupportScoreParameters,
 )
 from .separator import (
-    LeadingGridFailureParameters,
     SeparatorGeometrySupportParameters,
     SeparatorSupportParameters,
     SeparatorWidthProfileParameters,
@@ -80,7 +78,6 @@ class OuterParameters:
     separator_outer_band: SeparatorOuterBandParameters = field(default_factory=SeparatorOuterBandParameters)
     separator_full_width_outer: FullWidthSeparatorOuterParameters = field(default_factory=FullWidthSeparatorOuterParameters)
     long_axis_geometry_correction: LongAxisGeometryCorrectionParameters = field(default_factory=LongAxisGeometryCorrectionParameters)
-    grid_outer_refine: GridOuterRefineParameters = field(default_factory=GridOuterRefineParameters)
     short_axis_geometry_correction: ShortAxisGeometryCorrectionParameters = field(default_factory=ShortAxisGeometryCorrectionParameters)
     content_containment_correction: ContentContainmentCorrectionParameters = field(default_factory=ContentContainmentCorrectionParameters)
     outer_alignment_evidence: OuterAlignmentEvidenceParameters = field(default_factory=OuterAlignmentEvidenceParameters)
@@ -89,7 +86,6 @@ class OuterParameters:
 @dataclass(frozen=True)
 class SeparatorParameters:
     separator_support: SeparatorSupportParameters = field(default_factory=SeparatorSupportParameters)
-    leading_grid_failure: LeadingGridFailureParameters = field(default_factory=LeadingGridFailureParameters)
     separator_geometry_support: SeparatorGeometrySupportParameters = field(default_factory=SeparatorGeometrySupportParameters)
     separator_width_profile: SeparatorWidthProfileParameters = field(default_factory=SeparatorWidthProfileParameters)
     separator_width_profile_search: SeparatorWidthProfileSearchParameters = field(default_factory=SeparatorWidthProfileSearchParameters)

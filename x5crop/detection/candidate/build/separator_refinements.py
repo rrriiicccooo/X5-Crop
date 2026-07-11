@@ -23,7 +23,6 @@ NEARBY_REFINEMENT_PENDING_REASON = "pending_nearby_separator_refinement"
 class PrimarySeparatorRefinementResult:
     gaps: list[Gap]
     edge_pair_correction_detail: dict[str, Any]
-    grid_detail: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -206,18 +205,9 @@ def apply_primary_separator_refinements(
         cache,
         policy,
     )
-    model_gap_alignment_detail = {
-        "family": "model_gap_alignment",
-        "used": False,
-        "grid_used": False,
-        "reason": "not_applied",
-        "input_count": len(gaps),
-        "output_count": len(edge_pair_refinement.gaps),
-    }
     return PrimarySeparatorRefinementResult(
         gaps=edge_pair_refinement.gaps,
         edge_pair_correction_detail=edge_pair_refinement.detail,
-        grid_detail=model_gap_alignment_detail,
     )
 
 
@@ -238,7 +228,6 @@ def apply_candidate_nearby_separator_refinement(
     count: int,
     strip_mode: str,
     explicit_count: bool,
-    origin: float,
     pitch: float,
     policy: DetectionPolicy,
 ) -> GapRefinementResult:
@@ -259,7 +248,6 @@ def apply_candidate_nearby_separator_refinement(
     refinement = refine_nearby_separator_gaps(
         profile,
         gaps,
-        origin,
         pitch,
         count,
         policy.separator.nearby_refinement,
@@ -288,7 +276,6 @@ def apply_nearby_separator_refinement_chain(
     explicit_count: bool,
     profile: np.ndarray,
     gaps: list[Gap],
-    origin: float,
     pitch: float,
     policy: DetectionPolicy,
 ) -> NearbySeparatorRefinementChainResult:
@@ -298,7 +285,6 @@ def apply_nearby_separator_refinement_chain(
         count,
         strip_mode,
         explicit_count,
-        origin,
         pitch,
         policy,
     )

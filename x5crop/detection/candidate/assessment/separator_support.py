@@ -6,30 +6,24 @@ from typing import Any
 from ....domain import DetectionCandidate
 from ...evidence.separator_summary import gap_method_evidence_summary
 from ....policies.runtime.policy import DetectionPolicy
-from ....policies.parameters.separator import (
-    LeadingGridFailureParameters,
-    SeparatorSupportParameters,
-)
+from ....policies.parameters.separator import SeparatorSupportParameters
 
 
 @dataclass(frozen=True)
 class SeparatorSupportEvidence:
     expected_gaps: int
     actual_detected_gaps: int
-    grid_gaps: int
     equal_gaps: int
     hard_gaps: int
     hard_gap_indexes: list[int]
     edge_pair_scores: list[float]
     detected_scores: list[float]
-    leading_grid_scores: list[float]
 
 
 @dataclass(frozen=True)
 class SeparatorSupportAssessment:
     ok: bool
     reason: str
-    leading_grid_failure: bool = False
 
 
 @dataclass(frozen=True)
@@ -100,59 +94,16 @@ def separator_support_all_internal_gaps_hard_assessment(
     return SeparatorSupportCheck(ok=ok, reason=reason)
 
 
-def hard_gap_indexes_are_tail_adjacent(
-    hard_indexes: list[int],
-    minimum_tail_index: int,
-) -> bool:
-    if not hard_indexes:
-        return False
-    expected_sequence = list(
-        range(max(hard_indexes) - len(hard_indexes) + 1, max(hard_indexes) + 1)
-    )
-    return (
-        hard_indexes == expected_sequence
-        and min(hard_indexes) >= minimum_tail_index
-    )
-
-
-def separator_support_leading_grid_failure_assessment(
-    detection: DetectionCandidate,
-    evidence: SeparatorSupportEvidence,
-    policy: LeadingGridFailureParameters,
-) -> bool:
-    return (
-        detection.strip_mode == "full"
-        and evidence.expected_gaps >= policy.min_expected_gaps
-        and len(evidence.leading_grid_scores) >= policy.leading_count
-        and all(
-            score < policy.low_score
-            for score in evidence.leading_grid_scores[:policy.leading_count]
-        )
-        and sum(
-            1
-            for score in evidence.leading_grid_scores[:policy.leading_count]
-            if score < policy.very_low_score
-        ) >= policy.very_low_count
-        and len(evidence.hard_gap_indexes) <= policy.max_hard_gaps
-        and hard_gap_indexes_are_tail_adjacent(
-            evidence.hard_gap_indexes,
-            policy.leading_count + 1,
-        )
-    )
-
-
 def separator_support_evidence_from_detection(detection: DetectionCandidate) -> SeparatorSupportEvidence:
     raw_gap_evidence = gap_method_evidence_summary(detection.gaps, reliable_min_score=0.0)
     return SeparatorSupportEvidence(
         expected_gaps=max(0, int(detection.count) - 1),
         actual_detected_gaps=raw_gap_evidence.direct_hard_gaps,
-        grid_gaps=raw_gap_evidence.grid_model_gaps,
         equal_gaps=raw_gap_evidence.equal_model_gaps,
         hard_gaps=raw_gap_evidence.hard_separator_gaps,
         hard_gap_indexes=list(raw_gap_evidence.hard_gap_indexes),
         edge_pair_scores=list(raw_gap_evidence.edge_pair_scores),
         detected_scores=list(raw_gap_evidence.detected_scores),
-        leading_grid_scores=list(raw_gap_evidence.leading_grid_scores),
     )
 
 
@@ -166,15 +117,12 @@ def separator_support_detail(
         "reason": assessment.reason,
         "expected_gaps": evidence.expected_gaps,
         "hard_gaps": evidence.hard_gaps,
-        "separator_support_count": evidence.hard_gaps + evidence.grid_gaps,
+        "separator_support_count": evidence.hard_gaps,
         "actual_detected_gaps": evidence.actual_detected_gaps,
-        "grid_gaps": evidence.grid_gaps,
         "equal_gaps": evidence.equal_gaps,
         "hard_gap_indexes": evidence.hard_gap_indexes,
         "edge_pair_scores": evidence.edge_pair_scores,
         "detected_scores": evidence.detected_scores,
-        "leading_grid_scores": evidence.leading_grid_scores,
-        "leading_grid_separator_failure": bool(assessment.leading_grid_failure),
         "policy_id": policy.policy_id,
     }
 
@@ -183,24 +131,12 @@ def separator_support_assessment(
     detection: DetectionCandidate,
     evidence: SeparatorSupportEvidence,
     support: SeparatorSupportParameters,
-    leading_grid_parameters: LeadingGridFailureParameters,
     default_count: int,
 ) -> SeparatorSupportAssessment:
-    leading_grid_failed = separator_support_leading_grid_failure_assessment(
-        detection,
-        evidence,
-        leading_grid_parameters,
-    )
-
     if evidence.expected_gaps == 0:
         support_assessment = SeparatorSupportCheck(
             ok=True,
             reason="single_frame_no_separator_needed",
-        )
-    elif leading_grid_failed:
-        support_assessment = SeparatorSupportCheck(
-            ok=False,
-            reason="leading_grid_separator_failure",
         )
     else:
         checks = [
@@ -223,7 +159,6 @@ def separator_support_assessment(
     return SeparatorSupportAssessment(
         ok=support_assessment.ok,
         reason=support_assessment.reason,
-        leading_grid_failure=leading_grid_failed,
     )
 
 
@@ -237,7 +172,6 @@ def assess_separator_support(
         detection,
         evidence,
         support,
-        policy.separator.leading_grid_failure,
         policy.physical_spec.default_count,
     )
 

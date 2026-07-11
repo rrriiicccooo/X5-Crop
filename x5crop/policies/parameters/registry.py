@@ -372,7 +372,6 @@ def _with_candidate_scoring_profile(
     separator_weight: float | None = None,
     geometry_weight: float | None = None,
     content_weight: float | None = None,
-    model_grid_credit: float | None = None,
     model_equal_credit: float | None = None,
     nearby_separator_score_multiplier: float | None = None,
 ) -> FormatParameters:
@@ -425,11 +424,6 @@ def _with_candidate_scoring_profile(
             ),
             separator_support_score=replace(
                 support_score,
-                model_grid_credit=(
-                    support_score.model_grid_credit
-                    if model_grid_credit is None
-                    else float(model_grid_credit)
-                ),
                 model_equal_credit=(
                     support_score.model_equal_credit
                     if model_equal_credit is None
@@ -468,7 +462,6 @@ def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
             separator_weight=0.36,
             geometry_weight=0.32,
             content_weight=0.32,
-            model_grid_credit=0.18,
             model_equal_credit=0.04,
             nearby_separator_score_multiplier=1.28,
         )
@@ -493,7 +486,6 @@ def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
         params = _with_candidate_scoring_profile(
             params,
             full_photo_width_cv=0.008,
-            model_grid_credit=0.25,
             model_equal_credit=0.08,
         )
         params = _with_content_min_run(params, 0.16)
@@ -515,7 +507,6 @@ def format_parameters(spec: FormatPhysicalSpec) -> FormatParameters:
     elif profile == "panoramic_35mm":
         params = _with_candidate_scoring_profile(
             params,
-            model_grid_credit=0.20,
             model_equal_credit=0.06,
         )
         params = _with_content_min_run(params, 0.24)

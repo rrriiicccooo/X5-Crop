@@ -688,18 +688,6 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                     offenders.append(f"{path.relative_to(PROJECT_ROOT)}:{line_number}")
         self.assertEqual(offenders, [])
 
-    def test_leading_grid_tail_boundary_is_derived_from_policy(self) -> None:
-        source = (
-            PROJECT_ROOT
-            / "x5crop"
-            / "detection"
-            / "candidate"
-            / "assessment"
-            / "separator_support.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("min(hard_indexes) >= 4", source)
-        self.assertIn("policy.leading_count + 1", source)
-
     def test_foundation_helpers_require_explicit_parameters(self) -> None:
         banned = (
             "params=None",

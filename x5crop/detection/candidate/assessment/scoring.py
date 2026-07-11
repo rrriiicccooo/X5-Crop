@@ -101,7 +101,6 @@ def separator_support_score(
         1.0,
         (
             evidence.hard_separator_gaps
-            + support_policy.model_grid_credit * evidence.grid_model_gaps
             + support_policy.model_equal_credit * evidence.equal_model_gaps
         )
         / float(max(1, evidence.expected_gaps)),
