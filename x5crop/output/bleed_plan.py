@@ -1,21 +1,21 @@
 from __future__ import annotations
 
 from math import ceil
-from ..domain import AxisBleedParameters, OutputProtectionPlan
-from ..policies.parameters.exposure_overlap import ExposureOverlapProtectionParameters
+from ..domain import AxisBleedParameters, OutputBleedPlan
+from ..policies.parameters.output import OverlapBleedParameters
 
 
 DEFAULT_OUTPUT_BLEED = AxisBleedParameters(long_axis=20, short_axis=10)
 
 
-def output_protection_plan(
+def output_bleed_plan(
     overlap_detected: bool,
     widest_overlap_band_px: float,
     base_bleed: AxisBleedParameters,
-    protection: ExposureOverlapProtectionParameters,
+    protection: OverlapBleedParameters,
     *,
     long_axis_bleed_capacity_px: int,
-) -> OutputProtectionPlan:
+) -> OutputBleedPlan:
     detected = bool(overlap_detected)
     widest_band = max(0.0, float(widest_overlap_band_px))
     required = 0
@@ -35,23 +35,23 @@ def output_protection_plan(
     )
     feasible = bool(not detected or required <= available)
     if not detected:
-        reason = "no_exposure_overlap"
+        reason = "no_inter_frame_overlap"
         output_long_axis = int(base_bleed.long_axis)
     elif feasible:
-        reason = "exposure_overlap_protection_planned"
+        reason = "inter_frame_overlap_bleed_planned"
         output_long_axis = max(int(base_bleed.long_axis), required)
     else:
-        reason = "exposure_overlap_exceeds_bleed_capacity"
+        reason = "inter_frame_overlap_exceeds_bleed_capacity"
         output_long_axis = available
-    return OutputProtectionPlan(
-        base_bleed=base_bleed,
-        output_bleed=AxisBleedParameters(
+    return OutputBleedPlan(
+        user_bleed=base_bleed,
+        effective_bleed=AxisBleedParameters(
             long_axis=output_long_axis,
             short_axis=int(base_bleed.short_axis),
         ),
-        exposure_overlap_detected=detected,
-        required_long_axis_bleed_px=required,
-        available_long_axis_bleed_px=available,
+        overlap_detected=detected,
+        overlap_required_long_axis_bleed_px=required,
+        long_axis_bleed_capacity_px=available,
         feasible=feasible,
         reason=reason,
     )

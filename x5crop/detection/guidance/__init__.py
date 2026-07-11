@@ -1,1 +1,1 @@
-"""Content-derived guidance and weak model candidates."""
+"""Content-derived crop-envelope guidance."""

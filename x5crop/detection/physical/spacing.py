@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..evidence.state import EvidenceState
+from x5crop.domain import EvidenceState, PixelInterval, sum_pixel_intervals
 from .boundary import HolderOcclusionEvidence
-from .intervals import PixelInterval, sum_pixel_intervals
 
 
 SPACING_KINDS = frozenset({"separator", "contact", "overlap", "unresolved"})
@@ -17,12 +16,16 @@ class InterFrameSpacingEvidence:
     kind: str
     signed_width_px: PixelInterval
     reason: str
+    lane_index: int | None = None
 
     def __post_init__(self) -> None:
         if self.index <= 0:
             raise ValueError("inter-frame spacing index must be positive")
         if self.kind not in SPACING_KINDS:
             raise ValueError(f"unsupported spacing kind: {self.kind}")
+        if self.lane_index is not None and self.lane_index <= 0:
+            raise ValueError("lane index must be positive")
+
 
 @dataclass(frozen=True)
 class SequenceConservationEvidence:
@@ -63,26 +66,6 @@ def inter_frame_spacing_evidence(
     )
 
 
-def derive_inter_frame_spacing(
-    *,
-    index: int,
-    anchor_span_px: PixelInterval,
-    frame_width_px: PixelInterval,
-    edge_occlusion_px: PixelInterval,
-) -> InterFrameSpacingEvidence:
-    signed = anchor_span_px.plus(edge_occlusion_px).minus(
-        frame_width_px.scaled(2.0)
-    )
-    evidence = inter_frame_spacing_evidence(index, signed)
-    return InterFrameSpacingEvidence(
-        evidence.index,
-        evidence.state,
-        evidence.kind,
-        evidence.signed_width_px,
-        f"{evidence.kind}_spacing_from_physical_frame_width",
-    )
-
-
 def sequence_conservation_evidence(
     *,
     visible_length_px: PixelInterval,
@@ -99,6 +82,16 @@ def sequence_conservation_evidence(
             PixelInterval.zero(),
             PixelInterval.zero(),
             PixelInterval.zero(),
+            PixelInterval.zero(),
+        )
+    if any(spacing.state == EvidenceState.CONTRADICTED for spacing in spacings):
+        return SequenceConservationEvidence(
+            EvidenceState.CONTRADICTED,
+            "inter_frame_spacing_equation_contradicted",
+            visible_length_px,
+            PixelInterval.zero(),
+            frame_width_px.scaled(float(count)),
+            sum_pixel_intervals(tuple(item.signed_width_px for item in spacings)),
             PixelInterval.zero(),
         )
     if any(spacing.state == EvidenceState.UNAVAILABLE for spacing in spacings):

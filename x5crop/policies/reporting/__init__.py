@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ..runtime.policy import DetectionPolicy
 
-from ...constants import HARD_GAP_METHODS, MODEL_GAP_METHODS
 from .mode_descriptions import mode_notes_for_spec, mode_role_for_spec
 
 
@@ -42,24 +41,20 @@ def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
     return {
         "preprocess": _plain(policy.preprocess),
         "detector_kind": policy.detector_kind,
-        "partial_count_offsets": list(policy.partial_count_offsets),
-        "outer": {
-            "proposal_families": {
-                "partial_placement": policy.outer.proposal.geometry.partial_placement.enabled,
-                "separator_geometry": True,
-            },
-            "correction": _plain(policy.outer.correction),
+        "sequence": {
+            "boundary_detection": _plain(policy.sequence.boundary_detection),
+            "hypothesis_budget": _plain(policy.candidate_plan.sequence_hypotheses),
         },
         "separator": {
-            "support_mode": "unified_physical_support",
-            "width_profile_mode": policy.separator.width_profile.mode,
-            "hard_methods": sorted(HARD_GAP_METHODS),
-            "model_methods": sorted(MODEL_GAP_METHODS),
+            "observation": _plain(policy.separator.observation),
+            "profile": _plain(policy.separator.profile),
+            "continuity": _plain(policy.separator.continuity),
+            "frame_dimensions": _plain(policy.separator.frame_dimension_estimate),
         },
         "content": {
             "evidence": _plain(policy.content.evidence),
             "profile": _plain(policy.content.profile),
-            "mask": _plain(policy.content.mask),
+            "sequence_alignment": _plain(policy.sequence.content_alignment),
         },
     }
 
@@ -75,12 +70,6 @@ def _candidate_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
                 "separator": policy.scoring.calibration.separator_weight,
             },
         },
-    }
-
-
-def _evidence_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    return {
-        "exposure_overlap_evidence": _plain(policy.exposure_overlap_evidence),
     }
 
 
@@ -103,9 +92,7 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "physical": _physical_detail(policy),
         "physical_runtime": _physical_runtime_detail(policy),
         "candidate_runtime": _candidate_runtime_detail(policy),
-        "evidence_runtime": _evidence_runtime_detail(policy),
         "output_runtime": {
-            "approved_geometry_adjustment": _plain(policy.approved_geometry_adjustment),
             "output": _plain(policy.output),
         },
         "diagnostics_runtime": _diagnostics_runtime_detail(policy),

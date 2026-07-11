@@ -6,7 +6,7 @@ import unittest
 
 from tools.tests.physical_gate_support import candidate_evidence_fixture
 from x5crop.detection.candidate.assessment.scoring import candidate_scores
-from x5crop.detection.physical.photo_size import photo_size_consistency_from_gap_edges
+from x5crop.domain import EvidenceState
 from x5crop.policies.registry import get_detection_policy
 
 
@@ -25,64 +25,50 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
         evidence = candidate_evidence_fixture()
         stable = candidate_scores(
             evidence,
-            "separator",
             0.5,
             policy.scoring,
             policy.content.support,
         )
-        variable_dimensions = replace(
-            evidence.frame_dimensions,
-            separator_width_cv=0.95,
-            separator_widths_px=(2.0, 20.0),
-        )
         variable = candidate_scores(
-            replace(evidence, frame_dimensions=variable_dimensions),
-            "separator",
+            replace(
+                evidence,
+                frame_dimensions=replace(
+                    evidence.frame_dimensions,
+                    separator_width_cv=0.95,
+                    separator_widths_px=(2.0, 20.0),
+                ),
+            ),
             0.5,
             policy.scoring,
             policy.content.support,
         )
         self.assertEqual(stable, variable)
 
-    def test_model_gaps_receive_less_credit_than_hard_separators(self) -> None:
+    def test_dimension_constrained_boundaries_do_not_gain_separator_credit(self) -> None:
         policy = get_detection_policy("135", "full")
         evidence = candidate_evidence_fixture()
         hard = candidate_scores(
             evidence,
-            "separator",
             0.0,
             policy.scoring,
             policy.content.support,
         )
-        model_sequence = replace(
+        constrained = replace(
             evidence.separator_sequence,
+            state=EvidenceState.UNAVAILABLE,
             hard_count=0,
-            model_count=1,
-            hard_indexes=(),
+            dimension_constrained_count=1,
+            hard_boundary_indexes=(),
+            missing_boundary_indexes=(1,),
             hard_scores=(),
         )
-        model = candidate_scores(
-            replace(evidence, separator_sequence=model_sequence),
-            "separator",
+        modeled = candidate_scores(
+            replace(evidence, separator_sequence=constrained),
             0.0,
             policy.scoring,
             policy.content.support,
         )
-        self.assertGreater(hard.separator, model.separator)
-
-    def test_photo_size_uses_separator_edges_not_center_pitch(self) -> None:
-        from tools.tests.physical_gate_support import separator_observation
-
-        result = photo_size_consistency_from_gap_edges(
-            [
-                separator_observation(1, 100.0, start=90.0, end=110.0),
-                separator_observation(2, 230.0, start=220.0, end=240.0),
-            ],
-            0.0,
-            120.0,
-            3,
-        )
-        self.assertEqual(result.photo_widths, (90.0, 110.0, 120.0))
+        self.assertGreater(hard.separator, modeled.separator)
 
 
 if __name__ == "__main__":

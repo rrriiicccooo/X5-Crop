@@ -5,9 +5,9 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class DeskewParameters:
-    min_outer_width: int = 100
-    outer_dark_threshold: int = 245
-    outer_min_fraction: float = 0.01
+    min_footprint_width: int = 100
+    footprint_dark_threshold: int = 245
+    footprint_min_fraction: float = 0.01
     sample_width_px: int = 350
     min_samples: int = 6
     max_samples: int = 24

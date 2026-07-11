@@ -17,16 +17,15 @@ class DualLaneDividerParameters:
 
 
 @dataclass(frozen=True)
-class ContentSeparatorGuidanceParameters:
-    max_hint_offset_ratio: float = 0.28
-    max_hint_offset_min: int = 18
-    max_hint_offset_max: int = 420
+class SequenceHypothesisParameters:
+    observation_budget: int = 10
+    maximum_hypotheses: int = 12
 
 
 @dataclass(frozen=True)
 class CandidatePlanParameters:
-    content_separator_guidance: ContentSeparatorGuidanceParameters = field(
-        default_factory=ContentSeparatorGuidanceParameters
+    sequence_hypotheses: SequenceHypothesisParameters = field(
+        default_factory=SequenceHypothesisParameters
     )
     dual_lane_divider: DualLaneDividerParameters = field(
         default_factory=DualLaneDividerParameters

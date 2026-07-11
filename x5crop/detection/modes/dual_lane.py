@@ -18,7 +18,7 @@ from ..candidate.selection.model import SelectionResult
 from ..context import DetectionContext
 from ..geometry import CandidateGeometry
 from ..physical.boundary import canvas_boundary_observations
-from ..physical.spans import CropEnvelope, HolderSpan, VisibleSequenceSpan
+from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from .dual_lane_split import LaneDividerProposal, lane_divider_proposals
 
 
@@ -109,18 +109,18 @@ def _parent_candidate(
         max(box.right for box in crop_boxes),
         max(box.bottom for box in crop_boxes),
     )
-    separators = []
-    index_offset = 0
+    observations = []
     for lane, candidate in zip(lane_boxes, lane_candidates):
-        for observation in candidate.geometry.separators:
-            separators.append(
+        for observation in candidate.geometry.separator_observations:
+            observations.append(
                 replace(
                     observation,
-                    index=index_offset + observation.index,
+                    start=float(observation.start) + float(lane.left),
+                    end=float(observation.end) + float(lane.left),
+                    center=float(observation.center) + float(lane.left),
                     lane_box=lane,
                 )
             )
-        index_offset += max(0, candidate.geometry.count - 1)
     count = sum(candidate.geometry.count for candidate in lane_candidates)
     work_height, work_width = context.measurement_cache.gray_work.shape
     return BuiltCandidate(
@@ -135,13 +135,12 @@ def _parent_candidate(
             visible_sequence_span=VisibleSequenceSpan(visible_sequence_span),
             crop_envelope=CropEnvelope(crop_envelope),
             frames=frames,
-            separators=tuple(separators),
-            origin=float(visible_sequence_span.left),
-            pitch=min(candidate.geometry.pitch for candidate in lane_candidates),
-            offset_fraction=0.0,
+            separator_observations=tuple(observations),
+            separator_assignments=(),
+            frame_boundaries=(),
+            frame_dimension_estimate=lane_candidates[0].geometry.frame_dimension_estimate,
             source=CANDIDATE_SOURCE_DUAL_LANE,
             automatic_processing_supported=divider.source != "center_safety",
-            contract="dual_lane_component_evidence",
             sequence_hypothesis_name="measured_lane_divider",
             sequence_hypothesis_strategy="dual_lane_sequence",
             sequence_provenance=MeasurementProvenance(
@@ -154,13 +153,14 @@ def _parent_candidate(
                 work_height,
             ),
             lane_boxes=lane_boxes,
+            lane_crop_envelopes=tuple(
+                CropEnvelope(box) for box in crop_boxes
+            ),
         ),
         count_hypothesis=CountHypothesis(
             count=count,
             strip_mode="full",
-            offsets=(),
-            placement_source=divider.source,
-            source="physical_spec",
+            source=divider.source,
             allowed_by_physical_spec=count
             in physical_spec.allowed_counts,
         ),

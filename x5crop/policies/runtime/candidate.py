@@ -6,7 +6,6 @@ from ..parameters.scoring import (
     BaseDetectionScoreParameters,
     GeometrySupportScoreParameters,
     ScoringCalibrationParameters,
-    SeparatorSupportScoreParameters,
 )
 
 
@@ -15,4 +14,3 @@ class ScoringPolicy:
     calibration: ScoringCalibrationParameters
     base_detection: BaseDetectionScoreParameters
     geometry_support: GeometrySupportScoreParameters
-    separator_support: SeparatorSupportScoreParameters

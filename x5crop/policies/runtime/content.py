@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from ..parameters.content import (
     ContentEvidenceParameters,
-    ContentMaskParameters,
     ContentProfileParameters,
     ContentSupportParameters,
 )
@@ -14,5 +13,4 @@ from ..parameters.content import (
 class ContentPolicy:
     evidence: ContentEvidenceParameters
     profile: ContentProfileParameters
-    mask: ContentMaskParameters
     support: ContentSupportParameters

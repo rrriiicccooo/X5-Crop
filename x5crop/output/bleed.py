@@ -27,7 +27,7 @@ def output_bleed_geometry(
         for frame in geometry.frames
     )
     return OutputGeometry(
-        outer=geometry.outer,
+        crop_envelope=geometry.crop_envelope,
         frames=tuple(
             map_work_box(frame, layout, image_width, image_height)
             for frame in frames

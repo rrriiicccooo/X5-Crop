@@ -5,17 +5,16 @@ from typing import TYPE_CHECKING
 
 from ...cache import MeasurementCache
 from ...domain import Box
-from ...gap_methods import is_hard_gap_method
-from ...policies.parameters.outer import OuterAlignmentEvidenceParameters
+from ...policies.parameters.sequence import SequenceContentAlignmentParameters
 from ...utils import bbox_from_mask, clamp_int
-from .state import EvidenceState
+from x5crop.domain import EvidenceState
 
 if TYPE_CHECKING:
     from ..geometry import CandidateGeometry
 
 
 @dataclass(frozen=True)
-class OuterAlignmentEvidence:
+class SequenceContentAlignmentEvidence:
     state: EvidenceState
     reason: str
     visible_sequence_span: Box
@@ -31,24 +30,20 @@ class OuterAlignmentEvidence:
     bottom_slack_px: int
     border_tonal_fraction: tuple[tuple[str, float], ...]
 
-    @property
-    def confirmed_undercrop(self) -> bool:
-        return bool(self.confirmed_undercrop_sides)
-
-def outer_content_alignment_evidence(
+def sequence_content_alignment_evidence(
     geometry: CandidateGeometry,
     cache: MeasurementCache,
-    parameters: OuterAlignmentEvidenceParameters,
-) -> OuterAlignmentEvidence:
+    parameters: SequenceContentAlignmentParameters,
+) -> SequenceContentAlignmentEvidence:
     if cache.layout != geometry.layout:
-        raise ValueError("outer alignment requires matching analysis cache")
+        raise ValueError("sequence alignment requires matching measurement cache")
     work_height, work_width = cache.gray_work.shape
-    film = geometry.visible_sequence_span.box.clamp(work_width, work_height)
-    if not film.valid():
-        return OuterAlignmentEvidence(
+    sequence_box = geometry.visible_sequence_span.box.clamp(work_width, work_height)
+    if not sequence_box.valid():
+        return SequenceContentAlignmentEvidence(
             EvidenceState.UNAVAILABLE,
-            "invalid_film_span",
-            film,
+            "invalid_visible_sequence_span",
+            sequence_box,
             None,
             (),
             (),
@@ -72,10 +67,10 @@ def outer_content_alignment_evidence(
         if box is not None and box.valid():
             measured.append((f"gray_lt_{threshold}", box))
     if not measured:
-        return OuterAlignmentEvidence(
+        return SequenceContentAlignmentEvidence(
             EvidenceState.UNAVAILABLE,
             "content_span_unavailable",
-            film,
+            sequence_box,
             None,
             (),
             (),
@@ -90,32 +85,32 @@ def outer_content_alignment_evidence(
         )
 
     content = measured[0][1]
-    pitch = float(film.width) / float(max(1, geometry.count))
+    pitch = float(sequence_box.width) / float(max(1, geometry.count))
     long_threshold = clamp_int(
         pitch * parameters.long_threshold_ratio,
         parameters.long_threshold_min,
         parameters.long_threshold_max,
     )
     short_threshold = clamp_int(
-        float(film.height) * parameters.short_threshold_ratio,
+        float(sequence_box.height) * parameters.short_threshold_ratio,
         parameters.short_threshold_min,
         parameters.short_threshold_max,
     )
     counts = {
         "left": sum(
-            max(0, film.left - box.left) >= long_threshold
+            max(0, sequence_box.left - box.left) >= long_threshold
             for _source, box in measured
         ),
         "right": sum(
-            max(0, box.right - film.right) >= long_threshold
+            max(0, box.right - sequence_box.right) >= long_threshold
             for _source, box in measured
         ),
         "top": sum(
-            max(0, film.top - box.top) >= short_threshold
+            max(0, sequence_box.top - box.top) >= short_threshold
             for _source, box in measured
         ),
         "bottom": sum(
-            max(0, box.bottom - film.bottom) >= short_threshold
+            max(0, box.bottom - sequence_box.bottom) >= short_threshold
             for _source, box in measured
         ),
     }
@@ -125,21 +120,21 @@ def outer_content_alignment_evidence(
         side for side, count in counts.items() if 0 < count < minimum
     )
 
-    leading_slack = max(0, content.left - film.left)
-    trailing_slack = max(0, film.right - content.right)
-    top_slack = max(0, content.top - film.top)
-    bottom_slack = max(0, film.bottom - content.bottom)
+    leading_slack = max(0, content.left - sequence_box.left)
+    trailing_slack = max(0, sequence_box.right - content.right)
+    top_slack = max(0, content.top - sequence_box.top)
+    bottom_slack = max(0, sequence_box.bottom - content.bottom)
     max_long_slack = max(leading_slack, trailing_slack)
     max_short_slack = max(top_slack, bottom_slack)
     long_slack_ratio = float(max_long_slack) / max(1.0, pitch)
-    short_slack_ratio = float(max_short_slack) / max(1.0, float(film.height))
+    short_slack_ratio = float(max_short_slack) / max(1.0, float(sequence_box.height))
 
-    crop = cache.gray_work[film.top : film.bottom, film.left : film.right]
+    crop = cache.gray_work[sequence_box.top : sequence_box.bottom, sequence_box.left : sequence_box.right]
     edge_band = max(
         int(parameters.border_band_min_px),
         min(
             int(parameters.border_band_max_px),
-            int(round(min(film.width, film.height) * parameters.border_band_ratio)),
+            int(round(min(sequence_box.width, sequence_box.height) * parameters.border_band_ratio)),
         ),
     )
     if crop.size:
@@ -161,13 +156,17 @@ def outer_content_alignment_evidence(
     else:
         tonal = ()
 
+    hard_boundary_indexes = {
+        boundary.boundary_index
+        for boundary in geometry.frame_boundaries
+        if boundary.hard_separator
+    }
     edge_hard_anchors = bool(
         geometry.strip_mode == "full"
-        and len(geometry.separators) >= 2
-        and is_hard_gap_method(geometry.separators[0].method)
-        and is_hard_gap_method(geometry.separators[-1].method)
+        and geometry.count > 2
+        and {1, geometry.count - 1}.issubset(hard_boundary_indexes)
     )
-    content_width_ratio = float(content.width) / max(1.0, float(film.width))
+    content_width_ratio = float(content.width) / max(1.0, float(sequence_box.width))
     white_edge_threshold = clamp_int(
         pitch * parameters.white_edge_long_ratio,
         parameters.white_edge_long_min,
@@ -180,7 +179,7 @@ def outer_content_alignment_evidence(
         and max_short_slack
         <= max(
             int(parameters.edge_short_min_px),
-            int(round(float(film.height) * parameters.edge_short_ratio)),
+            int(round(float(sequence_box.height) * parameters.edge_short_ratio)),
         )
         and (
             leading_slack >= white_edge_threshold
@@ -201,7 +200,7 @@ def outer_content_alignment_evidence(
         (not parameters.short_requires_hard_anchors or edge_hard_anchors)
         and (
             parameters.short_content_height_max >= 1.0
-            or float(content.height) / max(1.0, float(film.height))
+            or float(content.height) / max(1.0, float(sequence_box.height))
             <= parameters.short_content_height_max
         )
     )
@@ -213,17 +212,17 @@ def outer_content_alignment_evidence(
 
     if confirmed:
         state = EvidenceState.CONTRADICTED
-        reason = "content_outside_film_span_confirmed"
+        reason = "content_outside_visible_sequence_confirmed"
     elif unconfirmed:
         state = EvidenceState.UNAVAILABLE
         reason = "content_span_measurements_disagree"
     else:
         state = EvidenceState.SUPPORTED
-        reason = "content_inside_film_span"
-    return OuterAlignmentEvidence(
+        reason = "content_inside_visible_sequence"
+    return SequenceContentAlignmentEvidence(
         state=state,
         reason=reason,
-        visible_sequence_span=film,
+        visible_sequence_span=sequence_box,
         content_span=content,
         content_measurement_sources=tuple(source for source, _box in measured),
         confirmed_undercrop_sides=confirmed,

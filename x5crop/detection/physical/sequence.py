@@ -1,23 +1,42 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 import numpy as np
 
-from ....domain import MeasurementProvenance
-from ....geometry.detection_parameters import OuterBoxDetectionParameters
-from ..boundary import (
-    BoundaryObservation,
-    visible_sequence_and_crop_envelope,
-)
-from .common import unique_sequence_span_proposals
-from .side_boundary import boundary_observation_groups
-from .types import SequenceHypothesis
+from ...domain import BoundaryObservation, MeasurementProvenance, SequenceHypothesis
+from ...geometry.detection_parameters import BoundaryDetectionParameters
+from .boundary import visible_sequence_and_crop_envelope
+from .boundary_detection import boundary_observation_groups
+
+
+def unique_sequence_hypotheses(
+    candidates: Iterable[SequenceHypothesis],
+) -> list[SequenceHypothesis]:
+    seen: set[tuple[int, int, int, int, str, str]] = set()
+    result: list[SequenceHypothesis] = []
+    for candidate in candidates:
+        box = candidate.crop_envelope.box
+        key = (
+            box.left,
+            box.top,
+            box.right,
+            box.bottom,
+            candidate.provenance.root_measurement,
+            candidate.provenance.source,
+        )
+        if key in seen or not box.valid():
+            continue
+        seen.add(key)
+        result.append(candidate)
+    return result
 
 
 def _proposal_from_observations(
     name: str,
     observations: tuple[BoundaryObservation, ...],
     gray: np.ndarray,
-    parameters: OuterBoxDetectionParameters,
+    parameters: BoundaryDetectionParameters,
 ) -> SequenceHypothesis | None:
     try:
         visible, envelope = visible_sequence_and_crop_envelope(
@@ -61,25 +80,37 @@ def _mixed_safe_observations(
     measured = [
         observations for name, observations in groups if name != "full_canvas"
     ]
-    return tuple(
-        (
-            min(
-                (item for group in measured for item in group if item.side == side),
-                key=lambda item: item.position.minimum,
-            )
-            if side in {"leading", "top"}
-            else max(
-                (item for group in measured for item in group if item.side == side),
-                key=lambda item: item.position.maximum,
-            )
+    canvas = {
+        observation.side: observation
+        for name, observations in groups
+        if name == "full_canvas"
+        for observation in observations
+    }
+    result: list[BoundaryObservation] = []
+    for side in ("leading", "trailing", "top", "bottom"):
+        candidates = tuple(
+            observation
+            for observations in measured
+            for observation in observations
+            if observation.side == side
         )
-        for side in ("leading", "trailing", "top", "bottom")
-    )
+        if not candidates:
+            result.append(canvas[side])
+            continue
+        if side in {"leading", "top"}:
+            result.append(
+                min(candidates, key=lambda item: item.position.minimum)
+            )
+        else:
+            result.append(
+                max(candidates, key=lambda item: item.position.maximum)
+            )
+    return tuple(result)
 
 
 def base_sequence_span_candidates(
     gray: np.ndarray,
-    parameters: OuterBoxDetectionParameters,
+    parameters: BoundaryDetectionParameters,
 ) -> list[SequenceHypothesis]:
     groups = boundary_observation_groups(gray, parameters)
     proposals = [
@@ -101,6 +132,9 @@ def base_sequence_span_candidates(
         gray,
         parameters,
     )
-    if mixed is not None:
+    if mixed is not None and any(
+        observation.kind != "canvas_clip"
+        for observation in mixed.boundary_observations
+    ):
         proposals.append(mixed)
-    return unique_sequence_span_proposals(proposals)
+    return unique_sequence_hypotheses(proposals)

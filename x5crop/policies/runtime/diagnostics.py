@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from ..parameters.diagnostics import DebugGapOverlayParameters
+from ..parameters.diagnostics import SeparatorOverlayParameters
 
 
 @dataclass(frozen=True)
@@ -12,7 +12,7 @@ class DebugPanelPolicy:
 
 @dataclass(frozen=True)
 class RuntimeDiagnosticsPolicy:
-    debug_gap_overlay: DebugGapOverlayParameters
+    separator_overlay: SeparatorOverlayParameters
     debug_panels: tuple[str, ...] = (
         "original_gray",
         "debug_boxes",

@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import replace
-
 from ...context import DetectionContext
+from ....constants import CANDIDATE_SOURCE_FRAME_SEQUENCE
 from ...evidence.content.frame_support import frame_content_evidence
 from ...evidence.content.holder_texture import holder_texture_evidence
 from ...evidence.content.preservation import content_preservation_evidence
 from ...evidence.frame_coverage import frame_coverage_evidence
 from ...evidence.frame_sequence import frame_sequence_evidence
 from ...evidence.holder_occupancy import holder_occupancy_evidence
-from ...evidence.outer_alignment import outer_content_alignment_evidence
+from ...evidence.sequence_content_alignment import sequence_content_alignment_evidence
 from ...evidence.partial_edge import partial_edge_safety_evidence
-from ...evidence.state import EvidenceState
+from x5crop.domain import EvidenceState
 from ..model import (
     AssessedCandidate,
     BuiltCandidate,
@@ -34,8 +33,26 @@ def _boundary_proof_paths(
     evidence: CandidateEvidence,
 ) -> tuple[BoundaryProofPath, ...]:
     geometry = candidate.geometry
+    boundary_by_side = {
+        observation.side: observation
+        for observation in geometry.boundary_observations
+    }
+    sequence_boundary_supported = bool(
+        geometry.sequence_provenance.root_measurement
+        not in {
+            "holder_canvas",
+            "safety_geometry_model",
+            "review_only_mode",
+        }
+        and all(
+            side in boundary_by_side
+            and boundary_by_side[side].kind != "canvas_clip"
+            for side in ("leading", "trailing")
+        )
+    )
     common = bool(
-        evidence.frame_topology.state == EvidenceState.SUPPORTED
+        sequence_boundary_supported
+        and evidence.frame_topology.state == EvidenceState.SUPPORTED
         and evidence.frame_coverage.state == EvidenceState.SUPPORTED
         and evidence.content_preservation.state == EvidenceState.SUPPORTED
         and evidence.frame_sequence.conservation.state
@@ -44,28 +61,30 @@ def _boundary_proof_paths(
         in {EvidenceState.SUPPORTED, EvidenceState.NOT_APPLICABLE}
     )
     separator_led = bool(
-        geometry.source == "separator"
+        geometry.source == CANDIDATE_SOURCE_FRAME_SEQUENCE
         and geometry.count > 1
         and common
         and evidence.separator_sequence.state == EvidenceState.SUPPORTED
         and evidence.separator_continuity.state == EvidenceState.SUPPORTED
     )
     hard_anchor_count = evidence.separator_sequence.hard_count
-    single_frame_boundary_anchors = set(
-        geometry.sequence_provenance.boundary_anchors
-    )
+    measured_single_frame_boundaries = {
+        observation.side
+        for observation in geometry.boundary_observations
+        if observation.kind != "canvas_clip"
+    }
     single_frame_physical_boundaries = bool(
         geometry.count == 1
+        and sequence_boundary_supported
         and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
-        and geometry.sequence_provenance.root_measurement != "content_guidance"
         and evidence.content_preservation.state == EvidenceState.SUPPORTED
         and (
             evidence.frame_dimensions.calibration_used
-            or len(single_frame_boundary_anchors) >= 2
+            or len(measured_single_frame_boundaries) >= 2
         )
     )
     geometry_led = bool(
-        geometry.source == "separator"
+        geometry.source == CANDIDATE_SOURCE_FRAME_SEQUENCE
         and evidence.frame_topology.state == EvidenceState.SUPPORTED
         and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
         and (
@@ -73,13 +92,16 @@ def _boundary_proof_paths(
             or (
                 common
                 and geometry.count > 1
-                and hard_anchor_count >= 1
+                and (
+                    hard_anchor_count >= 1
+                    or sequence_boundary_supported
+                )
             )
         )
     )
     count_hypothesis = candidate.count_hypothesis
     partial_occupancy_led = bool(
-        geometry.source == "separator"
+        geometry.source == CANDIDATE_SOURCE_FRAME_SEQUENCE
         and geometry.strip_mode == "partial"
         and count_hypothesis is not None
         and count_hypothesis.allowed_by_physical_spec
@@ -140,28 +162,25 @@ def assess_candidate(
     physical_spec = context.policy.physical_spec
     if candidate.geometry.format_id != physical_spec.format_id:
         raise ValueError("candidate and detection context format do not match")
+    geometry = candidate.geometry
+    frame_sequence = frame_sequence_evidence(geometry)
     base = base_physical_assessment(
         context.measurement_cache.gray_work,
         candidate,
         physical_spec,
         context.scan_calibration,
+        frame_sequence,
         context.policy.scoring,
-        context.policy.separator.hard_gap_trust,
+        context.policy.separator.continuity,
     )
-    geometry = replace(
-        candidate.geometry,
-        separators=base.separator_continuity.observations,
-    )
-    candidate = replace(candidate, geometry=geometry)
     coverage = frame_coverage_evidence(
         geometry.holder_span,
         geometry.visible_sequence_span,
         geometry.frames,
-        physical_spec,
+        geometry.frame_dimension_estimate.width_px.midpoint,
         context.measurement_cache,
         context.policy.content,
     )
-    frame_sequence = frame_sequence_evidence(geometry, physical_spec)
     content = frame_content_evidence(
         geometry,
         context.measurement_cache,
@@ -173,10 +192,10 @@ def assess_candidate(
         content,
         context.policy.content.evidence,
     )
-    alignment = outer_content_alignment_evidence(
+    alignment = sequence_content_alignment_evidence(
         geometry,
         context.measurement_cache,
-        context.policy.outer.alignment_evidence,
+        context.policy.sequence.content_alignment,
     )
     sequence = separator_sequence_evidence(
         geometry,
@@ -189,7 +208,8 @@ def assess_candidate(
         holder_span=geometry.holder_span,
         visible_sequence_span=geometry.visible_sequence_span,
         frames=geometry.frames,
-        separators=geometry.separators,
+        frame_boundaries=geometry.frame_boundaries,
+        separator_assignments=geometry.separator_assignments,
         physical_spec=physical_spec,
         content_support_available=content.support_available,
         frame_coverage=coverage,
@@ -220,7 +240,7 @@ def assess_candidate(
         frame_content=content,
         holder_texture=holder_texture,
         content_preservation=preservation,
-        outer_alignment=alignment,
+        sequence_content_alignment=alignment,
         holder_occupancy=occupancy,
         partial_edge_safety=partial_edge,
         independence=independence,
@@ -229,7 +249,7 @@ def assess_candidate(
     diagnostics = list(candidate.build_diagnostics)
     diagnostics.extend(partial_edge.diagnostics)
     if alignment.overcontains_long_axis or alignment.overcontains_short_axis:
-        diagnostics.append("film_span_overcontains_holder_area")
+        diagnostics.append("sequence_span_overcontains_holder_area")
     if content.state == EvidenceState.UNAVAILABLE:
         diagnostics.append("frame_content_unavailable")
     if holder_texture.state == EvidenceState.CONTRADICTED:
@@ -247,7 +267,6 @@ def assess_candidate(
     )
     scores = candidate_scores(
         evidence,
-        geometry.source,
         base.confidence,
         context.policy.scoring,
         context.policy.content.support,

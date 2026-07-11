@@ -4,6 +4,7 @@ from dataclasses import fields
 from pathlib import Path
 import inspect
 import unittest
+from typing import get_type_hints
 
 from x5crop.debug.status import debug_status_parts
 from x5crop.detection.candidate.model import (
@@ -23,6 +24,8 @@ from x5crop.detection.pipeline import choose_detection
 from x5crop.export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from x5crop.report.result_builder import result_from_detection
 from x5crop.report.record import report_record_for_final_detection
+from x5crop.domain import CropEnvelope, VisibleSequenceSpan
+from x5crop.output.model import OutputGeometry
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -51,9 +54,10 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         self.assertTrue(AssessedCandidate.__dataclass_params__.frozen)
         self.assertNotIn("status", final_fields)
         self.assertNotIn("final_review_reasons", final_fields)
-        self.assertIn("trace", final_fields)
-        self.assertIn("work_film_span", final_fields)
-        self.assertIn("pitch", final_fields)
+        self.assertIn("selection", final_fields)
+        self.assertIn("visible_sequence_span", final_fields)
+        self.assertIn("crop_envelope", final_fields)
+        self.assertIn("output_bleed_plan", final_fields)
 
     def test_gate_outcomes_are_derived_from_canonical_checks(self) -> None:
         candidate_fields = set(CandidateGateAssessment.__dataclass_fields__)
@@ -70,6 +74,13 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         self.assertNotIn("frames", FinalDetection.__dict__)
         self.assertNotIn("gaps", FinalDetection.__dict__)
         self.assertNotIn("restore_current_schema", FinalDetection.__dict__)
+
+    def test_sequence_and_envelope_types_remain_canonical_through_output(self) -> None:
+        final_hints = get_type_hints(FinalDetection)
+        output_hints = get_type_hints(OutputGeometry)
+        self.assertIs(final_hints["visible_sequence_span"], VisibleSequenceSpan)
+        self.assertIs(final_hints["crop_envelope"], CropEnvelope)
+        self.assertIs(output_hints["crop_envelope"], CropEnvelope)
 
     def test_pipeline_returns_selection_without_pass_through_wrapper(self) -> None:
         import x5crop.detection.pipeline as pipeline
@@ -91,24 +102,36 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertNotIn("_count_hypothesis_identity", source)
 
-    def test_gap_and_guidance_flows_have_no_single_field_wrappers(self) -> None:
-        from x5crop.detection.candidate.build import separator_sources
-        from x5crop.detection.guidance import content_separator
-        from x5crop.detection.physical.separator import proposal
-        from x5crop.geometry import separator_width_profile
-        from x5crop.geometry import gap_search
+    def test_candidate_build_consumes_canonical_sequence_hypothesis(self) -> None:
+        from x5crop.detection.candidate.build.detection import (
+            build_frame_sequence_geometry,
+        )
 
-        for module, class_name in (
-            (separator_sources, "InitialSeparatorGapResult"),
-            (proposal, "SeparatorGapSearchResult"),
-            (content_separator, "ContentSeparatorGuidance"),
-            (
-                separator_width_profile,
-                "SeparatorWidthGapCandidateSearchResult",
-            ),
-            (gap_search, "GapRankingWeights"),
+        parameters = inspect.signature(build_frame_sequence_geometry).parameters
+        self.assertIn("sequence_hypothesis", parameters)
+        self.assertIn("count_hypothesis", parameters)
+        for duplicated_field in (
+            "count",
+            "strip_mode",
+            "visible_sequence_span",
+            "crop_envelope",
+            "sequence_hypothesis_name",
+            "sequence_hypothesis_strategy",
+            "sequence_provenance",
+            "boundary_observations",
         ):
-            self.assertFalse(hasattr(module, class_name), class_name)
+            self.assertNotIn(duplicated_field, parameters)
+
+    def test_removed_gap_and_outer_modules_do_not_exist(self) -> None:
+        for relative in (
+            "x5crop/gap_methods.py",
+            "x5crop/geometry/gap_search.py",
+            "x5crop/geometry/model_gaps.py",
+            "x5crop/geometry/separator_width_profile.py",
+            "x5crop/detection/physical/outer",
+            "x5crop/detection/candidate/build/separator_sources.py",
+        ):
+            self.assertFalse((PROJECT_ROOT / relative).exists(), relative)
 
     def test_output_surfaces_require_final_detection(self) -> None:
         functions = (

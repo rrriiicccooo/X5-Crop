@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...evidence.state import EvidenceState
+from x5crop.domain import EvidenceState
 from ...gate_checks import GateCheck
 
 

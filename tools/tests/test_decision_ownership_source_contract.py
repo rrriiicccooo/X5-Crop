@@ -18,8 +18,7 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
         parameters = signature(apply_decision_gate).parameters
         for name in (
             "selection",
-            "output_protection_plan",
-            "exposure_overlap",
+            "output_bleed_plan",
             "transform_geometry",
             "scan_calibration",
         ):

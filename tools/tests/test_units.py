@@ -88,33 +88,13 @@ class UnitModelTests(unittest.TestCase):
         self.assertEqual(length.resolve_px(calibration, axis="x", reference_px=4), 8)
         self.assertEqual(length.resolve_px(calibration, axis="x", reference_px=100), 20)
 
-    def test_separator_edge_margins_use_physical_length(self) -> None:
-        from x5crop.geometry.detection_parameters import (
-            SeparatorWidthProfileSearchParameters,
-        )
-        from x5crop.policies.parameters.outer import SeparatorOuterBandParameters
-
-        outer_margin = SeparatorOuterBandParameters().edge_margin
-        width_margin = SeparatorWidthProfileSearchParameters().edge_margin
-
-        self.assertIsInstance(outer_margin, PhysicalLength)
-        self.assertIsInstance(width_margin, PhysicalLength)
-        for parameters in (
-            SeparatorOuterBandParameters,
-            SeparatorWidthProfileSearchParameters,
-        ):
-            self.assertNotIn("edge_margin_ratio", parameters.__dataclass_fields__)
-
-    def test_output_edge_guard_uses_physical_length(self) -> None:
-        from x5crop.policies.parameters.exposure_overlap import (
-            EdgeBleedProtectionParameters,
+    def test_overlap_bleed_capacity_uses_physical_length(self) -> None:
+        from x5crop.policies.parameters.output import (
+            OverlapBleedParameters,
         )
 
-        parameters = EdgeBleedProtectionParameters()
-        self.assertIsInstance(parameters.guard, PhysicalLength)
-        self.assertNotIn("guard_ratio", parameters.__dataclass_fields__)
-        self.assertNotIn("guard_min", parameters.__dataclass_fields__)
-        self.assertNotIn("guard_max", parameters.__dataclass_fields__)
+        parameters = OverlapBleedParameters()
+        self.assertIsInstance(parameters.long_axis_bleed_capacity, PhysicalLength)
 
 if __name__ == "__main__":
     unittest.main()

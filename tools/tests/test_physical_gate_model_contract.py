@@ -8,7 +8,7 @@ import unittest
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.candidate.assessment.separator_support import separator_sequence_evidence
 from x5crop.detection.candidate.selection.choose import select_candidates
-from x5crop.detection.evidence.state import EvidenceState
+from x5crop.domain import EvidenceState
 from x5crop.entry.cli import build_parser
 from x5crop.policies.registry import get_detection_policy
 from x5crop.run_config import RunConfig
@@ -85,9 +85,10 @@ class PhysicalGateModelContractTest(unittest.TestCase):
     def test_final_reason_vocabulary_is_finite_and_physical(self) -> None:
         from x5crop.constants import FINAL_REVIEW_REASONS
 
-        self.assertEqual(len(FINAL_REVIEW_REASONS), 9)
+        self.assertEqual(len(FINAL_REVIEW_REASONS), 10)
         self.assertIn("content_preservation_unresolved", FINAL_REVIEW_REASONS)
         self.assertIn("boundary_evidence_insufficient", FINAL_REVIEW_REASONS)
+        self.assertIn("frame_sequence_not_conserved", FINAL_REVIEW_REASONS)
 
 
 if __name__ == "__main__":

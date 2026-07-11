@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import unittest
+from dataclasses import fields
 
 from tools.tests.physical_gate_support import (
     final_detection_fixture,
@@ -34,6 +35,22 @@ def _record() -> dict:
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_typed_read_model_serializes_every_typed_result_field(self) -> None:
+        from x5crop.domain import MeasurementProvenance, PixelInterval
+        from x5crop.domain import FrameDimensionEstimate
+        from x5crop.report.read_models import typed_read_model
+
+        value = FrameDimensionEstimate(
+            width_px=PixelInterval.exact(100.0),
+            height_px=PixelInterval.exact(80.0),
+            source="test",
+            provenance=MeasurementProvenance("frame_dimensions", "test", ()),
+        )
+        self.assertEqual(
+            set(typed_read_model(value)),
+            {field.name for field in fields(FrameDimensionEstimate)},
+        )
+
     def test_final_detection_has_no_schema_restoration_wrapper(self) -> None:
         self.assertNotIn("restore", FinalDetection.__dict__)
 
@@ -112,7 +129,7 @@ class OutputReadModelContractTest(unittest.TestCase):
     def test_schema_identity_is_descriptive_not_version_named(self) -> None:
         record = _record()
         self.assertEqual(record["schema_id"], "detection_report")
-        self.assertEqual(record["schema_revision"], "physical_resolution")
+        self.assertEqual(record["schema_revision"], "frame_sequence_geometry")
         self.assertNotIn("v4", record["schema_revision"])
 
     def test_process_result_has_one_record_surface(self) -> None:
@@ -125,9 +142,11 @@ class OutputReadModelContractTest(unittest.TestCase):
                 "status",
                 "confidence",
                 "final_review_reasons",
-                "output_geometry.outer_box",
+                "output_geometry.crop_envelope",
                 "output_geometry.frame_boxes",
                 "separator_observations",
+                "separator_assignments",
+                "frame_boundaries",
             ),
         )
 

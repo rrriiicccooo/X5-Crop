@@ -6,8 +6,10 @@ import unittest
 from tools.tests.physical_gate_support import candidate_fixture, separator_observation
 from x5crop.detection.candidate.assessment.dual_lane import assess_dual_lane_candidate
 from x5crop.detection.candidate.model import BuiltCandidate
-from x5crop.detection.evidence.state import EvidenceState
-from x5crop.detection.physical.spans import CropEnvelope, HolderSpan, VisibleSequenceSpan
+from x5crop.domain import EvidenceState
+from x5crop.domain import PixelInterval
+from x5crop.detection.physical.spacing import inter_frame_spacing_evidence
+from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from x5crop.domain import Box, MeasurementProvenance
 
 
@@ -21,10 +23,12 @@ def _parent(lane):
         visible_sequence_span=VisibleSequenceSpan(Box(0, 0, 400, 100)),
         crop_envelope=CropEnvelope(Box(0, 0, 400, 100)),
         frames=frames,
-        separators=(
-            separator_observation(1, 100.0, start=95.0, end=105.0),
-            separator_observation(2, 200.0, start=195.0, end=205.0),
+        separator_observations=(
+            separator_observation(100.0, start=95.0, end=105.0),
+            separator_observation(200.0, start=195.0, end=205.0),
         ),
+        separator_assignments=(),
+        frame_boundaries=(),
         sequence_provenance=MeasurementProvenance(
             "lane_divider_profile",
             "measured_gutter",
@@ -61,6 +65,33 @@ class DualLaneAssessmentTest(unittest.TestCase):
         )
         self.assertFalse(hasattr(assessed, "status"))
         self.assertFalse(hasattr(assessed, "final_review_reasons"))
+
+    def test_dual_lane_preserves_lane_scoped_overlap_spacing(self) -> None:
+        first = candidate_fixture()
+        second = candidate_fixture()
+        second = replace(
+            second,
+            assessment=replace(
+                second.assessment,
+                evidence=replace(
+                    second.assessment.evidence,
+                    frame_sequence=replace(
+                        second.assessment.evidence.frame_sequence,
+                        spacings=(
+                            inter_frame_spacing_evidence(
+                                1,
+                                PixelInterval.exact(-8.0),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        assessed = assess_dual_lane_candidate(_parent(first), (first, second))
+        spacings = assessed.assessment.evidence.frame_sequence.spacings
+        overlap = next(spacing for spacing in spacings if spacing.kind == "overlap")
+        self.assertEqual(overlap.lane_index, 2)
+        self.assertEqual(overlap.signed_width_px, PixelInterval.exact(-8.0))
 
 
 if __name__ == "__main__":

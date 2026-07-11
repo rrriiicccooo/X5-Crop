@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from x5crop.constants import CANDIDATE_SOURCE_FRAME_SEQUENCE
 from x5crop.detection.candidate.assessment.candidate_gate import (
     BoundaryProofPath,
     CandidateGateAssessment,
@@ -32,7 +33,6 @@ from x5crop.detection.evidence.content.frame_support import (
 )
 from x5crop.detection.evidence.content.holder_texture import HolderTextureEvidence
 from x5crop.detection.evidence.content.preservation import ContentPreservationEvidence
-from x5crop.detection.evidence.exposure_overlap import ExposureOverlapEvidence
 from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
 from x5crop.detection.evidence.frame_sequence import FrameSequenceEvidence
 from x5crop.detection.evidence.frame_topology import FrameTopologyEvidence
@@ -40,53 +40,56 @@ from x5crop.detection.evidence.holder_occupancy import (
     HolderOccupancyEvidence,
     StripCompletenessEvidence,
 )
-from x5crop.detection.evidence.outer_alignment import OuterAlignmentEvidence
+from x5crop.detection.evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
 from x5crop.detection.evidence.separator_continuity import SeparatorContinuityEvidence
-from x5crop.detection.evidence.state import EvidenceState
+from x5crop.domain import EvidenceState
 from x5crop.detection.evidence.transform_geometry import TransformGeometryEvidence
 from x5crop.detection.gate_checks import GateCheck
 from x5crop.detection.geometry import CandidateGeometry
 from x5crop.detection.physical.photo_size import FrameDimensionEvidence
 from x5crop.detection.physical.boundary import HolderOcclusionEvidence
-from x5crop.detection.physical.intervals import PixelInterval
+from x5crop.domain import PixelInterval
 from x5crop.detection.physical.spacing import (
     SequenceConservationEvidence,
     inter_frame_spacing_evidence,
 )
-from x5crop.detection.physical.boundary import canvas_boundary_observations
-from x5crop.detection.physical.spans import CropEnvelope, HolderSpan, VisibleSequenceSpan
+from x5crop.domain import BoundaryObservation
+from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
+from x5crop.detection.physical.separator.assignment import (
+    assign_observation_to_boundary,
+    frame_boundary_from_assignment,
+)
+from x5crop.domain import SeparatorBandObservation
 from x5crop.domain import (
     AxisBleedParameters,
     Box,
+    FrameDimensionEstimate,
     MeasurementProvenance,
-    OutputProtectionPlan,
-    SeparatorBandObservation,
+    OutputBleedPlan,
 )
 from x5crop.units import ScanCalibration
 
 
 def separator_observation(
-    index: int,
     center: float,
     score: float = 1.0,
-    method: str = "detected",
     start: float | None = None,
     end: float | None = None,
 ) -> SeparatorBandObservation:
+    start = float(center - 1.0 if start is None else start)
+    end = float(center + 1.0 if end is None else end)
     return SeparatorBandObservation(
-        index=index,
+        start=start,
+        end=end,
         center=center,
         score=score,
-        method=method,
         provenance=MeasurementProvenance(
             root_measurement="separator_profile",
             source="test_fixture",
             dependencies=("gray_work",),
         ),
-        start=start,
-        end=end,
-        tonal_evidence=score if method != "equal" else None,
+        tonal_evidence=score,
     )
 
 
@@ -138,7 +141,7 @@ def candidate_evidence_fixture(
     frames = (Box(0, 0, 100, 100), Box(100, 0, 200, 100))
     holder = HolderSpan(outer)
     film = VisibleSequenceSpan(outer)
-    completeness = StripCompletenessEvidence(True, True, 2, 2, 2, 1, 1)
+    completeness = StripCompletenessEvidence(True, True, 2, 2, 2, 1, 1, 1)
     return CandidateEvidence(
         frame_topology=FrameTopologyEvidence(
             EvidenceState.SUPPORTED,
@@ -192,7 +195,7 @@ def candidate_evidence_fixture(
             EvidenceState.SUPPORTED,
             "supported",
             (),
-            (separator_observation(1, 100.0, start=95.0, end=105.0),),
+            (separator_observation(100.0, start=95.0, end=105.0),),
             0.62,
             0.55,
         ),
@@ -244,7 +247,7 @@ def candidate_evidence_fixture(
             (("left",) if content_preservation == EvidenceState.CONTRADICTED else ()),
             EvidenceState.NOT_APPLICABLE,
         ),
-        outer_alignment=OuterAlignmentEvidence(
+        sequence_content_alignment=SequenceContentAlignmentEvidence(
             EvidenceState.SUPPORTED,
             "content_contained",
             outer,
@@ -309,6 +312,14 @@ def candidate_fixture(
 ) -> AssessedCandidate:
     outer = Box(0, 0, 200, 100)
     frames = (Box(0, 0, 100, 100), Box(100, 0, 200, 100))
+    observation = separator_observation(100.0, start=95.0, end=105.0)
+    assignment = assign_observation_to_boundary(
+        1,
+        observation,
+        PixelInterval(80.0, 120.0),
+    )
+    assignment = replace(assignment, used_for_boundary=True)
+    boundary = frame_boundary_from_assignment(assignment)
     geometry = CandidateGeometry(
         format_id="135",
         layout="horizontal",
@@ -318,13 +329,21 @@ def candidate_fixture(
         visible_sequence_span=VisibleSequenceSpan(outer),
         crop_envelope=CropEnvelope(outer),
         frames=frames,
-        separators=(separator_observation(1, 100.0, start=95.0, end=105.0),),
-        origin=0.0,
-        pitch=100.0,
-        offset_fraction=0.0,
-        source="separator",
+        separator_observations=(observation,),
+        separator_assignments=(assignment,),
+        frame_boundaries=(boundary,),
+        frame_dimension_estimate=FrameDimensionEstimate(
+            PixelInterval.exact(100.0),
+            PixelInterval.exact(100.0),
+            "test_fixture",
+            MeasurementProvenance(
+                "frame_dimensions",
+                "test_fixture",
+                ("format_physical_spec",),
+            ),
+        ),
+        source=CANDIDATE_SOURCE_FRAME_SEQUENCE,
         automatic_processing_supported=automatic_processing_supported,
-        contract="physical_boundary_evidence",
         sequence_hypothesis_name="synthetic_sequence",
         sequence_hypothesis_strategy="boundary_led",
         sequence_provenance=MeasurementProvenance(
@@ -333,15 +352,31 @@ def candidate_fixture(
             ("gray_work",),
             ("left", "right"),
         ),
-        boundary_observations=canvas_boundary_observations(200, 100),
+        boundary_observations=tuple(
+            BoundaryObservation(
+                side,
+                PixelInterval.exact(position),
+                "tonal_transition",
+                MeasurementProvenance(
+                    "holder_boundary_profile",
+                    "synthetic_boundary",
+                    ("gray_work",),
+                    (side,),
+                ),
+            )
+            for side, position in (
+                ("leading", 1.0),
+                ("trailing", 199.0),
+                ("top", 1.0),
+                ("bottom", 99.0),
+            )
+        ),
     )
     return AssessedCandidate(
         geometry=geometry,
         count_hypothesis=CountHypothesis(
             count=2,
             strip_mode="full",
-            offsets=(0.0,),
-            placement_source="test_fixture",
             source="test_fixture",
             allowed_by_physical_spec=True,
         ),
@@ -388,8 +423,8 @@ def selection_fixture(
     )
 
 
-def output_protection_fixture(*, feasible: bool = True) -> OutputProtectionPlan:
-    return OutputProtectionPlan(
+def output_bleed_fixture(*, feasible: bool = True) -> OutputBleedPlan:
+    return OutputBleedPlan(
         AxisBleedParameters(20, 10),
         AxisBleedParameters(40 if feasible else 50, 10),
         True,
@@ -397,9 +432,9 @@ def output_protection_fixture(*, feasible: bool = True) -> OutputProtectionPlan:
         50,
         feasible,
         (
-            "exposure_overlap_protection_planned"
+            "inter_frame_overlap_bleed_planned"
             if feasible
-            else "exposure_overlap_exceeds_bleed_capacity"
+            else "inter_frame_overlap_exceeds_bleed_capacity"
         ),
     )
 
@@ -414,7 +449,7 @@ def decide_candidate(
     candidate: AssessedCandidate | None = None,
     *,
     geometry_disagreement: bool = False,
-    output_protection_feasible: bool = True,
+    overlap_bleed_feasible: bool = True,
     transform_state: EvidenceState = EvidenceState.SUPPORTED,
 ) -> FinalDetection:
     return apply_decision_gate(
@@ -422,15 +457,7 @@ def decide_candidate(
             candidate,
             geometry_disagreement=geometry_disagreement,
         ),
-        output_protection_fixture(feasible=output_protection_feasible),
-        ExposureOverlapEvidence(
-            EvidenceState.UNAVAILABLE,
-            "no_exposure_overlap",
-            False,
-            0.0,
-            (),
-            (),
-        ),
+        output_bleed_fixture(feasible=overlap_bleed_feasible),
         transform_geometry_fixture(transform_state),
         ScanCalibration(None, None, "unavailable", False),
         image_width=200,

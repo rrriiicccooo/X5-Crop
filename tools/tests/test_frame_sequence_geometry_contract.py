@@ -2,31 +2,170 @@ from __future__ import annotations
 
 import unittest
 from dataclasses import fields
+from inspect import signature
 from pathlib import Path
 
-from x5crop.detection.evidence.state import EvidenceState
+import numpy as np
+
+from x5crop.domain import EvidenceState
 from x5crop.detection.physical.boundary import (
     BoundaryObservation,
     HolderOcclusionEvidence,
     visible_sequence_and_crop_envelope,
     holder_occlusion_evidence,
 )
-from x5crop.detection.physical.intervals import PixelInterval
+from x5crop.domain import PixelInterval
 from x5crop.detection.physical.spacing import (
-    derive_inter_frame_spacing,
     inter_frame_spacing_evidence,
     sequence_conservation_evidence,
 )
+from x5crop.detection.physical.separator.assignment import (
+    assign_observation_to_boundary,
+    build_frame_boundaries,
+    dimension_constrained_boundary,
+)
+from x5crop.detection.physical.separator.observations import (
+    measure_focused_separator_band,
+    measure_separator_bands,
+)
+from x5crop.domain import SeparatorBandObservation
+from x5crop.policies.parameters.separator import SeparatorObservationParameters
 from x5crop.domain import MeasurementProvenance
 from x5crop.domain import Box
 from x5crop.detection.geometry import CandidateGeometry
-from x5crop.detection.physical.spans import CropEnvelope, VisibleSequenceSpan
+from x5crop.domain import CropEnvelope, VisibleSequenceSpan
+from tools.tests.physical_gate_support import candidate_fixture, separator_observation
+from dataclasses import replace
+from x5crop.detection.evidence.frame_sequence import frame_sequence_evidence
+from x5crop.detection.physical.separator.assignment import frame_boundary_from_assignment
+from x5crop.domain import FrameDimensionEstimate
 
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class FrameSequenceGeometryContractTests(unittest.TestCase):
+    def test_raw_separator_observation_is_count_independent(self) -> None:
+        names = {field.name for field in fields(SeparatorBandObservation)}
+        self.assertNotIn("index", names)
+        self.assertNotIn("method", names)
+        parameters = signature(measure_separator_bands).parameters
+        self.assertNotIn("count", parameters)
+        self.assertNotIn("pitch", parameters)
+
+    def test_raw_measurement_keeps_oversized_tonal_run(self) -> None:
+        profile = np.zeros(200, dtype=np.float32)
+        profile[70:130] = 0.95
+        observations = measure_separator_bands(
+            profile,
+            corridor_start=0.0,
+            parameters=SeparatorObservationParameters(
+                profile_threshold=0.5,
+                minimum_run_px=1,
+                maximum_observations=8,
+            ),
+        )
+        self.assertEqual(len(observations), 1)
+        self.assertEqual(observations[0].width, 60.0)
+
+    def test_only_fully_contained_band_is_independent_separator_assignment(self) -> None:
+        provenance = MeasurementProvenance(
+            "separator_profile",
+            "synthetic",
+            ("gray_work",),
+        )
+        contained = SeparatorBandObservation(40.0, 50.0, 45.0, 0.9, provenance)
+        partial = SeparatorBandObservation(45.0, 65.0, 55.0, 0.9, provenance)
+        allowed = PixelInterval(35.0, 55.0)
+        accepted = assign_observation_to_boundary(1, contained, allowed)
+        dependent = assign_observation_to_boundary(1, partial, allowed)
+        self.assertTrue(accepted.independent)
+        self.assertFalse(dependent.independent)
+        self.assertTrue(dependent.geometry_dependent)
+
+    def test_width_contradicted_raw_band_remains_a_candidate_assignment(self) -> None:
+        observation = separator_observation(
+            175.0,
+            score=0.95,
+            start=160.0,
+            end=190.0,
+        )
+        result = build_frame_boundaries(
+            (observation,),
+            (),
+            VisibleSequenceSpan(Box(0, 0, 210, 100)),
+            2,
+            FrameDimensionEstimate(
+                PixelInterval.exact(100.0),
+                PixelInterval.exact(100.0),
+                "synthetic",
+                MeasurementProvenance(
+                    "frame_dimensions",
+                    "synthetic",
+                    ("physical_frame_size",),
+                ),
+            ),
+            HolderOcclusionEvidence.not_applicable(),
+        )
+        self.assertEqual(len(result.assignments), 1)
+        self.assertEqual(result.assignments[0].state, EvidenceState.CONTRADICTED)
+        self.assertFalse(result.assignments[0].used_for_boundary)
+
+    def test_selected_observation_boundaries_are_monotonic(self) -> None:
+        result = build_frame_boundaries(
+            (
+                separator_observation(180.0, score=0.99, start=175.0, end=185.0),
+                separator_observation(120.0, score=0.80, start=115.0, end=125.0),
+            ),
+            (),
+            VisibleSequenceSpan(Box(0, 0, 300, 100)),
+            3,
+            FrameDimensionEstimate(
+                PixelInterval(50.0, 150.0),
+                PixelInterval.exact(100.0),
+                "synthetic",
+                MeasurementProvenance(
+                    "frame_dimensions",
+                    "synthetic",
+                    ("physical_frame_size",),
+                ),
+            ),
+            HolderOcclusionEvidence.not_applicable(),
+        )
+        coordinates = tuple(boundary.coordinate for boundary in result.boundaries)
+        self.assertEqual(coordinates, tuple(sorted(coordinates)))
+
+    def test_focused_measurement_is_geometry_dependent_not_hard_evidence(self) -> None:
+        profile = np.zeros(200, dtype=np.float32)
+        profile[70:130] = 0.95
+        observation = measure_focused_separator_band(
+            profile,
+            PixelInterval(90.0, 110.0),
+            corridor_start=0.0,
+            parameters=SeparatorObservationParameters(
+                profile_threshold=0.5,
+                minimum_run_px=1,
+                maximum_observations=8,
+            ),
+        )
+        self.assertIsNotNone(observation)
+        assert observation is not None
+        self.assertEqual((observation.start, observation.end), (90.0, 110.0))
+        self.assertIn("frame_dimensions", observation.provenance.dependencies)
+
+    def test_dimension_constrained_boundary_is_never_hard_separator(self) -> None:
+        boundary = dimension_constrained_boundary(
+            1,
+            PixelInterval(95.0, 105.0),
+            MeasurementProvenance(
+                "frame_dimensions",
+                "bidirectional_constraint",
+                ("frame_size", "sequence_boundaries"),
+            ),
+        )
+        self.assertFalse(boundary.hard_separator)
+        self.assertEqual(boundary.source, "dimension_constrained")
+
     def test_boundary_uncertainty_separates_visible_span_and_crop_envelope(self) -> None:
         provenance = MeasurementProvenance(
             "holder_boundary_profile",
@@ -110,15 +249,45 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         self.assertEqual(evidence.leading.state, EvidenceState.SUPPORTED)
         self.assertEqual(evidence.leading.hidden_width_px, PixelInterval.exact(6.0))
 
-    def test_internal_spacing_uses_two_physical_frame_widths(self) -> None:
-        evidence = derive_inter_frame_spacing(
-            index=2,
-            anchor_span_px=PixelInterval.exact(212.0),
-            frame_width_px=PixelInterval.exact(100.0),
-            edge_occlusion_px=PixelInterval.zero(),
+    def test_missing_spacing_uses_adjacent_cut_equations_without_double_counting(self) -> None:
+        candidate = candidate_fixture()
+        observed = separator_observation(102.5, start=100.0, end=105.0)
+        assignment = assign_observation_to_boundary(
+            1,
+            observed,
+            PixelInterval(95.0, 110.0),
         )
-        self.assertEqual(evidence.kind, "separator")
-        self.assertEqual(evidence.signed_width_px, PixelInterval.exact(12.0))
+        assignment = replace(assignment, used_for_boundary=True)
+        boundaries = (
+            frame_boundary_from_assignment(assignment),
+            dimension_constrained_boundary(
+                2,
+                PixelInterval.exact(210.0),
+                MeasurementProvenance(
+                    "frame_dimensions",
+                    "bidirectional_constraint",
+                    ("frame_size", "sequence_boundaries"),
+                ),
+            ),
+        )
+        geometry = replace(
+            candidate.geometry,
+            count=3,
+            visible_sequence_span=VisibleSequenceSpan(Box(0, 0, 315, 100)),
+            crop_envelope=CropEnvelope(Box(0, 0, 315, 100)),
+            frame_boundaries=boundaries,
+            separator_observations=(observed,),
+            separator_assignments=(assignment,),
+            frame_dimension_estimate=FrameDimensionEstimate(
+                PixelInterval.exact(100.0),
+                PixelInterval.exact(100.0),
+                "test",
+                MeasurementProvenance("frame_dimensions", "test", ()),
+            ),
+        )
+        evidence = frame_sequence_evidence(geometry)
+        self.assertEqual(evidence.spacings[0].signed_width_px, PixelInterval.exact(5.0))
+        self.assertEqual(evidence.spacings[1].signed_width_px, PixelInterval.exact(10.0))
 
 
 if __name__ == "__main__":

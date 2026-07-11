@@ -3,22 +3,28 @@ from __future__ import annotations
 from typing import Any
 
 from ..detection.decision.model import DecisionGateAssessment, FinalDetection
-from ..detection.evidence.state import EvidenceState
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..detection.gate_checks import GateCheck
 from ..domain import (
     AxisBleedParameters,
     Box,
+    CropEnvelope,
+    DimensionConstrainedBoundary,
+    EvidenceState,
+    FrameBoundary,
     MeasurementProvenance,
-    OutputProtectionPlan,
+    OutputBleedPlan,
+    PixelInterval,
+    SeparatorAssignment,
     SeparatorBandObservation,
+    VisibleSequenceSpan,
 )
 from ..output.model import OutputGeometry
 from ..units import ScanCalibration
 from .validation import current_report_record_errors
 
 
-def _box_from_record(value: dict[str, Any]) -> Box:
+def _box(value: dict[str, Any]) -> Box:
     return Box(
         int(value["left"]),
         int(value["top"]),
@@ -27,56 +33,27 @@ def _box_from_record(value: dict[str, Any]) -> Box:
     )
 
 
-def _geometry_from_record(value: dict[str, Any]) -> OutputGeometry:
-    return OutputGeometry(
-        outer=_box_from_record(value["outer_box"]),
-        frames=tuple(_box_from_record(frame) for frame in value["frame_boxes"]),
+def _interval(value: dict[str, Any]) -> PixelInterval:
+    return PixelInterval(float(value["minimum"]), float(value["maximum"]))
+
+
+def _provenance(value: dict[str, Any]) -> MeasurementProvenance:
+    return MeasurementProvenance(
+        root_measurement=str(value["root_measurement"]),
+        source=str(value["source"]),
+        dependencies=tuple(str(item) for item in value["dependencies"]),
+        boundary_anchors=tuple(str(item) for item in value["boundary_anchors"]),
     )
 
 
-def _gate_check_from_record(value: dict[str, Any]) -> GateCheck:
-    return GateCheck(
-        code=str(value["code"]),
-        stage=str(value["stage"]),
-        state=EvidenceState(str(value["state"])),
-        consequence=str(value["consequence"]),
-        final_review_reason=(
-            None
-            if value["final_review_reason"] is None
-            else str(value["final_review_reason"])
-        ),
-    )
-
-
-def _decision_gate_from_record(value: dict[str, Any]) -> DecisionGateAssessment:
-    return DecisionGateAssessment(
-        checks=tuple(_gate_check_from_record(check) for check in value["checks"]),
-    )
-
-
-def _separator_observation_from_record(
-    value: dict[str, Any],
-) -> SeparatorBandObservation:
-    provenance = value["provenance"]
-    lane_box = value["lane_box"]
+def _observation(value: dict[str, Any]) -> SeparatorBandObservation:
     return SeparatorBandObservation(
-        index=int(value["index"]),
+        start=float(value["start"]),
+        end=float(value["end"]),
         center=float(value["center"]),
         score=float(value["score"]),
-        method=str(value["method"]),
-        provenance=MeasurementProvenance(
-            root_measurement=str(provenance["root_measurement"]),
-            source=str(provenance["source"]),
-            dependencies=tuple(
-                str(item) for item in provenance["dependencies"]
-            ),
-            boundary_anchors=tuple(
-                str(item) for item in provenance["boundary_anchors"]
-            ),
-        ),
-        start=(None if value["start"] is None else float(value["start"])),
-        end=(None if value["end"] is None else float(value["end"])),
-        lane_box=(None if lane_box is None else _box_from_record(lane_box)),
+        provenance=_provenance(value["provenance"]),
+        lane_box=None if value["lane_box"] is None else _box(value["lane_box"]),
         continuity=(
             None if value["continuity"] is None else float(value["continuity"])
         ),
@@ -88,29 +65,94 @@ def _separator_observation_from_record(
     )
 
 
-def _output_protection_from_record(
-    value: dict[str, Any],
-) -> OutputProtectionPlan:
-    base = value["base_bleed"]
-    output = value["output_bleed"]
-    return OutputProtectionPlan(
-        base_bleed=AxisBleedParameters(
-            int(base["long_axis"]),
-            int(base["short_axis"]),
+def _assignment(value: dict[str, Any]) -> SeparatorAssignment:
+    return SeparatorAssignment(
+        boundary_index=int(value["boundary_index"]),
+        observation=_observation(value["observation"]),
+        allowed_interval=_interval(value["allowed_interval"]),
+        state=EvidenceState(str(value["state"])),
+        geometry_dependent=bool(value["geometry_dependent"]),
+        used_for_boundary=bool(value["used_for_boundary"]),
+        reason=str(value["reason"]),
+    )
+
+
+def _frame_boundary(value: dict[str, Any]) -> FrameBoundary:
+    assignment = (
+        None if value["assignment"] is None else _assignment(value["assignment"])
+    )
+    constraint_value = value["dimension_constraint"]
+    constraint = (
+        None
+        if constraint_value is None
+        else DimensionConstrainedBoundary(
+            boundary_index=int(constraint_value["boundary_index"]),
+            position=_interval(constraint_value["position"]),
+            provenance=_provenance(constraint_value["provenance"]),
+            focused_observation=(
+                None
+                if constraint_value["focused_observation"] is None
+                else _observation(constraint_value["focused_observation"])
+            ),
+        )
+    )
+    return FrameBoundary(
+        boundary_index=int(value["boundary_index"]),
+        position=_interval(value["position"]),
+        source=str(value["source"]),
+        provenance=_provenance(value["provenance"]),
+        assignment=assignment,
+        dimension_constraint=constraint,
+    )
+
+
+def _output_geometry(value: dict[str, Any]) -> OutputGeometry:
+    return OutputGeometry(
+        crop_envelope=CropEnvelope(_box(value["crop_envelope"])),
+        frames=tuple(_box(frame) for frame in value["frame_boxes"]),
+    )
+
+
+def _decision_gate(value: dict[str, Any]) -> DecisionGateAssessment:
+    return DecisionGateAssessment(
+        checks=tuple(
+            GateCheck(
+                code=str(check["code"]),
+                stage=str(check["stage"]),
+                state=EvidenceState(str(check["state"])),
+                consequence=str(check["consequence"]),
+                final_review_reason=(
+                    None
+                    if check["final_review_reason"] is None
+                    else str(check["final_review_reason"])
+                ),
+            )
+            for check in value["checks"]
+        )
+    )
+
+
+def _output_bleed(value: dict[str, Any]) -> OutputBleedPlan:
+    user = value["user_bleed"]
+    effective = value["effective_bleed"]
+    return OutputBleedPlan(
+        user_bleed=AxisBleedParameters(
+            int(user["long_axis"]), int(user["short_axis"])
         ),
-        output_bleed=AxisBleedParameters(
-            int(output["long_axis"]),
-            int(output["short_axis"]),
+        effective_bleed=AxisBleedParameters(
+            int(effective["long_axis"]), int(effective["short_axis"])
         ),
-        exposure_overlap_detected=bool(value["exposure_overlap_detected"]),
-        required_long_axis_bleed_px=int(value["required_long_axis_bleed_px"]),
-        available_long_axis_bleed_px=int(value["available_long_axis_bleed_px"]),
+        overlap_detected=bool(value["overlap_detected"]),
+        overlap_required_long_axis_bleed_px=int(
+            value["overlap_required_long_axis_bleed_px"]
+        ),
+        long_axis_bleed_capacity_px=int(value["long_axis_bleed_capacity_px"]),
         feasible=bool(value["feasible"]),
         reason=str(value["reason"]),
     )
 
 
-def _scan_calibration_from_record(value: dict[str, Any]) -> ScanCalibration:
+def _scan_calibration(value: dict[str, Any]) -> ScanCalibration:
     return ScanCalibration(
         x_px_per_mm=(
             None if value["x_px_per_mm"] is None else float(value["x_px_per_mm"])
@@ -134,7 +176,7 @@ def transform_geometry_from_record(
         estimated_angle_degrees=float(value["estimated_angle_degrees"]),
         applied_angle_degrees=float(value["applied_angle_degrees"]),
         reason=str(value["reason"]),
-        span_px=(None if value["span_px"] is None else float(value["span_px"])),
+        span_px=None if value["span_px"] is None else float(value["span_px"]),
         span_threshold_px=(
             None
             if value["span_threshold_px"] is None
@@ -153,23 +195,24 @@ def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
         strip_mode=str(record["strip_mode"]),
         count=int(record["count"]),
         confidence=float(record["confidence"]),
-        work_film_span=_box_from_record(record["visible_sequence_span"]),
-        pitch=float(record["pitch"]),
-        decision_gate=_decision_gate_from_record(record["decision_gate"]),
-        decision_geometry=_geometry_from_record(record["decision_geometry"]),
-        output_geometry=_geometry_from_record(record["output_geometry"]),
+        visible_sequence_span=VisibleSequenceSpan(
+            _box(record["visible_sequence_span"]["box"])
+        ),
+        crop_envelope=CropEnvelope(_box(record["crop_envelope"]["box"])),
+        decision_gate=_decision_gate(record["decision_gate"]),
+        decision_geometry=_output_geometry(record["decision_geometry"]),
+        output_geometry=_output_geometry(record["output_geometry"]),
         separator_observations=tuple(
-            _separator_observation_from_record(observation)
-            for observation in record["separator_observations"]
+            _observation(item) for item in record["separator_observations"]
         ),
-        output_protection=_output_protection_from_record(
-            record["output"]["protection_plan"]
+        separator_assignments=tuple(
+            _assignment(item) for item in record["separator_assignments"]
         ),
-        scan_calibration=_scan_calibration_from_record(
-            record["scan_calibration"]
+        frame_boundaries=tuple(
+            _frame_boundary(item) for item in record["frame_boundaries"]
         ),
-        diagnostics=tuple(
-            str(item) for item in record["diagnostics"]["detection"]
-        ),
-        trace=None,
+        output_bleed_plan=_output_bleed(record["output"]["bleed_plan"]),
+        scan_calibration=_scan_calibration(record["scan_calibration"]),
+        diagnostics=tuple(str(item) for item in record["diagnostics"]["detection"]),
+        selection=None,
     )

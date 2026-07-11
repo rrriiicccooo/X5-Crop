@@ -8,7 +8,7 @@ from ....cache import MeasurementCache
 from ....domain import Box
 from ....policies.parameters.content import ContentEvidenceParameters
 from ...geometry import CandidateGeometry
-from ..state import EvidenceState
+from x5crop.domain import EvidenceState
 from .frame_support import FrameContentEvidence
 
 

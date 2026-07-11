@@ -10,8 +10,7 @@ from .read_models import (
     candidate_gate_read_model,
     candidate_table,
     decision_gate_detail,
-    exposure_overlap_read_model,
-    output_protection_read_model,
+    output_bleed_read_model,
     scan_calibration_read_model,
     selection_read_model,
     typed_read_model,
@@ -43,8 +42,7 @@ def report_record_for_final_detection(
     transform_geometry: TransformGeometryEvidence,
     analysis_reuse_signature: dict,
 ) -> dict:
-    trace = detection.require_trace()
-    selection = trace.selection
+    selection = detection.require_selection()
     selected_evidence = selection.selected.assessment.evidence
     selected_candidate = selection.selected
     record = {
@@ -62,8 +60,16 @@ def report_record_for_final_detection(
             if selection.count_resolution is None
             else typed_read_model(selection.count_resolution)
         ),
-        "visible_sequence_span": typed_read_model(detection.work_film_span),
-        "pitch": float(detection.pitch),
+        "holder_span": typed_read_model(selected_candidate.geometry.holder_span),
+        "visible_sequence_span": typed_read_model(
+            selected_candidate.geometry.visible_sequence_span
+        ),
+        "crop_envelope": typed_read_model(
+            selected_candidate.geometry.crop_envelope
+        ),
+        "boundary_observations": typed_read_model(
+            selected_candidate.geometry.boundary_observations
+        ),
         "strip_completeness": typed_read_model(
             selected_evidence.holder_occupancy.strip_completeness
         ),
@@ -72,15 +78,32 @@ def report_record_for_final_detection(
         "confidence": float(detection.confidence),
         "final_review_reasons": list(detection.final_review_reasons),
         "decision_geometry": {
-            "outer_box": typed_read_model(detection.decision_geometry.outer),
+            "crop_envelope": typed_read_model(
+                detection.decision_geometry.crop_envelope.box
+            ),
             "frame_boxes": typed_read_model(detection.decision_geometry.frames),
         },
         "output_geometry": {
-            "outer_box": typed_read_model(detection.output_geometry.outer),
+            "crop_envelope": typed_read_model(
+                detection.output_geometry.crop_envelope.box
+            ),
             "frame_boxes": typed_read_model(detection.output_geometry.frames),
         },
         "separator_observations": typed_read_model(
             detection.separator_observations
+        ),
+        "separator_assignments": typed_read_model(
+            detection.separator_assignments
+        ),
+        "frame_boundaries": typed_read_model(detection.frame_boundaries),
+        "holder_occlusion": typed_read_model(
+            selected_evidence.frame_sequence.holder_occlusion
+        ),
+        "inter_frame_spacing": typed_read_model(
+            selected_evidence.frame_sequence.spacings
+        ),
+        "sequence_conservation": typed_read_model(
+            selected_evidence.frame_sequence.conservation
         ),
         "candidate_table": candidate_table(detection),
         "selection": selection_read_model(detection),
@@ -88,9 +111,6 @@ def report_record_for_final_detection(
         "policy_id": policy_id,
         "evidence_summary": {
             **candidate_evidence_read_model(selected_candidate),
-            "exposure_overlap": exposure_overlap_read_model(
-                trace.exposure_overlap
-            ),
         },
         "candidate_gate": candidate_gate_read_model(selected_candidate),
         "decision_gate": decision_gate_detail(detection),
@@ -105,8 +125,8 @@ def report_record_for_final_detection(
             "detection": list(detection.diagnostics),
         },
         "output": {
-            "protection_plan": output_protection_read_model(
-                detection.output_protection
+            "bleed_plan": output_bleed_read_model(
+                detection.output_bleed_plan
             ),
             "output_files": list(output_files),
             "review_copy": review_copy,

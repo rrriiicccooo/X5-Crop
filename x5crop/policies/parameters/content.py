@@ -25,16 +25,6 @@ class ContentProfileParameters:
     mid_percentile_multiplier: float = 0.82
 
 @dataclass(frozen=True)
-class ContentMaskParameters:
-    p55_weight: float = 0.34
-    p75_multiplier: float = 0.78
-    threshold_min: float = 0.045
-    threshold_max: float = 0.45
-    percentiles: tuple[float, float, float] = (55.0, 75.0, 92.0)
-    bbox_min_fraction: float = 0.008
-    outer_expand_ratio: float = 0.002
-
-@dataclass(frozen=True)
 class ContentSupportParameters:
     coverage_norm: float = 0.22
     mean_norm: float = 0.16

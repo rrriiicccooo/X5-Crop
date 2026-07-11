@@ -7,7 +7,7 @@ from x5crop.detection.candidate.assessment.candidate_gate import (
     CandidateGateInput,
     candidate_gate_assessment,
 )
-from x5crop.detection.evidence.state import EvidenceState
+from x5crop.domain import EvidenceState
 
 
 def _path(code: str, state: EvidenceState) -> BoundaryProofPath:
@@ -101,13 +101,13 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
         gate = _gate(
             diagnostics=(
                 "separator_width_varies",
-                "film_span_overcontains_holder_area",
+                "sequence_span_overcontains_holder_area",
             )
         )
         self.assertTrue(gate.passed)
         self.assertEqual(
             gate.diagnostics,
-            ("film_span_overcontains_holder_area", "separator_width_varies"),
+            ("separator_width_varies", "sequence_span_overcontains_holder_area"),
         )
 
 

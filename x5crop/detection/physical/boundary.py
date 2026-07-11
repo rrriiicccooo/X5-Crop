@@ -2,35 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...domain import Box, MeasurementProvenance
-from ..evidence.state import EvidenceState
-from .intervals import PixelInterval
-from .spans import CropEnvelope, VisibleSequenceSpan
-
-
-BOUNDARY_SIDES = frozenset({"leading", "trailing", "top", "bottom"})
-BOUNDARY_KINDS = frozenset(
-    {
-        "white_holder_transition",
-        "tonal_transition",
-        "texture_transition",
-        "canvas_clip",
-    }
+from ...domain import (
+    BOUNDARY_SIDES,
+    BoundaryObservation,
+    Box,
+    CropEnvelope,
+    EvidenceState,
+    FrameBoundary,
+    MeasurementProvenance,
+    PixelInterval,
+    VisibleSequenceSpan,
 )
-
-
-@dataclass(frozen=True)
-class BoundaryObservation:
-    side: str
-    position: PixelInterval
-    kind: str
-    provenance: MeasurementProvenance
-
-    def __post_init__(self) -> None:
-        if self.side not in BOUNDARY_SIDES:
-            raise ValueError(f"unsupported boundary side: {self.side}")
-        if self.kind not in BOUNDARY_KINDS:
-            raise ValueError(f"unsupported boundary kind: {self.kind}")
 
 
 @dataclass(frozen=True)
@@ -156,6 +138,52 @@ def holder_occlusion_evidence(
             trailing_visible_frame_width,
             frame_width_px,
         ),
+    )
+
+
+def holder_occlusion_for_sequence(
+    boundary_observations: tuple[BoundaryObservation, ...],
+    visible_sequence_span: VisibleSequenceSpan,
+    frame_boundaries: tuple[FrameBoundary, ...],
+    frame_width_px: PixelInterval,
+) -> HolderOcclusionEvidence:
+    white_holder = {
+        observation.side: observation
+        for observation in boundary_observations
+        if observation.kind == "white_holder_transition"
+        and observation.side in {"leading", "trailing"}
+    }
+    if not frame_boundaries:
+        visible_width = PixelInterval.exact(
+            float(visible_sequence_span.box.width)
+        )
+        leading_width = visible_width
+        trailing_width = visible_width
+    else:
+        first = min(frame_boundaries, key=lambda item: item.boundary_index)
+        last = max(frame_boundaries, key=lambda item: item.boundary_index)
+        leading_width = (
+            PixelInterval.exact(
+                float(first.assignment.observation.start)
+                - float(visible_sequence_span.box.left)
+            )
+            if first.assignment is not None and first.assignment.independent
+            else None
+        )
+        trailing_width = (
+            PixelInterval.exact(
+                float(visible_sequence_span.box.right)
+                - float(last.assignment.observation.end)
+            )
+            if last.assignment is not None and last.assignment.independent
+            else None
+        )
+    return holder_occlusion_evidence(
+        leading_boundary=white_holder.get("leading"),
+        trailing_boundary=white_holder.get("trailing"),
+        leading_visible_frame_width=leading_width,
+        trailing_visible_frame_width=trailing_width,
+        frame_width_px=frame_width_px,
     )
 
 

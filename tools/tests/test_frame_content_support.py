@@ -8,9 +8,9 @@ import numpy as np
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.cache import MeasurementCache
 from x5crop.detection.evidence.content.frame_support import frame_content_evidence
-from x5crop.detection.evidence.outer_alignment import outer_content_alignment_evidence
-from x5crop.detection.evidence.state import EvidenceState
-from x5crop.detection.physical.spans import VisibleSequenceSpan
+from x5crop.detection.evidence.sequence_content_alignment import sequence_content_alignment_evidence
+from x5crop.domain import EvidenceState
+from x5crop.domain import VisibleSequenceSpan
 from x5crop.domain import Box
 from x5crop.policies.registry import get_detection_policy
 
@@ -49,7 +49,7 @@ class FrameContentSupportTest(unittest.TestCase):
         )
         self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
 
-    def test_outer_overcontainment_is_allowed(self) -> None:
+    def test_sequence_overcontainment_is_allowed(self) -> None:
         candidate = candidate_fixture()
         gray = np.full((120, 900), 255, dtype=np.uint8)
         gray[20:100, 220:680] = 0
@@ -57,15 +57,15 @@ class FrameContentSupportTest(unittest.TestCase):
             candidate.geometry,
             visible_sequence_span=VisibleSequenceSpan(Box(0, 0, 900, 120)),
         )
-        alignment = outer_content_alignment_evidence(
+        alignment = sequence_content_alignment_evidence(
             geometry,
             _cache(gray),
-            get_detection_policy("120-645", "full").outer.alignment_evidence,
+            get_detection_policy("120-645", "full").sequence.content_alignment,
         )
         self.assertNotEqual(alignment.state, EvidenceState.CONTRADICTED)
         self.assertTrue(alignment.overcontains_long_axis)
 
-    def test_confirmed_outer_undercrop_is_integrity_failure(self) -> None:
+    def test_confirmed_sequence_undercrop_is_integrity_failure(self) -> None:
         candidate = candidate_fixture()
         gray = np.full((120, 900), 255, dtype=np.uint8)
         gray[20:100, 50:850] = 0
@@ -73,13 +73,13 @@ class FrameContentSupportTest(unittest.TestCase):
             candidate.geometry,
             visible_sequence_span=VisibleSequenceSpan(Box(250, 0, 650, 120)),
         )
-        alignment = outer_content_alignment_evidence(
+        alignment = sequence_content_alignment_evidence(
             geometry,
             _cache(gray),
-            get_detection_policy("120-645", "full").outer.alignment_evidence,
+            get_detection_policy("120-645", "full").sequence.content_alignment,
         )
         self.assertEqual(alignment.state, EvidenceState.CONTRADICTED)
-        self.assertTrue(alignment.confirmed_undercrop)
+        self.assertTrue(alignment.confirmed_undercrop_sides)
 
 
 if __name__ == "__main__":

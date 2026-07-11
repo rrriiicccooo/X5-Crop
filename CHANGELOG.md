@@ -1,587 +1,177 @@
 # X5 Crop 更新日志 / Changelog
 
-本文件记录版本级变化、验证记录、发布策略和回滚线索。运行流程架构和源码分层架构见
-`ARCHITECTURE.md`；用户操作说明见 `README.md` 和 `快速启动_Quick_Start.md`。
+本文件记录版本级变化、验证记录和发布策略。当前运行流程与源码分层见
+`ARCHITECTURE.md`；用户操作见 `README.md`；协作规则见 `AGENTS.md`。
 
-This file records version-level changes, validation records, release policy, and
-rollback context. Runtime-flow and source-layer architecture live in
-`ARCHITECTURE.md`; user instructions live in `README.md` and
-`快速启动_Quick_Start.md`.
+This file records version changes, verification, and release policy. Current
+architecture lives in `ARCHITECTURE.md`, user instructions in `README.md`, and
+repository rules in `AGENTS.md`.
 
-当前 active 脚本版本：V4.9
-
-当前稳定发布版本：v4.2.8
-
-Current active script version: V4.9
-
-Current stable release: v4.2.8
+当前 active 脚本版本 / Active script: **V4.9**
+当前稳定发布版本 / Stable release: **v4.2.8**
 
 ## 中文更新日志
 
-### 记录范围
+### V4.9 当前开发线
 
-本文件只记录对版本判断有价值的信息：
+#### Frame Sequence 物理模型重构（2026-07-11）
 
-- 用户可见行为变化。
-- 大的源码结构里程碑。
-- 验证命令、验证范围和未完成验证项。
-- 发布包策略和回滚线索。
+- Detection 采用
+  `BoundaryObservation -> SequenceHypothesis -> CandidateGeometry -> CandidateEvidence -> CandidateGate -> GeometryResolution -> DecisionGate`
+  的 immutable typed data flow。
+- 普通物理候选的 canonical source 统一为 `frame_sequence`；boundary、separator 和 dimensions
+  只作为 observation/proof provenance。
+- `HolderSpan`、`VisibleSequenceSpan` 和 `CropEnvelope` 成为不同 canonical identities；
+  generic outer、film-span、gap family、equal grid 和 detection correction surfaces 已删除。
+- Separator 是 count-independent raw band。只有完全落入物理允许区间、通过横跨短轴连续性且
+  provenance 独立的 assignment 才是 hard separator。
+- 缺失 separator 使用 `DimensionConstrainedBoundary`；focused pixel measurement 保持
+  geometry-dependent，不能增加 hard separator 数量。
+- 每个 raw band 都保留 candidate-specific assignment；未落入任何允许区间的宽 band 明确记录为
+  contradicted，只有 `used_for_boundary` 的独立 assignment 能定义实测切线。
+- Frame sequence 使用 signed spacing 守恒：正值为 separator、零为接触、负值为叠片。
+  Separator 宽度和片距允许变化，photo-size 使用真实 band edges 与物理 frame dimensions。
+- Holder occlusion 只允许发生在首张 leading edge 和末张 trailing edge；没有真实 white-holder
+  transition 时不能声称 occlusion。不可见遮挡不算脚本 undercrop，可见内容未被 frame union
+  覆盖仍然阻断。
+- Partial auto count 按允许 count 从大到小评估。`GeometryResolution` 是唯一 early-stop 输入；
+  CandidateGate 和 confidence 都不能停止候选搜索。
+- Content 只向外扩张 `CropEnvelope`，并提供遗漏内容反证和 preservation evidence；它不创建或
+  修改 `VisibleSequenceSpan`、frame dimensions 或内部 cut。Content-region measurement 使用
+  物理 frame-width reference，不读取 nominal/candidate count。
+- `CropEnvelope` 只覆盖 boundary uncertainty。额外 margin 由用户 bleed 唯一控制；signed overlap
+  只能增加长轴 bleed，不能改变 candidate、Gate 或 status。
+- Finalization 不再读取 gray 或重新检测几何，只应用 `OutputBleedPlan` 和 canvas clamp。
+- Dual-lane composition 保留每条 lane 的独立 `CropEnvelope` 和 signed spacing；基础输出 frame
+  不再跨越两排胶片，任一 lane 的叠片仍可进入统一 `OutputBleedPlan`。
 
-源码层级和运行流程说明写在 `ARCHITECTURE.md`；当前 handoff 写在 `AGENTS.md`。
+#### 架构与 schema 清理
 
-### 当前开发线：V4.9
+- `CandidateGate` 与 `DecisionGate` 是唯一 gates；只有 DecisionGate 创建 status 和
+  `final_review_reasons`。
+- Runtime 是 format/mode/policy 唯一解析边界。Foundation 不知道 format identity、decision 或
+  report schema，也不静默创建参数。
+- 删除旧字段、alias、shim、reducer、compatibility schema、重复 overlap model、单字段 trace
+  wrapper 和孤儿 count preflight。
+- Current report identity 更新为：
 
-V4.9 是当前 active development 线。它继承 V4.7 的源码分层成果，并继续把检测逻辑整理为
-可审核的 evidence / policy / decision 结构。
+```text
+schema_id: detection_report
+schema_revision: frame_sequence_geometry
+```
 
-当前版本口径：
+- Report/debug/cache reuse 只接受 current schema。Debug Analysis 保持三联图，只读 typed final
+  model。
+- 历史 reference diff 只用于定位变化，不作为 parity gate；PASS/REVIEW、crop、confidence、reason
+  和 schema diff 全部允许，参数与阈值留待真实样片校准。
 
-- V4.5.4 / V4.7 reference reports 是历史参考和 diff 定位工具，不是验收 oracle。
-- 当前项目阶段允许任何历史 reference diff；diff 本身不阻断验收。
-- `status`、`confidence`、`final_review_reasons`、`outer_box`、`frame_boxes`、`gaps`、
-  `runtime_policy_detail` 和 report record / schema fields 都可以出现 diff；需要时记录原因和涉及层级。
-- current-schema raw compare 用于定位变化，不用于把 diff 自动判为失败。
-- TIFF metadata、位深、ICC、resolution 和已知无损压缩行为仍属于用户输出质量边界。
+#### 本轮验证
 
-### V4.9 结构摘要
-
-物理检测模型 typed data-flow 重构（2026-07-11）：
-
-- Gate 之前的 detection 已改为
-  `DetectionContext -> physical observations -> count/placement hypotheses ->
-  CandidateGeometry -> CandidateEvidence -> CandidateAssessment -> GeometryResolution ->
-  SelectionResult`。Stage 之间只传不可变 typed result；旧 generic detail dict、旧 detail helper、
-  schema projection 和 import shim 已删除。
-- `HolderSpan` 与 `FilmSpan` 成为不同物理身份。Partial auto count 按允许 count 从大到小评估，
-  separator observations 只优化 placement；placement 使用 separator band 边缘和物理 frame
-  宽度，不再使用 holder 等分 pitch。
-- 一维 profile 命中的 separator 只有通过横跨短轴连续性后，才能计入 hard separator sequence、
-  photo-size measurement 或 geometry proof。Photo-size 只使用有独立边缘约束的照片区间，允许
-  separator 宽度和片距变化。
-- `GeometryResolution` 成为 primary、offset、count 和 correction 的唯一 early-stop input；
-  CandidateGate 与 confidence 不拥有 execution-budget 权限。未形成物理 resolution 时，较大 count
-  与 coverage 优先于低 count confidence。
-- Base outer 支持逐边 white-holder、tonal、texture 和 mixed-boundary proposal；content 只做
-  placement guidance、遗漏内容反证和向外保护，不能定义精确 cut 或收缩 film span。
-- 135-dual/full 先测量 holder gutter，并让每条 lane 进入普通 typed pipeline；中心等分仅作为
-  safety proposal。Deskew 输出 typed transform evidence。
-- Measurement cache 只保存 key 完整的 root measurements；Debug 使用独立 render cache。
-  Current report 的序列化、验证和恢复全部归 `x5crop.report`，runtime reuse 只做匹配和统一 output
-  actions。Current schema revision 保持描述性 `physical_resolution`，Debug Analysis 保持三联图。
-- 340 项 contract/behavior tests、197 个 active modules 的可达性、无环依赖与唯一分层检查通过；代表性
-  real/synthetic samples、current-schema validation、横竖三联图、cache reuse、TIFF metadata 和
-  native two-worker ProcessPool 均完成验证。当前样片结果变化留待独立 calibration 项目处理。
-
-物理事实驱动 Gate 重构（2026-07-11）：
-
-- Evidence 统一为 `supported / contradicted / unavailable / not_applicable`；CandidateGate
-  只检查 frame topology、content preservation、photo geometry、evidence independence 和
-  boundary proof paths。
-- CandidateGate 通过条件改为“硬安全事实没有明确矛盾，并且 `separator_led`、
-  `geometry_led`、`partial_occupancy_led` 至少一条独立物理证明路径成立”。
-- Confidence 只用于候选排序和结果解释；runtime confidence threshold、gate-derived caps、
-  final review cap、generic signal-to-blocker 和独立 decision contract policy 已删除。
-- Selection 将几何等价候选聚类为共识；只有实质不同的几何簇接近时才输出
-  `selection_geometry_disagreement`。
-- DecisionGate 只投影具体 CandidateGate 失败，并检查 automatic eligibility、selection
-  geometry consensus、output protection 和 transform geometry。叠片保护 bleed 可执行时不再
-  进入 REVIEW，只有保护能力不足时输出 `output_protection_unresolved`。
-- Partial auto count resolution 只读取 physically-supported hypothesis、完整 hard separator
-  sequence、photo-size consistency 和 frame topology，不读取 CandidateGate 或 confidence。
-- Frame content 聚合已从误导性的 containment/integrity 字段改为
-  `frame_content_support_available`；低 content、aspect 不确定和空 frame 只降低 guidance
-  可用性，不能伪装成真实内容受损。
-- 当前 report schema revision 为 `physical_resolution`；report/debug/cache reuse 不保留
-  旧 signal、cap、reason 或 schema 投影。
-- 完整 contract/behavior suite、14 个 format/mode policy、compile、launcher syntax、version
-  与 whitespace 检查通过；`135/full`、`120-66/partial auto`、`half/full`、`120-67/full`
-  真实样片均生成无 schema validation error 的 current report 和三联 Debug Analysis。
-
-此前架构封口候选（2026-07-11）：
-
-- 候选源码 commit 为 `d828c6268f6fa9ec908cda6a93ce9a332e52d5f1`。
-- 使用同一冻结契约完成 Audit A 与全新上下文 Audit B，均为零违规；218 个 active
-  modules 全部可达且唯一归层，806 条内部依赖无循环。
-- 351 项测试、14 个 format/mode policy、完整 compile、launcher syntax、version 和
-  whitespace 检查通过。
-- `135/full`、`120-66/partial auto`、`half/full`、`120-67/full` 真实样片均生成合法
-  current-schema report 和三联 Debug Analysis；cache reuse、原生双 worker ProcessPool、
-  合成 `135-dual/full` pipeline smoke 通过。
-- 后续 early-stop / cache 结构优化已改变 active architecture，此前候选状态随之失效；
-  新的 Codex 任务必须基于最新 commit 重新完整执行双轮审核，之后才能形成新的候选。
-
-当前性能与执行模型：
-
-- partial auto 将 physical count/placement resolution 与 CandidateGate/confidence auto readiness
-  分离；完整物理证据可以停止更小 count，即使最终 DecisionGate 仍给出 REVIEW。
-- count preflight 第一阶段只测 standard hard separator；observed-width placement evidence 按需
-  计算，缺少物理 placement 的 count 改由 content position guidance 提供最多三个位置。
-- separator-derived outer candidates 按物理 rank 分 cohort 执行；首个 primary cohort 已可靠时
-  不再 build base/content-guidance cohorts。候选仍统一 assessment，不拥有特殊 PASS 权限。
-- outer candidate disagreement 改由 selection 仅基于已 assessment 的同 count 候选计算；
-  未执行 proposal cohort 不再反向影响 DecisionGate。
-- standard separator profile 与 observed-width profile 都使用显式 sampling budget；per-outer
-  content column statistics 精确复用 frame mean/coverage，不缓存 CandidateGate 或 DecisionGate。
-- `120-66/partial auto` 样片 `X5_test_46.tif`（vertical、deskew off、diagnostics）从上一轮约
-  4.97 秒降至约 3.1 秒，candidate build 从 13 次降至 2 次；性能数据只说明执行开销，
-  不作为检测准确性阈值。
-
-- 入口和运行层收敛为 `entry`、`x5crop.run_config`、`runtime.input_probe`、`runtime.app` 和
-  `runtime.workflow`。
-- format physical facts 由 `x5crop.formats` 承担；sample-tuned parameter profile 由 central
-  typed factory 根据 physical facts 选择，不写回 physical spec。旧 per-format 参数模块和
-  string override path 已删除。
-- format aspect 由底片 frame size mm 推导；half 已从历史 `2/3` 修正为物理
-  `18x24mm = 3:4`，因此 half 检测输出允许出现破坏性 diff。
-- 新增 `ScanCalibration` 单位模型；TIFF resolution 只作为 report detail，
-  不直接放宽 PASS / REVIEW。
-- XPAN 和 120-66 增加 `complete_strip_can_be_underfilled` 物理 trait；partial
-  入口可以表达“完整张数但未铺满片夹”，并在 report 中记录 `strip_completeness`
-  和 `holder_occupancy`。
-- runtime policy、policy assembly 和 final decision ownership 分层；runtime 边界创建
-  `DetectionPolicyBundle` 并一次性解析当前 policy 和 dual-lane 支撑项；每个 policy 直接持有
-  唯一 `FormatPhysicalSpec`，不再复制 format-id/family/default-count，也不动态回查 registry。
-- dual-lane 的 lane count 和 lane format 已从 detector policy 默认值迁入
-  `FormatPhysicalSpec`，明确为胶片/片夹布局的物理事实；顶层 `DetectionPolicy` 的 output、
-  diagnostics surface 也必须由 assembly 显式装配。
-- detection 按 `modes`、`physical`、`guidance`、`evidence`、
-  `candidate.{plan,proposal,build,execution,assessment,selection,extension}`、`decision`
-  和 `final` 分层。
-- candidate lifecycle 进一步拆清：`candidate.plan` 只声明 count、offset、source descriptors
-  和 execution budget；proposal execution 迁入 `candidate.execution`，build 只负责未评分
-  `DetectionCandidate`，geometry evidence enrichment 显式发生在 assessment 前。
-- selected candidate 的 frame content support / content preservation / outer alignment evidence
-  在 evidence 层完成；DecisionGate 只消费显式 evidence、CandidateGate 结果和最终阶段 context，
-  不再接收完整 runtime policy。
-- auto count 改为显式 `CountHypothesisPlan -> CountHypothesisEvaluation -> count selection`：
-  runtime config 只保留 `requested_count`，不再用伪默认 count 表示自动模式；report 会记录
-  search order、每个 count 的候选支持和停止原因。
-- partial auto 增加 count-independent separator preflight：hard separator 数量优先排列 count，
-  hard separator 位置生成连续 placement；physical count resolution 后停止更小 count 与等价
-  offset。observed-width placement 按需执行，default count 不再运行物理上等价的五个 offset。
-- candidate execution budget 不再为 extension 重建 primary candidates；full-width 与 content-guided
-  extension 只在前一阶段仍不可靠且实际可用时执行。AnalysisCache 新增 base outer、完整 outer
-  proposal、observed-width profile、per-outer content threshold 和 content column statistics
-  复用；standard / width profile 的短轴统计都使用已声明的 sampling budget。
-- 候选与最终结果类型已拆成 `DetectionCandidate` / `FinalDetection`：candidate 不再携带
-  status 或 final reasons；DecisionGate 是唯一转换点。旧 `FinalDecisionResult`、
-  `DetectionFinalizationResult` 和 reason mutation helper 已删除，report / debug / export
-  只消费 `FinalDetection` 的 canonical status 和 final reasons。实际构建 report record 的
-  模块/接口也从含混的 `report.schema` 改为 `report.record`。
-- `outer_alignment` evidence policy 与 `content_containment` correction policy 拆清；
-  evidence 层不再读取 correction policy，也不生成 corrected outer。
-- `FormatPhysicalSpec` 成为唯一物理规格类型；旧 `FormatSpec` 别名和 format-name aspect map
-  已删除。physical spec 不保存 sample-tuned parameter profile 或 report description。
-- report/debug/export final reason 读取改成纯 read；缺失 current decision schema 时由 report
-  schema 输出 `schema_validation` diagnostic，不再写回 detection detail 或从旧位置兜底拼字段。
-- report schema revision 更新为 `canonical_final_record`；cached analysis reuse
-  只接受 schema、输入/config identity、active policy fingerprint 均匹配，且含 current count
-  selection、exposure evidence、output protection plan、decision summary 和 output geometry 的 record。
-- decision layer 生成 canonical final status 和 `final_review_reasons`；`DecisionGate` 也是
-  唯一 `FinalDetection` factory。旧 `contract_applier` 与独立 decision contract 已删除。
-- report / debug / cache reuse 只读当前 schema；旧 decision contract helper、旧 policy detail
-  fallback、旧 cached final reason fallback 和缺 decision summary 时的 final reason fallback 已删除。
-- cached approved export 只读取 current report 的 final frame boxes；不从 report 还原
-  `DetectionCandidate` 或 `FinalDetection`。
-- report schema identity 从版本号式命名收敛为 `schema_id` + `schema_revision`，
-  并由 `x5crop.report.identity` 单一拥有，避免脚本版本、policy 和 report schema 混在
-  同一个名称或 policy detail 里。
-- 叠片链路拆成纯 `exposure_overlap_evidence` 与 `OutputProtectionPlan`：evidence 只测量
-  model boundary 上的连续影像和 overlap band；output 层计算 required / available bleed 与
-  feasibility；DecisionGate 只阻断 `exposure_overlap_unresolved`，finalization 执行同一个 plan。
-  该物理能力对所有 format/mode 通用，不再由 format trait 或恒真 capability 开关控制；即使 plan 不完全可行，
-  REVIEW 输出也会使用当前可用的最大保护 bleed。
-- output bleed 和 approved geometry adjustment 已与最终决策输入分开；finalization 对
-  output detection 副本做几何调整，并同时记录 `decision_geometry` 与 `output_geometry`。
-- decision evidence policy 已从 format-id override 表收敛为 physical trait 推导；format 名字只作为
-  `FormatPhysicalSpec` 查询入口。
-- policy 参数 topology 已从扁平 `FormatParameters` 收敛为固定分组：
-  `preprocess`、`content`、`outer`、`separator`、`candidate`、`decision`、`output` 和
-  `diagnostics`。`FormatParameters` 只作为装配入口，不再提供扁平 property view。
-- policy registry 只解析一次 `FormatPhysicalSpec`，随后将同一 spec 和 concrete
-  `FormatParameters` 单向传给 assembly；parameter factory 和 mode preset 不再回查
-  format registry。
-- physical separator count、outer candidate strategy、frame aspect 和 separator band
-  collection 均只保留 canonical owner；旧别名、string reducer、纯转发 wrapper 和重复
-  collection model 已删除。
-- photo-size physical evidence 只保留测量值；separator-sequence ranking 由 candidate proposal
-  使用显式 parameter weight 完成。DecisionGate 也必须接收显式 deskew context。
-- image / geometry / cache foundation helper 改为显式参数对象；base gray、content evidence、
-  separator evidence、deskew fallback 和 scan calibration trust 参数由 runtime policy assembly 提供。
-- frame-fit foundation API 删除 optional config 路径；调用方必须显式传入 frame-fit parameters，
-  geometry model 固定生成基础 frame，edge evidence 在可用时进一步拟合。
-- approved geometry adjustment 迁到 output-adjacent helper，硬编码检测常数已进入 runtime
-  finalization policy。
-- 输出路径计算归 `x5crop.output.surface`；`x5crop.export` 只负责写 crop / review copy。
-- workflow 不再在读取 TIFF 前创建输出目录；output surface 只在实际写出 crop、review copy、
-  debug 或 report 时创建目录。
-- regression compare 工具只作为 diff 审计工具；reference diff 不改变命令退出状态。
-- Debug Analysis 默认保持三联图；更细 evidence / gate / decision signal 信息写入 report detail。
-- architecture closure 清理将 report side effect 单一归到 `runtime.app`；workflow 只返回
-  `ProcessResult`，analysis-reuse report-record cache 也归其 runtime owner，不再放在 foundation cache。
-- policy reporting 不再按 format id 晚查描述 registry；runtime 明确解析 `FormatDescription` 并传入
-  只读 report serializer。
-- separator gap search 删除单值 profile selector、profiles list、unsupported branch 和 correction
-  preservation flag；standard + observed-width measurement 现在是直接、唯一的物理搜索流程。
-- Debug Analysis 删除不可达 panel renderer 和 title；三联图只读 canonical exposure-overlap gap
-  evidence，附近 separator diagnostics 独立记录，不再复制或 fallback 到第二套 gap evidence。
-- candidate reliability、competition 和 execution-budget detail 从 `candidate.plan` 迁到
-  assessment / execution；plan 不再接收或读取 `DetectionCandidate`。
-- 删除 5 个单 caller constructor-forwarding assembly 模块；central factory 直接装配这些
-  runtime policies。`DetectionDecisionContract` 也直接持有 canonical review / selection 参数，
-  删除复制默认值的 `DecisionPolicy`。
-- geometry equal-model gap 的恒定 full-only runtime selector 已删除，eligibility 由 candidate build
-  直接表达；`app_info` import 也不再产生 stdout/stderr 全局副作用。
-- final status 和 `final_review_reasons` 只由 `FinalDetection` / canonical report 顶层拥有；
-  decision summary 与 cache reuse 不再保存或核对第二份 final truth。
-
-### 已验证记录
-
-近期已验证过的项目状态包括：
-
-- `python3 X5_Crop.py --version` 输出 `X5_Crop.py 4.9`。
-- package compile 通过。
-- `python3 -m x5crop.policies.consistency` 对 14 个 format / strip-mode 组合通过。
-- `git diff --check` 通过。
-- Mac 主启动器和 diagnostics 启动器 `bash -n` 通过。
-- Entry、workflow、policy、foundation、detection、report/debug/export 和 tools 分层 smoke
-  通过。
-- Debug Analysis 单样本 smoke 生成 V4.9 三联 JPG。
-- Cached analysis reuse smoke 覆盖 approved auto export 和 needs_review skip-export。
-- 七组本地 V4.5.4 reference reports 曾完成 comparison / classification，用于定位差异。
-
-说明：
-
-- 这些验证记录说明当时命令和样本覆盖范围，不代表历史 diff 阻断条件。
-- 后续行为变化以当前审核目标判断，不以旧 reference 的字段一致性判断。
-- 本地验证可能从 process worker fallback 到 thread worker。
-
-V4.9 release validation 尚未完成：
-
-- 默认 deskew export timing。
-- `xpan`、`120-645` 和 `135-dual` full sample reference comparison。
-- Release package generation。
+- 212 项 current contract/behavior tests 与 14 个 format/mode policy consistency checks 通过；
+  package/regression compile、launcher syntax、version 和 whitespace 检查通过。
+- 代表样片覆盖 `135/full`、`135/partial auto`、`135/partial -n 3`、
+  `120-66/partial auto`、`half/full`、`120-67/full|partial`；另验证 dual-lane、cache reuse、
+  review export、双 worker、TIFF metadata 和三联 Debug Analysis。
+- 结构验收不以样片当前 PASS/REVIEW 数量为阻塞条件；检测参数校准是后续独立项目。
 
 ### 版本摘要
 
 | Version | 状态 | 摘要 |
 |---|---|---|
-| V4.9 | 当前 active development | 继续推进 evidence / policy / decision 分层；reference diff 作为审查材料，不作为历史一致性 gate。 |
-| V4.7 | 上一个 active development | 源码布局重构；移除旧 bridge，保留薄入口和分层 `x5crop/` implementation，并把 format / mode 行为迁入 policy。 |
-| V4.6 | development | 引入 `DetectionPolicy` 管理 detector、count、outer、separator、content、scoring、selection、postprocess、diagnostics 和 output 行为。 |
-| V4.5.x | development | 收敛 120-66 broad separator width / strict-holder 行为、half geometry support、policy views、postprocess 和 separator-geometry outer。 |
-| V4.4.x | development | 改进 full / partial outer proposal、output folder naming、Debug Analysis readability、partial safe-extra-frames 和 cache efficiency。 |
-| V4.3.x | development | 建立 full-mode outer proposal layer，并为 partial mode 增加 conservative safe-extra-frames gate。 |
-| V4.2.8 | 当前 stable release | 改进启动器交互：只在 partial mode 开启后询问 count；Return 或 `auto` 表示自动判断。检测逻辑不变。 |
-| V4.2.x | development | 建立 120 family geometry model、separator-first outer proposal、120-66 / 120-67 保守修复和 half-frame full geometry support。 |
-| V4.1.x | development | 120-66 / 120-67 参数校准、outer retry 收敛和 120 shared policy 整理。 |
-| V4.0.x | historical stable / development | 模块化重写和 135 wide-spacing support；根入口变薄，主要职责迁入 `x5crop/`。 |
-| V3.6 - V3.9 | historical development | format-aware policy / tuning、frame fit、diagnostics、hard-gap trust、nearby separator、overlap risk 和 edge-pair 工作。 |
-| V3.0 - V3.5 | historical baseline / experiments | 建立主流程、output-only bleed 和 V3 风格检测链路；若干 hard-gap / grid 实验已暂停或回滚。 |
+| V4.9 | 当前 active development | Typed physical frame-sequence model；历史输出不作为 oracle。 |
+| V4.7 | 上一个 development | 源码分层重构，薄入口与模块化 `x5crop/`。 |
+| V4.6 | development | Policy-driven detection 结构。 |
+| V4.3-V4.5 | historical development | Full/partial、120、half、diagnostics 与 candidate experiments。 |
+| V4.2.8 | 当前 stable release | Partial 模式才询问 count；Return/`auto` 自动判断。 |
+| V3-V4.2 | historical | 早期主流程、格式参数与几何实验。 |
 
 ### 发布策略
 
-- GitHub Releases 是用户下载入口。
-- `main` 是开发分支，可以领先稳定发布版。
-- 用户 Release zip 只包含 standalone script、launchers、TXT user docs 和 install /
-  uninstall launchers。
-- 用户发布包不包含 `x5crop/`、`archive/`、`CHANGELOG.md`、`AGENTS.md`、`LICENSE`、
-  `.github/`、diagnostics launchers、Test files 或 generated outputs。
+- GitHub Releases 是用户下载入口；`main` 可以领先稳定发布版。
+- Release zip 只包含 standalone script、launchers、TXT user docs 和 install/uninstall launchers。
+- 用户包不包含 `x5crop/`、tests、development docs、diagnostics launcher 或生成文件。
 
 ## English Changelog
 
-### Scope
+### V4.9 Current Development Line
 
-This file records only version-relevant information:
+#### Physical Frame-Sequence Model (2026-07-11)
 
-- User-visible behavior changes.
-- Major source-structure milestones.
-- Verification commands, verification scope, and missing validation.
-- Release package policy and rollback context.
+- Detection now follows immutable typed stages from boundary observations through
+  CandidateGate, GeometryResolution, and DecisionGate.
+- Ordinary physical candidates now use the canonical `frame_sequence` source;
+  boundary, separator, and dimensions remain observation/proof provenance only.
+- `HolderSpan`, `VisibleSequenceSpan`, and `CropEnvelope` are distinct canonical
+  identities. Generic outer/film-span, gap families, equal grids, and detection
+  correction surfaces are removed.
+- Separator bands are count-independent raw observations. Only fully contained,
+  cross-axis-continuous, provenance-independent assignments become hard evidence.
+- Missing separators use `DimensionConstrainedBoundary`; focused measurements remain
+  geometry-dependent and never increase hard-separator count.
+- Every raw band keeps a candidate-specific assignment. Bands outside every physical
+  interval remain explicit contradictions; only independent assignments marked
+  `used_for_boundary` define measured cuts.
+- Signed spacing represents separator, contact, or overlap and participates in one
+  sequence-conservation equation. Variable separator width/spacing is allowed;
+  photo-size evidence uses physical frame dimensions and measured band edges.
+- Holder occlusion is limited to the leading edge of the first frame and trailing
+  edge of the last. Occlusion requires a real white-holder transition and shortened
+  visible edge frame.
+- Partial auto count evaluates larger allowed counts first. GeometryResolution alone
+  controls early-stop; CandidateGate and confidence cannot stop candidate search.
+- Content only expands `CropEnvelope` outward and supplies missing-content
+  counterevidence and preservation evidence. It never creates or changes the
+  visible sequence, frame dimensions, or internal cuts.
+- CropEnvelope covers boundary uncertainty only. User bleed is the only extra margin;
+  signed overlap can increase long-axis bleed but cannot change candidate geometry,
+  Gate outcomes, or status.
+- Finalization only applies `OutputBleedPlan` and canvas clamp. It does not read pixels
+  or redetect geometry.
+- Dual-lane composition retains one `CropEnvelope` and lane-indexed signed spacing per
+  lane. Base output frames no longer span both rows, and overlap in either lane still
+  reaches the shared `OutputBleedPlan`.
 
-Source layering and runtime-flow details live in `ARCHITECTURE.md`; current
-handoff lives in `AGENTS.md`.
+#### Architecture And Schema Cleanup
 
-### Current Development Line: V4.9
+- CandidateGate and DecisionGate are the only gates; only DecisionGate creates status
+  and `final_review_reasons`.
+- Runtime is the sole format/mode/policy resolution boundary. Foundation layers know
+  no format identity, decision state, or report schema.
+- Superseded fields, aliases, shims, reducers, schemas, duplicate overlap models,
+  single-field trace wrappers, and orphan count preflight are deleted without
+  compatibility surfaces.
+- Current report identity is `detection_report / frame_sequence_geometry`.
+- Report, debug, and cache reuse accept current schema only. Debug Analysis remains a
+  passive three-panel readout.
+- Historical reference diffs are audit material, not parity gates. Detection
+  calibration remains a separate real-sample project.
 
-V4.9 is the current active development line. It builds on the V4.7 source layout
-and continues organizing detection as reviewable evidence / policy / decision
-structure.
+#### Verification
 
-Current version stance:
-
-- V4.5.4 / V4.7 reference reports are historical references and diff-location
-  tools, not acceptance oracles.
-- In the current project phase, any historical reference diff can be accepted;
-  a diff does not block acceptance by itself.
-- `status`, `confidence`, `final_review_reasons`, `outer_box`, `frame_boxes`,
-  `gaps`, `runtime_policy_detail`, and report record / schema fields may all differ; when useful,
-  record why and which layer the change touches.
-- Current-schema raw comparison locates changes; it does not automatically turn
-  diffs into failures.
-- TIFF metadata, bit depth, ICC, resolution, and known lossless compression
-  behavior remain user-facing output-quality boundaries.
-
-### V4.9 Structure Summary
-
-Physical-fact-driven Gate refactor (2026-07-11):
-
-- Evidence now uses `supported / contradicted / unavailable / not_applicable`.
-  CandidateGate checks frame topology, content preservation, photo geometry,
-  evidence independence, and boundary proof paths only.
-- CandidateGate passes when no hard safety fact is contradicted and at least one
-  independent `separator_led`, `geometry_led`, or `partial_occupancy_led` proof path
-  is supported.
-- Confidence is ranking and explanatory data only. The runtime confidence threshold,
-  gate-derived caps, final review cap, generic signal-to-blocker conversion, and the
-  separate decision-contract policy were deleted.
-- Selection clusters geometrically equivalent candidates as consensus. Only close,
-  materially different geometry clusters produce `selection_geometry_disagreement`.
-- DecisionGate projects specific CandidateGate failures and checks automatic
-  eligibility, selection geometry consensus, output protection, and transform geometry.
-  Feasible overlap-protection bleed no longer triggers REVIEW; insufficient protection
-  produces `output_protection_unresolved`.
-- Partial auto count resolution reads only a physically supported hypothesis, a
-  complete hard-separator sequence, photo-size consistency, and frame topology. It
-  does not read CandidateGate or confidence.
-- Frame-content aggregation now reports `frame_content_support_available` instead
-  of misleading containment/integrity fields. Low content, uncertain aspect, and
-  empty frames reduce guidance availability but do not claim content damage.
-- The current report schema revision is `physical_resolution`; report, debug,
-  and cache reuse preserve no obsolete signal, cap, reason, or schema projection.
-- The complete contract/behavior suite, all 14 format/mode policies, compilation,
-  launcher syntax, version, and whitespace checks passed. Real `135/full`,
-  `120-66/partial auto`, `half/full`, and `120-67/full` samples produced current
-  reports with empty schema validation and three-panel Debug Analysis images.
-
-Previous architecture closure candidate (2026-07-11):
-
-- Candidate source commit: `d828c6268f6fa9ec908cda6a93ce9a332e52d5f1`.
-- Audit A and a fresh-context Audit B both found zero frozen-contract violations.
-  All 218 active modules are reachable and uniquely layered; 806 internal import
-  edges are acyclic.
-- All 351 tests, 14 format/mode policies, package/tool compilation, launcher
-  syntax, version, and whitespace checks passed.
-- Real `135/full`, `120-66/partial auto`, `half/full`, and `120-67/full` samples
-  produced valid current-schema reports and three-panel Debug Analysis images.
-  Cache reuse, native two-worker ProcessPool, and synthetic `135-dual/full`
-  pipeline smokes passed.
-- Later early-stop and cache structural changes superseded that candidate. A new
-  Codex task must rerun the complete two-audit plan from the latest commit before
-  creating another closure candidate.
-
-Current performance and execution model:
-
-- Partial auto separates physical count/placement resolution from CandidateGate
-  and confidence auto readiness. Complete physical evidence can stop smaller
-  counts even when DecisionGate still returns REVIEW.
-- Count preflight measures standard hard separators first. Observed-width
-  placement evidence is lazy, and unresolved counts use at most three
-  content-position hints.
-- Separator-derived outer candidates execute in physically ranked cohorts. A
-  reliable primary cohort prevents base/content-guidance cohorts from building;
-  every built candidate still receives the normal assessment.
-- Outer-candidate disagreement is computed only from assessed candidates of the
-  selected count; unexecuted proposal cohorts no longer affect DecisionGate.
-- Standard and observed-width separator profiles use explicit sampling budgets.
-  Exact per-outer content column statistics reuse frame means and coverage without
-  caching CandidateGate or DecisionGate.
-- The `120-66/partial auto` sample `X5_test_46.tif` (vertical, deskew off,
-  diagnostics) improved from about 4.97 seconds to about 3.1 seconds, while
-  candidate builds fell from 13 to 2. These numbers measure execution cost only.
-
-- Entry and runtime are split into `entry`, `x5crop.run_config`,
-  `runtime.input_probe`, `runtime.app`, and `runtime.workflow`.
-- Format physical facts belong to `x5crop.formats`. The central typed factory
-  selects sample-tuned parameter profiles from those facts without storing the
-  profile on the physical spec. Per-format parameter modules and string override
-  paths are gone.
-- Format aspect is derived from film frame size in millimeters; half-frame was
-  corrected from the historical `2/3` value to the physical `18x24mm = 3:4`,
-  so half-frame detection output diffs are accepted.
-- `ScanCalibration` owns TIFF-resolution interpretation for report detail; it
-  does not loosen PASS / REVIEW.
-- XPAN and 120-66 now expose the `complete_strip_can_be_underfilled` physical
-  trait. Partial mode can represent a complete frame sequence that does not fill
-  the holder, with `strip_completeness` and `holder_occupancy` recorded in the
-  report.
-- Runtime policy, policy assembly, and final decision ownership are separated.
-  Runtime resolves the active policy and dual-lane support entries into a
-  `DetectionPolicyBundle`. Each policy directly owns one `FormatPhysicalSpec`;
-  duplicated format-id/family/default-count fields and downstream registry
-  queries have been removed.
-- Detection is layered as `modes`, `physical`, `guidance`, `evidence`,
-  `candidate.{plan,proposal,build,execution,assessment,selection,extension}`,
-  `decision`, and `final`.
-- Candidate lifecycle is stricter: `candidate.plan` only declares count, offset,
-  source descriptors, and execution budget; proposal execution now lives in
-  `candidate.execution`, build only creates an unscored `DetectionCandidate`, and
-  geometry evidence enrichment explicitly happens before assessment.
-- The evidence layer completes frame-content support, content-preservation, and
-  outer-alignment evidence for the selected candidate. DecisionGate consumes explicit
-  evidence, CandidateGate output, and final-stage context, never a full runtime policy.
-- Auto count now follows an explicit `CountHypothesisPlan -> CountHypothesisEvaluation
-  -> count selection` flow. Runtime config carries only `requested_count` instead
-  of a placeholder default count, and reports expose search order, support, and
-  stopping evidence for every evaluated count.
-- Partial auto now runs a count-independent separator preflight. Hard separator
-  count orders hypotheses, hard separator positions derive continuous placement,
-  and physical count resolution stops smaller counts and equivalent offsets.
-  Observed-width placement is lazy, and nominal-count hypotheses no longer execute
-  five physically identical offsets.
-- Candidate execution no longer rebuilds primary candidates for extension work.
-  Full-width and content-guided extensions run only when the preceding stage is
-  still unreliable and the extension is actually available. AnalysisCache now
-  reuses base outer, complete outer proposal, observed-width profiles, per-outer
-  content thresholds, and content column statistics; standard and width profiles
-  honor their declared short-axis sampling budgets.
-- Candidate and final result types are now distinct. `DetectionCandidate` has no
-  status or final reasons; DecisionGate is the sole conversion to
-  `FinalDetection`. The old decision/finalization wrappers and reason mutation
-  helper were removed, and report/debug/export only consume final detections.
-- `outer_alignment` evidence policy is separated from `content_containment`
-  correction policy; the evidence layer no longer reads correction policy or
-  generates corrected outer boxes.
-- `FormatPhysicalSpec` is the sole physical-spec type. The old `FormatSpec` alias
-  and format-name aspect map are gone. Physical specs store neither sample-tuned
-  parameter profiles nor report descriptions.
-- The decision layer produces canonical final status and `final_review_reasons`;
-  `DecisionGate` is also the sole `FinalDetection` factory. The old
-  `contract_applier` and separate decision contract are gone.
-- Report / debug / cache reuse read the current schema only; final-reason reads
-  are pure reads, missing current decision schema is reported through
-  `schema_validation`, and report code no longer fills canonical fields from
-  old fallback locations.
-- Cached approved export reads final frame boxes from the current report without
-  reconstructing a `DetectionCandidate` or `FinalDetection`.
-- Report schema revision is now `canonical_final_record`; cached
-  analysis reuse requires matching schema, input/config identity, active policy
-  fingerprint, current count selection, exposure evidence, output protection
-  plan, decision summary, and output geometry.
-- Report schema identity now uses `schema_id` + `schema_revision` and is owned
-  solely by `x5crop.report.identity`, keeping script version, policy, policy
-  detail, and report schema separate.
-- Exposure overlap is split into pure `exposure_overlap_evidence` and an
-  `OutputProtectionPlan`. Evidence measures continuous image content at model
-  boundaries and overlap-band width; output planning owns required/available bleed
-  and feasibility. DecisionGate only blocks `exposure_overlap_unresolved`, and
-  finalization executes the same plan. The capability is universal across
-  format/mode combinations and has no trait or always-true capability switch; an infeasible REVIEW output
-  still receives the greatest available protective bleed.
-- Output bleed and approved geometry adjustment are separate from final decision
-  inputs. Finalization adjusts an output detection clone and records
-  `decision_geometry` separately from `output_geometry`.
-- Decision evidence policy is derived from physical traits instead of a
-  format-id override table; the format name is only a `FormatPhysicalSpec` lookup key.
-- Policy parameters now use grouped `FormatParameters`: `preprocess`, `content`,
-  `outer`, `separator`, `candidate`, `decision`, `output`, and `diagnostics`.
-  `FormatParameters` remains only the assembly entry and no longer exposes flat
-  property views.
-- The policy registry resolves `FormatPhysicalSpec` once, then passes that same
-  spec and concrete `FormatParameters` one-way through assembly. Parameter and
-  mode preset code no longer queries the format registry again.
-- Physical separator count, outer candidate strategy, frame aspect, and separator
-  band collection now each have one canonical owner; aliases, string reducers,
-  pure forwarding wrappers, and duplicate collection models are removed.
-- Photo-size physical evidence contains measurements only; candidate proposal owns
-  parameterized separator-sequence ranking. DecisionGate also requires explicit
-  deskew context.
-- Image / geometry / cache foundation helpers now use explicit parameter
-  objects; base gray, content evidence, separator evidence, deskew fallback, and
-  scan-calibration trust parameters are supplied by runtime policy assembly.
-- The frame-fit foundation API no longer accepts an optional config path. Callers
-  explicitly pass frame-fit parameters; geometry supplies baseline frames and
-  edge evidence refines them when available.
-- Approved geometry adjustment moved to an output-adjacent helper, and its
-  hard-coded detector constants now belong to runtime finalization policy.
-- Output path calculation belongs to `x5crop.output.surface`; `x5crop.export`
-  only writes crops and review copies.
-- Workflow no longer creates the output directory before reading TIFF input; the
-  output surface creates directories only when crop, review copy, debug, or
-  report output is actually written.
-- Regression compare tools are audit-only; reference diffs do not change the
-  command exit status.
-- Debug Analysis keeps a three-panel default; richer evidence / gate / decision
-  signal detail is written to report detail.
-- Architecture closure assigns report side effects solely to `runtime.app`;
-  workflow returns `ProcessResult`, and the analysis-reuse report-record cache
-  belongs to its runtime owner rather than foundation cache.
-- Policy reporting no longer performs late format-description registry lookup;
-  runtime resolves `FormatDescription` and passes it to the read-only serializer.
-- Separator gap search removed the single-value profile selector, profile lists,
-  unsupported branch, and correction-preservation flag. Standard search plus
-  observed-width measurement is now the single direct physical search flow.
-- Debug Analysis removed unreachable renderers and titles. Its three panels read
-  canonical exposure-overlap gap evidence, while nearby-separator diagnostics
-  remain separate observations without a second evidence fallback.
-- Candidate reliability, competition, and execution-budget detail moved from
-  `candidate.plan` to assessment/execution; plan no longer receives or reads a
-  `DetectionCandidate`.
-- Five single-caller constructor-forwarding assembly modules were deleted and
-  their objects are assembled directly in the central factory.
-  `DetectionDecisionContract` now retains canonical review/selection parameters
-  without a copied-default `DecisionPolicy`.
-- The invariant full-only geometry equal-model selector was deleted and candidate
-  build now expresses eligibility directly. Importing `app_info` also has no
-  stdout/stderr side effect.
-- Final status and `final_review_reasons` belong only to `FinalDetection` and the
-  canonical report top level; decision summary and cache reuse no longer store or
-  reconcile a second final truth.
-
-### Verified Records
-
-Recent verified project state included:
-
-- `python3 X5_Crop.py --version` printed `X5_Crop.py 4.9`.
-- Package compile passed.
-- `python3 -m x5crop.policies.consistency` passed across 14 format /
-  strip-mode combinations.
-- `git diff --check` passed.
-- Main Mac launcher and diagnostics launcher passed `bash -n`.
-- Entry, workflow, policy, foundation, detection, report/debug/export, and tools
-  layer smoke checks passed.
-- Single-file Debug Analysis smoke wrote a V4.9 three-panel JPG.
-- Cached analysis reuse smoke covered approved auto export and needs_review
-  skip-export paths.
-- Seven local V4.5.4 reference reports were compared / classified to locate
-  differences.
-
-Notes:
-
-- These records document command and sample coverage at the time; they do not
-  represent historical-diff blocking criteria.
-- Future behavior changes are judged by the current audit goal, not by field
-  parity with old references.
-- Local verification may fall back from process workers to thread workers.
-
-Not yet completed as V4.9 release validation:
-
-- Default-deskew export timing.
-- `xpan`, `120-645`, and `135-dual` full sample reference comparison.
-- Release package generation.
+- All 212 current contract/behavior tests and 14 format/mode policy consistency checks
+  passed, together with package/regression compile, launcher syntax, version, and
+  whitespace validation.
+- Representative smokes cover standard full/partial, partial auto/explicit count,
+  120-66, half, 120-67, dual lane, cache reuse, review export, multiprocessing, TIFF
+  metadata, and three-panel Debug Analysis.
+- Current PASS/REVIEW counts do not block structural acceptance; numerical calibration
+  follows separately.
 
 ### Version Summary
 
 | Version | Status | Summary |
 |---|---|---|
-| V4.9 | Current active development | Continues the evidence / policy / decision structure. Reference diffs are audit material, not historical-parity gates. |
-| V4.7 | Previous active development | Source-layout rewrite. Removes old bridges, keeps a thin entry and layered `x5crop/` implementation, and moves format / mode behavior into policy. |
-| V4.6 | Development | Introduces `DetectionPolicy` for detector, count, outer, separator, content, scoring, selection, postprocess, diagnostics, and output behavior. |
-| V4.5.x | Development | Converges 120-66 broad separator width / strict-holder behavior, half geometry support, policy views, postprocess, and separator-geometry outer. |
-| V4.4.x | Development | Refines full / partial outer proposal responsibilities, output-folder naming, Debug Analysis readability, partial safe-extra-frames, and cache efficiency. |
-| V4.3.x | Development | Builds full-mode outer proposal layering and conservative partial safe-extra-frames support. |
-| V4.2.8 | Current stable release | Improves launcher interaction: count is requested only when partial mode is enabled; Return or `auto` keeps automatic count estimation. Detection logic is unchanged. |
-| V4.2.x | Development | Builds 120 family geometry model, separator-first outer proposal, conservative 120-66 / 120-67 fixes, and half-frame full geometry support. |
-| V4.1.x | Development | Calibrates 120-66 / 120-67 parameters, converges outer retry, and introduces shared 120 policy structure. |
-| V4.0.x | Historical stable / development | Modular rewrite and 135 wide-spacing support; root entry becomes thin and main responsibilities move into `x5crop/`. |
-| V3.6 - V3.9 | Historical development | Format-aware policy / tuning, frame fit, diagnostics, hard-gap trust, nearby separator, overlap risk, and edge-pair work. |
-| V3.0 - V3.5 | Historical baseline / experiments | Establishes the main workflow, output-only bleed, and V3-style detection chain; several hard-gap / grid experiments are paused or reverted. |
+| V4.9 | Active development | Typed physical frame-sequence model; historical output is not an oracle. |
+| V4.7 | Previous development | Layered source rewrite with a thin entry and modular `x5crop/`. |
+| V4.6 | Development | Policy-driven detection structure. |
+| V4.3-V4.5 | Historical development | Full/partial, 120, half, diagnostics, and candidate experiments. |
+| V4.2.8 | Stable release | Count is requested only in partial mode; Return/`auto` selects automatic count. |
+| V3-V4.2 | Historical | Early workflow, format parameters, and geometry experiments. |
 
 ### Release Policy
 
-- GitHub Releases are the user-facing download channel.
-- `main` is the development branch and may be ahead of the stable release.
-- User Release zips contain only the standalone script, launchers, TXT user docs,
-  and install/uninstall launchers.
-- User packages exclude `x5crop/`, `archive/`, `CHANGELOG.md`, `AGENTS.md`,
-  `LICENSE`, `.github/`, diagnostics launchers, Test files, and generated outputs.
+- GitHub Releases are the user download channel; `main` may lead the stable release.
+- Release zips contain only the standalone script, launchers, TXT user docs, and
+  install/uninstall launchers.
+- User packages exclude `x5crop/`, tests, development docs, diagnostics launchers,
+  and generated files.

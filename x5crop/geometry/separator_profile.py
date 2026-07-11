@@ -119,11 +119,3 @@ def separator_profile(
     signals = separator_profile_signals(middle, config)
     score = combined_separator_profile_score(signals, config)
     return smooth_1d(score.astype(np.float32), separator_profile_smooth_window(w, config))
-
-
-def interval_mean(profile: np.ndarray, start: int, end: int) -> float:
-    start = max(0, min(int(start), len(profile)))
-    end = max(start, min(int(end), len(profile)))
-    if end <= start:
-        return 0.0
-    return float(profile[start:end].mean())

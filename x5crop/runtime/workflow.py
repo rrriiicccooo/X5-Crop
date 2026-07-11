@@ -10,7 +10,7 @@ from .analysis_reuse import (
 from ..cache.analysis import make_measurement_cache
 from ..detection.context import DetectionContext, DetectionRequest
 from ..run_config import RunConfig
-from .output_protection import prepare_output_protection
+from .output_bleed import prepare_output_bleed
 from .deskew import apply_deskew
 from ..debug.outputs import write_debug_outputs
 from ..detection.decision.decision_gate import apply_decision_gate
@@ -84,7 +84,7 @@ def process_one(
     )
     selection = choose_detection(detection_context)
     selected_policy = detection_context.policy
-    prepared_output_protection = prepare_output_protection(
+    prepared_output_bleed = prepare_output_bleed(
         selection.selected,
         detection_context,
         AxisBleedParameters(
@@ -94,8 +94,7 @@ def process_one(
     )
     decided_detection = apply_decision_gate(
         selection,
-        prepared_output_protection.plan,
-        prepared_output_protection.evidence,
+        prepared_output_bleed,
         transform_geometry,
         scan_calibration,
         image_width=int(gray.shape[1]),
@@ -103,12 +102,9 @@ def process_one(
     )
     runtime_policy_detail = detection_policy_report_detail(selected_policy)
     detection = finalize_detection(
-        gray,
         decided_detection,
-        approved_geometry_parameters=(
-            selected_policy.approved_geometry_adjustment
-        ),
-        edge_bleed_parameters=selected_policy.output.edge_bleed_protection,
+        image_width=int(gray.shape[1]),
+        image_height=int(gray.shape[0]),
     )
     review_copy = copy_for_review_if_needed(input_file, output_dir, config, detection, warnings)
     output_files = write_crops_if_allowed(

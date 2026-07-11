@@ -7,7 +7,8 @@ from ..candidate.plan.count_hypotheses import CountHypothesis
 from ..context import DetectionContext
 from ..geometry import CandidateGeometry
 from ..physical.boundary import canvas_boundary_observations
-from ..physical.spans import CropEnvelope, HolderSpan, VisibleSequenceSpan
+from ..physical.photo_size import frame_dimension_estimate
+from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 
 
 def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
@@ -20,6 +21,14 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
     height, width = context.measurement_cache.gray_work.shape
     span = Box(0, 0, width, height)
     count = physical_spec.default_count
+    visible_span = VisibleSequenceSpan(span)
+    dimensions = frame_dimension_estimate(
+        visible_span,
+        physical_spec,
+        context.scan_calibration,
+        context.policy.separator.frame_dimension_estimate,
+        layout=context.request.layout,
+    )
     return BuiltCandidate(
         geometry=CandidateGeometry(
             format_id=physical_spec.format_id,
@@ -27,16 +36,15 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
             strip_mode=context.request.strip_mode,
             count=count,
             holder_span=HolderSpan(span),
-            visible_sequence_span=VisibleSequenceSpan(span),
+            visible_sequence_span=visible_span,
             crop_envelope=CropEnvelope(span),
             frames=(),
-            separators=(),
-            origin=0.0,
-            pitch=float(width) / float(max(1, count)),
-            offset_fraction=0.0,
+            separator_observations=(),
+            separator_assignments=(),
+            frame_boundaries=(),
+            frame_dimension_estimate=dimensions,
             source=CANDIDATE_SOURCE_REVIEW_ONLY,
             automatic_processing_supported=False,
-            contract="review_only_mode",
             sequence_hypothesis_name="review_only_canvas",
             sequence_hypothesis_strategy="review_only_canvas",
             sequence_provenance=MeasurementProvenance(
@@ -49,8 +57,6 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
         count_hypothesis=CountHypothesis(
             count=count,
             strip_mode=context.request.strip_mode,
-            offsets=(),
-            placement_source="not_applicable",
             source="mode_contract",
             allowed_by_physical_spec=True,
         ),

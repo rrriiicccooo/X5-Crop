@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ....geometry.gap_geometry import width_cv
 from ...evidence.content.frame_support import (
     FrameContentEvidence,
     FrameContentObservation,
@@ -16,13 +15,13 @@ from ...evidence.holder_occupancy import (
     HolderOccupancyEvidence,
     StripCompletenessEvidence,
 )
-from ...evidence.outer_alignment import OuterAlignmentEvidence
+from ...evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from ...evidence.partial_edge import PartialEdgeSafetyEvidence
 from ...evidence.separator_continuity import SeparatorContinuityEvidence
-from ...evidence.state import EvidenceState
+from x5crop.domain import EvidenceState
 from ...physical.photo_size import FrameDimensionEvidence
 from ...physical.boundary import HolderOcclusionEvidence
-from ...physical.intervals import PixelInterval
+from x5crop.domain import PixelInterval
 from ...physical.spacing import SequenceConservationEvidence
 from ..model import (
     AssessedCandidate,
@@ -38,6 +37,16 @@ from .candidate_gate import (
 )
 from .evidence_independence import EvidenceIndependenceEvidence
 from .separator_support import SeparatorSequenceEvidence
+
+
+def _width_cv(values: tuple[float, ...]) -> float | None:
+    if len(values) < 2:
+        return None
+    mean = sum(values) / len(values)
+    if mean <= 0.0:
+        return None
+    variance = sum((value - mean) ** 2 for value in values) / len(values)
+    return (variance ** 0.5) / mean
 
 
 def _combined_state(states: tuple[EvidenceState, ...]) -> EvidenceState:
@@ -79,11 +88,14 @@ def assess_dual_lane_candidate(
             if coverage_state == EvidenceState.SUPPORTED
             else "lane_content_coverage_unresolved"
         ),
-        holder_interval=(
+        holder_long_axis_interval=(
             geometry.holder_span.box.left,
             geometry.holder_span.box.right,
         ),
-        film_interval=(geometry.visible_sequence_span.box.left, geometry.visible_sequence_span.box.right),
+        visible_sequence_interval=(
+            geometry.visible_sequence_span.box.left,
+            geometry.visible_sequence_span.box.right,
+        ),
         frame_intervals=tuple(
             interval
             for lane in lanes
@@ -127,11 +139,12 @@ def assess_dual_lane_candidate(
         reason="dual_lane_separator_sequence",
         expected_count=expected_separators,
         hard_count=len(hard_indexes),
-        model_count=sum(
-            lane.assessment.evidence.separator_sequence.model_count for lane in lanes
+        dimension_constrained_count=sum(
+            lane.assessment.evidence.separator_sequence.dimension_constrained_count
+            for lane in lanes
         ),
-        hard_indexes=hard_indexes,
-        missing_indexes=(),
+        hard_boundary_indexes=hard_indexes,
+        missing_boundary_indexes=(),
         hard_scores=tuple(
             score
             for lane in lanes
@@ -151,7 +164,7 @@ def assess_dual_lane_candidate(
             for lane in lanes
             for record in lane.assessment.evidence.separator_continuity.records
         ),
-        observations=geometry.separators,
+        observations=geometry.separator_observations,
         minimum_coverage_ratio=min(
             lane.assessment.evidence.separator_continuity.minimum_coverage_ratio
             for lane in lanes
@@ -182,9 +195,9 @@ def assess_dual_lane_candidate(
         nominal_height_mm=nominal.nominal_height_mm,
         nominal_aspect=nominal.nominal_aspect,
         photo_widths_px=widths,
-        photo_width_cv=width_cv(widths),
+        photo_width_cv=_width_cv(widths),
         separator_widths_px=separator_widths,
-        separator_width_cv=width_cv(separator_widths),
+        separator_width_cv=_width_cv(separator_widths),
         observed_width_mm=None,
         observed_height_mm=None,
         observed_aspect=None,
@@ -296,29 +309,29 @@ def assess_dual_lane_candidate(
             for lane in lanes
             for index in lane.assessment.evidence.content_preservation.boundary_contact_frame_indexes
         ),
-        confirmed_outer_undercrop_sides=tuple(
+        confirmed_visible_undercrop_sides=tuple(
             side
             for lane in lanes
-            for side in lane.assessment.evidence.content_preservation.confirmed_outer_undercrop_sides
+            for side in lane.assessment.evidence.content_preservation.confirmed_visible_undercrop_sides
         ),
         partial_edge_state=EvidenceState.NOT_APPLICABLE,
     )
-    alignment = OuterAlignmentEvidence(
+    alignment = SequenceContentAlignmentEvidence(
         state=_combined_state(
-            tuple(lane.assessment.evidence.outer_alignment.state for lane in lanes)
+            tuple(lane.assessment.evidence.sequence_content_alignment.state for lane in lanes)
         ),
-        reason="dual_lane_outer_alignment",
+        reason="dual_lane_sequence_content_alignment",
         visible_sequence_span=geometry.visible_sequence_span.box,
         content_span=None,
         content_measurement_sources=("lane_components",),
-        confirmed_undercrop_sides=preservation.confirmed_outer_undercrop_sides,
+        confirmed_undercrop_sides=preservation.confirmed_visible_undercrop_sides,
         unconfirmed_undercrop_sides=(),
         overcontains_long_axis=any(
-            lane.assessment.evidence.outer_alignment.overcontains_long_axis
+            lane.assessment.evidence.sequence_content_alignment.overcontains_long_axis
             for lane in lanes
         ),
         overcontains_short_axis=any(
-            lane.assessment.evidence.outer_alignment.overcontains_short_axis
+            lane.assessment.evidence.sequence_content_alignment.overcontains_short_axis
             for lane in lanes
         ),
         leading_slack_px=0,
@@ -333,14 +346,20 @@ def assess_dual_lane_candidate(
         count=geometry.count,
         nominal_count=geometry.count,
         valid_frame_count=len(geometry.frames),
-        expected_separator_count=expected_separators,
-        observed_separator_count=len(geometry.separators),
+        expected_internal_boundary_count=expected_separators,
+        resolved_boundary_count=sum(
+            len(lane.geometry.frame_boundaries) for lane in lanes
+        ),
+        independent_separator_count=sum(
+            lane.assessment.evidence.separator_sequence.hard_count
+            for lane in lanes
+        ),
     )
     occupancy = HolderOccupancyEvidence(
         state=EvidenceState.SUPPORTED,
         strip_completeness=completeness,
-        expected_film_span_mm=None,
-        observed_film_span_px=float(geometry.visible_sequence_span.box.width),
+        nominal_frame_total_mm=None,
+        observed_sequence_span_px=float(geometry.visible_sequence_span.box.width),
         leading_slack_px=0.0,
         trailing_slack_px=0.0,
         leading_slack_mm=None,
@@ -371,11 +390,11 @@ def assess_dual_lane_candidate(
             tuple(lane.assessment.evidence.independence.state for lane in lanes)
         ),
         reason="dual_lane_component_independence",
-        outer_root_measurement=geometry.sequence_provenance.root_measurement,
-        separator_root_measurements=tuple(
+        sequence_root_measurement=geometry.sequence_provenance.root_measurement,
+        supporting_root_measurements=tuple(
             root
             for lane in lanes
-            for root in lane.assessment.evidence.independence.separator_root_measurements
+            for root in lane.assessment.evidence.independence.supporting_root_measurements
         ),
         cyclic_measurements=(),
     )
@@ -384,7 +403,11 @@ def assess_dual_lane_candidate(
         frame_coverage=coverage,
         frame_sequence=FrameSequenceEvidence(
             holder_occlusion=HolderOcclusionEvidence.not_applicable(),
-            spacings=(),
+            spacings=tuple(
+                replace(spacing, lane_index=lane_index)
+                for lane_index, lane in enumerate(lanes, start=1)
+                for spacing in lane.assessment.evidence.frame_sequence.spacings
+            ),
             conservation=SequenceConservationEvidence(
                 EvidenceState.NOT_APPLICABLE,
                 "dual_lane_components_own_sequence_conservation",
@@ -401,7 +424,7 @@ def assess_dual_lane_candidate(
         frame_content=frame_content,
         holder_texture=holder_texture,
         content_preservation=preservation,
-        outer_alignment=alignment,
+        sequence_content_alignment=alignment,
         holder_occupancy=occupancy,
         partial_edge_safety=partial,
         independence=independence,

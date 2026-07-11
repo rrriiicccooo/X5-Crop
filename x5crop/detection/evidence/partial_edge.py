@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...gap_methods import is_hard_gap_method
 from ..geometry import CandidateGeometry
 from ..physical.photo_size import FrameDimensionEvidence
 from .content.frame_support import FrameContentEvidence
 from .frame_coverage import FrameCoverageEvidence
 from .holder_occupancy import HolderOccupancyEvidence
-from .state import EvidenceState
+from x5crop.domain import EvidenceState
 
 
 @dataclass(frozen=True)
@@ -44,8 +43,8 @@ def partial_edge_safety_evidence(
         )
     hard_count = sum(
         1
-        for observation in geometry.separators
-        if is_hard_gap_method(observation.method)
+        for assignment in geometry.separator_assignments
+        if assignment.used_for_boundary and assignment.independent
     )
     expected = max(0, geometry.count - 1)
     boundary_support = bool(

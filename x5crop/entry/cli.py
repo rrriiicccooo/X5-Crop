@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, SUMMARY_CSV_NAME, VERSION
 from ..formats import FORMAT_CHOICES
-from ..output.protection import DEFAULT_OUTPUT_BLEED
+from ..output.bleed_plan import DEFAULT_OUTPUT_BLEED
 from ..runtime.bootstrap import run_options
 from ..runtime.limits import STANDARD_JOB_LIMIT
 from ..runtime.options import (
@@ -38,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-n", "--count", type=int, default=None, help="Override frame count.")
     parser.add_argument("--page", type=int, default=0, help="TIFF page index; default 0.")
     parser.add_argument("--bleed", type=int, default=None, help="Bleed in pixels on all sides; overrides layout-aware defaults.")
-    parser.add_argument("--bleed-x", type=int, default=None, help=f"Long-axis bleed override; default {DEFAULT_OUTPUT_BLEED.long_axis}, increased when exposure-overlap protection requires it. Horizontal scans: left/right. Vertical scans: top/bottom.")
+    parser.add_argument("--bleed-x", type=int, default=None, help=f"Long-axis bleed override; default {DEFAULT_OUTPUT_BLEED.long_axis}, increased when signed overlap requires it. Horizontal scans: left/right. Vertical scans: top/bottom.")
     parser.add_argument("--bleed-y", type=int, default=None, help=f"Short-axis bleed override; default {DEFAULT_OUTPUT_BLEED.short_axis}. Horizontal scans: top/bottom. Vertical scans: left/right.")
     parser.add_argument("--deskew", choices=DESKEW_CHOICES, default="auto", help="Deskew strip before detection/export.")
     parser.add_argument("--deskew-fallback", choices=DESKEW_FALLBACK_CHOICES, default="auto", help="Fallback edge fitting for deskew angle selection. auto runs the fallback only when base deskew quality is weak; always evaluates it; off disables the fallback.")
@@ -52,7 +52,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="Detect only; do not write cropped TIFFs.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite existing outputs.")
     parser.add_argument("--report", action="store_true", help=f"Write {REPORT_JSONL_NAME} and {SUMMARY_CSV_NAME}.")
-    parser.add_argument("--debug", action="store_true", help="Write lightweight JPG previews with detected outer/frame boxes.")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Write lightweight JPG previews with sequence and frame geometry.",
+    )
     parser.add_argument("--debug-analysis", action="store_true", help="Write one combined JPG with original gray, debug boxes, and separator evidence.")
     parser.add_argument("--diagnostics", action="store_true", help="Read-only diagnostics mode; implies --report --debug-analysis --dry-run --no-copy-review-files --no-reuse-analysis.")
     parser.add_argument("--no-reuse-analysis", dest="reuse_analysis", action="store_false", default=True, help="Do not reuse matching Debug Analysis report data for non-dry-run export.")

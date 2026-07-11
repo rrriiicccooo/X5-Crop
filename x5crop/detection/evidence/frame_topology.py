@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ...domain import Box
-from .state import EvidenceState
+from x5crop.domain import EvidenceState
 
 
 def _overlap_pairs(boxes: list[Box]) -> list[tuple[int, int]]:

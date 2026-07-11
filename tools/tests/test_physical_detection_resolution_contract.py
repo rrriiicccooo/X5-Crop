@@ -1,121 +1,91 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from pathlib import Path
+from inspect import signature
 import unittest
-from unittest.mock import patch
 
 import numpy as np
 
-from tools.tests.physical_gate_support import (
-    candidate_evidence_fixture,
-    candidate_fixture,
-    separator_observation,
-)
-from x5crop.cache import MeasurementCache
+from tools.tests.physical_gate_support import candidate_evidence_fixture, candidate_fixture
 from x5crop.detection.candidate.assessment.candidate import _boundary_proof_paths
-from x5crop.detection.candidate.assessment.separator_support import (
-    separator_sequence_evidence,
-)
-from x5crop.detection.candidate.build.separator_sources import (
-    select_geometry_equal_model_gaps,
-)
 from x5crop.detection.candidate.model import BuiltCandidate
-from x5crop.detection.evidence.content.preservation import content_preservation_evidence
-from x5crop.detection.evidence.frame_coverage import frame_coverage_evidence
-from x5crop.detection.evidence.state import EvidenceState
-from x5crop.detection.evidence.separator_continuity import (
-    SeparatorContinuityEvidence,
-    SeparatorContinuityRecord,
+from x5crop.detection.candidate.selection.choose import select_candidates
+from x5crop.domain import (
+    BoundaryObservation,
+    Box,
+    EvidenceState,
+    MeasurementProvenance,
+    PixelInterval,
 )
-from x5crop.detection.physical.photo_size import (
-    frame_dimension_evidence,
-    photo_size_consistency_from_gap_edges,
-)
-from x5crop.detection.physical.separator.hints import (
-    SeparatorGapHint,
-    SeparatorGapHintSet,
-)
-from x5crop.detection.physical.separator.proposal import propose_separator_gaps
-from x5crop.domain import Box, MeasurementProvenance
-from x5crop.formats import format_spec
-from x5crop.geometry.detection_parameters import (
-    EdgePairParameters,
-    NearbySeparatorRefinementParameters,
-)
-from x5crop.geometry.edge_pairs import refine_gaps_with_edge_profiles
-from x5crop.geometry.frame_fit import frame_boxes_from_gaps
-from x5crop.geometry.gap_search import GapSearchResult
-from x5crop.geometry.nearby_separator import apply_nearby_separator_refinement
+from x5crop.detection.physical.boundary import canvas_boundary_observations
+from x5crop.detection.physical.separator.assignment import dimension_constrained_boundary
+from x5crop.cache import MeasurementCache
+from x5crop.domain import HolderSpan, VisibleSequenceSpan
 from x5crop.policies.registry import get_detection_policy
-from x5crop.units import ScanCalibration
+from x5crop.detection.final.finalize import finalize_detection
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-
-def _cache() -> MeasurementCache:
-    gray = np.zeros((100, 600), dtype=np.uint8)
-    return MeasurementCache(
-        layout="horizontal",
-        gray_work=gray,
-        content_evidence_work=gray,
-        content_evidence_float_work=gray.astype(np.float32),
+def _single_frame_candidate(*, measured_boundaries: bool) -> BuiltCandidate:
+    candidate = candidate_fixture()
+    provenance = MeasurementProvenance(
+        "boundary_measurement",
+        "synthetic",
+        ("gray_work",),
     )
+    kind = "tonal_transition" if measured_boundaries else "canvas_clip"
+    observations = (
+        BoundaryObservation("leading", PixelInterval.exact(0.0), kind, provenance),
+        BoundaryObservation("trailing", PixelInterval.exact(200.0), kind, provenance),
+        BoundaryObservation("top", PixelInterval.exact(0.0), kind, provenance),
+        BoundaryObservation("bottom", PixelInterval.exact(100.0), kind, provenance),
+    )
+    geometry = replace(
+        candidate.geometry,
+        count=1,
+        frames=(Box(0, 0, 200, 100),),
+        separator_observations=(),
+        separator_assignments=(),
+        frame_boundaries=(),
+        boundary_observations=observations,
+        sequence_provenance=provenance,
+    )
+    return BuiltCandidate(geometry, candidate.count_hypothesis, ())
 
 
 class PhysicalDetectionResolutionContractTest(unittest.TestCase):
-    def test_more_content_regions_than_frames_contradicts_coverage(self) -> None:
-        candidate = candidate_fixture()
-        with patch(
-            "x5crop.detection.evidence.frame_coverage.content_region_runs",
-            return_value=((10, 50), (80, 120), (150, 190)),
-        ):
-            evidence = frame_coverage_evidence(
-                candidate.geometry.holder_span,
-                candidate.geometry.visible_sequence_span,
-                candidate.geometry.frames,
-                format_spec("135"),
-                _cache(),
-                get_detection_policy("135", "full").content,
-            )
-        self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
-        self.assertEqual(evidence.unexplained_content_region_count, 1)
+    def test_full_canvas_does_not_prove_single_frame_geometry(self) -> None:
+        built = _single_frame_candidate(measured_boundaries=False)
+        paths = _boundary_proof_paths(built, candidate_evidence_fixture())
+        geometry_path = next(path for path in paths if path.code == "geometry_led")
+        self.assertEqual(geometry_path.state, EvidenceState.UNAVAILABLE)
 
-    def test_extra_empty_frame_is_legal(self) -> None:
-        candidate = candidate_fixture()
-        with patch(
-            "x5crop.detection.evidence.frame_coverage.content_region_runs",
-            return_value=((10, 90),),
-        ):
-            evidence = frame_coverage_evidence(
-                candidate.geometry.holder_span,
-                candidate.geometry.visible_sequence_span,
-                candidate.geometry.frames,
-                format_spec("135"),
-                _cache(),
-                get_detection_policy("135", "full").content,
-            )
-        self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
+    def test_two_measured_sides_can_support_single_frame_geometry(self) -> None:
+        built = _single_frame_candidate(measured_boundaries=True)
+        paths = _boundary_proof_paths(built, candidate_evidence_fixture())
+        geometry_path = next(path for path in paths if path.code == "geometry_led")
+        self.assertEqual(geometry_path.state, EvidenceState.SUPPORTED)
 
-    def test_single_frame_needs_calibration_or_two_boundary_anchors(self) -> None:
-        assessed = candidate_fixture()
+    def test_full_canvas_never_becomes_a_physical_proof_path(self) -> None:
+        candidate = candidate_fixture()
         geometry = replace(
-            assessed.geometry,
-            count=1,
-            frames=(assessed.geometry.frames[0],),
-            separators=(),
-            sequence_provenance=replace(
-                assessed.geometry.sequence_provenance,
-                boundary_anchors=(),
+            candidate.geometry,
+            sequence_provenance=MeasurementProvenance(
+                "holder_canvas",
+                "full_canvas",
+                ("canvas",),
             ),
+            boundary_observations=canvas_boundary_observations(200, 100),
         )
-        built = BuiltCandidate(geometry, assessed.count_hypothesis, ())
+        built = BuiltCandidate(geometry, candidate.count_hypothesis, ())
+        evidence = candidate_evidence_fixture()
         evidence = replace(
-            candidate_evidence_fixture(),
-            frame_dimensions=replace(
-                candidate_evidence_fixture().frame_dimensions,
-                calibration_used=False,
+            evidence,
+            separator_sequence=replace(
+                evidence.separator_sequence,
+                state=EvidenceState.UNAVAILABLE,
+                hard_count=0,
+                hard_boundary_indexes=(),
+                missing_boundary_indexes=(1,),
             ),
         )
         paths = _boundary_proof_paths(built, evidence)
@@ -123,270 +93,135 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             any(path.state == EvidenceState.SUPPORTED for path in paths)
         )
 
-    def test_complete_underfilled_does_not_suppress_undercrop(self) -> None:
-        evidence = candidate_evidence_fixture()
-        coverage = replace(
-            evidence.frame_coverage,
-            state=EvidenceState.CONTRADICTED,
-            uncovered_content=((190, 210),),
-        )
-        partial = replace(
-            evidence.partial_edge_safety,
-            state=EvidenceState.SUPPORTED,
-            complete_underfilled_strip=True,
-        )
-        result = content_preservation_evidence(
-            evidence.frame_content,
-            evidence.outer_alignment,
-            partial,
-            coverage,
-        )
-        self.assertEqual(result.state, EvidenceState.CONTRADICTED)
-
-    def test_irregular_separator_width_preserves_stable_photo_size(self) -> None:
-        result = photo_size_consistency_from_gap_edges(
-            [
-                separator_observation(1, 110.0, start=100.0, end=120.0),
-                separator_observation(2, 235.0, start=220.0, end=250.0),
-            ],
-            0.0,
-            350.0 / 3.0,
-            3,
-        )
-        self.assertEqual(result.photo_widths, (100.0, 100.0, 100.0))
-        self.assertEqual(result.photo_width_cv, 0.0)
-        self.assertGreater(result.separator_width_cv or 0.0, 0.0)
-
-    def test_photo_size_uses_available_edge_bounded_frames(self) -> None:
-        result = photo_size_consistency_from_gap_edges(
-            [
-                separator_observation(1, 105.0, start=100.0, end=110.0),
-                separator_observation(3, 335.0, start=330.0, end=340.0),
-            ],
-            0.0,
-            110.0,
-            4,
-            target_photo_width=100.0,
-        )
-
-        self.assertTrue(result.used)
-        self.assertEqual(result.photo_widths, (100.0, 100.0))
-        self.assertEqual(result.photo_width_cv, 0.0)
-
-    def test_separator_without_cross_axis_continuity_is_not_hard_support(self) -> None:
+    def test_one_canvas_sequence_edge_cannot_prove_placement(self) -> None:
         candidate = candidate_fixture()
-        observation = candidate.geometry.separators[0]
-        continuity = SeparatorContinuityEvidence(
-            EvidenceState.CONTRADICTED,
-            "separator_cross_axis_continuity_weak",
-            (
-                SeparatorContinuityRecord(
-                    observation.index,
-                    observation.method,
-                    True,
-                    EvidenceState.CONTRADICTED,
-                    0.2,
-                    0.2,
-                    3,
-                    0.2,
-                    "separator_cross_axis_continuity_weak",
-                ),
+        observations = tuple(
+            replace(
+                observation,
+                kind=("canvas_clip" if observation.side == "leading" else observation.kind),
+            )
+            for observation in candidate.geometry.boundary_observations
+        )
+        geometry = replace(candidate.geometry, boundary_observations=observations)
+        built = BuiltCandidate(geometry, candidate.count_hypothesis, ())
+        paths = _boundary_proof_paths(built, candidate_evidence_fixture())
+        self.assertFalse(
+            any(path.state == EvidenceState.SUPPORTED for path in paths)
+        )
+
+    def test_geometry_resolution_requires_sequence_conservation(self) -> None:
+        candidate = candidate_fixture()
+        conservation = replace(
+            candidate.assessment.evidence.frame_sequence.conservation,
+            state=EvidenceState.UNAVAILABLE,
+        )
+        evidence = replace(
+            candidate.assessment.evidence,
+            frame_sequence=replace(
+                candidate.assessment.evidence.frame_sequence,
+                conservation=conservation,
             ),
-            (observation,),
-            0.62,
-            0.55,
         )
+        candidate = replace(
+            candidate,
+            assessment=replace(candidate.assessment, evidence=evidence),
+        )
+        selection = select_candidates(
+            (candidate,),
+            get_detection_policy("135", "full").candidate_selection,
+            larger_counts_evaluated=True,
+        )
+        self.assertFalse(selection.geometry_resolution.supported)
+        self.assertIn("count_unresolved", selection.geometry_resolution.reasons)
 
-        sequence = separator_sequence_evidence(candidate.geometry, continuity)
-
-        self.assertEqual(sequence.hard_count, 0)
-        self.assertEqual(sequence.state, EvidenceState.UNAVAILABLE)
-
-    def test_photo_dimensions_ignore_unconfirmed_separator_bands(self) -> None:
+    def test_dimension_constrained_boundary_can_use_physical_geometry_proof(self) -> None:
         candidate = candidate_fixture()
-        policy = get_detection_policy("135", "full")
-
-        dimensions = frame_dimension_evidence(
+        geometry = replace(
             candidate.geometry,
-            format_spec("135"),
-            ScanCalibration(None, None, "unavailable", False),
             separator_observations=(),
-            maximum_photo_width_cv=(
-                policy.scoring.base_detection.unstable_photo_width_cv
-            ),
-            maximum_dimension_error_ratio=(
-                policy.scoring.geometry_support.aspect_norm
-            ),
-        )
-
-        self.assertEqual(dimensions.state, EvidenceState.UNAVAILABLE)
-
-    def test_equal_model_only_fills_missing_indexes(self) -> None:
-        fmt = format_spec("135")
-        hard = separator_observation(2, 200.0, start=195.0, end=205.0)
-        result = select_geometry_equal_model_gaps(
-            (hard,),
-            np.zeros(600, dtype=np.float32),
-            fmt,
-            fmt.default_count,
-            "full",
-            0.0,
-            100.0,
-            None,
-        )
-        self.assertIs(next(gap for gap in result if gap.index == 2), hard)
-        self.assertEqual(len(result), fmt.default_count - 1)
-
-    def test_nearby_refinement_never_moves_measured_band(self) -> None:
-        measured = separator_observation(1, 50.0, start=45.0, end=55.0)
-        profile = np.zeros(120, dtype=np.float32)
-        profile[64:67] = 1.0
-        result = apply_nearby_separator_refinement(
-            profile,
-            [measured],
-            100.0,
-            2,
-            NearbySeparatorRefinementParameters(),
-        )
-        self.assertIs(result[0], measured)
-
-    def test_edge_pair_refinement_stays_inside_measured_band(self) -> None:
-        measured = separator_observation(1, 50.0, start=45.0, end=55.0)
-        edge = np.zeros(120, dtype=np.float32)
-        edge[70] = 1.0
-        edge[80] = 1.0
-        background = np.ones(120, dtype=np.float32)
-        parameters = EdgePairParameters(
-            window_ratio=1.0,
-            search_window_max=120,
-            min_gutter_ratio=0.01,
-            max_gutter_ratio=0.50,
-            min_strength=0.10,
-            candidate_peak_percentile=0.0,
-            min_background=0.10,
-            max_hard_shift_ratio=1.0,
-            hard_shift_limit_max=120.0,
-        )
-
-        refined = refine_gaps_with_edge_profiles(
-            edge,
-            background,
-            [measured],
-            2,
-            parameters,
-        )
-
-        self.assertEqual(refined, [measured])
-
-    def test_one_measured_separator_band_cannot_fill_two_indexes(self) -> None:
-        policy = get_detection_policy("135", "full").separator
-
-        def same_band(_profile, _expected, _pitch, index, *_args, **_kwargs):
-            return GapSearchResult(
-                separator_observation(
-                    index,
-                    150.0,
-                    start=145.0,
-                    end=155.0,
-                ),
-                0.5,
-                "detected",
-            )
-
-        with patch(
-            "x5crop.detection.physical.separator.proposal.find_detected_gap",
-            side_effect=same_band,
-        ):
-            result = propose_separator_gaps(
-                Box(0, 0, 300, 100),
-                np.zeros(300, dtype=np.float32),
-                np.array([], dtype=np.float32),
-                0.0,
-                100.0,
-                3,
-                None,
-                policy.gap_search,
-                policy.width_profile,
-                policy.width_profile_search,
-                ScanCalibration(None, None, "unavailable", False),
-                "x",
-            )
-
-        measured = [gap for gap in result if gap.method == "detected"]
-        self.assertEqual(len(measured), 1)
-        self.assertEqual(len({gap.center for gap in measured}), 1)
-
-    def test_content_guided_separator_keeps_guidance_dependency(self) -> None:
-        separator_policy = get_detection_policy("135", "partial").separator
-        hints = SeparatorGapHintSet(
-            hints=(SeparatorGapHint(1, 80.0, 70.0, 90.0),),
-            max_offset_ratio=0.5,
-            max_offset_min=1,
-            max_offset_max=100,
-            provenance=MeasurementProvenance(
-                "content_guidance",
-                "content_runs",
-                ("content_evidence",),
-            ),
-        )
-        with patch(
-            "x5crop.detection.physical.separator.proposal.find_detected_gap",
-            return_value=GapSearchResult(
-                separator_observation(
+            separator_assignments=(),
+            frame_boundaries=(
+                dimension_constrained_boundary(
                     1,
-                    80.0,
-                    start=75.0,
-                    end=85.0,
+                    PixelInterval.exact(100.0),
+                    MeasurementProvenance(
+                        "physical_frame_aspect",
+                        "bidirectional_boundary_constraint",
+                        ("format_physical_spec", "sequence_boundaries"),
+                    ),
                 ),
-                0.0,
-                "detected",
             ),
-        ):
-            result = propose_separator_gaps(
-                Box(0, 0, 200, 100),
-                np.zeros(200, dtype=np.float32),
-                np.array([], dtype=np.float32),
-                0.0,
-                100.0,
-                2,
-                None,
-                separator_policy.gap_search,
-                separator_policy.width_profile,
-                separator_policy.width_profile_search,
-                ScanCalibration(None, None, "unavailable", False),
-                "x",
-                hints,
-            )
+        )
+        built = BuiltCandidate(geometry, candidate.count_hypothesis, ())
+        evidence = candidate_evidence_fixture()
+        evidence = replace(
+            evidence,
+            separator_sequence=replace(
+                evidence.separator_sequence,
+                state=EvidenceState.UNAVAILABLE,
+                hard_count=0,
+                hard_boundary_indexes=(),
+                missing_boundary_indexes=(1,),
+            ),
+        )
+        paths = _boundary_proof_paths(built, evidence)
+        geometry_path = next(path for path in paths if path.code == "geometry_led")
+        self.assertEqual(geometry_path.state, EvidenceState.SUPPORTED)
 
+    def test_geometry_resolution_requires_larger_counts_to_be_evaluated(self) -> None:
+        candidate = candidate_fixture()
+        selection = select_candidates(
+            (candidate,),
+            get_detection_policy("135", "full").candidate_selection,
+            larger_counts_evaluated=False,
+        )
+        self.assertFalse(selection.geometry_resolution.supported)
         self.assertIn(
-            "content_guidance",
-            result[0].provenance.dependencies,
+            "larger_counts_not_evaluated",
+            selection.geometry_resolution.reasons,
         )
 
-    def test_frame_cuts_use_measured_band_centers(self) -> None:
-        frames = frame_boxes_from_gaps(
-            Box(0, 0, 360, 100),
-            [
-                separator_observation(1, 90.0, start=85.0, end=95.0),
-                separator_observation(2, 230.0, start=225.0, end=235.0),
-            ],
-            3,
-            360,
-            100,
-            0,
-            0,
-            origin=0.0,
-            pitch=120.0,
-        )
+    def test_finalization_has_no_pixel_input(self) -> None:
+        parameters = signature(finalize_detection).parameters
+        self.assertNotIn("gray", parameters)
         self.assertEqual(
-            [(frame.left, frame.right) for frame in frames],
-            [(0, 90), (90, 230), (230, 360)],
+            tuple(parameters),
+            ("detection", "image_width", "image_height"),
         )
 
-    def test_candidate_gate_is_not_execution_budget(self) -> None:
-        source = (PROJECT_ROOT / "x5crop/detection/pipeline.py").read_text()
-        self.assertNotIn("candidate_gate.passed", source)
-        self.assertIn("evaluation.geometry_resolved", source)
+    def test_content_region_measurement_is_count_independent(self) -> None:
+        from x5crop.detection.evidence.content.regions import content_region_runs
+        from x5crop.detection.evidence.frame_coverage import frame_coverage_evidence
+
+        self.assertNotIn("count", signature(content_region_runs).parameters)
+        self.assertNotIn("fmt", signature(frame_coverage_evidence).parameters)
+        self.assertIn(
+            "frame_width_reference_px",
+            signature(frame_coverage_evidence).parameters,
+        )
+
+    def test_two_frames_cannot_cover_three_independent_content_regions(self) -> None:
+        from x5crop.detection.evidence.frame_coverage import frame_coverage_evidence
+
+        content = np.zeros((60, 450), dtype=np.uint8)
+        for start, end in ((20, 120), (160, 260), (320, 420)):
+            content[:, start:end] = 255
+        cache = MeasurementCache(
+            "horizontal",
+            np.full_like(content, 255),
+            content,
+            content.astype(np.float32) / 255.0,
+        )
+        evidence = frame_coverage_evidence(
+            HolderSpan(Box(0, 0, 450, 60)),
+            VisibleSequenceSpan(Box(0, 0, 450, 60)),
+            (Box(0, 0, 140, 60), Box(140, 0, 290, 60)),
+            100.0,
+            cache,
+            get_detection_policy("135", "partial").content,
+        )
+        self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
+        self.assertEqual(evidence.unexplained_content_region_count, 1)
 
 
 if __name__ == "__main__":

@@ -2,32 +2,41 @@ from __future__ import annotations
 
 import numpy as np
 
-from ....domain import MeasurementProvenance
-from ....geometry.detection_parameters import OuterBoxDetectionParameters
-from ....utils import clamp_int, runs_from_mask
-from ..boundary import BoundaryObservation, canvas_boundary_observations
-from ..intervals import PixelInterval
+from ...domain import BoundaryObservation, MeasurementProvenance, PixelInterval
+from ...geometry.detection_parameters import BoundaryDetectionParameters
+from ...utils import clamp_int, runs_from_mask
+from .boundary import canvas_boundary_observations
 
 
 BoundaryObservationGroup = tuple[str, tuple[BoundaryObservation, ...]]
 
 
-def _first_footprint_index(holder_mask: np.ndarray, min_run: int) -> int:
+def _first_footprint_index(holder_mask: np.ndarray, min_run: int) -> int | None:
     if holder_mask.size == 0:
-        return 0
+        return None
     footprint = ~holder_mask.astype(bool)
     for start, end in runs_from_mask(footprint):
         if end - start >= min_run:
             return int(start)
-    indexes = np.flatnonzero(footprint)
-    return int(indexes[0]) if indexes.size else 0
+    return None
+
+
+def _edge_holder_transition(holder_mask: np.ndarray, min_run: int) -> int | None:
+    holder = holder_mask.astype(bool)
+    if holder.size == 0 or not bool(holder[0]):
+        return None
+    non_holder = np.flatnonzero(~holder)
+    if not non_holder.size:
+        return None
+    transition = int(non_holder[0])
+    return transition if transition >= int(min_run) else None
 
 
 def _position_interval(
     side: str,
     position: int,
     gray: np.ndarray,
-    parameters: OuterBoxDetectionParameters,
+    parameters: BoundaryDetectionParameters,
 ) -> PixelInterval:
     axis_length = gray.shape[1] if side in {"leading", "trailing"} else gray.shape[0]
     uncertainty = max(
@@ -45,7 +54,7 @@ def _boundary_observation(
     position: int,
     kind: str,
     gray: np.ndarray,
-    parameters: OuterBoxDetectionParameters,
+    parameters: BoundaryDetectionParameters,
 ) -> BoundaryObservation:
     return BoundaryObservation(
         side=side,
@@ -64,41 +73,44 @@ def _observations_from_holder_profiles(
     gray: np.ndarray,
     col_holder: np.ndarray,
     row_holder: np.ndarray,
-    parameters: OuterBoxDetectionParameters,
+    parameters: BoundaryDetectionParameters,
     min_run_x: int,
     min_run_y: int,
 ) -> tuple[BoundaryObservation, ...]:
     width = gray.shape[1]
     height = gray.shape[0]
-    return (
-        _boundary_observation(
-            "leading",
-            _first_footprint_index(col_holder, min_run_x),
-            "white_holder_transition",
-            gray,
-            parameters,
-        ),
-        _boundary_observation(
+    transitions = (
+        ("leading", _edge_holder_transition(col_holder, min_run_x)),
+        (
             "trailing",
-            width - _first_footprint_index(col_holder[::-1], min_run_x),
-            "white_holder_transition",
-            gray,
-            parameters,
+            (
+                None
+                if (offset := _edge_holder_transition(col_holder[::-1], min_run_x))
+                is None
+                else width - offset
+            ),
         ),
-        _boundary_observation(
-            "top",
-            _first_footprint_index(row_holder, min_run_y),
-            "white_holder_transition",
-            gray,
-            parameters,
-        ),
-        _boundary_observation(
+        ("top", _edge_holder_transition(row_holder, min_run_y)),
+        (
             "bottom",
-            height - _first_footprint_index(row_holder[::-1], min_run_y),
+            (
+                None
+                if (offset := _edge_holder_transition(row_holder[::-1], min_run_y))
+                is None
+                else height - offset
+            ),
+        ),
+    )
+    return tuple(
+        _boundary_observation(
+            side,
+            position,
             "white_holder_transition",
             gray,
             parameters,
-        ),
+        )
+        for side, position in transitions
+        if position is not None
     )
 
 
@@ -107,47 +119,51 @@ def _observations_from_footprint(
     column_footprint: np.ndarray,
     row_footprint: np.ndarray,
     kind: str,
-    parameters: OuterBoxDetectionParameters,
+    parameters: BoundaryDetectionParameters,
     min_run_x: int,
     min_run_y: int,
 ) -> tuple[BoundaryObservation, ...]:
     width = gray.shape[1]
     height = gray.shape[0]
-    return (
-        _boundary_observation(
-            "leading",
-            _first_footprint_index(~column_footprint, min_run_x),
-            kind,
-            gray,
-            parameters,
-        ),
-        _boundary_observation(
+    leading = _first_footprint_index(~column_footprint, min_run_x)
+    trailing_offset = _first_footprint_index(
+        (~column_footprint)[::-1],
+        min_run_x,
+    )
+    top = _first_footprint_index(~row_footprint, min_run_y)
+    bottom_offset = _first_footprint_index((~row_footprint)[::-1], min_run_y)
+    transitions = (
+        ("leading", leading if leading not in {None, 0} else None),
+        (
             "trailing",
-            width - _first_footprint_index((~column_footprint)[::-1], min_run_x),
-            kind,
-            gray,
-            parameters,
+            width - trailing_offset
+            if trailing_offset not in {None, 0}
+            else None,
         ),
-        _boundary_observation(
-            "top",
-            _first_footprint_index(~row_footprint, min_run_y),
-            kind,
-            gray,
-            parameters,
-        ),
-        _boundary_observation(
+        ("top", top if top not in {None, 0} else None),
+        (
             "bottom",
-            height - _first_footprint_index((~row_footprint)[::-1], min_run_y),
+            height - bottom_offset
+            if bottom_offset not in {None, 0}
+            else None,
+        ),
+    )
+    return tuple(
+        _boundary_observation(
+            side,
+            position,
             kind,
             gray,
             parameters,
-        ),
+        )
+        for side, position in transitions
+        if position is not None
     )
 
 
 def boundary_observation_groups(
     gray: np.ndarray,
-    parameters: OuterBoxDetectionParameters,
+    parameters: BoundaryDetectionParameters,
 ) -> tuple[BoundaryObservationGroup, ...]:
     height, width = gray.shape
     min_run_x = clamp_int(
@@ -163,8 +179,8 @@ def boundary_observation_groups(
     white = gray >= int(parameters.white_light_threshold)
     white_boundaries = _observations_from_holder_profiles(
         gray,
-        white.mean(axis=0),
-        white.mean(axis=1),
+        white.mean(axis=0) >= float(parameters.white_holder_cross_axis_min),
+        white.mean(axis=1) >= float(parameters.white_holder_cross_axis_min),
         parameters,
         min_run_x,
         min_run_y,

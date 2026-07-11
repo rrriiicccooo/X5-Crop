@@ -4,7 +4,12 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class SeparatorWidthProfileParameters:
-    band_candidate_count: int = 10
-    sequence_candidate_count: int = 4
-    max_candidates: int = 4
+class SeparatorObservationParameters:
+    profile_threshold: float = 0.22
+    minimum_run_px: int = 1
+    maximum_observations: int = 32
+
+
+@dataclass(frozen=True)
+class FrameDimensionEstimateParameters:
+    relative_tolerance: float = 0.18

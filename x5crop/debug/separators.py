@@ -1,0 +1,117 @@
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+
+from ..detection.decision.model import FinalDetection
+from x5crop.domain import SeparatorBandObservation
+from ..domain import Box
+from ..geometry.boxes import map_work_box
+from .canvas import draw_preview_line, draw_preview_mark
+
+
+def _work_corridor(
+    detection: FinalDetection,
+    observation: SeparatorBandObservation,
+) -> Box:
+    return observation.lane_box or detection.crop_envelope.box
+
+
+def separator_mark_box(
+    detection: FinalDetection,
+    observation: SeparatorBandObservation,
+    image_width: int,
+    image_height: int,
+) -> Box:
+    corridor = _work_corridor(detection, observation)
+    start = int(round(observation.start))
+    end = max(start + 1, int(round(observation.end)))
+    return map_work_box(
+        Box(start, corridor.top, end, corridor.bottom),
+        detection.layout,
+        image_width,
+        image_height,
+    )
+
+
+def _boundary_ticks(
+    detection: FinalDetection,
+    center: float,
+    overlay: Any,
+    image_width: int,
+    image_height: int,
+) -> tuple[Box, Box]:
+    corridor = detection.crop_envelope.box
+    tick = max(
+        int(overlay.tick_length_min),
+        int(round(corridor.height * float(overlay.tick_length_ratio))),
+    )
+    x = int(round(center))
+    work_ticks = (
+        Box(x, corridor.top, x + 1, min(corridor.bottom, corridor.top + tick)),
+        Box(x, max(corridor.top, corridor.bottom - tick), x + 1, corridor.bottom),
+    )
+    return tuple(
+        map_work_box(box, detection.layout, image_width, image_height)
+        for box in work_ticks
+    )
+
+
+def draw_separator_overlay(
+    rgb: np.ndarray,
+    detection: FinalDetection,
+    scale: float,
+    overlay: Any,
+) -> None:
+    image_height = max(1, int(round(rgb.shape[0] / max(scale, 1e-9))))
+    image_width = max(1, int(round(rgb.shape[1] / max(scale, 1e-9))))
+    accepted = {
+        id(assignment.observation)
+        for assignment in detection.separator_assignments
+        if assignment.used_for_boundary and assignment.independent
+    }
+    for observation in detection.separator_observations:
+        draw_preview_mark(
+            rgb,
+            separator_mark_box(
+                detection,
+                observation,
+                image_width,
+                image_height,
+            ),
+            scale,
+            (255, 0, 0) if id(observation) in accepted else (255, 170, 0),
+            overlay.observed_line_width,
+        )
+    overlap_indexes = {
+        spacing.index
+        for spacing in detection.require_selection().selected.assessment.evidence.frame_sequence.spacings
+        if spacing.kind == "overlap"
+    }
+    for boundary in detection.frame_boundaries:
+        if boundary.source == "observed_separator" and boundary.boundary_index not in overlap_indexes:
+            continue
+        color = (
+            (0, 220, 255)
+            if boundary.boundary_index in overlap_indexes
+            else (190, 80, 255)
+        )
+        for tick in _boundary_ticks(
+            detection,
+            boundary.coordinate,
+            overlay,
+            image_width,
+            image_height,
+        ):
+            draw_preview_line(
+                rgb,
+                tick,
+                scale,
+                color,
+                (
+                    overlay.overlap_line_width
+                    if boundary.boundary_index in overlap_indexes
+                    else overlay.dimension_line_width
+                ),
+            )

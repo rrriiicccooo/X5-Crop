@@ -231,9 +231,13 @@ Common fields to inspect:
 status
 confidence
 final_review_reasons
-outer_box
-frame_boxes
-gaps
+visible_sequence_span
+crop_envelope
+output_geometry.frame_boxes
+separator_observations
+frame_boundaries
+inter_frame_spacing
+sequence_conservation
 ```
 
 Local `Test/` fixtures are untracked and their directory layout is not a source
@@ -275,12 +279,16 @@ architecture; no `docs/` mirror is kept.
 Current state:
 
 - Active script is `X5_Crop.py` V4.9.
-- Detection now follows the typed physical flow documented in `ARCHITECTURE.md`:
-  observations -> count/placement hypotheses -> geometry -> evidence ->
-  CandidateGate -> GeometryResolution -> selection -> DecisionGate.
-- `HolderSpan` and `FilmSpan` are distinct identities. Confirmed cross-axis
-  separator continuity is required before a band can support hard sequence or
-  photo-size evidence.
+- Detection follows the typed frame-sequence flow documented in
+  `ARCHITECTURE.md`: boundary/separator observations -> count and sequence
+  hypotheses -> candidate geometry/evidence -> CandidateGate ->
+  GeometryResolution -> selection -> OutputBleedPlan -> DecisionGate.
+- `HolderSpan`, `VisibleSequenceSpan`, and `CropEnvelope` are distinct canonical
+  identities. Signed inter-frame spacing represents separator, contact, or
+  overlap under one sequence-conservation model.
+- Raw separator bands are count-independent. Only physically assigned,
+  cross-axis-continuous observations become hard separator evidence;
+  dimension-constrained boundaries remain geometry-dependent.
 - `GeometryResolution` is the only execution early-stop input. CandidateGate
   and confidence do not own execution budget.
 - Report serialization, validation, and current-schema restoration all belong
@@ -294,26 +302,29 @@ Recent verified baseline:
 - The previous closure candidate is superseded by the physical detection model
   refactor. Architecture is not closed; the fixed two-audit closure plan must
   restart from the resulting commit.
-- The architecture suite covers 197 active modules and 751 acyclic internal
+- The architecture suite covers 157 active modules and 513 acyclic internal
   import edges; all active modules are reachable and uniquely layered.
-- 340 contract and behavior tests pass. Full package and regression compile,
+- 212 contract and behavior tests pass. Full package and regression compile,
   policy consistency, launcher syntax, version, and whitespace checks pass.
 - `135/full`, `135/partial auto`, `135/partial -n 3`, `120-66/partial auto`,
   `half/full`, and `120-67/full|partial` real samples produced valid
-  `physical_resolution` reports. Horizontal and vertical Debug Analysis images
-  were visually confirmed as three-panel output.
-- `X5_00034 partial auto` selected count 5 and covered all three real photos with
-  allowed empty frames. `X5_00033 partial auto` did not auto-pass as count 1.
-- The 120-66 sample preserved `complete_underfilled_strip`; it did not use that
-  occupancy fact to suppress content-preservation evidence.
-- Synthetic off-center `135-dual/full` used a measured lane divider and produced
-  twelve frames through the common lane pipeline.
+  `frame_sequence_geometry` reports. Horizontal and vertical Debug Analysis
+  images were visually confirmed as three-panel output.
+- `X5_00034 partial auto` evaluated counts from 5 down and selected count 5;
+  explicit count 3 exercised the independent fixed-count path.
+- The 120-66 sample selected nominal count 3 but kept
+  `complete_underfilled_strip=False` because frame coverage was contradicted;
+  holder occupancy did not suppress content-preservation evidence.
+- Synthetic off-center `135-dual/full` produced measured gutter hypotheses away
+  from the canvas center and twelve frames through the common lane pipeline.
 - Current-schema cache reuse completed the same review/export actions as a fresh
-  result. Exported TIFFs retained uint16 data, 600 dpi resolution metadata, and
-  DEFLATE compression. A native two-worker ProcessPool completed without fallback.
+  result. Exported TIFFs retained uint16 RGB data, ICC profile, 2000 dpi
+  resolution metadata, and source `NONE` compression. A native two-worker
+  ProcessPool completed without fallback.
 - Current representative samples are REVIEW after the structural rewrite. This
   does not block architecture work; proof thresholds and sample calibration are a
   separate project.
-- Unresolved partial samples currently expand 106-196 candidates. Optimize this
-  later through GeometryResolution-aware candidate planning and exact measurement
-  reuse, never through CandidateGate, DecisionGate, or confidence shortcuts.
+- The largest representative partial-auto smoke built 73 candidates. Optimize
+  this later through GeometryResolution-aware candidate planning and exact
+  measurement reuse, never through CandidateGate, DecisionGate, or confidence
+  shortcuts.

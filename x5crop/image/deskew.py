@@ -42,15 +42,25 @@ def fit_line(
 def fit_edge_angle(gray: np.ndarray, layout: str, deskew: DeskewParameters) -> tuple[float, dict[str, Any]]:
     work = work_gray(gray, layout)
     h = work.shape[0]
-    mask = work < deskew.outer_dark_threshold
-    outer = bbox_from_mask(mask, deskew.outer_min_fraction, deskew.outer_min_fraction)
-    if outer is None or outer.width < deskew.min_outer_width:
-        return 0.0, {"reason": "no_outer"}
+    mask = work < deskew.footprint_dark_threshold
+    footprint = bbox_from_mask(
+        mask,
+        deskew.footprint_min_fraction,
+        deskew.footprint_min_fraction,
+    )
+    if footprint is None or footprint.width < deskew.min_footprint_width:
+        return 0.0, {"reason": "no_scan_footprint"}
 
     xs = np.linspace(
-        outer.left,
-        outer.right - 1,
-        num=min(deskew.max_samples, max(deskew.min_samples, outer.width // deskew.sample_width_px)),
+        footprint.left,
+        footprint.right - 1,
+        num=min(
+            deskew.max_samples,
+            max(
+                deskew.min_samples,
+                footprint.width // deskew.sample_width_px,
+            ),
+        ),
     ).astype(int)
     top_points: list[tuple[float, float]] = []
     bottom_points: list[tuple[float, float]] = []

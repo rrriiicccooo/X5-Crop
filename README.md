@@ -172,8 +172,8 @@ x5_crop_output/_debug_analysis/
 每张 Debug Analysis JPG 的面板由 runtime diagnostics policy 控制，默认包含：
 
 - `Original gray context`: 原始灰度上下文。
-- `Debug boxes`: 当前 outer、frame 和裁切框。
-- `Separator evidence`: 分隔证据、当前 outer 和切线标记。
+- `Debug boxes`: 当前可见序列、CropEnvelope、frame 和最终裁切框。
+- `Separator evidence`: raw separator observations、实测/尺寸约束切线和叠片标记。
 
 详细 evidence / decision signal / decision 说明写入 report；Debug Analysis
 默认保持三联图，优先服务人工快速审阅。
@@ -185,10 +185,10 @@ x5_crop_output/_debug_analysis/
 
 检查 Debug Analysis 时优先确认：
 
-- 绿色外框是否裁入画面，或保留过多白边。
+- CropEnvelope 是否覆盖全部可见画面和 boundary uncertainty。
 - 半透明裁切色块是否覆盖照片并留出合理 bleed。
-- 红色分隔证据是否落在真实片间空隙或真实黑条。
-- 黄色 / 紫色 tick 是否只是模型补位。
+- 红色 separator observation 是否落在真实片间间距。
+- 紫色 dimension-constrained tick 与青色 overlap tick 是否符合照片物理尺寸。
 
 普通非 Debug Analysis 裁切不会生成报告。同一批 TIFF 已执行 Debug Analysis 后，
 普通裁切时可复用匹配的 `x5_crop_report.jsonl`；如果文件大小、修改时间、图像形状、
@@ -223,10 +223,10 @@ x5_crop_output/
 - `x5_crop_summary.csv` 是便于人工浏览的摘要表。
 - 普通启动器不会覆盖已有裁切 TIFF；命令行可用 `--overwrite` 覆盖。
 
-默认输出 bleed 为长轴 20px、短轴 10px。若检测到叠片、近似叠片或连续内容证据，
-输出长轴 bleed 会按实际所需的保护宽度增加，最大可用容量为 50px。所需保护不超过
-容量时，该证据不会单独触发复核；超过容量时进入复核，并使用当前可用的最大保护
-bleed。这个调整只影响最终输出范围，不参与检测评分。
+默认输出 bleed 为长轴 20px、短轴 10px。Signed spacing 确认叠片时，长轴 bleed
+会增加到覆盖该叠片所需的宽度；可用容量由可信 scan calibration 或 frame-relative
+physical length 计算。所需 bleed 在容量内时不单独触发复核；超过容量时进入复核并使用
+当前可用容量。Bleed 只影响最终输出，不能改变 candidate geometry 或 Gate 结果。
 
 ### 常用命令行
 
@@ -311,9 +311,10 @@ Windows: install/X5_Crop_win_uninstall.bat
 - Auto-cropped TIFF output preserves source quality attributes, including bit
   depth, channel layout, ICC / color space, resolution, metadata, and known
   lossless compression behavior.
-- Detection stays conservative. Weak evidence, conflicting evidence, unresolved
-  overlap, or unstable local spacing goes to review. Feasible overlap protection
-  does not independently require review.
+- Detection uses physical proof paths. Separator widths and spacing may vary;
+  confirmed content loss, unresolved geometry, or physically inconsistent frame
+  dimensions go to review. Feasible overlap bleed does not independently require
+  review.
 - The current active policy is more conservative. Difficult files
   that passed in older development versions may now go to `REVIEW` when
   combined evidence is insufficient.
@@ -442,8 +443,9 @@ x5_crop_output/_debug_analysis/
 Each JPG is controlled by runtime diagnostics policy and defaults to:
 
 - `Original gray context`: source gray context.
-- `Debug boxes`: current outer, frames, and crop boxes.
-- `Separator evidence`: separator evidence, current outer, and cut markers.
+- `Debug boxes`: visible sequence, CropEnvelope, frames, and final crop boxes.
+- `Separator evidence`: raw observations, measured/dimension-constrained cuts,
+  and overlap markers.
 
 Detailed evidence / decision signal / decision explanations are written to the
 report. Debug Analysis defaults to a three-panel image for fast human review.
@@ -472,13 +474,12 @@ x5_crop_output/
   x5_crop_summary.csv
 ```
 
-Default output bleed is 20px on the long axis and 10px on the short axis. For
-overlap, near-overlap, or continuous-content evidence, the
-long-axis bleed grows by the required protection width up to a 50px capacity.
-Feasible protection does
-not independently require review; a requirement beyond capacity goes to review
-and uses the greatest available protection. This affects final output geometry
-only and does not affect detection scoring.
+Default output bleed is 20px on the long axis and 10px on the short axis. When
+signed spacing confirms overlap, long-axis bleed grows to the required width.
+Capacity is resolved from trusted scan calibration or frame-relative physical
+length. Feasible bleed does not independently require review; a requirement
+beyond capacity goes to review and uses the available capacity. Bleed affects
+final output only and cannot change candidate geometry or Gate results.
 
 ### Command Line
 

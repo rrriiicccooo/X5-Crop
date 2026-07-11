@@ -12,7 +12,7 @@ from ..evidence.frame_coverage import FrameCoverageEvidence
 from ..evidence.frame_sequence import FrameSequenceEvidence
 from ..evidence.frame_topology import FrameTopologyEvidence
 from ..evidence.holder_occupancy import HolderOccupancyEvidence
-from ..evidence.outer_alignment import OuterAlignmentEvidence
+from ..evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from ..evidence.partial_edge import PartialEdgeSafetyEvidence
 from ..evidence.separator_continuity import SeparatorContinuityEvidence
 from ..physical.photo_size import FrameDimensionEvidence
@@ -38,7 +38,7 @@ class CandidateEvidence:
     frame_content: FrameContentEvidence
     holder_texture: HolderTextureEvidence
     content_preservation: ContentPreservationEvidence
-    outer_alignment: OuterAlignmentEvidence
+    sequence_content_alignment: SequenceContentAlignmentEvidence
     holder_occupancy: HolderOccupancyEvidence
     partial_edge_safety: PartialEdgeSafetyEvidence
     independence: EvidenceIndependenceEvidence

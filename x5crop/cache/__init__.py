@@ -5,7 +5,6 @@ from typing import Any
 
 import numpy as np
 
-from ..domain import Box
 from .content_statistics import ContentColumnStatistics
 
 
@@ -17,13 +16,7 @@ class MeasurementCache:
     content_evidence_float_work: np.ndarray
     separator_profiles: dict[tuple[Any, ...], np.ndarray] = field(default_factory=dict)
     separator_profiles_full: dict[tuple[Any, ...], np.ndarray] = field(default_factory=dict)
-    separator_evidence_crops: dict[tuple[Any, ...], np.ndarray] = field(
-        default_factory=dict
-    )
-    edge_refine_profiles: dict[tuple[Any, ...], tuple[np.ndarray, np.ndarray, np.ndarray]] = field(default_factory=dict)
-    content_mask_regions: dict[tuple[Any, ...], Box | None] = field(default_factory=dict)
     content_evidence_thresholds: dict[tuple[Any, ...], float] = field(default_factory=dict)
     content_column_statistics: dict[tuple[Any, ...], ContentColumnStatistics] = field(
         default_factory=dict
     )
-    separator_width_profiles: dict[tuple[Any, ...], np.ndarray] = field(default_factory=dict)

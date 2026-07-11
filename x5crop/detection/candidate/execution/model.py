@@ -19,16 +19,3 @@ class CountHypothesisEvaluation:
             self.selection is not None
             and self.selection.geometry_resolution.supported
         )
-
-
-@dataclass(frozen=True)
-class OffsetEvaluation:
-    candidates: tuple[AssessedCandidate, ...]
-    selection: SelectionResult | None
-
-    @property
-    def geometry_resolved(self) -> bool:
-        return bool(
-            self.selection is not None
-            and self.selection.geometry_resolution.supported
-        )

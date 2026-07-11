@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..geometry.layout import infer_layout
-from ..output.protection import DEFAULT_OUTPUT_BLEED
+from ..output.bleed_plan import DEFAULT_OUTPUT_BLEED
 from ..policies.runtime.bundle import DetectionPolicyBundle
 from ..run_config import RunConfig
 from .app import print_run_header, run_runtime

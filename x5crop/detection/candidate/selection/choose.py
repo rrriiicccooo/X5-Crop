@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ....domain import Box
 from ....policies.parameters.scoring import SelectionConsensusParameters
-from ...evidence.state import EvidenceState
+from x5crop.domain import EvidenceState
 from ..model import AssessedCandidate
 from .model import GeometryCluster, GeometryResolution, SelectionResult
 
@@ -17,6 +17,7 @@ def candidate_rank(
             evidence.frame_topology.state,
             evidence.frame_coverage.state,
             evidence.frame_dimensions.state,
+            evidence.frame_sequence.conservation.state,
             evidence.content_preservation.state,
             evidence.independence.state,
         )
@@ -59,8 +60,8 @@ def geometry_distance(
         return None
     scale = max(
         1.0,
-        float(left_geometry.pitch),
-        float(right_geometry.pitch),
+        float(left_geometry.frame_dimension_estimate.width_px.midpoint),
+        float(right_geometry.frame_dimension_estimate.width_px.midpoint),
     )
     distances = [
         _box_edge_distance(
@@ -119,6 +120,8 @@ def geometry_resolution_for_selection(
         and evidence.frame_topology.state == EvidenceState.SUPPORTED
         and evidence.frame_coverage.state == EvidenceState.SUPPORTED
         and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
+        and evidence.frame_sequence.conservation.state == EvidenceState.SUPPORTED
+        and evidence.content_preservation.state == EvidenceState.SUPPORTED
         and boundary_supported
     )
     placement_resolved = bool(

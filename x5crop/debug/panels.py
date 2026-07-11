@@ -19,7 +19,7 @@ from .canvas import (
     draw_preview_rect,
     fill_preview_rect,
 )
-from .gaps import draw_gap_overlay
+from .separators import draw_separator_overlay
 from .status import add_status_bar
 
 
@@ -35,7 +35,7 @@ def make_debug_preview_rgb(
         draw_preview_rect(rgb, box, scale, color, 1)
     draw_preview_rect(
         rgb,
-        detection.output_geometry.outer,
+        detection.output_geometry.crop_envelope.box,
         scale,
         (0, 255, 0),
         3,
@@ -51,7 +51,7 @@ def draw_evidence_context_overlay(
 ) -> None:
     draw_preview_rect(
         rgb,
-        detection.output_geometry.outer,
+        detection.output_geometry.crop_envelope.box,
         scale,
         (0, 255, 0),
         2,
@@ -72,7 +72,7 @@ def make_separator_evidence_debug_gray(
 def make_separator_evidence_debug_rgb(
     gray: np.ndarray,
     detection: FinalDetection,
-    debug_gap: Any,
+    separator_overlay: Any,
     params: SeparatorEvidenceImageParameters,
     render_cache: DebugRenderCache,
 ) -> np.ndarray:
@@ -86,7 +86,7 @@ def make_separator_evidence_debug_rgb(
         evidence,
     )
     draw_evidence_context_overlay(rgb, detection, scale)
-    draw_gap_overlay(rgb, detection, scale, debug_gap)
+    draw_separator_overlay(rgb, detection, scale, separator_overlay)
     return rgb
 
 
@@ -97,7 +97,7 @@ def make_debug_analysis_panel(
     separator_evidence_image: SeparatorEvidenceImageParameters,
     render_cache: DebugRenderCache,
 ) -> np.ndarray:
-    debug_gap = diagnostics.debug_gap_overlay
+    separator_overlay = diagnostics.separator_overlay
     panel_builders = {
         "original_gray": lambda title: cached_labeled_preview_gray(
             render_cache,
@@ -113,7 +113,7 @@ def make_debug_analysis_panel(
             make_separator_evidence_debug_rgb(
                 gray,
                 detection,
-                debug_gap,
+                separator_overlay,
                 separator_evidence_image,
                 render_cache,
             ),
@@ -129,24 +129,24 @@ def make_debug_analysis_panel(
 
 
 def stack_debug_panels(panels: list[np.ndarray], horizontal: bool) -> np.ndarray:
-    gap = 12
+    panel_spacing = 12
     if horizontal:
         max_h = max(panel.shape[0] for panel in panels)
-        total_w = sum(panel.shape[1] for panel in panels) + gap * (len(panels) - 1)
+        total_w = sum(panel.shape[1] for panel in panels) + panel_spacing * (len(panels) - 1)
         canvas = np.full((max_h, total_w, 3), 32, dtype=np.uint8)
         x = 0
         for panel in panels:
             h, w = panel.shape[:2]
             canvas[:h, x:x + w] = panel
-            x += w + gap
+            x += w + panel_spacing
         return canvas
 
     max_w = max(panel.shape[1] for panel in panels)
-    total_h = sum(panel.shape[0] for panel in panels) + gap * (len(panels) - 1)
+    total_h = sum(panel.shape[0] for panel in panels) + panel_spacing * (len(panels) - 1)
     canvas = np.full((total_h, max_w, 3), 32, dtype=np.uint8)
     y = 0
     for panel in panels:
         h, w = panel.shape[:2]
         canvas[y:y + h, :w] = panel
-        y += h + gap
+        y += h + panel_spacing
     return canvas

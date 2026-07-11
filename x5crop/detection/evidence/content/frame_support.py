@@ -12,7 +12,7 @@ from ....geometry.boxes import box_cache_key
 from ....policies.parameters.content import ContentEvidenceParameters
 from ....policies.runtime.content import ContentPolicy
 from ....utils import sampled_percentile
-from ..state import EvidenceState
+from x5crop.domain import EvidenceState
 
 if TYPE_CHECKING:
     from ...geometry import CandidateGeometry
@@ -75,10 +75,10 @@ class FrameContentEvidence:
 def _cached_content_evidence_threshold(
     cache: MeasurementCache,
     evidence: np.ndarray,
-    outer: Box,
+    sequence_box: Box,
     parameters: ContentEvidenceParameters,
 ) -> float:
-    key = (parameters, *box_cache_key(outer))
+    key = (parameters, *box_cache_key(sequence_box))
     threshold = cache.content_evidence_thresholds.get(key)
     if threshold is None:
         threshold = content_evidence_threshold(evidence, parameters)
@@ -119,14 +119,14 @@ def frame_content_evidence(
 ) -> FrameContentEvidence:
     if cache.layout != geometry.layout:
         raise ValueError("content evidence requires matching analysis cache")
-    outer = geometry.visible_sequence_span.box.clamp(
+    sequence_box = geometry.visible_sequence_span.box.clamp(
         cache.gray_work.shape[1],
         cache.gray_work.shape[0],
     )
-    if not outer.valid():
+    if not sequence_box.valid():
         return FrameContentEvidence(
             EvidenceState.UNAVAILABLE,
-            "invalid_film_span",
+            "invalid_visible_sequence_span",
             None,
             None,
             None,
@@ -134,13 +134,13 @@ def frame_content_evidence(
             CACHED_CONTENT_SIGNAL_COMPOSITE,
         )
     evidence = cache.content_evidence_float_work[
-        outer.top : outer.bottom,
-        outer.left : outer.right,
+        sequence_box.top : sequence_box.bottom,
+        sequence_box.left : sequence_box.right,
     ]
     if not evidence.size:
         return FrameContentEvidence(
             EvidenceState.UNAVAILABLE,
-            "empty_film_span",
+            "empty_visible_sequence_span",
             None,
             None,
             None,
@@ -151,10 +151,10 @@ def frame_content_evidence(
     threshold = _cached_content_evidence_threshold(
         cache,
         evidence,
-        outer,
+        sequence_box,
         parameters,
     )
-    statistics_key = (parameters, *box_cache_key(outer), float(threshold))
+    statistics_key = (parameters, *box_cache_key(sequence_box), float(threshold))
     statistics = cache.content_column_statistics.get(statistics_key)
     if statistics is None:
         statistics = ContentColumnStatistics.from_evidence(evidence, threshold)
@@ -167,10 +167,10 @@ def frame_content_evidence(
             cache.gray_work.shape[0],
         )
         relative = Box(
-            max(0, absolute.left - outer.left),
-            max(0, absolute.top - outer.top),
-            min(outer.width, absolute.right - outer.left),
-            min(outer.height, absolute.bottom - outer.top),
+            max(0, absolute.left - sequence_box.left),
+            max(0, absolute.top - sequence_box.top),
+            min(sequence_box.width, absolute.right - sequence_box.left),
+            min(sequence_box.height, absolute.bottom - sequence_box.top),
         )
         if not relative.valid():
             continue
@@ -180,7 +180,7 @@ def frame_content_evidence(
         ]
         if not crop.size:
             continue
-        if relative.top == 0 and relative.bottom == outer.height:
+        if relative.top == 0 and relative.bottom == sequence_box.height:
             mean, coverage = statistics.interval(relative.left, relative.right)
         else:
             mean = float(crop.mean())

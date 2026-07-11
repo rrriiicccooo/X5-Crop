@@ -4,19 +4,18 @@ from dataclasses import dataclass
 
 from ...cache import MeasurementCache
 from ...domain import Box
-from ...formats import FormatPhysicalSpec
 from ...policies.runtime.content import ContentPolicy
-from ..physical.spans import VisibleSequenceSpan, HolderSpan
+from x5crop.domain import VisibleSequenceSpan, HolderSpan
 from .content.regions import content_region_runs
-from .state import EvidenceState
+from x5crop.domain import EvidenceState
 
 
 @dataclass(frozen=True)
 class FrameCoverageEvidence:
     state: EvidenceState
     reason: str
-    holder_interval: tuple[int, int]
-    film_interval: tuple[int, int] | None
+    holder_long_axis_interval: tuple[int, int]
+    visible_sequence_interval: tuple[int, int]
     frame_intervals: tuple[tuple[int, int], ...]
     content_runs: tuple[tuple[int, int], ...]
     uncovered_content: tuple[tuple[int, int], ...]
@@ -58,7 +57,7 @@ def frame_coverage_evidence(
     holder_span: HolderSpan,
     visible_sequence_span: VisibleSequenceSpan,
     frames: tuple[Box, ...],
-    fmt: FormatPhysicalSpec,
+    frame_width_reference_px: float,
     cache: MeasurementCache,
     content_policy: ContentPolicy,
 ) -> FrameCoverageEvidence:
@@ -75,7 +74,7 @@ def frame_coverage_evidence(
     runs = content_region_runs(
         cache.content_evidence_work,
         holder,
-        fmt.default_count,
+        frame_width_reference_px,
         content_policy=content_policy,
     )
     tolerance = max(1, int(content_policy.profile.min_run_width_px))
@@ -101,8 +100,11 @@ def frame_coverage_evidence(
     return FrameCoverageEvidence(
         state=state,
         reason=reason,
-        holder_interval=(holder.left, holder.right),
-        film_interval=(visible_sequence_span.box.left, visible_sequence_span.box.right),
+        holder_long_axis_interval=(holder.left, holder.right),
+        visible_sequence_interval=(
+            visible_sequence_span.box.left,
+            visible_sequence_span.box.right,
+        ),
         frame_intervals=frame_intervals,
         content_runs=tuple(runs),
         uncovered_content=uncovered,

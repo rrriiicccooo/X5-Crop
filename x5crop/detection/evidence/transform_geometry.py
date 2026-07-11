@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .state import EvidenceState
+from x5crop.domain import EvidenceState
 
 
 @dataclass(frozen=True)

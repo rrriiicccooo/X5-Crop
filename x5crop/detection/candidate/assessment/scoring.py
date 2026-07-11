@@ -7,7 +7,6 @@ from ..model import CandidateEvidence, CandidateScores
 
 def candidate_scores(
     evidence: CandidateEvidence,
-    source: str,
     base_confidence: float,
     scoring_policy: ScoringPolicy,
     content_support: ContentSupportParameters,
@@ -91,23 +90,13 @@ def candidate_scores(
             1.0,
             float(sequence.hard_count) / float(sequence.expected_count),
         )
-        model_ratio = min(
-            1.0,
-            float(sequence.hard_count)
-            + scoring_policy.separator_support.model_equal_credit
-            * float(sequence.model_count),
-        ) / float(sequence.expected_count)
-        separator = (
-            scoring_policy.separator_support.hard_weight * hard_ratio
-            + scoring_policy.separator_support.model_weight * model_ratio
-        )
+        separator = hard_ratio
 
     calibration = scoring_policy.calibration
     joint = (
         calibration.geometry_weight * geometry
         + calibration.content_weight * content
         + calibration.separator_weight * separator
-        + (calibration.separator_source_bias if source == "separator" else 0.0)
     )
     joint = float(max(0.0, min(1.0, joint)))
     confidence = float(max(0.0, min(1.0, max(base_confidence, joint))))

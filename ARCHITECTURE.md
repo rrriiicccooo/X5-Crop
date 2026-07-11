@@ -1,6 +1,6 @@
 # X5 Crop 架构说明 / Architecture Guide
 
-本文件只描述当前 V4.9 的运行流程和源码分层。用户操作见 `README.md`，版本变化见
+本文件只描述当前 V4.9 的运行流程和源码分层。用户操作见 `README.md`，版本历史见
 `CHANGELOG.md`，协作与验收规则见 `AGENTS.md`。
 
 This document describes only the current V4.9 runtime flow and source layers.
@@ -10,290 +10,251 @@ repository rules in `AGENTS.md`.
 ## 1. 运行流程 / Runtime Flow
 
 ```text
-entry / launchers
-  -> runtime bootstrap and policy resolution
-  -> TIFF read, layout normalization, calibration, preprocess
-  -> DetectionContext
-  -> physical observations
-  -> count and placement hypotheses
+entry
+  -> runtime bootstrap and one-time policy resolution
+  -> TIFF read / layout normalization / calibration / preprocess
+  -> DetectionContext + MeasurementCache
+  -> BoundaryObservation + SeparatorBandObservation
+  -> count hypotheses + SequenceHypothesis
   -> CandidateGeometry
-  -> CandidateEvidence
-  -> CandidateAssessment + CandidateGate
-  -> GeometryResolution
-  -> SelectionResult
-  -> output protection
-  -> DecisionGate
-  -> FinalDetection
+  -> CandidateEvidence + CandidateGate
+  -> GeometryResolution + SelectionResult
+  -> OutputBleedPlan
+  -> DecisionGate -> FinalDetection
   -> output finalization
-  -> export / report / debug
+  -> export / current-schema report / three-panel debug
 ```
 
-### 1.1 顶层阶段 / Top-Level Stages
+### 1.1 顶层权限 / Top-Level Authority
 
-| 阶段 / Stage | 职责 / Responsibility | Owner |
-|---|---|---|
-| Entry | 解析 CLI 或交互输入，不读取图像、不做检测。 Parse user input without image or detection authority. | `X5_Crop.py`, `x5crop.entry` |
-| Runtime | 探测输入、解析 layout、装配唯一 runtime policy、编排单图或 worker。 Probe inputs, resolve layout and policy, orchestrate work. | `x5crop.runtime` |
-| Preprocess | 读取 TIFF，生成基础灰度和证据灰度，执行 deskew，建立 calibration 与 measurement cache。 Read TIFF, build gray evidence, deskew, calibration, and measurement cache. | `x5crop.io`, `image`, `cache`, `units` |
-| Detection | 从物理观测生成候选，测量证据，评估并选择几何。 Build, assess, and resolve geometry from physical observations. | `x5crop.detection` |
-| Decision | 将已选几何和输出保护转成最终 PASS/REVIEW。 Convert selected geometry and output protection into final status. | `detection.decision` |
-| Finalization | 只调整已决策输出几何，不生成候选或改写决定。 Adjust output geometry without candidate or decision authority. | `detection.final`, `x5crop.output` |
-| Export | 写 crop 或 review copy，并保持 TIFF 质量与 metadata。 Write crops or review copies while preserving TIFF properties. | `x5crop.export` |
-| Report / Debug | 序列化 current schema，生成三联 Debug Analysis，只解释结果。 Serialize the current schema and render the three-panel analysis without affecting detection. | `x5crop.report`, `x5crop.debug` |
+| 阶段 / Stage | 唯一职责 / Canonical responsibility |
+|---|---|
+| Entry | 解析 CLI/interactive 输入；不读取图像、不解析 policy。 Parse user input only. |
+| Runtime | 探测输入、解析 format/mode/policy、编排 worker 和副作用。 Resolve runtime identity and orchestrate work. |
+| Preprocess | TIFF 读取、layout 归一化、gray/evidence image、deskew、calibration、measurement cache。 |
+| Detection | 提出和测量物理几何，build/assess/select candidate。 Propose, measure, assess, and select physical geometry. |
+| CandidateGate | 判断候选是否有独立物理证明且无明确物理矛盾。 Judge candidate physical eligibility. |
+| GeometryResolution | 唯一 early-stop 输入；确认 count、placement、coverage 和替代几何已经解决。 |
+| DecisionGate | 唯一创建 PASS/REVIEW 与 `final_review_reasons`。 Sole final-status authority. |
+| Finalization | 只应用已批准的 `OutputBleedPlan` 和 canvas clamp。 Apply output bleed only. |
+| Export | 写 crop/review TIFF，保留质量与 metadata。 |
+| Report / Debug | 只读 `FinalDetection`，写 current schema 和三联图；不补算事实。 |
 
 ### 1.2 Runtime 边界 / Runtime Boundary
 
-Runtime 是 format、mode 和 policy 的唯一解析边界。它创建 `DetectionContext`，其中包含：
+Runtime 只解析一次 format、strip mode 和 policy，并创建 `DetectionContext`：
 
-- 原始方向灰度图和统一 horizontal work-space measurement cache。
 - `DetectionRequest`：layout、用户选择的 `full/partial`、显式或 auto count。
-- `FormatPhysicalSpec`：frame mm、aspect、允许 count、lane 和 occupancy 物理事实。
-- 已解析的 detection policy/subpolicies。
-- TIFF resolution 形成的可信或不可用 `ScanCalibration`。
+- `FormatPhysicalSpec`：frame mm、derived aspect、count、lane 和 holder occupancy 事实。
+- 已解析的 sequence、separator、content、candidate、output 和 diagnostics 参数。
+- `ScanCalibration`：只接受可信 TIFF resolution；缺失时保持 unavailable。
+- `MeasurementCache`：当前图像的 exact root measurements。
 
-Runtime is the only format, mode, and policy resolution boundary. Lower layers
-receive resolved specs and explicit parameter objects; they never query a
-registry or invent defaults.
+Lower layers receive explicit specs, subpolicies, or plain parameter objects.
+They never query registries or invent policy defaults.
 
-输出路径先被计算，只有真的写 crop、review copy、report 或 debug 时才创建目录。Current-schema
-cache reuse 必须匹配输入、配置、policy fingerprint 和 schema revision；不匹配时重新检测。
+输出路径先计算，只有实际写 crop、review copy、report 或 debug 时才创建目录。Cache reuse
+只接受输入/config/policy fingerprint 和 `frame_sequence_geometry` schema 全部匹配的 record。
 
-Output paths are calculated without side effects. Directories are created only
-when an artifact is written. Analysis reuse accepts only an exact current-schema
-match; otherwise the image is detected again.
+### 1.3 Boundary 与 Frame Sequence / Boundary and Frame Sequence
 
-### 1.3 物理观测 / Physical Observations
-
-检测开始时不直接猜最终 crop，而是测量可复用的物理事实：
-
-- `HolderSpan`：片夹可用范围。
-- `FilmSpan`：胶片 frame sequence 的实际范围，与 holder 不是同一概念。
-- `SeparatorBandObservation`：band start/end/center、tonal signal、横跨短轴连续性和 provenance。
-- 每边独立的 white-holder、tonal-transition、texture-transition、mixed-boundary outer proposal。
-- content region、holder texture 和 frame-boundary contact，只用于 guidance、遗漏内容反证和内容保护。
-
-Detection measures reusable physical facts before it proposes a final crop.
-Content may guide placement and disprove unsafe geometry, but it does not define
-an exact separator cut or become a boundary oracle.
-
-一维 separator profile 只能发现 band 候选。只有横跨短轴连续性确认后的 observation 才能计入
-hard separator sequence、photo-size measurement 或 geometry proof。Separator 宽度和片距可以变化；
-照片本体尺寸稳定性使用相邻 separator band 边缘之间的照片宽度，不使用 center pitch。
-
-A one-dimensional profile only proposes separator bands. A band becomes hard
-physical support only after cross-axis continuity is confirmed. Separator width
-and spacing may vary; photo-size evidence uses photo intervals between measured
-band edges, not separator-center pitch.
-
-### 1.4 Count 与 Placement / Count and Placement
-
-Partial auto count 始终按该 format 允许的 count 从大到小评估：
-
-1. Count-independent hard separator observations 只提供 placement。
-2. Placement 使用 separator band 边缘和物理 frame 宽度计算 film span，不使用 holder 等分 pitch。
-3. Standard observation 不足时才测 observed-width bands；content 只提供定位提示。
-4. `135/half/645/67` partial auto 不包含 nominal full count。
-5. XPAN 和 120-66 因物理 trait 可包含 nominal count，用来表达完整但未铺满片夹。
-6. `count=1` 必须有两侧独立 boundary evidence，或可信 calibration 加 frame-size corroboration。
-
-Partial auto count evaluates allowed counts from largest to smallest. Separator
-observations optimize placement but never reorder smaller counts ahead of larger
-ones. If no count is physically resolved, selection favors complete coverage and
-the fewest physical contradictions, then returns REVIEW when required.
-
-用户入口中的 `full/partial` 仍表示图像是否铺满片夹。内部另外记录：
-
-- `strip_completeness`：frame sequence 是否达到 nominal count。
-- `holder_occupancy`：film span 是否铺满 holder，是否存在 leading/trailing slack。
-- `complete_underfilled_strip`：仅 XPAN/120-66 可成立，且不能豁免任何 undercrop evidence。
-
-### 1.5 Candidate 数据流 / Candidate Data Flow
-
-每个 hypothesis 依次形成不可变 typed result：
+检测使用统一守恒模型：
 
 ```text
-physical proposal
-  -> CandidateGeometry
-  -> CandidateEvidence
-  -> CandidateAssessment
-  -> CandidateGate
+visible_sequence_length + leading_occlusion + trailing_occlusion
+  = frame_count * physical_frame_width + sum(signed_inter_frame_spacing)
 ```
 
-`CandidateEvidence` 包含：frame topology、frame coverage、separator sequence、separator
-continuity、frame dimensions、content preservation、holder texture、outer alignment、holder
-occupancy、partial edge safety 和 evidence independence。
+- 正 spacing 是可见 separator。
+- 零 spacing 表示照片接触。
+- 负 spacing 表示叠片。
+- Holder occlusion 只允许发生在第一张 leading edge 和最后一张 trailing edge。
 
-Outer correction 只能产生新的 `CandidateGeometry`。任何 corrected geometry 都必须重新 build
-全部 evidence 并重新 assessment；outer 不能评分、PASS 或 REVIEW。Content correction 只能向外扩张
-以保护内容，不能按 content 收缩 film span。
+每边独立测量 `white_holder_transition`、`tonal_transition`、
+`texture_transition` 或 `canvas_clip`。没有源图内部 transition 时不能伪造 pixel
+observation。`full_canvas` 只是保守包络，不能成为 physical proof。
 
-Outer correction only proposes a new geometry. Every corrected geometry is fully
-rebuilt and reassessed. Outer code cannot score or decide status, and content may
-only expand a span to preserve content.
+`VisibleSequenceSpan` 使用 boundary interval midpoint 表示可见序列；`CropEnvelope` 使用
+interval 外侧端覆盖全部 boundary uncertainty。CropEnvelope 不添加固定白边。
 
-### 1.6 CandidateGate 与 GeometryResolution
+### 1.4 Separator 与 Physical Dimensions
 
-`CandidateGate` 只回答候选是否具备自动处理资格：
+`SeparatorBandObservation` 是 count-independent raw pixel band，保留 start/end/center、
+tonal evidence、continuity 和 provenance。Raw detection 不按 format 或理论宽度删除宽 band。
 
-- frame topology 没有错序、交叉、无效 extent 或 count mismatch。
-- 没有可靠证据确认真实内容被裁断。
-- photo dimensions 没有被可信 measurement 明确反证。
-- boundary proof 没有循环依赖。
-- 至少一条独立 proof path 成立：`separator_led`、`geometry_led`、
-  `partial_occupancy_led` 或 dual-lane `mode_composition`。
+Candidate build 将 raw observation 分配给具体 frame boundary：
 
-`GeometryResolution` 是唯一 early-stop 输入。它独立于 CandidateGate 和 confidence，只在 count、
-placement、boundaries、coverage、较大 count 和替代几何都已经物理解决时成立。单个候选只能称为
-`uncontested`；多个等价候选才称为 `agreed`；实质不同且接近的几何为 `disagreed`。
+- band 完全落在物理允许区间内，才是独立 separator assignment。
+- 只部分相交时，observation 保留，但 assignment 是 geometry-dependent。
+- 无交集表示 width/position contradiction。
+- 缺失边界可在 dimension window 内做 focused pixel measurement；仍然是
+  `DimensionConstrainedBoundary`，永远不增加 hard separator 数量。
 
-`GeometryResolution` alone controls early-stop. CandidateGate determines automatic
-eligibility, while confidence only ranks candidates within the same physical state
-and remains explanatory data.
+照片尺寸由 `FormatPhysicalSpec` 的真实 mm/aspect、可信 calibration、实测 top/bottom 和
+photo-edge measurements共同表达。Photo-size 使用 separator band 边缘之间的照片宽度；
+separator width variation 本身不 gate。
 
-### 1.7 Selection、Decision 与 Output
+### 1.5 Count、Placement 与 Guidance
 
-Selection 按物理 proof、自动处理资格、coverage、矛盾数量、count 和 confidence 排序，并按
-frame-relative tolerance 聚类几何。只有实质不同的几何簇接近时，DecisionGate 才收到 geometry
-disagreement。
+Partial auto count 按允许 count 从大到小评估。普通 format 不把 nominal full count 放入
+partial auto；XPAN/120-66 由 physical trait 允许“完整但未铺满片夹”的 nominal count。
 
-DecisionGate 是最终 status 和 `final_review_reasons` 的唯一 owner。它只消费：
+Content 只允许：
 
-- CandidateGate 的具体失败项。
-- automatic-processing eligibility。
-- selection geometry consensus。
-- output content protection。
-- deskew/transform geometry integrity。
+- 向外扩张 `CropEnvelope` 以覆盖仍可见内容。
+- 发现 frame union 外未解释的真实内容。
+- 验证可见内容没有被裁断。
+- 解释 holder 的低纹理/低内容区域。
 
-DecisionGate does not rebuild evidence, generate candidates, or apply confidence
-thresholds. The same physical fact is judged once and projected to one final reason.
+Content 不创建或修改 `VisibleSequenceSpan`，不定义 hard separator、frame dimension 或内部
+cut，也不能收缩物理 sequence span。
+Content-region measurement 使用物理 frame-width reference，不读取 candidate count 或 format
+default count。
 
-叠片 measurement 属于 detection evidence；可执行 bleed 属于 output protection。Bleed 足以覆盖时
-可以自动输出，只有保护能力不足时才由 DecisionGate 阻断。Finalization 严格执行同一个
-`OutputProtectionPlan`，并可做 output-adjacent approved geometry adjustment；两者都不能改变
-PASS/REVIEW。
+### 1.6 Candidate、Gate 与 Selection
+
+```text
+CountHypothesisPlan
+  -> SequenceHypothesis
+  -> CandidateGeometry
+  -> CandidateEvidence
+  -> CandidateAssessment + CandidateGate
+  -> geometry clustering / SelectionResult
+```
+
+`CandidateGate` 只检查：frame topology、visible-content preservation、photo geometry、
+frame-sequence conservation、evidence independence 和至少一条 boundary proof path。
+Proof paths 为 `separator_led`、`geometry_led`、`partial_occupancy_led` 或 dual-lane
+`mode_composition`。
+
+Confidence 只用于候选排序和解释。Selection 按 frame-relative tolerance 聚类实质几何：
+单一候选是 `uncontested`，多个等价候选是 `agreed`，接近但实质不同的簇是 `disagreed`。
+`GeometryResolution` 是唯一 early-stop 输入；CandidateGate PASS 本身不能停止搜索。
+
+所有普通物理候选统一使用 `frame_sequence` source；boundary、separator 和 dimensions 是
+observation/proof provenance，不再伪装成彼此排他的 candidate identity。
+
+### 1.7 Decision、Envelope 与 Bleed
+
+DecisionGate 只消费：CandidateGate 的具体失败项、automatic eligibility、selection geometry
+consensus、OutputBleedPlan feasibility 和 transform geometry。它不重新测量 evidence，也不使用
+confidence floor。
+
+输出几何顺序固定为：
+
+```text
+VisibleSequenceSpan
+  -> CropEnvelope uncertainty applied to edge frames
+  -> OutputBleedPlan
+  -> final frame boxes clamped to canvas
+```
+
+```text
+effective_long_axis_bleed
+  = max(user_long_axis_bleed, overlap_required_bleed)
+
+effective_short_axis_bleed
+  = user_short_axis_bleed
+```
+
+Visible-content coverage 在 bleed 前验证；bleed 不能救回错误 candidate。叠片只增加长轴
+bleed；超过可用 capacity 才产生 `output_bleed_unresolved`。Finalization 不读取 gray、
+separator 或 content，也不重新检测几何。
 
 ### 1.8 Special Modes
 
-- `135-dual/full` 先测量中心附近 holder gutter，off-center divider 可以成为主 proposal；正中二分
-  只是低优先级 safety proposal。每条 lane 进入普通 strip 的完整 typed pipeline，最后检查 lane
-  consistency。
-- `135-dual/partial` 保持 review-only。
-- Deskew 输出 typed `TransformGeometryEvidence`，DecisionGate 只消费该结果。
+- `135-dual/full` 测量 holder gutter，分别运行两条普通 sequence pipeline，再检查 lane
+  consistency；每条 lane 保留自己的 `CropEnvelope` 和 lane-indexed signed spacing，center split
+  只作为 safety hypothesis。
+- `135-dual/partial` 是明确的 review-only mode。
+- Deskew 输出 typed `TransformGeometryEvidence`，只有 DecisionGate 消费其最终状态。
 
 ## 2. 源码分层 / Source Layers
 
-### 2.1 顶层 package / Top-Level Packages
+### 2.1 顶层 packages / Top-Level Packages
 
-| 层级 / Layer | 唯一职责 / Canonical Responsibility |
+| Layer | Canonical responsibility |
 |---|---|
-| `x5crop.entry` | CLI 和 interactive 输入。 CLI and interactive input. |
-| `x5crop.runtime` | Bootstrap、worker、workflow、deskew orchestration、current-schema reuse。 |
-| `x5crop.formats` | Format identity 与真实物理规格。 Format identity and physical facts. |
-| `x5crop.policies` | Sample-tuned 参数、runtime subpolicy 和 assembly；不拥有物理事实或 report schema。 |
-| `x5crop.units` | `ScanCalibration` 与 `PhysicalLength` 单位解析。 |
-| `x5crop.cache` | 只缓存 exact、count/offset-independent measurements。 |
-| `x5crop.geometry` | Box、profile、separator search、edge、frame 等纯算法。 |
+| `x5crop.entry` | CLI 与 interactive parsing。 |
+| `x5crop.runtime` | Bootstrap、workflow、workers、reuse 和 output side effects。 |
+| `x5crop.formats` | Format identity 与真实 physical spec。 |
+| `x5crop.policies` | Sample-tuned 参数和 runtime assembly；不拥有 physical facts 或 schema。 |
+| `x5crop.units` | `ScanCalibration`、`PhysicalLength` 和单位解析。 |
+| `x5crop.cache` | Exact count-independent measurement cache。 |
+| `x5crop.geometry` | Box/profile 等无业务权限的纯算法。 |
 | `x5crop.image` | Gray、deskew、pixel transform 和 crop pixels。 |
 | `x5crop.io` | TIFF read/write。 |
-| `x5crop.detection` | Physical proposal 到 FinalDetection 的 typed lifecycle。 |
-| `x5crop.output` | Output protection、bleed 和 output geometry adjustment。 |
-| `x5crop.export` | Crop TIFF 与 review copy 写出。 |
-| `x5crop.report` | Current report read model、record、validation 和输出。 |
+| `x5crop.detection` | Typed physical detection lifecycle。 |
+| `x5crop.output` | `OutputBleedPlan` 与 output geometry。 |
+| `x5crop.export` | Crop/review TIFF 写出。 |
+| `x5crop.report` | Current read model、record、validation、restoration 和 outputs。 |
 | `x5crop.debug` | 三联 Debug Analysis 的纯渲染。 |
-| `tools` | Tests、regression diff 和 standalone build；不进入 runtime。 |
+| `tools` | Contract tests、current-schema diff 和 standalone build。 |
 
 ### 2.2 Detection 子层 / Detection Sublayers
 
-| 子层 / Sublayer | 权限 / Authority |
+| Sublayer | Authority |
 |---|---|
-| `detection.context` | `DetectionRequest` 和 `DetectionContext`。 |
-| `detection.physical` | Outer、separator、photo-size 和 span 的物理 proposal/measurement。 |
-| `detection.guidance` | Content-derived outer、separator 和 count-placement hints。 |
-| `detection.candidate.plan` | Count hypotheses；不 build、不 assessment、不 selection。 |
-| `detection.candidate.proposal` | Candidate-level proposal entry。 |
-| `detection.candidate.build` | Proposal + observations -> `CandidateGeometry`。 |
-| `detection.evidence` | 只生成 typed physical evidence，不 gate、不 decision。 |
-| `detection.candidate.assessment` | Scores、proof paths 和唯一 `CandidateGate`。 |
-| `detection.candidate.execution` | 串联 plan、proposal、build、assessment，并按 `GeometryResolution` 停止。 |
-| `detection.candidate.extension` | 生成 corrected geometry 并完整 reassess。 |
-| `detection.candidate.selection` | Ranking、geometry clustering、resolution 和 selection。 |
-| `detection.modes` | Standard、dual-lane 和 review-only composition。 |
-| `detection.decision` | 唯一 `DecisionGate` 和 `FinalDetection` factory。 |
-| `detection.final` | 已决策 output geometry 的 finalization。 |
+| `context` | `DetectionRequest` / `DetectionContext`。 |
+| `physical` | Boundary、separator、frame dimensions、signed spacing 和 conservation。 |
+| `guidance` | 只向外扩张 `CropEnvelope`；不改物理 sequence geometry。 |
+| `candidate.plan` | Count hypothesis descriptors only。 |
+| `candidate.proposal` | Sequence hypotheses。 |
+| `candidate.build` | Hypothesis + measurements -> `CandidateGeometry`。 |
+| `evidence` | Typed physical measurements；不 gate、不 decision。 |
+| `candidate.assessment` | Scores、proof paths 和唯一 `CandidateGate`。 |
+| `candidate.execution` | 串联 plan/proposal/build/assessment。 |
+| `candidate.selection` | Ranking、geometry clusters、count/geometry resolution。 |
+| `modes` | Standard、dual-lane、review-only composition。 |
+| `decision` | 唯一 `DecisionGate` 和 `FinalDetection` factory。 |
+| `final` | 只应用 output bleed geometry。 |
 
-依赖方向固定为：
-
-```text
-context / physical / guidance / plan
-  -> build / evidence
-  -> assessment
-  -> selection
-candidate execution orchestrates plan / build / assessment / selection
-candidate extension produces new geometry and reuses the same lower stages
-pipeline -> execution / extension -> decision
-  -> final
-```
-
-Lower stages cannot import later-stage authority. Report and debug may import passive
-typed models but never detection computation.
+依赖只允许沿上述生命周期向后流动。Physical/evidence/guidance 不 import candidate decision；
+report/debug 可读取 typed final models，但不能 import detection computation。
 
 ### 2.3 Canonical Types
 
-| 类型 / Type | Owner | 含义 / Meaning |
+| Type | Owner | Meaning |
 |---|---|---|
-| `DetectionContext` | `detection.context` | 一次 detection 所需的不可歧义输入。 |
-| `HolderSpan`, `FilmSpan` | `detection.physical.spans` | Holder geometry 与 film geometry 的不同身份。 |
-| `SeparatorBandObservation` | `x5crop.domain` | Separator measurement 与 provenance。 |
-| `CandidateGeometry` | `detection.geometry` | Count、film span、frames、separator assignments 和 source。 |
-| `CandidateEvidence` | `candidate.model` | 该几何的全部物理 evidence。 |
-| `CandidateAssessment` | `candidate.model` | Scores、CandidateGate 和 diagnostics；无 final status。 |
-| `GeometryResolution` | `candidate.selection.model` | Count/placement/boundary 是否已物理解决；唯一 early-stop input。 |
-| `SelectionResult` | `candidate.selection.model` | Selected candidate、clusters、consensus 和 count resolution。 |
-| `DecisionGateAssessment` | `detection.decision.model` | Final-stage checks 和 canonical final reasons。 |
-| `FinalDetection` | `detection.decision.model` | 唯一拥有 final status、decision geometry 和 output geometry 的结果。 |
+| `HolderSpan`, `VisibleSequenceSpan`, `CropEnvelope` | `x5crop.domain` | Holder、可见照片序列和保守裁切包络。 |
+| `BoundaryObservation` | `x5crop.domain` | Per-side boundary interval 与 provenance。 |
+| `SeparatorBandObservation`, `SeparatorAssignment` | `x5crop.domain` | Raw band 与 candidate-specific assignment。 |
+| `FrameBoundary`, `DimensionConstrainedBoundary` | `x5crop.domain` | 实测或尺寸约束切线。 |
+| `InterFrameSpacingEvidence`, `SequenceConservationEvidence` | `detection.physical.spacing` | Signed spacing 与守恒。 |
+| `CandidateGeometry` | `detection.geometry` | Candidate 的全部物理几何。 |
+| `CandidateEvidence`, `CandidateAssessment` | `candidate.model` | Typed evidence、scores 和 CandidateGate。 |
+| `GeometryResolution`, `SelectionResult` | `candidate.selection.model` | Early-stop 与最终候选选择。 |
+| `OutputBleedPlan` | `x5crop.domain` | 用户 bleed、叠片增量和 feasibility。 |
+| `DecisionGateAssessment`, `FinalDetection` | `detection.decision.model` | Final checks、status 和 output facts。 |
 
-运行时没有 generic detail dict。Stage 之间只传 immutable typed results；report 层负责序列化，
-detection 类型不知道 report schema。
+Runtime 没有 generic detail dict、alias、shim 或 schema reducer。Stage 之间只传 immutable typed
+results；report 层负责 JSON read model。
 
-There is no generic runtime detail bus. Stages exchange immutable typed results;
-the report layer owns serialization and detection types do not know the schema.
+### 2.4 Policy、Foundation 与 Cache
 
-### 2.4 Policy 与 Foundation 边界
+Format 只保存 mm/aspect/count/lane/occupancy 等物理事实。Format 名字不决定算法分支。
+Sample-tuned 参数固定分为 preprocess、content、sequence、separator、candidate、output 和
+diagnostics，由 runtime boundary 解析。
 
-Format 只保存 frame mm、derived aspect、count、family、lane composition 和 occupancy trait。
-Format 名字不能决定算法分支。Sample-tuned parameter profiles 位于 `policies.parameters`，
-assembly 根据已解析 physical spec 与 mode 组装明确 subpolicy。
+Foundation (`geometry/image/io/cache/units`) 不知道 format/mode、CandidateGate、DecisionGate、
+status 或 report schema。Helper 必须接收显式参数。
 
-Foundation (`geometry/image/io/cache/units`) 不知道 format/mode identity、CandidateGate、
-DecisionGate、status 或 report schema。Helper 必须接收显式参数对象，不能静默创建默认 policy。
+`MeasurementCache` 只缓存 exact root measurements，key 包含所有影响结果的参数和 box。
+它不缓存 candidate、gate、decision、final reason 或 approximate geometry。Debug 使用独立
+render cache。
 
-`MeasurementCache` 只保存 exact root measurements，key 必须包含所有会改变结果的参数和 geometry。
-它不缓存 candidates、gates、decisions、final reasons 或 count-dependent guidance。Debug 使用独立
-`DebugRenderCache`，不能读取或写 detection measurement cache。
-
-### 2.5 Report、Debug 与 Reuse
-
-Current report identity:
+### 2.5 Current Schema 与 Enforcement
 
 ```text
 schema_id: detection_report
-schema_revision: physical_resolution
+schema_revision: frame_sequence_geometry
 ```
 
-Canonical record 包含 candidate table、CandidateGate、physical evidence、geometry resolution、
-selection、DecisionGate、`final_review_reasons`、decision/output geometry、output protection、
-calibration 和 diagnostics。它不保留旧字段 alias 或兼容 projection。
+Report 输出 boundary observations、VisibleSequenceSpan、CropEnvelope、holder occlusion、raw
+separator bands、assignments、frame boundaries、signed spacing、sequence conservation、
+CandidateGate、GeometryResolution、DecisionGate 和 OutputBleedPlan。Old/incomplete records
+直接重新检测。
 
-Report and Debug are read-only consumers. Cache reuse validates the complete current
-record, restores only `FinalDetection` output facts, and enters the same crop/review
-actions as a fresh decision. Old or incomplete schemas are ignored and redetected.
-
-### 2.6 架构验收 / Architecture Enforcement
-
-`tools/tests` 使用 AST 和行为合同检查：模块可达性、唯一层级、import 方向、gate/final authority、
-current schema、显式参数、unused symbols、重复模型和旧 vocabulary。发现新的架构残余时，先增加
-会失败的合同测试，再删除根因；不建立 alias、shim 或 compatibility branch。
-
-The frozen acceptance contract is defined in `AGENTS.md`. Threshold and sample
-calibration are separate work and do not reopen architecture unless a real ownership
-violation or an unexpressible physical fact is demonstrated.
+`tools/tests` 使用 AST 与行为契约检查：模块可达、唯一归层、无环依赖、单向权限、current
+schema、显式参数、零孤儿、零重复 model 和禁止旧 vocabulary。发现残余时先增加失败契约，
+再删除整类根因。冻结验收定义见 `AGENTS.md`。

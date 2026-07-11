@@ -4,8 +4,8 @@ from dataclasses import dataclass
 
 from ..partial_edge import PartialEdgeSafetyEvidence
 from ..frame_coverage import FrameCoverageEvidence
-from ..outer_alignment import OuterAlignmentEvidence
-from ..state import EvidenceState
+from ..sequence_content_alignment import SequenceContentAlignmentEvidence
+from x5crop.domain import EvidenceState
 from .frame_support import FrameContentEvidence
 
 
@@ -15,18 +15,18 @@ class ContentPreservationEvidence:
     reason: str
     uncovered_content: tuple[tuple[int, int], ...]
     boundary_contact_frame_indexes: tuple[int, ...]
-    confirmed_outer_undercrop_sides: tuple[str, ...]
+    confirmed_visible_undercrop_sides: tuple[str, ...]
     partial_edge_state: EvidenceState
 
 def content_preservation_evidence(
     frame_content: FrameContentEvidence,
-    outer_alignment: OuterAlignmentEvidence,
+    sequence_content_alignment: SequenceContentAlignmentEvidence,
     partial_edge: PartialEdgeSafetyEvidence,
     frame_coverage: FrameCoverageEvidence,
 ) -> ContentPreservationEvidence:
     uncovered = tuple(frame_coverage.uncovered_content)
     contacts = frame_content.boundary_contact_frame_indexes
-    confirmed_sides = tuple(outer_alignment.confirmed_undercrop_sides)
+    confirmed_sides = tuple(sequence_content_alignment.confirmed_undercrop_sides)
     if uncovered:
         state = EvidenceState.CONTRADICTED
         reason = "content_outside_frame_union"
@@ -38,13 +38,13 @@ def content_preservation_evidence(
         reason = "content_contacts_frame_boundary"
     elif confirmed_sides:
         state = EvidenceState.CONTRADICTED
-        reason = "content_outside_film_span_confirmed"
+        reason = "content_outside_visible_sequence_confirmed"
     elif partial_edge.state == EvidenceState.CONTRADICTED:
         state = EvidenceState.CONTRADICTED
         reason = partial_edge.reason
     elif (
         frame_coverage.state == EvidenceState.SUPPORTED
-        or outer_alignment.state == EvidenceState.SUPPORTED
+        or sequence_content_alignment.state == EvidenceState.SUPPORTED
     ):
         state = EvidenceState.SUPPORTED
         reason = "content_preserved"
@@ -56,6 +56,6 @@ def content_preservation_evidence(
         reason=reason,
         uncovered_content=uncovered,
         boundary_contact_frame_indexes=contacts,
-        confirmed_outer_undercrop_sides=confirmed_sides,
+        confirmed_visible_undercrop_sides=confirmed_sides,
         partial_edge_state=partial_edge.state,
     )

@@ -2,9 +2,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..domain import Box, MeasurementProvenance, SeparatorBandObservation
-from .physical.boundary import BoundaryObservation
-from .physical.spans import CropEnvelope, HolderSpan, VisibleSequenceSpan
+from ..domain import (
+    BoundaryObservation,
+    Box,
+    CropEnvelope,
+    FrameDimensionEstimate,
+    FrameBoundary,
+    HolderSpan,
+    MeasurementProvenance,
+    SeparatorAssignment,
+    SeparatorBandObservation,
+    VisibleSequenceSpan,
+)
 
 
 @dataclass(frozen=True)
@@ -17,15 +26,15 @@ class CandidateGeometry:
     visible_sequence_span: VisibleSequenceSpan
     crop_envelope: CropEnvelope
     frames: tuple[Box, ...]
-    separators: tuple[SeparatorBandObservation, ...]
-    origin: float
-    pitch: float
-    offset_fraction: float
+    separator_observations: tuple[SeparatorBandObservation, ...]
+    separator_assignments: tuple[SeparatorAssignment, ...]
+    frame_boundaries: tuple[FrameBoundary, ...]
+    frame_dimension_estimate: FrameDimensionEstimate
     source: str
     automatic_processing_supported: bool
-    contract: str | None
     sequence_hypothesis_name: str
     sequence_hypothesis_strategy: str
     sequence_provenance: MeasurementProvenance
     boundary_observations: tuple[BoundaryObservation, ...]
     lane_boxes: tuple[Box, ...] = ()
+    lane_crop_envelopes: tuple[CropEnvelope, ...] = ()

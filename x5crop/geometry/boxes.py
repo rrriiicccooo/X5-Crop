@@ -18,10 +18,10 @@ def is_full_work_box(gray_work: np.ndarray, box: Box) -> bool:
     return box_cache_key(box.clamp(gray_work.shape[1], gray_work.shape[0])) == box_cache_key(full)
 
 
-def crop_work_outer(gray_work: np.ndarray, outer: Box) -> np.ndarray:
-    if not outer.valid():
+def crop_work_box(gray_work: np.ndarray, box: Box) -> np.ndarray:
+    if not box.valid():
         return gray_work
-    crop = gray_work[outer.top:outer.bottom, outer.left:outer.right]
+    crop = gray_work[box.top:box.bottom, box.left:box.right]
     return crop if crop.size else gray_work
 
 

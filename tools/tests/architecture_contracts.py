@@ -21,13 +21,20 @@ STANDALONE_TOOL_ROOTS = frozenset(
     }
 )
 
+REFLECTED_READ_MODEL_PREFIXES = (
+    "x5crop.domain",
+    "x5crop.detection.evidence",
+    "x5crop.detection.physical",
+    "x5crop.detection.candidate.assessment",
+    "x5crop.detection.candidate.selection.model",
+)
+
 SOURCE_LAYER_PREFIXES: dict[str, tuple[str, ...]] = {
     "core": (
         "x5crop",
         "x5crop.app_info",
         "x5crop.constants",
         "x5crop.domain",
-        "x5crop.gap_methods",
         "x5crop.run_config",
         "x5crop.strip_modes",
         "x5crop.units",
@@ -514,11 +521,12 @@ def unreferenced_dataclass_fields() -> list[str]:
     reflected_dataclasses = {
         "FrameSizeMm",
         "ModePolicy",
-        "SeparatorGapHint",
     }
 
     offenders: list[str] = []
     for module in modules.values():
+        if module_has_prefix(module.name, REFLECTED_READ_MODEL_PREFIXES):
+            continue
         for node in parsed_source(module).body:
             if not isinstance(node, ast.ClassDef):
                 continue

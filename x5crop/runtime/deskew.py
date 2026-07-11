@@ -5,7 +5,7 @@ from typing import Any
 
 from ..domain import ImageProfile
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
-from ..detection.evidence.state import EvidenceState
+from x5crop.domain import EvidenceState
 from ..geometry.layout import work_gray
 from ..image.deskew import choose_deskew_angle
 from ..image.gray import make_base_gray_u8

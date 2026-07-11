@@ -15,9 +15,11 @@ DEFAULT_FIELDS = (
     "status",
     "confidence",
     "final_review_reasons",
-    "output_geometry.outer_box",
+    "output_geometry.crop_envelope",
     "output_geometry.frame_boxes",
     "separator_observations",
+    "separator_assignments",
+    "frame_boundaries",
 )
 
 

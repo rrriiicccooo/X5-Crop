@@ -17,8 +17,8 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
         parameters = inspect.signature(apply_decision_gate).parameters
         self.assertEqual(parameters["selection"].annotation, "SelectionResult")
         self.assertEqual(
-            parameters["output_protection_plan"].annotation,
-            "OutputProtectionPlan",
+            parameters["output_bleed_plan"].annotation,
+            "OutputBleedPlan",
         )
         self.assertEqual(
             parameters["transform_geometry"].annotation,
@@ -34,14 +34,14 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
 
     def test_report_read_models_are_passive_projections(self) -> None:
         decided = decide_candidate()
-        selected = decided.require_trace().selection.selected
+        selected = decided.require_selection().selected
         self.assertTrue(candidate_gate_read_model(selected)["passed"])
         self.assertTrue(decision_gate_detail(decided)["passed"])
 
-    def test_workflow_prepares_output_protection_before_decision(self) -> None:
+    def test_workflow_prepares_output_bleed_before_decision(self) -> None:
         source = (PROJECT_ROOT / "x5crop/runtime/workflow.py").read_text()
         self.assertLess(
-            source.index("prepare_output_protection("),
+            source.index("prepare_output_bleed("),
             source.index("apply_decision_gate("),
         )
 

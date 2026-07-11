@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..domain import Box
+from ..domain import Box, CropEnvelope
 
 
 @dataclass(frozen=True)
 class OutputGeometry:
-    outer: Box
+    crop_envelope: CropEnvelope
     frames: tuple[Box, ...]

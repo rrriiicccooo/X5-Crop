@@ -6,20 +6,13 @@ class ScoringCalibrationParameters:
     geometry_weight: float = 0.34
     content_weight: float = 0.33
     separator_weight: float = 0.33
-    separator_source_bias: float = 0.03
 
 @dataclass(frozen=True)
 class BaseDetectionScoreParameters:
     photo_width_cv_norm: float = 0.030
-    gap_weight: float = 0.40
+    separator_weight: float = 0.40
     photo_width_weight: float = 0.30
-    unstable_photo_width_cv: float = 0.030
-
-@dataclass(frozen=True)
-class SeparatorSupportScoreParameters:
-    model_equal_credit: float = 0.12
-    hard_weight: float = 0.78
-    model_weight: float = 0.22
+    maximum_photo_width_cv: float = 0.030
 
 @dataclass(frozen=True)
 class GeometrySupportScoreParameters:

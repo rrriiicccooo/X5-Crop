@@ -5,14 +5,16 @@ from dataclasses import dataclass
 import numpy as np
 
 from ....formats import FormatPhysicalSpec
-from ....geometry.detection_parameters import HardGapTrustParameters
+from ....geometry.detection_parameters import SeparatorContinuityParameters
 from ....policies.runtime.candidate import ScoringPolicy
 from ....units import ScanCalibration
 from ...evidence.frame_topology import FrameTopologyEvidence, frame_topology_evidence
+from ...evidence.frame_sequence import FrameSequenceEvidence
+from x5crop.domain import EvidenceState
 from ...evidence.separator_continuity import (
     SeparatorContinuityEvidence,
     separator_cross_axis_continuity_evidence,
-    supported_hard_separator_observations,
+    continuity_state_for_observation,
 )
 from ...physical.photo_size import (
     FrameDimensionEvidence,
@@ -34,8 +36,9 @@ def base_physical_assessment(
     candidate: BuiltCandidate,
     physical_spec: FormatPhysicalSpec,
     calibration: ScanCalibration,
+    frame_sequence: FrameSequenceEvidence,
     scoring_policy: ScoringPolicy,
-    hard_gap_trust: HardGapTrustParameters,
+    separator_continuity_parameters: SeparatorContinuityParameters,
 ) -> BasePhysicalAssessment:
     geometry = candidate.geometry
     topology = frame_topology_evidence(
@@ -44,26 +47,33 @@ def base_physical_assessment(
     )
     continuity = separator_cross_axis_continuity_evidence(
         gray_work,
-        geometry.visible_sequence_span.box,
-        geometry.separators,
-        geometry.pitch,
-        hard_gap_trust,
+        geometry,
+        separator_continuity_parameters,
     )
-    supported_separators = supported_hard_separator_observations(continuity)
     frame_dimensions = frame_dimension_evidence(
         geometry,
         physical_spec,
         calibration,
-        separator_observations=supported_separators,
+        continuity,
+        frame_sequence.holder_occlusion,
         maximum_photo_width_cv=(
-            scoring_policy.base_detection.unstable_photo_width_cv
+            scoring_policy.base_detection.maximum_photo_width_cv
         ),
         maximum_dimension_error_ratio=(
             scoring_policy.geometry_support.aspect_norm
         ),
     )
     expected = max(0, geometry.count - 1)
-    hard_count = len(supported_separators)
+    hard_count = sum(
+        boundary.hard_separator
+        and boundary.assignment is not None
+        and continuity_state_for_observation(
+            continuity,
+            boundary.assignment.observation,
+        )
+        == EvidenceState.SUPPORTED
+        for boundary in geometry.frame_boundaries
+    )
     separator_score = 1.0 if expected == 0 else min(
         1.0,
         float(hard_count) / float(expected),
@@ -79,11 +89,11 @@ def base_physical_assessment(
             ),
         )
         confidence = (
-            float(scoring_policy.base_detection.gap_weight) * separator_score
+            float(scoring_policy.base_detection.separator_weight) * separator_score
             + float(scoring_policy.base_detection.photo_width_weight) * width_score
         ) / max(
             1e-6,
-            float(scoring_policy.base_detection.gap_weight)
+            float(scoring_policy.base_detection.separator_weight)
             + float(scoring_policy.base_detection.photo_width_weight),
         )
     else:

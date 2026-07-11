@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...domain import Box, SeparatorBandObservation
+from ...domain import Box
 from ...formats import FormatPhysicalSpec
 from ...units import ScanCalibration
 from ..physical.photo_size import FrameDimensionEvidence
-from ..physical.spans import VisibleSequenceSpan, HolderSpan
+from x5crop.domain import VisibleSequenceSpan, HolderSpan
+from x5crop.domain import FrameBoundary, SeparatorAssignment
 from .frame_coverage import FrameCoverageEvidence
-from .state import EvidenceState
+from x5crop.domain import EvidenceState
 
 
 @dataclass(frozen=True)
@@ -18,15 +19,16 @@ class StripCompletenessEvidence:
     count: int
     nominal_count: int
     valid_frame_count: int
-    expected_separator_count: int
-    observed_separator_count: int
+    expected_internal_boundary_count: int
+    resolved_boundary_count: int
+    independent_separator_count: int
 
 @dataclass(frozen=True)
 class HolderOccupancyEvidence:
     state: EvidenceState
     strip_completeness: StripCompletenessEvidence
-    expected_film_span_mm: float | None
-    observed_film_span_px: float
+    nominal_frame_total_mm: float | None
+    observed_sequence_span_px: float
     leading_slack_px: float
     trailing_slack_px: float
     leading_slack_mm: float | None
@@ -45,7 +47,8 @@ def strip_completeness_evidence(
     *,
     count: int,
     frames: tuple[Box, ...],
-    separators: tuple[SeparatorBandObservation, ...],
+    frame_boundaries: tuple[FrameBoundary, ...],
+    separator_assignments: tuple[SeparatorAssignment, ...],
     physical_spec: FormatPhysicalSpec,
 ) -> StripCompletenessEvidence:
     valid_frame_count = sum(1 for frame in frames if frame.valid())
@@ -53,13 +56,19 @@ def strip_completeness_evidence(
     return StripCompletenessEvidence(
         frame_count_complete=frame_count_complete,
         frame_sequence_complete=bool(
-            frame_count_complete and valid_frame_count == int(count)
+            frame_count_complete
+            and valid_frame_count == int(count)
+            and len(frame_boundaries) == max(0, int(count) - 1)
         ),
         count=int(count),
         nominal_count=int(physical_spec.default_count),
         valid_frame_count=int(valid_frame_count),
-        expected_separator_count=max(0, int(count) - 1),
-        observed_separator_count=len(separators),
+        expected_internal_boundary_count=max(0, int(count) - 1),
+        resolved_boundary_count=len(frame_boundaries),
+        independent_separator_count=sum(
+            assignment.used_for_boundary and assignment.independent
+            for assignment in separator_assignments
+        ),
     )
 
 
@@ -71,7 +80,8 @@ def holder_occupancy_evidence(
     holder_span: HolderSpan,
     visible_sequence_span: VisibleSequenceSpan,
     frames: tuple[Box, ...],
-    separators: tuple[SeparatorBandObservation, ...],
+    frame_boundaries: tuple[FrameBoundary, ...],
+    separator_assignments: tuple[SeparatorAssignment, ...],
     physical_spec: FormatPhysicalSpec,
     content_support_available: bool,
     frame_coverage: FrameCoverageEvidence,
@@ -81,14 +91,15 @@ def holder_occupancy_evidence(
     completeness = strip_completeness_evidence(
         count=count,
         frames=frames,
-        separators=separators,
+        frame_boundaries=frame_boundaries,
+        separator_assignments=separator_assignments,
         physical_spec=physical_spec,
     )
     holder = holder_span.box
-    film = visible_sequence_span.box
-    leading_slack_px = max(0.0, float(film.left - holder.left))
-    trailing_slack_px = max(0.0, float(holder.right - film.right))
-    observed_span_px = float(film.width)
+    sequence_box = visible_sequence_span.box
+    leading_slack_px = max(0.0, float(sequence_box.left - holder.left))
+    trailing_slack_px = max(0.0, float(holder.right - sequence_box.right))
+    observed_span_px = float(sequence_box.width)
     holder_fill_ratio = observed_span_px / float(max(1, holder.width))
     long_axis = "x" if layout == "horizontal" else "y"
     px_per_mm = calibration.px_per_mm(long_axis) if calibration.trusted else None
@@ -126,12 +137,12 @@ def holder_occupancy_evidence(
     return HolderOccupancyEvidence(
         state=state,
         strip_completeness=completeness,
-        expected_film_span_mm=(
+        nominal_frame_total_mm=(
             float(count) * float(physical_spec.nominal_frame_size_mm.width_mm)
             if count > 0
             else None
         ),
-        observed_film_span_px=observed_span_px,
+        observed_sequence_span_px=observed_span_px,
         leading_slack_px=leading_slack_px,
         trailing_slack_px=trailing_slack_px,
         leading_slack_mm=leading_slack_mm,

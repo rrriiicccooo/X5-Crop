@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from ...domain import Box, OutputProtectionPlan, SeparatorBandObservation
+from ...domain import (
+    CropEnvelope,
+    FrameBoundary,
+    OutputBleedPlan,
+    SeparatorAssignment,
+    SeparatorBandObservation,
+    VisibleSequenceSpan,
+)
 from ...output.model import OutputGeometry
 from ...units import ScanCalibration
 from ..candidate.selection.model import SelectionResult
-from ..evidence.exposure_overlap import ExposureOverlapEvidence
 from ..gate_checks import GateCheck
 
 
@@ -41,33 +47,29 @@ class DecisionGateAssessment:
 
 
 @dataclass(frozen=True)
-class FinalDetectionTrace:
-    selection: SelectionResult
-    exposure_overlap: ExposureOverlapEvidence
-
-
-@dataclass(frozen=True)
 class FinalDetection:
     format_id: str
     layout: str
     strip_mode: str
     count: int
     confidence: float
-    work_film_span: Box
-    pitch: float
+    visible_sequence_span: VisibleSequenceSpan
+    crop_envelope: CropEnvelope
     decision_gate: DecisionGateAssessment
     decision_geometry: OutputGeometry
     output_geometry: OutputGeometry
     separator_observations: tuple[SeparatorBandObservation, ...]
-    output_protection: OutputProtectionPlan
+    separator_assignments: tuple[SeparatorAssignment, ...]
+    frame_boundaries: tuple[FrameBoundary, ...]
+    output_bleed_plan: OutputBleedPlan
     scan_calibration: ScanCalibration
     diagnostics: tuple[str, ...]
-    trace: FinalDetectionTrace | None
+    selection: SelectionResult | None
 
-    def require_trace(self) -> FinalDetectionTrace:
-        if self.trace is None:
-            raise RuntimeError("final detection audit trace is unavailable")
-        return self.trace
+    def require_selection(self) -> SelectionResult:
+        if self.selection is None:
+            raise RuntimeError("final detection candidate selection is unavailable")
+        return self.selection
 
     @property
     def status(self) -> str:
