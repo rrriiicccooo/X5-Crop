@@ -17,7 +17,7 @@ CURRENT_REPORT_SECTIONS = (
     "layout",
     "count",
     "count_resolution",
-    "film_span",
+    "visible_sequence_span",
     "pitch",
     "strip_completeness",
     "holder_occupancy",
@@ -113,7 +113,7 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
         errors.append("decision_geometry_invalid")
     if not _geometry_valid(record["output_geometry"]):
         errors.append("output_geometry_invalid")
-    if not _box_valid(record["film_span"]):
+    if not _box_valid(record["visible_sequence_span"]):
         errors.append("film_span_invalid")
     if not isinstance(record["pitch"], (int, float)) or float(record["pitch"]) <= 0.0:
         errors.append("pitch_invalid")

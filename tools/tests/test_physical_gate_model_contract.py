@@ -51,9 +51,9 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             bad,
             geometry=replace(
                 bad.geometry,
-                film_span=replace(
-                    bad.geometry.film_span,
-                    box=bad.geometry.film_span.box.expand(20, 0, 240, 100),
+                visible_sequence_span=replace(
+                    bad.geometry.visible_sequence_span,
+                    box=bad.geometry.visible_sequence_span.box.expand(20, 0, 240, 100),
                 ),
             ),
         )

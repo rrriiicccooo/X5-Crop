@@ -9,9 +9,9 @@ from ...physical.outer.correction.content_containment import (
 from ...physical.outer.correction.geometry import (
     geometry_consistency_correction_proposals,
 )
-from ...physical.outer.correction.types import OuterCorrectionProposal
+from ...physical.outer.correction.types import SequenceAdjustmentHypothesis
 from ..assessment.candidate import assess_candidate
-from ..build.detection import build_detection_geometry_for_outer
+from ..build.detection import build_candidate_geometry
 from ..model import AssessedCandidate
 from ..selection.model import SelectionResult
 
@@ -45,9 +45,9 @@ def _eligible_families(
 
 def _correction_provenance(
     source: AssessedCandidate,
-    proposal: OuterCorrectionProposal,
+    proposal: SequenceAdjustmentHypothesis,
 ) -> MeasurementProvenance:
-    original = source.geometry.outer_provenance
+    original = source.geometry.sequence_provenance
     dependencies = set(original.dependencies)
     if proposal.family in {"long_axis_geometry", "short_axis_geometry"}:
         dependencies.update(
@@ -67,30 +67,31 @@ def _correction_provenance(
 
 def _build_corrected_candidate(
     source: AssessedCandidate,
-    proposal: OuterCorrectionProposal,
+    proposal: SequenceAdjustmentHypothesis,
     context: DetectionContext,
 ) -> AssessedCandidate:
     geometry = source.geometry
-    built = build_detection_geometry_for_outer(
-        context.source_gray,
+    built = build_candidate_geometry(
         context.request,
         context.policy.physical_spec,
         geometry.count,
         geometry.strip_mode,
-        proposal.box,
+        proposal.visible_sequence_span,
+        proposal.crop_envelope,
         geometry.offset_fraction,
         geometry.holder_span,
         geometry.source,
         geometry.automatic_processing_supported,
         geometry.contract,
         source.count_hypothesis,
-        f"{proposal.family}_outer",
-        "outer_correction",
+        f"{proposal.family}_sequence",
+        "sequence_adjustment",
         _correction_provenance(source, proposal),
+        geometry.boundary_observations,
         context.scan_calibration,
         None,
         None,
-        (f"outer_correction:{proposal.family}:{proposal.reason}",),
+        (f"sequence_adjustment:{proposal.family}:{proposal.reason}",),
         cache=context.measurement_cache,
         separator_policy=context.policy.separator,
     )

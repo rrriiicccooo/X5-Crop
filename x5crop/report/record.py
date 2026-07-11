@@ -62,7 +62,7 @@ def report_record_for_final_detection(
             if selection.count_resolution is None
             else typed_read_model(selection.count_resolution)
         ),
-        "film_span": typed_read_model(detection.work_film_span),
+        "visible_sequence_span": typed_read_model(detection.work_film_span),
         "pitch": float(detection.pitch),
         "strip_completeness": typed_read_model(
             selected_evidence.holder_occupancy.strip_completeness

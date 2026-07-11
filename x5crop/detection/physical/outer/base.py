@@ -2,92 +2,105 @@ from __future__ import annotations
 
 import numpy as np
 
-from ....domain import Box, MeasurementProvenance
+from ....domain import MeasurementProvenance
 from ....geometry.detection_parameters import OuterBoxDetectionParameters
-from ....geometry.outer_boxes import detect_mask_profile_outer, detect_outer, detect_outer_white_x
-from .common import unique_outer_proposals
-from .side_boundary import side_boundary_outer_proposals
-from .types import OuterProposal
+from ..boundary import (
+    BoundaryObservation,
+    visible_sequence_and_crop_envelope,
+)
+from .common import unique_sequence_span_proposals
+from .side_boundary import boundary_observation_groups
+from .types import SequenceHypothesis
 
 
-def base_outer_candidates(
+def _proposal_from_observations(
+    name: str,
+    observations: tuple[BoundaryObservation, ...],
     gray: np.ndarray,
-    config: OuterBoxDetectionParameters,
-) -> list[OuterProposal]:
-    h, w = gray.shape
-    bw = detect_outer(gray, config)
-    white_x = detect_outer_white_x(gray, config)
-    candidates = [
-        OuterProposal(
-            "bw",
-            bw,
-            "base_outer",
-            MeasurementProvenance(
-                "holder_boundary_profile",
-                "bw",
-                ("gray_work",),
-            ),
+    parameters: OuterBoxDetectionParameters,
+) -> SequenceHypothesis | None:
+    try:
+        visible, envelope = visible_sequence_and_crop_envelope(
+            observations,
+            canvas_width=gray.shape[1],
+            canvas_height=gray.shape[0],
         )
-    ]
-    if white_x.valid():
-        max_reasonable = max(
-            float(bw.width) * config.white_x_width_multiplier,
-            float(bw.width) + w * config.white_x_extra_ratio,
-        )
-        if white_x.width >= bw.width and white_x.width <= max_reasonable:
-            candidates.append(
-                OuterProposal(
-                    "white_x",
-                    white_x,
-                    "base_outer",
-                    MeasurementProvenance(
-                        "holder_boundary_profile",
-                        "white_x",
-                        ("gray_work",),
-                    ),
-                )
-            )
-    for side_boundary in side_boundary_outer_proposals(gray, config):
-        if side_boundary.box is None:
-            continue
-        candidates.append(
-            OuterProposal(
-                side_boundary.reason,
-                side_boundary.box,
-                "base_outer",
-                MeasurementProvenance(
-                    "holder_boundary_profile",
-                    side_boundary.reason,
-                    tuple(side.boundary_model for side in side_boundary.sides),
-                    tuple(side.side for side in side_boundary.sides),
-                ),
-            )
-        )
-    for profile in config.mask_profiles:
-        box = detect_mask_profile_outer(gray, profile, config)
-        if box is not None:
-            candidates.append(
-                OuterProposal(
-                    profile.name,
-                    box,
-                    "base_outer",
-                    MeasurementProvenance(
-                        "holder_boundary_profile",
-                        profile.name,
-                        ("gray_work", "mask_profile"),
-                    ),
-                )
-            )
-    candidates.append(
-        OuterProposal(
-            "full_canvas",
-            Box(0, 0, w, h),
-            "base_outer",
-            MeasurementProvenance(
-                "holder_canvas",
-                "full_canvas",
-                ("canvas",),
-            ),
+    except ValueError:
+        return None
+    box = envelope.box
+    if (
+        box.width < max(parameters.min_width_px, gray.shape[1] * parameters.min_width_ratio)
+        or box.height
+        < max(parameters.min_height_px, gray.shape[0] * parameters.min_height_ratio)
+    ):
+        return None
+    roots = tuple(
+        dict.fromkeys(
+            observation.provenance.root_measurement
+            for observation in observations
         )
     )
-    return unique_outer_proposals(candidates)
+    return SequenceHypothesis(
+        name=name,
+        visible_sequence_span=visible,
+        crop_envelope=envelope,
+        strategy="boundary_led",
+        provenance=MeasurementProvenance(
+            root_measurement="boundary_observations",
+            source=name,
+            dependencies=roots,
+            boundary_anchors=tuple(observation.side for observation in observations),
+        ),
+        boundary_observations=observations,
+    )
+
+
+def _mixed_safe_observations(
+    groups: tuple[tuple[str, tuple[BoundaryObservation, ...]], ...],
+) -> tuple[BoundaryObservation, ...]:
+    measured = [
+        observations for name, observations in groups if name != "full_canvas"
+    ]
+    return tuple(
+        (
+            min(
+                (item for group in measured for item in group if item.side == side),
+                key=lambda item: item.position.minimum,
+            )
+            if side in {"leading", "top"}
+            else max(
+                (item for group in measured for item in group if item.side == side),
+                key=lambda item: item.position.maximum,
+            )
+        )
+        for side in ("leading", "trailing", "top", "bottom")
+    )
+
+
+def base_sequence_span_candidates(
+    gray: np.ndarray,
+    parameters: OuterBoxDetectionParameters,
+) -> list[SequenceHypothesis]:
+    groups = boundary_observation_groups(gray, parameters)
+    proposals = [
+        proposal
+        for name, observations in groups
+        if (
+            proposal := _proposal_from_observations(
+                name,
+                observations,
+                gray,
+                parameters,
+            )
+        )
+        is not None
+    ]
+    mixed = _proposal_from_observations(
+        "mixed_safe_overcontain",
+        _mixed_safe_observations(groups),
+        gray,
+        parameters,
+    )
+    if mixed is not None:
+        proposals.append(mixed)
+    return unique_sequence_span_proposals(proposals)

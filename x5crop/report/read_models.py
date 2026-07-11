@@ -329,7 +329,7 @@ def candidate_evidence_read_model(candidate: AssessedCandidate) -> dict[str, Any
         "outer_alignment": {
             "state": alignment.state.value,
             "reason": alignment.reason,
-            "film_span": typed_read_model(alignment.film_span),
+            "visible_sequence_span": typed_read_model(alignment.visible_sequence_span),
             "content_span": typed_read_model(alignment.content_span),
             "content_measurement_sources": list(
                 alignment.content_measurement_sources
@@ -372,7 +372,7 @@ def candidate_evidence_read_model(candidate: AssessedCandidate) -> dict[str, Any
             "frame_coverage_state": occupancy.frame_coverage_state.value,
             "photo_dimensions_stable": occupancy.photo_dimensions_stable,
             "holder_span": typed_read_model(occupancy.holder_span),
-            "film_span": typed_read_model(occupancy.film_span),
+            "visible_sequence_span": typed_read_model(occupancy.visible_sequence_span),
             "calibration_used": occupancy.calibration_used,
         },
         "partial_edge_safety": {
@@ -406,10 +406,12 @@ def candidate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
         "strip_mode": geometry.strip_mode,
         "count": int(geometry.count),
         "source": geometry.source,
-        "outer_proposal": geometry.outer_proposal_name,
-        "outer_strategy": geometry.outer_proposal_strategy,
-        "film_span": typed_read_model(geometry.film_span.box),
-        "frame_boxes": typed_read_model(geometry.image_frames),
+        "sequence_hypothesis": geometry.sequence_hypothesis_name,
+        "sequence_strategy": geometry.sequence_hypothesis_strategy,
+        "coordinate_space": "normalized_workspace",
+        "visible_sequence_span": typed_read_model(geometry.visible_sequence_span.box),
+        "crop_envelope": typed_read_model(geometry.crop_envelope.box),
+        "frame_boxes": typed_read_model(geometry.frames),
         "confidence": float(candidate.assessment.scores.confidence),
         "scores": typed_read_model(candidate.assessment.scores),
         "candidate_gate": candidate_gate_read_model(candidate),

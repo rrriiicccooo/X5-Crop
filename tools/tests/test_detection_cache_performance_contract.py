@@ -23,7 +23,7 @@ from x5crop.detection.candidate.execution.count_hypothesis import (
     evaluate_count_hypothesis,
 )
 from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
-from x5crop.detection.physical.outer.types import OuterProposal
+from x5crop.detection.physical.outer.types import SequenceHypothesis
 from x5crop.domain import Box, MeasurementProvenance
 from x5crop.formats import format_spec
 from x5crop.geometry.detection_parameters import (
@@ -248,7 +248,6 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
             True,
         )
         context = SimpleNamespace(
-            source_gray=np.zeros((100, 200), dtype=np.uint8),
             request=SimpleNamespace(
                 layout="horizontal",
                 strip_mode="partial",
@@ -261,16 +260,16 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         )
 
         with patch(
-            "x5crop.detection.candidate.execution.count_hypothesis.separator_primary_outer_plan",
+            "x5crop.detection.candidate.execution.count_hypothesis.separator_primary_sequence_plan",
             return_value=plan,
         ), patch(
-            "x5crop.detection.candidate.execution.count_hypothesis._assess_outer_plan",
+            "x5crop.detection.candidate.execution.count_hypothesis._assess_sequence_plan",
             return_value=[candidate],
         ), patch(
             "x5crop.detection.candidate.execution.count_hypothesis.select_candidates",
             return_value=selection_fixture(candidate),
         ), patch(
-            "x5crop.detection.candidate.execution.count_hypothesis.separator_extension_outer_plan",
+            "x5crop.detection.candidate.execution.count_hypothesis.separator_extension_sequence_plan",
             return_value=plan,
         ) as extension, patch(
             "x5crop.detection.candidate.execution.count_hypothesis.content_separator_guidance_for_count",
@@ -301,15 +300,15 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         cache = _cache(gray)
         fmt = format_spec("120-66")
         policy = get_detection_policy("120-66", "partial")
-        outer = OuterProposal(
+        outer = SequenceHypothesis.from_box_hypothesis(
             "base",
             Box(0, 0, 600, 100),
-            "base_outer",
+            "boundary_led",
             MeasurementProvenance("holder_boundary", "test", ("gray",)),
         )
 
         with patch(
-            "x5crop.detection.evidence.count_planning.base_outer_candidates",
+            "x5crop.detection.evidence.count_planning.base_sequence_span_candidates",
             return_value=[outer],
         ), patch(
             "x5crop.detection.evidence.count_planning.cached_separator_profile",

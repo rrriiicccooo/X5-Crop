@@ -7,25 +7,24 @@ from ..model import AssessedCandidate
 from ..plan.count_hypotheses import CountHypothesis
 from ..selection.choose import select_candidates
 from .source_candidates import (
-    SeparatorOuterProposalPlan,
+    SeparatorSequencePlan,
     build_separator_candidate_for_proposal,
     build_separator_candidate_with_guidance,
-    separator_extension_outer_plan,
-    separator_primary_outer_plan,
+    separator_extension_sequence_plan,
+    separator_primary_sequence_plan,
 )
 from .model import CountHypothesisEvaluation, OffsetEvaluation
 
 
-def _assess_outer_plan(
+def _assess_sequence_plan(
     context: DetectionContext,
     hypothesis: CountHypothesis,
     offset: float,
-    plan: SeparatorOuterProposalPlan,
+    plan: SeparatorSequencePlan,
 ) -> list[AssessedCandidate]:
     assessed: list[AssessedCandidate] = []
-    for outer_proposal in plan.proposals:
+    for sequence_hypothesis in plan.proposals:
         built = build_separator_candidate_for_proposal(
-            context.source_gray,
             context.request,
             context.policy.physical_spec,
             hypothesis.count,
@@ -35,7 +34,7 @@ def _assess_outer_plan(
             outer_policy=context.policy.outer,
             separator_policy=context.policy.separator,
             scan_calibration=context.scan_calibration,
-            proposal=outer_proposal,
+            proposal=sequence_hypothesis,
             plan=plan,
             gap_max_width_ratio_override=None,
         )
@@ -52,7 +51,7 @@ def _candidates_for_offset(
 ) -> OffsetEvaluation:
     candidates: list[AssessedCandidate] = []
     physical_spec = context.policy.physical_spec
-    primary_plan = separator_primary_outer_plan(
+    primary_plan = separator_primary_sequence_plan(
         context.request,
         physical_spec,
         hypothesis.count,
@@ -64,7 +63,7 @@ def _candidates_for_offset(
         scan_calibration=context.scan_calibration,
     )
     candidates.extend(
-        _assess_outer_plan(context, hypothesis, offset, primary_plan)
+        _assess_sequence_plan(context, hypothesis, offset, primary_plan)
     )
     primary_selection = (
         None
@@ -81,7 +80,7 @@ def _candidates_for_offset(
     ):
         return OffsetEvaluation(tuple(candidates), primary_selection)
 
-    extension_plan = separator_extension_outer_plan(
+    extension_plan = separator_extension_sequence_plan(
         context.request,
         physical_spec,
         hypothesis.count,
@@ -91,10 +90,10 @@ def _candidates_for_offset(
         outer_policy=context.policy.outer,
         separator_policy=context.policy.separator,
         scan_calibration=context.scan_calibration,
-        primary_outer_proposals=primary_plan.comparison_proposals,
+        primary_sequence_hypotheses=primary_plan.comparison_proposals,
     )
     candidates.extend(
-        _assess_outer_plan(context, hypothesis, offset, extension_plan)
+        _assess_sequence_plan(context, hypothesis, offset, extension_plan)
     )
 
     guidance = content_separator_guidance_for_count(
@@ -108,14 +107,13 @@ def _candidates_for_offset(
         candidates.extend(
             assess_candidate(
                 build_separator_candidate_with_guidance(
-                    context.source_gray,
                     context.request,
                     physical_spec,
                     hypothesis.count,
                     hypothesis.strip_mode,
                     hypothesis,
                     offset_fraction=offset,
-                    outer_proposal=outer_proposal,
+                    sequence_hypothesis=sequence_hypothesis,
                     guidance=guidance,
                     cache=context.measurement_cache,
                     separator_policy=context.policy.separator,
@@ -123,7 +121,7 @@ def _candidates_for_offset(
                 ),
                 context,
             )
-            for outer_proposal in extension_plan.comparison_proposals
+            for sequence_hypothesis in extension_plan.comparison_proposals
         )
     selection = (
         None

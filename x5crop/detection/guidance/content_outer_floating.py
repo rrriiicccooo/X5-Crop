@@ -6,18 +6,18 @@ from ...domain import Box, MeasurementProvenance
 from ...formats import FormatPhysicalSpec
 from ...policies.runtime.outer import PartialPlacementGeometryPolicy
 from ...utils import bbox_from_mask, clamp_int
-from ..physical.outer.common import unique_outer_proposals
-from ..physical.outer.types import OuterProposal
+from ..physical.outer.common import unique_sequence_span_proposals
+from ..physical.outer.types import SequenceHypothesis
 
 
 def floating_content_position_candidates(
     gray_work: np.ndarray,
-    base_candidates: list[OuterProposal],
+    base_candidates: list[SequenceHypothesis],
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
     partial_placement: PartialPlacementGeometryPolicy,
-) -> list[OuterProposal]:
+) -> list[SequenceHypothesis]:
     floating_policy = partial_placement.floating
     if not partial_placement.enabled:
         return []
@@ -35,15 +35,16 @@ def floating_content_position_candidates(
         min_row_fraction=floating_policy.content_bbox_min_fraction,
         min_col_fraction=floating_policy.content_bbox_min_fraction,
     )
-    candidates: list[OuterProposal] = []
+    candidates: list[SequenceHypothesis] = []
     source_candidates = sorted(
-        [candidate for candidate in base_candidates if candidate.box.valid()],
-        key=lambda candidate: candidate.box.width * candidate.box.height,
+        [candidate for candidate in base_candidates if candidate.crop_envelope.box.valid()],
+        key=lambda candidate: candidate.crop_envelope.box.width
+        * candidate.crop_envelope.box.height,
         reverse=True,
     )[:1]
 
     for source in source_candidates:
-        outer = source.box.clamp(w, h)
+        outer = source.crop_envelope.box.clamp(w, h)
         if not outer.valid() or outer.height <= 0:
             continue
         margin = clamp_int(
@@ -103,10 +104,10 @@ def floating_content_position_candidates(
                 if not box.valid() or box.width < min_width:
                     continue
                 candidates.append(
-                    OuterProposal(
+                    SequenceHypothesis.from_box_hypothesis(
                         f"floating_{strip_mode}_{source.name}_r{target_ratio:.3f}",
                         box,
-                        "content_outer",
+                        "content_floating_guidance",
                         MeasurementProvenance(
                             "content_guidance",
                             "floating_content_position",
@@ -115,4 +116,4 @@ def floating_content_position_candidates(
                     )
                 )
 
-    return unique_outer_proposals(candidates)[: int(floating_policy.max_candidates)]
+    return unique_sequence_span_proposals(candidates)[: int(floating_policy.max_candidates)]

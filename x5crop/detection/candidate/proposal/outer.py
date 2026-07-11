@@ -10,18 +10,18 @@ from ....policies.runtime.separator import SeparatorPolicy
 from ....units import ScanCalibration
 from ...guidance.content_outer_edge import edge_anchored_outer_candidates
 from ...guidance.content_outer_floating import floating_content_position_candidates
-from ...physical.outer.base import base_outer_candidates
-from ...physical.outer.common import unique_outer_proposals
+from ...physical.outer.base import base_sequence_span_candidates
+from ...physical.outer.common import unique_sequence_span_proposals
 from ...physical.outer.separator import (
     separator_derived_outer_candidates,
     separator_outer_scopes,
 )
 from ...physical.photo_size import PhotoSizeConsistency
-from ...physical.outer.types import OuterProposal
+from ...physical.outer.types import SequenceHypothesis
 
 
 @dataclass(frozen=True)
-class OuterProposalStrategy:
+class SequenceHypothesisStrategy:
     name: str
     mode: str
 
@@ -58,11 +58,11 @@ def separator_sequence_rank(
     )
 
 
-def outer_proposal_strategy_plan_for_policy(
+def sequence_hypothesis_strategy_plan(
     outer_policy: OuterPolicy,
     strip_mode: str = "full",
     explicit_count: bool = True,
-) -> list[OuterProposalStrategy]:
+) -> list[SequenceHypothesisStrategy]:
     proposal_policy = outer_policy.proposal
     partial_placement = proposal_policy.geometry.partial_placement
     separator_geometry = proposal_policy.geometry.separator
@@ -72,17 +72,17 @@ def outer_proposal_strategy_plan_for_policy(
         else "off"
     )
     base = [
-        OuterProposalStrategy(
+        SequenceHypothesisStrategy(
             "base",
             "always",
         ),
     ]
     partial_positions = {
-        "edge_anchor": OuterProposalStrategy(
+        "edge_anchor": SequenceHypothesisStrategy(
             "edge_anchor",
             "always" if partial_placement.enabled else "off",
         ),
-        "floating": OuterProposalStrategy(
+        "floating": SequenceHypothesisStrategy(
             "floating",
             "always" if partial_placement.enabled else "off",
         ),
@@ -94,7 +94,7 @@ def outer_proposal_strategy_plan_for_policy(
     ]
     active = [
         *ordered_partial_positions,
-        OuterProposalStrategy(
+        SequenceHypothesisStrategy(
             "separator_derived",
             separator_mode,
         ),
@@ -102,7 +102,7 @@ def outer_proposal_strategy_plan_for_policy(
     return [*base, *[strategy for strategy in active if strategy.mode == "always"]]
 
 
-def outer_proposal_candidates(
+def sequence_hypotheses(
     gray_work: np.ndarray,
     fmt: FormatPhysicalSpec,
     count: int,
@@ -115,18 +115,18 @@ def outer_proposal_candidates(
     separator_policy: SeparatorPolicy,
     separator_scopes: tuple[str, ...],
     explicit_count: bool = True,
-) -> list[OuterProposal]:
-    strategy_plan = outer_proposal_strategy_plan_for_policy(
+) -> list[SequenceHypothesis]:
+    strategy_plan = sequence_hypothesis_strategy_plan(
         outer_policy,
         strip_mode=strip_mode,
         explicit_count=explicit_count,
     )
     enabled_strategy_names = {strategy.name for strategy in strategy_plan if strategy.enabled}
-    base_candidates = base_outer_candidates(
+    base_candidates = base_sequence_span_candidates(
         gray_work,
         outer_policy.proposal.base,
     )
-    edge_candidates: list[OuterProposal] = []
+    edge_candidates: list[SequenceHypothesis] = []
     if "edge_anchor" in enabled_strategy_names:
         edge_candidates = edge_anchored_outer_candidates(
             gray_work,
@@ -136,7 +136,7 @@ def outer_proposal_candidates(
             strip_mode,
             partial_placement=outer_policy.proposal.geometry.partial_placement,
         )
-    floating_candidates: list[OuterProposal] = []
+    floating_candidates: list[SequenceHypothesis] = []
     if "floating" in enabled_strategy_names:
         floating_candidates = floating_content_position_candidates(
             gray_work,
@@ -146,8 +146,8 @@ def outer_proposal_candidates(
             strip_mode,
             outer_policy.proposal.geometry.partial_placement,
         )
-    pre_separator_candidates = unique_outer_proposals([*base_candidates, *edge_candidates, *floating_candidates])
-    separator_candidates: list[OuterProposal] = []
+    pre_separator_candidates = unique_sequence_span_proposals([*base_candidates, *edge_candidates, *floating_candidates])
+    separator_candidates: list[SequenceHypothesis] = []
     if "separator_derived" in enabled_strategy_names:
         separator_candidates = separator_derived_outer_candidates(
             gray_work,
@@ -164,6 +164,6 @@ def outer_proposal_candidates(
             explicit_count=explicit_count,
             sequence_ranker=separator_sequence_rank,
         )
-    return unique_outer_proposals(
+    return unique_sequence_span_proposals(
         [*base_candidates, *edge_candidates, *floating_candidates, *separator_candidates]
     )

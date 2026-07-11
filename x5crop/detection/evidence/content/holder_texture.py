@@ -46,7 +46,7 @@ def holder_texture_evidence(
         cache.gray_work.shape[1],
         cache.gray_work.shape[0],
     )
-    film = geometry.film_span.box.clamp(
+    film = geometry.visible_sequence_span.box.clamp(
         cache.gray_work.shape[1],
         cache.gray_work.shape[0],
     )

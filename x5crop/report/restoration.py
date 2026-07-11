@@ -153,7 +153,7 @@ def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
         strip_mode=str(record["strip_mode"]),
         count=int(record["count"]),
         confidence=float(record["confidence"]),
-        work_film_span=_box_from_record(record["film_span"]),
+        work_film_span=_box_from_record(record["visible_sequence_span"]),
         pitch=float(record["pitch"]),
         decision_gate=_decision_gate_from_record(record["decision_gate"]),
         decision_geometry=_geometry_from_record(record["decision_geometry"]),

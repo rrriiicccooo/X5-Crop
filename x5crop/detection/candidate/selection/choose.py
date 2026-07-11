@@ -54,7 +54,7 @@ def geometry_distance(
     if (
         left_geometry.count != right_geometry.count
         or left_geometry.strip_mode != right_geometry.strip_mode
-        or len(left_geometry.work_frames) != len(right_geometry.work_frames)
+        or len(left_geometry.frames) != len(right_geometry.frames)
     ):
         return None
     scale = max(
@@ -64,16 +64,16 @@ def geometry_distance(
     )
     distances = [
         _box_edge_distance(
-            left_geometry.film_span.box,
-            right_geometry.film_span.box,
+            left_geometry.visible_sequence_span.box,
+            right_geometry.visible_sequence_span.box,
             scale,
         )
     ]
     distances.extend(
         _box_edge_distance(left_box, right_box, scale)
         for left_box, right_box in zip(
-            left_geometry.work_frames,
-            right_geometry.work_frames,
+            left_geometry.frames,
+            right_geometry.frames,
         )
     )
     return max(distances, default=0.0)
@@ -123,8 +123,8 @@ def geometry_resolution_for_selection(
     )
     placement_resolved = bool(
         count_resolved
-        and selected.geometry.film_span.box.valid()
-        and len(selected.geometry.work_frames) == selected.geometry.count
+        and selected.geometry.visible_sequence_span.box.valid()
+        and len(selected.geometry.frames) == selected.geometry.count
     )
     boundaries_resolved = bool(boundary_supported)
     coverage_resolved = (

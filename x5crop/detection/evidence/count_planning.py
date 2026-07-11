@@ -17,7 +17,7 @@ from ...geometry.separator_band import SeparatorBand
 from ...geometry.separator_width_profile import collect_separator_width_bands
 from ...policies.parameters.outer import SeparatorOuterBandParameters
 from ...units import ScanCalibration
-from ..physical.outer.base import base_outer_candidates
+from ..physical.outer.base import base_sequence_span_candidates
 from ..physical.outer.separator_bands import collect_separator_outer_bands
 
 
@@ -85,8 +85,8 @@ def _placement_offsets(
             window = bands[start : start + expected_gaps]
             film_start = float(window[0].start) - float(frame_width)
             film_end = float(window[-1].end) + float(frame_width)
-            film_span = film_end - film_start
-            available = float(outer_width) - film_span
+            visible_sequence_span = film_end - film_start
+            available = float(outer_width) - visible_sequence_span
             if (
                 film_start < 0.0
                 or film_end > float(outer_width)
@@ -113,15 +113,20 @@ def count_planning_evidence(
     calibration: ScanCalibration,
     long_axis: str,
 ) -> CountPlanningEvidence:
-    base_candidates = base_outer_candidates(gray_work, outer_parameters)
-    valid_candidates = [candidate for candidate in base_candidates if candidate.box.valid()]
+    base_candidates = base_sequence_span_candidates(gray_work, outer_parameters)
+    valid_candidates = [
+        candidate
+        for candidate in base_candidates
+        if candidate.crop_envelope.box.valid()
+    ]
     if not valid_candidates:
         return CountPlanningEvidence.unavailable()
     source = max(
         valid_candidates,
-        key=lambda candidate: candidate.box.width * candidate.box.height,
+        key=lambda candidate: candidate.crop_envelope.box.width
+        * candidate.crop_envelope.box.height,
     )
-    outer = source.box
+    outer = source.crop_envelope.box
     profile = cached_separator_profile(
         cache,
         outer,

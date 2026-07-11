@@ -59,7 +59,7 @@ def frame_dimension_evidence(
 ) -> FrameDimensionEvidence:
     nominal = physical_spec.nominal_frame_size_mm
     target_photo_width = (
-        float(geometry.film_span.box.height)
+        float(geometry.visible_sequence_span.box.height)
         * float(physical_spec.horizontal_content_aspect)
     )
     consistency = photo_size_consistency_from_gap_edges(
@@ -78,8 +78,8 @@ def frame_dimension_evidence(
     observed_width_mm = None
     observed_height_mm = None
     observed_aspect = (
-        float(geometry.film_span.box.width)
-        / max(1.0, float(geometry.film_span.box.height))
+        float(geometry.visible_sequence_span.box.width)
+        / max(1.0, float(geometry.visible_sequence_span.box.height))
     )
     aspect_error_ratio = abs(
         observed_aspect - float(physical_spec.horizontal_content_aspect)
@@ -90,10 +90,10 @@ def frame_dimension_evidence(
         and short_axis_ppm is not None
     )
     if calibration_used:
-        observed_width_mm = float(geometry.film_span.box.width) / float(
+        observed_width_mm = float(geometry.visible_sequence_span.box.width) / float(
             long_axis_ppm
         )
-        observed_height_mm = float(geometry.film_span.box.height) / float(
+        observed_height_mm = float(geometry.visible_sequence_span.box.height) / float(
             short_axis_ppm
         )
     dimension_errors: list[float] = []

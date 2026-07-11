@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from .types import OuterProposal
+from .types import SequenceHypothesis
 
 
-def unique_outer_proposals(candidates: Iterable[OuterProposal]) -> list[OuterProposal]:
+def unique_sequence_span_proposals(
+    candidates: Iterable[SequenceHypothesis],
+) -> list[SequenceHypothesis]:
     seen: set[tuple[int, int, int, int, str, str]] = set()
-    out: list[OuterProposal] = []
+    out: list[SequenceHypothesis] = []
     for candidate in candidates:
-        box = candidate.box
+        box = candidate.crop_envelope.box
         key = (
             box.left,
             box.top,

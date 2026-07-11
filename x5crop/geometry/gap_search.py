@@ -360,7 +360,7 @@ def detected_gap_from_candidate(index: int, candidate: DetectedGapCandidate) -> 
         provenance=MeasurementProvenance(
             root_measurement="separator_profile",
             source="detected_band",
-            dependencies=("gray_work", "film_span"),
+            dependencies=("gray_work", "visible_sequence_span"),
         ),
         start=candidate.start,
         end=candidate.end,

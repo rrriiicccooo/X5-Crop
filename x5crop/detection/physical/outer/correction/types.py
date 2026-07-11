@@ -2,15 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...spans import FilmSpan
+from ...spans import CropEnvelope, VisibleSequenceSpan
 
 
 @dataclass(frozen=True)
-class OuterCorrectionProposal:
-    corrected_span: FilmSpan
+class SequenceAdjustmentHypothesis:
+    visible_sequence_span: VisibleSequenceSpan
+    crop_envelope: CropEnvelope
     family: str
     reason: str
-
-    @property
-    def box(self):
-        return self.corrected_span.box

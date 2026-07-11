@@ -7,7 +7,7 @@ from tools.tests.physical_gate_support import candidate_evidence_fixture, candid
 from x5crop.detection.evidence.holder_occupancy import holder_occupancy_evidence
 from x5crop.detection.evidence.partial_edge import partial_edge_safety_evidence
 from x5crop.detection.evidence.state import EvidenceState
-from x5crop.detection.physical.spans import FilmSpan, HolderSpan
+from x5crop.detection.physical.spans import VisibleSequenceSpan, HolderSpan
 from x5crop.domain import Box
 from x5crop.formats import format_spec
 from x5crop.units import ScanCalibration
@@ -17,7 +17,7 @@ class HolderOccupancyTests(unittest.TestCase):
     def _underfilled(self):
         candidate = candidate_fixture()
         holder = HolderSpan(Box(0, 0, 400, 120))
-        film = FilmSpan(Box(30, 0, 360, 120))
+        film = VisibleSequenceSpan(Box(30, 0, 360, 120))
         frames = (
             Box(30, 0, 130, 120),
             Box(140, 0, 240, 120),
@@ -29,9 +29,12 @@ class HolderOccupancyTests(unittest.TestCase):
             strip_mode="partial",
             count=3,
             holder_span=holder,
-            film_span=film,
-            work_frames=frames,
-            image_frames=frames,
+            visible_sequence_span=film,
+            crop_envelope=replace(
+                candidate.geometry.crop_envelope,
+                box=film.box,
+            ),
+            frames=frames,
             separators=(
                 separator_observation(1, 135.0, start=130.0, end=140.0),
                 separator_observation(2, 245.0, start=240.0, end=250.0),
@@ -61,8 +64,8 @@ class HolderOccupancyTests(unittest.TestCase):
             strip_mode="partial",
             count=geometry.count,
             holder_span=geometry.holder_span,
-            film_span=geometry.film_span,
-            work_frames=geometry.work_frames,
+            visible_sequence_span=geometry.visible_sequence_span,
+            frames=geometry.frames,
             separators=geometry.separators,
             physical_spec=format_spec("120-66"),
             content_support_available=True,
@@ -80,8 +83,8 @@ class HolderOccupancyTests(unittest.TestCase):
             strip_mode="partial",
             count=geometry.count,
             holder_span=geometry.holder_span,
-            film_span=geometry.film_span,
-            work_frames=geometry.work_frames,
+            visible_sequence_span=geometry.visible_sequence_span,
+            frames=geometry.frames,
             separators=geometry.separators,
             physical_spec=format_spec("120-66"),
             content_support_available=True,
@@ -106,8 +109,8 @@ class HolderOccupancyTests(unittest.TestCase):
             strip_mode="partial",
             count=geometry.count,
             holder_span=geometry.holder_span,
-            film_span=geometry.film_span,
-            work_frames=geometry.work_frames,
+            visible_sequence_span=geometry.visible_sequence_span,
+            frames=geometry.frames,
             separators=geometry.separators,
             physical_spec=format_spec("135"),
             content_support_available=True,
@@ -124,8 +127,8 @@ class HolderOccupancyTests(unittest.TestCase):
             strip_mode="partial",
             count=geometry.count,
             holder_span=geometry.holder_span,
-            film_span=geometry.film_span,
-            work_frames=geometry.work_frames,
+            visible_sequence_span=geometry.visible_sequence_span,
+            frames=geometry.frames,
             separators=geometry.separators,
             physical_spec=format_spec("120-66"),
             content_support_available=True,

@@ -45,7 +45,7 @@ def _gap_work_outer(
     geometry: CandidateGeometry,
     observation: SeparatorBandObservation,
 ) -> Box:
-    return observation.lane_box or geometry.film_span.box
+    return observation.lane_box or geometry.visible_sequence_span.box
 
 
 def gap_evidence_record(

@@ -59,15 +59,15 @@ def assess_dual_lane_candidate(
     topology = FrameTopologyEvidence(
         state=topology_state,
         expected_count=geometry.count,
-        actual_count=len(geometry.work_frames),
-        count_matches=len(geometry.work_frames) == geometry.count,
-        extent_valid=all(frame.valid() for frame in geometry.work_frames),
+        actual_count=len(geometry.frames),
+        count_matches=len(geometry.frames) == geometry.count,
+        extent_valid=all(frame.valid() for frame in geometry.frames),
         order_valid=topology_state == EvidenceState.SUPPORTED,
         overlap_absent=topology_state == EvidenceState.SUPPORTED,
         invalid_extent_indexes=(),
         order_invalid_indexes=(),
         overlap_pairs=(),
-        boxes=geometry.work_frames,
+        boxes=geometry.frames,
     )
     coverage_state = _combined_state(
         tuple(lane.assessment.evidence.frame_coverage.state for lane in lanes)
@@ -83,7 +83,7 @@ def assess_dual_lane_candidate(
             geometry.holder_span.box.left,
             geometry.holder_span.box.right,
         ),
-        film_interval=(geometry.film_span.box.left, geometry.film_span.box.right),
+        film_interval=(geometry.visible_sequence_span.box.left, geometry.visible_sequence_span.box.right),
         frame_intervals=tuple(
             interval
             for lane in lanes
@@ -308,7 +308,7 @@ def assess_dual_lane_candidate(
             tuple(lane.assessment.evidence.outer_alignment.state for lane in lanes)
         ),
         reason="dual_lane_outer_alignment",
-        film_span=geometry.film_span.box,
+        visible_sequence_span=geometry.visible_sequence_span.box,
         content_span=None,
         content_measurement_sources=("lane_components",),
         confirmed_undercrop_sides=preservation.confirmed_outer_undercrop_sides,
@@ -332,7 +332,7 @@ def assess_dual_lane_candidate(
         frame_sequence_complete=topology.state == EvidenceState.SUPPORTED,
         count=geometry.count,
         nominal_count=geometry.count,
-        valid_frame_count=len(geometry.work_frames),
+        valid_frame_count=len(geometry.frames),
         expected_separator_count=expected_separators,
         observed_separator_count=len(geometry.separators),
     )
@@ -340,7 +340,7 @@ def assess_dual_lane_candidate(
         state=EvidenceState.SUPPORTED,
         strip_completeness=completeness,
         expected_film_span_mm=None,
-        observed_film_span_px=float(geometry.film_span.box.width),
+        observed_film_span_px=float(geometry.visible_sequence_span.box.width),
         leading_slack_px=0.0,
         trailing_slack_px=0.0,
         leading_slack_mm=None,
@@ -352,7 +352,7 @@ def assess_dual_lane_candidate(
         frame_coverage_state=coverage.state,
         photo_dimensions_stable=dimensions.state == EvidenceState.SUPPORTED,
         holder_span=geometry.holder_span,
-        film_span=geometry.film_span,
+        visible_sequence_span=geometry.visible_sequence_span,
         calibration_used=dimensions.calibration_used,
     )
     partial = PartialEdgeSafetyEvidence(
@@ -371,7 +371,7 @@ def assess_dual_lane_candidate(
             tuple(lane.assessment.evidence.independence.state for lane in lanes)
         ),
         reason="dual_lane_component_independence",
-        outer_root_measurement=geometry.outer_provenance.root_measurement,
+        outer_root_measurement=geometry.sequence_provenance.root_measurement,
         separator_root_measurements=tuple(
             root
             for lane in lanes
@@ -388,7 +388,7 @@ def assess_dual_lane_candidate(
             conservation=SequenceConservationEvidence(
                 EvidenceState.NOT_APPLICABLE,
                 "dual_lane_components_own_sequence_conservation",
-                PixelInterval.exact(float(geometry.film_span.box.width)),
+                PixelInterval.exact(float(geometry.visible_sequence_span.box.width)),
                 PixelInterval.zero(),
                 PixelInterval.zero(),
                 PixelInterval.zero(),

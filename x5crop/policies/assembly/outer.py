@@ -9,12 +9,12 @@ from ...strip_modes import PARTIAL
 from ..runtime.outer import (
     ContentContainmentCorrectionPolicy,
     GeometryConsistencyCorrectionPolicy,
-    GeometryOuterProposalPolicy,
+    GeometrySequenceHypothesisPolicy,
     LongAxisGeometryCorrectionPolicy,
     OuterCorrectionFamilyPolicy,
     OuterCorrectionPolicy,
     OuterPolicy,
-    OuterProposalPolicy,
+    SequenceHypothesisPolicy,
     PartialPlacementGeometryPolicy,
     SeparatorOuterFamilyPolicy,
     SeparatorGeometryProposalPolicy,
@@ -99,9 +99,9 @@ def outer_policy(
         short_axis,
     )
     return OuterPolicy(
-        proposal=OuterProposalPolicy(
-            base=params.outer.base_outer_candidates,
-            geometry=GeometryOuterProposalPolicy(
+        proposal=SequenceHypothesisPolicy(
+            base=params.outer.base_sequence_span_candidates,
+            geometry=GeometrySequenceHypothesisPolicy(
                 partial_placement=PartialPlacementGeometryPolicy(
                     enabled=partial_content_enabled,
                     floating=floating_position,

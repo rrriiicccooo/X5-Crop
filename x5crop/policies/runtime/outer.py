@@ -74,15 +74,15 @@ class SeparatorGeometryProposalPolicy:
 
 
 @dataclass(frozen=True)
-class GeometryOuterProposalPolicy:
+class GeometrySequenceHypothesisPolicy:
     partial_placement: PartialPlacementGeometryPolicy
     separator: SeparatorGeometryProposalPolicy
 
 
 @dataclass(frozen=True)
-class OuterProposalPolicy:
+class SequenceHypothesisPolicy:
     base: OuterBoxDetectionParameters
-    geometry: GeometryOuterProposalPolicy
+    geometry: GeometrySequenceHypothesisPolicy
 
 
 @dataclass(frozen=True)
@@ -100,5 +100,5 @@ class OuterCorrectionPolicy:
 @dataclass(frozen=True)
 class OuterPolicy:
     alignment_evidence: OuterAlignmentEvidenceParameters
-    proposal: OuterProposalPolicy
+    proposal: SequenceHypothesisPolicy
     correction: OuterCorrectionPolicy

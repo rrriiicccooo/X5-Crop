@@ -13,6 +13,6 @@ def equal_model_gap(index: int, expected: float, score: float) -> SeparatorBandO
         provenance=MeasurementProvenance(
             root_measurement="geometry_model",
             source="equal_model",
-            dependencies=("film_span", "count", "placement"),
+            dependencies=("visible_sequence_span", "count", "placement"),
         ),
     )

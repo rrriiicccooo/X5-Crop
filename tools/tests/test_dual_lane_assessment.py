@@ -7,7 +7,7 @@ from tools.tests.physical_gate_support import candidate_fixture, separator_obser
 from x5crop.detection.candidate.assessment.dual_lane import assess_dual_lane_candidate
 from x5crop.detection.candidate.model import BuiltCandidate
 from x5crop.detection.evidence.state import EvidenceState
-from x5crop.detection.physical.spans import FilmSpan, HolderSpan
+from x5crop.detection.physical.spans import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from x5crop.domain import Box, MeasurementProvenance
 
 
@@ -18,15 +18,14 @@ def _parent(lane):
         format_id="135-dual",
         count=4,
         holder_span=HolderSpan(Box(0, 0, 400, 100)),
-        film_span=FilmSpan(Box(0, 0, 400, 100)),
-        work_frames=frames,
-        image_outer=Box(0, 0, 400, 100),
-        image_frames=frames,
+        visible_sequence_span=VisibleSequenceSpan(Box(0, 0, 400, 100)),
+        crop_envelope=CropEnvelope(Box(0, 0, 400, 100)),
+        frames=frames,
         separators=(
             separator_observation(1, 100.0, start=95.0, end=105.0),
             separator_observation(2, 200.0, start=195.0, end=205.0),
         ),
-        outer_provenance=MeasurementProvenance(
+        sequence_provenance=MeasurementProvenance(
             "lane_divider_profile",
             "measured_gutter",
             ("gray_work",),

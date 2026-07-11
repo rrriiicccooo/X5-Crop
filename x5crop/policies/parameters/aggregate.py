@@ -69,7 +69,7 @@ class OuterParameters:
     outer_strategy: OuterStrategyParameters = field(default_factory=OuterStrategyParameters)
     floating_content_position: FloatingContentPositionParameters = field(default_factory=FloatingContentPositionParameters)
     edge_anchored_content_position: EdgeAnchoredContentPositionParameters = field(default_factory=EdgeAnchoredContentPositionParameters)
-    base_outer_candidates: OuterBoxDetectionParameters = field(default_factory=OuterBoxDetectionParameters)
+    base_sequence_span_candidates: OuterBoxDetectionParameters = field(default_factory=OuterBoxDetectionParameters)
     separator_outer_band: SeparatorOuterBandParameters = field(default_factory=SeparatorOuterBandParameters)
     separator_full_width_outer: FullWidthSeparatorOuterParameters = field(default_factory=FullWidthSeparatorOuterParameters)
     long_axis_geometry_correction: LongAxisGeometryCorrectionParameters = field(default_factory=LongAxisGeometryCorrectionParameters)

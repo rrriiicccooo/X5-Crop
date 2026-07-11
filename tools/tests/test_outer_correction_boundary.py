@@ -10,9 +10,9 @@ from x5crop.detection.candidate.extension.outer_correction import (
     _eligible_families,
 )
 from x5crop.detection.physical.outer.correction.types import (
-    OuterCorrectionProposal,
+    SequenceAdjustmentHypothesis,
 )
-from x5crop.detection.physical.spans import FilmSpan
+from x5crop.detection.physical.spans import CropEnvelope, VisibleSequenceSpan
 from x5crop.detection.physical.outer.correction.content_containment import (
     content_containment_correction_proposal,
 )
@@ -90,13 +90,24 @@ class OuterCorrectionBoundaryTest(unittest.TestCase):
         )
         self.assertIsNotNone(proposal)
         assert proposal is not None
-        self.assertGreaterEqual(proposal.box.width, candidate.geometry.film_span.box.width)
-        self.assertGreaterEqual(proposal.box.height, candidate.geometry.film_span.box.height)
+        self.assertEqual(
+            proposal.visible_sequence_span,
+            candidate.geometry.visible_sequence_span,
+        )
+        self.assertGreaterEqual(
+            proposal.crop_envelope.box.width,
+            candidate.geometry.crop_envelope.box.width,
+        )
+        self.assertGreaterEqual(
+            proposal.crop_envelope.box.height,
+            candidate.geometry.crop_envelope.box.height,
+        )
 
     def test_geometry_correction_preserves_root_measurement_dependencies(self) -> None:
         candidate = _candidate("full")
-        proposal = OuterCorrectionProposal(
-            FilmSpan(candidate.geometry.film_span.box),
+        proposal = SequenceAdjustmentHypothesis(
+            VisibleSequenceSpan(candidate.geometry.visible_sequence_span.box),
+            CropEnvelope(candidate.geometry.crop_envelope.box),
             "long_axis_geometry",
             "test",
         )
@@ -105,7 +116,7 @@ class OuterCorrectionBoundaryTest(unittest.TestCase):
 
         self.assertEqual(
             provenance.root_measurement,
-            candidate.geometry.outer_provenance.root_measurement,
+            candidate.geometry.sequence_provenance.root_measurement,
         )
         self.assertIn("separator_profile", provenance.dependencies)
 

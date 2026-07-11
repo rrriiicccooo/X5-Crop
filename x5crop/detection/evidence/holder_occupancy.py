@@ -6,7 +6,7 @@ from ...domain import Box, SeparatorBandObservation
 from ...formats import FormatPhysicalSpec
 from ...units import ScanCalibration
 from ..physical.photo_size import FrameDimensionEvidence
-from ..physical.spans import FilmSpan, HolderSpan
+from ..physical.spans import VisibleSequenceSpan, HolderSpan
 from .frame_coverage import FrameCoverageEvidence
 from .state import EvidenceState
 
@@ -38,17 +38,17 @@ class HolderOccupancyEvidence:
     frame_coverage_state: EvidenceState
     photo_dimensions_stable: bool
     holder_span: HolderSpan
-    film_span: FilmSpan
+    visible_sequence_span: VisibleSequenceSpan
     calibration_used: bool
 
 def strip_completeness_evidence(
     *,
     count: int,
-    work_frames: tuple[Box, ...],
+    frames: tuple[Box, ...],
     separators: tuple[SeparatorBandObservation, ...],
     physical_spec: FormatPhysicalSpec,
 ) -> StripCompletenessEvidence:
-    valid_frame_count = sum(1 for frame in work_frames if frame.valid())
+    valid_frame_count = sum(1 for frame in frames if frame.valid())
     frame_count_complete = int(count) == int(physical_spec.default_count)
     return StripCompletenessEvidence(
         frame_count_complete=frame_count_complete,
@@ -69,8 +69,8 @@ def holder_occupancy_evidence(
     strip_mode: str,
     count: int,
     holder_span: HolderSpan,
-    film_span: FilmSpan,
-    work_frames: tuple[Box, ...],
+    visible_sequence_span: VisibleSequenceSpan,
+    frames: tuple[Box, ...],
     separators: tuple[SeparatorBandObservation, ...],
     physical_spec: FormatPhysicalSpec,
     content_support_available: bool,
@@ -80,12 +80,12 @@ def holder_occupancy_evidence(
 ) -> HolderOccupancyEvidence:
     completeness = strip_completeness_evidence(
         count=count,
-        work_frames=work_frames,
+        frames=frames,
         separators=separators,
         physical_spec=physical_spec,
     )
     holder = holder_span.box
-    film = film_span.box
+    film = visible_sequence_span.box
     leading_slack_px = max(0.0, float(film.left - holder.left))
     trailing_slack_px = max(0.0, float(holder.right - film.right))
     observed_span_px = float(film.width)
@@ -143,6 +143,6 @@ def holder_occupancy_evidence(
         frame_coverage_state=frame_coverage.state,
         photo_dimensions_stable=photo_dimensions_stable,
         holder_span=holder_span,
-        film_span=film_span,
+        visible_sequence_span=visible_sequence_span,
         calibration_used=bool(calibration.trusted and px_per_mm is not None),
     )

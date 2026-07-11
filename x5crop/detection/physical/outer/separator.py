@@ -19,9 +19,9 @@ from ....policies.runtime.separator import SeparatorPolicy
 from ....cache import MeasurementCache
 from ....units import ScanCalibration
 from ..photo_size import PhotoSizeConsistency, photo_size_consistency_from_separator_bands
-from .common import unique_outer_proposals
+from .common import unique_sequence_span_proposals
 from .separator_bands import collect_separator_outer_bands, separator_outer_band_sequences
-from .types import OuterProposal
+from .types import SequenceHypothesis
 
 
 LOCAL_SEPARATOR_OUTER = "local"
@@ -72,7 +72,7 @@ def separator_outer_scopes(
 
 def separator_derived_outer_candidates(
     gray_work: np.ndarray,
-    base_candidates: list[OuterProposal],
+    base_candidates: list[SequenceHypothesis],
     fmt: FormatPhysicalSpec,
     count: int,
     strip_mode: str,
@@ -85,7 +85,7 @@ def separator_derived_outer_candidates(
     outer_scopes: tuple[str, ...] | None = None,
     explicit_count: bool = True,
     sequence_ranker: _SeparatorSequenceRanker,
-) -> list[OuterProposal]:
+) -> list[SequenceHypothesis]:
     if strip_mode not in {"full", "partial"} or count <= 1:
         return []
     aspect = float(fmt.horizontal_content_aspect)
@@ -97,7 +97,7 @@ def separator_derived_outer_candidates(
         strip_mode,
         explicit_count,
     )
-    candidates: list[OuterProposal] = []
+    candidates: list[SequenceHypothesis] = []
     for outer_scope in selected_scopes:
         plan = _scope_plan(
             outer_scope,
@@ -125,7 +125,7 @@ def separator_derived_outer_candidates(
                 sequence_ranker,
             )
         )
-    return unique_outer_proposals(candidates)
+    return unique_sequence_span_proposals(candidates)
 
 
 def _candidate_prefix(outer_scope: str) -> str | None:
@@ -218,7 +218,7 @@ def _mode_active(
 
 def _separator_outer_candidates_for_plan(
     gray_work: np.ndarray,
-    base_candidates: list[OuterProposal],
+    base_candidates: list[SequenceHypothesis],
     count: int,
     aspect: float,
     plan: SeparatorOuterPlan,
@@ -228,19 +228,20 @@ def _separator_outer_candidates_for_plan(
     separator_geometry_policy: SeparatorGeometryProposalPolicy,
     separator_policy: SeparatorPolicy,
     sequence_ranker: _SeparatorSequenceRanker,
-) -> list[OuterProposal]:
+) -> list[SequenceHypothesis]:
     h, w = gray_work.shape
     source_candidates = sorted(
-        [candidate for candidate in base_candidates if candidate.box.valid()],
-        key=lambda candidate: candidate.box.width * candidate.box.height,
+        [candidate for candidate in base_candidates if candidate.crop_envelope.box.valid()],
+        key=lambda candidate: candidate.crop_envelope.box.width
+        * candidate.crop_envelope.box.height,
         reverse=True,
     )[: plan.source_candidate_count]
-    candidates: list[OuterProposal] = []
+    candidates: list[SequenceHypothesis] = []
     expected_gaps = count - 1
     band_policy = separator_geometry_policy.band
 
     for source in source_candidates:
-        source_box = source.box.clamp(w, h)
+        source_box = source.crop_envelope.box.clamp(w, h)
         if not source_box.valid() or source_box.height <= 0:
             continue
         outer = Box(0, source_box.top, w, source_box.bottom) if plan.full_width else source_box
@@ -325,10 +326,10 @@ def _separator_outer_candidates_for_plan(
                 continue
             ratio_suffix = f"_r{expected_ratio:.3f}"
             candidates.append(
-                OuterProposal(
+                SequenceHypothesis.from_box_hypothesis(
                     f"{plan.candidate_prefix}_{source.name}_{rank}{ratio_suffix}",
                     proposed,
-                    "separator_outer",
+                    "separator_dimension_span",
                     MeasurementProvenance(
                         root_measurement="separator_profile",
                         source=plan.name,
@@ -338,10 +339,15 @@ def _separator_outer_candidates_for_plan(
                             "placement",
                         ),
                     ),
+                    boundary_observations=tuple(
+                        observation
+                        for observation in source.boundary_observations
+                        if observation.side in {"top", "bottom"}
+                    ),
                 )
             )
 
-    return unique_outer_proposals(candidates)[: plan.max_candidates]
+    return unique_sequence_span_proposals(candidates)[: plan.max_candidates]
 
 
 def _rank_separator_sequences(

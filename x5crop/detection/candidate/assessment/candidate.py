@@ -52,12 +52,12 @@ def _boundary_proof_paths(
     )
     hard_anchor_count = evidence.separator_sequence.hard_count
     single_frame_boundary_anchors = set(
-        geometry.outer_provenance.boundary_anchors
+        geometry.sequence_provenance.boundary_anchors
     )
     single_frame_physical_boundaries = bool(
         geometry.count == 1
         and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
-        and geometry.outer_provenance.root_measurement != "content_guidance"
+        and geometry.sequence_provenance.root_measurement != "content_guidance"
         and evidence.content_preservation.state == EvidenceState.SUPPORTED
         and (
             evidence.frame_dimensions.calibration_used
@@ -155,8 +155,8 @@ def assess_candidate(
     candidate = replace(candidate, geometry=geometry)
     coverage = frame_coverage_evidence(
         geometry.holder_span,
-        geometry.film_span,
-        geometry.work_frames,
+        geometry.visible_sequence_span,
+        geometry.frames,
         physical_spec,
         context.measurement_cache,
         context.policy.content,
@@ -187,8 +187,8 @@ def assess_candidate(
         strip_mode=geometry.strip_mode,
         count=geometry.count,
         holder_span=geometry.holder_span,
-        film_span=geometry.film_span,
-        work_frames=geometry.work_frames,
+        visible_sequence_span=geometry.visible_sequence_span,
+        frames=geometry.frames,
         separators=geometry.separators,
         physical_spec=physical_spec,
         content_support_available=content.support_available,

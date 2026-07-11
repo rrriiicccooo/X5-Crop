@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ...domain import MeasurementProvenance
+from ...domain import Box, MeasurementProvenance
 from ..evidence.state import EvidenceState
 from .intervals import PixelInterval
+from .spans import CropEnvelope, VisibleSequenceSpan
 
 
 BOUNDARY_SIDES = frozenset({"leading", "trailing", "top", "bottom"})
@@ -154,5 +155,56 @@ def holder_occlusion_evidence(
             trailing_boundary,
             trailing_visible_frame_width,
             frame_width_px,
+        ),
+    )
+
+
+def visible_sequence_and_crop_envelope(
+    observations: tuple[BoundaryObservation, ...],
+    *,
+    canvas_width: int,
+    canvas_height: int,
+) -> tuple[VisibleSequenceSpan, CropEnvelope]:
+    by_side = {observation.side: observation for observation in observations}
+    if set(by_side) != BOUNDARY_SIDES:
+        raise ValueError("four boundary observations are required")
+    visible = Box(
+        int(round(by_side["leading"].position.midpoint)),
+        int(round(by_side["top"].position.midpoint)),
+        int(round(by_side["trailing"].position.midpoint)),
+        int(round(by_side["bottom"].position.midpoint)),
+    ).clamp(canvas_width, canvas_height)
+    envelope = Box(
+        int(round(by_side["leading"].position.minimum)),
+        int(round(by_side["top"].position.minimum)),
+        int(round(by_side["trailing"].position.maximum)),
+        int(round(by_side["bottom"].position.maximum)),
+    ).clamp(canvas_width, canvas_height)
+    if not visible.valid() or not envelope.valid():
+        raise ValueError("boundary observations produce invalid geometry")
+    return VisibleSequenceSpan(visible), CropEnvelope(envelope)
+
+
+def canvas_boundary_observations(
+    width: int,
+    height: int,
+) -> tuple[BoundaryObservation, ...]:
+    provenance = MeasurementProvenance(
+        root_measurement="holder_canvas",
+        source="canvas_clip",
+        dependencies=("canvas",),
+    )
+    return (
+        BoundaryObservation(
+            "leading", PixelInterval.exact(0.0), "canvas_clip", provenance
+        ),
+        BoundaryObservation(
+            "trailing", PixelInterval.exact(float(width)), "canvas_clip", provenance
+        ),
+        BoundaryObservation(
+            "top", PixelInterval.exact(0.0), "canvas_clip", provenance
+        ),
+        BoundaryObservation(
+            "bottom", PixelInterval.exact(float(height)), "canvas_clip", provenance
         ),
     )

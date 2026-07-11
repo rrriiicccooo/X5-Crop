@@ -229,7 +229,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             "DetectorPolicy",
             "CountHypothesisPolicy",
             "FinalizationPolicy",
-            "BaseOuterProposalPolicy",
+            "BaseSequenceHypothesisPolicy",
         ):
             self.assertNotIn(f"class {class_name}", source)
 
@@ -344,7 +344,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
 
     def test_active_source_has_no_undecorated_forwarding_aliases(self) -> None:
         banned_functions = {
-            "merge_outer_proposal_candidates",
+            "merge_sequence_hypotheses",
             "candidate_signals",
             "propose_equal_model_gap",
         }

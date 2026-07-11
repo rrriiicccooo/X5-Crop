@@ -273,7 +273,7 @@ def separator_width_gap_from_candidate(
         provenance=MeasurementProvenance(
             root_measurement="separator_width_profile",
             source="observed_width_band",
-            dependencies=("gray_work", "film_span"),
+            dependencies=("gray_work", "visible_sequence_span"),
         ),
         start=float(start),
         end=float(end),

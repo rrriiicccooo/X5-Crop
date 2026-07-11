@@ -67,7 +67,6 @@ def process_one(
         initial_policy.preprocess.content_evidence_image,
     )
     detection_context = DetectionContext(
-        source_gray=gray,
         image_profile=profile,
         scan_calibration=scan_calibration,
         request=DetectionRequest(
@@ -99,6 +98,8 @@ def process_one(
         prepared_output_protection.evidence,
         transform_geometry,
         scan_calibration,
+        image_width=int(gray.shape[1]),
+        image_height=int(gray.shape[0]),
     )
     runtime_policy_detail = detection_policy_report_detail(selected_policy)
     detection = finalize_detection(

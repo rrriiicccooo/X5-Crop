@@ -57,11 +57,11 @@ def frame_sequence_evidence(
         )
     holder_occlusion = HolderOcclusionEvidence.unavailable()
     frame_width = PixelInterval.exact(
-        float(geometry.film_span.box.height)
+        float(geometry.visible_sequence_span.box.height)
         * float(physical_spec.horizontal_content_aspect)
     )
     conservation = sequence_conservation_evidence(
-        visible_length_px=PixelInterval.exact(float(geometry.film_span.box.width)),
+        visible_length_px=PixelInterval.exact(float(geometry.visible_sequence_span.box.width)),
         count=geometry.count,
         frame_width_px=frame_width,
         spacings=tuple(spacings),

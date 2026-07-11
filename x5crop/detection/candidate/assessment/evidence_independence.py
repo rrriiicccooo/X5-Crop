@@ -25,7 +25,7 @@ def evidence_independence_evidence(
         return EvidenceIndependenceEvidence(
             EvidenceState.NOT_APPLICABLE,
             "non_separator_candidate",
-            geometry.outer_provenance.root_measurement,
+            geometry.sequence_provenance.root_measurement,
             (),
             (),
         )
@@ -42,8 +42,8 @@ def evidence_independence_evidence(
             }
         )
     )
-    outer_root = geometry.outer_provenance.root_measurement
-    outer_dependencies = set(geometry.outer_provenance.dependencies)
+    outer_root = geometry.sequence_provenance.root_measurement
+    outer_dependencies = set(geometry.sequence_provenance.dependencies)
     separator_dependencies = {
         dependency
         for observation in hard_observations

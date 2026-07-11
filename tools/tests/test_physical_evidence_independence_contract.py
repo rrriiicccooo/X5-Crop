@@ -19,8 +19,8 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
         candidate = candidate_fixture()
         geometry = replace(
             candidate.geometry,
-            outer_provenance=replace(
-                candidate.geometry.outer_provenance,
+            sequence_provenance=replace(
+                candidate.geometry.sequence_provenance,
                 root_measurement="separator_profile",
             ),
         )
@@ -31,8 +31,8 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
         candidate = candidate_fixture()
         geometry = replace(
             candidate.geometry,
-            outer_provenance=replace(
-                candidate.geometry.outer_provenance,
+            sequence_provenance=replace(
+                candidate.geometry.sequence_provenance,
                 root_measurement="separator_profile",
             ),
             separators=tuple(

@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class OuterAlignmentEvidence:
     state: EvidenceState
     reason: str
-    film_span: Box
+    visible_sequence_span: Box
     content_span: Box | None
     content_measurement_sources: tuple[str, ...]
     confirmed_undercrop_sides: tuple[str, ...]
@@ -43,7 +43,7 @@ def outer_content_alignment_evidence(
     if cache.layout != geometry.layout:
         raise ValueError("outer alignment requires matching analysis cache")
     work_height, work_width = cache.gray_work.shape
-    film = geometry.film_span.box.clamp(work_width, work_height)
+    film = geometry.visible_sequence_span.box.clamp(work_width, work_height)
     if not film.valid():
         return OuterAlignmentEvidence(
             EvidenceState.UNAVAILABLE,
@@ -223,7 +223,7 @@ def outer_content_alignment_evidence(
     return OuterAlignmentEvidence(
         state=state,
         reason=reason,
-        film_span=film,
+        visible_sequence_span=film,
         content_span=content,
         content_measurement_sources=tuple(source for source, _box in measured),
         confirmed_undercrop_sides=confirmed,

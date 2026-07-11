@@ -20,6 +20,10 @@ class PixelInterval:
     def zero(cls) -> "PixelInterval":
         return cls.exact(0.0)
 
+    @property
+    def midpoint(self) -> float:
+        return 0.5 * (self.minimum + self.maximum)
+
     def intersects(self, other: "PixelInterval") -> bool:
         return max(self.minimum, other.minimum) <= min(self.maximum, other.maximum)
 

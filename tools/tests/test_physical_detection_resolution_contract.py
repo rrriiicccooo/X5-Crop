@@ -73,8 +73,8 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         ):
             evidence = frame_coverage_evidence(
                 candidate.geometry.holder_span,
-                candidate.geometry.film_span,
-                candidate.geometry.work_frames,
+                candidate.geometry.visible_sequence_span,
+                candidate.geometry.frames,
                 format_spec("135"),
                 _cache(),
                 get_detection_policy("135", "full").content,
@@ -90,8 +90,8 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         ):
             evidence = frame_coverage_evidence(
                 candidate.geometry.holder_span,
-                candidate.geometry.film_span,
-                candidate.geometry.work_frames,
+                candidate.geometry.visible_sequence_span,
+                candidate.geometry.frames,
                 format_spec("135"),
                 _cache(),
                 get_detection_policy("135", "full").content,
@@ -103,11 +103,10 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         geometry = replace(
             assessed.geometry,
             count=1,
-            work_frames=(assessed.geometry.work_frames[0],),
-            image_frames=(assessed.geometry.image_frames[0],),
+            frames=(assessed.geometry.frames[0],),
             separators=(),
-            outer_provenance=replace(
-                assessed.geometry.outer_provenance,
+            sequence_provenance=replace(
+                assessed.geometry.sequence_provenance,
                 boundary_anchors=(),
             ),
         )

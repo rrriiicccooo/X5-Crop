@@ -119,7 +119,7 @@ def frame_content_evidence(
 ) -> FrameContentEvidence:
     if cache.layout != geometry.layout:
         raise ValueError("content evidence requires matching analysis cache")
-    outer = geometry.film_span.box.clamp(
+    outer = geometry.visible_sequence_span.box.clamp(
         cache.gray_work.shape[1],
         cache.gray_work.shape[0],
     )
@@ -161,7 +161,7 @@ def frame_content_evidence(
         cache.content_column_statistics[statistics_key] = statistics
 
     observations: list[FrameContentObservation] = []
-    for index, frame in enumerate(geometry.work_frames, start=1):
+    for index, frame in enumerate(geometry.frames, start=1):
         absolute = frame.clamp(
             cache.gray_work.shape[1],
             cache.gray_work.shape[0],

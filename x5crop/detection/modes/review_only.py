@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from ...constants import CANDIDATE_SOURCE_REVIEW_ONLY
 from ...domain import Box, MeasurementProvenance
-from ...geometry.boxes import map_work_box
 from ..candidate.model import BuiltCandidate
 from ..candidate.plan.count_hypotheses import CountHypothesis
 from ..context import DetectionContext
 from ..geometry import CandidateGeometry
-from ..physical.spans import FilmSpan, HolderSpan
+from ..physical.boundary import canvas_boundary_observations
+from ..physical.spans import CropEnvelope, HolderSpan, VisibleSequenceSpan
 
 
 def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
@@ -19,7 +19,6 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
         raise ValueError("review-only mode requires dual-lane partial input")
     height, width = context.measurement_cache.gray_work.shape
     span = Box(0, 0, width, height)
-    source_height, source_width = context.source_gray.shape
     count = physical_spec.default_count
     return BuiltCandidate(
         geometry=CandidateGeometry(
@@ -28,15 +27,9 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
             strip_mode=context.request.strip_mode,
             count=count,
             holder_span=HolderSpan(span),
-            film_span=FilmSpan(span),
-            work_frames=(),
-            image_outer=map_work_box(
-                span,
-                context.request.layout,
-                source_width,
-                source_height,
-            ),
-            image_frames=(),
+            visible_sequence_span=VisibleSequenceSpan(span),
+            crop_envelope=CropEnvelope(span),
+            frames=(),
             separators=(),
             origin=0.0,
             pitch=float(width) / float(max(1, count)),
@@ -44,13 +37,14 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
             source=CANDIDATE_SOURCE_REVIEW_ONLY,
             automatic_processing_supported=False,
             contract="review_only_mode",
-            outer_proposal_name="review_only_canvas",
-            outer_proposal_strategy="review_only_outer",
-            outer_provenance=MeasurementProvenance(
+            sequence_hypothesis_name="review_only_canvas",
+            sequence_hypothesis_strategy="review_only_canvas",
+            sequence_provenance=MeasurementProvenance(
                 root_measurement="review_only_mode",
                 source="review_only_canvas",
                 dependencies=("canvas",),
             ),
+            boundary_observations=canvas_boundary_observations(width, height),
         ),
         count_hypothesis=CountHypothesis(
             count=count,

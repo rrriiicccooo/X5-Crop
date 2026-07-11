@@ -10,7 +10,7 @@ from x5crop.cache import MeasurementCache
 from x5crop.detection.evidence.content.frame_support import frame_content_evidence
 from x5crop.detection.evidence.outer_alignment import outer_content_alignment_evidence
 from x5crop.detection.evidence.state import EvidenceState
-from x5crop.detection.physical.spans import FilmSpan
+from x5crop.detection.physical.spans import VisibleSequenceSpan
 from x5crop.domain import Box
 from x5crop.policies.registry import get_detection_policy
 
@@ -55,7 +55,7 @@ class FrameContentSupportTest(unittest.TestCase):
         gray[20:100, 220:680] = 0
         geometry = replace(
             candidate.geometry,
-            film_span=FilmSpan(Box(0, 0, 900, 120)),
+            visible_sequence_span=VisibleSequenceSpan(Box(0, 0, 900, 120)),
         )
         alignment = outer_content_alignment_evidence(
             geometry,
@@ -71,7 +71,7 @@ class FrameContentSupportTest(unittest.TestCase):
         gray[20:100, 50:850] = 0
         geometry = replace(
             candidate.geometry,
-            film_span=FilmSpan(Box(250, 0, 650, 120)),
+            visible_sequence_span=VisibleSequenceSpan(Box(250, 0, 650, 120)),
         )
         alignment = outer_content_alignment_evidence(
             geometry,

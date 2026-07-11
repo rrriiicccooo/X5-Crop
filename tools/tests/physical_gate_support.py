@@ -54,7 +54,8 @@ from x5crop.detection.physical.spacing import (
     SequenceConservationEvidence,
     inter_frame_spacing_evidence,
 )
-from x5crop.detection.physical.spans import FilmSpan, HolderSpan
+from x5crop.detection.physical.boundary import canvas_boundary_observations
+from x5crop.detection.physical.spans import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from x5crop.domain import (
     AxisBleedParameters,
     Box,
@@ -136,7 +137,7 @@ def candidate_evidence_fixture(
     outer = Box(0, 0, 200, 100)
     frames = (Box(0, 0, 100, 100), Box(100, 0, 200, 100))
     holder = HolderSpan(outer)
-    film = FilmSpan(outer)
+    film = VisibleSequenceSpan(outer)
     completeness = StripCompletenessEvidence(True, True, 2, 2, 2, 1, 1)
     return CandidateEvidence(
         frame_topology=FrameTopologyEvidence(
@@ -314,10 +315,9 @@ def candidate_fixture(
         strip_mode="full",
         count=2,
         holder_span=HolderSpan(outer),
-        film_span=FilmSpan(outer),
-        work_frames=frames,
-        image_outer=outer,
-        image_frames=frames,
+        visible_sequence_span=VisibleSequenceSpan(outer),
+        crop_envelope=CropEnvelope(outer),
+        frames=frames,
         separators=(separator_observation(1, 100.0, start=95.0, end=105.0),),
         origin=0.0,
         pitch=100.0,
@@ -325,14 +325,15 @@ def candidate_fixture(
         source="separator",
         automatic_processing_supported=automatic_processing_supported,
         contract="physical_boundary_evidence",
-        outer_proposal_name="synthetic_outer",
-        outer_proposal_strategy="base_outer",
-        outer_provenance=MeasurementProvenance(
+        sequence_hypothesis_name="synthetic_sequence",
+        sequence_hypothesis_strategy="boundary_led",
+        sequence_provenance=MeasurementProvenance(
             "holder_boundary_profile",
             "synthetic_outer",
             ("gray_work",),
             ("left", "right"),
         ),
+        boundary_observations=canvas_boundary_observations(200, 100),
     )
     return AssessedCandidate(
         geometry=geometry,
@@ -432,6 +433,8 @@ def decide_candidate(
         ),
         transform_geometry_fixture(transform_state),
         ScanCalibration(None, None, "unavailable", False),
+        image_width=200,
+        image_height=100,
     )
 
 

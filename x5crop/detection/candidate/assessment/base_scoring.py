@@ -39,12 +39,12 @@ def base_physical_assessment(
 ) -> BasePhysicalAssessment:
     geometry = candidate.geometry
     topology = frame_topology_evidence(
-        geometry.work_frames,
+        geometry.frames,
         geometry.count,
     )
     continuity = separator_cross_axis_continuity_evidence(
         gray_work,
-        geometry.film_span.box,
+        geometry.visible_sequence_span.box,
         geometry.separators,
         geometry.pitch,
         hard_gap_trust,

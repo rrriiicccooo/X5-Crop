@@ -12,6 +12,7 @@ from ...constants import (
     FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
 )
 from ...domain import OutputProtectionPlan
+from ...geometry.boxes import map_work_box
 from ...output.model import OutputGeometry
 from ...units import ScanCalibration
 from ..candidate.assessment.candidate_gate import CandidateGateAssessment
@@ -106,6 +107,9 @@ def apply_decision_gate(
     exposure_overlap: ExposureOverlapEvidence,
     transform_geometry: TransformGeometryEvidence,
     scan_calibration: ScanCalibration,
+    *,
+    image_width: int,
+    image_height: int,
 ) -> FinalDetection:
     selected = selection.selected
     candidate_gate = selected.assessment.gate
@@ -129,8 +133,21 @@ def apply_decision_gate(
         transform_geometry=transform_geometry,
     )
     geometry = OutputGeometry(
-        outer=selected.geometry.image_outer,
-        frames=selected.geometry.image_frames,
+        outer=map_work_box(
+            selected.geometry.crop_envelope.box,
+            selected.geometry.layout,
+            image_width,
+            image_height,
+        ),
+        frames=tuple(
+            map_work_box(
+                frame,
+                selected.geometry.layout,
+                image_width,
+                image_height,
+            )
+            for frame in selected.geometry.frames
+        ),
     )
     return FinalDetection(
         format_id=selected.geometry.format_id,
@@ -138,7 +155,7 @@ def apply_decision_gate(
         strip_mode=selected.geometry.strip_mode,
         count=selected.geometry.count,
         confidence=selected.assessment.scores.confidence,
-        work_film_span=selected.geometry.film_span.box,
+        work_film_span=selected.geometry.visible_sequence_span.box,
         pitch=selected.geometry.pitch,
         decision_gate=decision_gate,
         decision_geometry=geometry,

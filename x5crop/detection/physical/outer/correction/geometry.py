@@ -10,9 +10,9 @@ from .....utils import clamp_int
 from ....geometry import CandidateGeometry
 from ....evidence.outer_alignment import OuterAlignmentEvidence
 from ...photo_size import FrameDimensionEvidence
-from ...spans import FilmSpan
+from ...spans import CropEnvelope, VisibleSequenceSpan
 from .constraints import correction_axes_allowed
-from .types import OuterCorrectionProposal
+from .types import SequenceAdjustmentHypothesis
 
 
 def _long_axis_geometry_proposal(
@@ -21,10 +21,10 @@ def _long_axis_geometry_proposal(
     alignment: OuterAlignmentEvidence,
     policy: GeometryConsistencyCorrectionPolicy,
     canvas_width: int,
-) -> OuterCorrectionProposal | None:
+) -> SequenceAdjustmentHypothesis | None:
     family = policy.long_axis.family
     parameters = policy.long_axis.parameters
-    original = geometry.film_span.box
+    original = geometry.visible_sequence_span.box
     if family.mode == "off" or geometry.count <= 1:
         return None
     separators = tuple(
@@ -100,8 +100,9 @@ def _long_axis_geometry_proposal(
             return None
     if not correction_axes_allowed(family, original, corrected):
         return None
-    return OuterCorrectionProposal(
-        corrected_span=FilmSpan(corrected),
+    return SequenceAdjustmentHypothesis(
+        visible_sequence_span=VisibleSequenceSpan(corrected),
+        crop_envelope=CropEnvelope(corrected),
         family="long_axis_geometry",
         reason="separator_edges_explain_smaller_film_span",
     )
@@ -113,10 +114,10 @@ def _short_axis_geometry_proposal(
     physical_spec: FormatPhysicalSpec,
     policy: GeometryConsistencyCorrectionPolicy,
     canvas_height: int,
-) -> OuterCorrectionProposal | None:
+) -> SequenceAdjustmentHypothesis | None:
     family = policy.short_axis.family
     parameters = policy.short_axis.parameters
-    original = geometry.film_span.box
+    original = geometry.visible_sequence_span.box
     if family.mode == "off" or dimensions.maximum_dimension_error_ratio is None:
         return None
     if dimensions.maximum_dimension_error_ratio < parameters.min_error:
@@ -158,8 +159,9 @@ def _short_axis_geometry_proposal(
         return None
     if not correction_axes_allowed(family, original, corrected):
         return None
-    return OuterCorrectionProposal(
-        corrected_span=FilmSpan(corrected),
+    return SequenceAdjustmentHypothesis(
+        visible_sequence_span=VisibleSequenceSpan(corrected),
+        crop_envelope=CropEnvelope(corrected),
         family="short_axis_geometry",
         reason="physical_frame_aspect_requires_short_axis_expansion",
     )
@@ -175,8 +177,8 @@ def geometry_consistency_correction_proposals(
     canvas_width: int,
     canvas_height: int,
     eligible_families: frozenset[str],
-) -> tuple[OuterCorrectionProposal, ...]:
-    proposals: list[OuterCorrectionProposal] = []
+) -> tuple[SequenceAdjustmentHypothesis, ...]:
+    proposals: list[SequenceAdjustmentHypothesis] = []
     if "long_axis_geometry" in eligible_families:
         proposal = _long_axis_geometry_proposal(
             geometry,

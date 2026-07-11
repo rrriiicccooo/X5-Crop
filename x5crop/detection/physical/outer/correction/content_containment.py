@@ -5,9 +5,9 @@ from .....policies.runtime.outer import ContentContainmentCorrectionPolicy
 from .....utils import clamp_int
 from ....geometry import CandidateGeometry
 from ....evidence.outer_alignment import OuterAlignmentEvidence
-from ...spans import FilmSpan
+from ...spans import CropEnvelope
 from .constraints import correction_axes_allowed
-from .types import OuterCorrectionProposal
+from .types import SequenceAdjustmentHypothesis
 
 
 def content_containment_correction_proposal(
@@ -16,10 +16,10 @@ def content_containment_correction_proposal(
     canvas_width: int,
     canvas_height: int,
     policy: ContentContainmentCorrectionPolicy,
-) -> OuterCorrectionProposal | None:
+) -> SequenceAdjustmentHypothesis | None:
     family = policy.family
     content = alignment.content_span
-    original = geometry.film_span.box
+    original = geometry.crop_envelope.box
     if (
         family.mode == "off"
         or content is None
@@ -64,8 +64,9 @@ def content_containment_correction_proposal(
         return None
     if not correction_axes_allowed(family, original, corrected):
         return None
-    return OuterCorrectionProposal(
-        corrected_span=FilmSpan(corrected),
+    return SequenceAdjustmentHypothesis(
+        visible_sequence_span=geometry.visible_sequence_span,
+        crop_envelope=CropEnvelope(corrected),
         family="content_containment",
         reason=alignment.reason,
     )

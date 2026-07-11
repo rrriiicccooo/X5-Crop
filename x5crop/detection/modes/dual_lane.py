@@ -6,7 +6,7 @@ from typing import Callable
 from ...cache.analysis import make_measurement_cache
 from ...constants import CANDIDATE_SOURCE_DUAL_LANE
 from ...domain import Box, MeasurementProvenance
-from ...geometry.boxes import map_work_box, translate_box
+from ...geometry.boxes import translate_box
 from ...units import ScanCalibration
 from ..candidate.assessment.dual_lane import assess_dual_lane_candidate
 from ..candidate.model import BuiltCandidate
@@ -17,7 +17,8 @@ from ..candidate.selection.choose import select_candidates
 from ..candidate.selection.model import SelectionResult
 from ..context import DetectionContext
 from ..geometry import CandidateGeometry
-from ..physical.spans import FilmSpan, HolderSpan
+from ..physical.boundary import canvas_boundary_observations
+from ..physical.spans import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from .dual_lane_split import LaneDividerProposal, lane_divider_proposals
 
 
@@ -62,7 +63,6 @@ def _lane_context(
         axes="YX",
     )
     return DetectionContext(
-        source_gray=lane_gray,
         image_profile=profile,
         scan_calibration=_lane_calibration(context),
         request=lane_request,
@@ -80,24 +80,34 @@ def _parent_candidate(
 ) -> BuiltCandidate:
     physical_spec = context.policy.physical_spec
     lane_candidates = tuple(selection.selected for selection in lanes)
-    work_frames = tuple(
+    frames = tuple(
         translate_box(frame, lane.left, lane.top)
         for lane, candidate in zip(lane_boxes, lane_candidates)
-        for frame in candidate.geometry.work_frames
+        for frame in candidate.geometry.frames
     )
     film_boxes = tuple(
         translate_box(
-            candidate.geometry.film_span.box,
+            candidate.geometry.visible_sequence_span.box,
             lane.left,
             lane.top,
         )
         for lane, candidate in zip(lane_boxes, lane_candidates)
     )
-    film_span = Box(
+    visible_sequence_span = Box(
         min(box.left for box in film_boxes),
         min(box.top for box in film_boxes),
         max(box.right for box in film_boxes),
         max(box.bottom for box in film_boxes),
+    )
+    crop_boxes = tuple(
+        translate_box(candidate.geometry.crop_envelope.box, lane.left, lane.top)
+        for lane, candidate in zip(lane_boxes, lane_candidates)
+    )
+    crop_envelope = Box(
+        min(box.left for box in crop_boxes),
+        min(box.top for box in crop_boxes),
+        max(box.right for box in crop_boxes),
+        max(box.bottom for box in crop_boxes),
     )
     separators = []
     index_offset = 0
@@ -111,17 +121,8 @@ def _parent_candidate(
                 )
             )
         index_offset += max(0, candidate.geometry.count - 1)
-    source_height, source_width = context.source_gray.shape
-    image_frames = tuple(
-        map_work_box(
-            frame,
-            context.request.layout,
-            source_width,
-            source_height,
-        )
-        for frame in work_frames
-    )
     count = sum(candidate.geometry.count for candidate in lane_candidates)
+    work_height, work_width = context.measurement_cache.gray_work.shape
     return BuiltCandidate(
         geometry=CandidateGeometry(
             format_id=physical_spec.format_id,
@@ -129,30 +130,28 @@ def _parent_candidate(
             strip_mode="full",
             count=count,
             holder_span=HolderSpan(
-                Box(0, 0, context.measurement_cache.gray_work.shape[1], context.measurement_cache.gray_work.shape[0])
+                Box(0, 0, work_width, work_height)
             ),
-            film_span=FilmSpan(film_span),
-            work_frames=work_frames,
-            image_outer=map_work_box(
-                film_span,
-                context.request.layout,
-                source_width,
-                source_height,
-            ),
-            image_frames=image_frames,
+            visible_sequence_span=VisibleSequenceSpan(visible_sequence_span),
+            crop_envelope=CropEnvelope(crop_envelope),
+            frames=frames,
             separators=tuple(separators),
-            origin=float(film_span.left),
+            origin=float(visible_sequence_span.left),
             pitch=min(candidate.geometry.pitch for candidate in lane_candidates),
             offset_fraction=0.0,
             source=CANDIDATE_SOURCE_DUAL_LANE,
             automatic_processing_supported=divider.source != "center_safety",
             contract="dual_lane_component_evidence",
-            outer_proposal_name="measured_lane_divider",
-            outer_proposal_strategy="dual_lane_outer",
-            outer_provenance=MeasurementProvenance(
+            sequence_hypothesis_name="measured_lane_divider",
+            sequence_hypothesis_strategy="dual_lane_sequence",
+            sequence_provenance=MeasurementProvenance(
                 root_measurement="holder_gutter_profile",
                 source=divider.source,
                 dependencies=("content_evidence", "holder_texture"),
+            ),
+            boundary_observations=canvas_boundary_observations(
+                work_width,
+                work_height,
             ),
             lane_boxes=lane_boxes,
         ),

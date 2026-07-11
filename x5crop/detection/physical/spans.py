@@ -11,5 +11,10 @@ class HolderSpan:
 
 
 @dataclass(frozen=True)
-class FilmSpan:
+class VisibleSequenceSpan:
+    box: Box
+
+
+@dataclass(frozen=True)
+class CropEnvelope:
     box: Box
