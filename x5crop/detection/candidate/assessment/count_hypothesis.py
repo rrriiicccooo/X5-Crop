@@ -35,6 +35,8 @@ def physical_count_resolution(
     topology = dict(topology) if isinstance(topology, dict) else {}
     photo_size = candidate.detail.get("photo_width_stability", {})
     photo_size = dict(photo_size) if isinstance(photo_size, dict) else {}
+    coverage = candidate.detail.get("frame_coverage_evidence", {})
+    coverage = dict(coverage) if isinstance(coverage, dict) else {}
 
     expected_gaps = max(0, int(hypothesis.count) - 1)
     hard_separator_complete = bool(
@@ -52,6 +54,7 @@ def physical_count_resolution(
     photo_size_consistent = bool(
         photo_size.get("used", False) and not photo_size.get("unstable", True)
     )
+    frame_coverage_complete = coverage.get("state") == "supported"
     count_resolved = all(
         (
             hypothesis.physically_supported,
@@ -59,6 +62,7 @@ def physical_count_resolution(
             hard_separator_complete,
             topology_valid,
             photo_size_consistent,
+            frame_coverage_complete,
         )
     )
     return PhysicalCountResolution(
@@ -71,6 +75,7 @@ def physical_count_resolution(
             "hard_separator_complete": bool(hard_separator_complete),
             "photo_size_consistent": bool(photo_size_consistent),
             "frame_topology_valid": bool(topology_valid),
+            "frame_coverage_complete": bool(frame_coverage_complete),
         },
     )
 
@@ -81,7 +86,6 @@ class CountHypothesisEvaluation:
     candidates: tuple[DetectionCandidate, ...]
     count_resolved: bool
     placement_resolved: bool
-    candidate_auto_ready: bool
     resolved_offsets: tuple[float, ...]
     resolution_checks: tuple[dict[str, Any], ...]
 
@@ -93,7 +97,6 @@ class CountHypothesisEvaluation:
             "max_confidence": max(confidences) if confidences else None,
             "count_resolved": bool(self.count_resolved),
             "placement_resolved": bool(self.placement_resolved),
-            "candidate_auto_ready": bool(self.candidate_auto_ready),
             "resolved_offsets": [float(offset) for offset in self.resolved_offsets],
             "resolution_checks": [dict(check) for check in self.resolution_checks],
         }

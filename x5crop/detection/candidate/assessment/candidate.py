@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from typing import Any, Optional
 
 import numpy as np
@@ -14,6 +14,7 @@ from ....policies.runtime.policy import DetectionPolicy
 from ....run_config import RunConfig
 from ...evidence.content.frame_support import content_evidence_detail
 from ...evidence.content.support import frame_content_support_detail
+from ...evidence.frame_coverage import FrameCoverageEvidence, frame_coverage_evidence
 from ...evidence.frame_topology import frame_topology_evidence
 from ...evidence.holder_occupancy import holder_occupancy_evidence
 from ...evidence.separator_summary import separator_support_detail_summary
@@ -88,7 +89,10 @@ def _independence_state(detail: dict[str, Any]) -> EvidenceState:
 def candidate_content_preservation_state(
     content_support: dict[str, Any],
     partial_edge: dict[str, Any],
+    frame_coverage: FrameCoverageEvidence,
 ) -> EvidenceState:
+    if frame_coverage.state == EvidenceState.CONTRADICTED:
+        return EvidenceState.CONTRADICTED
     if str(partial_edge.get("state", "not_applicable")) == "contradicted":
         return EvidenceState.CONTRADICTED
     if bool(content_support.get("frame_content_support_available", False)):
@@ -123,16 +127,19 @@ def _boundary_proof_paths(
         EvidenceState.NOT_APPLICABLE,
     }
     separator_led = bool(
-        _uses_separator_evidence(source)
+        expected > 0
+        and _uses_separator_evidence(source)
         and common_supported
+        and hard_complete
         and bool(separator_detail.get("ok", False))
-        and (continuity_supported or one_weak_gap_corroborated or expected == 0)
+        and (continuity_supported or one_weak_gap_corroborated)
     )
     geometry_led = bool(
-        _uses_separator_evidence(source)
+        expected > 0
+        and _uses_separator_evidence(source)
         and common_supported
         and photo_state == EvidenceState.SUPPORTED
-        and (hard >= 1 or expected == 0)
+        and hard >= 1
     )
     partial_state = str(partial_edge.get("state", "not_applicable"))
     partial_occupancy_led = bool(
@@ -283,7 +290,17 @@ def apply_candidate_assessment_policy(
     if str(content_support.get("support", "")) == "aspect_conflict":
         diagnostics.append("content_aspect_uncertain")
 
-    holder_occupancy = holder_occupancy_evidence(candidate, fmt, content_support)
+    coverage = frame_coverage_evidence(candidate, fmt, cache, policy.content)
+    candidate.detail["frame_coverage_evidence"] = {
+        **asdict(coverage),
+        "state": coverage.state.value,
+    }
+    holder_occupancy = holder_occupancy_evidence(
+        candidate,
+        fmt,
+        content_support,
+        frame_coverage=coverage,
+    )
     strip_completeness = dict(holder_occupancy.get("strip_completeness", {}))
     candidate.detail["strip_completeness"] = strip_completeness
     candidate.detail["holder_occupancy"] = holder_occupancy
@@ -299,7 +316,11 @@ def apply_candidate_assessment_policy(
     )
     topology = _topology_detail(candidate)
     topology_state = _topology_state(topology)
-    content_state = candidate_content_preservation_state(content_support, partial_edge)
+    content_state = candidate_content_preservation_state(
+        content_support,
+        partial_edge,
+        coverage,
+    )
     photo_state = _photo_geometry_state(candidate)
     independence = evidence_independence_detail(
         candidate,
@@ -364,6 +385,7 @@ def apply_candidate_assessment_policy(
         "content_support": str(content_support.get("support", "")),
         "content_preservation_state": content_state.value,
         "frame_content_support": content_support,
+        "frame_coverage": candidate.detail["frame_coverage_evidence"],
         "strip_completeness": strip_completeness,
         "holder_occupancy": holder_occupancy,
         "separator_support": separator_detail,

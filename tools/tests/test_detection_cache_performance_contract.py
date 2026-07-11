@@ -150,7 +150,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         self.assertEqual(first, expected)
         self.assertEqual(second, expected)
 
-    def test_reliable_candidate_stops_remaining_outer_plan_execution(self) -> None:
+    def test_outer_plan_assesses_every_candidate_without_gate_driven_early_stop(self) -> None:
         outer_candidates = (
             OuterCandidate("first", Box(0, 0, 100, 20), "base_outer"),
             OuterCandidate("second", Box(1, 0, 99, 20), "base_outer"),
@@ -178,9 +178,6 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         ) as build, patch(
             "x5crop.detection.candidate.execution.count_hypothesis.assess_source_candidates",
             return_value=[candidate],
-        ), patch(
-            "x5crop.detection.candidate.execution.count_hypothesis.candidate_is_reliable_for_execution_budget",
-            return_value=True,
         ):
             assessed = _assess_separator_outer_plan(
                 gray=None,
@@ -192,7 +189,6 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
                 cache=None,
                 policy=None,
                 plan=plan,
-                existing_candidates=(),
             )
 
         self.assertEqual(build.call_count, 2)

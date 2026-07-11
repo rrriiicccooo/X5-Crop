@@ -25,55 +25,16 @@ def frame_boxes_from_gaps(
     *,
     origin: float,
     pitch: float | None,
-    geometry_parameters: FrameFitParameters | None,
 ) -> list[Box]:
     if pitch is None:
         cuts = [float(outer.left)] + [gap.center + outer.left for gap in gaps] + [float(outer.right)]
     else:
         cuts = [outer.left + origin] + [outer.left + gap.center for gap in gaps] + [outer.left + origin + pitch * count]
-    if geometry_parameters is not None:
-        cuts = fit_cuts_by_geometry(cuts, outer, count, pitch, geometry_parameters)
     boxes: list[Box] = []
     for left, right in zip(cuts[:-1], cuts[1:]):
         box = Box(int(round(left)), outer.top, int(round(right)), outer.bottom)
         boxes.append(box.expand(bleed_x, bleed_y, image_w, image_h))
     return boxes[:count]
-
-
-def fit_cuts_by_geometry(
-    cuts: list[float],
-    outer: Box,
-    count: int,
-    pitch: float | None,
-    config: FrameFitParameters,
-) -> list[float]:
-    if len(cuts) != count + 1 or count <= 1:
-        return cuts
-    widths = np.diff(np.array(cuts, dtype=np.float64))
-    if widths.size != count or np.any(widths <= 1):
-        return cuts
-    width_cv = float(widths.std() / max(1.0, widths.mean()))
-    target = float(np.median(widths))
-    if pitch is not None and config.geometry_pitch_min_ratio <= target / max(1.0, float(pitch)) <= config.geometry_pitch_max_ratio:
-        target = float(pitch)
-    if width_cv <= config.geometry_noop_width_cv:
-        return cuts
-
-    centers = (np.array(cuts[:-1], dtype=np.float64) + np.array(cuts[1:], dtype=np.float64)) / 2.0
-    starts = centers - (np.arange(count, dtype=np.float64) + 0.5) * target
-    start = float(np.median(starts))
-    start = max(float(outer.left), min(float(outer.right) - target * count, start))
-    fitted = [start + target * i for i in range(count + 1)]
-    outer_tolerance = clamp_float(
-        target * config.geometry_outer_tolerance_ratio,
-        config.geometry_outer_tolerance_min,
-        config.geometry_outer_tolerance_max,
-    )
-    if fitted[0] < outer.left - outer_tolerance or fitted[-1] > outer.right + outer_tolerance:
-        return cuts
-    if len(fitted) != len(cuts) or any(b <= a for a, b in zip(fitted[:-1], fitted[1:])):
-        return cuts
-    return fitted
 
 
 def frame_edge_weight(gap: Gap, config: FrameFitParameters) -> float:
@@ -222,7 +183,6 @@ def fit_frame_boxes_from_gaps(
         bleed_y,
         origin=origin,
         pitch=pitch,
-        geometry_parameters=config,
     )
     fitted_boxes, detail = fit_boxes_by_edge_evidence(
         outer,
@@ -243,12 +203,6 @@ def fit_frame_boxes_from_gaps(
         "nominal_max_ratio": float(config.nominal_max_ratio),
         "inlier_tolerance_ratio": float(config.inlier_tolerance_ratio),
         "min_inlier_tolerance_px": float(config.min_inlier_tolerance_px),
-        "geometry_pitch_min_ratio": float(config.geometry_pitch_min_ratio),
-        "geometry_pitch_max_ratio": float(config.geometry_pitch_max_ratio),
-        "geometry_noop_width_cv": float(config.geometry_noop_width_cv),
-        "geometry_outer_tolerance_ratio": float(config.geometry_outer_tolerance_ratio),
-        "geometry_outer_tolerance_min": float(config.geometry_outer_tolerance_min),
-        "geometry_outer_tolerance_max": float(config.geometry_outer_tolerance_max),
         "edge_candidate_weight_with_edges": float(config.edge_candidate_weight_with_edges),
         "edge_candidate_weight_without_edges": float(config.edge_candidate_weight_without_edges),
         "edge_adjust_tolerance_ratio": float(config.edge_adjust_tolerance_ratio),

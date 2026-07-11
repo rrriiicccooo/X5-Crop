@@ -88,7 +88,6 @@ class AutoCountContractTest(unittest.TestCase):
             candidates=(_candidate("135", 5),),
             count_resolved=True,
             placement_resolved=True,
-            candidate_auto_ready=False,
             resolved_offsets=(0.0,),
             resolution_checks=(),
         )
@@ -125,9 +124,6 @@ class AutoCountContractTest(unittest.TestCase):
         ), patch(
             "x5crop.detection.candidate.execution.count_hypothesis.select_source_candidate",
             return_value=_candidate("135", 2),
-        ), patch(
-            "x5crop.detection.candidate.execution.count_hypothesis.candidate_is_reliable_for_execution_budget",
-            return_value=False,
         ):
             evaluation = evaluate_count_hypothesis(
                 gray=None,
@@ -141,7 +137,6 @@ class AutoCountContractTest(unittest.TestCase):
         self.assertEqual(assessed.call_count, 1)
         self.assertTrue(evaluation.count_resolved)
         self.assertTrue(evaluation.placement_resolved)
-        self.assertFalse(evaluation.candidate_auto_ready)
         self.assertEqual(evaluation.resolved_offsets, (0.0,))
         resolution_check = evaluation.report_detail()["resolution_checks"][0]
         self.assertTrue(resolution_check["evidence"]["hard_separator_complete"])
@@ -186,10 +181,10 @@ class AutoCountContractTest(unittest.TestCase):
             planning_evidence=evidence,
         )
 
-        self.assertEqual([item.count for item in plan.hypotheses], [3, 5, 4, 2, 1])
-        self.assertEqual(plan.hypotheses[0].offsets, (0.37,))
-        self.assertTrue(plan.hypotheses[0].physically_supported)
-        self.assertFalse(plan.hypotheses[1].physically_supported)
+        self.assertEqual([item.count for item in plan.hypotheses], [5, 4, 3, 2, 1])
+        supported = next(item for item in plan.hypotheses if item.count == 3)
+        self.assertEqual(supported.offsets, (0.37,))
+        self.assertTrue(supported.physically_supported)
 
     def test_single_frame_auto_count_defers_fixed_offsets_to_guidance(self) -> None:
         hypothesis = self._plan("135").hypotheses[-1]
@@ -273,6 +268,7 @@ def _physically_resolved_candidate(format_id: str, count: int) -> DetectionCandi
             },
             "separator_cross_axis_continuity": {"ok": True},
             "photo_width_stability": {"used": True, "unstable": False},
+            "frame_coverage_evidence": {"state": "supported"},
             "candidate_assessment": {
                 "separator_support": {
                     "ok": True,

@@ -106,7 +106,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             decided.final_review_reasons,
         )
 
-    def test_complete_underfilled_holder_slack_is_not_content_undercrop(self) -> None:
+    def test_complete_underfilled_state_does_not_suppress_confirmed_undercrop(self) -> None:
         candidate = candidate_fixture()
         candidate.strip_mode = "partial"
         candidate.detail["candidate_assessment"]["partial_edge_safety"] = {
@@ -124,8 +124,11 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             },
         )
 
-        self.assertEqual(decided.status, "approved_auto")
-        self.assertEqual(decided.final_review_reasons, [])
+        self.assertEqual(decided.status, "needs_review")
+        self.assertEqual(
+            decided.final_review_reasons,
+            [FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED],
+        )
 
     def test_only_substantive_geometry_disagreement_blocks_selection(self) -> None:
         decided = decide_candidate(

@@ -104,12 +104,6 @@ class FrameFitParameters:
     nominal_max_ratio: float = 1.10
     inlier_tolerance_ratio: float = 0.035
     min_inlier_tolerance_px: float = 3.0
-    geometry_pitch_min_ratio: float = 0.85
-    geometry_pitch_max_ratio: float = 1.15
-    geometry_noop_width_cv: float = 0.006
-    geometry_outer_tolerance_ratio: float = 0.0
-    geometry_outer_tolerance_min: float = 1.0
-    geometry_outer_tolerance_max: float = 1.0
     edge_candidate_weight_with_edges: float = 0.18
     edge_candidate_weight_without_edges: float = 1.0
     edge_adjust_tolerance_ratio: float = 0.0

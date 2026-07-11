@@ -112,11 +112,6 @@ def count_hypothesis_plan(
     if not counts:
         raise ValueError(f"no automatic count hypotheses configured for {fmt.format_id}")
     supported_count = planning_evidence.supported_count
-    if supported_count in counts:
-        counts = (
-            int(supported_count),
-            *tuple(count for count in counts if count != supported_count),
-        )
     return CountHypothesisPlan(
         hypotheses=tuple(
             CountHypothesis(

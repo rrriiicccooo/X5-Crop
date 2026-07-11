@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 from x5crop.detection.decision.decision_gate import apply_decision_gate
+from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
+from x5crop.detection.evidence.state import EvidenceState
 from x5crop.domain import (
     AxisBleedParameters,
     Box,
@@ -99,6 +101,18 @@ def output_protection_fixture(*, feasible: bool = True) -> OutputProtectionPlan:
     )
 
 
+def supported_frame_coverage() -> FrameCoverageEvidence:
+    return FrameCoverageEvidence(
+        state=EvidenceState.SUPPORTED,
+        reason="content_runs_covered",
+        holder_interval=(0, 200),
+        film_interval=(0, 200),
+        frame_intervals=((0, 200),),
+        content_runs=((0, 200),),
+        uncovered_content=(),
+    )
+
+
 def decide_candidate(
     candidate: DetectionCandidate | None = None,
     *,
@@ -115,6 +129,7 @@ def decide_candidate(
             "frame_content_support_available": True,
         },
         outer_alignment or {"used": True, "ok": True},
+        supported_frame_coverage(),
         deskew_detail=deskew_detail or {"applied": False},
         output_protection_plan=output_protection_fixture(
             feasible=output_protection_feasible,

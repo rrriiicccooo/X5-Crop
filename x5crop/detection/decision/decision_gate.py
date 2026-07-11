@@ -19,6 +19,7 @@ from ...constants import (
 )
 from ...domain import DetectionCandidate, FinalDetection, OutputProtectionPlan
 from ..evidence.content.preservation import ContentPreservationEvidence, content_preservation_evidence
+from ..evidence.frame_coverage import FrameCoverageEvidence
 from ..evidence.state import EvidenceState
 from ..gate_checks import GateCheck, gate_check_details
 from .evidence_summary import evidence_summary_for
@@ -195,6 +196,7 @@ def apply_decision_gate(
     detection: DetectionCandidate,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
+    frame_coverage: FrameCoverageEvidence,
     *,
     deskew_detail: dict[str, Any],
     output_protection_plan: OutputProtectionPlan,
@@ -210,6 +212,7 @@ def apply_decision_gate(
         content_detail,
         outer_alignment,
         partial_edge,
+        frame_coverage,
     )
     decision_gate = decision_gate_assessment(
         DecisionGateInput(
@@ -225,7 +228,12 @@ def apply_decision_gate(
             transform_geometry=_transform_geometry_state(deskew_detail),
         )
     )
-    evidence = evidence_summary_for(working, content_detail, outer_alignment)
+    evidence = evidence_summary_for(
+        working,
+        content_detail,
+        outer_alignment,
+        frame_coverage,
+    )
     evidence["content_preservation"] = preservation.report_detail()
     working.detail["decision_summary"] = {
         "decision_gate": decision_gate.report_detail(),

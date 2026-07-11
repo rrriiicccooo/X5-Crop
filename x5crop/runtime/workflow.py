@@ -81,12 +81,13 @@ def process_one(
         analysis_cache,
         content_policy=selected_policy.content,
         alignment_parameters=selected_policy.outer.alignment_evidence,
-        horizontal_frame_aspect=selected_policy.physical_spec.horizontal_content_aspect,
+        physical_spec=selected_policy.physical_spec,
     )
     decided_detection = apply_decision_gate(
         selected_evidence.candidate,
         selected_evidence.content,
         selected_evidence.outer_alignment,
+        selected_evidence.frame_coverage,
         deskew_detail=deskew_detail,
         output_protection_plan=output_protection_plan,
     )

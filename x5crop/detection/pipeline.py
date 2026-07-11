@@ -101,7 +101,6 @@ def choose_detection(
             config,
             fmt,
             count_plan.hard_safety_count,
-            policy.frame_fit,
         )
         candidate.detail["count_selection"] = count_selection_detail(
             candidate,

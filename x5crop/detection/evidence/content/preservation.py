@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from ..frame_coverage import FrameCoverageEvidence
 from ..state import EvidenceState
 
 
@@ -24,24 +25,29 @@ def content_preservation_evidence(
     content: dict[str, Any],
     outer_alignment: dict[str, Any],
     partial_edge: dict[str, Any],
+    frame_coverage: FrameCoverageEvidence,
 ) -> ContentPreservationEvidence:
     partial_failures = set(partial_edge.get("preservation_failures", []))
-    complete_underfilled_strip = bool(
-        partial_edge.get("complete_underfilled_strip", False)
-    )
+    complete_underfilled_strip = bool(partial_edge.get("complete_underfilled_strip", False))
     direct_undercrop = bool(
         "partial_edge_content_present" in partial_failures
-        or (
-            outer_alignment.get("confirmed_undercrop", False)
-            and not complete_underfilled_strip
-        )
+        or outer_alignment.get("confirmed_undercrop", False)
     )
     corroborated_undercrop = bool(
         content.get("content_boundary_contact", False)
         and outer_alignment.get("used", False)
         and not outer_alignment.get("ok", True)
-        and not complete_underfilled_strip
     )
+    if frame_coverage.state == EvidenceState.CONTRADICTED:
+        return ContentPreservationEvidence(
+            EvidenceState.CONTRADICTED,
+            "content_outside_frame_union",
+            {
+                "uncovered_content": list(frame_coverage.uncovered_content),
+                "frame_intervals": list(frame_coverage.frame_intervals),
+                "content_runs": list(frame_coverage.content_runs),
+            },
+        )
     if direct_undercrop or corroborated_undercrop:
         return ContentPreservationEvidence(
             EvidenceState.CONTRADICTED,

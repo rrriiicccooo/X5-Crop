@@ -236,7 +236,6 @@ def base_detection_assessment(
         0,
         origin=origin or 0.0,
         pitch=pitch,
-        geometry_parameters=policy.frame_fit,
     )
     topology_evidence = frame_topology_evidence(topology_boxes, count)
     separator_continuity = separator_cross_axis_continuity_evidence(
@@ -418,7 +417,6 @@ def apply_base_detection_scoring(
             config.bleed_y,
             origin=origin,
             pitch=pitch,
-            geometry_parameters=policy.frame_fit,
         )
         pre_nearby_assessment = base_detection_assessment(
             gray_work,
@@ -442,7 +440,6 @@ def apply_base_detection_scoring(
             config.bleed_y,
             origin=origin,
             pitch=pitch,
-            geometry_parameters=policy.frame_fit,
         )
         geometry_assessment = base_detection_assessment(
             gray_work,

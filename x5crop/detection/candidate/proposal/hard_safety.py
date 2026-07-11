@@ -11,7 +11,6 @@ from ....geometry.boxes import map_work_box
 from ....geometry.frame_fit import frame_boxes_from_gaps
 from ....geometry.layout import work_gray
 from ....geometry.model_gaps import equal_model_gap
-from ....geometry.detection_parameters import FrameFitParameters
 from ....run_config import RunConfig
 
 
@@ -20,7 +19,6 @@ def hard_safety_detection(
     config: RunConfig,
     fmt: FormatPhysicalSpec,
     count: int,
-    frame_fit: FrameFitParameters,
 ) -> DetectionCandidate:
     gray_work = work_gray(gray, config.layout)
     wh, ww = gray_work.shape
@@ -42,7 +40,6 @@ def hard_safety_detection(
         config.bleed_y,
         origin=0.0,
         pitch=pitch,
-        geometry_parameters=frame_fit,
     )
     source_h, source_w = gray.shape
     boxes = [map_work_box(box, config.layout, source_w, source_h) for box in boxes_work]

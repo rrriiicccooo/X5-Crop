@@ -7,6 +7,8 @@ from ...domain import Box, DetectionCandidate
 from ...formats import FormatPhysicalSpec
 from ...units import ScanCalibration
 from ...utils import box_from_dict
+from .frame_coverage import FrameCoverageEvidence
+from .state import EvidenceState
 
 
 def _work_outer(detection: DetectionCandidate) -> Box:
@@ -80,8 +82,7 @@ def _photo_width_stable(detection: DetectionCandidate) -> bool:
     detail = detection.detail.get("photo_width_stability")
     if isinstance(detail, dict) and bool(detail.get("used", False)):
         return not bool(detail.get("unstable", False))
-    width_source = str(detection.detail.get("width_cv_source") or "")
-    return width_source != "photo_edges"
+    return False
 
 
 def holder_occupancy_evidence(
@@ -89,6 +90,7 @@ def holder_occupancy_evidence(
     fmt: FormatPhysicalSpec,
     frame_content_support: dict[str, Any],
     *,
+    frame_coverage: FrameCoverageEvidence,
     calibration: ScanCalibration | None = None,
 ) -> dict[str, Any]:
     holder_outer = _holder_reference_outer(detection)
@@ -124,6 +126,7 @@ def holder_occupancy_evidence(
         and detection.strip_mode == "partial"
         and strip_completeness["frame_sequence_complete"]
         and frame_content_support_available
+        and frame_coverage.state == EvidenceState.SUPPORTED
         and photo_width_stable
     )
     if detection.strip_mode == "full":
@@ -149,6 +152,7 @@ def holder_occupancy_evidence(
         "occupancy_status": occupancy_status,
         "complete_underfilled_strip": complete_underfilled,
         "frame_content_support_available": frame_content_support_available,
+        "frame_coverage_state": frame_coverage.state.value,
         "photo_width_stable": photo_width_stable,
         "holder_reference_outer_box": asdict(holder_outer),
         "film_span": (

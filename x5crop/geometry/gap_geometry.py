@@ -47,7 +47,7 @@ def photo_widths_from_gap_edges(
     if count <= 0 or pitch <= 0.0:
         return None
     if count == 1:
-        return [float(pitch)]
+        return None
     by_index = {int(gap.index): gap for gap in gaps}
     widths: list[float] = []
     left_edge = float(origin)

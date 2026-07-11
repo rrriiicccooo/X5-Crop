@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from ...domain import DetectionCandidate
+from ..evidence.frame_coverage import FrameCoverageEvidence
 from ..evidence.separator_summary import separator_support_detail_summary
 
 
@@ -14,6 +15,7 @@ def evidence_summary_for(
     detection: DetectionCandidate,
     content_detail: dict[str, Any],
     outer_alignment: dict[str, Any],
+    frame_coverage: FrameCoverageEvidence,
 ) -> dict[str, Any]:
     assessment = _dict(detection.detail.get("candidate_assessment"))
     separator_detail = _dict(assessment.get("separator_support"))
@@ -21,9 +23,6 @@ def evidence_summary_for(
     photo = _dict(detection.detail.get("photo_width_stability"))
     topology = _dict(detection.detail.get("frame_topology_evidence"))
     partial = _dict(assessment.get("partial_edge_safety"))
-    complete_underfilled_strip = bool(
-        partial.get("complete_underfilled_strip", False)
-    )
     return {
         "frame_topology": {
             "state": "supported" if topology.get("ok", False) else "contradicted",
@@ -52,10 +51,12 @@ def evidence_summary_for(
             "state": (
                 "contradicted"
                 if (
+                    frame_coverage.state.value == "contradicted"
+                    or (
                     content_detail.get("content_boundary_contact", False)
                     and outer_alignment.get("used", False)
                     and not outer_alignment.get("ok", True)
-                    and not complete_underfilled_strip
+                    )
                 )
                 else "supported"
                 if content_detail.get("frame_content_support_available", False)
@@ -63,15 +64,25 @@ def evidence_summary_for(
             ),
             "detail": dict(content_detail),
         },
+        "frame_coverage": {
+            "state": frame_coverage.state.value,
+            "reason": frame_coverage.reason,
+            "holder_interval": list(frame_coverage.holder_interval),
+            "film_interval": (
+                None
+                if frame_coverage.film_interval is None
+                else list(frame_coverage.film_interval)
+            ),
+            "content_runs": list(frame_coverage.content_runs),
+            "frame_intervals": list(frame_coverage.frame_intervals),
+            "uncovered_content": list(frame_coverage.uncovered_content),
+        },
         "outer_alignment": {
             "state": (
                 "not_applicable"
                 if not outer_alignment.get("used", False)
                 else "contradicted"
-                if (
-                    outer_alignment.get("confirmed_undercrop", False)
-                    and not complete_underfilled_strip
-                )
+                if outer_alignment.get("confirmed_undercrop", False)
                 else "supported"
                 if outer_alignment.get("ok", False)
                 else "unavailable"

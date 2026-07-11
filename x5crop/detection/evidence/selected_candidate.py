@@ -8,10 +8,12 @@ import numpy as np
 
 from ...cache import AnalysisCache
 from ...domain import DetectionCandidate
+from ...formats import FormatPhysicalSpec
 from ...policies.parameters.outer import OuterAlignmentEvidenceParameters
 from ...policies.runtime.content import ContentPolicy
 from .content.frame_support import content_evidence_detail
 from .content.support import frame_content_support_detail
+from .frame_coverage import FrameCoverageEvidence, frame_coverage_evidence
 from .outer_alignment import outer_content_alignment_detail
 
 
@@ -20,6 +22,7 @@ class SelectedCandidateEvidence:
     candidate: DetectionCandidate
     content: dict[str, Any]
     outer_alignment: dict[str, Any]
+    frame_coverage: FrameCoverageEvidence
 
 
 def complete_selected_candidate_evidence(
@@ -29,7 +32,7 @@ def complete_selected_candidate_evidence(
     *,
     content_policy: ContentPolicy,
     alignment_parameters: OuterAlignmentEvidenceParameters,
-    horizontal_frame_aspect: float,
+    physical_spec: FormatPhysicalSpec,
 ) -> SelectedCandidateEvidence:
     candidate = deepcopy(candidate)
     if not isinstance(candidate.detail.get("exposure_overlap_evidence"), dict):
@@ -39,7 +42,7 @@ def complete_selected_candidate_evidence(
         candidate,
         cache,
         content_policy=content_policy,
-        horizontal_frame_aspect=horizontal_frame_aspect,
+        horizontal_frame_aspect=physical_spec.horizontal_content_aspect,
     )
     content = frame_content_support_detail(
         raw_content,
@@ -52,6 +55,7 @@ def complete_selected_candidate_evidence(
         cache,
         alignment_policy=alignment_parameters,
     )
+    coverage = frame_coverage_evidence(candidate, physical_spec, cache, content_policy)
     candidate.detail["content_evidence"] = raw_content
     candidate.detail["frame_content_support"] = content
     candidate.detail["outer_content_alignment"] = outer_alignment
@@ -59,4 +63,5 @@ def complete_selected_candidate_evidence(
         candidate=candidate,
         content=content,
         outer_alignment=outer_alignment,
+        frame_coverage=coverage,
     )

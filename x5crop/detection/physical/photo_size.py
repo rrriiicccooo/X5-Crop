@@ -76,6 +76,12 @@ def photo_size_consistency_from_gap_edges(
 ) -> PhotoSizeConsistency:
     if count <= 0 or pitch <= 0.0:
         return PhotoSizeConsistency(False, "invalid_count_or_pitch")
+    if count == 1:
+        return PhotoSizeConsistency(
+            False,
+            "single_frame_requires_independent_boundaries",
+            target_photo_width=target_photo_width,
+        )
     photo_widths = photo_widths_from_gap_edges(gaps, origin, pitch, count)
     if photo_widths is None:
         return PhotoSizeConsistency(

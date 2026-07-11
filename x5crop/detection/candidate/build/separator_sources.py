@@ -170,10 +170,13 @@ def select_geometry_equal_model_gaps(
     result = with_model_gap_proposal_detail(result, model_detail)
     if not bool(model_detail.get("available", False)):
         return result
+    model_gaps = propose_equal_model_gaps_from_profile(profile, origin, pitch, count)
+    measured_by_index = {int(gap.index): gap for gap in result.gaps}
+    completed = [measured_by_index.get(int(gap.index), gap) for gap in model_gaps]
     return with_selected_gap_source(
         result,
         GEOMETRY_EQUAL_MODEL_SOURCE,
-        gaps=propose_equal_model_gaps_from_profile(profile, origin, pitch, count),
+        gaps=completed,
         extra_standard_detail={
             "model_gap_proposal": {
                 **model_detail,

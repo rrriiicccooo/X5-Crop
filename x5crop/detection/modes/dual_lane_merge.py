@@ -26,7 +26,6 @@ def dual_lane_review_detection(
         config,
         parent_spec,
         parent_spec.default_count,
-        context.lane_policy.frame_fit,
     )
     mode_diagnostics = detection.detail.setdefault("mode_diagnostics", [])
     if isinstance(mode_diagnostics, list):

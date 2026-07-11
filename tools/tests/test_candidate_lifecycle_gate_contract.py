@@ -13,6 +13,7 @@ from x5crop.detection.candidate.assessment.candidate import (
     candidate_content_preservation_state,
 )
 from x5crop.detection.evidence.state import EvidenceState
+from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
 from x5crop.detection.evidence.content.frame_support import content_frame_support_detail
 from x5crop.domain import Box
 from x5crop.policies.parameters.content import ContentEvidenceParameters
@@ -149,6 +150,15 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
         self.assertTrue(assessment.passed)
 
     def test_partial_preservation_failure_is_a_content_contradiction(self) -> None:
+        coverage = FrameCoverageEvidence(
+            EvidenceState.SUPPORTED,
+            "content_runs_covered",
+            (0, 100),
+            (0, 100),
+            ((0, 100),),
+            ((0, 100),),
+            (),
+        )
         state = candidate_content_preservation_state(
             {
                 "frame_content_support_available": True,
@@ -157,6 +167,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
                 "state": "contradicted",
                 "preservation_failures": ["partial_edge_content_present"],
             },
+            coverage,
         )
         self.assertEqual(state, EvidenceState.CONTRADICTED)
 
@@ -166,6 +177,7 @@ class CandidateLifecycleGateContractTest(unittest.TestCase):
                 "content_boundary_contact": True,
             },
             {"state": "not_applicable"},
+            coverage,
         )
         self.assertEqual(boundary_state, EvidenceState.SUPPORTED)
 

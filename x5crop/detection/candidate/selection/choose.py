@@ -37,19 +37,6 @@ def select_source_candidate(candidates: list[DetectionCandidate]) -> DetectionCa
     return max(candidates, key=calibrated_candidate_rank)
 
 
-def is_partial_occupancy_candidate(detection: DetectionCandidate) -> bool:
-    if detection.strip_mode != "partial" or not _candidate_gate_allows_selection(detection):
-        return False
-    gate = _candidate_assessment(detection).get("candidate_gate", {})
-    paths = gate.get("proof_paths", []) if isinstance(gate, dict) else []
-    return any(
-        isinstance(path, dict)
-        and path.get("code") == "partial_occupancy_led"
-        and path.get("state") == "supported"
-        for path in paths
-    )
-
-
 def _candidate_summary(candidate: DetectionCandidate) -> dict:
     assessment = _candidate_assessment(candidate)
     return {

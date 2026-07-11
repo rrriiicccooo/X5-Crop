@@ -7,6 +7,8 @@ import numpy as np
 from x5crop.constants import GAP_DETECTED
 from x5crop.detection.candidate.assessment.partial_holder import partial_edge_safety_assessment_detail
 from x5crop.detection.evidence.holder_occupancy import holder_occupancy_evidence
+from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
+from x5crop.detection.evidence.state import EvidenceState
 from x5crop.domain import Box, DetectionCandidate, Gap
 from x5crop.formats import format_spec
 from x5crop.policies.registry import get_detection_policy
@@ -39,6 +41,18 @@ def _complete_underfilled_medium_square_detection() -> DetectionCandidate:
     )
 
 
+def _complete_frame_coverage() -> FrameCoverageEvidence:
+    return FrameCoverageEvidence(
+        state=EvidenceState.SUPPORTED,
+        reason="content_runs_covered",
+        holder_interval=(0, 360),
+        film_interval=(30, 350),
+        frame_intervals=((30, 130), (140, 240), (250, 350)),
+        content_runs=((30, 350),),
+        uncovered_content=(),
+    )
+
+
 class HolderOccupancyTests(unittest.TestCase):
     def test_default_count_partial_medium_square_can_be_complete_underfilled(self) -> None:
         detection = _complete_underfilled_medium_square_detection()
@@ -50,6 +64,7 @@ class HolderOccupancyTests(unittest.TestCase):
             detection,
             format_spec("120-66"),
             frame_content_support,
+            frame_coverage=_complete_frame_coverage(),
         )
 
         self.assertTrue(evidence["strip_frame_count_complete"])
@@ -74,6 +89,7 @@ class HolderOccupancyTests(unittest.TestCase):
             detection,
             format_spec("120-66"),
             content_detail,
+            frame_coverage=_complete_frame_coverage(),
         )
 
         detail = partial_edge_safety_assessment_detail(
