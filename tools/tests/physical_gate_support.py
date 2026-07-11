@@ -10,8 +10,34 @@ from x5crop.domain import (
     Box,
     DetectionCandidate,
     FinalDetection,
+    MeasurementProvenance,
     OutputProtectionPlan,
+    SeparatorBandObservation,
 )
+
+
+def separator_observation(
+    index: int,
+    center: float,
+    score: float,
+    method: str,
+    start: float | None = None,
+    end: float | None = None,
+) -> SeparatorBandObservation:
+    return SeparatorBandObservation(
+        index=index,
+        center=center,
+        score=score,
+        method=method,
+        provenance=MeasurementProvenance(
+            root_measurement="test_fixture",
+            source=method,
+            dependencies=(),
+        ),
+        start=start,
+        end=end,
+        tonal_evidence=score if method != "equal" else None,
+    )
 
 
 def candidate_gate_detail(

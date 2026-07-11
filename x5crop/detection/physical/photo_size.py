@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Sequence
 
-from ...domain import Gap
+from ...domain import SeparatorBandObservation
 from ...geometry.gap_geometry import (
     photo_widths_from_gap_edges,
     separator_widths,
@@ -67,7 +67,7 @@ def _photo_width_error_ratios(
 
 
 def photo_size_consistency_from_gap_edges(
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     origin: float,
     pitch: float,
     count: int,

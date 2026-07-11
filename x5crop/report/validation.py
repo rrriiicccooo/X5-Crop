@@ -126,7 +126,18 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
     if not isinstance(record["gaps"], list):
         errors.append("gaps_not_list")
     else:
-        gap_fields = {"index", "center", "score", "method", "start", "end", "lane_box"}
+        gap_fields = {
+            "index",
+            "center",
+            "score",
+            "method",
+            "provenance",
+            "start",
+            "end",
+            "lane_box",
+            "continuity",
+            "tonal_evidence",
+        }
         if any(
             not isinstance(gap, dict) or not gap_fields.issubset(gap)
             for gap in record["gaps"]

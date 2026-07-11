@@ -7,7 +7,7 @@ import numpy as np
 
 from ...cache import AnalysisCache
 from ...cache.separator import cached_separator_profile
-from ...domain import Box, Gap
+from ...domain import Box, SeparatorBandObservation
 from ...gap_methods import is_hard_gap_method
 from ...geometry.boxes import box_cache_key
 from ...geometry.detection_parameters import (
@@ -21,7 +21,7 @@ from ...policies.parameters.diagnostics import NearbySeparatorDiagnosticsParamet
 def nearby_separator_diagnostic_detail(
     gray_work: np.ndarray,
     work_outer: Box,
-    gap: Gap,
+    gap: SeparatorBandObservation,
     pitch: float,
     start: int,
     end: int,
@@ -59,14 +59,17 @@ def nearby_separator_diagnostic_detail(
     profile = cached_separator_profile(cache, gray_work, work_outer, profile_policy)
     if profile.size == 0:
         return {"searched": False, "reason": "empty_profile"}
-    search_gap = Gap(
+    search_gap = SeparatorBandObservation(
         gap.index,
         gap.center,
         gap.score,
         gap.method,
+        gap.provenance,
         float(start - work_outer.left),
         float(end - work_outer.left),
         gap.lane_box,
+        gap.continuity,
+        gap.tonal_evidence,
     )
     detail = nearby_separator_search_detail(
         profile,

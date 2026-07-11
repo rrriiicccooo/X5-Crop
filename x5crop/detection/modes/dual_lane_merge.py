@@ -5,7 +5,7 @@ from dataclasses import asdict
 import numpy as np
 
 from ...constants import CANDIDATE_SOURCE_DUAL_LANE
-from ...domain import Box, DetectionCandidate, Gap
+from ...domain import Box, DetectionCandidate, SeparatorBandObservation
 from ...geometry.boxes import map_work_box
 from ...run_config import RunConfig
 from ...utils import box_from_dict
@@ -114,20 +114,23 @@ def merge_dual_lane_detections(
     )
 
 
-def _merged_dual_lane_gaps(lane_detections: list[DetectionCandidate], lane_count: int) -> list[Gap]:
-    gaps: list[Gap] = []
+def _merged_dual_lane_gaps(lane_detections: list[DetectionCandidate], lane_count: int) -> list[SeparatorBandObservation]:
+    gaps: list[SeparatorBandObservation] = []
     for lane_number, detection in enumerate(lane_detections, start=1):
         lane_work_outer = box_from_dict(detection.detail["work_outer"])
         for gap in detection.gaps:
             gaps.append(
-                Gap(
+                SeparatorBandObservation(
                     index=(lane_number - 1) * lane_count + int(gap.index),
                     center=float(gap.center),
                     score=float(gap.score),
                     method=gap.method,
+                    provenance=gap.provenance,
                     start=gap.start,
                     end=gap.end,
-                    lane_box=asdict(lane_work_outer),
+                    lane_box=lane_work_outer,
+                    continuity=gap.continuity,
+                    tonal_evidence=gap.tonal_evidence,
                 )
             )
     return gaps
@@ -138,7 +141,7 @@ def _dual_lane_detail(
     context: DualLaneDetectionContext,
     lanes: list[Box],
     combined_work_outer: Box,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     lane_detections: list[DetectionCandidate],
     mode_diagnostics: list[str],
 ) -> dict:

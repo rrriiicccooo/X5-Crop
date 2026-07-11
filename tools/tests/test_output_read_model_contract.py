@@ -259,7 +259,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         detection = _detection()
         schema = _report_record(detection)
 
-        self.assertEqual(schema["schema_revision"], "physical_gate_proof_paths")
+        self.assertEqual(schema["schema_revision"], "physical_resolution")
         for duplicate in (
             "version",
             "format",

@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from ..domain import Gap
+from ..domain import MeasurementProvenance, SeparatorBandObservation
 from ..constants import GAP_DETECTED
 from ..gap_methods import is_model_gap_method
 from ..utils import clamp_float, clamp_int, runs_from_mask
@@ -82,7 +82,7 @@ class NearbySeparatorReplacementAssessment:
     replacement: dict[str, Any] | None
     search_detail: dict[str, Any]
 
-    def detail(self, gap: Gap) -> dict[str, Any]:
+    def detail(self, gap: SeparatorBandObservation) -> dict[str, Any]:
         return {
             "index": int(gap.index),
             "reason": self.reason,
@@ -97,13 +97,13 @@ class NearbySeparatorReplacementAssessment:
 
 @dataclass(frozen=True)
 class NearbySeparatorRefinementResult:
-    gaps: list[Gap]
+    gaps: list[SeparatorBandObservation]
     detail: dict[str, Any]
 
 
 def nearby_separator_search_context(
     profile: np.ndarray,
-    gap: Gap,
+    gap: SeparatorBandObservation,
     pitch: float,
     config: NearbySeparatorRefinementParameters,
 ) -> NearbySeparatorSearchContext | None:
@@ -145,7 +145,7 @@ def nearby_separator_search_context(
 
 def nearby_separator_candidates(
     profile: np.ndarray,
-    gap: Gap,
+    gap: SeparatorBandObservation,
     pitch: float,
     config: NearbySeparatorRefinementParameters,
     context: NearbySeparatorSearchContext,
@@ -205,7 +205,7 @@ def nearby_separator_candidate_is_stronger(
 
 def nearby_separator_search_result(
     profile: np.ndarray,
-    gap: Gap,
+    gap: SeparatorBandObservation,
     pitch: float,
     config: NearbySeparatorRefinementParameters,
     *,
@@ -235,7 +235,7 @@ def nearby_separator_search_result(
 
 def nearby_separator_search_detail(
     profile: np.ndarray,
-    gap: Gap,
+    gap: SeparatorBandObservation,
     pitch: float,
     config: NearbySeparatorRefinementParameters,
     *,
@@ -257,7 +257,7 @@ def nearby_separator_search_detail(
 
 def nearby_separator_replacement_assessment(
     profile: np.ndarray,
-    gap: Gap,
+    gap: SeparatorBandObservation,
     pitch: float,
     refinement_config: NearbySeparatorRefinementParameters,
 ) -> NearbySeparatorReplacementAssessment:
@@ -305,20 +305,26 @@ def nearby_separator_replacement_assessment(
     return NearbySeparatorReplacementAssessment(True, "stronger_candidate", detail, detail)
 
 
-def nearby_separator_gap_from_candidate(gap: Gap, candidate: dict[str, Any]) -> Gap:
-    return Gap(
-        gap.index,
-        float(candidate["center"]),
-        float(candidate["score"]),
-        GAP_DETECTED,
-        float(candidate["start"]),
-        float(candidate["end"]),
-        gap.lane_box,
+def nearby_separator_gap_from_candidate(gap: SeparatorBandObservation, candidate: dict[str, Any]) -> SeparatorBandObservation:
+    return SeparatorBandObservation(
+        index=gap.index,
+        center=float(candidate["center"]),
+        score=float(candidate["score"]),
+        method=GAP_DETECTED,
+        provenance=MeasurementProvenance(
+            root_measurement="separator_profile",
+            source="nearby_observed_band",
+            dependencies=(gap.provenance.root_measurement,),
+        ),
+        start=float(candidate["start"]),
+        end=float(candidate["end"]),
+        lane_box=gap.lane_box,
+        tonal_evidence=float(candidate["score"]),
     )
 
 
 def nearby_separator_reject_detail(
-    gap: Gap,
+    gap: SeparatorBandObservation,
     reason: str,
     candidate: dict[str, Any],
 ) -> dict[str, Any]:
@@ -326,8 +332,8 @@ def nearby_separator_reject_detail(
 
 
 def nearby_separator_accept_detail(
-    gap: Gap,
-    proposed_gap: Gap,
+    gap: SeparatorBandObservation,
+    proposed_gap: SeparatorBandObservation,
     replacement: dict[str, Any],
 ) -> dict[str, Any]:
     return {
@@ -345,7 +351,7 @@ def nearby_separator_accept_detail(
 
 def apply_nearby_separator_refinement(
     profile: np.ndarray,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     pitch: float,
     count: int,
     refinement_config: NearbySeparatorRefinementParameters,

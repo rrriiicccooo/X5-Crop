@@ -52,6 +52,13 @@ def evidence_independence_detail(
 
     outer_strategy = str(detection.detail.get("outer_candidate_strategy", ""))
     separator_detail = _dict(detection.detail.get("standard_gap_search"))
+    measurement_dependencies = sorted(
+        {
+            dependency
+            for gap in detection.gaps
+            for dependency in gap.provenance.dependencies
+        }
+    )
     dependent_outer = outer_strategy == DEPENDENT_OUTER_STRATEGY
     dependent_gap_count = gap_source_count(
         separator_detail,
@@ -85,6 +92,7 @@ def evidence_independence_detail(
         "outer_candidate_strategy": outer_strategy,
         "dependent_outer": bool(dependent_outer),
         "dependent_gap_sources": list(DEPENDENT_GAP_SOURCES),
+        "measurement_dependencies": measurement_dependencies,
         "dependent_gap_count": int(dependent_gap_count),
         "max_dependent_gap_count_without_validation": int(
             policy.max_dependent_gap_count_without_validation

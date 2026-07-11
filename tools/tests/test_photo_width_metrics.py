@@ -2,11 +2,12 @@ import unittest
 
 import numpy as np
 
+from tools.tests.physical_gate_support import separator_observation
 from x5crop.detection.candidate.assessment.base_scoring import base_detection_assessment
 from x5crop.detection.candidate.assessment.scoring import geometry_support_score
 from x5crop.detection.evidence.photo_width import photo_width_cv_from_detail
 from x5crop.detection.candidate.selection.choose import calibrated_candidate_rank
-from x5crop.domain import DetectionCandidate, Gap
+from x5crop.domain import DetectionCandidate
 from x5crop.domain import Box
 from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED
@@ -24,9 +25,9 @@ class PhotoWidthMetricsTest(unittest.TestCase):
 
     def test_separator_width_variation_does_not_change_photo_width_cv(self) -> None:
         gaps = [
-            Gap(1, 105.0, 1.0, GAP_DETECTED, 100.0, 110.0),
-            Gap(2, 225.0, 1.0, GAP_DETECTED, 210.0, 240.0),
-            Gap(3, 342.5, 1.0, GAP_DETECTED, 340.0, 345.0),
+            separator_observation(1, 105.0, 1.0, GAP_DETECTED, 100.0, 110.0),
+            separator_observation(2, 225.0, 1.0, GAP_DETECTED, 210.0, 240.0),
+            separator_observation(3, 342.5, 1.0, GAP_DETECTED, 340.0, 345.0),
         ]
         count = 4
         origin = 0.0
@@ -44,9 +45,9 @@ class PhotoWidthMetricsTest(unittest.TestCase):
         gray[:, ::2] = 255
         outer = Box(0, 10, 445, 110)
         gaps = [
-            Gap(1, 105.0, 1.0, GAP_DETECTED, 100.0, 110.0),
-            Gap(2, 225.0, 1.0, GAP_DETECTED, 210.0, 240.0),
-            Gap(3, 342.5, 1.0, GAP_DETECTED, 340.0, 345.0),
+            separator_observation(1, 105.0, 1.0, GAP_DETECTED, 100.0, 110.0),
+            separator_observation(2, 225.0, 1.0, GAP_DETECTED, 210.0, 240.0),
+            separator_observation(3, 342.5, 1.0, GAP_DETECTED, 340.0, 345.0),
         ]
         boxes = [
             Box(0, 10, 105, 110),

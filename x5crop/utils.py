@@ -6,7 +6,7 @@ from typing import Any, Iterable, Optional
 
 import numpy as np
 
-from .domain import Box, Gap
+from .domain import Box, MeasurementProvenance, SeparatorBandObservation
 
 
 def clamp_int(value: float, lower: int, upper: int) -> int:
@@ -137,13 +137,28 @@ def box_from_dict(value: dict[str, Any]) -> Box:
     return Box(int(value["left"]), int(value["top"]), int(value["right"]), int(value["bottom"]))
 
 
-def gap_from_dict(value: dict[str, Any]) -> Gap:
-    return Gap(
+def gap_from_dict(value: dict[str, Any]) -> SeparatorBandObservation:
+    provenance = value["provenance"]
+    lane_box = value["lane_box"]
+    return SeparatorBandObservation(
         index=int(value["index"]),
         center=float(value["center"]),
         score=float(value["score"]),
         method=str(value["method"]),
+        provenance=MeasurementProvenance(
+            root_measurement=str(provenance["root_measurement"]),
+            source=str(provenance["source"]),
+            dependencies=tuple(str(item) for item in provenance["dependencies"]),
+        ),
         start=(None if value["start"] is None else float(value["start"])),
         end=(None if value["end"] is None else float(value["end"])),
-        lane_box=value["lane_box"],
+        lane_box=(None if lane_box is None else box_from_dict(lane_box)),
+        continuity=(
+            None if value["continuity"] is None else float(value["continuity"])
+        ),
+        tonal_evidence=(
+            None
+            if value["tonal_evidence"] is None
+            else float(value["tonal_evidence"])
+        ),
     )

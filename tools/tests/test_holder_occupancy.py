@@ -4,12 +4,13 @@ import unittest
 
 import numpy as np
 
+from tools.tests.physical_gate_support import separator_observation
 from x5crop.constants import GAP_DETECTED
 from x5crop.detection.candidate.assessment.partial_holder import partial_edge_safety_assessment_detail
 from x5crop.detection.evidence.holder_occupancy import holder_occupancy_evidence
 from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
 from x5crop.detection.evidence.state import EvidenceState
-from x5crop.domain import Box, DetectionCandidate, Gap
+from x5crop.domain import Box, DetectionCandidate
 from x5crop.formats import format_spec
 from x5crop.policies.registry import get_detection_policy
 
@@ -27,8 +28,8 @@ def _complete_underfilled_medium_square_detection() -> DetectionCandidate:
             Box(250, 0, 350, 120),
         ],
         gaps=[
-            Gap(1, 135.0, 1.0, GAP_DETECTED, 130.0, 140.0),
-            Gap(2, 245.0, 1.0, GAP_DETECTED, 240.0, 250.0),
+            separator_observation(1, 135.0, 1.0, GAP_DETECTED, 130.0, 140.0),
+            separator_observation(2, 245.0, 1.0, GAP_DETECTED, 240.0, 250.0),
         ],
         confidence=0.90,
         detail={

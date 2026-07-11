@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..domain import Gap
+from ..domain import SeparatorBandObservation
 
 
 
 
-def gap_width_cv(gaps: list[Gap], origin: float, pitch: float, count: int) -> float:
+def gap_width_cv(gaps: list[SeparatorBandObservation], origin: float, pitch: float, count: int) -> float:
     if count <= 1:
         return 0.0
     cuts = [float(origin)] + [float(gap.center) for gap in gaps] + [float(origin + pitch * count)]
@@ -26,7 +26,7 @@ def width_cv(widths: list[float]) -> float:
     return float(values.std() / max(1.0, values.mean()))
 
 
-def separator_widths(gaps: list[Gap]) -> list[float]:
+def separator_widths(gaps: list[SeparatorBandObservation]) -> list[float]:
     return [
         float(gap.width)
         for gap in gaps
@@ -34,12 +34,12 @@ def separator_widths(gaps: list[Gap]) -> list[float]:
     ]
 
 
-def separator_width_cv(gaps: list[Gap]) -> float:
+def separator_width_cv(gaps: list[SeparatorBandObservation]) -> float:
     return width_cv(separator_widths(gaps))
 
 
 def photo_widths_from_gap_edges(
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     origin: float,
     pitch: float,
     count: int,

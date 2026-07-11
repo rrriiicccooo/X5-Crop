@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ....domain import Box, Gap
+from ....domain import Box, SeparatorBandObservation
 from ....gap_methods import is_detected_gap_method
 from ....geometry.detection_parameters import (
     GapSearchParameters,
@@ -26,17 +26,17 @@ from .hints import SeparatorGapHintSet
 
 @dataclass(frozen=True)
 class SeparatorGapSearchResult:
-    gaps: list[Gap]
+    gaps: list[SeparatorBandObservation]
     search_detail: dict[str, Any]
 
 
 @dataclass(frozen=True)
 class SeparatorGapProposal:
-    gap: Gap
+    gap: SeparatorBandObservation
     detail: dict[str, Any]
 
 
-def _selected_gap_detail(gap: Gap, *, include_width: bool = False) -> dict[str, Any]:
+def _selected_gap_detail(gap: SeparatorBandObservation, *, include_width: bool = False) -> dict[str, Any]:
     detail: dict[str, Any] = {
         "selected_method": gap.method,
         "selected_center": float(gap.center),
@@ -204,7 +204,7 @@ def propose_separator_gaps_with_detail(
         count,
         frame_aspect,
     )
-    gaps: list[Gap] = []
+    gaps: list[SeparatorBandObservation] = []
     entries: list[dict[str, Any]] = []
     applied_hint_count = 0
     for index in range(1, count):

@@ -89,6 +89,35 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertIsInstance(HARD_GAP_METHODS, frozenset)
         self.assertIsInstance(MODEL_GAP_METHODS, frozenset)
 
+    def test_separator_measurement_has_one_physical_identity(self) -> None:
+        from x5crop.domain import MeasurementProvenance, SeparatorBandObservation
+
+        self.assertEqual(
+            tuple(SeparatorBandObservation.__dataclass_fields__),
+            (
+                "index",
+                "center",
+                "score",
+                "method",
+                "provenance",
+                "start",
+                "end",
+                "lane_box",
+                "continuity",
+                "tonal_evidence",
+            ),
+        )
+        self.assertTrue(SeparatorBandObservation.__dataclass_params__.frozen)
+        self.assertEqual(
+            tuple(MeasurementProvenance.__dataclass_fields__),
+            ("root_measurement", "source", "dependencies"),
+        )
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (PROJECT_ROOT / "x5crop").rglob("*.py")
+        )
+        self.assertNotIn("class Gap:", source)
+
     def test_content_candidate_source_has_one_canonical_identity(self) -> None:
         source = "\n".join(
             path.read_text(encoding="utf-8")

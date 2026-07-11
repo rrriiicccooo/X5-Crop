@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ...domain import Gap
+from ...domain import SeparatorBandObservation
 from ...gap_methods import (
     is_content_model_gap_method,
     is_detected_gap_method,
@@ -43,7 +43,7 @@ def _int(value: Any, default: int = 0) -> int:
         return int(default)
 
 def gap_method_evidence_summary(
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     reliable_min_score: float,
 ) -> GapMethodEvidenceSummary:
     direct_hard_gaps = 0

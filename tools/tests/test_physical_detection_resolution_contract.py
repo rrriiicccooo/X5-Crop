@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
+from tools.tests.physical_gate_support import separator_observation
 from x5crop.detection.candidate.assessment.candidate import _boundary_proof_paths
 from x5crop.detection.candidate.assessment.candidate_gate import BoundaryProofPath
 from x5crop.detection.candidate.assessment.count_hypothesis import physical_count_resolution
@@ -23,7 +24,7 @@ from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
 from x5crop.detection.evidence.state import EvidenceState
 from x5crop.detection.physical.photo_size import photo_size_consistency_from_gap_edges
 from x5crop.constants import GAP_DETECTED, GAP_EQUAL
-from x5crop.domain import Box, DetectionCandidate, Gap
+from x5crop.domain import Box, DetectionCandidate
 from x5crop.formats import format_spec
 from x5crop.geometry.frame_fit import frame_boxes_from_gaps
 from x5crop.geometry.separator_band import SeparatorBand
@@ -48,7 +49,7 @@ def _coverage(state: EvidenceState) -> FrameCoverageEvidence:
 
 def _resolved_candidate(count: int) -> DetectionCandidate:
     gaps = [
-        Gap(index=index, center=float(index * 100), score=1.0, method="detected", start=index * 100 - 5, end=index * 100 + 5)
+        separator_observation(index=index, center=float(index * 100), score=1.0, method="detected", start=index * 100 - 5, end=index * 100 + 5)
         for index in range(1, count)
     ]
     return DetectionCandidate(
@@ -198,7 +199,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         self.assertEqual(merged, [stronger, separate])
 
     def test_equal_model_fills_missing_indexes_without_replacing_hard_gaps(self) -> None:
-        hard = Gap(index=3, center=300.0, score=1.2, method="detected", start=295.0, end=305.0)
+        hard = separator_observation(index=3, center=300.0, score=1.2, method="detected", start=295.0, end=305.0)
         result = select_geometry_equal_model_gaps(
             InitialSeparatorGapResult(
                 gaps=[hard],
@@ -218,7 +219,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         self.assertEqual(sum(gap.method == "detected" for gap in result.gaps), 1)
 
     def test_nearby_refinement_never_moves_measured_separator_band(self) -> None:
-        measured = Gap(1, 50.0, 0.2, GAP_DETECTED, 45.0, 55.0)
+        measured = separator_observation(1, 50.0, 0.2, GAP_DETECTED, 45.0, 55.0)
         profile = np.zeros(120, dtype=np.float32)
         profile[64:67] = 1.0
 
@@ -233,7 +234,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         self.assertIs(result.gaps[0], measured)
 
     def test_nearby_refinement_can_promote_model_gap_to_observed_band(self) -> None:
-        model = Gap(1, 50.0, 0.0, GAP_EQUAL, 49.0, 51.0)
+        model = separator_observation(1, 50.0, 0.0, GAP_EQUAL, 49.0, 51.0)
         profile = np.zeros(120, dtype=np.float32)
         profile[64:67] = 1.0
 
@@ -254,8 +255,8 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         frames = frame_boxes_from_gaps(
             Box(0, 0, 360, 100),
             [
-                Gap(1, 90.0, 1.0, "detected", 85.0, 95.0),
-                Gap(2, 230.0, 1.0, "detected", 225.0, 235.0),
+                separator_observation(1, 90.0, 1.0, "detected", 85.0, 95.0),
+                separator_observation(2, 230.0, 1.0, "detected", 225.0, 235.0),
             ],
             3,
             360,

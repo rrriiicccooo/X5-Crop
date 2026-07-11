@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ....domain import Box, Gap
+from ....domain import Box, SeparatorBandObservation
 from ....formats import FormatPhysicalSpec
 from ....cache.separator import cached_separator_profile
 from ....policies.runtime.policy import DetectionPolicy
@@ -31,11 +31,11 @@ class SeparatorGapBuildResult:
     profile: np.ndarray
     origin: float
     pitch: float
-    gaps: list[Gap]
+    gaps: list[SeparatorBandObservation]
     standard_gap_search_detail: dict[str, Any]
     edge_pair_correction_detail: dict[str, Any]
     nearby_refinement_detail: dict[str, Any]
-    pre_nearby_gaps: Optional[list[Gap]]
+    pre_nearby_gaps: Optional[list[SeparatorBandObservation]]
 
 
 def separator_origin_pitch(

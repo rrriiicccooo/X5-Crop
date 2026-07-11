@@ -5,7 +5,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ..constants import GAP_DETECTED, GAP_EDGE_PAIR, GAP_EQUAL
-from ..domain import Box, FinalDetection, Gap
+from ..domain import Box, FinalDetection, SeparatorBandObservation
 from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float
 from .canvas import (
@@ -15,19 +15,21 @@ from .canvas import (
 )
 
 
-def gap_mark_box(detection: FinalDetection, gap: Gap) -> Optional[Box]:
-    work_outer_raw = gap.lane_box if isinstance(gap.lane_box, dict) else detection.detail.get("work_outer")
-    if not isinstance(work_outer_raw, dict):
-        return None
-    try:
-        work_outer = Box(
-            int(work_outer_raw["left"]),
-            int(work_outer_raw["top"]),
-            int(work_outer_raw["right"]),
-            int(work_outer_raw["bottom"]),
-        )
-    except Exception:
-        return None
+def gap_mark_box(detection: FinalDetection, gap: SeparatorBandObservation) -> Optional[Box]:
+    work_outer = gap.lane_box
+    if work_outer is None:
+        work_outer_raw = detection.detail.get("work_outer")
+        if not isinstance(work_outer_raw, dict):
+            return None
+        try:
+            work_outer = Box(
+                int(work_outer_raw["left"]),
+                int(work_outer_raw["top"]),
+                int(work_outer_raw["right"]),
+                int(work_outer_raw["bottom"]),
+            )
+        except (KeyError, TypeError, ValueError):
+            return None
     if is_hard_gap_method(gap.method) and gap.start is not None and gap.end is not None:
         start = int(round(work_outer.left + min(gap.start, gap.end)))
         end = int(round(work_outer.left + max(gap.start, gap.end)))
@@ -43,19 +45,21 @@ def gap_mark_box(detection: FinalDetection, gap: Gap) -> Optional[Box]:
     return Box(work_outer.top, x, work_outer.bottom, x + 1)
 
 
-def gap_tick_boxes(detection: FinalDetection, gap: Gap, debug_gap: Any) -> list[Box]:
-    work_outer_raw = gap.lane_box if isinstance(gap.lane_box, dict) else detection.detail.get("work_outer")
-    if not isinstance(work_outer_raw, dict):
-        return []
-    try:
-        work_outer = Box(
-            int(work_outer_raw["left"]),
-            int(work_outer_raw["top"]),
-            int(work_outer_raw["right"]),
-            int(work_outer_raw["bottom"]),
-        )
-    except Exception:
-        return []
+def gap_tick_boxes(detection: FinalDetection, gap: SeparatorBandObservation, debug_gap: Any) -> list[Box]:
+    work_outer = gap.lane_box
+    if work_outer is None:
+        work_outer_raw = detection.detail.get("work_outer")
+        if not isinstance(work_outer_raw, dict):
+            return []
+        try:
+            work_outer = Box(
+                int(work_outer_raw["left"]),
+                int(work_outer_raw["top"]),
+                int(work_outer_raw["right"]),
+                int(work_outer_raw["bottom"]),
+            )
+        except (KeyError, TypeError, ValueError):
+            return []
     tick_axis = work_outer.height if detection.layout == "horizontal" else work_outer.width
     tick = max(
         int(debug_gap.tick_length_min),

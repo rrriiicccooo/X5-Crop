@@ -7,7 +7,7 @@ import numpy as np
 
 from ....cache import AnalysisCache
 from ....cache.separator import cached_separator_width_profile
-from ....domain import Box, Gap
+from ....domain import Box, SeparatorBandObservation
 from ....formats import FormatPhysicalSpec
 from ....policies.runtime.policy import DetectionPolicy
 from ...physical.separator.hints import SeparatorGapHintSet
@@ -22,7 +22,7 @@ GEOMETRY_EQUAL_MODEL_SOURCE = "geometry_equal_model"
 
 @dataclass(frozen=True)
 class InitialSeparatorGapResult:
-    gaps: list[Gap]
+    gaps: list[SeparatorBandObservation]
     standard_gap_search_detail: dict[str, Any]
 
 
@@ -42,7 +42,7 @@ def with_selected_gap_source(
     result: InitialSeparatorGapResult,
     source: str,
     *,
-    gaps: Optional[list[Gap]] = None,
+    gaps: Optional[list[SeparatorBandObservation]] = None,
     extra_standard_detail: Optional[dict[str, Any]] = None,
 ) -> InitialSeparatorGapResult:
     return InitialSeparatorGapResult(

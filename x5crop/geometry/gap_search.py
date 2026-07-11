@@ -6,7 +6,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ..constants import GAP_DETECTED
-from ..domain import Gap
+from ..domain import MeasurementProvenance, SeparatorBandObservation
 from ..utils import clamp_int, runs_from_mask
 from .detection_parameters import GapSearchParameters
 from .gap_search_detail import attach_gap_run_evaluation_summary
@@ -129,7 +129,7 @@ class DetectedGapCandidateSearchResult:
 
 @dataclass(frozen=True)
 class GapSearchResult:
-    detected_gap: Optional[Gap]
+    detected_gap: Optional[SeparatorBandObservation]
     model_gap_score: float
     reason: str
     detail: dict[str, Any] = field(default_factory=dict)
@@ -370,8 +370,21 @@ def best_detected_gap_candidate(candidates: list[DetectedGapCandidate]) -> Optio
     return min(candidates, key=lambda item: item.rank_key())
 
 
-def detected_gap_from_candidate(index: int, candidate: DetectedGapCandidate) -> Gap:
-    return Gap(index, candidate.center, float(candidate.quality), candidate.method, candidate.start, candidate.end)
+def detected_gap_from_candidate(index: int, candidate: DetectedGapCandidate) -> SeparatorBandObservation:
+    return SeparatorBandObservation(
+        index=index,
+        center=candidate.center,
+        score=float(candidate.quality),
+        method=candidate.method,
+        provenance=MeasurementProvenance(
+            root_measurement="separator_profile",
+            source="detected_band",
+            dependencies=("gray_work", "film_span"),
+        ),
+        start=candidate.start,
+        end=candidate.end,
+        tonal_evidence=float(candidate.quality),
+    )
 
 
 def gap_search_detail(

@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 
 from ..constants import GAP_EDGE_PAIR
-from ..domain import Gap
+from ..domain import MeasurementProvenance, SeparatorBandObservation
 from ..gap_methods import is_detected_gap_method, is_hard_gap_method
 from ..utils import clamp_float, clamp_int
 from .detection_parameters import EdgePairParameters
@@ -61,10 +61,10 @@ class EdgePairSearchLimits:
 
 @dataclass(frozen=True)
 class EdgePairSearchResult:
-    gap: Gap
+    gap: SeparatorBandObservation
     candidates: list[EdgePairCandidate]
     selected_candidate: EdgePairCandidate | None
-    selected_gap: Gap | None
+    selected_gap: SeparatorBandObservation | None
 
     def detail(self, *, candidate_limit: int = 5) -> dict[str, Any]:
         return {
@@ -110,13 +110,13 @@ class EdgePairReplacementAssessment:
 
 @dataclass(frozen=True)
 class EdgePairRefinementResult:
-    gaps: list[Gap]
+    gaps: list[SeparatorBandObservation]
     detail: dict[str, Any]
 
 
 def assess_edge_pair_hard_gap_replacement(
-    gap: Gap,
-    edge_gap: Gap,
+    gap: SeparatorBandObservation,
+    edge_gap: SeparatorBandObservation,
     pitch: float,
     params: EdgePairParameters,
 ) -> EdgePairReplacementAssessment:
@@ -176,8 +176,8 @@ def assess_edge_pair_hard_gap_replacement(
 
 
 def assess_edge_pair_replacement(
-    gap: Gap,
-    edge_gap: Gap,
+    gap: SeparatorBandObservation,
+    edge_gap: SeparatorBandObservation,
     pitch: float,
     params: EdgePairParameters,
 ) -> EdgePairReplacementAssessment:
@@ -199,7 +199,7 @@ def assess_edge_pair_replacement(
     )
 
 
-def edge_pair_replacement_role(gap: Gap) -> str:
+def edge_pair_replacement_role(gap: SeparatorBandObservation) -> str:
     if not is_hard_gap_method(gap.method):
         return "model_gap_promotion"
     if is_detected_gap_method(gap.method):
@@ -207,7 +207,7 @@ def edge_pair_replacement_role(gap: Gap) -> str:
     return "edge_pair_refresh"
 
 
-def edge_pair_replacement_evidence_role_detail(gap: Gap, edge_gap: Gap) -> dict[str, Any]:
+def edge_pair_replacement_evidence_role_detail(gap: SeparatorBandObservation, edge_gap: SeparatorBandObservation) -> dict[str, Any]:
     role = edge_pair_replacement_role(gap)
     return {
         "replacement_role": role,
@@ -231,7 +231,7 @@ def edge_pair_search_limits(pitch: float, params: EdgePairParameters) -> EdgePai
 def edge_pair_candidates_for_gap(
     edge: np.ndarray,
     background: np.ndarray,
-    gap: Gap,
+    gap: SeparatorBandObservation,
     pitch: float,
     params: EdgePairParameters,
     limits: EdgePairSearchLimits,
@@ -276,17 +276,24 @@ def edge_pair_candidates_for_gap(
 
 
 def edge_pair_gap_from_candidate(
-    gap: Gap,
+    gap: SeparatorBandObservation,
     candidate: EdgePairCandidate,
-) -> Gap:
+) -> SeparatorBandObservation:
     center = (candidate.left + candidate.right) / 2.0
-    return Gap(
-        gap.index,
-        float(center),
-        float(candidate.quality),
-        GAP_EDGE_PAIR,
-        float(candidate.left),
-        float(candidate.right + 1),
+    return SeparatorBandObservation(
+        index=gap.index,
+        center=float(center),
+        score=float(candidate.quality),
+        method=GAP_EDGE_PAIR,
+        provenance=MeasurementProvenance(
+            root_measurement="edge_refine_profiles",
+            source="edge_pair",
+            dependencies=(gap.provenance.root_measurement,),
+        ),
+        start=float(candidate.left),
+        end=float(candidate.right + 1),
+        lane_box=gap.lane_box,
+        tonal_evidence=float(candidate.quality),
     )
 
 
@@ -299,7 +306,7 @@ def best_edge_pair_candidate(candidates: list[EdgePairCandidate]) -> EdgePairCan
 def edge_pair_search_result_for_gap(
     edge: np.ndarray,
     background: np.ndarray,
-    gap: Gap,
+    gap: SeparatorBandObservation,
     pitch: float,
     params: EdgePairParameters,
     limits: EdgePairSearchLimits,
@@ -329,7 +336,7 @@ def edge_pair_search_result_for_gap(
 def refine_gaps_with_edge_profiles(
     edge: np.ndarray,
     background: np.ndarray,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     count: int,
     edge_pair_parameters: EdgePairParameters,
 ) -> EdgePairRefinementResult:
@@ -339,7 +346,7 @@ def refine_gaps_with_edge_profiles(
     pitch = width / float(max(1, count))
     params = edge_pair_parameters
     search_limits = edge_pair_search_limits(pitch, params)
-    refined: list[Gap] = []
+    refined: list[SeparatorBandObservation] = []
     accepted: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
     for gap in gaps:

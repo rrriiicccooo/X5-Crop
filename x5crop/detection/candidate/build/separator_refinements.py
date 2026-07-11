@@ -7,7 +7,7 @@ import numpy as np
 
 from ....cache import AnalysisCache
 from ....cache.separator import cached_edge_refine_profiles
-from ....domain import Box, Gap
+from ....domain import Box, SeparatorBandObservation
 from ....geometry.edge_pairs import refine_gaps_with_edge_profiles
 from ....geometry.nearby_separator import apply_nearby_separator_refinement as refine_nearby_separator_gaps
 from ....policies.runtime.policy import DetectionPolicy
@@ -21,23 +21,23 @@ NEARBY_REFINEMENT_PENDING_REASON = "pending_nearby_separator_refinement"
 
 @dataclass(frozen=True)
 class PrimarySeparatorRefinementResult:
-    gaps: list[Gap]
+    gaps: list[SeparatorBandObservation]
     edge_pair_correction_detail: dict[str, Any]
 
 
 @dataclass(frozen=True)
 class NearbySeparatorRefinementChainResult:
-    gaps: list[Gap]
+    gaps: list[SeparatorBandObservation]
     nearby_refinement_detail: dict[str, Any]
-    pre_nearby_gaps: Optional[list[Gap]]
+    pre_nearby_gaps: Optional[list[SeparatorBandObservation]]
 
 
 @dataclass(frozen=True)
 class GapRefinementResult:
     family: str
-    gaps: list[Gap]
+    gaps: list[SeparatorBandObservation]
     detail: dict[str, Any]
-    pre_refinement_gaps: Optional[list[Gap]] = None
+    pre_refinement_gaps: Optional[list[SeparatorBandObservation]] = None
 
 
 def _gap_refinement_detail(
@@ -81,13 +81,13 @@ def _gap_refinement_detail(
 
 def _gap_refinement_result(
     family: str,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     detail: dict[str, Any],
     *,
     family_policy: Optional[SeparatorRefinementFamilyPolicy],
     eligible: bool = True,
     skipped_reason: Optional[str] = None,
-    pre_refinement_gaps: Optional[list[Gap]] = None,
+    pre_refinement_gaps: Optional[list[SeparatorBandObservation]] = None,
 ) -> GapRefinementResult:
     return GapRefinementResult(
         family=family,
@@ -105,7 +105,7 @@ def _gap_refinement_result(
 
 def _skipped_gap_refinement_result(
     family: str,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     reason: str,
     *,
     family_policy: Optional[SeparatorRefinementFamilyPolicy],
@@ -148,7 +148,7 @@ def edge_pair_refinement_skip_reason(
 def apply_edge_pair_refinement(
     outer: Box,
     crop: np.ndarray,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     count: int,
     strip_mode: str,
     explicit_count: bool,
@@ -188,7 +188,7 @@ def apply_edge_pair_refinement(
 def apply_primary_separator_refinements(
     outer: Box,
     crop: np.ndarray,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     count: int,
     strip_mode: str,
     explicit_count: bool,
@@ -224,7 +224,7 @@ def nearby_separator_refinement_skip_reason(
 
 def apply_candidate_nearby_separator_refinement(
     profile: np.ndarray,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     count: int,
     strip_mode: str,
     explicit_count: bool,
@@ -275,7 +275,7 @@ def apply_nearby_separator_refinement_chain(
     strip_mode: str,
     explicit_count: bool,
     profile: np.ndarray,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     pitch: float,
     policy: DetectionPolicy,
 ) -> NearbySeparatorRefinementChainResult:

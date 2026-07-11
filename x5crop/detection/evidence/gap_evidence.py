@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ...domain import Box, DetectionCandidate, Gap
+from ...domain import Box, DetectionCandidate, SeparatorBandObservation
 from ...gap_methods import gap_method_role, is_hard_gap_method, is_model_gap_method
 from ...geometry.gap_trust import (
     diagnostic_hard_gap_trust_assessment,
@@ -17,8 +17,10 @@ from ...policies.runtime.separator import SeparatorPolicy
 from ...utils import clamp_int
 
 
-def gap_work_outer(detection: DetectionCandidate, gap: Gap) -> Optional[Box]:
-    work_outer_raw = gap.lane_box if isinstance(gap.lane_box, dict) else detection.detail.get("work_outer")
+def gap_work_outer(detection: DetectionCandidate, gap: SeparatorBandObservation) -> Optional[Box]:
+    if gap.lane_box is not None:
+        return gap.lane_box
+    work_outer_raw = detection.detail.get("work_outer")
     if not isinstance(work_outer_raw, dict):
         return None
     try:
@@ -28,14 +30,14 @@ def gap_work_outer(detection: DetectionCandidate, gap: Gap) -> Optional[Box]:
             int(work_outer_raw["right"]),
             int(work_outer_raw["bottom"]),
         )
-    except Exception:
+    except (KeyError, TypeError, ValueError):
         return None
 
 
 def gap_evidence_record(
     gray_work: np.ndarray,
     detection: DetectionCandidate,
-    gap: Gap,
+    gap: SeparatorBandObservation,
     *,
     separator_policy: SeparatorPolicy,
     exposure_overlap_policy: ExposureOverlapEvidenceParameters,
@@ -84,14 +86,17 @@ def gap_evidence_record(
         start, end = center - half, center + half + 1
     start = max(work_outer.left, min(work_outer.right, start))
     end = max(start + 1, min(work_outer.right, end))
-    signal_gap = Gap(
+    signal_gap = SeparatorBandObservation(
         gap.index,
         gap.center,
         gap.score,
         gap.method,
+        gap.provenance,
         float(start - work_outer.left),
         float(end - work_outer.left),
         gap.lane_box,
+        gap.continuity,
+        gap.tonal_evidence,
     )
     signals = hard_gap_pixel_signals(gray_work, work_outer, signal_gap, pitch, hard_gap_trust_policy)
     if signals is None:

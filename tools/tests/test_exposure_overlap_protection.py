@@ -5,11 +5,11 @@ from unittest.mock import patch
 
 import numpy as np
 
-from tools.tests.physical_gate_support import final_detection_fixture
+from tools.tests.physical_gate_support import final_detection_fixture, separator_observation
 from x5crop.detection.evidence.exposure_overlap import (
     exposure_overlap_evidence_detail,
 )
-from x5crop.domain import AxisBleedParameters, Box, FinalDetection, Gap
+from x5crop.domain import AxisBleedParameters, Box, FinalDetection
 from x5crop.output.bleed import apply_output_protection_plan
 from x5crop.output.protection import output_protection_plan
 from x5crop.policies.registry import get_detection_policy
@@ -20,7 +20,7 @@ def _detection() -> FinalDetection:
     detection.count = 2
     detection.outer = Box(0, 0, 100, 60)
     detection.frames = [Box(0, 0, 50, 60), Box(50, 0, 100, 60)]
-    detection.gaps = [Gap(1, 50.0, 0.5, "equal")]
+    detection.gaps = [separator_observation(1, 50.0, 0.5, "equal")]
     detection.confidence = 0.95
     detection.detail = {}
     return detection

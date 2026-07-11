@@ -40,15 +40,25 @@ class Box:
         ).clamp(width, height)
 
 
-@dataclass
-class Gap:
+@dataclass(frozen=True)
+class MeasurementProvenance:
+    root_measurement: str
+    source: str
+    dependencies: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SeparatorBandObservation:
     index: int
     center: float
     score: float
     method: str
+    provenance: MeasurementProvenance
     start: Optional[float] = None
     end: Optional[float] = None
-    lane_box: Optional[dict[str, int]] = None
+    lane_box: Optional[Box] = None
+    continuity: Optional[float] = None
+    tonal_evidence: Optional[float] = None
 
     @property
     def width(self) -> float:
@@ -73,7 +83,7 @@ class DetectionCandidate:
     count: int
     outer: Box
     frames: list[Box]
-    gaps: list[Gap]
+    gaps: list[SeparatorBandObservation]
     confidence: float
     detail: dict[str, Any]
 

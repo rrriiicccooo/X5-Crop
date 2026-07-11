@@ -5,6 +5,7 @@ import unittest
 
 import numpy as np
 
+from tools.tests.physical_gate_support import separator_observation
 from x5crop.detection.candidate.assessment.base_scoring import base_detection_assessment
 from x5crop.detection.candidate.assessment.scoring import (
     content_quality_score,
@@ -12,7 +13,7 @@ from x5crop.detection.candidate.assessment.scoring import (
     geometry_support_score,
     separator_support_score,
 )
-from x5crop.domain import Box, DetectionCandidate, Gap
+from x5crop.domain import Box, DetectionCandidate
 from x5crop.formats import format_spec
 from x5crop.gap_methods import GAP_DETECTED
 from x5crop.policies.registry import get_detection_policy
@@ -40,8 +41,8 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
             gray,
             Box(0, 0, 100, 100),
             [
-                Gap(1, 32.0, 1.0, GAP_DETECTED, 28.0, 36.0),
-                Gap(2, 68.0, 1.0, GAP_DETECTED, 64.0, 72.0),
+                separator_observation(1, 32.0, 1.0, GAP_DETECTED, 28.0, 36.0),
+                separator_observation(2, 68.0, 1.0, GAP_DETECTED, 64.0, 72.0),
             ],
             [Box(0, 0, 28, 100), Box(36, 0, 64, 100), Box(72, 0, 100, 100)],
             3,
@@ -66,9 +67,9 @@ class CandidateLifecycleScoringContractTest(unittest.TestCase):
             gray,
             Box(0, 10, 445, 110),
             [
-                Gap(1, 105.0, 1.0, GAP_DETECTED, 100.0, 110.0),
-                Gap(2, 225.0, 1.0, GAP_DETECTED, 210.0, 240.0),
-                Gap(3, 342.5, 1.0, GAP_DETECTED, 340.0, 345.0),
+                separator_observation(1, 105.0, 1.0, GAP_DETECTED, 100.0, 110.0),
+                separator_observation(2, 225.0, 1.0, GAP_DETECTED, 210.0, 240.0),
+                separator_observation(3, 342.5, 1.0, GAP_DETECTED, 340.0, 345.0),
             ],
             [
                 Box(0, 10, 105, 110),

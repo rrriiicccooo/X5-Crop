@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ....domain import Gap
+from ....domain import SeparatorBandObservation
 from ....geometry.model_gaps import equal_model_gap
 
 
@@ -18,7 +18,7 @@ def propose_equal_model_gaps_from_profile(
     origin: float,
     pitch: float,
     count: int,
-) -> list[Gap]:
+) -> list[SeparatorBandObservation]:
     return [
         equal_model_gap(
             index,

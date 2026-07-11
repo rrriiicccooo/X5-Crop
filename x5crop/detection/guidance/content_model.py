@@ -5,7 +5,7 @@ from typing import Optional
 
 import numpy as np
 
-from ...domain import Box, Gap
+from ...domain import Box, SeparatorBandObservation
 from ...formats import FormatPhysicalSpec
 from ...geometry.layout import work_gray
 from ...geometry.model_gaps import content_model_gap
@@ -32,7 +32,7 @@ CONTENT_GAP_EVIDENCE_KIND = "content_model_gap"
 class ContentCandidateProposal:
     outer: Box
     frames: tuple[Box, ...]
-    gaps: tuple[Gap, ...]
+    gaps: tuple[SeparatorBandObservation, ...]
     detail: dict
 
 
@@ -109,8 +109,8 @@ def content_candidate_raw_frame_boxes(
     return raw_boxes, placement
 
 
-def content_model_gaps_for_boxes(raw_boxes: list[Box], outer: Box) -> list[Gap]:
-    gaps: list[Gap] = []
+def content_model_gaps_for_boxes(raw_boxes: list[Box], outer: Box) -> list[SeparatorBandObservation]:
+    gaps: list[SeparatorBandObservation] = []
     for index in range(1, len(raw_boxes)):
         left_box = raw_boxes[index - 1]
         right_box = raw_boxes[index]

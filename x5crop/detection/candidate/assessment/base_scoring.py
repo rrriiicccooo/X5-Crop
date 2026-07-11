@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from ....domain import Box, DetectionCandidate, Gap
+from ....domain import Box, DetectionCandidate, SeparatorBandObservation
 from ....formats import FormatPhysicalSpec
 from ....geometry.frame_fit import frame_boxes_from_gaps
 from ....geometry.gap_geometry import (
@@ -57,11 +57,11 @@ def _work_frame_boxes_from_detail(detail: dict[str, Any]) -> list[Box]:
     return boxes
 
 
-def _gaps_from_detail(detail: dict[str, Any], key: str) -> list[Gap]:
+def _gaps_from_detail(detail: dict[str, Any], key: str) -> list[SeparatorBandObservation]:
     value = detail.get(key)
     if not isinstance(value, list):
         return []
-    gaps: list[Gap] = []
+    gaps: list[SeparatorBandObservation] = []
     for item in value:
         if not isinstance(item, dict):
             continue
@@ -87,7 +87,7 @@ def _frame_box_widths(boxes: list[Box]) -> list[float]:
 
 
 def _candidate_width_metrics(
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     boxes: list[Box],
     origin: float | None,
     pitch: float | None,
@@ -191,7 +191,7 @@ def _photo_width_stability_profile(
 def base_detection_assessment(
     gray_work: np.ndarray,
     outer: Box,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     boxes: list[Box],
     count: int,
     fmt: FormatPhysicalSpec,

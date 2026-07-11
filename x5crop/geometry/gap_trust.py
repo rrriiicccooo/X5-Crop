@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from ..domain import Box, Gap
+from ..domain import Box, SeparatorBandObservation
 from ..gap_methods import is_hard_gap_method
 from ..utils import clamp_float, clamp_int
 from .detection_parameters import HardGapTrustParameters
@@ -72,11 +72,11 @@ class HardGapTrustContext:
     signal_flags: dict[str, bool]
 
 
-def hard_gap_width_ratio(gap: Gap, pitch: float) -> float:
+def hard_gap_width_ratio(gap: SeparatorBandObservation, pitch: float) -> float:
     return float(gap.width) / max(1.0, float(pitch))
 
 
-def hard_gap_is_narrow(gap: Gap, pitch: float, config: HardGapTrustParameters) -> bool:
+def hard_gap_is_narrow(gap: SeparatorBandObservation, pitch: float, config: HardGapTrustParameters) -> bool:
     return 0.0 < gap.width <= clamp_float(
         pitch * config.narrow_ratio,
         config.narrow_min,
@@ -87,7 +87,7 @@ def hard_gap_is_narrow(gap: Gap, pitch: float, config: HardGapTrustParameters) -
 def hard_gap_pixel_signals(
     gray_work: np.ndarray,
     outer: Box,
-    gap: Gap,
+    gap: SeparatorBandObservation,
     pitch: float,
     config: HardGapTrustParameters,
 ) -> HardGapPixelSignals | None:
@@ -267,7 +267,7 @@ def hard_gap_trust_assessment_result(
 
 
 def diagnostic_hard_gap_trust_assessment(
-    gap: Gap,
+    gap: SeparatorBandObservation,
     pitch: float,
     config: HardGapTrustParameters,
     *,

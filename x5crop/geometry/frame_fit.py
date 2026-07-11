@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ..domain import Box, Gap
+from ..domain import Box, SeparatorBandObservation
 from ..gap_methods import (
     is_detected_gap_method,
     is_edge_pair_gap_method,
@@ -16,7 +16,7 @@ from .detection_parameters import FrameFitParameters
 
 def frame_boxes_from_gaps(
     outer: Box,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     count: int,
     image_w: int,
     image_h: int,
@@ -37,7 +37,7 @@ def frame_boxes_from_gaps(
     return boxes[:count]
 
 
-def frame_edge_weight(gap: Gap, config: FrameFitParameters) -> float:
+def frame_edge_weight(gap: SeparatorBandObservation, config: FrameFitParameters) -> float:
     if gap.width <= 0:
         return 0.0
     if is_edge_pair_gap_method(gap.method):
@@ -47,7 +47,7 @@ def frame_edge_weight(gap: Gap, config: FrameFitParameters) -> float:
     return 0.0
 
 
-def relative_ranges_from_gaps(outer: Box, gaps: list[Gap]) -> list[tuple[float, float]]:
+def relative_ranges_from_gaps(outer: Box, gaps: list[SeparatorBandObservation]) -> list[tuple[float, float]]:
     cuts = [0.0] + [float(gap.center) for gap in gaps] + [float(outer.width)]
     return [(left, right) for left, right in zip(cuts[:-1], cuts[1:])]
 
@@ -69,7 +69,7 @@ def box_list_from_relative_ranges(
 
 def fit_boxes_by_edge_evidence(
     outer: Box,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     count: int,
     image_w: int,
     image_h: int,
@@ -161,7 +161,7 @@ def fit_boxes_by_edge_evidence(
 
 def fit_frame_boxes_from_gaps(
     outer: Box,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     count: int,
     image_w: int,
     image_h: int,

@@ -6,7 +6,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ..constants import GAP_DETECTED
-from ..domain import Gap
+from ..domain import MeasurementProvenance, SeparatorBandObservation
 from ..utils import clamp_float, clamp_int, runs_from_mask, sampled_percentile, smooth_1d
 from .detection_parameters import SeparatorWidthProfileSearchParameters
 from .gap_search_detail import attach_gap_run_evaluation_summary
@@ -101,7 +101,7 @@ class SeparatorWidthGapBestCandidateResult:
 
 @dataclass(frozen=True)
 class SeparatorWidthGapSearchResult:
-    gap: Optional[Gap]
+    gap: Optional[SeparatorBandObservation]
     reason: str
     detail: dict[str, Any]
 
@@ -409,20 +409,26 @@ def separator_width_gap_from_candidate(
     profile_length: int,
     bounds: SeparatorWidthBounds,
     params: SeparatorWidthProfileSearchParameters,
-) -> Gap:
+) -> SeparatorBandObservation:
     start = candidate.start
     end = candidate.end
     if (end - start) > bounds.max_core_width:
         half_width = bounds.max_core_width * 0.5
         start = int(round(max(0.0, candidate.center - half_width)))
         end = int(round(min(float(profile_length), candidate.center + half_width)))
-    return Gap(
-        index,
-        float(candidate.center),
-        float(params.gap_score_base + max(0.0, candidate.score)),
-        GAP_DETECTED,
-        float(start),
-        float(end),
+    return SeparatorBandObservation(
+        index=index,
+        center=float(candidate.center),
+        score=float(params.gap_score_base + max(0.0, candidate.score)),
+        method=GAP_DETECTED,
+        provenance=MeasurementProvenance(
+            root_measurement="separator_width_profile",
+            source="observed_width_band",
+            dependencies=("gray_work", "film_span"),
+        ),
+        start=float(start),
+        end=float(end),
+        tonal_evidence=float(candidate.score),
     )
 
 

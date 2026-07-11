@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from x5crop.domain import Gap
+from tools.tests.physical_gate_support import separator_observation
 from x5crop.detection.candidate.proposal.outer import separator_sequence_rank
 from x5crop.detection.physical.photo_size import (
     photo_size_consistency_from_gap_edges,
@@ -19,9 +19,9 @@ from x5crop.policies.parameters.outer import SeparatorOuterBandParameters
 class PhotoSizePhysicalModelTests(unittest.TestCase):
     def test_separator_width_variation_does_not_make_photo_size_unstable(self) -> None:
         gaps = [
-            Gap(1, 105.0, 1.0, "detected", 100.0, 110.0),
-            Gap(2, 245.0, 1.0, "detected", 210.0, 280.0),
-            Gap(3, 390.0, 1.0, "detected", 380.0, 400.0),
+            separator_observation(1, 105.0, 1.0, "detected", 100.0, 110.0),
+            separator_observation(2, 245.0, 1.0, "detected", 210.0, 280.0),
+            separator_observation(3, 390.0, 1.0, "detected", 380.0, 400.0),
         ]
 
         detail = photo_size_consistency_from_gap_edges(
@@ -80,7 +80,7 @@ class PhotoSizePhysicalModelTests(unittest.TestCase):
 
     def test_incomplete_gap_edges_keep_target_photo_width_detail(self) -> None:
         detail = photo_size_consistency_from_gap_edges(
-            [Gap(1, 100.0, 1.0, "equal")],
+            [separator_observation(1, 100.0, 1.0, "equal")],
             origin=0.0,
             pitch=120.0,
             count=2,

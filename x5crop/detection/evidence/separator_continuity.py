@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ...domain import Box, Gap
+from ...domain import Box, SeparatorBandObservation
 from ...gap_methods import is_hard_gap_method
 from ...geometry.detection_parameters import HardGapTrustParameters
 from ...geometry.gap_trust import hard_gap_pixel_signals, hard_gap_signal_flags
@@ -13,7 +13,7 @@ from ...geometry.gap_trust import hard_gap_pixel_signals, hard_gap_signal_flags
 def separator_cross_axis_continuity_evidence(
     gray_work: np.ndarray,
     outer: Box,
-    gaps: list[Gap],
+    gaps: list[SeparatorBandObservation],
     pitch: float,
     parameters: HardGapTrustParameters,
 ) -> dict[str, Any]:
