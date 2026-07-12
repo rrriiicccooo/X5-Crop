@@ -122,6 +122,8 @@ repository rules in `AGENTS.md`.
   off-by-one 坐标；随之删除无调用者的 scale floor 参数。
 - Sequence hypothesis identity 只保留 measurement provenance；geometry 删除重复 name/strategy，
   frame-content evidence 删除只供 generic report reflection 使用的固定 composite 字段。
+- Regression compare 使用 source page 与完整 request configuration 构成 typed identity；重复 identity
+  直接失败，不再让同名 TIFF 的不同 page 或运行配置静默覆盖。
 - Shared domain 不再混放 report、TIFF 或 output 类型：current-schema `ReportResult` 归 report 并在
   构造时验证，`ImageProfile` 与 TIFF tag value 归 I/O，`AxisBleedParameters` 归 output；units 只
   接收 resolution 与 unit，不再依赖完整 TIFF profile。

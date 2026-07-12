@@ -22,8 +22,33 @@ DEFAULT_FIELDS = (
 
 
 @dataclass(frozen=True)
-class ReportDiff:
+class ReportComparisonIdentity:
     source: str
+    page: int
+    format_id: str
+    layout: str
+    strip_mode: str
+    requested_count: int | None
+    deskew: str
+    deskew_fallback: str
+    deskew_min_angle: float
+    deskew_max_angle: float
+    bleed_x: int
+    bleed_y: int
+
+    def __str__(self) -> str:
+        count = "auto" if self.requested_count is None else str(self.requested_count)
+        return (
+            f"{self.source}#page={self.page} "
+            f"[{self.format_id}/{self.strip_mode}, layout={self.layout}, "
+            f"count={count}, deskew={self.deskew}/{self.deskew_fallback}, "
+            f"bleed={self.bleed_x}x{self.bleed_y}]"
+        )
+
+
+@dataclass(frozen=True)
+class ReportDiff:
+    identity: ReportComparisonIdentity
     field: str
     before: Any
     after: Any
@@ -48,9 +73,44 @@ def load_jsonl_report(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def report_key(row: dict[str, Any]) -> str:
+def report_key(row: dict[str, Any]) -> ReportComparisonIdentity:
     validate_current_report_record(row)
-    return str(row["source"])
+    signature = row["analysis_reuse_signature"]
+    source = signature["source"]
+    config = signature["config"]
+    if int(source["page"]) != int(config["page"]):
+        raise ValueError("report source and configuration page disagree")
+    return ReportComparisonIdentity(
+        source=str(row["source"]),
+        page=int(source["page"]),
+        format_id=str(config["format_id"]),
+        layout=str(config["layout"]),
+        strip_mode=str(config["strip_mode"]),
+        requested_count=(
+            None
+            if config["requested_count"] is None
+            else int(config["requested_count"])
+        ),
+        deskew=str(config["deskew"]),
+        deskew_fallback=str(config["deskew_fallback"]),
+        deskew_min_angle=float(config["deskew_min_angle"]),
+        deskew_max_angle=float(config["deskew_max_angle"]),
+        bleed_x=int(config["bleed_x"]),
+        bleed_y=int(config["bleed_y"]),
+    )
+
+
+def _indexed_rows(
+    rows: Iterable[dict[str, Any]],
+    label: str,
+) -> dict[ReportComparisonIdentity, dict[str, Any]]:
+    indexed: dict[ReportComparisonIdentity, dict[str, Any]] = {}
+    for row in rows:
+        identity = report_key(row)
+        if identity in indexed:
+            raise ValueError(f"duplicate {label} report identity: {identity}")
+        indexed[identity] = row
+    return indexed
 
 
 def compare_report_rows(
@@ -58,10 +118,10 @@ def compare_report_rows(
     candidate_rows: Iterable[dict[str, Any]],
     fields: Iterable[str] = DEFAULT_FIELDS,
 ) -> list[ReportDiff]:
-    baseline = {report_key(row): row for row in baseline_rows}
-    candidate = {report_key(row): row for row in candidate_rows}
+    baseline = _indexed_rows(baseline_rows, "baseline")
+    candidate = _indexed_rows(candidate_rows, "candidate")
     diffs: list[ReportDiff] = []
-    for key in sorted(set(baseline) | set(candidate)):
+    for key in sorted(set(baseline) | set(candidate), key=str):
         if key not in baseline:
             diffs.append(ReportDiff(key, "__row__", None, "added"))
             continue
@@ -100,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"candidate rows: {len(load_jsonl_report(args.candidate))}")
     print(f"diff count: {len(diffs)}")
     for diff in diffs[:200]:
-        print(f"{diff.source}: {diff.field}")
+        print(f"{diff.identity}: {diff.field}")
         print(f"  before: {diff.before}")
         print(f"  after:  {diff.after}")
     if len(diffs) > 200:
