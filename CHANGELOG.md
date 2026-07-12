@@ -42,8 +42,10 @@ repository rules in `AGENTS.md`.
   `DetectionConfiguration` 取代；旧 `x5crop.policies` 源码树已删除且无 compatibility shim。
 - Global overlap capacity 已替换为逐 boundary `FrameBleedPlan`。只有 independently observed
   overlap 扩张相邻两张 frame 的对应侧，无关 frame 不再共享最大 bleed。
-- Current report schema 更新为 `detection_report / physical_sequence_resolution`，canonical
+- Current report schema 更新为 `detection_report / physical_candidate_geometry`，canonical
   sections 为 `input / configuration / selection / decision / output`。旧 record 直接重新检测。
+- Candidate geometry 拆成 `SequenceSolution / DualLaneSolution / ReviewOnlyGeometry`；
+  dual-lane 与 review-only 不再用空字段或可选 lane 字段伪装成标准 sequence。
 - 所有结构、PASS/REVIEW、count、crop 和 schema diff 均按批准方案接受；measurement 数值校准
   仍是后续独立项目。
 
@@ -143,9 +145,11 @@ schema_revision: frame_sequence_geometry
   a compatibility shim.
 - Per-boundary `FrameBleedPlan` replaces global overlap capacity. Only adjacent frame
   sides receive independently observed overlap protection.
-- Current reports use `detection_report / physical_sequence_resolution` with canonical
+- Current reports use `detection_report / physical_candidate_geometry` with canonical
   `input / configuration / selection / decision / output` sections. Old records are
   redetected.
+- Candidate geometry now uses distinct `SequenceSolution`, `DualLaneSolution`, and
+  `ReviewOnlyGeometry` types instead of optional lane fields or empty sequence geometry.
 - All behavioral and schema diffs are accepted for this structural project; numerical
   measurement calibration remains separate.
 

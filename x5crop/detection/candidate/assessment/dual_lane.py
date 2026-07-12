@@ -23,6 +23,7 @@ from ...physical.photo_size import FrameDimensionEvidence
 from ...physical.boundary import HolderOcclusionEvidence
 from x5crop.domain import PixelInterval
 from ...physical.spacing import SequenceConservationEvidence
+from ...physical.model import DualLaneSolution
 from ..model import (
     AssessedCandidate,
     BuiltCandidate,
@@ -62,6 +63,8 @@ def assess_dual_lane_candidate(
     lanes: tuple[AssessedCandidate, ...],
 ) -> AssessedCandidate:
     geometry = candidate.geometry
+    if not isinstance(geometry, DualLaneSolution):
+        raise ValueError("dual-lane assessment requires dual-lane geometry")
     topology_state = _combined_state(
         tuple(lane.assessment.evidence.frame_topology.state for lane in lanes)
     )

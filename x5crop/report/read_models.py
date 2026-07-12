@@ -6,6 +6,11 @@ from typing import Any
 
 from ..detection.candidate.model import AssessedCandidate
 from ..detection.decision.model import FinalDetection
+from ..detection.physical.model import (
+    DualLaneSolution,
+    ReviewOnlyGeometry,
+    SequenceSolution,
+)
 from ..detection.physical.spacing import (
     ObservedSpacingEvidence,
     SpacingHypothesis,
@@ -70,8 +75,18 @@ def candidate_evidence_read_model(candidate: AssessedCandidate) -> dict[str, Any
 
 
 def candidate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
+    geometry = candidate.geometry
+    if isinstance(geometry, SequenceSolution):
+        geometry_kind = "sequence"
+    elif isinstance(geometry, DualLaneSolution):
+        geometry_kind = "dual_lane"
+    elif isinstance(geometry, ReviewOnlyGeometry):
+        geometry_kind = "review_only"
+    else:
+        raise TypeError(f"unsupported candidate geometry: {type(geometry).__name__}")
     return {
-        "sequence_solution": typed_read_model(candidate.geometry),
+        "geometry_kind": geometry_kind,
+        "candidate_geometry": typed_read_model(geometry),
         "evidence_quality": typed_read_model(candidate.assessment.quality),
         "candidate_gate": candidate_gate_read_model(candidate),
         "count_hypothesis": typed_read_model(candidate.count_hypothesis),

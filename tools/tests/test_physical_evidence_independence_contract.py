@@ -8,6 +8,9 @@ from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.candidate.assessment.evidence_independence import (
     evidence_independence_evidence,
 )
+from x5crop.detection.physical.separator.assignment import (
+    dimension_constrained_boundary,
+)
 from x5crop.domain import EvidenceState
 
 
@@ -69,10 +72,15 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
 
     def test_dimension_prior_is_not_independent_measurement_evidence(self) -> None:
         candidate = candidate_fixture()
+        boundary = dimension_constrained_boundary(
+            1,
+            candidate.geometry.frame_boundaries[0].position,
+            candidate.geometry.frame_dimension_prior.provenance,
+        )
         geometry = replace(
             candidate.geometry,
             separator_assignments=(),
-            frame_boundaries=(),
+            frame_boundaries=(boundary,),
         )
         evidence = evidence_independence_evidence(geometry)
         self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)

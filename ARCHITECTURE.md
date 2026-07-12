@@ -17,6 +17,7 @@ entry
   -> boundary / separator / content observations
   -> count hypotheses + sequence hypotheses
   -> global monotonic sequence solver -> SequenceSolution
+  -> mode composition -> CandidateGeometry
   -> physical evidence + EvidenceQuality + CandidateGate
   -> GeometryResolution + deterministic selection
   -> FrameBleedPlan
@@ -34,7 +35,7 @@ entry
 | Preprocess | TIFF、layout、gray/evidence image、deskew、calibration 和 root measurements。 |
 | Physical detection | 提出并求解 boundary、separator、photo interval、spacing 和 count。 |
 | Evidence | 描述观测支持、矛盾或不可用；不决定 PASS/REVIEW。 |
-| CandidateGate | 判断单个 `SequenceSolution` 是否有独立物理证明且无明确矛盾。 |
+| CandidateGate | 判断单个 typed candidate geometry 是否有独立物理证明且无明确矛盾。 |
 | GeometryResolution | 唯一 early-stop 输入；确认 count、placement、coverage 和替代几何已解决。 |
 | Selection | 按物理目标确定性排序并聚合区间等价解。 |
 | FrameBleedPlan | 把用户 bleed 与逐 boundary 的实测叠片保护转换为逐 frame-side 输出计划。 |
@@ -110,6 +111,11 @@ coverage 和实质替代解均已解决时才 supported；CandidateGate PASS 不
 
 ### 1.6 Evidence、Assessment 与 Selection
 
+`CandidateGeometry` 是唯一 candidate geometry union：标准 strip 使用 `SequenceSolution`；
+dual-lane 使用带有独立 lane solutions 的 `DualLaneSolution`；不支持自动求解的 mode 使用
+`ReviewOnlyGeometry`，其 solved frame geometry 必须为空。三者分别进入 standard、dual-lane 和
+review-only assessment，不以空字段伪装成另一种物理状态。
+
 Candidate evidence 包括 topology、frame coverage、separator sequence、photo dimensions、
 content preservation、holder occupancy、sequence conservation 和 evidence independence。
 
@@ -153,14 +159,14 @@ Current report identity：
 
 ```text
 schema_id: detection_report
-schema_revision: physical_sequence_resolution
+schema_revision: physical_candidate_geometry
 ```
 
 Canonical sections：
 
 - `input`: TIFF profile 与 `ScanCalibration`。
 - `configuration`: 当前 `DetectionConfiguration` read model。
-- `selection`: candidates、完整 `SequenceSolution`、evidence、`EvidenceQuality`、CandidateGate、
+- `selection`: candidates、typed candidate geometry、evidence、`EvidenceQuality`、CandidateGate、
   GeometryResolution 和 clusters。
 - `decision`: status、`final_review_reasons` 和 DecisionGate。
 - `output`: decision/final geometry、`FrameBleedPlan` 和写出结果。

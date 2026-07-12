@@ -33,7 +33,7 @@ from x5crop.domain import SeparatorBandObservation
 from x5crop.configuration.separator import SeparatorObservationParameters
 from x5crop.domain import MeasurementProvenance
 from x5crop.domain import Box
-from x5crop.detection.physical.model import SequenceSolution
+from x5crop.detection.physical.model import PhotoInterval, SequenceSolution
 from x5crop.detection.evidence.separator_continuity import (
     separator_cross_axis_continuity_evidence,
 )
@@ -330,6 +330,40 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             count=3,
             visible_sequence_span=VisibleSequenceSpan(Box(0, 0, 315, 100)),
             crop_envelope=CropEnvelope(Box(0, 0, 315, 100)),
+            frames=(
+                Box(0, 0, 103, 100),
+                Box(103, 0, 210, 100),
+                Box(210, 0, 315, 100),
+            ),
+            photo_intervals=(
+                PhotoInterval(
+                    1,
+                    PixelInterval.exact(0.0),
+                    PixelInterval.exact(100.0),
+                    observed.provenance,
+                    observed.provenance,
+                    True,
+                    True,
+                ),
+                PhotoInterval(
+                    2,
+                    PixelInterval.exact(105.0),
+                    PixelInterval.exact(205.0),
+                    observed.provenance,
+                    observed.provenance,
+                    True,
+                    True,
+                ),
+                PhotoInterval(
+                    3,
+                    PixelInterval.exact(215.0),
+                    PixelInterval.exact(315.0),
+                    observed.provenance,
+                    observed.provenance,
+                    True,
+                    True,
+                ),
+            ),
             frame_boundaries=boundaries,
             separator_observations=(observed,),
             separator_assignments=(assignment,),

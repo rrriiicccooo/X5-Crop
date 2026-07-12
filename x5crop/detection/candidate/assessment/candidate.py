@@ -10,6 +10,7 @@ from ...evidence.frame_sequence import frame_sequence_evidence
 from ...evidence.holder_occupancy import holder_occupancy_evidence
 from ...evidence.sequence_content_alignment import sequence_content_alignment_evidence
 from ...evidence.partial_edge import partial_edge_safety_evidence
+from ...physical.model import SequenceSolution
 from x5crop.domain import EvidenceState
 from ..model import (
     AssessedCandidate,
@@ -151,6 +152,8 @@ def assess_candidate(
     if candidate.geometry.format_id != physical_spec.format_id:
         raise ValueError("candidate and detection context format do not match")
     geometry = candidate.geometry
+    if not isinstance(geometry, SequenceSolution):
+        raise ValueError("standard candidate assessment requires sequence geometry")
     frame_sequence = frame_sequence_evidence(geometry)
     core = measure_core_physical_evidence(
         context.measurement_cache.gray_work,

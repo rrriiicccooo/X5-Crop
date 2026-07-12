@@ -18,6 +18,7 @@ from x5crop.domain import (
     PixelInterval,
 )
 from x5crop.detection.physical.boundary import canvas_boundary_observations
+from x5crop.detection.physical.model import PhotoInterval
 from x5crop.detection.physical.separator.assignment import dimension_constrained_boundary
 from x5crop.cache import MeasurementCache
 from x5crop.domain import HolderSpan, VisibleSequenceSpan
@@ -44,9 +45,21 @@ def _single_frame_candidate(*, measured_boundaries: bool) -> BuiltCandidate:
         candidate.geometry,
         count=1,
         frames=(Box(0, 0, 200, 100),),
+        photo_intervals=(
+            PhotoInterval(
+                1,
+                PixelInterval.exact(0.0),
+                PixelInterval.exact(200.0),
+                provenance,
+                provenance,
+                measured_boundaries,
+                measured_boundaries,
+            ),
+        ),
         separator_observations=(),
         separator_assignments=(),
         frame_boundaries=(),
+        inter_frame_spacings=(),
         boundary_observations=observations,
         sequence_provenance=provenance,
     )

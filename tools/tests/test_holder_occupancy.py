@@ -15,7 +15,9 @@ from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
     frame_boundary_from_assignment,
 )
-from x5crop.domain import EvidenceState, PixelInterval
+from x5crop.detection.physical.model import PhotoInterval
+from x5crop.detection.physical.spacing import observed_spacing_evidence
+from x5crop.domain import EvidenceState, MeasurementProvenance, PixelInterval
 from x5crop.domain import VisibleSequenceSpan, HolderSpan
 from x5crop.domain import Box
 from x5crop.formats import format_spec
@@ -55,6 +57,11 @@ class HolderOccupancyTests(unittest.TestCase):
             for index, observation in enumerate(observations, start=1)
         )
         boundaries = tuple(frame_boundary_from_assignment(item) for item in assignments)
+        photo_edge_provenance = MeasurementProvenance(
+            "photo_edges",
+            "holder_occupancy_fixture",
+            ("gray_work",),
+        )
         geometry = replace(
             candidate.geometry,
             format_id="120-66",
@@ -67,9 +74,29 @@ class HolderOccupancyTests(unittest.TestCase):
                 box=sequence.box,
             ),
             frames=frames,
+            photo_intervals=tuple(
+                PhotoInterval(
+                    index,
+                    PixelInterval.exact(frame.left),
+                    PixelInterval.exact(frame.right),
+                    photo_edge_provenance,
+                    photo_edge_provenance,
+                    True,
+                    True,
+                )
+                for index, frame in enumerate(frames, start=1)
+            ),
             separator_observations=observations,
             separator_assignments=assignments,
             frame_boundaries=boundaries,
+            inter_frame_spacings=tuple(
+                observed_spacing_evidence(
+                    index,
+                    PixelInterval.exact(observation.width),
+                    observation.provenance,
+                )
+                for index, observation in enumerate(observations, start=1)
+            ),
         )
         evidence = candidate_evidence_fixture()
         coverage = replace(

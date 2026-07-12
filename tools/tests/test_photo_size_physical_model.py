@@ -18,6 +18,7 @@ from x5crop.detection.physical.boundary import (
 )
 from x5crop.detection.physical.photo_size import frame_dimension_evidence
 from x5crop.detection.physical.model import PhotoInterval
+from x5crop.detection.physical.spacing import observed_spacing_evidence
 from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
     frame_boundary_from_assignment,
@@ -74,6 +75,14 @@ def _geometry(second_start: float = 205.0):
         separator_observations=observations,
         separator_assignments=assignments,
         frame_boundaries=boundaries,
+        inter_frame_spacings=tuple(
+            observed_spacing_evidence(
+                index,
+                PixelInterval.exact(observation.width),
+                observation.provenance,
+            )
+            for index, observation in enumerate(observations, start=1)
+        ),
         photo_intervals=(
             PhotoInterval(
                 1,
@@ -138,11 +147,16 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         base = candidate_fixture().geometry
         geometry = replace(
             base,
-            count=2,
-            separator_observations=(),
-            separator_assignments=(),
-            frame_boundaries=(),
-            photo_intervals=(),
+            photo_intervals=tuple(
+                replace(
+                    interval,
+                    start_provenance=base.frame_dimension_prior.provenance,
+                    end_provenance=base.frame_dimension_prior.provenance,
+                    start_independently_observed=False,
+                    end_independently_observed=False,
+                )
+                for interval in base.photo_intervals
+            ),
             frame_dimension_prior=replace(
                 base.frame_dimension_prior,
                 source="short_axis_aspect",
@@ -178,7 +192,18 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             separator_observations=(),
             separator_assignments=(),
             frame_boundaries=(),
-            photo_intervals=(),
+            inter_frame_spacings=(),
+            photo_intervals=(
+                PhotoInterval(
+                    1,
+                    PixelInterval.exact(0.0),
+                    PixelInterval.exact(94.0),
+                    base.frame_dimension_prior.provenance,
+                    base.frame_dimension_prior.provenance,
+                    False,
+                    False,
+                ),
+            ),
         )
         boundary = BoundaryObservation(
             "leading",

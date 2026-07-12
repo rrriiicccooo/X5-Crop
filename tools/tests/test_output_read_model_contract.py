@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import unittest
+import numpy as np
 from dataclasses import fields, replace
 
 from tools.tests.physical_gate_support import (
@@ -34,6 +35,96 @@ def _record() -> dict:
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_review_only_pipeline_produces_valid_current_report(self) -> None:
+        from x5crop.cache.analysis import make_measurement_cache
+        from x5crop.configuration.registry import get_detection_configuration
+        from x5crop.detection.context import DetectionContext, DetectionRequest
+        from x5crop.detection.decision.decision_gate import apply_decision_gate
+        from x5crop.detection.final.finalize import finalize_detection
+        from x5crop.detection.pipeline import choose_detection
+        from x5crop.domain import AxisBleedParameters, ImageProfile
+        from x5crop.image.statistics import image_measurement_statistics
+        from x5crop.report.configuration import detection_configuration_read_model
+        from x5crop.report.record import report_record_for_final_detection
+        from x5crop.report.validation import current_report_record_errors
+        from x5crop.runtime.frame_bleed import prepare_frame_bleed
+        from x5crop.units import ScanCalibration
+        from tools.tests.physical_gate_support import transform_geometry_fixture
+
+        configuration = get_detection_configuration("135-dual", "partial")
+        gray = np.full((120, 240), 255, dtype=np.uint8)
+        statistics = image_measurement_statistics(
+            gray,
+            configuration.preprocess.image_statistics,
+        )
+        cache = make_measurement_cache(
+            gray,
+            "horizontal",
+            configuration.preprocess.content_evidence_image,
+            statistics,
+        )
+        profile = ImageProfile(
+            gray.shape,
+            "uint8",
+            "YX",
+            "MINISBLACK",
+            "NONE",
+            None,
+            8,
+            1,
+            None,
+            None,
+            None,
+            None,
+        )
+        context = DetectionContext(
+            image_profile=profile,
+            scan_calibration=ScanCalibration(None, None, "unavailable", False),
+            request=DetectionRequest("horizontal", "partial", None),
+            configuration=configuration,
+            lane_configuration=None,
+            measurement_cache=cache,
+        )
+        selection = choose_detection(context)
+        from x5crop.detection.physical.model import ReviewOnlyGeometry
+        from tools.tests.physical_gate_support import separator_observation
+
+        self.assertIsInstance(selection.selected.geometry, ReviewOnlyGeometry)
+        with self.assertRaises(ValueError):
+            replace(
+                selection.selected.geometry,
+                separator_observations=(separator_observation(120.0),),
+            )
+        bleed = prepare_frame_bleed(
+            selection.selected,
+            AxisBleedParameters(20, 10),
+        )
+        detection = apply_decision_gate(
+            selection,
+            bleed,
+            transform_geometry_fixture(),
+            context.scan_calibration,
+            image_width=240,
+            image_height=120,
+        )
+        detection = finalize_detection(
+            detection,
+            image_width=240,
+            image_height=120,
+        )
+        record = report_record_for_final_detection(
+            detection,
+            source="synthetic.tif",
+            profile={},
+            output_files=[],
+            review_copy=None,
+            warnings=[],
+            configuration=detection_configuration_read_model(configuration),
+            transform_geometry=transform_geometry_fixture(),
+            analysis_reuse_signature={},
+        )
+        self.assertEqual(current_report_record_errors(record), [])
+
     def test_cache_reuse_does_not_resolve_configuration_from_report_data(self) -> None:
         source = (
             PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py"
@@ -136,7 +227,7 @@ class OutputReadModelContractTest(unittest.TestCase):
     def test_cache_restoration_fields_are_required_by_current_schema(self) -> None:
         missing_provenance = _record()
         missing_provenance["selection"]["candidates"][0][
-            "sequence_solution"
+            "candidate_geometry"
         ]["separator_observations"][0]["provenance"].pop("boundary_anchors")
         self.assertIn(
             "separator_observation_invalid",
@@ -172,7 +263,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(record["schema_id"], "detection_report")
         self.assertEqual(
             record["schema_revision"],
-            "physical_sequence_resolution",
+            "physical_candidate_geometry",
         )
         self.assertNotIn("v4", record["schema_revision"])
 

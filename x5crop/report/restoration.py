@@ -216,29 +216,29 @@ def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
         raise ValueError("invalid current report record: " + ",".join(errors))
     selection = record["selection"]
     selected = selection["candidates"][int(selection["selected_rank"]) - 1]
-    sequence = selected["sequence_solution"]
+    geometry = selected["candidate_geometry"]
     decision = record["decision"]
     output = record["output"]
     return FinalDetection(
-        format_id=str(sequence["format_id"]),
-        layout=str(sequence["layout"]),
-        strip_mode=str(sequence["strip_mode"]),
-        count=int(sequence["count"]),
+        format_id=str(geometry["format_id"]),
+        layout=str(geometry["layout"]),
+        strip_mode=str(geometry["strip_mode"]),
+        count=int(geometry["count"]),
         visible_sequence_span=VisibleSequenceSpan(
-            _box(sequence["visible_sequence_span"]["box"])
+            _box(geometry["visible_sequence_span"]["box"])
         ),
-        crop_envelope=CropEnvelope(_box(sequence["crop_envelope"]["box"])),
+        crop_envelope=CropEnvelope(_box(geometry["crop_envelope"]["box"])),
         decision_gate=_decision_gate(decision["gate"]),
         decision_geometry=_output_geometry(output["decision_geometry"]),
         output_geometry=_output_geometry(output["final_geometry"]),
         separator_observations=tuple(
-            _observation(item) for item in sequence["separator_observations"]
+            _observation(item) for item in geometry["separator_observations"]
         ),
         separator_assignments=tuple(
-            _assignment(item) for item in sequence["separator_assignments"]
+            _assignment(item) for item in geometry["separator_assignments"]
         ),
         frame_boundaries=tuple(
-            _frame_boundary(item) for item in sequence["frame_boundaries"]
+            _frame_boundary(item) for item in geometry["frame_boundaries"]
         ),
         frame_bleed_plan=_frame_bleed_plan(output["frame_bleed_plan"]),
         scan_calibration=_scan_calibration(

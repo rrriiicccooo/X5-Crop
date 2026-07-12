@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from .candidate.assessment.candidate import assess_candidate
+from .candidate.assessment.review_only import assess_review_only_candidate
 from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
 from .candidate.execution.model import CountHypothesisEvaluation
 from .candidate.plan.count_hypotheses import count_hypothesis_plan
@@ -92,7 +93,7 @@ def choose_detection(context: DetectionContext) -> SelectionResult:
             _choose_standard_detection,
         )
     elif configuration.detector_kind == "review_only":
-        assessed = assess_candidate(review_only_candidate(context), context)
+        assessed = assess_review_only_candidate(review_only_candidate(context))
         selection = select_candidates(
             (assessed,),
             larger_counts_evaluated=True,

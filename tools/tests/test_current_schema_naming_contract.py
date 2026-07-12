@@ -97,7 +97,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
 
     def test_report_schema_identity_is_descriptive(self) -> None:
         self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
-        self.assertEqual(REPORT_SCHEMA_REVISION, "physical_sequence_resolution")
+        self.assertEqual(REPORT_SCHEMA_REVISION, "physical_candidate_geometry")
         self.assertNotIn("v4", REPORT_SCHEMA_REVISION)
 
     def test_report_schema_identity_is_owned_by_report_layer(self) -> None:
@@ -145,7 +145,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             "physical" + "_resolution",
         ):
             self.assertNotIn(removed, coordination)
-        self.assertIn("physical_sequence_resolution", coordination)
+        self.assertIn("physical_candidate_geometry", coordination)
 
     def test_user_docs_describe_current_sequence_and_bleed_model(self) -> None:
         quick_start = (PROJECT_ROOT / "快速启动_Quick_Start.md").read_text(

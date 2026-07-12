@@ -5,7 +5,17 @@ from typing import Callable
 
 from ...cache.analysis import make_measurement_cache
 from ...constants import CANDIDATE_SOURCE_DUAL_LANE
-from ...domain import Box, MeasurementProvenance
+from ...domain import (
+    Box,
+    CropEnvelope,
+    FrameBoundary,
+    HolderSpan,
+    MeasurementProvenance,
+    PixelInterval,
+    SeparatorAssignment,
+    SeparatorBandObservation,
+    VisibleSequenceSpan,
+)
 from ...geometry.boxes import translate_box
 from ...image.statistics import image_measurement_statistics
 from ...units import ScanCalibration
@@ -17,14 +27,143 @@ from ..candidate.assessment.candidate import assess_candidate
 from ..candidate.selection.choose import select_candidates
 from ..candidate.selection.model import SelectionResult
 from ..context import DetectionContext
-from ..physical.model import SequenceResiduals, SequenceSolution
-from ..physical.boundary import HolderOcclusionEvidence
-from ..physical.boundary import canvas_boundary_observations
-from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
+from ..physical.model import (
+    DualLaneSolution,
+    PhotoInterval,
+    SequenceResiduals,
+    SequenceSolution,
+)
+from ..physical.boundary import (
+    HolderOcclusionEvidence,
+    canvas_boundary_observations,
+)
+from ..physical.spacing import InterFrameSpacing
 from .dual_lane_split import LaneDividerProposal, lane_divider_proposals
 
 
 StandardDetector = Callable[[DetectionContext], SelectionResult]
+
+
+def _offset_interval(interval: PixelInterval, offset: int) -> PixelInterval:
+    return interval.plus(PixelInterval.exact(float(offset)))
+
+
+def _translate_separator_observation(
+    observation: SeparatorBandObservation,
+    lane: Box,
+) -> SeparatorBandObservation:
+    return replace(
+        observation,
+        start=float(observation.start) + float(lane.left),
+        end=float(observation.end) + float(lane.left),
+        center=float(observation.center) + float(lane.left),
+        lane_box=lane,
+    )
+
+
+def _translate_lane_geometry(
+    solution: SequenceSolution,
+    lane: Box,
+    lane_index: int,
+) -> tuple[
+    tuple[PhotoInterval, ...],
+    tuple[SeparatorBandObservation, ...],
+    tuple[SeparatorAssignment, ...],
+    tuple[FrameBoundary, ...],
+    tuple[InterFrameSpacing, ...],
+]:
+    translated_observations = tuple(
+        _translate_separator_observation(observation, lane)
+        for observation in solution.separator_observations
+    )
+    observation_by_id = {
+        id(original): translated
+        for original, translated in zip(
+            solution.separator_observations,
+            translated_observations,
+            strict=True,
+        )
+    }
+
+    def translated_observation(
+        observation: SeparatorBandObservation,
+    ) -> SeparatorBandObservation:
+        return observation_by_id.get(
+            id(observation),
+            _translate_separator_observation(observation, lane),
+        )
+
+    translated_assignments = tuple(
+        replace(
+            assignment,
+            observation=translated_observation(assignment.observation),
+            position_constraint=replace(
+                assignment.position_constraint,
+                position=_offset_interval(
+                    assignment.position_constraint.position,
+                    lane.left,
+                ),
+            ),
+        )
+        for assignment in solution.separator_assignments
+    )
+    assignment_by_id = {
+        id(original): translated
+        for original, translated in zip(
+            solution.separator_assignments,
+            translated_assignments,
+            strict=True,
+        )
+    }
+    translated_boundaries = tuple(
+        replace(
+            boundary,
+            position=_offset_interval(boundary.position, lane.left),
+            assignment=(
+                None
+                if boundary.assignment is None
+                else assignment_by_id[id(boundary.assignment)]
+            ),
+            dimension_constraint=(
+                None
+                if boundary.dimension_constraint is None
+                else replace(
+                    boundary.dimension_constraint,
+                    position=_offset_interval(
+                        boundary.dimension_constraint.position,
+                        lane.left,
+                    ),
+                    focused_observation=(
+                        None
+                        if boundary.dimension_constraint.focused_observation is None
+                        else translated_observation(
+                            boundary.dimension_constraint.focused_observation
+                        )
+                    ),
+                )
+            ),
+        )
+        for boundary in solution.frame_boundaries
+    )
+    translated_intervals = tuple(
+        replace(
+            interval,
+            start=_offset_interval(interval.start, lane.left),
+            end=_offset_interval(interval.end, lane.left),
+        )
+        for interval in solution.photo_intervals
+    )
+    lane_spacings = tuple(
+        replace(spacing, lane_index=lane_index)
+        for spacing in solution.inter_frame_spacings
+    )
+    return (
+        translated_intervals,
+        translated_observations,
+        translated_assignments,
+        translated_boundaries,
+        lane_spacings,
+    )
 
 
 def _lane_calibration(context: DetectionContext) -> ScanCalibration:
@@ -86,6 +225,9 @@ def _parent_candidate(
 ) -> BuiltCandidate:
     physical_spec = context.configuration.physical_spec
     lane_candidates = tuple(selection.selected for selection in lanes)
+    lane_solutions = tuple(candidate.geometry for candidate in lane_candidates)
+    if not all(isinstance(solution, SequenceSolution) for solution in lane_solutions):
+        raise ValueError("dual-lane components require solved lane sequences")
     frames = tuple(
         translate_box(frame, lane.left, lane.top)
         for lane, candidate in zip(lane_boxes, lane_candidates)
@@ -115,22 +257,22 @@ def _parent_candidate(
         max(box.right for box in crop_boxes),
         max(box.bottom for box in crop_boxes),
     )
-    observations = []
-    for lane, candidate in zip(lane_boxes, lane_candidates):
-        for observation in candidate.geometry.separator_observations:
-            observations.append(
-                replace(
-                    observation,
-                    start=float(observation.start) + float(lane.left),
-                    end=float(observation.end) + float(lane.left),
-                    center=float(observation.center) + float(lane.left),
-                    lane_box=lane,
-                )
-            )
+    translated = tuple(
+        _translate_lane_geometry(solution, lane, lane_index)
+        for lane_index, (solution, lane) in enumerate(
+            zip(lane_solutions, lane_boxes, strict=True),
+            start=1,
+        )
+    )
+    photo_intervals = tuple(item for group in translated for item in group[0])
+    observations = tuple(item for group in translated for item in group[1])
+    assignments = tuple(item for group in translated for item in group[2])
+    boundaries = tuple(item for group in translated for item in group[3])
+    spacings = tuple(item for group in translated for item in group[4])
     count = sum(candidate.geometry.count for candidate in lane_candidates)
     work_height, work_width = context.measurement_cache.gray_work.shape
     return BuiltCandidate(
-        geometry=SequenceSolution(
+        geometry=DualLaneSolution(
             format_id=physical_spec.format_id,
             layout=context.request.layout,
             strip_mode="full",
@@ -140,12 +282,12 @@ def _parent_candidate(
             ),
             visible_sequence_span=VisibleSequenceSpan(visible_sequence_span),
             crop_envelope=CropEnvelope(crop_envelope),
-            photo_intervals=(),
+            photo_intervals=photo_intervals,
             frames=frames,
-            separator_observations=tuple(observations),
-            separator_assignments=(),
-            frame_boundaries=(),
-            inter_frame_spacings=(),
+            separator_observations=observations,
+            separator_assignments=assignments,
+            frame_boundaries=boundaries,
+            inter_frame_spacings=spacings,
             holder_occlusion=HolderOcclusionEvidence.not_applicable(),
             frame_dimension_prior=lane_candidates[0].geometry.frame_dimension_prior,
             residuals=SequenceResiduals(None, None, 0.0),
@@ -163,6 +305,7 @@ def _parent_candidate(
                 work_width,
                 work_height,
             ),
+            lane_solutions=lane_solutions,
             lane_boxes=lane_boxes,
             lane_crop_envelopes=tuple(
                 CropEnvelope(box) for box in crop_boxes

@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.physical_gate_support import candidate_fixture, separator_observation
+from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.candidate.assessment.dual_lane import assess_dual_lane_candidate
 from x5crop.detection.candidate.model import BuiltCandidate
 from x5crop.domain import EvidenceState
 from x5crop.domain import PixelInterval
+from x5crop.detection.physical.model import DualLaneSolution
 from x5crop.detection.physical.spacing import observed_spacing_evidence
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from x5crop.domain import Box, MeasurementProvenance
@@ -15,31 +16,50 @@ from x5crop.domain import Box, MeasurementProvenance
 
 def _parent(lane):
     frames = tuple(Box(index * 100, 0, (index + 1) * 100, 100) for index in range(4))
-    geometry = replace(
-        lane.geometry,
+    geometry = DualLaneSolution(
         format_id="135-dual",
+        layout=lane.geometry.layout,
+        strip_mode=lane.geometry.strip_mode,
         count=4,
         holder_span=HolderSpan(Box(0, 0, 400, 100)),
         visible_sequence_span=VisibleSequenceSpan(Box(0, 0, 400, 100)),
         crop_envelope=CropEnvelope(Box(0, 0, 400, 100)),
+        photo_intervals=lane.geometry.photo_intervals * 2,
         frames=frames,
-        separator_observations=(
-            separator_observation(100.0, start=95.0, end=105.0),
-            separator_observation(200.0, start=195.0, end=205.0),
-        ),
-        separator_assignments=(),
-        frame_boundaries=(),
+        separator_observations=lane.geometry.separator_observations * 2,
+        separator_assignments=lane.geometry.separator_assignments * 2,
+        frame_boundaries=lane.geometry.frame_boundaries * 2,
+        inter_frame_spacings=lane.geometry.inter_frame_spacings * 2,
+        holder_occlusion=lane.geometry.holder_occlusion,
+        frame_dimension_prior=lane.geometry.frame_dimension_prior,
+        residuals=lane.geometry.residuals,
+        search_budget_exhausted=False,
+        source=lane.geometry.source,
+        automatic_processing_supported=True,
+        sequence_hypothesis_name="dual_lane_fixture",
+        sequence_hypothesis_strategy="dual_lane_sequence",
         sequence_provenance=MeasurementProvenance(
             "lane_divider_profile",
             "measured_gutter",
             ("gray_work",),
         ),
+        boundary_observations=lane.geometry.boundary_observations,
+        lane_solutions=(lane.geometry, lane.geometry),
         lane_boxes=(Box(0, 0, 400, 50), Box(0, 50, 400, 100)),
+        lane_crop_envelopes=(
+            CropEnvelope(Box(0, 0, 400, 50)),
+            CropEnvelope(Box(0, 50, 400, 100)),
+        ),
     )
     return BuiltCandidate(geometry, lane.count_hypothesis, ("dual_lane",))
 
 
 class DualLaneAssessmentTest(unittest.TestCase):
+    def test_dual_lane_solution_requires_complete_flattened_geometry(self) -> None:
+        geometry = _parent(candidate_fixture()).geometry
+        with self.assertRaises(ValueError):
+            replace(geometry, photo_intervals=())
+
     def test_dual_lane_builds_structured_evidence_quality(self) -> None:
         first = candidate_fixture()
         second = candidate_fixture()

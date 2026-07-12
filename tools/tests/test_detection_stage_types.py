@@ -14,6 +14,7 @@ from x5crop.detection.candidate.model import (
     CandidateEvidence,
 )
 from x5crop.detection.physical.model import SequenceSolution
+import x5crop.detection.physical.model as physical_model
 from x5crop.detection.candidate.selection.model import SelectionResult
 from x5crop.detection.decision.model import DecisionGateAssessment, FinalDetection
 from x5crop.detection.candidate.assessment.candidate_gate import (
@@ -58,6 +59,35 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         self.assertIn("visible_sequence_span", final_fields)
         self.assertIn("crop_envelope", final_fields)
         self.assertIn("frame_bleed_plan", final_fields)
+
+    def test_standard_dual_lane_and_review_only_geometry_have_distinct_types(self) -> None:
+        sequence_fields = {field.name for field in fields(SequenceSolution)}
+        self.assertNotIn("lane_boxes", sequence_fields)
+        self.assertNotIn("lane_crop_envelopes", sequence_fields)
+        self.assertTrue(hasattr(physical_model, "DualLaneSolution"))
+        self.assertTrue(hasattr(physical_model, "ReviewOnlyGeometry"))
+        self.assertFalse(hasattr(physical_model, "UnavailableGeometry"))
+
+    def test_sequence_solution_rejects_incomplete_frame_structure(self) -> None:
+        from dataclasses import replace
+        from tools.tests.physical_gate_support import candidate_fixture
+
+        with self.assertRaises(ValueError):
+            replace(candidate_fixture().geometry, frames=())
+
+    def test_review_only_geometry_uses_a_dedicated_assessment_path(self) -> None:
+        from x5crop.detection.candidate.assessment.review_only import (
+            assess_review_only_candidate,
+        )
+        import x5crop.detection.pipeline as pipeline
+
+        self.assertTrue(callable(assess_review_only_candidate))
+        source = inspect.getsource(pipeline.choose_detection)
+        self.assertIn("assess_review_only_candidate", source)
+        self.assertNotIn(
+            "assess_candidate(review_only_candidate(context), context)",
+            source,
+        )
 
     def test_gate_outcomes_are_derived_from_canonical_checks(self) -> None:
         candidate_fields = set(CandidateGateAssessment.__dataclass_fields__)

@@ -23,6 +23,7 @@ from ..candidate.selection.model import SelectionResult
 from x5crop.domain import EvidenceState
 from ..gate_checks import GateCheck
 from ..evidence.transform_geometry import TransformGeometryEvidence
+from ..physical.model import DualLaneSolution
 from .model import DecisionGateAssessment, FinalDetection
 
 
@@ -38,7 +39,7 @@ _CANDIDATE_REASON_BY_CHECK = {
 
 def _crop_envelope_frames(selection: SelectionResult) -> tuple[Box, ...]:
     geometry = selection.selected.geometry
-    if not geometry.lane_crop_envelopes:
+    if not isinstance(geometry, DualLaneSolution):
         envelope = geometry.crop_envelope.box
         last_index = len(geometry.frames) - 1
         return tuple(

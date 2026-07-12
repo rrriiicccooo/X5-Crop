@@ -36,12 +36,12 @@ def _span_valid(value: Any) -> bool:
     return isinstance(value, dict) and _box_valid(value.get("box"))
 
 
-def _geometry_valid(value: Any) -> bool:
+def _geometry_valid(value: Any, *, allow_empty_frames: bool = False) -> bool:
     return bool(
         isinstance(value, dict)
         and _box_valid(value.get("crop_envelope"))
         and isinstance(value.get("frame_boxes"), list)
-        and value["frame_boxes"]
+        and (allow_empty_frames or value["frame_boxes"])
         and all(_box_valid(frame) for frame in value["frame_boxes"])
     )
 
@@ -97,11 +97,125 @@ def _separator_assignment_valid(value: Any) -> bool:
     )
 
 
+def _sequence_geometry_valid(value: Any) -> bool:
+    return bool(
+        isinstance(value, dict)
+        and isinstance(value.get("frames"), list)
+        and len(value["frames"]) == int(value.get("count", 0))
+        and all(_box_valid(frame) for frame in value["frames"])
+        and isinstance(value.get("photo_intervals"), list)
+        and len(value["photo_intervals"]) == int(value["count"])
+        and isinstance(value.get("frame_boundaries"), list)
+        and len(value["frame_boundaries"]) == max(0, int(value["count"]) - 1)
+        and isinstance(value.get("inter_frame_spacings"), list)
+        and len(value["inter_frame_spacings"]) == max(0, int(value["count"]) - 1)
+    )
+
+
+def _candidate_geometry_valid(kind: str, value: Any) -> bool:
+    common_fields = {
+        "format_id",
+        "layout",
+        "strip_mode",
+        "count",
+        "holder_span",
+        "visible_sequence_span",
+        "crop_envelope",
+        "photo_intervals",
+        "frames",
+        "separator_observations",
+        "separator_assignments",
+        "frame_boundaries",
+        "inter_frame_spacings",
+        "holder_occlusion",
+        "frame_dimension_prior",
+        "residuals",
+        "search_budget_exhausted",
+        "source",
+        "automatic_processing_supported",
+        "sequence_hypothesis_name",
+        "sequence_hypothesis_strategy",
+        "sequence_provenance",
+        "boundary_observations",
+    }
+    if not (
+        isinstance(value, dict)
+        and common_fields.issubset(value)
+        and int(value["count"]) > 0
+        and _span_valid(value["holder_span"])
+        and _span_valid(value["visible_sequence_span"])
+        and _span_valid(value["crop_envelope"])
+        and isinstance(value["separator_observations"], list)
+        and all(
+            _separator_observation_valid(item)
+            for item in value["separator_observations"]
+        )
+        and isinstance(value["separator_assignments"], list)
+        and all(
+            _separator_assignment_valid(item)
+            for item in value["separator_assignments"]
+        )
+    ):
+        return False
+    if kind == "sequence":
+        return _sequence_geometry_valid(value)
+    if kind == "dual_lane":
+        lane_solutions = value.get("lane_solutions")
+        lane_boxes = value.get("lane_boxes")
+        lane_envelopes = value.get("lane_crop_envelopes")
+        component_count = (
+            sum(int(lane.get("count", 0)) for lane in lane_solutions)
+            if isinstance(lane_solutions, list)
+            else 0
+        )
+        component_boundaries = (
+            sum(max(0, int(lane.get("count", 0)) - 1) for lane in lane_solutions)
+            if isinstance(lane_solutions, list)
+            else 0
+        )
+        return bool(
+            isinstance(value["frames"], list)
+            and len(value["frames"]) == int(value["count"])
+            and all(_box_valid(frame) for frame in value["frames"])
+            and isinstance(value["photo_intervals"], list)
+            and len(value["photo_intervals"]) == int(value["count"])
+            and isinstance(value["frame_boundaries"], list)
+            and len(value["frame_boundaries"]) == component_boundaries
+            and isinstance(value["inter_frame_spacings"], list)
+            and len(value["inter_frame_spacings"]) == component_boundaries
+            and isinstance(lane_solutions, list)
+            and len(lane_solutions) > 1
+            and component_count == int(value["count"])
+            and all(
+                _candidate_geometry_valid("sequence", lane)
+                for lane in lane_solutions
+            )
+            and isinstance(lane_boxes, list)
+            and len(lane_boxes) == len(lane_solutions)
+            and all(_box_valid(box) for box in lane_boxes)
+            and isinstance(lane_envelopes, list)
+            and len(lane_envelopes) == len(lane_solutions)
+            and all(_span_valid(envelope) for envelope in lane_envelopes)
+        )
+    if kind == "review_only":
+        return bool(
+            value["frames"] == []
+            and value["photo_intervals"] == []
+            and value["separator_observations"] == []
+            and value["separator_assignments"] == []
+            and value["frame_boundaries"] == []
+            and value["inter_frame_spacings"] == []
+            and not value["automatic_processing_supported"]
+        )
+    return False
+
+
 def _candidate_valid(value: Any) -> bool:
     if not (
         isinstance(value, dict)
         and {
-            "sequence_solution",
+            "geometry_kind",
+            "candidate_geometry",
             "evidence_quality",
             "candidate_gate",
             "count_hypothesis",
@@ -110,52 +224,9 @@ def _candidate_valid(value: Any) -> bool:
         }.issubset(value)
     ):
         return False
-    sequence = value["sequence_solution"]
-    if not (
-        isinstance(sequence, dict)
-        and {
-            "format_id",
-            "layout",
-            "strip_mode",
-            "count",
-            "holder_span",
-            "visible_sequence_span",
-            "crop_envelope",
-            "photo_intervals",
-            "frames",
-            "separator_observations",
-            "separator_assignments",
-            "frame_boundaries",
-            "inter_frame_spacings",
-            "holder_occlusion",
-            "frame_dimension_prior",
-            "residuals",
-            "search_budget_exhausted",
-            "source",
-            "automatic_processing_supported",
-            "sequence_hypothesis_name",
-            "sequence_hypothesis_strategy",
-            "sequence_provenance",
-            "boundary_observations",
-            "lane_boxes",
-            "lane_crop_envelopes",
-        }.issubset(sequence)
-        and _span_valid(sequence["holder_span"])
-        and _span_valid(sequence["visible_sequence_span"])
-        and _span_valid(sequence["crop_envelope"])
-        and isinstance(sequence["frames"], list)
-        and sequence["frames"]
-        and all(_box_valid(frame) for frame in sequence["frames"])
-        and isinstance(sequence["separator_observations"], list)
-        and all(
-            _separator_observation_valid(item)
-            for item in sequence["separator_observations"]
-        )
-        and isinstance(sequence["separator_assignments"], list)
-        and all(
-            _separator_assignment_valid(item)
-            for item in sequence["separator_assignments"]
-        )
+    if not _candidate_geometry_valid(
+        str(value["geometry_kind"]),
+        value["candidate_geometry"],
     ):
         return False
     gate = value["candidate_gate"]
@@ -286,7 +357,7 @@ def _frame_bleed_plan_valid(value: Any, frame_count: int) -> bool:
     )
 
 
-def _output_valid(value: Any) -> bool:
+def _output_valid(value: Any, *, allow_empty_frames: bool) -> bool:
     if not (
         isinstance(value, dict)
         and {
@@ -297,8 +368,14 @@ def _output_valid(value: Any) -> bool:
             "review_copy",
             "warnings",
         }.issubset(value)
-        and _geometry_valid(value["decision_geometry"])
-        and _geometry_valid(value["final_geometry"])
+        and _geometry_valid(
+            value["decision_geometry"],
+            allow_empty_frames=allow_empty_frames,
+        )
+        and _geometry_valid(
+            value["final_geometry"],
+            allow_empty_frames=allow_empty_frames,
+        )
         and isinstance(value["output_files"], list)
         and isinstance(value["warnings"], list)
     ):
@@ -346,7 +423,7 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
             not _separator_observation_valid(observation)
             for candidate in candidates
             if isinstance(candidate, dict)
-            for observation in candidate.get("sequence_solution", {}).get(
+            for observation in candidate.get("candidate_geometry", {}).get(
                 "separator_observations",
                 [],
             )
@@ -357,7 +434,26 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
             else "selection_incomplete"
         )
     _decision_consistent(record["decision"], errors)
-    if not _output_valid(record["output"]):
+    selection = record["selection"]
+    selected_kind = None
+    if (
+        isinstance(selection, dict)
+        and isinstance(selection.get("candidates"), list)
+        and selection["candidates"]
+    ):
+        selected_rank = int(selection.get("selected_rank", 0))
+        if 1 <= selected_rank <= len(selection["candidates"]):
+            selected_kind = selection["candidates"][selected_rank - 1].get(
+                "geometry_kind"
+            )
+    allow_empty_frames = bool(
+        selected_kind == "review_only"
+        and record["decision"].get("status") == "needs_review"
+    )
+    if not _output_valid(
+        record["output"],
+        allow_empty_frames=allow_empty_frames,
+    ):
         errors.append("output_incomplete")
     diagnostics = record["diagnostics"]
     transform_fields = {

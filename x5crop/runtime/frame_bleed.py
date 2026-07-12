@@ -6,11 +6,12 @@ from ..detection.candidate.model import AssessedCandidate
 from ..domain import AxisBleedParameters, CropEnvelope
 from ..output.frame_bleed import frame_bleed_plan
 from ..output.model import FrameBleedPlan, FrameOverlapRequirement
+from ..detection.physical.model import DualLaneSolution
 
 
 def _frame_crop_envelopes(candidate: AssessedCandidate) -> tuple[CropEnvelope, ...]:
     geometry = candidate.geometry
-    if not geometry.lane_crop_envelopes:
+    if not isinstance(geometry, DualLaneSolution):
         return (geometry.crop_envelope,) * len(geometry.frames)
     envelopes: list[CropEnvelope] = []
     for frame in geometry.frames:
@@ -32,7 +33,7 @@ def _frame_crop_envelopes(candidate: AssessedCandidate) -> tuple[CropEnvelope, .
 
 def _lane_frame_indexes(candidate: AssessedCandidate) -> tuple[tuple[int, ...], ...]:
     geometry = candidate.geometry
-    if not geometry.lane_boxes:
+    if not isinstance(geometry, DualLaneSolution):
         return (tuple(range(len(geometry.frames))),)
     lane_indexes: list[list[int]] = [[] for _lane in geometry.lane_boxes]
     for frame_index, frame in enumerate(geometry.frames):
