@@ -103,6 +103,7 @@ class PhysicalModelInvariantTest(unittest.TestCase):
             evidence.frame_content,
             evidence.holder_texture,
             evidence.sequence_content_alignment,
+            evidence.independence,
         ):
             with self.subTest(derived=type(derived).__name__):
                 self.assertFalse(derived.__dataclass_fields__["state"].init)

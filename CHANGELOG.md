@@ -54,6 +54,8 @@ repository rules in `AGENTS.md`.
   adaptive threshold、逐 frame observations 与明确的 unavailable cause 派生。
 - Holder texture 删除 caller-supplied state、reason 与 contrast summary；这些结论现在只由 holder
   slack regions、frame-content reference 与明确的 measurement failure 派生。
+- Evidence independence 删除 caller-supplied state/reason；sequence/supporting root identities、
+  dependency cycles 与 automatic-processing applicability 现在是唯一事实源。
 - Standard proof paths 改由 typed candidate model 从 geometry/evidence 重算校验；确认 undercrop 不再
   同时制造派生的 boundary failure，测试 fixture 也不再手工伪造 Gate。
 - Dual-lane evidence 现在保留各 lane 的 typed CandidateGate 与 geometry resolution；父 candidate

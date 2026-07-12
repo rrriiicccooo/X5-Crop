@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from x5crop.domain import EvidenceState, MeasurementIdentity
@@ -11,18 +11,16 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class EvidenceIndependenceEvidence:
-    state: EvidenceState
-    reason: str
     sequence_root_measurement: MeasurementIdentity
     supporting_root_measurements: tuple[MeasurementIdentity, ...]
     cyclic_measurements: tuple[MeasurementIdentity, ...]
+    automatic_processing_supported: bool
+    state: EvidenceState = field(init=False)
+    reason: str = field(init=False)
 
     def __post_init__(self) -> None:
-        if not self.reason or not isinstance(
-            self.sequence_root_measurement,
-            MeasurementIdentity,
-        ):
-            raise ValueError("evidence independence requires identity and reason")
+        if not isinstance(self.sequence_root_measurement, MeasurementIdentity):
+            raise ValueError("evidence independence requires a sequence identity")
         for values in (
             self.supporting_root_measurements,
             self.cyclic_measurements,
@@ -33,31 +31,39 @@ class EvidenceIndependenceEvidence:
                 raise ValueError(
                     "evidence measurement identities must be non-empty and unique"
                 )
-        root_reused = (
-            self.sequence_root_measurement in self.supporting_root_measurements
-        )
-        contradicted = bool(root_reused or self.cyclic_measurements)
-        if contradicted != (self.state == EvidenceState.CONTRADICTED):
-            raise ValueError(
-                "independence contradiction requires shared measurement provenance"
-            )
-        if self.state == EvidenceState.SUPPORTED and not self.supporting_root_measurements:
-            raise ValueError("supported independence requires supporting measurements")
-        if self.state == EvidenceState.NOT_APPLICABLE and self.supporting_root_measurements:
-            raise ValueError(
-                "not-applicable independence cannot claim supporting measurements"
-            )
+        root_reused = self.sequence_root_measurement in self.supporting_root_measurements
+        if not self.automatic_processing_supported:
+            if self.supporting_root_measurements or self.cyclic_measurements:
+                raise ValueError(
+                    "unsupported automatic processing cannot claim independence measurements"
+                )
+            state = EvidenceState.NOT_APPLICABLE
+            reason = "automatic_processing_not_supported"
+        elif root_reused:
+            state = EvidenceState.CONTRADICTED
+            reason = "sequence_and_separator_share_root_measurement"
+        elif self.cyclic_measurements:
+            state = EvidenceState.CONTRADICTED
+            reason = "sequence_and_separator_share_measurement_dependency"
+        elif not self.supporting_root_measurements:
+            state = EvidenceState.UNAVAILABLE
+            reason = "independent_separator_measurement_unavailable"
+        else:
+            state = EvidenceState.SUPPORTED
+            reason = "independent_sequence_and_separator_measurements"
+        object.__setattr__(self, "state", state)
+        object.__setattr__(self, "reason", reason)
+
 
 def evidence_independence_evidence(
     geometry: SequenceSolution,
 ) -> EvidenceIndependenceEvidence:
     if not geometry.automatic_processing_supported:
         return EvidenceIndependenceEvidence(
-            EvidenceState.NOT_APPLICABLE,
-            "automatic_processing_not_supported",
             geometry.sequence_provenance.root_measurement,
             (),
             (),
+            False,
         )
     hard_observations = tuple(
         assignment.observation
@@ -91,23 +97,9 @@ def evidence_independence_evidence(
     cyclic_measurements = tuple(
         sorted(dependency_cycle, key=lambda item: item.value)
     )
-    root_reused = sequence_root in set(measurement_roots)
-    if root_reused:
-        state = EvidenceState.CONTRADICTED
-        reason = "sequence_and_separator_share_root_measurement"
-    elif cyclic_measurements:
-        state = EvidenceState.CONTRADICTED
-        reason = "sequence_and_separator_share_measurement_dependency"
-    elif not hard_roots:
-        state = EvidenceState.UNAVAILABLE
-        reason = "independent_separator_measurement_unavailable"
-    else:
-        state = EvidenceState.SUPPORTED
-        reason = "independent_sequence_and_separator_measurements"
     return EvidenceIndependenceEvidence(
-        state=state,
-        reason=reason,
         sequence_root_measurement=sequence_root,
         supporting_root_measurements=measurement_roots,
         cyclic_measurements=cyclic_measurements,
+        automatic_processing_supported=True,
     )

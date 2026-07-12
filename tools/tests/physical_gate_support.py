@@ -312,11 +312,10 @@ def candidate_evidence_fixture(
             diagnostics=(),
         ),
         independence=EvidenceIndependenceEvidence(
-            EvidenceState.SUPPORTED,
-            "independent_boundary_and_separator_measurements",
             MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             (MeasurementIdentity.SEPARATOR_PROFILE,),
             (),
+            True,
         ),
     )
 
