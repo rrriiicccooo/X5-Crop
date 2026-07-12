@@ -14,7 +14,10 @@ from ..io.model import ImageProfile
 from ..report.model import ReportResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from ..output.surface import OutputSurface
-from ..image.transforms import rotate_array_expand
+from ..image.transforms import (
+    photometric_background_value,
+    rotate_array_expand,
+)
 from ..io.tiff import read_tiff
 from ..configuration.bundle import DetectionConfigurationBundle
 from ..report.restoration import (
@@ -161,13 +164,19 @@ def find_reusable_analysis(
 def apply_cached_transform(
     arr: np.ndarray,
     axes: str,
+    photometric: str,
     transform_geometry: TransformGeometryEvidence,
     warnings: list[str],
 ) -> tuple[np.ndarray, bool]:
     if not transform_geometry.applied:
         return arr, False
     angle = float(transform_geometry.applied_angle_degrees)
-    arr = rotate_array_expand(arr, angle, axes)
+    arr = rotate_array_expand(
+        arr,
+        angle,
+        axes,
+        background_value=photometric_background_value(arr, photometric),
+    )
     warnings.append(f"reused deskew: {angle:.4f} degrees")
     return arr, True
 
@@ -222,6 +231,7 @@ def result_from_reusable_analysis(
     arr, deskew_applied = apply_cached_transform(
         arr,
         profile.axes,
+        profile.photometric,
         transform_geometry,
         warnings,
     )

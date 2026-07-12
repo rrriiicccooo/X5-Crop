@@ -11,17 +11,52 @@ ROTATION_IDENTITY_EPSILON_DEGREES = 1e-9
 ROTATION_ROW_CHUNK_SIZE = 256
 
 
-def dtype_white(dtype: np.dtype) -> int | float:
+def _dtype_limits(dtype: np.dtype) -> tuple[int, int] | None:
+    if np.issubdtype(dtype, np.bool_):
+        return (0, 1)
     if np.issubdtype(dtype, np.integer):
-        return int(np.iinfo(dtype).max)
-    return 1.0
+        info = np.iinfo(dtype)
+        return int(info.min), int(info.max)
+    return None
 
 
-def rotate_array_expand(arr: np.ndarray, angle_degrees: float, axes: str) -> np.ndarray:
+def photometric_background_value(
+    arr: np.ndarray,
+    photometric: str,
+) -> int | float:
+    limits = _dtype_limits(arr.dtype)
+    minimum_is_white = photometric.upper() == "MINISWHITE"
+    if limits is not None:
+        return limits[0] if minimum_is_white else limits[1]
+    finite = arr[np.isfinite(arr)]
+    if not finite.size:
+        raise ValueError("rotation background requires finite image samples")
+    return float(finite.min() if minimum_is_white else finite.max())
+
+
+def _cast_interpolated(value: np.ndarray, dtype: np.dtype) -> np.ndarray:
+    limits = _dtype_limits(dtype)
+    if limits is not None:
+        value = np.clip(value, limits[0], limits[1])
+    return value.astype(dtype)
+
+
+def rotate_array_expand(
+    arr: np.ndarray,
+    angle_degrees: float,
+    axes: str,
+    *,
+    background_value: int | float,
+) -> np.ndarray:
     if abs(angle_degrees) < ROTATION_IDENTITY_EPSILON_DEGREES:
         return arr
     if axes == "SYX":
-        rotated = rotate_array_expand(np.moveaxis(arr, 0, -1), angle_degrees, "YXS")
+        rotated = rotate_array_expand(
+            np.moveaxis(arr, 0, -1),
+            angle_degrees,
+            "YXS",
+            background_value=background_value,
+        )
         return np.moveaxis(rotated, -1, 0)
     angle = math.radians(angle_degrees)
     cos_a = math.cos(angle)
@@ -45,7 +80,7 @@ def rotate_array_expand(arr: np.ndarray, angle_degrees: float, axes: str) -> np.
     out_w = int(math.ceil(max_xy[0] - min_xy[0] + 1))
     out_h = int(math.ceil(max_xy[1] - min_xy[1] + 1))
     out_shape = (out_h, out_w) + tuple(arr.shape[2:])
-    out = np.full(out_shape, dtype_white(arr.dtype), dtype=arr.dtype)
+    out = np.full(out_shape, background_value, dtype=arr.dtype)
 
     out_cx = (out_w - 1) / 2.0
     out_cy = (out_h - 1) / 2.0
@@ -75,7 +110,10 @@ def rotate_array_expand(arr: np.ndarray, angle_degrees: float, axes: str) -> np.
                 + arr[y1f, x0f] * (1 - wx) * wy
                 + arr[y1f, x1f] * wx * wy
             )
-            out[y0:y1, :][valid] = np.clip(value[valid], 0, dtype_white(arr.dtype)).astype(arr.dtype)
+            out[y0:y1, :][valid] = _cast_interpolated(
+                value[valid],
+                arr.dtype,
+            )
         elif axes == "YXS":
             value = (
                 arr[y0f, x0f].astype(np.float64) * ((1 - wx) * (1 - wy))[..., None]
@@ -84,7 +122,7 @@ def rotate_array_expand(arr: np.ndarray, angle_degrees: float, axes: str) -> np.
                 + arr[y1f, x1f].astype(np.float64) * (wx * wy)[..., None]
             )
             out_chunk = out[y0:y1, :]
-            out_chunk[valid] = np.clip(value[valid], 0, dtype_white(arr.dtype)).astype(arr.dtype)
+            out_chunk[valid] = _cast_interpolated(value[valid], arr.dtype)
         else:
             raise ValueError(f"Unsupported axes for deskew rotation: {axes}")
     return out

@@ -4,6 +4,7 @@ import unittest
 
 from x5crop.units import (
     ScanCalibration,
+    scan_calibration_after_rotation,
     scan_calibration_from_resolution,
 )
 
@@ -48,6 +49,24 @@ class UnitModelTests(unittest.TestCase):
         self.assertTrue(calibration.trusted)
         self.assertAlmostEqual(calibration.x_px_per_mm or 0.0, 300.0 / 25.4)
         self.assertAlmostEqual(calibration.y_px_per_mm or 0.0, 1200.0 / 25.4)
+
+    def test_rotation_invalidates_axis_aligned_anisotropic_calibration(self) -> None:
+        calibration = ScanCalibration(10.0, 20.0, "tiff_resolution", True)
+        rotated = scan_calibration_after_rotation(calibration, 0.5)
+        self.assertFalse(rotated.trusted)
+        self.assertIsNone(rotated.x_px_per_mm)
+        self.assertIsNone(rotated.y_px_per_mm)
+        self.assertIn(
+            "anisotropic_resolution_invalid_after_rotation",
+            rotated.warnings,
+        )
+
+    def test_rotation_preserves_isotropic_calibration(self) -> None:
+        calibration = ScanCalibration(10.0, 10.0, "tiff_resolution", True)
+        self.assertEqual(
+            scan_calibration_after_rotation(calibration, 0.5),
+            calibration,
+        )
 
 if __name__ == "__main__":
     unittest.main()

@@ -27,7 +27,10 @@ from ..output.surface import output_surface_for_input
 from ..report.configuration import detection_configuration_read_model
 from ..configuration.bundle import DetectionConfigurationBundle
 from ..report.result_builder import result_from_detection
-from ..units import scan_calibration_from_resolution
+from ..units import (
+    scan_calibration_after_rotation,
+    scan_calibration_from_resolution,
+)
 from ..utils import spatial_shape_from_shape
 
 
@@ -70,6 +73,10 @@ def process_one(
         work_gray(gray, config.layout),
         initial_configuration.preprocess.image_statistics,
     )
+    scan_calibration = scan_calibration_from_resolution(
+        profile.resolution,
+        profile.resolution_unit,
+    )
 
     arr, gray, transform_geometry = apply_deskew(
         arr,
@@ -85,10 +92,10 @@ def process_one(
             work_gray(gray, config.layout),
             initial_configuration.preprocess.image_statistics,
         )
-    scan_calibration = scan_calibration_from_resolution(
-        profile.resolution,
-        profile.resolution_unit,
-    )
+        scan_calibration = scan_calibration_after_rotation(
+            scan_calibration,
+            transform_geometry.applied_angle_degrees,
+        )
     measurement_cache = make_measurement_cache(
         gray,
         config.layout,

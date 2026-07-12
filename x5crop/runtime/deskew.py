@@ -15,7 +15,10 @@ from ..image.deskew import (
 )
 from ..image.evidence import make_deskew_fallback_gray
 from ..image.gray import make_base_gray_u8
-from ..image.transforms import rotate_array_expand
+from ..image.transforms import (
+    photometric_background_value,
+    rotate_array_expand,
+)
 from ..configuration.preprocess import PreprocessConfiguration
 from ..image.statistics import (
     ImageMeasurementStatistics,
@@ -110,7 +113,15 @@ def apply_deskew(
         state = EvidenceState.SUPPORTED
         reason = "span_below_threshold"
     elif config.deskew_min_angle <= abs(angle) <= config.deskew_max_angle:
-        arr = rotate_array_expand(arr, -angle, profile.axes)
+        arr = rotate_array_expand(
+            arr,
+            -angle,
+            profile.axes,
+            background_value=photometric_background_value(
+                arr,
+                profile.photometric,
+            ),
+        )
         gray = make_base_gray_u8(arr, profile.axes, profile.photometric, preprocess.base_gray)
         applied = True
         applied_angle = -float(angle)

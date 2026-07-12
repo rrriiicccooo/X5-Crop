@@ -88,3 +88,19 @@ def scan_calibration_from_resolution(
         trusted=True,
         warnings=(),
     )
+
+
+def scan_calibration_after_rotation(
+    calibration: ScanCalibration,
+    angle_degrees: float,
+) -> ScanCalibration:
+    if (
+        not calibration.trusted
+        or float(angle_degrees) == 0.0
+        or calibration.x_px_per_mm == calibration.y_px_per_mm
+    ):
+        return calibration
+    return _unavailable(
+        *calibration.warnings,
+        "anisotropic_resolution_invalid_after_rotation",
+    )
