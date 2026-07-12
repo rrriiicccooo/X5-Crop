@@ -287,7 +287,6 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             evidence,
             separator_sequence=replace(
                 evidence.separator_sequence,
-                state=EvidenceState.UNAVAILABLE,
                 hard_count=0,
                 hard_boundaries=(),
                 missing_boundaries=(FrameBoundaryReference(None, 1),),
@@ -364,7 +363,6 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             evidence,
             separator_sequence=replace(
                 evidence.separator_sequence,
-                state=EvidenceState.UNAVAILABLE,
                 hard_count=0,
                 hard_boundaries=(),
                 missing_boundaries=(FrameBoundaryReference(None, 1),),

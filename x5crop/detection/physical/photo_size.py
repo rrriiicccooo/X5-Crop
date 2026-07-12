@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from statistics import median
 from typing import TYPE_CHECKING
@@ -30,50 +30,86 @@ def width_coefficient_of_variation(
 
 @dataclass(frozen=True)
 class FrameDimensionEvidence:
-    state: EvidenceState
-    reason: str
     frame_width_mm: float
     frame_height_mm: float
-    frame_aspect: float
-    photo_widths_px: tuple[float, ...]
-    photo_width_cv: float | None
+    frame_width_prior_px: PixelInterval
+    photo_width_intervals_px: tuple[PixelInterval, ...]
     separator_widths_px: tuple[float, ...]
-    separator_width_cv: float | None
     observed_width_mm: float | None
     observed_height_mm: float | None
     observed_aspect: float | None
     aspect_error_ratio: float | None
-    dimension_residual_max: float | None
     calibration_used: bool
+    state: EvidenceState = field(init=False)
+    reason: str = field(init=False)
+    frame_aspect: float = field(init=False)
+    photo_widths_px: tuple[float, ...] = field(init=False)
+    photo_width_cv: float | None = field(init=False)
+    separator_width_cv: float | None = field(init=False)
+    dimension_residual_max: float | None = field(init=False)
 
     def __post_init__(self) -> None:
-        if not self.reason:
-            raise ValueError("frame dimension evidence requires a reason")
         if min(self.frame_width_mm, self.frame_height_mm) <= 0.0:
-            raise ValueError("nominal frame dimensions must be positive")
-        if self.frame_aspect != self.frame_width_mm / self.frame_height_mm:
-            raise ValueError("nominal frame aspect must derive from physical size")
+            raise ValueError("physical frame dimensions must be positive")
+        if self.frame_width_prior_px.minimum <= 0.0:
+            raise ValueError("frame width prior must be positive")
+        photo_widths = tuple(
+            interval.midpoint for interval in self.photo_width_intervals_px
+        )
         if any(
             not math.isfinite(value) or value <= 0.0
-            for value in (*self.photo_widths_px, *self.separator_widths_px)
+            for value in (*photo_widths, *self.separator_widths_px)
         ):
             raise ValueError("measured frame and separator widths must be positive")
-        if self.photo_width_cv != width_coefficient_of_variation(
-            self.photo_widths_px
-        ):
-            raise ValueError("photo width variation must derive from measurements")
-        if self.separator_width_cv != width_coefficient_of_variation(
-            self.separator_widths_px
-        ):
-            raise ValueError("separator width variation must derive from measurements")
-        if self.state == EvidenceState.SUPPORTED and not self.photo_widths_px:
-            raise ValueError("supported frame dimensions require measured photo widths")
+        contradicted = any(
+            not interval.intersects(self.frame_width_prior_px)
+            for interval in self.photo_width_intervals_px
+        )
+        state = (
+            EvidenceState.CONTRADICTED
+            if contradicted
+            else EvidenceState.SUPPORTED
+            if photo_widths
+            else EvidenceState.UNAVAILABLE
+        )
+        reason = (
+            "physical_frame_dimensions_contradicted"
+            if contradicted
+            else "photo_dimensions_supported"
+            if photo_widths
+            else "independent_photo_edge_measurements_unavailable"
+        )
+        frame_aspect = self.frame_width_mm / self.frame_height_mm
+        dimension_residual = (
+            max(
+                abs(width - self.frame_width_prior_px.midpoint)
+                / max(1.0, self.frame_width_prior_px.midpoint)
+                for width in photo_widths
+            )
+            if photo_widths
+            else None
+        )
+        object.__setattr__(self, "state", state)
+        object.__setattr__(self, "reason", reason)
+        object.__setattr__(self, "frame_aspect", frame_aspect)
+        object.__setattr__(self, "photo_widths_px", photo_widths)
+        object.__setattr__(
+            self,
+            "photo_width_cv",
+            width_coefficient_of_variation(photo_widths),
+        )
+        object.__setattr__(
+            self,
+            "separator_width_cv",
+            width_coefficient_of_variation(self.separator_widths_px),
+        )
+        object.__setattr__(self, "dimension_residual_max", dimension_residual)
         optional_nonnegative = (
             self.observed_width_mm,
             self.observed_height_mm,
             self.observed_aspect,
             self.aspect_error_ratio,
-            self.dimension_residual_max,
+            dimension_residual,
         )
         if any(
             value is not None and (not math.isfinite(value) or value < 0.0)
@@ -82,14 +118,14 @@ class FrameDimensionEvidence:
             raise ValueError("frame dimension measurements must be finite and non-negative")
         if self.observed_aspect is not None:
             expected_error = (
-                abs(self.observed_aspect - self.frame_aspect)
-                / self.frame_aspect
+                abs(self.observed_aspect - frame_aspect)
+                / frame_aspect
             )
             if self.aspect_error_ratio != expected_error:
                 raise ValueError("frame aspect error must derive from measured aspect")
         if self.calibration_used:
             if self.observed_height_mm is None or (
-                self.photo_widths_px and self.observed_width_mm is None
+                photo_widths and self.observed_width_mm is None
             ):
                 raise ValueError("calibrated dimensions require millimeter measurements")
         elif self.observed_width_mm is not None or self.observed_height_mm is not None:
@@ -207,13 +243,6 @@ def frame_dimension_evidence(
     photo_widths, separator_widths = _photo_widths(
         geometry,
     )
-    target = geometry.frame_dimension_prior.width_px.midpoint
-    photo_cv = width_coefficient_of_variation(photo_widths)
-    separator_cv = width_coefficient_of_variation(separator_widths)
-    errors = tuple(
-        abs(width - target) / target for width in photo_widths
-    )
-    maximum_error = max(errors) if errors else None
     observed_width = median(photo_widths) if photo_widths else None
     observed_height = float(geometry.visible_sequence_span.box.height)
     observed_aspect = (
@@ -251,32 +280,15 @@ def frame_dimension_evidence(
     observed_intervals = tuple(
         interval.width_px for interval in _dimension_photo_intervals(geometry)
     )
-    if any(
-        not interval.intersects(geometry.frame_dimension_prior.width_px)
-        for interval in observed_intervals
-    ):
-        state = EvidenceState.CONTRADICTED
-        reason = "physical_frame_dimensions_contradicted"
-    elif photo_widths:
-        state = EvidenceState.SUPPORTED
-        reason = "photo_dimensions_supported"
-    else:
-        state = EvidenceState.UNAVAILABLE
-        reason = "independent_photo_edge_measurements_unavailable"
     return FrameDimensionEvidence(
-        state,
-        reason,
-        float(frame_width_mm),
-        float(frame_height_mm),
-        frame_aspect,
-        tuple(float(width) for width in photo_widths),
-        photo_cv,
-        tuple(float(width) for width in separator_widths),
-        separator_cv,
-        observed_width_mm,
-        observed_height_mm,
-        observed_aspect,
-        aspect_error,
-        maximum_error,
-        calibration_used,
+        frame_width_mm=float(frame_width_mm),
+        frame_height_mm=float(frame_height_mm),
+        frame_width_prior_px=geometry.frame_dimension_prior.width_px,
+        photo_width_intervals_px=observed_intervals,
+        separator_widths_px=tuple(float(width) for width in separator_widths),
+        observed_width_mm=observed_width_mm,
+        observed_height_mm=observed_height_mm,
+        observed_aspect=observed_aspect,
+        aspect_error_ratio=aspect_error,
+        calibration_used=calibration_used,
     )

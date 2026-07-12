@@ -93,8 +93,6 @@ def assess_review_only_candidate(
         ),
     )
     separator_sequence = SeparatorSequenceEvidence(
-        state=unavailable,
-        reason=_REVIEW_ONLY_EVIDENCE_REASON,
         expected_count=expected_boundaries,
         hard_count=0,
         dimension_constrained_count=0,
@@ -106,20 +104,15 @@ def assess_review_only_candidate(
         hard_tonal_evidence=(),
     )
     frame_dimensions = FrameDimensionEvidence(
-        state=unavailable,
-        reason=_REVIEW_ONLY_EVIDENCE_REASON,
         frame_width_mm=float(nominal[0]),
         frame_height_mm=float(nominal[1]),
-        frame_aspect=float(nominal[0]) / float(nominal[1]),
-        photo_widths_px=(),
-        photo_width_cv=None,
+        frame_width_prior_px=geometry.frame_dimension_prior.width_px,
+        photo_width_intervals_px=(),
         separator_widths_px=(),
-        separator_width_cv=None,
         observed_width_mm=None,
         observed_height_mm=None,
         observed_aspect=None,
         aspect_error_ratio=None,
-        dimension_residual_max=None,
         calibration_used=False,
     )
     frame_content = FrameContentEvidence(

@@ -123,7 +123,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             PROJECT_ROOT / "x5crop/detection/candidate/assessment/dual_lane.py"
         ).read_text(encoding="utf-8")
         self.assertNotIn("def _width_cv", dual_lane)
-        self.assertIn("width_coefficient_of_variation", dual_lane)
+        self.assertNotIn("width_coefficient_of_variation", dual_lane)
 
     def test_regression_tools_are_current_schema_diff_auditors(self) -> None:
         source = (

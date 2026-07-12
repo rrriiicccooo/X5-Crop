@@ -114,9 +114,12 @@ class HolderOccupancyTests(unittest.TestCase):
             evidence.frame_dimensions,
             frame_width_mm=56.0,
             frame_height_mm=56.0,
-            frame_aspect=1.0,
-            photo_widths_px=(100.0, 100.0, 100.0),
-            photo_width_cv=0.0,
+            frame_width_prior_px=PixelInterval.exact(100.0),
+            photo_width_intervals_px=(
+                PixelInterval.exact(100.0),
+                PixelInterval.exact(100.0),
+                PixelInterval.exact(100.0),
+            ),
             observed_aspect=1.0,
             aspect_error_ratio=0.0,
         )

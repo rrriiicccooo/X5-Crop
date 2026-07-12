@@ -57,6 +57,13 @@ def _provenance() -> MeasurementProvenance:
 class PhysicalModelInvariantTest(unittest.TestCase):
     def test_candidate_gate_evidence_rejects_state_measurement_drift(self) -> None:
         evidence = candidate_fixture().assessment.evidence
+        for derived in (
+            evidence.frame_dimensions,
+            evidence.separator_sequence,
+        ):
+            with self.subTest(derived=type(derived).__name__):
+                self.assertFalse(derived.__dataclass_fields__["state"].init)
+                self.assertFalse(derived.__dataclass_fields__["reason"].init)
         invalid_factories = (
             lambda: replace(
                 evidence.frame_topology,
@@ -84,7 +91,9 @@ class PhysicalModelInvariantTest(unittest.TestCase):
             ),
         )
         for factory in invalid_factories:
-            with self.subTest(factory=factory), self.assertRaises(ValueError):
+            with self.subTest(factory=factory), self.assertRaises(
+                (TypeError, ValueError)
+            ):
                 factory()
 
     def test_transform_geometry_rejects_inconsistent_measurements(self) -> None:

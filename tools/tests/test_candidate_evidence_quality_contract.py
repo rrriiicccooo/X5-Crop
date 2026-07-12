@@ -5,7 +5,7 @@ import unittest
 
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.candidate.model import CandidateAssessment
-from x5crop.domain import EvidenceState, FrameBoundaryReference
+from x5crop.domain import FrameBoundaryReference
 
 
 class CandidateEvidenceQualityContractTest(unittest.TestCase):
@@ -26,7 +26,6 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
                     evidence,
                     frame_dimensions=replace(
                         evidence.frame_dimensions,
-                        separator_width_cv=0.95,
                         separator_widths_px=(1.0, 39.0),
                     ),
                 ),
@@ -39,7 +38,6 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
         evidence = candidate.assessment.evidence
         constrained = replace(
             evidence.separator_sequence,
-            state=EvidenceState.UNAVAILABLE,
             hard_count=0,
             dimension_constrained_count=1,
             hard_boundaries=(),

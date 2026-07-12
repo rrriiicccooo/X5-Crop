@@ -18,10 +18,7 @@ from ...evidence.holder_occupancy import (
 from ...evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from ...evidence.partial_edge import PartialEdgeSafetyEvidence
 from x5crop.domain import EvidenceState, FrameBoundaryReference
-from ...physical.photo_size import (
-    FrameDimensionEvidence,
-    width_coefficient_of_variation,
-)
+from ...physical.photo_size import FrameDimensionEvidence
 from ...physical.boundary import HolderOcclusionEvidence
 from x5crop.domain import PixelInterval
 from ...physical.spacing import SequenceConservationEvidence
@@ -129,13 +126,6 @@ def assess_dual_lane_candidate(
         for reference in lane.assessment.evidence.separator_sequence.missing_boundaries
     )
     sequence = SeparatorSequenceEvidence(
-        state=_combined_state(
-            tuple(
-                lane.assessment.evidence.separator_sequence.state
-                for lane in lanes
-            )
-        ),
-        reason="dual_lane_separator_sequence",
         expected_count=expected_separators,
         hard_count=len(hard_boundaries),
         dimension_constrained_count=sum(
@@ -150,13 +140,10 @@ def assess_dual_lane_candidate(
             for tonal_evidence in lane.assessment.evidence.separator_sequence.hard_tonal_evidence
         ),
     )
-    dimension_states = tuple(
-        lane.assessment.evidence.frame_dimensions.state for lane in lanes
-    )
-    widths = tuple(
-        value
+    width_intervals = tuple(
+        interval
         for lane in lanes
-        for value in lane.assessment.evidence.frame_dimensions.photo_widths_px
+        for interval in lane.assessment.evidence.frame_dimensions.photo_width_intervals_px
     )
     separator_widths = tuple(
         value
@@ -165,44 +152,16 @@ def assess_dual_lane_candidate(
     )
     nominal = lanes[0].assessment.evidence.frame_dimensions
     dimensions = FrameDimensionEvidence(
-        state=_combined_state(dimension_states),
-        reason="dual_lane_frame_dimensions",
         frame_width_mm=nominal.frame_width_mm,
         frame_height_mm=nominal.frame_height_mm,
-        frame_aspect=nominal.frame_aspect,
-        photo_widths_px=widths,
-        photo_width_cv=width_coefficient_of_variation(widths),
+        frame_width_prior_px=nominal.frame_width_prior_px,
+        photo_width_intervals_px=width_intervals,
         separator_widths_px=separator_widths,
-        separator_width_cv=width_coefficient_of_variation(separator_widths),
         observed_width_mm=None,
         observed_height_mm=None,
         observed_aspect=None,
-        aspect_error_ratio=max(
-            (
-                value
-                for lane in lanes
-                if (
-                    value := lane.assessment.evidence.frame_dimensions.aspect_error_ratio
-                )
-                is not None
-            ),
-            default=None,
-        ),
-        dimension_residual_max=max(
-            (
-                value
-                for lane in lanes
-                if (
-                    value := lane.assessment.evidence.frame_dimensions.dimension_residual_max
-                )
-                is not None
-            ),
-            default=None,
-        ),
-        calibration_used=all(
-            lane.assessment.evidence.frame_dimensions.calibration_used
-            for lane in lanes
-        ),
+        aspect_error_ratio=None,
+        calibration_used=False,
     )
     frame_observations: list[FrameContentObservation] = []
     frame_index = 1
