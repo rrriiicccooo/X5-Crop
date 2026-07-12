@@ -208,7 +208,7 @@ def candidate_evidence_fixture(
     frames = (Box(0, 0, 100, 100), Box(100, 0, 200, 100))
     holder_span = HolderSpan(sequence_box)
     visible_sequence_span = VisibleSequenceSpan(sequence_box)
-    completeness = StripCompletenessEvidence(True, True, 2, 2, 2, 1, 1, 1)
+    completeness = StripCompletenessEvidence(2, 2, 2, 1, 1)
     return CandidateEvidence(
         frame_topology=FrameTopologyEvidence(
             EvidenceState.SUPPORTED,
@@ -313,23 +313,15 @@ def candidate_evidence_fixture(
             10,
         ),
         holder_occupancy=HolderOccupancyEvidence(
-            EvidenceState.SUPPORTED,
-            completeness,
-            None,
-            200.0,
-            0.0,
-            0.0,
-            None,
-            None,
-            1.0,
-            "filled",
-            False,
-            True,
-            EvidenceState.SUPPORTED,
-            True,
-            holder_span,
-            visible_sequence_span,
-            False,
+            strip_completeness=completeness,
+            content_support_available=True,
+            frame_coverage_state=EvidenceState.SUPPORTED,
+            frame_dimension_state=EvidenceState.SUPPORTED,
+            complete_strip_can_be_underfilled=False,
+            holder_span=holder_span,
+            visible_sequence_span=visible_sequence_span,
+            long_axis="x",
+            long_axis_px_per_mm=None,
         ),
         partial_edge_safety=PartialEdgeSafetyEvidence(
             is_partial=False,

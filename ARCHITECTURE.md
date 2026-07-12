@@ -157,8 +157,9 @@ Partial auto count 从允许的较大 count 向较小 count 求解。XPAN 和 12
 包含 nominal count，以表达完整胶片未铺满片夹。`GeometryResolution` 只有在 count、placement、
 content preservation compatibility 和实质替代解均已解决时才 supported；CandidateGate PASS
 不能替代这一结论。
-片夹 occupancy 只由 holder/visible spans 和正向物理证据派生，用户选择的 full/partial mode
-不能改写同一几何的 filled/underfilled 状态。
+片夹 occupancy 只由 layout-aware 长轴上的 holder/visible spans 和正向物理证据派生，用户选择的
+full/partial mode 不能改写同一几何的 filled/underfilled 状态；slack、fill ratio 与 calibration
+projection 都是同一 typed evidence 的确定性派生值。
 一旦最高的 physically resolved count 出现，最终 candidate pool 只包含该 count 的候选；此前
 已评估但 unresolved 的较大 count 保留在 count audit detail 中，不能重新赢回 selection。
 

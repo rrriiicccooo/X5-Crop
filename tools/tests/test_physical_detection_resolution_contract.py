@@ -21,6 +21,7 @@ from x5crop.detection.candidate.selection.model import GeometryResolution
 from x5crop.detection.candidate.assessment.candidate import _boundary_proof_paths
 from x5crop.detection.candidate.model import AssessedCandidate, BuiltCandidate
 from x5crop.detection.candidate.selection.choose import select_candidates
+from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
 from x5crop.domain import (
     BoundaryObservation,
     Box,
@@ -207,6 +208,32 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         paths = _boundary_proof_paths(built, candidate_evidence_fixture())
         geometry_path = next(path for path in paths if path.code == "geometry_led")
         self.assertEqual(geometry_path.state, EvidenceState.SUPPORTED)
+
+    def test_filled_geometry_cannot_support_partial_occupancy_proof(self) -> None:
+        candidate = candidate_fixture()
+        built = BuiltCandidate(
+            replace(candidate.geometry, strip_mode="partial"),
+            replace(candidate.count_hypothesis, strip_mode="partial"),
+            (),
+        )
+        evidence = replace(
+            candidate_evidence_fixture(),
+            partial_edge_safety=PartialEdgeSafetyEvidence(
+                is_partial=True,
+                hard_separator_count=1,
+                expected_separator_count=1,
+                frame_coverage_state=EvidenceState.SUPPORTED,
+                frame_dimension_state=EvidenceState.SUPPORTED,
+                diagnostics=(),
+            ),
+        )
+
+        path = next(
+            item
+            for item in _boundary_proof_paths(built, evidence)
+            if item.code == "partial_occupancy_led"
+        )
+        self.assertEqual(path.state, EvidenceState.UNAVAILABLE)
 
     def test_unavailable_content_does_not_veto_complete_separator_proof(
         self,

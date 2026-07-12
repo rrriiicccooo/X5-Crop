@@ -154,7 +154,7 @@ class HolderOccupancyTests(unittest.TestCase):
                 False,
             ),
         )
-        self.assertEqual(occupancy.occupancy_status, "underfilled")
+        self.assertTrue(occupancy.underfilled)
         self.assertTrue(occupancy.complete_underfilled_strip)
 
     def test_underfilled_state_uses_normal_partial_edge_evidence(self) -> None:
@@ -212,11 +212,13 @@ class HolderOccupancyTests(unittest.TestCase):
 
     def test_vertical_holder_slack_uses_source_y_calibration(self) -> None:
         geometry, coverage, dimensions, _ = self._underfilled()
+        holder_span = HolderSpan(Box(0, 0, 120, 400))
+        visible_sequence_span = VisibleSequenceSpan(Box(0, 30, 120, 360))
         occupancy = holder_occupancy_evidence(
             layout="vertical",
             count=geometry.count,
-            holder_span=geometry.holder_span,
-            visible_sequence_span=geometry.visible_sequence_span,
+            holder_span=holder_span,
+            visible_sequence_span=visible_sequence_span,
             frames=geometry.frames,
             frame_boundaries=geometry.frame_boundaries,
             separator_assignments=geometry.separator_assignments,
@@ -232,6 +234,8 @@ class HolderOccupancyTests(unittest.TestCase):
             ),
         )
 
+        self.assertEqual(occupancy.leading_slack_px, 30.0)
+        self.assertEqual(occupancy.trailing_slack_px, 40.0)
         self.assertEqual(occupancy.leading_slack_mm, 1.5)
         self.assertEqual(occupancy.trailing_slack_mm, 2.0)
 
@@ -257,7 +261,7 @@ class HolderOccupancyTests(unittest.TestCase):
                 False,
             ),
         )
-        self.assertEqual(occupancy.occupancy_status, "filled")
+        self.assertFalse(occupancy.underfilled)
 
 
 if __name__ == "__main__":

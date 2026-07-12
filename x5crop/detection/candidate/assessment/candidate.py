@@ -90,7 +90,7 @@ def _boundary_proof_paths(
     partial_occupancy_led = bool(
         geometry.strip_mode == "partial"
         and evidence.partial_edge_safety.state == EvidenceState.SUPPORTED
-        and evidence.holder_occupancy.state == EvidenceState.SUPPORTED
+        and evidence.holder_occupancy.underfilled
         and common
     )
     return (

@@ -104,6 +104,14 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 state=EvidenceState.SUPPORTED,
                 boundary_support=False,
             ),
+            lambda: replace(
+                evidence.holder_occupancy,
+                holder_fill_ratio=0.25,
+            ),
+            lambda: replace(
+                evidence.holder_occupancy.strip_completeness,
+                frame_sequence_complete=False,
+            ),
         )
         for factory in invalid_factories:
             with self.subTest(factory=factory), self.assertRaises(

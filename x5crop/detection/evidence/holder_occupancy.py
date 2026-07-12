@@ -1,48 +1,134 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import math
 
-from ...domain import Box
 from ...formats import FormatPhysicalSpec
 from ...geometry.layout import is_horizontal_layout
 from ...units import ScanCalibration
 from ..physical.photo_size import FrameDimensionEvidence
-from x5crop.domain import VisibleSequenceSpan, HolderSpan
-from x5crop.domain import FrameBoundary, SeparatorAssignment
+from ...domain import (
+    Box,
+    EvidenceState,
+    FrameBoundary,
+    HolderSpan,
+    SeparatorAssignment,
+    VisibleSequenceSpan,
+)
 from .frame_coverage import FrameCoverageEvidence
-from x5crop.domain import EvidenceState
 
 
 @dataclass(frozen=True)
 class StripCompletenessEvidence:
-    frame_count_complete: bool
-    frame_sequence_complete: bool
     count: int
     nominal_count: int
     valid_frame_count: int
-    expected_internal_boundary_count: int
     resolved_boundary_count: int
     independent_separator_count: int
+    frame_count_complete: bool = field(init=False)
+    frame_sequence_complete: bool = field(init=False)
+    expected_internal_boundary_count: int = field(init=False)
+
+    def __post_init__(self) -> None:
+        if min(self.count, self.nominal_count) <= 0:
+            raise ValueError("strip counts must be positive")
+        expected = self.count - 1
+        if not 0 <= self.valid_frame_count <= self.count:
+            raise ValueError("valid frame count must fit the candidate count")
+        if not 0 <= self.resolved_boundary_count <= expected:
+            raise ValueError("resolved boundaries must fit the candidate count")
+        if not 0 <= self.independent_separator_count <= self.resolved_boundary_count:
+            raise ValueError("independent separators must resolve candidate boundaries")
+        frame_count_complete = self.count == self.nominal_count
+        object.__setattr__(self, "frame_count_complete", frame_count_complete)
+        object.__setattr__(
+            self,
+            "frame_sequence_complete",
+            bool(
+                frame_count_complete
+                and self.valid_frame_count == self.count
+                and self.resolved_boundary_count == expected
+            ),
+        )
+        object.__setattr__(self, "expected_internal_boundary_count", expected)
+
 
 @dataclass(frozen=True)
 class HolderOccupancyEvidence:
-    state: EvidenceState
     strip_completeness: StripCompletenessEvidence
-    nominal_frame_total_mm: float | None
-    observed_sequence_span_px: float
-    leading_slack_px: float
-    trailing_slack_px: float
-    leading_slack_mm: float | None
-    trailing_slack_mm: float | None
-    holder_fill_ratio: float
-    occupancy_status: str
-    complete_underfilled_strip: bool
     content_support_available: bool
     frame_coverage_state: EvidenceState
-    photo_dimensions_stable: bool
+    frame_dimension_state: EvidenceState
+    complete_strip_can_be_underfilled: bool
     holder_span: HolderSpan
     visible_sequence_span: VisibleSequenceSpan
-    calibration_used: bool
+    long_axis: str
+    long_axis_px_per_mm: float | None
+    observed_sequence_span_px: float = field(init=False)
+    leading_slack_px: float = field(init=False)
+    trailing_slack_px: float = field(init=False)
+    leading_slack_mm: float | None = field(init=False)
+    trailing_slack_mm: float | None = field(init=False)
+    holder_fill_ratio: float = field(init=False)
+    underfilled: bool = field(init=False)
+    complete_underfilled_strip: bool = field(init=False)
+    calibration_used: bool = field(init=False)
+
+    def __post_init__(self) -> None:
+        if self.long_axis not in {"x", "y"}:
+            raise ValueError("holder occupancy requires a physical long axis")
+        scale = self.long_axis_px_per_mm
+        if scale is not None and (not math.isfinite(scale) or scale <= 0.0):
+            raise ValueError("holder occupancy calibration must be finite and positive")
+
+        holder = self.holder_span.box
+        sequence = self.visible_sequence_span.box
+        if not (
+            holder.left <= sequence.left < sequence.right <= holder.right
+            and holder.top <= sequence.top < sequence.bottom <= holder.bottom
+        ):
+            raise ValueError("visible sequence span must be contained by holder span")
+        if self.long_axis == "x":
+            holder_start, holder_end = holder.left, holder.right
+            sequence_start, sequence_end = sequence.left, sequence.right
+        else:
+            holder_start, holder_end = holder.top, holder.bottom
+            sequence_start, sequence_end = sequence.top, sequence.bottom
+
+        holder_length = float(holder_end - holder_start)
+        sequence_length = float(sequence_end - sequence_start)
+        leading_slack = float(sequence_start - holder_start)
+        trailing_slack = float(holder_end - sequence_end)
+        underfilled = leading_slack > 0.0 or trailing_slack > 0.0
+        object.__setattr__(self, "observed_sequence_span_px", sequence_length)
+        object.__setattr__(self, "leading_slack_px", leading_slack)
+        object.__setattr__(self, "trailing_slack_px", trailing_slack)
+        object.__setattr__(
+            self,
+            "leading_slack_mm",
+            None if scale is None else leading_slack / scale,
+        )
+        object.__setattr__(
+            self,
+            "trailing_slack_mm",
+            None if scale is None else trailing_slack / scale,
+        )
+        object.__setattr__(self, "holder_fill_ratio", sequence_length / holder_length)
+        object.__setattr__(self, "underfilled", underfilled)
+        object.__setattr__(
+            self,
+            "complete_underfilled_strip",
+            bool(
+                self.complete_strip_can_be_underfilled
+                and self.strip_completeness.frame_sequence_complete
+                and self.content_support_available
+                and self.frame_coverage_state == EvidenceState.SUPPORTED
+                and self.frame_dimension_state == EvidenceState.SUPPORTED
+                and underfilled
+            ),
+        )
+        object.__setattr__(self, "calibration_used", scale is not None)
+
 
 def strip_completeness_evidence(
     *,
@@ -53,18 +139,10 @@ def strip_completeness_evidence(
     physical_spec: FormatPhysicalSpec,
 ) -> StripCompletenessEvidence:
     valid_frame_count = sum(1 for frame in frames if frame.valid())
-    frame_count_complete = int(count) == int(physical_spec.default_count)
     return StripCompletenessEvidence(
-        frame_count_complete=frame_count_complete,
-        frame_sequence_complete=bool(
-            frame_count_complete
-            and valid_frame_count == int(count)
-            and len(frame_boundaries) == max(0, int(count) - 1)
-        ),
         count=int(count),
         nominal_count=int(physical_spec.default_count),
         valid_frame_count=int(valid_frame_count),
-        expected_internal_boundary_count=max(0, int(count) - 1),
         resolved_boundary_count=len(frame_boundaries),
         independent_separator_count=sum(
             assignment.used_for_boundary and assignment.independent
@@ -95,58 +173,19 @@ def holder_occupancy_evidence(
         separator_assignments=separator_assignments,
         physical_spec=physical_spec,
     )
-    holder = holder_span.box
-    sequence_box = visible_sequence_span.box
-    leading_slack_px = max(0.0, float(sequence_box.left - holder.left))
-    trailing_slack_px = max(0.0, float(holder.right - sequence_box.right))
-    observed_span_px = float(sequence_box.width)
-    holder_fill_ratio = observed_span_px / float(max(1, holder.width))
     long_axis = "x" if is_horizontal_layout(layout) else "y"
-    px_per_mm = calibration.px_per_mm(long_axis) if calibration.trusted else None
-    leading_slack_mm = (
-        None
-        if px_per_mm is None
-        else leading_slack_px / float(px_per_mm)
-    )
-    trailing_slack_mm = (
-        None
-        if px_per_mm is None
-        else trailing_slack_px / float(px_per_mm)
-    )
-    photo_dimensions_stable = frame_dimensions.state == EvidenceState.SUPPORTED
-    complete_underfilled = bool(
-        physical_spec.complete_strip_can_be_underfilled
-        and completeness.frame_sequence_complete
-        and content_support_available
-        and frame_coverage.state == EvidenceState.SUPPORTED
-        and photo_dimensions_stable
-        and (leading_slack_px > 0.0 or trailing_slack_px > 0.0)
-    )
-    occupancy_status = (
-        "underfilled"
-        if leading_slack_px > 0.0 or trailing_slack_px > 0.0
-        else "filled"
-    )
     return HolderOccupancyEvidence(
-        state=EvidenceState.SUPPORTED,
         strip_completeness=completeness,
-        nominal_frame_total_mm=(
-            float(count) * float(physical_spec.nominal_frame_size_mm.width_mm)
-            if count > 0
-            else None
-        ),
-        observed_sequence_span_px=observed_span_px,
-        leading_slack_px=leading_slack_px,
-        trailing_slack_px=trailing_slack_px,
-        leading_slack_mm=leading_slack_mm,
-        trailing_slack_mm=trailing_slack_mm,
-        holder_fill_ratio=holder_fill_ratio,
-        occupancy_status=occupancy_status,
-        complete_underfilled_strip=complete_underfilled,
         content_support_available=content_support_available,
         frame_coverage_state=frame_coverage.state,
-        photo_dimensions_stable=photo_dimensions_stable,
+        frame_dimension_state=frame_dimensions.state,
+        complete_strip_can_be_underfilled=(
+            physical_spec.complete_strip_can_be_underfilled
+        ),
         holder_span=holder_span,
         visible_sequence_span=visible_sequence_span,
-        calibration_used=bool(calibration.trusted and px_per_mm is not None),
+        long_axis=long_axis,
+        long_axis_px_per_mm=(
+            calibration.px_per_mm(long_axis) if calibration.trusted else None
+        ),
     )

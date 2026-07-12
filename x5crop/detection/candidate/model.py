@@ -172,7 +172,6 @@ class AssessedCandidate:
                         "sequence_content_alignment",
                         evidence.sequence_content_alignment.state,
                     ),
-                    ("holder_occupancy", evidence.holder_occupancy.state),
                     ("partial_edge_safety", evidence.partial_edge_safety.state),
                     ("evidence_independence", evidence.independence.state),
                 )
