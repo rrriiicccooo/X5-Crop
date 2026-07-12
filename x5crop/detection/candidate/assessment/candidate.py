@@ -12,7 +12,7 @@ from ...evidence.sequence_content_alignment import sequence_content_alignment_ev
 from ...evidence.partial_edge import partial_edge_safety_evidence
 from ...physical.model import SequenceSolution
 from ...physical.photo_size import frame_dimension_evidence
-from x5crop.domain import EvidenceState
+from ....domain import EvidenceState, MeasurementIdentity
 from ..model import (
     AssessedCandidate,
     BuiltCandidate,
@@ -40,9 +40,9 @@ def _boundary_proof_paths(
     sequence_boundary_supported = bool(
         geometry.sequence_provenance.root_measurement
         not in {
-            "holder_canvas",
-            "safety_geometry_model",
-            "review_only_mode",
+            MeasurementIdentity.HOLDER_CANVAS,
+            MeasurementIdentity.SAFETY_GEOMETRY_MODEL,
+            MeasurementIdentity.REVIEW_ONLY_MODE,
         }
         and all(
             side in boundary_by_side

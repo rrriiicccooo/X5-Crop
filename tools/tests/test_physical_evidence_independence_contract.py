@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from dataclasses import replace
 from pathlib import Path
 import unittest
@@ -18,6 +19,27 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
+    def test_measurement_authority_comparisons_use_typed_identities(self) -> None:
+        offenders: list[str] = []
+        for path in (PROJECT_ROOT / "x5crop/detection").rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Compare):
+                    continue
+                text = ast.unparse(node)
+                if "root_measurement" not in text:
+                    continue
+                if any(
+                    isinstance(child, ast.Constant)
+                    and isinstance(child.value, str)
+                    for comparator in node.comparators
+                    for child in ast.walk(comparator)
+                ):
+                    offenders.append(
+                        f"{path.relative_to(PROJECT_ROOT).as_posix()}:{node.lineno}"
+                    )
+        self.assertEqual(offenders, [])
+
     def test_shared_root_measurement_is_contradicted(self) -> None:
         candidate = candidate_fixture()
         geometry = replace(

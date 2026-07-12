@@ -134,6 +134,8 @@ repository rules in `AGENTS.md`.
   “成功但没有 edge fit”等不可能状态。
 - Runtime 不再复制一个仅把 `report` 设为 false 的伪 worker configuration；串行、并行与 workflow
   全部接收同一个 canonical `RunConfig`，selection 也不再拥有误导性的 configuration alias。
+- Boundary proof 的 measurement authority 只比较 typed `MeasurementIdentity`；自由字符串不能再
+  决定 canvas、safety 或 review-only provenance 是否具有物理证明权限。
 - Shared domain 不再混放 report、TIFF 或 output 类型：current-schema `ReportResult` 归 report 并在
   构造时验证，`ImageProfile` 与 TIFF tag value 归 I/O，`AxisBleedParameters` 归 output；units 只
   接收 resolution 与 unit，不再依赖完整 TIFF profile。
@@ -350,6 +352,9 @@ schema_revision: frame_sequence_geometry
 - Runtime no longer copies a report-disabled pseudo worker configuration. Sequential,
   parallel, and workflow paths receive the same canonical `RunConfig`, and selection
   no longer appears to own a separate configuration alias.
+- Boundary-proof authority now compares typed `MeasurementIdentity` values only;
+  free-text literals cannot decide whether canvas, safety, or review-only provenance
+  has physical proof authority.
 
 #### Physical Frame-Sequence Model (2026-07-11)
 
