@@ -7,7 +7,14 @@ import unittest
 
 import numpy as np
 
-from tools.tests.physical_gate_support import candidate_evidence_fixture, candidate_fixture
+from tools.tests.physical_gate_support import (
+    candidate_evidence_fixture,
+    candidate_fixture,
+    selection_fixture,
+)
+from x5crop.detection.candidate.execution.model import CountHypothesisEvaluation
+from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
+from x5crop.detection.candidate.selection.model import GeometryResolution
 from x5crop.detection.candidate.assessment.candidate import _boundary_proof_paths
 from x5crop.detection.candidate.model import BuiltCandidate
 from x5crop.detection.candidate.selection.choose import select_candidates
@@ -68,6 +75,51 @@ def _single_frame_candidate(*, measured_boundaries: bool) -> BuiltCandidate:
 
 
 class PhysicalDetectionResolutionContractTest(unittest.TestCase):
+    def test_resolved_count_excludes_larger_unresolved_candidates_from_selection(
+        self,
+    ) -> None:
+        from x5crop.detection.pipeline import _candidate_pool_for_count_resolution
+
+        higher = candidate_fixture()
+        lower = replace(
+            candidate_fixture(),
+            geometry=replace(
+                candidate_fixture().geometry,
+                sequence_hypothesis_name="resolved_lower_count",
+            ),
+        )
+        unresolved = replace(
+            selection_fixture(higher),
+            geometry_resolution=GeometryResolution(
+                EvidenceState.UNAVAILABLE,
+                False,
+                False,
+                False,
+                True,
+                True,
+                True,
+                ("count_unresolved",),
+            ),
+        )
+        resolved = selection_fixture(lower)
+        evaluations = (
+            CountHypothesisEvaluation(
+                CountHypothesis(3, "partial", "automatic_count", True),
+                (higher,),
+                unresolved,
+            ),
+            CountHypothesisEvaluation(
+                CountHypothesis(2, "partial", "automatic_count", True),
+                (lower,),
+                resolved,
+            ),
+        )
+
+        self.assertEqual(
+            _candidate_pool_for_count_resolution(evaluations),
+            (lower,),
+        )
+
     def test_dual_lane_parent_does_not_erase_search_budget_exhaustion(self) -> None:
         root = Path(__file__).resolve().parents[2]
         source = (root / "x5crop/detection/modes/dual_lane.py").read_text()
@@ -132,6 +184,68 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         paths = _boundary_proof_paths(built, candidate_evidence_fixture())
         geometry_path = next(path for path in paths if path.code == "geometry_led")
         self.assertEqual(geometry_path.state, EvidenceState.SUPPORTED)
+
+    def test_unavailable_content_does_not_veto_complete_separator_proof(
+        self,
+    ) -> None:
+        candidate = candidate_fixture()
+        built = BuiltCandidate(
+            candidate.geometry,
+            candidate.count_hypothesis,
+            (),
+        )
+        evidence = candidate_evidence_fixture()
+        evidence = replace(
+            evidence,
+            frame_coverage=replace(
+                evidence.frame_coverage,
+                state=EvidenceState.UNAVAILABLE,
+                reason="content_runs_unavailable",
+            ),
+            content_preservation=replace(
+                evidence.content_preservation,
+                state=EvidenceState.UNAVAILABLE,
+                reason="content_preservation_unresolved",
+            ),
+        )
+
+        paths = _boundary_proof_paths(built, evidence)
+        separator_path = next(
+            path for path in paths if path.code == "separator_led"
+        )
+        self.assertEqual(separator_path.state, EvidenceState.SUPPORTED)
+
+    def test_fixed_count_geometry_accepts_uncontradicted_unavailable_content(
+        self,
+    ) -> None:
+        candidate = candidate_fixture()
+        evidence = replace(
+            candidate.assessment.evidence,
+            frame_coverage=replace(
+                candidate.assessment.evidence.frame_coverage,
+                state=EvidenceState.UNAVAILABLE,
+                reason="content_runs_unavailable",
+            ),
+            content_preservation=replace(
+                candidate.assessment.evidence.content_preservation,
+                state=EvidenceState.UNAVAILABLE,
+                reason="content_preservation_unresolved",
+            ),
+        )
+        candidate = replace(
+            candidate,
+            count_hypothesis=replace(
+                candidate.count_hypothesis,
+                source="format_default",
+            ),
+            assessment=replace(candidate.assessment, evidence=evidence),
+        )
+
+        selection = select_candidates(
+            (candidate,),
+            larger_counts_evaluated=True,
+        )
+        self.assertTrue(selection.geometry_resolution.supported)
 
     def test_full_canvas_never_becomes_a_physical_proof_path(self) -> None:
         candidate = candidate_fixture()

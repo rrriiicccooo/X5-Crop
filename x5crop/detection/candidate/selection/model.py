@@ -12,7 +12,7 @@ class GeometryResolution:
     count_resolved: bool
     placement_resolved: bool
     boundaries_resolved: bool
-    coverage_resolved: bool
+    content_preservation_compatible: bool
     larger_counts_evaluated: bool
     alternative_geometries_resolved: bool
     reasons: tuple[str, ...]

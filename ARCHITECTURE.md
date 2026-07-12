@@ -123,7 +123,10 @@ geometry。
 
 Partial auto count 从允许的较大 count 向较小 count 求解。XPAN 和 120-66 可由 physical trait
 包含 nominal count，以表达完整胶片未铺满片夹。`GeometryResolution` 只有在 count、placement、
-coverage 和实质替代解均已解决时才 supported；CandidateGate PASS 不能替代这一结论。
+content preservation compatibility 和实质替代解均已解决时才 supported；CandidateGate PASS
+不能替代这一结论。
+一旦最高的 physically resolved count 出现，最终 candidate pool 只包含该 count 的候选；此前
+已评估但 unresolved 的较大 count 保留在 count audit detail 中，不能重新赢回 selection。
 
 ### 1.6 Evidence、Assessment 与 Selection
 
@@ -140,6 +143,10 @@ content preservation、holder occupancy、sequence conservation 和 evidence ind
 `FrameDimensionEvidence`。Content run 数量只做 guidance/diagnostic，不能证明 frame count。
 全局 content span 与局部 frame coverage 冲突时保持 unavailable，不能由任一侧单独宣告
 preserved 或 undercrop。
+
+Content 是保护性反证，不是 hard physical proof 的许可机关。明确的 uncovered content 会
+contradict；content measurement unavailable 不会否决完整 separator/geometry proof。Partial auto
+count 仍要求正向 frame coverage 才能声明 count resolved。
 
 `EvidenceQuality` 保存 supported、contradicted、unavailable 项和物理 residual。系统没有
 scalar confidence、weighted score、confidence cap 或 confidence gate。
@@ -163,6 +170,9 @@ conservation、evidence independence 和 proof paths。
 
 `DecisionGate` 只消费 CandidateGate、GeometryResolution、selection consensus、output
 protection 和 transform geometry。它不重新测量 evidence，也不生成候选。
+显式 review-only mode、CandidateGate 物理失败、count resolution、geometry resolution 与
+selection disagreement 分别拥有自己的 final reason；下游派生检查在上游根因失败时为
+`not_applicable`，不重复制造 REVIEW reasons。
 
 `FrameBleedPlan` 为每个 frame 分别记录 leading、trailing 和 short-axis bleed：
 
@@ -195,6 +205,8 @@ Canonical sections：
 同一事实不再同时投影为顶层 alias、candidate table 和 evidence summary。Cache reuse 只接受该
 schema 与完全匹配的 source/configuration fingerprint；旧 record 直接重新检测。Debug Analysis
 保持 original gray、debug boxes、separator evidence 三联图。
+Current validator 精确校验 `GeometryResolution` 字段；旧字段形状即使使用相同 schema identity
+也会被拒绝并重新检测。
 
 ## 2. 源码分层 / Source Layers
 

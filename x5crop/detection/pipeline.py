@@ -6,6 +6,7 @@ from .candidate.assessment.candidate import assess_candidate
 from .candidate.assessment.review_only import assess_review_only_candidate
 from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
 from .candidate.execution.model import CountHypothesisEvaluation
+from .candidate.model import AssessedCandidate
 from .candidate.plan.count_hypotheses import count_hypothesis_plan
 from .candidate.proposal.hard_safety import hard_safety_candidate
 from .candidate.selection.choose import select_candidates
@@ -13,6 +14,22 @@ from .candidate.selection.model import CountResolution, SelectionResult
 from .context import DetectionContext
 from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import review_only_candidate
+
+
+def _candidate_pool_for_count_resolution(
+    evaluations: tuple[CountHypothesisEvaluation, ...],
+) -> tuple[AssessedCandidate, ...]:
+    resolved = next(
+        (evaluation for evaluation in evaluations if evaluation.geometry_resolved),
+        None,
+    )
+    if resolved is not None:
+        return resolved.candidates
+    return tuple(
+        candidate
+        for evaluation in evaluations
+        for candidate in evaluation.candidates
+    )
 
 def _count_resolution(
     selection: SelectionResult,
@@ -52,7 +69,6 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
         fmt=physical_spec,
     )
     evaluations: list[CountHypothesisEvaluation] = []
-    candidates = []
     stopped_after_count: int | None = None
     for hypothesis in plan.hypotheses:
         evaluation = evaluate_count_hypothesis(
@@ -61,16 +77,16 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
             larger_counts_evaluated=True,
         )
         evaluations.append(evaluation)
-        candidates.extend(evaluation.candidates)
         if plan.automatic and evaluation.geometry_resolved:
             stopped_after_count = hypothesis.count
             break
 
+    candidates = _candidate_pool_for_count_resolution(tuple(evaluations))
     if not candidates:
         built = hard_safety_candidate(context, plan.hard_safety_count)
-        candidates.append(assess_candidate(built, context))
+        candidates = (assess_candidate(built, context),)
     selection = select_candidates(
-        tuple(candidates),
+        candidates,
         larger_counts_evaluated=True,
     )
     count_resolution = _count_resolution(

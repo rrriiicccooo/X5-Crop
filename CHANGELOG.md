@@ -30,6 +30,14 @@ repository rules in `AGENTS.md`.
   共享 white-holder 身份，左白右黑、上白下黑等真实 mixed boundary 可同时表达。
 - Holder occlusion 的 state、side、white-holder provenance 与 hidden-width interval 现在由 typed
   invariant 约束；完全不相交的 boundary constraints 直接无解，不再伪造 midpoint。
+- Partial auto count 找到最高 resolved count 后，最终 selection pool 只保留该 count；此前评估过的
+  unresolved 较大 count 不再被普通排序重新选回。
+- Content unavailable 不再否决 fixed/requested count 的完整 separator/geometry proof；明确 content
+  contradiction 仍阻断，partial auto count 仍要求正向 coverage 才能 resolved。
+- DecisionGate 将 mode eligibility、CandidateGate physical failure、count、geometry 与 selection
+  disagreement 分区；下游派生检查使用 `not_applicable`，同一根因只生成一个 final reason。
+- `GeometryResolution.coverage_resolved` 已由物理语义准确的
+  `content_preservation_compatible` 取代；current schema validator 精确拒绝旧字段形状。
 - 单个 separator 宽度上限由边界两侧照片的物理占位决定，不再被其他 boundary 的 overlap
   抵消。可信 calibration、两端实测边界与其余独立 spacing 唯一共同确定的负 residual 可形成
   `CorroboratedSpacingEvidence`，只保护相邻输出，不反向证明 conservation。
@@ -47,14 +55,14 @@ repository rules in `AGENTS.md`.
   edge quantiles 和 numerical floors 均由显式参数拥有。
 - Physical fact、adaptive measurement、numerical safety、execution budget 与 diagnostics 参数
   在 canonical owner 构造时验证；低层 helper 不再静默修正无效参数。
-- Separator continuity 现在要求真实横跨短轴的 8 邻域像素路径。Content span 与 frame coverage
+- Separator observation 现在要求真实横跨短轴的 8 邻域像素路径。Content span 与 frame coverage
   冲突保持 unavailable，旧的 write-only undercrop confirmation 字段已删除。
 - Observation、hypothesis、solver 与 dual-lane proposal 的预算耗尽状态全程传播；截断搜索不能
   形成 resolved geometry。Dual-lane composition 同时要求每条 lane 的 gate 与 geometry resolution。
 - Cache reuse 不再从 report candidate 反向选择 configuration；output bleed layout 必须显式传入。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 279 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 286 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

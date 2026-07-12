@@ -112,6 +112,10 @@ class OutputReadModelContractTest(unittest.TestCase):
             image_width=240,
             image_height=120,
         )
+        self.assertEqual(
+            detection.final_review_reasons,
+            ("automatic_processing_not_supported",),
+        )
         record = report_record_for_final_detection(
             detection,
             source="synthetic.tif",
@@ -153,6 +157,17 @@ class OutputReadModelContractTest(unittest.TestCase):
 
     def test_fresh_record_is_current_schema_valid(self) -> None:
         self.assertEqual(current_report_record_errors(_record()), [])
+
+    def test_superseded_geometry_resolution_shape_is_not_current(self) -> None:
+        record = _record()
+        resolution = record["selection"]["geometry_resolution"]
+        resolution["coverage_resolved"] = resolution.pop(
+            "content_preservation_compatible"
+        )
+        self.assertIn(
+            "selection_incomplete",
+            current_report_record_errors(record),
+        )
 
     def test_malformed_current_record_is_rejected_without_raising(self) -> None:
         record = _record()

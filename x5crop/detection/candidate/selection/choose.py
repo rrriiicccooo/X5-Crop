@@ -162,8 +162,9 @@ def geometry_resolution_for_selection(
         and not selected.geometry.search_budget_exhausted
     )
     boundaries_resolved = bool(boundary_supported)
-    coverage_resolved = (
-        evidence.frame_coverage.state == EvidenceState.SUPPORTED
+    content_preservation_compatible = bool(
+        evidence.frame_coverage.state != EvidenceState.CONTRADICTED
+        and evidence.content_preservation.state != EvidenceState.CONTRADICTED
     )
     alternative_geometries_resolved = consensus != "disagreed"
     reasons: list[str] = []
@@ -173,8 +174,8 @@ def geometry_resolution_for_selection(
         reasons.append("placement_unresolved")
     if not boundaries_resolved:
         reasons.append("boundaries_unresolved")
-    if not coverage_resolved:
-        reasons.append("coverage_unresolved")
+    if not content_preservation_compatible:
+        reasons.append("content_preservation_contradicted")
     if not larger_counts_evaluated:
         reasons.append("larger_counts_not_evaluated")
     if not alternative_geometries_resolved:
@@ -193,7 +194,7 @@ def geometry_resolution_for_selection(
         count_resolved=count_resolved,
         placement_resolved=placement_resolved,
         boundaries_resolved=boundaries_resolved,
-        coverage_resolved=coverage_resolved,
+        content_preservation_compatible=content_preservation_compatible,
         larger_counts_evaluated=larger_counts_evaluated,
         alternative_geometries_resolved=alternative_geometries_resolved,
         reasons=tuple(reasons),

@@ -55,11 +55,18 @@ def candidate_gate_assessment(gate_input: CandidateGateInput) -> CandidateGateAs
     )
     if unknown_paths:
         raise ValueError(f"unowned boundary proof path: {','.join(unknown_paths)}")
-    boundary_state = (
-        EvidenceState.SUPPORTED
-        if any(path.state == EvidenceState.SUPPORTED for path in gate_input.proof_paths)
-        else EvidenceState.CONTRADICTED
-    )
+    if any(
+        path.state == EvidenceState.SUPPORTED
+        for path in gate_input.proof_paths
+    ):
+        boundary_state = EvidenceState.SUPPORTED
+    elif gate_input.proof_paths and all(
+        path.state == EvidenceState.NOT_APPLICABLE
+        for path in gate_input.proof_paths
+    ):
+        boundary_state = EvidenceState.NOT_APPLICABLE
+    else:
+        boundary_state = EvidenceState.CONTRADICTED
     checks = (
         GateCheck(
             code="frame_topology_integrity",

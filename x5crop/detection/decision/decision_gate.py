@@ -122,12 +122,16 @@ def decision_gate_assessment(
     automatic_processing: EvidenceState,
     selection_consensus: EvidenceState,
     output_protection: EvidenceState,
-    transform_geometry: TransformGeometryEvidence,
+    transform_geometry: EvidenceState,
     count_resolution: EvidenceState,
     geometry_resolution: EvidenceState,
 ) -> DecisionGateAssessment:
     checks = (
-        *_project_candidate_checks(candidate_gate),
+        *(
+            ()
+            if automatic_processing == EvidenceState.CONTRADICTED
+            else _project_candidate_checks(candidate_gate)
+        ),
         _decision_check(
             "count_resolution",
             count_resolution,
@@ -155,7 +159,7 @@ def decision_gate_assessment(
         ),
         _decision_check(
             "transform_geometry_integrity",
-            transform_geometry.state,
+            transform_geometry,
             FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
         ),
     )
@@ -174,40 +178,57 @@ def apply_decision_gate(
     selected = selection.selected
     candidate_gate = selected.assessment.gate
     resolution = selection.geometry_resolution
-    decision_gate = decision_gate_assessment(
-        candidate_gate=candidate_gate,
-        automatic_processing=(
+    automatic_processing_state = (
+        EvidenceState.SUPPORTED
+        if selected.geometry.automatic_processing_supported
+        else EvidenceState.CONTRADICTED
+    )
+    final_stage_applicable = bool(
+        automatic_processing_state == EvidenceState.SUPPORTED
+        and candidate_gate.passed
+    )
+    if final_stage_applicable:
+        count_resolution_state = (
             EvidenceState.SUPPORTED
-            if selected.geometry.automatic_processing_supported
+            if resolution.count_resolved and resolution.larger_counts_evaluated
             else EvidenceState.CONTRADICTED
-        ),
-        selection_consensus=(
-            EvidenceState.CONTRADICTED
-            if selection.consensus == "disagreed"
+        )
+        geometry_resolution_state = (
+            EvidenceState.NOT_APPLICABLE
+            if count_resolution_state != EvidenceState.SUPPORTED
             else EvidenceState.SUPPORTED
-        ),
-        output_protection=(
-            EvidenceState.SUPPORTED
-            if frame_bleed_plan.feasible
-            else EvidenceState.CONTRADICTED
-        ),
-        transform_geometry=transform_geometry,
-        count_resolution=(
-            EvidenceState.SUPPORTED
-            if resolution.count_resolved
-            else EvidenceState.CONTRADICTED
-        ),
-        geometry_resolution=(
-            EvidenceState.SUPPORTED
             if (
                 resolution.placement_resolved
                 and resolution.boundaries_resolved
-                and resolution.coverage_resolved
-                and resolution.larger_counts_evaluated
-                and resolution.alternative_geometries_resolved
+                and resolution.content_preservation_compatible
             )
             else EvidenceState.CONTRADICTED
-        ),
+        )
+        selection_consensus_state = (
+            EvidenceState.CONTRADICTED
+            if selection.consensus == "disagreed"
+            else EvidenceState.SUPPORTED
+        )
+        output_protection_state = (
+            EvidenceState.SUPPORTED
+            if frame_bleed_plan.feasible
+            else EvidenceState.CONTRADICTED
+        )
+        transform_geometry_state = transform_geometry.state
+    else:
+        count_resolution_state = EvidenceState.NOT_APPLICABLE
+        geometry_resolution_state = EvidenceState.NOT_APPLICABLE
+        selection_consensus_state = EvidenceState.NOT_APPLICABLE
+        output_protection_state = EvidenceState.NOT_APPLICABLE
+        transform_geometry_state = EvidenceState.NOT_APPLICABLE
+    decision_gate = decision_gate_assessment(
+        candidate_gate=candidate_gate,
+        automatic_processing=automatic_processing_state,
+        selection_consensus=selection_consensus_state,
+        output_protection=output_protection_state,
+        transform_geometry=transform_geometry_state,
+        count_resolution=count_resolution_state,
+        geometry_resolution=geometry_resolution_state,
     )
     geometry = OutputGeometry(
         crop_envelope=CropEnvelope(

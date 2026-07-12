@@ -218,7 +218,7 @@ def assess_review_only_candidate(
         independence=independence,
     )
     proof_paths = tuple(
-        BoundaryProofPath(code, unavailable, ())
+        BoundaryProofPath(code, EvidenceState.NOT_APPLICABLE, ())
         for code in (
             "separator_led",
             "geometry_led",

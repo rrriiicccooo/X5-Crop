@@ -287,6 +287,37 @@ def _candidate_valid(value: Any) -> bool:
     )
 
 
+def _geometry_resolution_valid(value: Any) -> bool:
+    fields = {
+        "state",
+        "count_resolved",
+        "placement_resolved",
+        "boundaries_resolved",
+        "content_preservation_compatible",
+        "larger_counts_evaluated",
+        "alternative_geometries_resolved",
+        "reasons",
+    }
+    return bool(
+        isinstance(value, dict)
+        and set(value) == fields
+        and value["state"] in {
+            "supported",
+            "contradicted",
+            "unavailable",
+            "not_applicable",
+        }
+        and all(
+            isinstance(value[field], bool)
+            for field in fields
+            if field.endswith("_resolved")
+            or field.endswith("_compatible")
+            or field == "larger_counts_evaluated"
+        )
+        and isinstance(value["reasons"], list)
+    )
+
+
 def _selection_valid(value: Any) -> bool:
     if not (
         isinstance(value, dict)
@@ -301,6 +332,7 @@ def _selection_valid(value: Any) -> bool:
         and isinstance(value["candidates"], list)
         and value["candidates"]
         and all(_candidate_valid(candidate) for candidate in value["candidates"])
+        and _geometry_resolution_valid(value["geometry_resolution"])
         and isinstance(value["clusters"], list)
     ):
         return False

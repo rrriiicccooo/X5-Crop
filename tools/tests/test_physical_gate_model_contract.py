@@ -5,7 +5,14 @@ from inspect import signature
 from pathlib import Path
 import unittest
 
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.physical_gate_support import (
+    candidate_fixture,
+    frame_bleed_fixture,
+    selection_fixture,
+    transform_geometry_fixture,
+)
+from x5crop.detection.candidate.selection.model import GeometryResolution
+from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.candidate.assessment.separator_support import separator_sequence_evidence
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.candidate.selection.choose import geometry_clusters
@@ -15,12 +22,103 @@ from x5crop.entry.cli import build_parser
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.run_config import RunConfig
 from x5crop.runtime.options import RuntimeOptions
+from x5crop.units import ScanCalibration
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class PhysicalGateModelContractTest(unittest.TestCase):
+    def _decision_for_resolution(
+        self,
+        resolution: GeometryResolution,
+        *,
+        consensus: str = "uncontested",
+    ):
+        selection = replace(
+            selection_fixture(),
+            consensus=consensus,
+            geometry_resolution=resolution,
+        )
+        return apply_decision_gate(
+            selection,
+            frame_bleed_fixture(),
+            transform_geometry_fixture(),
+            ScanCalibration(None, None, "unavailable", False),
+            image_width=200,
+            image_height=100,
+        )
+
+    def test_unresolved_count_does_not_duplicate_generic_geometry_reason(
+        self,
+    ) -> None:
+        detection = self._decision_for_resolution(
+            GeometryResolution(
+                EvidenceState.UNAVAILABLE,
+                False,
+                False,
+                False,
+                True,
+                True,
+                True,
+                ("count_unresolved", "placement_unresolved"),
+            )
+        )
+        self.assertEqual(
+            detection.final_review_reasons,
+            ("count_resolution_unavailable",),
+        )
+
+    def test_selection_disagreement_owns_its_final_reason(self) -> None:
+        detection = self._decision_for_resolution(
+            GeometryResolution(
+                EvidenceState.UNAVAILABLE,
+                True,
+                True,
+                True,
+                True,
+                True,
+                False,
+                ("geometry_clusters_disagree",),
+            ),
+            consensus="disagreed",
+        )
+        self.assertEqual(
+            detection.final_review_reasons,
+            ("selection_geometry_disagreement",),
+        )
+
+    def test_candidate_physical_failure_owns_its_final_reason(self) -> None:
+        candidate = candidate_fixture(
+            failed_candidate_check="frame_topology_integrity",
+        )
+        selection = replace(
+            selection_fixture(candidate),
+            geometry_resolution=GeometryResolution(
+                EvidenceState.UNAVAILABLE,
+                False,
+                False,
+                False,
+                False,
+                True,
+                True,
+                ("count_unresolved", "placement_unresolved"),
+            ),
+        )
+        detection = apply_decision_gate(
+            selection,
+            frame_bleed_fixture(feasible=False),
+            transform_geometry_fixture(EvidenceState.CONTRADICTED),
+            ScanCalibration(None, None, "unavailable", False),
+            image_width=200,
+            image_height=100,
+        )
+
+        self.assertEqual(
+            detection.final_review_reasons,
+            ("frame_topology_invalid",),
+        )
+
     def test_evidence_state_has_explicit_non_failure_states(self) -> None:
         self.assertEqual(
             {state.value for state in EvidenceState},

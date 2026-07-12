@@ -51,11 +51,14 @@ def _boundary_proof_paths(
             for side in ("leading", "trailing")
         )
     )
+    content_not_contradicted = bool(
+        evidence.frame_coverage.state != EvidenceState.CONTRADICTED
+        and evidence.content_preservation.state != EvidenceState.CONTRADICTED
+    )
     common = bool(
         sequence_boundary_supported
         and evidence.frame_topology.state == EvidenceState.SUPPORTED
-        and evidence.frame_coverage.state == EvidenceState.SUPPORTED
-        and evidence.content_preservation.state == EvidenceState.SUPPORTED
+        and content_not_contradicted
         and evidence.frame_sequence.conservation.state
         != EvidenceState.CONTRADICTED
         and evidence.independence.state
@@ -72,7 +75,7 @@ def _boundary_proof_paths(
         geometry.count == 1
         and sequence_boundary_supported
         and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
-        and evidence.content_preservation.state == EvidenceState.SUPPORTED
+        and content_not_contradicted
     )
     geometry_led = bool(
         geometry.source == CANDIDATE_SOURCE_FRAME_SEQUENCE
