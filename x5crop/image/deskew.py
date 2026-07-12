@@ -1,176 +1,157 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import math
-from typing import Any, Optional
 
 import numpy as np
 
 from ..geometry.layout import work_gray
 from ..utils import bbox_from_mask
-from .evidence import DeskewFallbackEvidenceParameters, make_deskew_fallback_gray
 from .deskew_parameters import DeskewParameters
-from .statistics import (
-    ImageMeasurementStatistics,
-    ImageMeasurementStatisticsParameters,
-    image_measurement_statistics,
-)
+from .statistics import ImageMeasurementStatistics
 
-def fit_line(
+
+@dataclass(frozen=True)
+class LineFitMeasurement:
+    slope: float
+    inliers: int
+    median_residual: float
+
+
+@dataclass(frozen=True)
+class DeskewAngleMeasurement:
+    angle_degrees: float
+    reason: str | None
+    top_fit: LineFitMeasurement | None
+    bottom_fit: LineFitMeasurement | None
+
+
+def _fit_line(
     points: list[tuple[float, float]],
     *,
     min_points: int,
     tolerance_min: float,
     tolerance_multiplier: float,
-) -> Optional[dict[str, Any]]:
+) -> LineFitMeasurement | None:
     if len(points) < min_points:
         return None
-    x = np.array([p[0] for p in points], dtype=np.float64)
-    y = np.array([p[1] for p in points], dtype=np.float64)
+    x = np.array([point[0] for point in points], dtype=np.float64)
+    y = np.array([point[1] for point in points], dtype=np.float64)
     slope, intercept = np.polyfit(x, y, 1)
     residuals = np.abs(y - (slope * x + intercept))
     median_residual = float(np.median(residuals)) if residuals.size else 0.0
     tolerance = max(tolerance_min, median_residual * tolerance_multiplier)
     inliers = residuals <= tolerance
-    if int(inliers.sum()) >= min_points and int(inliers.sum()) < len(points):
+    inlier_count = int(inliers.sum())
+    if min_points <= inlier_count < len(points):
         slope, intercept = np.polyfit(x[inliers], y[inliers], 1)
         residuals = np.abs(y[inliers] - (slope * x[inliers] + intercept))
-        median_residual = float(np.median(residuals)) if residuals.size else 0.0
-    return {
-        "slope": float(slope),
-        "intercept": float(intercept),
-        "inliers": int(inliers.sum()),
-        "samples": len(points),
-        "median_residual": median_residual,
-    }
+        median_residual = (
+            float(np.median(residuals)) if residuals.size else 0.0
+        )
+    return LineFitMeasurement(
+        slope=float(slope),
+        inliers=inlier_count,
+        median_residual=median_residual,
+    )
 
 
-def fit_edge_angle(
+def measure_deskew_angle(
     gray: np.ndarray,
     layout: str,
-    deskew: DeskewParameters,
+    parameters: DeskewParameters,
     statistics: ImageMeasurementStatistics,
-) -> tuple[float, dict[str, Any]]:
+) -> DeskewAngleMeasurement:
     work = work_gray(gray, layout)
-    h = work.shape[0]
+    height = work.shape[0]
     mask = work < float(statistics.intensity_high)
     footprint = bbox_from_mask(
         mask,
-        deskew.footprint_min_fraction,
-        deskew.footprint_min_fraction,
+        parameters.footprint_min_fraction,
+        parameters.footprint_min_fraction,
     )
-    if footprint is None or footprint.width < deskew.min_footprint_width:
-        return 0.0, {"reason": "no_scan_footprint"}
+    if footprint is None or footprint.width < parameters.min_footprint_width:
+        return DeskewAngleMeasurement(0.0, "no_scan_footprint", None, None)
 
     xs = np.linspace(
         footprint.left,
         footprint.right - 1,
         num=min(
-            deskew.max_samples,
+            parameters.max_samples,
             max(
-                deskew.min_samples,
-                footprint.width // deskew.sample_width_px,
+                parameters.min_samples,
+                footprint.width // parameters.sample_width_px,
             ),
         ),
     ).astype(int)
     top_points: list[tuple[float, float]] = []
     bottom_points: list[tuple[float, float]] = []
     for x in xs:
-        col = mask[:, x]
-        ys = np.flatnonzero(col)
-        if ys.size < max(deskew.min_col_content, h * deskew.min_col_content_ratio):
+        column = mask[:, x]
+        ys = np.flatnonzero(column)
+        if ys.size < max(
+            parameters.min_col_content,
+            height * parameters.min_col_content_ratio,
+        ):
             continue
         top_points.append((float(x), float(ys[0])))
         bottom_points.append((float(x), float(ys[-1])))
 
-    top_fit = fit_line(
+    top_fit = _fit_line(
         top_points,
-        min_points=deskew.fit_min_points,
-        tolerance_min=deskew.fit_tolerance_min,
-        tolerance_multiplier=deskew.fit_tolerance_multiplier,
+        min_points=parameters.fit_min_points,
+        tolerance_min=parameters.fit_tolerance_min,
+        tolerance_multiplier=parameters.fit_tolerance_multiplier,
     )
-    bottom_fit = fit_line(
+    bottom_fit = _fit_line(
         bottom_points,
-        min_points=deskew.fit_min_points,
-        tolerance_min=deskew.fit_tolerance_min,
-        tolerance_multiplier=deskew.fit_tolerance_multiplier,
+        min_points=parameters.fit_min_points,
+        tolerance_min=parameters.fit_tolerance_min,
+        tolerance_multiplier=parameters.fit_tolerance_multiplier,
     )
-    fits = [fit for fit in (top_fit, bottom_fit) if fit is not None]
+    fits = tuple(fit for fit in (top_fit, bottom_fit) if fit is not None)
     if not fits:
-        return 0.0, {"reason": "not_enough_points", "top_samples": len(top_points), "bottom_samples": len(bottom_points)}
+        return DeskewAngleMeasurement(0.0, "not_enough_points", None, None)
 
-    slopes = [float(fit["slope"]) for fit in fits]
-    if len(slopes) == 2 and abs(slopes[0] - slopes[1]) > deskew.slope_delta_max:
-        return 0.0, {
-            "reason": "top_bottom_disagree",
-            "top": top_fit,
-            "bottom": bottom_fit,
-            "slope_delta": abs(slopes[0] - slopes[1]),
-        }
-    if any(float(fit["median_residual"]) > max(deskew.residual_min, h * deskew.residual_height_ratio) for fit in fits):
-        return 0.0, {"reason": "high_residual", "top": top_fit, "bottom": bottom_fit}
+    slopes = tuple(fit.slope for fit in fits)
+    if (
+        len(slopes) == 2
+        and abs(slopes[0] - slopes[1]) > parameters.slope_delta_max
+    ):
+        return DeskewAngleMeasurement(
+            0.0,
+            "top_bottom_disagree",
+            top_fit,
+            bottom_fit,
+        )
+    residual_limit = max(
+        parameters.residual_min,
+        height * parameters.residual_height_ratio,
+    )
+    if any(fit.median_residual > residual_limit for fit in fits):
+        return DeskewAngleMeasurement(
+            0.0,
+            "high_residual",
+            top_fit,
+            bottom_fit,
+        )
 
     slope = float(np.median(slopes))
     angle = math.degrees(math.atan(slope))
     if layout == "vertical":
         angle = -angle
-    return angle, {
-        "slope": slope,
-        "top": top_fit,
-        "bottom": bottom_fit,
-        "samples": len(top_points) + len(bottom_points),
-    }
+    return DeskewAngleMeasurement(angle, None, top_fit, bottom_fit)
 
 
-def deskew_quality(detail: dict[str, Any], deskew: DeskewParameters) -> float:
-    if detail.get("reason"):
+def deskew_measurement_quality(
+    measurement: DeskewAngleMeasurement,
+    parameters: DeskewParameters,
+) -> float:
+    if measurement.reason is not None:
         return -1.0
-    fits = [detail.get("top"), detail.get("bottom")]
-    score = 0.0
-    for fit in fits:
-        if isinstance(fit, dict):
-            score += float(fit["inliers"]) * deskew.quality_inlier_weight
-            score -= float(fit["median_residual"])
-    return score
-
-
-def choose_deskew_angle(
-    gray: np.ndarray,
-    layout: str,
-    deskew_fallback: str,
-    deskew: DeskewParameters,
-    fallback_params: DeskewFallbackEvidenceParameters,
-    base_statistics: ImageMeasurementStatistics,
-    statistics_parameters: ImageMeasurementStatisticsParameters,
-) -> tuple[float, dict[str, Any]]:
-    base_angle, base_detail = fit_edge_angle(
-        gray,
-        layout,
-        deskew,
-        base_statistics,
+    return sum(
+        fit.inliers * parameters.quality_inlier_weight
+        - fit.median_residual
+        for fit in (measurement.top_fit, measurement.bottom_fit)
+        if fit is not None
     )
-    base_detail["source"] = "base"
-    if deskew_fallback == "off":
-        return base_angle, base_detail
-    if deskew_fallback == "auto" and deskew_quality(base_detail, deskew) >= deskew.auto_quality_ok:
-        base_detail["fallback_candidate"] = {"skipped": "auto_base_quality_ok"}
-        return base_angle, base_detail
-    fallback_gray = make_deskew_fallback_gray(
-        gray,
-        fallback_params,
-    )
-    fallback_statistics = image_measurement_statistics(
-        work_gray(fallback_gray, layout),
-        statistics_parameters,
-    )
-    fallback_angle, fallback_detail = fit_edge_angle(
-        fallback_gray,
-        layout,
-        deskew,
-        fallback_statistics,
-    )
-    fallback_detail["source"] = "fallback"
-    if deskew_quality(fallback_detail, deskew) > deskew_quality(base_detail, deskew) + deskew.fallback_quality_gain:
-        fallback_detail["base_candidate"] = base_detail
-        return fallback_angle, fallback_detail
-    base_detail["fallback_candidate"] = fallback_detail
-    return base_angle, base_detail

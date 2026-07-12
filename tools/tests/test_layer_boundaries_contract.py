@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from tools.tests.architecture_contracts import (
+    PROJECT_ROOT,
     RUNTIME_ROOTS,
     SOURCE_LAYER_PREFIXES,
     STANDALONE_ROOTS,
@@ -49,6 +50,14 @@ def _cycles(graph: dict[str, frozenset[str]]) -> list[tuple[str, ...]]:
 
 
 class LayerBoundariesContractTest(unittest.TestCase):
+    def test_deskew_measurements_do_not_use_a_mutable_detail_bus(self) -> None:
+        source = (
+            PROJECT_ROOT / "x5crop/image/deskew.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("dict[str, Any]", source)
+        self.assertNotIn("detail.get(", source)
+        self.assertNotIn('["source"] =', source)
+
     def test_active_source_import_graph_is_acyclic(self) -> None:
         self.assertEqual(_cycles(source_import_graph()), [])
 

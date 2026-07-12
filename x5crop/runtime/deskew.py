@@ -1,30 +1,82 @@
 from __future__ import annotations
 
 import math
-from typing import Any
 
-from ..domain import ImageProfile
+import numpy as np
+
+from ..domain import EvidenceState, ImageProfile
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
-from x5crop.domain import EvidenceState
 from ..geometry.layout import work_gray
-from ..image.deskew import choose_deskew_angle
+from ..image.deskew import (
+    DeskewAngleMeasurement,
+    deskew_measurement_quality,
+    measure_deskew_angle,
+)
+from ..image.evidence import make_deskew_fallback_gray
 from ..image.gray import make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..configuration.preprocess import PreprocessConfiguration
-from ..image.statistics import ImageMeasurementStatistics
+from ..image.statistics import (
+    ImageMeasurementStatistics,
+    image_measurement_statistics,
+)
 from ..utils import clamp_float
 from ..run_config import RunConfig
 
 
+def _select_deskew_measurement(
+    gray: np.ndarray,
+    config: RunConfig,
+    preprocess: PreprocessConfiguration,
+    base_statistics: ImageMeasurementStatistics,
+) -> DeskewAngleMeasurement:
+    parameters = preprocess.deskew
+    base = measure_deskew_angle(
+        gray,
+        config.layout,
+        parameters,
+        base_statistics,
+    )
+    if config.deskew_fallback == "off":
+        return base
+    if (
+        config.deskew_fallback == "auto"
+        and deskew_measurement_quality(base, parameters)
+        >= parameters.auto_quality_ok
+    ):
+        return base
+    fallback_gray = make_deskew_fallback_gray(
+        gray,
+        preprocess.deskew_fallback_evidence,
+    )
+    fallback_statistics = image_measurement_statistics(
+        work_gray(fallback_gray, config.layout),
+        preprocess.image_statistics,
+    )
+    fallback = measure_deskew_angle(
+        fallback_gray,
+        config.layout,
+        parameters,
+        fallback_statistics,
+    )
+    return (
+        fallback
+        if deskew_measurement_quality(fallback, parameters)
+        > deskew_measurement_quality(base, parameters)
+        + parameters.fallback_quality_gain
+        else base
+    )
+
+
 def apply_deskew(
-    arr: Any,
-    gray: Any,
+    arr: np.ndarray,
+    gray: np.ndarray,
     profile: ImageProfile,
     config: RunConfig,
     preprocess: PreprocessConfiguration,
     measurement_statistics: ImageMeasurementStatistics,
     warnings: list[str],
-) -> tuple[Any, Any, TransformGeometryEvidence]:
+) -> tuple[np.ndarray, np.ndarray, TransformGeometryEvidence]:
     deskew = preprocess.deskew
     if config.deskew == "off":
         return arr, gray, TransformGeometryEvidence(
@@ -37,15 +89,13 @@ def apply_deskew(
             span_threshold_px=None,
         )
 
-    angle, angle_detail = choose_deskew_angle(
+    measurement = _select_deskew_measurement(
         gray,
-        config.layout,
-        config.deskew_fallback,
-        deskew,
-        preprocess.deskew_fallback_evidence,
+        config,
+        preprocess,
         measurement_statistics,
-        preprocess.image_statistics,
     )
+    angle = measurement.angle_degrees
     deskew_work_width = float(work_gray(gray, config.layout).shape[1])
     deskew_span = abs(math.tan(math.radians(angle)) * deskew_work_width)
     deskew_span_threshold = clamp_float(
@@ -69,8 +119,8 @@ def apply_deskew(
     else:
         state = EvidenceState.CONTRADICTED
         reason = "angle_out_of_range"
-    if angle_detail.get("reason") and reason == "span_below_threshold":
-        reason = str(angle_detail["reason"])
+    if measurement.reason is not None and reason == "span_below_threshold":
+        reason = measurement.reason
     return arr, gray, TransformGeometryEvidence(
         state=state,
         applied=applied,

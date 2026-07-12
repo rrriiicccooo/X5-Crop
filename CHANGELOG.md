@@ -38,6 +38,9 @@ repository rules in `AGENTS.md`.
   disagreement 分区；下游派生检查使用 `not_applicable`，同一根因只生成一个 final reason。
 - `GeometryResolution.coverage_resolved` 已由物理语义准确的
   `content_preservation_compatible` 取代；current schema validator 精确拒绝旧字段形状。
+- Deskew line fit、angle 和 reason 已改为 immutable typed measurements；`image` 层只测量和计算
+  quality，base/fallback mode 与择优迁到 runtime。旧 `dict[str, Any]` detail 总线及 write-only
+  candidate detail 已删除。
 - 单个 separator 宽度上限由边界两侧照片的物理占位决定，不再被其他 boundary 的 overlap
   抵消。可信 calibration、两端实测边界与其余独立 spacing 唯一共同确定的负 residual 可形成
   `CorroboratedSpacingEvidence`，只保护相邻输出，不反向证明 conservation。
@@ -62,7 +65,7 @@ repository rules in `AGENTS.md`.
 - Cache reuse 不再从 report candidate 反向选择 configuration；output bleed layout 必须显式传入。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 286 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 287 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

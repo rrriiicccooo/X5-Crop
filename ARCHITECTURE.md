@@ -36,12 +36,16 @@ entry
 | Physical detection | 提出并求解 boundary、separator、photo interval、spacing 和 count。 |
 | Evidence | 描述观测支持、矛盾或不可用；不决定 PASS/REVIEW。 |
 | CandidateGate | 判断单个 typed candidate geometry 是否有独立物理证明且无明确矛盾。 |
-| GeometryResolution | 唯一 early-stop 输入；确认 count、placement、coverage 和替代几何已解决。 |
+| GeometryResolution | 唯一 early-stop 输入；确认 count、placement、content compatibility 和替代几何已解决。 |
 | Selection | 按物理目标确定性排序并聚合区间等价解。 |
 | FrameBleedPlan | 把用户 bleed 与逐 boundary 的物理叠片保护转换为逐 frame-side 输出计划。 |
 | DecisionGate | 唯一创建最终 status 和 `final_review_reasons`。 |
 | Finalization | 只应用 `FrameBleedPlan` 和 bounds clamp；不重新检测。 |
 | Report / Debug | 只读 typed final results；不补算事实、不参与裁决。 |
+
+`x5crop.image.deskew` 只生成 immutable line-fit / angle measurements 并计算 measurement
+quality。Base/fallback 是否启用及二者择优归 runtime preprocess 编排；foundation 不接收运行模式
+字符串，也不产生可变 detail 字典。
 
 ### 1.2 Runtime Configuration
 
