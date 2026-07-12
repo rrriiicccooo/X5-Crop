@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 
 from ...domain import (
     BOUNDARY_SIDES,
@@ -58,75 +59,153 @@ def holder_occlusion_constraint(
     )
 
 
+class HolderOcclusionSideOutcome(str, Enum):
+    MEASUREMENT_UNAVAILABLE = "measurement_unavailable"
+    NOT_WHITE_HOLDER = "not_white_holder"
+    NO_FRAME_SHORTENING = "no_frame_shortening"
+    SHORTENING_UNCERTAIN = "shortening_uncertain"
+    OCCLUSION_SUPPORTED = "occlusion_supported"
+    ALLOCATION_UNRESOLVED = "allocation_unresolved"
+
+
 @dataclass(frozen=True)
 class HolderOcclusionSideEvidence:
     side: str
-    state: EvidenceState
+    outcome: HolderOcclusionSideOutcome
     hidden_width_px: PixelInterval
-    reason: str
     boundary: BoundaryObservation | None
+    state: EvidenceState = field(init=False)
+    reason: str = field(init=False)
 
     def __post_init__(self) -> None:
         if self.side not in {"leading", "trailing"}:
             raise ValueError("holder occlusion side must be leading or trailing")
+        if not isinstance(self.outcome, HolderOcclusionSideOutcome):
+            raise TypeError("holder occlusion side requires a typed outcome")
         if self.hidden_width_px.minimum < 0.0:
             raise ValueError("holder occlusion width cannot be negative")
-        if not self.reason:
-            raise ValueError("holder occlusion evidence requires a reason")
         if self.boundary is not None and self.boundary.side != self.side:
             raise ValueError("holder occlusion boundary must match its side")
-        if self.state == EvidenceState.NOT_APPLICABLE:
-            if self.hidden_width_px != PixelInterval.zero():
-                raise ValueError("not-applicable holder occlusion has zero width")
-        elif self.state == EvidenceState.SUPPORTED:
+        white_holder = bool(
+            self.boundary is not None
+            and self.boundary.kind == "white_holder_transition"
+        )
+        if self.outcome == HolderOcclusionSideOutcome.MEASUREMENT_UNAVAILABLE:
             if (
-                self.hidden_width_px.minimum <= 0.0
+                self.hidden_width_px != PixelInterval.zero()
+                or (self.boundary is not None and not white_holder)
+            ):
+                raise ValueError("unavailable occlusion has zero hidden width")
+        elif self.outcome == HolderOcclusionSideOutcome.NOT_WHITE_HOLDER:
+            if (
+                self.hidden_width_px != PixelInterval.zero()
                 or self.boundary is None
-                or self.boundary.kind != "white_holder_transition"
+                or white_holder
             ):
                 raise ValueError(
-                    "supported holder occlusion requires positive white-holder evidence"
+                    "non-white-holder outcome requires a measured non-white edge"
                 )
-        elif self.state != EvidenceState.UNAVAILABLE:
-            raise ValueError("unsupported holder occlusion evidence state")
+        elif self.outcome == HolderOcclusionSideOutcome.NO_FRAME_SHORTENING:
+            if self.hidden_width_px != PixelInterval.zero() or not white_holder:
+                raise ValueError("unshortened frame requires a white-holder boundary")
+        elif self.outcome == HolderOcclusionSideOutcome.SHORTENING_UNCERTAIN:
+            if (
+                not white_holder
+                or self.hidden_width_px.minimum > 0.0
+                or self.hidden_width_px.maximum <= 0.0
+            ):
+                raise ValueError(
+                    "uncertain shortening requires a possible positive width"
+                )
+        elif self.outcome == HolderOcclusionSideOutcome.OCCLUSION_SUPPORTED:
+            if not white_holder or self.hidden_width_px.minimum <= 0.0:
+                raise ValueError(
+                    "supported occlusion requires positive white-holder evidence"
+                )
+        elif (
+            not white_holder
+            or self.hidden_width_px.minimum != 0.0
+            or self.hidden_width_px.maximum <= 0.0
+        ):
+            raise ValueError(
+                "unresolved allocation requires a possible white-holder width"
+            )
+        state, reason = {
+            HolderOcclusionSideOutcome.MEASUREMENT_UNAVAILABLE: (
+                EvidenceState.UNAVAILABLE,
+                "holder_occlusion_measurement_unavailable",
+            ),
+            HolderOcclusionSideOutcome.NOT_WHITE_HOLDER: (
+                EvidenceState.NOT_APPLICABLE,
+                "measured_edge_is_not_white_holder_occlusion",
+            ),
+            HolderOcclusionSideOutcome.NO_FRAME_SHORTENING: (
+                EvidenceState.NOT_APPLICABLE,
+                "white_holder_boundary_without_frame_shortening",
+            ),
+            HolderOcclusionSideOutcome.SHORTENING_UNCERTAIN: (
+                EvidenceState.UNAVAILABLE,
+                "edge_frame_shortening_uncertain",
+            ),
+            HolderOcclusionSideOutcome.OCCLUSION_SUPPORTED: (
+                EvidenceState.SUPPORTED,
+                "white_holder_occludes_edge_frame",
+            ),
+            HolderOcclusionSideOutcome.ALLOCATION_UNRESOLVED: (
+                EvidenceState.UNAVAILABLE,
+                "single_frame_occlusion_allocation_unresolved",
+            ),
+        }[self.outcome]
+        object.__setattr__(self, "state", state)
+        object.__setattr__(self, "reason", reason)
 
 
 @dataclass(frozen=True)
 class HolderOcclusionEvidence:
     leading: HolderOcclusionSideEvidence
     trailing: HolderOcclusionSideEvidence
-    combined_hidden_width_px: PixelInterval
+    unallocated_hidden_width_px: PixelInterval | None = None
+    combined_hidden_width_px: PixelInterval = field(init=False)
 
     def __post_init__(self) -> None:
         if self.leading.side != "leading" or self.trailing.side != "trailing":
             raise ValueError("holder occlusion evidence requires ordered edge sides")
-        if self.combined_hidden_width_px.minimum < 0.0:
-            raise ValueError("combined holder occlusion width cannot be negative")
         side_total = self.leading.hidden_width_px.plus(
             self.trailing.hidden_width_px
         )
-        allocation_unresolved = self.combined_hidden_width_px != side_total
-        if allocation_unresolved:
+        if self.unallocated_hidden_width_px is not None:
+            combined = self.unallocated_hidden_width_px
+            if combined.minimum < 0.0:
+                raise ValueError("unallocated holder occlusion cannot be negative")
             if (
-                self.leading.state != EvidenceState.UNAVAILABLE
-                or self.trailing.state != EvidenceState.UNAVAILABLE
+                self.leading.outcome
+                != HolderOcclusionSideOutcome.ALLOCATION_UNRESOLVED
+                or self.trailing.outcome
+                != HolderOcclusionSideOutcome.ALLOCATION_UNRESOLVED
                 or self.leading.hidden_width_px.minimum != 0.0
                 or self.trailing.hidden_width_px.minimum != 0.0
                 or self.leading.hidden_width_px.maximum
-                != self.combined_hidden_width_px.maximum
+                != combined.maximum
                 or self.trailing.hidden_width_px.maximum
-                != self.combined_hidden_width_px.maximum
+                != combined.maximum
             ):
-                raise ValueError("unresolved edge allocation must preserve one total width")
-        elif self.combined_hidden_width_px != side_total:
-            raise ValueError("combined holder occlusion must derive from edge widths")
+                raise ValueError(
+                    "unresolved edge allocation must preserve one total width"
+                )
+        else:
+            combined = side_total
+            if any(
+                side.outcome == HolderOcclusionSideOutcome.ALLOCATION_UNRESOLVED
+                for side in (self.leading, self.trailing)
+            ):
+                raise ValueError("unresolved edge allocation requires one total width")
+        object.__setattr__(self, "combined_hidden_width_px", combined)
 
     @classmethod
     def unavailable(cls) -> "HolderOcclusionEvidence":
         return cls(
             _unavailable_side("leading"),
             _unavailable_side("trailing"),
-            PixelInterval.zero(),
         )
 
 
@@ -154,9 +233,8 @@ def visible_sequence_length_interval(
 def _unavailable_side(side: str) -> HolderOcclusionSideEvidence:
     return HolderOcclusionSideEvidence(
         side=side,
-        state=EvidenceState.UNAVAILABLE,
+        outcome=HolderOcclusionSideOutcome.MEASUREMENT_UNAVAILABLE,
         hidden_width_px=PixelInterval.zero(),
-        reason="holder_occlusion_measurement_unavailable",
         boundary=None,
     )
 
@@ -170,9 +248,8 @@ def _occlusion_side_evidence(
     if boundary is None:
         return HolderOcclusionSideEvidence(
             side,
-            EvidenceState.UNAVAILABLE,
+            HolderOcclusionSideOutcome.MEASUREMENT_UNAVAILABLE,
             PixelInterval.zero(),
-            "edge_boundary_or_visible_width_unavailable",
             boundary,
         )
     if boundary.side != side:
@@ -180,17 +257,15 @@ def _occlusion_side_evidence(
     if boundary.kind != "white_holder_transition":
         return HolderOcclusionSideEvidence(
             side,
-            EvidenceState.NOT_APPLICABLE,
+            HolderOcclusionSideOutcome.NOT_WHITE_HOLDER,
             PixelInterval.zero(),
-            "measured_edge_is_not_white_holder_occlusion",
             boundary,
         )
     if visible_width is None:
         return HolderOcclusionSideEvidence(
             side,
-            EvidenceState.UNAVAILABLE,
+            HolderOcclusionSideOutcome.MEASUREMENT_UNAVAILABLE,
             PixelInterval.zero(),
-            "edge_boundary_or_visible_width_unavailable",
             boundary,
         )
     hidden = PixelInterval(
@@ -200,24 +275,21 @@ def _occlusion_side_evidence(
     if hidden.maximum <= 0.0:
         return HolderOcclusionSideEvidence(
             side,
-            EvidenceState.NOT_APPLICABLE,
+            HolderOcclusionSideOutcome.NO_FRAME_SHORTENING,
             PixelInterval.zero(),
-            "white_holder_boundary_without_frame_shortening",
             boundary,
         )
     if hidden.minimum <= 0.0:
         return HolderOcclusionSideEvidence(
             side,
-            EvidenceState.UNAVAILABLE,
+            HolderOcclusionSideOutcome.SHORTENING_UNCERTAIN,
             hidden,
-            "edge_frame_shortening_uncertain",
             boundary,
         )
     return HolderOcclusionSideEvidence(
         side,
-        EvidenceState.SUPPORTED,
+        HolderOcclusionSideOutcome.OCCLUSION_SUPPORTED,
         hidden,
-        "white_holder_occludes_edge_frame",
         boundary,
     )
 
@@ -245,9 +317,6 @@ def holder_occlusion_evidence(
     return HolderOcclusionEvidence(
         leading=leading,
         trailing=trailing,
-        combined_hidden_width_px=leading.hidden_width_px.plus(
-            trailing.hidden_width_px
-        ),
     )
 
 
@@ -269,20 +338,17 @@ def _single_frame_two_sided_occlusion(
     if total_hidden.maximum <= 0.0:
         return None
     side_interval = PixelInterval(0.0, total_hidden.maximum)
-    reason = "single_frame_occlusion_allocation_unresolved"
     return HolderOcclusionEvidence(
         HolderOcclusionSideEvidence(
             "leading",
-            EvidenceState.UNAVAILABLE,
+            HolderOcclusionSideOutcome.ALLOCATION_UNRESOLVED,
             side_interval,
-            reason,
             leading_boundary,
         ),
         HolderOcclusionSideEvidence(
             "trailing",
-            EvidenceState.UNAVAILABLE,
+            HolderOcclusionSideOutcome.ALLOCATION_UNRESOLVED,
             side_interval,
-            reason,
             trailing_boundary,
         ),
         total_hidden,

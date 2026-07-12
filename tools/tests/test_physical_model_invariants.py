@@ -285,6 +285,15 @@ class PhysicalModelInvariantTest(unittest.TestCase):
         self.assertFalse(consensus_fields["state"].init)
         self.assertFalse(consensus_fields["reason"].init)
 
+    def test_holder_occlusion_derives_classification_and_total(self) -> None:
+        occlusion = candidate_fixture().geometry.holder_occlusion
+        side_fields = type(occlusion.leading).__dataclass_fields__
+        self.assertFalse(side_fields["state"].init)
+        self.assertFalse(side_fields["reason"].init)
+        self.assertFalse(
+            type(occlusion).__dataclass_fields__["combined_hidden_width_px"].init
+        )
+
     def test_pixel_intervals_and_residuals_require_finite_values(self) -> None:
         with self.assertRaises(ValueError):
             PixelInterval(math.nan, 1.0)

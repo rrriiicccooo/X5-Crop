@@ -162,6 +162,8 @@ Sequence conservation 同样只保存 visible length、holder occlusion、frame/
 spacing basis；physical extent、state 和 reason 均由这些物理事实派生。
 Boundary assignment consensus 只保存 typed solver outcome、solution count 与 conflicting indexes；
 state 和 reason 由 outcome 派生，dual-lane component failure 也有独立 outcome。
+Holder occlusion side 使用 typed measurement outcome；普通 combined width 由两侧相加，只有单 frame
+两端分配未解决时保存一个明确的 unallocated total。
 Transform geometry 只保存 typed deskew outcome、角度、span measurement 与可选 measurement
 diagnostic；state、applied geometry 和 reason 均由 outcome 派生。
 片夹 occupancy 只由 normalized horizontal work-space 的 holder/visible spans 和正向物理证据派生；

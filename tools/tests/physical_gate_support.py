@@ -66,6 +66,7 @@ from x5crop.detection.physical.photo_size import FrameDimensionEvidence
 from x5crop.detection.physical.boundary import (
     HolderOcclusionEvidence,
     HolderOcclusionSideEvidence,
+    HolderOcclusionSideOutcome,
     canvas_boundary_observations,
 )
 from x5crop.domain import PixelInterval
@@ -138,18 +139,26 @@ def separator_observation(
 
 def holder_occlusion_not_applicable() -> HolderOcclusionEvidence:
     def side(name: str) -> HolderOcclusionSideEvidence:
+        boundary = BoundaryObservation(
+            name,
+            PixelInterval.exact(0.0 if name == "leading" else 200.0),
+            "tonal_transition",
+            MeasurementProvenance(
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+                "synthetic_non_white_holder_edge",
+                (MeasurementIdentity.GRAY_WORK,),
+            ),
+        )
         return HolderOcclusionSideEvidence(
             name,
-            EvidenceState.NOT_APPLICABLE,
+            HolderOcclusionSideOutcome.NOT_WHITE_HOLDER,
             PixelInterval.zero(),
-            "edge_frame_not_occluded",
-            None,
+            boundary,
         )
 
     return HolderOcclusionEvidence(
         side("leading"),
         side("trailing"),
-        PixelInterval.zero(),
     )
 
 

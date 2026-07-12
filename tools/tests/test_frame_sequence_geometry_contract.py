@@ -19,6 +19,7 @@ from x5crop.detection.physical.boundary import (
     BoundaryObservation,
     HolderOcclusionConstraint,
     HolderOcclusionSideEvidence,
+    HolderOcclusionSideOutcome,
     visible_sequence_and_crop_envelope,
     holder_occlusion_evidence,
     holder_occlusion_for_sequence,
@@ -160,9 +161,8 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             HolderOcclusionSideEvidence(
                 "leading",
-                EvidenceState.NOT_APPLICABLE,
+                HolderOcclusionSideOutcome.NOT_WHITE_HOLDER,
                 PixelInterval(1.0, 2.0),
-                "invalid_not_applicable_occlusion",
                 None,
             )
 

@@ -9,6 +9,7 @@ from tools.tests.physical_gate_support import (
     separator_observation,
 )
 from x5crop.detection.physical.boundary import (
+    HolderOcclusionSideOutcome,
     holder_occlusion_for_sequence,
 )
 from x5crop.detection.physical.sequence_solver import solve_frame_sequence
@@ -231,7 +232,7 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             with self.subTest(factory=factory), self.assertRaises(ValueError):
                 factory()
 
-    def test_holder_occlusion_reason_text_does_not_control_allocation(self) -> None:
+    def test_holder_occlusion_allocation_has_typed_outcome(self) -> None:
         provenance = MeasurementProvenance(
             MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic",
@@ -258,13 +259,16 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             PixelInterval.exact(100.0),
         )
 
-        renamed = replace(
-            occlusion,
-            leading=replace(occlusion.leading, reason="allocation_unresolved"),
-            trailing=replace(occlusion.trailing, reason="allocation_unresolved"),
+        self.assertEqual(
+            occlusion.leading.outcome,
+            HolderOcclusionSideOutcome.ALLOCATION_UNRESOLVED,
         )
         self.assertEqual(
-            renamed.combined_hidden_width_px,
+            occlusion.unallocated_hidden_width_px,
+            PixelInterval.exact(20.0),
+        )
+        self.assertEqual(
+            occlusion.combined_hidden_width_px,
             PixelInterval.exact(20.0),
         )
 
