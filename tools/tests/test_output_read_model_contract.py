@@ -246,10 +246,16 @@ class OutputReadModelContractTest(unittest.TestCase):
             measurement_cache=cache,
         )
         selection = choose_detection(context)
+        from x5crop.detection.candidate.model import ReviewOnlyEvidence
         from x5crop.detection.physical.model import ReviewOnlyGeometry
         from tools.tests.physical_gate_support import separator_observation
 
         self.assertIsInstance(selection.selected.geometry, ReviewOnlyGeometry)
+        self.assertIsInstance(
+            selection.selected.assessment.evidence,
+            ReviewOnlyEvidence,
+        )
+        self.assertIsNone(selection.selected.assessment.gate)
         with self.assertRaises(ValueError):
             replace(
                 selection.selected.geometry,
@@ -295,6 +301,12 @@ class OutputReadModelContractTest(unittest.TestCase):
             ),
         )
         self.assertEqual(current_report_record_errors(record), [])
+        candidate_record = record["selection"]["candidates"][0]
+        self.assertEqual(
+            candidate_record["evidence"],
+            {"reason": "review_only_geometry_not_measured"},
+        )
+        self.assertIsNone(candidate_record["candidate_gate"])
 
     def test_cache_reuse_does_not_resolve_configuration_from_report_data(self) -> None:
         source = (

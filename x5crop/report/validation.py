@@ -21,7 +21,7 @@ from ..detection.decision.model import DecisionGateAssessment
 from ..detection.candidate.model import (
     AssessedCandidate,
     CandidateAssessment,
-    CandidateEvidence,
+    CandidateEvidenceModel,
 )
 from ..detection.candidate.plan.count_hypotheses import CountHypothesis
 from ..detection.candidate.selection.model import (
@@ -369,9 +369,13 @@ def _candidate_from_read_model(value: Any) -> AssessedCandidate:
         assessment=CandidateAssessment(
             evidence=_typed_value_from_read_model(
                 value["evidence"],
-                CandidateEvidence,
+                CandidateEvidenceModel,
             ),
-            gate=candidate_gate_from_read_model(value["candidate_gate"]),
+            gate=(
+                None
+                if value["candidate_gate"] is None
+                else candidate_gate_from_read_model(value["candidate_gate"])
+            ),
         ),
     )
     if typed_read_model(candidate.evidence_quality) != value["evidence_quality"]:

@@ -111,6 +111,8 @@ repository rules in `AGENTS.md`.
 - `CandidateAssessment` 只保存 canonical evidence 与 CandidateGate；`EvidenceQuality` 从 evidence、
   proof paths 和 geometry residuals 确定性派生。Count hypothesis 从 plan、build、assessment 到
   selection 全程保持同一 identity，不再保存可手写的 physical-eligibility 布尔副本。
+- Review-only assessment 不再构造零值 physical evidence 或 CandidateGate；dual-lane assessment
+  保留各 lane 的 canonical evidence，并由父级 CandidateGate 单独判断 composition。
 - Shared domain 不再混放 report、TIFF 或 output 类型：current-schema `ReportResult` 归 report 并在
   构造时验证，`ImageProfile` 与 TIFF tag value 归 I/O，`AxisBleedParameters` 归 output；units 只
   接收 resolution 与 unit，不再依赖完整 TIFF profile。

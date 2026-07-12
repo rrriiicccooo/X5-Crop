@@ -219,6 +219,8 @@ class DualLaneAssessmentTest(unittest.TestCase):
         self.assertNotIn("lane_index", field_names)
 
     def test_dual_lane_builds_structured_evidence_quality(self) -> None:
+        from x5crop.detection.candidate.model import DualLaneEvidence
+
         first = candidate_fixture()
         second = candidate_fixture()
         assessed = assess_dual_lane_candidate(
@@ -226,12 +228,21 @@ class DualLaneAssessmentTest(unittest.TestCase):
             (first, second),
             lane_geometry_resolved=(True, True),
         )
+        self.assertIsInstance(assessed.assessment.evidence, DualLaneEvidence)
+        self.assertEqual(
+            assessed.assessment.evidence.lane_evidence,
+            (first.assessment.evidence, second.assessment.evidence),
+        )
         self.assertTrue(assessed.evidence_quality.supported_proof_paths)
         self.assertTrue(assessed.assessment.gate.passed)
         self.assertEqual(
             {
-                (reference.lane_index, reference.boundary_index)
-                for reference in assessed.assessment.evidence.separator_sequence.hard_boundaries
+                (lane_index, reference.boundary_index)
+                for lane_index, evidence in enumerate(
+                    assessed.assessment.evidence.lane_evidence,
+                    start=1,
+                )
+                for reference in evidence.separator_sequence.hard_boundaries
             },
             {(1, 1), (2, 1)},
         )
@@ -341,7 +352,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
         self.assertEqual(overlap.boundary, FrameBoundaryReference(2, 1))
         self.assertEqual(overlap.signed_width_px, PixelInterval.exact(-8.0))
 
-    def test_lane_local_content_contacts_receive_global_frame_indexes(self) -> None:
+    def test_lane_content_contacts_keep_their_lane_evidence_identity(self) -> None:
         first = candidate_fixture()
         second = candidate_fixture()
         lanes = tuple(
@@ -366,8 +377,11 @@ class DualLaneAssessmentTest(unittest.TestCase):
             lane_geometry_resolved=(True, True),
         )
         self.assertEqual(
-            assessed.assessment.evidence.content_preservation.boundary_contact_frame_indexes,
-            (1, 3),
+            tuple(
+                evidence.content_preservation.boundary_contact_frame_indexes
+                for evidence in assessed.assessment.evidence.lane_evidence
+            ),
+            ((1,), (1,)),
         )
 
 

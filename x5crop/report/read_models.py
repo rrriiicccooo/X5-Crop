@@ -73,8 +73,12 @@ def gate_check_read_model(check: Any) -> dict[str, Any]:
     }
 
 
-def candidate_gate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
+def candidate_gate_read_model(
+    candidate: AssessedCandidate,
+) -> dict[str, Any] | None:
     gate = candidate.assessment.gate
+    if gate is None:
+        return None
     return {
         "passed": bool(gate.passed),
         "checks": [gate_check_read_model(check) for check in gate.checks],

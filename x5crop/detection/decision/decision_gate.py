@@ -68,7 +68,7 @@ def _project_candidate_checks(
 
 def decision_gate_assessment(
     *,
-    candidate_gate: CandidateGateAssessment,
+    candidate_gate: CandidateGateAssessment | None,
     automatic_processing: EvidenceState,
     selection_consensus: EvidenceState,
     output_protection: EvidenceState,
@@ -76,12 +76,19 @@ def decision_gate_assessment(
     count_resolution: EvidenceState,
     geometry_resolution: EvidenceState,
 ) -> DecisionGateAssessment:
+    if (
+        automatic_processing != EvidenceState.CONTRADICTED
+        and candidate_gate is None
+    ):
+        raise ValueError("automatic processing requires CandidateGate")
+    candidate_checks = (
+        ()
+        if automatic_processing == EvidenceState.CONTRADICTED
+        or candidate_gate is None
+        else _project_candidate_checks(candidate_gate)
+    )
     checks = (
-        *(
-            ()
-            if automatic_processing == EvidenceState.CONTRADICTED
-            else _project_candidate_checks(candidate_gate)
-        ),
+        *candidate_checks,
         _decision_check(
             "count_resolution",
             count_resolution,
@@ -131,6 +138,7 @@ def apply_decision_gate(
     )
     final_stage_applicable = bool(
         automatic_processing_state == EvidenceState.SUPPORTED
+        and candidate_gate is not None
         and candidate_gate.passed
     )
     if final_stage_applicable:

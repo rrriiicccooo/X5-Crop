@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from x5crop.domain import EvidenceState
 from ...physical.model import SequenceSolution
-from ..model import AssessedCandidate
+from ..model import (
+    AssessedCandidate,
+    CandidateEvidence,
+    DualLaneEvidence,
+    ReviewOnlyEvidence,
+)
 from .model import GeometryCluster, GeometryResolution, SelectionResult
 
 
@@ -119,31 +124,79 @@ def geometry_resolution_for_selection(
     consensus: str,
     larger_counts_evaluated: bool,
 ) -> GeometryResolution:
-    evidence = selected.assessment.evidence
+    evidence_model = selected.assessment.evidence
+    if isinstance(evidence_model, ReviewOnlyEvidence):
+        reasons = (
+            "count_unresolved",
+            "placement_unresolved",
+            "boundaries_unresolved",
+            "content_preservation_unavailable",
+            "separator_assignment_geometry_unresolved",
+        )
+        if not larger_counts_evaluated:
+            reasons = (*reasons, "larger_counts_not_evaluated")
+        if consensus == "disagreed":
+            reasons = (*reasons, "geometry_clusters_disagree")
+        return GeometryResolution(
+            state=EvidenceState.UNAVAILABLE,
+            count_resolved=False,
+            placement_resolved=False,
+            boundaries_resolved=False,
+            content_preservation_compatible=False,
+            larger_counts_evaluated=larger_counts_evaluated,
+            alternative_geometries_resolved=consensus != "disagreed",
+            reasons=reasons,
+        )
+    evidence_sets = (
+        evidence_model.lane_evidence
+        if isinstance(evidence_model, DualLaneEvidence)
+        else (evidence_model,)
+    )
+    if not all(isinstance(item, CandidateEvidence) for item in evidence_sets):
+        raise TypeError("physical selection requires physical candidate evidence")
+    evidence = tuple(
+        item for item in evidence_sets if isinstance(item, CandidateEvidence)
+    )
     hypothesis = selected.count_hypothesis
+    gate = selected.assessment.gate
+    if gate is None:
+        raise ValueError("physical selection requires CandidateGate")
     boundary_supported = any(
         path.state == EvidenceState.SUPPORTED
-        for path in selected.assessment.gate.proof_paths
+        for path in gate.proof_paths
     )
     fixed_count = bool(
         hypothesis.source in {"format_default", "requested_count"}
     )
     count_topology_supported = bool(
-        evidence.frame_topology.state == EvidenceState.SUPPORTED
-        and evidence.frame_topology.count_matches
+        all(
+            item.frame_topology.state == EvidenceState.SUPPORTED
+            and item.frame_topology.count_matches
+            for item in evidence
+        )
     )
-    conservation_not_contradicted = (
-        evidence.frame_sequence.conservation.state != EvidenceState.CONTRADICTED
+    conservation_not_contradicted = all(
+        item.frame_sequence.conservation.state != EvidenceState.CONTRADICTED
+        for item in evidence
     )
     assignment_geometry_resolved = (
         selected.geometry.assignment_consensus.state == EvidenceState.SUPPORTED
     )
     automatic_count_supported = bool(
         count_topology_supported
-        and evidence.frame_coverage.state == EvidenceState.SUPPORTED
-        and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
+        and all(
+            item.frame_coverage.state == EvidenceState.SUPPORTED
+            for item in evidence
+        )
+        and all(
+            item.frame_dimensions.state == EvidenceState.SUPPORTED
+            for item in evidence
+        )
         and conservation_not_contradicted
-        and evidence.content_preservation.state == EvidenceState.SUPPORTED
+        and all(
+            item.content_preservation.state == EvidenceState.SUPPORTED
+            for item in evidence
+        )
         and boundary_supported
         and assignment_geometry_resolved
         and not selected.geometry.search_budget_exhausted
@@ -163,8 +216,14 @@ def geometry_resolution_for_selection(
     )
     boundaries_resolved = bool(boundary_supported)
     content_preservation_compatible = bool(
-        evidence.frame_coverage.state != EvidenceState.CONTRADICTED
-        and evidence.content_preservation.state != EvidenceState.CONTRADICTED
+        all(
+            item.frame_coverage.state != EvidenceState.CONTRADICTED
+            for item in evidence
+        )
+        and all(
+            item.content_preservation.state != EvidenceState.CONTRADICTED
+            for item in evidence
+        )
     )
     alternative_geometries_resolved = consensus != "disagreed"
     reasons: list[str] = []

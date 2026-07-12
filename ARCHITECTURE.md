@@ -191,7 +191,10 @@ Content 是保护性反证，不是 hard physical proof 的许可机关。明确
 contradict；content measurement unavailable 不会否决完整 separator/geometry proof。Partial auto
 count 仍要求正向 frame coverage 才能声明 count resolved。
 
-`CandidateAssessment` 只保存 canonical evidence 与 CandidateGate。
+Standard 与 dual-lane 的 `CandidateAssessment` 只保存 canonical evidence 与 CandidateGate；
+review-only assessment 只保存明确的不可自动处理原因，不伪造 physical evidence 或 CandidateGate。
+Dual-lane evidence 保留各 lane 的 canonical evidence，父级 CandidateGate 只负责 composition assessment，
+不把 lane gate 或 resolution 结果伪装成 evidence。
 `AssessedCandidate.evidence_quality` 从 evidence、proof paths 和 geometry residuals 确定性派生；
 selection 与 report 只读取该 canonical property，不维护第二事实源或反向调用 assessment。
 Inter-frame spacing 与 holder occlusion 只属于 candidate geometry；`FrameSequenceEvidence` 只保存由这些
