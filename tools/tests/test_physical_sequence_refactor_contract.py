@@ -104,23 +104,27 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             "test",
             (),
         )
-        invalid_factories = (
-            lambda: ObservedSpacingEvidence(
-                FrameBoundaryReference(None, 1),
-                "separator",
-                PixelInterval.exact(-5.0),
-                provenance,
-            ),
-            lambda: SpacingHypothesis(
-                FrameBoundaryReference(None, 1),
+        spacings = (
+            (
+                ObservedSpacingEvidence(
+                    FrameBoundaryReference(None, 1),
+                    PixelInterval.exact(-5.0),
+                    provenance,
+                ),
                 "overlap",
-                PixelInterval.exact(5.0),
-                provenance,
+            ),
+            (
+                SpacingHypothesis(
+                    FrameBoundaryReference(None, 1),
+                    PixelInterval.exact(5.0),
+                    provenance,
+                ),
+                "separator",
             ),
         )
-        for factory in invalid_factories:
-            with self.subTest(factory=factory), self.assertRaises(ValueError):
-                factory()
+        for spacing, expected_kind in spacings:
+            with self.subTest(spacing=spacing):
+                self.assertEqual(spacing.kind, expected_kind)
 
     def test_holder_occlusion_builder_uses_the_canonical_inputs(self) -> None:
         source = (

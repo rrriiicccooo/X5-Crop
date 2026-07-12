@@ -91,6 +91,7 @@ def _spacing_from_read_model(value: Any) -> Any:
     expected = model_fields | {
         "measurement_kind",
         "state",
+        "kind",
         "reason",
         "independently_observed",
         "supports_output_protection",
@@ -106,6 +107,7 @@ def _spacing_from_read_model(value: Any) -> Any:
     )
     if (
         value["state"] != spacing.state.value
+        or value["kind"] != spacing.kind
         or value["reason"] != spacing.reason
         or value["independently_observed"] is not spacing.independently_observed
         or value["supports_output_protection"]

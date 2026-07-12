@@ -356,6 +356,7 @@ class PhysicalModelInvariantTest(unittest.TestCase):
         ):
             with self.subTest(spacing_type=spacing_type.__name__):
                 self.assertNotIn("reason", spacing_type.__dataclass_fields__)
+                self.assertNotIn("kind", spacing_type.__dataclass_fields__)
 
     def test_pixel_intervals_and_residuals_require_finite_values(self) -> None:
         with self.assertRaises(ValueError):

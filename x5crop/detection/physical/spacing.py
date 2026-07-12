@@ -18,9 +18,6 @@ from x5crop.domain import (
 from .boundary import HolderOcclusionEvidence
 
 
-SPACING_KINDS = frozenset({"separator", "contact", "overlap", "unresolved"})
-
-
 def _spacing_kind(interval: PixelInterval) -> str:
     if interval.minimum > 0.0:
         return "separator"
@@ -33,30 +30,23 @@ def _spacing_kind(interval: PixelInterval) -> str:
 
 def _validate_spacing_identity(
     boundary: FrameBoundaryReference,
-    kind: str,
-    signed_width_px: PixelInterval,
 ) -> None:
     if not isinstance(boundary, FrameBoundaryReference):
         raise TypeError("inter-frame spacing requires a frame boundary reference")
-    if kind not in SPACING_KINDS:
-        raise ValueError(f"unsupported inter-frame spacing: {kind}")
-    if kind != _spacing_kind(signed_width_px):
-        raise ValueError("inter-frame spacing kind must match its signed interval")
 
 
 @dataclass(frozen=True)
 class ObservedSpacingEvidence:
     boundary: FrameBoundaryReference
-    kind: str
     signed_width_px: PixelInterval
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
-        _validate_spacing_identity(
-            self.boundary,
-            self.kind,
-            self.signed_width_px,
-        )
+        _validate_spacing_identity(self.boundary)
+
+    @property
+    def kind(self) -> str:
+        return _spacing_kind(self.signed_width_px)
 
     @property
     def reason(self) -> str:
@@ -86,18 +76,17 @@ class ObservedSpacingEvidence:
 @dataclass(frozen=True)
 class CorroboratedSpacingEvidence:
     boundary: FrameBoundaryReference
-    kind: str
     signed_width_px: PixelInterval
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
-        _validate_spacing_identity(
-            self.boundary,
-            self.kind,
-            self.signed_width_px,
-        )
+        _validate_spacing_identity(self.boundary)
         if self.kind != "overlap" or self.signed_width_px.maximum >= 0.0:
             raise ValueError("corroborated spacing evidence must be an overlap")
+
+    @property
+    def kind(self) -> str:
+        return _spacing_kind(self.signed_width_px)
 
     @property
     def reason(self) -> str:
@@ -123,16 +112,15 @@ class CorroboratedSpacingEvidence:
 @dataclass(frozen=True)
 class SpacingHypothesis:
     boundary: FrameBoundaryReference
-    kind: str
     signed_width_px: PixelInterval
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
-        _validate_spacing_identity(
-            self.boundary,
-            self.kind,
-            self.signed_width_px,
-        )
+        _validate_spacing_identity(self.boundary)
+
+    @property
+    def kind(self) -> str:
+        return _spacing_kind(self.signed_width_px)
 
     @property
     def reason(self) -> str:
@@ -216,10 +204,8 @@ def observed_spacing_evidence(
     signed_width_px: PixelInterval,
     provenance: MeasurementProvenance,
 ) -> ObservedSpacingEvidence:
-    kind = _spacing_kind(signed_width_px)
     return ObservedSpacingEvidence(
         boundary=boundary,
-        kind=kind,
         signed_width_px=signed_width_px,
         provenance=provenance,
     )
@@ -230,10 +216,8 @@ def spacing_hypothesis(
     signed_width_px: PixelInterval,
     provenance: MeasurementProvenance,
 ) -> SpacingHypothesis:
-    kind = _spacing_kind(signed_width_px)
     return SpacingHypothesis(
         boundary=boundary,
-        kind=kind,
         signed_width_px=signed_width_px,
         provenance=provenance,
     )
@@ -301,11 +285,10 @@ def corroborate_single_missing_overlap(
         or overlap.minimum <= -frame_width_px.minimum
     ):
         return spacings
-    leading = edge_observations["leading"]
-    trailing = edge_observations["trailing"]
+    leading = edge_observations[BoundarySide.LEADING]
+    trailing = edge_observations[BoundarySide.TRAILING]
     corroborated = CorroboratedSpacingEvidence(
         boundary=missing_spacing.boundary,
-        kind="overlap",
         signed_width_px=overlap,
         provenance=MeasurementProvenance(
             root_measurement=MeasurementIdentity.CALIBRATED_SEQUENCE_CONSTRAINTS,

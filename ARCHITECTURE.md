@@ -124,7 +124,7 @@ tonal region 只能保留为 diagnostic / geometry-dependent observation。
 
 正值是 separator，零是 contact，负值是 overlap。Hypothesis 不能支持 proof path 或自动
 overlap bleed；corroborated overlap 也不能回头支持 sequence conservation。每个 spacing 的
-`kind` 由 signed interval 唯一推导，不能以独立字符串声明出相互矛盾的物理状态。Spacing、
+`kind` 只由 signed interval 唯一派生，不保存独立字段。Spacing、
 separator evidence 和 output protection 使用同一个 `FrameBoundaryReference`；dual-lane 的
 lane identity 不能被展平丢失。
 
@@ -162,8 +162,8 @@ content preservation compatibility 和实质替代解均已解决时才 supporte
 state 和 ordered reasons 只能由完整 resolution facts 派生，caller 不得另行写入。
 Sequence conservation 同样只保存 visible length、holder occlusion、frame/spacing totals 与 typed
 spacing basis；physical extent、state 和 reason 均由这些物理事实派生。
-Observed、corroborated 与 hypothesized spacing 的 reason 由 concrete type 与 signed kind 派生，
-不保存自由文本字段。
+Observed、corroborated 与 hypothesized spacing 的 kind/reason 由 signed interval 与 concrete type
+派生，不保存 caller-supplied 字段。
 Review-only evidence 是无字段 marker；mode identity 与 DecisionGate 已分别承担内部身份和最终原因。
 Deskew measurement 使用 foundation-owned typed outcome；transform evidence 不传递自由 reason 字符串。
 每个 measurement outcome 同时约束 angle 与 line-fit 形状，不可能的测量组合在 foundation 边界拒绝。

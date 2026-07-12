@@ -70,6 +70,8 @@ repository rules in `AGENTS.md`.
   intervals 与 typed spacing basis 确定性派生。
 - Observed/corroborated/hypothesized spacing 删除自由 reason 字段；read-model reason 现在由 concrete
   spacing type 与 signed kind 派生。
+- Spacing kind 同样删除 caller-supplied 字段，separator/contact/overlap/unresolved 只由 signed
+  interval 唯一派生。
 - Review-only evidence 删除唯一固定值的 reason 字段，收敛成无字段 marker；最终原因仍只由
   DecisionGate 生成。
 - 同步修正文档中的 review-only assessment 描述，并用 current-schema contract 防止 marker payload
