@@ -19,6 +19,8 @@ repository rules in `AGENTS.md`.
 - Current schema 唯一身份更新为 `detection_report / physical_sequence_resolution`；旧 revision
   不再被 report、cache、tests 或 tools 接受。
 - Dimension-constrained cut 保留完整位置区间，不再把未观测边界伪装成精确中点。
+- Separator band 必须整体落入 boundary position constraint 才能成为独立实测证据；仅中心点
+  落入约束的宽 tonal region 保持 geometry-dependent，不能定义 hard separator。
 - 单个 separator 宽度上限由边界两侧照片的物理占位决定，不再被其他 boundary 的 overlap
   抵消。可信 calibration、两端实测边界与其余独立 spacing 唯一共同确定的负 residual 可形成
   `CorroboratedSpacingEvidence`，只保护相邻输出，不反向证明 conservation。
@@ -43,7 +45,7 @@ repository rules in `AGENTS.md`.
 - Cache reuse 不再从 report candidate 反向选择 configuration；output bleed layout 必须显式传入。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 270 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 271 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

@@ -30,14 +30,15 @@ def assign_observation_to_boundary(
     width_supported = bool(
         width_constraint.width.minimum <= width <= width_constraint.width.maximum
     )
-    center_supported = bool(
-        position.minimum <= observation.center <= position.maximum
+    band_contained = bool(
+        position.minimum <= observation.start
+        and observation.end <= position.maximum
     )
     if not width_supported:
         state = EvidenceState.CONTRADICTED
         geometry_dependent = False
         reason = "separator_width_outside_physical_constraint"
-    elif center_supported:
+    elif band_contained:
         state = EvidenceState.SUPPORTED
         geometry_dependent = False
         reason = "separator_position_and_width_supported"

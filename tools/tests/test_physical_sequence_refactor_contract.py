@@ -156,6 +156,26 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         )
         self.assertFalse(assignment.independent)
 
+    def test_band_center_alone_cannot_create_independent_separator(self) -> None:
+        observation = separator_observation(
+            100.0,
+            start=50.0,
+            end=150.0,
+        )
+        assignment = assign_observation_to_boundary(
+            1,
+            observation,
+            *separator_constraints(
+                1,
+                PixelInterval(90.0, 110.0),
+                PixelInterval(0.0, 200.0),
+            ),
+        )
+
+        self.assertEqual(assignment.state, EvidenceState.UNAVAILABLE)
+        self.assertTrue(assignment.geometry_dependent)
+        self.assertFalse(assignment.independent)
+
     def test_positive_separator_width_is_not_erased_by_other_overlap(self) -> None:
         constraint = separator_width_constraint(
             VisibleSequenceSpan(Box(0, 0, 270, 100)),
