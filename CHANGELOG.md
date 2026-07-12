@@ -55,7 +55,11 @@ repository rules in `AGENTS.md`.
   role、unit、stage、rationale 和 calibration status。
 - 函数内数值检查现在只豁免 AST 可证明的下标、维度和数学恒等式；content evidence 的
   component consensus、Debug 样式、RGB/uint8 编码和通用物理系数均有显式 owner。
-- Dual-lane 坐标迁移使用命名 typed aggregate，不再用五元 tuple 下标传递物理 stage data。
+- `DualLaneSolution` 只保存 canonical lane solutions 与全局输出 geometry，不再复制展平后的
+  observations、assignments、boundaries、spacings 或 photo intervals。Aggregate geometry 必须由
+  lane solutions 精确投影，residuals 与 assignment consensus 也只能由 lane results 聚合。
+- Separator evidence、signed spacing、Debug overlay 与逐 frame overlap protection 共享 typed
+  `FrameBoundaryReference`；相同局部 boundary index 在不同 lane 中保持不同物理身份。
 - Deskew 固定灰度身份阈值已由 per-image robust statistics 取代；percentile sampling budget、
   edge quantiles 和 numerical floors 均由显式参数拥有。
 - Physical fact、adaptive measurement、numerical safety、execution budget 与 diagnostics 参数
@@ -84,7 +88,7 @@ repository rules in `AGENTS.md`.
   使旧分析失效。Bundle 同时拒绝空集合、initial identity 漂移和重复 configuration identity。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 298 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 301 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

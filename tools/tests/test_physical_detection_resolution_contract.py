@@ -22,6 +22,7 @@ from x5crop.domain import (
     BoundaryObservation,
     Box,
     EvidenceState,
+    FrameBoundaryReference,
     MeasurementProvenance,
     PixelInterval,
 )
@@ -266,8 +267,9 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                 evidence.separator_sequence,
                 state=EvidenceState.UNAVAILABLE,
                 hard_count=0,
-                hard_boundary_indexes=(),
-                missing_boundary_indexes=(1,),
+                hard_boundaries=(),
+                missing_boundaries=(FrameBoundaryReference(None, 1),),
+                hard_tonal_evidence=(),
             ),
         )
         paths = _boundary_proof_paths(built, evidence)
@@ -341,8 +343,9 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                 evidence.separator_sequence,
                 state=EvidenceState.UNAVAILABLE,
                 hard_count=0,
-                hard_boundary_indexes=(),
-                missing_boundary_indexes=(1,),
+                hard_boundaries=(),
+                missing_boundaries=(FrameBoundaryReference(None, 1),),
+                hard_tonal_evidence=(),
             ),
         )
         paths = _boundary_proof_paths(built, evidence)

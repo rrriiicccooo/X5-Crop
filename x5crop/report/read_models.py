@@ -38,13 +38,12 @@ def typed_read_model(value: Any) -> Any:
                 if isinstance(value, CorroboratedSpacingEvidence)
                 else "hypothesis"
             ),
-            "index": int(value.index),
+            "boundary": typed_read_model(value.boundary),
             "state": value.state.value,
             "kind": value.kind,
             "signed_width_px": typed_read_model(value.signed_width_px),
             "provenance": typed_read_model(value.provenance),
             "reason": value.reason,
-            "lane_index": value.lane_index,
             "independently_observed": bool(value.independently_observed),
             "supports_output_protection": bool(
                 value.supports_output_protection
@@ -156,7 +155,7 @@ def frame_bleed_plan_read_model(plan: Any) -> dict[str, Any]:
         "user_bleed": typed_read_model(plan.user_bleed),
         "frame_sides": typed_read_model(plan.frame_sides),
         "overlap_protection": typed_read_model(plan.overlap_protection),
-        "unresolved_overlap_boundaries": list(
+        "unresolved_overlap_boundaries": typed_read_model(
             plan.unresolved_overlap_boundaries
         ),
         "feasible": bool(plan.feasible),

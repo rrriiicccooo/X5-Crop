@@ -17,7 +17,12 @@ from x5crop.detection.physical.separator.assignment import (
 )
 from x5crop.detection.physical.model import PhotoInterval
 from x5crop.detection.physical.spacing import observed_spacing_evidence
-from x5crop.domain import EvidenceState, MeasurementProvenance, PixelInterval
+from x5crop.domain import (
+    EvidenceState,
+    FrameBoundaryReference,
+    MeasurementProvenance,
+    PixelInterval,
+)
 from x5crop.domain import VisibleSequenceSpan, HolderSpan
 from x5crop.domain import Box
 from x5crop.formats import format_spec
@@ -91,7 +96,7 @@ class HolderOccupancyTests(unittest.TestCase):
             frame_boundaries=boundaries,
             inter_frame_spacings=tuple(
                 observed_spacing_evidence(
-                    index,
+                    FrameBoundaryReference(None, index),
                     PixelInterval.exact(observation.width),
                     observation.provenance,
                 )

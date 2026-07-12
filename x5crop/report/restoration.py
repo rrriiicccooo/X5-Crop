@@ -10,6 +10,7 @@ from ..domain import (
     Box,
     CropEnvelope,
     EvidenceState,
+    FrameBoundaryReference,
 )
 from ..output.model import (
     BoundaryOverlapProtection,
@@ -57,6 +58,12 @@ def _decision_gate(value: dict[str, Any]) -> DecisionGateAssessment:
 
 
 def _frame_bleed_plan(value: dict[str, Any]) -> FrameBleedPlan:
+    def boundary_reference(item: dict[str, Any]) -> FrameBoundaryReference:
+        return FrameBoundaryReference(
+            None if item["lane_index"] is None else int(item["lane_index"]),
+            int(item["boundary_index"]),
+        )
+
     user = value["user_bleed"]
     return FrameBleedPlan(
         user_bleed=AxisBleedParameters(
@@ -73,7 +80,7 @@ def _frame_bleed_plan(value: dict[str, Any]) -> FrameBleedPlan:
         ),
         overlap_protection=tuple(
             BoundaryOverlapProtection(
-                int(item["boundary_index"]),
+                boundary_reference(item["boundary"]),
                 int(item["left_frame_index"]),
                 int(item["right_frame_index"]),
                 int(item["required_px"]),
@@ -84,7 +91,8 @@ def _frame_bleed_plan(value: dict[str, Any]) -> FrameBleedPlan:
             for item in value["overlap_protection"]
         ),
         unresolved_overlap_boundaries=tuple(
-            int(item) for item in value["unresolved_overlap_boundaries"]
+            boundary_reference(item)
+            for item in value["unresolved_overlap_boundaries"]
         ),
         feasible=bool(value["feasible"]),
         reason=str(value["reason"]),

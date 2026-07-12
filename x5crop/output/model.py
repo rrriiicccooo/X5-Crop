@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..domain import AxisBleedParameters, Box, CropEnvelope
+from ..domain import AxisBleedParameters, Box, CropEnvelope, FrameBoundaryReference
 
 
 @dataclass(frozen=True)
@@ -26,7 +26,7 @@ class OutputGeometry:
 
 @dataclass(frozen=True)
 class FrameOverlapRequirement:
-    boundary_index: int
+    boundary: FrameBoundaryReference
     left_frame_index: int
     right_frame_index: int
     required_px: int
@@ -34,8 +34,6 @@ class FrameOverlapRequirement:
     provenance: str
 
     def __post_init__(self) -> None:
-        if self.boundary_index <= 0:
-            raise ValueError("overlap boundary index must be positive")
         if self.left_frame_index < 0 or self.right_frame_index < 0:
             raise ValueError("overlap frame indexes must be non-negative")
         if self.right_frame_index <= self.left_frame_index:
@@ -60,7 +58,7 @@ class FrameSideBleed:
 
 @dataclass(frozen=True)
 class BoundaryOverlapProtection:
-    boundary_index: int
+    boundary: FrameBoundaryReference
     left_frame_index: int
     right_frame_index: int
     required_px: int
@@ -69,8 +67,6 @@ class BoundaryOverlapProtection:
     provenance: str
 
     def __post_init__(self) -> None:
-        if self.boundary_index <= 0:
-            raise ValueError("overlap protection boundary index must be positive")
         if self.left_frame_index < 0 or self.right_frame_index <= self.left_frame_index:
             raise ValueError("overlap protection frames must be ordered")
         if self.required_px <= 0:
@@ -96,7 +92,7 @@ class FrameBleedPlan:
     user_bleed: AxisBleedParameters
     frame_sides: tuple[FrameSideBleed, ...]
     overlap_protection: tuple[BoundaryOverlapProtection, ...]
-    unresolved_overlap_boundaries: tuple[int, ...]
+    unresolved_overlap_boundaries: tuple[FrameBoundaryReference, ...]
     feasible: bool
     reason: str
 
@@ -105,8 +101,8 @@ class FrameBleedPlan:
         if indexes != tuple(range(len(indexes))):
             raise ValueError("frame bleed plan indexes must be complete and ordered")
         unresolved = self.unresolved_overlap_boundaries
-        if any(index <= 0 for index in unresolved) or len(set(unresolved)) != len(unresolved):
-            raise ValueError("unresolved overlap boundaries must be positive and unique")
+        if len(set(unresolved)) != len(unresolved):
+            raise ValueError("unresolved overlap boundaries must be unique")
         if self.feasible != (not unresolved):
             raise ValueError("frame bleed feasibility must match unresolved overlap state")
         if not self.reason:

@@ -227,20 +227,22 @@ def _candidate_geometry_valid(kind: str, value: Any) -> bool:
         and _span_valid(value["holder_span"])
         and _span_valid(value["visible_sequence_span"])
         and _span_valid(value["crop_envelope"])
-        and isinstance(value["separator_observations"], list)
-        and all(
-            _separator_observation_valid(item)
-            for item in value["separator_observations"]
-        )
-        and isinstance(value["separator_assignments"], list)
-        and all(
-            _separator_assignment_valid(item)
-            for item in value["separator_assignments"]
-        )
     ):
         return False
     if kind == "sequence":
-        return _sequence_geometry_valid(value)
+        return bool(
+            _sequence_geometry_valid(value)
+            and isinstance(value["separator_observations"], list)
+            and all(
+                _separator_observation_valid(item)
+                for item in value["separator_observations"]
+            )
+            and isinstance(value["separator_assignments"], list)
+            and all(
+                _separator_assignment_valid(item)
+                for item in value["separator_assignments"]
+            )
+        )
     if kind == "dual_lane":
         lane_solutions = value["lane_solutions"]
         lane_boxes = value["lane_boxes"]
@@ -264,23 +266,13 @@ def _candidate_geometry_valid(kind: str, value: Any) -> bool:
             if lane_counts_valid
             else 0
         )
-        component_boundaries = (
-            sum(item - 1 for item in lane_counts if item is not None)
-            if lane_counts_valid
-            else 0
-        )
         return bool(
             isinstance(value["frames"], list)
             and len(value["frames"]) == count
             and all(_box_valid(frame) for frame in value["frames"])
-            and isinstance(value["photo_intervals"], list)
-            and len(value["photo_intervals"]) == count
-            and isinstance(value["frame_boundaries"], list)
-            and len(value["frame_boundaries"]) == component_boundaries
-            and isinstance(value["inter_frame_spacings"], list)
-            and len(value["inter_frame_spacings"]) == component_boundaries
             and isinstance(lane_solutions, list)
             and len(lane_solutions) > 1
+            and all(_sequence_geometry_valid(lane) for lane in lane_solutions)
             and lane_counts_valid
             and component_count == count
             and isinstance(lane_boxes, list)

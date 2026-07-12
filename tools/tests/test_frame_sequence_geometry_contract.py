@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from x5crop.domain import EvidenceState
+from x5crop.domain import EvidenceState, FrameBoundaryReference
 from x5crop.detection.physical.boundary import (
     BoundaryObservation,
     HolderOcclusionEvidence,
@@ -374,12 +374,12 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             frame_width_px=PixelInterval.exact(100.0),
             spacings=(
                 observed_spacing_evidence(
-                    1,
+                    FrameBoundaryReference(None, 1),
                     PixelInterval.exact(5.0),
                     MeasurementProvenance("separator_profile", "synthetic", ()),
                 ),
                 observed_spacing_evidence(
-                    2,
+                    FrameBoundaryReference(None, 2),
                     PixelInterval.exact(10.0),
                     MeasurementProvenance("separator_profile", "synthetic", ()),
                 ),
@@ -395,12 +395,12 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             frame_width_px=PixelInterval.exact(100.0),
             spacings=(
                 observed_spacing_evidence(
-                    1,
+                    FrameBoundaryReference(None, 1),
                     PixelInterval.exact(5.0),
                     MeasurementProvenance("separator_profile", "synthetic", ()),
                 ),
                 observed_spacing_evidence(
-                    2,
+                    FrameBoundaryReference(None, 2),
                     PixelInterval.exact(-3.0),
                     MeasurementProvenance("photo_edges", "synthetic", ()),
                 ),
@@ -531,12 +531,12 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             ),
             inter_frame_spacings=(
                 observed_spacing_evidence(
-                    1,
+                    FrameBoundaryReference(None, 1),
                     PixelInterval.exact(5.0),
                     observed.provenance,
                 ),
                 spacing_hypothesis(
-                    2,
+                    FrameBoundaryReference(None, 2),
                     PixelInterval.exact(10.0),
                     MeasurementProvenance(
                         "frame_geometry",

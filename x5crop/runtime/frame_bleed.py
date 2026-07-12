@@ -57,17 +57,18 @@ def _overlap_requirements(
     for relation in candidate.assessment.evidence.frame_sequence.spacings:
         if relation.signed_width_px.minimum >= 0.0:
             continue
-        lane_index = 0 if relation.lane_index is None else relation.lane_index - 1
+        boundary = relation.boundary
+        lane_index = 0 if boundary.lane_index is None else boundary.lane_index - 1
         if lane_index < 0 or lane_index >= len(lane_indexes):
             raise ValueError("inter-frame relation references a missing lane")
         frames = lane_indexes[lane_index]
-        left_position = relation.index - 1
-        right_position = relation.index
+        left_position = boundary.boundary_index - 1
+        right_position = boundary.boundary_index
         if left_position < 0 or right_position >= len(frames):
             raise ValueError("inter-frame relation references a missing boundary")
         requirements.append(
             FrameOverlapRequirement(
-                boundary_index=relation.index,
+                boundary=boundary,
                 left_frame_index=frames[left_position],
                 right_frame_index=frames[right_position],
                 required_px=max(1, int(ceil(-relation.signed_width_px.minimum))),

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from x5crop.domain import EvidenceState
+from ...physical.model import SequenceSolution
 from ..model import AssessedCandidate
 from .model import GeometryCluster, GeometryResolution, SelectionResult
 
@@ -75,7 +76,10 @@ def geometry_equivalent(
         or len(left_geometry.frames) != len(right_geometry.frames)
     ):
         return False
-    if left_geometry.photo_intervals and right_geometry.photo_intervals:
+    if isinstance(left_geometry, SequenceSolution) and isinstance(
+        right_geometry,
+        SequenceSolution,
+    ):
         return all(
             left_photo.start.intersects(right_photo.start)
             and left_photo.end.intersects(right_photo.end)

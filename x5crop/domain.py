@@ -277,6 +277,18 @@ class SeparatorBandObservation:
 
 
 @dataclass(frozen=True)
+class FrameBoundaryReference:
+    lane_index: int | None
+    boundary_index: int
+
+    def __post_init__(self) -> None:
+        if self.lane_index is not None and self.lane_index <= 0:
+            raise ValueError("frame boundary lane index must be positive")
+        if self.boundary_index <= 0:
+            raise ValueError("frame boundary index must be positive")
+
+
+@dataclass(frozen=True)
 class SeparatorAssignment:
     boundary_index: int
     observation: SeparatorBandObservation

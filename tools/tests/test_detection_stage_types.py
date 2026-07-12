@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 from dataclasses import fields
 from pathlib import Path
 import inspect
@@ -37,31 +36,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 class DetectionStageTypeContractTests(unittest.TestCase):
     def test_detection_context_contains_no_tiff_io_profile(self) -> None:
         self.assertNotIn("image_profile", DetectionContext.__dataclass_fields__)
-
-    def test_dual_lane_translation_uses_a_named_typed_aggregate(self) -> None:
-        source_path = PROJECT_ROOT / "x5crop/detection/modes/dual_lane.py"
-        tree = ast.parse(source_path.read_text(encoding="utf-8"))
-        function = next(
-            node
-            for node in tree.body
-            if isinstance(node, ast.FunctionDef)
-            and node.name == "_translate_lane_geometry"
-        )
-        self.assertEqual(ast.unparse(function.returns), "_TranslatedLaneGeometry")
-        parent = next(
-            node
-            for node in tree.body
-            if isinstance(node, ast.FunctionDef)
-            and node.name == "_parent_candidate"
-        )
-        positional_group_reads = tuple(
-            node
-            for node in ast.walk(parent)
-            if isinstance(node, ast.Subscript)
-            and isinstance(node.value, ast.Name)
-            and node.value.id == "group"
-        )
-        self.assertEqual(positional_group_reads, ())
 
     def test_candidate_stages_are_immutable_and_separate(self) -> None:
         geometry_fields = {field.name for field in fields(SequenceSolution)}

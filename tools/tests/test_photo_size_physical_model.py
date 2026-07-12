@@ -22,6 +22,7 @@ from x5crop.detection.physical.separator.assignment import (
 from x5crop.domain import (
     BoundaryObservation,
     EvidenceState,
+    FrameBoundaryReference,
     MeasurementProvenance,
     PixelInterval,
 )
@@ -73,7 +74,7 @@ def _geometry(second_start: float = 205.0):
         frame_boundaries=boundaries,
         inter_frame_spacings=tuple(
             observed_spacing_evidence(
-                index,
+                FrameBoundaryReference(None, index),
                 PixelInterval.exact(observation.width),
                 observation.provenance,
             )

@@ -49,6 +49,7 @@ from x5crop.domain import (
     BoundaryObservation,
     Box,
     EvidenceState,
+    FrameBoundaryReference,
     FrameDimensionPrior,
     MeasurementProvenance,
     PixelInterval,
@@ -73,7 +74,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         provenance = MeasurementProvenance("spacing", "test", ())
         self.assertIsInstance(
             observed_spacing_evidence(
-                1,
+                FrameBoundaryReference(None, 1),
                 PixelInterval.exact(5.0),
                 provenance,
             ),
@@ -81,7 +82,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         )
         self.assertIsInstance(
             spacing_hypothesis(
-                1,
+                FrameBoundaryReference(None, 1),
                 PixelInterval.exact(-5.0),
                 provenance,
             ),
@@ -92,21 +93,21 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         provenance = MeasurementProvenance("spacing", "test", ())
         invalid_factories = (
             lambda: ObservedSpacingEvidence(
-                1,
+                FrameBoundaryReference(None, 1),
                 "separator",
                 PixelInterval.exact(-5.0),
                 provenance,
                 "mismatched_observation",
             ),
             lambda: SpacingHypothesis(
-                1,
+                FrameBoundaryReference(None, 1),
                 "overlap",
                 PixelInterval.exact(5.0),
                 provenance,
                 "mismatched_hypothesis",
             ),
             lambda: ObservedSpacingEvidence(
-                1,
+                FrameBoundaryReference(None, 1),
                 "separator",
                 PixelInterval.exact(5.0),
                 provenance,
@@ -435,7 +436,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
 
     def test_geometry_derived_negative_spacing_is_not_supported_overlap(self) -> None:
         spacing = spacing_hypothesis(
-            1,
+            FrameBoundaryReference(None, 1),
             PixelInterval(-20.0, -10.0),
             MeasurementProvenance(
                 "frame_geometry",

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from x5crop.domain import (
     BoundaryObservation,
     EvidenceState,
+    FrameBoundaryReference,
     MeasurementProvenance,
     PixelInterval,
     sum_pixel_intervals,
@@ -26,40 +27,35 @@ def _spacing_kind(interval: PixelInterval) -> str:
 
 
 def _validate_spacing_identity(
-    index: int,
+    boundary: FrameBoundaryReference,
     kind: str,
     signed_width_px: PixelInterval,
     reason: str,
-    lane_index: int | None,
 ) -> None:
-    if index <= 0:
-        raise ValueError("inter-frame spacing index must be positive")
+    if not isinstance(boundary, FrameBoundaryReference):
+        raise TypeError("inter-frame spacing requires a frame boundary reference")
     if kind not in SPACING_KINDS:
         raise ValueError(f"unsupported inter-frame spacing: {kind}")
     if kind != _spacing_kind(signed_width_px):
         raise ValueError("inter-frame spacing kind must match its signed interval")
     if not reason:
         raise ValueError("inter-frame spacing requires a reason")
-    if lane_index is not None and lane_index <= 0:
-        raise ValueError("lane index must be positive")
 
 
 @dataclass(frozen=True)
 class ObservedSpacingEvidence:
-    index: int
+    boundary: FrameBoundaryReference
     kind: str
     signed_width_px: PixelInterval
     provenance: MeasurementProvenance
     reason: str
-    lane_index: int | None = None
 
     def __post_init__(self) -> None:
         _validate_spacing_identity(
-            self.index,
+            self.boundary,
             self.kind,
             self.signed_width_px,
             self.reason,
-            self.lane_index,
         )
 
     @property
@@ -85,20 +81,18 @@ class ObservedSpacingEvidence:
 
 @dataclass(frozen=True)
 class CorroboratedSpacingEvidence:
-    index: int
+    boundary: FrameBoundaryReference
     kind: str
     signed_width_px: PixelInterval
     provenance: MeasurementProvenance
     reason: str
-    lane_index: int | None = None
 
     def __post_init__(self) -> None:
         _validate_spacing_identity(
-            self.index,
+            self.boundary,
             self.kind,
             self.signed_width_px,
             self.reason,
-            self.lane_index,
         )
         if self.kind != "overlap" or self.signed_width_px.maximum >= 0.0:
             raise ValueError("corroborated spacing evidence must be an overlap")
@@ -122,20 +116,18 @@ class CorroboratedSpacingEvidence:
 
 @dataclass(frozen=True)
 class SpacingHypothesis:
-    index: int
+    boundary: FrameBoundaryReference
     kind: str
     signed_width_px: PixelInterval
     provenance: MeasurementProvenance
     reason: str
-    lane_index: int | None = None
 
     def __post_init__(self) -> None:
         _validate_spacing_identity(
-            self.index,
+            self.boundary,
             self.kind,
             self.signed_width_px,
             self.reason,
-            self.lane_index,
         )
 
     @property
@@ -174,13 +166,13 @@ class SequenceConservationEvidence:
 
 
 def observed_spacing_evidence(
-    index: int,
+    boundary: FrameBoundaryReference,
     signed_width_px: PixelInterval,
     provenance: MeasurementProvenance,
 ) -> ObservedSpacingEvidence:
     kind = _spacing_kind(signed_width_px)
     return ObservedSpacingEvidence(
-        index=index,
+        boundary=boundary,
         kind=kind,
         signed_width_px=signed_width_px,
         provenance=provenance,
@@ -189,13 +181,13 @@ def observed_spacing_evidence(
 
 
 def spacing_hypothesis(
-    index: int,
+    boundary: FrameBoundaryReference,
     signed_width_px: PixelInterval,
     provenance: MeasurementProvenance,
 ) -> SpacingHypothesis:
     kind = _spacing_kind(signed_width_px)
     return SpacingHypothesis(
-        index=index,
+        boundary=boundary,
         kind=kind,
         signed_width_px=signed_width_px,
         provenance=provenance,
@@ -262,7 +254,7 @@ def corroborate_single_missing_overlap(
     leading = edge_observations["leading"]
     trailing = edge_observations["trailing"]
     corroborated = CorroboratedSpacingEvidence(
-        index=missing_spacing.index,
+        boundary=missing_spacing.boundary,
         kind="overlap",
         signed_width_px=residual,
         provenance=MeasurementProvenance(

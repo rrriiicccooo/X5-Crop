@@ -6,6 +6,7 @@ import numpy as np
 
 from ..detection.decision.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
+from ..detection.physical.model import DualLaneSolution, SequenceSolution
 from x5crop.domain import SeparatorBandObservation
 from ..domain import Box
 from ..geometry.boxes import map_work_box
@@ -13,23 +14,16 @@ from ..configuration.diagnostics import DebugStyleParameters
 from .canvas import draw_preview_line, draw_preview_mark
 
 
-def _work_corridor(
-    selected_candidate: AssessedCandidate,
-    observation: SeparatorBandObservation,
-) -> Box:
-    return observation.lane_box or selected_candidate.geometry.crop_envelope.box
-
-
 def separator_mark_box(
     detection: FinalDetection,
-    selected_candidate: AssessedCandidate,
     observation: SeparatorBandObservation,
+    corridor: Box,
+    long_axis_offset: int,
     image_width: int,
     image_height: int,
 ) -> Box:
-    corridor = _work_corridor(selected_candidate, observation)
-    start = int(round(observation.start))
-    end = max(start + 1, int(round(observation.end)))
+    start = int(round(observation.start + long_axis_offset))
+    end = max(start + 1, int(round(observation.end + long_axis_offset)))
     return map_work_box(
         Box(start, corridor.top, end, corridor.bottom),
         detection.layout,
@@ -40,13 +34,12 @@ def separator_mark_box(
 
 def _boundary_ticks(
     detection: FinalDetection,
-    selected_candidate: AssessedCandidate,
+    corridor: Box,
     center: float,
     overlay: Any,
     image_width: int,
     image_height: int,
 ) -> tuple[Box, Box]:
-    corridor = selected_candidate.geometry.crop_envelope.box
     tick = max(
         int(overlay.tick_length_min),
         int(round(corridor.height * float(overlay.tick_length_ratio))),
@@ -60,6 +53,74 @@ def _boundary_ticks(
         map_work_box(box, detection.layout, image_width, image_height)
         for box in work_ticks
     )
+
+
+def _draw_sequence_overlay(
+    rgb: np.ndarray,
+    detection: FinalDetection,
+    solution: SequenceSolution,
+    corridor: Box,
+    lane_index: int | None,
+    long_axis_offset: int,
+    overlap_boundaries: set[tuple[int | None, int]],
+    scale: float,
+    overlay: Any,
+    style: DebugStyleParameters,
+    image_width: int,
+    image_height: int,
+) -> None:
+    accepted = {
+        id(assignment.observation)
+        for assignment in solution.separator_assignments
+        if assignment.used_for_boundary and assignment.independent
+    }
+    for observation in solution.separator_observations:
+        draw_preview_mark(
+            rgb,
+            separator_mark_box(
+                detection,
+                observation,
+                corridor,
+                long_axis_offset,
+                image_width,
+                image_height,
+            ),
+            scale,
+            (
+                style.accepted_separator_color
+                if id(observation) in accepted
+                else style.unselected_separator_color
+            ),
+            overlay.observed_line_width,
+        )
+    for boundary in solution.frame_boundaries:
+        identity = (lane_index, boundary.boundary_index)
+        overlap = identity in overlap_boundaries
+        if boundary.source == "observed_separator" and not overlap:
+            continue
+        for tick in _boundary_ticks(
+            detection,
+            corridor,
+            boundary.coordinate + long_axis_offset,
+            overlay,
+            image_width,
+            image_height,
+        ):
+            draw_preview_line(
+                rgb,
+                tick,
+                scale,
+                (
+                    style.overlap_boundary_color
+                    if overlap
+                    else style.dimension_boundary_color
+                ),
+                (
+                    overlay.overlap_line_width
+                    if overlap
+                    else overlay.dimension_line_width
+                ),
+            )
 
 
 def draw_separator_overlay(
@@ -78,59 +139,51 @@ def draw_separator_overlay(
         1,
         int(round(rgb.shape[1] / max(scale, style.separator_scale_floor))),
     )
-    geometry = selected_candidate.geometry
-    accepted = {
-        id(assignment.observation)
-        for assignment in geometry.separator_assignments
-        if assignment.used_for_boundary and assignment.independent
-    }
-    for observation in geometry.separator_observations:
-        draw_preview_mark(
-            rgb,
-            separator_mark_box(
-                detection,
-                selected_candidate,
-                observation,
-                image_width,
-                image_height,
-            ),
-            scale,
-            (
-                style.accepted_separator_color
-                if id(observation) in accepted
-                else style.unselected_separator_color
-            ),
-            overlay.observed_line_width,
+    overlap_boundaries = {
+        (
+            spacing.boundary.lane_index,
+            spacing.boundary.boundary_index,
         )
-    overlap_indexes = {
-        spacing.index
         for spacing in selected_candidate.assessment.evidence.frame_sequence.spacings
         if spacing.kind == "overlap"
     }
-    for boundary in geometry.frame_boundaries:
-        if boundary.source == "observed_separator" and boundary.boundary_index not in overlap_indexes:
-            continue
-        color = (
-            style.overlap_boundary_color
-            if boundary.boundary_index in overlap_indexes
-            else style.dimension_boundary_color
-        )
-        for tick in _boundary_ticks(
+    geometry = selected_candidate.geometry
+    if isinstance(geometry, SequenceSolution):
+        _draw_sequence_overlay(
+            rgb,
             detection,
-            selected_candidate,
-            boundary.coordinate,
+            geometry,
+            geometry.crop_envelope.box,
+            None,
+            0,
+            overlap_boundaries,
+            scale,
             overlay,
+            style,
             image_width,
             image_height,
+        )
+    elif isinstance(geometry, DualLaneSolution):
+        for lane_index, (lane, lane_solution, lane_envelope) in enumerate(
+            zip(
+                geometry.lane_boxes,
+                geometry.lane_solutions,
+                geometry.lane_crop_envelopes,
+                strict=True,
+            ),
+            start=1,
         ):
-            draw_preview_line(
+            _draw_sequence_overlay(
                 rgb,
-                tick,
+                detection,
+                lane_solution,
+                lane_envelope.box,
+                lane_index,
+                lane.left,
+                overlap_boundaries,
                 scale,
-                color,
-                (
-                    overlay.overlap_line_width
-                    if boundary.boundary_index in overlap_indexes
-                    else overlay.dimension_line_width
-                ),
+                overlay,
+                style,
+                image_width,
+                image_height,
             )

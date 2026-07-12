@@ -7,6 +7,7 @@ from ...domain import (
     Box,
     EvidenceState,
     FrameBoundary,
+    FrameBoundaryReference,
     FrameDimensionPrior,
     MeasurementProvenance,
     PixelInterval,
@@ -506,7 +507,7 @@ def _relations(
         if assignment is not None and assignment.independent:
             relations.append(
                 observed_spacing_evidence(
-                    boundary.boundary_index,
+                    FrameBoundaryReference(None, boundary.boundary_index),
                     PixelInterval.exact(assignment.observation.width),
                     assignment.observation.provenance,
                 )
@@ -519,7 +520,7 @@ def _relations(
         )
         relations.append(
             spacing_hypothesis(
-                boundary.boundary_index,
+                FrameBoundaryReference(None, boundary.boundary_index),
                 PixelInterval(
                     -float(dimensions.width_px.maximum),
                     float(width_constraint.maximum),

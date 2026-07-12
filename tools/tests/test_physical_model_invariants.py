@@ -10,6 +10,7 @@ from x5crop.domain import (
     Box,
     CropEnvelope,
     FrameBoundary,
+    FrameBoundaryReference,
     FrameDimensionPrior,
     HolderSpan,
     MeasurementProvenance,
@@ -100,13 +101,21 @@ class PhysicalModelInvariantTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             FrameSideBleed(0, -1, 0, 0)
         with self.assertRaises(ValueError):
-            BoundaryOverlapProtection(1, 0, 1, 5, -1, 5, "synthetic")
+            BoundaryOverlapProtection(
+                FrameBoundaryReference(None, 1),
+                0,
+                1,
+                5,
+                -1,
+                5,
+                "synthetic",
+            )
         with self.assertRaises(ValueError):
             FrameBleedPlan(
                 AxisBleedParameters(0, 0),
                 (FrameSideBleed(0, 0, 0, 0),),
                 (),
-                (1,),
+                (FrameBoundaryReference(None, 1),),
                 True,
                 "no_output_overlap",
             )

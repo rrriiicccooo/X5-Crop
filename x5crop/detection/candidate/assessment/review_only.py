@@ -32,6 +32,7 @@ from .candidate_gate import (
 )
 from .evidence_independence import EvidenceIndependenceEvidence
 from .quality import evidence_quality
+from x5crop.domain import FrameBoundaryReference
 from .separator_support import SeparatorSequenceEvidence
 
 
@@ -97,8 +98,11 @@ def assess_review_only_candidate(
         expected_count=expected_boundaries,
         hard_count=0,
         dimension_constrained_count=0,
-        hard_boundary_indexes=(),
-        missing_boundary_indexes=tuple(range(1, expected_boundaries + 1)),
+        hard_boundaries=(),
+        missing_boundaries=tuple(
+            FrameBoundaryReference(None, index)
+            for index in range(1, expected_boundaries + 1)
+        ),
         hard_tonal_evidence=(),
     )
     frame_dimensions = FrameDimensionEvidence(

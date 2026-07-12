@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from ..domain import AxisBleedParameters, Box, CropEnvelope
+from ..domain import (
+    AxisBleedParameters,
+    Box,
+    CropEnvelope,
+    FrameBoundaryReference,
+)
 from ..geometry.boxes import map_work_box, original_box_to_work
 from .model import (
     BoundaryOverlapProtection,
@@ -9,6 +14,7 @@ from .model import (
     FrameSideBleed,
     OutputGeometry,
 )
+
 
 def _long_axis_capacity(
     frame: Box,
@@ -45,13 +51,13 @@ def frame_bleed_plan(
     leading = [int(user_bleed.long_axis) for _frame in frames]
     trailing = [int(user_bleed.long_axis) for _frame in frames]
     protections: list[BoundaryOverlapProtection] = []
-    unresolved: list[int] = []
+    unresolved: list[FrameBoundaryReference] = []
 
     for requirement in overlap_requirements:
         if requirement.right_frame_index >= len(frames):
             raise ValueError("overlap requirement references a missing frame")
         if not requirement.physically_supported:
-            unresolved.append(requirement.boundary_index)
+            unresolved.append(requirement.boundary)
             continue
         left_index = requirement.left_frame_index
         right_index = requirement.right_frame_index
@@ -68,7 +74,7 @@ def frame_bleed_plan(
             horizontal=horizontal,
         )
         protection = BoundaryOverlapProtection(
-            boundary_index=requirement.boundary_index,
+            boundary=requirement.boundary,
             left_frame_index=left_index,
             right_frame_index=right_index,
             required_px=requirement.required_px,
@@ -80,7 +86,7 @@ def frame_bleed_plan(
         trailing[left_index] = max(trailing[left_index], requirement.required_px)
         leading[right_index] = max(leading[right_index], requirement.required_px)
         if not protection.complete:
-            unresolved.append(requirement.boundary_index)
+            unresolved.append(requirement.boundary)
 
     unresolved_boundaries = tuple(dict.fromkeys(unresolved))
     return FrameBleedPlan(

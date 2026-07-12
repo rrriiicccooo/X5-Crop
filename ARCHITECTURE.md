@@ -114,7 +114,9 @@ tonal region 只能保留为 diagnostic / geometry-dependent observation。
 
 正值是 separator，零是 contact，负值是 overlap。Hypothesis 不能支持 proof path 或自动
 overlap bleed；corroborated overlap 也不能回头支持 sequence conservation。每个 spacing 的
-`kind` 由 signed interval 唯一推导，不能以独立字符串声明出相互矛盾的物理状态。
+`kind` 由 signed interval 唯一推导，不能以独立字符串声明出相互矛盾的物理状态。Spacing、
+separator evidence 和 output protection 使用同一个 `FrameBoundaryReference`；dual-lane 的
+lane identity 不能被展平丢失。
 
 ### 1.5 Global Sequence Solver 与 Auto Count
 
@@ -146,8 +148,10 @@ content preservation compatibility 和实质替代解均已解决时才 supporte
 `CandidateGeometry` 是唯一 candidate geometry union：标准 strip 使用 `SequenceSolution`；
 dual-lane 使用带有独立 lane solutions 的 `DualLaneSolution`；不支持自动求解的 mode 使用
 `ReviewOnlyGeometry`，其 solved frame geometry 必须为空。三者分别进入 standard、dual-lane 和
-review-only assessment，不以空字段伪装成另一种物理状态。Dual-lane 的 composition proof 要求
-每条 lane 的 CandidateGate 与 GeometryResolution 都成立。
+review-only assessment，不以空字段伪装成另一种物理状态。`DualLaneSolution` 不复制展平的
+lane observations 或 boundaries；全局 frames、envelope、residuals 和 assignment consensus 只能
+由 lane solutions 确定性派生。Dual-lane 的 composition proof 要求每条 lane 的 CandidateGate 与
+GeometryResolution 都成立。
 
 Candidate evidence 包括 topology、frame coverage、separator sequence、photo dimensions、
 content preservation、holder occupancy、sequence conservation 和 evidence independence。

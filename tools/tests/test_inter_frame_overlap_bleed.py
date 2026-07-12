@@ -3,7 +3,12 @@ from __future__ import annotations
 import unittest
 from inspect import signature
 
-from x5crop.domain import AxisBleedParameters, Box, CropEnvelope
+from x5crop.domain import (
+    AxisBleedParameters,
+    Box,
+    CropEnvelope,
+    FrameBoundaryReference,
+)
 from x5crop.output.frame_bleed import apply_frame_bleed, frame_bleed_plan
 from x5crop.output.model import (
     FrameOverlapRequirement,
@@ -30,7 +35,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             frame_crop_envelopes=envelopes,
             overlap_requirements=(
                 FrameOverlapRequirement(
-                    boundary_index=1,
+                    boundary=FrameBoundaryReference(None, 1),
                     left_frame_index=0,
                     right_frame_index=1,
                     required_px=30,
@@ -51,8 +56,8 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             ((5, 30, 2), (30, 5, 2), (5, 5, 2)),
         )
         self.assertEqual(
-            tuple(item.boundary_index for item in plan.overlap_protection),
-            (1,),
+            tuple(item.boundary for item in plan.overlap_protection),
+            (FrameBoundaryReference(None, 1),),
         )
 
     def test_geometry_overlap_hypothesis_cannot_create_output_protection(self) -> None:
@@ -64,7 +69,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             ),
             overlap_requirements=(
                 FrameOverlapRequirement(
-                    boundary_index=1,
+                    boundary=FrameBoundaryReference(None, 1),
                     left_frame_index=0,
                     right_frame_index=1,
                     required_px=40,
@@ -77,7 +82,10 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
         )
 
         self.assertFalse(plan.feasible)
-        self.assertEqual(plan.unresolved_overlap_boundaries, (1,))
+        self.assertEqual(
+            plan.unresolved_overlap_boundaries,
+            (FrameBoundaryReference(None, 1),),
+        )
         self.assertEqual(
             tuple(
                 (side.leading_px, side.trailing_px)
@@ -85,6 +93,43 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             ),
             ((5, 5), (5, 5)),
         )
+
+    def test_unresolved_boundaries_keep_their_lane_identity(self) -> None:
+        frames = (
+            Box(0, 0, 100, 60),
+            Box(100, 0, 200, 60),
+            Box(0, 60, 100, 120),
+            Box(100, 60, 200, 120),
+        )
+        envelopes = (
+            CropEnvelope(Box(0, 0, 200, 60)),
+            CropEnvelope(Box(0, 0, 200, 60)),
+            CropEnvelope(Box(0, 60, 200, 120)),
+            CropEnvelope(Box(0, 60, 200, 120)),
+        )
+        boundaries = (
+            FrameBoundaryReference(1, 1),
+            FrameBoundaryReference(2, 1),
+        )
+        plan = frame_bleed_plan(
+            frames=frames,
+            frame_crop_envelopes=envelopes,
+            overlap_requirements=tuple(
+                FrameOverlapRequirement(
+                    boundary=boundary,
+                    left_frame_index=lane_index * 2,
+                    right_frame_index=lane_index * 2 + 1,
+                    required_px=20,
+                    physically_supported=False,
+                    provenance="geometry_spacing_hypothesis",
+                )
+                for lane_index, boundary in enumerate(boundaries)
+            ),
+            user_bleed=AxisBleedParameters(5, 2),
+            layout="horizontal",
+        )
+
+        self.assertEqual(plan.unresolved_overlap_boundaries, boundaries)
 
     def test_frame_bleed_is_clamped_to_each_crop_envelope(self) -> None:
         geometry = OutputGeometry(
@@ -99,7 +144,14 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             frames=geometry.frames,
             frame_crop_envelopes=(geometry.crop_envelope,) * 3,
             overlap_requirements=(
-                FrameOverlapRequirement(1, 0, 1, 30, True, "observed_overlap"),
+                FrameOverlapRequirement(
+                    FrameBoundaryReference(None, 1),
+                    0,
+                    1,
+                    30,
+                    True,
+                    "observed_overlap",
+                ),
             ),
             user_bleed=AxisBleedParameters(5, 2),
             layout="horizontal",

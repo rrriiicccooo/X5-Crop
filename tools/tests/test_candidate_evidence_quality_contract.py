@@ -6,7 +6,7 @@ import unittest
 from tools.tests.physical_gate_support import candidate_evidence_fixture
 from x5crop.detection.candidate.assessment.quality import evidence_quality
 from x5crop.detection.candidate.model import CandidateAssessment
-from x5crop.domain import EvidenceState
+from x5crop.domain import EvidenceState, FrameBoundaryReference
 
 
 class CandidateEvidenceQualityContractTest(unittest.TestCase):
@@ -40,8 +40,8 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
             state=EvidenceState.UNAVAILABLE,
             hard_count=0,
             dimension_constrained_count=1,
-            hard_boundary_indexes=(),
-            missing_boundary_indexes=(1,),
+            hard_boundaries=(),
+            missing_boundaries=(FrameBoundaryReference(None, 1),),
             hard_tonal_evidence=(),
         )
         quality = evidence_quality(

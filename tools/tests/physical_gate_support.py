@@ -42,7 +42,7 @@ from x5crop.detection.evidence.holder_occupancy import (
 )
 from x5crop.detection.evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
-from x5crop.domain import EvidenceState
+from x5crop.domain import EvidenceState, FrameBoundaryReference
 from x5crop.detection.evidence.transform_geometry import TransformGeometryEvidence
 from x5crop.detection.gate_checks import GateCheck
 from x5crop.detection.physical.model import (
@@ -213,7 +213,7 @@ def candidate_evidence_fixture(
             holder_occlusion=HolderOcclusionEvidence.not_applicable(),
             spacings=(
                 observed_spacing_evidence(
-                    1,
+                    FrameBoundaryReference(None, 1),
                     PixelInterval.exact(0.0),
                     MeasurementProvenance(
                         "separator_profile",
@@ -238,7 +238,7 @@ def candidate_evidence_fixture(
             1,
             1,
             0,
-            (1,),
+            (FrameBoundaryReference(None, 1),),
             (),
             (1.0,),
         ),
@@ -359,7 +359,7 @@ def candidate_fixture(
     assignment = replace(assignment, used_for_boundary=True)
     boundary = frame_boundary_from_assignment(assignment)
     relation = observed_spacing_evidence(
-        1,
+        FrameBoundaryReference(None, 1),
         PixelInterval.exact(observation.width),
         observation.provenance,
     )
@@ -511,7 +511,9 @@ def frame_bleed_fixture(*, feasible: bool = True) -> FrameBleedPlan:
             FrameSideBleed(1, 20, 20, 10),
         ),
         overlap_protection=(),
-        unresolved_overlap_boundaries=() if feasible else (1,),
+        unresolved_overlap_boundaries=(
+            () if feasible else (FrameBoundaryReference(None, 1),)
+        ),
         feasible=feasible,
         reason="no_output_overlap" if feasible else "output_overlap_unresolved",
     )

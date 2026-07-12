@@ -17,7 +17,7 @@ from ...evidence.holder_occupancy import (
 )
 from ...evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from ...evidence.partial_edge import PartialEdgeSafetyEvidence
-from x5crop.domain import EvidenceState
+from x5crop.domain import EvidenceState, FrameBoundaryReference
 from ...physical.photo_size import FrameDimensionEvidence
 from ...physical.boundary import HolderOcclusionEvidence
 from x5crop.domain import PixelInterval
@@ -125,15 +125,15 @@ def assess_dual_lane_candidate(
     expected_separators = sum(
         lane.assessment.evidence.separator_sequence.expected_count for lane in lanes
     )
-    hard_indexes = tuple(
-        range(
-            1,
-            1
-            + sum(
-                lane.assessment.evidence.separator_sequence.hard_count
-                for lane in lanes
-            ),
-        )
+    hard_boundaries = tuple(
+        FrameBoundaryReference(lane_index, reference.boundary_index)
+        for lane_index, lane in enumerate(lanes, start=1)
+        for reference in lane.assessment.evidence.separator_sequence.hard_boundaries
+    )
+    missing_boundaries = tuple(
+        FrameBoundaryReference(lane_index, reference.boundary_index)
+        for lane_index, lane in enumerate(lanes, start=1)
+        for reference in lane.assessment.evidence.separator_sequence.missing_boundaries
     )
     sequence = SeparatorSequenceEvidence(
         state=_combined_state(
@@ -144,13 +144,13 @@ def assess_dual_lane_candidate(
         ),
         reason="dual_lane_separator_sequence",
         expected_count=expected_separators,
-        hard_count=len(hard_indexes),
+        hard_count=len(hard_boundaries),
         dimension_constrained_count=sum(
             lane.assessment.evidence.separator_sequence.dimension_constrained_count
             for lane in lanes
         ),
-        hard_boundary_indexes=hard_indexes,
-        missing_boundary_indexes=(),
+        hard_boundaries=hard_boundaries,
+        missing_boundaries=missing_boundaries,
         hard_tonal_evidence=tuple(
             tonal_evidence
             for lane in lanes
@@ -383,7 +383,13 @@ def assess_dual_lane_candidate(
         frame_sequence=FrameSequenceEvidence(
             holder_occlusion=HolderOcclusionEvidence.not_applicable(),
             spacings=tuple(
-                replace(spacing, lane_index=lane_index)
+                replace(
+                    spacing,
+                    boundary=FrameBoundaryReference(
+                        lane_index,
+                        spacing.boundary.boundary_index,
+                    ),
+                )
                 for lane_index, lane in enumerate(lanes, start=1)
                 for spacing in lane.assessment.evidence.frame_sequence.spacings
             ),
