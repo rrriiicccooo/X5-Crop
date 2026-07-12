@@ -23,8 +23,19 @@ from ..physical.model import SequenceResiduals
 @dataclass(frozen=True)
 class BuiltCandidate:
     geometry: CandidateGeometry
-    count_hypothesis: CountHypothesis | None
+    count_hypothesis: CountHypothesis
     build_diagnostics: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            self.count_hypothesis.count != self.geometry.count
+            or self.count_hypothesis.strip_mode != self.geometry.strip_mode
+        ):
+            raise ValueError("built candidate count hypothesis must match geometry")
+        if any(not item for item in self.build_diagnostics) or len(
+            set(self.build_diagnostics)
+        ) != len(self.build_diagnostics):
+            raise ValueError("build diagnostics must be non-empty and unique")
 
 
 @dataclass(frozen=True)
@@ -58,13 +69,18 @@ class EvidenceQuality:
 @dataclass(frozen=True)
 class CandidateAssessment:
     evidence: CandidateEvidence
-    quality: EvidenceQuality
     gate: CandidateGateAssessment
-    diagnostics: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class AssessedCandidate:
     geometry: CandidateGeometry
-    count_hypothesis: CountHypothesis | None
+    count_hypothesis: CountHypothesis
     assessment: CandidateAssessment
+
+    def __post_init__(self) -> None:
+        if (
+            self.count_hypothesis.count != self.geometry.count
+            or self.count_hypothesis.strip_mode != self.geometry.strip_mode
+        ):
+            raise ValueError("assessed candidate count hypothesis must match geometry")

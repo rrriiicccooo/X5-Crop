@@ -16,7 +16,7 @@ from x5crop.detection.candidate.execution.model import CountHypothesisEvaluation
 from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
 from x5crop.detection.candidate.selection.model import GeometryResolution
 from x5crop.detection.candidate.assessment.candidate import _boundary_proof_paths
-from x5crop.detection.candidate.model import BuiltCandidate
+from x5crop.detection.candidate.model import AssessedCandidate, BuiltCandidate
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.domain import (
     BoundaryObservation,
@@ -72,7 +72,11 @@ def _single_frame_candidate(*, measured_boundaries: bool) -> BuiltCandidate:
         boundary_observations=observations,
         sequence_provenance=provenance,
     )
-    return BuiltCandidate(geometry, candidate.count_hypothesis, ())
+    return BuiltCandidate(
+        geometry,
+        replace(candidate.count_hypothesis, count=1),
+        (),
+    )
 
 
 class PhysicalDetectionResolutionContractTest(unittest.TestCase):
@@ -81,13 +85,31 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
     ) -> None:
         from x5crop.detection.pipeline import _candidate_pool_for_count_resolution
 
-        higher = candidate_fixture()
-        lower = replace(
-            candidate_fixture(),
+        higher_hypothesis = CountHypothesis(
+            2,
+            "partial",
+            "automatic_count",
+        )
+        higher_fixture = candidate_fixture()
+        higher = replace(
+            higher_fixture,
+            geometry=replace(higher_fixture.geometry, strip_mode="partial"),
+            count_hypothesis=higher_hypothesis,
+        )
+        lower_built = _single_frame_candidate(measured_boundaries=True)
+        lower_hypothesis = CountHypothesis(
+            1,
+            "partial",
+            "automatic_count",
+        )
+        lower = AssessedCandidate(
             geometry=replace(
-                candidate_fixture().geometry,
+                lower_built.geometry,
+                strip_mode="partial",
                 sequence_hypothesis_name="resolved_lower_count",
             ),
+            count_hypothesis=lower_hypothesis,
+            assessment=candidate_fixture().assessment,
         )
         unresolved = replace(
             selection_fixture(higher),
@@ -105,12 +127,12 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         resolved = selection_fixture(lower)
         evaluations = (
             CountHypothesisEvaluation(
-                CountHypothesis(3, "partial", "automatic_count", True),
+                higher_hypothesis,
                 (higher,),
                 unresolved,
             ),
             CountHypothesisEvaluation(
-                CountHypothesis(2, "partial", "automatic_count", True),
+                lower_hypothesis,
                 (lower,),
                 resolved,
             ),

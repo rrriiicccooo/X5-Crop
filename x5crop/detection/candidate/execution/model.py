@@ -13,6 +13,21 @@ class CountHypothesisEvaluation:
     candidates: tuple[AssessedCandidate, ...]
     selection: SelectionResult | None
 
+    def __post_init__(self) -> None:
+        if any(
+            candidate.geometry.count != self.hypothesis.count
+            or candidate.geometry.strip_mode != self.hypothesis.strip_mode
+            or candidate.count_hypothesis != self.hypothesis
+            for candidate in self.candidates
+        ):
+            raise ValueError("count evaluation candidates must match its hypothesis")
+        if (self.selection is None) != (not self.candidates):
+            raise ValueError("count evaluation selection must match candidate availability")
+        if self.selection is not None and {
+            id(candidate) for candidate in self.selection.ranked_candidates
+        } != {id(candidate) for candidate in self.candidates}:
+            raise ValueError("count evaluation selection must cover its candidates")
+
     @property
     def geometry_resolved(self) -> bool:
         return bool(

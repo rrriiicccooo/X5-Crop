@@ -36,7 +36,6 @@ from .candidate_gate import (
 )
 from .evidence_independence import EvidenceIndependenceEvidence
 from .separator_support import SeparatorSequenceEvidence
-from .quality import evidence_quality
 
 
 def _width_cv(values: tuple[float, ...]) -> float | None:
@@ -439,18 +438,11 @@ def assess_dual_lane_candidate(
             diagnostics=candidate.build_diagnostics,
         )
     )
-    quality = evidence_quality(
-        evidence,
-        gate.proof_paths,
-        residuals=geometry.residuals,
-    )
     return AssessedCandidate(
         geometry=geometry,
         count_hypothesis=candidate.count_hypothesis,
         assessment=CandidateAssessment(
             evidence=evidence,
-            quality=quality,
             gate=gate,
-            diagnostics=candidate.build_diagnostics,
         ),
     )

@@ -41,8 +41,7 @@ def _count_resolution(
     if requested_count is not None:
         reason = "requested_count"
     elif (
-        selection.selected.count_hypothesis is not None
-        and selection.selected.count_hypothesis.source == "format_default"
+        selection.selected.count_hypothesis.source == "format_default"
     ):
         reason = "format_default_count"
     elif selection.geometry_resolution.supported:

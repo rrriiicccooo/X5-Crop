@@ -18,7 +18,6 @@ from x5crop.detection.candidate.model import (
     CandidateAssessment,
     CandidateEvidence,
 )
-from x5crop.detection.candidate.assessment.quality import evidence_quality
 from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
 from x5crop.detection.candidate.selection.model import (
     GeometryCluster,
@@ -462,17 +461,10 @@ def candidate_fixture(
             count=2,
             strip_mode="full",
             source="test_fixture",
-            allowed_by_physical_spec=True,
         ),
         assessment=CandidateAssessment(
             evidence=evidence,
-            quality=evidence_quality(
-                evidence,
-                gate.proof_paths,
-                residuals=geometry.residuals,
-            ),
             gate=gate,
-            diagnostics=(),
         ),
     )
 

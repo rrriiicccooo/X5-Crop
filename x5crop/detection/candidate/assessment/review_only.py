@@ -31,7 +31,6 @@ from .candidate_gate import (
     candidate_gate_assessment,
 )
 from .evidence_independence import EvidenceIndependenceEvidence
-from .quality import evidence_quality
 from x5crop.domain import FrameBoundaryReference
 from .separator_support import SeparatorSequenceEvidence
 
@@ -246,12 +245,6 @@ def assess_review_only_candidate(
         count_hypothesis=candidate.count_hypothesis,
         assessment=CandidateAssessment(
             evidence=evidence,
-            quality=evidence_quality(
-                evidence,
-                proof_paths,
-                residuals=geometry.residuals,
-            ),
             gate=gate,
-            diagnostics=tuple(sorted(set(diagnostics))),
         ),
     )

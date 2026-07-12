@@ -71,7 +71,7 @@ class AutoCountContractTest(unittest.TestCase):
         candidate = candidate_fixture(failed_candidate_check="boundary_proof")
         candidate = replace(
             candidate,
-            count_hypothesis=CountHypothesis(2, "full", "format_default", True),
+            count_hypothesis=CountHypothesis(2, "full", "format_default"),
         )
         resolution = select_candidates(
             (candidate,),
@@ -85,7 +85,7 @@ class AutoCountContractTest(unittest.TestCase):
         candidate = replace(
             candidate,
             geometry=replace(candidate.geometry, strip_mode="partial"),
-            count_hypothesis=CountHypothesis(2, "partial", "requested_count", True),
+            count_hypothesis=CountHypothesis(2, "partial", "requested_count"),
         )
         resolution = select_candidates(
             (candidate,),

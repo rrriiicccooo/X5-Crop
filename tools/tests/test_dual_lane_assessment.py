@@ -7,6 +7,7 @@ import numpy as np
 
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.candidate.assessment.dual_lane import assess_dual_lane_candidate
+from x5crop.detection.candidate.assessment.quality import quality_for_candidate
 from x5crop.detection.candidate.assessment.separator_support import (
     SeparatorSequenceEvidence,
 )
@@ -94,7 +95,11 @@ def _parent(lane):
         lane_boxes=lane_boxes,
         lane_crop_envelopes=lane_crop_envelopes,
     )
-    return BuiltCandidate(geometry, lane.count_hypothesis, ("dual_lane",))
+    return BuiltCandidate(
+        geometry,
+        replace(lane.count_hypothesis, count=geometry.count),
+        ("dual_lane",),
+    )
 
 
 class DualLaneAssessmentTest(unittest.TestCase):
@@ -174,7 +179,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
             (first, second),
             lane_geometry_resolved=(True, True),
         )
-        self.assertTrue(assessed.assessment.quality.supported_proof_paths)
+        self.assertTrue(quality_for_candidate(assessed).supported_proof_paths)
         self.assertTrue(assessed.assessment.gate.passed)
         self.assertEqual(
             {

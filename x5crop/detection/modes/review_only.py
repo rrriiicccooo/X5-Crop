@@ -69,7 +69,6 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
             count=count,
             strip_mode=context.request.strip_mode,
             source="mode_contract",
-            allowed_by_physical_spec=True,
         ),
         build_diagnostics=(
             "dual_lane_partial_not_supported",

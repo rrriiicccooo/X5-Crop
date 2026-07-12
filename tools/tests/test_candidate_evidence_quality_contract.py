@@ -13,7 +13,7 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
     def test_candidate_assessment_has_no_scalar_scores(self) -> None:
         self.assertEqual(
             {field.name for field in fields(CandidateAssessment)},
-            {"evidence", "quality", "gate", "diagnostics"},
+            {"evidence", "gate"},
         )
 
     def test_separator_width_variation_does_not_change_evidence_quality(self) -> None:

@@ -258,5 +258,5 @@ def apply_decision_gate(
         output_geometry=geometry,
         frame_bleed_plan=frame_bleed_plan,
         scan_calibration=scan_calibration,
-        diagnostics=selected.assessment.diagnostics,
+        diagnostics=selected.assessment.gate.diagnostics,
     )

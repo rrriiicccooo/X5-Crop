@@ -347,7 +347,6 @@ def _candidate_valid(value: Any) -> bool:
         "candidate_gate",
         "count_hypothesis",
         "evidence",
-        "diagnostics",
     }
     if not isinstance(value, dict) or set(value) != expected:
         return False
@@ -360,12 +359,7 @@ def _candidate_valid(value: Any) -> bool:
         _candidate_gate_valid(value["candidate_gate"])
         and _typed_value_valid(value["evidence_quality"], EvidenceQuality)
         and _typed_value_valid(value["evidence"], CandidateEvidence)
-        and (
-            value["count_hypothesis"] is None
-            or _typed_value_valid(value["count_hypothesis"], CountHypothesis)
-        )
-        and isinstance(value["diagnostics"], list)
-        and all(isinstance(item, str) for item in value["diagnostics"])
+        and _typed_value_valid(value["count_hypothesis"], CountHypothesis)
     )
 
 

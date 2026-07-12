@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Any
 
 from ..detection.candidate.model import AssessedCandidate
+from ..detection.candidate.assessment.quality import quality_for_candidate
 from ..detection.decision.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.physical.model import (
@@ -99,11 +100,10 @@ def candidate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
     return {
         "geometry_kind": geometry_kind,
         "candidate_geometry": typed_read_model(geometry),
-        "evidence_quality": typed_read_model(candidate.assessment.quality),
+        "evidence_quality": typed_read_model(quality_for_candidate(candidate)),
         "candidate_gate": candidate_gate_read_model(candidate),
         "count_hypothesis": typed_read_model(candidate.count_hypothesis),
         "evidence": candidate_evidence_read_model(candidate),
-        "diagnostics": list(candidate.assessment.diagnostics),
     }
 
 

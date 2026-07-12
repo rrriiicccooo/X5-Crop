@@ -47,7 +47,7 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
                 "test",
                 (FrameSizeMm(36.0, 24.0),),
             ),
-            lambda: CountHypothesis(0, "partial", "automatic_count", True),
+            lambda: CountHypothesis(0, "partial", "automatic_count"),
             lambda: AxisBleedParameters(-1, 0),
             lambda: SeparatorProfileParameters(segments=0),
             lambda: SeparatorObservationParameters(minimum_run_px=0),

@@ -25,7 +25,6 @@ from .candidate_gate import (
     candidate_gate_assessment,
 )
 from .evidence_independence import evidence_independence_evidence
-from .quality import evidence_quality
 from .separator_support import separator_sequence_evidence
 
 
@@ -90,12 +89,9 @@ def _boundary_proof_paths(
             )
         )
     )
-    count_hypothesis = candidate.count_hypothesis
     partial_occupancy_led = bool(
         geometry.source == CANDIDATE_SOURCE_FRAME_SEQUENCE
         and geometry.strip_mode == "partial"
-        and count_hypothesis is not None
-        and count_hypothesis.allowed_by_physical_spec
         and evidence.partial_edge_safety.state == EvidenceState.SUPPORTED
         and evidence.holder_occupancy.state == EvidenceState.SUPPORTED
         and common
@@ -248,18 +244,11 @@ def assess_candidate(
             diagnostics=tuple(diagnostics),
         )
     )
-    quality = evidence_quality(
-        evidence,
-        proof_paths,
-        residuals=geometry.residuals,
-    )
     return AssessedCandidate(
         geometry=geometry,
         count_hypothesis=candidate.count_hypothesis,
         assessment=CandidateAssessment(
             evidence=evidence,
-            quality=quality,
             gate=gate,
-            diagnostics=tuple(sorted(set(diagnostics))),
         ),
     )

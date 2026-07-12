@@ -126,6 +126,8 @@ def _parent_candidate(
         max(box.bottom for box in crop_boxes),
     )
     count = sum(candidate.geometry.count for candidate in lane_candidates)
+    if count not in physical_spec.allowed_counts:
+        raise ValueError("dual-lane total count must be physically allowed")
     work_height, work_width = context.measurement_cache.gray_work.shape
     return BuiltCandidate(
         geometry=DualLaneSolution(
@@ -164,8 +166,6 @@ def _parent_candidate(
             count=count,
             strip_mode="full",
             source="format_default",
-            allowed_by_physical_spec=count
-            in physical_spec.allowed_counts,
         ),
         build_diagnostics=(
             ("center_safety_lane_divider",)

@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from dataclasses import fields
 import math
 import unittest
 
 from tools.tests.physical_gate_support import candidate_fixture, selection_fixture
+from x5crop.detection.candidate.execution.model import CountHypothesisEvaluation
+from x5crop.detection.candidate.model import AssessedCandidate, BuiltCandidate
+from x5crop.detection.candidate.plan.count_hypotheses import (
+    CountHypothesis,
+    CountHypothesisPlan,
+)
 from x5crop.detection.candidate.selection.model import (
     CountResolution,
     GeometryCluster,
@@ -41,6 +49,43 @@ def _provenance() -> MeasurementProvenance:
 
 
 class PhysicalModelInvariantTest(unittest.TestCase):
+    def test_count_hypothesis_contains_identity_not_derived_eligibility(self) -> None:
+        self.assertEqual(
+            {field.name for field in fields(CountHypothesis)},
+            {"count", "strip_mode", "source"},
+        )
+
+    def test_candidate_lifecycle_rejects_count_identity_drift(self) -> None:
+        candidate = candidate_fixture()
+        hypothesis = candidate.count_hypothesis
+        mismatched = replace(hypothesis, count=hypothesis.count + 1)
+        invalid_factories = (
+            lambda: CountHypothesisPlan((), True, None),
+            lambda: BuiltCandidate(candidate.geometry, mismatched, ()),
+            lambda: AssessedCandidate(
+                candidate.geometry,
+                mismatched,
+                candidate.assessment,
+            ),
+            lambda: CountHypothesisEvaluation(
+                hypothesis,
+                (candidate,),
+                None,
+            ),
+            lambda: CountHypothesisEvaluation(
+                CountHypothesis(
+                    hypothesis.count + 1,
+                    hypothesis.strip_mode,
+                    hypothesis.source,
+                ),
+                (candidate,),
+                selection_fixture(candidate),
+            ),
+        )
+        for factory in invalid_factories:
+            with self.subTest(factory=factory), self.assertRaises(ValueError):
+                factory()
+
     def test_selection_models_reject_internally_inconsistent_states(self) -> None:
         candidate = candidate_fixture()
         selection = selection_fixture()

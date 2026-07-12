@@ -22,6 +22,8 @@ def hard_safety_candidate(
     if count <= 0:
         raise ValueError("hard-safety candidate count must be positive")
     count = int(count)
+    if count not in physical_spec.allowed_counts:
+        raise ValueError("hard-safety candidate count must be physically allowed")
     span = Box(0, 0, work_width, work_height)
     visible_span = VisibleSequenceSpan(span)
     dimensions = frame_dimension_prior(
@@ -49,7 +51,6 @@ def hard_safety_candidate(
         count=count,
         strip_mode=context.request.strip_mode,
         source="hard_safety",
-        allowed_by_physical_spec=count in physical_spec.allowed_counts,
     )
     return BuiltCandidate(
         geometry=SequenceSolution(

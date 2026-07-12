@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from x5crop.domain import EvidenceState
 from ...physical.model import SequenceResiduals
-from ..model import CandidateEvidence, EvidenceQuality
+from ..model import AssessedCandidate, CandidateEvidence, EvidenceQuality
 from .candidate_gate import BoundaryProofPath
 
 
@@ -45,4 +45,12 @@ def evidence_quality(
             path.code for path in proof_paths if path.state == EvidenceState.SUPPORTED
         ),
         physical_residuals=residuals,
+    )
+
+
+def quality_for_candidate(candidate: AssessedCandidate) -> EvidenceQuality:
+    return evidence_quality(
+        candidate.assessment.evidence,
+        candidate.assessment.gate.proof_paths,
+        residuals=candidate.geometry.residuals,
     )

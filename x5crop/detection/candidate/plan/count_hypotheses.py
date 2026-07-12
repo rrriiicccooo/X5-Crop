@@ -10,7 +10,6 @@ class CountHypothesis:
     count: int
     strip_mode: str
     source: str
-    allowed_by_physical_spec: bool
 
     def __post_init__(self) -> None:
         if self.count <= 0:
@@ -27,10 +26,40 @@ class CountHypothesisPlan:
     automatic: bool
     requested_count: int | None
 
+    def __post_init__(self) -> None:
+        if not self.hypotheses:
+            raise ValueError("count hypothesis plan requires hypotheses")
+        counts = tuple(hypothesis.count for hypothesis in self.hypotheses)
+        if len(set(counts)) != len(counts):
+            raise ValueError("count hypothesis plan counts must be unique")
+        modes = {hypothesis.strip_mode for hypothesis in self.hypotheses}
+        if len(modes) != 1:
+            raise ValueError("count hypothesis plan requires one strip mode")
+        if self.automatic:
+            if self.requested_count is not None or any(
+                hypothesis.source != "automatic_count"
+                for hypothesis in self.hypotheses
+            ):
+                raise ValueError("automatic count plan has inconsistent ownership")
+            if counts != tuple(sorted(counts, reverse=True)):
+                raise ValueError("automatic count plan must search larger counts first")
+        else:
+            if len(self.hypotheses) != 1:
+                raise ValueError("fixed count plan requires exactly one hypothesis")
+            hypothesis = self.hypotheses[0]
+            expected_source = (
+                "requested_count"
+                if self.requested_count is not None
+                else "format_default"
+            )
+            if hypothesis.source != expected_source or (
+                self.requested_count is not None
+                and hypothesis.count != self.requested_count
+            ):
+                raise ValueError("fixed count plan has inconsistent ownership")
+
     @property
     def hard_safety_count(self) -> int:
-        if not self.hypotheses:
-            raise ValueError("count hypothesis plan is empty")
         return int(self.hypotheses[0].count)
 
 def count_hypothesis_plan(
@@ -50,7 +79,6 @@ def count_hypothesis_plan(
                     count,
                     FULL,
                     "format_default" if requested_count is None else "requested_count",
-                    True,
                 ),
             ),
             automatic=False,
@@ -65,7 +93,6 @@ def count_hypothesis_plan(
                     requested_count,
                     PARTIAL,
                     "requested_count",
-                    True,
                 ),
             ),
             automatic=False,
@@ -85,7 +112,6 @@ def count_hypothesis_plan(
                 count,
                 PARTIAL,
                 "automatic_count",
-                True,
             )
             for count in counts
         ),

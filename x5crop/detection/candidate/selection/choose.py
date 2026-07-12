@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from x5crop.domain import EvidenceState
 from ...physical.model import SequenceSolution
+from ..assessment.quality import quality_for_candidate
 from ..model import AssessedCandidate
 from .model import GeometryCluster, GeometryResolution, SelectionResult
 
@@ -9,12 +10,11 @@ from .model import GeometryCluster, GeometryResolution, SelectionResult
 def candidate_rank(
     candidate: AssessedCandidate,
 ) -> tuple[int, int, int, int, int, int, float, float, float]:
-    quality = candidate.assessment.quality
+    quality = quality_for_candidate(candidate)
     residuals = quality.physical_residuals
     partial_auto_count = (
         candidate.geometry.count
         if candidate.geometry.strip_mode == "partial"
-        and candidate.count_hypothesis is not None
         and candidate.count_hypothesis.source == "automatic_count"
         else 0
     )
@@ -127,13 +127,10 @@ def geometry_resolution_for_selection(
         for path in selected.assessment.gate.proof_paths
     )
     fixed_count = bool(
-        hypothesis is not None
-        and hypothesis.source in {"format_default", "requested_count"}
+        hypothesis.source in {"format_default", "requested_count"}
     )
     count_topology_supported = bool(
-        hypothesis is not None
-        and hypothesis.allowed_by_physical_spec
-        and evidence.frame_topology.state == EvidenceState.SUPPORTED
+        evidence.frame_topology.state == EvidenceState.SUPPORTED
         and evidence.frame_topology.count_matches
     )
     conservation_not_contradicted = (

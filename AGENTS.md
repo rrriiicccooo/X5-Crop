@@ -286,8 +286,9 @@ Current state:
   conservation equation.
 - Standard, dual-lane, and review-only candidates use distinct geometry types;
   review-only modes never masquerade as solved frame sequences.
-- Candidate assessment uses `EvidenceQuality`, not scalar confidence or weighted
-  format profiles. `GeometryResolution` is the only early-stop input.
+- Candidate assessment stores canonical evidence and `CandidateGate` only;
+  `EvidenceQuality` is derived for ordering and reporting. `GeometryResolution`
+  is the only early-stop input.
 - Overlap protection uses a per-boundary `FrameBleedPlan`; unrelated frames are
   never expanded by a global maximum.
 - Current reports use `detection_report / physical_sequence_resolution` with
