@@ -4,11 +4,9 @@ from dataclasses import dataclass
 
 from ..physical.model import SequenceSolution
 from ..physical.boundary import (
-    HolderOcclusionEvidence,
     visible_sequence_length_interval,
 )
 from ..physical.spacing import (
-    InterFrameSpacing,
     SequenceConservationEvidence,
     sequence_conservation_evidence,
 )
@@ -16,8 +14,6 @@ from ..physical.spacing import (
 
 @dataclass(frozen=True)
 class FrameSequenceEvidence:
-    holder_occlusion: HolderOcclusionEvidence
-    spacings: tuple[InterFrameSpacing, ...]
     conservation: SequenceConservationEvidence
 
 
@@ -34,8 +30,4 @@ def frame_sequence_evidence(
         spacings=geometry.inter_frame_spacings,
         holder_occlusion=geometry.holder_occlusion,
     )
-    return FrameSequenceEvidence(
-        geometry.holder_occlusion,
-        geometry.inter_frame_spacings,
-        conservation,
-    )
+    return FrameSequenceEvidence(conservation)

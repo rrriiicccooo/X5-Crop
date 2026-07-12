@@ -3,9 +3,12 @@ from __future__ import annotations
 from dataclasses import replace
 import unittest
 
-from tools.tests.physical_gate_support import candidate_fixture, separator_observation
+from tools.tests.physical_gate_support import (
+    candidate_fixture,
+    holder_occlusion_not_applicable,
+    separator_observation,
+)
 from x5crop.detection.physical.boundary import (
-    HolderOcclusionEvidence,
     holder_occlusion_for_sequence,
 )
 from x5crop.detection.physical.sequence_solver import solve_frame_sequence
@@ -168,7 +171,7 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             count=3,
             frame_width_px=PixelInterval.exact(100.0),
             spacings=spacings,
-            holder_occlusion=HolderOcclusionEvidence.not_applicable(),
+            holder_occlusion=holder_occlusion_not_applicable(),
             boundary_observations=edge_observations,
             dimension_source="scan_calibration",
         )

@@ -15,7 +15,6 @@ from ...evidence.partial_edge import PartialEdgeSafetyEvidence
 from ...evidence.sequence_content_alignment import (
     SequenceContentAlignmentEvidence,
 )
-from ...physical.boundary import HolderOcclusionEvidence
 from ...physical.model import ReviewOnlyGeometry
 from ...physical.photo_size import FrameDimensionEvidence
 from ...physical.spacing import SequenceConservationEvidence
@@ -80,8 +79,6 @@ def assess_review_only_candidate(
         unexplained_content_region_count=0,
     )
     frame_sequence = FrameSequenceEvidence(
-        holder_occlusion=HolderOcclusionEvidence.unavailable(),
-        spacings=(),
         conservation=SequenceConservationEvidence(
             state=unavailable,
             reason=_REVIEW_ONLY_EVIDENCE_REASON,

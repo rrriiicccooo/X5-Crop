@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from functools import lru_cache
+from pathlib import Path
 from types import UnionType
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
@@ -17,9 +18,19 @@ from ..detection.candidate.assessment.candidate_gate import (
     CandidateGateAssessment,
 )
 from ..detection.decision.model import DecisionGateAssessment
-from ..detection.candidate.model import CandidateEvidence, EvidenceQuality
+from ..detection.candidate.model import (
+    AssessedCandidate,
+    CandidateAssessment,
+    CandidateEvidence,
+)
 from ..detection.candidate.plan.count_hypotheses import CountHypothesis
-from ..detection.candidate.selection.model import CountResolution, GeometryResolution
+from ..detection.candidate.selection.model import (
+    CountResolution,
+    GeometryCluster,
+    GeometryResolution,
+    SelectionResult,
+)
+from ..detection.final.model import FinalizationPlan
 from ..detection.gate_checks import GateCheck
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..detection.physical.model import (
@@ -32,12 +43,14 @@ from ..detection.physical.spacing import (
     ObservedSpacingEvidence,
     SpacingHypothesis,
 )
-from ..domain import EvidenceState, SeparatorAssignment, SeparatorBandObservation
+from ..domain import Box, CropEnvelope, EvidenceState, SeparatorBandObservation
 from ..io.model import ImageProfile
 from ..formats import FrameSizeMm
-from ..output.model import FrameBleedPlan
+from ..output.frame_bleed import apply_frame_bleed
+from ..output.model import FrameBleedPlan, OutputGeometry
 from ..units import ScanCalibration
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
+from .read_models import typed_read_model
 
 
 CURRENT_REPORT_SECTIONS = (
@@ -67,12 +80,12 @@ def _model_hints(model: type) -> dict[str, Any]:
     return get_type_hints(model)
 
 
-def _spacing_read_model_valid(value: Any) -> bool:
+def _spacing_from_read_model(value: Any) -> Any:
     if not isinstance(value, dict):
-        return False
+        raise TypeError("spacing read model must be a mapping")
     model = _SPACING_MODELS.get(value.get("measurement_kind"))
     if model is None:
-        return False
+        raise ValueError("unknown spacing measurement kind")
     model_fields = {field.name for field in fields(model)}
     expected = model_fields | {
         "measurement_kind",
@@ -81,221 +94,155 @@ def _spacing_read_model_valid(value: Any) -> bool:
         "supports_output_protection",
     }
     hints = _model_hints(model)
-    return bool(
-        set(value) == expected
-        and all(
-            _typed_value_valid(value[name], hints[name])
+    if set(value) != expected:
+        raise ValueError("spacing read model fields are incomplete")
+    spacing = model(
+        **{
+            name: _typed_value_from_read_model(value[name], hints[name])
             for name in model_fields
-        )
-        and value["state"]
-        in {"supported", "contradicted", "unavailable", "not_applicable"}
-        and isinstance(value["independently_observed"], bool)
-        and isinstance(value["supports_output_protection"], bool)
+        }
     )
+    if (
+        value["state"] != spacing.state.value
+        or value["independently_observed"] is not spacing.independently_observed
+        or value["supports_output_protection"]
+        is not spacing.supports_output_protection
+    ):
+        raise ValueError("spacing read model projections are inconsistent")
+    return spacing
 
 
-def _typed_value_valid(value: Any, annotation: Any) -> bool:
+def _typed_value_from_read_model(value: Any, annotation: Any) -> Any:
     if annotation is Any:
-        return True
+        return value
     if annotation is type(None):
-        return value is None
+        if value is not None:
+            raise TypeError("expected null")
+        return None
     if annotation is bool:
-        return isinstance(value, bool)
+        if not isinstance(value, bool):
+            raise TypeError("expected bool")
+        return value
     if annotation is int:
-        return _integer(value) is not None
+        integer = _integer(value)
+        if integer is None:
+            raise TypeError("expected integer")
+        return integer
     if annotation is float:
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            raise TypeError("expected number")
+        return float(value)
     if annotation is str:
-        return isinstance(value, str)
+        if not isinstance(value, str):
+            raise TypeError("expected string")
+        return value
     if annotation is bytes:
-        return isinstance(value, str) and value.startswith("<bytes:")
+        if not (
+            isinstance(value, str)
+            and value.startswith("<bytes:")
+            and value.endswith(">")
+            and value[7:-1].isdigit()
+        ):
+            raise TypeError("expected bytes read model")
+        return b""
     if isinstance(annotation, type) and issubclass(annotation, Enum):
-        return value in {item.value for item in annotation}
+        return annotation(value)
 
     origin = get_origin(annotation)
     arguments = get_args(annotation)
     if origin in {UnionType, Union}:
         if isinstance(value, dict) and "measurement_kind" in value:
-            return _spacing_read_model_valid(value)
-        return any(_typed_value_valid(value, item) for item in arguments)
+            return _spacing_from_read_model(value)
+        for item in arguments:
+            try:
+                return _typed_value_from_read_model(value, item)
+            except (KeyError, TypeError, ValueError):
+                continue
+        raise TypeError("value does not match union")
     if origin is tuple:
         if not isinstance(value, list):
-            return False
+            raise TypeError("expected tuple read model")
         if len(arguments) == 2 and arguments[1] is Ellipsis:
-            return all(_typed_value_valid(item, arguments[0]) for item in value)
-        return len(value) == len(arguments) and all(
-            _typed_value_valid(item, item_type)
+            return tuple(
+                _typed_value_from_read_model(item, arguments[0])
+                for item in value
+            )
+        if len(value) != len(arguments):
+            raise ValueError("tuple read model has the wrong length")
+        return tuple(
+            _typed_value_from_read_model(item, item_type)
             for item, item_type in zip(value, arguments, strict=True)
         )
+    if origin is list:
+        if not isinstance(value, list) or len(arguments) != 1:
+            raise TypeError("expected list read model")
+        return [
+            _typed_value_from_read_model(item, arguments[0]) for item in value
+        ]
+    if origin is dict:
+        if not isinstance(value, dict) or len(arguments) != 2:
+            raise TypeError("expected dict read model")
+        key_type, value_type = arguments
+        return {
+            _typed_value_from_read_model(key, key_type):
+            _typed_value_from_read_model(item, value_type)
+            for key, item in value.items()
+        }
     if is_dataclass(annotation):
         if not isinstance(value, dict):
-            return False
-        model_fields = {field.name for field in fields(annotation)}
-        if set(value) != model_fields:
-            return False
+            raise TypeError("expected dataclass read model")
+        model_fields = fields(annotation)
+        field_names = {field.name for field in model_fields}
+        if set(value) != field_names:
+            raise ValueError("dataclass read model fields are incomplete")
         hints = _model_hints(annotation)
-        return all(
-            _typed_value_valid(value[name], hints[name])
-            for name in model_fields
+        instance = annotation(
+            **{
+                field.name: _typed_value_from_read_model(
+                    value[field.name],
+                    hints[field.name],
+                )
+                for field in model_fields
+                if field.init
+            }
         )
-    return isinstance(value, annotation) if isinstance(annotation, type) else False
+        if any(
+            typed_read_model(getattr(instance, field.name)) != value[field.name]
+            for field in model_fields
+            if not field.init
+        ):
+            raise ValueError("derived dataclass projection is inconsistent")
+        return instance
+    if isinstance(annotation, type) and isinstance(value, annotation):
+        return value
+    raise TypeError("unsupported typed read model")
+
+
+def _typed_value_valid(value: Any, annotation: Any) -> bool:
+    try:
+        _typed_value_from_read_model(value, annotation)
+    except (KeyError, TypeError, ValueError):
+        return False
+    return True
 
 
 def _integer(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def _box_valid(value: Any) -> bool:
-    if not isinstance(value, dict) or set(value) != {
-        "left",
-        "top",
-        "right",
-        "bottom",
-    }:
-        return False
-    left = _integer(value.get("left"))
-    top = _integer(value.get("top"))
-    right = _integer(value.get("right"))
-    bottom = _integer(value.get("bottom"))
-    return bool(
-        None not in {left, top, right, bottom}
-        and right is not None
-        and left is not None
-        and bottom is not None
-        and top is not None
-        and right > left
-        and bottom > top
-    )
-
-
-def _span_valid(value: Any) -> bool:
-    return bool(
-        isinstance(value, dict)
-        and set(value) == {"box"}
-        and _box_valid(value["box"])
-    )
-
-
-def _geometry_valid(value: Any, *, allow_empty_frames: bool = False) -> bool:
-    return bool(
-        isinstance(value, dict)
-        and set(value) == {"crop_envelope", "frame_boxes"}
-        and _box_valid(value["crop_envelope"])
-        and isinstance(value["frame_boxes"], list)
-        and (allow_empty_frames or value["frame_boxes"])
-        and all(_box_valid(frame) for frame in value["frame_boxes"])
-    )
-
-
 def _separator_observation_valid(value: Any) -> bool:
     return _typed_value_valid(value, SeparatorBandObservation)
 
 
-def _separator_assignment_valid(value: Any) -> bool:
-    return _typed_value_valid(value, SeparatorAssignment)
-
-
-def _sequence_geometry_valid(value: Any) -> bool:
-    count = _integer(value.get("count")) if isinstance(value, dict) else None
-    return bool(
-        isinstance(value, dict)
-        and count is not None
-        and count > 0
-        and isinstance(value.get("frames"), list)
-        and len(value["frames"]) == count
-        and all(_box_valid(frame) for frame in value["frames"])
-        and isinstance(value.get("photo_intervals"), list)
-        and len(value["photo_intervals"]) == count
-        and isinstance(value.get("frame_boundaries"), list)
-        and len(value["frame_boundaries"]) == count - 1
-        and isinstance(value.get("inter_frame_spacings"), list)
-        and len(value["inter_frame_spacings"]) == count - 1
-    )
-
-
-def _candidate_geometry_valid(kind: str, value: Any) -> bool:
-    model_by_kind = {
+def _candidate_geometry_from_read_model(kind: str, value: Any) -> Any:
+    model = {
         "sequence": SequenceSolution,
         "dual_lane": DualLaneSolution,
         "review_only": ReviewOnlyGeometry,
-    }
-    model = model_by_kind.get(kind)
-    if model is None or not _typed_value_valid(value, model):
-        return False
-    count = _integer(value.get("count")) if isinstance(value, dict) else None
-    if not (
-        isinstance(value, dict)
-        and count is not None
-        and count > 0
-        and _span_valid(value["holder_span"])
-        and _span_valid(value["visible_sequence_span"])
-        and _span_valid(value["crop_envelope"])
-    ):
-        return False
-    if kind == "sequence":
-        return bool(
-            _sequence_geometry_valid(value)
-            and isinstance(value["separator_observations"], list)
-            and all(
-                _separator_observation_valid(item)
-                for item in value["separator_observations"]
-            )
-            and isinstance(value["separator_assignments"], list)
-            and all(
-                _separator_assignment_valid(item)
-                for item in value["separator_assignments"]
-            )
-        )
-    if kind == "dual_lane":
-        lane_solutions = value["lane_solutions"]
-        lane_boxes = value["lane_boxes"]
-        lane_envelopes = value["lane_crop_envelopes"]
-        lane_counts = (
-            tuple(
-                _integer(lane.get("count"))
-                if isinstance(lane, dict)
-                else None
-                for lane in lane_solutions
-            )
-            if isinstance(lane_solutions, list)
-            else ()
-        )
-        lane_counts_valid = bool(
-            lane_counts
-            and all(item is not None and item > 0 for item in lane_counts)
-        )
-        component_count = (
-            sum(item for item in lane_counts if item is not None)
-            if lane_counts_valid
-            else 0
-        )
-        return bool(
-            isinstance(value["frames"], list)
-            and len(value["frames"]) == count
-            and all(_box_valid(frame) for frame in value["frames"])
-            and isinstance(lane_solutions, list)
-            and len(lane_solutions) > 1
-            and all(_sequence_geometry_valid(lane) for lane in lane_solutions)
-            and lane_counts_valid
-            and component_count == count
-            and isinstance(lane_boxes, list)
-            and len(lane_boxes) == len(lane_solutions)
-            and all(_box_valid(box) for box in lane_boxes)
-            and isinstance(lane_envelopes, list)
-            and len(lane_envelopes) == len(lane_solutions)
-            and all(_span_valid(envelope) for envelope in lane_envelopes)
-        )
-    if kind == "review_only":
-        return bool(
-            value["frames"] == []
-            and value["photo_intervals"] == []
-            and value["separator_observations"] == []
-            and value["separator_assignments"] == []
-            and value["frame_boundaries"] == []
-            and value["inter_frame_spacings"] == []
-            and not value["automatic_processing_supported"]
-        )
-    return False
+    }.get(kind)
+    if model is None:
+        raise ValueError(f"unknown candidate geometry kind: {kind}")
+    return _typed_value_from_read_model(value, model)
 
 
 def _gate_check_from_read_model(value: Any) -> GateCheck:
@@ -374,14 +321,6 @@ def candidate_gate_from_read_model(value: Any) -> CandidateGateAssessment:
     return gate
 
 
-def _candidate_gate_valid(value: Any) -> bool:
-    try:
-        candidate_gate_from_read_model(value)
-    except (KeyError, TypeError, ValueError):
-        return False
-    return True
-
-
 def decision_gate_from_read_model(value: Any) -> DecisionGateAssessment:
     expected = {"passed", "checks", "reason_inputs"}
     if not (
@@ -407,7 +346,7 @@ def decision_gate_from_read_model(value: Any) -> DecisionGateAssessment:
     return gate
 
 
-def _candidate_valid(value: Any) -> bool:
+def _candidate_from_read_model(value: Any) -> AssessedCandidate:
     expected = {
         "geometry_kind",
         "candidate_geometry",
@@ -417,25 +356,30 @@ def _candidate_valid(value: Any) -> bool:
         "evidence",
     }
     if not isinstance(value, dict) or set(value) != expected:
-        return False
-    if not _candidate_geometry_valid(
-        str(value["geometry_kind"]),
-        value["candidate_geometry"],
-    ):
-        return False
-    return bool(
-        _candidate_gate_valid(value["candidate_gate"])
-        and _typed_value_valid(value["evidence_quality"], EvidenceQuality)
-        and _typed_value_valid(value["evidence"], CandidateEvidence)
-        and _typed_value_valid(value["count_hypothesis"], CountHypothesis)
+        raise ValueError("candidate read model is incomplete")
+    candidate = AssessedCandidate(
+        geometry=_candidate_geometry_from_read_model(
+            str(value["geometry_kind"]),
+            value["candidate_geometry"],
+        ),
+        count_hypothesis=_typed_value_from_read_model(
+            value["count_hypothesis"],
+            CountHypothesis,
+        ),
+        assessment=CandidateAssessment(
+            evidence=_typed_value_from_read_model(
+                value["evidence"],
+                CandidateEvidence,
+            ),
+            gate=candidate_gate_from_read_model(value["candidate_gate"]),
+        ),
     )
+    if typed_read_model(candidate.evidence_quality) != value["evidence_quality"]:
+        raise ValueError("candidate evidence quality projection is inconsistent")
+    return candidate
 
 
-def _geometry_resolution_valid(value: Any) -> bool:
-    return _typed_value_valid(value, GeometryResolution)
-
-
-def _selection_valid(value: Any) -> bool:
+def _selection_from_read_model(value: Any) -> SelectionResult:
     expected = {
         "selected_rank",
         "consensus",
@@ -444,40 +388,59 @@ def _selection_valid(value: Any) -> bool:
         "candidates",
         "clusters",
     }
-    if not (
-        isinstance(value, dict)
-        and set(value) == expected
-        and value["consensus"] in {"agreed", "uncontested", "disagreed"}
-        and isinstance(value["candidates"], list)
-        and value["candidates"]
-        and all(_candidate_valid(candidate) for candidate in value["candidates"])
-        and _geometry_resolution_valid(value["geometry_resolution"])
-        and (
-            value["count_resolution"] is None
-            or _typed_value_valid(value["count_resolution"], CountResolution)
-        )
-        and isinstance(value["clusters"], list)
-    ):
-        return False
+    if not isinstance(value, dict) or set(value) != expected:
+        raise ValueError("selection read model is incomplete")
+    if not isinstance(value["candidates"], list) or not value["candidates"]:
+        raise ValueError("selection requires candidates")
+    candidates = tuple(
+        _candidate_from_read_model(candidate) for candidate in value["candidates"]
+    )
     selected_rank = _integer(value["selected_rank"])
-    if selected_rank is None:
-        return False
-    if not 1 <= selected_rank <= len(value["candidates"]):
-        return False
+    if selected_rank is None or not 1 <= selected_rank <= len(candidates):
+        raise ValueError("selection rank is invalid")
     cluster_fields = {"candidate_ranks", "representative_rank"}
-    return all(
-        isinstance(cluster, dict)
-        and set(cluster) == cluster_fields
-        and isinstance(cluster["candidate_ranks"], list)
-        and cluster["candidate_ranks"]
-        and all(
-            _integer(rank) is not None
-            and 1 <= rank <= len(value["candidates"])
-            for rank in cluster["candidate_ranks"]
+    if not isinstance(value["clusters"], list):
+        raise ValueError("selection clusters must be a list")
+    clusters: list[GeometryCluster] = []
+    for cluster in value["clusters"]:
+        if (
+            not isinstance(cluster, dict)
+            or set(cluster) != cluster_fields
+            or not isinstance(cluster["candidate_ranks"], list)
+            or not cluster["candidate_ranks"]
+        ):
+            raise ValueError("geometry cluster read model is incomplete")
+        ranks = tuple(_integer(rank) for rank in cluster["candidate_ranks"])
+        representative_rank = _integer(cluster["representative_rank"])
+        if (
+            any(rank is None or not 1 <= rank <= len(candidates) for rank in ranks)
+            or representative_rank is None
+            or representative_rank not in ranks
+        ):
+            raise ValueError("geometry cluster ranks are invalid")
+        valid_ranks = tuple(int(rank) for rank in ranks if rank is not None)
+        cluster_candidates = tuple(
+            candidates[rank - 1] for rank in valid_ranks
         )
-        and _integer(cluster["representative_rank"]) is not None
-        and cluster["representative_rank"] in cluster["candidate_ranks"]
-        for cluster in value["clusters"]
+        clusters.append(
+            GeometryCluster(
+                cluster_candidates,
+                candidates[representative_rank - 1],
+            )
+        )
+    return SelectionResult(
+        selected=candidates[selected_rank - 1],
+        ranked_candidates=candidates,
+        clusters=tuple(clusters),
+        consensus=_typed_value_from_read_model(value["consensus"], str),
+        geometry_resolution=_typed_value_from_read_model(
+            value["geometry_resolution"],
+            GeometryResolution,
+        ),
+        count_resolution=_typed_value_from_read_model(
+            value["count_resolution"],
+            CountResolution | None,
+        ),
     )
 
 
@@ -515,19 +478,7 @@ def _decision_consistent(value: Any, errors: list[str]) -> None:
             errors.append(f"unknown_final_review_reason:{reason}")
 
 
-def _frame_bleed_plan_valid(value: Any, frame_count: int) -> bool:
-    return bool(
-        _typed_value_valid(value, FrameBleedPlan)
-        and len(value["frame_sides"]) == frame_count
-        and value["feasible"] == (not value["unresolved_overlap_boundaries"])
-    )
-
-
-def _finalization_plan_valid(
-    value: Any,
-    *,
-    allow_empty_frames: bool,
-) -> bool:
+def finalization_plan_from_read_model(value: Any) -> FinalizationPlan:
     expected = {
         "layout",
         "image_width",
@@ -535,22 +486,42 @@ def _finalization_plan_valid(
         "decision_geometry",
         "frame_bleed_plan",
     }
+    if not isinstance(value, dict) or set(value) != expected:
+        raise ValueError("finalization plan read model is incomplete")
+    return FinalizationPlan(
+        layout=_typed_value_from_read_model(value["layout"], str),
+        image_width=_typed_value_from_read_model(value["image_width"], int),
+        image_height=_typed_value_from_read_model(value["image_height"], int),
+        decision_geometry=output_geometry_from_read_model(
+            value["decision_geometry"]
+        ),
+        frame_bleed_plan=_typed_value_from_read_model(
+            value["frame_bleed_plan"],
+            FrameBleedPlan,
+        ),
+    )
+
+
+def output_geometry_from_read_model(value: Any) -> OutputGeometry:
     if not (
         isinstance(value, dict)
-        and set(value) == expected
-        and value["layout"] in {"horizontal", "vertical"}
-        and (_integer(value["image_width"]) or 0) > 0
-        and (_integer(value["image_height"]) or 0) > 0
-        and _geometry_valid(
-            value["decision_geometry"],
-            allow_empty_frames=allow_empty_frames,
-        )
+        and set(value) == {"crop_envelope", "frame_boxes"}
+        and isinstance(value["frame_boxes"], list)
     ):
-        return False
-    return _frame_bleed_plan_valid(
-        value["frame_bleed_plan"],
-        len(value["decision_geometry"]["frame_boxes"]),
+        raise ValueError("output geometry read model is incomplete")
+    return OutputGeometry(
+        crop_envelope=CropEnvelope(
+            _typed_value_from_read_model(value["crop_envelope"], Box)
+        ),
+        frames=tuple(
+            _typed_value_from_read_model(frame, Box)
+            for frame in value["frame_boxes"]
+        ),
     )
+
+
+def transform_geometry_from_read_model(value: Any) -> TransformGeometryEvidence:
+    return _typed_value_from_read_model(value, TransformGeometryEvidence)
 
 
 def _output_valid(value: Any, *, allow_empty_frames: bool) -> bool:
@@ -561,26 +532,29 @@ def _output_valid(value: Any, *, allow_empty_frames: bool) -> bool:
         "review_copy",
         "warnings",
     }
-    if not (
-        isinstance(value, dict)
-        and set(value) == expected
-        and _finalization_plan_valid(
-            value["finalization_plan"],
-            allow_empty_frames=allow_empty_frames,
-        )
-        and _geometry_valid(
-            value["final_geometry"],
-            allow_empty_frames=allow_empty_frames,
-        )
+    if not isinstance(value, dict) or set(value) != expected:
+        return False
+    try:
+        plan = finalization_plan_from_read_model(value["finalization_plan"])
+        final_geometry = output_geometry_from_read_model(value["final_geometry"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if not allow_empty_frames and not final_geometry.frames:
+        return False
+    expected_geometry = apply_frame_bleed(
+        plan.decision_geometry,
+        plan.frame_bleed_plan,
+        layout=plan.layout,
+        image_width=plan.image_width,
+        image_height=plan.image_height,
+    )
+    return bool(
+        final_geometry == expected_geometry
         and isinstance(value["output_files"], list)
         and all(isinstance(path, str) for path in value["output_files"])
         and (value["review_copy"] is None or isinstance(value["review_copy"], str))
         and isinstance(value["warnings"], list)
         and all(isinstance(warning, str) for warning in value["warnings"])
-    ):
-        return False
-    return len(value["final_geometry"]["frame_boxes"]) == len(
-        value["finalization_plan"]["decision_geometry"]["frame_boxes"]
     )
 
 
@@ -629,23 +603,53 @@ def _configuration_valid(value: Any) -> bool:
     physical = value["physical"]
     measurement = value["measurement"]
     execution = value["execution"]
+    allowed_counts = (
+        tuple(physical.get("allowed_counts", ()))
+        if isinstance(physical, dict)
+        and isinstance(physical.get("allowed_counts"), list)
+        else ()
+    )
+    nominal_size = (
+        physical.get("nominal_frame_size_mm", {})
+        if isinstance(physical, dict)
+        else {}
+    )
+    frame_options = (
+        physical.get("frame_size_mm_options", ())
+        if isinstance(physical, dict)
+        else ()
+    )
+    default_count = (
+        _integer(physical.get("default_count"))
+        if isinstance(physical, dict)
+        else None
+    )
     return bool(
         isinstance(value["configuration_id"], str)
         and isinstance(value["format_id"], str)
-        and isinstance(value["strip_mode"], str)
+        and value["configuration_id"]
+        == f"detection:{value['format_id']}:{value['strip_mode']}"
+        and value["strip_mode"] in {"full", "partial"}
         and isinstance(physical, dict)
         and set(physical) == physical_fields
         and physical["physical_layout"] in {"single_strip", "dual_lane"}
-        and _integer(physical["default_count"]) is not None
+        and default_count is not None
+        and default_count > 0
         and _integer(physical["expected_separator_count"]) is not None
-        and isinstance(physical["allowed_counts"], list)
-        and all(_integer(count) is not None for count in physical["allowed_counts"])
+        and bool(allowed_counts)
+        and all(_integer(count) is not None and count > 0 for count in allowed_counts)
+        and allowed_counts == tuple(sorted(allowed_counts))
+        and len(set(allowed_counts)) == len(allowed_counts)
+        and default_count in allowed_counts
         and _typed_value_valid(physical["nominal_frame_size_mm"], FrameSizeMm)
         and _typed_value_valid(
             physical["frame_size_mm_options"],
             tuple[FrameSizeMm, ...],
         )
+        and nominal_size in frame_options
         and _typed_value_valid(physical["frame_aspect"], float)
+        and float(physical["frame_aspect"])
+        == float(nominal_size["width_mm"]) / float(nominal_size["height_mm"])
         and physical["aspect_source"] == "frame_size_mm"
         and isinstance(physical["complete_strip_can_be_underfilled"], bool)
         and isinstance(measurement, dict)
@@ -747,6 +751,45 @@ def _analysis_reuse_signature_valid(value: Any) -> bool:
     )
 
 
+def _record_identities_valid(
+    record: dict[str, Any],
+    selection: SelectionResult,
+) -> bool:
+    configuration = record["configuration"]
+    physical = configuration["physical"]
+    signature_config = record["analysis_reuse_signature"]["config"]
+    signature_source = record["analysis_reuse_signature"]["source"]
+    input_profile = record["input"]["profile"]
+    format_id = configuration["format_id"]
+    strip_mode = configuration["strip_mode"]
+    layout = signature_config["layout"]
+    allowed_counts = set(physical["allowed_counts"])
+    requested_count = signature_config["requested_count"]
+    plan = finalization_plan_from_read_model(
+        record["output"]["finalization_plan"]
+    )
+    selected = selection.selected.geometry
+    return bool(
+        signature_config["format_id"] == format_id
+        and signature_config["strip_mode"] == strip_mode
+        and signature_source["name"] == Path(record["source"]).name
+        and all(
+            signature_source[name] == input_profile[name]
+            for name in ("shape", "dtype", "axes", "photometric")
+        )
+        and all(
+            candidate.geometry.format_id == format_id
+            and candidate.geometry.strip_mode == strip_mode
+            and candidate.geometry.layout == layout
+            and candidate.geometry.count in allowed_counts
+            for candidate in selection.ranked_candidates
+        )
+        and (requested_count is None or selected.count == requested_count)
+        and plan.layout == selected.layout
+        and len(plan.decision_geometry.frames) == len(selected.frames)
+    )
+
+
 def current_report_record_errors(record: dict[str, Any]) -> list[str]:
     errors = [
         f"missing_section:{key}"
@@ -772,7 +815,10 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
     configuration = record["configuration"]
     if not _configuration_valid(configuration):
         errors.append("configuration_incomplete")
-    if not _selection_valid(record["selection"]):
+    selection_result: SelectionResult | None = None
+    try:
+        selection_result = _selection_from_read_model(record["selection"])
+    except (KeyError, TypeError, ValueError):
         candidates = (
             record["selection"].get("candidates", [])
             if isinstance(record["selection"], dict)
@@ -805,9 +851,9 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
             selected_rank is not None
             and 1 <= selected_rank <= len(selection["candidates"])
         ):
-            selected_kind = selection["candidates"][selected_rank - 1].get(
-                "geometry_kind"
-            )
+            selected_candidate = selection["candidates"][selected_rank - 1]
+            if isinstance(selected_candidate, dict):
+                selected_kind = selected_candidate.get("geometry_kind")
     decision = record["decision"] if isinstance(record["decision"], dict) else {}
     allow_empty_frames = bool(
         selected_kind == "review_only"
@@ -820,6 +866,23 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
         errors.append("output_incomplete")
     if not _analysis_reuse_signature_valid(record["analysis_reuse_signature"]):
         errors.append("analysis_reuse_signature_invalid")
+    elif (
+        selection_result is not None
+        and _configuration_valid(configuration)
+        and _output_valid(
+            record["output"],
+            allow_empty_frames=allow_empty_frames,
+        )
+    ):
+        try:
+            identities_valid = _record_identities_valid(
+                record,
+                selection_result,
+            )
+        except (KeyError, TypeError, ValueError):
+            identities_valid = False
+        if not identities_valid:
+            errors.append("record_identity_mismatch")
     if not (
         isinstance(record["analysis_reuse"], dict)
         and set(record["analysis_reuse"]) == {"used"}

@@ -6,6 +6,7 @@ import os
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 import numpy as np
 from dataclasses import fields, replace
 
@@ -51,12 +52,13 @@ def _profile() -> ImageProfile:
 def _analysis_reuse_signature(
     format_id: str = "135",
     strip_mode: str = "full",
+    source_name: str = "input.tif",
 ) -> dict:
     return {
         "script": "X5_Crop.py",
         "script_version": "4.9",
         "source": {
-            "name": "input.tif",
+            "name": source_name,
             "size": 1,
             "mtime_ns": 1,
             "content_sha256": "0" * 64,
@@ -117,6 +119,14 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertNotIn("decision_geometry", output)
         self.assertNotIn("frame_bleed_plan", output)
 
+    def test_frame_sequence_report_does_not_duplicate_geometry_facts(self) -> None:
+        candidate = _record()["selection"]["candidates"][0]
+        self.assertIn("inter_frame_spacings", candidate["candidate_geometry"])
+        self.assertEqual(
+            set(candidate["evidence"]["frame_sequence"]),
+            {"conservation"},
+        )
+
     def test_cache_restoration_rejects_geometry_not_produced_by_finalization(
         self,
     ) -> None:
@@ -175,6 +185,12 @@ class OutputReadModelContractTest(unittest.TestCase):
             second = source_cache_signature(source, profile, 0)
 
         self.assertNotEqual(first, second)
+
+    def test_configuration_fingerprint_has_no_stringification_fallback(self) -> None:
+        source = (PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("default=str", source)
 
     def test_review_only_pipeline_produces_valid_current_report(self) -> None:
         from x5crop.cache.analysis import make_measurement_cache
@@ -275,6 +291,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             analysis_reuse_signature=_analysis_reuse_signature(
                 "135-dual",
                 "partial",
+                "synthetic.tif",
             ),
         )
         self.assertEqual(current_report_record_errors(record), [])
@@ -372,6 +389,92 @@ class OutputReadModelContractTest(unittest.TestCase):
             "count"
         ] = "not-an-integer"
         self.assertTrue(current_report_record_errors(record))
+
+        invalid_counts = _record()
+        invalid_counts["configuration"]["physical"]["allowed_counts"] = [[]]
+        self.assertTrue(current_report_record_errors(invalid_counts))
+
+        invalid_candidate = _record()
+        invalid_candidate["selection"]["candidates"][0] = None
+        self.assertTrue(current_report_record_errors(invalid_candidate))
+
+    def test_current_schema_executes_typed_cross_field_invariants(self) -> None:
+        mutations = (
+            lambda record: record["selection"]["geometry_resolution"].__setitem__(
+                "count_resolved",
+                False,
+            ),
+            lambda record: record["selection"]["candidates"][0][
+                "count_hypothesis"
+            ].__setitem__("count", 1),
+            lambda record: record["selection"]["candidates"][0][
+                "candidate_geometry"
+            ].__setitem__("format_id", "half"),
+            lambda record: record["analysis_reuse_signature"]["config"].__setitem__(
+                "format_id",
+                "half",
+            ),
+            lambda record: record["configuration"]["physical"].__setitem__(
+                "frame_aspect",
+                9.0,
+            ),
+            lambda record: record["analysis_reuse_signature"]["source"].__setitem__(
+                "shape",
+                [1, 1],
+            ),
+            lambda record: record["analysis_reuse_signature"]["source"].__setitem__(
+                "name",
+                "other.tif",
+            ),
+            lambda record: record["output"]["final_geometry"]["frame_boxes"][0].__setitem__(
+                "left",
+                1,
+            ),
+        )
+        for mutation in mutations:
+            record = _record()
+            mutation(record)
+            with self.subTest(mutation=mutation):
+                self.assertTrue(current_report_record_errors(record))
+
+    def test_invalid_current_record_is_a_cache_miss(self) -> None:
+        from x5crop.runtime.analysis_reuse import cached_record_matches
+
+        record = _record()
+        record["selection"]["geometry_resolution"]["count_resolved"] = False
+        self.assertFalse(
+            cached_record_matches(record, record["analysis_reuse_signature"])
+        )
+
+    def test_cache_restoration_failure_falls_back_to_fresh_detection(self) -> None:
+        from x5crop.runtime.analysis_reuse import result_from_reusable_analysis
+
+        config = SimpleNamespace(
+            reuse_analysis=True,
+            dry_run=False,
+            debug=False,
+            debug_analysis=False,
+        )
+        with (
+            patch(
+                "x5crop.runtime.analysis_reuse.find_reusable_analysis",
+                return_value=_record(),
+            ),
+            patch(
+                "x5crop.runtime.analysis_reuse._final_detection_from_record",
+                side_effect=ValueError("invalid typed restoration"),
+            ),
+        ):
+            self.assertIsNone(
+                result_from_reusable_analysis(
+                    Path("input.tif"),
+                    config,
+                    SimpleNamespace(root=Path("output")),
+                    _profile(),
+                    [],
+                    _analysis_reuse_signature(),
+                )
+            )
 
     def test_unavailable_transform_span_remains_explicitly_unavailable(self) -> None:
         transform = replace(

@@ -121,14 +121,6 @@ class HolderOcclusionEvidence:
             raise ValueError("combined holder occlusion must derive from edge widths")
 
     @classmethod
-    def not_applicable(cls) -> "HolderOcclusionEvidence":
-        return cls(
-            _not_applicable_side("leading"),
-            _not_applicable_side("trailing"),
-            PixelInterval.zero(),
-        )
-
-    @classmethod
     def unavailable(cls) -> "HolderOcclusionEvidence":
         return cls(
             _unavailable_side("leading"),
@@ -156,16 +148,6 @@ def visible_sequence_length_interval(
                 measured.maximum,
             )
     return PixelInterval.exact(float(visible_sequence_span.box.width))
-
-
-def _not_applicable_side(side: str) -> HolderOcclusionSideEvidence:
-    return HolderOcclusionSideEvidence(
-        side=side,
-        state=EvidenceState.NOT_APPLICABLE,
-        hidden_width_px=PixelInterval.zero(),
-        reason="edge_frame_not_occluded",
-        boundary=None,
-    )
 
 
 def _unavailable_side(side: str) -> HolderOcclusionSideEvidence:

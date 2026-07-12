@@ -19,7 +19,6 @@ from ...evidence.sequence_content_alignment import SequenceContentAlignmentEvide
 from ...evidence.partial_edge import PartialEdgeSafetyEvidence
 from x5crop.domain import EvidenceState, FrameBoundaryReference
 from ...physical.photo_size import FrameDimensionEvidence
-from ...physical.boundary import HolderOcclusionEvidence
 from x5crop.domain import PixelInterval
 from ...physical.spacing import SequenceConservationEvidence
 from ...physical.model import DualLaneSolution
@@ -348,18 +347,6 @@ def assess_dual_lane_candidate(
         frame_topology=topology,
         frame_coverage=coverage,
         frame_sequence=FrameSequenceEvidence(
-            holder_occlusion=HolderOcclusionEvidence.not_applicable(),
-            spacings=tuple(
-                replace(
-                    spacing,
-                    boundary=FrameBoundaryReference(
-                        lane_index,
-                        spacing.boundary.boundary_index,
-                    ),
-                )
-                for lane_index, lane in enumerate(lanes, start=1)
-                for spacing in lane.assessment.evidence.frame_sequence.spacings
-            ),
             conservation=SequenceConservationEvidence(
                 EvidenceState.NOT_APPLICABLE,
                 "dual_lane_components_own_sequence_conservation",

@@ -61,7 +61,6 @@ class EvidenceQuality:
     supported: tuple[str, ...]
     contradicted: tuple[str, ...]
     unavailable: tuple[str, ...]
-    not_applicable: tuple[str, ...]
     covered_content_px: int
     uncovered_content_px: int
     supported_proof_paths: tuple[str, ...]
@@ -124,11 +123,6 @@ class AssessedCandidate:
             ),
             unavailable=tuple(
                 code for code, state in states if state == EvidenceState.UNAVAILABLE
-            ),
-            not_applicable=tuple(
-                code
-                for code, state in states
-                if state == EvidenceState.NOT_APPLICABLE
             ),
             covered_content_px=max(0, content_total - uncovered),
             uncovered_content_px=uncovered,

@@ -194,6 +194,8 @@ count 仍要求正向 frame coverage 才能声明 count resolved。
 `CandidateAssessment` 只保存 canonical evidence 与 CandidateGate。
 `AssessedCandidate.evidence_quality` 从 evidence、proof paths 和 geometry residuals 确定性派生；
 selection 与 report 只读取该 canonical property，不维护第二事实源或反向调用 assessment。
+Inter-frame spacing 与 holder occlusion 只属于 candidate geometry；`FrameSequenceEvidence` 只保存由这些
+事实推导的 conservation，不复制 geometry facts。Output bleed 与 Debug 也直接读取 canonical geometry。
 系统没有 scalar confidence、weighted score、confidence cap 或 confidence gate。
 
 Selection 使用确定性顺序：
@@ -235,8 +237,8 @@ DecisionGateAssessment 在构造时拒绝 vocabulary 之外的 final reason。
 - Geometry overlap hypothesis 产生 unresolved output protection，不产生自动 bleed。
 - Finalization 在 `frame_output_bounds` 内应用 bleed，生成实际 final envelope；它不读取
   gray/content/separator，也不修改 decision geometry。
-- `FinalDetection` 在构造时使用同一 `FinalizationPlan` 重算 output geometry；任意扩张、
-  第二 factory 或与 plan 不一致的持久化结果都会被拒绝。
+- `FinalDetection` 从同一 `FinalizationPlan` 确定性派生 output geometry；任意扩张、第二 factory
+  或与 plan 不一致的持久化结果都会被拒绝。
 
 Transform evidence、output protection、user bleed 与 final geometry 都在 typed model 边界验证派生
 状态；`applied` angle、span pair、feasible、reason 和 unresolved boundaries 不能彼此矛盾。
@@ -272,9 +274,10 @@ Preview/Analysis 请求都会执行完整 detection；cached export 只重放必
 像素 transform，不重建 gray/evidence/configuration。Debug Analysis 保持 original gray、debug
 boxes、separator evidence 三联图。
 Current validator 精确校验 `GeometryResolution` 字段；旧字段形状即使使用相同 schema identity
-也会被拒绝并重新检测。所有 typed result 由 canonical dataclass 结构递归校验，report 自有投影
-也使用精确字段集合；configuration、selection、decision 与 output 共用唯一 typed projection，
-不再经过第二套通用序列化。任何层级的额外 alias、旧字段或未知 section 都会使 record 失效。
+也会被拒绝并重新检测。所有 typed result 都由 canonical dataclass 构造器递归恢复，因此跨字段
+物理不变量与 runtime 完全相同；validator 还核对 input/signature、configuration/candidate、count 和
+finalization geometry 的共同 identity。Report 自有投影使用精确字段集合；任何额外 alias、旧字段、
+未知 section 或 restoration 失败都会使 cache miss 并重新检测。
 Runtime 对外只传递 report-owned `ReportResult`；它在构造时验证 current schema。共享 domain
 不保存 report record、TIFF profile 或用户 bleed 偏好，后者由 `x5crop.output` 独占。
 

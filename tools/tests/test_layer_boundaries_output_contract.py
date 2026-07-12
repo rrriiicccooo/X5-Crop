@@ -3,12 +3,20 @@ from __future__ import annotations
 from inspect import signature
 import unittest
 
+import numpy as np
+
 from tools.tests.architecture_contracts import PROJECT_ROOT, forbidden_import_edges
 
 
 class LayerBoundariesOutputContractTest(unittest.TestCase):
-    def test_report_restoration_is_the_only_schema_deserializer(self) -> None:
+    def test_report_validation_is_the_only_schema_deserializer(self) -> None:
         reuse = (PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py").read_text(
+            encoding="utf-8"
+        )
+        restoration = (PROJECT_ROOT / "x5crop/report/restoration.py").read_text(
+            encoding="utf-8"
+        )
+        validation = (PROJECT_ROOT / "x5crop/report/validation.py").read_text(
             encoding="utf-8"
         )
         self.assertIn(
@@ -21,6 +29,13 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             "def _box_from_record",
         ):
             self.assertNotIn(forbidden, reuse)
+        self.assertIn("_typed_value_from_read_model", validation)
+        for duplicate_constructor in (
+            "OutputGeometry(",
+            "FrameBleedPlan(",
+            "TransformGeometryEvidence(",
+        ):
+            self.assertNotIn(duplicate_constructor, restoration)
 
     def test_report_output_has_one_runtime_owner(self) -> None:
         owners = [
@@ -37,8 +52,34 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         )
         self.assertIn("FinalDetection", source)
         self.assertIn("separator_observations", source)
-        self.assertIn("frame_sequence.spacings", source)
+        self.assertIn("geometry.inter_frame_spacings", source)
+        self.assertNotIn("frame_sequence.spacings", source)
         self.assertNotIn(".detail", source)
+
+    def test_separator_overlay_uses_finalization_coordinate_context(self) -> None:
+        from tools.tests.physical_gate_support import (
+            candidate_fixture,
+            final_detection_fixture,
+        )
+        from x5crop.configuration.registry import get_detection_configuration
+        from x5crop.debug.separators import draw_separator_overlay
+
+        diagnostics = get_detection_configuration("135", "full").diagnostics
+        draw_separator_overlay(
+            np.zeros((100, 200, 3), dtype=np.uint8),
+            final_detection_fixture(),
+            candidate_fixture(),
+            1.0,
+            diagnostics.separator_overlay,
+            diagnostics.style,
+        )
+
+    def test_output_bleed_reads_canonical_geometry_spacing(self) -> None:
+        source = (PROJECT_ROOT / "x5crop/runtime/frame_bleed.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("geometry.inter_frame_spacings", source)
+        self.assertNotIn("frame_sequence.spacings", source)
 
     def test_debug_analysis_has_one_fixed_three_panel_contract(self) -> None:
         import x5crop.configuration.diagnostics as diagnostics_model

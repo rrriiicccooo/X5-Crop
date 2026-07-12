@@ -48,9 +48,10 @@ def _lane_frame_indexes(candidate: AssessedCandidate) -> tuple[tuple[int, ...], 
 def _overlap_requirements(
     candidate: AssessedCandidate,
 ) -> tuple[FrameOverlapRequirement, ...]:
+    geometry = candidate.geometry
     lane_indexes = _lane_frame_indexes(candidate)
     requirements: list[FrameOverlapRequirement] = []
-    for relation in candidate.assessment.evidence.frame_sequence.spacings:
+    for relation in geometry.inter_frame_spacings:
         if relation.signed_width_px.minimum >= 0.0:
             continue
         boundary = relation.boundary

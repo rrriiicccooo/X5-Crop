@@ -255,8 +255,16 @@ class DualLaneAssessmentTest(unittest.TestCase):
         second = candidate_fixture(
             failed_candidate_check="boundary_proof",
         )
+        parent = _parent(first)
+        parent = replace(
+            parent,
+            geometry=replace(
+                parent.geometry,
+                lane_solutions=(first.geometry, second.geometry),
+            ),
+        )
         assessed = assess_dual_lane_candidate(
-            _parent(first),
+            parent,
             (first, second),
             lane_geometry_resolved=(True, True),
         )
@@ -300,33 +308,35 @@ class DualLaneAssessmentTest(unittest.TestCase):
         second = candidate_fixture()
         second = replace(
             second,
-            assessment=replace(
-                second.assessment,
-                evidence=replace(
-                    second.assessment.evidence,
-                    frame_sequence=replace(
-                        second.assessment.evidence.frame_sequence,
-                        spacings=(
-                            observed_spacing_evidence(
-                                FrameBoundaryReference(None, 1),
-                                PixelInterval.exact(-8.0),
-                                MeasurementProvenance(
-                                    "photo_edges",
-                                    "synthetic_overlap",
-                                    ("gray_work",),
-                                ),
-                            ),
+            geometry=replace(
+                second.geometry,
+                inter_frame_spacings=(
+                    observed_spacing_evidence(
+                        FrameBoundaryReference(None, 1),
+                        PixelInterval.exact(-8.0),
+                        MeasurementProvenance(
+                            "photo_edges",
+                            "synthetic_overlap",
+                            ("gray_work",),
                         ),
                     ),
                 ),
             ),
         )
+        parent = _parent(first)
+        parent = replace(
+            parent,
+            geometry=replace(
+                parent.geometry,
+                lane_solutions=(first.geometry, second.geometry),
+            ),
+        )
         assessed = assess_dual_lane_candidate(
-            _parent(first),
+            parent,
             (first, second),
             lane_geometry_resolved=(True, True),
         )
-        spacings = assessed.assessment.evidence.frame_sequence.spacings
+        spacings = assessed.geometry.inter_frame_spacings
         overlap = next(spacing for spacing in spacings if spacing.kind == "overlap")
         self.assertEqual(overlap.boundary, FrameBoundaryReference(2, 1))
         self.assertEqual(overlap.signed_width_px, PixelInterval.exact(-8.0))

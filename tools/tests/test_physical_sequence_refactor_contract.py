@@ -9,6 +9,7 @@ import unittest
 from tools.tests.physical_gate_support import (
     candidate_fixture,
     frame_bleed_fixture,
+    holder_occlusion_not_applicable,
     selection_fixture,
     separator_constraints,
     separator_observation,
@@ -29,7 +30,6 @@ from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
 from x5crop.detection.evidence.sequence_content_alignment import (
     SequenceContentAlignmentEvidence,
 )
-from x5crop.detection.physical.boundary import HolderOcclusionEvidence
 from x5crop.detection.physical.boundary import holder_occlusion_for_sequence
 from x5crop.detection.physical.boundary import visible_sequence_length_interval
 from x5crop.detection.physical.model import BoundaryAssignmentConsensus
@@ -387,7 +387,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                     ("physical_frame_size",),
                 ),
             ),
-            HolderOcclusionEvidence.not_applicable(),
+            holder_occlusion_not_applicable(),
         )
 
         self.assertGreaterEqual(constraint.width.maximum, 10.0)
@@ -477,7 +477,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             count=3,
             frame_width_px=PixelInterval.exact(100.0),
             spacings=result.relations,
-            holder_occlusion=HolderOcclusionEvidence.not_applicable(),
+            holder_occlusion=holder_occlusion_not_applicable(),
         )
         self.assertEqual(conservation.state, EvidenceState.UNAVAILABLE)
 
@@ -561,7 +561,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                     ),
                 ),
             ),
-            holder_occlusion=HolderOcclusionEvidence.not_applicable(),
+            holder_occlusion=holder_occlusion_not_applicable(),
             boundary_observations=boundaries,
             dimension_source="scan_calibration",
         )

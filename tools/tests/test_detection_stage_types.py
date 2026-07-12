@@ -217,6 +217,14 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         self.assertNotIn("final_review_reasons", decision_fields)
         self.assertNotIn("reason_inputs", decision_fields)
 
+    def test_frame_sequence_evidence_does_not_copy_geometry_facts(self) -> None:
+        from x5crop.detection.evidence.frame_sequence import FrameSequenceEvidence
+
+        self.assertEqual(
+            {field.name for field in fields(FrameSequenceEvidence)},
+            {"conservation"},
+        )
+
     def test_final_detection_has_no_output_alias_properties(self) -> None:
         self.assertNotIn("outer", FinalDetection.__dict__)
         self.assertNotIn("frames", FinalDetection.__dict__)

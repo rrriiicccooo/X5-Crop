@@ -55,7 +55,10 @@ from x5crop.detection.physical.model import (
     SequenceSolution,
 )
 from x5crop.detection.physical.photo_size import FrameDimensionEvidence
-from x5crop.detection.physical.boundary import HolderOcclusionEvidence
+from x5crop.detection.physical.boundary import (
+    HolderOcclusionEvidence,
+    HolderOcclusionSideEvidence,
+)
 from x5crop.domain import PixelInterval
 from x5crop.detection.physical.spacing import (
     SequenceConservationEvidence,
@@ -118,6 +121,23 @@ def separator_observation(
                 else "cross_axis_continuity_weak"
             ),
         ),
+    )
+
+
+def holder_occlusion_not_applicable() -> HolderOcclusionEvidence:
+    def side(name: str) -> HolderOcclusionSideEvidence:
+        return HolderOcclusionSideEvidence(
+            name,
+            EvidenceState.NOT_APPLICABLE,
+            PixelInterval.zero(),
+            "edge_frame_not_occluded",
+            None,
+        )
+
+    return HolderOcclusionEvidence(
+        side("leading"),
+        side("trailing"),
+        PixelInterval.zero(),
     )
 
 
@@ -211,18 +231,6 @@ def candidate_evidence_fixture(
             0,
         ),
         frame_sequence=FrameSequenceEvidence(
-            holder_occlusion=HolderOcclusionEvidence.not_applicable(),
-            spacings=(
-                observed_spacing_evidence(
-                    FrameBoundaryReference(None, 1),
-                    PixelInterval.exact(0.0),
-                    MeasurementProvenance(
-                        "separator_profile",
-                        "test_fixture",
-                        ("gray_work",),
-                    ),
-                ),
-            ),
             conservation=SequenceConservationEvidence(
                 EvidenceState.SUPPORTED,
                 "frame_sequence_conserved",
@@ -397,7 +405,7 @@ def candidate_fixture(
         separator_assignments=(assignment,),
         frame_boundaries=(boundary,),
         inter_frame_spacings=(relation,),
-        holder_occlusion=HolderOcclusionEvidence.not_applicable(),
+        holder_occlusion=holder_occlusion_not_applicable(),
         frame_dimension_prior=FrameDimensionPrior(
             PixelInterval.exact(100.0),
             PixelInterval.exact(100.0),

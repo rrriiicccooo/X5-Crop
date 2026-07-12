@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 
 from ...domain import (
@@ -8,6 +8,7 @@ from ...domain import (
     Box,
     CropEnvelope,
     FrameBoundary,
+    FrameBoundaryReference,
     FrameDimensionPrior,
     HolderSpan,
     MeasurementProvenance,
@@ -284,6 +285,20 @@ class DualLaneSolution:
     @property
     def sequence_provenance(self) -> MeasurementProvenance:
         return self.lane_divider.provenance
+
+    @property
+    def inter_frame_spacings(self) -> tuple[InterFrameSpacing, ...]:
+        return tuple(
+            replace(
+                spacing,
+                boundary=FrameBoundaryReference(
+                    lane_index,
+                    spacing.boundary.boundary_index,
+                ),
+            )
+            for lane_index, lane in enumerate(self.lane_solutions, start=1)
+            for spacing in lane.inter_frame_spacings
+        )
 
     def __post_init__(self) -> None:
         _validate_geometry_identity(self.format_id, self.layout, self.strip_mode)

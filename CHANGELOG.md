@@ -16,6 +16,11 @@ repository rules in `AGENTS.md`.
 
 #### 封口参数与几何解析契约（2026-07-12）
 
+- Current-schema validation 现在通过正式 dataclass 构造器执行全部跨字段物理不变量，并核对
+  input/signature、configuration/candidate、count 与 finalization geometry 的共同 identity；损坏记录
+  或 restoration 失败只会导致重新检测。Configuration fingerprint 也不再静默字符串化未知类型。
+- Inter-frame spacing 与 holder occlusion 收敛为 CandidateGeometry 的唯一事实源；
+  `FrameSequenceEvidence` 只保留 conservation，output bleed、Debug 和 report 不再读取事实副本。
 - Decision 与 output ownership 再收口：删除只转发 DecisionGate 的 `DecisionResult`，`DecisionGateAssessment`
   直接拥有 checks、status 和 final reasons；layout、图像尺寸、
   decision geometry 和 bleed 统一进入 typed `FinalizationPlan`。`FinalDetection` 只能由一个

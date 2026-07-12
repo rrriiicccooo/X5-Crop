@@ -26,7 +26,7 @@ def separator_mark_box(
     end = max(start + 1, int(round(observation.end + long_axis_offset)))
     return map_work_box(
         Box(start, corridor.top, end, corridor.bottom),
-        detection.decision.layout,
+        detection.finalization_plan.layout,
         image_width,
         image_height,
     )
@@ -50,7 +50,12 @@ def _boundary_ticks(
         Box(x, max(corridor.top, corridor.bottom - tick), x + 1, corridor.bottom),
     )
     return tuple(
-        map_work_box(box, detection.decision.layout, image_width, image_height)
+        map_work_box(
+            box,
+            detection.finalization_plan.layout,
+            image_width,
+            image_height,
+        )
         for box in work_ticks
     )
 
@@ -131,6 +136,7 @@ def draw_separator_overlay(
     overlay: Any,
     style: DebugStyleParameters,
 ) -> None:
+    geometry = selected_candidate.geometry
     image_height = max(
         1,
         int(round(rgb.shape[0] / max(scale, style.separator_scale_floor))),
@@ -144,10 +150,9 @@ def draw_separator_overlay(
             spacing.boundary.lane_index,
             spacing.boundary.boundary_index,
         )
-        for spacing in selected_candidate.assessment.evidence.frame_sequence.spacings
+        for spacing in geometry.inter_frame_spacings
         if spacing.kind == "overlap"
     }
-    geometry = selected_candidate.geometry
     if isinstance(geometry, SequenceSolution):
         _draw_sequence_overlay(
             rgb,

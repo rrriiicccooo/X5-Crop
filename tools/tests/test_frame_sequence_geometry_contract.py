@@ -12,7 +12,6 @@ from x5crop.domain import EvidenceState, FrameBoundaryReference
 from x5crop.detection.physical.boundary import (
     BoundaryObservation,
     HolderOcclusionConstraint,
-    HolderOcclusionEvidence,
     HolderOcclusionSideEvidence,
     visible_sequence_and_crop_envelope,
     holder_occlusion_evidence,
@@ -48,6 +47,7 @@ from x5crop.image.statistics import (
 from x5crop.domain import CropEnvelope, VisibleSequenceSpan
 from tools.tests.physical_gate_support import (
     candidate_fixture,
+    holder_occlusion_not_applicable,
     separator_constraints,
     separator_observation,
 )
@@ -441,7 +441,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                     MeasurementProvenance("separator_profile", "synthetic", ()),
                 ),
             ),
-            holder_occlusion=HolderOcclusionEvidence.not_applicable(),
+            holder_occlusion=holder_occlusion_not_applicable(),
         )
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
 
@@ -462,7 +462,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                     MeasurementProvenance("photo_edges", "synthetic", ()),
                 ),
             ),
-            holder_occlusion=HolderOcclusionEvidence.not_applicable(),
+            holder_occlusion=holder_occlusion_not_applicable(),
         )
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
 
@@ -638,9 +638,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             ),
         )
         evidence = frame_sequence_evidence(geometry)
-        self.assertEqual(evidence.spacings[0].signed_width_px, PixelInterval.exact(5.0))
-        self.assertEqual(evidence.spacings[1].signed_width_px, PixelInterval.exact(10.0))
-        self.assertEqual(evidence.spacings[1].state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(evidence.conservation.state, EvidenceState.UNAVAILABLE)
 
 
 if __name__ == "__main__":

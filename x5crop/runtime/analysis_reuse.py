@@ -79,7 +79,6 @@ def analysis_configuration_fingerprint(
         analysis_configurations,
         sort_keys=True,
         separators=(",", ":"),
-        default=str,
     ).encode("utf-8")
     return sha256(payload).hexdigest()
 
@@ -204,7 +203,10 @@ def result_from_reusable_analysis(
     if cached_record is None:
         return None
 
-    detection = _final_detection_from_record(cached_record)
+    try:
+        detection = _final_detection_from_record(cached_record)
+    except (KeyError, TypeError, ValueError):
+        return None
     warnings.append(f"reused analysis report: {REPORT_JSONL_NAME}")
     review_copy = copy_for_review_if_needed(
         input_file,
