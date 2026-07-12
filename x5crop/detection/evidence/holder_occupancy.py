@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from ...domain import Box
 from ...formats import FormatPhysicalSpec
+from ...geometry.layout import is_horizontal_layout
 from ...units import ScanCalibration
 from ..physical.photo_size import FrameDimensionEvidence
 from x5crop.domain import VisibleSequenceSpan, HolderSpan
@@ -101,7 +102,7 @@ def holder_occupancy_evidence(
     trailing_slack_px = max(0.0, float(holder.right - sequence_box.right))
     observed_span_px = float(sequence_box.width)
     holder_fill_ratio = observed_span_px / float(max(1, holder.width))
-    long_axis = "x" if layout == "horizontal" else "y"
+    long_axis = "x" if is_horizontal_layout(layout) else "y"
     px_per_mm = calibration.px_per_mm(long_axis) if calibration.trusted else None
     leading_slack_mm = (
         None

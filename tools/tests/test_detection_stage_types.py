@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import fields
 from pathlib import Path
 import inspect
+from types import SimpleNamespace
 import unittest
 from typing import get_type_hints
 
@@ -17,7 +18,7 @@ from x5crop.detection.physical.model import SequenceSolution
 import x5crop.detection.physical.model as physical_model
 from x5crop.detection.candidate.selection.model import SelectionResult
 from x5crop.detection.decision.model import DecisionGateAssessment, FinalDetection
-from x5crop.detection.context import DetectionContext
+from x5crop.detection.context import DetectionContext, DetectionRequest
 from x5crop.detection.candidate.assessment.candidate_gate import (
     CandidateGateAssessment,
 )
@@ -28,12 +29,61 @@ from x5crop.report.result_builder import result_from_detection
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.domain import CropEnvelope
 from x5crop.output.model import OutputGeometry
+from x5crop.units import ScanCalibration
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class DetectionStageTypeContractTests(unittest.TestCase):
+    def test_detection_request_and_context_reject_identity_drift(self) -> None:
+        from x5crop.configuration.registry import get_detection_configuration
+
+        with self.assertRaises(ValueError):
+            DetectionRequest("diagonal", "full", None)
+        with self.assertRaises(ValueError):
+            DetectionRequest("horizontal", "unknown", None)
+        with self.assertRaises(ValueError):
+            DetectionRequest("horizontal", "partial", 0)
+
+        calibration = ScanCalibration(None, None, "unavailable", False)
+        full = get_detection_configuration("135", "full")
+        dual = get_detection_configuration("135-dual", "full")
+        lane = get_detection_configuration("135", "full")
+        invalid_contexts = (
+            lambda: DetectionContext(
+                calibration,
+                DetectionRequest("horizontal", "partial", None),
+                full,
+                None,
+                SimpleNamespace(layout="horizontal"),
+            ),
+            lambda: DetectionContext(
+                calibration,
+                DetectionRequest("vertical", "full", None),
+                full,
+                None,
+                SimpleNamespace(layout="horizontal"),
+            ),
+            lambda: DetectionContext(
+                calibration,
+                DetectionRequest("horizontal", "full", None),
+                full,
+                lane,
+                SimpleNamespace(layout="horizontal"),
+            ),
+            lambda: DetectionContext(
+                calibration,
+                DetectionRequest("horizontal", "full", None),
+                dual,
+                None,
+                SimpleNamespace(layout="horizontal"),
+            ),
+        )
+        for factory in invalid_contexts:
+            with self.subTest(factory=factory), self.assertRaises(ValueError):
+                factory()
+
     def test_detection_context_contains_no_tiff_io_profile(self) -> None:
         self.assertNotIn("image_profile", DetectionContext.__dataclass_fields__)
 

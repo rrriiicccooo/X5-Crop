@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from ...domain import FrameDimensionPrior, MeasurementProvenance
 from ...formats import FormatPhysicalSpec
+from ...geometry.layout import is_horizontal_layout
 from ...units import ScanCalibration
 from x5crop.domain import EvidenceState
 from x5crop.domain import PixelInterval, VisibleSequenceSpan
@@ -50,13 +51,14 @@ def frame_dimension_prior(
     *,
     layout: str,
 ) -> FrameDimensionPrior:
+    horizontal = is_horizontal_layout(layout)
     short_axis = float(span.box.height)
     options = tuple(
         (float(option.width_mm), float(option.height_mm))
         for option in physical_spec.frame_size_mm_options
     )
-    long_ppm = calibration.px_per_mm("x" if layout == "horizontal" else "y")
-    short_ppm = calibration.px_per_mm("y" if layout == "horizontal" else "x")
+    long_ppm = calibration.px_per_mm("x" if horizontal else "y")
+    short_ppm = calibration.px_per_mm("y" if horizontal else "x")
     calibrated = bool(
         calibration.trusted
         and long_ppm is not None
@@ -119,6 +121,7 @@ def frame_dimension_evidence(
     physical_spec: FormatPhysicalSpec,
     calibration: ScanCalibration,
 ) -> FrameDimensionEvidence:
+    horizontal = is_horizontal_layout(geometry.layout)
     nominal = physical_spec.nominal_frame_size_mm
     photo_widths, separator_widths = _photo_widths(
         geometry,
@@ -144,10 +147,10 @@ def frame_dimension_evidence(
         else None
     )
     long_ppm = calibration.px_per_mm(
-        "x" if geometry.layout == "horizontal" else "y"
+        "x" if horizontal else "y"
     )
     short_ppm = calibration.px_per_mm(
-        "y" if geometry.layout == "horizontal" else "x"
+        "y" if horizontal else "x"
     )
     calibration_used = bool(
         calibration.trusted

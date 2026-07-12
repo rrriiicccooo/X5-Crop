@@ -5,7 +5,7 @@ import math
 
 import numpy as np
 
-from ..geometry.layout import work_gray
+from ..geometry.layout import VERTICAL, work_gray
 from ..utils import bbox_from_mask
 from .deskew_parameters import DeskewParameters
 from .statistics import ImageMeasurementStatistics
@@ -138,7 +138,7 @@ def measure_deskew_angle(
 
     slope = float(np.median(slopes))
     angle = math.degrees(math.atan(slope))
-    if layout == "vertical":
+    if layout == VERTICAL:
         angle = -angle
     return DeskewAngleMeasurement(angle, None, top_fit, bottom_fit)
 

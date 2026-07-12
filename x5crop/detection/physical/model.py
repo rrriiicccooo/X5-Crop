@@ -17,8 +17,22 @@ from ...domain import (
     VisibleSequenceSpan,
     EvidenceState,
 )
+from ...geometry.layout import HORIZONTAL, require_work_layout
+from ...strip_modes import FULL, PARTIAL
 from .boundary import HolderOcclusionEvidence
 from .spacing import InterFrameSpacing
+
+
+def _validate_geometry_identity(
+    format_id: str,
+    layout: str,
+    strip_mode: str,
+) -> None:
+    if not format_id:
+        raise ValueError("candidate geometry requires a format identity")
+    require_work_layout(layout)
+    if strip_mode not in {FULL, PARTIAL}:
+        raise ValueError(f"unsupported candidate geometry mode: {strip_mode}")
 
 
 @dataclass(frozen=True)
@@ -122,6 +136,7 @@ class SequenceSolution:
     boundary_observations: tuple[BoundaryObservation, ...]
 
     def __post_init__(self) -> None:
+        _validate_geometry_identity(self.format_id, self.layout, self.strip_mode)
         if self.count <= 0:
             raise ValueError("sequence solution count must be positive")
         if len(self.frames) != self.count:
@@ -218,6 +233,8 @@ class DualLaneSolution:
     lane_crop_envelopes: tuple[CropEnvelope, ...]
 
     def __post_init__(self) -> None:
+        _validate_geometry_identity(self.format_id, self.layout, self.strip_mode)
+
         def translated(box: Box, lane_box: Box) -> Box:
             return Box(
                 box.left + lane_box.left,
@@ -263,7 +280,7 @@ class DualLaneSolution:
             or any(not frame.valid() for frame in self.frames)
         ):
             raise ValueError("dual-lane solution requires one valid frame per count")
-        if any(lane.layout != "horizontal" for lane in self.lane_solutions):
+        if any(lane.layout != HORIZONTAL for lane in self.lane_solutions):
             raise ValueError("dual-lane components must use horizontal lane workspace")
         expected_frames = tuple(
             translated(frame, lane_box)
@@ -347,6 +364,7 @@ class ReviewOnlyGeometry:
     automatic_processing_supported: bool = False
 
     def __post_init__(self) -> None:
+        _validate_geometry_identity(self.format_id, self.layout, self.strip_mode)
         if self.count <= 0:
             raise ValueError("review-only geometry count must be positive")
         if any(

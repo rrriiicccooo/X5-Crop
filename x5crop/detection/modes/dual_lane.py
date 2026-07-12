@@ -12,6 +12,7 @@ from ...domain import (
     VisibleSequenceSpan,
 )
 from ...geometry.boxes import translate_box
+from ...geometry.layout import HORIZONTAL, is_horizontal_layout
 from ...image.statistics import image_measurement_statistics
 from ...units import ScanCalibration
 from ..candidate.assessment.dual_lane import assess_dual_lane_candidate
@@ -40,7 +41,7 @@ StandardDetector = Callable[[DetectionContext], SelectionResult]
 
 def _lane_calibration(context: DetectionContext) -> ScanCalibration:
     calibration = context.scan_calibration
-    if context.request.layout == "horizontal":
+    if is_horizontal_layout(context.request.layout):
         return calibration
     return ScanCalibration(
         x_px_per_mm=calibration.y_px_per_mm,
@@ -61,13 +62,13 @@ def _lane_context(
     lane_gray = context.measurement_cache.gray_work[lane.top : lane.bottom, lane.left : lane.right]
     lane_request = replace(
         context.request,
-        layout="horizontal",
+        layout=HORIZONTAL,
         strip_mode="full",
         requested_count=lane_configuration.physical_spec.default_count,
     )
     cache = make_measurement_cache(
         lane_gray,
-        "horizontal",
+        HORIZONTAL,
         lane_configuration.preprocess.content_evidence_image,
         image_measurement_statistics(
             lane_gray,

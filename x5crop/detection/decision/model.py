@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from ...output.model import FrameBleedPlan, OutputGeometry
+from ...geometry.layout import require_work_layout
 from ...strip_modes import FULL, PARTIAL
 from ...units import ScanCalibration
 from ..gate_checks import GateCheck
@@ -63,8 +64,7 @@ class FinalDetection:
     def __post_init__(self) -> None:
         if not self.format_id:
             raise ValueError("final detection requires a format identity")
-        if self.layout not in {"horizontal", "vertical"}:
-            raise ValueError(f"unsupported final detection layout: {self.layout}")
+        require_work_layout(self.layout)
         if self.strip_mode not in {FULL, PARTIAL}:
             raise ValueError(
                 f"unsupported final detection strip mode: {self.strip_mode}"

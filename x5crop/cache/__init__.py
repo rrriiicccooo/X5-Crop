@@ -9,6 +9,7 @@ import numpy as np
 from .content_statistics import ContentColumnStatistics
 from ..domain import Box
 from ..image.statistics import ImageMeasurementStatistics
+from ..geometry.layout import require_work_layout
 
 
 @dataclass(frozen=True)
@@ -57,3 +58,15 @@ class MeasurementCache:
     content_column_statistics: dict[ThresholdedMeasurementRegionKey, ContentColumnStatistics] = field(
         default_factory=dict
     )
+
+    def __post_init__(self) -> None:
+        require_work_layout(self.layout)
+        measurements = (
+            self.gray_work,
+            self.content_evidence_work,
+            self.content_evidence_float_work,
+        )
+        if any(item.ndim != 2 for item in measurements):
+            raise ValueError("measurement cache images must be two-dimensional")
+        if any(item.shape != self.gray_work.shape for item in measurements[1:]):
+            raise ValueError("measurement cache images must share one workspace shape")

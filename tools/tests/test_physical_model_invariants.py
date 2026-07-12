@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
-from dataclasses import fields
+from dataclasses import fields, replace
 import math
 import unittest
 
@@ -18,12 +17,13 @@ from x5crop.detection.candidate.selection.model import (
     GeometryResolution,
     SelectionResult,
 )
-from x5crop.detection.physical.model import SequenceResiduals
 from x5crop.detection.physical.model import (
     DualLaneSolution,
     ReviewOnlyGeometry,
+    SequenceResiduals,
     SequenceSolution,
 )
+from x5crop.detection.evidence.transform_geometry import TransformGeometryEvidence
 from x5crop.domain import (
     BoundaryPositionConstraint,
     Box,
@@ -43,6 +43,7 @@ from x5crop.output.model import (
     AxisBleedParameters,
     BoundaryOverlapProtection,
     FrameBleedPlan,
+    FrameOverlapRequirement,
     FrameSideBleed,
     OutputGeometry,
 )
@@ -54,6 +55,49 @@ def _provenance() -> MeasurementProvenance:
 
 
 class PhysicalModelInvariantTest(unittest.TestCase):
+    def test_transform_geometry_rejects_inconsistent_measurements(self) -> None:
+        invalid_factories = (
+            lambda: TransformGeometryEvidence(
+                EvidenceState.SUPPORTED,
+                False,
+                math.nan,
+                0.0,
+                "non_finite_angle",
+                None,
+                None,
+            ),
+            lambda: TransformGeometryEvidence(
+                EvidenceState.SUPPORTED,
+                False,
+                1.0,
+                -1.0,
+                "unapplied_angle",
+                1.0,
+                2.0,
+            ),
+            lambda: TransformGeometryEvidence(
+                EvidenceState.CONTRADICTED,
+                True,
+                1.0,
+                -1.0,
+                "contradicted_applied_transform",
+                1.0,
+                2.0,
+            ),
+            lambda: TransformGeometryEvidence(
+                EvidenceState.SUPPORTED,
+                False,
+                0.0,
+                0.0,
+                "incomplete_span_pair",
+                1.0,
+                None,
+            ),
+        )
+        for factory in invalid_factories:
+            with self.subTest(factory=factory), self.assertRaises(ValueError):
+                factory()
+
     def test_candidate_geometry_has_no_duplicate_source_identity(self) -> None:
         for geometry_type in (
             SequenceSolution,
@@ -137,6 +181,8 @@ class PhysicalModelInvariantTest(unittest.TestCase):
             SequenceResiduals(None, None, -1.0)
 
     def test_physical_spans_and_priors_reject_impossible_geometry(self) -> None:
+        with self.assertRaises(ValueError):
+            replace(candidate_fixture().geometry, layout="diagonal")
         for span_type in (HolderSpan, VisibleSequenceSpan, CropEnvelope):
             with self.subTest(span_type=span_type), self.assertRaises(ValueError):
                 span_type(Box(10, 0, 5, 10))
@@ -214,6 +260,56 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 True,
                 "no_output_overlap",
             )
+
+        boundary = FrameBoundaryReference(None, 1)
+        complete = BoundaryOverlapProtection(
+            boundary,
+            0,
+            1,
+            5,
+            5,
+            5,
+            "synthetic",
+        )
+        invalid_factories = (
+            lambda: FrameOverlapRequirement(boundary, 0, 2, 5, True, "synthetic"),
+            lambda: FrameOverlapRequirement(boundary, 0, 1, 5, True, ""),
+            lambda: FrameBleedPlan(
+                AxisBleedParameters(5, 2),
+                (FrameSideBleed(0, 4, 5, 2),),
+                (),
+                (),
+                True,
+                "no_output_overlap",
+            ),
+            lambda: FrameBleedPlan(
+                AxisBleedParameters(0, 0),
+                (FrameSideBleed(0, 0, 0, 0), FrameSideBleed(1, 0, 0, 0)),
+                (complete,),
+                (boundary,),
+                False,
+                "output_overlap_unresolved",
+            ),
+            lambda: FrameBleedPlan(
+                AxisBleedParameters(0, 0),
+                (FrameSideBleed(0, 0, 5, 0), FrameSideBleed(1, 5, 0, 0)),
+                (complete, complete),
+                (),
+                True,
+                "output_overlap_protected",
+            ),
+            lambda: FrameBleedPlan(
+                AxisBleedParameters(0, 0),
+                (FrameSideBleed(0, 0, 0, 0),),
+                (),
+                (),
+                True,
+                "output_overlap_protected",
+            ),
+        )
+        for factory in invalid_factories:
+            with self.subTest(factory=factory), self.assertRaises(ValueError):
+                factory()
 
 
 if __name__ == "__main__":

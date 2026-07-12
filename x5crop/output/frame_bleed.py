@@ -6,6 +6,7 @@ from ..domain import (
     FrameBoundaryReference,
 )
 from ..geometry.boxes import map_work_box, original_box_to_work
+from ..geometry.layout import is_horizontal_layout
 from .model import (
     AxisBleedParameters,
     BoundaryOverlapProtection,
@@ -47,7 +48,7 @@ def frame_bleed_plan(
 ) -> FrameBleedPlan:
     if len(frame_crop_envelopes) != len(frames):
         raise ValueError("each frame requires one crop envelope")
-    horizontal = layout == "horizontal"
+    horizontal = is_horizontal_layout(layout)
     leading = [int(user_bleed.long_axis) for _frame in frames]
     trailing = [int(user_bleed.long_axis) for _frame in frames]
     protections: list[BoundaryOverlapProtection] = []
@@ -137,14 +138,15 @@ def apply_frame_bleed(
     image_width: int,
     image_height: int,
 ) -> OutputGeometry:
+    horizontal = is_horizontal_layout(layout)
     if len(frame_bleed_plan.frame_sides) != len(geometry.frames):
         raise ValueError("frame bleed plan does not match output geometry")
     if tuple(side.frame_index for side in frame_bleed_plan.frame_sides) != tuple(
         range(len(geometry.frames))
     ):
         raise ValueError("frame bleed plan indexes must match output frames")
-    work_width = image_width if layout == "horizontal" else image_height
-    work_height = image_height if layout == "horizontal" else image_width
+    work_width = image_width if horizontal else image_height
+    work_height = image_height if horizontal else image_width
     work_envelope = original_box_to_work(
         geometry.crop_envelope.box,
         layout,

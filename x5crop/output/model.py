@@ -46,10 +46,12 @@ class FrameOverlapRequirement:
     def __post_init__(self) -> None:
         if self.left_frame_index < 0 or self.right_frame_index < 0:
             raise ValueError("overlap frame indexes must be non-negative")
-        if self.right_frame_index <= self.left_frame_index:
-            raise ValueError("overlap frames must be ordered")
+        if self.right_frame_index != self.left_frame_index + 1:
+            raise ValueError("overlap protection applies to adjacent frames")
         if self.required_px <= 0:
             raise ValueError("overlap protection must be positive")
+        if not self.provenance:
+            raise ValueError("overlap requirement requires provenance")
 
 
 @dataclass(frozen=True)
@@ -77,8 +79,11 @@ class BoundaryOverlapProtection:
     provenance: str
 
     def __post_init__(self) -> None:
-        if self.left_frame_index < 0 or self.right_frame_index <= self.left_frame_index:
-            raise ValueError("overlap protection frames must be ordered")
+        if (
+            self.left_frame_index < 0
+            or self.right_frame_index != self.left_frame_index + 1
+        ):
+            raise ValueError("overlap protection applies to adjacent frames")
         if self.required_px <= 0:
             raise ValueError("overlap protection requirement must be positive")
         if min(
@@ -110,10 +115,48 @@ class FrameBleedPlan:
         indexes = tuple(side.frame_index for side in self.frame_sides)
         if indexes != tuple(range(len(indexes))):
             raise ValueError("frame bleed plan indexes must be complete and ordered")
+        if any(
+            side.leading_px < self.user_bleed.long_axis
+            or side.trailing_px < self.user_bleed.long_axis
+            or side.short_axis_px != self.user_bleed.short_axis
+            for side in self.frame_sides
+        ):
+            raise ValueError("frame bleed sides must preserve user output preferences")
+        protection_boundaries = tuple(
+            item.boundary for item in self.overlap_protection
+        )
+        if len(set(protection_boundaries)) != len(protection_boundaries):
+            raise ValueError("overlap protection boundaries must be unique")
         unresolved = self.unresolved_overlap_boundaries
         if len(set(unresolved)) != len(unresolved):
             raise ValueError("unresolved overlap boundaries must be unique")
+        complete = {
+            item.boundary for item in self.overlap_protection if item.complete
+        }
+        incomplete = {
+            item.boundary for item in self.overlap_protection if not item.complete
+        }
+        unresolved_set = set(unresolved)
+        if complete & unresolved_set or not incomplete.issubset(unresolved_set):
+            raise ValueError("overlap protection state must match unresolved boundaries")
         if self.feasible != (not unresolved):
             raise ValueError("frame bleed feasibility must match unresolved overlap state")
-        if not self.reason:
-            raise ValueError("frame bleed plan requires a reason")
+        expected_reason = (
+            "output_overlap_unresolved"
+            if unresolved
+            else "output_overlap_protected"
+            if self.overlap_protection
+            else "no_output_overlap"
+        )
+        if self.reason != expected_reason:
+            raise ValueError("frame bleed reason must match its protection state")
+        for item in self.overlap_protection:
+            if item.right_frame_index >= len(self.frame_sides):
+                raise ValueError("overlap protection references a missing frame")
+            left = self.frame_sides[item.left_frame_index]
+            right = self.frame_sides[item.right_frame_index]
+            if (
+                left.trailing_px < item.required_px
+                or right.leading_px < item.required_px
+            ):
+                raise ValueError("frame bleed must include required overlap protection")

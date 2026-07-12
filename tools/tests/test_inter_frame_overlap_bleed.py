@@ -22,6 +22,14 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
             signature(frame_bleed_plan).parameters["layout"].default,
             signature(frame_bleed_plan).empty,
         )
+        with self.assertRaises(ValueError):
+            frame_bleed_plan(
+                frames=(Box(0, 0, 100, 60),),
+                frame_crop_envelopes=(CropEnvelope(Box(0, 0, 100, 60)),),
+                overlap_requirements=(),
+                user_bleed=AxisBleedParameters(0, 0),
+                layout="diagonal",
+            )
 
     def test_overlap_protection_only_expands_adjacent_frame_sides(self) -> None:
         frames = (

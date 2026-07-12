@@ -12,6 +12,7 @@ from x5crop.cache import MeasurementCache, MeasurementParametersKey
 from x5crop.cache.separator import cached_separator_profile
 from x5crop.domain import Box
 from x5crop.geometry.detection_parameters import SeparatorProfileParameters
+from x5crop.geometry.layout import work_gray
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 from x5crop.configuration.bundle import DetectionConfigurationBundle
 from x5crop.configuration.registry import get_detection_configuration
@@ -32,6 +33,31 @@ def _cache() -> MeasurementCache:
 
 
 class DetectionCachePerformanceContractTest(unittest.TestCase):
+    def test_workspace_and_measurement_cache_reject_coordinate_drift(self) -> None:
+        gray = np.zeros((80, 240), dtype=np.uint8)
+        statistics = image_measurement_statistics(
+            gray,
+            ImageMeasurementStatisticsParameters(),
+        )
+        with self.assertRaises(ValueError):
+            work_gray(gray, "diagonal")
+        with self.assertRaises(ValueError):
+            MeasurementCache(
+                "diagonal",
+                gray,
+                gray,
+                gray.astype(np.float32),
+                statistics,
+            )
+        with self.assertRaises(ValueError):
+            MeasurementCache(
+                "horizontal",
+                gray,
+                gray[:, :-1],
+                gray.astype(np.float32),
+                statistics,
+            )
+
     def test_cached_output_does_not_rebuild_detection_gray(self) -> None:
         from tools.tests.architecture_contracts import PROJECT_ROOT
 

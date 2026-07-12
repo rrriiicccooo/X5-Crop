@@ -5,12 +5,13 @@ from pathlib import Path
 from typing import Optional
 
 from ..output.model import AxisBleedParameters
+from ..geometry.layout import HORIZONTAL, VERTICAL
 
 
 DEFAULT_DESKEW_MIN_ANGLE_DEGREES = 0.03
 DEFAULT_DESKEW_MAX_ANGLE_DEGREES = 2.0
 DEFAULT_OUTPUT_BLEED = AxisBleedParameters(long_axis=20, short_axis=10)
-LAYOUT_CHOICES = ("auto", "horizontal", "vertical")
+LAYOUT_CHOICES = ("auto", HORIZONTAL, VERTICAL)
 DESKEW_CHOICES = ("off", "auto")
 DESKEW_FALLBACK_CHOICES = ("off", "auto", "always")
 COMPRESSION_CHOICES = ("none", "same")
