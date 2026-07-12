@@ -47,7 +47,7 @@ def build_sequence_candidate(
     scan_calibration: ScanCalibration,
     *,
     cache: MeasurementCache,
-    separator_policy: SeparatorConfiguration,
+    separator_configuration: SeparatorConfiguration,
     solver_parameters: SequenceSolverParameters,
     planning_budget_exhausted: bool,
 ) -> BuiltCandidate:
@@ -64,14 +64,14 @@ def build_sequence_candidate(
     profile = cached_separator_profile(
         cache,
         corridor,
-        separator_policy.profile,
+        separator_configuration.profile,
     )
     observation_set = measure_separator_bands(
         profile,
         gray_work=cache.gray_work,
         corridor=corridor,
         statistics=cache.image_statistics,
-        parameters=separator_policy.observation,
+        parameters=separator_configuration.observation,
     )
     observations = observation_set.observations
     dimensions = frame_dimension_prior(
@@ -112,7 +112,7 @@ def build_sequence_candidate(
                 gray_work=cache.gray_work,
                 corridor=corridor,
                 statistics=cache.image_statistics,
-                parameters=separator_policy.observation,
+                parameters=separator_configuration.observation,
             )
         )
         is not None

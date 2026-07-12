@@ -110,6 +110,11 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertEqual(REPORT_SCHEMA_REVISION, "physical_sequence_resolution")
         self.assertNotIn("v4", REPORT_SCHEMA_REVISION)
 
+    def test_active_source_uses_configuration_and_parameter_vocabulary(self) -> None:
+        source = _active_source()
+        self.assertNotRegex(source, r"\b[A-Za-z_]*[Pp]olicy[A-Za-z_]*\b")
+        self.assertNotIn("profile_config", source)
+
     def test_report_schema_identity_is_owned_by_report_layer(self) -> None:
         owners = [
             path

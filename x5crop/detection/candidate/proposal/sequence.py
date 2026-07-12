@@ -68,7 +68,7 @@ def _separator_dimension_hypotheses(
     cache: MeasurementCache,
     calibration: ScanCalibration,
     layout: str,
-    separator_policy: SeparatorConfiguration,
+    separator_configuration: SeparatorConfiguration,
     hypothesis_parameters: SequenceHypothesisParameters,
 ) -> SequenceHypothesisSet:
     if count <= 1:
@@ -78,13 +78,17 @@ def _separator_dimension_hypotheses(
     budget_exhausted = False
     for source in base:
         corridor = _measurement_corridor(source, cache)
-        profile = cached_separator_profile(cache, corridor, separator_policy.profile)
+        profile = cached_separator_profile(
+            cache,
+            corridor,
+            separator_configuration.profile,
+        )
         observation_set = measure_separator_bands(
             profile,
             gray_work=cache.gray_work,
             corridor=corridor,
             statistics=cache.image_statistics,
-            parameters=separator_policy.observation,
+            parameters=separator_configuration.observation,
         )
         observations = tuple(
             observation
@@ -179,8 +183,8 @@ def sequence_hypotheses(
     layout: str,
     *,
     boundary_parameters: BoundaryObservationParameters,
-    content_policy: ContentConfiguration,
-    separator_policy: SeparatorConfiguration,
+    content_configuration: ContentConfiguration,
+    separator_configuration: SeparatorConfiguration,
     hypothesis_parameters: SequenceHypothesisParameters,
 ) -> SequenceHypothesisSet:
     if cache.gray_work is not gray_work and not np.shares_memory(cache.gray_work, gray_work):
@@ -197,7 +201,7 @@ def sequence_hypotheses(
         cache,
         calibration,
         layout,
-        separator_policy,
+        separator_configuration,
         hypothesis_parameters,
     )
     physical_sources = unique_sequence_hypotheses(
@@ -211,6 +215,6 @@ def sequence_hypotheses(
     hypotheses = expand_crop_envelopes_for_content(
         cache.content_evidence_float_work,
         physical_sources[:limit],
-        content_policy.evidence,
+        content_configuration.evidence,
     )
     return SequenceHypothesisSet(tuple(hypotheses), budget_exhausted)

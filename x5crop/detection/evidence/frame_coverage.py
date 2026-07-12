@@ -58,7 +58,7 @@ def frame_coverage_evidence(
     visible_sequence_span: VisibleSequenceSpan,
     frames: tuple[Box, ...],
     cache: MeasurementCache,
-    content_policy: ContentConfiguration,
+    content_configuration: ContentConfiguration,
 ) -> FrameCoverageEvidence:
     holder = holder_span.box.clamp(
         cache.gray_work.shape[1],
@@ -73,9 +73,9 @@ def frame_coverage_evidence(
     runs = content_region_runs(
         cache.content_evidence_work,
         holder,
-        content_policy=content_policy,
+        content_configuration=content_configuration,
     )
-    tolerance = int(content_policy.profile.min_run_width_px)
+    tolerance = int(content_configuration.profile.min_run_width_px)
     uncovered = tuple(
         segment
         for run in runs

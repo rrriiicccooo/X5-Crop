@@ -29,8 +29,8 @@ def frame_sequence_plan(
     *,
     cache: MeasurementCache,
     boundary_parameters: BoundaryObservationParameters,
-    content_policy: ContentConfiguration,
-    separator_policy: SeparatorConfiguration,
+    content_configuration: ContentConfiguration,
+    separator_configuration: SeparatorConfiguration,
     hypothesis_parameters: SequenceHypothesisParameters,
     scan_calibration: ScanCalibration,
 ) -> FrameSequencePlan:
@@ -44,8 +44,8 @@ def frame_sequence_plan(
         scan_calibration,
         request.layout,
         boundary_parameters=boundary_parameters,
-        content_policy=content_policy,
-        separator_policy=separator_policy,
+        content_configuration=content_configuration,
+        separator_configuration=separator_configuration,
         hypothesis_parameters=hypothesis_parameters,
     )
     return FrameSequencePlan(

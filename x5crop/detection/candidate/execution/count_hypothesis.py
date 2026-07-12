@@ -26,7 +26,7 @@ def _assess_sequence_plan(
             sequence_hypothesis,
             context.scan_calibration,
             cache=context.measurement_cache,
-            separator_policy=context.configuration.separator,
+            separator_configuration=context.configuration.separator,
             solver_parameters=context.configuration.candidate_plan.sequence_solver,
             planning_budget_exhausted=plan.search_budget_exhausted,
         )
@@ -46,8 +46,8 @@ def evaluate_count_hypothesis(
         hypothesis,
         cache=context.measurement_cache,
         boundary_parameters=context.configuration.boundary,
-        content_policy=context.configuration.content,
-        separator_policy=context.configuration.separator,
+        content_configuration=context.configuration.content,
+        separator_configuration=context.configuration.separator,
         hypothesis_parameters=context.configuration.candidate_plan.sequence_hypotheses,
         scan_calibration=context.scan_calibration,
     )

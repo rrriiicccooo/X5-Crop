@@ -89,6 +89,8 @@ repository rules in `AGENTS.md`.
   validator 才失败。
 - `EvidenceQuality` 现在是 `AssessedCandidate` 的 canonical derived property；selection 与 report
   只读该结果，旧的 assessment quality 计算入口已删除。
+- Active detection/cache 接口统一使用 `Configuration` 与 `Parameters` 词汇；旧的局部
+  `*_policy` / `profile_config` 命名已删除。
 - Deskew 固定灰度身份阈值已由 per-image robust statistics 取代；percentile sampling budget、
   edge quantiles 和 numerical floors 均由显式参数拥有。
 - Physical fact、adaptive measurement、numerical safety、execution budget 与 diagnostics 参数
@@ -245,6 +247,8 @@ schema_revision: frame_sequence_geometry
 - Candidate comparison now uses `EvidenceQuality` and deterministic physical ordering.
   Scalar confidence, weighted scores, format-family profiles, and fixed-percentage
   geometry clustering are removed.
+- Active detection and cache interfaces now use only `Configuration` and `Parameters`
+  vocabulary; stale local policy/config aliases are removed.
 - Directly built `DetectionConfiguration` replaces the policy/parameter/assembly
   translation chain. The superseded `x5crop.policies` source tree is deleted without
   a compatibility shim.

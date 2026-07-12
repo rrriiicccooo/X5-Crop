@@ -13,9 +13,9 @@ def content_region_runs(
     evidence: np.ndarray,
     region: Box,
     *,
-    content_policy: ContentConfiguration,
+    content_configuration: ContentConfiguration,
 ) -> tuple[tuple[int, int], ...]:
-    parameters = content_policy.profile
+    parameters = content_configuration.profile
     crop = evidence[region.top : region.bottom, region.left : region.right].astype(
         np.float32
     ) / UINT8_MAX_VALUE
@@ -30,8 +30,8 @@ def content_region_runs(
     threshold = adaptive_activation_threshold(
         smoothed,
         parameters.activation_percentile,
-        content_policy.evidence.minimum_evidence_range,
-        content_policy.evidence.maximum_percentile_samples,
+        content_configuration.evidence.minimum_evidence_range,
+        content_configuration.evidence.maximum_percentile_samples,
     )
     if threshold is None:
         return ()
