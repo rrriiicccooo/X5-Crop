@@ -280,7 +280,8 @@ schema 与完全匹配的 source/configuration fingerprint；source identity 包
 同一 finalization factory 并核对持久化 geometry；它不反序列化 candidate selection。任何 Debug
 Preview/Analysis 请求都会执行完整 detection；cached export 只重放必要的
 像素 transform，不重建 gray/evidence/configuration。Debug Analysis 保持 original gray、debug
-boxes、separator evidence 三联图。
+boxes、separator evidence 三联图；overlay 直接读取 FinalizationPlan 的原图尺寸，不从 preview
+scale 反推坐标空间。
 Current validator 精确校验 `GeometryResolution` 字段；旧字段形状即使使用相同 schema identity
 也会被拒绝并重新检测。所有 typed result 都由 canonical dataclass 构造器递归恢复，因此跨字段
 物理不变量与 runtime 完全相同；validator 还核对 input/signature、configuration/candidate、count 和

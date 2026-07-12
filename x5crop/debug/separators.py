@@ -137,14 +137,8 @@ def draw_separator_overlay(
     style: DebugStyleParameters,
 ) -> None:
     geometry = selected_candidate.geometry
-    image_height = max(
-        1,
-        int(round(rgb.shape[0] / max(scale, style.separator_scale_floor))),
-    )
-    image_width = max(
-        1,
-        int(round(rgb.shape[1] / max(scale, style.separator_scale_floor))),
-    )
+    image_width = detection.finalization_plan.image_width
+    image_height = detection.finalization_plan.image_height
     overlap_boundaries = {
         (
             spacing.boundary.lane_index,

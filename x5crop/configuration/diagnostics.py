@@ -30,7 +30,6 @@ class DebugStyleParameters:
     label_origin: tuple[int, int] = (12, 9)
     text_color: tuple[int, int, int] = (245, 245, 245)
     jpeg_quality: int = 92
-    separator_scale_floor: float = 1e-9
     accepted_separator_color: tuple[int, int, int] = (255, 0, 0)
     unselected_separator_color: tuple[int, int, int] = (255, 170, 0)
     overlap_boundary_color: tuple[int, int, int] = (0, 220, 255)
@@ -62,7 +61,6 @@ class DebugStyleParameters:
         ):
             require_positive(name, value)
         require_unit_interval("debug frame fill alpha", self.frame_fill_alpha)
-        require_positive("debug separator scale floor", self.separator_scale_floor)
         if self.jpeg_quality > JPEG_QUALITY_MAX:
             raise ValueError("debug JPEG quality exceeds the standard maximum")
         colors = (

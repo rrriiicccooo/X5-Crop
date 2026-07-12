@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from inspect import signature
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -73,6 +74,32 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             diagnostics.separator_overlay,
             diagnostics.style,
         )
+
+    def test_separator_overlay_never_reverse_engineers_source_dimensions(self) -> None:
+        from tools.tests.physical_gate_support import (
+            candidate_fixture,
+            final_detection_fixture,
+        )
+        from x5crop.configuration.registry import get_detection_configuration
+        from x5crop.debug.separators import draw_separator_overlay
+        from x5crop.domain import Box
+
+        diagnostics = get_detection_configuration("135", "full").diagnostics
+        with patch(
+            "x5crop.debug.separators.separator_mark_box",
+            return_value=Box(0, 0, 1, 1),
+        ) as mark_box:
+            draw_separator_overlay(
+                np.zeros((33, 67, 3), dtype=np.uint8),
+                final_detection_fixture(),
+                candidate_fixture(),
+                1.0 / 3.0,
+                diagnostics.separator_overlay,
+                diagnostics.style,
+            )
+
+        self.assertTrue(mark_box.called)
+        self.assertEqual(mark_box.call_args.args[-2:], (200, 100))
 
     def test_output_bleed_reads_canonical_geometry_spacing(self) -> None:
         source = (PROJECT_ROOT / "x5crop/runtime/frame_bleed.py").read_text(
