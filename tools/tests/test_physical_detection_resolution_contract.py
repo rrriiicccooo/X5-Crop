@@ -320,6 +320,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         conservation = replace(
             candidate.assessment.evidence.frame_sequence.conservation,
             state=EvidenceState.CONTRADICTED,
+            visible_length_px=PixelInterval.exact(400.0),
         )
         evidence = replace(
             candidate.assessment.evidence,

@@ -79,6 +79,11 @@ repository rules in `AGENTS.md`.
   bleed、overlap protection、unresolved boundaries、feasible 和 reason 不能表达互相矛盾的状态。
 - `FormatPhysicalSpec` 删除未参与检测的 family 描述，`FrameSizeMm` 删除由 option 顺序已唯一表达的
   nominal/variant label；configuration report 只输出检测实际消费的物理事实。
+- CandidateGate 直接消费的 topology、content preservation、frame dimensions、sequence
+  conservation 与 evidence independence 现在由 typed invariants 锁定 state/measurement 一致性。
+  Dual-lane topology 使用 composition scope，measurement provenance 保留 lane identity。
+- DecisionGateAssessment 在自身边界验证 final reason vocabulary；未知 reason 不再延迟到 report
+  validator 才失败。
 - Deskew 固定灰度身份阈值已由 per-image robust statistics 取代；percentile sampling budget、
   edge quantiles 和 numerical floors 均由显式参数拥有。
 - Physical fact、adaptive measurement、numerical safety、execution budget 与 diagnostics 参数
@@ -107,7 +112,7 @@ repository rules in `AGENTS.md`.
   使旧分析失效。Bundle 同时拒绝空集合、initial identity 漂移和重复 configuration identity。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 316 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 318 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

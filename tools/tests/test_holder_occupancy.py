@@ -117,6 +117,8 @@ class HolderOccupancyTests(unittest.TestCase):
             nominal_aspect=1.0,
             photo_widths_px=(100.0, 100.0, 100.0),
             photo_width_cv=0.0,
+            observed_aspect=1.0,
+            aspect_error_ratio=0.0,
         )
         return geometry, coverage, dimensions, evidence
 

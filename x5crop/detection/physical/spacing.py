@@ -164,6 +164,22 @@ class SequenceConservationEvidence:
     spacing_total_px: PixelInterval
     physical_sequence_px: PixelInterval
 
+    def __post_init__(self) -> None:
+        if not self.reason:
+            raise ValueError("sequence conservation evidence requires a reason")
+        if self.state in {EvidenceState.SUPPORTED, EvidenceState.CONTRADICTED}:
+            modeled = self.frame_total_px.plus(self.spacing_total_px)
+            observed = self.visible_length_px.plus(self.holder_occlusion_px)
+            if self.physical_sequence_px != modeled:
+                raise ValueError(
+                    "physical sequence extent must derive from frames and spacing"
+                )
+            supported = observed.intersects(modeled)
+            if supported != (self.state == EvidenceState.SUPPORTED):
+                raise ValueError(
+                    "sequence conservation state must match physical intervals"
+                )
+
 
 def observed_spacing_evidence(
     boundary: FrameBoundaryReference,

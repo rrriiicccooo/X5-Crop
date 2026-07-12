@@ -17,6 +17,32 @@ class EvidenceIndependenceEvidence:
     supporting_root_measurements: tuple[str, ...]
     cyclic_measurements: tuple[str, ...]
 
+    def __post_init__(self) -> None:
+        if not self.reason or not self.sequence_root_measurement:
+            raise ValueError("evidence independence requires identity and reason")
+        for values in (
+            self.supporting_root_measurements,
+            self.cyclic_measurements,
+        ):
+            if any(not item for item in values) or len(set(values)) != len(values):
+                raise ValueError(
+                    "evidence measurement identities must be non-empty and unique"
+                )
+        root_reused = (
+            self.sequence_root_measurement in self.supporting_root_measurements
+        )
+        contradicted = bool(root_reused or self.cyclic_measurements)
+        if contradicted != (self.state == EvidenceState.CONTRADICTED):
+            raise ValueError(
+                "independence contradiction requires shared measurement provenance"
+            )
+        if self.state == EvidenceState.SUPPORTED and not self.supporting_root_measurements:
+            raise ValueError("supported independence requires supporting measurements")
+        if self.state == EvidenceState.NOT_APPLICABLE and self.supporting_root_measurements:
+            raise ValueError(
+                "not-applicable independence cannot claim supporting measurements"
+            )
+
 def evidence_independence_evidence(
     geometry: SequenceSolution,
 ) -> EvidenceIndependenceEvidence:

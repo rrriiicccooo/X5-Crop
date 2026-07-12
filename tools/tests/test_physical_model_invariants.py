@@ -55,6 +55,38 @@ def _provenance() -> MeasurementProvenance:
 
 
 class PhysicalModelInvariantTest(unittest.TestCase):
+    def test_candidate_gate_evidence_rejects_state_measurement_drift(self) -> None:
+        evidence = candidate_fixture().assessment.evidence
+        invalid_factories = (
+            lambda: replace(
+                evidence.frame_topology,
+                count_matches=False,
+            ),
+            lambda: replace(
+                evidence.content_preservation,
+                state=EvidenceState.SUPPORTED,
+                uncovered_content=((0, 5),),
+            ),
+            lambda: replace(
+                evidence.frame_dimensions,
+                state=EvidenceState.SUPPORTED,
+                photo_widths_px=(),
+            ),
+            lambda: replace(
+                evidence.frame_sequence.conservation,
+                state=EvidenceState.SUPPORTED,
+                physical_sequence_px=PixelInterval.zero(),
+            ),
+            lambda: replace(
+                evidence.independence,
+                state=EvidenceState.SUPPORTED,
+                cyclic_measurements=("synthetic_cycle",),
+            ),
+        )
+        for factory in invalid_factories:
+            with self.subTest(factory=factory), self.assertRaises(ValueError):
+                factory()
+
     def test_transform_geometry_rejects_inconsistent_measurements(self) -> None:
         invalid_factories = (
             lambda: TransformGeometryEvidence(

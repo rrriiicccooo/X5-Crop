@@ -184,6 +184,7 @@ def candidate_evidence_fixture(
     return CandidateEvidence(
         frame_topology=FrameTopologyEvidence(
             EvidenceState.SUPPORTED,
+            "sequence",
             2,
             2,
             True,
@@ -247,10 +248,10 @@ def candidate_evidence_fixture(
             (95.0, 95.0),
             0.0,
             (10.0,),
-            0.0,
             None,
             None,
-            2.0,
+            None,
+            1.5,
             0.0,
             0.0,
             False,
@@ -281,7 +282,11 @@ def candidate_evidence_fixture(
                 if content_preservation == EvidenceState.CONTRADICTED
                 else "supported"
             ),
-            (),
+            (
+                ((0, 5),)
+                if content_preservation == EvidenceState.CONTRADICTED
+                else ()
+            ),
             (),
             EvidenceState.NOT_APPLICABLE,
         ),

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from statistics import median
 from typing import TYPE_CHECKING
 
@@ -42,6 +43,51 @@ class FrameDimensionEvidence:
     aspect_error_ratio: float | None
     dimension_residual_max: float | None
     calibration_used: bool
+
+    def __post_init__(self) -> None:
+        if not self.reason:
+            raise ValueError("frame dimension evidence requires a reason")
+        if min(self.nominal_width_mm, self.nominal_height_mm) <= 0.0:
+            raise ValueError("nominal frame dimensions must be positive")
+        if self.nominal_aspect != self.nominal_width_mm / self.nominal_height_mm:
+            raise ValueError("nominal frame aspect must derive from physical size")
+        if any(
+            not math.isfinite(value) or value <= 0.0
+            for value in (*self.photo_widths_px, *self.separator_widths_px)
+        ):
+            raise ValueError("measured frame and separator widths must be positive")
+        if self.photo_width_cv != _width_cv(self.photo_widths_px):
+            raise ValueError("photo width variation must derive from measurements")
+        if self.separator_width_cv != _width_cv(self.separator_widths_px):
+            raise ValueError("separator width variation must derive from measurements")
+        if self.state == EvidenceState.SUPPORTED and not self.photo_widths_px:
+            raise ValueError("supported frame dimensions require measured photo widths")
+        optional_nonnegative = (
+            self.observed_width_mm,
+            self.observed_height_mm,
+            self.observed_aspect,
+            self.aspect_error_ratio,
+            self.dimension_residual_max,
+        )
+        if any(
+            value is not None and (not math.isfinite(value) or value < 0.0)
+            for value in optional_nonnegative
+        ):
+            raise ValueError("frame dimension measurements must be finite and non-negative")
+        if self.observed_aspect is not None:
+            expected_error = (
+                abs(self.observed_aspect - self.nominal_aspect)
+                / self.nominal_aspect
+            )
+            if self.aspect_error_ratio != expected_error:
+                raise ValueError("frame aspect error must derive from measured aspect")
+        if self.calibration_used:
+            if self.observed_height_mm is None or (
+                self.photo_widths_px and self.observed_width_mm is None
+            ):
+                raise ValueError("calibrated dimensions require millimeter measurements")
+        elif self.observed_width_mm is not None or self.observed_height_mm is not None:
+            raise ValueError("millimeter dimensions require trusted calibration")
 
 
 def frame_dimension_prior(

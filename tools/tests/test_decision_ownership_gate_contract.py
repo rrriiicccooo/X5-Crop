@@ -20,10 +20,24 @@ from x5crop.detection.decision.vocabulary import (
 )
 from x5crop.domain import Box, CropEnvelope, EvidenceState
 from x5crop.detection.decision.model import DecisionGateAssessment
+from x5crop.detection.gate_checks import GateCheck
 from x5crop.output.model import OutputGeometry
 
 
 class DecisionOwnershipGateContractTest(unittest.TestCase):
+    def test_decision_gate_rejects_unowned_final_reason(self) -> None:
+        with self.assertRaises(ValueError):
+            DecisionGateAssessment(
+                (
+                    GateCheck(
+                        "synthetic",
+                        "decision",
+                        EvidenceState.CONTRADICTED,
+                        "unowned_final_reason",
+                    ),
+                )
+            )
+
     def test_decision_gate_rejects_candidate_stage_checks(self) -> None:
         with self.assertRaises(ValueError):
             DecisionGateAssessment(candidate_gate_fixture().checks)

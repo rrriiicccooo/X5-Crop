@@ -6,6 +6,7 @@ from ...geometry.layout import require_work_layout
 from ...strip_modes import FULL, PARTIAL
 from ...units import ScanCalibration
 from ..gate_checks import GateCheck
+from .vocabulary import FINAL_REVIEW_REASONS
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,11 @@ class DecisionGateAssessment:
             raise ValueError("decision gate requires checks")
         if any(check.stage != "decision" for check in self.checks):
             raise ValueError("decision gate can contain only decision-stage checks")
+        if any(
+            check.final_review_reason not in FINAL_REVIEW_REASONS
+            for check in self.checks
+        ):
+            raise ValueError("decision gate final reasons must use its vocabulary")
         codes = tuple(check.code for check in self.checks)
         if len(set(codes)) != len(codes):
             raise ValueError("decision gate check codes must be unique")

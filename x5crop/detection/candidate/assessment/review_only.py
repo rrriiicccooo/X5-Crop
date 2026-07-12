@@ -51,6 +51,7 @@ def assess_review_only_candidate(
     nominal = geometry.frame_dimension_prior.frame_size_options_mm[0]
     topology = FrameTopologyEvidence(
         state=unavailable,
+        measurement_scope="unmeasured",
         expected_count=geometry.count,
         actual_count=0,
         count_matches=False,

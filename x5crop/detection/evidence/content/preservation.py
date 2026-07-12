@@ -17,6 +17,26 @@ class ContentPreservationEvidence:
     boundary_contact_frame_indexes: tuple[int, ...]
     partial_edge_state: EvidenceState
 
+    def __post_init__(self) -> None:
+        if not self.reason:
+            raise ValueError("content preservation evidence requires a reason")
+        if any(end <= start for start, end in self.uncovered_content):
+            raise ValueError("uncovered content intervals must have positive extent")
+        if (
+            any(index < 0 for index in self.boundary_contact_frame_indexes)
+            or len(set(self.boundary_contact_frame_indexes))
+            != len(self.boundary_contact_frame_indexes)
+        ):
+            raise ValueError("content boundary contacts must be valid and unique")
+        contradicted = bool(
+            self.uncovered_content
+            or self.partial_edge_state == EvidenceState.CONTRADICTED
+        )
+        if contradicted != (self.state == EvidenceState.CONTRADICTED):
+            raise ValueError(
+                "content preservation contradiction must match physical evidence"
+            )
+
 def content_preservation_evidence(
     frame_content: FrameContentEvidence,
     sequence_content_alignment: SequenceContentAlignmentEvidence,

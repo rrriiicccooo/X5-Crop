@@ -72,6 +72,7 @@ def assess_dual_lane_candidate(
     )
     topology = FrameTopologyEvidence(
         state=topology_state,
+        measurement_scope="lane_composition",
         expected_count=geometry.count,
         actual_count=len(geometry.frames),
         count_matches=len(geometry.frames) == geometry.count,
@@ -370,11 +371,22 @@ def assess_dual_lane_candidate(
         reason="dual_lane_component_independence",
         sequence_root_measurement=geometry.sequence_provenance.root_measurement,
         supporting_root_measurements=tuple(
-            root
-            for lane in lanes
+            f"lane_{lane_index}:{root}"
+            for lane_index, lane in enumerate(lanes, start=1)
             for root in lane.assessment.evidence.independence.supporting_root_measurements
         ),
-        cyclic_measurements=(),
+        cyclic_measurements=tuple(
+            f"lane_{lane_index}:{root}"
+            for lane_index, lane in enumerate(lanes, start=1)
+            if lane.assessment.evidence.independence.state
+            == EvidenceState.CONTRADICTED
+            for root in (
+                lane.assessment.evidence.independence.cyclic_measurements
+                or (
+                    lane.assessment.evidence.independence.sequence_root_measurement,
+                )
+            )
+        ),
     )
     evidence = CandidateEvidence(
         frame_topology=topology,

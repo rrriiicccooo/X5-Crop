@@ -25,7 +25,7 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
                 frame_dimensions=replace(
                     evidence.frame_dimensions,
                     separator_width_cv=0.95,
-                    separator_widths_px=(2.0, 20.0),
+                    separator_widths_px=(1.0, 39.0),
                 ),
             ),
             (),
