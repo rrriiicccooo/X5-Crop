@@ -122,16 +122,7 @@ def _without_content_measurements(evidence: CandidateEvidence) -> CandidateEvide
         frame_coverage=replace(evidence.frame_coverage, content_runs=()),
         sequence_content_alignment=replace(
             evidence.sequence_content_alignment,
-            state=EvidenceState.UNAVAILABLE,
-            reason="content_span_unavailable",
             content_span=None,
-            content_outside_sides=(),
-            overcontains_long_axis=False,
-            overcontains_short_axis=False,
-            leading_slack_px=0,
-            trailing_slack_px=0,
-            top_slack_px=0,
-            bottom_slack_px=0,
         ),
     )
 

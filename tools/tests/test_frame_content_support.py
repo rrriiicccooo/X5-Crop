@@ -87,8 +87,7 @@ class FrameContentSupportTest(unittest.TestCase):
         evidence = candidate_evidence_fixture()
         alignment = replace(
             evidence.sequence_content_alignment,
-            state=EvidenceState.UNAVAILABLE,
-            content_outside_sides=("top",),
+            content_span=Box(10, -10, 190, 90),
         )
         state = content_preservation_state(
             evidence.frame_coverage,

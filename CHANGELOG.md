@@ -48,6 +48,8 @@ repository rules in `AGENTS.md`.
   proof-path set 精确一致。
 - 删除只复制 coverage、alignment、partial edge 与 frame contacts 的 ContentPreservationEvidence；
   CandidateGate 现在直接从 canonical evidence 投影唯一 content-preservation check。
+- Sequence/content alignment 删除 caller-supplied state、reason、outside side 和 slack；这些结论现在
+  只由 canonical sequence span 与 content span 派生。
 - Standard proof paths 改由 typed candidate model 从 geometry/evidence 重算校验；确认 undercrop 不再
   同时制造派生的 boundary failure，测试 fixture 也不再手工伪造 Gate。
 - Format physical sizes 与 runtime configuration bundle 各自收敛为一个 canonical tuple；删除

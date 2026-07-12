@@ -628,17 +628,8 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             ),
         )
         alignment = SequenceContentAlignmentEvidence(
-            EvidenceState.SUPPORTED,
-            "content_inside_visible_sequence",
             Box(0, 0, 200, 100),
             Box(0, 0, 200, 100),
-            (),
-            False,
-            False,
-            0,
-            0,
-            0,
-            0,
         )
         partial = PartialEdgeSafetyEvidence(
             is_partial=False,

@@ -226,6 +226,8 @@ clustering tolerance。
 evidence independence 和完整 proof paths。
 Content preservation check 直接从 canonical frame coverage、sequence/content alignment 与 partial-edge
 evidence 投影，不保存第二份 preservation evidence。
+Sequence/content alignment 只保存 canonical sequence span 与 content span；越界 side、slack、state
+和 reason 均由 evidence type 确定性派生。
 Standard proof paths 由 `SequenceSolution + CandidateEvidence` 确定性派生并在 `AssessedCandidate`
 构造边界复核；它们只证明 boundary geometry，不重复裁决 content preservation。
 `GateCheck` 只表达所属 stage 与 evidence state；所有 check 都是该 Gate 的正式检查，不再保留

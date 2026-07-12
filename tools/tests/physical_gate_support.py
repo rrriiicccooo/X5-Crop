@@ -295,17 +295,8 @@ def candidate_evidence_fixture(
             None,
         ),
         sequence_content_alignment=SequenceContentAlignmentEvidence(
-            EvidenceState.SUPPORTED,
-            "content_contained",
             sequence_box,
             Box(10, 10, 190, 90),
-            (),
-            False,
-            False,
-            10,
-            10,
-            10,
-            10,
         ),
         holder_occupancy=HolderOccupancyEvidence(
             strip_completeness=completeness,
