@@ -95,7 +95,6 @@ PARAMETER_GROUPS = (
     _group(ImageMeasurementStatisticsParameters, ("edge_sample_min_px",), ParameterRole.ADAPTIVE_MEASUREMENT, "px", "preprocess", "Minimum sampling support."),
     _group(ImageMeasurementStatisticsParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "preprocess", "Deterministic percentile sampling support."),
     _group(ContentEvidenceImageParameters, ("gradient_percentile", "texture_percentile", "local_contrast_percentile", "tonal_presence_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "preprocess", "Per-image content evidence normalization."),
-    _group(ContentEvidenceImageParameters, ("minimum_active_pixels",), ParameterRole.ADAPTIVE_MEASUREMENT, "px_count", "preprocess", "Minimum content measurement support."),
     _group(ContentEvidenceImageParameters, ("minimum_consensus_channels",), ParameterRole.ADAPTIVE_MEASUREMENT, "component_count", "preprocess", "Minimum independently active content-evidence components."),
     _group(ContentEvidenceImageParameters, ("numerical_floor",), ParameterRole.NUMERICAL_SAFETY, "normalized", "preprocess", "Content evidence normalization floor."),
     _group(ContentEvidenceImageParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "preprocess", "Deterministic percentile sampling support."),

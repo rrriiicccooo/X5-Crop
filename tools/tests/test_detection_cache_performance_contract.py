@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from x5crop.cache import MeasurementCache, MeasurementParametersKey
+from x5crop.cache import MeasurementCache, MeasurementRegionKey
 from x5crop.cache.separator import cached_separator_profile
 from x5crop.domain import Box
 from x5crop.geometry.detection_parameters import SeparatorProfileParameters
@@ -195,8 +195,12 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         cache = _cache()
         parameters = SeparatorProfileParameters()
         cached_separator_profile(cache, Box(0, 0, 240, 80), parameters)
-        key = next(iter(cache.separator_profiles_full))
-        self.assertEqual(key, MeasurementParametersKey(parameters))
+        self.assertFalse(hasattr(cache, "separator_profiles_full"))
+        key = next(iter(cache.separator_profiles))
+        self.assertEqual(
+            key,
+            MeasurementRegionKey(parameters, Box(0, 0, 240, 80)),
+        )
 
 
 if __name__ == "__main__":

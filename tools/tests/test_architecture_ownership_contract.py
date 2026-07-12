@@ -84,15 +84,11 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
 
     def test_evidence_cache_keys_include_parameters_and_exact_geometry(self) -> None:
         from x5crop.cache import (
-            MeasurementParametersKey,
             MeasurementRegionKey,
             ThresholdedMeasurementRegionKey,
         )
+        from x5crop.domain import Box
 
-        self.assertEqual(
-            tuple(field.name for field in fields(MeasurementParametersKey)),
-            ("parameters",),
-        )
         self.assertEqual(
             tuple(field.name for field in fields(MeasurementRegionKey)),
             ("parameters", "region"),
@@ -103,6 +99,8 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             ),
             ("parameters", "region", "threshold"),
         )
+        with self.assertRaises(TypeError):
+            MeasurementRegionKey(("not", "parameters"), Box(0, 0, 1, 1))
 
     def test_configuration_registry_is_the_only_builder(self) -> None:
         root = PROJECT_ROOT / "x5crop/configuration"

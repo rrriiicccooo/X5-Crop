@@ -131,7 +131,6 @@ class ContentEvidenceImageParameters:
     texture_percentile: float = 99.2
     local_contrast_percentile: float = 99.0
     tonal_presence_percentile: float = 99.0
-    minimum_active_pixels: int = 16
     numerical_floor: float = 1e-6
     maximum_percentile_samples: int = 1_000_000
     minimum_consensus_channels: int = 2
@@ -144,7 +143,6 @@ class ContentEvidenceImageParameters:
             ("content tonal-presence percentile", self.tonal_presence_percentile),
         ):
             require_percentile(name, value)
-        require_positive("content evidence active pixels", self.minimum_active_pixels)
         require_positive("content evidence numerical floor", self.numerical_floor)
         require_positive(
             "content evidence percentile sample budget",

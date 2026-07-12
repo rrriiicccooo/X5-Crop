@@ -104,6 +104,10 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
         )
 
     def test_foundation_measurement_budgets_and_floors_are_explicit(self) -> None:
+        self.assertNotIn(
+            "minimum_active_pixels",
+            ContentEvidenceImageParameters.__dataclass_fields__,
+        )
         self.assertIs(
             signature(sampled_percentile).parameters["max_samples"].default,
             signature(sampled_percentile).empty,

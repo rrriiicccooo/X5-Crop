@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Hashable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, is_dataclass
 import math
 
 import numpy as np
@@ -12,33 +11,34 @@ from ..image.statistics import ImageMeasurementStatistics
 from ..geometry.layout import require_work_layout
 
 
-@dataclass(frozen=True)
-class MeasurementParametersKey:
-    parameters: Hashable
-
-    def __post_init__(self) -> None:
-        hash(self.parameters)
+def _require_frozen_parameters(value: object) -> None:
+    dataclass_parameters = getattr(type(value), "__dataclass_params__", None)
+    if not is_dataclass(value) or not bool(
+        dataclass_parameters and dataclass_parameters.frozen
+    ):
+        raise TypeError("measurement cache keys require frozen parameter objects")
+    hash(value)
 
 
 @dataclass(frozen=True)
 class MeasurementRegionKey:
-    parameters: Hashable
+    parameters: object
     region: Box
 
     def __post_init__(self) -> None:
-        hash(self.parameters)
+        _require_frozen_parameters(self.parameters)
         if not self.region.valid():
             raise ValueError("measurement cache region must have positive extent")
 
 
 @dataclass(frozen=True)
 class ThresholdedMeasurementRegionKey:
-    parameters: Hashable
+    parameters: object
     region: Box
     threshold: float
 
     def __post_init__(self) -> None:
-        hash(self.parameters)
+        _require_frozen_parameters(self.parameters)
         if not self.region.valid():
             raise ValueError("measurement cache region must have positive extent")
         if not math.isfinite(self.threshold):
@@ -53,7 +53,6 @@ class MeasurementCache:
     content_evidence_float_work: np.ndarray
     image_statistics: ImageMeasurementStatistics
     separator_profiles: dict[MeasurementRegionKey, np.ndarray] = field(default_factory=dict)
-    separator_profiles_full: dict[MeasurementParametersKey, np.ndarray] = field(default_factory=dict)
     content_evidence_thresholds: dict[MeasurementRegionKey, float | None] = field(default_factory=dict)
     content_column_statistics: dict[ThresholdedMeasurementRegionKey, ContentColumnStatistics] = field(
         default_factory=dict
