@@ -75,12 +75,10 @@ def frame_coverage_evidence(
         holder,
         content_configuration=content_configuration,
     )
-    tolerance = int(content_configuration.profile.min_run_width_px)
     uncovered = tuple(
         segment
         for run in runs
         for segment in _uncovered_segments(run, frame_intervals)
-        if segment[1] - segment[0] >= tolerance
     )
     unexplained_region_count = max(0, len(runs) - len(frames))
     if not runs:

@@ -432,6 +432,36 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
         self.assertEqual(evidence.unexplained_content_region_count, 1)
 
+    def test_any_measured_uncovered_content_remains_a_contradiction(self) -> None:
+        from unittest.mock import patch
+
+        from x5crop.detection.evidence.frame_coverage import frame_coverage_evidence
+
+        content = np.zeros((20, 100), dtype=np.uint8)
+        cache = MeasurementCache(
+            "horizontal",
+            np.full_like(content, 255),
+            content,
+            content.astype(np.float32),
+            image_measurement_statistics(
+                np.full_like(content, 255),
+                ImageMeasurementStatisticsParameters(),
+            ),
+        )
+        with patch(
+            "x5crop.detection.evidence.frame_coverage.content_region_runs",
+            return_value=((10, 21),),
+        ):
+            evidence = frame_coverage_evidence(
+                HolderSpan(Box(0, 0, 100, 20)),
+                VisibleSequenceSpan(Box(0, 0, 100, 20)),
+                (Box(10, 0, 20, 20),),
+                cache,
+                get_detection_configuration("135", "partial").content,
+            )
+        self.assertEqual(evidence.uncovered_content, ((20, 21),))
+        self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
+
 
 if __name__ == "__main__":
     unittest.main()

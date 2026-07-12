@@ -11,6 +11,7 @@ from tools.tests.physical_gate_support import (
 )
 from x5crop.cache import MeasurementCache
 from x5crop.detection.evidence.content.frame_support import frame_content_evidence
+from x5crop.detection.evidence.content.frame_support import _sample_supports_content
 from x5crop.detection.evidence.sequence_content_alignment import sequence_content_alignment_evidence
 from x5crop.detection.evidence.content.preservation import (
     content_preservation_evidence,
@@ -34,6 +35,16 @@ def _cache(gray: np.ndarray) -> MeasurementCache:
 
 
 class FrameContentSupportTest(unittest.TestCase):
+    def test_undersized_sample_cannot_satisfy_minimum_content_support(self) -> None:
+        sample = np.ones((1, 1), dtype=np.float32)
+        self.assertFalse(
+            _sample_supports_content(
+                sample,
+                threshold=0.5,
+                minimum_active_pixels=16,
+            )
+        )
+
     def test_content_span_conflict_prevents_supported_preservation(self) -> None:
         evidence = candidate_evidence_fixture()
         alignment = replace(

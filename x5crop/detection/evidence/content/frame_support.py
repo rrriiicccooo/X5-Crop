@@ -103,9 +103,23 @@ def _boundary_contact_sides(
     return tuple(
         side
         for side, sample in samples.items()
-        if sample.size
-        and int(np.count_nonzero(sample >= threshold))
-        >= min(int(parameters.minimum_active_pixels), int(sample.size))
+        if _sample_supports_content(
+            sample,
+            threshold,
+            parameters.minimum_active_pixels,
+        )
+    )
+
+
+def _sample_supports_content(
+    sample: np.ndarray,
+    threshold: float,
+    minimum_active_pixels: int,
+) -> bool:
+    required = int(minimum_active_pixels)
+    return bool(
+        sample.size >= required
+        and int(np.count_nonzero(sample >= threshold)) >= required
     )
 
 
@@ -196,9 +210,10 @@ def frame_content_evidence(
         else:
             mean = float(crop.mean())
             coverage = float((crop >= threshold).mean())
-        content_present = bool(
-            int(np.count_nonzero(crop >= threshold))
-            >= min(int(parameters.minimum_active_pixels), int(crop.size))
+        content_present = _sample_supports_content(
+            crop,
+            threshold,
+            parameters.minimum_active_pixels,
         )
         observations.append(
             FrameContentObservation(
