@@ -8,10 +8,6 @@ from ..model import (
     ReviewOnlyEvidence,
 )
 
-
-_REVIEW_ONLY_EVIDENCE_REASON = "review_only_geometry_not_measured"
-
-
 def assess_review_only_candidate(
     candidate: BuiltCandidate,
 ) -> AssessedCandidate:
@@ -22,7 +18,7 @@ def assess_review_only_candidate(
         geometry=geometry,
         count_hypothesis=candidate.count_hypothesis,
         assessment=CandidateAssessment(
-            evidence=ReviewOnlyEvidence(_REVIEW_ONLY_EVIDENCE_REASON),
+            evidence=ReviewOnlyEvidence(),
             gate=None,
         ),
     )

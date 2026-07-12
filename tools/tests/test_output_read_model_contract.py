@@ -318,7 +318,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         candidate_record = record["selection"]["candidates"][0]
         self.assertEqual(
             candidate_record["evidence"],
-            {"reason": "review_only_geometry_not_measured"},
+            {},
         )
         self.assertIsNone(candidate_record["candidate_gate"])
 

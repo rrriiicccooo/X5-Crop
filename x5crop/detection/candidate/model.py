@@ -86,11 +86,9 @@ class DualLaneEvidence:
 
 @dataclass(frozen=True)
 class ReviewOnlyEvidence:
-    reason: str
-
-    def __post_init__(self) -> None:
-        if not self.reason:
-            raise ValueError("review-only evidence requires a reason")
+    @property
+    def quality_unavailable_code(self) -> str:
+        return "review_only_geometry_not_measured"
 
 
 CandidateEvidenceModel = CandidateEvidence | DualLaneEvidence | ReviewOnlyEvidence
@@ -374,7 +372,7 @@ class AssessedCandidate:
             return EvidenceQuality(
                 supported=(),
                 contradicted=(),
-                unavailable=(evidence_model.reason,),
+                unavailable=(evidence_model.quality_unavailable_code,),
                 covered_content_px=0,
                 uncovered_content_px=0,
                 supported_proof_paths=(),

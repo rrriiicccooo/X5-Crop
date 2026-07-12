@@ -64,6 +64,8 @@ repository rules in `AGENTS.md`.
   intervals 与 typed spacing basis 确定性派生。
 - Observed/corroborated/hypothesized spacing 删除自由 reason 字段；read-model reason 现在由 concrete
   spacing type 与 signed kind 派生。
+- Review-only evidence 删除唯一固定值的 reason 字段，收敛成无字段 marker；最终原因仍只由
+  DecisionGate 生成。
 - Boundary assignment consensus 删除 caller-supplied state/reason，改为 typed solver outcome；
   disagreement、budget exhaustion 与 dual-lane component unresolved 不再共用自由文本状态。
 - Holder occlusion side 删除 caller-supplied state/reason，改为 typed measurement outcome；普通 combined
