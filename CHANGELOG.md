@@ -58,6 +58,8 @@ repository rules in `AGENTS.md`.
   dependency cycles 与 automatic-processing applicability 现在是唯一事实源。
 - GeometryResolution 补齐 assignment-resolution 与 search-budget facts，并删除 caller-supplied
   state/reasons；唯一 early-stop result 现在从完整解析事实确定性派生。
+- Sequence conservation 删除 caller-supplied extent/state/reason，改由 visible/occlusion/frame/spacing
+  intervals 与 typed spacing basis 确定性派生。
 - Standard proof paths 改由 typed candidate model 从 geometry/evidence 重算校验；确认 undercrop 不再
   同时制造派生的 boundary failure，测试 fixture 也不再手工伪造 Gate。
 - Dual-lane evidence 现在保留各 lane 的 typed CandidateGate 与 geometry resolution；父 candidate

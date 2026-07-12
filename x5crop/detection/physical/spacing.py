@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 
 from x5crop.domain import (
     BoundaryObservation,
@@ -156,31 +157,53 @@ InterFrameSpacing = (
 )
 
 
+class SequenceConservationBasis(str, Enum):
+    INDEPENDENT_SPACING = "independent_spacing"
+    CORROBORATED_SPACING = "corroborated_spacing"
+    SPACING_HYPOTHESIS = "spacing_hypothesis"
+    INCOMPLETE_SEQUENCE = "incomplete_sequence"
+
+
 @dataclass(frozen=True)
 class SequenceConservationEvidence:
-    state: EvidenceState
-    reason: str
     visible_length_px: PixelInterval
     holder_occlusion_px: PixelInterval
     frame_total_px: PixelInterval
     spacing_total_px: PixelInterval
-    physical_sequence_px: PixelInterval
+    basis: SequenceConservationBasis
+    physical_sequence_px: PixelInterval = field(init=False)
+    state: EvidenceState = field(init=False)
+    reason: str = field(init=False)
 
     def __post_init__(self) -> None:
-        if not self.reason:
-            raise ValueError("sequence conservation evidence requires a reason")
-        if self.state in {EvidenceState.SUPPORTED, EvidenceState.CONTRADICTED}:
-            modeled = self.frame_total_px.plus(self.spacing_total_px)
+        if not isinstance(self.basis, SequenceConservationBasis):
+            raise TypeError("sequence conservation requires a typed basis")
+        modeled = self.frame_total_px.plus(self.spacing_total_px)
+        if self.basis == SequenceConservationBasis.INCOMPLETE_SEQUENCE:
+            state = EvidenceState.UNAVAILABLE
+            reason = "count_or_spacing_sequence_incomplete"
+        elif self.basis == SequenceConservationBasis.CORROBORATED_SPACING:
+            state = EvidenceState.UNAVAILABLE
+            reason = "conservation_derived_spacing_not_independent"
+        elif self.basis == SequenceConservationBasis.SPACING_HYPOTHESIS:
+            state = EvidenceState.UNAVAILABLE
+            reason = "signed_spacing_unresolved"
+        else:
             observed = self.visible_length_px.plus(self.holder_occlusion_px)
-            if self.physical_sequence_px != modeled:
-                raise ValueError(
-                    "physical sequence extent must derive from frames and spacing"
-                )
             supported = observed.intersects(modeled)
-            if supported != (self.state == EvidenceState.SUPPORTED):
-                raise ValueError(
-                    "sequence conservation state must match physical intervals"
-                )
+            state = (
+                EvidenceState.SUPPORTED
+                if supported
+                else EvidenceState.CONTRADICTED
+            )
+            reason = (
+                "frame_sequence_conserved"
+                if supported
+                else "frame_sequence_not_conserved"
+            )
+        object.__setattr__(self, "physical_sequence_px", modeled)
+        object.__setattr__(self, "state", state)
+        object.__setattr__(self, "reason", reason)
 
 
 def observed_spacing_evidence(
@@ -312,45 +335,36 @@ def sequence_conservation_evidence(
 ) -> SequenceConservationEvidence:
     if count <= 0 or len(spacings) != max(0, count - 1):
         return SequenceConservationEvidence(
-            EvidenceState.UNAVAILABLE,
-            "count_or_spacing_sequence_incomplete",
             visible_length_px,
             PixelInterval.zero(),
             PixelInterval.zero(),
             PixelInterval.zero(),
-            PixelInterval.zero(),
+            SequenceConservationBasis.INCOMPLETE_SEQUENCE,
         )
     if any(not spacing.supports_sequence_conservation for spacing in spacings):
         return SequenceConservationEvidence(
-            EvidenceState.UNAVAILABLE,
-            (
-                "conservation_derived_spacing_not_independent"
-                if any(
-                    isinstance(spacing, CorroboratedSpacingEvidence)
-                    for spacing in spacings
-                )
-                else "signed_spacing_unresolved"
-            ),
             visible_length_px,
             PixelInterval.zero(),
             frame_width_px.scaled(float(count)),
             sum_pixel_intervals(tuple(item.signed_width_px for item in spacings)),
-            PixelInterval.zero(),
+            (
+                SequenceConservationBasis.CORROBORATED_SPACING
+                if any(
+                    isinstance(spacing, CorroboratedSpacingEvidence)
+                    for spacing in spacings
+                )
+                else SequenceConservationBasis.SPACING_HYPOTHESIS
+            ),
         )
     occlusion = holder_occlusion.combined_hidden_width_px
     frame_total = frame_width_px.scaled(float(count))
     spacing_total = sum_pixel_intervals(
         tuple(item.signed_width_px for item in spacings)
     )
-    observed_physical = visible_length_px.plus(occlusion)
-    modeled_physical = frame_total.plus(spacing_total)
-    supported = observed_physical.intersects(modeled_physical)
     return SequenceConservationEvidence(
-        EvidenceState.SUPPORTED if supported else EvidenceState.CONTRADICTED,
-        "frame_sequence_conserved" if supported else "frame_sequence_not_conserved",
         visible_length_px,
         occlusion,
         frame_total,
         spacing_total,
-        modeled_physical,
+        SequenceConservationBasis.INDEPENDENT_SPACING,
     )

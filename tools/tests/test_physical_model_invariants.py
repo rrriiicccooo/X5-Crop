@@ -104,10 +104,16 @@ class PhysicalModelInvariantTest(unittest.TestCase):
             evidence.holder_texture,
             evidence.sequence_content_alignment,
             evidence.independence,
+            evidence.sequence_conservation,
         ):
             with self.subTest(derived=type(derived).__name__):
                 self.assertFalse(derived.__dataclass_fields__["state"].init)
                 self.assertFalse(derived.__dataclass_fields__["reason"].init)
+        self.assertFalse(
+            evidence.sequence_conservation.__dataclass_fields__[
+                "physical_sequence_px"
+            ].init
+        )
         invalid_factories = (
             lambda: replace(
                 evidence.frame_coverage,

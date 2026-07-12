@@ -66,6 +66,7 @@ from x5crop.detection.physical.boundary import (
 )
 from x5crop.domain import PixelInterval
 from x5crop.detection.physical.spacing import (
+    SequenceConservationBasis,
     SequenceConservationEvidence,
     observed_spacing_evidence,
 )
@@ -245,13 +246,11 @@ def candidate_evidence_fixture(
     return CandidateEvidence(
         frame_coverage=coverage,
         sequence_conservation=SequenceConservationEvidence(
-            EvidenceState.SUPPORTED,
-            "frame_sequence_conserved",
             PixelInterval.exact(200.0),
             PixelInterval.zero(),
             PixelInterval.exact(200.0),
             PixelInterval.zero(),
-            PixelInterval.exact(200.0),
+            SequenceConservationBasis.INDEPENDENT_SPACING,
         ),
         separator_sequence=SeparatorSequenceEvidence(
             1,

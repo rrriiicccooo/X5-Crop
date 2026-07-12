@@ -41,6 +41,7 @@ from x5crop.domain import (
 )
 from x5crop.detection.physical.boundary import canvas_boundary_observations
 from x5crop.detection.physical.model import PhotoInterval, SequenceSolution
+from x5crop.detection.physical.spacing import SequenceConservationBasis
 from x5crop.detection.physical.separator.assignment import dimension_constrained_boundary
 from x5crop.cache import MeasurementCache
 from x5crop.domain import HolderSpan, VisibleSequenceSpan
@@ -210,7 +211,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                 candidate.assessment.evidence,
                 sequence_conservation=replace(
                     candidate.assessment.evidence.sequence_conservation,
-                    state=EvidenceState.UNAVAILABLE,
+                    basis=SequenceConservationBasis.SPACING_HYPOTHESIS,
                 ),
             ),
         )
@@ -373,7 +374,6 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         candidate = candidate_fixture()
         conservation = replace(
             candidate.assessment.evidence.sequence_conservation,
-            state=EvidenceState.CONTRADICTED,
             visible_length_px=PixelInterval.exact(400.0),
         )
         evidence = replace(

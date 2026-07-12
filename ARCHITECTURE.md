@@ -158,6 +158,8 @@ Partial auto count 从允许的较大 count 向较小 count 求解。XPAN 和 12
 content preservation compatibility 和实质替代解均已解决时才 supported；CandidateGate PASS
 不能替代这一结论。Assignment resolution 与 search-budget exhaustion 也是它的 canonical facts；
 state 和 ordered reasons 只能由完整 resolution facts 派生，caller 不得另行写入。
+Sequence conservation 同样只保存 visible length、holder occlusion、frame/spacing totals 与 typed
+spacing basis；physical extent、state 和 reason 均由这些物理事实派生。
 片夹 occupancy 只由 normalized horizontal work-space 的 holder/visible spans 和正向物理证据派生；
 原始 layout 只负责选择 source X/Y calibration。用户选择的 full/partial mode 不能改写同一几何的
 filled/underfilled 状态；slack、fill ratio 与 calibration projection 都是同一 typed evidence 的
