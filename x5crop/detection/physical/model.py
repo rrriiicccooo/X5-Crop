@@ -20,6 +20,7 @@ from ...domain import (
 from ...geometry.layout import HORIZONTAL, require_work_layout
 from ...strip_modes import FULL, PARTIAL
 from .boundary import HolderOcclusionEvidence
+from .lane_divider import LaneDividerEvidence
 from .spacing import InterFrameSpacing
 
 
@@ -224,13 +225,20 @@ class DualLaneSolution:
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
-    automatic_processing_supported: bool
     sequence_hypothesis_name: str
     sequence_hypothesis_strategy: str
-    sequence_provenance: MeasurementProvenance
+    lane_divider: LaneDividerEvidence
     lane_solutions: tuple[SequenceSolution, ...]
     lane_boxes: tuple[Box, ...]
     lane_crop_envelopes: tuple[CropEnvelope, ...]
+
+    @property
+    def automatic_processing_supported(self) -> bool:
+        return self.lane_divider.state == EvidenceState.SUPPORTED
+
+    @property
+    def sequence_provenance(self) -> MeasurementProvenance:
+        return self.lane_divider.provenance
 
     def __post_init__(self) -> None:
         _validate_geometry_identity(self.format_id, self.layout, self.strip_mode)
@@ -261,6 +269,18 @@ class DualLaneSolution:
             raise ValueError("dual-lane solution requires one box and envelope per lane")
         if any(not lane.valid() for lane in self.lane_boxes):
             raise ValueError("dual-lane solution requires valid lane boxes")
+        if self.lane_divider.gutter.left != 0 or (
+            self.lane_divider.gutter.right != self.holder_span.box.width
+            or self.lane_divider.gutter.bottom > self.holder_span.box.height
+        ):
+            raise ValueError("lane divider evidence must use holder coordinates")
+        if tuple(
+            self.lane_divider.lane_boxes(
+                self.holder_span.box.width,
+                self.holder_span.box.height,
+            )
+        ) != self.lane_boxes:
+            raise ValueError("dual-lane boxes must be derived from divider evidence")
         if any(
             lane.holder_span.box
             != Box(0, 0, lane_box.width, lane_box.height)

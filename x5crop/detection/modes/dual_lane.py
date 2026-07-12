@@ -7,8 +7,8 @@ from ...cache.analysis import make_measurement_cache
 from ...domain import (
     Box,
     CropEnvelope,
+    EvidenceState,
     HolderSpan,
-    MeasurementProvenance,
     VisibleSequenceSpan,
 )
 from ...geometry.boxes import translate_box
@@ -29,10 +29,10 @@ from ..physical.model import (
     DualLaneSolution,
     SequenceSolution,
 )
-from .dual_lane_split import (
+from ..physical.lane_divider import (
     DUAL_LANE_COUNT,
-    LaneDividerProposal,
-    lane_divider_proposals,
+    LaneDividerEvidence,
+    measure_lane_dividers,
 )
 
 
@@ -86,7 +86,7 @@ def _lane_context(
 
 def _parent_candidate(
     context: DetectionContext,
-    divider: LaneDividerProposal,
+    divider: LaneDividerEvidence,
     lane_boxes: tuple[Box, Box],
     lanes: tuple[SelectionResult, SelectionResult],
     proposal_budget_exhausted: bool,
@@ -147,14 +147,9 @@ def _parent_candidate(
                 proposal_budget_exhausted
                 or any(solution.search_budget_exhausted for solution in lane_solutions)
             ),
-            automatic_processing_supported=divider.source != "center_safety",
             sequence_hypothesis_name="measured_lane_divider",
             sequence_hypothesis_strategy="dual_lane_sequence",
-            sequence_provenance=MeasurementProvenance(
-                root_measurement="content_evidence",
-                source=divider.source,
-                dependencies=("content_evidence",),
-            ),
+            lane_divider=divider,
             lane_solutions=lane_solutions,
             lane_boxes=lane_boxes,
             lane_crop_envelopes=tuple(
@@ -167,8 +162,8 @@ def _parent_candidate(
             source="format_default",
         ),
         build_diagnostics=(
-            ("center_safety_lane_divider",)
-            if divider.source == "center_safety"
+            ("lane_divider_evidence_unavailable",)
+            if divider.state != EvidenceState.SUPPORTED
             else ()
         ),
     )
@@ -183,13 +178,13 @@ def choose_dual_lane_detection(
         raise ValueError("dual-lane detector is only valid for full mode")
     if physical_spec.lane_count != DUAL_LANE_COUNT:
         raise ValueError("dual-lane detector supports exactly two lanes")
-    proposal_set = lane_divider_proposals(
+    divider_evidence = measure_lane_dividers(
         context.measurement_cache.content_evidence_float_work,
         context.configuration.candidate_plan.dual_lane_divider,
     )
     parent_candidates = []
-    for proposal in proposal_set.proposals:
-        lanes = proposal.lane_boxes(
+    for divider in divider_evidence.candidates:
+        lanes = divider.lane_boxes(
             context.measurement_cache.gray_work.shape[1],
             context.measurement_cache.gray_work.shape[0],
         )
@@ -200,10 +195,10 @@ def choose_dual_lane_detection(
         )
         built = _parent_candidate(
             context,
-            proposal,
+            divider,
             lanes,
             lane_selections,
-            proposal_set.budget_exhausted,
+            divider_evidence.budget_exhausted,
         )
         parent_candidates.append(
             assess_dual_lane_candidate(

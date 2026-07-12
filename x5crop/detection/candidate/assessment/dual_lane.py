@@ -235,15 +235,19 @@ def assess_dual_lane_candidate(
             lane.assessment.evidence.content_preservation.state for lane in lanes
         )
     )
+    boundary_contact_frame_indexes: list[int] = []
+    frame_offset = 0
+    for lane in lanes:
+        boundary_contact_frame_indexes.extend(
+            frame_offset + index
+            for index in lane.assessment.evidence.content_preservation.boundary_contact_frame_indexes
+        )
+        frame_offset += lane.geometry.count
     preservation = ContentPreservationEvidence(
         state=preservation_state,
         reason="dual_lane_content_preservation",
         uncovered_content=coverage.uncovered_content,
-        boundary_contact_frame_indexes=tuple(
-            index
-            for lane in lanes
-            for index in lane.assessment.evidence.content_preservation.boundary_contact_frame_indexes
-        ),
+        boundary_contact_frame_indexes=tuple(boundary_contact_frame_indexes),
         partial_edge_state=EvidenceState.NOT_APPLICABLE,
     )
     alignment = SequenceContentAlignmentEvidence(
@@ -379,6 +383,7 @@ def assess_dual_lane_candidate(
     components_pass = bool(
         all(lane.assessment.gate.passed for lane in lanes)
         and all(lane_geometry_resolved)
+        and geometry.lane_divider.state == EvidenceState.SUPPORTED
     )
     gate = candidate_gate_assessment(
         CandidateGateInput(
@@ -396,6 +401,7 @@ def assess_dual_lane_candidate(
                     (
                         "two_independently_assessed_lanes",
                         "resolved_lane_geometry",
+                        "supported_lane_divider",
                     ),
                 ),
             ),

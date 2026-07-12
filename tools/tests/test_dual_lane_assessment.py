@@ -13,6 +13,10 @@ from x5crop.detection.candidate.assessment.separator_support import (
 from x5crop.detection.candidate.model import BuiltCandidate
 from x5crop.domain import EvidenceState, FrameBoundaryReference
 from x5crop.domain import PixelInterval
+from x5crop.detection.physical.lane_divider import (
+    LaneDividerEvidence,
+    measure_lane_dividers,
+)
 from x5crop.detection.physical.model import DualLaneSolution
 from x5crop.detection.physical.model import (
     BoundaryAssignmentConsensus,
@@ -26,7 +30,6 @@ from x5crop.detection.physical.spacing import (
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from x5crop.domain import Box, MeasurementProvenance
 from x5crop.configuration.candidate import DualLaneDividerParameters
-from x5crop.detection.modes.dual_lane_split import lane_divider_proposals
 
 
 def _parent(lane):
@@ -81,13 +84,18 @@ def _parent(lane):
             (lane.geometry, lane.geometry)
         ),
         search_budget_exhausted=False,
-        automatic_processing_supported=True,
         sequence_hypothesis_name="dual_lane_fixture",
         sequence_hypothesis_strategy="dual_lane_sequence",
-        sequence_provenance=MeasurementProvenance(
-            "lane_divider_profile",
-            "measured_gutter",
-            ("gray_work",),
+        lane_divider=LaneDividerEvidence(
+            center=lane_height,
+            gutter=Box(0, lane_height - 1, lane_width, lane_height + 1),
+            normalized_gutter_residual=0.0,
+            normalized_lane_residuals=(1.0, 1.0),
+            provenance=MeasurementProvenance(
+                "lane_divider_profile",
+                "measured_gutter",
+                ("content_evidence_image",),
+            ),
         ),
         lane_solutions=(lane.geometry, lane.geometry),
         lane_boxes=lane_boxes,
@@ -101,12 +109,51 @@ def _parent(lane):
 
 
 class DualLaneAssessmentTest(unittest.TestCase):
-    def test_lane_divider_proposal_budget_exhaustion_is_explicit(self) -> None:
-        result = lane_divider_proposals(
+    def test_lane_divider_measurement_budget_exhaustion_is_explicit(self) -> None:
+        result = measure_lane_dividers(
             np.zeros((100, 10), dtype=np.float32),
             DualLaneDividerParameters(proposal_count=1),
         )
         self.assertTrue(result.budget_exhausted)
+
+    def test_content_across_divider_is_unavailable_and_never_discarded(self) -> None:
+        result = measure_lane_dividers(
+            np.ones((100, 20), dtype=np.float32),
+            DualLaneDividerParameters(proposal_count=2),
+        )
+        self.assertTrue(result.candidates)
+        for divider in result.candidates:
+            with self.subTest(center=divider.center):
+                self.assertEqual(divider.state, EvidenceState.UNAVAILABLE)
+                upper, lower = divider.lane_boxes(20, 100)
+                self.assertEqual(upper.top, 0)
+                self.assertEqual(upper.bottom, lower.top)
+                self.assertEqual(lower.bottom, 100)
+
+    def test_local_content_valley_supports_lane_divider(self) -> None:
+        evidence = np.ones((100, 20), dtype=np.float32)
+        evidence[48:52, :] = 0.0
+        result = measure_lane_dividers(
+            evidence,
+            DualLaneDividerParameters(proposal_count=1),
+        )
+        self.assertTrue(
+            any(
+                divider.state == EvidenceState.SUPPORTED
+                for divider in result.candidates
+            )
+        )
+
+    def test_lane_divider_provenance_is_acyclic(self) -> None:
+        result = measure_lane_dividers(
+            np.zeros((100, 20), dtype=np.float32),
+            DualLaneDividerParameters(proposal_count=1),
+        )
+        for divider in result.candidates:
+            self.assertNotIn(
+                divider.provenance.root_measurement,
+                divider.provenance.dependencies,
+            )
 
     def test_dual_lane_solution_does_not_duplicate_lane_sequence_facts(self) -> None:
         field_names = {field.name for field in fields(DualLaneSolution)}
@@ -216,6 +263,27 @@ class DualLaneAssessmentTest(unittest.TestCase):
         self.assertEqual(path.state, EvidenceState.CONTRADICTED)
         self.assertFalse(assessed.assessment.gate.passed)
 
+    def test_unavailable_lane_divider_blocks_mode_composition_proof(self) -> None:
+        lane = candidate_fixture()
+        parent = _parent(lane)
+        parent = replace(
+            parent,
+            geometry=replace(
+                parent.geometry,
+                lane_divider=replace(
+                    parent.geometry.lane_divider,
+                    normalized_gutter_residual=1.0,
+                    normalized_lane_residuals=(1.0, 1.0),
+                ),
+            ),
+        )
+        assessed = assess_dual_lane_candidate(
+            parent,
+            (lane, lane),
+            lane_geometry_resolved=(True, True),
+        )
+        self.assertFalse(assessed.assessment.gate.passed)
+
     def test_dual_lane_assessment_never_creates_final_status(self) -> None:
         assessed = assess_dual_lane_candidate(
             _parent(candidate_fixture()),
@@ -260,6 +328,35 @@ class DualLaneAssessmentTest(unittest.TestCase):
         overlap = next(spacing for spacing in spacings if spacing.kind == "overlap")
         self.assertEqual(overlap.boundary, FrameBoundaryReference(2, 1))
         self.assertEqual(overlap.signed_width_px, PixelInterval.exact(-8.0))
+
+    def test_lane_local_content_contacts_receive_global_frame_indexes(self) -> None:
+        first = candidate_fixture()
+        second = candidate_fixture()
+        lanes = tuple(
+            replace(
+                lane,
+                assessment=replace(
+                    lane.assessment,
+                    evidence=replace(
+                        lane.assessment.evidence,
+                        content_preservation=replace(
+                            lane.assessment.evidence.content_preservation,
+                            boundary_contact_frame_indexes=(1,),
+                        ),
+                    ),
+                ),
+            )
+            for lane in (first, second)
+        )
+        assessed = assess_dual_lane_candidate(
+            _parent(first),
+            lanes,
+            lane_geometry_resolved=(True, True),
+        )
+        self.assertEqual(
+            assessed.assessment.evidence.content_preservation.boundary_contact_frame_indexes,
+            (1, 3),
+        )
 
 
 if __name__ == "__main__":
