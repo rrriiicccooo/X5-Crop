@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import unittest
 
-from x5crop.image.deskew import DeskewAngleMeasurement, LineFitMeasurement
+from x5crop.image.deskew import (
+    DeskewAngleMeasurement,
+    DeskewMeasurementOutcome,
+    LineFitMeasurement,
+)
 import x5crop.runtime.deskew as runtime_deskew
 
 
 def _measurement(
     *,
-    reason: str | None = None,
+    outcome: DeskewMeasurementOutcome = DeskewMeasurementOutcome.MEASURED,
     top: tuple[int, float] | None = None,
     bottom: tuple[int, float] | None = None,
 ) -> DeskewAngleMeasurement:
@@ -22,28 +26,45 @@ def _measurement(
         )
 
     return DeskewAngleMeasurement(
-        angle_degrees=0.05 if reason is None else 0.0,
-        reason=reason,
+        outcome=outcome,
+        angle_degrees=(
+            0.05 if outcome == DeskewMeasurementOutcome.MEASURED else 0.0
+        ),
         top_fit=fit(top),
         bottom_fit=fit(bottom),
     )
 
 
 class DeskewMeasurementContractTest(unittest.TestCase):
+    def test_measurement_outcome_is_typed_not_a_free_reason(self) -> None:
+        self.assertNotIn("reason", DeskewAngleMeasurement.__dataclass_fields__)
+
     def test_measurement_types_reject_impossible_states(self) -> None:
         for factory in (
             lambda: LineFitMeasurement(float("nan"), 4, 1.0),
             lambda: LineFitMeasurement(0.0, 0, 1.0),
             lambda: LineFitMeasurement(0.0, 4, -1.0),
-            lambda: DeskewAngleMeasurement(0.05, None, None, None),
-            lambda: DeskewAngleMeasurement(0.05, "not_enough_points", None, None),
+            lambda: DeskewAngleMeasurement(
+                DeskewMeasurementOutcome.MEASURED,
+                0.05,
+                None,
+                None,
+            ),
+            lambda: DeskewAngleMeasurement(
+                DeskewMeasurementOutcome.INSUFFICIENT_EDGE_POINTS,
+                0.05,
+                None,
+                None,
+            ),
         ):
             with self.subTest(factory=factory), self.assertRaises(ValueError):
                 factory()
 
     def test_measurement_preference_uses_physical_fit_facts(self) -> None:
         preference = getattr(runtime_deskew, "_deskew_measurement_preference")
-        invalid = _measurement(reason="not_enough_points")
+        invalid = _measurement(
+            outcome=DeskewMeasurementOutcome.INSUFFICIENT_EDGE_POINTS
+        )
         one_edge = _measurement(top=(8, 1.0))
         two_edges = _measurement(top=(8, 1.0), bottom=(7, 1.2))
         more_inliers = _measurement(top=(9, 1.0), bottom=(8, 1.2))

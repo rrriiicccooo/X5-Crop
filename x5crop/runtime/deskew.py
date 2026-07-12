@@ -12,6 +12,7 @@ from ..detection.evidence.transform_geometry import (
 from ..geometry.layout import work_gray
 from ..image.deskew import (
     DeskewAngleMeasurement,
+    DeskewMeasurementOutcome,
     measure_deskew_angle,
 )
 from ..image.evidence import make_deskew_fallback_gray
@@ -38,7 +39,7 @@ def _deskew_measurement_preference(
         if fit is not None
     )
     return (
-        measurement.reason is None,
+        measurement.outcome == DeskewMeasurementOutcome.MEASURED,
         len(fits),
         sum(fit.inliers for fit in fits),
         -max((fit.median_residual for fit in fits), default=float("inf")),
@@ -62,7 +63,7 @@ def _select_deskew_measurement(
         return base
     if (
         config.deskew_fallback == "auto"
-        and base.reason is None
+        and base.outcome == DeskewMeasurementOutcome.MEASURED
         and base.top_fit is not None
         and base.bottom_fit is not None
     ):
@@ -138,9 +139,5 @@ def apply_deskew(
         estimated_angle_degrees=float(angle),
         span_px=float(deskew_span),
         span_threshold_px=float(deskew_span_threshold),
-        measurement_reason=(
-            measurement.reason
-            if outcome == TransformOutcome.SPAN_BELOW_THRESHOLD
-            else None
-        ),
+        measurement_outcome=measurement.outcome,
     )

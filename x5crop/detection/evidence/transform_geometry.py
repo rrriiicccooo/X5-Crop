@@ -5,6 +5,7 @@ from enum import Enum
 import math
 
 from x5crop.domain import EvidenceState
+from x5crop.image.deskew import DeskewMeasurementOutcome
 
 
 class TransformOutcome(str, Enum):
@@ -20,7 +21,7 @@ class TransformGeometryEvidence:
     estimated_angle_degrees: float
     span_px: float | None
     span_threshold_px: float | None
-    measurement_reason: str | None = None
+    measurement_outcome: DeskewMeasurementOutcome | None = None
     state: EvidenceState = field(init=False)
     applied: bool = field(init=False)
     applied_angle_degrees: float = field(init=False)
@@ -45,17 +46,19 @@ class TransformGeometryEvidence:
             if (
                 self.estimated_angle_degrees != 0.0
                 or self.span_px is not None
-                or self.measurement_reason is not None
+                or self.measurement_outcome is not None
             ):
                 raise ValueError("disabled deskew cannot carry transform measurements")
         elif self.span_px is None:
             raise ValueError("measured deskew outcome requires span measurements")
-        if (
-            self.measurement_reason is not None
-            and self.outcome != TransformOutcome.SPAN_BELOW_THRESHOLD
-        ):
+        elif not isinstance(self.measurement_outcome, DeskewMeasurementOutcome):
+            raise TypeError("measured transform requires a typed measurement outcome")
+        if self.outcome in {
+            TransformOutcome.APPLIED,
+            TransformOutcome.ANGLE_OUT_OF_RANGE,
+        } and self.measurement_outcome != DeskewMeasurementOutcome.MEASURED:
             raise ValueError(
-                "deskew measurement reason belongs only to a skipped small transform"
+                "applied or out-of-range transform requires a measured deskew angle"
             )
         applied = self.outcome == TransformOutcome.APPLIED
         object.__setattr__(
@@ -76,5 +79,10 @@ class TransformGeometryEvidence:
         object.__setattr__(
             self,
             "reason",
-            self.measurement_reason or self.outcome.value,
+            (
+                self.measurement_outcome.value
+                if self.outcome == TransformOutcome.SPAN_BELOW_THRESHOLD
+                and self.measurement_outcome != DeskewMeasurementOutcome.MEASURED
+                else self.outcome.value
+            ),
         )

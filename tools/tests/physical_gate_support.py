@@ -54,6 +54,7 @@ from x5crop.detection.evidence.transform_geometry import (
     TransformGeometryEvidence,
     TransformOutcome,
 )
+from x5crop.image.deskew import DeskewMeasurementOutcome
 from x5crop.detection.gate_checks import GateCheck
 from x5crop.detection.physical.model import (
     AssignmentConsensusOutcome,
@@ -540,7 +541,7 @@ def transform_geometry_fixture(
         0.0,
         0.0,
         1.0,
-        "test_fixture" if state == EvidenceState.SUPPORTED else None,
+        DeskewMeasurementOutcome.MEASURED,
     )
 
 

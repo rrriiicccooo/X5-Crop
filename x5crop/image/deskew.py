@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 import math
 
 import numpy as np
@@ -27,22 +28,32 @@ class LineFitMeasurement:
             raise ValueError("line fit measurement requires finite positive support")
 
 
+class DeskewMeasurementOutcome(str, Enum):
+    MEASURED = "deskew_angle_measured"
+    NO_SCAN_FOOTPRINT = "no_scan_footprint"
+    INSUFFICIENT_EDGE_POINTS = "insufficient_edge_points"
+    EDGE_FITS_DISAGREE = "edge_fits_disagree"
+    HIGH_RESIDUAL = "high_residual"
+
+
 @dataclass(frozen=True)
 class DeskewAngleMeasurement:
+    outcome: DeskewMeasurementOutcome
     angle_degrees: float
-    reason: str | None
     top_fit: LineFitMeasurement | None
     bottom_fit: LineFitMeasurement | None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.outcome, DeskewMeasurementOutcome):
+            raise TypeError("deskew measurement requires a typed outcome")
         if not math.isfinite(self.angle_degrees):
             raise ValueError("deskew angle measurement must be finite")
         fits = (self.top_fit, self.bottom_fit)
-        if self.reason is None:
+        if self.outcome == DeskewMeasurementOutcome.MEASURED:
             if all(fit is None for fit in fits):
                 raise ValueError("successful deskew measurement requires an edge fit")
-        elif not self.reason or self.angle_degrees != 0.0:
-            raise ValueError("failed deskew measurement must have zero angle and a reason")
+        elif self.angle_degrees != 0.0:
+            raise ValueError("failed deskew measurement must have zero angle")
 
 
 def _fit_line(
@@ -90,7 +101,12 @@ def measure_deskew_angle(
         parameters.footprint_min_fraction,
     )
     if footprint is None or footprint.width < parameters.min_footprint_width:
-        return DeskewAngleMeasurement(0.0, "no_scan_footprint", None, None)
+        return DeskewAngleMeasurement(
+            DeskewMeasurementOutcome.NO_SCAN_FOOTPRINT,
+            0.0,
+            None,
+            None,
+        )
 
     xs = np.linspace(
         footprint.left,
@@ -130,7 +146,12 @@ def measure_deskew_angle(
     )
     fits = tuple(fit for fit in (top_fit, bottom_fit) if fit is not None)
     if not fits:
-        return DeskewAngleMeasurement(0.0, "not_enough_points", None, None)
+        return DeskewAngleMeasurement(
+            DeskewMeasurementOutcome.INSUFFICIENT_EDGE_POINTS,
+            0.0,
+            None,
+            None,
+        )
 
     slopes = tuple(fit.slope for fit in fits)
     if (
@@ -138,8 +159,8 @@ def measure_deskew_angle(
         and abs(slopes[0] - slopes[1]) > parameters.slope_delta_max
     ):
         return DeskewAngleMeasurement(
+            DeskewMeasurementOutcome.EDGE_FITS_DISAGREE,
             0.0,
-            "top_bottom_disagree",
             top_fit,
             bottom_fit,
         )
@@ -149,8 +170,8 @@ def measure_deskew_angle(
     )
     if any(fit.median_residual > residual_limit for fit in fits):
         return DeskewAngleMeasurement(
+            DeskewMeasurementOutcome.HIGH_RESIDUAL,
             0.0,
-            "high_residual",
             top_fit,
             bottom_fit,
         )
@@ -159,4 +180,9 @@ def measure_deskew_angle(
     angle = math.degrees(math.atan(slope))
     if layout == VERTICAL:
         angle = -angle
-    return DeskewAngleMeasurement(angle, None, top_fit, bottom_fit)
+    return DeskewAngleMeasurement(
+        DeskewMeasurementOutcome.MEASURED,
+        angle,
+        top_fit,
+        bottom_fit,
+    )

@@ -66,6 +66,8 @@ repository rules in `AGENTS.md`.
   spacing type 与 signed kind 派生。
 - Review-only evidence 删除唯一固定值的 reason 字段，收敛成无字段 marker；最终原因仍只由
   DecisionGate 生成。
+- Deskew measurement 与 transform evidence 删除自由 reason 字符串，统一使用 foundation-owned typed
+  measurement outcome。
 - Boundary assignment consensus 删除 caller-supplied state/reason，改为 typed solver outcome；
   disagreement、budget exhaustion 与 dual-lane component unresolved 不再共用自由文本状态。
 - Holder occlusion side 删除 caller-supplied state/reason，改为 typed measurement outcome；普通 combined

@@ -78,6 +78,12 @@ class PhysicalModelInvariantTest(unittest.TestCase):
     def test_review_only_evidence_is_a_fieldless_marker(self) -> None:
         self.assertEqual(ReviewOnlyEvidence.__dataclass_fields__, {})
 
+    def test_transform_evidence_has_no_free_measurement_reason(self) -> None:
+        self.assertNotIn(
+            "measurement_reason",
+            TransformGeometryEvidence.__dataclass_fields__,
+        )
+
     def test_candidate_gate_must_match_candidate_evidence(self) -> None:
         candidate = candidate_fixture()
         gate = candidate.assessment.gate
