@@ -6,7 +6,12 @@ import math
 import numpy as np
 
 from ...configuration.candidate import DualLaneDividerParameters
-from ...domain import Box, EvidenceState, MeasurementProvenance
+from ...domain import (
+    Box,
+    EvidenceState,
+    MeasurementIdentity,
+    MeasurementProvenance,
+)
 from ...utils import clamp_int
 
 
@@ -89,9 +94,9 @@ def _divider_evidence(
             float(np.mean(lower, dtype=np.float64)),
         ),
         provenance=MeasurementProvenance(
-            root_measurement="lane_divider_profile",
+            root_measurement=MeasurementIdentity.LANE_DIVIDER_PROFILE,
             source=source,
-            dependencies=("content_evidence_image",),
+            dependencies=(MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,),
         ),
     )
 

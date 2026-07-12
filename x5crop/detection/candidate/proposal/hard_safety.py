@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from ....domain import Box, MeasurementProvenance
+from ....domain import Box, MeasurementIdentity, MeasurementProvenance
 from ...context import DetectionContext
 from ...physical.boundary import canvas_boundary_observations
 from ...physical.photo_size import frame_dimension_priors
 from ...physical.sequence_solver import solve_frame_sequence
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from ..model import BuiltCandidate
-from ..plan.count_hypotheses import CountHypothesis
+from ..plan.count_hypotheses import CountHypothesis, CountHypothesisSource
 from ...physical.model import SequenceSolution
 
 
@@ -46,7 +46,7 @@ def hard_safety_candidate(
     hypothesis = CountHypothesis(
         count=count,
         strip_mode=context.request.strip_mode,
-        source="hard_safety",
+        source=CountHypothesisSource.HARD_SAFETY,
     )
     return BuiltCandidate(
         geometry=SequenceSolution(
@@ -72,9 +72,12 @@ def hard_safety_candidate(
             sequence_hypothesis_name="full_canvas_safety",
             sequence_hypothesis_strategy="safety_canvas",
             sequence_provenance=MeasurementProvenance(
-                root_measurement="safety_geometry_model",
+                root_measurement=MeasurementIdentity.SAFETY_GEOMETRY_MODEL,
                 source="full_canvas_safety",
-                dependencies=("canvas", "count"),
+                dependencies=(
+                    MeasurementIdentity.CANVAS,
+                    MeasurementIdentity.COUNT,
+                ),
             ),
             boundary_observations=boundary_observations,
         ),

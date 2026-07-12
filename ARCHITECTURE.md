@@ -184,6 +184,9 @@ Topology 显式区分 sequence、lane composition 与 unmeasured scope；dual-la
 
 `FrameDimensionPrior` 只约束搜索。只有独立 photo-edge measurement 才能形成
 `FrameDimensionEvidence`。Content run 数量只做 guidance/diagnostic，不能证明 frame count。
+Count hypothesis、frame boundary、dimension prior、scan calibration 与 measurement dependency
+使用 typed identities；自由文本 provenance 只解释来源，不能授予 fixed-count、hard separator、
+calibrated overlap 或 evidence independence 权限。
 全局 content span 与局部 frame coverage 冲突时保持 unavailable，不能由任一侧单独宣告
 preserved 或 undercrop。
 

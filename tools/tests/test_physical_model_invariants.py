@@ -30,9 +30,12 @@ from x5crop.domain import (
     CropEnvelope,
     EvidenceState,
     FrameBoundary,
+    FrameBoundarySource,
     FrameBoundaryReference,
     FrameDimensionPrior,
+    FrameDimensionPriorSource,
     HolderSpan,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
     SeparatorWidthConstraint,
@@ -47,11 +50,15 @@ from x5crop.output.model import (
     FrameSideBleed,
     OutputGeometry,
 )
-from x5crop.units import ScanCalibration
+from x5crop.units import ScanCalibration, ScanCalibrationSource
 
 
 def _provenance() -> MeasurementProvenance:
-    return MeasurementProvenance("synthetic_measurement", "test", ())
+    return MeasurementProvenance(
+        MeasurementIdentity.FRAME_GEOMETRY,
+        "test",
+        (),
+    )
 
 
 class PhysicalModelInvariantTest(unittest.TestCase):
@@ -232,7 +239,7 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 PixelInterval(0.0, 10.0),
                 PixelInterval(1.0, 10.0),
                 (36.0, 24.0),
-                "synthetic",
+                FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
                 _provenance(),
             )
 
@@ -256,21 +263,26 @@ class PhysicalModelInvariantTest(unittest.TestCase):
             FrameBoundary(
                 1,
                 PixelInterval.exact(10.0),
-                "observed_separator",
+                FrameBoundarySource.OBSERVED_SEPARATOR,
                 _provenance(),
             )
         with self.assertRaises(ValueError):
             FrameBoundary(
                 1,
                 PixelInterval.exact(10.0),
-                "dimension_constrained",
+                FrameBoundarySource.DIMENSION_CONSTRAINED,
                 _provenance(),
             )
 
     def test_scan_calibration_rejects_impossible_trusted_state_and_axis(self) -> None:
         with self.assertRaises(ValueError):
-            ScanCalibration(None, None, "tiff_resolution", True)
-        calibration = ScanCalibration(10.0, 10.0, "tiff_resolution", True)
+            ScanCalibration(None, None, ScanCalibrationSource.TIFF_RESOLUTION, True)
+        calibration = ScanCalibration(
+            10.0,
+            10.0,
+            ScanCalibrationSource.TIFF_RESOLUTION,
+            True,
+        )
         with self.assertRaises(ValueError):
             calibration.px_per_mm("long")
 

@@ -26,11 +26,13 @@ from x5crop.domain import (
     BoundaryObservation,
     EvidenceState,
     FrameBoundaryReference,
+    FrameDimensionPriorSource,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
 )
 from x5crop.formats import format_spec
-from x5crop.units import ScanCalibration
+from x5crop.units import ScanCalibration, ScanCalibrationSource
 
 
 def _geometry(second_start: float = 205.0):
@@ -65,9 +67,12 @@ def _geometry(second_start: float = 205.0):
     first_cut = int(round(observations[0].center))
     second_cut = int(round(observations[1].center))
     photo_edge_provenance = MeasurementProvenance(
-        "photo_edges",
+        MeasurementIdentity.PHOTO_EDGES,
         "test_fixture",
-        ("separator_profile", "sequence_boundaries"),
+        (
+            MeasurementIdentity.SEPARATOR_PROFILE,
+            MeasurementIdentity.SEQUENCE_BOUNDARIES,
+        ),
     )
     return replace(
         base,
@@ -128,7 +133,12 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         priors = frame_dimension_priors(
             base.visible_sequence_span,
             format_spec("120-66"),
-            ScanCalibration(10.0, 10.0, "test", True),
+            ScanCalibration(
+                10.0,
+                10.0,
+                ScanCalibrationSource.TIFF_RESOLUTION,
+                True,
+            ),
             layout="horizontal",
         )
         self.assertEqual(
@@ -146,7 +156,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         uncalibrated = frame_dimension_priors(
             base.visible_sequence_span,
             format_spec("120-66"),
-            ScanCalibration(None, None, "unavailable", False),
+            ScanCalibration(None, None, ScanCalibrationSource.UNAVAILABLE, False),
             layout="horizontal",
         )
         self.assertEqual(len(uncalibrated), 1)
@@ -177,17 +187,20 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             ),
             frame_dimension_prior=replace(
                 base.frame_dimension_prior,
-                source="short_axis_aspect",
+                source=FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
                 provenance=MeasurementProvenance(
-                    "physical_frame_aspect",
+                    MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
                     "frame_dimension_prior",
-                    ("format_physical_spec", "short_axis_boundaries"),
+                    (
+                        MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+                        MeasurementIdentity.SHORT_AXIS_BOUNDARIES,
+                    ),
                 ),
             ),
         )
         result = frame_dimension_evidence(
             geometry,
-            ScanCalibration(None, None, "unavailable", False),
+            ScanCalibration(None, None, ScanCalibrationSource.UNAVAILABLE, False),
         )
         self.assertEqual(result.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(
@@ -226,9 +239,9 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             PixelInterval.exact(0.0),
             "white_holder_transition",
             MeasurementProvenance(
-                "holder_boundary_profile",
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "white_holder_transition",
-                ("gray_work",),
+                (MeasurementIdentity.GRAY_WORK,),
             ),
         )
         occlusion = holder_occlusion_evidence(
@@ -239,9 +252,9 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             frame_width_px=PixelInterval.exact(100.0),
         )
         photo_edges = MeasurementProvenance(
-            "photo_edges",
+            MeasurementIdentity.PHOTO_EDGES,
             "test_fixture",
-            ("holder_boundary_profile",),
+            (MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,),
         )
         geometry = replace(
             geometry,
@@ -258,7 +271,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         )
         result = frame_dimension_evidence(
             geometry,
-            ScanCalibration(None, None, "unavailable", False),
+            ScanCalibration(None, None, ScanCalibrationSource.UNAVAILABLE, False),
         )
         self.assertEqual(occlusion.leading.state, EvidenceState.SUPPORTED)
         self.assertEqual(result.photo_widths_px, ())
@@ -268,7 +281,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         geometry = _geometry()
         result = frame_dimension_evidence(
             geometry,
-            ScanCalibration(None, None, "unavailable", False),
+            ScanCalibration(None, None, ScanCalibrationSource.UNAVAILABLE, False),
         )
         self.assertEqual(result.photo_widths_px, (100.0, 100.0, 100.0))
         self.assertGreater(result.separator_width_cv or 0.0, 0.0)
@@ -316,7 +329,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
 
         result = frame_dimension_evidence(
             geometry,
-            ScanCalibration(None, None, "unavailable", False),
+            ScanCalibration(None, None, ScanCalibrationSource.UNAVAILABLE, False),
         )
 
         self.assertEqual(result.photo_widths_px, (100.0,))
@@ -326,7 +339,7 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         geometry = _geometry(second_start=225.0)
         result = frame_dimension_evidence(
             geometry,
-            ScanCalibration(None, None, "unavailable", False),
+            ScanCalibration(None, None, ScanCalibrationSource.UNAVAILABLE, False),
         )
         self.assertEqual(result.state, EvidenceState.CONTRADICTED)
         self.assertEqual(result.reason, "physical_frame_dimensions_contradicted")

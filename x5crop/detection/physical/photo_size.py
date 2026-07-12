@@ -5,7 +5,12 @@ import math
 from statistics import median
 from typing import TYPE_CHECKING
 
-from ...domain import FrameDimensionPrior, MeasurementProvenance
+from ...domain import (
+    FrameDimensionPrior,
+    FrameDimensionPriorSource,
+    MeasurementIdentity,
+    MeasurementProvenance,
+)
 from ...formats import FormatPhysicalSpec
 from ...geometry.layout import is_horizontal_layout
 from ...units import ScanCalibration
@@ -156,12 +161,18 @@ def frame_dimension_priors(
     )
     provenance = MeasurementProvenance(
         root_measurement=(
-            "scan_calibration" if calibrated else "physical_frame_aspect"
+            MeasurementIdentity.SCAN_CALIBRATION
+            if calibrated
+            else MeasurementIdentity.PHYSICAL_FRAME_ASPECT
         ),
         source="frame_dimension_prior",
         dependencies=(
-            "format_physical_spec",
-            "scan_calibration" if calibrated else "short_axis_boundaries",
+            MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+            (
+                MeasurementIdentity.SCAN_CALIBRATION
+                if calibrated
+                else MeasurementIdentity.SHORT_AXIS_BOUNDARIES
+            ),
         ),
     )
     priors: list[FrameDimensionPrior] = []
@@ -185,7 +196,9 @@ def frame_dimension_priors(
                 height_px=height_px,
                 frame_size_mm=(width_mm, height_mm),
                 source=(
-                    "scan_calibration" if calibrated else "short_axis_aspect"
+                    FrameDimensionPriorSource.SCAN_CALIBRATION
+                    if calibrated
+                    else FrameDimensionPriorSource.SHORT_AXIS_ASPECT
                 ),
                 provenance=provenance,
             )

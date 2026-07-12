@@ -5,7 +5,9 @@ from ....domain import (
     DimensionConstrainedBoundary,
     EvidenceState,
     FrameBoundary,
+    FrameBoundarySource,
     FrameDimensionPrior,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
     SeparatorAssignment,
@@ -77,7 +79,7 @@ def frame_boundary_from_assignment(
     return FrameBoundary(
         boundary_index=assignment.boundary_index,
         position=PixelInterval.exact(assignment.observation.center),
-        source="observed_separator",
+        source=FrameBoundarySource.OBSERVED_SEPARATOR,
         provenance=assignment.observation.provenance,
         assignment=assignment,
     )
@@ -100,7 +102,7 @@ def dimension_constrained_boundary(
     return FrameBoundary(
         boundary_index=int(boundary_index),
         position=position,
-        source="dimension_constrained",
+        source=FrameBoundarySource.DIMENSION_CONSTRAINED,
         provenance=provenance,
         assignment=assignment,
         dimension_constraint=constraint,
@@ -137,12 +139,12 @@ def boundary_position_constraint(
         boundary_index=int(boundary_index),
         position=position,
         provenance=MeasurementProvenance(
-            root_measurement="frame_dimensions",
+            root_measurement=MeasurementIdentity.FRAME_DIMENSIONS,
             source="boundary_position_constraint",
             dependencies=(
                 dimensions.provenance.root_measurement,
-                "sequence_boundaries",
-                "holder_occlusion",
+                MeasurementIdentity.SEQUENCE_BOUNDARIES,
+                MeasurementIdentity.HOLDER_OCCLUSION,
             ),
         ),
     )
@@ -169,12 +171,12 @@ def separator_width_constraint(
         boundary_index=int(boundary_index),
         width=PixelInterval(0.0, max(0.0, maximum_width)),
         provenance=MeasurementProvenance(
-            root_measurement="frame_dimensions",
+            root_measurement=MeasurementIdentity.FRAME_DIMENSIONS,
             source="separator_width_constraint",
             dependencies=(
                 dimensions.provenance.root_measurement,
-                "sequence_boundaries",
-                "holder_occlusion",
+                MeasurementIdentity.SEQUENCE_BOUNDARIES,
+                MeasurementIdentity.HOLDER_OCCLUSION,
             ),
         ),
     )

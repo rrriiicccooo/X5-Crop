@@ -12,6 +12,7 @@ from ....domain import (
     Box,
     CropEnvelope,
     EvidenceState,
+    MeasurementIdentity,
     MeasurementProvenance,
     SequenceHypothesis,
     VisibleSequenceSpan,
@@ -159,10 +160,10 @@ def _separator_dimension_hypotheses(
                             crop_envelope=CropEnvelope(box),
                             strategy="separator_dimension_led",
                             provenance=MeasurementProvenance(
-                                root_measurement="frame_dimensions",
+                                root_measurement=MeasurementIdentity.FRAME_DIMENSIONS,
                                 source="separator_dimension_sequence",
                                 dependencies=(
-                                    "separator_profile",
+                                    MeasurementIdentity.SEPARATOR_PROFILE,
                                     dimensions.provenance.root_measurement,
                                 ),
                                 boundary_anchors=("separator_sequence",),

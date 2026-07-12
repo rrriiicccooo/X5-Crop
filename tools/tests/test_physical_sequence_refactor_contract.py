@@ -53,6 +53,8 @@ from x5crop.domain import (
     EvidenceState,
     FrameBoundaryReference,
     FrameDimensionPrior,
+    FrameDimensionPriorSource,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
     VisibleSequenceSpan,
@@ -72,7 +74,11 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
     def test_observed_spacing_and_geometry_hypothesis_are_distinct_types(
         self,
     ) -> None:
-        provenance = MeasurementProvenance("spacing", "test", ())
+        provenance = MeasurementProvenance(
+            MeasurementIdentity.PHOTO_EDGES,
+            "test",
+            (),
+        )
         self.assertIsInstance(
             observed_spacing_evidence(
                 FrameBoundaryReference(None, 1),
@@ -91,7 +97,11 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         )
 
     def test_spacing_kind_is_derived_from_its_signed_interval(self) -> None:
-        provenance = MeasurementProvenance("spacing", "test", ())
+        provenance = MeasurementProvenance(
+            MeasurementIdentity.PHOTO_EDGES,
+            "test",
+            (),
+        )
         invalid_factories = (
             lambda: ObservedSpacingEvidence(
                 FrameBoundaryReference(None, 1),
@@ -203,11 +213,11 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "synthetic",
+                FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
                 MeasurementProvenance(
-                    "frame_dimensions",
+                    MeasurementIdentity.FRAME_DIMENSIONS,
                     "synthetic",
-                    ("physical_frame_size",),
+                    (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
                 ),
             ),
             (),
@@ -230,11 +240,11 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 PixelInterval(50.0, 150.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "synthetic",
+                FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
                 MeasurementProvenance(
-                    "frame_dimensions",
+                    MeasurementIdentity.FRAME_DIMENSIONS,
                     "synthetic",
-                    ("physical_frame_size",),
+                    (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
                 ),
             ),
             (),
@@ -326,11 +336,11 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 PixelInterval(80.0, 120.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "synthetic",
+                FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
                 MeasurementProvenance(
-                    "frame_dimensions",
+                    MeasurementIdentity.FRAME_DIMENSIONS,
                     "synthetic",
-                    ("physical_frame_size",),
+                    (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
                 ),
             ),
             (),
@@ -380,11 +390,11 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "synthetic",
+                FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
                 MeasurementProvenance(
-                    "frame_dimensions",
+                    MeasurementIdentity.FRAME_DIMENSIONS,
                     "synthetic",
-                    ("physical_frame_size",),
+                    (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
                 ),
             ),
             holder_occlusion_not_applicable(),
@@ -402,11 +412,11 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 PixelInterval(80.0, 120.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "synthetic",
+                FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
                 MeasurementProvenance(
-                    "frame_dimensions",
+                    MeasurementIdentity.FRAME_DIMENSIONS,
                     "synthetic",
-                    ("physical_frame_size",),
+                    (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
                 ),
             ),
             (),
@@ -429,9 +439,9 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             separator_observation(92.5, start=90.0, end=95.0),
         )
         edge_provenance = MeasurementProvenance(
-            "holder_boundary_profile",
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic_edges",
-            ("gray_work",),
+            (MeasurementIdentity.GRAY_WORK,),
         )
         result = solve_frame_sequence(
             observations,
@@ -442,11 +452,14 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "scan_calibration",
+                FrameDimensionPriorSource.SCAN_CALIBRATION,
                 MeasurementProvenance(
-                    "scan_calibration",
+                    MeasurementIdentity.SCAN_CALIBRATION,
                     "synthetic",
-                    ("tiff_resolution", "physical_frame_size"),
+                    (
+                        MeasurementIdentity.TIFF_RESOLUTION,
+                        MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+                    ),
                 ),
             ),
             (
@@ -491,11 +504,11 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "short_axis_aspect",
+                FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
                 MeasurementProvenance(
-                    "physical_frame_aspect",
+                    MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
                     "synthetic",
-                    ("short_axis_boundaries",),
+                    (MeasurementIdentity.SHORT_AXIS_BOUNDARIES,),
                 ),
             ),
             (),
@@ -509,9 +522,9 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             FrameBoundaryReference(None, 1),
             PixelInterval(-20.0, -10.0),
             MeasurementProvenance(
-                "frame_geometry",
+                MeasurementIdentity.FRAME_GEOMETRY,
                 "synthetic",
-                ("frame_dimensions",),
+                (MeasurementIdentity.FRAME_DIMENSIONS,),
             ),
         )
         self.assertEqual(spacing.kind, "overlap")
@@ -521,9 +534,9 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         self,
     ) -> None:
         edge_provenance = MeasurementProvenance(
-            "holder_boundary_profile",
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic",
-            ("gray_work",),
+            (MeasurementIdentity.GRAY_WORK,),
         )
         span = VisibleSequenceSpan(Box(5, 0, 305, 100))
         boundaries = (
@@ -555,15 +568,15 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                     FrameBoundaryReference(None, 2),
                     PixelInterval(-100.0, 100.0),
                     MeasurementProvenance(
-                        "frame_geometry",
+                        MeasurementIdentity.FRAME_GEOMETRY,
                         "synthetic",
-                        ("frame_dimensions",),
+                        (MeasurementIdentity.FRAME_DIMENSIONS,),
                     ),
                 ),
             ),
             holder_occlusion=holder_occlusion_not_applicable(),
             boundary_observations=boundaries,
-            dimension_source="scan_calibration",
+            dimension_source=FrameDimensionPriorSource.SCAN_CALIBRATION,
         )
         self.assertEqual(visible_length, PixelInterval(270.0, 330.0))
         self.assertTrue(
@@ -586,11 +599,11 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 PixelInterval(10.0, 290.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "synthetic",
+                FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
                 MeasurementProvenance(
-                    "frame_dimensions",
+                    MeasurementIdentity.FRAME_DIMENSIONS,
                     "synthetic",
-                    ("physical_frame_size",),
+                    (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
                 ),
             ),
             (),

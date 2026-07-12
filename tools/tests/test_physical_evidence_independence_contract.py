@@ -11,7 +11,7 @@ from x5crop.detection.candidate.assessment.evidence_independence import (
 from x5crop.detection.physical.separator.assignment import (
     dimension_constrained_boundary,
 )
-from x5crop.domain import EvidenceState
+from x5crop.domain import EvidenceState, MeasurementIdentity
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -24,7 +24,7 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             candidate.geometry,
             sequence_provenance=replace(
                 candidate.geometry.sequence_provenance,
-                root_measurement="separator_profile",
+                root_measurement=MeasurementIdentity.SEPARATOR_PROFILE,
             ),
         )
         evidence = evidence_independence_evidence(geometry)
@@ -37,8 +37,8 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
             original_assignment.observation,
             provenance=replace(
                 original_assignment.observation.provenance,
-                root_measurement="focused_separator_profile",
-                dependencies=("holder_boundary_profile",),
+                root_measurement=MeasurementIdentity.FOCUSED_SEPARATOR_PROFILE,
+                dependencies=(MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,),
             ),
         )
         assignment = replace(original_assignment, observation=observation)

@@ -4,6 +4,7 @@ import unittest
 
 from x5crop.units import (
     ScanCalibration,
+    ScanCalibrationSource,
     scan_calibration_after_rotation,
     scan_calibration_from_resolution,
 )
@@ -22,7 +23,10 @@ class UnitModelTests(unittest.TestCase):
     def test_scan_calibration_from_inch_resolution(self) -> None:
         calibration = scan_calibration_from_resolution((300.0, 300.0), 2)
         self.assertTrue(calibration.trusted)
-        self.assertEqual(calibration.source, "tiff_resolution")
+        self.assertEqual(
+            calibration.source,
+            ScanCalibrationSource.TIFF_RESOLUTION,
+        )
         self.assertAlmostEqual(calibration.x_px_per_mm or 0.0, 300.0 / 25.4)
         self.assertAlmostEqual(calibration.y_px_per_mm or 0.0, 300.0 / 25.4)
 
@@ -51,7 +55,12 @@ class UnitModelTests(unittest.TestCase):
         self.assertAlmostEqual(calibration.y_px_per_mm or 0.0, 1200.0 / 25.4)
 
     def test_rotation_invalidates_axis_aligned_anisotropic_calibration(self) -> None:
-        calibration = ScanCalibration(10.0, 20.0, "tiff_resolution", True)
+        calibration = ScanCalibration(
+            10.0,
+            20.0,
+            ScanCalibrationSource.TIFF_RESOLUTION,
+            True,
+        )
         rotated = scan_calibration_after_rotation(calibration, 0.5)
         self.assertFalse(rotated.trusted)
         self.assertIsNone(rotated.x_px_per_mm)
@@ -62,7 +71,12 @@ class UnitModelTests(unittest.TestCase):
         )
 
     def test_rotation_preserves_isotropic_calibration(self) -> None:
-        calibration = ScanCalibration(10.0, 10.0, "tiff_resolution", True)
+        calibration = ScanCalibration(
+            10.0,
+            10.0,
+            ScanCalibrationSource.TIFF_RESOLUTION,
+            True,
+        )
         self.assertEqual(
             scan_calibration_after_rotation(calibration, 0.5),
             calibration,

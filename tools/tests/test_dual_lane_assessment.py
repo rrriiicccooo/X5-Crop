@@ -11,7 +11,7 @@ from x5crop.detection.candidate.assessment.separator_support import (
     SeparatorSequenceEvidence,
 )
 from x5crop.detection.candidate.model import BuiltCandidate
-from x5crop.domain import EvidenceState, FrameBoundaryReference
+from x5crop.domain import EvidenceState, FrameBoundaryReference, MeasurementIdentity
 from x5crop.domain import PixelInterval
 from x5crop.detection.physical.lane_divider import (
     LaneDividerEvidence,
@@ -92,9 +92,9 @@ def _parent(lane):
             normalized_gutter_residual=0.0,
             normalized_lane_residuals=(1.0, 1.0),
             provenance=MeasurementProvenance(
-                "lane_divider_profile",
+                MeasurementIdentity.LANE_DIVIDER_PROFILE,
                 "measured_gutter",
-                ("content_evidence_image",),
+                (MeasurementIdentity.CONTENT_EVIDENCE_IMAGE,),
             ),
         ),
         lane_solutions=(lane.geometry, lane.geometry),
@@ -326,9 +326,9 @@ class DualLaneAssessmentTest(unittest.TestCase):
                         FrameBoundaryReference(None, 1),
                         PixelInterval.exact(-8.0),
                         MeasurementProvenance(
-                            "photo_edges",
+                            MeasurementIdentity.PHOTO_EDGES,
                             "synthetic_overlap",
-                            ("gray_work",),
+                            (MeasurementIdentity.GRAY_WORK,),
                         ),
                     ),
                 ),

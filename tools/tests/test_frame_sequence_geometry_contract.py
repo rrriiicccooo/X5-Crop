@@ -8,7 +8,13 @@ from unittest.mock import patch
 
 import numpy as np
 
-from x5crop.domain import EvidenceState, FrameBoundaryReference
+from x5crop.domain import (
+    EvidenceState,
+    FrameBoundarySource,
+    FrameBoundaryReference,
+    FrameDimensionPriorSource,
+    MeasurementIdentity,
+)
 from x5crop.detection.physical.boundary import (
     BoundaryObservation,
     HolderOcclusionConstraint,
@@ -69,7 +75,7 @@ from x5crop.image.statistics import (
     ImageMeasurementStatisticsParameters,
     image_measurement_statistics,
 )
-from x5crop.units import ScanCalibration
+from x5crop.units import ScanCalibration, ScanCalibrationSource
 from x5crop.domain import SequenceHypothesis
 
 
@@ -108,9 +114,9 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             CropEnvelope(box),
             "boundary_led",
             MeasurementProvenance(
-                "holder_boundary_profile",
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "synthetic",
-                ("gray_work",),
+                (MeasurementIdentity.GRAY_WORK,),
             ),
             (),
         )
@@ -133,7 +139,12 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 format_spec("135"),
                 3,
                 cache,
-                ScanCalibration(None, None, "unavailable", False),
+                ScanCalibration(
+                    None,
+                    None,
+                    ScanCalibrationSource.UNAVAILABLE,
+                    False,
+                ),
                 "horizontal",
                 SeparatorConfiguration(),
                 SequenceHypothesisParameters(
@@ -166,11 +177,11 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             PixelInterval.exact(200.0),
             PixelInterval.exact(100.0),
             (36.0, 24.0),
-            "synthetic",
+            FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
             MeasurementProvenance(
-                "frame_dimensions",
+                MeasurementIdentity.FRAME_DIMENSIONS,
                 "synthetic",
-                ("physical_frame_size",),
+                (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
             ),
         )
 
@@ -280,9 +291,9 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
 
     def test_only_fully_contained_band_is_independent_separator_assignment(self) -> None:
         provenance = MeasurementProvenance(
-            "separator_profile",
+            MeasurementIdentity.SEPARATOR_PROFILE,
             "synthetic",
-            ("gray_work",),
+            (MeasurementIdentity.GRAY_WORK,),
         )
         contained = replace(
             separator_observation(45.0, start=40.0, end=50.0),
@@ -316,11 +327,11 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "synthetic",
+                FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
                 MeasurementProvenance(
-                    "frame_dimensions",
+                    MeasurementIdentity.FRAME_DIMENSIONS,
                     "synthetic",
-                    ("physical_frame_size",),
+                    (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
                 ),
             ),
             (),
@@ -343,11 +354,11 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 PixelInterval(50.0, 150.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "synthetic",
+                FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
                 MeasurementProvenance(
-                    "frame_dimensions",
+                    MeasurementIdentity.FRAME_DIMENSIONS,
                     "synthetic",
-                    ("physical_frame_size",),
+                    (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
                 ),
             ),
             (),
@@ -374,26 +385,35 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         self.assertIsNotNone(observation)
         assert observation is not None
         self.assertEqual((observation.start, observation.end), (90.0, 110.0))
-        self.assertIn("frame_dimensions", observation.provenance.dependencies)
+        self.assertIn(
+            MeasurementIdentity.FRAME_DIMENSIONS,
+            observation.provenance.dependencies,
+        )
 
     def test_dimension_constrained_boundary_is_never_hard_separator(self) -> None:
         boundary = dimension_constrained_boundary(
             1,
             PixelInterval(95.0, 105.0),
             MeasurementProvenance(
-                "frame_dimensions",
+                MeasurementIdentity.FRAME_DIMENSIONS,
                 "bidirectional_constraint",
-                ("frame_size", "sequence_boundaries"),
+                (
+                    MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+                    MeasurementIdentity.SEQUENCE_BOUNDARIES,
+                ),
             ),
         )
         self.assertFalse(boundary.hard_separator)
-        self.assertEqual(boundary.source, "dimension_constrained")
+        self.assertEqual(
+            boundary.source,
+            FrameBoundarySource.DIMENSION_CONSTRAINED,
+        )
 
     def test_boundary_uncertainty_separates_visible_span_and_crop_envelope(self) -> None:
         provenance = MeasurementProvenance(
-            "holder_boundary_profile",
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic",
-            ("gray_work",),
+            (MeasurementIdentity.GRAY_WORK,),
         )
         observations = (
             BoundaryObservation("leading", PixelInterval(9.0, 11.0), "white_holder_transition", provenance),
@@ -433,12 +453,20 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 observed_spacing_evidence(
                     FrameBoundaryReference(None, 1),
                     PixelInterval.exact(5.0),
-                    MeasurementProvenance("separator_profile", "synthetic", ()),
+                    MeasurementProvenance(
+                        MeasurementIdentity.SEPARATOR_PROFILE,
+                        "synthetic",
+                        (),
+                    ),
                 ),
                 observed_spacing_evidence(
                     FrameBoundaryReference(None, 2),
                     PixelInterval.exact(10.0),
-                    MeasurementProvenance("separator_profile", "synthetic", ()),
+                    MeasurementProvenance(
+                        MeasurementIdentity.SEPARATOR_PROFILE,
+                        "synthetic",
+                        (),
+                    ),
                 ),
             ),
             holder_occlusion=holder_occlusion_not_applicable(),
@@ -454,12 +482,20 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 observed_spacing_evidence(
                     FrameBoundaryReference(None, 1),
                     PixelInterval.exact(5.0),
-                    MeasurementProvenance("separator_profile", "synthetic", ()),
+                    MeasurementProvenance(
+                        MeasurementIdentity.SEPARATOR_PROFILE,
+                        "synthetic",
+                        (),
+                    ),
                 ),
                 observed_spacing_evidence(
                     FrameBoundaryReference(None, 2),
                     PixelInterval.exact(-3.0),
-                    MeasurementProvenance("photo_edges", "synthetic", ()),
+                    MeasurementProvenance(
+                        MeasurementIdentity.PHOTO_EDGES,
+                        "synthetic",
+                        (),
+                    ),
                 ),
             ),
             holder_occlusion=holder_occlusion_not_applicable(),
@@ -472,9 +508,9 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             position=PixelInterval.exact(20.0),
             kind="white_holder_transition",
             provenance=MeasurementProvenance(
-                "holder_boundary_profile",
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "white_holder_transition",
-                ("gray_work",),
+                (MeasurementIdentity.GRAY_WORK,),
                 ("leading",),
             ),
         )
@@ -492,9 +528,9 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         self,
     ) -> None:
         provenance = MeasurementProvenance(
-            "holder_boundary_profile",
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "white_holder_transition",
-            ("gray_work",),
+            (MeasurementIdentity.GRAY_WORK,),
         )
         evidence = holder_occlusion_for_sequence(
             (
@@ -528,9 +564,9 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             position=PixelInterval.exact(20.0),
             kind="texture_transition",
             provenance=MeasurementProvenance(
-                "holder_boundary_profile",
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "texture_transition",
-                ("gray_work",),
+                (MeasurementIdentity.GRAY_WORK,),
                 ("leading",),
             ),
         )
@@ -565,9 +601,12 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 2,
                 PixelInterval.exact(210.0),
                 MeasurementProvenance(
-                    "frame_dimensions",
+                    MeasurementIdentity.FRAME_DIMENSIONS,
                     "bidirectional_constraint",
-                    ("frame_size", "sequence_boundaries"),
+                    (
+                        MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+                        MeasurementIdentity.SEQUENCE_BOUNDARIES,
+                    ),
                 ),
             ),
         )
@@ -617,8 +656,12 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "test",
-                MeasurementProvenance("frame_dimensions", "test", ()),
+                FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
+                MeasurementProvenance(
+                    MeasurementIdentity.FRAME_DIMENSIONS,
+                    "test",
+                    (),
+                ),
             ),
             inter_frame_spacings=(
                 observed_spacing_evidence(
@@ -630,9 +673,9 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                     FrameBoundaryReference(None, 2),
                     PixelInterval.exact(10.0),
                     MeasurementProvenance(
-                        "frame_geometry",
+                        MeasurementIdentity.FRAME_GEOMETRY,
                         "test_hypothesis",
-                        ("frame_dimensions",),
+                        (MeasurementIdentity.FRAME_DIMENSIONS,),
                     ),
                 ),
             ),

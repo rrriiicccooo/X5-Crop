@@ -21,13 +21,14 @@ from x5crop.detection.physical.spacing import observed_spacing_evidence
 from x5crop.domain import (
     EvidenceState,
     FrameBoundaryReference,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
 )
 from x5crop.domain import VisibleSequenceSpan, HolderSpan
 from x5crop.domain import Box
 from x5crop.formats import format_spec
-from x5crop.units import ScanCalibration
+from x5crop.units import ScanCalibration, ScanCalibrationSource
 
 
 class HolderOccupancyTests(unittest.TestCase):
@@ -70,9 +71,9 @@ class HolderOccupancyTests(unittest.TestCase):
         )
         boundaries = tuple(frame_boundary_from_assignment(item) for item in assignments)
         photo_edge_provenance = MeasurementProvenance(
-            "photo_edges",
+            MeasurementIdentity.PHOTO_EDGES,
             "holder_occupancy_fixture",
-            ("gray_work",),
+            (MeasurementIdentity.GRAY_WORK,),
         )
         geometry = replace(
             candidate.geometry,
@@ -146,7 +147,12 @@ class HolderOccupancyTests(unittest.TestCase):
             content_support_available=True,
             frame_coverage=coverage,
             frame_dimensions=dimensions,
-            calibration=ScanCalibration(None, None, "unavailable", False),
+            calibration=ScanCalibration(
+                None,
+                None,
+                ScanCalibrationSource.UNAVAILABLE,
+                False,
+            ),
         )
         self.assertEqual(occupancy.occupancy_status, "underfilled")
         self.assertTrue(occupancy.complete_underfilled_strip)
@@ -165,7 +171,12 @@ class HolderOccupancyTests(unittest.TestCase):
             content_support_available=True,
             frame_coverage=coverage,
             frame_dimensions=dimensions,
-            calibration=ScanCalibration(None, None, "unavailable", False),
+            calibration=ScanCalibration(
+                None,
+                None,
+                ScanCalibrationSource.UNAVAILABLE,
+                False,
+            ),
         )
         partial = partial_edge_safety_evidence(
             geometry,
@@ -191,7 +202,12 @@ class HolderOccupancyTests(unittest.TestCase):
             content_support_available=True,
             frame_coverage=coverage,
             frame_dimensions=dimensions,
-            calibration=ScanCalibration(None, None, "unavailable", False),
+            calibration=ScanCalibration(
+                None,
+                None,
+                ScanCalibrationSource.UNAVAILABLE,
+                False,
+            ),
         )
         self.assertFalse(occupancy.complete_underfilled_strip)
 
@@ -209,7 +225,12 @@ class HolderOccupancyTests(unittest.TestCase):
             content_support_available=True,
             frame_coverage=coverage,
             frame_dimensions=dimensions,
-            calibration=ScanCalibration(10.0, 20.0, "tiff_resolution", True),
+            calibration=ScanCalibration(
+                10.0,
+                20.0,
+                ScanCalibrationSource.TIFF_RESOLUTION,
+                True,
+            ),
         )
 
         self.assertEqual(occupancy.leading_slack_mm, 1.5)
@@ -230,7 +251,12 @@ class HolderOccupancyTests(unittest.TestCase):
             content_support_available=True,
             frame_coverage=coverage,
             frame_dimensions=dimensions,
-            calibration=ScanCalibration(None, None, "unavailable", False),
+            calibration=ScanCalibration(
+                None,
+                None,
+                ScanCalibrationSource.UNAVAILABLE,
+                False,
+            ),
         )
         self.assertEqual(occupancy.occupancy_status, "filled")
 

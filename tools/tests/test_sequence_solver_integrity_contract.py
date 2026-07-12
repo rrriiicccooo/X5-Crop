@@ -25,6 +25,8 @@ from x5crop.domain import (
     EvidenceState,
     FrameBoundaryReference,
     FrameDimensionPrior,
+    FrameDimensionPriorSource,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
     VisibleSequenceSpan,
@@ -36,9 +38,9 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
         self,
     ) -> None:
         edge_provenance = MeasurementProvenance(
-            "holder_boundary_profile",
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic",
-            ("gray_work",),
+            (MeasurementIdentity.GRAY_WORK,),
         )
         boundaries = (
             BoundaryObservation(
@@ -63,11 +65,11 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "scan_calibration",
+                FrameDimensionPriorSource.SCAN_CALIBRATION,
                 MeasurementProvenance(
-                    "scan_calibration",
+                    MeasurementIdentity.SCAN_CALIBRATION,
                     "synthetic",
-                    ("tiff_resolution",),
+                    (MeasurementIdentity.TIFF_RESOLUTION,),
                 ),
             ),
             boundaries,
@@ -83,9 +85,9 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
         self,
     ) -> None:
         edge_provenance = MeasurementProvenance(
-            "holder_boundary_profile",
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic",
-            ("gray_work",),
+            (MeasurementIdentity.GRAY_WORK,),
         )
         observations = (
             BoundaryObservation(
@@ -112,11 +114,11 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
                 (36.0, 24.0),
-                "scan_calibration",
+                FrameDimensionPriorSource.SCAN_CALIBRATION,
                 MeasurementProvenance(
-                    "scan_calibration",
+                    MeasurementIdentity.SCAN_CALIBRATION,
                     "synthetic",
-                    ("tiff_resolution",),
+                    (MeasurementIdentity.TIFF_RESOLUTION,),
                 ),
             ),
             observations,
@@ -135,9 +137,9 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
 
     def test_impossible_overlap_cannot_be_corroborated(self) -> None:
         provenance = MeasurementProvenance(
-            "separator_profile",
+            MeasurementIdentity.SEPARATOR_PROFILE,
             "synthetic",
-            ("gray_work",),
+            (MeasurementIdentity.GRAY_WORK,),
         )
         spacings = (
             observed_spacing_evidence(
@@ -173,7 +175,7 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
             spacings=spacings,
             holder_occlusion=holder_occlusion_not_applicable(),
             boundary_observations=edge_observations,
-            dimension_source="scan_calibration",
+            dimension_source=FrameDimensionPriorSource.SCAN_CALIBRATION,
         )
 
         self.assertIsInstance(result[1], SpacingHypothesis)
@@ -231,9 +233,9 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
 
     def test_holder_occlusion_reason_text_does_not_control_allocation(self) -> None:
         provenance = MeasurementProvenance(
-            "holder_boundary_profile",
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic",
-            ("gray_work",),
+            (MeasurementIdentity.GRAY_WORK,),
         )
         boundaries = (
             BoundaryObservation(

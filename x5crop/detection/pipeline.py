@@ -7,7 +7,10 @@ from .candidate.assessment.review_only import assess_review_only_candidate
 from .candidate.execution.count_hypothesis import evaluate_count_hypothesis
 from .candidate.execution.model import CountHypothesisEvaluation
 from .candidate.model import AssessedCandidate
-from .candidate.plan.count_hypotheses import count_hypothesis_plan
+from .candidate.plan.count_hypotheses import (
+    CountHypothesisSource,
+    count_hypothesis_plan,
+)
 from .candidate.proposal.hard_safety import hard_safety_candidate
 from .candidate.selection.choose import select_candidates
 from .candidate.selection.model import CountResolution, SelectionResult
@@ -41,7 +44,8 @@ def _count_resolution(
     if requested_count is not None:
         reason = "requested_count"
     elif (
-        selection.selected.count_hypothesis.source == "format_default"
+        selection.selected.count_hypothesis.source
+        == CountHypothesisSource.FORMAT_DEFAULT
     ):
         reason = "format_default_count"
     elif selection.geometry_resolution.supported:

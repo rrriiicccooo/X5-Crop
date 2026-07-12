@@ -8,6 +8,7 @@ import numpy as np
 from ....domain import (
     Box,
     EvidenceState,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
     SeparatorBandObservation,
@@ -182,12 +183,12 @@ def measure_focused_separator_band(
                     max(0.0, focused[start:end].mean() - threshold) / spread
                 ),
                 provenance=MeasurementProvenance(
-                    root_measurement="separator_profile",
+                    root_measurement=MeasurementIdentity.SEPARATOR_PROFILE,
                     source="focused_dimension_window",
                     dependencies=(
-                        "gray_work",
-                        "frame_dimensions",
-                        "sequence_boundaries",
+                        MeasurementIdentity.GRAY_WORK,
+                        MeasurementIdentity.FRAME_DIMENSIONS,
+                        MeasurementIdentity.SEQUENCE_BOUNDARIES,
                     ),
                 ),
                 cross_axis=_cross_axis_measurement(
@@ -240,9 +241,12 @@ def measure_separator_bands(
                     / spread
                 ),
                 provenance=MeasurementProvenance(
-                    root_measurement="separator_profile",
+                    root_measurement=MeasurementIdentity.SEPARATOR_PROFILE,
                     source="observed_separator_band",
-                    dependencies=("gray_work", "boundary_corridor"),
+                    dependencies=(
+                        MeasurementIdentity.GRAY_WORK,
+                        MeasurementIdentity.BOUNDARY_CORRIDOR,
+                    ),
                 ),
                 cross_axis=_cross_axis_measurement(
                     gray_work,

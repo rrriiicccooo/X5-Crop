@@ -6,8 +6,11 @@ from inspect import signature
 import unittest
 
 from tools.tests.physical_gate_support import candidate_fixture
-from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
-from x5crop.detection.candidate.plan.count_hypotheses import count_hypothesis_plan
+from x5crop.detection.candidate.plan.count_hypotheses import (
+    CountHypothesis,
+    CountHypothesisSource,
+    count_hypothesis_plan,
+)
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.candidate.selection.model import GeometryResolution
 from x5crop.formats import format_spec
@@ -71,7 +74,11 @@ class AutoCountContractTest(unittest.TestCase):
         candidate = candidate_fixture(failed_candidate_check="boundary_proof")
         candidate = replace(
             candidate,
-            count_hypothesis=CountHypothesis(2, "full", "format_default"),
+            count_hypothesis=CountHypothesis(
+                2,
+                "full",
+                CountHypothesisSource.FORMAT_DEFAULT,
+            ),
         )
         resolution = select_candidates(
             (candidate,),
@@ -85,7 +92,11 @@ class AutoCountContractTest(unittest.TestCase):
         candidate = replace(
             candidate,
             geometry=replace(candidate.geometry, strip_mode="partial"),
-            count_hypothesis=CountHypothesis(2, "partial", "requested_count"),
+            count_hypothesis=CountHypothesis(
+                2,
+                "partial",
+                CountHypothesisSource.REQUESTED,
+            ),
         )
         resolution = select_candidates(
             (candidate,),

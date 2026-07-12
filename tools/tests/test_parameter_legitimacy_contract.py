@@ -24,7 +24,10 @@ from x5crop.configuration.candidate import (
     SequenceSolverParameters,
 )
 from x5crop.configuration.separator import SeparatorObservationParameters
-from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
+from x5crop.detection.candidate.plan.count_hypotheses import (
+    CountHypothesis,
+    CountHypothesisSource,
+)
 from x5crop.output.model import AxisBleedParameters
 from x5crop.formats import FormatPhysicalSpec, FrameSizeMm, expected_separator_count
 from x5crop.image.separator_profile import SeparatorProfileParameters
@@ -47,7 +50,11 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
                 "test",
                 (FrameSizeMm(36.0, 24.0),),
             ),
-            lambda: CountHypothesis(0, "partial", "automatic_count"),
+            lambda: CountHypothesis(
+                0,
+                "partial",
+                CountHypothesisSource.AUTOMATIC,
+            ),
             lambda: AxisBleedParameters(-1, 0),
             lambda: SeparatorProfileParameters(segments=0),
             lambda: SeparatorObservationParameters(minimum_run_px=0),

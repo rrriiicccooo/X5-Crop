@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from x5crop.domain import EvidenceState
+from x5crop.domain import EvidenceState, MeasurementIdentity
 
 if TYPE_CHECKING:
     from ...physical.model import SequenceSolution
@@ -13,18 +13,23 @@ if TYPE_CHECKING:
 class EvidenceIndependenceEvidence:
     state: EvidenceState
     reason: str
-    sequence_root_measurement: str
-    supporting_root_measurements: tuple[str, ...]
-    cyclic_measurements: tuple[str, ...]
+    sequence_root_measurement: MeasurementIdentity
+    supporting_root_measurements: tuple[MeasurementIdentity, ...]
+    cyclic_measurements: tuple[MeasurementIdentity, ...]
 
     def __post_init__(self) -> None:
-        if not self.reason or not self.sequence_root_measurement:
+        if not self.reason or not isinstance(
+            self.sequence_root_measurement,
+            MeasurementIdentity,
+        ):
             raise ValueError("evidence independence requires identity and reason")
         for values in (
             self.supporting_root_measurements,
             self.cyclic_measurements,
         ):
-            if any(not item for item in values) or len(set(values)) != len(values):
+            if any(not isinstance(item, MeasurementIdentity) for item in values) or len(
+                set(values)
+            ) != len(values):
                 raise ValueError(
                     "evidence measurement identities must be non-empty and unique"
                 )
@@ -64,7 +69,8 @@ def evidence_independence_evidence(
             {
                 observation.provenance.root_measurement
                 for observation in hard_observations
-            }
+            },
+            key=lambda item: item.value,
         )
     )
     sequence_root = geometry.sequence_provenance.root_measurement
@@ -83,7 +89,7 @@ def evidence_independence_evidence(
         )
     }
     cyclic_measurements = tuple(
-        sorted(dependency_cycle)
+        sorted(dependency_cycle, key=lambda item: item.value)
     )
     root_reused = sequence_root in set(measurement_roots)
     if root_reused:

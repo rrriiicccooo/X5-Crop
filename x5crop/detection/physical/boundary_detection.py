@@ -3,7 +3,12 @@ from __future__ import annotations
 import numpy as np
 
 from ...configuration.boundary import BoundaryObservationParameters
-from ...domain import BoundaryObservation, MeasurementProvenance, PixelInterval
+from ...domain import (
+    BoundaryObservation,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    PixelInterval,
+)
 from ...image.statistics import ImageMeasurementStatistics
 from ...utils import runs_from_mask
 from .boundary import canvas_boundary_observations
@@ -87,9 +92,12 @@ def _observation(
         position=_change_point_interval(profile, position, parameters),
         kind=kind,
         provenance=MeasurementProvenance(
-            root_measurement="holder_boundary_profile",
+            root_measurement=MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             source=kind,
-            dependencies=("gray_work", "image_measurement_statistics"),
+            dependencies=(
+                MeasurementIdentity.GRAY_WORK,
+                MeasurementIdentity.IMAGE_MEASUREMENT_STATISTICS,
+            ),
             boundary_anchors=(side,),
         ),
     )

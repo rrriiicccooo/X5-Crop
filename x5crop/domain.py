@@ -31,16 +31,52 @@ class Box:
             max(0, min(height, self.bottom)),
         )
 
+class MeasurementIdentity(str, Enum):
+    BOUNDARY_OBSERVATIONS = "boundary_observations"
+    BOUNDARY_CORRIDOR = "boundary_corridor"
+    CALIBRATED_SEQUENCE_CONSTRAINTS = "calibrated_sequence_constraints"
+    CANVAS = "canvas"
+    CONTENT_EVIDENCE_IMAGE = "content_evidence_image"
+    COUNT = "count"
+    FOCUSED_SEPARATOR_PROFILE = "focused_separator_profile"
+    FORMAT_PHYSICAL_SPEC = "format_physical_spec"
+    FRAME_DIMENSIONS = "frame_dimensions"
+    FRAME_GEOMETRY = "frame_geometry"
+    GRAY_WORK = "gray_work"
+    HOLDER_BOUNDARY_PROFILE = "holder_boundary_profile"
+    HOLDER_CANVAS = "holder_canvas"
+    HOLDER_OCCLUSION = "holder_occlusion"
+    IMAGE_MEASUREMENT_STATISTICS = "image_measurement_statistics"
+    LANE_DIVIDER_PROFILE = "lane_divider_profile"
+    PHYSICAL_FRAME_ASPECT = "physical_frame_aspect"
+    PHOTO_EDGES = "photo_edges"
+    REVIEW_ONLY_MODE = "review_only_mode"
+    SAFETY_GEOMETRY_MODEL = "safety_geometry_model"
+    SCAN_CALIBRATION = "scan_calibration"
+    SEPARATOR_PROFILE = "separator_profile"
+    SEQUENCE_BOUNDARIES = "sequence_boundaries"
+    SEQUENCE_CUTS = "sequence_cuts"
+    SHORT_AXIS_BOUNDARIES = "short_axis_boundaries"
+    TIFF_RESOLUTION = "tiff_resolution"
+
+
 @dataclass(frozen=True)
 class MeasurementProvenance:
-    root_measurement: str
+    root_measurement: MeasurementIdentity
     source: str
-    dependencies: tuple[str, ...]
+    dependencies: tuple[MeasurementIdentity, ...]
     boundary_anchors: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.root_measurement or not self.source:
+        if not isinstance(self.root_measurement, MeasurementIdentity) or not self.source:
             raise ValueError("measurement provenance requires root and source identity")
+        if any(
+            not isinstance(dependency, MeasurementIdentity)
+            for dependency in self.dependencies
+        ):
+            raise ValueError("measurement dependencies require typed identities")
+        if len(set(self.dependencies)) != len(self.dependencies):
+            raise ValueError("measurement dependencies must be unique")
 
 
 class EvidenceState(str, Enum):
@@ -94,12 +130,17 @@ class PixelInterval:
         return PixelInterval(min(low, high), max(low, high))
 
 
+class FrameDimensionPriorSource(str, Enum):
+    SCAN_CALIBRATION = "scan_calibration"
+    SHORT_AXIS_ASPECT = "short_axis_aspect"
+
+
 @dataclass(frozen=True)
 class FrameDimensionPrior:
     width_px: PixelInterval
     height_px: PixelInterval
     frame_size_mm: tuple[float, float]
-    source: str
+    source: FrameDimensionPriorSource
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
@@ -113,8 +154,8 @@ class FrameDimensionPrior:
             or not math.isfinite(height_mm)
         ):
             raise ValueError("frame dimension prior requires a physical size")
-        if not self.source:
-            raise ValueError("frame dimension prior requires a source")
+        if not isinstance(self.source, FrameDimensionPriorSource):
+            raise ValueError("frame dimension prior requires a typed source")
 
 
 @dataclass(frozen=True)
@@ -326,11 +367,16 @@ class DimensionConstrainedBoundary:
             raise ValueError("dimension boundary index must be positive")
 
 
+class FrameBoundarySource(str, Enum):
+    OBSERVED_SEPARATOR = "observed_separator"
+    DIMENSION_CONSTRAINED = "dimension_constrained"
+
+
 @dataclass(frozen=True)
 class FrameBoundary:
     boundary_index: int
     position: PixelInterval
-    source: str
+    source: FrameBoundarySource
     provenance: MeasurementProvenance
     assignment: SeparatorAssignment | None = None
     dimension_constraint: DimensionConstrainedBoundary | None = None
@@ -338,9 +384,9 @@ class FrameBoundary:
     def __post_init__(self) -> None:
         if self.boundary_index <= 0:
             raise ValueError("frame boundary index must be positive")
-        if self.source not in {"observed_separator", "dimension_constrained"}:
-            raise ValueError(f"unsupported frame boundary source: {self.source}")
-        if self.source == "observed_separator":
+        if not isinstance(self.source, FrameBoundarySource):
+            raise ValueError("frame boundary requires a typed source")
+        if self.source == FrameBoundarySource.OBSERVED_SEPARATOR:
             if self.assignment is None or self.dimension_constraint is not None:
                 raise ValueError("observed frame boundary requires one separator assignment")
             if not self.assignment.used_for_boundary:
@@ -358,7 +404,7 @@ class FrameBoundary:
     @property
     def hard_separator(self) -> bool:
         return bool(
-            self.source == "observed_separator"
+            self.source == FrameBoundarySource.OBSERVED_SEPARATOR
             and self.assignment is not None
             and self.assignment.independent
         )

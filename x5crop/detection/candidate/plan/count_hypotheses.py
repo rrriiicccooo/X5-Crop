@@ -1,23 +1,32 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from ....formats import FormatPhysicalSpec
 from ....strip_modes import FULL, PARTIAL
+
+
+class CountHypothesisSource(str, Enum):
+    AUTOMATIC = "automatic_count"
+    FORMAT_DEFAULT = "format_default"
+    HARD_SAFETY = "hard_safety"
+    MODE_CONTRACT = "mode_contract"
+    REQUESTED = "requested_count"
 
 
 @dataclass(frozen=True)
 class CountHypothesis:
     count: int
     strip_mode: str
-    source: str
+    source: CountHypothesisSource
 
     def __post_init__(self) -> None:
         if self.count <= 0:
             raise ValueError("count hypothesis must be positive")
         if self.strip_mode not in {FULL, PARTIAL}:
             raise ValueError(f"unsupported count hypothesis mode: {self.strip_mode}")
-        if not self.source:
-            raise ValueError("count hypothesis source must not be empty")
+        if not isinstance(self.source, CountHypothesisSource):
+            raise ValueError("count hypothesis requires a typed source")
 
 
 @dataclass(frozen=True)
@@ -37,7 +46,7 @@ class CountHypothesisPlan:
             raise ValueError("count hypothesis plan requires one strip mode")
         if self.automatic:
             if self.requested_count is not None or any(
-                hypothesis.source != "automatic_count"
+                hypothesis.source != CountHypothesisSource.AUTOMATIC
                 for hypothesis in self.hypotheses
             ):
                 raise ValueError("automatic count plan has inconsistent ownership")
@@ -48,9 +57,9 @@ class CountHypothesisPlan:
                 raise ValueError("fixed count plan requires exactly one hypothesis")
             hypothesis = self.hypotheses[0]
             expected_source = (
-                "requested_count"
+                CountHypothesisSource.REQUESTED
                 if self.requested_count is not None
-                else "format_default"
+                else CountHypothesisSource.FORMAT_DEFAULT
             )
             if hypothesis.source != expected_source or (
                 self.requested_count is not None
@@ -78,7 +87,11 @@ def count_hypothesis_plan(
                 CountHypothesis(
                     count,
                     FULL,
-                    "format_default" if requested_count is None else "requested_count",
+                    (
+                        CountHypothesisSource.FORMAT_DEFAULT
+                        if requested_count is None
+                        else CountHypothesisSource.REQUESTED
+                    ),
                 ),
             ),
             automatic=False,
@@ -92,7 +105,7 @@ def count_hypothesis_plan(
                 CountHypothesis(
                     requested_count,
                     PARTIAL,
-                    "requested_count",
+                    CountHypothesisSource.REQUESTED,
                 ),
             ),
             automatic=False,
@@ -111,7 +124,7 @@ def count_hypothesis_plan(
             CountHypothesis(
                 count,
                 PARTIAL,
-                "automatic_count",
+                CountHypothesisSource.AUTOMATIC,
             )
             for count in counts
         ),

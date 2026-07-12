@@ -7,7 +7,7 @@ import numpy as np
 from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
 from ..detection.physical.model import DualLaneSolution, SequenceSolution
-from x5crop.domain import SeparatorBandObservation
+from x5crop.domain import FrameBoundarySource, SeparatorBandObservation
 from ..domain import Box
 from ..geometry.boxes import map_work_box
 from ..configuration.diagnostics import DebugStyleParameters
@@ -101,7 +101,7 @@ def _draw_sequence_overlay(
     for boundary in solution.frame_boundaries:
         identity = (lane_index, boundary.boundary_index)
         overlap = identity in overlap_boundaries
-        if boundary.source == "observed_separator" and not overlap:
+        if boundary.source == FrameBoundarySource.OBSERVED_SEPARATOR and not overlap:
             continue
         for tick in _boundary_ticks(
             detection,

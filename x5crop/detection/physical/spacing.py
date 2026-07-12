@@ -6,6 +6,8 @@ from x5crop.domain import (
     BoundaryObservation,
     EvidenceState,
     FrameBoundaryReference,
+    FrameDimensionPriorSource,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
     sum_pixel_intervals,
@@ -219,9 +221,9 @@ def corroborate_single_missing_overlap(
     spacings: tuple[InterFrameSpacing, ...],
     holder_occlusion: HolderOcclusionEvidence,
     boundary_observations: tuple[BoundaryObservation, ...],
-    dimension_source: str,
+    dimension_source: FrameDimensionPriorSource,
 ) -> tuple[InterFrameSpacing, ...]:
-    if dimension_source != "scan_calibration":
+    if dimension_source != FrameDimensionPriorSource.SCAN_CALIBRATION:
         return spacings
     edge_observations = {
         observation.side: observation
@@ -280,12 +282,12 @@ def corroborate_single_missing_overlap(
         kind="overlap",
         signed_width_px=overlap,
         provenance=MeasurementProvenance(
-            root_measurement="calibrated_sequence_constraints",
+            root_measurement=MeasurementIdentity.CALIBRATED_SEQUENCE_CONSTRAINTS,
             source="single_missing_overlap_corroboration",
             dependencies=tuple(
                 dict.fromkeys(
                     (
-                        "scan_calibration",
+                        MeasurementIdentity.SCAN_CALIBRATION,
                         leading.provenance.root_measurement,
                         trailing.provenance.root_measurement,
                         *(item.provenance.root_measurement for item in observed),

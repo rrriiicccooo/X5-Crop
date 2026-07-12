@@ -8,6 +8,7 @@ from ..model import (
     DualLaneEvidence,
     ReviewOnlyEvidence,
 )
+from ..plan.count_hypotheses import CountHypothesisSource
 from .model import GeometryCluster, GeometryResolution, SelectionResult
 
 
@@ -19,7 +20,7 @@ def candidate_rank(
     partial_auto_count = (
         candidate.geometry.count
         if candidate.geometry.strip_mode == "partial"
-        and candidate.count_hypothesis.source == "automatic_count"
+        and candidate.count_hypothesis.source == CountHypothesisSource.AUTOMATIC
         else 0
     )
     dimension_residual = (
@@ -166,7 +167,8 @@ def geometry_resolution_for_selection(
         for path in gate.proof_paths
     )
     fixed_count = bool(
-        hypothesis.source in {"format_default", "requested_count"}
+        hypothesis.source
+        in {CountHypothesisSource.FORMAT_DEFAULT, CountHypothesisSource.REQUESTED}
     )
     count_topology_supported = bool(
         all(

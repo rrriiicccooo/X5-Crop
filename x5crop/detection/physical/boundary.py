@@ -9,6 +9,7 @@ from ...domain import (
     CropEnvelope,
     EvidenceState,
     FrameBoundary,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
     VisibleSequenceSpan,
@@ -375,9 +376,9 @@ def canvas_boundary_observations(
     height: int,
 ) -> tuple[BoundaryObservation, ...]:
     provenance = MeasurementProvenance(
-        root_measurement="holder_canvas",
+        root_measurement=MeasurementIdentity.HOLDER_CANVAS,
         source="canvas_clip",
-        dependencies=("canvas",),
+        dependencies=(MeasurementIdentity.CANVAS,),
     )
     return (
         BoundaryObservation(

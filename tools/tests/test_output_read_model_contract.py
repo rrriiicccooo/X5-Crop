@@ -26,7 +26,7 @@ from x5crop.report.read_models import typed_read_model
 from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
 from tools.regression.compare import DEFAULT_FIELDS
-from x5crop.units import ScanCalibration
+from x5crop.units import ScanCalibration, ScanCalibrationSource
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -97,7 +97,12 @@ def _record() -> dict:
         configuration=detection_configuration_read_model(
             get_detection_configuration("135", "full")
         ),
-        scan_calibration=ScanCalibration(None, None, "unavailable", False),
+        scan_calibration=ScanCalibration(
+            None,
+            None,
+            ScanCalibrationSource.UNAVAILABLE,
+            False,
+        ),
         transform_geometry=transform_geometry_fixture(),
         analysis_reuse_signature=_analysis_reuse_signature(),
     )
@@ -209,7 +214,6 @@ class OutputReadModelContractTest(unittest.TestCase):
         from x5crop.report.validation import current_report_record_errors
         from x5crop.runtime.frame_bleed import prepare_frame_bleed
         from x5crop.output.model import AxisBleedParameters
-        from x5crop.units import ScanCalibration
         from tools.tests.physical_gate_support import transform_geometry_fixture
 
         configuration = get_detection_configuration("135-dual", "partial")
@@ -239,7 +243,12 @@ class OutputReadModelContractTest(unittest.TestCase):
             None,
         )
         context = DetectionContext(
-            scan_calibration=ScanCalibration(None, None, "unavailable", False),
+            scan_calibration=ScanCalibration(
+                None,
+                None,
+                ScanCalibrationSource.UNAVAILABLE,
+                False,
+            ),
             request=DetectionRequest("horizontal", "partial", None),
             configuration=configuration,
             lane_configuration=None,
@@ -315,16 +324,25 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertNotIn("configuration_bundle.configuration_for(", source)
 
     def test_typed_read_model_serializes_every_typed_result_field(self) -> None:
-        from x5crop.domain import MeasurementProvenance, PixelInterval
-        from x5crop.domain import FrameDimensionPrior
+        from x5crop.domain import (
+            FrameDimensionPrior,
+            FrameDimensionPriorSource,
+            MeasurementIdentity,
+            MeasurementProvenance,
+            PixelInterval,
+        )
         from x5crop.report.read_models import typed_read_model
 
         value = FrameDimensionPrior(
             width_px=PixelInterval.exact(100.0),
             height_px=PixelInterval.exact(80.0),
             frame_size_mm=(36.0, 24.0),
-            source="test",
-            provenance=MeasurementProvenance("frame_dimensions", "test", ()),
+            source=FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
+            provenance=MeasurementProvenance(
+                MeasurementIdentity.FRAME_DIMENSIONS,
+                "test",
+                (),
+            ),
         )
         self.assertEqual(
             set(typed_read_model(value)),
@@ -505,7 +523,12 @@ class OutputReadModelContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "full")
             ),
-            scan_calibration=ScanCalibration(None, None, "unavailable", False),
+            scan_calibration=ScanCalibration(
+                None,
+                None,
+                ScanCalibrationSource.UNAVAILABLE,
+                False,
+            ),
             transform_geometry=transform,
             analysis_reuse_signature=_analysis_reuse_signature(),
         )

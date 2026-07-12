@@ -2,23 +2,29 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from enum import Enum
 
 
 MILLIMETERS_PER_INCH = 25.4
 MILLIMETERS_PER_CENTIMETER = 10.0
 
 
+class ScanCalibrationSource(str, Enum):
+    TIFF_RESOLUTION = "tiff_resolution"
+    UNAVAILABLE = "unavailable"
+
+
 @dataclass(frozen=True)
 class ScanCalibration:
     x_px_per_mm: float | None
     y_px_per_mm: float | None
-    source: str
+    source: ScanCalibrationSource
     trusted: bool
     warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.source:
-            raise ValueError("scan calibration requires a source")
+        if not isinstance(self.source, ScanCalibrationSource):
+            raise ValueError("scan calibration requires a typed source")
         values = (self.x_px_per_mm, self.y_px_per_mm)
         if any(
             value is not None
@@ -28,7 +34,7 @@ class ScanCalibration:
             raise ValueError("scan calibration scale must be finite and positive")
         if self.trusted and any(value is None for value in values):
             raise ValueError("trusted scan calibration requires both axis scales")
-        if self.trusted and self.source == "unavailable":
+        if self.trusted and self.source == ScanCalibrationSource.UNAVAILABLE:
             raise ValueError("unavailable scan calibration cannot be trusted")
 
     def px_per_mm(self, axis: str) -> float | None:
@@ -52,7 +58,7 @@ def _unavailable(*warnings: str) -> ScanCalibration:
     return ScanCalibration(
         x_px_per_mm=None,
         y_px_per_mm=None,
-        source="unavailable",
+        source=ScanCalibrationSource.UNAVAILABLE,
         trusted=False,
         warnings=tuple(warnings),
     )
@@ -84,7 +90,7 @@ def scan_calibration_from_resolution(
     return ScanCalibration(
         x_px_per_mm=x_px_per_mm,
         y_px_per_mm=y_px_per_mm,
-        source="tiff_resolution",
+        source=ScanCalibrationSource.TIFF_RESOLUTION,
         trusted=True,
         warnings=(),
     )

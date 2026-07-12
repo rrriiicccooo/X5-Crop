@@ -5,11 +5,12 @@ from ...domain import (
     CropEnvelope,
     EvidenceState,
     HolderSpan,
+    MeasurementIdentity,
     MeasurementProvenance,
     VisibleSequenceSpan,
 )
 from ..candidate.model import BuiltCandidate
-from ..candidate.plan.count_hypotheses import CountHypothesis
+from ..candidate.plan.count_hypotheses import CountHypothesis, CountHypothesisSource
 from ..context import DetectionContext
 from ..physical.model import (
     BoundaryAssignmentConsensus,
@@ -57,16 +58,16 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
             sequence_hypothesis_name="review_only_canvas",
             sequence_hypothesis_strategy="review_only_canvas",
             sequence_provenance=MeasurementProvenance(
-                root_measurement="review_only_mode",
+                root_measurement=MeasurementIdentity.REVIEW_ONLY_MODE,
                 source="review_only_canvas",
-                dependencies=("canvas",),
+                dependencies=(MeasurementIdentity.CANVAS,),
             ),
             boundary_observations=canvas_boundary_observations(width, height),
         ),
         count_hypothesis=CountHypothesis(
             count=count,
             strip_mode=context.request.strip_mode,
-            source="mode_contract",
+            source=CountHypothesisSource.MODE_CONTRACT,
         ),
         build_diagnostics=(
             "dual_lane_partial_not_supported",

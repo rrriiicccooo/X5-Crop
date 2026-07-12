@@ -113,6 +113,9 @@ repository rules in `AGENTS.md`.
   selection 全程保持同一 identity，不再保存可手写的 physical-eligibility 布尔副本。
 - Review-only assessment 不再构造零值 physical evidence 或 CandidateGate；dual-lane assessment
   保留各 lane 的 canonical evidence，并由父级 CandidateGate 单独判断 composition。
+- Count、frame boundary、dimension prior、scan calibration 与 measurement dependency 的权限判别
+  改为 typed identities；自由字符串不再控制 auto count、hard separator、overlap corroboration 或
+  evidence independence。
 - Shared domain 不再混放 report、TIFF 或 output 类型：current-schema `ReportResult` 归 report 并在
   构造时验证，`ImageProfile` 与 TIFF tag value 归 I/O，`AxisBleedParameters` 归 output；units 只
   接收 resolution 与 unit，不再依赖完整 TIFF profile。

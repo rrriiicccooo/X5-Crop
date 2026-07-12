@@ -71,7 +71,7 @@ def _overlap_requirements(
                 required_px=max(1, int(ceil(-relation.signed_width_px.minimum))),
                 physically_supported=relation.supports_output_protection,
                 provenance=(
-                    f"{relation.provenance.root_measurement}:"
+                    f"{relation.provenance.root_measurement.value}:"
                     f"{relation.provenance.source}"
                 ),
             )

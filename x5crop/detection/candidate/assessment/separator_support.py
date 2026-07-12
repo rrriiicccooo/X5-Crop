@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from x5crop.domain import EvidenceState, FrameBoundaryReference
+from x5crop.domain import EvidenceState, FrameBoundaryReference, FrameBoundarySource
 from ...physical.model import SequenceSolution
 
 
@@ -70,7 +70,7 @@ def separator_sequence_evidence(
         index for index in range(1, expected + 1) if index not in indexes
     )
     dimension_count = sum(
-        boundary.source == "dimension_constrained"
+        boundary.source == FrameBoundarySource.DIMENSION_CONSTRAINED
         for boundary in geometry.frame_boundaries
     )
     return SeparatorSequenceEvidence(

@@ -31,7 +31,7 @@ from x5crop.report.result_builder import result_from_detection
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.domain import Box, CropEnvelope
 from x5crop.output.model import OutputGeometry
-from x5crop.units import ScanCalibration
+from x5crop.units import ScanCalibration, ScanCalibrationSource
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -48,7 +48,12 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             DetectionRequest("horizontal", "partial", 0)
 
-        calibration = ScanCalibration(None, None, "unavailable", False)
+        calibration = ScanCalibration(
+            None,
+            None,
+            ScanCalibrationSource.UNAVAILABLE,
+            False,
+        )
         full = get_detection_configuration("135", "full")
         dual = get_detection_configuration("135-dual", "full")
         lane = get_detection_configuration("135", "full")
@@ -88,6 +93,44 @@ class DetectionStageTypeContractTests(unittest.TestCase):
 
     def test_detection_context_contains_no_tiff_io_profile(self) -> None:
         self.assertNotIn("image_profile", DetectionContext.__dataclass_fields__)
+
+    def test_physical_authority_discriminators_are_typed(self) -> None:
+        from x5crop.detection.candidate.plan.count_hypotheses import (
+            CountHypothesis,
+            CountHypothesisSource,
+        )
+        from x5crop.domain import (
+            FrameBoundary,
+            FrameBoundarySource,
+            FrameDimensionPrior,
+            FrameDimensionPriorSource,
+            MeasurementIdentity,
+            MeasurementProvenance,
+        )
+        from x5crop.units import ScanCalibration, ScanCalibrationSource
+
+        self.assertIs(
+            get_type_hints(CountHypothesis)["source"],
+            CountHypothesisSource,
+        )
+        self.assertIs(
+            get_type_hints(FrameBoundary)["source"],
+            FrameBoundarySource,
+        )
+        self.assertIs(
+            get_type_hints(FrameDimensionPrior)["source"],
+            FrameDimensionPriorSource,
+        )
+        self.assertIs(
+            get_type_hints(ScanCalibration)["source"],
+            ScanCalibrationSource,
+        )
+        provenance_hints = get_type_hints(MeasurementProvenance)
+        self.assertIs(provenance_hints["root_measurement"], MeasurementIdentity)
+        self.assertEqual(
+            provenance_hints["dependencies"],
+            tuple[MeasurementIdentity, ...],
+        )
 
     def test_candidate_stages_are_immutable_and_separate(self) -> None:
         geometry_fields = {field.name for field in fields(SequenceSolution)}

@@ -12,6 +12,7 @@ from x5crop.detection.physical.sequence import base_sequence_span_candidates
 from x5crop.domain import (
     Box,
     CropEnvelope,
+    MeasurementIdentity,
     MeasurementProvenance,
     SequenceHypothesis,
     VisibleSequenceSpan,
@@ -166,9 +167,9 @@ class BoundaryDetectionTests(unittest.TestCase):
             crop_envelope=CropEnvelope(physical_box),
             strategy="boundary_led",
             provenance=MeasurementProvenance(
-                "holder_boundary_profile",
+                MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "synthetic",
-                ("gray_work",),
+                (MeasurementIdentity.GRAY_WORK,),
             ),
             boundary_observations=(),
         )

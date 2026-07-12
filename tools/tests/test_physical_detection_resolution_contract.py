@@ -13,7 +13,10 @@ from tools.tests.physical_gate_support import (
     selection_fixture,
 )
 from x5crop.detection.candidate.execution.model import CountHypothesisEvaluation
-from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
+from x5crop.detection.candidate.plan.count_hypotheses import (
+    CountHypothesis,
+    CountHypothesisSource,
+)
 from x5crop.detection.candidate.selection.model import GeometryResolution
 from x5crop.detection.candidate.assessment.candidate import _boundary_proof_paths
 from x5crop.detection.candidate.model import AssessedCandidate, BuiltCandidate
@@ -23,6 +26,7 @@ from x5crop.domain import (
     Box,
     EvidenceState,
     FrameBoundaryReference,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
 )
@@ -39,9 +43,9 @@ from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_
 def _single_frame_candidate(*, measured_boundaries: bool) -> BuiltCandidate:
     candidate = candidate_fixture()
     provenance = MeasurementProvenance(
-        "boundary_measurement",
+        MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
         "synthetic",
-        ("gray_work",),
+        (MeasurementIdentity.GRAY_WORK,),
     )
     kind = "tonal_transition" if measured_boundaries else "canvas_clip"
     observations = (
@@ -88,7 +92,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         higher_hypothesis = CountHypothesis(
             2,
             "partial",
-            "automatic_count",
+            CountHypothesisSource.AUTOMATIC,
         )
         higher_fixture = candidate_fixture()
         higher = replace(
@@ -100,7 +104,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         lower_hypothesis = CountHypothesis(
             1,
             "partial",
-            "automatic_count",
+            CountHypothesisSource.AUTOMATIC,
         )
         lower = AssessedCandidate(
             geometry=replace(
@@ -154,7 +158,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             candidate,
             count_hypothesis=replace(
                 candidate.count_hypothesis,
-                source="requested_count",
+                source=CountHypothesisSource.REQUESTED,
             ),
             assessment=replace(
                 candidate.assessment,
@@ -259,7 +263,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             candidate,
             count_hypothesis=replace(
                 candidate.count_hypothesis,
-                source="format_default",
+                source=CountHypothesisSource.FORMAT_DEFAULT,
             ),
             assessment=replace(candidate.assessment, evidence=evidence),
         )
@@ -275,9 +279,9 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         geometry = replace(
             candidate.geometry,
             sequence_provenance=MeasurementProvenance(
-                "holder_canvas",
+                MeasurementIdentity.HOLDER_CANVAS,
                 "full_canvas",
-                ("canvas",),
+                (MeasurementIdentity.CANVAS,),
             ),
             boundary_observations=canvas_boundary_observations(200, 100),
         )
@@ -330,6 +334,10 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         )
         candidate = replace(
             candidate,
+            count_hypothesis=replace(
+                candidate.count_hypothesis,
+                source=CountHypothesisSource.AUTOMATIC,
+            ),
             assessment=replace(candidate.assessment, evidence=evidence),
         )
         selection = select_candidates(
@@ -350,9 +358,12 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                     1,
                     PixelInterval.exact(100.0),
                     MeasurementProvenance(
-                        "physical_frame_aspect",
+                        MeasurementIdentity.PHYSICAL_FRAME_ASPECT,
                         "bidirectional_boundary_constraint",
-                        ("format_physical_spec", "sequence_boundaries"),
+                        (
+                            MeasurementIdentity.FORMAT_PHYSICAL_SPEC,
+                            MeasurementIdentity.SEQUENCE_BOUNDARIES,
+                        ),
                     ),
                 ),
             ),

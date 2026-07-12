@@ -5,7 +5,12 @@ from collections.abc import Iterable
 import numpy as np
 
 from ...configuration.boundary import BoundaryObservationParameters
-from ...domain import BoundaryObservation, MeasurementProvenance, SequenceHypothesis
+from ...domain import (
+    BoundaryObservation,
+    MeasurementIdentity,
+    MeasurementProvenance,
+    SequenceHypothesis,
+)
 from ...image.statistics import ImageMeasurementStatistics
 from .boundary import visible_sequence_and_crop_envelope
 from .boundary_detection import boundary_observation_groups
@@ -58,7 +63,7 @@ def _proposal_from_observations(
         crop_envelope=envelope,
         strategy="boundary_led",
         provenance=MeasurementProvenance(
-            root_measurement="boundary_observations",
+            root_measurement=MeasurementIdentity.BOUNDARY_OBSERVATIONS,
             source=name,
             dependencies=roots,
             boundary_anchors=tuple(observation.side for observation in observations),

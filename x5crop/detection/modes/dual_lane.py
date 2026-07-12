@@ -17,7 +17,7 @@ from ...image.statistics import image_measurement_statistics
 from ...units import ScanCalibration
 from ..candidate.assessment.dual_lane import assess_dual_lane_candidate
 from ..candidate.model import BuiltCandidate
-from ..candidate.plan.count_hypotheses import CountHypothesis
+from ..candidate.plan.count_hypotheses import CountHypothesis, CountHypothesisSource
 from ..candidate.proposal.hard_safety import hard_safety_candidate
 from ..candidate.assessment.candidate import assess_candidate
 from ..candidate.selection.choose import select_candidates
@@ -159,7 +159,7 @@ def _parent_candidate(
         count_hypothesis=CountHypothesis(
             count=count,
             strip_mode="full",
-            source="format_default",
+            source=CountHypothesisSource.FORMAT_DEFAULT,
         ),
         build_diagnostics=(
             ("lane_divider_evidence_unavailable",)

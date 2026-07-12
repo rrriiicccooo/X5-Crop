@@ -17,7 +17,10 @@ from x5crop.detection.candidate.model import (
     CandidateAssessment,
     CandidateEvidence,
 )
-from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
+from x5crop.detection.candidate.plan.count_hypotheses import (
+    CountHypothesis,
+    CountHypothesisSource,
+)
 from x5crop.detection.candidate.selection.model import (
     GeometryCluster,
     GeometryResolution,
@@ -78,6 +81,8 @@ from x5crop.domain import (
     BoundaryPositionConstraint,
     Box,
     FrameDimensionPrior,
+    FrameDimensionPriorSource,
+    MeasurementIdentity,
     MeasurementProvenance,
     SeparatorWidthConstraint,
 )
@@ -99,9 +104,9 @@ def separator_observation(
         center=center,
         tonal_evidence=tonal_evidence,
         provenance=MeasurementProvenance(
-            root_measurement="separator_profile",
+            root_measurement=MeasurementIdentity.SEPARATOR_PROFILE,
             source="test_fixture",
-            dependencies=("gray_work",),
+            dependencies=(MeasurementIdentity.GRAY_WORK,),
         ),
         cross_axis=SeparatorCrossAxisMeasurement(
             state=cross_axis_state,
@@ -147,9 +152,9 @@ def separator_constraints(
     width: PixelInterval = PixelInterval(0.0, 1000.0),
 ) -> tuple[BoundaryPositionConstraint, SeparatorWidthConstraint]:
     provenance = MeasurementProvenance(
-        "frame_dimensions",
+        MeasurementIdentity.FRAME_DIMENSIONS,
         "test_constraint",
-        ("physical_frame_size",),
+        (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
     )
     return (
         BoundaryPositionConstraint(index, position, provenance),
@@ -344,8 +349,8 @@ def candidate_evidence_fixture(
         independence=EvidenceIndependenceEvidence(
             EvidenceState.SUPPORTED,
             "independent_outer_and_separator_measurements",
-            "holder_boundary_profile",
-            ("separator_profile",),
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
+            (MeasurementIdentity.SEPARATOR_PROFILE,),
             (),
         ),
     )
@@ -385,8 +390,16 @@ def candidate_fixture(
                 1,
                 PixelInterval.exact(0.0),
                 PixelInterval.exact(95.0),
-                MeasurementProvenance("photo_edges", "test_fixture", ("separator_profile",)),
-                MeasurementProvenance("photo_edges", "test_fixture", ("separator_profile",)),
+                MeasurementProvenance(
+                    MeasurementIdentity.PHOTO_EDGES,
+                    "test_fixture",
+                    (MeasurementIdentity.SEPARATOR_PROFILE,),
+                ),
+                MeasurementProvenance(
+                    MeasurementIdentity.PHOTO_EDGES,
+                    "test_fixture",
+                    (MeasurementIdentity.SEPARATOR_PROFILE,),
+                ),
                 True,
                 True,
             ),
@@ -394,8 +407,16 @@ def candidate_fixture(
                 2,
                 PixelInterval.exact(105.0),
                 PixelInterval.exact(200.0),
-                MeasurementProvenance("photo_edges", "test_fixture", ("separator_profile",)),
-                MeasurementProvenance("photo_edges", "test_fixture", ("separator_profile",)),
+                MeasurementProvenance(
+                    MeasurementIdentity.PHOTO_EDGES,
+                    "test_fixture",
+                    (MeasurementIdentity.SEPARATOR_PROFILE,),
+                ),
+                MeasurementProvenance(
+                    MeasurementIdentity.PHOTO_EDGES,
+                    "test_fixture",
+                    (MeasurementIdentity.SEPARATOR_PROFILE,),
+                ),
                 True,
                 True,
             ),
@@ -410,11 +431,11 @@ def candidate_fixture(
             PixelInterval.exact(100.0),
             PixelInterval.exact(100.0),
             (36.0, 24.0),
-            "test_fixture",
+            FrameDimensionPriorSource.SHORT_AXIS_ASPECT,
             MeasurementProvenance(
-                "frame_dimensions",
+                MeasurementIdentity.FRAME_DIMENSIONS,
                 "test_fixture",
-                ("format_physical_spec",),
+                (MeasurementIdentity.FORMAT_PHYSICAL_SPEC,),
             ),
         ),
         residuals=SequenceResiduals(0.05, 0.0, 0.0),
@@ -429,10 +450,10 @@ def candidate_fixture(
         sequence_hypothesis_name="synthetic_sequence",
         sequence_hypothesis_strategy="boundary_led",
         sequence_provenance=MeasurementProvenance(
-            "holder_boundary_profile",
+            MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic_outer",
-            ("gray_work",),
-            ("left", "right"),
+            (MeasurementIdentity.GRAY_WORK,),
+            ("leading", "trailing"),
         ),
         boundary_observations=tuple(
             BoundaryObservation(
@@ -440,9 +461,9 @@ def candidate_fixture(
                 PixelInterval.exact(position),
                 "tonal_transition",
                 MeasurementProvenance(
-                    "holder_boundary_profile",
+                    MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                     "synthetic_boundary",
-                    ("gray_work",),
+                    (MeasurementIdentity.GRAY_WORK,),
                     (side,),
                 ),
             )
@@ -470,7 +491,7 @@ def candidate_fixture(
         count_hypothesis=CountHypothesis(
             count=2,
             strip_mode="full",
-            source="test_fixture",
+            source=CountHypothesisSource.FORMAT_DEFAULT,
         ),
         assessment=CandidateAssessment(
             evidence=evidence,

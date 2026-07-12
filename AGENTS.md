@@ -284,6 +284,8 @@ Current state:
   observed spacing, independently corroborated overlap, and geometry spacing
   hypotheses. Corroborated overlap can protect output but cannot prove its own
   conservation equation.
+- Count, boundary, dimension, calibration, and measurement-dependency authority
+  use typed identities; descriptive provenance text cannot change physical proof.
 - Standard, dual-lane, and review-only candidates use distinct geometry types;
   review-only modes never masquerade as solved frame sequences.
 - Physical candidate assessment stores canonical evidence and `CandidateGate`;

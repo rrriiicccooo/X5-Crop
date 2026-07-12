@@ -9,6 +9,7 @@ from ...domain import (
     FrameBoundary,
     FrameBoundaryReference,
     FrameDimensionPrior,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
     SeparatorAssignment,
@@ -297,11 +298,11 @@ def _cuts(
             boundary_index,
             cut_position,
             MeasurementProvenance(
-                root_measurement="frame_dimensions",
+                root_measurement=MeasurementIdentity.FRAME_DIMENSIONS,
                 source="monotonic_dimension_constraint",
                 dependencies=(
                     dimensions.provenance.root_measurement,
-                    "sequence_boundaries",
+                    MeasurementIdentity.SEQUENCE_BOUNDARIES,
                 ),
             ),
             focused_assignment,
@@ -454,9 +455,9 @@ def _photo_intervals(
         if observation.side in {"leading", "trailing"}
     }
     generated_provenance = MeasurementProvenance(
-        root_measurement="frame_geometry",
+        root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
         source="sequence_photo_interval",
-        dependencies=("sequence_cuts",),
+        dependencies=(MeasurementIdentity.SEQUENCE_CUTS,),
     )
     intervals: list[PhotoInterval] = []
     for index, frame in enumerate(frames, start=1):
@@ -544,11 +545,15 @@ def _relations(
                     float(width_constraint.maximum),
                 ),
                 MeasurementProvenance(
-                    root_measurement="frame_geometry",
+                    root_measurement=MeasurementIdentity.FRAME_GEOMETRY,
                     source="unobserved_inter_frame_relation",
-                    dependencies=(
-                        boundary.provenance.root_measurement,
-                        dimensions.provenance.root_measurement,
+                    dependencies=tuple(
+                        dict.fromkeys(
+                            (
+                                boundary.provenance.root_measurement,
+                                dimensions.provenance.root_measurement,
+                            )
+                        )
                     ),
                 ),
             )

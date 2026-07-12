@@ -21,6 +21,7 @@ from x5crop.domain import (
     CropEnvelope,
     EvidenceState,
     HolderSpan,
+    MeasurementIdentity,
     MeasurementProvenance,
     PixelInterval,
     VisibleSequenceSpan,
@@ -44,9 +45,9 @@ def _cache(gray: np.ndarray) -> MeasurementCache:
 def _single_frame_geometry(box: Box):
     geometry = candidate_fixture().geometry
     provenance = MeasurementProvenance(
-        "photo_edges",
+        MeasurementIdentity.PHOTO_EDGES,
         "content_alignment_fixture",
-        ("gray_work",),
+        (MeasurementIdentity.GRAY_WORK,),
     )
     return replace(
         geometry,
