@@ -57,7 +57,6 @@ def process_one(
         profile,
         warnings,
         analysis_reuse_signature,
-        configuration_bundle,
     )
     if cached_result is not None:
         return cached_result

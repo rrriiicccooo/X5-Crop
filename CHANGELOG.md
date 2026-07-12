@@ -78,9 +78,11 @@ repository rules in `AGENTS.md`.
 - `FinalDetection` 已删除 optional selection、sequence span、separator assignments 与 frame
   boundaries 等候选阶段副本。Report/debug 显式接收 `SelectionResult` 或 selected candidate；
   cache restoration 只恢复 final decision/output，不再维护半有效 FinalDetection 或物理反序列化。
+- Analysis reuse 在任何 Debug Preview/Analysis 请求下都会重新检测；cached crop export 只重放
+  必要的 array transform，不再重建 base gray，也不再接收未消费的 configuration bundle。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 294 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 296 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

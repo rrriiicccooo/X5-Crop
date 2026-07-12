@@ -31,6 +31,14 @@ def _cache() -> MeasurementCache:
 
 
 class DetectionCachePerformanceContractTest(unittest.TestCase):
+    def test_cached_output_does_not_rebuild_detection_gray(self) -> None:
+        from tools.tests.architecture_contracts import PROJECT_ROOT
+
+        source = (
+            PROJECT_ROOT / "x5crop/runtime/analysis_reuse.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("make_base_gray_u8", source)
+
     def test_measurement_cache_uses_explicit_typed_keys(self) -> None:
         self.assertFalse(
             any(

@@ -16,10 +16,8 @@ from ..domain import (
 )
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from ..output.surface import OutputSurface
-from ..image.gray import BaseGrayParameters, make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..io.tiff import read_tiff
-from ..configuration.bundle import DetectionConfigurationBundle
 from ..configuration.model import DetectionConfiguration
 from ..report.restoration import (
     final_detection_from_record as _final_detection_from_record,
@@ -157,20 +155,16 @@ def find_reusable_analysis(
 
 def apply_cached_transform(
     arr: np.ndarray,
-    gray: np.ndarray,
     axes: str,
-    photometric: str,
-    base_gray_params: BaseGrayParameters,
     transform_geometry: TransformGeometryEvidence,
     warnings: list[str],
-) -> tuple[np.ndarray, np.ndarray, bool]:
+) -> tuple[np.ndarray, bool]:
     if not transform_geometry.applied:
-        return arr, gray, False
+        return arr, False
     angle = float(transform_geometry.applied_angle_degrees)
     arr = rotate_array_expand(arr, angle, axes)
-    gray = make_base_gray_u8(arr, axes, photometric, base_gray_params)
     warnings.append(f"reused deskew: {angle:.4f} degrees")
-    return arr, gray, True
+    return arr, True
 
 
 def result_from_reusable_analysis(
@@ -180,9 +174,13 @@ def result_from_reusable_analysis(
     profile: ImageProfile,
     warnings: list[str],
     analysis_reuse_signature: dict[str, Any],
-    configuration_bundle: DetectionConfigurationBundle,
 ) -> ProcessResult | None:
-    if not (config.reuse_analysis and not config.dry_run and not config.debug_analysis):
+    if not (
+        config.reuse_analysis
+        and not config.dry_run
+        and not config.debug
+        and not config.debug_analysis
+    ):
         return None
     cached_record = find_reusable_analysis(
         input_file,
@@ -213,22 +211,12 @@ def result_from_reusable_analysis(
         )
 
     arr, profile, page_warnings = read_tiff(input_file, config.page)
-    configuration = configuration_bundle.initial_configuration
-    gray = make_base_gray_u8(
-        arr,
-        profile.axes,
-        profile.photometric,
-        configuration.preprocess.base_gray,
-    )
     warnings.extend(warning for warning in page_warnings if warning not in warnings)
     source_arr = arr
     transform_geometry = _transform_geometry_from_record(cached_record)
-    arr, gray, deskew_applied = apply_cached_transform(
+    arr, deskew_applied = apply_cached_transform(
         arr,
-        gray,
         profile.axes,
-        profile.photometric,
-        configuration.preprocess.base_gray,
         transform_geometry,
         warnings,
     )

@@ -4,6 +4,7 @@ from copy import deepcopy
 from pathlib import Path
 import os
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
 import numpy as np
 from dataclasses import asdict, fields, replace
@@ -96,6 +97,28 @@ def _record() -> dict:
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_analysis_reuse_is_disabled_for_every_debug_surface(self) -> None:
+        from x5crop.runtime.analysis_reuse import result_from_reusable_analysis
+
+        for debug, debug_analysis in ((True, False), (False, True)):
+            config = SimpleNamespace(
+                reuse_analysis=True,
+                dry_run=False,
+                debug=debug,
+                debug_analysis=debug_analysis,
+            )
+            with self.subTest(debug=debug, debug_analysis=debug_analysis):
+                self.assertIsNone(
+                    result_from_reusable_analysis(
+                        Path("unused.tif"),
+                        config,
+                        None,
+                        None,
+                        [],
+                        {},
+                    )
+                )
+
     def test_analysis_reuse_source_identity_includes_file_content(self) -> None:
         from x5crop.runtime.analysis_reuse import source_cache_signature
 
