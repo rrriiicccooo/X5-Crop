@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import fields, replace
 import unittest
 
 from x5crop.detection.candidate.assessment.candidate_gate import (
@@ -8,6 +9,7 @@ from x5crop.detection.candidate.assessment.candidate_gate import (
     candidate_gate_assessment,
 )
 from x5crop.domain import EvidenceState
+from x5crop.detection.gate_checks import GateCheck
 
 
 def _path(code: str, state: EvidenceState) -> BoundaryProofPath:
@@ -39,6 +41,41 @@ def _gate(
 
 
 class CandidateLifecycleGateContractTest(unittest.TestCase):
+    def test_gate_check_has_no_unused_consequence_dimension(self) -> None:
+        self.assertEqual(
+            {field.name for field in fields(GateCheck)},
+            {"code", "stage", "state", "final_review_reason"},
+        )
+
+    def test_gate_check_rejects_cross_stage_reason_ownership(self) -> None:
+        invalid_factories = (
+            lambda: GateCheck("", "candidate", EvidenceState.SUPPORTED),
+            lambda: GateCheck(
+                "content_preservation",
+                "candidate",
+                EvidenceState.CONTRADICTED,
+                "content_preservation_unresolved",
+            ),
+            lambda: GateCheck(
+                "content_preservation",
+                "unknown",
+                EvidenceState.CONTRADICTED,
+            ),
+            lambda: GateCheck(
+                "decision_check",
+                "decision",
+                EvidenceState.CONTRADICTED,
+            ),
+        )
+        for factory in invalid_factories:
+            with self.subTest(factory=factory), self.assertRaises(ValueError):
+                factory()
+
+    def test_candidate_gate_rejects_incomplete_check_ownership(self) -> None:
+        gate = _gate()
+        with self.assertRaises(ValueError):
+            replace(gate, checks=gate.checks[:-1])
+
     def test_candidate_gate_has_only_physical_checks(self) -> None:
         self.assertEqual(
             tuple(check.code for check in _gate().checks),

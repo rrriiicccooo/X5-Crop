@@ -45,7 +45,6 @@ def _decision_gate(value: dict[str, Any]) -> DecisionGateAssessment:
                 code=str(check["code"]),
                 stage=str(check["stage"]),
                 state=EvidenceState(str(check["state"])),
-                consequence=str(check["consequence"]),
                 final_review_reason=(
                     None
                     if check["final_review_reason"] is None

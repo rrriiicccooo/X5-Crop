@@ -14,6 +14,14 @@ BOUNDARY_PROOF_PATH_CODES = frozenset(
         "mode_composition",
     }
 )
+CANDIDATE_GATE_CHECK_CODES = (
+    "frame_topology_integrity",
+    "content_preservation",
+    "photo_geometry_consistency",
+    "frame_sequence_conservation",
+    "evidence_independence",
+    "boundary_proof",
+)
 
 
 @dataclass(frozen=True)
@@ -21,6 +29,14 @@ class BoundaryProofPath:
     code: str
     state: EvidenceState
     supporting_evidence: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if self.code not in BOUNDARY_PROOF_PATH_CODES:
+            raise ValueError(f"unowned boundary proof path: {self.code}")
+        if any(not item for item in self.supporting_evidence) or len(
+            set(self.supporting_evidence)
+        ) != len(self.supporting_evidence):
+            raise ValueError("boundary proof evidence names must be non-empty and unique")
 
 
 @dataclass(frozen=True)
@@ -40,6 +56,18 @@ class CandidateGateAssessment:
     proof_paths: tuple[BoundaryProofPath, ...]
     diagnostics: tuple[str, ...]
 
+    def __post_init__(self) -> None:
+        if tuple(check.code for check in self.checks) != CANDIDATE_GATE_CHECK_CODES:
+            raise ValueError("candidate gate checks must be complete and ordered")
+        if any(check.stage != "candidate" for check in self.checks):
+            raise ValueError("candidate gate can contain only candidate-stage checks")
+        if len({path.code for path in self.proof_paths}) != len(self.proof_paths):
+            raise ValueError("candidate boundary proof paths must be unique")
+        if any(not item for item in self.diagnostics) or len(
+            set(self.diagnostics)
+        ) != len(self.diagnostics):
+            raise ValueError("candidate diagnostics must be non-empty and unique")
+
     @property
     def failed_checks(self) -> tuple[str, ...]:
         return tuple(check.code for check in self.checks if check.blocks)
@@ -50,11 +78,6 @@ class CandidateGateAssessment:
 
 
 def candidate_gate_assessment(gate_input: CandidateGateInput) -> CandidateGateAssessment:
-    unknown_paths = sorted(
-        {path.code for path in gate_input.proof_paths} - BOUNDARY_PROOF_PATH_CODES
-    )
-    if unknown_paths:
-        raise ValueError(f"unowned boundary proof path: {','.join(unknown_paths)}")
     if any(
         path.state == EvidenceState.SUPPORTED
         for path in gate_input.proof_paths
@@ -72,37 +95,31 @@ def candidate_gate_assessment(gate_input: CandidateGateInput) -> CandidateGateAs
             code="frame_topology_integrity",
             stage="candidate",
             state=gate_input.frame_topology,
-            consequence="blocker",
         ),
         GateCheck(
             code="content_preservation",
             stage="candidate",
             state=gate_input.content_preservation,
-            consequence="blocker",
         ),
         GateCheck(
             code="photo_geometry_consistency",
             stage="candidate",
             state=gate_input.photo_geometry,
-            consequence="blocker",
         ),
         GateCheck(
             code="frame_sequence_conservation",
             stage="candidate",
             state=gate_input.sequence_conservation,
-            consequence="blocker",
         ),
         GateCheck(
             code="evidence_independence",
             stage="candidate",
             state=gate_input.evidence_independence,
-            consequence="blocker",
         ),
         GateCheck(
             code="boundary_proof",
             stage="candidate",
             state=boundary_state,
-            consequence="blocker",
         ),
     )
     return CandidateGateAssessment(

@@ -184,6 +184,9 @@ clustering tolerance。
 
 `CandidateGate` 只检查 topology、content preservation、measured photo geometry、sequence
 conservation、evidence independence 和 proof paths。
+`GateCheck` 只表达所属 stage 与 evidence state；所有 check 都是该 Gate 的正式检查，不再保留
+未使用的 consequence 维度。Candidate check 不能拥有 final reason，diagnostic 也不能伪装成
+GateCheck。
 
 `DecisionGate` 只消费 CandidateGate、GeometryResolution、selection consensus、output
 protection 和 transform geometry。它不重新测量 evidence，也不生成候选。

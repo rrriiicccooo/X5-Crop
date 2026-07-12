@@ -66,7 +66,6 @@ def gate_check_read_model(check: Any) -> dict[str, Any]:
         "code": check.code,
         "stage": check.stage,
         "state": check.state.value,
-        "consequence": check.consequence,
         "final_review_reason": check.final_review_reason,
         "blocks": bool(check.blocks),
     }

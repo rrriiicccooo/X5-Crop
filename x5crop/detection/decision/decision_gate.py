@@ -91,7 +91,6 @@ def _decision_check(
         code=code,
         stage="decision",
         state=state,
-        consequence="blocker",
         final_review_reason=final_reason,
     )
 

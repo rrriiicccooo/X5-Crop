@@ -307,10 +307,7 @@ def _gate_check_valid(value: Any) -> bool:
         and isinstance(value["blocks"], bool)
     ):
         return False
-    expected_blocks = bool(
-        value["consequence"] == "blocker"
-        and value["state"] == "contradicted"
-    )
+    expected_blocks = value["state"] == "contradicted"
     return value["blocks"] == expected_blocks
 
 
@@ -454,7 +451,6 @@ def _decision_consistent(value: Any, errors: list[str]) -> None:
         check
         for check in gate["checks"]
         if isinstance(check, dict)
-        and check.get("consequence") == "blocker"
         and check.get("state") == "contradicted"
     ]
     derived_passed = not blocking

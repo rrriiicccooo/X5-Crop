@@ -158,7 +158,6 @@ def candidate_gate_fixture(
                 if not passed and code == failed_check
                 else EvidenceState.SUPPORTED
             ),
-            consequence="blocker",
         )
         for code in codes
     )
