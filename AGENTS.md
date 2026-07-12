@@ -149,6 +149,9 @@ Enforcement and closure:
 
 ## Completion And Sync
 
+- Repository-owned Git hooks are the source of truth for mechanical commit and
+  push checks. Enable them once per clone with `tools/install_git_hooks.sh` and
+  never bypass them with `--no-verify`.
 - When the user asks Codex to change repository source, docs, config, launchers,
   or release metadata, finish by verifying, committing, and pushing to GitHub
   unless the user explicitly says not to.
@@ -156,8 +159,8 @@ Enforcement and closure:
 - Treat this as standing authorization for verified pushes to the current branch;
   do not ask for a separate chat confirmation before `git push`. Use the platform
   approval flow directly if it is required.
-- Before committing, run the relevant checks and confirm `git status --short`
-  contains only intentional changes.
+- Before committing, confirm `git status --short` contains only intentional
+  changes. The hooks enforce staged-file hygiene and the full pre-push suite.
 - Push the current branch to `origin` after a successful commit.
 - If commit or push cannot complete, report the blocker clearly and leave the
   working tree in the safest possible state.

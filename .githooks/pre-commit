@@ -1,0 +1,2 @@
+#!/bin/sh
+exec tools/git_checks.sh pre-commit

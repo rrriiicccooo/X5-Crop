@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+refs=$(mktemp "${TMPDIR:-/tmp}/x5-crop-pre-push.XXXXXX")
+trap 'rm -f "$refs"' EXIT HUP INT TERM
+cat >"$refs"
+
+if command -v git-lfs >/dev/null 2>&1; then
+  git lfs pre-push "$@" <"$refs"
+fi
+
+tools/git_checks.sh pre-push
