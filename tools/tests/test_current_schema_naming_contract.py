@@ -178,12 +178,18 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("FilmSpan", source)
 
     def test_current_coordination_and_test_fixtures_use_sequence_vocabulary(self) -> None:
-        removed_diagnostic = "film" + "_span_overcontains_holder_area"
+        removed_terms = (
+            "film" + "_span_overcontains_holder_area",
+            "independent_" + "outer_and_separator_measurements",
+        )
         test_offenders = [
             path.relative_to(PROJECT_ROOT).as_posix()
             for path in (PROJECT_ROOT / "tools/tests").glob("*.py")
             if path != Path(__file__)
-            and removed_diagnostic in path.read_text(encoding="utf-8")
+            and any(
+                removed in path.read_text(encoding="utf-8")
+                for removed in removed_terms
+            )
         ]
         self.assertEqual(test_offenders, [])
 
@@ -195,6 +201,12 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         ):
             self.assertNotIn(removed, coordination)
         self.assertIn("physical_sequence_resolution", coordination)
+
+        architecture = (PROJECT_ROOT / "ARCHITECTURE.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("Boundary、Sequence 与 Outer", architecture)
+        self.assertNotIn("旧 generic outer", architecture)
 
     def test_user_docs_describe_current_sequence_and_bleed_model(self) -> None:
         quick_start = (PROJECT_ROOT / "快速启动_Quick_Start.md").read_text(

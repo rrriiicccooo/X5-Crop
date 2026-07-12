@@ -205,10 +205,10 @@ def candidate_evidence_fixture(
     *,
     content_preservation: EvidenceState = EvidenceState.SUPPORTED,
 ) -> CandidateEvidence:
-    outer = Box(0, 0, 200, 100)
+    sequence_box = Box(0, 0, 200, 100)
     frames = (Box(0, 0, 100, 100), Box(100, 0, 200, 100))
-    holder = HolderSpan(outer)
-    film = VisibleSequenceSpan(outer)
+    holder_span = HolderSpan(sequence_box)
+    visible_sequence_span = VisibleSequenceSpan(sequence_box)
     completeness = StripCompletenessEvidence(True, True, 2, 2, 2, 1, 1, 1)
     return CandidateEvidence(
         frame_topology=FrameTopologyEvidence(
@@ -305,7 +305,7 @@ def candidate_evidence_fixture(
         sequence_content_alignment=SequenceContentAlignmentEvidence(
             EvidenceState.SUPPORTED,
             "content_contained",
-            outer,
+            sequence_box,
             Box(10, 10, 190, 90),
             (),
             False,
@@ -330,8 +330,8 @@ def candidate_evidence_fixture(
             True,
             EvidenceState.SUPPORTED,
             True,
-            holder,
-            film,
+            holder_span,
+            visible_sequence_span,
             False,
         ),
         partial_edge_safety=PartialEdgeSafetyEvidence(
@@ -347,7 +347,7 @@ def candidate_evidence_fixture(
         ),
         independence=EvidenceIndependenceEvidence(
             EvidenceState.SUPPORTED,
-            "independent_outer_and_separator_measurements",
+            "independent_boundary_and_separator_measurements",
             MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             (MeasurementIdentity.SEPARATOR_PROFILE,),
             (),
@@ -361,7 +361,7 @@ def candidate_fixture(
     automatic_processing_supported: bool = True,
     content_preservation: EvidenceState = EvidenceState.SUPPORTED,
 ) -> AssessedCandidate:
-    outer = Box(0, 0, 200, 100)
+    sequence_box = Box(0, 0, 200, 100)
     frames = (Box(0, 0, 100, 100), Box(100, 0, 200, 100))
     observation = separator_observation(100.0, start=95.0, end=105.0)
     assignment = assign_observation_to_boundary(
@@ -381,9 +381,9 @@ def candidate_fixture(
         layout="horizontal",
         strip_mode="full",
         count=2,
-        holder_span=HolderSpan(outer),
-        visible_sequence_span=VisibleSequenceSpan(outer),
-        crop_envelope=CropEnvelope(outer),
+        holder_span=HolderSpan(sequence_box),
+        visible_sequence_span=VisibleSequenceSpan(sequence_box),
+        crop_envelope=CropEnvelope(sequence_box),
         photo_intervals=(
             PhotoInterval(
                 1,
