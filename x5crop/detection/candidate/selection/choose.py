@@ -9,7 +9,12 @@ from ..model import (
     ReviewOnlyEvidence,
 )
 from ..plan.count_hypotheses import CountHypothesisSource
-from .model import GeometryCluster, GeometryResolution, SelectionResult
+from .model import (
+    GeometryCluster,
+    GeometryResolution,
+    SelectionConsensus,
+    SelectionResult,
+)
 
 
 def candidate_rank(
@@ -122,7 +127,7 @@ def geometry_clusters(
 def geometry_resolution_for_selection(
     selected: AssessedCandidate,
     *,
-    consensus: str,
+    consensus: SelectionConsensus,
     larger_counts_evaluated: bool,
 ) -> GeometryResolution:
     evidence_model = selected.assessment.evidence
@@ -133,7 +138,9 @@ def geometry_resolution_for_selection(
             boundaries_resolved=False,
             content_preservation_compatible=False,
             larger_counts_evaluated=larger_counts_evaluated,
-            alternative_geometries_resolved=consensus != "disagreed",
+            alternative_geometries_resolved=(
+                consensus != SelectionConsensus.DISAGREED
+            ),
             assignment_geometry_resolved=False,
             search_budget_exhausted=selected.geometry.search_budget_exhausted,
         )
@@ -207,7 +214,9 @@ def geometry_resolution_for_selection(
             for item in evidence
         )
     )
-    alternative_geometries_resolved = consensus != "disagreed"
+    alternative_geometries_resolved = (
+        consensus != SelectionConsensus.DISAGREED
+    )
     return GeometryResolution(
         count_resolved=count_resolved,
         placement_resolved=placement_resolved,
@@ -245,11 +254,11 @@ def select_candidates(
     )
     disagreement = bool(unresolved_competitors)
     if disagreement:
-        consensus = "disagreed"
+        consensus = SelectionConsensus.DISAGREED
     elif len(selected_cluster.candidates) > 1:
-        consensus = "agreed"
+        consensus = SelectionConsensus.AGREED
     else:
-        consensus = "uncontested"
+        consensus = SelectionConsensus.UNCONTESTED
     resolution = geometry_resolution_for_selection(
         selected,
         consensus=consensus,

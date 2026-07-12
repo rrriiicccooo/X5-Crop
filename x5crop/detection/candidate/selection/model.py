@@ -88,6 +88,12 @@ class CountResolutionOutcome(str, Enum):
     )
 
 
+class SelectionConsensus(str, Enum):
+    AGREED = "agreed"
+    UNCONTESTED = "uncontested"
+    DISAGREED = "disagreed"
+
+
 @dataclass(frozen=True)
 class CountResolution:
     selected_count: int
@@ -132,7 +138,7 @@ class SelectionResult:
     selected: AssessedCandidate
     ranked_candidates: tuple[AssessedCandidate, ...]
     clusters: tuple[GeometryCluster, ...]
-    consensus: str
+    consensus: SelectionConsensus
     geometry_resolution: GeometryResolution
     count_resolution: CountResolution | None = None
 
@@ -163,18 +169,21 @@ class SelectionResult:
         )
         if selected_cluster is None:
             raise ValueError("selected candidate must belong to one cluster")
-        if self.consensus not in {"agreed", "uncontested", "disagreed"}:
-            raise ValueError(f"unsupported selection consensus: {self.consensus}")
+        if not isinstance(self.consensus, SelectionConsensus):
+            raise TypeError("selection requires a typed consensus")
         alternatives_resolved = (
             self.geometry_resolution.alternative_geometries_resolved
         )
-        if self.consensus == "disagreed" and alternatives_resolved:
+        if self.consensus == SelectionConsensus.DISAGREED and alternatives_resolved:
             raise ValueError("disagreed selection requires unresolved alternatives")
-        if self.consensus != "disagreed" and not alternatives_resolved:
+        if self.consensus != SelectionConsensus.DISAGREED and not alternatives_resolved:
             raise ValueError("selection consensus must match geometry alternatives")
-        if self.consensus == "agreed" and len(selected_cluster.candidates) <= 1:
+        if self.consensus == SelectionConsensus.AGREED and len(selected_cluster.candidates) <= 1:
             raise ValueError("agreed selection requires equivalent candidates")
-        if self.consensus == "uncontested" and len(selected_cluster.candidates) != 1:
+        if (
+            self.consensus == SelectionConsensus.UNCONTESTED
+            and len(selected_cluster.candidates) != 1
+        ):
             raise ValueError("uncontested selection requires one selected-cluster candidate")
         if (
             self.count_resolution is not None

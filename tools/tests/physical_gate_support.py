@@ -28,6 +28,7 @@ from x5crop.detection.candidate.plan.count_hypotheses import (
 from x5crop.detection.candidate.selection.model import (
     GeometryCluster,
     GeometryResolution,
+    SelectionConsensus,
     SelectionResult,
 )
 from x5crop.detection.decision.decision_gate import apply_decision_gate
@@ -506,7 +507,11 @@ def selection_fixture(
         selected=selected,
         ranked_candidates=(selected,),
         clusters=(cluster,),
-        consensus="disagreed" if geometry_disagreement else "uncontested",
+        consensus=(
+            SelectionConsensus.DISAGREED
+            if geometry_disagreement
+            else SelectionConsensus.UNCONTESTED
+        ),
         geometry_resolution=resolution,
     )
 

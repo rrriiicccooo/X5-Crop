@@ -238,7 +238,8 @@ Selection 使用确定性顺序：
 6. 使用稳定 source order 收尾。
 
 Geometry consensus 由对应 `PhotoInterval` 和 cut uncertainty 是否相交决定，不使用固定百分比
-clustering tolerance。
+clustering tolerance。Selection consensus 使用 typed outcome，并作为 DecisionGate 的唯一 geometry
+agreement 输入。
 
 ### 1.7 Gate、Output Protection 与 Finalization
 

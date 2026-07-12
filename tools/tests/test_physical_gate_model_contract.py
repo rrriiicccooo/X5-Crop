@@ -11,7 +11,10 @@ from tools.tests.physical_gate_support import (
     selection_fixture,
     transform_geometry_fixture,
 )
-from x5crop.detection.candidate.selection.model import GeometryResolution
+from x5crop.detection.candidate.selection.model import (
+    GeometryResolution,
+    SelectionConsensus,
+)
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.candidate.assessment.separator_support import separator_sequence_evidence
 from x5crop.detection.candidate.selection.choose import select_candidates
@@ -31,7 +34,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         self,
         resolution: GeometryResolution,
         *,
-        consensus: str = "uncontested",
+        consensus: SelectionConsensus = SelectionConsensus.UNCONTESTED,
     ):
         selection = replace(
             selection_fixture(),
@@ -76,7 +79,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
                 True,
                 False,
             ),
-            consensus="disagreed",
+            consensus=SelectionConsensus.DISAGREED,
         )
         self.assertEqual(
             detection.final_review_reasons,
@@ -111,7 +114,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             (candidate, corroborating_candidate),
             larger_counts_evaluated=True,
         )
-        self.assertEqual(result.consensus, "agreed")
+        self.assertEqual(result.consensus, SelectionConsensus.AGREED)
         self.assertEqual(len(result.clusters), 1)
 
     def test_failed_candidate_does_not_create_equal_rank_disagreement(self) -> None:
@@ -136,7 +139,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             (good, bad),
             larger_counts_evaluated=True,
         )
-        self.assertNotEqual(result.consensus, "disagreed")
+        self.assertNotEqual(result.consensus, SelectionConsensus.DISAGREED)
 
     def test_geometry_cluster_requires_common_interval_consensus(self) -> None:
         center = candidate_fixture()
@@ -219,7 +222,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             (selected, alternative),
             larger_counts_evaluated=True,
         )
-        self.assertEqual(result.consensus, "disagreed")
+        self.assertEqual(result.consensus, SelectionConsensus.DISAGREED)
         self.assertFalse(result.geometry_resolution.alternative_geometries_resolved)
 
     def test_gate_flow_has_no_confidence_caps_or_generic_fallback(self) -> None:

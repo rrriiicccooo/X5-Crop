@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import fields, replace
+from enum import Enum
 import math
+from typing import get_type_hints
 import unittest
 
 from tools.tests.physical_gate_support import candidate_fixture, selection_fixture
@@ -75,6 +77,12 @@ def _provenance() -> MeasurementProvenance:
 
 
 class PhysicalModelInvariantTest(unittest.TestCase):
+    def test_selection_consensus_is_a_typed_gate_input(self) -> None:
+        annotation = get_type_hints(SelectionResult)["consensus"]
+        self.assertTrue(
+            isinstance(annotation, type) and issubclass(annotation, Enum)
+        )
+
     def test_review_only_evidence_is_a_fieldless_marker(self) -> None:
         self.assertEqual(ReviewOnlyEvidence.__dataclass_fields__, {})
 

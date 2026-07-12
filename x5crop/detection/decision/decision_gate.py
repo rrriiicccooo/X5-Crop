@@ -15,7 +15,7 @@ from .vocabulary import (
 )
 from ...output.model import FrameBleedPlan
 from ..candidate.assessment.candidate_gate import CandidateGateAssessment
-from ..candidate.selection.model import SelectionResult
+from ..candidate.selection.model import SelectionConsensus, SelectionResult
 from x5crop.domain import EvidenceState
 from ..gate_checks import GateCheck
 from ..evidence.transform_geometry import TransformGeometryEvidence
@@ -158,7 +158,7 @@ def apply_decision_gate(
         )
         selection_consensus_state = (
             EvidenceState.CONTRADICTED
-            if selection.consensus == "disagreed"
+            if selection.consensus == SelectionConsensus.DISAGREED
             else EvidenceState.SUPPORTED
         )
         output_protection_state = (

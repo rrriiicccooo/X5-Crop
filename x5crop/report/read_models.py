@@ -122,7 +122,7 @@ def selection_read_model(selection: SelectionResult) -> dict[str, Any]:
     }
     return {
         "selected_rank": ranks[id(selection.selected)],
-        "consensus": selection.consensus,
+        "consensus": typed_read_model(selection.consensus),
         "geometry_resolution": typed_read_model(selection.geometry_resolution),
         "count_resolution": typed_read_model(selection.count_resolution),
         "candidates": [

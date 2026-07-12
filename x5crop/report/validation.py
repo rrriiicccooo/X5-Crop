@@ -28,6 +28,7 @@ from ..detection.candidate.selection.model import (
     CountResolution,
     GeometryCluster,
     GeometryResolution,
+    SelectionConsensus,
     SelectionResult,
 )
 from ..detection.final.model import FinalizationPlan
@@ -438,7 +439,10 @@ def _selection_from_read_model(value: Any) -> SelectionResult:
         selected=candidates[selected_rank - 1],
         ranked_candidates=candidates,
         clusters=tuple(clusters),
-        consensus=_typed_value_from_read_model(value["consensus"], str),
+        consensus=_typed_value_from_read_model(
+            value["consensus"],
+            SelectionConsensus,
+        ),
         geometry_resolution=_typed_value_from_read_model(
             value["geometry_resolution"],
             GeometryResolution,
