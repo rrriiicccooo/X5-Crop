@@ -132,6 +132,8 @@ repository rules in `AGENTS.md`.
   与 provenance 完全一致；证据身份和实际切线不能在 typed model 内漂移。
 - Deskew line-fit 与 angle measurement 在构造时拒绝非有限值、无支持拟合、负 residual 及
   “成功但没有 edge fit”等不可能状态。
+- Runtime 不再复制一个仅把 `report` 设为 false 的伪 worker configuration；串行、并行与 workflow
+  全部接收同一个 canonical `RunConfig`，selection 也不再拥有误导性的 configuration alias。
 - Shared domain 不再混放 report、TIFF 或 output 类型：current-schema `ReportResult` 归 report 并在
   构造时验证，`ImageProfile` 与 TIFF tag value 归 I/O，`AxisBleedParameters` 归 output；units 只
   接收 resolution 与 unit，不再依赖完整 TIFF profile。
@@ -345,6 +347,9 @@ schema_revision: frame_sequence_geometry
 - Deskew line-fit and angle measurements now reject non-finite values, unsupported
   fits, negative residuals, and impossible successful-without-an-edge states at
   construction time.
+- Runtime no longer copies a report-disabled pseudo worker configuration. Sequential,
+  parallel, and workflow paths receive the same canonical `RunConfig`, and selection
+  no longer appears to own a separate configuration alias.
 
 #### Physical Frame-Sequence Model (2026-07-11)
 

@@ -69,7 +69,12 @@ def process_one(
         return cached_result
 
     arr, profile, page_warnings = read_tiff(input_file, config.page)
-    gray = make_base_gray_u8(arr, profile.axes, profile.photometric, initial_configuration.preprocess.base_gray)
+    gray = make_base_gray_u8(
+        arr,
+        profile.axes,
+        profile.photometric,
+        initial_configuration.preprocess.base_gray,
+    )
     _extend_unique(warnings, page_warnings)
     source_arr = arr
     measurement_statistics = image_measurement_statistics(
@@ -121,7 +126,6 @@ def process_one(
         measurement_cache=measurement_cache,
     )
     selection = choose_detection(detection_context)
-    selected_configuration = detection_context.configuration
     prepared_frame_bleed = prepare_frame_bleed(
         selection.selected,
         AxisBleedParameters(
@@ -134,7 +138,7 @@ def process_one(
         prepared_frame_bleed,
         transform_geometry,
     )
-    configuration_detail = detection_configuration_read_model(selected_configuration)
+    configuration_detail = detection_configuration_read_model(initial_configuration)
     finalization_plan = finalization_plan_for_selection(
         selection,
         prepared_frame_bleed,
@@ -164,7 +168,7 @@ def process_one(
         input_file.stem,
         config,
         warnings,
-        selected_configuration.diagnostics,
+        initial_configuration.diagnostics,
     )
 
     result = result_from_detection(

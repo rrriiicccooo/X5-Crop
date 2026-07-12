@@ -3,7 +3,6 @@ from __future__ import annotations
 import sys
 import traceback
 import concurrent.futures
-from dataclasses import replace
 from pathlib import Path
 
 from ..app_info import SCRIPT_NAME, VERSION
@@ -55,7 +54,6 @@ def print_report_result(result: ReportResult, config: RunConfig) -> None:
 
 def process_parallel_files(
     invocation: RuntimeInvocation,
-    worker_config: RunConfig,
 ) -> tuple[int, int, int, int]:
     config = invocation.config
     files = invocation.files
@@ -74,7 +72,7 @@ def process_parallel_files(
             executor.submit(
                 process_one,
                 path,
-                worker_config,
+                config,
                 invocation.configuration_bundle,
             ): path
             for path in files
@@ -109,17 +107,15 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
     approved = 0
     review = 0
     total = len(files)
-    worker_config = replace(config, report=False)
     if total > 1 and config.jobs > 1:
         ok, failed, approved, review = process_parallel_files(
             invocation,
-            worker_config,
         )
     else:
         for index, path in enumerate(files, start=1):
             print(f"\n[{index}/{total}] {path.name}")
             try:
-                result = process_one(path, worker_config, invocation.configuration_bundle)
+                result = process_one(path, config, invocation.configuration_bundle)
                 ok += 1
                 approved += int(
                     result.record["decision"]["status"] == "approved_auto"
