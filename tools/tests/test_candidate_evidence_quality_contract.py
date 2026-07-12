@@ -4,7 +4,14 @@ from dataclasses import fields, replace
 import unittest
 
 from tools.tests.physical_gate_support import candidate_fixture
-from x5crop.detection.candidate.model import CandidateAssessment
+from x5crop.detection.candidate.assessment.candidate import (
+    candidate_gate_for_evidence,
+)
+from x5crop.detection.candidate.model import (
+    AssessedCandidate,
+    BuiltCandidate,
+    CandidateAssessment,
+)
 from x5crop.domain import FrameBoundaryReference
 
 
@@ -44,11 +51,17 @@ class CandidateEvidenceQualityContractTest(unittest.TestCase):
             missing_boundaries=(FrameBoundaryReference(None, 1),),
             hard_tonal_evidence=(),
         )
-        candidate = replace(
-            candidate,
-            assessment=replace(
-                candidate.assessment,
-                evidence=replace(evidence, separator_sequence=constrained),
+        updated_evidence = replace(evidence, separator_sequence=constrained)
+        built = BuiltCandidate(candidate.geometry, candidate.count_hypothesis, ())
+        candidate = AssessedCandidate(
+            candidate.geometry,
+            candidate.count_hypothesis,
+            CandidateAssessment(
+                updated_evidence,
+                candidate_gate_for_evidence(
+                    built,
+                    updated_evidence,
+                ),
             ),
         )
         quality = candidate.evidence_quality

@@ -225,15 +225,5 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
         )
         self.assertNotIn("DEFAULT_OUTPUT_BLEED", source)
 
-    def test_single_frame_boundary_uses_physical_side_identity(self) -> None:
-        source = (
-            PROJECT_ROOT
-            / "x5crop/detection/candidate/assessment/candidate.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("len(measured_single_frame_boundaries) >= 2", source)
-        self.assertNotIn("MINIMUM_INDEPENDENT_SINGLE_FRAME_BOUNDARY_SIDES", source)
-        self.assertIn('for side in ("leading", "trailing")', source)
-
-
 if __name__ == "__main__":
     unittest.main()

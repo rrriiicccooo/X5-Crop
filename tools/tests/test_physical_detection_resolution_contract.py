@@ -19,13 +19,14 @@ from x5crop.detection.candidate.plan.count_hypotheses import (
 )
 from x5crop.detection.candidate.selection.model import GeometryResolution
 from x5crop.detection.candidate.assessment.candidate import (
-    _boundary_proof_paths,
     candidate_gate_for_evidence,
 )
 from x5crop.detection.candidate.model import (
     AssessedCandidate,
     BuiltCandidate,
+    CandidateAssessment,
     CandidateEvidence,
+    boundary_proof_paths_for_geometry,
 )
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
@@ -39,7 +40,7 @@ from x5crop.domain import (
     PixelInterval,
 )
 from x5crop.detection.physical.boundary import canvas_boundary_observations
-from x5crop.detection.physical.model import PhotoInterval
+from x5crop.detection.physical.model import PhotoInterval, SequenceSolution
 from x5crop.detection.physical.separator.assignment import dimension_constrained_boundary
 from x5crop.cache import MeasurementCache
 from x5crop.domain import HolderSpan, VisibleSequenceSpan
@@ -94,12 +95,21 @@ def _single_frame_candidate(*, measured_boundaries: bool) -> BuiltCandidate:
 def _with_candidate_evidence(
     candidate: AssessedCandidate,
     evidence: CandidateEvidence,
+    *,
+    geometry: SequenceSolution | None = None,
+    count_hypothesis: CountHypothesis | None = None,
 ) -> AssessedCandidate:
-    built = BuiltCandidate(candidate.geometry, candidate.count_hypothesis, ())
-    return replace(
-        candidate,
-        assessment=replace(
-            candidate.assessment,
+    resolved_geometry = candidate.geometry if geometry is None else geometry
+    resolved_hypothesis = (
+        candidate.count_hypothesis
+        if count_hypothesis is None
+        else count_hypothesis
+    )
+    built = BuiltCandidate(resolved_geometry, resolved_hypothesis, ())
+    return AssessedCandidate(
+        geometry=resolved_geometry,
+        count_hypothesis=resolved_hypothesis,
+        assessment=CandidateAssessment(
             evidence=evidence,
             gate=candidate_gate_for_evidence(built, evidence),
         ),
@@ -138,8 +148,9 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             CountHypothesisSource.AUTOMATIC,
         )
         higher_fixture = candidate_fixture()
-        higher = replace(
+        higher = _with_candidate_evidence(
             higher_fixture,
+            higher_fixture.assessment.evidence,
             geometry=replace(higher_fixture.geometry, strip_mode="partial"),
             count_hypothesis=higher_hypothesis,
         )
@@ -149,13 +160,12 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             "partial",
             CountHypothesisSource.AUTOMATIC,
         )
-        lower = AssessedCandidate(
-            geometry=replace(
-                lower_built.geometry,
-                strip_mode="partial",
-            ),
+        lower_fixture = candidate_fixture()
+        lower = _with_candidate_evidence(
+            lower_fixture,
+            lower_fixture.assessment.evidence,
+            geometry=replace(lower_built.geometry, strip_mode="partial"),
             count_hypothesis=lower_hypothesis,
-            assessment=candidate_fixture().assessment,
         )
         unresolved = replace(
             selection_fixture(higher),
@@ -241,13 +251,19 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
 
     def test_full_canvas_does_not_prove_single_frame_geometry(self) -> None:
         built = _single_frame_candidate(measured_boundaries=False)
-        paths = _boundary_proof_paths(built, candidate_evidence_fixture())
+        paths = boundary_proof_paths_for_geometry(
+            built.geometry,
+            candidate_evidence_fixture(),
+        )
         geometry_path = next(path for path in paths if path.code == "geometry_led")
         self.assertEqual(geometry_path.state, EvidenceState.UNAVAILABLE)
 
     def test_two_measured_sides_can_support_single_frame_geometry(self) -> None:
         built = _single_frame_candidate(measured_boundaries=True)
-        paths = _boundary_proof_paths(built, candidate_evidence_fixture())
+        paths = boundary_proof_paths_for_geometry(
+            built.geometry,
+            candidate_evidence_fixture(),
+        )
         geometry_path = next(path for path in paths if path.code == "geometry_led")
         self.assertEqual(geometry_path.state, EvidenceState.SUPPORTED)
 
@@ -272,7 +288,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
 
         path = next(
             item
-            for item in _boundary_proof_paths(built, evidence)
+            for item in boundary_proof_paths_for_geometry(built.geometry, evidence)
             if item.code == "partial_occupancy_led"
         )
         self.assertEqual(path.state, EvidenceState.UNAVAILABLE)
@@ -289,7 +305,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         evidence = candidate_evidence_fixture()
         evidence = _without_content_measurements(evidence)
 
-        paths = _boundary_proof_paths(built, evidence)
+        paths = boundary_proof_paths_for_geometry(built.geometry, evidence)
         separator_path = next(
             path for path in paths if path.code == "separator_led"
         )
@@ -338,7 +354,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                 hard_tonal_evidence=(),
             ),
         )
-        paths = _boundary_proof_paths(built, evidence)
+        paths = boundary_proof_paths_for_geometry(built.geometry, evidence)
         self.assertFalse(
             any(path.state == EvidenceState.SUPPORTED for path in paths)
         )
@@ -354,7 +370,10 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         )
         geometry = replace(candidate.geometry, boundary_observations=observations)
         built = BuiltCandidate(geometry, candidate.count_hypothesis, ())
-        paths = _boundary_proof_paths(built, candidate_evidence_fixture())
+        paths = boundary_proof_paths_for_geometry(
+            built.geometry,
+            candidate_evidence_fixture(),
+        )
         self.assertFalse(
             any(path.state == EvidenceState.SUPPORTED for path in paths)
         )
@@ -418,7 +437,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
                 hard_tonal_evidence=(),
             ),
         )
-        paths = _boundary_proof_paths(built, evidence)
+        paths = boundary_proof_paths_for_geometry(built.geometry, evidence)
         geometry_path = next(path for path in paths if path.code == "geometry_led")
         self.assertEqual(geometry_path.state, EvidenceState.UNAVAILABLE)
 

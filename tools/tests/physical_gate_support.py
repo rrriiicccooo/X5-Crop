@@ -6,6 +6,9 @@ from x5crop.detection.candidate.assessment.candidate_gate import (
     BoundaryProofPath,
     CandidateGateAssessment,
 )
+from x5crop.detection.candidate.assessment.candidate import (
+    candidate_gate_for_evidence,
+)
 from x5crop.detection.candidate.assessment.evidence_independence import (
     EvidenceIndependenceEvidence,
 )
@@ -14,6 +17,7 @@ from x5crop.detection.candidate.assessment.separator_support import (
 )
 from x5crop.detection.candidate.model import (
     AssessedCandidate,
+    BuiltCandidate,
     CandidateAssessment,
     CandidateEvidence,
 )
@@ -58,6 +62,7 @@ from x5crop.detection.physical.photo_size import FrameDimensionEvidence
 from x5crop.detection.physical.boundary import (
     HolderOcclusionEvidence,
     HolderOcclusionSideEvidence,
+    canvas_boundary_observations,
 )
 from x5crop.domain import PixelInterval
 from x5crop.detection.physical.spacing import (
@@ -337,6 +342,12 @@ def candidate_fixture(
     automatic_processing_supported: bool = True,
     content_preservation: EvidenceState = EvidenceState.SUPPORTED,
 ) -> AssessedCandidate:
+    if failed_candidate_check not in {
+        None,
+        "boundary_proof",
+        "content_preservation",
+    }:
+        raise ValueError("candidate fixture requires a physical failed check")
     sequence_box = Box(0, 0, 200, 100)
     frames = (Box(0, 0, 100, 100), Box(100, 0, 200, 100))
     observation = separator_observation(100.0, start=95.0, end=105.0)
@@ -451,21 +462,26 @@ def candidate_fixture(
     evidence = candidate_evidence_fixture(
         content_preservation=content_preservation,
     )
-    gate = candidate_gate_fixture(
-        passed=failed_candidate_check is None,
-        failed_check=(
-            "boundary_proof"
-            if failed_candidate_check is None
-            else failed_candidate_check
-        ),
+    if failed_candidate_check == "boundary_proof":
+        geometry = replace(
+            geometry,
+            sequence_provenance=MeasurementProvenance(
+                MeasurementIdentity.HOLDER_CANVAS,
+                "test_canvas_geometry",
+                (MeasurementIdentity.CANVAS,),
+            ),
+            boundary_observations=canvas_boundary_observations(200, 100),
+        )
+    hypothesis = CountHypothesis(
+        count=2,
+        strip_mode="full",
+        source=CountHypothesisSource.FORMAT_DEFAULT,
     )
+    built = BuiltCandidate(geometry, hypothesis, ())
+    gate = candidate_gate_for_evidence(built, evidence)
     return AssessedCandidate(
         geometry=geometry,
-        count_hypothesis=CountHypothesis(
-            count=2,
-            strip_mode="full",
-            source=CountHypothesisSource.FORMAT_DEFAULT,
-        ),
+        count_hypothesis=hypothesis,
         assessment=CandidateAssessment(
             evidence=evidence,
             gate=gate,

@@ -108,6 +108,10 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             == FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED
         )
         self.assertEqual(len(content_checks), 1)
+        self.assertEqual(
+            decided.final_review_reasons,
+            (FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,),
+        )
 
     def test_only_substantive_geometry_disagreement_blocks_selection(self) -> None:
         decided = decide_candidate(geometry_disagreement=True)

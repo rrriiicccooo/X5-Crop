@@ -78,6 +78,23 @@ class PhysicalModelInvariantTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             replace(candidate.assessment, gate=replace(gate, checks=checks))
 
+    def test_boundary_proof_paths_must_match_geometry_and_evidence(self) -> None:
+        candidate = candidate_fixture()
+        gate = candidate.assessment.gate
+        self.assertIsNotNone(gate)
+        forged_paths = (
+            replace(gate.proof_paths[0], supporting_evidence=("forged",)),
+            *gate.proof_paths[1:],
+        )
+        with self.assertRaises(ValueError):
+            replace(
+                candidate,
+                assessment=replace(
+                    candidate.assessment,
+                    gate=replace(gate, proof_paths=forged_paths),
+                ),
+            )
+
     def test_candidate_gate_evidence_rejects_state_measurement_drift(self) -> None:
         evidence = candidate_fixture().assessment.evidence
         for derived in (

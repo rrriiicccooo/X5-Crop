@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from x5crop.domain import EvidenceState
+from x5crop.domain import EvidenceState, MeasurementIdentity
 
 from ..physical.model import (
     CandidateGeometry,
     DualLaneSolution,
     ReviewOnlyGeometry,
+    SequenceSolution,
 )
 from .assessment.evidence_independence import EvidenceIndependenceEvidence
 from .assessment.separator_support import SeparatorSequenceEvidence
@@ -18,7 +19,7 @@ from ..evidence.holder_occupancy import HolderOccupancyEvidence
 from ..evidence.sequence_content_alignment import SequenceContentAlignmentEvidence
 from ..evidence.partial_edge import PartialEdgeSafetyEvidence
 from ..physical.photo_size import FrameDimensionEvidence
-from .assessment.candidate_gate import CandidateGateAssessment
+from .assessment.candidate_gate import BoundaryProofPath, CandidateGateAssessment
 from .plan.count_hypotheses import CountHypothesis
 from ..physical.model import SequenceResiduals
 from ..physical.spacing import SequenceConservationEvidence
@@ -102,6 +103,107 @@ def content_preservation_state(
     ):
         return EvidenceState.SUPPORTED
     return EvidenceState.UNAVAILABLE
+
+
+def boundary_proof_paths_for_geometry(
+    geometry: SequenceSolution,
+    evidence: CandidateEvidence,
+) -> tuple[BoundaryProofPath, ...]:
+    boundary_by_side = {
+        observation.side: observation
+        for observation in geometry.boundary_observations
+    }
+    sequence_boundary_supported = bool(
+        geometry.sequence_provenance.root_measurement
+        not in {
+            MeasurementIdentity.HOLDER_CANVAS,
+            MeasurementIdentity.SAFETY_GEOMETRY_MODEL,
+            MeasurementIdentity.REVIEW_ONLY_MODE,
+        }
+        and all(
+            side in boundary_by_side
+            and boundary_by_side[side].kind != "canvas_clip"
+            for side in ("leading", "trailing")
+        )
+    )
+    common = bool(
+        sequence_boundary_supported
+        and evidence.sequence_conservation.state != EvidenceState.CONTRADICTED
+        and evidence.independence.state
+        in {EvidenceState.SUPPORTED, EvidenceState.NOT_APPLICABLE}
+    )
+    separator_led = bool(
+        geometry.count > 1
+        and common
+        and evidence.separator_sequence.state == EvidenceState.SUPPORTED
+    )
+    hard_anchor_count = evidence.separator_sequence.hard_count
+    single_frame_physical_boundaries = bool(
+        geometry.count == 1
+        and sequence_boundary_supported
+        and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
+    )
+    geometry_led = bool(
+        evidence.frame_dimensions.state == EvidenceState.SUPPORTED
+        and (
+            single_frame_physical_boundaries
+            or (common and geometry.count > 1 and hard_anchor_count >= 1)
+        )
+    )
+    partial_occupancy_led = bool(
+        geometry.strip_mode == "partial"
+        and evidence.partial_edge_safety.state == EvidenceState.SUPPORTED
+        and evidence.holder_occupancy.underfilled
+        and common
+    )
+    return (
+        BoundaryProofPath(
+            "separator_led",
+            (
+                EvidenceState.SUPPORTED
+                if separator_led
+                else EvidenceState.UNAVAILABLE
+            ),
+            (
+                "complete_hard_separator_sequence",
+                "cross_axis_separator_pixel_paths",
+                "frame_union_content_coverage",
+            ),
+        ),
+        BoundaryProofPath(
+            "geometry_led",
+            (
+                EvidenceState.SUPPORTED
+                if geometry_led
+                else EvidenceState.UNAVAILABLE
+            ),
+            (
+                "physical_frame_dimensions",
+                (
+                    "calibrated_two_side_frame_boundaries"
+                    if evidence.frame_dimensions.calibration_used
+                    else "independent_two_side_frame_boundaries"
+                    if single_frame_physical_boundaries
+                    else "independent_separator_anchor"
+                ),
+            ),
+        ),
+        BoundaryProofPath(
+            "partial_occupancy_led",
+            (
+                EvidenceState.SUPPORTED
+                if partial_occupancy_led
+                else EvidenceState.UNAVAILABLE
+                if geometry.strip_mode == "partial"
+                else EvidenceState.NOT_APPLICABLE
+            ),
+            (
+                "partial_edge_content_preservation",
+                "holder_occupancy",
+                "resolved_frame_sequence",
+            ),
+        ),
+    )
 
 
 def _combined_evidence_state(states: tuple[EvidenceState, ...]) -> EvidenceState:
@@ -191,6 +293,15 @@ class AssessedCandidate:
         )
         if not isinstance(self.assessment.evidence, expected_evidence):
             raise ValueError("candidate geometry and evidence model must match")
+        if isinstance(self.geometry, SequenceSolution):
+            gate = self.assessment.gate
+            if gate is None or gate.proof_paths != boundary_proof_paths_for_geometry(
+                self.geometry,
+                self.assessment.evidence,
+            ):
+                raise ValueError(
+                    "candidate boundary proof paths must match geometry and evidence"
+                )
 
     @property
     def evidence_quality(self) -> EvidenceQuality:

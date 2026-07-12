@@ -8,7 +8,15 @@ from unittest.mock import patch
 
 from tools.tests.physical_gate_support import candidate_fixture, selection_fixture
 import x5crop.detection.pipeline as detection_pipeline
+from x5crop.detection.candidate.assessment.candidate import (
+    candidate_gate_for_evidence,
+)
 from x5crop.detection.candidate.execution.model import CountHypothesisEvaluation
+from x5crop.detection.candidate.model import (
+    AssessedCandidate,
+    BuiltCandidate,
+    CandidateAssessment,
+)
 from x5crop.detection.candidate.plan.count_hypotheses import (
     CountHypothesis,
     CountHypothesisPlan,
@@ -122,13 +130,22 @@ class AutoCountContractTest(unittest.TestCase):
 
     def test_requested_partial_count_is_resolved_independently_of_placement(self) -> None:
         candidate = candidate_fixture(failed_candidate_check="boundary_proof")
-        candidate = replace(
-            candidate,
-            geometry=replace(candidate.geometry, strip_mode="partial"),
-            count_hypothesis=CountHypothesis(
-                2,
-                "partial",
-                CountHypothesisSource.REQUESTED,
+        geometry = replace(candidate.geometry, strip_mode="partial")
+        hypothesis = CountHypothesis(
+            2,
+            "partial",
+            CountHypothesisSource.REQUESTED,
+        )
+        built = BuiltCandidate(geometry, hypothesis, ())
+        candidate = AssessedCandidate(
+            geometry,
+            hypothesis,
+            CandidateAssessment(
+                candidate.assessment.evidence,
+                candidate_gate_for_evidence(
+                    built,
+                    candidate.assessment.evidence,
+                ),
             ),
         )
         resolution = select_candidates(
