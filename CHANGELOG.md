@@ -58,6 +58,8 @@ repository rules in `AGENTS.md`.
   dependency cycles 与 automatic-processing applicability 现在是唯一事实源。
 - GeometryResolution 补齐 assignment-resolution 与 search-budget facts，并删除 caller-supplied
   state/reasons；唯一 early-stop result 现在从完整解析事实确定性派生。
+- CountResolution 将自由 reason 字符串替换为 typed outcome，并校验 physically-resolved outcome
+  必须对应真实 early-stop。
 - Sequence conservation 删除 caller-supplied extent/state/reason，改由 visible/occlusion/frame/spacing
   intervals 与 typed spacing basis 确定性派生。
 - Boundary assignment consensus 删除 caller-supplied state/reason，改为 typed solver outcome；

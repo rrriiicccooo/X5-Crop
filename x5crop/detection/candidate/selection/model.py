@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 
 from x5crop.domain import EvidenceState
 from ..model import AssessedCandidate
@@ -78,17 +79,28 @@ class GeometryCluster:
             raise ValueError("geometry cluster representative must belong to the cluster")
 
 
+class CountResolutionOutcome(str, Enum):
+    REQUESTED_COUNT = "requested_count"
+    FORMAT_DEFAULT_COUNT = "format_default_count"
+    LARGEST_PHYSICALLY_RESOLVED_COUNT = "largest_physically_resolved_count"
+    BEST_COVERAGE_WITHOUT_PHYSICAL_RESOLUTION = (
+        "best_coverage_without_physical_resolution"
+    )
+
+
 @dataclass(frozen=True)
 class CountResolution:
     selected_count: int
     search_order: tuple[int, ...]
     evaluated_counts: tuple[int, ...]
     stopped_after_count: int | None
-    reason: str
+    outcome: CountResolutionOutcome
 
     def __post_init__(self) -> None:
         if self.selected_count <= 0:
             raise ValueError("selected count must be positive")
+        if not isinstance(self.outcome, CountResolutionOutcome):
+            raise TypeError("count resolution requires a typed outcome")
         if (
             not self.search_order
             or not self.evaluated_counts
@@ -108,13 +120,11 @@ class CountResolution:
             or self.stopped_after_count != self.selected_count
         ):
             raise ValueError("count early-stop must identify the selected evaluation")
-        if self.reason not in {
-            "requested_count",
-            "format_default_count",
-            "largest_physically_resolved_count",
-            "best_coverage_without_physical_resolution",
-        }:
-            raise ValueError(f"unsupported count resolution reason: {self.reason}")
+        if (
+            self.outcome
+            == CountResolutionOutcome.LARGEST_PHYSICALLY_RESOLVED_COUNT
+        ) != (self.stopped_after_count is not None):
+            raise ValueError("count resolution outcome must match early-stop facts")
 
 
 @dataclass(frozen=True)

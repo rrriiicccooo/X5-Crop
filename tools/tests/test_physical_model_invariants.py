@@ -285,6 +285,11 @@ class PhysicalModelInvariantTest(unittest.TestCase):
         self.assertFalse(consensus_fields["state"].init)
         self.assertFalse(consensus_fields["reason"].init)
 
+    def test_count_resolution_uses_typed_outcome(self) -> None:
+        field_names = set(CountResolution.__dataclass_fields__)
+        self.assertIn("outcome", field_names)
+        self.assertNotIn("reason", field_names)
+
     def test_holder_occlusion_derives_classification_and_total(self) -> None:
         occlusion = candidate_fixture().geometry.holder_occlusion
         side_fields = type(occlusion.leading).__dataclass_fields__

@@ -176,6 +176,8 @@ filled/underfilled 状态；slack、fill ratio 与 calibration projection 都是
 确定性派生值。
 一旦最高的 physically resolved count 出现，最终 candidate pool 只包含该 count 的候选；此前
 已评估但 unresolved 的较大 count 保留在 count audit detail 中，不能重新赢回 selection。
+`CountResolution` 使用 typed outcome 表达 requested/default/resolved/fallback selection，不保存
+自由 reason 字符串。
 
 ### 1.6 Evidence、Assessment 与 Selection
 

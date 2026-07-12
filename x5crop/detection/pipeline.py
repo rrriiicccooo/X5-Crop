@@ -14,7 +14,11 @@ from .candidate.plan.count_hypotheses import (
 )
 from .candidate.proposal.hard_safety import hard_safety_candidate
 from .candidate.selection.choose import select_candidates
-from .candidate.selection.model import CountResolution, SelectionResult
+from .candidate.selection.model import (
+    CountResolution,
+    CountResolutionOutcome,
+    SelectionResult,
+)
 from .context import DetectionContext
 from .modes.dual_lane import choose_dual_lane_detection
 from .modes.review_only import review_only_candidate
@@ -63,16 +67,18 @@ def _count_resolution(
     requested_count: int | None,
 ) -> CountResolution:
     if requested_count is not None:
-        reason = "requested_count"
+        outcome = CountResolutionOutcome.REQUESTED_COUNT
     elif (
         selection.selected.count_hypothesis.source
         == CountHypothesisSource.FORMAT_DEFAULT
     ):
-        reason = "format_default_count"
+        outcome = CountResolutionOutcome.FORMAT_DEFAULT_COUNT
     elif selection.geometry_resolution.supported:
-        reason = "largest_physically_resolved_count"
+        outcome = CountResolutionOutcome.LARGEST_PHYSICALLY_RESOLVED_COUNT
     else:
-        reason = "best_coverage_without_physical_resolution"
+        outcome = (
+            CountResolutionOutcome.BEST_COVERAGE_WITHOUT_PHYSICAL_RESOLUTION
+        )
     return CountResolution(
         selected_count=selection.selected.geometry.count,
         search_order=search_order,
@@ -80,7 +86,7 @@ def _count_resolution(
             evaluation.hypothesis.count for evaluation in evaluations
         ),
         stopped_after_count=stopped_after_count,
-        reason=reason,
+        outcome=outcome,
     )
 
 
