@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import tifffile
 
-from .model import ImageProfile
+from .model import ImageProfile, TiffExtraTag, TiffMetadata
 from ..run_config import CompressionMode
 from ..utils import (
     enum_name,
@@ -20,6 +20,77 @@ LOSSLESS_COMPRESSIONS = {"NONE", "LZW", "ADOBE_DEFLATE", "DEFLATE", "ZSTD"}
 TIFF_ICC_PROFILE_TAG = 34675
 BITS_PER_BYTE = 8
 TIFF_RESOLUTION_ABSOLUTE_TOLERANCE = 1e-6
+TIFF_IMAGE_DESCRIPTION_TAG = 270
+TIFF_SOFTWARE_TAG = 305
+TIFF_DATETIME_TAG = 306
+TRANSFERABLE_EXTRA_TAG_TYPES = {
+    269: "s",  # DocumentName
+    271: "s",  # Make
+    272: "s",  # Model
+    285: "s",  # PageName
+    315: "s",  # Artist
+    316: "s",  # HostComputer
+    700: "B",  # XMP
+    33723: "B",  # IPTC/NAA
+    34377: "B",  # Photoshop image resources
+    33432: "s",  # Copyright
+}
+
+
+def _text_tag_value(page: Any, code: int) -> str | None:
+    tag = page.tags.get(code)
+    if tag is None:
+        return None
+    value = normalize_tag_value(tag.value)
+    if isinstance(value, bytes):
+        return value.rstrip(b"\0").decode("utf-8", errors="replace")
+    return str(value)
+
+
+def _extra_tag_value(
+    value: Any,
+    dtype: str,
+) -> str | bytes | tuple[int, ...] | tuple[float, ...]:
+    normalized = normalize_tag_value(value)
+    if dtype == "s":
+        if isinstance(normalized, bytes):
+            return normalized.rstrip(b"\0").decode("utf-8", errors="replace")
+        return str(normalized)
+    if isinstance(normalized, bytes):
+        return normalized
+    if isinstance(normalized, tuple):
+        if all(isinstance(item, int) for item in normalized):
+            return tuple(int(item) for item in normalized)
+        if all(isinstance(item, (int, float)) for item in normalized):
+            return tuple(float(item) for item in normalized)
+    raise ValueError("transferable TIFF byte metadata has an unsupported value")
+
+
+def tiff_metadata_from_page(page: Any) -> TiffMetadata:
+    extra_tags = tuple(
+        TiffExtraTag(
+            code=code,
+            dtype=dtype,
+            count=(
+                0
+                if dtype == "s"
+                else len(value)
+                if isinstance(value, (bytes, tuple))
+                else int(page.tags[code].count)
+            ),
+            value=value,
+        )
+        for code, dtype in TRANSFERABLE_EXTRA_TAG_TYPES.items()
+        if code in page.tags
+        for value in (_extra_tag_value(page.tags[code].value, dtype),)
+    )
+    return TiffMetadata(
+        description=_text_tag_value(page, TIFF_IMAGE_DESCRIPTION_TAG),
+        datetime=_text_tag_value(page, TIFF_DATETIME_TAG),
+        software=_text_tag_value(page, TIFF_SOFTWARE_TAG),
+        extra_tags=extra_tags,
+    )
+
 
 def profile_from_page(page: Any, shape: tuple[int, ...], dtype: np.dtype, axes: str) -> ImageProfile:
     photometric = enum_name(getattr(page, "photometric", None), "UNKNOWN")
@@ -57,6 +128,7 @@ def profile_from_page(page: Any, shape: tuple[int, ...], dtype: np.dtype, axes: 
             normalize_tag_value(unit.value) if unit else None
         ),
         icc_profile=(bytes(icc.value) if icc is not None else None),
+        metadata=tiff_metadata_from_page(page),
     )
     expected_bits = expected_bits_for_dtype(profile.dtype, int(profile.samples_per_pixel or 1))
     if profile.bits_per_sample is not None and normalize_tag_value(profile.bits_per_sample) != normalize_tag_value(expected_bits):
@@ -128,7 +200,7 @@ def tiff_write_kwargs(
     profile: ImageProfile,
     compression_mode: CompressionMode,
 ) -> dict[str, Any]:
-    kwargs: dict[str, Any] = {}
+    kwargs: dict[str, Any] = {"metadata": None}
     photometric = profile.photometric.lower()
     if photometric in {"rgb", "minisblack", "miniswhite"}:
         kwargs["photometric"] = photometric
@@ -145,6 +217,19 @@ def tiff_write_kwargs(
         kwargs["resolutionunit"] = profile.resolution_unit
     if profile.icc_profile:
         kwargs["iccprofile"] = profile.icc_profile
+    metadata = profile.metadata
+    if metadata.description is not None:
+        kwargs["description"] = metadata.description
+    if metadata.datetime is not None:
+        kwargs["datetime"] = metadata.datetime
+    kwargs["software"] = (
+        metadata.software if metadata.software is not None else False
+    )
+    if metadata.extra_tags:
+        kwargs["extratags"] = tuple(
+            (tag.code, tag.dtype, tag.count, tag.value, False)
+            for tag in metadata.extra_tags
+        )
     return kwargs
 
 
@@ -221,6 +306,7 @@ def validate_written_tiff(
         samples = page.tags.get("SamplesPerPixel")
         planar = page.tags.get("PlanarConfiguration")
         icc = page.tags.get(TIFF_ICC_PROFILE_TAG)
+        metadata = tiff_metadata_from_page(page)
 
         if arr.dtype != expected_array.dtype:
             problems.append(f"dtype changed: {expected_array.dtype} -> {arr.dtype}")
@@ -271,6 +357,10 @@ def validate_written_tiff(
             actual_icc = bytes(icc.value) if icc is not None else None
             if actual_icc != source_profile.icc_profile:
                 problems.append("ICC profile changed or was dropped")
+        if metadata != source_profile.metadata:
+            problems.append(
+                f"TIFF metadata changed: {source_profile.metadata} -> {metadata}"
+            )
 
     if problems:
         raise RuntimeError("Output TIFF validation failed for " + str(out_path) + ":\n  - " + "\n  - ".join(problems))

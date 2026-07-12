@@ -297,6 +297,8 @@ Current state:
 - Current reports use `detection_report / physical_sequence_resolution` with
   canonical `input`, `configuration`, `selection`, `decision`, and `output`
   sections. Cache reuse accepts only this schema.
+- TIFF export preserves typed transferable metadata and verifies it after write;
+  TIFF tag semantics remain owned by the I/O layer.
 - Runtime flow and source-layer structure live in `ARCHITECTURE.md`.
 - Version history and validation summaries live in `CHANGELOG.md`.
 - User setup and usage live in `README.md` and `快速启动_Quick_Start.md`.

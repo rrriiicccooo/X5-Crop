@@ -253,6 +253,8 @@ Transform evidence、output protection、user bleed 与 final geometry 都在 ty
 
 `ImageProfile` 由 `x5crop.io` 独占，是 TIFF I/O 边界创建的 immutable typed input contract。
 TIFF rational、enum 和 NumPy scalar 等库特有值在该边界归一化为普通 Python scalar/tuple；
+可安全重写的 description、datetime、software、artist、XMP 等 metadata 由 typed
+`TiffMetadata` 保存，并由 export 与写后验证共同消费；结构 tag 和 offset/pointer tag 不复制。
 calibration 只接收 resolution 与 unit，cache、report 和 export 不再解析底层 TIFF tag 形状。
 
 Current report identity：

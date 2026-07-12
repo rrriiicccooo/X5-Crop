@@ -16,7 +16,7 @@ from tools.tests.physical_gate_support import (
     transform_geometry_fixture,
 )
 from x5crop.detection.final.model import FinalDetection
-from x5crop.io.model import ImageProfile
+from x5crop.io.model import ImageProfile, TiffMetadata
 from x5crop.io.tiff import compression_for_write
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.report.configuration import detection_configuration_read_model
@@ -34,18 +34,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def _profile() -> ImageProfile:
     return ImageProfile(
-        (120, 240),
-        "uint8",
-        "YX",
-        "MINISBLACK",
-        "NONE",
-        None,
-        8,
-        1,
-        None,
-        None,
-        None,
-        None,
+        shape=(120, 240),
+        dtype="uint8",
+        axes="YX",
+        photometric="MINISBLACK",
+        compression="NONE",
+        sample_format=None,
+        bits_per_sample=8,
+        samples_per_pixel=1,
+        planar_config=None,
+        resolution=None,
+        resolution_unit=None,
+        icc_profile=None,
+        metadata=TiffMetadata(None, None, None, ()),
     )
 
 
@@ -166,18 +167,19 @@ class OutputReadModelContractTest(unittest.TestCase):
         from x5crop.runtime.analysis_reuse import source_cache_signature
 
         profile = ImageProfile(
-            (1, 4),
-            "uint8",
-            "YX",
-            "MINISBLACK",
-            "NONE",
-            None,
-            8,
-            1,
-            None,
-            None,
-            None,
-            None,
+            shape=(1, 4),
+            dtype="uint8",
+            axes="YX",
+            photometric="MINISBLACK",
+            compression="NONE",
+            sample_format=None,
+            bits_per_sample=8,
+            samples_per_pixel=1,
+            planar_config=None,
+            resolution=None,
+            resolution_unit=None,
+            icc_profile=None,
+            metadata=TiffMetadata(None, None, None, ()),
         )
         fixed_time_ns = 1_700_000_000_000_000_000
         with TemporaryDirectory() as directory:
@@ -229,18 +231,19 @@ class OutputReadModelContractTest(unittest.TestCase):
             statistics,
         )
         profile = ImageProfile(
-            gray.shape,
-            "uint8",
-            "YX",
-            "MINISBLACK",
-            "NONE",
-            None,
-            8,
-            1,
-            None,
-            None,
-            None,
-            None,
+            shape=gray.shape,
+            dtype="uint8",
+            axes="YX",
+            photometric="MINISBLACK",
+            compression="NONE",
+            sample_format=None,
+            bits_per_sample=8,
+            samples_per_pixel=1,
+            planar_config=None,
+            resolution=None,
+            resolution_unit=None,
+            icc_profile=None,
+            metadata=TiffMetadata(None, None, None, ()),
         )
         context = DetectionContext(
             scan_calibration=ScanCalibration(
