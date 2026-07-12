@@ -216,6 +216,55 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         self.assertGreater(result.separator_width_cv or 0.0, 0.0)
         self.assertEqual(result.state, EvidenceState.SUPPORTED)
 
+    def test_supported_holder_occlusion_excludes_edge_frames_from_dimension_checks(
+        self,
+    ) -> None:
+        geometry = _geometry()
+        provenance = geometry.photo_intervals[0].start_provenance
+        leading = BoundaryObservation(
+            "leading",
+            PixelInterval.exact(0.0),
+            "white_holder_transition",
+            provenance,
+        )
+        trailing = BoundaryObservation(
+            "trailing",
+            PixelInterval.exact(315.0),
+            "white_holder_transition",
+            provenance,
+        )
+        occlusion = holder_occlusion_evidence(
+            leading_boundary=leading,
+            trailing_boundary=trailing,
+            leading_visible_frame_width=PixelInterval.exact(90.0),
+            trailing_visible_frame_width=PixelInterval.exact(90.0),
+            frame_width_px=PixelInterval.exact(100.0),
+        )
+        geometry = replace(
+            geometry,
+            holder_occlusion=occlusion,
+            photo_intervals=(
+                replace(
+                    geometry.photo_intervals[0],
+                    end=PixelInterval.exact(90.0),
+                ),
+                geometry.photo_intervals[1],
+                replace(
+                    geometry.photo_intervals[2],
+                    start=PixelInterval.exact(225.0),
+                ),
+            ),
+        )
+
+        result = frame_dimension_evidence(
+            geometry,
+            format_spec("135"),
+            ScanCalibration(None, None, "unavailable", False),
+        )
+
+        self.assertEqual(result.photo_widths_px, (100.0,))
+        self.assertEqual(result.state, EvidenceState.SUPPORTED)
+
     def test_photo_width_variation_is_a_physical_contradiction(self) -> None:
         geometry = _geometry(second_start=225.0)
         result = frame_dimension_evidence(

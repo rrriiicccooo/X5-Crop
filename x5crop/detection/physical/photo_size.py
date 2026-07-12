@@ -13,7 +13,7 @@ from x5crop.domain import EvidenceState
 from x5crop.domain import PixelInterval, VisibleSequenceSpan
 
 if TYPE_CHECKING:
-    from .model import SequenceSolution
+    from .model import PhotoInterval, SequenceSolution
 
 
 def _width_cv(values: tuple[float, ...]) -> float | None:
@@ -153,12 +153,29 @@ def _photo_widths(
     )
     widths = [
         interval.width_px.midpoint
-        for interval in geometry.photo_intervals
-        if interval.independently_observed
+        for interval in _dimension_photo_intervals(geometry)
     ]
     return (
         tuple(width for width in widths if width > 0.0),
         tuple(assignment.observation.width for assignment in assignments),
+    )
+
+
+def _dimension_photo_intervals(
+    geometry: SequenceSolution,
+) -> tuple[PhotoInterval, ...]:
+    leading_occluded = (
+        geometry.holder_occlusion.leading.state == EvidenceState.SUPPORTED
+    )
+    trailing_occluded = (
+        geometry.holder_occlusion.trailing.state == EvidenceState.SUPPORTED
+    )
+    return tuple(
+        interval
+        for interval in geometry.photo_intervals
+        if interval.independently_observed
+        and not (interval.index == 1 and leading_occluded)
+        and not (interval.index == geometry.count and trailing_occluded)
     )
 
 
@@ -214,9 +231,7 @@ def frame_dimension_evidence(
         observed_height / float(short_ppm) if calibration_used else None
     )
     observed_intervals = tuple(
-        interval.width_px
-        for interval in geometry.photo_intervals
-        if interval.independently_observed
+        interval.width_px for interval in _dimension_photo_intervals(geometry)
     )
     if any(
         not interval.intersects(geometry.frame_dimension_prior.width_px)

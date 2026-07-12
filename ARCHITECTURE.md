@@ -130,6 +130,8 @@ Sequence solver 同时求解所有内部 boundaries，不逐边贪心：
 - `PhotoInterval` 和 cuts 必须严格单调，不能产生零宽、负宽或倒序 frame。
 - Interior photos 服从同一 `FrameDimensionPrior` option。
 - Holder occlusion 只能作用于首张 leading edge 和末张 trailing edge。
+- 已确认遮挡的首尾可见宽度不参与普通 photo-dimension contradiction；尺寸一致性只使用未遮挡、
+  independently observed 的 frame。
 - Holder occlusion state、side 与 hidden-width interval 必须一致；无交集的 boundary constraints
   是无解状态，不能用合成中点继续求解。
 - Position、width、sequence conservation 和 provenance 必须同时成立。

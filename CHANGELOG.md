@@ -30,6 +30,8 @@ repository rules in `AGENTS.md`.
   共享 white-holder 身份，左白右黑、上白下黑等真实 mixed boundary 可同时表达。
 - Holder occlusion 的 state、side、white-holder provenance 与 hidden-width interval 现在由 typed
   invariant 约束；完全不相交的 boundary constraints 直接无解，不再伪造 midpoint。
+- 已由 white-holder measurement 确认遮挡的首尾 frame 不再进入普通 photo-width contradiction；
+  dimension evidence 只使用未遮挡且独立测得的 frame。
 - Partial auto count 找到最高 resolved count 后，最终 selection pool 只保留该 count；此前评估过的
   unresolved 较大 count 不再被普通排序重新选回。
 - Content unavailable 不再否决 fixed/requested count 的完整 separator/geometry proof；明确 content
@@ -244,6 +246,8 @@ schema_revision: frame_sequence_geometry
 - Frame priors, photo intervals, position/width constraints, observed spacing, and
   geometry spacing hypotheses are separate canonical types. A geometry hypothesis
   cannot prove overlap or trigger automatic bleed.
+- Edge frames with supported white-holder occlusion are excluded from ordinary
+  photo-width contradiction; dimension evidence uses only unoccluded independent frames.
 - Candidate comparison now uses `EvidenceQuality` and deterministic physical ordering.
   Scalar confidence, weighted scores, format-family profiles, and fixed-percentage
   geometry clustering are removed.
