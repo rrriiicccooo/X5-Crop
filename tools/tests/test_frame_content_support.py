@@ -10,12 +10,10 @@ from tools.tests.physical_gate_support import (
     candidate_fixture,
 )
 from x5crop.cache import MeasurementCache
+from x5crop.detection.candidate.model import content_preservation_state
 from x5crop.detection.evidence.content.frame_support import frame_content_evidence
 from x5crop.detection.evidence.content.frame_support import _sample_supports_content
 from x5crop.detection.evidence.sequence_content_alignment import sequence_content_alignment_evidence
-from x5crop.detection.evidence.content.preservation import (
-    content_preservation_evidence,
-)
 from x5crop.domain import (
     Box,
     CropEnvelope,
@@ -92,13 +90,12 @@ class FrameContentSupportTest(unittest.TestCase):
             state=EvidenceState.UNAVAILABLE,
             content_outside_sides=("top",),
         )
-        preservation = content_preservation_evidence(
-            evidence.frame_content,
+        state = content_preservation_state(
+            evidence.frame_coverage,
             alignment,
             evidence.partial_edge_safety,
-            evidence.frame_coverage,
         )
-        self.assertEqual(preservation.state, EvidenceState.UNAVAILABLE)
+        self.assertEqual(state, EvidenceState.UNAVAILABLE)
 
     def test_empty_frame_does_not_claim_content_damage(self) -> None:
         candidate = candidate_fixture()

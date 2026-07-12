@@ -177,8 +177,8 @@ GeometryResolution 都成立。
 Geometry 不保存重复的 candidate-source、hypothesis name 或 strategy string。Geometry type、
 automatic-processing eligibility 与 measurement provenance 共同表达其物理身份。
 
-Candidate evidence 包括 frame coverage、separator sequence、photo dimensions、content preservation、
-holder occupancy、sequence conservation 和 evidence independence。
+Candidate evidence 包括 frame coverage、separator sequence、photo dimensions、content alignment、
+partial edge safety、holder occupancy、sequence conservation 和 evidence independence。
 Evidence 只保存测量与状态，不携带固定 report 描述副本。
 直接进入 CandidateGate 或 geometry resolution 的 coverage、preservation、dimensions、conservation
 与 independence 在 typed model 边界重算 state/derived measurements；state 不能与 raw physical facts
@@ -224,6 +224,8 @@ clustering tolerance。
 
 `CandidateGate` 只检查 content preservation、measured photo geometry、sequence conservation、
 evidence independence 和完整 proof paths。
+Content preservation check 直接从 canonical frame coverage、sequence/content alignment 与 partial-edge
+evidence 投影，不保存第二份 preservation evidence。
 `GateCheck` 只表达所属 stage 与 evidence state；所有 check 都是该 Gate 的正式检查，不再保留
 未使用的 consequence 维度。Candidate check 不能拥有 final reason，diagnostic 也不能伪装成
 GateCheck。

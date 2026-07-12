@@ -89,11 +89,6 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 self.assertFalse(derived.__dataclass_fields__["reason"].init)
         invalid_factories = (
             lambda: replace(
-                evidence.content_preservation,
-                state=EvidenceState.SUPPORTED,
-                uncovered_content=((0, 5),),
-            ),
-            lambda: replace(
                 evidence.frame_coverage,
                 state=EvidenceState.SUPPORTED,
                 uncovered_content=((190, 200),),

@@ -17,13 +17,11 @@ from tools.tests.physical_gate_support import (
 )
 from x5crop.detection.candidate.selection.model import GeometryResolution
 from x5crop.detection.candidate.selection.choose import select_candidates
+from x5crop.detection.candidate.model import content_preservation_state
 from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.evidence.content.frame_support import (
     FrameContentEvidence,
     FrameContentObservation,
-)
-from x5crop.detection.evidence.content.preservation import (
-    content_preservation_evidence,
 )
 from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
 from x5crop.detection.evidence.partial_edge import PartialEdgeSafetyEvidence
@@ -657,13 +655,18 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             content_runs=((0, 200),),
             candidate_frame_count=2,
         )
-        evidence = content_preservation_evidence(
-            frame_content,
+        state = content_preservation_state(
+            coverage,
             alignment,
             partial,
-            coverage,
         )
-        self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
+        self.assertTrue(
+            all(
+                observation.boundary_contact_sides
+                for observation in frame_content.observations
+            )
+        )
+        self.assertEqual(state, EvidenceState.SUPPORTED)
 
     def test_unresolved_auto_count_cannot_be_approved(self) -> None:
         candidate = candidate_fixture()

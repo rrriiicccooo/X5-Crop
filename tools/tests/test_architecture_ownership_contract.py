@@ -23,6 +23,17 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
         self.assertNotIn("frame_topology", CandidateEvidence.__dataclass_fields__)
         self.assertNotIn("frame_topology_integrity", CANDIDATE_GATE_CHECK_CODES)
 
+    def test_content_preservation_is_a_gate_projection_not_duplicate_evidence(self) -> None:
+        from x5crop.detection.candidate.model import CandidateEvidence
+
+        self.assertFalse(
+            (
+                PROJECT_ROOT
+                / "x5crop/detection/evidence/content/preservation.py"
+            ).exists()
+        )
+        self.assertNotIn("content_preservation", CandidateEvidence.__dataclass_fields__)
+
     def test_candidate_evidence_owns_sequence_conservation_directly(self) -> None:
         from x5crop.detection.candidate.model import CandidateEvidence
         from x5crop.detection.physical.spacing import SequenceConservationEvidence

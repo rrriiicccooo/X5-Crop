@@ -38,7 +38,6 @@ from x5crop.detection.evidence.content.frame_support import (
     FrameContentObservation,
 )
 from x5crop.detection.evidence.content.holder_texture import HolderTextureEvidence
-from x5crop.detection.evidence.content.preservation import ContentPreservationEvidence
 from x5crop.detection.evidence.frame_coverage import FrameCoverageEvidence
 from x5crop.detection.evidence.holder_occupancy import (
     HolderOccupancyEvidence,
@@ -217,19 +216,29 @@ def candidate_evidence_fixture(
     *,
     content_preservation: EvidenceState = EvidenceState.SUPPORTED,
 ) -> CandidateEvidence:
+    if content_preservation not in {
+        EvidenceState.SUPPORTED,
+        EvidenceState.CONTRADICTED,
+    }:
+        raise ValueError("candidate evidence fixture requires resolved content state")
     sequence_box = Box(0, 0, 200, 100)
     frames = (Box(0, 0, 100, 100), Box(100, 0, 200, 100))
     holder_span = HolderSpan(sequence_box)
     visible_sequence_span = VisibleSequenceSpan(sequence_box)
     completeness = StripCompletenessEvidence(2, 2, 2, 1, 1)
-    return CandidateEvidence(
-        frame_coverage=FrameCoverageEvidence(
-            holder_long_axis_interval=(0, 200),
-            visible_sequence_interval=(0, 200),
-            frame_intervals=((0, 200),),
-            content_runs=((10, 190),),
-            candidate_frame_count=2,
+    coverage = FrameCoverageEvidence(
+        holder_long_axis_interval=(0, 200),
+        visible_sequence_interval=(0, 200),
+        frame_intervals=(
+            ((0, 100),)
+            if content_preservation == EvidenceState.CONTRADICTED
+            else ((0, 200),)
         ),
+        content_runs=((10, 190),),
+        candidate_frame_count=2,
+    )
+    return CandidateEvidence(
+        frame_coverage=coverage,
         sequence_conservation=SequenceConservationEvidence(
             EvidenceState.SUPPORTED,
             "frame_sequence_conserved",
@@ -280,21 +289,6 @@ def candidate_evidence_fixture(
             None,
             None,
         ),
-        content_preservation=ContentPreservationEvidence(
-            content_preservation,
-            (
-                "content_undercrop_confirmed"
-                if content_preservation == EvidenceState.CONTRADICTED
-                else "supported"
-            ),
-            (
-                ((0, 5),)
-                if content_preservation == EvidenceState.CONTRADICTED
-                else ()
-            ),
-            (),
-            EvidenceState.NOT_APPLICABLE,
-        ),
         sequence_content_alignment=SequenceContentAlignmentEvidence(
             EvidenceState.SUPPORTED,
             "content_contained",
@@ -311,7 +305,7 @@ def candidate_evidence_fixture(
         holder_occupancy=HolderOccupancyEvidence(
             strip_completeness=completeness,
             content_support_available=True,
-            frame_coverage_state=EvidenceState.SUPPORTED,
+            frame_coverage_state=coverage.state,
             frame_dimension_state=EvidenceState.SUPPORTED,
             complete_strip_can_be_underfilled=False,
             holder_span=holder_span,
@@ -323,7 +317,7 @@ def candidate_evidence_fixture(
             is_partial=False,
             hard_separator_count=1,
             expected_separator_count=1,
-            frame_coverage_state=EvidenceState.SUPPORTED,
+            frame_coverage_state=coverage.state,
             frame_dimension_state=EvidenceState.SUPPORTED,
             diagnostics=(),
         ),

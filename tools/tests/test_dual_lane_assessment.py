@@ -360,9 +360,17 @@ class DualLaneAssessmentTest(unittest.TestCase):
                     lane.assessment,
                     evidence=replace(
                         lane.assessment.evidence,
-                        content_preservation=replace(
-                            lane.assessment.evidence.content_preservation,
-                            boundary_contact_frame_indexes=(1,),
+                        frame_content=replace(
+                            lane.assessment.evidence.frame_content,
+                            observations=tuple(
+                                replace(
+                                    observation,
+                                    boundary_contact_sides=("left",),
+                                )
+                                if observation.index == 1
+                                else observation
+                                for observation in lane.assessment.evidence.frame_content.observations
+                            ),
                         ),
                     ),
                 ),
@@ -376,7 +384,11 @@ class DualLaneAssessmentTest(unittest.TestCase):
         )
         self.assertEqual(
             tuple(
-                evidence.content_preservation.boundary_contact_frame_indexes
+                tuple(
+                    observation.index
+                    for observation in evidence.frame_content.observations
+                    if observation.boundary_contact_sides
+                )
                 for evidence in assessed.assessment.evidence.lane_evidence
             ),
             ((1,), (1,)),

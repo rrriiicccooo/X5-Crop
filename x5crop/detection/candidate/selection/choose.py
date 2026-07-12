@@ -188,7 +188,7 @@ def geometry_resolution_for_selection(
         )
         and conservation_not_contradicted
         and all(
-            item.content_preservation.state == EvidenceState.SUPPORTED
+            item.content_preservation_state == EvidenceState.SUPPORTED
             for item in evidence
         )
         and boundary_supported
@@ -214,7 +214,7 @@ def geometry_resolution_for_selection(
             for item in evidence
         )
         and all(
-            item.content_preservation.state != EvidenceState.CONTRADICTED
+            item.content_preservation_state != EvidenceState.CONTRADICTED
             for item in evidence
         )
     )

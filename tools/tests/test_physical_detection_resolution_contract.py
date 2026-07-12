@@ -106,6 +106,26 @@ def _with_candidate_evidence(
     )
 
 
+def _without_content_measurements(evidence: CandidateEvidence) -> CandidateEvidence:
+    return replace(
+        evidence,
+        frame_coverage=replace(evidence.frame_coverage, content_runs=()),
+        sequence_content_alignment=replace(
+            evidence.sequence_content_alignment,
+            state=EvidenceState.UNAVAILABLE,
+            reason="content_span_unavailable",
+            content_span=None,
+            content_outside_sides=(),
+            overcontains_long_axis=False,
+            overcontains_short_axis=False,
+            leading_slack_px=0,
+            trailing_slack_px=0,
+            top_slack_px=0,
+            bottom_slack_px=0,
+        ),
+    )
+
+
 class PhysicalDetectionResolutionContractTest(unittest.TestCase):
     def test_resolved_count_excludes_larger_unresolved_candidates_from_selection(
         self,
@@ -267,18 +287,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             (),
         )
         evidence = candidate_evidence_fixture()
-        evidence = replace(
-            evidence,
-            frame_coverage=replace(
-                evidence.frame_coverage,
-                content_runs=(),
-            ),
-            content_preservation=replace(
-                evidence.content_preservation,
-                state=EvidenceState.UNAVAILABLE,
-                reason="content_preservation_unresolved",
-            ),
-        )
+        evidence = _without_content_measurements(evidence)
 
         paths = _boundary_proof_paths(built, evidence)
         separator_path = next(
@@ -290,18 +299,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         self,
     ) -> None:
         candidate = candidate_fixture()
-        evidence = replace(
-            candidate.assessment.evidence,
-            frame_coverage=replace(
-                candidate.assessment.evidence.frame_coverage,
-                content_runs=(),
-            ),
-            content_preservation=replace(
-                candidate.assessment.evidence.content_preservation,
-                state=EvidenceState.UNAVAILABLE,
-                reason="content_preservation_unresolved",
-            ),
-        )
+        evidence = _without_content_measurements(candidate.assessment.evidence)
         candidate = replace(
             candidate,
             count_hypothesis=replace(

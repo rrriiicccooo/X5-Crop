@@ -69,7 +69,7 @@ def assess_dual_lane_candidate(
     gate = candidate_gate_assessment(
         CandidateGateInput(
             content_preservation=_combined_evidence_state(
-                tuple(item.content_preservation.state for item in physical_evidence)
+                tuple(item.content_preservation_state for item in physical_evidence)
             ),
             photo_geometry=_combined_evidence_state(
                 tuple(item.frame_dimensions.state for item in physical_evidence)

@@ -11,7 +11,6 @@ from ..physical.model import (
 )
 from .assessment.evidence_independence import EvidenceIndependenceEvidence
 from .assessment.separator_support import SeparatorSequenceEvidence
-from ..evidence.content.preservation import ContentPreservationEvidence
 from ..evidence.content.frame_support import FrameContentEvidence
 from ..evidence.content.holder_texture import HolderTextureEvidence
 from ..evidence.frame_coverage import FrameCoverageEvidence
@@ -51,11 +50,18 @@ class CandidateEvidence:
     frame_dimensions: FrameDimensionEvidence
     frame_content: FrameContentEvidence
     holder_texture: HolderTextureEvidence
-    content_preservation: ContentPreservationEvidence
     sequence_content_alignment: SequenceContentAlignmentEvidence
     holder_occupancy: HolderOccupancyEvidence
     partial_edge_safety: PartialEdgeSafetyEvidence
     independence: EvidenceIndependenceEvidence
+
+    @property
+    def content_preservation_state(self) -> EvidenceState:
+        return content_preservation_state(
+            self.frame_coverage,
+            self.sequence_content_alignment,
+            self.partial_edge_safety,
+        )
 
 
 @dataclass(frozen=True)
@@ -77,6 +83,25 @@ class ReviewOnlyEvidence:
 
 
 CandidateEvidenceModel = CandidateEvidence | DualLaneEvidence | ReviewOnlyEvidence
+
+
+def content_preservation_state(
+    frame_coverage: FrameCoverageEvidence,
+    sequence_alignment: SequenceContentAlignmentEvidence,
+    partial_edge: PartialEdgeSafetyEvidence,
+) -> EvidenceState:
+    if frame_coverage.state == EvidenceState.CONTRADICTED:
+        return EvidenceState.CONTRADICTED
+    if sequence_alignment.content_outside_sides:
+        return EvidenceState.UNAVAILABLE
+    if partial_edge.state == EvidenceState.CONTRADICTED:
+        return EvidenceState.CONTRADICTED
+    if (
+        frame_coverage.state == EvidenceState.SUPPORTED
+        or sequence_alignment.state == EvidenceState.SUPPORTED
+    ):
+        return EvidenceState.SUPPORTED
+    return EvidenceState.UNAVAILABLE
 
 
 def _combined_evidence_state(states: tuple[EvidenceState, ...]) -> EvidenceState:
@@ -101,8 +126,11 @@ def _candidate_gate_evidence_states(
             tuple(getattr(item, attribute).state for item in evidence_sets)
         )
 
+    content_preservation = _combined_evidence_state(
+        tuple(item.content_preservation_state for item in evidence_sets)
+    )
     return {
-        "content_preservation": combined("content_preservation"),
+        "content_preservation": content_preservation,
         "photo_geometry_consistency": combined("frame_dimensions"),
         "frame_sequence_conservation": combined("sequence_conservation"),
         "evidence_independence": combined("independence"),
@@ -203,7 +231,7 @@ class AssessedCandidate:
                     ("frame_dimensions", evidence.frame_dimensions.state),
                     ("frame_content", evidence.frame_content.state),
                     ("holder_texture", evidence.holder_texture.state),
-                    ("content_preservation", evidence.content_preservation.state),
+                    ("content_preservation", evidence.content_preservation_state),
                     (
                         "sequence_content_alignment",
                         evidence.sequence_content_alignment.state,

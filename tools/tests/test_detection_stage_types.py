@@ -251,9 +251,6 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         )
 
     def test_content_alignment_has_no_write_only_confirmation_fields(self) -> None:
-        from x5crop.detection.evidence.content.preservation import (
-            ContentPreservationEvidence,
-        )
         from x5crop.detection.evidence.sequence_content_alignment import (
             SequenceContentAlignmentEvidence,
         )
@@ -269,10 +266,6 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             "border_tonal_fraction",
         ):
             self.assertNotIn(removed, alignment_fields)
-        self.assertNotIn(
-            "confirmed_visible_undercrop_sides",
-            ContentPreservationEvidence.__dataclass_fields__,
-        )
 
     def test_gate_outcomes_are_derived_from_canonical_checks(self) -> None:
         candidate_fields = set(CandidateGateAssessment.__dataclass_fields__)

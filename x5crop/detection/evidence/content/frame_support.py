@@ -41,6 +41,7 @@ class FrameContentObservation:
     content_present: bool
     boundary_contact_sides: tuple[str, ...]
 
+
 @dataclass(frozen=True)
 class FrameContentEvidence:
     state: EvidenceState
@@ -54,13 +55,6 @@ class FrameContentEvidence:
     def support_available(self) -> bool:
         return self.state == EvidenceState.SUPPORTED
 
-    @property
-    def boundary_contact_frame_indexes(self) -> tuple[int, ...]:
-        return tuple(
-            observation.index
-            for observation in self.observations
-            if observation.boundary_contact_sides
-        )
 
 def _cached_content_evidence_threshold(
     cache: MeasurementCache,

@@ -3,7 +3,6 @@ from __future__ import annotations
 from ...context import DetectionContext
 from ...evidence.content.frame_support import frame_content_evidence
 from ...evidence.content.holder_texture import holder_texture_evidence
-from ...evidence.content.preservation import content_preservation_evidence
 from ...evidence.frame_coverage import frame_coverage_evidence
 from ...evidence.frame_sequence import sequence_conservation_for_geometry
 from ...evidence.holder_occupancy import holder_occupancy_evidence
@@ -52,7 +51,7 @@ def _boundary_proof_paths(
     )
     content_not_contradicted = bool(
         evidence.frame_coverage.state != EvidenceState.CONTRADICTED
-        and evidence.content_preservation.state != EvidenceState.CONTRADICTED
+        and evidence.content_preservation_state != EvidenceState.CONTRADICTED
     )
     common = bool(
         sequence_boundary_supported
@@ -144,7 +143,7 @@ def candidate_gate_for_evidence(
 ) -> CandidateGateAssessment:
     return candidate_gate_assessment(
         CandidateGateInput(
-            content_preservation=evidence.content_preservation.state,
+            content_preservation=evidence.content_preservation_state,
             photo_geometry=evidence.frame_dimensions.state,
             sequence_conservation=evidence.sequence_conservation.state,
             evidence_independence=evidence.independence.state,
@@ -212,12 +211,6 @@ def assess_candidate(
         frame_dimensions,
         content,
     )
-    preservation = content_preservation_evidence(
-        content,
-        alignment,
-        partial_edge,
-        coverage,
-    )
     independence = evidence_independence_evidence(geometry)
     evidence = CandidateEvidence(
         frame_coverage=coverage,
@@ -226,7 +219,6 @@ def assess_candidate(
         frame_dimensions=frame_dimensions,
         frame_content=content,
         holder_texture=holder_texture,
-        content_preservation=preservation,
         sequence_content_alignment=alignment,
         holder_occupancy=occupancy,
         partial_edge_safety=partial_edge,
