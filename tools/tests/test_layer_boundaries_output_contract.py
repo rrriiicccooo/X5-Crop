@@ -78,37 +78,37 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertEqual(bootstrap.count("DetectionPolicyBundle.for_format_mode"), 1)
         self.assertNotIn("DetectionPolicyBundle.for_format_mode", other_runtime)
 
-    def test_output_bleed_plan_has_explicit_physical_inputs(self) -> None:
-        from x5crop.output.bleed_plan import output_bleed_plan
-        from x5crop.runtime.output_bleed import prepare_output_bleed
+    def test_frame_bleed_plan_has_explicit_physical_inputs(self) -> None:
+        from x5crop.output.frame_bleed import frame_bleed_plan
+        from x5crop.runtime.frame_bleed import prepare_frame_bleed
 
         self.assertEqual(
-            tuple(signature(output_bleed_plan).parameters),
+            tuple(signature(frame_bleed_plan).parameters),
             (
-                "overlap_detected",
-                "widest_overlap_band_px",
-                "base_bleed",
-                "protection",
-                "long_axis_bleed_capacity_px",
+                "frames",
+                "frame_crop_envelopes",
+                "overlap_requirements",
+                "user_bleed",
+                "layout",
             ),
         )
         self.assertEqual(
-            tuple(signature(prepare_output_bleed).parameters),
-            ("candidate", "context", "base_bleed"),
+            tuple(signature(prepare_frame_bleed).parameters),
+            ("candidate", "user_bleed"),
         )
 
     def test_workflow_orders_bleed_decision_and_finalization_once(self) -> None:
         source = (PROJECT_ROOT / "x5crop/runtime/workflow.py").read_text(
             encoding="utf-8"
         )
-        self.assertLess(source.index("prepare_output_bleed("), source.index("apply_decision_gate("))
+        self.assertLess(source.index("prepare_frame_bleed("), source.index("apply_decision_gate("))
         self.assertLess(source.index("apply_decision_gate("), source.index("finalize_detection("))
 
-    def test_finalization_only_applies_output_bleed_geometry(self) -> None:
+    def test_finalization_only_applies_frame_bleed_geometry(self) -> None:
         source = (PROJECT_ROOT / "x5crop/detection/final/finalize.py").read_text(
             encoding="utf-8"
         )
-        self.assertIn("output_bleed_geometry", source)
+        self.assertIn("apply_frame_bleed", source)
         for forbidden in ("gray", "DetectionPolicy", "separator", "content", "Candidate"):
             self.assertNotIn(forbidden, source)
 

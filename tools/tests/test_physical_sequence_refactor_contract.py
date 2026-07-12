@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import ast
 from dataclasses import replace
+from inspect import signature
+from pathlib import Path
 import unittest
 
 from tools.tests.physical_gate_support import (
     candidate_fixture,
+    frame_bleed_fixture,
     selection_fixture,
     separator_constraints,
     separator_observation,
@@ -25,13 +29,13 @@ from x5crop.detection.evidence.sequence_content_alignment import (
     SequenceContentAlignmentEvidence,
 )
 from x5crop.detection.physical.boundary import HolderOcclusionEvidence
+from x5crop.detection.physical.boundary import holder_occlusion_for_sequence
 from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
 )
 from x5crop.detection.physical.sequence_solver import solve_frame_sequence
 from x5crop.detection.physical.spacing import spacing_hypothesis
 from x5crop.domain import (
-    AxisBleedParameters,
     Box,
     EvidenceState,
     FrameDimensionPrior,
@@ -39,12 +43,46 @@ from x5crop.domain import (
     PixelInterval,
     VisibleSequenceSpan,
 )
-from x5crop.output.bleed_plan import output_bleed_plan
-from x5crop.policies.registry import get_detection_policy
 from x5crop.units import ScanCalibration
 
 
 class PhysicalSequenceRefactorContractTest(unittest.TestCase):
+    def test_holder_occlusion_builder_uses_the_canonical_inputs(self) -> None:
+        source = (
+            Path(__file__).resolve().parents[2]
+            / "x5crop/detection/candidate/build/detection.py"
+        ).read_text(encoding="utf-8")
+        calls = tuple(
+            node
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "holder_occlusion_for_sequence"
+        )
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(
+            len(calls[0].args),
+            len(signature(holder_occlusion_for_sequence).parameters),
+        )
+
+    def test_sequence_solver_callers_supply_the_execution_budget(self) -> None:
+        source = (
+            Path(__file__).resolve().parents[2]
+            / "x5crop/detection/candidate/build/detection.py"
+        ).read_text(encoding="utf-8")
+        calls = tuple(
+            node
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "solve_frame_sequence"
+        )
+        self.assertGreaterEqual(len(calls), 1)
+        self.assertEqual(
+            {len(call.args) for call in calls},
+            {len(signature(solve_frame_sequence).parameters)},
+        )
+
     def test_sequence_solver_reports_assignment_budget_exhaustion(self) -> None:
         result = solve_frame_sequence(
             (
@@ -203,16 +241,9 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 ("count_unresolved",),
             ),
         )
-        bleed = output_bleed_plan(
-            False,
-            0.0,
-            AxisBleedParameters(20, 10),
-            get_detection_policy("135", "partial").output,
-            long_axis_bleed_capacity_px=50,
-        )
         detection = apply_decision_gate(
             selection,
-            bleed,
+            frame_bleed_fixture(),
             transform_geometry_fixture(),
             ScanCalibration(None, None, "unavailable", False),
             image_width=200,

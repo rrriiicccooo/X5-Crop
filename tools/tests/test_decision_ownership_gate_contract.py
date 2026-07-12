@@ -8,7 +8,7 @@ from x5crop.constants import (
     FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
     FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,
     FINAL_REASON_FRAME_TOPOLOGY_INVALID,
-    FINAL_REASON_OUTPUT_BLEED_UNRESOLVED,
+    FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
     FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
     FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
 )
@@ -80,14 +80,14 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
 
     def test_feasible_overlap_protection_does_not_block(self) -> None:
         self.assertEqual(
-            decide_candidate(overlap_bleed_feasible=True).status,
+            decide_candidate(output_protection_feasible=True).status,
             "approved_auto",
         )
 
     def test_unresolved_overlap_protection_blocks(self) -> None:
-        decided = decide_candidate(overlap_bleed_feasible=False)
+        decided = decide_candidate(output_protection_feasible=False)
         self.assertIn(
-            FINAL_REASON_OUTPUT_BLEED_UNRESOLVED,
+            FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
             decided.final_review_reasons,
         )
 

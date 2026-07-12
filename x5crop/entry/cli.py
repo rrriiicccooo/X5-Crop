@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, SUMMARY_CSV_NAME, VERSION
 from ..formats import FORMAT_CHOICES
-from ..output.bleed_plan import DEFAULT_OUTPUT_BLEED
+from ..output.frame_bleed import DEFAULT_OUTPUT_BLEED
 from ..runtime.bootstrap import run_options
 from ..runtime.limits import STANDARD_JOB_LIMIT
 from ..runtime.options import (

@@ -4,7 +4,6 @@ import unittest
 
 from x5crop.domain import ImageProfile
 from x5crop.units import (
-    PhysicalLength,
     ScanCalibration,
     ScanCalibrationTrustParameters,
     scan_calibration_from_profile,
@@ -65,36 +64,6 @@ class UnitModelTests(unittest.TestCase):
         self.assertIn("resolution_unit_has_no_absolute_length", invalid.warnings)
         self.assertFalse(unsupported.trusted)
         self.assertIn("unsupported_resolution_unit:99", unsupported.warnings)
-
-    def test_physical_length_prefers_trusted_mm(self) -> None:
-        length = PhysicalLength(2.0, 0.10, 1, 500)
-        calibration = ScanCalibration(20.0, 20.0, "tiff_resolution", True)
-        self.assertEqual(
-            length.resolve_px(calibration, axis="x", reference_px=100.0),
-            40,
-        )
-
-    def test_physical_length_falls_back_to_reference_ratio(self) -> None:
-        length = PhysicalLength(2.0, 0.10, 1, 500)
-        calibration = ScanCalibration(None, None, "unavailable", False)
-        self.assertEqual(
-            length.resolve_px(calibration, axis="x", reference_px=100.0),
-            10,
-        )
-
-    def test_physical_length_clamps_pixel_result(self) -> None:
-        length = PhysicalLength(None, 0.50, 8, 20)
-        calibration = ScanCalibration(None, None, "unavailable", False)
-        self.assertEqual(length.resolve_px(calibration, axis="x", reference_px=4), 8)
-        self.assertEqual(length.resolve_px(calibration, axis="x", reference_px=100), 20)
-
-    def test_overlap_bleed_capacity_uses_physical_length(self) -> None:
-        from x5crop.policies.parameters.output import (
-            OverlapBleedParameters,
-        )
-
-        parameters = OverlapBleedParameters()
-        self.assertIsInstance(parameters.long_axis_bleed_capacity, PhysicalLength)
 
 if __name__ == "__main__":
     unittest.main()

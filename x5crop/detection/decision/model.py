@@ -4,12 +4,11 @@ from dataclasses import dataclass
 from ...domain import (
     CropEnvelope,
     FrameBoundary,
-    OutputBleedPlan,
     SeparatorAssignment,
     SeparatorBandObservation,
     VisibleSequenceSpan,
 )
-from ...output.model import OutputGeometry
+from ...output.model import FrameBleedPlan, OutputGeometry
 from ...units import ScanCalibration
 from ..candidate.selection.model import SelectionResult
 from ..gate_checks import GateCheck
@@ -60,7 +59,7 @@ class FinalDetection:
     separator_observations: tuple[SeparatorBandObservation, ...]
     separator_assignments: tuple[SeparatorAssignment, ...]
     frame_boundaries: tuple[FrameBoundary, ...]
-    output_bleed_plan: OutputBleedPlan
+    frame_bleed_plan: FrameBleedPlan
     scan_calibration: ScanCalibration
     diagnostics: tuple[str, ...]
     selection: SelectionResult | None

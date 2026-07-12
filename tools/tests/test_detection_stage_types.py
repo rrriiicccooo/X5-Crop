@@ -57,7 +57,7 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         self.assertIn("selection", final_fields)
         self.assertIn("visible_sequence_span", final_fields)
         self.assertIn("crop_envelope", final_fields)
-        self.assertIn("output_bleed_plan", final_fields)
+        self.assertIn("frame_bleed_plan", final_fields)
 
     def test_gate_outcomes_are_derived_from_canonical_checks(self) -> None:
         candidate_fields = set(CandidateGateAssessment.__dataclass_fields__)

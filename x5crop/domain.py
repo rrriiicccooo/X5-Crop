@@ -31,15 +31,6 @@ class Box:
             max(0, min(height, self.bottom)),
         )
 
-    def expand(self, bleed_x: int, bleed_y: int, width: int, height: int) -> "Box":
-        return Box(
-            self.left - bleed_x,
-            self.top - bleed_y,
-            self.right + bleed_x,
-            self.bottom + bleed_y,
-        ).clamp(width, height)
-
-
 @dataclass(frozen=True)
 class MeasurementProvenance:
     root_measurement: str
@@ -272,17 +263,6 @@ class ImageProfile:
 class AxisBleedParameters:
     long_axis: int
     short_axis: int
-
-
-@dataclass(frozen=True)
-class OutputBleedPlan:
-    user_bleed: AxisBleedParameters
-    effective_bleed: AxisBleedParameters
-    overlap_detected: bool
-    overlap_required_long_axis_bleed_px: int
-    long_axis_bleed_capacity_px: int
-    feasible: bool
-    reason: str
 
 
 @dataclass(frozen=True)

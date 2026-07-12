@@ -42,7 +42,6 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 "content",
                 "separator",
                 "candidate",
-                "output",
                 "diagnostics",
             ),
         )
@@ -56,7 +55,6 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 "separator",
                 "content",
                 "candidate_plan",
-                "output",
                 "diagnostics",
             ),
         )

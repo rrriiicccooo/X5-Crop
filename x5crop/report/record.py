@@ -10,7 +10,7 @@ from .read_models import (
     candidate_gate_read_model,
     candidate_table,
     decision_gate_detail,
-    output_bleed_read_model,
+    frame_bleed_plan_read_model,
     scan_calibration_read_model,
     selection_read_model,
     typed_read_model,
@@ -124,8 +124,8 @@ def report_record_for_final_detection(
             "detection": list(detection.diagnostics),
         },
         "output": {
-            "bleed_plan": output_bleed_read_model(
-                detection.output_bleed_plan
+            "frame_bleed_plan": frame_bleed_plan_read_model(
+                detection.frame_bleed_plan
             ),
             "output_files": list(output_files),
             "review_copy": review_copy,

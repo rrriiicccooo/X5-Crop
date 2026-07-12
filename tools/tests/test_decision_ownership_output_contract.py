@@ -17,8 +17,8 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
         parameters = inspect.signature(apply_decision_gate).parameters
         self.assertEqual(parameters["selection"].annotation, "SelectionResult")
         self.assertEqual(
-            parameters["output_bleed_plan"].annotation,
-            "OutputBleedPlan",
+            parameters["frame_bleed_plan"].annotation,
+            "FrameBleedPlan",
         )
         self.assertEqual(
             parameters["transform_geometry"].annotation,
@@ -38,10 +38,10 @@ class DecisionOwnershipOutputContractTest(unittest.TestCase):
         self.assertTrue(candidate_gate_read_model(selected)["passed"])
         self.assertTrue(decision_gate_detail(decided)["passed"])
 
-    def test_workflow_prepares_output_bleed_before_decision(self) -> None:
+    def test_workflow_prepares_frame_bleed_before_decision(self) -> None:
         source = (PROJECT_ROOT / "x5crop/runtime/workflow.py").read_text()
         self.assertLess(
-            source.index("prepare_output_bleed("),
+            source.index("prepare_frame_bleed("),
             source.index("apply_decision_gate("),
         )
 

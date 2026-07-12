@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from ...output.bleed import output_bleed_geometry
+from ...output.frame_bleed import apply_frame_bleed
 from ..decision.model import FinalDetection
 
 
@@ -12,9 +12,9 @@ def finalize_detection(
     image_width: int,
     image_height: int,
 ) -> FinalDetection:
-    geometry = output_bleed_geometry(
+    geometry = apply_frame_bleed(
         detection.decision_geometry,
-        detection.output_bleed_plan.effective_bleed,
+        detection.frame_bleed_plan,
         layout=detection.layout,
         image_width=image_width,
         image_height=image_height,

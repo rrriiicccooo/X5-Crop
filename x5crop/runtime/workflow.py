@@ -10,7 +10,7 @@ from .analysis_reuse import (
 from ..cache.analysis import make_measurement_cache
 from ..detection.context import DetectionContext, DetectionRequest
 from ..run_config import RunConfig
-from .output_bleed import prepare_output_bleed
+from .frame_bleed import prepare_frame_bleed
 from .deskew import apply_deskew
 from ..debug.outputs import write_debug_outputs
 from ..detection.decision.decision_gate import apply_decision_gate
@@ -85,9 +85,8 @@ def process_one(
     )
     selection = choose_detection(detection_context)
     selected_policy = detection_context.policy
-    prepared_output_bleed = prepare_output_bleed(
+    prepared_frame_bleed = prepare_frame_bleed(
         selection.selected,
-        detection_context,
         AxisBleedParameters(
             long_axis=int(config.bleed_x),
             short_axis=int(config.bleed_y),
@@ -95,7 +94,7 @@ def process_one(
     )
     decided_detection = apply_decision_gate(
         selection,
-        prepared_output_bleed,
+        prepared_frame_bleed,
         transform_geometry,
         scan_calibration,
         image_width=int(gray.shape[1]),

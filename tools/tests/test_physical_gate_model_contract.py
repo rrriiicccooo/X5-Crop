@@ -8,7 +8,7 @@ import unittest
 from tools.tests.physical_gate_support import candidate_fixture
 from x5crop.detection.candidate.assessment.separator_support import separator_sequence_evidence
 from x5crop.detection.candidate.selection.choose import select_candidates
-from x5crop.domain import EvidenceState
+from x5crop.domain import Box, EvidenceState
 from x5crop.entry.cli import build_parser
 from x5crop.policies.registry import get_detection_policy
 from x5crop.run_config import RunConfig
@@ -51,7 +51,12 @@ class PhysicalGateModelContractTest(unittest.TestCase):
                 bad.geometry,
                 visible_sequence_span=replace(
                     bad.geometry.visible_sequence_span,
-                    box=bad.geometry.visible_sequence_span.box.expand(20, 0, 240, 100),
+                box=Box(
+                    bad.geometry.visible_sequence_span.box.left - 20,
+                    bad.geometry.visible_sequence_span.box.top,
+                    bad.geometry.visible_sequence_span.box.right + 20,
+                    bad.geometry.visible_sequence_span.box.bottom,
+                ).clamp(240, 100),
                 ),
             ),
         )

@@ -12,9 +12,6 @@ from .content import (
     ContentProfileParameters,
 )
 from .diagnostics import SeparatorOverlayParameters
-from .output import (
-    OverlapBleedParameters,
-)
 from .separator import (
     SeparatorObservationParameters,
 )
@@ -55,5 +52,4 @@ class FormatParameters:
     content: ContentParameters = field(default_factory=ContentParameters)
     separator: SeparatorParameters = field(default_factory=SeparatorParameters)
     candidate: CandidateParameters = field(default_factory=CandidateParameters)
-    output: OverlapBleedParameters = field(default_factory=OverlapBleedParameters)
     diagnostics: DiagnosticsParameters = field(default_factory=DiagnosticsParameters)

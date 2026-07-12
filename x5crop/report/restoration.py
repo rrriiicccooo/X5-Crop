@@ -14,14 +14,18 @@ from ..domain import (
     EvidenceState,
     FrameBoundary,
     MeasurementProvenance,
-    OutputBleedPlan,
     PixelInterval,
     SeparatorAssignment,
     SeparatorBandObservation,
     SeparatorWidthConstraint,
     VisibleSequenceSpan,
 )
-from ..output.model import OutputGeometry
+from ..output.model import (
+    BoundaryOverlapProtection,
+    FrameBleedPlan,
+    FrameSideBleed,
+    OutputGeometry,
+)
 from ..units import ScanCalibration
 from .validation import current_report_record_errors
 
@@ -138,21 +142,36 @@ def _decision_gate(value: dict[str, Any]) -> DecisionGateAssessment:
     )
 
 
-def _output_bleed(value: dict[str, Any]) -> OutputBleedPlan:
+def _frame_bleed_plan(value: dict[str, Any]) -> FrameBleedPlan:
     user = value["user_bleed"]
-    effective = value["effective_bleed"]
-    return OutputBleedPlan(
+    return FrameBleedPlan(
         user_bleed=AxisBleedParameters(
             int(user["long_axis"]), int(user["short_axis"])
         ),
-        effective_bleed=AxisBleedParameters(
-            int(effective["long_axis"]), int(effective["short_axis"])
+        frame_sides=tuple(
+            FrameSideBleed(
+                int(item["frame_index"]),
+                int(item["leading_px"]),
+                int(item["trailing_px"]),
+                int(item["short_axis_px"]),
+            )
+            for item in value["frame_sides"]
         ),
-        overlap_detected=bool(value["overlap_detected"]),
-        overlap_required_long_axis_bleed_px=int(
-            value["overlap_required_long_axis_bleed_px"]
+        overlap_protection=tuple(
+            BoundaryOverlapProtection(
+                int(item["boundary_index"]),
+                int(item["left_frame_index"]),
+                int(item["right_frame_index"]),
+                int(item["required_px"]),
+                int(item["left_trailing_available_px"]),
+                int(item["right_leading_available_px"]),
+                str(item["provenance"]),
+            )
+            for item in value["overlap_protection"]
         ),
-        long_axis_bleed_capacity_px=int(value["long_axis_bleed_capacity_px"]),
+        unresolved_overlap_boundaries=tuple(
+            int(item) for item in value["unresolved_overlap_boundaries"]
+        ),
         feasible=bool(value["feasible"]),
         reason=str(value["reason"]),
     )
@@ -216,7 +235,9 @@ def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
         frame_boundaries=tuple(
             _frame_boundary(item) for item in record["frame_boundaries"]
         ),
-        output_bleed_plan=_output_bleed(record["output"]["bleed_plan"]),
+        frame_bleed_plan=_frame_bleed_plan(
+            record["output"]["frame_bleed_plan"]
+        ),
         scan_calibration=_scan_calibration(record["scan_calibration"]),
         diagnostics=tuple(str(item) for item in record["diagnostics"]["detection"]),
         selection=None,

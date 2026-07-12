@@ -51,7 +51,6 @@ def build_detection_policy(
             profile=params.content.content_profile,
         ),
         candidate_plan=params.candidate.candidate_plan,
-        output=params.output,
         diagnostics=RuntimeDiagnosticsPolicy(
             separator_overlay=params.diagnostics.separator_overlay,
         ),

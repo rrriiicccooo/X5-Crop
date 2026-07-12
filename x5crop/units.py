@@ -20,36 +20,6 @@ class ScanCalibration:
 
 
 @dataclass(frozen=True)
-class PhysicalLength:
-    mm: float | None
-    fallback_ratio: float
-    min_px: int
-    max_px: int
-
-    def fallback_px(self, reference_px: float) -> int:
-        value = float(reference_px) * float(self.fallback_ratio)
-        return max(int(self.min_px), min(int(self.max_px), int(round(value))))
-
-    def resolve_px(
-        self,
-        calibration: ScanCalibration,
-        *,
-        axis: str,
-        reference_px: float,
-    ) -> int:
-        px_per_mm = calibration.px_per_mm(axis)
-        if (
-            calibration.trusted
-            and self.mm is not None
-            and px_per_mm is not None
-            and px_per_mm > 0.0
-        ):
-            value = float(self.mm) * float(px_per_mm)
-        else:
-            return self.fallback_px(reference_px)
-        return max(int(self.min_px), min(int(self.max_px), int(round(value))))
-
-@dataclass(frozen=True)
 class ScanCalibrationTrustParameters:
     min_axis_resolution_ratio: float = 0.5
     max_axis_resolution_ratio: float = 2.0

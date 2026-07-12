@@ -71,9 +71,9 @@ from x5crop.domain import (
     Box,
     FrameDimensionPrior,
     MeasurementProvenance,
-    OutputBleedPlan,
     SeparatorWidthConstraint,
 )
+from x5crop.output.model import FrameBleedPlan, FrameSideBleed
 from x5crop.units import ScanCalibration
 
 
@@ -485,19 +485,17 @@ def selection_fixture(
     )
 
 
-def output_bleed_fixture(*, feasible: bool = True) -> OutputBleedPlan:
-    return OutputBleedPlan(
-        AxisBleedParameters(20, 10),
-        AxisBleedParameters(40 if feasible else 50, 10),
-        True,
-        40 if feasible else 80,
-        50,
-        feasible,
-        (
-            "inter_frame_overlap_bleed_planned"
-            if feasible
-            else "inter_frame_overlap_exceeds_bleed_capacity"
+def frame_bleed_fixture(*, feasible: bool = True) -> FrameBleedPlan:
+    return FrameBleedPlan(
+        user_bleed=AxisBleedParameters(20, 10),
+        frame_sides=(
+            FrameSideBleed(0, 20, 20, 10),
+            FrameSideBleed(1, 20, 20, 10),
         ),
+        overlap_protection=(),
+        unresolved_overlap_boundaries=() if feasible else (1,),
+        feasible=feasible,
+        reason="no_output_overlap" if feasible else "output_overlap_unresolved",
     )
 
 
@@ -511,7 +509,7 @@ def decide_candidate(
     candidate: AssessedCandidate | None = None,
     *,
     geometry_disagreement: bool = False,
-    overlap_bleed_feasible: bool = True,
+    output_protection_feasible: bool = True,
     transform_state: EvidenceState = EvidenceState.SUPPORTED,
 ) -> FinalDetection:
     return apply_decision_gate(
@@ -519,7 +517,7 @@ def decide_candidate(
             candidate,
             geometry_disagreement=geometry_disagreement,
         ),
-        output_bleed_fixture(feasible=overlap_bleed_feasible),
+        frame_bleed_fixture(feasible=output_protection_feasible),
         transform_geometry_fixture(transform_state),
         ScanCalibration(None, None, "unavailable", False),
         image_width=200,

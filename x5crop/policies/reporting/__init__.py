@@ -75,9 +75,6 @@ def detection_policy_report_detail(policy: "DetectionPolicy") -> dict[str, Any]:
         "physical": _physical_detail(policy),
         "physical_runtime": _physical_runtime_detail(policy),
         "candidate_runtime": _candidate_runtime_detail(policy),
-        "output_runtime": {
-            "output": _plain(policy.output),
-        },
         "diagnostics_runtime": _diagnostics_runtime_detail(policy),
         "notes": list(mode_notes_for_spec(spec, policy.strip_mode)),
     }

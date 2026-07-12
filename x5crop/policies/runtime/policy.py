@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from ...formats import FormatPhysicalSpec
 from ..identity import detection_policy_id_for
 from ..parameters.candidate import CandidatePlanParameters
-from ..parameters.output import OverlapBleedParameters
 from .content import ContentPolicy
 from .diagnostics import RuntimeDiagnosticsPolicy
 from .preprocess import RuntimePreprocessPolicy
@@ -21,7 +20,6 @@ class DetectionPolicy:
     separator: SeparatorPolicy
     content: ContentPolicy
     candidate_plan: CandidatePlanParameters
-    output: OverlapBleedParameters
     diagnostics: RuntimeDiagnosticsPolicy
 
     @property

@@ -49,7 +49,7 @@ class DetectionPolicyBundleTests(unittest.TestCase):
         self.assertIn("physical_spec", field_names)
         self.assertTrue({"format_id", "family", "default_count"}.isdisjoint(field_names))
 
-        runtime_surfaces = {"output", "diagnostics"}
+        runtime_surfaces = {"diagnostics"}
         defaults = {
             field.name: (field.default, field.default_factory)
             for field in fields(DetectionPolicy)

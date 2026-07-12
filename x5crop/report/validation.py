@@ -259,8 +259,13 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
     output = record["output"]
     if not (
         isinstance(output, dict)
-        and {"output_files", "review_copy", "warnings", "bleed_plan"}.issubset(output)
-        and isinstance(output["bleed_plan"], dict)
+        and {
+            "output_files",
+            "review_copy",
+            "warnings",
+            "frame_bleed_plan",
+        }.issubset(output)
+        and isinstance(output["frame_bleed_plan"], dict)
     ):
         errors.append("output_section_incomplete")
     return errors

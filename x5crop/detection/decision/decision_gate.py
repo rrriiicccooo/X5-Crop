@@ -9,14 +9,14 @@ from ...constants import (
     FINAL_REASON_FRAME_TOPOLOGY_INVALID,
     FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE,
     FINAL_REASON_FRAME_SEQUENCE_NOT_CONSERVED,
-    FINAL_REASON_OUTPUT_BLEED_UNRESOLVED,
+    FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
     FINAL_REASON_PHOTO_GEOMETRY_CONTRADICTED,
     FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
     FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
 )
-from ...domain import Box, CropEnvelope, OutputBleedPlan
+from ...domain import Box, CropEnvelope
 from ...geometry.boxes import map_work_box
-from ...output.model import OutputGeometry
+from ...output.model import FrameBleedPlan, OutputGeometry
 from ...units import ScanCalibration
 from ..candidate.assessment.candidate_gate import CandidateGateAssessment
 from ..candidate.selection.model import SelectionResult
@@ -120,7 +120,7 @@ def decision_gate_assessment(
     candidate_gate: CandidateGateAssessment,
     automatic_processing: EvidenceState,
     selection_consensus: EvidenceState,
-    output_bleed: EvidenceState,
+    output_protection: EvidenceState,
     transform_geometry: TransformGeometryEvidence,
     count_resolution: EvidenceState,
     geometry_resolution: EvidenceState,
@@ -148,9 +148,9 @@ def decision_gate_assessment(
             FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
         ),
         _decision_check(
-            "output_bleed_feasibility",
-            output_bleed,
-            FINAL_REASON_OUTPUT_BLEED_UNRESOLVED,
+            "output_content_protection",
+            output_protection,
+            FINAL_REASON_OUTPUT_PROTECTION_UNRESOLVED,
         ),
         _decision_check(
             "transform_geometry_integrity",
@@ -163,7 +163,7 @@ def decision_gate_assessment(
 
 def apply_decision_gate(
     selection: SelectionResult,
-    output_bleed_plan: OutputBleedPlan,
+    frame_bleed_plan: FrameBleedPlan,
     transform_geometry: TransformGeometryEvidence,
     scan_calibration: ScanCalibration,
     *,
@@ -185,9 +185,9 @@ def apply_decision_gate(
             if selection.consensus == "disagreed"
             else EvidenceState.SUPPORTED
         ),
-        output_bleed=(
+        output_protection=(
             EvidenceState.SUPPORTED
-            if output_bleed_plan.feasible
+            if frame_bleed_plan.feasible
             else EvidenceState.CONTRADICTED
         ),
         transform_geometry=transform_geometry,
@@ -240,7 +240,7 @@ def apply_decision_gate(
         separator_observations=selected.geometry.separator_observations,
         separator_assignments=selected.geometry.separator_assignments,
         frame_boundaries=selected.geometry.frame_boundaries,
-        output_bleed_plan=output_bleed_plan,
+        frame_bleed_plan=frame_bleed_plan,
         scan_calibration=scan_calibration,
         diagnostics=selected.assessment.diagnostics,
         selection=selection,
