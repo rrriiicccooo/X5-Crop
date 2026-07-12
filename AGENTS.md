@@ -289,9 +289,8 @@ Current state:
 - Standard, dual-lane, and review-only candidates use distinct geometry types;
   review-only modes never masquerade as solved frame sequences.
 - Physical candidate assessment stores canonical evidence and `CandidateGate`;
-  review-only assessment stores only its unsupported reason. `EvidenceQuality`
-  is derived for ordering and reporting. `GeometryResolution` is the only
-  early-stop input.
+  review-only assessment uses a fieldless marker. `EvidenceQuality` is derived
+  for ordering and reporting. `GeometryResolution` is the only early-stop input.
 - Overlap protection uses a per-boundary `FrameBleedPlan`; unrelated frames are
   never expanded by a global maximum.
 - Current reports use `detection_report / physical_sequence_resolution` with

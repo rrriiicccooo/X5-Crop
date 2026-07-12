@@ -217,7 +217,7 @@ contradict；content measurement unavailable 不会否决完整 separator/geomet
 count 仍要求正向 frame coverage 才能声明 count resolved。
 
 Standard 与 dual-lane 的 `CandidateAssessment` 只保存 canonical evidence 与 CandidateGate；
-review-only assessment 只保存明确的不可自动处理原因，不伪造 physical evidence 或 CandidateGate。
+review-only assessment 使用无字段 marker，不伪造 physical evidence 或 CandidateGate。
 Dual-lane evidence 保留各 lane 的 canonical evidence，父级 CandidateGate 只负责 composition assessment，
 不把 lane gate 或 resolution 结果伪装成 evidence。
 `AssessedCandidate.evidence_quality` 从 evidence、proof paths 和 geometry residuals 确定性派生；

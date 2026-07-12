@@ -258,6 +258,19 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         self.assertNotIn("SeparatorSequencePlan", source)
         self.assertNotIn("CANDIDATE_SOURCE_", source)
 
+    def test_review_only_marker_is_described_without_payload(self) -> None:
+        for name in ("AGENTS.md", "ARCHITECTURE.md"):
+            document = (PROJECT_ROOT / name).read_text(encoding="utf-8")
+            with self.subTest(document=name):
+                self.assertNotIn(
+                    "review-only assessment stores only its unsupported reason",
+                    document,
+                )
+                self.assertNotIn(
+                    "review-only assessment 只保存明确的不可自动处理原因",
+                    document,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
