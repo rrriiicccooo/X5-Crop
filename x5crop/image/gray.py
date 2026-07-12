@@ -6,6 +6,7 @@ import numpy as np
 
 from .constants import UINT8_MAX_VALUE
 from ..utils import (
+    RGB_CHANNEL_COUNT,
     require_nonnegative,
     require_percentile,
     require_positive,
@@ -50,14 +51,14 @@ def make_base_gray_u8(
     if axes == "YX":
         gray = arr
     elif axes == "YXS":
-        rgb = arr[..., :3].astype(np.float32)
+        rgb = arr[..., :RGB_CHANNEL_COUNT].astype(np.float32)
         gray = (
             params.red_weight * rgb[..., 0]
             + params.green_weight * rgb[..., 1]
             + params.blue_weight * rgb[..., 2]
         )
     elif axes == "SYX":
-        rgb = arr[:3, ...].astype(np.float32)
+        rgb = arr[:RGB_CHANNEL_COUNT, ...].astype(np.float32)
         gray = (
             params.red_weight * rgb[0]
             + params.green_weight * rgb[1]

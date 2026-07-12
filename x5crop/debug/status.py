@@ -6,6 +6,7 @@ from PIL import Image, ImageDraw
 from ..app_info import SCRIPT_NAME, VERSION
 from ..configuration.diagnostics import DebugStyleParameters
 from ..detection.decision.model import FinalDetection
+from ..utils import RGB_CHANNEL_COUNT
 
 
 def debug_status_parts(
@@ -28,19 +29,24 @@ def draw_large_status(
     text: str,
     color: tuple[int, int, int],
     fallback_size: tuple[int, int],
+    stroke_width: int,
 ) -> tuple[int, int]:
     x, y = xy
-    offsets = ((0, 0), (1, 0), (0, 1), (1, 1), (2, 0), (0, 2))
-    for dx, dy in offsets:
-        draw.text((x + dx, y + dy), text, fill=color)
+    draw.text(
+        (x, y),
+        text,
+        fill=color,
+        stroke_width=stroke_width,
+        stroke_fill=color,
+    )
     try:
-        bbox = draw.textbbox((x, y), text)
+        bbox = draw.textbbox((x, y), text, stroke_width=stroke_width)
         width = bbox[2] - bbox[0]
         height = bbox[3] - bbox[1]
     except Exception:
         width = len(text) * fallback_size[0]
         height = fallback_size[1]
-    return width + 3, height + 3
+    return width, height
 
 
 def add_status_bar(
@@ -52,17 +58,26 @@ def add_status_bar(
     detail = f"{SCRIPT_NAME} {VERSION} | {detail}"
     bar_h = style.status_bar_height
     h, w = rgb.shape[:2]
-    panel = np.full((h + bar_h, w, 3), style.dark_background, dtype=np.uint8)
+    panel = np.full(
+        (h + bar_h, w, RGB_CHANNEL_COUNT),
+        style.dark_background,
+        dtype=np.uint8,
+    )
     panel[bar_h:, :, :] = rgb
     image = Image.fromarray(panel, mode="RGB")
     draw = ImageDraw.Draw(image)
-    draw.rectangle((0, 0, w - 1, bar_h - 1), outline=color, width=2)
+    draw.rectangle(
+        (0, 0, w - 1, bar_h - 1),
+        outline=color,
+        width=style.status_outline_width,
+    )
     status_w, _ = draw_large_status(
         draw,
         style.status_origin,
         status,
         color,
         style.text_fallback_size,
+        style.status_text_stroke_width,
     )
     draw.text(
         (

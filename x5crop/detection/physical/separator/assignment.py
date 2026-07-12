@@ -16,6 +16,9 @@ from ....domain import (
 from ..boundary import HolderOcclusionEvidence
 
 
+BOUNDARY_ADJACENT_FRAME_COUNT = 2.0
+
+
 def assign_observation_to_boundary(
     boundary_index: int,
     observation: SeparatorBandObservation,
@@ -156,7 +159,7 @@ def separator_width_constraint(
     )
     maximum_width = (
         available_anchor_span.maximum
-        - 2.0 * dimensions.width_px.minimum
+        - BOUNDARY_ADJACENT_FRAME_COUNT * dimensions.width_px.minimum
     )
     return SeparatorWidthConstraint(
         boundary_index=int(boundary_index),

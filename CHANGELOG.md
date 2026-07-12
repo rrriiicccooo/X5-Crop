@@ -29,6 +29,9 @@ repository rules in `AGENTS.md`.
   时，evidence independence 保持 unavailable。
 - 参数契约现在动态发现参数 dataclass、模块级数值常量和隐藏 percentile；每项都具有唯一
   role、unit、stage、rationale 和 calibration status。
+- 函数内数值检查现在只豁免 AST 可证明的下标、维度和数学恒等式；content evidence 的
+  component consensus、Debug 样式、RGB/uint8 编码和通用物理系数均有显式 owner。
+- Dual-lane 坐标迁移使用命名 typed aggregate，不再用五元 tuple 下标传递物理 stage data。
 - Deskew 固定灰度身份阈值已由 per-image robust statistics 取代；percentile sampling budget、
   edge quantiles 和 numerical floors 均由显式参数拥有。
 - Physical fact、adaptive measurement、numerical safety、execution budget 与 diagnostics 参数
@@ -40,7 +43,7 @@ repository rules in `AGENTS.md`.
 - Cache reuse 不再从 report candidate 反向选择 configuration；output bleed layout 必须显式传入。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 269 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 270 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）
@@ -155,6 +158,11 @@ schema_revision: frame_sequence_geometry
 - Trusted calibration, measured sequence edges, and all remaining observed
   spacings may uniquely corroborate one negative spacing. This evidence protects
   only the adjacent output sides and cannot prove its own conservation equation.
+- Function-local numeric checks now exempt only AST-identifiable indexes,
+  dimensions, and mathematical identities. Content-evidence consensus, debug
+  styling, RGB/uint8 encoding, and universal physical coefficients have explicit
+  owners. Dual-lane translation now uses a named typed aggregate instead of a
+  positional five-tuple.
 - A global monotonic `SequenceSolution` solver replaces greedy boundary assignment;
   zero-width, negative-width, and reversed frames cannot become candidates.
 - Frame priors, photo intervals, position/width constraints, observed spacing, and

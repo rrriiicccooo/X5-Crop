@@ -13,6 +13,7 @@ from ..configuration.diagnostics import (
     DebugStyleParameters,
     DiagnosticsConfiguration,
 )
+from ..utils import RGB_CHANNEL_COUNT
 from .canvas import (
     DebugRenderCache,
     FRAME_FILL_COLORS,
@@ -168,7 +169,7 @@ def stack_debug_panels(
         max_h = max(panel.shape[0] for panel in panels)
         total_w = sum(panel.shape[1] for panel in panels) + panel_spacing * (len(panels) - 1)
         canvas = np.full(
-            (max_h, total_w, 3),
+            (max_h, total_w, RGB_CHANNEL_COUNT),
             style.panel_background,
             dtype=np.uint8,
         )
@@ -182,7 +183,7 @@ def stack_debug_panels(
     max_w = max(panel.shape[1] for panel in panels)
     total_h = sum(panel.shape[0] for panel in panels) + panel_spacing * (len(panels) - 1)
     canvas = np.full(
-        (total_h, max_w, 3),
+        (total_h, max_w, RGB_CHANNEL_COUNT),
         style.panel_background,
         dtype=np.uint8,
     )

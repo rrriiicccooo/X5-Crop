@@ -96,6 +96,7 @@ PARAMETER_GROUPS = (
     _group(ImageMeasurementStatisticsParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "preprocess", "Deterministic percentile sampling support."),
     _group(ContentEvidenceImageParameters, ("gradient_percentile", "texture_percentile", "local_contrast_percentile", "tonal_presence_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "preprocess", "Per-image content evidence normalization."),
     _group(ContentEvidenceImageParameters, ("minimum_active_pixels",), ParameterRole.ADAPTIVE_MEASUREMENT, "px_count", "preprocess", "Minimum content measurement support."),
+    _group(ContentEvidenceImageParameters, ("minimum_consensus_channels",), ParameterRole.ADAPTIVE_MEASUREMENT, "component_count", "preprocess", "Minimum independently active content-evidence components."),
     _group(ContentEvidenceImageParameters, ("numerical_floor",), ParameterRole.NUMERICAL_SAFETY, "normalized", "preprocess", "Content evidence normalization floor."),
     _group(ContentEvidenceImageParameters, ("maximum_percentile_samples",), ParameterRole.ADAPTIVE_MEASUREMENT, "sample_count", "preprocess", "Deterministic percentile sampling support."),
     _group(DeskewFallbackEvidenceParameters, ("low_percentile", "high_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "deskew", "Per-image fallback intensity normalization."),
@@ -183,6 +184,14 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "fixed_by_contract",
     ),
     ParameterContract(
+        "x5crop.image.constants.UINT8_ROUNDING_OFFSET",
+        ParameterRole.STANDARD_TRANSFORM,
+        "uint8_value",
+        "image",
+        "Nearest-integer offset for uint8 evidence encoding.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
         "x5crop.image.constants.FOUR_NEIGHBOR_MEAN_WEIGHT",
         ParameterRole.STANDARD_TRANSFORM,
         "coefficient",
@@ -260,6 +269,70 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "percentile",
         "parameter_validation",
         "Canonical percentile domain maximum.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.utils.RGB_CHANNEL_COUNT",
+        ParameterRole.STANDARD_TRANSFORM,
+        "channel_count",
+        "image",
+        "Canonical RGB array channel count.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.utils.RGBA_CHANNEL_COUNT",
+        ParameterRole.STANDARD_TRANSFORM,
+        "channel_count",
+        "image",
+        "Canonical RGBA array channel count.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.image.evidence.CONTENT_EVIDENCE_COMPONENT_COUNT",
+        ParameterRole.STANDARD_TRANSFORM,
+        "component_count",
+        "content_evidence",
+        "Canonical number of independent content-evidence components.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.image.statistics.INTENSITY_QUANTILE_COUNT",
+        ParameterRole.STANDARD_TRANSFORM,
+        "quantile_count",
+        "preprocess",
+        "Canonical intensity statistics tuple shape.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.image.statistics.DISTRIBUTION_QUANTILE_COUNT",
+        ParameterRole.STANDARD_TRANSFORM,
+        "quantile_count",
+        "preprocess",
+        "Canonical noise and edge statistics tuple shape.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.entry.cli.CLI_USAGE_ERROR_EXIT_CODE",
+        ParameterRole.STANDARD_TRANSFORM,
+        "process_exit_code",
+        "entry",
+        "Canonical command-line usage failure exit code.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.detection.modes.dual_lane_split.DUAL_LANE_COUNT",
+        ParameterRole.PHYSICAL_FACT,
+        "lane_count",
+        "dual_lane_proposal",
+        "Canonical lane count supported by dual-lane physical composition.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.detection.physical.separator.assignment.BOUNDARY_ADJACENT_FRAME_COUNT",
+        ParameterRole.PHYSICAL_FACT,
+        "frame_count",
+        "separator_assignment",
+        "Each internal separator boundary must leave one physical frame on both sides.",
         "fixed_by_contract",
     ),
     ParameterContract(
@@ -458,7 +531,131 @@ def hidden_runtime_percentiles() -> list[str]:
     return sorted(offenders)
 
 
-_STRUCTURAL_NUMERIC_LITERALS = frozenset({-1, 0, 1, 2, 3, 4, 5, 0.5})
+_STRUCTURAL_NUMERIC_LITERALS = frozenset({-1, 0, 1})
+
+
+def _structural_compare(node: ast.Constant, parents: dict[ast.AST, ast.AST]) -> bool:
+    parent = parents.get(node)
+    while parent is not None and not isinstance(
+        parent,
+        (ast.Compare, ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda),
+    ):
+        parent = parents.get(parent)
+    if not isinstance(parent, ast.Compare):
+        return False
+    expression = ast.unparse(parent)
+    return any(
+        marker in expression
+        for marker in ("len(", "shape", ".ndim", "lane_count")
+    )
+
+
+def _structural_subscript_or_slice(
+    node: ast.Constant,
+    parents: dict[ast.AST, ast.AST],
+) -> bool:
+    parent = parents.get(node)
+    if isinstance(parent, (ast.Subscript, ast.Slice)):
+        return True
+    if (
+        isinstance(parent, ast.Tuple)
+        and isinstance(parents.get(parent), ast.Subscript)
+        and parents[parent].slice is parent
+    ):
+        return True
+    return bool(
+        isinstance(parent, ast.UnaryOp)
+        and isinstance(parents.get(parent), ast.Subscript)
+        and parents[parent].slice is parent
+    )
+
+
+def _structural_keyword(node: ast.Constant, parents: dict[ast.AST, ast.AST]) -> bool:
+    parent = parents.get(node)
+    return bool(
+        isinstance(parent, ast.keyword)
+        and parent.arg in {"axis", "start"}
+    )
+
+
+def _structural_formula(node: ast.Constant, parents: dict[ast.AST, ast.AST]) -> bool:
+    parent = parents.get(node)
+    if not isinstance(parent, ast.BinOp):
+        return False
+    if isinstance(parent.op, ast.Pow) and parent.right is node:
+        return node.value in {2, 0.5}
+    other = parent.left if parent.right is node else parent.right
+    if (
+        isinstance(parent.op, (ast.Div, ast.FloorDiv))
+        and parent.right is node
+        and node.value in {2, 2.0}
+    ) or (
+        isinstance(parent.op, ast.Mult)
+        and node.value == 0.5
+    ):
+        names = {
+            item.id
+            for item in ast.walk(other)
+            if isinstance(item, ast.Name)
+        } | {
+            item.attr
+            for item in ast.walk(other)
+            if isinstance(item, ast.Attribute)
+        }
+        coordinate_terms = {
+            "center",
+            "center_y",
+            "position",
+            "midpoint",
+            "start",
+            "end",
+            "left",
+            "right",
+            "top",
+            "bottom",
+            "width",
+            "height",
+            "minimum",
+            "maximum",
+            "w",
+            "h",
+            "out_w",
+            "out_h",
+            "t",
+            "band_width",
+        }
+        return bool(
+            names & coordinate_terms
+            or any(
+                name.endswith(
+                    (
+                        "_start",
+                        "_end",
+                        "_left",
+                        "_right",
+                        "_top",
+                        "_bottom",
+                        "_width",
+                        "_height",
+                    )
+                )
+                for name in names
+            )
+        )
+    return False
+
+
+def _is_structural_numeric_literal(
+    node: ast.Constant,
+    parents: dict[ast.AST, ast.AST],
+) -> bool:
+    return bool(
+        node.value in _STRUCTURAL_NUMERIC_LITERALS
+        or _structural_subscript_or_slice(node, parents)
+        or _structural_keyword(node, parents)
+        or _structural_compare(node, parents)
+        or _structural_formula(node, parents)
+    )
 
 
 def hidden_runtime_numeric_literals() -> list[str]:
@@ -475,7 +672,7 @@ def hidden_runtime_numeric_literals() -> list[str]:
                 not isinstance(node, ast.Constant)
                 or isinstance(node.value, bool)
                 or not isinstance(node.value, (int, float))
-                or node.value in _STRUCTURAL_NUMERIC_LITERALS
+                or _is_structural_numeric_literal(node, parents)
             ):
                 continue
             parent = parents.get(node)

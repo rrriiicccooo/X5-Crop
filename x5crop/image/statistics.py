@@ -14,6 +14,10 @@ from ..utils import (
 )
 
 
+INTENSITY_QUANTILE_COUNT = 5
+DISTRIBUTION_QUANTILE_COUNT = 3
+
+
 @dataclass(frozen=True)
 class ImageMeasurementStatisticsParameters:
     intensity_percentiles: tuple[float, float, float, float, float] = (
@@ -32,10 +36,26 @@ class ImageMeasurementStatisticsParameters:
 
     def __post_init__(self) -> None:
         groups = (
-            ("intensity", self.intensity_percentiles, 5),
-            ("noise", self.noise_percentiles, 3),
-            ("edge intensity", self.edge_intensity_percentiles, 3),
-            ("edge texture", self.edge_texture_percentiles, 3),
+            (
+                "intensity",
+                self.intensity_percentiles,
+                INTENSITY_QUANTILE_COUNT,
+            ),
+            (
+                "noise",
+                self.noise_percentiles,
+                DISTRIBUTION_QUANTILE_COUNT,
+            ),
+            (
+                "edge intensity",
+                self.edge_intensity_percentiles,
+                DISTRIBUTION_QUANTILE_COUNT,
+            ),
+            (
+                "edge texture",
+                self.edge_texture_percentiles,
+                DISTRIBUTION_QUANTILE_COUNT,
+            ),
         )
         for name, values, expected_length in groups:
             if len(values) != expected_length or tuple(sorted(values)) != values:

@@ -67,7 +67,7 @@ def _change_point_interval(
         return PixelInterval.exact(float(position))
     start, end = min(
         runs,
-        key=lambda run: abs(0.5 * (run[0] + run[1]) - float(position)),
+        key=lambda run: abs(float(sum(run)) / float(len(run)) - float(position)),
     )
     return PixelInterval(float(start), float(max(start + 1, end)))
 

@@ -8,6 +8,7 @@ from .constants import (
     FIVE_POINT_MEAN_WEIGHT,
     FOUR_NEIGHBOR_MEAN_WEIGHT,
     UINT8_MAX_VALUE,
+    UINT8_ROUNDING_OFFSET,
 )
 from ..utils import (
     require_nonnegative,
@@ -19,6 +20,9 @@ from ..utils import (
     smooth_1d,
 )
 from .statistics import ImageMeasurementStatistics
+
+
+CONTENT_EVIDENCE_COMPONENT_COUNT = 4
 
 
 @dataclass(frozen=True)
@@ -130,6 +134,7 @@ class ContentEvidenceImageParameters:
     minimum_active_pixels: int = 16
     numerical_floor: float = 1e-6
     maximum_percentile_samples: int = 1_000_000
+    minimum_consensus_channels: int = 2
 
     def __post_init__(self) -> None:
         for name, value in (
@@ -145,6 +150,12 @@ class ContentEvidenceImageParameters:
             "content evidence percentile sample budget",
             self.maximum_percentile_samples,
         )
+        require_positive(
+            "content evidence consensus channel count",
+            self.minimum_consensus_channels,
+        )
+        if self.minimum_consensus_channels > CONTENT_EVIDENCE_COMPONENT_COUNT:
+            raise ValueError("content evidence consensus exceeds component count")
 
 
 def adaptive_activation_threshold(
@@ -202,7 +213,9 @@ def make_deskew_fallback_gray(
             int(round(gray.shape[1] * params.gutter_run_width_ratio)),
         ):
             fallback[:, start:end] = stretched[:, start:end]
-    return (fallback * UINT8_MAX_VALUE + 0.5).astype(np.uint8)
+    return (
+        fallback * UINT8_MAX_VALUE + UINT8_ROUNDING_OFFSET
+    ).astype(np.uint8)
 
 
 def make_separator_evidence_gray(
@@ -254,7 +267,10 @@ def make_separator_evidence_gray(
         vertical_edge[None, :] * params.vertical_edge_weight,
     )
     evidence = np.maximum(evidence, band[None, :] * params.tonal_band_weight)
-    return (np.clip(evidence, 0.0, 1.0) * UINT8_MAX_VALUE + 0.5).astype(np.uint8)
+    return (
+        np.clip(evidence, 0.0, 1.0) * UINT8_MAX_VALUE
+        + UINT8_ROUNDING_OFFSET
+    ).astype(np.uint8)
 
 
 def normalize_score_image(
@@ -338,6 +354,9 @@ def make_content_evidence_gray(
         params.maximum_percentile_samples,
     )
     stack = np.stack((gradient, texture, local_contrast, tonal_presence), axis=0)
-    evidence = np.partition(stack, -2, axis=0)[-2]
+    consensus_index = -int(params.minimum_consensus_channels)
+    evidence = np.partition(stack, consensus_index, axis=0)[consensus_index]
     evidence = np.clip(evidence, 0.0, 1.0)
-    return (evidence * UINT8_MAX_VALUE + 0.5).astype(np.uint8)
+    return (
+        evidence * UINT8_MAX_VALUE + UINT8_ROUNDING_OFFSET
+    ).astype(np.uint8)

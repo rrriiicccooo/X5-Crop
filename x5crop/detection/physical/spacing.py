@@ -189,7 +189,7 @@ def corroborate_single_missing_overlap(
     boundary_observations: tuple[BoundaryObservation, ...],
     dimension_source: str,
 ) -> tuple[InterFrameSpacing, ...]:
-    if count <= 2 or dimension_source != "scan_calibration":
+    if dimension_source != "scan_calibration":
         return spacings
     edge_observations = {
         observation.side: observation

@@ -23,6 +23,9 @@ from ..strip_modes import STRIP_MODES
 from .text_output import configure_entry_text_output
 
 
+CLI_USAGE_ERROR_EXIT_CODE = 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=f"X5 Crop V{VERSION} single-strip TIFF film cropper.")
     parser.add_argument("input", nargs="?", default=".", help="TIFF file or directory; default current directory.")
@@ -128,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         if "args" in locals() and bool(getattr(args, "debug_errors", False)):
             traceback.print_exc()
-        return 2
+        return CLI_USAGE_ERROR_EXIT_CODE
 
 
 if __name__ == "__main__":

@@ -4,7 +4,12 @@ from dataclasses import dataclass, field
 
 from ..image.constants import UINT8_MAX_VALUE
 from ..image.evidence import SeparatorEvidenceImageParameters
-from ..utils import require_nonnegative, require_positive, require_unit_interval
+from ..utils import (
+    RGB_CHANNEL_COUNT,
+    require_nonnegative,
+    require_positive,
+    require_unit_interval,
+)
 
 
 JPEG_QUALITY_MAX = 100
@@ -35,6 +40,8 @@ class DebugStyleParameters:
     reason_display_limit: int = 3
     text_fallback_size: tuple[int, int] = (8, 12)
     status_bar_height: int = 48
+    status_outline_width: int = 2
+    status_text_stroke_width: int = 2
     status_origin: tuple[int, int] = (12, 10)
     detail_gap: int = 14
     detail_baseline: int = 17
@@ -50,6 +57,8 @@ class DebugStyleParameters:
             ("debug JPEG quality", self.jpeg_quality),
             ("debug reason display limit", self.reason_display_limit),
             ("debug status bar height", self.status_bar_height),
+            ("debug status outline width", self.status_outline_width),
+            ("debug status text stroke width", self.status_text_stroke_width),
         ):
             require_positive(name, value)
         require_unit_interval("debug frame fill alpha", self.frame_fill_alpha)
@@ -67,7 +76,7 @@ class DebugStyleParameters:
             self.review_color,
         )
         if any(
-            len(color) != 3
+            len(color) != RGB_CHANNEL_COUNT
             or any(channel < 0 or channel > UINT8_MAX_VALUE for channel in color)
             for color in colors
         ):

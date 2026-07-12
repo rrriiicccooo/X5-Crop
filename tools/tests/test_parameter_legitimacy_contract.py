@@ -54,6 +54,9 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
             lambda: SeparatorObservationParameters(maximum_observations=0),
             lambda: SequenceHypothesisParameters(maximum_hypotheses=0),
             lambda: SequenceSolverParameters(maximum_assignment_evaluations=0),
+            lambda: ContentEvidenceImageParameters(
+                minimum_consensus_channels=5,
+            ),
         )
         for factory in invalid_factories:
             with self.subTest(factory=factory), self.assertRaises(ValueError):
@@ -63,6 +66,7 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
             expected_separator_count(0, "single_strip", 1)
         with self.assertRaises(ValueError):
             sampling_step_for_limit(100, 0)
+
     def test_every_runtime_parameter_has_one_complete_contract(self) -> None:
         self.assertEqual(unclassified_parameter_owners(), [])
         self.assertEqual(stale_parameter_contracts(), [])

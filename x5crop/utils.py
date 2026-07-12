@@ -10,6 +10,9 @@ from .domain import Box
 
 
 PERCENTILE_MAX = 100.0
+RGB_CHANNEL_COUNT = 3
+RGBA_CHANNEL_COUNT = 4
+SUPPORTED_COLOR_CHANNEL_COUNTS = (RGB_CHANNEL_COUNT, RGBA_CHANNEL_COUNT)
 
 
 def require_positive(name: str, value: int | float) -> None:
@@ -75,7 +78,11 @@ def planar_config_name(value: Any) -> Optional[str]:
 def spatial_shape(arr: np.ndarray) -> tuple[int, int]:
     if arr.ndim < 2:
         raise ValueError(f"Unsupported image shape: {arr.shape}")
-    if arr.ndim == 3 and arr.shape[0] in (3, 4) and arr.shape[-1] not in (3, 4):
+    if (
+        arr.ndim == 3
+        and arr.shape[0] in SUPPORTED_COLOR_CHANNEL_COUNTS
+        and arr.shape[-1] not in SUPPORTED_COLOR_CHANNEL_COUNTS
+    ):
         return int(arr.shape[1]), int(arr.shape[2])
     return int(arr.shape[0]), int(arr.shape[1])
 
@@ -83,9 +90,9 @@ def spatial_shape(arr: np.ndarray) -> tuple[int, int]:
 def infer_axes(arr: np.ndarray) -> str:
     if arr.ndim == 2:
         return "YX"
-    if arr.ndim == 3 and arr.shape[-1] in (3, 4):
+    if arr.ndim == 3 and arr.shape[-1] in SUPPORTED_COLOR_CHANNEL_COUNTS:
         return "YXS"
-    if arr.ndim == 3 and arr.shape[0] in (3, 4):
+    if arr.ndim == 3 and arr.shape[0] in SUPPORTED_COLOR_CHANNEL_COUNTS:
         return "SYX"
     raise ValueError(f"Unsupported TIFF array shape: {arr.shape}")
 
@@ -93,9 +100,9 @@ def infer_axes(arr: np.ndarray) -> str:
 def infer_axes_from_shape(shape: tuple[int, ...]) -> str:
     if len(shape) == 2:
         return "YX"
-    if len(shape) == 3 and shape[-1] in (3, 4):
+    if len(shape) == 3 and shape[-1] in SUPPORTED_COLOR_CHANNEL_COUNTS:
         return "YXS"
-    if len(shape) == 3 and shape[0] in (3, 4):
+    if len(shape) == 3 and shape[0] in SUPPORTED_COLOR_CHANNEL_COUNTS:
         return "SYX"
     raise ValueError(f"Unsupported TIFF array shape: {shape}")
 

@@ -68,7 +68,8 @@ def separator_profile_signals(
     tonal_scale = max(
         floor,
         statistics.intensity_mad,
-        0.5 * (statistics.intensity_high - statistics.intensity_low),
+        statistics.intensity_median - statistics.intensity_low,
+        statistics.intensity_high - statistics.intensity_median,
     )
     texture_scale = max(
         floor,

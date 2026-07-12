@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw
 
 from ..domain import Box
 from ..image.constants import UINT8_MAX_VALUE
+from ..utils import RGB_CHANNEL_COUNT
 
 
 @dataclass
@@ -43,7 +44,11 @@ def preview_gray(gray: np.ndarray, max_side: int) -> tuple[np.ndarray, float]:
     else:
         small = gray
         actual_scale = 1.0
-    rgb = np.repeat(small[..., None], 3, axis=2).astype(np.uint8, copy=False)
+    rgb = np.repeat(
+        small[..., None],
+        RGB_CHANNEL_COUNT,
+        axis=2,
+    ).astype(np.uint8, copy=False)
     return rgb, actual_scale
 
 
@@ -178,7 +183,11 @@ def add_panel_label(
     text_color: tuple[int, int, int],
 ) -> np.ndarray:
     h, w = rgb.shape[:2]
-    panel = np.full((h + height, w, 3), background, dtype=np.uint8)
+    panel = np.full(
+        (h + height, w, RGB_CHANNEL_COUNT),
+        background,
+        dtype=np.uint8,
+    )
     panel[height:, :, :] = rgb
     image = Image.fromarray(panel, mode="RGB")
     draw = ImageDraw.Draw(image)

@@ -9,6 +9,9 @@ from ...configuration.candidate import DualLaneDividerParameters
 from ...utils import clamp_int
 
 
+DUAL_LANE_COUNT = 2
+
+
 @dataclass(frozen=True)
 class LaneDividerProposal:
     center: int
@@ -35,7 +38,7 @@ def lane_divider_proposals(
     if content_evidence.ndim != 2:
         raise ValueError("dual-lane divider requires two-dimensional evidence")
     height, width = content_evidence.shape
-    if height < 2 or width < 1:
+    if height < DUAL_LANE_COUNT or width < 1:
         return LaneDividerProposalSet((), False)
     start = max(1, int(round(height * parameters.search_min_ratio)))
     end = min(height - 1, int(round(height * parameters.search_max_ratio)))
@@ -76,7 +79,7 @@ def lane_divider_proposals(
                 break
             selected.append(row)
 
-    half = max(1, band_width // 2)
+    half = max(1, band_width // DUAL_LANE_COUNT)
     proposals = [
         LaneDividerProposal(
             center=row,
@@ -85,7 +88,7 @@ def lane_divider_proposals(
         )
         for row in selected
     ]
-    center = height // 2
+    center = height // DUAL_LANE_COUNT
     if all(abs(center - proposal.center) >= half for proposal in proposals):
         proposals.append(
             LaneDividerProposal(

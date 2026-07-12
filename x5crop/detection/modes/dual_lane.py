@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Callable
 
 from ...cache.analysis import make_measurement_cache
@@ -38,10 +38,23 @@ from ..physical.boundary import (
     canvas_boundary_observations,
 )
 from ..physical.spacing import InterFrameSpacing
-from .dual_lane_split import LaneDividerProposal, lane_divider_proposals
+from .dual_lane_split import (
+    DUAL_LANE_COUNT,
+    LaneDividerProposal,
+    lane_divider_proposals,
+)
 
 
 StandardDetector = Callable[[DetectionContext], SelectionResult]
+
+
+@dataclass(frozen=True)
+class _TranslatedLaneGeometry:
+    photo_intervals: tuple[PhotoInterval, ...]
+    separator_observations: tuple[SeparatorBandObservation, ...]
+    separator_assignments: tuple[SeparatorAssignment, ...]
+    frame_boundaries: tuple[FrameBoundary, ...]
+    inter_frame_spacings: tuple[InterFrameSpacing, ...]
 
 
 def _offset_interval(interval: PixelInterval, offset: int) -> PixelInterval:
@@ -65,13 +78,7 @@ def _translate_lane_geometry(
     solution: SequenceSolution,
     lane: Box,
     lane_index: int,
-) -> tuple[
-    tuple[PhotoInterval, ...],
-    tuple[SeparatorBandObservation, ...],
-    tuple[SeparatorAssignment, ...],
-    tuple[FrameBoundary, ...],
-    tuple[InterFrameSpacing, ...],
-]:
+) -> _TranslatedLaneGeometry:
     translated_observations = tuple(
         _translate_separator_observation(observation, lane)
         for observation in solution.separator_observations
@@ -157,12 +164,12 @@ def _translate_lane_geometry(
         replace(spacing, lane_index=lane_index)
         for spacing in solution.inter_frame_spacings
     )
-    return (
-        translated_intervals,
-        translated_observations,
-        translated_assignments,
-        translated_boundaries,
-        lane_spacings,
+    return _TranslatedLaneGeometry(
+        photo_intervals=translated_intervals,
+        separator_observations=translated_observations,
+        separator_assignments=translated_assignments,
+        frame_boundaries=translated_boundaries,
+        inter_frame_spacings=lane_spacings,
     )
 
 
@@ -265,11 +272,21 @@ def _parent_candidate(
             start=1,
         )
     )
-    photo_intervals = tuple(item for group in translated for item in group[0])
-    observations = tuple(item for group in translated for item in group[1])
-    assignments = tuple(item for group in translated for item in group[2])
-    boundaries = tuple(item for group in translated for item in group[3])
-    spacings = tuple(item for group in translated for item in group[4])
+    photo_intervals = tuple(
+        item for group in translated for item in group.photo_intervals
+    )
+    observations = tuple(
+        item for group in translated for item in group.separator_observations
+    )
+    assignments = tuple(
+        item for group in translated for item in group.separator_assignments
+    )
+    boundaries = tuple(
+        item for group in translated for item in group.frame_boundaries
+    )
+    spacings = tuple(
+        item for group in translated for item in group.inter_frame_spacings
+    )
     count = sum(candidate.geometry.count for candidate in lane_candidates)
     work_height, work_width = context.measurement_cache.gray_work.shape
     return BuiltCandidate(
@@ -337,7 +354,7 @@ def choose_dual_lane_detection(
     physical_spec = context.configuration.physical_spec
     if context.request.strip_mode != "full":
         raise ValueError("dual-lane detector is only valid for full mode")
-    if physical_spec.lane_count != 2:
+    if physical_spec.lane_count != DUAL_LANE_COUNT:
         raise ValueError("dual-lane detector supports exactly two lanes")
     proposal_set = lane_divider_proposals(
         context.measurement_cache.content_evidence_float_work,
