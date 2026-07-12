@@ -15,6 +15,7 @@ from tools.tests.architecture_contracts import (
     invalid_dataclass_default_factories,
     modules_with_export_lists,
     pass_through_classes,
+    pass_through_tool_functions,
     reachable_source_modules,
     source_import_graph,
     source_layer_import_graph,
@@ -27,6 +28,8 @@ from tools.tests.architecture_contracts import (
     unreferenced_public_symbols,
     unreferenced_top_level_symbols,
     unused_imports,
+    unused_tool_imports,
+    unreferenced_tool_helpers,
 )
 
 
@@ -180,6 +183,11 @@ class LayerBoundariesContractTest(unittest.TestCase):
         self.assertEqual(unused_imports(), [])
         self.assertEqual(modules_with_export_lists(), [])
         self.assertEqual(pass_through_classes(), [])
+
+    def test_tools_and_tests_have_no_orphan_or_pass_through_helpers(self) -> None:
+        self.assertEqual(unreferenced_tool_helpers(), [])
+        self.assertEqual(pass_through_tool_functions(), [])
+        self.assertEqual(unused_tool_imports(), [])
 
     def test_active_interfaces_are_typed_and_configuration_defaults_are_explicit(self) -> None:
         self.assertEqual(functions_with_untyped_parameters(), [])

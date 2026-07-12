@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import fields
-from pathlib import Path
 import unittest
 
 from tools.tests.architecture_contracts import (

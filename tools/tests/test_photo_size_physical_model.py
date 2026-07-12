@@ -10,7 +10,6 @@ from tools.tests.physical_gate_support import (
     separator_observation,
 )
 from x5crop.detection.physical.boundary import (
-    HolderOcclusionEvidence,
     holder_occlusion_evidence,
 )
 from x5crop.detection.physical.photo_size import (

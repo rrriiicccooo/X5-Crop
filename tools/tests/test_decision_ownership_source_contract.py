@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ast
 from inspect import Parameter, signature
-from pathlib import Path
 import unittest
 
 from tools.tests.architecture_contracts import PROJECT_ROOT

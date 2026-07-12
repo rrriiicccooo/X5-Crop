@@ -558,20 +558,3 @@ def final_detection_fixture(
         image_width=200,
         image_height=100,
     )
-
-
-def with_content_preservation(
-    candidate: AssessedCandidate,
-    state: EvidenceState,
-) -> AssessedCandidate:
-    evidence = replace(
-        candidate.assessment.evidence,
-        content_preservation=replace(
-            candidate.assessment.evidence.content_preservation,
-            state=state,
-        ),
-    )
-    return replace(
-        candidate,
-        assessment=replace(candidate.assessment, evidence=evidence),
-    )

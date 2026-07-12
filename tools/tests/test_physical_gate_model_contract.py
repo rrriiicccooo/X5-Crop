@@ -19,7 +19,6 @@ from x5crop.detection.candidate.selection.choose import geometry_clusters
 from x5crop.domain import Box, EvidenceState, PixelInterval
 from x5crop.detection.physical.model import SequenceResiduals
 from x5crop.entry.cli import build_parser
-from x5crop.configuration.registry import get_detection_configuration
 from x5crop.run_config import RunConfig
 from x5crop.runtime.options import RuntimeOptions
 from x5crop.units import ScanCalibration

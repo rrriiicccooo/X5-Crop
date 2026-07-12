@@ -38,10 +38,6 @@ def field_value(row: dict[str, Any], field: str) -> Any:
     return value
 
 
-def validate_report_row(row: dict[str, Any]) -> None:
-    validate_current_report_record(row)
-
-
 def load_jsonl_report(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     with path.open("r", encoding="utf-8") as handle:
@@ -53,7 +49,7 @@ def load_jsonl_report(path: Path) -> list[dict[str, Any]]:
 
 
 def report_key(row: dict[str, Any]) -> str:
-    validate_report_row(row)
+    validate_current_report_record(row)
     return str(row["source"])
 
 

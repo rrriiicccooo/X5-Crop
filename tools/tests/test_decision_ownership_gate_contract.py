@@ -18,7 +18,7 @@ from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
     FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
 )
-from x5crop.domain import Box, CropEnvelope, EvidenceState
+from x5crop.domain import Box, EvidenceState
 from x5crop.detection.decision.model import DecisionGateAssessment
 from x5crop.detection.gate_checks import GateCheck
 from x5crop.output.model import OutputGeometry

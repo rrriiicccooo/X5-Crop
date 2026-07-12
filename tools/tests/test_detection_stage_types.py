@@ -16,7 +16,6 @@ from x5crop.detection.candidate.model import (
 )
 from x5crop.detection.physical.model import SequenceSolution
 import x5crop.detection.physical.model as physical_model
-from x5crop.detection.candidate.selection.model import SelectionResult
 from x5crop.detection.decision.model import DecisionGateAssessment
 from x5crop.detection.final.model import FinalDetection
 from x5crop.detection.context import DetectionContext, DetectionRequest

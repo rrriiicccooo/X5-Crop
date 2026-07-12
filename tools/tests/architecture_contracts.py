@@ -185,15 +185,6 @@ def forbidden_import_edges(
     )
 
 
-def public_top_level_symbols(node_type: type[ast.AST]) -> dict[str, list[str]]:
-    symbols: dict[str, list[str]] = {}
-    for module in source_modules().values():
-        for node in parsed_source(module).body:
-            if isinstance(node, node_type) and not node.name.startswith("_"):
-                symbols.setdefault(node.name, []).append(module.name)
-    return symbols
-
-
 def pass_through_classes() -> list[str]:
     offenders: list[str] = []
     for module in source_modules().values():
@@ -532,9 +523,9 @@ def unreferenced_dataclass_fields() -> list[str]:
     return sorted(offenders)
 
 
-def unused_imports() -> list[str]:
+def _unused_imports(modules: Iterable[SourceModule]) -> list[str]:
     offenders: list[str] = []
-    for module in source_modules().values():
+    for module in modules:
         tree = parsed_source(module)
         loaded_names = {
             node.id
@@ -559,6 +550,14 @@ def unused_imports() -> list[str]:
                 if name not in loaded_names:
                     offenders.append(f"{module.name}:{line_number}:{name}")
     return sorted(offenders)
+
+
+def unused_imports() -> list[str]:
+    return _unused_imports(source_modules().values())
+
+
+def unused_tool_imports() -> list[str]:
+    return _unused_imports(_tool_modules().values())
 
 
 def unreferenced_methods() -> list[str]:
@@ -616,3 +615,99 @@ def standalone_tool_modules() -> frozenset[str]:
         ):
             modules.add(".".join(path.relative_to(PROJECT_ROOT).with_suffix("").parts))
     return frozenset(modules)
+
+
+def _tool_modules() -> dict[str, SourceModule]:
+    modules: dict[str, SourceModule] = {}
+    for path in sorted((PROJECT_ROOT / "tools").rglob("*.py")):
+        relative = path.relative_to(PROJECT_ROOT).with_suffix("")
+        parts = list(relative.parts)
+        if parts[-1] == "__init__":
+            parts.pop()
+        name = ".".join(parts)
+        modules[name] = SourceModule(name=name, path=path)
+    return modules
+
+
+def unreferenced_tool_helpers() -> list[str]:
+    modules = _tool_modules()
+    references: set[tuple[str, str]] = set()
+    for module in modules.values():
+        tree = parsed_source(module)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                references.add((module.name, node.id))
+            elif isinstance(node, ast.ImportFrom):
+                if node.level:
+                    relative = "." * node.level + (node.module or "")
+                    base = resolve_name(relative, module.package)
+                else:
+                    base = node.module or ""
+                for alias in node.names:
+                    references.add((base, alias.name))
+
+    offenders: list[str] = []
+    for module in modules.values():
+        is_test_module = module.path.name.startswith("test_")
+        for node in parsed_source(module).body:
+            if not isinstance(
+                node,
+                (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef),
+            ):
+                continue
+            if node.name.startswith("_") or node.name == "main":
+                continue
+            if is_test_module and isinstance(node, ast.ClassDef):
+                continue
+            if (module.name, node.name) not in references:
+                offenders.append(f"{module.name}.{node.name}")
+    return sorted(offenders)
+
+
+def pass_through_tool_functions() -> list[str]:
+    offenders: list[str] = []
+    for module in _tool_modules().values():
+        for node in parsed_source(module).body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name.startswith("_") or node.name == "main":
+                continue
+            statements = [
+                statement
+                for statement in node.body
+                if not (
+                    isinstance(statement, ast.Expr)
+                    and isinstance(statement.value, ast.Constant)
+                    and isinstance(statement.value.value, str)
+                )
+            ]
+            if len(statements) != 1:
+                continue
+            statement = statements[0]
+            call = (
+                statement.value
+                if isinstance(statement, ast.Expr)
+                and isinstance(statement.value, ast.Call)
+                else statement.value
+                if isinstance(statement, ast.Return)
+                and isinstance(statement.value, ast.Call)
+                else None
+            )
+            if call is None or call.keywords:
+                continue
+            parameters = tuple(
+                argument.arg
+                for argument in (
+                    *node.args.posonlyargs,
+                    *node.args.args,
+                    *node.args.kwonlyargs,
+                )
+            )
+            forwarded = tuple(
+                argument.id
+                for argument in call.args
+                if isinstance(argument, ast.Name)
+            )
+            if len(forwarded) == len(call.args) and forwarded == parameters:
+                offenders.append(f"{module.name}:{node.lineno}:{node.name}")
+    return sorted(offenders)

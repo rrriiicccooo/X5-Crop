@@ -4,7 +4,6 @@ import ast
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 import importlib
-from pathlib import Path
 from types import UnionType
 from typing import Any, get_args, get_origin
 
