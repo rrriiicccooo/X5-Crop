@@ -160,6 +160,8 @@ content preservation compatibility 和实质替代解均已解决时才 supporte
 state 和 ordered reasons 只能由完整 resolution facts 派生，caller 不得另行写入。
 Sequence conservation 同样只保存 visible length、holder occlusion、frame/spacing totals 与 typed
 spacing basis；physical extent、state 和 reason 均由这些物理事实派生。
+Observed、corroborated 与 hypothesized spacing 的 reason 由 concrete type 与 signed kind 派生，
+不保存自由文本字段。
 Boundary assignment consensus 只保存 typed solver outcome、solution count 与 conflicting indexes；
 state 和 reason 由 outcome 派生，dual-lane component failure 也有独立 outcome。
 Holder occlusion side 使用 typed measurement outcome；普通 combined width 由两侧相加，只有单 frame

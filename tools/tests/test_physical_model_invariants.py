@@ -27,6 +27,11 @@ from x5crop.detection.physical.model import (
 from x5crop.detection.physical.separator.assignment import (
     dimension_constrained_boundary,
 )
+from x5crop.detection.physical.spacing import (
+    CorroboratedSpacingEvidence,
+    ObservedSpacingEvidence,
+    SpacingHypothesis,
+)
 from x5crop.detection.evidence.transform_geometry import (
     TransformGeometryEvidence,
     TransformOutcome,
@@ -311,6 +316,15 @@ class PhysicalModelInvariantTest(unittest.TestCase):
         cross_axis_fields = type(cross_axis).__dataclass_fields__
         self.assertFalse(cross_axis_fields["state"].init)
         self.assertFalse(cross_axis_fields["reason"].init)
+
+    def test_spacing_reason_is_derived_from_typed_spacing(self) -> None:
+        for spacing_type in (
+            ObservedSpacingEvidence,
+            CorroboratedSpacingEvidence,
+            SpacingHypothesis,
+        ):
+            with self.subTest(spacing_type=spacing_type.__name__):
+                self.assertNotIn("reason", spacing_type.__dataclass_fields__)
 
     def test_pixel_intervals_and_residuals_require_finite_values(self) -> None:
         with self.assertRaises(ValueError):

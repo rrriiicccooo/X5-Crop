@@ -108,21 +108,12 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 "separator",
                 PixelInterval.exact(-5.0),
                 provenance,
-                "mismatched_observation",
             ),
             lambda: SpacingHypothesis(
                 FrameBoundaryReference(None, 1),
                 "overlap",
                 PixelInterval.exact(5.0),
                 provenance,
-                "mismatched_hypothesis",
-            ),
-            lambda: ObservedSpacingEvidence(
-                FrameBoundaryReference(None, 1),
-                "separator",
-                PixelInterval.exact(5.0),
-                provenance,
-                "",
             ),
         )
         for factory in invalid_factories:

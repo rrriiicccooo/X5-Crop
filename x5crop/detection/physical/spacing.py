@@ -33,7 +33,6 @@ def _validate_spacing_identity(
     boundary: FrameBoundaryReference,
     kind: str,
     signed_width_px: PixelInterval,
-    reason: str,
 ) -> None:
     if not isinstance(boundary, FrameBoundaryReference):
         raise TypeError("inter-frame spacing requires a frame boundary reference")
@@ -41,8 +40,6 @@ def _validate_spacing_identity(
         raise ValueError(f"unsupported inter-frame spacing: {kind}")
     if kind != _spacing_kind(signed_width_px):
         raise ValueError("inter-frame spacing kind must match its signed interval")
-    if not reason:
-        raise ValueError("inter-frame spacing requires a reason")
 
 
 @dataclass(frozen=True)
@@ -51,15 +48,17 @@ class ObservedSpacingEvidence:
     kind: str
     signed_width_px: PixelInterval
     provenance: MeasurementProvenance
-    reason: str
 
     def __post_init__(self) -> None:
         _validate_spacing_identity(
             self.boundary,
             self.kind,
             self.signed_width_px,
-            self.reason,
         )
+
+    @property
+    def reason(self) -> str:
+        return f"observed_{self.kind}_spacing"
 
     @property
     def state(self) -> EvidenceState:
@@ -88,17 +87,19 @@ class CorroboratedSpacingEvidence:
     kind: str
     signed_width_px: PixelInterval
     provenance: MeasurementProvenance
-    reason: str
 
     def __post_init__(self) -> None:
         _validate_spacing_identity(
             self.boundary,
             self.kind,
             self.signed_width_px,
-            self.reason,
         )
         if self.kind != "overlap" or self.signed_width_px.maximum >= 0.0:
             raise ValueError("corroborated spacing evidence must be an overlap")
+
+    @property
+    def reason(self) -> str:
+        return "independent_constraints_require_overlap"
 
     @property
     def state(self) -> EvidenceState:
@@ -123,15 +124,17 @@ class SpacingHypothesis:
     kind: str
     signed_width_px: PixelInterval
     provenance: MeasurementProvenance
-    reason: str
 
     def __post_init__(self) -> None:
         _validate_spacing_identity(
             self.boundary,
             self.kind,
             self.signed_width_px,
-            self.reason,
         )
+
+    @property
+    def reason(self) -> str:
+        return f"{self.kind}_spacing_hypothesis"
 
     @property
     def state(self) -> EvidenceState:
@@ -217,7 +220,6 @@ def observed_spacing_evidence(
         kind=kind,
         signed_width_px=signed_width_px,
         provenance=provenance,
-        reason=f"observed_{kind}_spacing",
     )
 
 
@@ -232,7 +234,6 @@ def spacing_hypothesis(
         kind=kind,
         signed_width_px=signed_width_px,
         provenance=provenance,
-        reason=f"{kind}_spacing_hypothesis",
     )
 
 
@@ -318,7 +319,6 @@ def corroborate_single_missing_overlap(
                 )
             ),
         ),
-        reason="independent_constraints_require_overlap",
     )
     result = list(spacings)
     result[missing_position] = corroborated
