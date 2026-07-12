@@ -16,6 +16,12 @@ repository rules in `AGENTS.md`.
 
 #### 封口参数与几何解析契约（2026-07-12）
 
+- Current schema 唯一身份更新为 `detection_report / physical_sequence_resolution`；旧 revision
+  不再被 report、cache、tests 或 tools 接受。
+- Dimension-constrained cut 保留完整位置区间，不再把未观测边界伪装成精确中点。
+- 单个 separator 宽度上限由边界两侧照片的物理占位决定，不再被其他 boundary 的 overlap
+  抵消。可信 calibration、两端实测边界与其余独立 spacing 唯一共同确定的负 residual 可形成
+  `CorroboratedSpacingEvidence`，只保护相邻输出，不反向证明 conservation。
 - 固定的 format/full count 与用户显式 count 已和 partial auto inference 分离；固定 count
   不再因 placement 未解决而伪装成 count 未解决。
 - Geometry clustering 要求同簇区间具有共同共识；非支配的不同几何仍保持 disagreement。
@@ -34,7 +40,7 @@ repository rules in `AGENTS.md`.
 - Cache reuse 不再从 report candidate 反向选择 configuration；output bleed layout 必须显式传入。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 256 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 269 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）
@@ -48,9 +54,9 @@ repository rules in `AGENTS.md`.
   format-family profile 和固定 geometry clustering percentage 已删除。
 - `DetectionPolicy` / `FormatParameters` / assembly wrappers 已由直接构建的
   `DetectionConfiguration` 取代；旧 `x5crop.policies` 源码树已删除且无 compatibility shim。
-- Global overlap capacity 已替换为逐 boundary `FrameBleedPlan`。只有 independently observed
-  overlap 扩张相邻两张 frame 的对应侧，无关 frame 不再共享最大 bleed。
-- Current report schema 更新为 `detection_report / physical_candidate_geometry`，canonical
+- Global overlap capacity 已替换为逐 boundary `FrameBleedPlan`。只有 independently observed 或
+  independent-constraint corroborated overlap 扩张相邻两张 frame 的对应侧，无关 frame 不再共享最大 bleed。
+- Current report schema 更新为 `detection_report / physical_sequence_resolution`，canonical
   sections 为 `input / configuration / selection / decision / output`。旧 record 直接重新检测。
 - Candidate geometry 拆成 `SequenceSolution / DualLaneSolution / ReviewOnlyGeometry`；
   dual-lane 与 review-only 不再用空字段或可选 lane 字段伪装成标准 sequence。
@@ -140,6 +146,15 @@ schema_revision: frame_sequence_geometry
 
 #### Physical Sequence Resolution And Empirical-Profile Removal (2026-07-12)
 
+- The sole current schema identity is now
+  `detection_report / physical_sequence_resolution`; reports, cache, tests, and
+  tools do not accept the superseded revision.
+- Dimension-constrained cuts retain their position intervals instead of turning
+  unobserved boundaries into exact midpoints. A separator's width allowance is
+  independent of overlap at another boundary.
+- Trusted calibration, measured sequence edges, and all remaining observed
+  spacings may uniquely corroborate one negative spacing. This evidence protects
+  only the adjacent output sides and cannot prove its own conservation equation.
 - A global monotonic `SequenceSolution` solver replaces greedy boundary assignment;
   zero-width, negative-width, and reversed frames cannot become candidates.
 - Frame priors, photo intervals, position/width constraints, observed spacing, and
@@ -152,8 +167,8 @@ schema_revision: frame_sequence_geometry
   translation chain. The superseded `x5crop.policies` source tree is deleted without
   a compatibility shim.
 - Per-boundary `FrameBleedPlan` replaces global overlap capacity. Only adjacent frame
-  sides receive independently observed overlap protection.
-- Current reports use `detection_report / physical_candidate_geometry` with canonical
+  sides receive independently observed or independent-constraint corroborated overlap protection.
+- Current reports use `detection_report / physical_sequence_resolution` with canonical
   `input / configuration / selection / decision / output` sections. Old records are
   redetected.
 - Candidate geometry now uses distinct `SequenceSolution`, `DualLaneSolution`, and

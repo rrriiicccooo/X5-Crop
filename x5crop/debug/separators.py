@@ -8,6 +8,7 @@ from ..detection.decision.model import FinalDetection
 from x5crop.domain import SeparatorBandObservation
 from ..domain import Box
 from ..geometry.boxes import map_work_box
+from ..configuration.diagnostics import DebugStyleParameters
 from .canvas import draw_preview_line, draw_preview_mark
 
 
@@ -63,9 +64,16 @@ def draw_separator_overlay(
     detection: FinalDetection,
     scale: float,
     overlay: Any,
+    style: DebugStyleParameters,
 ) -> None:
-    image_height = max(1, int(round(rgb.shape[0] / max(scale, 1e-9))))
-    image_width = max(1, int(round(rgb.shape[1] / max(scale, 1e-9))))
+    image_height = max(
+        1,
+        int(round(rgb.shape[0] / max(scale, style.separator_scale_floor))),
+    )
+    image_width = max(
+        1,
+        int(round(rgb.shape[1] / max(scale, style.separator_scale_floor))),
+    )
     accepted = {
         id(assignment.observation)
         for assignment in detection.separator_assignments
@@ -81,7 +89,11 @@ def draw_separator_overlay(
                 image_height,
             ),
             scale,
-            (255, 0, 0) if id(observation) in accepted else (255, 170, 0),
+            (
+                style.accepted_separator_color
+                if id(observation) in accepted
+                else style.unselected_separator_color
+            ),
             overlay.observed_line_width,
         )
     overlap_indexes = {
@@ -93,9 +105,9 @@ def draw_separator_overlay(
         if boundary.source == "observed_separator" and boundary.boundary_index not in overlap_indexes:
             continue
         color = (
-            (0, 220, 255)
+            style.overlap_boundary_color
             if boundary.boundary_index in overlap_indexes
-            else (190, 80, 255)
+            else style.dimension_boundary_color
         )
         for tick in _boundary_ticks(
             detection,

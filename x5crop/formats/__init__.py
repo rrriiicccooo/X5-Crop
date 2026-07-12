@@ -76,7 +76,7 @@ class FormatPhysicalSpec:
 def expected_separator_count(
     default_count: int,
     physical_layout: str,
-    lane_count: int = 1,
+    lane_count: int,
 ) -> int:
     if default_count <= 0:
         raise ValueError("default frame count must be positive")
@@ -96,10 +96,11 @@ def _format_spec(
     allowed_counts: tuple[int, ...],
     family: str,
     nominal_frame_size_mm: FrameSizeMm,
+    *,
+    lane_count: int,
     frame_size_mm_options: tuple[FrameSizeMm, ...] = (),
     physical_layout: str = "single_strip",
     complete_strip_can_be_underfilled: bool = False,
-    lane_count: int = 1,
     lane_format_id: str | None = None,
 ) -> FormatPhysicalSpec:
     frame_options = frame_size_mm_options or (nominal_frame_size_mm,)
@@ -123,6 +124,7 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         tuple(range(1, 7)),
         "35mm",
         FrameSizeMm(36.0, 24.0),
+        lane_count=1,
     ),
     "135-dual": _format_spec(
         "135-dual",
@@ -140,6 +142,7 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         tuple(range(1, 13)),
         "35mm",
         FrameSizeMm(18.0, 24.0),
+        lane_count=1,
     ),
     "xpan": _format_spec(
         "xpan",
@@ -147,6 +150,7 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         (1, 2, 3),
         "35mm",
         FrameSizeMm(65.0, 24.0),
+        lane_count=1,
         complete_strip_can_be_underfilled=True,
     ),
     "120-645": _format_spec(
@@ -155,6 +159,7 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         (1, 2, 3, 4),
         "120",
         FrameSizeMm(42.0, 56.0),
+        lane_count=1,
     ),
     "120-66": _format_spec(
         "120-66",
@@ -162,6 +167,7 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         (1, 2, 3),
         "120",
         FrameSizeMm(56.0, 56.0),
+        lane_count=1,
         frame_size_mm_options=(
             FrameSizeMm(56.0, 56.0),
             FrameSizeMm(54.0, 54.0, label="camera_variant"),
@@ -174,6 +180,7 @@ FORMATS: dict[str, FormatPhysicalSpec] = {
         (1, 2, 3),
         "120",
         FrameSizeMm(70.0, 56.0),
+        lane_count=1,
     ),
 }
 

@@ -5,6 +5,7 @@ import numpy as np
 from ....domain import Box
 from ....configuration.content import ContentConfiguration
 from ....image.evidence import adaptive_activation_threshold
+from ....image.constants import UINT8_MAX_VALUE
 from ....utils import runs_from_mask, smooth_1d
 
 
@@ -17,7 +18,7 @@ def content_region_runs(
     parameters = content_policy.profile
     crop = evidence[region.top : region.bottom, region.left : region.right].astype(
         np.float32
-    ) / 255.0
+    ) / UINT8_MAX_VALUE
     if crop.size == 0:
         return ()
     profile = crop.mean(axis=0)

@@ -8,6 +8,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from ..domain import Box
+from ..image.constants import UINT8_MAX_VALUE
 
 
 @dataclass
@@ -32,7 +33,7 @@ FRAME_FILL_COLORS = (
 )
 
 
-def preview_gray(gray: np.ndarray, max_side: int = 1800) -> tuple[np.ndarray, float]:
+def preview_gray(gray: np.ndarray, max_side: int) -> tuple[np.ndarray, float]:
     h, w = gray.shape
     scale = min(1.0, float(max_side) / float(max(h, w)))
     if scale < 1.0:
@@ -50,7 +51,7 @@ def cached_preview_gray(
     cache: DebugRenderCache,
     key: str,
     gray: np.ndarray,
-    max_side: int = 1800,
+    max_side: int,
 ) -> tuple[np.ndarray, float]:
     cache_key = (str(key), int(max_side))
     cached = cache.previews.get(cache_key)
@@ -67,13 +68,24 @@ def cached_labeled_preview_gray(
     key: str,
     label: str,
     gray: np.ndarray,
-    max_side: int = 1800,
+    max_side: int,
+    label_height: int,
+    label_origin: tuple[int, int],
+    background: int,
+    text_color: tuple[int, int, int],
 ) -> tuple[np.ndarray, float]:
     cache_key = (str(key), str(label), int(max_side))
     cached = cache.labeled_panels.get(cache_key)
     if cached is None:
         rgb, scale = cached_preview_gray(cache, key, gray, max_side)
-        labeled = add_panel_label(rgb, label)
+        labeled = add_panel_label(
+            rgb,
+            label,
+            height=label_height,
+            origin=label_origin,
+            background=background,
+            text_color=text_color,
+        )
         cache.labeled_panels[cache_key] = labeled.copy()
         return labeled, scale
     preview = cache.previews.get((str(key), int(max_side)))
@@ -86,7 +98,7 @@ def draw_preview_rect(
     box: Box,
     scale: float,
     color: tuple[int, int, int],
-    thickness: int = 2,
+    thickness: int,
 ) -> None:
     h, w = rgb.shape[:2]
     left = max(0, min(w - 1, int(round(box.left * scale))))
@@ -107,7 +119,7 @@ def fill_preview_rect(
     box: Box,
     scale: float,
     color: tuple[int, int, int],
-    alpha: float = 0.24,
+    alpha: float,
 ) -> None:
     h, w = rgb.shape[:2]
     left = max(0, min(w - 1, int(round(box.left * scale))))
@@ -118,7 +130,11 @@ def fill_preview_rect(
         return
     overlay = np.array(color, dtype=np.float32)
     region = rgb[top:bottom, left:right].astype(np.float32, copy=False)
-    blended = np.clip(region * (1.0 - alpha) + overlay * alpha, 0, 255)
+    blended = np.clip(
+        region * (1.0 - alpha) + overlay * alpha,
+        0,
+        UINT8_MAX_VALUE,
+    )
     rgb[top:bottom, left:right] = blended.astype(np.uint8)
 
 
@@ -127,7 +143,7 @@ def draw_preview_line(
     box: Box,
     scale: float,
     color: tuple[int, int, int],
-    thickness: int = 2,
+    thickness: int,
 ) -> None:
     h, w = rgb.shape[:2]
     x = max(0, min(w - 1, int(round(box.left * scale))))
@@ -144,7 +160,7 @@ def draw_preview_mark(
     box: Box,
     scale: float,
     color: tuple[int, int, int],
-    thickness: int = 2,
+    thickness: int,
 ) -> None:
     if box.width > 1 or box.height > 1:
         draw_preview_rect(rgb, box, scale, color, thickness)
@@ -152,18 +168,30 @@ def draw_preview_mark(
         draw_preview_line(rgb, box, scale, color, thickness)
 
 
-def add_panel_label(rgb: np.ndarray, label: str) -> np.ndarray:
-    label_h = 34
+def add_panel_label(
+    rgb: np.ndarray,
+    label: str,
+    *,
+    height: int,
+    origin: tuple[int, int],
+    background: int,
+    text_color: tuple[int, int, int],
+) -> np.ndarray:
     h, w = rgb.shape[:2]
-    panel = np.full((h + label_h, w, 3), 18, dtype=np.uint8)
-    panel[label_h:, :, :] = rgb
+    panel = np.full((h + height, w, 3), background, dtype=np.uint8)
+    panel[height:, :, :] = rgb
     image = Image.fromarray(panel, mode="RGB")
     draw = ImageDraw.Draw(image)
-    draw.text((12, 9), label, fill=(245, 245, 245))
+    draw.text(origin, label, fill=text_color)
     return np.asarray(image)
 
 
-def write_rgb_jpeg(rgb: np.ndarray, output_path: Path) -> None:
+def write_rgb_jpeg(
+    rgb: np.ndarray,
+    output_path: Path,
+    *,
+    quality: int,
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     image = Image.fromarray(np.ascontiguousarray(rgb), mode="RGB")
-    image.save(output_path, format="JPEG", quality=92, optimize=True)
+    image.save(output_path, format="JPEG", quality=quality, optimize=True)

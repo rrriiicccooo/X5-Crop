@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .constants import FOUR_NEIGHBOR_MEAN_WEIGHT
 from ..utils import (
     require_percentile,
     require_positive,
@@ -109,7 +110,7 @@ def _neighbor_texture(data: np.ndarray) -> np.ndarray:
         + np.abs(data - south)
         + np.abs(data - west)
         + np.abs(data - east)
-    ) * 0.25
+    ) * FOUR_NEIGHBOR_MEAN_WEIGHT
 
 
 def image_measurement_statistics(

@@ -74,8 +74,8 @@ def frame_dimension_prior(
         )
         heights = (short_axis,)
     return FrameDimensionPrior(
-        width_px=PixelInterval(max(1.0, min(widths)), max(1.0, max(widths))),
-        height_px=PixelInterval(max(1.0, min(heights)), max(1.0, max(heights))),
+        width_px=PixelInterval(min(widths), max(widths)),
+        height_px=PixelInterval(min(heights), max(heights)),
         frame_size_options_mm=options,
         source="scan_calibration" if calibrated else "short_axis_aspect",
         provenance=MeasurementProvenance(
@@ -149,19 +149,19 @@ def frame_dimension_evidence(
     photo_cv = _width_cv(photo_widths)
     separator_cv = _width_cv(separator_widths)
     errors = tuple(
-        abs(width - target) / max(1.0, target) for width in photo_widths
+        abs(width - target) / target for width in photo_widths
     )
     maximum_error = max(errors) if errors else None
     observed_width = median(photo_widths) if photo_widths else None
     observed_height = float(geometry.visible_sequence_span.box.height)
     observed_aspect = (
-        float(observed_width) / max(1.0, observed_height)
+        float(observed_width) / observed_height
         if observed_width is not None
         else None
     )
     nominal_aspect = float(physical_spec.horizontal_content_aspect)
     aspect_error = (
-        abs(observed_aspect - nominal_aspect) / max(1e-6, nominal_aspect)
+        abs(observed_aspect - nominal_aspect) / nominal_aspect
         if observed_aspect is not None
         else None
     )

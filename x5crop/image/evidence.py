@@ -4,6 +4,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .constants import (
+    FIVE_POINT_MEAN_WEIGHT,
+    FOUR_NEIGHBOR_MEAN_WEIGHT,
+    UINT8_MAX_VALUE,
+)
 from ..utils import (
     require_nonnegative,
     require_percentile,
@@ -197,7 +202,7 @@ def make_deskew_fallback_gray(
             int(round(gray.shape[1] * params.gutter_run_width_ratio)),
         ):
             fallback[:, start:end] = stretched[:, start:end]
-    return (fallback * 255.0 + 0.5).astype(np.uint8)
+    return (fallback * UINT8_MAX_VALUE + 0.5).astype(np.uint8)
 
 
 def make_separator_evidence_gray(
@@ -249,7 +254,7 @@ def make_separator_evidence_gray(
         vertical_edge[None, :] * params.vertical_edge_weight,
     )
     evidence = np.maximum(evidence, band[None, :] * params.tonal_band_weight)
-    return (np.clip(evidence, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
+    return (np.clip(evidence, 0.0, 1.0) * UINT8_MAX_VALUE + 0.5).astype(np.uint8)
 
 
 def normalize_score_image(
@@ -276,7 +281,7 @@ def make_content_evidence_gray(
     statistics: ImageMeasurementStatistics,
     params: ContentEvidenceImageParameters,
 ) -> np.ndarray:
-    data = gray.astype(np.float32, copy=False) / 255.0
+    data = gray.astype(np.float32, copy=False) / UINT8_MAX_VALUE
     if data.size == 0:
         return gray.copy()
 
@@ -301,7 +306,12 @@ def make_content_evidence_gray(
     west[:, 1:] = data[:, :-1]
     east[:, -1] = data[:, -1]
     east[:, :-1] = data[:, 1:]
-    neighbor_texture = (np.abs(data - north) + np.abs(data - south) + np.abs(data - west) + np.abs(data - east)) * 0.25
+    neighbor_texture = (
+        np.abs(data - north)
+        + np.abs(data - south)
+        + np.abs(data - west)
+        + np.abs(data - east)
+    ) * FOUR_NEIGHBOR_MEAN_WEIGHT
     texture = normalize_score_image(
         neighbor_texture,
         params.texture_percentile,
@@ -309,7 +319,9 @@ def make_content_evidence_gray(
         params.maximum_percentile_samples,
     )
 
-    local_mean = (data + north + south + west + east) * 0.2
+    local_mean = (
+        data + north + south + west + east
+    ) * FIVE_POINT_MEAN_WEIGHT
     local_contrast = normalize_score_image(
         np.abs(data - local_mean),
         params.local_contrast_percentile,
@@ -318,7 +330,9 @@ def make_content_evidence_gray(
     )
 
     tonal_presence = normalize_score_image(
-        np.abs(data - float(statistics.intensity_median) / 255.0),
+        np.abs(
+            data - float(statistics.intensity_median) / UINT8_MAX_VALUE
+        ),
         params.tonal_presence_percentile,
         params.numerical_floor,
         params.maximum_percentile_samples,
@@ -326,4 +340,4 @@ def make_content_evidence_gray(
     stack = np.stack((gradient, texture, local_contrast, tonal_presence), axis=0)
     evidence = np.partition(stack, -2, axis=0)[-2]
     evidence = np.clip(evidence, 0.0, 1.0)
-    return (evidence * 255.0 + 0.5).astype(np.uint8)
+    return (evidence * UINT8_MAX_VALUE + 0.5).astype(np.uint8)

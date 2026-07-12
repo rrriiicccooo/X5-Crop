@@ -83,9 +83,9 @@ def _occlusion_side_evidence(
     if boundary.kind != "white_holder_transition":
         return HolderOcclusionSideEvidence(
             side,
-            EvidenceState.UNAVAILABLE,
+            EvidenceState.NOT_APPLICABLE,
             PixelInterval.zero(),
-            "edge_boundary_is_not_white_holder",
+            "measured_edge_is_not_white_holder_occlusion",
             boundary,
         )
     hidden = PixelInterval(
@@ -147,11 +147,10 @@ def holder_occlusion_for_sequence(
     frame_boundaries: tuple[FrameBoundary, ...],
     frame_width_px: PixelInterval,
 ) -> HolderOcclusionEvidence:
-    white_holder = {
+    sequence_edges = {
         observation.side: observation
         for observation in boundary_observations
-        if observation.kind == "white_holder_transition"
-        and observation.side in {"leading", "trailing"}
+        if observation.side in {"leading", "trailing"}
     }
     if not frame_boundaries:
         visible_width = PixelInterval.exact(
@@ -179,8 +178,8 @@ def holder_occlusion_for_sequence(
             else None
         )
     return holder_occlusion_evidence(
-        leading_boundary=white_holder.get("leading"),
-        trailing_boundary=white_holder.get("trailing"),
+        leading_boundary=sequence_edges.get("leading"),
+        trailing_boundary=sequence_edges.get("trailing"),
         leading_visible_frame_width=leading_width,
         trailing_visible_frame_width=trailing_width,
         frame_width_px=frame_width_px,

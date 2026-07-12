@@ -24,7 +24,13 @@ def write_debug_outputs(
     render_cache = DebugRenderCache()
     if config.debug and not config.debug_analysis:
         debug_path = output_dir / "_debug" / f"{input_stem}_debug.jpg"
-        write_debug_preview(gray, detection, debug_path, render_cache)
+        write_debug_preview(
+            gray,
+            detection,
+            debug_path,
+            diagnostics,
+            render_cache,
+        )
         warnings.append(f"debug preview: {display_generated_path(debug_path, config)}")
     if config.debug_analysis:
         analysis_paths = write_debug_analysis(

@@ -281,14 +281,16 @@ Current state:
 - Runtime resolves one `DetectionConfiguration`; the superseded `x5crop.policies`
   topology and all compatibility surfaces are deleted.
 - Detection uses a global monotonic `SequenceSolution` solver with separate
-  observed spacing evidence and geometry spacing hypotheses.
+  observed spacing, independently corroborated overlap, and geometry spacing
+  hypotheses. Corroborated overlap can protect output but cannot prove its own
+  conservation equation.
 - Standard, dual-lane, and review-only candidates use distinct geometry types;
   review-only modes never masquerade as solved frame sequences.
 - Candidate assessment uses `EvidenceQuality`, not scalar confidence or weighted
   format profiles. `GeometryResolution` is the only early-stop input.
 - Overlap protection uses a per-boundary `FrameBleedPlan`; unrelated frames are
   never expanded by a global maximum.
-- Current reports use `detection_report / physical_candidate_geometry` with
+- Current reports use `detection_report / physical_sequence_resolution` with
   canonical `input`, `configuration`, `selection`, `decision`, and `output`
   sections. Cache reuse accepts only this schema.
 - Runtime flow and source-layer structure live in `ARCHITECTURE.md`.

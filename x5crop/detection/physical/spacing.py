@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from x5crop.domain import (
+    BoundaryObservation,
     EvidenceState,
     MeasurementProvenance,
     PixelInterval,
@@ -51,6 +52,45 @@ class ObservedSpacingEvidence:
     def independently_observed(self) -> bool:
         return self.state == EvidenceState.SUPPORTED
 
+    @property
+    def supports_sequence_conservation(self) -> bool:
+        return self.state == EvidenceState.SUPPORTED
+
+    @property
+    def supports_output_protection(self) -> bool:
+        return bool(self.state == EvidenceState.SUPPORTED and self.kind == "overlap")
+
+
+@dataclass(frozen=True)
+class CorroboratedSpacingEvidence:
+    index: int
+    kind: str
+    signed_width_px: PixelInterval
+    provenance: MeasurementProvenance
+    reason: str
+    lane_index: int | None = None
+
+    def __post_init__(self) -> None:
+        _validate_spacing_identity(self.index, self.kind, self.lane_index)
+        if self.kind != "overlap" or self.signed_width_px.maximum >= 0.0:
+            raise ValueError("corroborated spacing evidence must be an overlap")
+
+    @property
+    def state(self) -> EvidenceState:
+        return EvidenceState.SUPPORTED
+
+    @property
+    def independently_observed(self) -> bool:
+        return False
+
+    @property
+    def supports_sequence_conservation(self) -> bool:
+        return False
+
+    @property
+    def supports_output_protection(self) -> bool:
+        return True
+
 
 @dataclass(frozen=True)
 class SpacingHypothesis:
@@ -72,8 +112,20 @@ class SpacingHypothesis:
     def independently_observed(self) -> bool:
         return False
 
+    @property
+    def supports_sequence_conservation(self) -> bool:
+        return False
 
-InterFrameSpacing = ObservedSpacingEvidence | SpacingHypothesis
+    @property
+    def supports_output_protection(self) -> bool:
+        return False
+
+
+InterFrameSpacing = (
+    ObservedSpacingEvidence
+    | CorroboratedSpacingEvidence
+    | SpacingHypothesis
+)
 
 
 @dataclass(frozen=True)
@@ -127,6 +179,89 @@ def spacing_hypothesis(
     )
 
 
+def corroborate_single_missing_overlap(
+    *,
+    visible_length_px: PixelInterval,
+    count: int,
+    frame_width_px: PixelInterval,
+    spacings: tuple[InterFrameSpacing, ...],
+    holder_occlusion: HolderOcclusionEvidence,
+    boundary_observations: tuple[BoundaryObservation, ...],
+    dimension_source: str,
+) -> tuple[InterFrameSpacing, ...]:
+    if count <= 2 or dimension_source != "scan_calibration":
+        return spacings
+    edge_observations = {
+        observation.side: observation
+        for observation in boundary_observations
+        if observation.side in {"leading", "trailing"}
+    }
+    if any(
+        side not in edge_observations
+        or edge_observations[side].kind == "canvas_clip"
+        for side in ("leading", "trailing")
+    ):
+        return spacings
+    occlusion_sides = (holder_occlusion.leading, holder_occlusion.trailing)
+    if any(
+        side.state not in {EvidenceState.SUPPORTED, EvidenceState.NOT_APPLICABLE}
+        for side in occlusion_sides
+    ):
+        return spacings
+    missing = tuple(
+        (index, spacing)
+        for index, spacing in enumerate(spacings)
+        if isinstance(spacing, SpacingHypothesis)
+    )
+    observed = tuple(
+        spacing
+        for spacing in spacings
+        if isinstance(spacing, ObservedSpacingEvidence)
+    )
+    if len(missing) != 1 or len(observed) != len(spacings) - 1 or not observed:
+        return spacings
+    occlusion = holder_occlusion.leading.hidden_width_px.plus(
+        holder_occlusion.trailing.hidden_width_px
+    )
+    residual = (
+        visible_length_px.plus(occlusion)
+        .minus(frame_width_px.scaled(float(count)))
+        .minus(
+            sum_pixel_intervals(
+                tuple(spacing.signed_width_px for spacing in observed)
+            )
+        )
+    )
+    if residual.maximum >= 0.0:
+        return spacings
+    missing_position, missing_spacing = missing[0]
+    leading = edge_observations["leading"]
+    trailing = edge_observations["trailing"]
+    corroborated = CorroboratedSpacingEvidence(
+        index=missing_spacing.index,
+        kind="overlap",
+        signed_width_px=residual,
+        provenance=MeasurementProvenance(
+            root_measurement="calibrated_sequence_constraints",
+            source="single_missing_overlap_corroboration",
+            dependencies=tuple(
+                dict.fromkeys(
+                    (
+                        "scan_calibration",
+                        leading.provenance.root_measurement,
+                        trailing.provenance.root_measurement,
+                        *(item.provenance.root_measurement for item in observed),
+                    )
+                )
+            ),
+        ),
+        reason="independent_constraints_require_overlap",
+    )
+    result = list(spacings)
+    result[missing_position] = corroborated
+    return tuple(result)
+
+
 def sequence_conservation_evidence(
     *,
     visible_length_px: PixelInterval,
@@ -155,10 +290,17 @@ def sequence_conservation_evidence(
             sum_pixel_intervals(tuple(item.signed_width_px for item in spacings)),
             PixelInterval.zero(),
         )
-    if any(spacing.state == EvidenceState.UNAVAILABLE for spacing in spacings):
+    if any(not spacing.supports_sequence_conservation for spacing in spacings):
         return SequenceConservationEvidence(
             EvidenceState.UNAVAILABLE,
-            "signed_spacing_unresolved",
+            (
+                "conservation_derived_spacing_not_independent"
+                if any(
+                    isinstance(spacing, CorroboratedSpacingEvidence)
+                    for spacing in spacings
+                )
+                else "signed_spacing_unresolved"
+            ),
             visible_length_px,
             PixelInterval.zero(),
             frame_width_px.scaled(float(count)),

@@ -12,6 +12,7 @@ from ..detection.physical.model import (
     SequenceSolution,
 )
 from ..detection.physical.spacing import (
+    CorroboratedSpacingEvidence,
     ObservedSpacingEvidence,
     SpacingHypothesis,
 )
@@ -20,11 +21,20 @@ from ..detection.physical.spacing import (
 def typed_read_model(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
-    if isinstance(value, (ObservedSpacingEvidence, SpacingHypothesis)):
+    if isinstance(
+        value,
+        (
+            ObservedSpacingEvidence,
+            CorroboratedSpacingEvidence,
+            SpacingHypothesis,
+        ),
+    ):
         return {
             "measurement_kind": (
                 "observed"
                 if isinstance(value, ObservedSpacingEvidence)
+                else "corroborated"
+                if isinstance(value, CorroboratedSpacingEvidence)
                 else "hypothesis"
             ),
             "index": int(value.index),
@@ -35,6 +45,9 @@ def typed_read_model(value: Any) -> Any:
             "reason": value.reason,
             "lane_index": value.lane_index,
             "independently_observed": bool(value.independently_observed),
+            "supports_output_protection": bool(
+                value.supports_output_protection
+            ),
         }
     if is_dataclass(value) and not isinstance(value, type):
         return {

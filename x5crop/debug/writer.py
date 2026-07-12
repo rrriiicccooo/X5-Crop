@@ -14,13 +14,15 @@ def write_debug_preview(
     gray: np.ndarray,
     detection: FinalDetection,
     output_path: Path,
+    diagnostics: DiagnosticsConfiguration,
     render_cache: DebugRenderCache,
 ) -> None:
     rgb = add_status_bar(
-        make_debug_preview_rgb(gray, detection, render_cache),
+        make_debug_preview_rgb(gray, detection, diagnostics.style, render_cache),
         detection,
+        diagnostics.style,
     )
-    write_rgb_jpeg(rgb, output_path)
+    write_rgb_jpeg(rgb, output_path, quality=diagnostics.style.jpeg_quality)
 
 
 def write_debug_analysis(
@@ -41,5 +43,6 @@ def write_debug_analysis(
             render_cache,
         ),
         panel_path,
+        quality=diagnostics.style.jpeg_quality,
     )
     return [str(panel_path)]

@@ -10,6 +10,7 @@ from ..geometry.layout import work_gray
 from ..image.statistics import (
     ImageMeasurementStatistics,
 )
+from ..image.constants import UINT8_MAX_VALUE
 from . import MeasurementCache
 
 
@@ -29,6 +30,8 @@ def make_measurement_cache(
         layout=layout,
         gray_work=gray_work,
         content_evidence_work=content_evidence,
-        content_evidence_float_work=content_evidence.astype(np.float32) / 255.0,
+        content_evidence_float_work=(
+            content_evidence.astype(np.float32) / UINT8_MAX_VALUE
+        ),
         image_statistics=image_statistics,
     )

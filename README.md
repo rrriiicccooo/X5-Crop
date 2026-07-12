@@ -36,8 +36,8 @@ Current stable release: v4.2.8
 - `needs_review/` 里的文件是原始 TIFF 的复制，用于人工处理。
 - 自动裁切输出会保留原 TIFF 的位深、通道结构、ICC / 色彩空间、resolution、
   metadata 和已知无损压缩行为。
-- 检测阶段依据物理证据决定自动导出或复核。可由输出 bleed 保护的独立实测叠片
-  只扩大相邻 frame 的最终输出范围，不天然阻断自动裁切。
+- 检测阶段依据物理证据决定自动导出或复核。独立像素观测，或由可信校准、两端实测边界
+  和其余独立片距唯一共同佐证的叠片，只扩大相邻 frame 的最终输出范围，不天然阻断自动裁切。
 
 ### 推荐下载
 
@@ -474,8 +474,10 @@ x5_crop_output/
 ```
 
 Default output bleed is 20px on the long axis and 10px on the short axis. Only
-independently observed signed spacing can expand the corresponding sides of the
-two adjacent frames. Available protection is the actual geometric slack between
+independently observed overlap, or overlap uniquely corroborated by trusted
+calibration, measured sequence edges, and the remaining observed spacings, can
+expand the corresponding sides of the two adjacent frames. Corroborated overlap
+cannot prove its own conservation equation. Available protection is the actual geometric slack between
 each base frame and its `CropEnvelope`, finally clamped to the image canvas. If
 either side lacks enough slack, the result goes to review. Bleed affects final
 output only and cannot change candidate geometry or Gate results.

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .constants import UINT8_MAX_VALUE
 from ..utils import (
     require_nonnegative,
     require_percentile,
@@ -80,7 +81,11 @@ def make_base_gray_u8(
     if hi <= lo:
         out = np.zeros(gray.shape, dtype=np.uint8)
     else:
-        out = np.clip((gray - lo) * (255.0 / (hi - lo)), 0, 255).astype(np.uint8)
+        out = np.clip(
+            (gray - lo) * (UINT8_MAX_VALUE / (hi - lo)),
+            0,
+            UINT8_MAX_VALUE,
+        ).astype(np.uint8)
     if photometric.upper() == "MINISWHITE":
-        out = 255 - out
+        out = int(UINT8_MAX_VALUE) - out
     return out

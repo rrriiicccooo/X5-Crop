@@ -32,15 +32,19 @@ from x5crop.detection.physical.boundary import HolderOcclusionEvidence
 from x5crop.detection.physical.boundary import holder_occlusion_for_sequence
 from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
+    separator_width_constraint,
 )
 from x5crop.detection.physical.sequence_solver import solve_frame_sequence
 from x5crop.detection.physical.spacing import (
+    CorroboratedSpacingEvidence,
     ObservedSpacingEvidence,
     SpacingHypothesis,
     observed_spacing_evidence,
+    sequence_conservation_evidence,
     spacing_hypothesis,
 )
 from x5crop.domain import (
+    BoundaryObservation,
     Box,
     EvidenceState,
     FrameDimensionPrior,
@@ -151,6 +155,142 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             ),
         )
         self.assertFalse(assignment.independent)
+
+    def test_positive_separator_width_is_not_erased_by_other_overlap(self) -> None:
+        constraint = separator_width_constraint(
+            VisibleSequenceSpan(Box(0, 0, 270, 100)),
+            1,
+            3,
+            FrameDimensionPrior(
+                PixelInterval.exact(100.0),
+                PixelInterval.exact(100.0),
+                ((36.0, 24.0),),
+                "synthetic",
+                MeasurementProvenance(
+                    "frame_dimensions",
+                    "synthetic",
+                    ("physical_frame_size",),
+                ),
+            ),
+            HolderOcclusionEvidence.not_applicable(),
+        )
+
+        self.assertGreaterEqual(constraint.width.maximum, 10.0)
+
+    def test_dimension_constrained_cut_preserves_position_uncertainty(self) -> None:
+        result = solve_frame_sequence(
+            (),
+            (),
+            VisibleSequenceSpan(Box(0, 0, 300, 100)),
+            3,
+            FrameDimensionPrior(
+                PixelInterval(80.0, 120.0),
+                PixelInterval.exact(100.0),
+                ((36.0, 24.0),),
+                "synthetic",
+                MeasurementProvenance(
+                    "frame_dimensions",
+                    "synthetic",
+                    ("physical_frame_size",),
+                ),
+            ),
+            HolderOcclusionEvidence.not_applicable(),
+            (),
+            100,
+        )
+
+        self.assertTrue(
+            all(
+                boundary.position.maximum > boundary.position.minimum
+                for boundary in result.boundaries
+            )
+        )
+        self.assertEqual(result.photo_intervals[0].end, result.boundaries[0].position)
+        self.assertEqual(result.photo_intervals[1].start, result.boundaries[0].position)
+        self.assertFalse(result.photo_intervals[0].end_independently_observed)
+        self.assertFalse(result.photo_intervals[1].start_independently_observed)
+
+    def test_calibrated_sequence_can_corroborate_one_missing_overlap(self) -> None:
+        observations = (
+            separator_observation(92.5, start=90.0, end=95.0),
+        )
+        edge_provenance = MeasurementProvenance(
+            "holder_boundary_profile",
+            "synthetic_edges",
+            ("gray_work",),
+        )
+        result = solve_frame_sequence(
+            observations,
+            (),
+            VisibleSequenceSpan(Box(0, 0, 285, 100)),
+            3,
+            FrameDimensionPrior(
+                PixelInterval.exact(100.0),
+                PixelInterval.exact(100.0),
+                ((36.0, 24.0),),
+                "scan_calibration",
+                MeasurementProvenance(
+                    "scan_calibration",
+                    "synthetic",
+                    ("tiff_resolution", "physical_frame_size"),
+                ),
+            ),
+            HolderOcclusionEvidence.not_applicable(),
+            (
+                BoundaryObservation(
+                    "leading",
+                    PixelInterval.exact(0.0),
+                    "texture_transition",
+                    edge_provenance,
+                ),
+                BoundaryObservation(
+                    "trailing",
+                    PixelInterval.exact(285.0),
+                    "texture_transition",
+                    edge_provenance,
+                ),
+            ),
+            100,
+        )
+
+        overlap = result.relations[1]
+        self.assertIsInstance(overlap, CorroboratedSpacingEvidence)
+        self.assertEqual(overlap.kind, "overlap")
+        self.assertEqual(overlap.signed_width_px, PixelInterval.exact(-20.0))
+        self.assertFalse(overlap.independently_observed)
+        self.assertTrue(overlap.supports_output_protection)
+        conservation = sequence_conservation_evidence(
+            visible_length_px=PixelInterval.exact(285.0),
+            count=3,
+            frame_width_px=PixelInterval.exact(100.0),
+            spacings=result.relations,
+            holder_occlusion=HolderOcclusionEvidence.not_applicable(),
+        )
+        self.assertEqual(conservation.state, EvidenceState.UNAVAILABLE)
+
+    def test_uncalibrated_missing_spacing_remains_a_hypothesis(self) -> None:
+        result = solve_frame_sequence(
+            (separator_observation(92.5, start=90.0, end=95.0),),
+            (),
+            VisibleSequenceSpan(Box(0, 0, 285, 100)),
+            3,
+            FrameDimensionPrior(
+                PixelInterval.exact(100.0),
+                PixelInterval.exact(100.0),
+                ((36.0, 24.0),),
+                "short_axis_aspect",
+                MeasurementProvenance(
+                    "physical_frame_aspect",
+                    "synthetic",
+                    ("short_axis_boundaries",),
+                ),
+            ),
+            HolderOcclusionEvidence.not_applicable(),
+            (),
+            100,
+        )
+
+        self.assertIsInstance(result.relations[1], SpacingHypothesis)
 
     def test_geometry_derived_negative_spacing_is_not_supported_overlap(self) -> None:
         spacing = spacing_hypothesis(

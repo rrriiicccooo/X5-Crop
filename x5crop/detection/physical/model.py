@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 from ...domain import (
     BoundaryObservation,
@@ -52,6 +53,19 @@ class SequenceResiduals:
     dimension: float | None
     conservation: float | None
     boundary_uncertainty: float
+
+    def __post_init__(self) -> None:
+        values = tuple(
+            value
+            for value in (
+                self.dimension,
+                self.conservation,
+                self.boundary_uncertainty,
+            )
+            if value is not None
+        )
+        if any(not math.isfinite(value) or value < 0.0 for value in values):
+            raise ValueError("sequence residuals must be finite and non-negative")
 
 
 @dataclass(frozen=True)

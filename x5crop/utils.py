@@ -9,6 +9,9 @@ import numpy as np
 from .domain import Box
 
 
+PERCENTILE_MAX = 100.0
+
+
 def require_positive(name: str, value: int | float) -> None:
     if not math.isfinite(float(value)) or float(value) <= 0.0:
         raise ValueError(f"{name} must be positive")
@@ -20,7 +23,7 @@ def require_nonnegative(name: str, value: int | float) -> None:
 
 
 def require_percentile(name: str, value: int | float) -> None:
-    if not math.isfinite(float(value)) or not 0.0 <= float(value) <= 100.0:
+    if not math.isfinite(float(value)) or not 0.0 <= float(value) <= PERCENTILE_MAX:
         raise ValueError(f"{name} must be within [0, 100]")
 
 

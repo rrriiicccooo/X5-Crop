@@ -1,0 +1,6 @@
+from __future__ import annotations
+
+
+UINT8_MAX_VALUE = 255.0
+FOUR_NEIGHBOR_MEAN_WEIGHT = 0.25
+FIVE_POINT_MEAN_WEIGHT = 0.2

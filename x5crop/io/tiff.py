@@ -16,6 +16,9 @@ from ..utils import (
 
 
 LOSSLESS_COMPRESSIONS = {"NONE", "LZW", "ADOBE_DEFLATE", "DEFLATE", "ZSTD"}
+TIFF_ICC_PROFILE_TAG = 34675
+BITS_PER_BYTE = 8
+TIFF_RESOLUTION_ABSOLUTE_TOLERANCE = 1e-6
 
 def profile_from_page(page: Any, shape: tuple[int, ...], dtype: np.dtype, axes: str) -> ImageProfile:
     photometric = enum_name(getattr(page, "photometric", None), "UNKNOWN")
@@ -27,7 +30,7 @@ def profile_from_page(page: Any, shape: tuple[int, ...], dtype: np.dtype, axes: 
     xres = page.tags.get("XResolution")
     yres = page.tags.get("YResolution")
     unit = page.tags.get("ResolutionUnit")
-    icc = page.tags.get(34675)
+    icc = page.tags.get(TIFF_ICC_PROFILE_TAG)
     profile = ImageProfile(
         shape=tuple(int(x) for x in shape),
         dtype=str(np.dtype(dtype)),
@@ -138,7 +141,7 @@ def expected_bits_for_dtype(dtype_name: str, samples: int) -> int | tuple[int, .
     dtype = np.dtype(dtype_name)
     if not np.issubdtype(dtype, np.integer) and not np.issubdtype(dtype, np.floating):
         return None
-    bits = int(dtype.itemsize * 8)
+    bits = int(dtype.itemsize * BITS_PER_BYTE)
     if samples <= 1:
         return bits
     return tuple(bits for _ in range(samples))
@@ -157,7 +160,7 @@ def rational_to_float(value: Any) -> Optional[float]:
         return None
 
 
-def resolutions_equivalent(a: Any, b: Any, tolerance: float = 1e-6) -> bool:
+def resolutions_equivalent(a: Any, b: Any, tolerance: float) -> bool:
     if a is None or b is None:
         return a is b
     if len(a) != 2 or len(b) != 2:
@@ -194,7 +197,7 @@ def validate_written_tiff(
         bits = page.tags.get("BitsPerSample")
         samples = page.tags.get("SamplesPerPixel")
         planar = page.tags.get("PlanarConfiguration")
-        icc = page.tags.get(34675)
+        icc = page.tags.get(TIFF_ICC_PROFILE_TAG)
 
         if arr.dtype != expected_array.dtype:
             problems.append(f"dtype changed: {expected_array.dtype} -> {arr.dtype}")
@@ -231,7 +234,11 @@ def validate_written_tiff(
 
         if source_profile.resolution is not None:
             actual_resolution = ((xres.value if xres else None), (yres.value if yres else None))
-            if not resolutions_equivalent(actual_resolution, source_profile.resolution):
+            if not resolutions_equivalent(
+                actual_resolution,
+                source_profile.resolution,
+                TIFF_RESOLUTION_ABSOLUTE_TOLERANCE,
+            ):
                 problems.append(f"Resolution changed: {source_profile.resolution} -> {actual_resolution}")
         if source_profile.resolution_unit is not None:
             actual_unit = unit.value if unit else None

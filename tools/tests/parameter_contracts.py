@@ -23,7 +23,10 @@ from x5crop.configuration.content import (
     ContentEvidenceParameters,
     ContentProfileParameters,
 )
-from x5crop.configuration.diagnostics import SeparatorOverlayParameters
+from x5crop.configuration.diagnostics import (
+    DebugStyleParameters,
+    SeparatorOverlayParameters,
+)
 from x5crop.configuration.separator import SeparatorObservationParameters
 from x5crop.domain import AxisBleedParameters
 from x5crop.formats import FormatPhysicalSpec, FrameSizeMm
@@ -131,6 +134,7 @@ PARAMETER_GROUPS = (
     _group(BoundaryObservationParameters, ("holder_reference_percentile", "change_point_percentile"), ParameterRole.ADAPTIVE_MEASUREMENT, "percentile", "boundary_observation", "Robust per-image holder and change-point measurement."),
     _group(DeskewParameters, tuple(field.name for field in fields(DeskewParameters)), ParameterRole.ADAPTIVE_MEASUREMENT, "mixed_measurement", "deskew", "Deskew sampling and robust fit parameters."),
     _group(SeparatorOverlayParameters, tuple(field.name for field in fields(SeparatorOverlayParameters)), ParameterRole.DIAGNOSTICS_ONLY, "rendering", "debug", "Debug-only separator overlay rendering."),
+    _group(DebugStyleParameters, tuple(field.name for field in fields(DebugStyleParameters)), ParameterRole.DIAGNOSTICS_ONLY, "rendering", "debug", "Debug-only canvas, color, text, and encoding style."),
     _group(AxisBleedParameters, ("long_axis", "short_axis"), ParameterRole.USER_PREFERENCE, "px", "output", "User-selected output margin."),
     _group(RuntimeOptions, ("requested_count",), ParameterRole.USER_PREFERENCE, "count", "runtime_input", "Optional user-selected frame count."),
     _group(RuntimeOptions, ("page",), ParameterRole.USER_PREFERENCE, "page_index", "input", "User-selected TIFF page."),
@@ -155,11 +159,107 @@ CONSTANT_PARAMETER_CONTRACTS = (
         "fixed_by_contract",
     ),
     ParameterContract(
+        "x5crop.configuration.diagnostics.JPEG_QUALITY_MAX",
+        ParameterRole.STANDARD_TRANSFORM,
+        "jpeg_quality",
+        "debug",
+        "Standard JPEG encoder quality maximum.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
         "x5crop.formats.FORMATS",
         ParameterRole.PHYSICAL_FACT,
         "physical_registry",
         "format",
         "Canonical format physical facts.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.image.constants.UINT8_MAX_VALUE",
+        ParameterRole.STANDARD_TRANSFORM,
+        "uint8_value",
+        "image",
+        "Canonical uint8 normalization scale.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.image.constants.FOUR_NEIGHBOR_MEAN_WEIGHT",
+        ParameterRole.STANDARD_TRANSFORM,
+        "coefficient",
+        "image",
+        "Equal four-neighbor mean coefficient.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.image.constants.FIVE_POINT_MEAN_WEIGHT",
+        ParameterRole.STANDARD_TRANSFORM,
+        "coefficient",
+        "image",
+        "Equal center-plus-neighbor mean coefficient.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.image.transforms.ROTATION_IDENTITY_EPSILON_DEGREES",
+        ParameterRole.NUMERICAL_SAFETY,
+        "degrees",
+        "image_transform",
+        "Avoids numerically meaningless rotation work.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.image.transforms.ROTATION_ROW_CHUNK_SIZE",
+        ParameterRole.EXECUTION_BUDGET,
+        "rows",
+        "image_transform",
+        "Bounds temporary rotation-grid memory.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.io.tiff.TIFF_ICC_PROFILE_TAG",
+        ParameterRole.STANDARD_TRANSFORM,
+        "tiff_tag",
+        "tiff_io",
+        "Standard TIFF ICC profile tag identity.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.io.tiff.BITS_PER_BYTE",
+        ParameterRole.STANDARD_TRANSFORM,
+        "bits",
+        "tiff_io",
+        "Standard byte-to-bit conversion.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.io.tiff.TIFF_RESOLUTION_ABSOLUTE_TOLERANCE",
+        ParameterRole.NUMERICAL_SAFETY,
+        "resolution",
+        "tiff_validation",
+        "Compares equivalent rational TIFF resolution values.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.units.MILLIMETERS_PER_INCH",
+        ParameterRole.STANDARD_TRANSFORM,
+        "mm_per_inch",
+        "units",
+        "Exact inch-to-millimeter conversion.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.units.MILLIMETERS_PER_CENTIMETER",
+        ParameterRole.STANDARD_TRANSFORM,
+        "mm_per_centimeter",
+        "units",
+        "Exact centimeter-to-millimeter conversion.",
+        "fixed_by_contract",
+    ),
+    ParameterContract(
+        "x5crop.utils.PERCENTILE_MAX",
+        ParameterRole.STANDARD_TRANSFORM,
+        "percentile",
+        "parameter_validation",
+        "Canonical percentile domain maximum.",
         "fixed_by_contract",
     ),
     ParameterContract(
@@ -354,5 +454,38 @@ def hidden_runtime_percentiles() -> list[str]:
             if any(_contains_numeric_literal(argument) for argument in percentile_arguments):
                 offenders.append(
                     f"{path.relative_to(PROJECT_ROOT).as_posix()}:{node.lineno}"
+                )
+    return sorted(offenders)
+
+
+_STRUCTURAL_NUMERIC_LITERALS = frozenset({-1, 0, 1, 2, 3, 4, 5, 0.5})
+
+
+def hidden_runtime_numeric_literals() -> list[str]:
+    offenders: list[str] = []
+    root = PROJECT_ROOT / "x5crop"
+    for path in sorted(root.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        parents: dict[ast.AST, ast.AST] = {}
+        for parent in ast.walk(tree):
+            for child in ast.iter_child_nodes(parent):
+                parents[child] = parent
+        for node in ast.walk(tree):
+            if (
+                not isinstance(node, ast.Constant)
+                or isinstance(node.value, bool)
+                or not isinstance(node.value, (int, float))
+                or node.value in _STRUCTURAL_NUMERIC_LITERALS
+            ):
+                continue
+            parent = parents.get(node)
+            while parent is not None and not isinstance(
+                parent,
+                (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda),
+            ):
+                parent = parents.get(parent)
+            if parent is not None:
+                offenders.append(
+                    f"{path.relative_to(PROJECT_ROOT).as_posix()}:{node.lineno}:{node.value}"
                 )
     return sorted(offenders)

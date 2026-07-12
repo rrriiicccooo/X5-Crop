@@ -4,17 +4,21 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from ..app_info import SCRIPT_NAME, VERSION
+from ..configuration.diagnostics import DebugStyleParameters
 from ..detection.decision.model import FinalDetection
 
 
-def debug_status_parts(detection: FinalDetection) -> tuple[str, str, tuple[int, int, int]]:
+def debug_status_parts(
+    detection: FinalDetection,
+    style: DebugStyleParameters,
+) -> tuple[str, str, tuple[int, int, int]]:
     passed = detection.status == "approved_auto"
     status = "PASS" if passed else "REVIEW"
     detail = f"status: {detection.status}"
-    color = (40, 180, 90) if passed else (230, 80, 70)
+    color = style.pass_color if passed else style.review_color
     reasons = detection.final_review_reasons
     if reasons:
-        detail += " | " + ",".join(reasons[:3])
+        detail += " | " + ",".join(reasons[: style.reason_display_limit])
     return status, detail, color
 
 
@@ -23,6 +27,7 @@ def draw_large_status(
     xy: tuple[int, int],
     text: str,
     color: tuple[int, int, int],
+    fallback_size: tuple[int, int],
 ) -> tuple[int, int]:
     x, y = xy
     offsets = ((0, 0), (1, 0), (0, 1), (1, 1), (2, 0), (0, 2))
@@ -33,21 +38,38 @@ def draw_large_status(
         width = bbox[2] - bbox[0]
         height = bbox[3] - bbox[1]
     except Exception:
-        width = len(text) * 8
-        height = 12
+        width = len(text) * fallback_size[0]
+        height = fallback_size[1]
     return width + 3, height + 3
 
 
-def add_status_bar(rgb: np.ndarray, detection: FinalDetection) -> np.ndarray:
-    status, detail, color = debug_status_parts(detection)
+def add_status_bar(
+    rgb: np.ndarray,
+    detection: FinalDetection,
+    style: DebugStyleParameters,
+) -> np.ndarray:
+    status, detail, color = debug_status_parts(detection, style)
     detail = f"{SCRIPT_NAME} {VERSION} | {detail}"
-    bar_h = 48
+    bar_h = style.status_bar_height
     h, w = rgb.shape[:2]
-    panel = np.full((h + bar_h, w, 3), 18, dtype=np.uint8)
+    panel = np.full((h + bar_h, w, 3), style.dark_background, dtype=np.uint8)
     panel[bar_h:, :, :] = rgb
     image = Image.fromarray(panel, mode="RGB")
     draw = ImageDraw.Draw(image)
     draw.rectangle((0, 0, w - 1, bar_h - 1), outline=color, width=2)
-    status_w, _ = draw_large_status(draw, (12, 10), status, color)
-    draw.text((12 + status_w + 14, 17), detail, fill=(245, 245, 245))
+    status_w, _ = draw_large_status(
+        draw,
+        style.status_origin,
+        status,
+        color,
+        style.text_fallback_size,
+    )
+    draw.text(
+        (
+            style.status_origin[0] + status_w + style.detail_gap,
+            style.detail_baseline,
+        ),
+        detail,
+        fill=style.text_color,
+    )
     return np.asarray(image)

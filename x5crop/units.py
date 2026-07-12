@@ -7,6 +7,10 @@ from typing import Any
 from .domain import ImageProfile
 
 
+MILLIMETERS_PER_INCH = 25.4
+MILLIMETERS_PER_CENTIMETER = 10.0
+
+
 @dataclass(frozen=True)
 class ScanCalibration:
     x_px_per_mm: float | None
@@ -15,7 +19,24 @@ class ScanCalibration:
     trusted: bool
     warnings: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        if not self.source:
+            raise ValueError("scan calibration requires a source")
+        values = (self.x_px_per_mm, self.y_px_per_mm)
+        if any(
+            value is not None
+            and (not math.isfinite(value) or value <= 0.0)
+            for value in values
+        ):
+            raise ValueError("scan calibration scale must be finite and positive")
+        if self.trusted and any(value is None for value in values):
+            raise ValueError("trusted scan calibration requires both axis scales")
+        if self.trusted and self.source == "unavailable":
+            raise ValueError("unavailable scan calibration cannot be trusted")
+
     def px_per_mm(self, axis: str) -> float | None:
+        if axis not in {"x", "y"}:
+            raise ValueError(f"unsupported calibration axis: {axis}")
         return self.y_px_per_mm if axis == "y" else self.x_px_per_mm
 
 
@@ -61,9 +82,9 @@ def scan_calibration_from_profile(
         return _unavailable("missing_tiff_resolution")
     unit = _resolution_unit_name(profile.resolution_unit)
     if unit == "inch":
-        divisor = 25.4
+        divisor = MILLIMETERS_PER_INCH
     elif unit == "centimeter":
-        divisor = 10.0
+        divisor = MILLIMETERS_PER_CENTIMETER
     elif unit == "none":
         return _unavailable("resolution_unit_has_no_absolute_length")
     else:

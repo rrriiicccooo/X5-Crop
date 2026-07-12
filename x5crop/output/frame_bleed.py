@@ -50,7 +50,7 @@ def frame_bleed_plan(
     for requirement in overlap_requirements:
         if requirement.right_frame_index >= len(frames):
             raise ValueError("overlap requirement references a missing frame")
-        if not requirement.independently_observed:
+        if not requirement.physically_supported:
             unresolved.append(requirement.boundary_index)
             continue
         left_index = requirement.left_frame_index

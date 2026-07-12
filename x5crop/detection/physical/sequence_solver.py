@@ -25,6 +25,7 @@ from .separator.assignment import (
 )
 from .spacing import (
     InterFrameSpacing,
+    corroborate_single_missing_overlap,
     observed_spacing_evidence,
     spacing_hypothesis,
 )
@@ -231,8 +232,11 @@ def _cuts(
             )
         if upper < lower:
             raise ValueError("physical sequence has no monotonic cut solution")
-        coordinate = max(lower, min(upper, position.position.midpoint))
-        cut_position = PixelInterval.exact(coordinate)
+        cut_minimum = max(lower, position.position.minimum)
+        cut_maximum = min(upper, position.position.maximum)
+        if cut_maximum < cut_minimum:
+            raise ValueError("physical sequence constraints do not intersect")
+        cut_position = PixelInterval(cut_minimum, cut_maximum)
         focused_assignment = None
         if boundary_index in focused:
             width = separator_width_constraint(
@@ -322,11 +326,7 @@ def _photo_intervals(
     frames: tuple[Box, ...],
     boundary_observations: tuple[BoundaryObservation, ...],
 ) -> tuple[PhotoInterval, ...]:
-    assignments = {
-        boundary.boundary_index: boundary.assignment
-        for boundary in boundaries
-        if boundary.assignment is not None and boundary.assignment.independent
-    }
+    by_index = {boundary.boundary_index: boundary for boundary in boundaries}
     sequence_edges = {
         observation.side: observation
         for observation in boundary_observations
@@ -339,14 +339,19 @@ def _photo_intervals(
     )
     intervals: list[PhotoInterval] = []
     for index, frame in enumerate(frames, start=1):
-        previous = assignments.get(index - 1)
-        following = assignments.get(index)
+        previous = by_index.get(index - 1)
+        following = by_index.get(index)
         leading = sequence_edges.get("leading") if index == 1 else None
         trailing = sequence_edges.get("trailing") if index == len(frames) else None
-        if previous is not None:
-            start = PixelInterval.exact(previous.observation.end)
-            start_provenance = previous.observation.provenance
+        if previous is not None and previous.hard_separator:
+            assert previous.assignment is not None
+            start = PixelInterval.exact(previous.assignment.observation.end)
+            start_provenance = previous.assignment.observation.provenance
             start_observed = True
+        elif previous is not None:
+            start = previous.position
+            start_provenance = previous.provenance
+            start_observed = False
         elif leading is not None:
             start = leading.position
             start_provenance = leading.provenance
@@ -355,10 +360,15 @@ def _photo_intervals(
             start = PixelInterval.exact(float(frame.left))
             start_provenance = generated_provenance
             start_observed = False
-        if following is not None:
-            end = PixelInterval.exact(following.observation.start)
-            end_provenance = following.observation.provenance
+        if following is not None and following.hard_separator:
+            assert following.assignment is not None
+            end = PixelInterval.exact(following.assignment.observation.start)
+            end_provenance = following.assignment.observation.provenance
             end_observed = True
+        elif following is not None:
+            end = following.position
+            end_provenance = following.provenance
+            end_observed = False
         elif trailing is not None:
             end = trailing.position
             end_provenance = trailing.provenance
@@ -366,13 +376,6 @@ def _photo_intervals(
         else:
             end = PixelInterval.exact(float(frame.right))
             end_provenance = generated_provenance
-            end_observed = False
-        if end.maximum <= start.minimum:
-            start = PixelInterval.exact(float(frame.left))
-            end = PixelInterval.exact(float(frame.right))
-            start_provenance = generated_provenance
-            end_provenance = generated_provenance
-            start_observed = False
             end_observed = False
         intervals.append(
             PhotoInterval(
@@ -391,6 +394,9 @@ def _photo_intervals(
 def _relations(
     boundaries: tuple[FrameBoundary, ...],
     dimensions: FrameDimensionPrior,
+    span: VisibleSequenceSpan,
+    holder_occlusion: HolderOcclusionEvidence,
+    boundary_observations: tuple[BoundaryObservation, ...],
 ) -> tuple[InterFrameSpacing, ...]:
     relations: list[InterFrameSpacing] = []
     for boundary in boundaries:
@@ -426,7 +432,15 @@ def _relations(
                 ),
             )
         )
-    return tuple(relations)
+    return corroborate_single_missing_overlap(
+        visible_length_px=PixelInterval.exact(float(span.box.width)),
+        count=len(boundaries) + 1,
+        frame_width_px=dimensions.width_px,
+        spacings=tuple(relations),
+        holder_occlusion=holder_occlusion,
+        boundary_observations=boundary_observations,
+        dimension_source=dimensions.source,
+    )
 
 
 def _residuals(
@@ -506,7 +520,13 @@ def solve_frame_sequence(
     ) + focused_assignments
     frames = _frames(span, boundaries, count)
     intervals = _photo_intervals(boundaries, frames, boundary_observations)
-    relations = _relations(boundaries, dimensions)
+    relations = _relations(
+        boundaries,
+        dimensions,
+        span,
+        holder_occlusion,
+        boundary_observations,
+    )
     return SequenceSolveResult(
         photo_intervals=intervals,
         frames=frames,

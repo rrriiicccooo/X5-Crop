@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import math
 from typing import Any, Optional
 
 
@@ -38,6 +39,10 @@ class MeasurementProvenance:
     dependencies: tuple[str, ...]
     boundary_anchors: tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        if not self.root_measurement or not self.source:
+            raise ValueError("measurement provenance requires root and source identity")
+
 
 class EvidenceState(str, Enum):
     SUPPORTED = "supported"
@@ -52,6 +57,8 @@ class PixelInterval:
     maximum: float
 
     def __post_init__(self) -> None:
+        if not math.isfinite(self.minimum) or not math.isfinite(self.maximum):
+            raise ValueError("pixel interval bounds must be finite")
         if self.maximum < self.minimum:
             raise ValueError("pixel interval maximum must not be below minimum")
 
@@ -96,6 +103,20 @@ class FrameDimensionPrior:
     source: str
     provenance: MeasurementProvenance
 
+    def __post_init__(self) -> None:
+        if self.width_px.minimum <= 0.0 or self.height_px.minimum <= 0.0:
+            raise ValueError("frame dimension prior must have positive extent")
+        if not self.frame_size_options_mm or any(
+            width <= 0.0
+            or height <= 0.0
+            or not math.isfinite(width)
+            or not math.isfinite(height)
+            for width, height in self.frame_size_options_mm
+        ):
+            raise ValueError("frame dimension prior requires physical size options")
+        if not self.source:
+            raise ValueError("frame dimension prior requires a source")
+
 
 @dataclass(frozen=True)
 class BoundaryPositionConstraint:
@@ -103,12 +124,22 @@ class BoundaryPositionConstraint:
     position: PixelInterval
     provenance: MeasurementProvenance
 
+    def __post_init__(self) -> None:
+        if self.boundary_index <= 0:
+            raise ValueError("boundary position index must be positive")
+
 
 @dataclass(frozen=True)
 class SeparatorWidthConstraint:
     boundary_index: int
     width: PixelInterval
     provenance: MeasurementProvenance
+
+    def __post_init__(self) -> None:
+        if self.boundary_index <= 0:
+            raise ValueError("separator width index must be positive")
+        if self.width.minimum < 0.0:
+            raise ValueError("separator width constraint cannot be negative")
 
 
 def sum_pixel_intervals(intervals: tuple[PixelInterval, ...]) -> PixelInterval:
@@ -122,15 +153,27 @@ def sum_pixel_intervals(intervals: tuple[PixelInterval, ...]) -> PixelInterval:
 class HolderSpan:
     box: Box
 
+    def __post_init__(self) -> None:
+        if not self.box.valid():
+            raise ValueError("holder span must have positive extent")
+
 
 @dataclass(frozen=True)
 class VisibleSequenceSpan:
     box: Box
 
+    def __post_init__(self) -> None:
+        if not self.box.valid():
+            raise ValueError("visible sequence span must have positive extent")
+
 
 @dataclass(frozen=True)
 class CropEnvelope:
     box: Box
+
+    def __post_init__(self) -> None:
+        if not self.box.valid():
+            raise ValueError("crop envelope must have positive extent")
 
 
 @dataclass(frozen=True)
@@ -141,6 +184,19 @@ class SequenceHypothesis:
     strategy: str
     provenance: MeasurementProvenance
     boundary_observations: tuple["BoundaryObservation", ...]
+
+    def __post_init__(self) -> None:
+        if not self.name or not self.strategy:
+            raise ValueError("sequence hypothesis requires name and strategy")
+        visible = self.visible_sequence_span.box
+        envelope = self.crop_envelope.box
+        if not (
+            envelope.left <= visible.left
+            and envelope.top <= visible.top
+            and envelope.right >= visible.right
+            and envelope.bottom >= visible.bottom
+        ):
+            raise ValueError("crop envelope must contain the visible sequence")
 
 
 BOUNDARY_SIDES = frozenset({"leading", "trailing", "top", "bottom"})
@@ -216,6 +272,10 @@ class DimensionConstrainedBoundary:
     provenance: MeasurementProvenance
     focused_observation: SeparatorBandObservation | None = None
 
+    def __post_init__(self) -> None:
+        if self.boundary_index <= 0:
+            raise ValueError("dimension boundary index must be positive")
+
 
 @dataclass(frozen=True)
 class FrameBoundary:
@@ -227,8 +287,20 @@ class FrameBoundary:
     dimension_constraint: DimensionConstrainedBoundary | None = None
 
     def __post_init__(self) -> None:
+        if self.boundary_index <= 0:
+            raise ValueError("frame boundary index must be positive")
         if self.source not in {"observed_separator", "dimension_constrained"}:
             raise ValueError(f"unsupported frame boundary source: {self.source}")
+        if self.source == "observed_separator":
+            if self.assignment is None or self.dimension_constraint is not None:
+                raise ValueError("observed frame boundary requires one separator assignment")
+            if not self.assignment.used_for_boundary:
+                raise ValueError("observed frame boundary assignment must be selected")
+        elif self.dimension_constraint is None:
+            raise ValueError("dimension frame boundary requires a dimension constraint")
+        for item in (self.assignment, self.dimension_constraint):
+            if item is not None and item.boundary_index != self.boundary_index:
+                raise ValueError("frame boundary components must share one index")
 
     @property
     def coordinate(self) -> float:

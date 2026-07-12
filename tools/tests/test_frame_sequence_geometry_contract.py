@@ -356,6 +356,30 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         self.assertEqual(evidence.leading.state, EvidenceState.SUPPORTED)
         self.assertEqual(evidence.leading.hidden_width_px, PixelInterval.exact(6.0))
 
+    def test_measured_non_white_edge_rules_out_white_holder_occlusion(self) -> None:
+        boundary = BoundaryObservation(
+            side="leading",
+            position=PixelInterval.exact(20.0),
+            kind="texture_transition",
+            provenance=MeasurementProvenance(
+                "holder_boundary_profile",
+                "texture_transition",
+                ("gray_work",),
+                ("leading",),
+            ),
+        )
+
+        evidence = holder_occlusion_evidence(
+            leading_boundary=boundary,
+            trailing_boundary=None,
+            leading_visible_frame_width=PixelInterval.exact(94.0),
+            trailing_visible_frame_width=None,
+            frame_width_px=PixelInterval.exact(100.0),
+        )
+
+        self.assertEqual(evidence.leading.state, EvidenceState.NOT_APPLICABLE)
+        self.assertEqual(evidence.leading.hidden_width_px, PixelInterval.zero())
+
     def test_missing_spacing_remains_an_explicit_hypothesis(self) -> None:
         candidate = candidate_fixture()
         observed = separator_observation(102.5, start=100.0, end=105.0)

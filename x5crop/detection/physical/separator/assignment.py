@@ -151,12 +151,16 @@ def separator_width_constraint(
     occlusion = holder_occlusion.leading.hidden_width_px.plus(
         holder_occlusion.trailing.hidden_width_px
     )
-    spacing_budget = PixelInterval.exact(float(span.box.width)).plus(
+    available_anchor_span = PixelInterval.exact(float(span.box.width)).plus(
         occlusion
-    ).minus(dimensions.width_px.scaled(float(count)))
+    )
+    maximum_width = (
+        available_anchor_span.maximum
+        - 2.0 * dimensions.width_px.minimum
+    )
     return SeparatorWidthConstraint(
         boundary_index=int(boundary_index),
-        width=PixelInterval(0.0, max(0.0, spacing_budget.maximum)),
+        width=PixelInterval(0.0, max(0.0, maximum_width)),
         provenance=MeasurementProvenance(
             root_measurement="frame_dimensions",
             source="separator_width_constraint",

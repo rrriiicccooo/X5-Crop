@@ -7,6 +7,10 @@ import numpy as np
 from ..utils import spatial_shape
 
 
+ROTATION_IDENTITY_EPSILON_DEGREES = 1e-9
+ROTATION_ROW_CHUNK_SIZE = 256
+
+
 def dtype_white(dtype: np.dtype) -> int | float:
     if np.issubdtype(dtype, np.integer):
         return int(np.iinfo(dtype).max)
@@ -14,7 +18,7 @@ def dtype_white(dtype: np.dtype) -> int | float:
 
 
 def rotate_array_expand(arr: np.ndarray, angle_degrees: float, axes: str) -> np.ndarray:
-    if abs(angle_degrees) < 1e-9:
+    if abs(angle_degrees) < ROTATION_IDENTITY_EPSILON_DEGREES:
         return arr
     if axes == "SYX":
         rotated = rotate_array_expand(np.moveaxis(arr, 0, -1), angle_degrees, "YXS")
@@ -45,7 +49,7 @@ def rotate_array_expand(arr: np.ndarray, angle_degrees: float, axes: str) -> np.
 
     out_cx = (out_w - 1) / 2.0
     out_cy = (out_h - 1) / 2.0
-    chunk = 256
+    chunk = ROTATION_ROW_CHUNK_SIZE
     for y0 in range(0, out_h, chunk):
         y1 = min(out_h, y0 + chunk)
         yy, xx = np.mgrid[y0:y1, 0:out_w].astype(np.float64)

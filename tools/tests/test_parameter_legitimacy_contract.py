@@ -5,6 +5,7 @@ import unittest
 from tools.tests.architecture_contracts import PROJECT_ROOT
 from tools.tests.parameter_contracts import (
     ParameterRole,
+    hidden_runtime_numeric_literals,
     hidden_runtime_percentiles,
     parameter_contracts,
     stale_parameter_contracts,
@@ -59,7 +60,7 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
                 factory()
 
         with self.assertRaises(ValueError):
-            expected_separator_count(0, "single_strip")
+            expected_separator_count(0, "single_strip", 1)
         with self.assertRaises(ValueError):
             sampling_step_for_limit(100, 0)
     def test_every_runtime_parameter_has_one_complete_contract(self) -> None:
@@ -72,6 +73,9 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
 
     def test_runtime_percentiles_are_explicit_parameters(self) -> None:
         self.assertEqual(hidden_runtime_percentiles(), [])
+
+    def test_runtime_has_no_unowned_numeric_literals(self) -> None:
+        self.assertEqual(hidden_runtime_numeric_literals(), [])
 
     def test_fixed_tonal_identity_thresholds_are_absent(self) -> None:
         self.assertNotIn(

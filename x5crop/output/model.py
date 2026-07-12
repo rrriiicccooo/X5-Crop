@@ -10,6 +10,19 @@ class OutputGeometry:
     crop_envelope: CropEnvelope
     frames: tuple[Box, ...]
 
+    def __post_init__(self) -> None:
+        envelope = self.crop_envelope.box
+        for frame in self.frames:
+            if not frame.valid():
+                raise ValueError("output frames must have positive extent")
+            if not (
+                envelope.left <= frame.left
+                and envelope.top <= frame.top
+                and envelope.right >= frame.right
+                and envelope.bottom >= frame.bottom
+            ):
+                raise ValueError("output frames must remain inside the crop envelope")
+
 
 @dataclass(frozen=True)
 class FrameOverlapRequirement:
@@ -17,7 +30,7 @@ class FrameOverlapRequirement:
     left_frame_index: int
     right_frame_index: int
     required_px: int
-    independently_observed: bool
+    physically_supported: bool
     provenance: str
 
     def __post_init__(self) -> None:
@@ -38,6 +51,12 @@ class FrameSideBleed:
     trailing_px: int
     short_axis_px: int
 
+    def __post_init__(self) -> None:
+        if self.frame_index < 0:
+            raise ValueError("frame bleed index must be non-negative")
+        if min(self.leading_px, self.trailing_px, self.short_axis_px) < 0:
+            raise ValueError("frame bleed values must be non-negative")
+
 
 @dataclass(frozen=True)
 class BoundaryOverlapProtection:
@@ -48,6 +67,21 @@ class BoundaryOverlapProtection:
     left_trailing_available_px: int
     right_leading_available_px: int
     provenance: str
+
+    def __post_init__(self) -> None:
+        if self.boundary_index <= 0:
+            raise ValueError("overlap protection boundary index must be positive")
+        if self.left_frame_index < 0 or self.right_frame_index <= self.left_frame_index:
+            raise ValueError("overlap protection frames must be ordered")
+        if self.required_px <= 0:
+            raise ValueError("overlap protection requirement must be positive")
+        if min(
+            self.left_trailing_available_px,
+            self.right_leading_available_px,
+        ) < 0:
+            raise ValueError("overlap protection availability must be non-negative")
+        if not self.provenance:
+            raise ValueError("overlap protection requires provenance")
 
     @property
     def complete(self) -> bool:
@@ -65,3 +99,15 @@ class FrameBleedPlan:
     unresolved_overlap_boundaries: tuple[int, ...]
     feasible: bool
     reason: str
+
+    def __post_init__(self) -> None:
+        indexes = tuple(side.frame_index for side in self.frame_sides)
+        if indexes != tuple(range(len(indexes))):
+            raise ValueError("frame bleed plan indexes must be complete and ordered")
+        unresolved = self.unresolved_overlap_boundaries
+        if any(index <= 0 for index in unresolved) or len(set(unresolved)) != len(unresolved):
+            raise ValueError("unresolved overlap boundaries must be positive and unique")
+        if self.feasible != (not unresolved):
+            raise ValueError("frame bleed feasibility must match unresolved overlap state")
+        if not self.reason:
+            raise ValueError("frame bleed plan requires a reason")

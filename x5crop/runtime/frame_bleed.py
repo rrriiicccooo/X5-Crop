@@ -71,7 +71,7 @@ def _overlap_requirements(
                 left_frame_index=frames[left_position],
                 right_frame_index=frames[right_position],
                 required_px=max(1, int(ceil(-relation.signed_width_px.minimum))),
-                independently_observed=relation.independently_observed,
+                physically_supported=relation.supports_output_protection,
                 provenance=(
                     f"{relation.provenance.root_measurement}:"
                     f"{relation.provenance.source}"

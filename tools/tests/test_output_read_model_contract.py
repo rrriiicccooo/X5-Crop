@@ -270,7 +270,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(record["schema_id"], "detection_report")
         self.assertEqual(
             record["schema_revision"],
-            "physical_candidate_geometry",
+            "physical_sequence_resolution",
         )
         self.assertNotIn("v4", record["schema_revision"])
 

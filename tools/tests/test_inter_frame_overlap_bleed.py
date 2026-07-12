@@ -34,7 +34,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
                     left_frame_index=0,
                     right_frame_index=1,
                     required_px=30,
-                    independently_observed=True,
+                    physically_supported=True,
                     provenance="content_overlap_measurement",
                 ),
             ),
@@ -68,7 +68,7 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
                     left_frame_index=0,
                     right_frame_index=1,
                     required_px=40,
-                    independently_observed=False,
+                    physically_supported=False,
                     provenance="geometry_spacing_hypothesis",
                 ),
             ),
@@ -117,6 +117,11 @@ class InterFrameOverlapBleedTest(unittest.TestCase):
         self.assertEqual(expanded.frames[0], Box(0, 0, 130, 60))
         self.assertEqual(expanded.frames[1], Box(70, 0, 205, 60))
         self.assertEqual(expanded.frames[2], Box(195, 0, 300, 60))
+
+    def test_overlap_requirement_uses_physical_support_not_observation_alias(self) -> None:
+        fields = FrameOverlapRequirement.__dataclass_fields__
+        self.assertIn("physically_supported", fields)
+        self.assertNotIn("independently_observed", fields)
 
 
 if __name__ == "__main__":
