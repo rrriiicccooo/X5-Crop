@@ -23,6 +23,9 @@ from x5crop.detection.physical.model import (
     SequenceResiduals,
     SequenceSolution,
 )
+from x5crop.detection.physical.separator.assignment import (
+    dimension_constrained_boundary,
+)
 from x5crop.detection.evidence.transform_geometry import TransformGeometryEvidence
 from x5crop.domain import (
     BoundaryPositionConstraint,
@@ -270,6 +273,43 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 PixelInterval.exact(10.0),
                 FrameBoundarySource.DIMENSION_CONSTRAINED,
                 _provenance(),
+            )
+
+    def test_frame_boundary_cannot_drift_from_its_physical_source(self) -> None:
+        observed = candidate_fixture().geometry.frame_boundaries[0]
+        with self.assertRaises(ValueError):
+            replace(
+                observed,
+                position=PixelInterval.exact(observed.coordinate + 10.0),
+            )
+        with self.assertRaises(ValueError):
+            replace(observed, provenance=_provenance())
+        with self.assertRaises(ValueError):
+            replace(
+                observed,
+                assignment=replace(
+                    observed.assignment,
+                    state=EvidenceState.UNAVAILABLE,
+                ),
+            )
+
+        constrained = dimension_constrained_boundary(
+            1,
+            PixelInterval(40.0, 60.0),
+            _provenance(),
+        )
+        with self.assertRaises(ValueError):
+            replace(constrained, position=PixelInterval(45.0, 65.0))
+        with self.assertRaises(ValueError):
+            replace(constrained, assignment=observed.assignment)
+        with self.assertRaises(ValueError):
+            replace(
+                constrained,
+                provenance=MeasurementProvenance(
+                    MeasurementIdentity.FRAME_GEOMETRY,
+                    "different_source",
+                    (),
+                ),
             )
 
     def test_scan_calibration_rejects_impossible_trusted_state_and_axis(self) -> None:

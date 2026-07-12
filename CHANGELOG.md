@@ -128,6 +128,8 @@ repository rules in `AGENTS.md`.
   bleed-plan 类型；项目内已知对象不再以 `Any` 掩盖边界。
 - Deskew base/fallback 选择删除无单位的加权 quality score、固定 pass threshold 和 gain；有效性、
   独立上下边拟合、inlier 数与残差按确定性次序比较，参数台账也只使用单一真实单位。
+- `FrameBoundary` 现在必须与其 canonical separator assignment 或 dimension constraint 的 position
+  与 provenance 完全一致；证据身份和实际切线不能在 typed model 内漂移。
 - Shared domain 不再混放 report、TIFF 或 output 类型：current-schema `ReportResult` 归 report 并在
   构造时验证，`ImageProfile` 与 TIFF tag value 归 I/O，`AxisBleedParameters` 归 output；units 只
   接收 resolution 与 unit，不再依赖完整 TIFF profile。
@@ -335,6 +337,9 @@ schema_revision: frame_sequence_geometry
 - Deskew base/fallback selection no longer uses a unitless weighted score, fixed
   pass threshold, or gain. It compares validity, independent edge fits, inliers,
   and residuals deterministically, and every parameter contract has one concrete unit.
+- `FrameBoundary` must now exactly match the position and provenance of its canonical
+  separator assignment or dimension constraint, preventing evidence identity from
+  drifting away from the cut actually used.
 
 #### Physical Frame-Sequence Model (2026-07-11)
 

@@ -385,10 +385,35 @@ class FrameBoundary:
         if self.source == FrameBoundarySource.OBSERVED_SEPARATOR:
             if self.assignment is None or self.dimension_constraint is not None:
                 raise ValueError("observed frame boundary requires one separator assignment")
-            if not self.assignment.used_for_boundary:
-                raise ValueError("observed frame boundary assignment must be selected")
-        elif self.dimension_constraint is None:
-            raise ValueError("dimension frame boundary requires a dimension constraint")
+            expected_position = PixelInterval.exact(self.assignment.observation.center)
+            if (
+                not self.assignment.used_for_boundary
+                or not self.assignment.independent
+                or self.position != expected_position
+                or self.provenance != self.assignment.observation.provenance
+            ):
+                raise ValueError(
+                    "observed frame boundary must match its independent assignment"
+                )
+        else:
+            constraint = self.dimension_constraint
+            if constraint is None:
+                raise ValueError(
+                    "dimension frame boundary requires a dimension constraint"
+                )
+            focused = constraint.focused_observation
+            if (
+                self.position != constraint.position
+                or self.provenance != constraint.provenance
+                or (self.assignment is None) != (focused is None)
+                or (
+                    self.assignment is not None
+                    and focused != self.assignment.observation
+                )
+            ):
+                raise ValueError(
+                    "dimension frame boundary must match its dimension constraint"
+                )
         for item in (self.assignment, self.dimension_constraint):
             if item is not None and item.boundary_index != self.boundary_index:
                 raise ValueError("frame boundary components must share one index")
