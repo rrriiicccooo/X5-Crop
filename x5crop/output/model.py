@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..domain import Box, CropEnvelope, FrameBoundaryReference
 
@@ -109,8 +109,8 @@ class FrameBleedPlan:
     frame_sides: tuple[FrameSideBleed, ...]
     overlap_protection: tuple[BoundaryOverlapProtection, ...]
     unresolved_overlap_boundaries: tuple[FrameBoundaryReference, ...]
-    feasible: bool
-    reason: str
+    feasible: bool = field(init=False)
+    reason: str = field(init=False)
 
     def __post_init__(self) -> None:
         indexes = tuple(side.frame_index for side in self.frame_sides)
@@ -144,17 +144,16 @@ class FrameBleedPlan:
         unresolved_set = set(unresolved)
         if complete & unresolved_set or not incomplete.issubset(unresolved_set):
             raise ValueError("overlap protection state must match unresolved boundaries")
-        if self.feasible != (not unresolved):
-            raise ValueError("frame bleed feasibility must match unresolved overlap state")
-        expected_reason = (
+        feasible = not unresolved
+        reason = (
             "output_overlap_unresolved"
             if unresolved
             else "output_overlap_protected"
             if self.overlap_protection
             else "no_output_overlap"
         )
-        if self.reason != expected_reason:
-            raise ValueError("frame bleed reason must match its protection state")
+        object.__setattr__(self, "feasible", feasible)
+        object.__setattr__(self, "reason", reason)
         for item in self.overlap_protection:
             if item.right_frame_index >= len(self.frame_sides):
                 raise ValueError("overlap protection references a missing frame")

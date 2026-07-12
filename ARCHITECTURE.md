@@ -280,7 +280,7 @@ DecisionGateAssessment 在构造时拒绝 vocabulary 之外的 final reason。
   或与 plan 不一致的持久化结果都会被拒绝。
 
 Transform evidence、output protection、user bleed 与 final geometry 都在 typed model 边界验证派生
-状态；`applied` angle、span pair、feasible、reason 和 unresolved boundaries 不能彼此矛盾。
+状态；FrameBleedPlan 的 `feasible` 与 reason 只由 unresolved boundaries 和实际 protection 派生。
 
 ### 1.8 Report、Debug 与 Cache Reuse
 

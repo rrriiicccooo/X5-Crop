@@ -112,14 +112,6 @@ def frame_bleed_plan(
         ),
         overlap_protection=tuple(protections),
         unresolved_overlap_boundaries=unresolved_boundaries,
-        feasible=not unresolved_boundaries,
-        reason=(
-            "output_overlap_protected"
-            if protections and not unresolved_boundaries
-            else "output_overlap_unresolved"
-            if unresolved_boundaries
-            else "no_output_overlap"
-        ),
     )
 
 

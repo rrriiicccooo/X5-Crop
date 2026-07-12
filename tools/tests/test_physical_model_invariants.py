@@ -414,6 +414,9 @@ class PhysicalModelInvariantTest(unittest.TestCase):
             calibration.px_per_mm("long")
 
     def test_output_models_reject_invalid_geometry_and_plan_state(self) -> None:
+        plan_fields = FrameBleedPlan.__dataclass_fields__
+        self.assertFalse(plan_fields["feasible"].init)
+        self.assertFalse(plan_fields["reason"].init)
         with self.assertRaises(ValueError):
             OutputGeometry(
                 CropEnvelope(Box(0, 0, 100, 100)),
@@ -431,17 +434,6 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 5,
                 "synthetic",
             )
-        with self.assertRaises(ValueError):
-            FrameBleedPlan(
-                user_bleed=AxisBleedParameters(0, 0),
-                frame_output_bounds=(Box(0, 0, 100, 100),),
-                frame_sides=(FrameSideBleed(0, 0, 0, 0),),
-                overlap_protection=(),
-                unresolved_overlap_boundaries=(FrameBoundaryReference(None, 1),),
-                feasible=True,
-                reason="no_output_overlap",
-            )
-
         boundary = FrameBoundaryReference(None, 1)
         complete = BoundaryOverlapProtection(
             boundary,
@@ -461,8 +453,6 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 frame_sides=(FrameSideBleed(0, 4, 5, 2),),
                 overlap_protection=(),
                 unresolved_overlap_boundaries=(),
-                feasible=True,
-                reason="no_output_overlap",
             ),
             lambda: FrameBleedPlan(
                 user_bleed=AxisBleedParameters(0, 0),
@@ -476,8 +466,6 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 ),
                 overlap_protection=(complete,),
                 unresolved_overlap_boundaries=(boundary,),
-                feasible=False,
-                reason="output_overlap_unresolved",
             ),
             lambda: FrameBleedPlan(
                 user_bleed=AxisBleedParameters(0, 0),
@@ -491,17 +479,6 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 ),
                 overlap_protection=(complete, complete),
                 unresolved_overlap_boundaries=(),
-                feasible=True,
-                reason="output_overlap_protected",
-            ),
-            lambda: FrameBleedPlan(
-                user_bleed=AxisBleedParameters(0, 0),
-                frame_output_bounds=(Box(0, 0, 100, 100),),
-                frame_sides=(FrameSideBleed(0, 0, 0, 0),),
-                overlap_protection=(),
-                unresolved_overlap_boundaries=(),
-                feasible=True,
-                reason="output_overlap_protected",
             ),
         )
         for factory in invalid_factories:

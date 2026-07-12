@@ -66,6 +66,8 @@ repository rules in `AGENTS.md`.
   disagreement、budget exhaustion 与 dual-lane component unresolved 不再共用自由文本状态。
 - Holder occlusion side 删除 caller-supplied state/reason，改为 typed measurement outcome；普通 combined
   width 由两侧自动求和，只有单 frame 双边分配未解决时保留 unallocated total。
+- FrameBleedPlan 删除 caller-supplied feasible/reason；output protection conclusion 现在只由 unresolved
+  boundaries 与实际 per-boundary protection 派生。
 - Separator assignment 删除 caller-supplied state/reason/geometry-dependency；assignment classification
   现在只由 observation、position/width constraints 与 cross-axis measurement 派生。
 - Cross-axis separator measurement 删除 caller-supplied state/reason，改为 typed measurement outcome；

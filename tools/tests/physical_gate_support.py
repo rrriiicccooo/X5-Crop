@@ -525,8 +525,6 @@ def frame_bleed_fixture(*, feasible: bool = True) -> FrameBleedPlan:
         unresolved_overlap_boundaries=(
             () if feasible else (FrameBoundaryReference(None, 1),)
         ),
-        feasible=feasible,
-        reason="no_output_overlap" if feasible else "output_overlap_unresolved",
     )
 
 
