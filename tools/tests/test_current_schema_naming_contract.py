@@ -181,6 +181,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
         removed_terms = (
             "film" + "_span_overcontains_holder_area",
             "independent_" + "outer_and_separator_measurements",
+            "synthetic_" + "outer",
         )
         test_offenders = [
             path.relative_to(PROJECT_ROOT).as_posix()

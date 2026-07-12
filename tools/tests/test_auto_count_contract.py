@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from pathlib import Path
 from inspect import signature
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
-from tools.tests.physical_gate_support import candidate_fixture
+from tools.tests.physical_gate_support import candidate_fixture, selection_fixture
+import x5crop.detection.pipeline as detection_pipeline
+from x5crop.detection.candidate.execution.model import CountHypothesisEvaluation
 from x5crop.detection.candidate.plan.count_hypotheses import (
     CountHypothesis,
+    CountHypothesisPlan,
     CountHypothesisSource,
     count_hypothesis_plan,
 )
@@ -55,16 +59,45 @@ class AutoCountContractTest(unittest.TestCase):
         self.assertNotIn("offsets", fields)
         self.assertNotIn("placement_source", fields)
 
-    def test_early_stop_reads_geometry_resolution_only(self) -> None:
-        root = Path(__file__).resolve().parents[2]
-        pipeline = (root / "x5crop/detection/pipeline.py").read_text()
-        evaluation = (
-            root / "x5crop/detection/candidate/execution/model.py"
-        ).read_text()
-        self.assertIn("evaluation.geometry_resolved", pipeline)
-        self.assertIn("selection.geometry_resolution.supported", evaluation)
-        for forbidden in ("candidate_is_reliable", "candidate_gate.passed", ".confidence"):
-            self.assertNotIn(forbidden, pipeline)
+    def test_early_stop_uses_geometry_resolution_only(self) -> None:
+        candidate = candidate_fixture()
+        self.assertTrue(candidate.assessment.gate.passed)
+        unresolved = CountHypothesisEvaluation(
+            candidate.count_hypothesis,
+            (candidate,),
+            selection_fixture(candidate, geometry_disagreement=True),
+        )
+        resolved = CountHypothesisEvaluation(
+            candidate.count_hypothesis,
+            (candidate,),
+            selection_fixture(candidate),
+        )
+        self.assertFalse(unresolved.geometry_resolved)
+        self.assertTrue(resolved.geometry_resolved)
+
+        hypotheses = tuple(
+            CountHypothesis(count, "partial", CountHypothesisSource.AUTOMATIC)
+            for count in (3, 2, 1)
+        )
+        plan = CountHypothesisPlan(hypotheses, True, None)
+        evaluations = tuple(
+            SimpleNamespace(
+                hypothesis=hypothesis,
+                geometry_resolved=hypothesis.count == 2,
+            )
+            for hypothesis in hypotheses
+        )
+        evaluate = getattr(detection_pipeline, "_evaluate_count_hypotheses")
+        with patch.object(
+            detection_pipeline,
+            "evaluate_count_hypothesis",
+            side_effect=evaluations,
+        ) as evaluate_one:
+            completed, stopped_after_count = evaluate(object(), plan)
+
+        self.assertEqual(completed, evaluations[:2])
+        self.assertEqual(stopped_after_count, 2)
+        self.assertEqual(evaluate_one.call_count, 2)
 
     def test_geometry_resolution_names_resolved_alternatives(self) -> None:
         fields = GeometryResolution.__dataclass_fields__

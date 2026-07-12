@@ -448,7 +448,7 @@ def candidate_fixture(
         automatic_processing_supported=automatic_processing_supported,
         sequence_provenance=MeasurementProvenance(
             MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
-            "synthetic_outer",
+            "synthetic_sequence_boundary",
             (MeasurementIdentity.GRAY_WORK,),
             ("leading", "trailing"),
         ),
