@@ -21,11 +21,6 @@ if TYPE_CHECKING:
     from ...physical.model import SequenceSolution
 
 
-CACHED_CONTENT_SIGNAL_COMPOSITE = (
-    "cached_gradient+neighbor_texture+local_contrast+tonal_presence"
-)
-
-
 def content_evidence_threshold(
     evidence_float: np.ndarray,
     parameters: ContentEvidenceParameters,
@@ -54,7 +49,6 @@ class FrameContentEvidence:
     median_mean: float | None
     median_coverage: float | None
     observations: tuple[FrameContentObservation, ...]
-    composite: str
 
     @property
     def support_available(self) -> bool:
@@ -142,7 +136,6 @@ def frame_content_evidence(
             None,
             None,
             (),
-            CACHED_CONTENT_SIGNAL_COMPOSITE,
         )
     evidence = cache.content_evidence_float_work[
         sequence_box.top : sequence_box.bottom,
@@ -156,7 +149,6 @@ def frame_content_evidence(
             None,
             None,
             (),
-            CACHED_CONTENT_SIGNAL_COMPOSITE,
         )
     parameters = configuration.evidence
     threshold = _cached_content_evidence_threshold(
@@ -173,7 +165,6 @@ def frame_content_evidence(
             None,
             None,
             (),
-            CACHED_CONTENT_SIGNAL_COMPOSITE,
         )
     statistics_key = ThresholdedMeasurementRegionKey(
         parameters,
@@ -254,5 +245,4 @@ def frame_content_evidence(
         median_mean=median_mean,
         median_coverage=median_coverage,
         observations=tuple(observations),
-        composite=CACHED_CONTENT_SIGNAL_COMPOSITE,
     )

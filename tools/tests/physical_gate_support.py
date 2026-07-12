@@ -279,7 +279,6 @@ def candidate_evidence_fixture(
                 FrameContentObservation(1, 0.8, 0.8, True, ()),
                 FrameContentObservation(2, 0.8, 0.8, True, ()),
             ),
-            "synthetic",
         ),
         holder_texture=HolderTextureEvidence(
             EvidenceState.UNAVAILABLE,
@@ -447,8 +446,6 @@ def candidate_fixture(
         ),
         search_budget_exhausted=False,
         automatic_processing_supported=automatic_processing_supported,
-        sequence_hypothesis_name="synthetic_sequence",
-        sequence_hypothesis_strategy="boundary_led",
         sequence_provenance=MeasurementProvenance(
             MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
             "synthetic_outer",

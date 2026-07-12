@@ -120,6 +120,8 @@ repository rules in `AGENTS.md`.
   software、artist、XMP 及其它明确可安全迁移的 metadata tag。
 - Debug separator overlay 直接使用 FinalizationPlan 的原图尺寸，不再从缩放 preview 反推并产生
   off-by-one 坐标；随之删除无调用者的 scale floor 参数。
+- Sequence hypothesis identity 只保留 measurement provenance；geometry 删除重复 name/strategy，
+  frame-content evidence 删除只供 generic report reflection 使用的固定 composite 字段。
 - Shared domain 不再混放 report、TIFF 或 output 类型：current-schema `ReportResult` 归 report 并在
   构造时验证，`ImageProfile` 与 TIFF tag value 归 I/O，`AxisBleedParameters` 归 output；units 只
   接收 resolution 与 unit，不再依赖完整 TIFF profile。

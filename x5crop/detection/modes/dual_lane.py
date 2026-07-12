@@ -147,8 +147,6 @@ def _parent_candidate(
                 proposal_budget_exhausted
                 or any(solution.search_budget_exhausted for solution in lane_solutions)
             ),
-            sequence_hypothesis_name="measured_lane_divider",
-            sequence_hypothesis_strategy="dual_lane_sequence",
             lane_divider=divider,
             lane_solutions=lane_solutions,
             lane_boxes=lane_boxes,

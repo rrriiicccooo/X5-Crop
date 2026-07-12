@@ -155,10 +155,8 @@ def _separator_dimension_hypotheses(
                     (
                         physical_error,
                         SequenceHypothesis(
-                            name="separator_dimension_sequence",
                             visible_sequence_span=VisibleSequenceSpan(box),
                             crop_envelope=CropEnvelope(box),
-                            strategy="separator_dimension_led",
                             provenance=MeasurementProvenance(
                                 root_measurement=MeasurementIdentity.FRAME_DIMENSIONS,
                                 source="separator_dimension_sequence",

@@ -134,8 +134,6 @@ def build_sequence_candidate(
                 or solved.search_budget_exhausted
             ),
             automatic_processing_supported=True,
-            sequence_hypothesis_name=sequence_hypothesis.name,
-            sequence_hypothesis_strategy=sequence_hypothesis.strategy,
             sequence_provenance=sequence_hypothesis.provenance,
             boundary_observations=sequence_hypothesis.boundary_observations,
         ),

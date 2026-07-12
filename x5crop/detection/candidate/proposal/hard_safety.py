@@ -69,8 +69,6 @@ def hard_safety_candidate(
             assignment_consensus=solved.assignment_consensus,
             search_budget_exhausted=solved.search_budget_exhausted,
             automatic_processing_supported=False,
-            sequence_hypothesis_name="full_canvas_safety",
-            sequence_hypothesis_strategy="safety_canvas",
             sequence_provenance=MeasurementProvenance(
                 root_measurement=MeasurementIdentity.SAFETY_GEOMETRY_MODEL,
                 source="full_canvas_safety",

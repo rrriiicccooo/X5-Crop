@@ -84,8 +84,6 @@ def _parent(lane):
             (lane.geometry, lane.geometry)
         ),
         search_budget_exhausted=False,
-        sequence_hypothesis_name="dual_lane_fixture",
-        sequence_hypothesis_strategy="dual_lane_sequence",
         lane_divider=LaneDividerEvidence(
             center=lane_height,
             gutter=Box(0, lane_height - 1, lane_width, lane_height + 1),

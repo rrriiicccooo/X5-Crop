@@ -109,10 +109,8 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         )
         box = Box(0, 0, 300, 100)
         source = SequenceHypothesis(
-            "synthetic_sequence",
             VisibleSequenceSpan(box),
             CropEnvelope(box),
-            "boundary_led",
             MeasurementProvenance(
                 MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "synthetic",

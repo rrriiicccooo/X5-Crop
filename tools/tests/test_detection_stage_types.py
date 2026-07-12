@@ -168,6 +168,29 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             {"decision", "finalization_plan"},
         )
 
+    def test_typed_results_do_not_store_report_only_identity_copies(self) -> None:
+        from x5crop.detection.evidence.content.frame_support import (
+            FrameContentEvidence,
+        )
+        from x5crop.detection.physical.model import (
+            DualLaneSolution,
+            ReviewOnlyGeometry,
+        )
+        from x5crop.domain import SequenceHypothesis
+
+        for model in (
+            SequenceHypothesis,
+            SequenceSolution,
+            DualLaneSolution,
+            ReviewOnlyGeometry,
+        ):
+            model_fields = set(model.__dataclass_fields__)
+            self.assertNotIn("name", model_fields)
+            self.assertNotIn("strategy", model_fields)
+            self.assertNotIn("sequence_hypothesis_name", model_fields)
+            self.assertNotIn("sequence_hypothesis_strategy", model_fields)
+        self.assertNotIn("composite", FrameContentEvidence.__dataclass_fields__)
+
     def test_decision_and_finalization_have_distinct_lifecycle_types(self) -> None:
         import x5crop.detection.decision.model as decision_model
         from x5crop.detection.decision.decision_gate import apply_decision_gate

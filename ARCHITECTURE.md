@@ -172,11 +172,12 @@ lane observations 或 boundaries；全局 frames、envelope、residuals 和 assi
 由 lane solutions 确定性派生。Dual-lane 的 composition proof 要求每条 lane 的 CandidateGate 与
 GeometryResolution 都成立。
 
-Geometry 不保存重复的 candidate-source string。Geometry type、automatic-processing eligibility、
-sequence strategy 与 measurement provenance 共同表达其物理身份。
+Geometry 不保存重复的 candidate-source、hypothesis name 或 strategy string。Geometry type、
+automatic-processing eligibility 与 measurement provenance 共同表达其物理身份。
 
 Candidate evidence 包括 topology、frame coverage、separator sequence、photo dimensions、
 content preservation、holder occupancy、sequence conservation 和 evidence independence。
+Evidence 只保存测量与状态，不携带固定 report 描述副本。
 直接进入 CandidateGate 的 topology、preservation、dimensions、conservation 与 independence
 在 typed model 边界重算 state/derived measurements；state 不能与 raw physical facts 漂移。
 Topology 显式区分 sequence、lane composition 与 unmeasured scope；dual-lane measurement root

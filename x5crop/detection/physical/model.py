@@ -132,8 +132,6 @@ class SequenceSolution:
     assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
     automatic_processing_supported: bool
-    sequence_hypothesis_name: str
-    sequence_hypothesis_strategy: str
     sequence_provenance: MeasurementProvenance
     boundary_observations: tuple[BoundaryObservation, ...]
 
@@ -271,8 +269,6 @@ class DualLaneSolution:
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
-    sequence_hypothesis_name: str
-    sequence_hypothesis_strategy: str
     lane_divider: LaneDividerEvidence
     lane_solutions: tuple[SequenceSolution, ...]
     lane_boxes: tuple[Box, ...]
@@ -429,8 +425,6 @@ class ReviewOnlyGeometry:
     frame_dimension_prior: FrameDimensionPrior
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
-    sequence_hypothesis_name: str
-    sequence_hypothesis_strategy: str
     sequence_provenance: MeasurementProvenance
     boundary_observations: tuple[BoundaryObservation, ...]
     photo_intervals: tuple[PhotoInterval, ...] = ()

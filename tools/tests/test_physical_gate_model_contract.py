@@ -129,7 +129,10 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             candidate,
             geometry=replace(
                 candidate.geometry,
-                sequence_hypothesis_name="equivalent_independent_candidate",
+                sequence_provenance=replace(
+                    candidate.geometry.sequence_provenance,
+                    source="equivalent_independent_candidate",
+                ),
             ),
         )
         result = select_candidates(

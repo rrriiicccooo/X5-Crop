@@ -246,10 +246,8 @@ class PhysicalModelInvariantTest(unittest.TestCase):
     def test_sequence_hypothesis_envelope_must_cover_visible_sequence(self) -> None:
         with self.assertRaises(ValueError):
             SequenceHypothesis(
-                "invalid",
                 VisibleSequenceSpan(Box(0, 0, 100, 100)),
                 CropEnvelope(Box(10, 0, 90, 100)),
-                "boundary_led",
                 _provenance(),
                 (),
             )

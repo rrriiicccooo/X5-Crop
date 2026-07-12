@@ -628,7 +628,6 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 FrameContentObservation(1, 0.4, 0.4, True, ("right",)),
                 FrameContentObservation(2, 0.4, 0.4, True, ("left",)),
             ),
-            "synthetic",
         )
         alignment = SequenceContentAlignmentEvidence(
             EvidenceState.SUPPORTED,

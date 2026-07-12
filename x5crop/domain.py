@@ -218,16 +218,12 @@ class CropEnvelope:
 
 @dataclass(frozen=True)
 class SequenceHypothesis:
-    name: str
     visible_sequence_span: VisibleSequenceSpan
     crop_envelope: CropEnvelope
-    strategy: str
     provenance: MeasurementProvenance
     boundary_observations: tuple["BoundaryObservation", ...]
 
     def __post_init__(self) -> None:
-        if not self.name or not self.strategy:
-            raise ValueError("sequence hypothesis requires name and strategy")
         visible = self.visible_sequence_span.box
         envelope = self.crop_envelope.box
         if not (

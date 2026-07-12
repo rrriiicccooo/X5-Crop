@@ -58,10 +58,8 @@ def _proposal_from_observations(
         )
     )
     return SequenceHypothesis(
-        name=name,
         visible_sequence_span=visible,
         crop_envelope=envelope,
-        strategy="boundary_led",
         provenance=MeasurementProvenance(
             root_measurement=MeasurementIdentity.BOUNDARY_OBSERVATIONS,
             source=name,

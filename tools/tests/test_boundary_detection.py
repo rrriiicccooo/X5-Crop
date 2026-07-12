@@ -113,7 +113,11 @@ class BoundaryDetectionTests(unittest.TestCase):
             _statistics(gray),
             BOUNDARY_PARAMETERS,
         )
-        full_canvas = next(item for item in proposals if item.name == "full_canvas")
+        full_canvas = next(
+            item
+            for item in proposals
+            if item.provenance.source == "full_canvas"
+        )
         self.assertEqual(
             (
                 full_canvas.crop_envelope.box.left,
@@ -153,7 +157,10 @@ class BoundaryDetectionTests(unittest.TestCase):
                     _statistics(gray),
                     BOUNDARY_PARAMETERS,
                 )
-                self.assertEqual([item.name for item in proposals], ["full_canvas"])
+                self.assertEqual(
+                    [item.provenance.source for item in proposals],
+                    ["full_canvas"],
+                )
 
     def test_content_expands_crop_envelope_without_changing_sequence_geometry(self) -> None:
         gray = np.full((100, 200), 255, dtype=np.uint8)
@@ -162,10 +169,8 @@ class BoundaryDetectionTests(unittest.TestCase):
         content_evidence[10:90, 10:190] = 1.0
         physical_box = Box(20, 20, 180, 80)
         physical = SequenceHypothesis(
-            name="physical_sequence",
             visible_sequence_span=VisibleSequenceSpan(physical_box),
             crop_envelope=CropEnvelope(physical_box),
-            strategy="boundary_led",
             provenance=MeasurementProvenance(
                 MeasurementIdentity.HOLDER_BOUNDARY_PROFILE,
                 "synthetic",

@@ -110,7 +110,6 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             geometry=replace(
                 lower_built.geometry,
                 strip_mode="partial",
-                sequence_hypothesis_name="resolved_lower_count",
             ),
             count_hypothesis=lower_hypothesis,
             assessment=candidate_fixture().assessment,

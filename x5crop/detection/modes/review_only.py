@@ -55,8 +55,6 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
                 0,
                 (),
             ),
-            sequence_hypothesis_name="review_only_canvas",
-            sequence_hypothesis_strategy="review_only_canvas",
             sequence_provenance=MeasurementProvenance(
                 root_measurement=MeasurementIdentity.REVIEW_ONLY_MODE,
                 source="review_only_canvas",
