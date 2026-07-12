@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
+from tempfile import TemporaryDirectory
 import unittest
 import numpy as np
 from dataclasses import fields, replace
@@ -10,7 +12,7 @@ from tools.tests.physical_gate_support import (
     transform_geometry_fixture,
 )
 from x5crop.detection.decision.model import FinalDetection
-from x5crop.domain import ProcessResult
+from x5crop.domain import ImageProfile, ProcessResult
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
@@ -35,6 +37,35 @@ def _record() -> dict:
 
 
 class OutputReadModelContractTest(unittest.TestCase):
+    def test_analysis_reuse_source_identity_includes_file_content(self) -> None:
+        from x5crop.runtime.analysis_reuse import source_cache_signature
+
+        profile = ImageProfile(
+            (1, 4),
+            "uint8",
+            "YX",
+            "MINISBLACK",
+            "NONE",
+            None,
+            8,
+            1,
+            None,
+            None,
+            None,
+            None,
+        )
+        fixed_time_ns = 1_700_000_000_000_000_000
+        with TemporaryDirectory() as directory:
+            source = Path(directory) / "source.tif"
+            source.write_bytes(b"aaaa")
+            os.utime(source, ns=(fixed_time_ns, fixed_time_ns))
+            first = source_cache_signature(source, profile, 0)
+            source.write_bytes(b"bbbb")
+            os.utime(source, ns=(fixed_time_ns, fixed_time_ns))
+            second = source_cache_signature(source, profile, 0)
+
+        self.assertNotEqual(first, second)
+
     def test_review_only_pipeline_produces_valid_current_report(self) -> None:
         from x5crop.cache.analysis import make_measurement_cache
         from x5crop.configuration.registry import get_detection_configuration

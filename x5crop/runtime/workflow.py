@@ -43,8 +43,22 @@ def process_one(
     config = replace(config, layout=layout)
     initial_configuration = configuration_bundle.initial_configuration
     fmt = initial_configuration.physical_spec
+    analysis_reuse_signature = make_analysis_reuse_signature(
+        input_file,
+        profile,
+        config,
+        initial_configuration,
+    )
 
-    cached_result = result_from_reusable_analysis(input_file, config, output_surface, profile, warnings, configuration_bundle)
+    cached_result = result_from_reusable_analysis(
+        input_file,
+        config,
+        output_surface,
+        profile,
+        warnings,
+        analysis_reuse_signature,
+        configuration_bundle,
+    )
     if cached_result is not None:
         return cached_result
 
@@ -147,12 +161,7 @@ def process_one(
         warnings,
         configuration_detail=configuration_detail,
         transform_geometry=transform_geometry,
-        analysis_reuse_signature=make_analysis_reuse_signature(
-            input_file,
-            profile,
-            config,
-            selected_configuration,
-        ),
+        analysis_reuse_signature=analysis_reuse_signature,
     )
     return result
 

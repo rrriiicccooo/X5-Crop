@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import math
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -342,20 +342,24 @@ class FrameBoundary:
         )
 
 
-@dataclass
+TiffTagScalar = int | float | str
+TiffTagValue = TiffTagScalar | tuple[TiffTagScalar, ...]
+
+
+@dataclass(frozen=True)
 class ImageProfile:
     shape: tuple[int, ...]
     dtype: str
     axes: str
     photometric: str
     compression: str
-    sample_format: Optional[Any]
-    bits_per_sample: Optional[Any]
-    samples_per_pixel: Optional[int]
-    planar_config: Optional[str]
-    resolution: Optional[tuple[Any, Any]]
-    resolution_unit: Optional[Any]
-    icc_profile: Optional[bytes]
+    sample_format: TiffTagValue | None
+    bits_per_sample: int | tuple[int, ...] | None
+    samples_per_pixel: int | None
+    planar_config: str | None
+    resolution: tuple[float, float] | None
+    resolution_unit: int | str | None
+    icc_profile: bytes | None
 
 
 @dataclass(frozen=True)

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any
 
 from .domain import ImageProfile
 
@@ -40,22 +39,8 @@ class ScanCalibration:
         return self.y_px_per_mm if axis == "y" else self.x_px_per_mm
 
 
-def _numeric_value(value: Any) -> float | None:
-    if value is None:
-        return None
-    if isinstance(value, tuple) and len(value) == 2:
-        denominator = float(value[1])
-        if denominator == 0.0:
-            return None
-        return float(value[0]) / denominator
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _resolution_unit_name(value: Any) -> str:
-    raw = str(getattr(value, "name", value) or "").strip().lower()
+def _resolution_unit_name(value: int | str | None) -> str:
+    raw = str(value or "").strip().lower()
     if raw in {"2", "inch", "inches"}:
         return "inch"
     if raw in {"3", "centimeter", "centimetre", "cm"}:
@@ -90,9 +75,8 @@ def scan_calibration_from_profile(
     else:
         return _unavailable(f"unsupported_resolution_unit:{unit}")
 
-    x_res = _numeric_value(profile.resolution[0])
-    y_res = _numeric_value(profile.resolution[1])
-    if x_res is None or y_res is None or x_res <= 0.0 or y_res <= 0.0:
+    x_res, y_res = profile.resolution
+    if x_res <= 0.0 or y_res <= 0.0:
         return _unavailable("invalid_tiff_resolution")
     x_px_per_mm = float(x_res) / divisor
     y_px_per_mm = float(y_res) / divisor

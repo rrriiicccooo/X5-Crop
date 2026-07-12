@@ -5,7 +5,7 @@ from pathlib import Path
 import unittest
 
 from tools.tests.architecture_contracts import PROJECT_ROOT
-from x5crop.domain import MeasurementProvenance, SeparatorBandObservation
+from x5crop.domain import ImageProfile, MeasurementProvenance, SeparatorBandObservation
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 
 
@@ -17,6 +17,15 @@ def _active_source() -> str:
 
 
 class CurrentSchemaNamingContractTest(unittest.TestCase):
+    def test_tiff_profile_is_an_immutable_typed_input_contract(self) -> None:
+        self.assertTrue(ImageProfile.__dataclass_params__.frozen)
+        self.assertFalse(
+            any(
+                "Any" in str(field.type)
+                for field in ImageProfile.__dataclass_fields__.values()
+            )
+        )
+
     def test_separator_measurement_has_one_count_independent_identity(self) -> None:
         self.assertEqual(
             tuple(SeparatorBandObservation.__dataclass_fields__),

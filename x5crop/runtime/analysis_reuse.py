@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from hashlib import sha256
+from hashlib import file_digest, sha256
 import json
 from pathlib import Path
 from typing import Any
@@ -35,10 +35,13 @@ _REPORT_RECORD_CACHE: dict[Path, tuple[int, int, list[dict[str, Any]]]] = {}
 
 def source_cache_signature(input_file: Path, profile: ImageProfile, page_index: int) -> dict[str, Any]:
     stat = input_file.stat()
+    with input_file.open("rb") as stream:
+        content_sha256 = file_digest(stream, "sha256").hexdigest()
     return {
         "name": input_file.name,
         "size": int(stat.st_size),
         "mtime_ns": int(stat.st_mtime_ns),
+        "content_sha256": content_sha256,
         "page": int(page_index),
         "shape": list(profile.shape),
         "dtype": profile.dtype,
@@ -94,10 +97,7 @@ def make_analysis_reuse_signature(
 
 def cached_record_matches(
     record: dict[str, Any],
-    input_file: Path,
-    profile: ImageProfile,
-    config: RunConfig,
-    configuration: DetectionConfiguration,
+    expected_signature: dict[str, Any],
 ) -> bool:
     if current_report_record_errors(record):
         return False
@@ -106,18 +106,7 @@ def cached_record_matches(
     cache = record["analysis_reuse_signature"]
     if not isinstance(cache, dict):
         return False
-    if cache.get("script") != SCRIPT_NAME or cache.get("script_version") != VERSION:
-        return False
-    if cache.get("configuration_fingerprint") != analysis_configuration_fingerprint(configuration):
-        return False
-    expected_source = source_cache_signature(input_file, profile, config.page)
-    expected_config = config_cache_signature(config)
-    if cache.get("source") != expected_source:
-        return False
-    cached_config = cache.get("config")
-    if not isinstance(cached_config, dict):
-        return False
-    if cached_config != expected_config:
+    if cache != expected_signature:
         return False
     return str(record["decision"]["status"]) in {
         "approved_auto",
@@ -155,13 +144,11 @@ def load_report_records(report_path: Path) -> list[dict[str, Any]]:
 def find_reusable_analysis(
     input_file: Path,
     output_dir: Path,
-    profile: ImageProfile,
-    config: RunConfig,
-    configuration: DetectionConfiguration,
+    expected_signature: dict[str, Any],
 ) -> dict[str, Any] | None:
     report_path = output_dir / REPORT_JSONL_NAME
     for record in load_report_records(report_path):
-        if not cached_record_matches(record, input_file, profile, config, configuration):
+        if not cached_record_matches(record, expected_signature):
             continue
         if Path(str(record["source"])).name == input_file.name:
             return record
@@ -192,6 +179,7 @@ def result_from_reusable_analysis(
     output_surface: OutputSurface,
     profile: ImageProfile,
     warnings: list[str],
+    analysis_reuse_signature: dict[str, Any],
     configuration_bundle: DetectionConfigurationBundle,
 ) -> ProcessResult | None:
     if not (config.reuse_analysis and not config.dry_run and not config.debug_analysis):
@@ -199,9 +187,7 @@ def result_from_reusable_analysis(
     cached_record = find_reusable_analysis(
         input_file,
         output_surface.root,
-        profile,
-        config,
-        configuration_bundle.initial_configuration,
+        analysis_reuse_signature,
     )
     if cached_record is None:
         return None

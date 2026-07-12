@@ -37,22 +37,22 @@ class UnitModelTests(unittest.TestCase):
         self.assertEqual(calibration.source, "unavailable")
 
     def test_scan_calibration_from_inch_resolution(self) -> None:
-        calibration = scan_calibration_from_profile(_profile(((300, 1), (300, 1)), 2))
+        calibration = scan_calibration_from_profile(_profile((300.0, 300.0), 2))
         self.assertTrue(calibration.trusted)
         self.assertEqual(calibration.source, "tiff_resolution")
         self.assertAlmostEqual(calibration.x_px_per_mm or 0.0, 300.0 / 25.4)
         self.assertAlmostEqual(calibration.y_px_per_mm or 0.0, 300.0 / 25.4)
 
     def test_scan_calibration_from_centimeter_resolution(self) -> None:
-        calibration = scan_calibration_from_profile(_profile(((120, 1), (120, 1)), 3))
+        calibration = scan_calibration_from_profile(_profile((120.0, 120.0), 3))
         self.assertTrue(calibration.trusted)
         self.assertAlmostEqual(calibration.x_px_per_mm or 0.0, 12.0)
         self.assertAlmostEqual(calibration.y_px_per_mm or 0.0, 12.0)
 
     def test_scan_calibration_rejects_missing_or_invalid_units(self) -> None:
         missing = scan_calibration_from_profile(_profile())
-        invalid = scan_calibration_from_profile(_profile(((300, 1), (300, 1)), 1))
-        unsupported = scan_calibration_from_profile(_profile(((300, 1), (300, 1)), 99))
+        invalid = scan_calibration_from_profile(_profile((300.0, 300.0), 1))
+        unsupported = scan_calibration_from_profile(_profile((300.0, 300.0), 99))
 
         self.assertFalse(missing.trusted)
         self.assertIn("missing_tiff_resolution", missing.warnings)
@@ -63,7 +63,7 @@ class UnitModelTests(unittest.TestCase):
 
     def test_valid_anisotropic_resolution_is_preserved_per_axis(self) -> None:
         calibration = scan_calibration_from_profile(
-            _profile(((300, 1), (1200, 1)), 2)
+            _profile((300.0, 1200.0), 2)
         )
         self.assertTrue(calibration.trusted)
         self.assertAlmostEqual(calibration.x_px_per_mm or 0.0, 300.0 / 25.4)

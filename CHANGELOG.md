@@ -63,9 +63,13 @@ repository rules in `AGENTS.md`.
 - Observation、hypothesis、solver 与 dual-lane proposal 的预算耗尽状态全程传播；截断搜索不能
   形成 resolved geometry。Dual-lane composition 同时要求每条 lane 的 gate 与 geometry resolution。
 - Cache reuse 不再从 report candidate 反向选择 configuration；output bleed layout 必须显式传入。
+- Analysis reuse source identity 现在包含文件内容 SHA-256；同一次运行只计算一次，并由 cache
+  lookup 与 current report 共同使用。相同文件名、大小和时间戳不再足以复用检测。
+- TIFF `ImageProfile` 已成为 immutable typed input contract；rational、enum 和 NumPy scalar 在
+  I/O 边界归一化，calibration/cache/report 不再兼容解析底层 tag 对象或旧 rational shape。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 287 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 289 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

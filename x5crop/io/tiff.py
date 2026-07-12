@@ -31,18 +31,30 @@ def profile_from_page(page: Any, shape: tuple[int, ...], dtype: np.dtype, axes: 
     yres = page.tags.get("YResolution")
     unit = page.tags.get("ResolutionUnit")
     icc = page.tags.get(TIFF_ICC_PROFILE_TAG)
+    x_resolution = rational_to_float(xres.value) if xres else None
+    y_resolution = rational_to_float(yres.value) if yres else None
     profile = ImageProfile(
         shape=tuple(int(x) for x in shape),
         dtype=str(np.dtype(dtype)),
         axes=axes,
         photometric=photometric,
         compression=compression,
-        sample_format=(sample_format.value if sample_format else normalize_tag_value(getattr(page, "sampleformat", None))),
-        bits_per_sample=(bits_tag.value if bits_tag else None),
+        sample_format=normalize_tag_value(
+            sample_format.value
+            if sample_format
+            else getattr(page, "sampleformat", None)
+        ),
+        bits_per_sample=normalize_tag_value(bits_tag.value) if bits_tag else None,
         samples_per_pixel=(int(samples_tag.value) if samples_tag else (shape[-1] if axes == "YXS" else shape[0] if axes == "SYX" else 1)),
         planar_config=planar_config_name(getattr(page, "planarconfig", None) or (planar.value if planar else None)),
-        resolution=((xres.value if xres else None), (yres.value if yres else None)) if xres or yres else None,
-        resolution_unit=(unit.value if unit else None),
+        resolution=(
+            (x_resolution, y_resolution)
+            if x_resolution is not None and y_resolution is not None
+            else None
+        ),
+        resolution_unit=(
+            normalize_tag_value(unit.value) if unit else None
+        ),
         icc_profile=(bytes(icc.value) if icc is not None else None),
     )
     expected_bits = expected_bits_for_dtype(profile.dtype, int(profile.samples_per_pixel or 1))
@@ -128,6 +140,8 @@ def tiff_write_kwargs(profile: ImageProfile, compression_mode: str) -> dict[str,
 
 
 def normalize_tag_value(value: Any) -> Any:
+    if hasattr(value, "value"):
+        return normalize_tag_value(value.value)
     if isinstance(value, np.generic):
         return value.item()
     if isinstance(value, tuple):
