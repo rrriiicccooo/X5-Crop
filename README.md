@@ -124,12 +124,11 @@ debug analysis? [y/n, return=no]:
 ```
 
 只有开启 partial mode 后才会询问 `count`。按 Return 或输入 `auto` 表示自动判断张数。
-auto count 始终按 format 允许的张数从大到小评估；不依赖 count 的 hard separator 只用于
-估算 placement。只有当前 count 缺少 placement 时才按需测量 observed-width evidence。
-物理 count / placement 是否已确定，与候选能否自动通过分开记录：物理证据已完整时不再搜索
-更小 count，即使最终结果仍需 REVIEW。缺少物理 placement 的 count 使用 content position
-生成最多三个定位提示，不再固定扫描五个比例位置。所有实际候选仍须完成相同的 evidence、
-CandidateGate 和 DecisionGate。
+auto count 始终按 format 允许的张数从大到小求解。每个 count 都从相同的逐边 boundary 与
+count-independent separator observations 构造 sequence hypotheses，再由全局单调 solver 求解
+frame geometry。只有 `GeometryResolution` 确认 count、placement、coverage 和替代几何都已解决，
+才停止搜索更小 count；即使最终结果仍需 REVIEW，也不会让 CandidateGate 或 confidence 代替这项
+物理解析。所有候选都完成相同的 evidence、CandidateGate 和 DecisionGate。
 
 ### Format 和张数
 
@@ -225,7 +224,8 @@ x5_crop_output/
 
 默认输出 bleed 为长轴 20px、短轴 10px。只有独立观测的 signed spacing 确认叠片时，
 相邻两张 frame 的对应侧才会增加到所需宽度。可用保护范围是基础 frame 到其
-`CropEnvelope` 的实际几何余量，并最终 clamp 到图像 canvas；任一侧余量不足时进入复核。
+holder canvas 或所属 lane `frame_output_bounds` 的实际几何余量；任一侧余量不足时进入复核。
+`CropEnvelope` 只表示不含用户 bleed 的基础物理包络。
 Bleed 只影响最终输出，不能改变 candidate geometry 或 Gate 结果。
 
 ### 常用命令行
@@ -403,14 +403,13 @@ debug analysis? [y/n, return=no]:
 
 It asks for `count` only when partial mode is enabled. Press Return or type
 `auto` to let the script estimate the partial count.
-Auto count first reads count-independent hard separator positions to order count
-hypotheses and estimate continuous placement. Observed-width evidence runs only
-when an executed count still lacks placement. Physical count/placement resolution
-is separate from auto readiness, so complete physical evidence stops smaller
-counts even when the final result remains REVIEW. Counts without physical
-placement use at most three content-position hints instead of five fixed offsets.
-Every resulting candidate still passes through the same evidence, CandidateGate,
-and DecisionGate.
+Auto count solves the format's allowed counts from largest to smallest. Every
+count uses the same per-side boundary measurements and count-independent separator
+observations to build sequence hypotheses for the global monotonic solver. Smaller
+counts are skipped only after `GeometryResolution` confirms count, placement,
+coverage, and alternative geometry resolution. CandidateGate and confidence never
+substitute for that physical resolution. Every candidate passes through the same
+evidence, CandidateGate, and DecisionGate.
 
 ### Formats
 
@@ -478,9 +477,10 @@ independently observed overlap, or overlap uniquely corroborated by trusted
 calibration, measured sequence edges, and the remaining observed spacings, can
 expand the corresponding sides of the two adjacent frames. Corroborated overlap
 cannot prove its own conservation equation. Available protection is the actual geometric slack between
-each base frame and its `CropEnvelope`, finally clamped to the image canvas. If
-either side lacks enough slack, the result goes to review. Bleed affects final
-output only and cannot change candidate geometry or Gate results.
+each base frame and its holder or lane `frame_output_bounds`. `CropEnvelope` is the
+base physical envelope before user bleed. If either side lacks enough output space,
+the result goes to review. Bleed affects final output only and cannot change
+candidate geometry or Gate results.
 
 ### Command Line
 

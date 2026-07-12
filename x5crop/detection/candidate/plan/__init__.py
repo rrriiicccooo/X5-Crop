@@ -1,1 +1,1 @@
-"""Candidate count, offset, source descriptors, and execution budget."""
+"""Candidate count hypothesis planning."""

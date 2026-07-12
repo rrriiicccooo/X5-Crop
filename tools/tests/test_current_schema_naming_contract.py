@@ -176,6 +176,20 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             readme,
         )
         self.assertIn("CropEnvelope", readme)
+        for stale in (
+            "observed-width evidence",
+            "content position",
+            "order count hypotheses",
+            "five fixed offsets",
+            "between each base frame and its `CropEnvelope`",
+        ):
+            self.assertNotIn(stale, readme)
+
+        candidate_plan = (
+            PROJECT_ROOT / "x5crop/detection/candidate/plan/__init__.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("offset", candidate_plan)
+        self.assertNotIn("source descriptors", candidate_plan)
 
     def test_content_guidance_cannot_create_or_replace_sequence_geometry(self) -> None:
         guidance = PROJECT_ROOT / "x5crop/detection/guidance"
