@@ -72,6 +72,8 @@ repository rules in `AGENTS.md`.
   `GeometryResolution` 可以提前停止候选搜索。
 - Deskew measurement 与 transform evidence 删除自由 reason 字符串，统一使用 foundation-owned typed
   measurement outcome。
+- Deskew measurement outcome 现在同时校验 angle 与 line-fit 形状，current report/cache 不能恢复
+  不可能的测量组合。
 - Boundary assignment consensus 删除 caller-supplied state/reason，改为 typed solver outcome；
   disagreement、budget exhaustion 与 dual-lane component unresolved 不再共用自由文本状态。
 - Holder occlusion side 删除 caller-supplied state/reason，改为 typed measurement outcome；普通 combined

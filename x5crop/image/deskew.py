@@ -52,8 +52,24 @@ class DeskewAngleMeasurement:
         if self.outcome == DeskewMeasurementOutcome.MEASURED:
             if all(fit is None for fit in fits):
                 raise ValueError("successful deskew measurement requires an edge fit")
-        elif self.angle_degrees != 0.0:
-            raise ValueError("failed deskew measurement must have zero angle")
+        else:
+            if self.angle_degrees != 0.0:
+                raise ValueError("failed deskew measurement must have zero angle")
+            if self.outcome in {
+                DeskewMeasurementOutcome.NO_SCAN_FOOTPRINT,
+                DeskewMeasurementOutcome.INSUFFICIENT_EDGE_POINTS,
+            } and any(fit is not None for fit in fits):
+                raise ValueError("unsupported deskew measurement cannot carry edge fits")
+            if (
+                self.outcome == DeskewMeasurementOutcome.EDGE_FITS_DISAGREE
+                and any(fit is None for fit in fits)
+            ):
+                raise ValueError("edge disagreement requires both edge fits")
+            if (
+                self.outcome == DeskewMeasurementOutcome.HIGH_RESIDUAL
+                and all(fit is None for fit in fits)
+            ):
+                raise ValueError("high residual requires an edge fit")
 
 
 def _fit_line(

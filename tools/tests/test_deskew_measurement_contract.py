@@ -40,6 +40,7 @@ class DeskewMeasurementContractTest(unittest.TestCase):
         self.assertNotIn("reason", DeskewAngleMeasurement.__dataclass_fields__)
 
     def test_measurement_types_reject_impossible_states(self) -> None:
+        fit = LineFitMeasurement(0.0, 4, 1.0)
         for factory in (
             lambda: LineFitMeasurement(float("nan"), 4, 1.0),
             lambda: LineFitMeasurement(0.0, 0, 1.0),
@@ -53,6 +54,30 @@ class DeskewMeasurementContractTest(unittest.TestCase):
             lambda: DeskewAngleMeasurement(
                 DeskewMeasurementOutcome.INSUFFICIENT_EDGE_POINTS,
                 0.05,
+                None,
+                None,
+            ),
+            lambda: DeskewAngleMeasurement(
+                DeskewMeasurementOutcome.NO_SCAN_FOOTPRINT,
+                0.0,
+                fit,
+                None,
+            ),
+            lambda: DeskewAngleMeasurement(
+                DeskewMeasurementOutcome.INSUFFICIENT_EDGE_POINTS,
+                0.0,
+                fit,
+                None,
+            ),
+            lambda: DeskewAngleMeasurement(
+                DeskewMeasurementOutcome.EDGE_FITS_DISAGREE,
+                0.0,
+                fit,
+                None,
+            ),
+            lambda: DeskewAngleMeasurement(
+                DeskewMeasurementOutcome.HIGH_RESIDUAL,
+                0.0,
                 None,
                 None,
             ),
