@@ -10,7 +10,6 @@ from ...image.gray import BaseGrayParameters
 from ..parameters.aggregate import FormatParameters
 from ...strip_modes import FULL, PARTIAL
 from .separator import separator_policy
-from ..runtime.candidate import ScoringPolicy
 from ..runtime.content import ContentPolicy
 from ..runtime.diagnostics import RuntimeDiagnosticsPolicy
 from ..runtime.policy import DetectionPolicy
@@ -49,14 +48,7 @@ def build_detection_policy(
         content=ContentPolicy(
             evidence=params.content.content_evidence,
             profile=params.content.content_profile,
-            support=params.content.content_support,
         ),
-        scoring=ScoringPolicy(
-            calibration=params.candidate.scoring_calibration,
-            base_detection=params.candidate.base_detection_score,
-            geometry_support=params.candidate.geometry_support_score,
-        ),
-        candidate_selection=params.candidate.selection_consensus,
         candidate_plan=params.candidate.candidate_plan,
         output=params.output,
         diagnostics=RuntimeDiagnosticsPolicy(

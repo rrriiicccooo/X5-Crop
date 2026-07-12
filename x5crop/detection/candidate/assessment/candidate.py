@@ -17,14 +17,14 @@ from ..model import (
     CandidateAssessment,
     CandidateEvidence,
 )
-from .base_scoring import base_physical_assessment
+from .physical_evidence import measure_core_physical_evidence
 from .candidate_gate import (
     BoundaryProofPath,
     CandidateGateInput,
     candidate_gate_assessment,
 )
 from .evidence_independence import evidence_independence_evidence
-from .scoring import candidate_scores
+from .quality import evidence_quality
 from .separator_support import separator_sequence_evidence
 
 
@@ -92,10 +92,7 @@ def _boundary_proof_paths(
             or (
                 common
                 and geometry.count > 1
-                and (
-                    hard_anchor_count >= 1
-                    or sequence_boundary_supported
-                )
+                and hard_anchor_count >= 1
             )
         )
     )
@@ -164,12 +161,11 @@ def assess_candidate(
         raise ValueError("candidate and detection context format do not match")
     geometry = candidate.geometry
     frame_sequence = frame_sequence_evidence(geometry)
-    base = base_physical_assessment(
+    core = measure_core_physical_evidence(
         context.measurement_cache.gray_work,
         candidate,
         physical_spec,
         context.scan_calibration,
-        context.policy.scoring,
         context.policy.separator.continuity,
     )
     coverage = frame_coverage_evidence(
@@ -198,7 +194,7 @@ def assess_candidate(
     )
     sequence = separator_sequence_evidence(
         geometry,
-        base.separator_continuity,
+        core.separator_continuity,
     )
     occupancy = holder_occupancy_evidence(
         layout=geometry.layout,
@@ -212,13 +208,13 @@ def assess_candidate(
         physical_spec=physical_spec,
         content_support_available=content.support_available,
         frame_coverage=coverage,
-        frame_dimensions=base.frame_dimensions,
+        frame_dimensions=core.frame_dimensions,
         calibration=context.scan_calibration,
     )
     partial_edge = partial_edge_safety_evidence(
         geometry,
         coverage,
-        base.frame_dimensions,
+        core.frame_dimensions,
         content,
         occupancy,
     )
@@ -230,12 +226,12 @@ def assess_candidate(
     )
     independence = evidence_independence_evidence(geometry)
     evidence = CandidateEvidence(
-        frame_topology=base.frame_topology,
+        frame_topology=core.frame_topology,
         frame_coverage=coverage,
         frame_sequence=frame_sequence,
         separator_sequence=sequence,
-        separator_continuity=base.separator_continuity,
-        frame_dimensions=base.frame_dimensions,
+        separator_continuity=core.separator_continuity,
+        frame_dimensions=core.frame_dimensions,
         frame_content=content,
         holder_texture=holder_texture,
         content_preservation=preservation,
@@ -264,18 +260,17 @@ def assess_candidate(
             diagnostics=tuple(diagnostics),
         )
     )
-    scores = candidate_scores(
+    quality = evidence_quality(
         evidence,
-        base.confidence,
-        context.policy.scoring,
-        context.policy.content.support,
+        proof_paths,
+        residuals=geometry.residuals,
     )
     return AssessedCandidate(
         geometry=geometry,
         count_hypothesis=candidate.count_hypothesis,
         assessment=CandidateAssessment(
             evidence=evidence,
-            scores=scores,
+            quality=quality,
             gate=gate,
             diagnostics=tuple(sorted(set(diagnostics))),
         ),

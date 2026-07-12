@@ -10,7 +10,7 @@ from ..detection.decision.model import FinalDetection
 def debug_status_parts(detection: FinalDetection) -> tuple[str, str, tuple[int, int, int]]:
     passed = detection.status == "approved_auto"
     status = "PASS" if passed else "REVIEW"
-    detail = f"status: {detection.status} | confidence: {detection.confidence:.3f}"
+    detail = f"status: {detection.status}"
     color = (40, 180, 90) if passed else (230, 80, 70)
     reasons = detection.final_review_reasons
     if reasons:

@@ -13,7 +13,6 @@ from x5crop.report.validation import validate_current_report_record
 
 DEFAULT_FIELDS = (
     "status",
-    "confidence",
     "final_review_reasons",
     "output_geometry.crop_envelope",
     "output_geometry.frame_boxes",

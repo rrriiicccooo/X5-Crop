@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from ...domain import (
+    BoundaryObservation,
     Box,
     EvidenceState,
     FrameBoundary,
@@ -268,46 +269,69 @@ def _frames(
 def _photo_intervals(
     boundaries: tuple[FrameBoundary, ...],
     frames: tuple[Box, ...],
+    boundary_observations: tuple[BoundaryObservation, ...],
 ) -> tuple[PhotoInterval, ...]:
     assignments = {
         boundary.boundary_index: boundary.assignment
         for boundary in boundaries
         if boundary.assignment is not None and boundary.assignment.independent
     }
+    sequence_edges = {
+        observation.side: observation
+        for observation in boundary_observations
+        if observation.side in {"leading", "trailing"}
+    }
+    generated_provenance = MeasurementProvenance(
+        root_measurement="frame_geometry",
+        source="sequence_photo_interval",
+        dependencies=("sequence_cuts",),
+    )
     intervals: list[PhotoInterval] = []
     for index, frame in enumerate(frames, start=1):
         previous = assignments.get(index - 1)
         following = assignments.get(index)
-        start = PixelInterval.exact(
-            previous.observation.end if previous is not None else float(frame.left)
-        )
-        end = PixelInterval.exact(
-            following.observation.start if following is not None else float(frame.right)
-        )
+        leading = sequence_edges.get("leading") if index == 1 else None
+        trailing = sequence_edges.get("trailing") if index == len(frames) else None
+        if previous is not None:
+            start = PixelInterval.exact(previous.observation.end)
+            start_provenance = previous.observation.provenance
+            start_observed = True
+        elif leading is not None:
+            start = leading.position
+            start_provenance = leading.provenance
+            start_observed = leading.kind != "canvas_clip"
+        else:
+            start = PixelInterval.exact(float(frame.left))
+            start_provenance = generated_provenance
+            start_observed = False
+        if following is not None:
+            end = PixelInterval.exact(following.observation.start)
+            end_provenance = following.observation.provenance
+            end_observed = True
+        elif trailing is not None:
+            end = trailing.position
+            end_provenance = trailing.provenance
+            end_observed = trailing.kind != "canvas_clip"
+        else:
+            end = PixelInterval.exact(float(frame.right))
+            end_provenance = generated_provenance
+            end_observed = False
         if end.maximum <= start.minimum:
             start = PixelInterval.exact(float(frame.left))
             end = PixelInterval.exact(float(frame.right))
+            start_provenance = generated_provenance
+            end_provenance = generated_provenance
+            start_observed = False
+            end_observed = False
         intervals.append(
             PhotoInterval(
                 index,
                 start,
                 end,
-                MeasurementProvenance(
-                    root_measurement=(
-                        "photo_edges"
-                        if previous is not None or following is not None
-                        else "frame_geometry"
-                    ),
-                    source="sequence_photo_interval",
-                    dependencies=tuple(
-                        dict.fromkeys(
-                            item.observation.provenance.root_measurement
-                            for item in (previous, following)
-                            if item is not None
-                        )
-                    )
-                    or ("sequence_cuts",),
-                ),
+                start_provenance,
+                end_provenance,
+                start_observed,
+                end_observed,
             )
         )
     return tuple(intervals)
@@ -363,7 +387,7 @@ def _residuals(
     observed_widths = tuple(
         photo.width_px.midpoint
         for photo in photo_intervals
-        if photo.provenance.root_measurement == "photo_edges"
+        if photo.independently_observed
     )
     target = dimensions.width_px.midpoint
     dimension = (
@@ -389,23 +413,13 @@ def solve_frame_sequence(
     count: int,
     dimensions: FrameDimensionPrior,
     holder_occlusion: HolderOcclusionEvidence,
+    boundary_observations: tuple[BoundaryObservation, ...],
 ) -> SequenceSolveResult:
     if count <= 0:
         raise ValueError("sequence count must be positive")
     if count == 1:
         frames = (span.box,)
-        intervals = (
-            PhotoInterval(
-                1,
-                PixelInterval.exact(float(span.box.left)),
-                PixelInterval.exact(float(span.box.right)),
-                MeasurementProvenance(
-                    "sequence_boundaries",
-                    "single_photo_interval",
-                    ("sequence_boundaries",),
-                ),
-            ),
-        )
+        intervals = _photo_intervals((), frames, boundary_observations)
         return SequenceSolveResult(
             intervals,
             frames,
@@ -438,7 +452,7 @@ def solve_frame_sequence(
         for id_index, observation in enumerate(observations)
     ) + focused_assignments
     frames = _frames(span, boundaries, count)
-    intervals = _photo_intervals(boundaries, frames)
+    intervals = _photo_intervals(boundaries, frames, boundary_observations)
     relations = _relations(boundaries, dimensions)
     return SequenceSolveResult(
         photo_intervals=intervals,

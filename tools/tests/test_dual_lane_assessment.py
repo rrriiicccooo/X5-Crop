@@ -40,11 +40,11 @@ def _parent(lane):
 
 
 class DualLaneAssessmentTest(unittest.TestCase):
-    def test_dual_lane_uses_minimum_component_scores(self) -> None:
-        first = candidate_fixture(confidence=0.90)
-        second = candidate_fixture(confidence=0.70)
+    def test_dual_lane_builds_structured_evidence_quality(self) -> None:
+        first = candidate_fixture()
+        second = candidate_fixture()
         assessed = assess_dual_lane_candidate(_parent(first), (first, second))
-        self.assertEqual(assessed.assessment.scores.confidence, 0.70)
+        self.assertTrue(assessed.assessment.quality.supported_proof_paths)
         self.assertTrue(assessed.assessment.gate.passed)
 
     def test_failed_lane_blocks_mode_composition_proof(self) -> None:

@@ -17,8 +17,8 @@ from x5crop.detection.candidate.model import (
     AssessedCandidate,
     CandidateAssessment,
     CandidateEvidence,
-    CandidateScores,
 )
+from x5crop.detection.candidate.assessment.quality import evidence_quality
 from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
 from x5crop.detection.candidate.selection.model import (
     GeometryCluster,
@@ -335,7 +335,6 @@ def candidate_evidence_fixture(
 
 def candidate_fixture(
     *,
-    confidence: float = 0.90,
     failed_candidate_check: str | None = None,
     automatic_processing_supported: bool = True,
     content_preservation: EvidenceState = EvidenceState.SUPPORTED,
@@ -369,12 +368,18 @@ def candidate_fixture(
                 PixelInterval.exact(0.0),
                 PixelInterval.exact(95.0),
                 MeasurementProvenance("photo_edges", "test_fixture", ("separator_profile",)),
+                MeasurementProvenance("photo_edges", "test_fixture", ("separator_profile",)),
+                True,
+                True,
             ),
             PhotoInterval(
                 2,
                 PixelInterval.exact(105.0),
                 PixelInterval.exact(200.0),
                 MeasurementProvenance("photo_edges", "test_fixture", ("separator_profile",)),
+                MeasurementProvenance("photo_edges", "test_fixture", ("separator_profile",)),
+                True,
+                True,
             ),
         ),
         frames=frames,
@@ -426,6 +431,17 @@ def candidate_fixture(
             )
         ),
     )
+    evidence = candidate_evidence_fixture(
+        content_preservation=content_preservation,
+    )
+    gate = candidate_gate_fixture(
+        passed=failed_candidate_check is None,
+        failed_check=(
+            "boundary_proof"
+            if failed_candidate_check is None
+            else failed_candidate_check
+        ),
+    )
     return AssessedCandidate(
         geometry=geometry,
         count_hypothesis=CountHypothesis(
@@ -435,18 +451,13 @@ def candidate_fixture(
             allowed_by_physical_spec=True,
         ),
         assessment=CandidateAssessment(
-            evidence=candidate_evidence_fixture(
-                content_preservation=content_preservation,
+            evidence=evidence,
+            quality=evidence_quality(
+                evidence,
+                gate.proof_paths,
+                residuals=geometry.residuals,
             ),
-            scores=CandidateScores(confidence, confidence, 1.0, 1.0, 1.0, confidence),
-            gate=candidate_gate_fixture(
-                passed=failed_candidate_check is None,
-                failed_check=(
-                    "boundary_proof"
-                    if failed_candidate_check is None
-                    else failed_candidate_check
-                ),
-            ),
+            gate=gate,
             diagnostics=(),
         ),
     )
@@ -521,12 +532,10 @@ def decide_candidate(
 
 def final_detection_fixture(
     *,
-    confidence: float = 0.90,
     failed_candidate_check: str | None = None,
 ) -> FinalDetection:
     return decide_candidate(
         candidate_fixture(
-            confidence=confidence,
             failed_candidate_check=failed_candidate_check,
         )
     )

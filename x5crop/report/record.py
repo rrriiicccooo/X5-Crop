@@ -75,7 +75,6 @@ def report_record_for_final_detection(
         ),
         "holder_occupancy": typed_read_model(selected_evidence.holder_occupancy),
         "status": detection.status,
-        "confidence": float(detection.confidence),
         "final_review_reasons": list(detection.final_review_reasons),
         "decision_geometry": {
             "crop_envelope": typed_read_model(

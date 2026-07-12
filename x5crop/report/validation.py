@@ -24,7 +24,6 @@ CURRENT_REPORT_SECTIONS = (
     "strip_completeness",
     "holder_occupancy",
     "status",
-    "confidence",
     "final_review_reasons",
     "decision_geometry",
     "output_geometry",

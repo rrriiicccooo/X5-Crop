@@ -232,7 +232,6 @@ def apply_decision_gate(
         layout=selected.geometry.layout,
         strip_mode=selected.geometry.strip_mode,
         count=selected.geometry.count,
-        confidence=selected.assessment.scores.confidence,
         visible_sequence_span=selected.geometry.visible_sequence_span,
         crop_envelope=selected.geometry.crop_envelope,
         decision_gate=decision_gate,

@@ -34,6 +34,10 @@ from x5crop.policies.parameters.separator import SeparatorObservationParameters
 from x5crop.domain import MeasurementProvenance
 from x5crop.domain import Box
 from x5crop.detection.physical.model import SequenceSolution
+from x5crop.detection.evidence.separator_continuity import (
+    separator_cross_axis_continuity_evidence,
+)
+from x5crop.geometry.detection_parameters import SeparatorContinuityParameters
 from x5crop.domain import CropEnvelope, VisibleSequenceSpan
 from tools.tests.physical_gate_support import (
     candidate_fixture,
@@ -50,6 +54,22 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class FrameSequenceGeometryContractTests(unittest.TestCase):
+    def test_unused_weak_band_does_not_reduce_selected_separator_proof(self) -> None:
+        geometry = candidate_fixture().geometry
+        unused = separator_observation(35.0, start=30.0, end=40.0)
+        geometry = replace(
+            geometry,
+            separator_observations=(*geometry.separator_observations, unused),
+        )
+        gray = np.full((100, 200), 128, dtype=np.uint8)
+        gray[:, 95:105] = 255
+        evidence = separator_cross_axis_continuity_evidence(
+            gray,
+            geometry,
+            SeparatorContinuityParameters(),
+        )
+        self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
+
     def test_raw_separator_observation_is_count_independent(self) -> None:
         names = {field.name for field in fields(SeparatorBandObservation)}
         self.assertNotIn("index", names)
@@ -113,6 +133,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 ),
             ),
             HolderOcclusionEvidence.not_applicable(),
+            (),
         )
         self.assertEqual(len(result.assignments), 1)
         self.assertEqual(result.assignments[0].state, EvidenceState.CONTRADICTED)
@@ -139,6 +160,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 ),
             ),
             HolderOcclusionEvidence.not_applicable(),
+            (),
         )
         coordinates = tuple(boundary.coordinate for boundary in result.boundaries)
         self.assertEqual(coordinates, tuple(sorted(coordinates)))

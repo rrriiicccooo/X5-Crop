@@ -52,7 +52,6 @@ def evaluate_count_hypothesis(
     selection = (
         select_candidates(
             tuple(candidates),
-            context.policy.candidate_selection,
             larger_counts_evaluated=larger_counts_evaluated,
         )
         if candidates

@@ -28,7 +28,6 @@ from ..model import (
     BuiltCandidate,
     CandidateAssessment,
     CandidateEvidence,
-    CandidateScores,
 )
 from .candidate_gate import (
     BoundaryProofPath,
@@ -37,6 +36,7 @@ from .candidate_gate import (
 )
 from .evidence_independence import EvidenceIndependenceEvidence
 from .separator_support import SeparatorSequenceEvidence
+from .quality import evidence_quality
 
 
 def _width_cv(values: tuple[float, ...]) -> float | None:
@@ -212,12 +212,12 @@ def assess_dual_lane_candidate(
             ),
             default=None,
         ),
-        maximum_dimension_error_ratio=max(
+        dimension_residual_max=max(
             (
                 value
                 for lane in lanes
                 if (
-                    value := lane.assessment.evidence.frame_dimensions.maximum_dimension_error_ratio
+                    value := lane.assessment.evidence.frame_dimensions.dimension_residual_max
                 )
                 is not None
             ),
@@ -449,22 +449,17 @@ def assess_dual_lane_candidate(
             diagnostics=candidate.build_diagnostics,
         )
     )
-    scores = CandidateScores(
-        confidence=min(
-            lane.assessment.scores.confidence for lane in lanes
-        ),
-        base=min(lane.assessment.scores.base for lane in lanes),
-        geometry=min(lane.assessment.scores.geometry for lane in lanes),
-        separator=min(lane.assessment.scores.separator for lane in lanes),
-        content=min(lane.assessment.scores.content for lane in lanes),
-        joint=min(lane.assessment.scores.joint for lane in lanes),
+    quality = evidence_quality(
+        evidence,
+        gate.proof_paths,
+        residuals=geometry.residuals,
     )
     return AssessedCandidate(
         geometry=geometry,
         count_hypothesis=candidate.count_hypothesis,
         assessment=CandidateAssessment(
             evidence=evidence,
-            scores=scores,
+            quality=quality,
             gate=gate,
             diagnostics=candidate.build_diagnostics,
         ),

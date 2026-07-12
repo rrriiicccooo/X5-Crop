@@ -60,17 +60,7 @@ def _physical_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
 
 
 def _candidate_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:
-    return {
-        "candidate_plan": _plain(policy.candidate_plan),
-        "selection": _plain(policy.candidate_selection),
-        "scoring": {
-            "weights": {
-                "geometry": policy.scoring.calibration.geometry_weight,
-                "content": policy.scoring.calibration.content_weight,
-                "separator": policy.scoring.calibration.separator_weight,
-            },
-        },
-    }
+    return {"candidate_plan": _plain(policy.candidate_plan)}
 
 
 def _diagnostics_runtime_detail(policy: "DetectionPolicy") -> dict[str, Any]:

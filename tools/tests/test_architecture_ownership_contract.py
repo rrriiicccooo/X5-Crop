@@ -57,8 +57,6 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 "sequence",
                 "separator",
                 "content",
-                "scoring",
-                "candidate_selection",
                 "candidate_plan",
                 "output",
                 "diagnostics",

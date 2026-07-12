@@ -40,7 +40,7 @@ class FrameDimensionEvidence:
     observed_height_mm: float | None
     observed_aspect: float | None
     aspect_error_ratio: float | None
-    maximum_dimension_error_ratio: float | None
+    dimension_residual_max: float | None
     calibration_used: bool
 
 
@@ -126,7 +126,7 @@ def _photo_widths(
     widths = [
         interval.width_px.midpoint
         for interval in geometry.photo_intervals
-        if interval.provenance.root_measurement == "photo_edges"
+        if interval.independently_observed
     ]
     return (
         tuple(width for width in widths if width > 0.0),
@@ -139,9 +139,6 @@ def frame_dimension_evidence(
     physical_spec: FormatPhysicalSpec,
     calibration: ScanCalibration,
     continuity: SeparatorContinuityEvidence,
-    *,
-    maximum_photo_width_cv: float,
-    maximum_dimension_error_ratio: float,
 ) -> FrameDimensionEvidence:
     nominal = physical_spec.nominal_frame_size_mm
     photo_widths, separator_widths = _photo_widths(
@@ -189,11 +186,14 @@ def frame_dimension_evidence(
     observed_height_mm = (
         observed_height / float(short_ppm) if calibration_used else None
     )
-    if photo_cv is not None and photo_cv > float(maximum_photo_width_cv):
-        state = EvidenceState.CONTRADICTED
-        reason = "photo_widths_inconsistent"
-    elif maximum_error is not None and maximum_error > float(
-        maximum_dimension_error_ratio
+    observed_intervals = tuple(
+        interval.width_px
+        for interval in geometry.photo_intervals
+        if interval.independently_observed
+    )
+    if any(
+        not interval.intersects(geometry.frame_dimension_prior.width_px)
+        for interval in observed_intervals
     ):
         state = EvidenceState.CONTRADICTED
         reason = "physical_frame_dimensions_contradicted"

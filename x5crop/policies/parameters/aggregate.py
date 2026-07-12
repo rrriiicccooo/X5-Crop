@@ -11,18 +11,11 @@ from .candidate import CandidatePlanParameters
 from .content import (
     ContentEvidenceParameters,
     ContentProfileParameters,
-    ContentSupportParameters,
 )
 from .diagnostics import SeparatorOverlayParameters
 from .sequence import SequenceParameters
 from .output import (
     OverlapBleedParameters,
-)
-from .scoring import (
-    BaseDetectionScoreParameters,
-    SelectionConsensusParameters,
-    GeometrySupportScoreParameters,
-    ScoringCalibrationParameters,
 )
 from .separator import (
     FrameDimensionPriorParameters,
@@ -39,7 +32,6 @@ class PreprocessParameters:
 class ContentParameters:
     content_evidence: ContentEvidenceParameters = field(default_factory=ContentEvidenceParameters)
     content_profile: ContentProfileParameters = field(default_factory=ContentProfileParameters)
-    content_support: ContentSupportParameters = field(default_factory=ContentSupportParameters)
 
 
 @dataclass(frozen=True)
@@ -59,10 +51,6 @@ class SeparatorParameters:
 @dataclass(frozen=True)
 class CandidateParameters:
     candidate_plan: CandidatePlanParameters = field(default_factory=CandidatePlanParameters)
-    scoring_calibration: ScoringCalibrationParameters = field(default_factory=ScoringCalibrationParameters)
-    base_detection_score: BaseDetectionScoreParameters = field(default_factory=BaseDetectionScoreParameters)
-    geometry_support_score: GeometrySupportScoreParameters = field(default_factory=GeometrySupportScoreParameters)
-    selection_consensus: SelectionConsensusParameters = field(default_factory=SelectionConsensusParameters)
 
 
 @dataclass(frozen=True)

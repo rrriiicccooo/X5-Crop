@@ -65,7 +65,6 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
         candidates.append(assess_candidate(built, context))
     selection = select_candidates(
         tuple(candidates),
-        policy.candidate_selection,
         larger_counts_evaluated=True,
     )
     count_resolution = _count_resolution(
@@ -91,7 +90,6 @@ def choose_detection(context: DetectionContext) -> SelectionResult:
         assessed = assess_candidate(review_only_candidate(context), context)
         selection = select_candidates(
             (assessed,),
-            policy.candidate_selection,
             larger_counts_evaluated=True,
         )
     else:

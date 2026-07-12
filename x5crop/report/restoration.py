@@ -205,7 +205,6 @@ def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
         layout=str(record["layout"]),
         strip_mode=str(record["strip_mode"]),
         count=int(record["count"]),
-        confidence=float(record["confidence"]),
         visible_sequence_span=VisibleSequenceSpan(
             _box(record["visible_sequence_span"]["box"])
         ),

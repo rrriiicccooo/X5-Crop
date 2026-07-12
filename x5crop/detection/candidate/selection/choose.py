@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from ....domain import Box
-from ....policies.parameters.scoring import SelectionConsensusParameters
 from x5crop.domain import EvidenceState
 from ..model import AssessedCandidate
 from .model import GeometryCluster, GeometryResolution, SelectionResult
@@ -9,47 +7,48 @@ from .model import GeometryCluster, GeometryResolution, SelectionResult
 
 def candidate_rank(
     candidate: AssessedCandidate,
-) -> tuple[int, int, int, int, int, float, float]:
-    evidence = candidate.assessment.evidence
-    contradictions = sum(
-        state == EvidenceState.CONTRADICTED
-        for state in (
-            evidence.frame_topology.state,
-            evidence.frame_coverage.state,
-            evidence.frame_dimensions.state,
-            evidence.frame_sequence.conservation.state,
-            evidence.content_preservation.state,
-            evidence.independence.state,
-        )
+) -> tuple[int, int, int, int, int, int, float, float, float]:
+    quality = candidate.assessment.quality
+    residuals = quality.physical_residuals
+    partial_auto_count = (
+        candidate.geometry.count
+        if candidate.geometry.strip_mode == "partial"
+        and candidate.count_hypothesis is not None
+        and candidate.count_hypothesis.source == "automatic_count"
+        else 0
     )
-    proof_supported = any(
-        path.state == EvidenceState.SUPPORTED
-        for path in candidate.assessment.gate.proof_paths
+    dimension_residual = (
+        residuals.dimension
+        if residuals is not None and residuals.dimension is not None
+        else float("inf")
+    )
+    conservation_residual = (
+        residuals.conservation
+        if residuals is not None and residuals.conservation is not None
+        else float("inf")
+    )
+    boundary_residual = (
+        residuals.boundary_uncertainty
+        if residuals is not None
+        else float("inf")
     )
     return (
-        1 if proof_supported else 0,
+        int(quality.covered_content_px),
+        -int(quality.uncovered_content_px),
+        -len(quality.contradicted),
+        len(quality.supported_proof_paths),
         1 if candidate.geometry.automatic_processing_supported else 0,
-        1 if candidate.assessment.gate.passed else 0,
-        1 if evidence.frame_coverage.state == EvidenceState.SUPPORTED else 0,
-        -int(contradictions),
-        float(candidate.geometry.count),
-        float(candidate.assessment.scores.confidence),
+        int(partial_auto_count),
+        -float(dimension_residual),
+        -float(conservation_residual),
+        -float(boundary_residual),
     )
 
 
-def _box_edge_distance(left: Box, right: Box, scale: float) -> float:
-    return max(
-        abs(left.left - right.left),
-        abs(left.top - right.top),
-        abs(left.right - right.right),
-        abs(left.bottom - right.bottom),
-    ) / max(1.0, scale)
-
-
-def geometry_distance(
+def geometry_equivalent(
     left: AssessedCandidate,
     right: AssessedCandidate,
-) -> float | None:
+) -> bool:
     left_geometry = left.geometry
     right_geometry = right.geometry
     if (
@@ -57,38 +56,26 @@ def geometry_distance(
         or left_geometry.strip_mode != right_geometry.strip_mode
         or len(left_geometry.frames) != len(right_geometry.frames)
     ):
-        return None
-    scale = max(
-        1.0,
-        float(left_geometry.frame_dimension_prior.width_px.midpoint),
-        float(right_geometry.frame_dimension_prior.width_px.midpoint),
-    )
-    distances = [
-        _box_edge_distance(
-            left_geometry.visible_sequence_span.box,
-            right_geometry.visible_sequence_span.box,
-            scale,
+        return False
+    if left_geometry.photo_intervals and right_geometry.photo_intervals:
+        return all(
+            left_photo.start.intersects(right_photo.start)
+            and left_photo.end.intersects(right_photo.end)
+            for left_photo, right_photo in zip(
+                left_geometry.photo_intervals,
+                right_geometry.photo_intervals,
+            )
         )
-    ]
-    distances.extend(
-        _box_edge_distance(left_box, right_box, scale)
-        for left_box, right_box in zip(
-            left_geometry.frames,
-            right_geometry.frames,
-        )
-    )
-    return max(distances, default=0.0)
+    return left_geometry.frames == right_geometry.frames
 
 
 def geometry_clusters(
     candidates: tuple[AssessedCandidate, ...],
-    tolerance: float,
 ) -> tuple[GeometryCluster, ...]:
     groups: list[list[AssessedCandidate]] = []
     for candidate in candidates:
         for group in groups:
-            distance = geometry_distance(candidate, group[0])
-            if distance is not None and distance <= tolerance:
+            if geometry_equivalent(candidate, group[0]):
                 group.append(candidate)
                 break
         else:
@@ -166,14 +153,13 @@ def geometry_resolution_for_selection(
 
 def select_candidates(
     candidates: tuple[AssessedCandidate, ...],
-    parameters: SelectionConsensusParameters,
     *,
     larger_counts_evaluated: bool,
 ) -> SelectionResult:
     if not candidates:
         raise ValueError("candidate selection requires at least one candidate")
     ranked = tuple(sorted(candidates, key=candidate_rank, reverse=True))
-    clusters = geometry_clusters(ranked, parameters.geometry_tolerance_ratio)
+    clusters = geometry_clusters(ranked)
     selected = ranked[0]
     selected_cluster = next(
         cluster for cluster in clusters if selected in cluster.candidates
@@ -188,13 +174,8 @@ def select_candidates(
     )
     disagreement = bool(
         nearest_competitor is not None
-        and candidate_rank(nearest_competitor.representative)[:5]
-        == candidate_rank(selected)[:5]
-        and abs(
-            selected.assessment.scores.confidence
-            - nearest_competitor.representative.assessment.scores.confidence
-        )
-        < parameters.confidence_tie_margin
+        and candidate_rank(nearest_competitor.representative)
+        == candidate_rank(selected)
     )
     if disagreement:
         consensus = "disagreed"

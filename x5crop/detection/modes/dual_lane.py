@@ -226,6 +226,5 @@ def choose_dual_lane_detection(
         )
     return select_candidates(
         tuple(parent_candidates),
-        context.policy.candidate_selection,
         larger_counts_evaluated=True,
     )

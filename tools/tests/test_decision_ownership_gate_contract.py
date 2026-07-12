@@ -16,8 +16,9 @@ from x5crop.domain import EvidenceState
 
 
 class DecisionOwnershipGateContractTest(unittest.TestCase):
-    def test_confidence_never_blocks_automatic_processing(self) -> None:
-        decided = decide_candidate(candidate_fixture(confidence=0.01))
+    def test_decision_has_no_scalar_confidence_input(self) -> None:
+        decided = decide_candidate(candidate_fixture())
+        self.assertFalse(hasattr(decided, "confidence"))
         self.assertEqual(decided.status, "approved_auto")
         self.assertEqual(decided.final_review_reasons, ())
 

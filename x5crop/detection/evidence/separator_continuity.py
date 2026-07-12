@@ -136,24 +136,39 @@ def separator_cross_axis_continuity_evidence(
             )
         )
         enriched.append(replace(observation, continuity=continuity))
+    selected_keys = {
+        (
+            boundary.assignment.observation.start,
+            boundary.assignment.observation.end,
+        )
+        for boundary in geometry.frame_boundaries
+        if boundary.assignment is not None
+        and boundary.assignment.used_for_boundary
+        and boundary.assignment.independent
+    }
+    selected_records = tuple(
+        record
+        for record in records
+        if (record.start, record.end) in selected_keys
+    )
     supported_count = sum(
-        record.state == EvidenceState.SUPPORTED for record in records
+        record.state == EvidenceState.SUPPORTED for record in selected_records
     )
     contradicted_count = sum(
-        record.state == EvidenceState.CONTRADICTED for record in records
+        record.state == EvidenceState.CONTRADICTED for record in selected_records
     )
-    if records and supported_count == len(records):
+    if selected_records and supported_count == len(selected_records):
         state = EvidenceState.SUPPORTED
-        reason = "all_observed_bands_cross_short_axis"
-    elif records and contradicted_count == len(records):
+        reason = "selected_separator_bands_cross_short_axis"
+    elif selected_records and contradicted_count == len(selected_records):
         state = EvidenceState.CONTRADICTED
-        reason = "observed_bands_lack_cross_axis_continuity"
+        reason = "selected_separator_bands_lack_cross_axis_continuity"
     elif supported_count:
         state = EvidenceState.UNAVAILABLE
-        reason = "observed_band_continuity_mixed"
+        reason = "selected_separator_band_continuity_mixed"
     else:
         state = EvidenceState.UNAVAILABLE
-        reason = "separator_continuity_unavailable"
+        reason = "selected_separator_continuity_unavailable"
     return SeparatorContinuityEvidence(
         state,
         reason,

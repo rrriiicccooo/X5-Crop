@@ -128,13 +128,12 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         )
         selection = select_candidates(
             (candidate,),
-            get_detection_policy("135", "full").candidate_selection,
             larger_counts_evaluated=True,
         )
         self.assertFalse(selection.geometry_resolution.supported)
         self.assertIn("count_unresolved", selection.geometry_resolution.reasons)
 
-    def test_dimension_constrained_boundary_can_use_physical_geometry_proof(self) -> None:
+    def test_multi_frame_geometry_requires_an_independent_internal_anchor(self) -> None:
         candidate = candidate_fixture()
         geometry = replace(
             candidate.geometry,
@@ -166,13 +165,12 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
         )
         paths = _boundary_proof_paths(built, evidence)
         geometry_path = next(path for path in paths if path.code == "geometry_led")
-        self.assertEqual(geometry_path.state, EvidenceState.SUPPORTED)
+        self.assertEqual(geometry_path.state, EvidenceState.UNAVAILABLE)
 
     def test_geometry_resolution_requires_larger_counts_to_be_evaluated(self) -> None:
         candidate = candidate_fixture()
         selection = select_candidates(
             (candidate,),
-            get_detection_policy("135", "full").candidate_selection,
             larger_counts_evaluated=False,
         )
         self.assertFalse(selection.geometry_resolution.supported)

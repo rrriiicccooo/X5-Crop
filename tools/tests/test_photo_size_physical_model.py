@@ -80,18 +80,27 @@ def _geometry(second_start: float = 205.0):
                 PixelInterval.exact(0.0),
                 PixelInterval.exact(observations[0].start),
                 photo_edge_provenance,
+                photo_edge_provenance,
+                True,
+                True,
             ),
             PhotoInterval(
                 2,
                 PixelInterval.exact(observations[0].end),
                 PixelInterval.exact(observations[1].start),
                 photo_edge_provenance,
+                photo_edge_provenance,
+                True,
+                True,
             ),
             PhotoInterval(
                 3,
                 PixelInterval.exact(observations[1].end),
                 PixelInterval.exact(315.0),
                 photo_edge_provenance,
+                photo_edge_provenance,
+                True,
+                True,
             ),
         ),
         frames=(
@@ -151,8 +160,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
             _continuity(geometry),
-            maximum_photo_width_cv=0.03,
-            maximum_dimension_error_ratio=0.22,
         )
         self.assertEqual(result.state, EvidenceState.UNAVAILABLE)
         self.assertEqual(
@@ -197,8 +204,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
             _continuity(geometry),
-            maximum_photo_width_cv=0.03,
-            maximum_dimension_error_ratio=0.22,
         )
         self.assertEqual(occlusion.leading.state, EvidenceState.SUPPORTED)
         self.assertEqual(result.photo_widths_px, ())
@@ -211,8 +216,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
             _continuity(geometry),
-            maximum_photo_width_cv=0.03,
-            maximum_dimension_error_ratio=0.22,
         )
         self.assertEqual(result.photo_widths_px, (100.0, 100.0, 100.0))
         self.assertGreater(result.separator_width_cv or 0.0, 0.0)
@@ -225,11 +228,9 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
             format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
             _continuity(geometry),
-            maximum_photo_width_cv=0.03,
-            maximum_dimension_error_ratio=0.22,
         )
         self.assertEqual(result.state, EvidenceState.CONTRADICTED)
-        self.assertEqual(result.reason, "photo_widths_inconsistent")
+        self.assertEqual(result.reason, "physical_frame_dimensions_contradicted")
 
 
 if __name__ == "__main__":

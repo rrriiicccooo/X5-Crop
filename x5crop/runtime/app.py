@@ -42,7 +42,7 @@ def print_run_header(invocation: RuntimeInvocation) -> None:
 
 def print_process_result(result: ProcessResult, config: RunConfig) -> None:
     record = result.record
-    print(f"  status={record['status']} confidence={float(record['confidence']):.3f}")
+    print(f"  status={record['status']}")
     for warning in record["output"]["warnings"]:
         print(f"  info: {warning}")
     output_files = record["output"]["output_files"]

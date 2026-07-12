@@ -23,10 +23,3 @@ class ContentProfileParameters:
     percentiles: tuple[float, float, float] = (35.0, 65.0, 90.0)
     low_percentile_weight: float = 0.38
     mid_percentile_multiplier: float = 0.82
-
-@dataclass(frozen=True)
-class ContentSupportParameters:
-    coverage_norm: float = 0.22
-    mean_norm: float = 0.16
-    coverage_weight: float = 0.42
-    mean_weight: float = 0.40

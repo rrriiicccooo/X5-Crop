@@ -82,6 +82,7 @@ def build_frame_sequence_geometry(
         count,
         dimensions,
         HolderOcclusionEvidence.unavailable(),
+        sequence_hypothesis.boundary_observations,
     )
     holder_occlusion = holder_occlusion_for_sequence(
         sequence_hypothesis.boundary_observations,
@@ -115,6 +116,7 @@ def build_frame_sequence_geometry(
         count,
         dimensions,
         holder_occlusion,
+        sequence_hypothesis.boundary_observations,
     )
     return BuiltCandidate(
         geometry=SequenceSolution(

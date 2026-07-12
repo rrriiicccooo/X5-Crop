@@ -5,10 +5,8 @@ from dataclasses import dataclass
 from ...formats import FormatPhysicalSpec
 from ..identity import detection_policy_id_for
 from ..parameters.candidate import CandidatePlanParameters
-from ..parameters.scoring import SelectionConsensusParameters
 from ..parameters.output import OverlapBleedParameters
 from ..parameters.sequence import SequenceParameters
-from .candidate import ScoringPolicy
 from .content import ContentPolicy
 from .diagnostics import RuntimeDiagnosticsPolicy
 from .preprocess import RuntimePreprocessPolicy
@@ -24,8 +22,6 @@ class DetectionPolicy:
     sequence: SequenceParameters
     separator: SeparatorPolicy
     content: ContentPolicy
-    scoring: ScoringPolicy
-    candidate_selection: SelectionConsensusParameters
     candidate_plan: CandidatePlanParameters
     output: OverlapBleedParameters
     diagnostics: RuntimeDiagnosticsPolicy

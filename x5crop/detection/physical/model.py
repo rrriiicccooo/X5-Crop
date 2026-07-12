@@ -24,7 +24,10 @@ class PhotoInterval:
     index: int
     start: PixelInterval
     end: PixelInterval
-    provenance: MeasurementProvenance
+    start_provenance: MeasurementProvenance
+    end_provenance: MeasurementProvenance
+    start_independently_observed: bool
+    end_independently_observed: bool
 
     def __post_init__(self) -> None:
         if self.index <= 0:
@@ -35,6 +38,13 @@ class PhotoInterval:
     @property
     def width_px(self) -> PixelInterval:
         return self.end.minus(self.start)
+
+    @property
+    def independently_observed(self) -> bool:
+        return bool(
+            self.start_independently_observed
+            and self.end_independently_observed
+        )
 
 
 @dataclass(frozen=True)

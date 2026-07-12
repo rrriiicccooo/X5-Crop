@@ -93,6 +93,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                 ),
             ),
             HolderOcclusionEvidence.not_applicable(),
+            (),
         )
         self.assertTrue(all(frame.valid() for frame in result.frames))
         self.assertTrue(

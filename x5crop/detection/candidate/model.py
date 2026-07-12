@@ -18,6 +18,7 @@ from ..evidence.separator_continuity import SeparatorContinuityEvidence
 from ..physical.photo_size import FrameDimensionEvidence
 from .assessment.candidate_gate import CandidateGateAssessment
 from .plan.count_hypotheses import CountHypothesis
+from ..physical.model import SequenceResiduals
 
 
 @dataclass(frozen=True)
@@ -45,19 +46,21 @@ class CandidateEvidence:
 
 
 @dataclass(frozen=True)
-class CandidateScores:
-    confidence: float
-    base: float
-    geometry: float
-    separator: float
-    content: float
-    joint: float
+class EvidenceQuality:
+    supported: tuple[str, ...]
+    contradicted: tuple[str, ...]
+    unavailable: tuple[str, ...]
+    not_applicable: tuple[str, ...]
+    covered_content_px: int
+    uncovered_content_px: int
+    supported_proof_paths: tuple[str, ...]
+    physical_residuals: SequenceResiduals | None
 
 
 @dataclass(frozen=True)
 class CandidateAssessment:
     evidence: CandidateEvidence
-    scores: CandidateScores
+    quality: EvidenceQuality
     gate: CandidateGateAssessment
     diagnostics: tuple[str, ...]
 

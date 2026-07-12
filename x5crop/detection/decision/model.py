@@ -52,7 +52,6 @@ class FinalDetection:
     layout: str
     strip_mode: str
     count: int
-    confidence: float
     visible_sequence_span: VisibleSequenceSpan
     crop_envelope: CropEnvelope
     decision_gate: DecisionGateAssessment

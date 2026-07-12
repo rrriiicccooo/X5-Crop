@@ -29,6 +29,10 @@ def hard_safety_candidate(
         layout=context.request.layout,
     )
     holder_occlusion = HolderOcclusionEvidence.unavailable()
+    boundary_observations = canvas_boundary_observations(
+        work_width,
+        work_height,
+    )
     solved = solve_frame_sequence(
         (),
         (),
@@ -36,6 +40,7 @@ def hard_safety_candidate(
         count,
         dimensions,
         holder_occlusion,
+        boundary_observations,
     )
     hypothesis = CountHypothesis(
         count=count,
@@ -71,10 +76,7 @@ def hard_safety_candidate(
                 source="full_canvas_safety",
                 dependencies=("canvas", "count"),
             ),
-            boundary_observations=canvas_boundary_observations(
-                work_width,
-                work_height,
-            ),
+            boundary_observations=boundary_observations,
         ),
         count_hypothesis=hypothesis,
         build_diagnostics=(

@@ -35,16 +35,14 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         candidate = candidate_fixture()
         result = select_candidates(
             (candidate, candidate),
-            get_detection_policy("135", "full").candidate_selection,
             larger_counts_evaluated=True,
         )
         self.assertEqual(result.consensus, "agreed")
         self.assertEqual(len(result.clusters), 1)
 
     def test_failed_candidate_does_not_create_equal_rank_disagreement(self) -> None:
-        good = candidate_fixture(confidence=0.80)
+        good = candidate_fixture()
         bad = candidate_fixture(
-            confidence=0.99,
             failed_candidate_check="boundary_proof",
         )
         bad = replace(
@@ -59,7 +57,6 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         )
         result = select_candidates(
             (good, bad),
-            get_detection_policy("135", "full").candidate_selection,
             larger_counts_evaluated=True,
         )
         self.assertNotEqual(result.consensus, "disagreed")

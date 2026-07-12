@@ -141,7 +141,6 @@ class OutputReadModelContractTest(unittest.TestCase):
             DEFAULT_FIELDS,
             (
                 "status",
-                "confidence",
                 "final_review_reasons",
                 "output_geometry.crop_envelope",
                 "output_geometry.frame_boxes",
