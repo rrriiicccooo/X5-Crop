@@ -62,7 +62,7 @@ class HolderOccupancyEvidence:
     complete_strip_can_be_underfilled: bool
     holder_span: HolderSpan
     visible_sequence_span: VisibleSequenceSpan
-    long_axis: str
+    source_long_axis: str
     long_axis_px_per_mm: float | None
     observed_sequence_span_px: float = field(init=False)
     leading_slack_px: float = field(init=False)
@@ -75,8 +75,8 @@ class HolderOccupancyEvidence:
     calibration_used: bool = field(init=False)
 
     def __post_init__(self) -> None:
-        if self.long_axis not in {"x", "y"}:
-            raise ValueError("holder occupancy requires a physical long axis")
+        if self.source_long_axis not in {"x", "y"}:
+            raise ValueError("holder occupancy requires a source long axis")
         scale = self.long_axis_px_per_mm
         if scale is not None and (not math.isfinite(scale) or scale <= 0.0):
             raise ValueError("holder occupancy calibration must be finite and positive")
@@ -88,13 +88,8 @@ class HolderOccupancyEvidence:
             and holder.top <= sequence.top < sequence.bottom <= holder.bottom
         ):
             raise ValueError("visible sequence span must be contained by holder span")
-        if self.long_axis == "x":
-            holder_start, holder_end = holder.left, holder.right
-            sequence_start, sequence_end = sequence.left, sequence.right
-        else:
-            holder_start, holder_end = holder.top, holder.bottom
-            sequence_start, sequence_end = sequence.top, sequence.bottom
-
+        holder_start, holder_end = holder.left, holder.right
+        sequence_start, sequence_end = sequence.left, sequence.right
         holder_length = float(holder_end - holder_start)
         sequence_length = float(sequence_end - sequence_start)
         leading_slack = float(sequence_start - holder_start)
@@ -173,7 +168,7 @@ def holder_occupancy_evidence(
         separator_assignments=separator_assignments,
         physical_spec=physical_spec,
     )
-    long_axis = "x" if is_horizontal_layout(layout) else "y"
+    source_long_axis = "x" if is_horizontal_layout(layout) else "y"
     return HolderOccupancyEvidence(
         strip_completeness=completeness,
         content_support_available=content_support_available,
@@ -184,8 +179,10 @@ def holder_occupancy_evidence(
         ),
         holder_span=holder_span,
         visible_sequence_span=visible_sequence_span,
-        long_axis=long_axis,
+        source_long_axis=source_long_axis,
         long_axis_px_per_mm=(
-            calibration.px_per_mm(long_axis) if calibration.trusted else None
+            calibration.px_per_mm(source_long_axis)
+            if calibration.trusted
+            else None
         ),
     )

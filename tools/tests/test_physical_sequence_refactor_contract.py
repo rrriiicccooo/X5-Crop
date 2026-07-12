@@ -651,14 +651,11 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             diagnostics=(),
         )
         coverage = FrameCoverageEvidence(
-            EvidenceState.SUPPORTED,
-            "content_runs_covered",
-            (0, 200),
-            (0, 200),
-            ((0, 100), (100, 200)),
-            ((0, 200),),
-            (),
-            0,
+            holder_long_axis_interval=(0, 200),
+            visible_sequence_interval=(0, 200),
+            frame_intervals=((0, 200),),
+            content_runs=((0, 200),),
+            candidate_frame_count=2,
         )
         evidence = content_preservation_evidence(
             frame_content,

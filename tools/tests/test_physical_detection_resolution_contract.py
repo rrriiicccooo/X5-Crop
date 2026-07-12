@@ -249,8 +249,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             evidence,
             frame_coverage=replace(
                 evidence.frame_coverage,
-                state=EvidenceState.UNAVAILABLE,
-                reason="content_runs_unavailable",
+                content_runs=(),
             ),
             content_preservation=replace(
                 evidence.content_preservation,
@@ -273,8 +272,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             candidate.assessment.evidence,
             frame_coverage=replace(
                 candidate.assessment.evidence.frame_coverage,
-                state=EvidenceState.UNAVAILABLE,
-                reason="content_runs_unavailable",
+                content_runs=(),
             ),
             content_preservation=replace(
                 candidate.assessment.evidence.content_preservation,

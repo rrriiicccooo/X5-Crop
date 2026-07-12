@@ -38,9 +38,11 @@ repository rules in `AGENTS.md`.
 - Partial edge safety 的 state、reason 与 boundary support 现在只由适用模式、hard separator、
   frame coverage 和 frame dimension evidence 派生；删除复制的 holder occupancy 状态，无法再构造
   与底层物理事实矛盾的 supported evidence。
-- Holder occupancy 现在按 horizontal/vertical 的真实长轴计算 span、slack、fill ratio 和 mm projection；
-  completeness 与 occupancy projection 全部改为构造时派生，删除永远 supported 的伪 evidence state；
-  partial occupancy proof 也必须确实观测到 underfilled holder geometry。
+- Holder occupancy 现在从 normalized horizontal work-space 的 spans 计算 slack/fill ratio，并按原始
+  layout 选择 source X/Y calibration；completeness 与 occupancy projection 全部改为构造时派生，
+  删除永远 supported 的伪 evidence state，partial occupancy proof 也必须确实观测到 underfilled geometry。
+- Frame coverage 现在只保存 canonical holder/sequence、frame union、content runs 与 candidate count；
+  uncovered content、region diagnostic、state 和 reason 全部确定性派生，无法与 interval facts 漂移。
 - Format physical sizes 与 runtime configuration bundle 各自收敛为一个 canonical tuple；删除
   重复 nominal size 输入、重复 initial configuration 存储和 configuration registry 隐藏缓存。
 - Separator measurement region 现在先 canonicalize 再同时用于 cache key 与 pixels，无交集

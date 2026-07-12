@@ -85,6 +85,11 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 uncovered_content=((0, 5),),
             ),
             lambda: replace(
+                evidence.frame_coverage,
+                state=EvidenceState.SUPPORTED,
+                uncovered_content=((190, 200),),
+            ),
+            lambda: replace(
                 evidence.frame_dimensions,
                 state=EvidenceState.SUPPORTED,
                 photo_widths_px=(),

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ...cache import MeasurementCache
 from ...domain import Box
@@ -12,14 +12,60 @@ from x5crop.domain import EvidenceState
 
 @dataclass(frozen=True)
 class FrameCoverageEvidence:
-    state: EvidenceState
-    reason: str
     holder_long_axis_interval: tuple[int, int]
     visible_sequence_interval: tuple[int, int]
     frame_intervals: tuple[tuple[int, int], ...]
     content_runs: tuple[tuple[int, int], ...]
-    uncovered_content: tuple[tuple[int, int], ...]
-    unexplained_content_region_count: int
+    candidate_frame_count: int
+    state: EvidenceState = field(init=False)
+    reason: str = field(init=False)
+    uncovered_content: tuple[tuple[int, int], ...] = field(init=False)
+    unexplained_content_region_count: int = field(init=False)
+
+    def __post_init__(self) -> None:
+        holder_start, holder_end = self.holder_long_axis_interval
+        sequence_start, sequence_end = self.visible_sequence_interval
+        if holder_end <= holder_start:
+            raise ValueError("holder coverage interval must have positive extent")
+        if not holder_start <= sequence_start < sequence_end <= holder_end:
+            raise ValueError("visible sequence interval must fit the holder")
+        if self.candidate_frame_count <= 0:
+            raise ValueError("frame coverage requires a positive candidate count")
+        for name, intervals in (
+            ("frame", self.frame_intervals),
+            ("content", self.content_runs),
+        ):
+            previous_end: int | None = None
+            for start, end in intervals:
+                if not holder_start <= start < end <= holder_end:
+                    raise ValueError(f"{name} intervals must fit the holder")
+                if previous_end is not None and start <= previous_end:
+                    raise ValueError(f"{name} intervals must be canonical and disjoint")
+                previous_end = end
+
+        uncovered = tuple(
+            segment
+            for run in self.content_runs
+            for segment in _uncovered_segments(run, self.frame_intervals)
+        )
+        unexplained = max(0, len(self.content_runs) - self.candidate_frame_count)
+        if not self.content_runs:
+            state = EvidenceState.UNAVAILABLE
+            reason = "content_runs_unavailable"
+        elif uncovered:
+            state = EvidenceState.CONTRADICTED
+            reason = "content_outside_frame_union"
+        else:
+            state = EvidenceState.SUPPORTED
+            reason = (
+                "content_runs_covered_multiple_regions"
+                if unexplained
+                else "content_runs_covered"
+            )
+        object.__setattr__(self, "uncovered_content", uncovered)
+        object.__setattr__(self, "unexplained_content_region_count", unexplained)
+        object.__setattr__(self, "state", state)
+        object.__setattr__(self, "reason", reason)
 
 
 def _merged_intervals(intervals: list[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
@@ -75,28 +121,7 @@ def frame_coverage_evidence(
         holder,
         content_configuration=content_configuration,
     )
-    uncovered = tuple(
-        segment
-        for run in runs
-        for segment in _uncovered_segments(run, frame_intervals)
-    )
-    unexplained_region_count = max(0, len(runs) - len(frames))
-    if not runs:
-        state = EvidenceState.UNAVAILABLE
-        reason = "content_runs_unavailable"
-    elif uncovered:
-        state = EvidenceState.CONTRADICTED
-        reason = "content_outside_frame_union"
-    else:
-        state = EvidenceState.SUPPORTED
-        reason = (
-            "content_runs_covered_multiple_regions"
-            if unexplained_region_count
-            else "content_runs_covered"
-        )
     return FrameCoverageEvidence(
-        state=state,
-        reason=reason,
         holder_long_axis_interval=(holder.left, holder.right),
         visible_sequence_interval=(
             visible_sequence_span.box.left,
@@ -104,6 +129,5 @@ def frame_coverage_evidence(
         ),
         frame_intervals=frame_intervals,
         content_runs=tuple(runs),
-        uncovered_content=uncovered,
-        unexplained_content_region_count=unexplained_region_count,
+        candidate_frame_count=len(frames),
     )

@@ -225,14 +225,11 @@ def candidate_evidence_fixture(
             frames,
         ),
         frame_coverage=FrameCoverageEvidence(
-            EvidenceState.SUPPORTED,
-            "content_runs_covered",
-            (0, 200),
-            (0, 200),
-            ((0, 100), (100, 200)),
-            ((10, 190),),
-            (),
-            0,
+            holder_long_axis_interval=(0, 200),
+            visible_sequence_interval=(0, 200),
+            frame_intervals=((0, 200),),
+            content_runs=((10, 190),),
+            candidate_frame_count=2,
         ),
         sequence_conservation=SequenceConservationEvidence(
             EvidenceState.SUPPORTED,
@@ -320,7 +317,7 @@ def candidate_evidence_fixture(
             complete_strip_can_be_underfilled=False,
             holder_span=holder_span,
             visible_sequence_span=visible_sequence_span,
-            long_axis="x",
+            source_long_axis="x",
             long_axis_px_per_mm=None,
         ),
         partial_edge_safety=PartialEdgeSafetyEvidence(
