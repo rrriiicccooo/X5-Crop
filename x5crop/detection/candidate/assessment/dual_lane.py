@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from ....domain import EvidenceState
 from ...physical.model import DualLaneSolution
 from ..model import (
     AssessedCandidate,
@@ -9,9 +8,9 @@ from ..model import (
     CandidateEvidence,
     DualLaneEvidence,
     _combined_evidence_state,
+    boundary_proof_paths_for_dual_lane,
 )
 from .candidate_gate import (
-    BoundaryProofPath,
     CandidateGateInput,
     candidate_gate_assessment,
 )
@@ -30,6 +29,8 @@ def assess_dual_lane_candidate(
         raise ValueError("dual-lane assessment requires one resolution per lane")
     if len(geometry.lane_solutions) != len(lanes):
         raise ValueError("dual-lane assessment must match component geometry")
+    if tuple(lane.geometry for lane in lanes) != geometry.lane_solutions:
+        raise ValueError("dual-lane assessment requires exact component geometry")
     lane_evidence = tuple(lane.assessment.evidence for lane in lanes)
     lane_gates = tuple(lane.assessment.gate for lane in lanes)
     if not all(isinstance(evidence, CandidateEvidence) for evidence in lane_evidence):
@@ -40,23 +41,10 @@ def assess_dual_lane_candidate(
         evidence for evidence in lane_evidence if isinstance(evidence, CandidateEvidence)
     )
     physical_gates = tuple(gate for gate in lane_gates if gate is not None)
-    composition_supported = bool(
-        geometry.lane_divider.state == EvidenceState.SUPPORTED
-        and all(gate.passed for gate in physical_gates)
-        and all(lane_geometry_resolved)
-    )
-    proof_path = BoundaryProofPath(
-        "mode_composition",
-        (
-            EvidenceState.SUPPORTED
-            if composition_supported
-            else EvidenceState.CONTRADICTED
-        ),
-        (
-            "lane_divider",
-            "lane_candidate_gates",
-            "lane_geometry_resolution",
-        ),
+    dual_lane_evidence = DualLaneEvidence(
+        physical_evidence,
+        physical_gates,
+        lane_geometry_resolved,
     )
     diagnostics = tuple(
         dict.fromkeys(
@@ -83,7 +71,10 @@ def assess_dual_lane_candidate(
             evidence_independence=_combined_evidence_state(
                 tuple(item.independence.state for item in physical_evidence)
             ),
-            proof_paths=(proof_path,),
+            proof_paths=boundary_proof_paths_for_dual_lane(
+                geometry,
+                dual_lane_evidence,
+            ),
             diagnostics=diagnostics,
         )
     )
@@ -91,9 +82,7 @@ def assess_dual_lane_candidate(
         geometry=geometry,
         count_hypothesis=candidate.count_hypothesis,
         assessment=CandidateAssessment(
-            evidence=DualLaneEvidence(
-                physical_evidence,
-            ),
+            evidence=dual_lane_evidence,
             gate=gate,
         ),
     )

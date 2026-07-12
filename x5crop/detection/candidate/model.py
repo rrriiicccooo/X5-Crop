@@ -68,10 +68,20 @@ class CandidateEvidence:
 @dataclass(frozen=True)
 class DualLaneEvidence:
     lane_evidence: tuple[CandidateEvidence, ...]
+    lane_gates: tuple[CandidateGateAssessment, ...]
+    lane_geometry_resolved: tuple[bool, ...]
 
     def __post_init__(self) -> None:
-        if len(self.lane_evidence) <= 1:
+        lane_count = len(self.lane_evidence)
+        if lane_count <= 1:
             raise ValueError("dual-lane evidence requires multiple lane evidence sets")
+        if (
+            len(self.lane_gates) != lane_count
+            or len(self.lane_geometry_resolved) != lane_count
+        ):
+            raise ValueError(
+                "dual-lane evidence requires one gate and resolution per lane"
+            )
 
 
 @dataclass(frozen=True)
@@ -206,6 +216,32 @@ def boundary_proof_paths_for_geometry(
     )
 
 
+def boundary_proof_paths_for_dual_lane(
+    geometry: DualLaneSolution,
+    evidence: DualLaneEvidence,
+) -> tuple[BoundaryProofPath, ...]:
+    composition_supported = bool(
+        geometry.lane_divider.state == EvidenceState.SUPPORTED
+        and all(gate.passed for gate in evidence.lane_gates)
+        and all(evidence.lane_geometry_resolved)
+    )
+    return (
+        BoundaryProofPath(
+            "mode_composition",
+            (
+                EvidenceState.SUPPORTED
+                if composition_supported
+                else EvidenceState.CONTRADICTED
+            ),
+            (
+                "lane_divider",
+                "lane_candidate_gates",
+                "lane_geometry_resolution",
+            ),
+        ),
+    )
+
+
 def _combined_evidence_state(states: tuple[EvidenceState, ...]) -> EvidenceState:
     if any(state == EvidenceState.CONTRADICTED for state in states):
         return EvidenceState.CONTRADICTED
@@ -301,6 +337,34 @@ class AssessedCandidate:
             ):
                 raise ValueError(
                     "candidate boundary proof paths must match geometry and evidence"
+                )
+        elif isinstance(self.geometry, DualLaneSolution):
+            evidence = self.assessment.evidence
+            gate = self.assessment.gate
+            if not isinstance(evidence, DualLaneEvidence) or gate is None:
+                raise ValueError("dual-lane candidate requires physical assessment")
+            if len(self.geometry.lane_solutions) != len(evidence.lane_evidence):
+                raise ValueError("dual-lane assessment must match component geometry")
+            for lane_geometry, lane_evidence, lane_gate in zip(
+                self.geometry.lane_solutions,
+                evidence.lane_evidence,
+                evidence.lane_gates,
+                strict=True,
+            ):
+                CandidateAssessment(lane_evidence, lane_gate)
+                if lane_gate.proof_paths != boundary_proof_paths_for_geometry(
+                    lane_geometry,
+                    lane_evidence,
+                ):
+                    raise ValueError(
+                        "dual-lane component proof paths must match lane facts"
+                    )
+            if gate.proof_paths != boundary_proof_paths_for_dual_lane(
+                self.geometry,
+                evidence,
+            ):
+                raise ValueError(
+                    "dual-lane composition proof must match lane facts"
                 )
 
     @property

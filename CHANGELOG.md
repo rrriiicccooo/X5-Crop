@@ -56,6 +56,8 @@ repository rules in `AGENTS.md`.
   slack regions、frame-content reference 与明确的 measurement failure 派生。
 - Standard proof paths 改由 typed candidate model 从 geometry/evidence 重算校验；确认 undercrop 不再
   同时制造派生的 boundary failure，测试 fixture 也不再手工伪造 Gate。
+- Dual-lane evidence 现在保留各 lane 的 typed CandidateGate 与 geometry resolution；父 candidate
+  会核对 exact component geometry，并从 lane facts 重算唯一 mode-composition proof。
 - Format physical sizes 与 runtime configuration bundle 各自收敛为一个 canonical tuple；删除
   重复 nominal size 输入、重复 initial configuration 存储和 configuration registry 隐藏缓存。
 - Separator measurement region 现在先 canonicalize 再同时用于 cache key 与 pixels，无交集

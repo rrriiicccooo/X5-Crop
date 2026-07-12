@@ -245,6 +245,37 @@ class DualLaneAssessmentTest(unittest.TestCase):
             {(1, 1), (2, 1)},
         )
 
+    def test_dual_lane_proof_must_match_lane_facts(self) -> None:
+        lane = candidate_fixture()
+        assessed = assess_dual_lane_candidate(
+            _parent(lane),
+            (lane, lane),
+            lane_geometry_resolved=(True, True),
+        )
+        gate = assessed.assessment.gate
+        forged_path = replace(
+            gate.proof_paths[0],
+            supporting_evidence=("forged",),
+        )
+        with self.assertRaises(ValueError):
+            replace(
+                assessed,
+                assessment=replace(
+                    assessed.assessment,
+                    gate=replace(gate, proof_paths=(forged_path,)),
+                ),
+            )
+
+    def test_dual_lane_assessment_requires_exact_component_geometry(self) -> None:
+        first = candidate_fixture()
+        second = candidate_fixture(failed_candidate_check="boundary_proof")
+        with self.assertRaises(ValueError):
+            assess_dual_lane_candidate(
+                _parent(first),
+                (first, second),
+                lane_geometry_resolved=(True, True),
+            )
+
     def test_unresolved_lane_geometry_blocks_mode_composition(self) -> None:
         first = candidate_fixture()
         second = candidate_fixture()
