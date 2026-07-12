@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 import math
 
@@ -330,10 +330,10 @@ class SeparatorAssignment:
     observation: SeparatorBandObservation
     position_constraint: BoundaryPositionConstraint
     width_constraint: SeparatorWidthConstraint
-    state: EvidenceState
-    geometry_dependent: bool
     used_for_boundary: bool
-    reason: str
+    state: EvidenceState = field(init=False)
+    geometry_dependent: bool = field(init=False)
+    reason: str = field(init=False)
 
     def __post_init__(self) -> None:
         if self.boundary_index <= 0:
@@ -343,8 +343,43 @@ class SeparatorAssignment:
             or self.width_constraint.boundary_index != self.boundary_index
         ):
             raise ValueError("separator assignment constraints must share one index")
-        if not self.reason:
-            raise ValueError("separator assignment requires a reason")
+        position = self.position_constraint.position
+        width = float(self.observation.width)
+        width_supported = bool(
+            self.width_constraint.width.minimum
+            <= width
+            <= self.width_constraint.width.maximum
+        )
+        band_contained = bool(
+            position.minimum <= self.observation.start
+            and self.observation.end <= position.maximum
+        )
+        if not width_supported:
+            state = EvidenceState.CONTRADICTED
+            geometry_dependent = False
+            reason = "separator_width_outside_physical_constraint"
+        elif band_contained:
+            state = EvidenceState.SUPPORTED
+            geometry_dependent = False
+            reason = "separator_position_and_width_supported"
+        elif self.observation.interval.intersects(position):
+            state = EvidenceState.UNAVAILABLE
+            geometry_dependent = True
+            reason = "separator_position_geometry_dependent"
+        else:
+            state = EvidenceState.CONTRADICTED
+            geometry_dependent = False
+            reason = "separator_position_outside_physical_constraint"
+        if state == EvidenceState.SUPPORTED:
+            if self.observation.cross_axis.state == EvidenceState.CONTRADICTED:
+                state = EvidenceState.CONTRADICTED
+                reason = "separator_cross_axis_continuity_contradicted"
+            elif self.observation.cross_axis.state != EvidenceState.SUPPORTED:
+                state = EvidenceState.UNAVAILABLE
+                reason = "separator_cross_axis_continuity_unavailable"
+        object.__setattr__(self, "state", state)
+        object.__setattr__(self, "geometry_dependent", geometry_dependent)
+        object.__setattr__(self, "reason", reason)
 
     @property
     def independent(self) -> bool:

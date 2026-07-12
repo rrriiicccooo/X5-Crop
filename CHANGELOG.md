@@ -64,6 +64,8 @@ repository rules in `AGENTS.md`.
   disagreement、budget exhaustion 与 dual-lane component unresolved 不再共用自由文本状态。
 - Holder occlusion side 删除 caller-supplied state/reason，改为 typed measurement outcome；普通 combined
   width 由两侧自动求和，只有单 frame 双边分配未解决时保留 unallocated total。
+- Separator assignment 删除 caller-supplied state/reason/geometry-dependency；assignment classification
+  现在只由 observation、position/width constraints 与 cross-axis measurement 派生。
 - Transform geometry 删除 caller-supplied state/applied/reason 组合，改由 typed deskew outcome 与
   canonical angle/span measurements 派生；report 同时删除手写 transform schema projection，统一使用
   current typed read model。

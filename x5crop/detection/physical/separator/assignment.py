@@ -3,7 +3,6 @@ from __future__ import annotations
 from ....domain import (
     BoundaryPositionConstraint,
     DimensionConstrainedBoundary,
-    EvidenceState,
     FrameBoundary,
     FrameBoundarySource,
     FrameDimensionPrior,
@@ -27,47 +26,12 @@ def assign_observation_to_boundary(
     position_constraint: BoundaryPositionConstraint,
     width_constraint: SeparatorWidthConstraint,
 ) -> SeparatorAssignment:
-    position = position_constraint.position
-    width = float(observation.width)
-    width_supported = bool(
-        width_constraint.width.minimum <= width <= width_constraint.width.maximum
-    )
-    band_contained = bool(
-        position.minimum <= observation.start
-        and observation.end <= position.maximum
-    )
-    if not width_supported:
-        state = EvidenceState.CONTRADICTED
-        geometry_dependent = False
-        reason = "separator_width_outside_physical_constraint"
-    elif band_contained:
-        state = EvidenceState.SUPPORTED
-        geometry_dependent = False
-        reason = "separator_position_and_width_supported"
-    elif observation.interval.intersects(position):
-        state = EvidenceState.UNAVAILABLE
-        geometry_dependent = True
-        reason = "separator_position_geometry_dependent"
-    else:
-        state = EvidenceState.CONTRADICTED
-        geometry_dependent = False
-        reason = "separator_position_outside_physical_constraint"
-    if state == EvidenceState.SUPPORTED:
-        if observation.cross_axis.state == EvidenceState.CONTRADICTED:
-            state = EvidenceState.CONTRADICTED
-            reason = "separator_cross_axis_continuity_contradicted"
-        elif observation.cross_axis.state != EvidenceState.SUPPORTED:
-            state = EvidenceState.UNAVAILABLE
-            reason = "separator_cross_axis_continuity_unavailable"
     return SeparatorAssignment(
         boundary_index=int(boundary_index),
         observation=observation,
         position_constraint=position_constraint,
         width_constraint=width_constraint,
-        state=state,
-        geometry_dependent=geometry_dependent,
         used_for_boundary=False,
-        reason=reason,
     )
 
 

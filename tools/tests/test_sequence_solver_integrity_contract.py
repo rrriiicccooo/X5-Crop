@@ -183,9 +183,16 @@ class SequenceSolverIntegrityContractTest(unittest.TestCase):
 
     def test_sequence_solution_rejects_cross_field_geometry_drift(self) -> None:
         geometry = candidate_fixture().geometry
+        original_assignment = geometry.separator_assignments[0]
         replacement_assignment = replace(
-            geometry.separator_assignments[0],
-            reason="different_assignment_identity",
+            original_assignment,
+            position_constraint=replace(
+                original_assignment.position_constraint,
+                position=PixelInterval(
+                    original_assignment.position_constraint.position.minimum - 1.0,
+                    original_assignment.position_constraint.position.maximum + 1.0,
+                ),
+            ),
         )
         invalid_geometries = (
             lambda: replace(

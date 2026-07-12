@@ -294,6 +294,13 @@ class PhysicalModelInvariantTest(unittest.TestCase):
             type(occlusion).__dataclass_fields__["combined_hidden_width_px"].init
         )
 
+    def test_separator_assignment_derives_physical_classification(self) -> None:
+        assignment = candidate_fixture().geometry.separator_assignments[0]
+        assignment_fields = type(assignment).__dataclass_fields__
+        for field_name in ("state", "reason", "geometry_dependent"):
+            with self.subTest(field=field_name):
+                self.assertFalse(assignment_fields[field_name].init)
+
     def test_pixel_intervals_and_residuals_require_finite_values(self) -> None:
         with self.assertRaises(ValueError):
             PixelInterval(math.nan, 1.0)
@@ -360,7 +367,7 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 observed,
                 assignment=replace(
                     observed.assignment,
-                    state=EvidenceState.UNAVAILABLE,
+                    used_for_boundary=False,
                 ),
             )
 
