@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Optional
 
@@ -8,8 +7,8 @@ from ..detection.final.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..io.model import ImageProfile
-from ..utils import json_safe
 from .model import ReportResult
+from .read_models import typed_read_model
 from .record import report_record_for_final_detection
 
 
@@ -30,7 +29,7 @@ def result_from_detection(
         detection,
         selection,
         source=str(input_file),
-        profile=json_safe(asdict(profile)),
+        profile=typed_read_model(profile),
         output_files=output_files,
         review_copy=review_copy,
         warnings=warnings,
@@ -53,7 +52,7 @@ def result_from_cached_record(
     report_record = dict(cached_record)
     report_record["source"] = str(input_file)
     input_detail = dict(cached_record["input"])
-    input_detail["profile"] = json_safe(asdict(profile))
+    input_detail["profile"] = typed_read_model(profile)
     report_record["input"] = input_detail
     report_record["analysis_reuse"] = {"used": True}
     output_detail = dict(cached_record["output"])
@@ -61,4 +60,4 @@ def result_from_cached_record(
     output_detail["review_copy"] = review_copy
     output_detail["warnings"] = list(warnings)
     report_record["output"] = output_detail
-    return ReportResult(record=json_safe(report_record))
+    return ReportResult(record=report_record)

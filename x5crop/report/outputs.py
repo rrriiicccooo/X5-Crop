@@ -8,7 +8,6 @@ from ..app_info import REPORT_JSONL_NAME, SUMMARY_CSV_NAME
 from .model import ReportResult
 from ..output.surface import output_directory_for
 from ..run_config import RunConfig
-from ..utils import json_safe
 
 
 def append_report_jsonl(path: Path, result: ReportResult) -> None:
@@ -16,7 +15,7 @@ def append_report_jsonl(path: Path, result: ReportResult) -> None:
         raise ValueError("Current report record is missing")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(json_safe(result.record), ensure_ascii=False) + "\n")
+        f.write(json.dumps(result.record, ensure_ascii=False) + "\n")
 
 
 def append_summary_csv(path: Path, result: ReportResult) -> None:

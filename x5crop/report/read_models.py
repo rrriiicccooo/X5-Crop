@@ -20,6 +20,8 @@ from ..detection.physical.spacing import (
 
 
 def typed_read_model(value: Any) -> Any:
+    if isinstance(value, bytes):
+        return f"<bytes:{len(value)}>"
     if isinstance(value, Enum):
         return value.value
     if isinstance(

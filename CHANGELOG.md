@@ -22,6 +22,8 @@ repository rules in `AGENTS.md`.
   `geometry` profile 路径直接删除。
 - Decision 与 finalization 生命周期拆为 `DecisionResult -> FinalDetection`；DecisionGate 不再提前
   创建带有占位 output geometry 的“最终”对象。
+- Current report 删除永远为空的 `schema_validation` section，并统一使用唯一 typed read-model
+  projection；旧通用 `_plain` / `json_safe` 二次序列化路径已删除。
 - Current schema 唯一身份更新为 `detection_report / physical_sequence_resolution`；旧 revision
   不再被 report、cache、tests 或 tools 接受。
 - Dimension-constrained cut 保留完整位置区间，不再把未观测边界伪装成精确中点。

@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 import unittest
 import numpy as np
-from dataclasses import asdict, fields, replace
+from dataclasses import fields, replace
 
 from tools.tests.physical_gate_support import (
     final_detection_fixture,
@@ -20,6 +20,7 @@ from x5crop.configuration.registry import get_detection_configuration
 from x5crop.report.configuration import detection_configuration_read_model
 from x5crop.report.model import ReportResult
 from x5crop.report.record import report_record_for_final_detection
+from x5crop.report.read_models import typed_read_model
 from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
 from tools.regression.compare import DEFAULT_FIELDS
@@ -85,7 +86,7 @@ def _record() -> dict:
         final_detection_fixture(),
         selection_fixture(),
         source="input.tif",
-        profile=asdict(_profile()),
+        profile=typed_read_model(_profile()),
         output_files=[],
         review_copy=None,
         warnings=[],
@@ -234,7 +235,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             detection,
             selection,
             source="synthetic.tif",
-            profile=asdict(profile),
+            profile=typed_read_model(profile),
             output_files=[],
             review_copy=None,
             warnings=[],
@@ -275,6 +276,27 @@ class OutputReadModelContractTest(unittest.TestCase):
 
     def test_fresh_record_is_current_schema_valid(self) -> None:
         self.assertEqual(current_report_record_errors(_record()), [])
+
+    def test_current_schema_has_no_write_only_validation_section(self) -> None:
+        from x5crop.report.validation import CURRENT_REPORT_SECTIONS
+
+        self.assertNotIn("schema_validation", CURRENT_REPORT_SECTIONS)
+        self.assertNotIn("schema_validation", _record())
+
+    def test_report_uses_one_typed_projection_path(self) -> None:
+        configuration_source = (
+            PROJECT_ROOT / "x5crop/report/configuration.py"
+        ).read_text(encoding="utf-8")
+        record_source = (
+            PROJECT_ROOT / "x5crop/report/record.py"
+        ).read_text(encoding="utf-8")
+        outputs_source = (
+            PROJECT_ROOT / "x5crop/report/outputs.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("def _plain", configuration_source)
+        self.assertIn("typed_read_model", configuration_source)
+        self.assertNotIn("json_safe", record_source)
+        self.assertNotIn("json_safe", outputs_source)
 
     def test_current_schema_rejects_unknown_fields_at_every_runtime_boundary(
         self,
@@ -331,7 +353,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             final_detection_fixture(),
             selection_fixture(),
             source="input.tif",
-            profile=asdict(_profile()),
+            profile=typed_read_model(_profile()),
             output_files=[],
             review_copy=None,
             warnings=[],

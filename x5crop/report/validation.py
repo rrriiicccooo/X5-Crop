@@ -52,7 +52,6 @@ CURRENT_REPORT_SECTIONS = (
     "output",
     "analysis_reuse_signature",
     "analysis_reuse",
-    "schema_validation",
     "diagnostics",
 )
 
@@ -745,8 +744,6 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
         errors.append("script_version_invalid")
     if not isinstance(record["source"], str):
         errors.append("source_invalid")
-    if not isinstance(record["schema_validation"], list) or record["schema_validation"]:
-        errors.append("schema_validation_not_empty")
     input_detail = record["input"]
     if not _input_valid(input_detail):
         errors.append("input_incomplete")

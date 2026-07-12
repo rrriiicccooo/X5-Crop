@@ -262,7 +262,8 @@ selection。任何 Debug Preview/Analysis 请求都会执行完整 detection；c
 boxes、separator evidence 三联图。
 Current validator 精确校验 `GeometryResolution` 字段；旧字段形状即使使用相同 schema identity
 也会被拒绝并重新检测。所有 typed result 由 canonical dataclass 结构递归校验，report 自有投影
-也使用精确字段集合；任何层级的额外 alias、旧字段或未知 section 都会使 record 失效。
+也使用精确字段集合；configuration、selection、decision 与 output 共用唯一 typed projection，
+不再经过第二套通用序列化。任何层级的额外 alias、旧字段或未知 section 都会使 record 失效。
 Runtime 对外只传递 report-owned `ReportResult`；它在构造时验证 current schema。共享 domain
 不保存 report record、TIFF profile 或用户 bleed 偏好，后者由 `x5crop.output` 独占。
 

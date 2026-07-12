@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
 from typing import Any, Iterable, Optional
 
 import numpy as np
@@ -41,22 +40,6 @@ def clamp_int(value: float, lower: int, upper: int) -> int:
 
 def clamp_float(value: float, lower: float, upper: float) -> float:
     return float(max(lower, min(upper, float(value))))
-
-
-def json_safe(value: Any) -> Any:
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, bytes):
-        return f"<bytes:{len(value)}>"
-    if isinstance(value, dict):
-        return {str(k): json_safe(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [json_safe(v) for v in value]
-    return value
 
 
 def enum_name(value: Any, default: str = "") -> str:

@@ -5,7 +5,6 @@ from ..detection.final.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..output.model import OutputGeometry
-from ..utils import json_safe
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from .read_models import (
     decision_gate_detail,
@@ -90,10 +89,9 @@ def report_record_for_final_detection(
         },
         "analysis_reuse_signature": dict(analysis_reuse_signature),
         "analysis_reuse": {"used": False},
-        "schema_validation": [],
         "diagnostics": {
             "transform_geometry": _transform_read_model(transform_geometry),
             "detection": list(detection.decision.diagnostics),
         },
     }
-    return json_safe(record)
+    return record

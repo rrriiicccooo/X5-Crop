@@ -1,22 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import fields, is_dataclass
 from typing import Any
 
 from ..configuration.model import DetectionConfiguration
-
-
-def _plain(value: Any) -> Any:
-    if is_dataclass(value) and not isinstance(value, type):
-        return {
-            field.name: _plain(getattr(value, field.name))
-            for field in fields(value)
-        }
-    if isinstance(value, (list, tuple)):
-        return [_plain(item) for item in value]
-    if isinstance(value, dict):
-        return {str(key): _plain(item) for key, item in value.items()}
-    return value
+from .read_models import typed_read_model
 
 
 def detection_configuration_read_model(
@@ -32,8 +19,8 @@ def detection_configuration_read_model(
             "default_count": int(spec.default_count),
             "expected_separator_count": int(spec.expected_separator_count),
             "allowed_counts": list(spec.allowed_counts),
-            "nominal_frame_size_mm": _plain(spec.nominal_frame_size_mm),
-            "frame_size_mm_options": _plain(spec.frame_size_mm_options),
+            "nominal_frame_size_mm": typed_read_model(spec.nominal_frame_size_mm),
+            "frame_size_mm_options": typed_read_model(spec.frame_size_mm_options),
             "frame_aspect": spec.horizontal_content_aspect,
             "aspect_source": "frame_size_mm",
             "complete_strip_can_be_underfilled": bool(
@@ -41,13 +28,13 @@ def detection_configuration_read_model(
             ),
         },
         "measurement": {
-            "preprocess": _plain(configuration.preprocess),
-            "separator": _plain(configuration.separator),
-            "content": _plain(configuration.content),
+            "preprocess": typed_read_model(configuration.preprocess),
+            "separator": typed_read_model(configuration.separator),
+            "content": typed_read_model(configuration.content),
         },
         "execution": {
             "detector_kind": configuration.detector_kind,
-            "candidate_plan": _plain(configuration.candidate_plan),
+            "candidate_plan": typed_read_model(configuration.candidate_plan),
         },
-        "diagnostics": _plain(configuration.diagnostics),
+        "diagnostics": typed_read_model(configuration.diagnostics),
     }
