@@ -30,7 +30,7 @@ from x5crop.configuration.diagnostics import (
 from x5crop.configuration.separator import SeparatorObservationParameters
 from x5crop.output.model import AxisBleedParameters
 from x5crop.formats import FormatPhysicalSpec, FrameSizeMm
-from x5crop.geometry.detection_parameters import SeparatorProfileParameters
+from x5crop.image.separator_profile import SeparatorProfileParameters
 from x5crop.image.deskew_parameters import DeskewParameters
 from x5crop.image.evidence import (
     ContentEvidenceImageParameters,

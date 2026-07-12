@@ -5,10 +5,7 @@ import numpy as np
 from . import MeasurementCache, MeasurementRegionKey
 from ..domain import Box
 from ..geometry.boxes import crop_work_box, full_work_box, is_full_work_box
-from ..geometry.detection_parameters import (
-    SeparatorProfileParameters,
-)
-from ..geometry.separator_profile import separator_profile
+from ..image.separator_profile import SeparatorProfileParameters, separator_profile
 
 
 def separator_profile_cache_key(

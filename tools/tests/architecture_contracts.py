@@ -136,6 +136,25 @@ def source_import_graph() -> dict[str, frozenset[str]]:
     }
 
 
+def source_layer_import_graph() -> dict[str, frozenset[str]]:
+    graph: dict[str, set[str]] = {
+        layer: set() for layer in SOURCE_LAYER_PREFIXES
+    }
+    for source, targets in source_import_graph().items():
+        source_layers = source_layer_memberships(source)
+        if len(source_layers) != 1:
+            continue
+        source_layer = source_layers[0]
+        for target in targets:
+            target_layers = source_layer_memberships(target)
+            if len(target_layers) == 1 and target_layers[0] != source_layer:
+                graph[source_layer].add(target_layers[0])
+    return {
+        layer: frozenset(targets)
+        for layer, targets in graph.items()
+    }
+
+
 def source_layer_memberships(module_name: str) -> tuple[str, ...]:
     return tuple(
         layer

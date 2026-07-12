@@ -76,7 +76,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
     def test_configuration_does_not_duplicate_foundation_models(self) -> None:
         self.assertEqual(
             duplicate_dataclass_models(
-                "x5crop.geometry.detection_parameters",
+                "x5crop.image.separator_profile",
                 "x5crop.configuration",
             ),
             [],

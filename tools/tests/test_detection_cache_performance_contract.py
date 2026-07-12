@@ -11,7 +11,7 @@ import numpy as np
 from x5crop.cache import MeasurementCache, MeasurementRegionKey
 from x5crop.cache.separator import cached_separator_profile
 from x5crop.domain import Box
-from x5crop.geometry.detection_parameters import SeparatorProfileParameters
+from x5crop.image.separator_profile import SeparatorProfileParameters
 from x5crop.geometry.layout import work_gray
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 from x5crop.configuration.bundle import DetectionConfigurationBundle

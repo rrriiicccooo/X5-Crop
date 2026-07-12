@@ -27,7 +27,7 @@ from x5crop.configuration.separator import SeparatorObservationParameters
 from x5crop.detection.candidate.plan.count_hypotheses import CountHypothesis
 from x5crop.output.model import AxisBleedParameters
 from x5crop.formats import FormatPhysicalSpec, FrameSizeMm, expected_separator_count
-from x5crop.geometry.detection_parameters import SeparatorProfileParameters
+from x5crop.image.separator_profile import SeparatorProfileParameters
 from x5crop.geometry.sampling import sampling_step_for_limit
 from x5crop.run_config import RunConfig
 from x5crop.runtime.options import RuntimeOptions

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..geometry.detection_parameters import SeparatorProfileParameters
+from ..image.separator_profile import SeparatorProfileParameters
 from ..utils import require_percentile, require_positive
 
 

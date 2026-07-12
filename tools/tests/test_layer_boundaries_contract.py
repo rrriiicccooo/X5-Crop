@@ -17,6 +17,7 @@ from tools.tests.architecture_contracts import (
     pass_through_classes,
     reachable_source_modules,
     source_import_graph,
+    source_layer_import_graph,
     source_layer_memberships,
     source_modules,
     standalone_tool_modules,
@@ -60,6 +61,9 @@ class LayerBoundariesContractTest(unittest.TestCase):
 
     def test_active_source_import_graph_is_acyclic(self) -> None:
         self.assertEqual(_cycles(source_import_graph()), [])
+
+    def test_source_layer_import_graph_is_acyclic(self) -> None:
+        self.assertEqual(_cycles(source_layer_import_graph()), [])
 
     def test_every_active_module_has_one_layer_and_is_reachable(self) -> None:
         modules = set(source_modules())
