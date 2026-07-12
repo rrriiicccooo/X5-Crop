@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from x5crop.domain import EvidenceState
 from ...physical.model import SequenceSolution
-from ..assessment.quality import quality_for_candidate
 from ..model import AssessedCandidate
 from .model import GeometryCluster, GeometryResolution, SelectionResult
 
@@ -10,7 +9,7 @@ from .model import GeometryCluster, GeometryResolution, SelectionResult
 def candidate_rank(
     candidate: AssessedCandidate,
 ) -> tuple[int, int, int, int, int, int, float, float, float]:
-    quality = quality_for_candidate(candidate)
+    quality = candidate.evidence_quality
     residuals = quality.physical_residuals
     partial_auto_count = (
         candidate.geometry.count

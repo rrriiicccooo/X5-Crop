@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from x5crop.domain import EvidenceState
+
 from ..physical.model import CandidateGeometry
 from .assessment.evidence_independence import EvidenceIndependenceEvidence
 from .assessment.separator_support import SeparatorSequenceEvidence
@@ -84,3 +86,56 @@ class AssessedCandidate:
             or self.count_hypothesis.strip_mode != self.geometry.strip_mode
         ):
             raise ValueError("assessed candidate count hypothesis must match geometry")
+
+    @property
+    def evidence_quality(self) -> EvidenceQuality:
+        evidence = self.assessment.evidence
+        states = (
+            ("frame_topology", evidence.frame_topology.state),
+            ("frame_coverage", evidence.frame_coverage.state),
+            ("frame_sequence_conservation", evidence.frame_sequence.conservation.state),
+            ("separator_sequence", evidence.separator_sequence.state),
+            ("frame_dimensions", evidence.frame_dimensions.state),
+            ("frame_content", evidence.frame_content.state),
+            ("holder_texture", evidence.holder_texture.state),
+            ("content_preservation", evidence.content_preservation.state),
+            (
+                "sequence_content_alignment",
+                evidence.sequence_content_alignment.state,
+            ),
+            ("holder_occupancy", evidence.holder_occupancy.state),
+            ("partial_edge_safety", evidence.partial_edge_safety.state),
+            ("evidence_independence", evidence.independence.state),
+        )
+        content_total = sum(
+            max(0, int(end) - int(start))
+            for start, end in evidence.frame_coverage.content_runs
+        )
+        uncovered = sum(
+            max(0, int(end) - int(start))
+            for start, end in evidence.frame_coverage.uncovered_content
+        )
+        return EvidenceQuality(
+            supported=tuple(
+                code for code, state in states if state == EvidenceState.SUPPORTED
+            ),
+            contradicted=tuple(
+                code for code, state in states if state == EvidenceState.CONTRADICTED
+            ),
+            unavailable=tuple(
+                code for code, state in states if state == EvidenceState.UNAVAILABLE
+            ),
+            not_applicable=tuple(
+                code
+                for code, state in states
+                if state == EvidenceState.NOT_APPLICABLE
+            ),
+            covered_content_px=max(0, content_total - uncovered),
+            uncovered_content_px=uncovered,
+            supported_proof_paths=tuple(
+                path.code
+                for path in self.assessment.gate.proof_paths
+                if path.state == EvidenceState.SUPPORTED
+            ),
+            physical_residuals=self.geometry.residuals,
+        )

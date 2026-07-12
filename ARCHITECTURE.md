@@ -19,7 +19,7 @@ entry
   -> global monotonic sequence solver -> SequenceSolution
   -> mode composition -> CandidateGeometry
   -> physical evidence + CandidateGate
-  -> derived EvidenceQuality
+  -> AssessedCandidate.evidence_quality
   -> GeometryResolution + deterministic selection
   -> FrameBleedPlan
   -> DecisionGate -> FinalDetection
@@ -177,8 +177,9 @@ Content 是保护性反证，不是 hard physical proof 的许可机关。明确
 contradict；content measurement unavailable 不会否决完整 separator/geometry proof。Partial auto
 count 仍要求正向 frame coverage 才能声明 count resolved。
 
-`CandidateAssessment` 只保存 canonical evidence 与 CandidateGate。`EvidenceQuality` 在排序或
-报告时从 evidence、proof paths 和 geometry residuals 确定性派生，不形成可漂移的第二事实源。
+`CandidateAssessment` 只保存 canonical evidence 与 CandidateGate。
+`AssessedCandidate.evidence_quality` 从 evidence、proof paths 和 geometry residuals 确定性派生；
+selection 与 report 只读取该 canonical property，不维护第二事实源或反向调用 assessment。
 系统没有 scalar confidence、weighted score、confidence cap 或 confidence gate。
 
 Selection 使用确定性顺序：

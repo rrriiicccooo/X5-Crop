@@ -16,7 +16,6 @@ from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.candidate.assessment.separator_support import separator_sequence_evidence
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.candidate.selection.choose import geometry_clusters
-from x5crop.detection.candidate.assessment.quality import quality_for_candidate
 from x5crop.domain import Box, EvidenceState, PixelInterval
 from x5crop.detection.physical.model import SequenceResiduals
 from x5crop.entry.cli import build_parser
@@ -251,11 +250,11 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             ),
         )
         self.assertEqual(
-            quality_for_candidate(selected).physical_residuals,
+            selected.evidence_quality.physical_residuals,
             selected.geometry.residuals,
         )
         self.assertEqual(
-            quality_for_candidate(alternative).physical_residuals,
+            alternative.evidence_quality.physical_residuals,
             alternative.geometry.residuals,
         )
         result = select_candidates(

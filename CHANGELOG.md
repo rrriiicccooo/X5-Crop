@@ -84,6 +84,8 @@ repository rules in `AGENTS.md`.
   Dual-lane topology 使用 composition scope，measurement provenance 保留 lane identity。
 - DecisionGateAssessment 在自身边界验证 final reason vocabulary；未知 reason 不再延迟到 report
   validator 才失败。
+- `EvidenceQuality` 现在是 `AssessedCandidate` 的 canonical derived property；selection 与 report
+  只读该结果，旧的 assessment quality 计算入口已删除。
 - Deskew 固定灰度身份阈值已由 per-image robust statistics 取代；percentile sampling budget、
   edge quantiles 和 numerical floors 均由显式参数拥有。
 - Physical fact、adaptive measurement、numerical safety、execution budget 与 diagnostics 参数

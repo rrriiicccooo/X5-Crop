@@ -131,6 +131,19 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertNotIn("get_detection_configuration", source)
         self.assertNotIn("DetectionConfigurationBundle.for_format_mode", source)
 
+    def test_report_only_reads_assessed_candidate_results(self) -> None:
+        source = (PROJECT_ROOT / "x5crop/report/read_models.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn("detection.candidate.assessment", source)
+        self.assertNotIn("quality_for_candidate", source)
+        self.assertFalse(
+            (
+                PROJECT_ROOT
+                / "x5crop/detection/candidate/assessment/quality.py"
+            ).exists()
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
