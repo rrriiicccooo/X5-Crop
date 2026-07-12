@@ -16,6 +16,12 @@ repository rules in `AGENTS.md`.
 
 #### 封口参数与几何解析契约（2026-07-12）
 
+- Dual-lane holder gutter 现在是 typed `LaneDividerEvidence`；只有相对两侧内容证据支持的 divider
+  才能自动处理，lane 分区连续覆盖整个 canvas，lane-local frame index 会转换为全局 identity。
+- Separator profile 参数与像素测量已统一归 `image` owner；源码层级依赖图新增无环契约，旧
+  `geometry` profile 路径直接删除。
+- Decision 与 finalization 生命周期拆为 `DecisionResult -> FinalDetection`；DecisionGate 不再提前
+  创建带有占位 output geometry 的“最终”对象。
 - Current schema 唯一身份更新为 `detection_report / physical_sequence_resolution`；旧 revision
   不再被 report、cache、tests 或 tools 接受。
 - Dimension-constrained cut 保留完整位置区间，不再把未观测边界伪装成精确中点。

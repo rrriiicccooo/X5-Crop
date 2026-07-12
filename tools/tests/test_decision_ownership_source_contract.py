@@ -41,30 +41,40 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
             )
         self.assertEqual(offenders, [])
 
-    def test_decision_gate_is_the_only_runtime_final_detection_factory(self) -> None:
-        offenders: list[str] = []
-        restoration = PROJECT_ROOT / "x5crop" / "report" / "restoration.py"
+    def test_decision_and_finalization_have_single_factories(self) -> None:
+        decision_factories: list[str] = []
+        final_factories: list[str] = []
         for path in (PROJECT_ROOT / "x5crop").rglob("*.py"):
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call):
                     continue
-                direct = isinstance(node.func, ast.Name) and node.func.id == "FinalDetection"
-                factory = isinstance(node.func, ast.Attribute) and node.func.attr == "from_candidate"
-                if (
-                    (direct or factory)
-                    and path.name != "decision_gate.py"
-                    and path != restoration
-                ):
-                    offenders.append(str(path.relative_to(PROJECT_ROOT)))
-        self.assertEqual(sorted(set(offenders)), [])
+                if isinstance(node.func, ast.Name):
+                    if node.func.id == "DecisionResult":
+                        decision_factories.append(str(path.relative_to(PROJECT_ROOT)))
+                    elif node.func.id == "FinalDetection":
+                        final_factories.append(str(path.relative_to(PROJECT_ROOT)))
+        self.assertEqual(
+            sorted(set(decision_factories)),
+            [
+                "x5crop/detection/decision/decision_gate.py",
+                "x5crop/report/restoration.py",
+            ],
+        )
+        self.assertEqual(
+            sorted(set(final_factories)),
+            [
+                "x5crop/detection/final/finalize.py",
+                "x5crop/report/restoration.py",
+            ],
+        )
 
     def test_decision_gate_owns_status_and_final_reason_creation(self) -> None:
         factories: list[str] = []
         status_owners: list[str] = []
         for path in DECISION_ROOT.glob("*.py"):
             source = path.read_text(encoding="utf-8")
-            if "FinalDetection(" in source:
+            if "DecisionResult(" in source:
                 factories.append(path.name)
             if '"approved_auto"' in source or '"needs_review"' in source:
                 status_owners.append(path.name)
@@ -88,8 +98,13 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
     def test_decision_gate_uses_typed_assessment_and_specific_projection(self) -> None:
         gate_source = (DECISION_ROOT / "decision_gate.py").read_text(encoding="utf-8")
         model_source = (DECISION_ROOT / "model.py").read_text(encoding="utf-8")
+        final_model_source = (
+            PROJECT_ROOT / "x5crop/detection/final/model.py"
+        ).read_text(encoding="utf-8")
         self.assertIn("class DecisionGateAssessment", model_source)
-        self.assertIn("class FinalDetection", model_source)
+        self.assertIn("class DecisionResult", model_source)
+        self.assertNotIn("class FinalDetection", model_source)
+        self.assertIn("class FinalDetection", final_model_source)
         self.assertIn("_CANDIDATE_REASON_BY_CHECK", gate_source)
         self.assertNotIn("report_detail", gate_source)
         self.assertNotIn(".detail", gate_source)

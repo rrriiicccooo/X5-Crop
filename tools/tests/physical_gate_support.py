@@ -24,7 +24,9 @@ from x5crop.detection.candidate.selection.model import (
     SelectionResult,
 )
 from x5crop.detection.decision.decision_gate import apply_decision_gate
-from x5crop.detection.decision.model import FinalDetection
+from x5crop.detection.decision.model import DecisionResult
+from x5crop.detection.final.model import FinalDetection
+from x5crop.detection.final.finalize import finalize_detection
 from x5crop.detection.evidence.content.frame_support import (
     FrameContentEvidence,
     FrameContentObservation,
@@ -529,7 +531,7 @@ def decide_candidate(
     geometry_disagreement: bool = False,
     output_protection_feasible: bool = True,
     transform_state: EvidenceState = EvidenceState.SUPPORTED,
-) -> FinalDetection:
+) -> DecisionResult:
     return apply_decision_gate(
         selection_fixture(
             candidate,
@@ -547,10 +549,14 @@ def final_detection_fixture(
     *,
     failed_candidate_check: str | None = None,
 ) -> FinalDetection:
-    return decide_candidate(
-        candidate_fixture(
-            failed_candidate_check=failed_candidate_check,
-        )
+    return finalize_detection(
+        decide_candidate(
+            candidate_fixture(
+                failed_candidate_check=failed_candidate_check,
+            )
+        ),
+        image_width=200,
+        image_height=100,
     )
 
 

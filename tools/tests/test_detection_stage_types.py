@@ -17,7 +17,8 @@ from x5crop.detection.candidate.model import (
 from x5crop.detection.physical.model import SequenceSolution
 import x5crop.detection.physical.model as physical_model
 from x5crop.detection.candidate.selection.model import SelectionResult
-from x5crop.detection.decision.model import DecisionGateAssessment, FinalDetection
+from x5crop.detection.decision.model import DecisionGateAssessment
+from x5crop.detection.final.model import FinalDetection
 from x5crop.detection.context import DetectionContext, DetectionRequest
 from x5crop.detection.candidate.assessment.candidate_gate import (
     CandidateGateAssessment,
@@ -118,7 +119,37 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             "frame_boundaries",
         ):
             self.assertNotIn(candidate_stage_field, final_fields)
-        self.assertIn("frame_bleed_plan", final_fields)
+        self.assertEqual(final_fields, {"decision", "output_geometry"})
+
+    def test_decision_and_finalization_have_distinct_lifecycle_types(self) -> None:
+        import x5crop.detection.decision.model as decision_model
+        from x5crop.detection.decision.decision_gate import apply_decision_gate
+
+        self.assertTrue(hasattr(decision_model, "DecisionResult"))
+        self.assertFalse(hasattr(decision_model, "FinalDetection"))
+        self.assertTrue(
+            (PROJECT_ROOT / "x5crop/detection/final/model.py").is_file()
+        )
+        decision_result = decision_model.DecisionResult
+        self.assertEqual(
+            inspect.signature(apply_decision_gate).return_annotation,
+            "DecisionResult",
+        )
+        self.assertEqual(
+            inspect.signature(finalize.finalize_detection).parameters[
+                "decision"
+            ].annotation,
+            "DecisionResult",
+        )
+        self.assertEqual(
+            inspect.signature(finalize.finalize_detection).return_annotation,
+            "FinalDetection",
+        )
+        self.assertEqual(
+            {field.name for field in fields(FinalDetection)},
+            {"decision", "output_geometry"},
+        )
+        self.assertNotEqual(decision_result, FinalDetection)
 
     def test_standard_dual_lane_and_review_only_geometry_have_distinct_types(self) -> None:
         sequence_fields = {field.name for field in fields(SequenceSolution)}
@@ -263,7 +294,6 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             write_crops_if_allowed,
             result_from_detection,
             report_record_for_final_detection,
-            finalize.finalize_detection,
         )
         for function in functions:
             with self.subTest(function=function.__name__):

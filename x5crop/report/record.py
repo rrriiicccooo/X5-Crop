@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ..app_info import VERSION
-from ..detection.decision.model import FinalDetection
+from ..detection.final.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..output.model import OutputGeometry
@@ -64,23 +64,25 @@ def report_record_for_final_detection(
         "input": {
             "profile": dict(profile),
             "scan_calibration": scan_calibration_read_model(
-                detection.scan_calibration
+                detection.decision.scan_calibration
             ),
         },
         "configuration": dict(configuration),
         "selection": selection_read_model(selection),
         "decision": {
-            "status": detection.status,
-            "final_review_reasons": list(detection.final_review_reasons),
-            "gate": decision_gate_detail(detection),
+            "status": detection.decision.status,
+            "final_review_reasons": list(
+                detection.decision.final_review_reasons
+            ),
+            "gate": decision_gate_detail(detection.decision),
         },
         "output": {
             "decision_geometry": _geometry_read_model(
-                detection.decision_geometry
+                detection.decision.decision_geometry
             ),
             "final_geometry": _geometry_read_model(detection.output_geometry),
             "frame_bleed_plan": frame_bleed_plan_read_model(
-                detection.frame_bleed_plan
+                detection.decision.frame_bleed_plan
             ),
             "output_files": list(output_files),
             "review_copy": review_copy,
@@ -91,7 +93,7 @@ def report_record_for_final_detection(
         "schema_validation": [],
         "diagnostics": {
             "transform_geometry": _transform_read_model(transform_geometry),
-            "detection": list(detection.diagnostics),
+            "detection": list(detection.decision.diagnostics),
         },
     }
     return json_safe(record)

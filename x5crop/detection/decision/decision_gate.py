@@ -24,7 +24,7 @@ from x5crop.domain import EvidenceState
 from ..gate_checks import GateCheck
 from ..evidence.transform_geometry import TransformGeometryEvidence
 from ..physical.model import DualLaneSolution
-from .model import DecisionGateAssessment, FinalDetection
+from .model import DecisionGateAssessment, DecisionResult
 
 
 _CANDIDATE_REASON_BY_CHECK = {
@@ -173,7 +173,7 @@ def apply_decision_gate(
     *,
     image_width: int,
     image_height: int,
-) -> FinalDetection:
+) -> DecisionResult:
     selected = selection.selected
     candidate_gate = selected.assessment.gate
     resolution = selection.geometry_resolution
@@ -248,14 +248,13 @@ def apply_decision_gate(
             for frame in _crop_envelope_frames(selection)
         ),
     )
-    return FinalDetection(
+    return DecisionResult(
         format_id=selected.geometry.format_id,
         layout=selected.geometry.layout,
         strip_mode=selected.geometry.strip_mode,
         count=selected.geometry.count,
         decision_gate=decision_gate,
         decision_geometry=geometry,
-        output_geometry=geometry,
         frame_bleed_plan=frame_bleed_plan,
         scan_calibration=scan_calibration,
         diagnostics=selected.assessment.gate.diagnostics,

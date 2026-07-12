@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import numpy as np
 
-from ..detection.decision.model import FinalDetection
+from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
 from ..configuration.diagnostics import DiagnosticsConfiguration
 from .canvas import DebugRenderCache, write_rgb_jpeg

@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ..detection.decision.model import FinalDetection
+from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
 from ..detection.physical.model import DualLaneSolution, SequenceSolution
 from x5crop.domain import SeparatorBandObservation
@@ -26,7 +26,7 @@ def separator_mark_box(
     end = max(start + 1, int(round(observation.end + long_axis_offset)))
     return map_work_box(
         Box(start, corridor.top, end, corridor.bottom),
-        detection.layout,
+        detection.decision.layout,
         image_width,
         image_height,
     )
@@ -50,7 +50,7 @@ def _boundary_ticks(
         Box(x, max(corridor.top, corridor.bottom - tick), x + 1, corridor.bottom),
     )
     return tuple(
-        map_work_box(box, detection.layout, image_width, image_height)
+        map_work_box(box, detection.decision.layout, image_width, image_height)
         for box in work_ticks
     )
 

@@ -4,7 +4,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Optional
 
-from ..detection.decision.model import FinalDetection
+from ..detection.final.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..io.model import ImageProfile

@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw
 
 from ..app_info import SCRIPT_NAME, VERSION
 from ..configuration.diagnostics import DebugStyleParameters
-from ..detection.decision.model import FinalDetection
+from ..detection.final.model import FinalDetection
 from ..utils import RGB_CHANNEL_COUNT
 
 
@@ -13,11 +13,11 @@ def debug_status_parts(
     detection: FinalDetection,
     style: DebugStyleParameters,
 ) -> tuple[str, str, tuple[int, int, int]]:
-    passed = detection.status == "approved_auto"
+    passed = detection.decision.status == "approved_auto"
     status = "PASS" if passed else "REVIEW"
-    detail = f"status: {detection.status}"
+    detail = f"status: {detection.decision.status}"
     color = style.pass_color if passed else style.review_color
-    reasons = detection.final_review_reasons
+    reasons = detection.decision.final_review_reasons
     if reasons:
         detail += " | " + ",".join(reasons[: style.reason_display_limit])
     return status, detail, color

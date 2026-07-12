@@ -213,7 +213,7 @@ def result_from_reusable_analysis(
         detection,
         warnings,
     )
-    if detection.status == "needs_review" and not config.export_review:
+    if detection.decision.status == "needs_review" and not config.export_review:
         warnings.append("cached status is needs_review; crop export not requested")
         return result_from_cached_record(
             input_file,

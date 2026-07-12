@@ -45,8 +45,14 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
     def test_final_detection_rejects_inconsistent_final_identity(self) -> None:
         detection = final_detection_fixture()
         invalid_factories = (
-            lambda: replace(detection, format_id=""),
-            lambda: replace(detection, count=0),
+            lambda: replace(
+                detection,
+                decision=replace(detection.decision, format_id=""),
+            ),
+            lambda: replace(
+                detection,
+                decision=replace(detection.decision, count=0),
+            ),
             lambda: replace(
                 detection,
                 output_geometry=OutputGeometry(
@@ -59,9 +65,12 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
             ),
             lambda: replace(
                 detection,
-                frame_bleed_plan=replace(
-                    detection.frame_bleed_plan,
-                    frame_sides=(),
+                decision=replace(
+                    detection.decision,
+                    frame_bleed_plan=replace(
+                        detection.decision.frame_bleed_plan,
+                        frame_sides=(),
+                    ),
                 ),
             ),
         )

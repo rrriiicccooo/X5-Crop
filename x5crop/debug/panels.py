@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 
-from ..detection.decision.model import FinalDetection
+from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
 from ..image.evidence import (
     SeparatorEvidenceImageParameters,

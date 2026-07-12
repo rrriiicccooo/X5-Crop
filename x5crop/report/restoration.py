@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..detection.decision.model import FinalDetection
+from ..detection.decision.model import DecisionResult
+from ..detection.final.model import FinalDetection
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..domain import (
     Box,
@@ -128,16 +129,20 @@ def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
     decision = record["decision"]
     output = record["output"]
     return FinalDetection(
-        format_id=str(geometry["format_id"]),
-        layout=str(geometry["layout"]),
-        strip_mode=str(geometry["strip_mode"]),
-        count=int(geometry["count"]),
-        decision_gate=decision_gate_from_read_model(decision["gate"]),
-        decision_geometry=_output_geometry(output["decision_geometry"]),
-        output_geometry=_output_geometry(output["final_geometry"]),
-        frame_bleed_plan=_frame_bleed_plan(output["frame_bleed_plan"]),
-        scan_calibration=_scan_calibration(
-            record["input"]["scan_calibration"]
+        decision=DecisionResult(
+            format_id=str(geometry["format_id"]),
+            layout=str(geometry["layout"]),
+            strip_mode=str(geometry["strip_mode"]),
+            count=int(geometry["count"]),
+            decision_gate=decision_gate_from_read_model(decision["gate"]),
+            decision_geometry=_output_geometry(output["decision_geometry"]),
+            frame_bleed_plan=_frame_bleed_plan(output["frame_bleed_plan"]),
+            scan_calibration=_scan_calibration(
+                record["input"]["scan_calibration"]
+            ),
+            diagnostics=tuple(
+                str(item) for item in record["diagnostics"]["detection"]
+            ),
         ),
-        diagnostics=tuple(str(item) for item in record["diagnostics"]["detection"]),
+        output_geometry=_output_geometry(output["final_geometry"]),
     )

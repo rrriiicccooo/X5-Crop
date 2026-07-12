@@ -14,7 +14,7 @@ from tools.tests.physical_gate_support import (
     selection_fixture,
     transform_geometry_fixture,
 )
-from x5crop.detection.decision.model import FinalDetection
+from x5crop.detection.final.model import FinalDetection
 from x5crop.io.model import ImageProfile
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.report.configuration import detection_configuration_read_model
@@ -227,7 +227,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             image_height=120,
         )
         self.assertEqual(
-            detection.final_review_reasons,
+            detection.decision.final_review_reasons,
             ("automatic_processing_not_supported",),
         )
         record = report_record_for_final_detection(
@@ -488,9 +488,12 @@ class OutputReadModelContractTest(unittest.TestCase):
         record = _record()
         detection = final_detection_from_record(record)
 
-        self.assertEqual(detection.status, record["decision"]["status"])
         self.assertEqual(
-            detection.final_review_reasons,
+            detection.decision.status,
+            record["decision"]["status"],
+        )
+        self.assertEqual(
+            detection.decision.final_review_reasons,
             tuple(record["decision"]["final_review_reasons"]),
         )
         self.assertEqual(

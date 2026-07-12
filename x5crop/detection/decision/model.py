@@ -55,62 +55,38 @@ class DecisionGateAssessment:
 
 
 @dataclass(frozen=True)
-class FinalDetection:
+class DecisionResult:
     format_id: str
     layout: str
     strip_mode: str
     count: int
     decision_gate: DecisionGateAssessment
     decision_geometry: OutputGeometry
-    output_geometry: OutputGeometry
     frame_bleed_plan: FrameBleedPlan
     scan_calibration: ScanCalibration
     diagnostics: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if not self.format_id:
-            raise ValueError("final detection requires a format identity")
+            raise ValueError("decision result requires a format identity")
         require_work_layout(self.layout)
         if self.strip_mode not in {FULL, PARTIAL}:
             raise ValueError(
-                f"unsupported final detection strip mode: {self.strip_mode}"
+                f"unsupported decision result strip mode: {self.strip_mode}"
             )
         if self.count <= 0:
-            raise ValueError("final detection count must be positive")
-        decision_envelope = self.decision_geometry.crop_envelope.box
-        output_envelope = self.output_geometry.crop_envelope.box
-        if not (
-            output_envelope.left <= decision_envelope.left
-            and output_envelope.top <= decision_envelope.top
-            and output_envelope.right >= decision_envelope.right
-            and output_envelope.bottom >= decision_envelope.bottom
-        ):
-            raise ValueError("final output must contain the decision crop envelope")
+            raise ValueError("decision result count must be positive")
         decision_frame_count = len(self.decision_geometry.frames)
         if decision_frame_count not in {0, self.count}:
-            raise ValueError("final detection has incomplete decision frames")
+            raise ValueError("decision result has incomplete frames")
         if self.decision_gate.passed and decision_frame_count != self.count:
-            raise ValueError("approved final detection requires one frame per count")
-        if len(self.output_geometry.frames) != decision_frame_count:
-            raise ValueError("final output must preserve decision frame identity")
-        if any(
-            output.left > decision.left
-            or output.top > decision.top
-            or output.right < decision.right
-            or output.bottom < decision.bottom
-            for decision, output in zip(
-                self.decision_geometry.frames,
-                self.output_geometry.frames,
-                strict=True,
-            )
-        ):
-            raise ValueError("final output frames may expand but cannot shrink or move")
+            raise ValueError("approved decision requires one frame per count")
         if len(self.frame_bleed_plan.frame_sides) != decision_frame_count:
-            raise ValueError("final bleed plan must match decision frames")
+            raise ValueError("frame bleed plan must match decision frames")
         if any(not item for item in self.diagnostics) or len(
             set(self.diagnostics)
         ) != len(self.diagnostics):
-            raise ValueError("final diagnostics must be non-empty and unique")
+            raise ValueError("decision diagnostics must be non-empty and unique")
 
     @property
     def status(self) -> str:

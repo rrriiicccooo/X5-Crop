@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from ..run_config import RunConfig
-from ..detection.decision.model import FinalDetection
+from ..detection.final.model import FinalDetection
 from ..detection.candidate.model import AssessedCandidate
 from ..output.surface import display_generated_path
 from ..configuration.diagnostics import DiagnosticsConfiguration
