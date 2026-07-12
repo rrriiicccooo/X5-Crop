@@ -5,7 +5,7 @@ from dataclasses import replace
 import numpy as np
 
 from ...domain import Box, CropEnvelope, SequenceHypothesis
-from ...policies.parameters.content import ContentEvidenceParameters
+from ...configuration.content import ContentEvidenceParameters
 from ...image.evidence import adaptive_activation_threshold
 
 

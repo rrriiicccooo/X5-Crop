@@ -24,7 +24,7 @@ from .separator.assignment import (
     separator_width_constraint,
 )
 from .spacing import (
-    InterFrameRelation,
+    InterFrameSpacing,
     observed_spacing_evidence,
     spacing_hypothesis,
 )
@@ -36,7 +36,7 @@ class SequenceSolveResult:
     frames: tuple[Box, ...]
     assignments: tuple[SeparatorAssignment, ...]
     boundaries: tuple[FrameBoundary, ...]
-    relations: tuple[InterFrameRelation, ...]
+    relations: tuple[InterFrameSpacing, ...]
     residuals: SequenceResiduals
     search_budget_exhausted: bool
 
@@ -391,8 +391,8 @@ def _photo_intervals(
 def _relations(
     boundaries: tuple[FrameBoundary, ...],
     dimensions: FrameDimensionPrior,
-) -> tuple[InterFrameRelation, ...]:
-    relations: list[InterFrameRelation] = []
+) -> tuple[InterFrameSpacing, ...]:
+    relations: list[InterFrameSpacing] = []
     for boundary in boundaries:
         assignment = boundary.assignment
         if assignment is not None and assignment.independent:

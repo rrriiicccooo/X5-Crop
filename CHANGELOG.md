@@ -14,6 +14,24 @@ repository rules in `AGENTS.md`.
 
 ### V4.9 当前开发线
 
+#### 物理序列求解与经验参数退场（2026-07-12）
+
+- 逐边贪心 assignment 已替换为全局单调 `SequenceSolution` solver；零宽、负宽和倒序 frame
+  不再能形成候选。
+- `FrameDimensionPrior`、`PhotoInterval`、position/width constraints、
+  `ObservedSpacingEvidence` 和 `SpacingHypothesis` 成为不同 canonical types。Geometry
+  hypothesis 不能自证 overlap 或触发自动 bleed。
+- 候选比较改为 `EvidenceQuality` 与确定性物理排序；scalar confidence、weighted score、
+  format-family profile 和固定 geometry clustering percentage 已删除。
+- `DetectionPolicy` / `FormatParameters` / assembly wrappers 已由直接构建的
+  `DetectionConfiguration` 取代；旧 `x5crop.policies` 源码树已删除且无 compatibility shim。
+- Global overlap capacity 已替换为逐 boundary `FrameBleedPlan`。只有 independently observed
+  overlap 扩张相邻两张 frame 的对应侧，无关 frame 不再共享最大 bleed。
+- Current report schema 更新为 `detection_report / physical_sequence_resolution`，canonical
+  sections 为 `input / configuration / selection / decision / output`。旧 record 直接重新检测。
+- 所有结构、PASS/REVIEW、count、crop 和 schema diff 均按批准方案接受；measurement 数值校准
+  仍是后续独立项目。
+
 #### Frame Sequence 物理模型重构（2026-07-11）
 
 - Detection 采用
@@ -94,6 +112,27 @@ schema_revision: frame_sequence_geometry
 ## English Changelog
 
 ### V4.9 Current Development Line
+
+#### Physical Sequence Resolution And Empirical-Profile Removal (2026-07-12)
+
+- A global monotonic `SequenceSolution` solver replaces greedy boundary assignment;
+  zero-width, negative-width, and reversed frames cannot become candidates.
+- Frame priors, photo intervals, position/width constraints, observed spacing, and
+  geometry spacing hypotheses are separate canonical types. A geometry hypothesis
+  cannot prove overlap or trigger automatic bleed.
+- Candidate comparison now uses `EvidenceQuality` and deterministic physical ordering.
+  Scalar confidence, weighted scores, format-family profiles, and fixed-percentage
+  geometry clustering are removed.
+- Directly built `DetectionConfiguration` replaces the policy/parameter/assembly
+  translation chain. The superseded `x5crop.policies` source tree is deleted without
+  a compatibility shim.
+- Per-boundary `FrameBleedPlan` replaces global overlap capacity. Only adjacent frame
+  sides receive independently observed overlap protection.
+- Current reports use `detection_report / physical_sequence_resolution` with canonical
+  `input / configuration / selection / decision / output` sections. Old records are
+  redetected.
+- All behavioral and schema diffs are accepted for this structural project; numerical
+  measurement calibration remains separate.
 
 #### Physical Frame-Sequence Model (2026-07-11)
 

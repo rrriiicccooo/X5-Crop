@@ -43,21 +43,21 @@ def _lane_context(
     context: DetectionContext,
     lane: Box,
 ) -> DetectionContext:
-    lane_policy = context.lane_policy
-    if lane_policy is None:
-        raise ValueError("dual-lane context requires a resolved lane policy")
+    lane_configuration = context.lane_configuration
+    if lane_configuration is None:
+        raise ValueError("dual-lane context requires a resolved lane configuration")
     lane_gray = context.measurement_cache.gray_work[lane.top : lane.bottom, lane.left : lane.right]
     lane_request = replace(
         context.request,
         layout="horizontal",
         strip_mode="full",
-        requested_count=lane_policy.physical_spec.default_count,
+        requested_count=lane_configuration.physical_spec.default_count,
     )
     cache = make_measurement_cache(
         lane_gray,
         "horizontal",
-        lane_policy.preprocess.content_evidence_image,
-        lane_policy.preprocess.image_statistics,
+        lane_configuration.preprocess.content_evidence_image,
+        lane_configuration.preprocess.image_statistics,
     )
     profile = replace(
         context.image_profile,
@@ -68,8 +68,8 @@ def _lane_context(
         image_profile=profile,
         scan_calibration=_lane_calibration(context),
         request=lane_request,
-        policy=lane_policy,
-        lane_policy=None,
+        configuration=lane_configuration,
+        lane_configuration=None,
         measurement_cache=cache,
     )
 
@@ -80,7 +80,7 @@ def _parent_candidate(
     lane_boxes: tuple[Box, Box],
     lanes: tuple[SelectionResult, SelectionResult],
 ) -> BuiltCandidate:
-    physical_spec = context.policy.physical_spec
+    physical_spec = context.configuration.physical_spec
     lane_candidates = tuple(selection.selected for selection in lanes)
     frames = tuple(
         translate_box(frame, lane.left, lane.top)
@@ -141,7 +141,7 @@ def _parent_candidate(
             separator_observations=tuple(observations),
             separator_assignments=(),
             frame_boundaries=(),
-            inter_frame_relations=(),
+            inter_frame_spacings=(),
             holder_occlusion=HolderOcclusionEvidence.not_applicable(),
             frame_dimension_prior=lane_candidates[0].geometry.frame_dimension_prior,
             residuals=SequenceResiduals(None, None, 0.0),
@@ -183,14 +183,14 @@ def choose_dual_lane_detection(
     context: DetectionContext,
     standard_detector: StandardDetector,
 ) -> SelectionResult:
-    physical_spec = context.policy.physical_spec
+    physical_spec = context.configuration.physical_spec
     if context.request.strip_mode != "full":
         raise ValueError("dual-lane detector is only valid for full mode")
     if physical_spec.lane_count != 2:
         raise ValueError("dual-lane detector supports exactly two lanes")
     proposals = lane_divider_proposals(
         context.measurement_cache.content_evidence_float_work,
-        context.policy.candidate_plan.dual_lane_divider,
+        context.configuration.candidate_plan.dual_lane_divider,
     )
     parent_candidates = []
     for proposal in proposals:

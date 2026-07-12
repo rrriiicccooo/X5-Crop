@@ -14,10 +14,22 @@ from .boundary import HolderOcclusionEvidence
 SPACING_KINDS = frozenset({"separator", "contact", "overlap", "unresolved"})
 
 
+def _validate_spacing_identity(
+    index: int,
+    kind: str,
+    lane_index: int | None,
+) -> None:
+    if index <= 0:
+        raise ValueError("inter-frame spacing index must be positive")
+    if kind not in SPACING_KINDS:
+        raise ValueError(f"unsupported inter-frame spacing: {kind}")
+    if lane_index is not None and lane_index <= 0:
+        raise ValueError("lane index must be positive")
+
+
 @dataclass(frozen=True)
-class InterFrameRelation:
+class ObservedSpacingEvidence:
     index: int
-    state: EvidenceState
     kind: str
     signed_width_px: PixelInterval
     provenance: MeasurementProvenance
@@ -25,16 +37,43 @@ class InterFrameRelation:
     lane_index: int | None = None
 
     def __post_init__(self) -> None:
-        if self.index <= 0:
-            raise ValueError("inter-frame relation index must be positive")
-        if self.kind not in SPACING_KINDS:
-            raise ValueError(f"unsupported inter-frame relation: {self.kind}")
-        if self.lane_index is not None and self.lane_index <= 0:
-            raise ValueError("lane index must be positive")
+        _validate_spacing_identity(self.index, self.kind, self.lane_index)
+
+    @property
+    def state(self) -> EvidenceState:
+        return (
+            EvidenceState.UNAVAILABLE
+            if self.kind == "unresolved"
+            else EvidenceState.SUPPORTED
+        )
 
     @property
     def independently_observed(self) -> bool:
         return self.state == EvidenceState.SUPPORTED
+
+
+@dataclass(frozen=True)
+class SpacingHypothesis:
+    index: int
+    kind: str
+    signed_width_px: PixelInterval
+    provenance: MeasurementProvenance
+    reason: str
+    lane_index: int | None = None
+
+    def __post_init__(self) -> None:
+        _validate_spacing_identity(self.index, self.kind, self.lane_index)
+
+    @property
+    def state(self) -> EvidenceState:
+        return EvidenceState.UNAVAILABLE
+
+    @property
+    def independently_observed(self) -> bool:
+        return False
+
+
+InterFrameSpacing = ObservedSpacingEvidence | SpacingHypothesis
 
 
 @dataclass(frozen=True)
@@ -62,15 +101,10 @@ def observed_spacing_evidence(
     index: int,
     signed_width_px: PixelInterval,
     provenance: MeasurementProvenance,
-) -> InterFrameRelation:
+) -> ObservedSpacingEvidence:
     kind = _spacing_kind(signed_width_px)
-    return InterFrameRelation(
+    return ObservedSpacingEvidence(
         index=index,
-        state=(
-            EvidenceState.UNAVAILABLE
-            if kind == "unresolved"
-            else EvidenceState.SUPPORTED
-        ),
         kind=kind,
         signed_width_px=signed_width_px,
         provenance=provenance,
@@ -82,11 +116,10 @@ def spacing_hypothesis(
     index: int,
     signed_width_px: PixelInterval,
     provenance: MeasurementProvenance,
-) -> InterFrameRelation:
+) -> SpacingHypothesis:
     kind = _spacing_kind(signed_width_px)
-    return InterFrameRelation(
+    return SpacingHypothesis(
         index=index,
-        state=EvidenceState.UNAVAILABLE,
         kind=kind,
         signed_width_px=signed_width_px,
         provenance=provenance,
@@ -99,7 +132,7 @@ def sequence_conservation_evidence(
     visible_length_px: PixelInterval,
     count: int,
     frame_width_px: PixelInterval,
-    spacings: tuple[InterFrameRelation, ...],
+    spacings: tuple[InterFrameSpacing, ...],
     holder_occlusion: HolderOcclusionEvidence,
 ) -> SequenceConservationEvidence:
     if count <= 0 or len(spacings) != max(0, count - 1):

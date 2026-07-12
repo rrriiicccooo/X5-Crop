@@ -34,7 +34,12 @@ from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
 )
 from x5crop.detection.physical.sequence_solver import solve_frame_sequence
-from x5crop.detection.physical.spacing import spacing_hypothesis
+from x5crop.detection.physical.spacing import (
+    ObservedSpacingEvidence,
+    SpacingHypothesis,
+    observed_spacing_evidence,
+    spacing_hypothesis,
+)
 from x5crop.domain import (
     Box,
     EvidenceState,
@@ -47,10 +52,31 @@ from x5crop.units import ScanCalibration
 
 
 class PhysicalSequenceRefactorContractTest(unittest.TestCase):
+    def test_observed_spacing_and_geometry_hypothesis_are_distinct_types(
+        self,
+    ) -> None:
+        provenance = MeasurementProvenance("spacing", "test", ())
+        self.assertIsInstance(
+            observed_spacing_evidence(
+                1,
+                PixelInterval.exact(5.0),
+                provenance,
+            ),
+            ObservedSpacingEvidence,
+        )
+        self.assertIsInstance(
+            spacing_hypothesis(
+                1,
+                PixelInterval.exact(-5.0),
+                provenance,
+            ),
+            SpacingHypothesis,
+        )
+
     def test_holder_occlusion_builder_uses_the_canonical_inputs(self) -> None:
         source = (
             Path(__file__).resolve().parents[2]
-            / "x5crop/detection/candidate/build/detection.py"
+            / "x5crop/detection/candidate/build/sequence_candidate.py"
         ).read_text(encoding="utf-8")
         calls = tuple(
             node
@@ -68,7 +94,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
     def test_sequence_solver_callers_supply_the_execution_budget(self) -> None:
         source = (
             Path(__file__).resolve().parents[2]
-            / "x5crop/detection/candidate/build/detection.py"
+            / "x5crop/detection/candidate/build/sequence_candidate.py"
         ).read_text(encoding="utf-8")
         calls = tuple(
             node

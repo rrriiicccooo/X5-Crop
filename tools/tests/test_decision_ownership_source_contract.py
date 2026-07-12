@@ -28,8 +28,8 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
         banned = (
             "build_detection_for_outer",
             "select_detection_candidate",
-            "DetectionPolicy",
-            "get_detection_policy",
+            "DetectionConfiguration",
+            "get_detection_configuration",
         )
         offenders: list[str] = []
         for path in DECISION_ROOT.rglob("*.py"):

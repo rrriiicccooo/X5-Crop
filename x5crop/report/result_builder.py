@@ -19,8 +19,7 @@ def result_from_detection(
     review_copy: Optional[str],
     warnings: list[str],
     *,
-    policy_id: str,
-    runtime_policy_detail: dict[str, Any],
+    configuration_detail: dict[str, Any],
     transform_geometry: TransformGeometryEvidence,
     analysis_reuse_signature: dict[str, Any],
 ) -> ProcessResult:
@@ -31,8 +30,7 @@ def result_from_detection(
         output_files=output_files,
         review_copy=review_copy,
         warnings=warnings,
-        policy_id=policy_id,
-        runtime_policy=runtime_policy_detail,
+        configuration=configuration_detail,
         transform_geometry=transform_geometry,
         analysis_reuse_signature=analysis_reuse_signature,
     )
@@ -50,7 +48,9 @@ def result_from_cached_record(
 ) -> ProcessResult:
     report_record = dict(cached_record)
     report_record["source"] = str(input_file)
-    report_record["profile"] = json_safe(asdict(profile))
+    input_detail = dict(cached_record["input"])
+    input_detail["profile"] = json_safe(asdict(profile))
+    report_record["input"] = input_detail
     report_record["analysis_reuse"] = {"used": True}
     output_detail = dict(cached_record["output"])
     output_detail["output_files"] = list(output_files)

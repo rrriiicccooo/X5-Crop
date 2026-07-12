@@ -19,8 +19,8 @@ from ..output.surface import OutputSurface
 from ..image.gray import BaseGrayParameters, make_base_gray_u8
 from ..image.transforms import rotate_array_expand
 from ..io.tiff import read_tiff
-from ..policies.runtime.bundle import DetectionPolicyBundle
-from ..policies.runtime.policy import DetectionPolicy
+from ..configuration.bundle import DetectionConfigurationBundle
+from ..configuration.model import DetectionConfiguration
 from ..report.restoration import (
     final_detection_from_record as _final_detection_from_record,
     transform_geometry_from_record as _transform_geometry_from_record,
@@ -65,9 +65,9 @@ def config_cache_signature(config: RunConfig) -> dict[str, Any]:
     }
 
 
-def analysis_policy_fingerprint(policy: DetectionPolicy) -> str:
+def analysis_configuration_fingerprint(configuration: DetectionConfiguration) -> str:
     payload = json.dumps(
-        asdict(policy),
+        asdict(configuration),
         sort_keys=True,
         separators=(",", ":"),
         default=str,
@@ -79,14 +79,14 @@ def make_analysis_reuse_signature(
     input_file: Path,
     profile: ImageProfile,
     config: RunConfig,
-    policy: DetectionPolicy,
+    configuration: DetectionConfiguration,
 ) -> dict[str, Any]:
     return {
         "script": SCRIPT_NAME,
         "script_version": VERSION,
         "source": source_cache_signature(input_file, profile, config.page),
         "config": config_cache_signature(config),
-        "policy_fingerprint": analysis_policy_fingerprint(policy),
+        "configuration_fingerprint": analysis_configuration_fingerprint(configuration),
     }
 
 
@@ -95,7 +95,7 @@ def cached_record_matches(
     input_file: Path,
     profile: ImageProfile,
     config: RunConfig,
-    policy: DetectionPolicy,
+    configuration: DetectionConfiguration,
 ) -> bool:
     if current_report_record_errors(record):
         return False
@@ -106,7 +106,7 @@ def cached_record_matches(
         return False
     if cache.get("script") != SCRIPT_NAME or cache.get("script_version") != VERSION:
         return False
-    if cache.get("policy_fingerprint") != analysis_policy_fingerprint(policy):
+    if cache.get("configuration_fingerprint") != analysis_configuration_fingerprint(configuration):
         return False
     expected_source = source_cache_signature(input_file, profile, config.page)
     expected_config = config_cache_signature(config)
@@ -117,7 +117,10 @@ def cached_record_matches(
         return False
     if cached_config != expected_config:
         return False
-    return str(record["status"]) in {"approved_auto", "needs_review"}
+    return str(record["decision"]["status"]) in {
+        "approved_auto",
+        "needs_review",
+    }
 
 
 def load_report_records(report_path: Path) -> list[dict[str, Any]]:
@@ -152,11 +155,11 @@ def find_reusable_analysis(
     output_dir: Path,
     profile: ImageProfile,
     config: RunConfig,
-    policy: DetectionPolicy,
+    configuration: DetectionConfiguration,
 ) -> dict[str, Any] | None:
     report_path = output_dir / REPORT_JSONL_NAME
     for record in load_report_records(report_path):
-        if not cached_record_matches(record, input_file, profile, config, policy):
+        if not cached_record_matches(record, input_file, profile, config, configuration):
             continue
         if Path(str(record["source"])).name == input_file.name:
             return record
@@ -187,7 +190,7 @@ def result_from_reusable_analysis(
     output_surface: OutputSurface,
     profile: ImageProfile,
     warnings: list[str],
-    policy_bundle: DetectionPolicyBundle,
+    configuration_bundle: DetectionConfigurationBundle,
 ) -> ProcessResult | None:
     if not (config.reuse_analysis and not config.dry_run and not config.debug_analysis):
         return None
@@ -196,7 +199,7 @@ def result_from_reusable_analysis(
         output_surface.root,
         profile,
         config,
-        policy_bundle.initial_policy,
+        configuration_bundle.initial_configuration,
     )
     if cached_record is None:
         return None
@@ -222,15 +225,18 @@ def result_from_reusable_analysis(
         )
 
     arr, profile, page_warnings = read_tiff(input_file, config.page)
-    policy = policy_bundle.policy_for(
-        str(cached_record["format_id"]),
-        str(cached_record["strip_mode"]),
+    selection = cached_record["selection"]
+    selected = selection["candidates"][int(selection["selected_rank"]) - 1]
+    sequence = selected["sequence_solution"]
+    configuration = configuration_bundle.configuration_for(
+        str(sequence["format_id"]),
+        str(sequence["strip_mode"]),
     )
     gray = make_base_gray_u8(
         arr,
         profile.axes,
         profile.photometric,
-        policy.preprocess.base_gray,
+        configuration.preprocess.base_gray,
     )
     warnings.extend(warning for warning in page_warnings if warning not in warnings)
     source_arr = arr
@@ -240,7 +246,7 @@ def result_from_reusable_analysis(
         gray,
         profile.axes,
         profile.photometric,
-        policy.preprocess.base_gray,
+        configuration.preprocess.base_gray,
         transform_geometry,
         warnings,
     )

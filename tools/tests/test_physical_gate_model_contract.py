@@ -10,7 +10,7 @@ from x5crop.detection.candidate.assessment.separator_support import separator_se
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.domain import Box, EvidenceState
 from x5crop.entry.cli import build_parser
-from x5crop.policies.registry import get_detection_policy
+from x5crop.configuration.registry import get_detection_configuration
 from x5crop.run_config import RunConfig
 from x5crop.runtime.options import RuntimeOptions
 

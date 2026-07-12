@@ -16,7 +16,7 @@ from ...domain import (
     VisibleSequenceSpan,
 )
 from .boundary import HolderOcclusionEvidence
-from .spacing import InterFrameRelation
+from .spacing import InterFrameSpacing
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,7 @@ class SequenceSolution:
     separator_observations: tuple[SeparatorBandObservation, ...]
     separator_assignments: tuple[SeparatorAssignment, ...]
     frame_boundaries: tuple[FrameBoundary, ...]
-    inter_frame_relations: tuple[InterFrameRelation, ...]
+    inter_frame_spacings: tuple[InterFrameSpacing, ...]
     holder_occlusion: HolderOcclusionEvidence
     frame_dimension_prior: FrameDimensionPrior
     residuals: SequenceResiduals

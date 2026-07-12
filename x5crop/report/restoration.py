@@ -214,31 +214,36 @@ def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
     errors = current_report_record_errors(record)
     if errors:
         raise ValueError("invalid current report record: " + ",".join(errors))
+    selection = record["selection"]
+    selected = selection["candidates"][int(selection["selected_rank"]) - 1]
+    sequence = selected["sequence_solution"]
+    decision = record["decision"]
+    output = record["output"]
     return FinalDetection(
-        format_id=str(record["format_id"]),
-        layout=str(record["layout"]),
-        strip_mode=str(record["strip_mode"]),
-        count=int(record["count"]),
+        format_id=str(sequence["format_id"]),
+        layout=str(sequence["layout"]),
+        strip_mode=str(sequence["strip_mode"]),
+        count=int(sequence["count"]),
         visible_sequence_span=VisibleSequenceSpan(
-            _box(record["visible_sequence_span"]["box"])
+            _box(sequence["visible_sequence_span"]["box"])
         ),
-        crop_envelope=CropEnvelope(_box(record["crop_envelope"]["box"])),
-        decision_gate=_decision_gate(record["decision_gate"]),
-        decision_geometry=_output_geometry(record["decision_geometry"]),
-        output_geometry=_output_geometry(record["output_geometry"]),
+        crop_envelope=CropEnvelope(_box(sequence["crop_envelope"]["box"])),
+        decision_gate=_decision_gate(decision["gate"]),
+        decision_geometry=_output_geometry(output["decision_geometry"]),
+        output_geometry=_output_geometry(output["final_geometry"]),
         separator_observations=tuple(
-            _observation(item) for item in record["separator_observations"]
+            _observation(item) for item in sequence["separator_observations"]
         ),
         separator_assignments=tuple(
-            _assignment(item) for item in record["separator_assignments"]
+            _assignment(item) for item in sequence["separator_assignments"]
         ),
         frame_boundaries=tuple(
-            _frame_boundary(item) for item in record["frame_boundaries"]
+            _frame_boundary(item) for item in sequence["frame_boundaries"]
         ),
-        frame_bleed_plan=_frame_bleed_plan(
-            record["output"]["frame_bleed_plan"]
+        frame_bleed_plan=_frame_bleed_plan(output["frame_bleed_plan"]),
+        scan_calibration=_scan_calibration(
+            record["input"]["scan_calibration"]
         ),
-        scan_calibration=_scan_calibration(record["scan_calibration"]),
         diagnostics=tuple(str(item) for item in record["diagnostics"]["detection"]),
         selection=None,
     )

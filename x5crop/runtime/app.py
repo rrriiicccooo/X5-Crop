@@ -22,8 +22,8 @@ def print_run_header(invocation: RuntimeInvocation) -> None:
     print(f"files: {len(files)}")
     layout_label = f"auto(probe={config.layout})" if config.layout_auto else config.layout
     mode_parts = [f"layout: {layout_label}", f"strip: {config.strip_mode}"]
-    policy = invocation.policy_bundle.initial_policy
-    mode_parts.append(f"policy: {policy.policy_id}")
+    configuration = invocation.configuration_bundle.initial_configuration
+    mode_parts.append(f"configuration: {configuration.configuration_id}")
     if config.strip_mode == "partial" and config.requested_count is None:
         mode_parts.append("count: auto")
     if config.debug_analysis:
@@ -42,7 +42,7 @@ def print_run_header(invocation: RuntimeInvocation) -> None:
 
 def print_process_result(result: ProcessResult, config: RunConfig) -> None:
     record = result.record
-    print(f"  status={record['status']}")
+    print(f"  status={record['decision']['status']}")
     for warning in record["output"]["warnings"]:
         print(f"  info: {warning}")
     output_files = record["output"]["output_files"]
@@ -75,7 +75,7 @@ def process_parallel_files(
                 process_one,
                 path,
                 worker_config,
-                invocation.policy_bundle,
+                invocation.configuration_bundle,
             ): path
             for path in files
         }
@@ -85,8 +85,12 @@ def process_parallel_files(
             try:
                 result = future.result()
                 ok += 1
-                approved += int(result.record["status"] == "approved_auto")
-                review += int(result.record["status"] == "needs_review")
+                approved += int(
+                    result.record["decision"]["status"] == "approved_auto"
+                )
+                review += int(
+                    result.record["decision"]["status"] == "needs_review"
+                )
                 write_report_outputs_for_result(result, config)
                 print_process_result(result, config)
             except Exception as exc:
@@ -115,10 +119,14 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
         for index, path in enumerate(files, start=1):
             print(f"\n[{index}/{total}] {path.name}")
             try:
-                result = process_one(path, worker_config, invocation.policy_bundle)
+                result = process_one(path, worker_config, invocation.configuration_bundle)
                 ok += 1
-                approved += int(result.record["status"] == "approved_auto")
-                review += int(result.record["status"] == "needs_review")
+                approved += int(
+                    result.record["decision"]["status"] == "approved_auto"
+                )
+                review += int(
+                    result.record["decision"]["status"] == "needs_review"
+                )
                 write_report_outputs_for_result(result, config)
                 print_process_result(result, config)
             except Exception as exc:

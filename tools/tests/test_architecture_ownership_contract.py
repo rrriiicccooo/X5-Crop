@@ -6,7 +6,6 @@ import unittest
 from tools.tests.architecture_contracts import (
     PROJECT_ROOT,
     duplicate_dataclass_models,
-    translated_parameter_models,
 )
 
 
@@ -22,31 +21,19 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             "x5crop/output/geometry_adjustment.py",
             "x5crop/output/protection.py",
             "x5crop/runtime/output_protection.py",
-            "x5crop/policies/parameters/exposure_overlap.py",
-            "x5crop/policies/runtime/sequence.py",
-            "x5crop/policies/assembly/sequence.py",
+            "x5crop/configuration/profiles.py",
+            "x5crop/configuration/assembly.py",
         )
         self.assertEqual(
             [relative for relative in removed if (PROJECT_ROOT / relative).exists()],
             [],
         )
 
-    def test_runtime_policy_has_current_physical_groups_only(self) -> None:
-        from x5crop.policies.parameters.aggregate import FormatParameters
-        from x5crop.policies.runtime.policy import DetectionPolicy
+    def test_runtime_configuration_has_current_physical_groups_only(self) -> None:
+        from x5crop.configuration.model import DetectionConfiguration
 
         self.assertEqual(
-            tuple(FormatParameters.__dataclass_fields__),
-            (
-                "preprocess",
-                "content",
-                "separator",
-                "candidate",
-                "diagnostics",
-            ),
-        )
-        self.assertEqual(
-            tuple(DetectionPolicy.__dataclass_fields__),
+            tuple(DetectionConfiguration.__dataclass_fields__),
             (
                 "physical_spec",
                 "strip_mode",
@@ -60,35 +47,36 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
         )
 
     def test_candidate_plan_contains_budget_parameters_not_source_labels(self) -> None:
-        from x5crop.policies.parameters.candidate import CandidatePlanParameters
+        from x5crop.configuration.candidate import CandidatePlanParameters
 
         self.assertEqual(
             tuple(CandidatePlanParameters.__dataclass_fields__),
             ("sequence_hypotheses", "sequence_solver", "dual_lane_divider"),
         )
 
-    def test_policy_identity_is_derived_from_format_and_mode(self) -> None:
-        from x5crop.policies.runtime.policy import DetectionPolicy
+    def test_configuration_identity_is_derived_from_format_and_mode(self) -> None:
+        from x5crop.configuration.model import DetectionConfiguration
 
-        self.assertNotIn("policy_id", DetectionPolicy.__dataclass_fields__)
-        self.assertIsInstance(DetectionPolicy.policy_id, property)
+        self.assertNotIn(
+            "configuration_id",
+            DetectionConfiguration.__dataclass_fields__,
+        )
+        self.assertIsInstance(
+            DetectionConfiguration.configuration_id,
+            property,
+        )
 
-    def test_parameter_layers_do_not_duplicate_or_translate_models(self) -> None:
+    def test_legacy_policy_topology_is_absent(self) -> None:
+        self.assertFalse((PROJECT_ROOT / "x5crop/policies").exists())
+
+    def test_configuration_does_not_duplicate_foundation_models(self) -> None:
         self.assertEqual(
             duplicate_dataclass_models(
                 "x5crop.geometry.detection_parameters",
-                "x5crop.policies.parameters",
+                "x5crop.configuration",
             ),
             [],
         )
-        self.assertEqual(
-            duplicate_dataclass_models(
-                "x5crop.policies.parameters",
-                "x5crop.policies.runtime",
-            ),
-            [],
-        )
-        self.assertEqual(translated_parameter_models(), [])
 
     def test_evidence_cache_keys_include_parameters_and_exact_geometry(self) -> None:
         frame_support = (
@@ -111,16 +99,11 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             separator_cache,
         )
 
-    def test_policy_assembly_has_one_central_builder(self) -> None:
-        assembly = PROJECT_ROOT / "x5crop/policies/assembly"
-        self.assertTrue((assembly / "factory.py").is_file())
-        for obsolete in (
-            "format_presets.py",
-            "presets.py",
-            "output.py",
-            "finalization.py",
-        ):
-            self.assertFalse((assembly / obsolete).exists())
+    def test_configuration_registry_is_the_only_builder(self) -> None:
+        root = PROJECT_ROOT / "x5crop/configuration"
+        self.assertTrue((root / "registry.py").is_file())
+        for obsolete in ("profiles.py", "assembly.py", "aggregate.py"):
+            self.assertFalse((root / obsolete).exists())
 
     def test_contract_test_modules_keep_one_reviewable_responsibility(self) -> None:
         offenders = [

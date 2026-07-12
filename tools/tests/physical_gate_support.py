@@ -383,7 +383,7 @@ def candidate_fixture(
         separator_observations=(observation,),
         separator_assignments=(assignment,),
         frame_boundaries=(boundary,),
-        inter_frame_relations=(relation,),
+        inter_frame_spacings=(relation,),
         holder_occlusion=HolderOcclusionEvidence.not_applicable(),
         frame_dimension_prior=FrameDimensionPrior(
             PixelInterval.exact(100.0),

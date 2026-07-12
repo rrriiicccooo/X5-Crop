@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from ..physical.model import SequenceSolution
 from ..physical.boundary import HolderOcclusionEvidence
 from ..physical.spacing import (
-    InterFrameRelation,
+    InterFrameSpacing,
     SequenceConservationEvidence,
     sequence_conservation_evidence,
 )
@@ -15,7 +15,7 @@ from x5crop.domain import PixelInterval
 @dataclass(frozen=True)
 class FrameSequenceEvidence:
     holder_occlusion: HolderOcclusionEvidence
-    spacings: tuple[InterFrameRelation, ...]
+    spacings: tuple[InterFrameSpacing, ...]
     conservation: SequenceConservationEvidence
 
 
@@ -28,11 +28,11 @@ def frame_sequence_evidence(
         ),
         count=geometry.count,
         frame_width_px=geometry.frame_dimension_prior.width_px,
-        spacings=geometry.inter_frame_relations,
+        spacings=geometry.inter_frame_spacings,
         holder_occlusion=geometry.holder_occlusion,
     )
     return FrameSequenceEvidence(
         geometry.holder_occlusion,
-        geometry.inter_frame_relations,
+        geometry.inter_frame_spacings,
         conservation,
     )

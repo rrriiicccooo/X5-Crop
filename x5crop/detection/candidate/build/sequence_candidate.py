@@ -5,8 +5,8 @@ from ....cache.separator import cached_separator_profile
 from ....constants import CANDIDATE_SOURCE_FRAME_SEQUENCE
 from ....domain import Box, CropEnvelope, HolderSpan, SequenceHypothesis
 from ....formats import FormatPhysicalSpec
-from ....policies.runtime.separator import SeparatorPolicy
-from ....policies.parameters.candidate import SequenceSolverParameters
+from ....configuration.separator import SeparatorConfiguration
+from ....configuration.candidate import SequenceSolverParameters
 from ....units import ScanCalibration
 from ...context import DetectionRequest
 from ...physical.model import SequenceSolution
@@ -40,7 +40,7 @@ def _separator_measurement_corridor(
     return corridor if corridor.valid() else holder
 
 
-def build_frame_sequence_geometry(
+def build_sequence_candidate(
     request: DetectionRequest,
     fmt: FormatPhysicalSpec,
     count_hypothesis: CountHypothesis,
@@ -48,7 +48,7 @@ def build_frame_sequence_geometry(
     scan_calibration: ScanCalibration,
     *,
     cache: MeasurementCache,
-    separator_policy: SeparatorPolicy,
+    separator_policy: SeparatorConfiguration,
     solver_parameters: SequenceSolverParameters,
 ) -> BuiltCandidate:
     if cache.layout != request.layout:
@@ -136,7 +136,7 @@ def build_frame_sequence_geometry(
             separator_observations=observations,
             separator_assignments=solved.assignments,
             frame_boundaries=solved.boundaries,
-            inter_frame_relations=solved.relations,
+            inter_frame_spacings=solved.relations,
             holder_occlusion=holder_occlusion,
             frame_dimension_prior=dimensions,
             residuals=solved.residuals,

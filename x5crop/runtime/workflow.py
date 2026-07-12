@@ -22,8 +22,8 @@ from ..geometry.layout import infer_layout
 from ..image.gray import make_base_gray_u8
 from ..io.tiff import read_tiff, read_tiff_profile
 from ..output.surface import output_surface_for_input
-from ..policies.reporting import detection_policy_report_detail
-from ..policies.runtime.bundle import DetectionPolicyBundle
+from ..report.configuration import detection_configuration_read_model
+from ..configuration.bundle import DetectionConfigurationBundle
 from ..report.result_builder import result_from_detection
 from ..units import scan_calibration_from_profile
 from ..utils import spatial_shape_from_shape
@@ -32,7 +32,7 @@ from ..utils import spatial_shape_from_shape
 def process_one(
     input_file: Path,
     config: RunConfig,
-    policy_bundle: DetectionPolicyBundle,
+    configuration_bundle: DetectionConfigurationBundle,
 ) -> ProcessResult:
     output_surface = output_surface_for_input(input_file, config)
     output_dir = output_surface.root
@@ -40,15 +40,15 @@ def process_one(
     height, width = spatial_shape_from_shape(profile.shape)
     layout = infer_layout(width, height) if config.layout_auto else config.layout
     config = replace(config, layout=layout)
-    initial_policy = policy_bundle.initial_policy
-    fmt = initial_policy.physical_spec
+    initial_configuration = configuration_bundle.initial_configuration
+    fmt = initial_configuration.physical_spec
 
-    cached_result = result_from_reusable_analysis(input_file, config, output_surface, profile, warnings, policy_bundle)
+    cached_result = result_from_reusable_analysis(input_file, config, output_surface, profile, warnings, configuration_bundle)
     if cached_result is not None:
         return cached_result
 
     arr, profile, page_warnings = read_tiff(input_file, config.page)
-    gray = make_base_gray_u8(arr, profile.axes, profile.photometric, initial_policy.preprocess.base_gray)
+    gray = make_base_gray_u8(arr, profile.axes, profile.photometric, initial_configuration.preprocess.base_gray)
     _extend_unique(warnings, page_warnings)
     source_arr = arr
 
@@ -57,15 +57,15 @@ def process_one(
         gray,
         profile,
         config,
-        initial_policy.preprocess,
+        initial_configuration.preprocess,
         warnings,
     )
-    scan_calibration = scan_calibration_from_profile(profile, initial_policy.preprocess.scan_calibration_trust)
+    scan_calibration = scan_calibration_from_profile(profile, initial_configuration.preprocess.scan_calibration_trust)
     measurement_cache = make_measurement_cache(
         gray,
         config.layout,
-        initial_policy.preprocess.content_evidence_image,
-        initial_policy.preprocess.image_statistics,
+        initial_configuration.preprocess.content_evidence_image,
+        initial_configuration.preprocess.image_statistics,
     )
     detection_context = DetectionContext(
         image_profile=profile,
@@ -75,16 +75,16 @@ def process_one(
             strip_mode=config.strip_mode,
             requested_count=config.requested_count,
         ),
-        policy=initial_policy,
-        lane_policy=(
+        configuration=initial_configuration,
+        lane_configuration=(
             None
             if fmt.lane_format_id is None
-            else policy_bundle.policy_for(fmt.lane_format_id, "full")
+            else configuration_bundle.configuration_for(fmt.lane_format_id, "full")
         ),
         measurement_cache=measurement_cache,
     )
     selection = choose_detection(detection_context)
-    selected_policy = detection_context.policy
+    selected_configuration = detection_context.configuration
     prepared_frame_bleed = prepare_frame_bleed(
         selection.selected,
         AxisBleedParameters(
@@ -100,7 +100,7 @@ def process_one(
         image_width=int(gray.shape[1]),
         image_height=int(gray.shape[0]),
     )
-    runtime_policy_detail = detection_policy_report_detail(selected_policy)
+    configuration_detail = detection_configuration_read_model(selected_configuration)
     detection = finalize_detection(
         decided_detection,
         image_width=int(gray.shape[1]),
@@ -124,8 +124,8 @@ def process_one(
         input_file.stem,
         config,
         warnings,
-        selected_policy.diagnostics,
-        selected_policy.preprocess.separator_evidence_image,
+        selected_configuration.diagnostics,
+        selected_configuration.preprocess.separator_evidence_image,
     )
 
     result = result_from_detection(
@@ -135,14 +135,13 @@ def process_one(
         output_files,
         review_copy,
         warnings,
-        policy_id=selected_policy.policy_id,
-        runtime_policy_detail=runtime_policy_detail,
+        configuration_detail=configuration_detail,
         transform_geometry=transform_geometry,
         analysis_reuse_signature=make_analysis_reuse_signature(
             input_file,
             profile,
             config,
-            selected_policy,
+            selected_configuration,
         ),
     )
     return result

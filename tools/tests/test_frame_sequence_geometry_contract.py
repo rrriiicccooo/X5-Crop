@@ -30,7 +30,7 @@ from x5crop.detection.physical.separator.observations import (
     measure_separator_bands,
 )
 from x5crop.domain import SeparatorBandObservation
-from x5crop.policies.parameters.separator import SeparatorObservationParameters
+from x5crop.configuration.separator import SeparatorObservationParameters
 from x5crop.domain import MeasurementProvenance
 from x5crop.domain import Box
 from x5crop.detection.physical.model import SequenceSolution
@@ -340,7 +340,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                 "test",
                 MeasurementProvenance("frame_dimensions", "test", ()),
             ),
-            inter_frame_relations=(
+            inter_frame_spacings=(
                 observed_spacing_evidence(
                     1,
                     PixelInterval.exact(5.0),

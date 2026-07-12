@@ -12,13 +12,12 @@ from x5crop.report.validation import validate_current_report_record
 
 
 DEFAULT_FIELDS = (
-    "status",
-    "final_review_reasons",
-    "output_geometry.crop_envelope",
-    "output_geometry.frame_boxes",
-    "separator_observations",
-    "separator_assignments",
-    "frame_boundaries",
+    "decision.status",
+    "decision.final_review_reasons",
+    "selection.selected_rank",
+    "selection.geometry_resolution",
+    "output.final_geometry.crop_envelope",
+    "output.final_geometry.frame_boxes",
 )
 
 

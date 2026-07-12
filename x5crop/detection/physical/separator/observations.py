@@ -5,7 +5,7 @@ from math import ceil, floor
 import numpy as np
 
 from ....domain import MeasurementProvenance
-from ....policies.parameters.separator import SeparatorObservationParameters
+from ....configuration.separator import SeparatorObservationParameters
 from ....utils import runs_from_mask, sampled_percentile
 from x5crop.domain import PixelInterval, SeparatorBandObservation
 

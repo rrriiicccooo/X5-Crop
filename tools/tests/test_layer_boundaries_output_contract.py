@@ -41,12 +41,12 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertIn("frame_sequence.spacings", source)
         self.assertNotIn(".detail", source)
 
-    def test_debug_policy_and_renderers_define_exactly_three_panels(self) -> None:
-        from x5crop.policies.registry import get_detection_policy
+    def test_debug_configuration_and_renderers_define_three_panels(self) -> None:
+        from x5crop.configuration.registry import get_detection_configuration
 
-        policy = get_detection_policy("135", "full").diagnostics
+        configuration = get_detection_configuration("135", "full").diagnostics
         self.assertEqual(
-            policy.debug_panels,
+            configuration.debug_panels,
             ("original_gray", "debug_boxes", "separator_evidence"),
         )
         tree = ast.parse(
@@ -64,7 +64,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             for key in node.value.keys
             if isinstance(key, ast.Constant) and isinstance(key.value, str)
         }
-        self.assertEqual(panel_ids, set(policy.debug_panels))
+        self.assertEqual(panel_ids, set(configuration.debug_panels))
 
     def test_runtime_resolves_format_mode_once(self) -> None:
         bootstrap = (PROJECT_ROOT / "x5crop/runtime/bootstrap.py").read_text(
@@ -75,8 +75,8 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             for path in (PROJECT_ROOT / "x5crop/runtime").glob("*.py")
             if path.name != "bootstrap.py"
         )
-        self.assertEqual(bootstrap.count("DetectionPolicyBundle.for_format_mode"), 1)
-        self.assertNotIn("DetectionPolicyBundle.for_format_mode", other_runtime)
+        self.assertEqual(bootstrap.count("DetectionConfigurationBundle.for_format_mode"), 1)
+        self.assertNotIn("DetectionConfigurationBundle.for_format_mode", other_runtime)
 
     def test_frame_bleed_plan_has_explicit_physical_inputs(self) -> None:
         from x5crop.output.frame_bleed import frame_bleed_plan
@@ -109,7 +109,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("apply_frame_bleed", source)
-        for forbidden in ("gray", "DetectionPolicy", "separator", "content", "Candidate"):
+        for forbidden in ("gray", "DetectionConfiguration", "separator", "content", "Candidate"):
             self.assertNotIn(forbidden, source)
 
     def test_output_layer_is_independent_of_detection_and_runtime(self) -> None:
@@ -118,7 +118,7 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             [],
         )
 
-    def test_report_debug_and_output_do_not_resolve_policy_registry(self) -> None:
+    def test_report_debug_and_output_do_not_resolve_configuration_registry(self) -> None:
         source = "\n".join(
             path.read_text(encoding="utf-8")
             for root in (
@@ -128,8 +128,8 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
             )
             for path in root.rglob("*.py")
         )
-        self.assertNotIn("get_detection_policy", source)
-        self.assertNotIn("DetectionPolicyBundle.for_format_mode", source)
+        self.assertNotIn("get_detection_configuration", source)
+        self.assertNotIn("DetectionConfigurationBundle.for_format_mode", source)
 
 
 if __name__ == "__main__":

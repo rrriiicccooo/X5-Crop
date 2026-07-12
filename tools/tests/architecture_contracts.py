@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SOURCE_ROOT = PROJECT_ROOT / "x5crop"
 
 RUNTIME_ROOTS = frozenset({"x5crop.entry.cli"})
-STANDALONE_ROOTS = frozenset({"x5crop.policies.consistency"})
+STANDALONE_ROOTS = frozenset({"x5crop.configuration.consistency"})
 STANDALONE_TOOL_ROOTS = frozenset(
     {
         "tools.build_standalone",
@@ -43,7 +43,7 @@ SOURCE_LAYER_PREFIXES: dict[str, tuple[str, ...]] = {
     "entry": ("x5crop.entry",),
     "runtime": ("x5crop.runtime",),
     "formats": ("x5crop.formats",),
-    "policies": ("x5crop.policies",),
+    "configuration": ("x5crop.configuration",),
     "cache": ("x5crop.cache",),
     "geometry": ("x5crop.geometry",),
     "image": ("x5crop.image",),
@@ -233,50 +233,6 @@ def duplicate_dataclass_models(
         right = [name for name in names if module_has_prefix(name, (right_prefix,))]
         offenders.extend((left_name, right_name) for left_name in left for right_name in right)
     return sorted(offenders)
-
-
-def translated_parameter_models() -> list[tuple[str, str]]:
-    parameter_models: dict[str, tuple[str, frozenset[str]]] = {}
-    runtime_models: dict[str, tuple[str, frozenset[str]]] = {}
-    for module in source_modules().values():
-        if not module_has_prefix(
-            module.name,
-            ("x5crop.policies.parameters", "x5crop.policies.runtime"),
-        ):
-            continue
-        for node in parsed_source(module).body:
-            if not isinstance(node, ast.ClassDef):
-                continue
-            is_dataclass = any(
-                (isinstance(decorator, ast.Name) and decorator.id == "dataclass")
-                or (
-                    isinstance(decorator, ast.Call)
-                    and isinstance(decorator.func, ast.Name)
-                    and decorator.func.id == "dataclass"
-                )
-                for decorator in node.decorator_list
-            )
-            if not is_dataclass:
-                continue
-            stem = node.name.removesuffix("Parameters").removesuffix("Policy")
-            qualified = f"{module.name}.{node.name}"
-            field_names = frozenset(
-                statement.target.id
-                for statement in node.body
-                if isinstance(statement, ast.AnnAssign)
-                and isinstance(statement.target, ast.Name)
-            )
-            if module.name.startswith("x5crop.policies.parameters"):
-                if module.name == "x5crop.policies.parameters.aggregate":
-                    continue
-                parameter_models[stem] = (qualified, field_names)
-            else:
-                runtime_models[stem.removeprefix("Runtime")] = (qualified, field_names)
-    return sorted(
-        (parameter_models[stem][0], runtime_models[stem][0])
-        for stem in parameter_models.keys() & runtime_models.keys()
-        if len(parameter_models[stem][1] & runtime_models[stem][1]) >= 4
-    )
 
 
 def unreferenced_top_level_symbols() -> list[str]:

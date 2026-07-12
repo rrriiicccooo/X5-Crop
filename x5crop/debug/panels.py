@@ -9,7 +9,7 @@ from ..image.evidence import (
     SeparatorEvidenceImageParameters,
     make_separator_evidence_gray,
 )
-from ..policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
+from ..configuration.diagnostics import DiagnosticsConfiguration
 from .canvas import (
     DebugRenderCache,
     FRAME_FILL_COLORS,
@@ -93,7 +93,7 @@ def make_separator_evidence_debug_rgb(
 def make_debug_analysis_panel(
     gray: np.ndarray,
     detection: FinalDetection,
-    diagnostics: RuntimeDiagnosticsPolicy,
+    diagnostics: DiagnosticsConfiguration,
     separator_evidence_image: SeparatorEvidenceImageParameters,
     render_cache: DebugRenderCache,
 ) -> np.ndarray:

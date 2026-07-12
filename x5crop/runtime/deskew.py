@@ -10,7 +10,7 @@ from ..geometry.layout import work_gray
 from ..image.deskew import choose_deskew_angle
 from ..image.gray import make_base_gray_u8
 from ..image.transforms import rotate_array_expand
-from ..policies.runtime.preprocess import RuntimePreprocessPolicy
+from ..configuration.preprocess import PreprocessConfiguration
 from ..utils import clamp_float
 from ..run_config import RunConfig
 
@@ -20,7 +20,7 @@ def apply_deskew(
     gray: Any,
     profile: ImageProfile,
     config: RunConfig,
-    preprocess: RuntimePreprocessPolicy,
+    preprocess: PreprocessConfiguration,
     warnings: list[str],
 ) -> tuple[Any, Any, TransformGeometryEvidence]:
     deskew = preprocess.deskew

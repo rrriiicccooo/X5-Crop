@@ -76,7 +76,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
                 ),
                 (
                     "x5crop.runtime",
-                    "x5crop.policies",
+                    "x5crop.configuration",
                     "x5crop.detection",
                     "x5crop.report",
                     "x5crop.debug",
@@ -168,10 +168,10 @@ class LayerBoundariesContractTest(unittest.TestCase):
         self.assertEqual(modules_with_export_lists(), [])
         self.assertEqual(pass_through_classes(), [])
 
-    def test_active_interfaces_are_typed_and_policy_defaults_are_explicit(self) -> None:
+    def test_active_interfaces_are_typed_and_configuration_defaults_are_explicit(self) -> None:
         self.assertEqual(functions_with_untyped_parameters(), [])
         self.assertEqual(
-            invalid_dataclass_default_factories("x5crop.policies.runtime"),
+            invalid_dataclass_default_factories("x5crop.configuration"),
             [],
         )
 
@@ -183,7 +183,7 @@ class LayerBoundariesContractTest(unittest.TestCase):
                 "entry",
                 "runtime",
                 "formats",
-                "policies",
+                "configuration",
                 "cache",
                 "geometry",
                 "image",

@@ -6,11 +6,31 @@ from typing import Any
 
 from ..detection.candidate.model import AssessedCandidate
 from ..detection.decision.model import FinalDetection
+from ..detection.physical.spacing import (
+    ObservedSpacingEvidence,
+    SpacingHypothesis,
+)
 
 
 def typed_read_model(value: Any) -> Any:
     if isinstance(value, Enum):
         return value.value
+    if isinstance(value, (ObservedSpacingEvidence, SpacingHypothesis)):
+        return {
+            "measurement_kind": (
+                "observed"
+                if isinstance(value, ObservedSpacingEvidence)
+                else "hypothesis"
+            ),
+            "index": int(value.index),
+            "state": value.state.value,
+            "kind": value.kind,
+            "signed_width_px": typed_read_model(value.signed_width_px),
+            "provenance": typed_read_model(value.provenance),
+            "reason": value.reason,
+            "lane_index": value.lane_index,
+            "independently_observed": bool(value.independently_observed),
+        }
     if is_dataclass(value) and not isinstance(value, type):
         return {
             field.name: typed_read_model(getattr(value, field.name))
@@ -50,27 +70,8 @@ def candidate_evidence_read_model(candidate: AssessedCandidate) -> dict[str, Any
 
 
 def candidate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
-    geometry = candidate.geometry
     return {
-        "format_id": geometry.format_id,
-        "strip_mode": geometry.strip_mode,
-        "count": int(geometry.count),
-        "source": geometry.source,
-        "sequence_hypothesis": geometry.sequence_hypothesis_name,
-        "sequence_strategy": geometry.sequence_hypothesis_strategy,
-        "holder_span": typed_read_model(geometry.holder_span),
-        "visible_sequence_span": typed_read_model(geometry.visible_sequence_span),
-        "crop_envelope": typed_read_model(geometry.crop_envelope),
-        "boundary_observations": typed_read_model(geometry.boundary_observations),
-        "separator_observations": typed_read_model(geometry.separator_observations),
-        "separator_assignments": typed_read_model(geometry.separator_assignments),
-        "frame_boundaries": typed_read_model(geometry.frame_boundaries),
-        "frame_dimension_prior": typed_read_model(
-            geometry.frame_dimension_prior
-        ),
-        "frame_boxes": typed_read_model(geometry.frames),
-        "lane_boxes": typed_read_model(geometry.lane_boxes),
-        "lane_crop_envelopes": typed_read_model(geometry.lane_crop_envelopes),
+        "sequence_solution": typed_read_model(candidate.geometry),
         "evidence_quality": typed_read_model(candidate.assessment.quality),
         "candidate_gate": candidate_gate_read_model(candidate),
         "count_hypothesis": typed_read_model(candidate.count_hypothesis),
@@ -79,28 +80,27 @@ def candidate_read_model(candidate: AssessedCandidate) -> dict[str, Any]:
     }
 
 
-def candidate_table(detection: FinalDetection) -> list[dict[str, Any]]:
-    selection = detection.require_selection()
-    return [
-        {
-            "rank": index,
-            "selected": candidate is selection.selected,
-            **candidate_read_model(candidate),
-        }
-        for index, candidate in enumerate(selection.ranked_candidates, start=1)
-    ]
-
-
 def selection_read_model(detection: FinalDetection) -> dict[str, Any]:
     selection = detection.require_selection()
+    ranks = {
+        id(candidate): index
+        for index, candidate in enumerate(selection.ranked_candidates, start=1)
+    }
     return {
+        "selected_rank": ranks[id(selection.selected)],
         "consensus": selection.consensus,
         "geometry_resolution": typed_read_model(selection.geometry_resolution),
         "count_resolution": typed_read_model(selection.count_resolution),
+        "candidates": [
+            candidate_read_model(candidate)
+            for candidate in selection.ranked_candidates
+        ],
         "clusters": [
             {
-                "candidate_count": len(cluster.candidates),
-                "representative": candidate_read_model(cluster.representative),
+                "candidate_ranks": [
+                    ranks[id(candidate)] for candidate in cluster.candidates
+                ],
+                "representative_rank": ranks[id(cluster.representative)],
             }
             for cluster in selection.clusters
         ],

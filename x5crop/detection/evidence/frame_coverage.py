@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from ...cache import MeasurementCache
 from ...domain import Box
-from ...policies.runtime.content import ContentPolicy
+from ...configuration.content import ContentConfiguration
 from x5crop.domain import VisibleSequenceSpan, HolderSpan
 from .content.regions import content_region_runs
 from x5crop.domain import EvidenceState
@@ -58,7 +58,7 @@ def frame_coverage_evidence(
     visible_sequence_span: VisibleSequenceSpan,
     frames: tuple[Box, ...],
     cache: MeasurementCache,
-    content_policy: ContentPolicy,
+    content_policy: ContentConfiguration,
 ) -> FrameCoverageEvidence:
     holder = holder_span.box.clamp(
         cache.gray_work.shape[1],

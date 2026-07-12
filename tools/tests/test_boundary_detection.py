@@ -17,7 +17,7 @@ from x5crop.domain import (
     VisibleSequenceSpan,
 )
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
-from x5crop.policies.parameters.content import ContentEvidenceParameters
+from x5crop.configuration.content import ContentEvidenceParameters
 
 
 def _statistics(gray: np.ndarray):

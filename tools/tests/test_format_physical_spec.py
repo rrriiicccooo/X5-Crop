@@ -4,9 +4,9 @@ import unittest
 
 from x5crop.formats import FORMATS
 from x5crop.detection.candidate.plan.count_hypotheses import count_hypothesis_plan
-from x5crop.policies.registry import get_detection_policy
-from x5crop.policies.reporting import detection_policy_report_detail
-from x5crop.policies.runtime.bundle import DetectionPolicyBundle
+from x5crop.configuration.registry import get_detection_configuration
+from x5crop.report.configuration import detection_configuration_read_model
+from x5crop.configuration.bundle import DetectionConfigurationBundle
 
 
 class FormatPhysicalSpecTests(unittest.TestCase):
@@ -19,12 +19,12 @@ class FormatPhysicalSpecTests(unittest.TestCase):
         )
         self.assertIsInstance(FormatPhysicalSpec.expected_separator_count, property)
 
-    def test_policy_report_uses_physical_expected_separator_count_for_every_format_mode(self) -> None:
+    def test_configuration_report_uses_physical_separator_count(self) -> None:
         for format_id, spec in FORMATS.items():
             for strip_mode in ("full", "partial"):
                 with self.subTest(format_id=format_id, strip_mode=strip_mode):
-                    policy = get_detection_policy(format_id, strip_mode)
-                    detail = detection_policy_report_detail(policy)
+                    configuration = get_detection_configuration(format_id, strip_mode)
+                    detail = detection_configuration_read_model(configuration)
                     self.assertEqual(
                         detail["physical"]["expected_separator_count"],
                         spec.expected_separator_count,
@@ -63,14 +63,14 @@ class FormatPhysicalSpecTests(unittest.TestCase):
             self.assertEqual(spec.lane_count, 1)
             self.assertIsNone(spec.lane_format_id)
 
-    def test_dual_lane_bundle_resolves_the_physical_lane_policy(self) -> None:
-        bundle = DetectionPolicyBundle.for_format_mode("135-dual", "full")
+    def test_dual_lane_bundle_resolves_the_physical_lane_configuration(self) -> None:
+        bundle = DetectionConfigurationBundle.for_format_mode("135-dual", "full")
         self.assertEqual(
-            bundle.initial_policy.physical_spec.format_id,
+            bundle.initial_configuration.physical_spec.format_id,
             "135-dual",
         )
         self.assertEqual(
-            bundle.policy_for("135", "full").physical_spec.format_id,
+            bundle.configuration_for("135", "full").physical_spec.format_id,
             "135",
         )
 
@@ -104,9 +104,9 @@ class FormatPhysicalSpecTests(unittest.TestCase):
                     can_underfill,
                 )
 
-    def test_policy_report_exposes_physical_aspect_source(self) -> None:
-        policy = get_detection_policy("half", "full")
-        detail = detection_policy_report_detail(policy)
+    def test_configuration_report_exposes_physical_aspect_source(self) -> None:
+        configuration = get_detection_configuration("half", "full")
+        detail = detection_configuration_read_model(configuration)
         physical = detail["physical"]
 
         self.assertEqual(physical["aspect_source"], "frame_size_mm")
@@ -114,9 +114,9 @@ class FormatPhysicalSpecTests(unittest.TestCase):
         self.assertEqual(physical["nominal_frame_size_mm"]["height_mm"], 24.0)
         self.assertAlmostEqual(physical["frame_aspect"], 0.75)
 
-    def test_policy_report_exposes_complete_underfilled_trait(self) -> None:
-        policy = get_detection_policy("120-66", "partial")
-        detail = detection_policy_report_detail(policy)
+    def test_configuration_report_exposes_complete_underfilled_trait(self) -> None:
+        configuration = get_detection_configuration("120-66", "partial")
+        detail = detection_configuration_read_model(configuration)
         self.assertTrue(detail["physical"]["complete_strip_can_be_underfilled"])
 
     def test_complete_underfilled_formats_include_default_count_in_partial_auto(self) -> None:

@@ -92,10 +92,10 @@ Definition of extreme cleanliness and elegance:
 - `CandidateGate` and `DecisionGate` are the only gates. Only `DecisionGate`
   creates final PASS/REVIEW status and `final_review_reasons`.
 - Format names identify physical specs; they do not own algorithm branches.
-  Physical facts, sample-tuned parameters, runtime policy, and report descriptions
-  remain separate concepts.
-- Policy and format resolution happen at the runtime boundary. Lower layers
-  receive explicit specs, subpolicies, or plain parameter objects and never query
+  Physical facts, adaptive measurement parameters, runtime configuration, and
+  report descriptions remain separate concepts.
+- Configuration and format resolution happen at the runtime boundary. Lower layers
+  receive explicit specs, configuration groups, or plain parameter objects and never query
   registries or invent defaults.
 - Foundation modules know only geometry, pixels, TIFF I/O, cache mechanics, and
   units. They do not know format/mode identity, decision state, or report schema.
@@ -228,16 +228,12 @@ between current-schema reports. Diffs are audit material, not parity blockers.
 Common fields to inspect:
 
 ```text
-status
-confidence
-final_review_reasons
-visible_sequence_span
-crop_envelope
-output_geometry.frame_boxes
-separator_observations
-frame_boundaries
-inter_frame_spacing
-sequence_conservation
+decision.status
+decision.final_review_reasons
+selection.selected_rank
+selection.geometry_resolution
+output.final_geometry.crop_envelope
+output.final_geometry.frame_boxes
 ```
 
 Local `Test/` fixtures are untracked and their directory layout is not a source
@@ -250,12 +246,12 @@ find Test -type f \( -iname '*.tif' -o -iname '*.tiff' \) | sort
 When present, cover representative `135/full`, `120-66/partial`, `half/full`,
 and `120-67/full` inputs. Treat additional sets as audit material.
 
-For source or policy changes, also run:
+For source or configuration changes, also run:
 
 ```bash
 python3 -m unittest discover -s tools/tests
 python3 -m compileall -q X5_Crop.py x5crop
-python3 -m x5crop.policies.consistency
+python3 -m x5crop.configuration.consistency
 bash -n X5_Crop_Mac.command
 bash -n X5_Crop_Mac_diagnostics.command
 git diff --check
@@ -269,7 +265,7 @@ unless the edit changes commands or release behavior.
 
 ## Current Handoff
 
-Date: 2026-07-11
+Date: 2026-07-12
 Computer: primary macOS machine
 Branch: main
 Latest documentation state: root documents have distinct responsibilities.
@@ -279,52 +275,29 @@ architecture; no `docs/` mirror is kept.
 Current state:
 
 - Active script is `X5_Crop.py` V4.9.
-- Detection follows the typed frame-sequence flow documented in
-  `ARCHITECTURE.md`: boundary/separator observations -> count and sequence
-  hypotheses -> candidate geometry/evidence -> CandidateGate ->
-  GeometryResolution -> selection -> OutputBleedPlan -> DecisionGate.
-- `HolderSpan`, `VisibleSequenceSpan`, and `CropEnvelope` are distinct canonical
-  identities. Signed inter-frame spacing represents separator, contact, or
-  overlap under one sequence-conservation model.
-- Raw separator bands are count-independent. Only physically assigned,
-  cross-axis-continuous observations become hard separator evidence;
-  dimension-constrained boundaries remain geometry-dependent.
-- `GeometryResolution` is the only execution early-stop input. CandidateGate
-  and confidence do not own execution budget.
-- Report serialization, validation, and current-schema restoration all belong
-  to `x5crop.report`; debug rendering does not touch detection measurement cache.
+- Runtime resolves one `DetectionConfiguration`; the superseded `x5crop.policies`
+  topology and all compatibility surfaces are deleted.
+- Detection uses a global monotonic `SequenceSolution` solver with separate
+  observed spacing evidence and geometry spacing hypotheses.
+- Candidate assessment uses `EvidenceQuality`, not scalar confidence or weighted
+  format profiles. `GeometryResolution` is the only early-stop input.
+- Overlap protection uses a per-boundary `FrameBleedPlan`; unrelated frames are
+  never expanded by a global maximum.
+- Current reports use `detection_report / physical_sequence_resolution` with
+  canonical `input`, `configuration`, `selection`, `decision`, and `output`
+  sections. Cache reuse accepts only this schema.
 - Runtime flow and source-layer structure live in `ARCHITECTURE.md`.
 - Version history and validation summaries live in `CHANGELOG.md`.
 - User setup and usage live in `README.md` and `快速启动_Quick_Start.md`.
 
 Recent verified baseline:
 
-- The previous closure candidate is superseded by the physical detection model
-  refactor. Architecture is not closed; the fixed two-audit closure plan must
-  restart from the resulting commit.
-- The architecture suite covers 157 active modules and 513 acyclic internal
-  import edges; all active modules are reachable and uniquely layered.
-- 212 contract and behavior tests pass. Full package and regression compile,
-  policy consistency, launcher syntax, version, and whitespace checks pass.
-- `135/full`, `135/partial auto`, `135/partial -n 3`, `120-66/partial auto`,
-  `half/full`, and `120-67/full|partial` real samples produced valid
-  `frame_sequence_geometry` reports. Horizontal and vertical Debug Analysis
-  images were visually confirmed as three-panel output.
-- `X5_00034 partial auto` evaluated counts from 5 down and selected count 5;
-  explicit count 3 exercised the independent fixed-count path.
-- The 120-66 sample selected nominal count 3 but kept
-  `complete_underfilled_strip=False` because frame coverage was contradicted;
-  holder occupancy did not suppress content-preservation evidence.
-- Synthetic off-center `135-dual/full` produced measured gutter hypotheses away
-  from the canvas center and twelve frames through the common lane pipeline.
-- Current-schema cache reuse completed the same review/export actions as a fresh
-  result. Exported TIFFs retained uint16 RGB data, ICC profile, 2000 dpi
-  resolution metadata, and source `NONE` compression. A native two-worker
-  ProcessPool completed without fallback.
-- Current representative samples are REVIEW after the structural rewrite. This
-  does not block architecture work; proof thresholds and sample calibration are a
-  separate project.
-- The largest representative partial-auto smoke built 73 candidates. Optimize
-  this later through GeometryResolution-aware candidate planning and exact
-  measurement reuse, never through CandidateGate, DecisionGate, or confidence
-  shortcuts.
+- Physical sequence, adaptive measurement, per-frame overlap protection, runtime
+  configuration, and current report schema refactors have been implemented.
+- `135/full` completed with a valid current-schema report; a second run reused the
+  report and exported review crops through the shared output actions.
+- The generated Debug Analysis was visually confirmed as a three-panel image.
+- Architecture is not closed. Restart the frozen two-audit closure plan from the
+  final commit produced by this refactor.
+- Current PASS/REVIEW outcomes are calibration material and do not block this
+  structural project.

@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ...domain import Box
-from ...policies.parameters.candidate import DualLaneDividerParameters
+from ...configuration.candidate import DualLaneDividerParameters
 from ...utils import clamp_int
 
 

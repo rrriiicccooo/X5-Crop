@@ -169,7 +169,7 @@ Debug Analysis 是试运行 / 分析模式。它会读取 TIFF、执行检测、
 x5_crop_output/_debug_analysis/
 ```
 
-每张 Debug Analysis JPG 的面板由 runtime diagnostics policy 控制，默认包含：
+每张 Debug Analysis JPG 的面板由 diagnostics configuration 控制，默认包含：
 
 - `Original gray context`: 原始灰度上下文。
 - `Debug boxes`: 当前可见序列、CropEnvelope、frame 和最终裁切框。
@@ -315,9 +315,8 @@ Windows: install/X5_Crop_win_uninstall.bat
   confirmed content loss, unresolved geometry, or physically inconsistent frame
   dimensions go to review. Feasible overlap bleed does not independently require
   review.
-- The current active policy is more conservative. Difficult files
-  that passed in older development versions may now go to `REVIEW` when
-  combined evidence is insufficient.
+- Automatic output requires resolved physical geometry plus CandidateGate and
+  DecisionGate approval. Historical confidence or output parity is not used.
 
 ### Download
 
@@ -440,7 +439,7 @@ Output:
 x5_crop_output/_debug_analysis/
 ```
 
-Each JPG is controlled by runtime diagnostics policy and defaults to:
+Each JPG is controlled by diagnostics configuration and defaults to:
 
 - `Original gray context`: source gray context.
 - `Debug boxes`: visible sequence, CropEnvelope, frames, and final crop boxes.

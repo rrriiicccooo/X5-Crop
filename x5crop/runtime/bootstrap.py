@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..geometry.layout import infer_layout
 from ..output.frame_bleed import DEFAULT_OUTPUT_BLEED
-from ..policies.runtime.bundle import DetectionPolicyBundle
+from ..configuration.bundle import DetectionConfigurationBundle
 from ..run_config import RunConfig
 from .app import print_run_header, run_runtime
 from .input_probe import first_tiff_shape, iter_input_files
@@ -18,11 +18,11 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
         raise ValueError(f"No TIFF files found: {options.input_path}")
 
     height, width = first_tiff_shape(first_file, options.page)
-    policy_bundle = DetectionPolicyBundle.for_format_mode(
+    configuration_bundle = DetectionConfigurationBundle.for_format_mode(
         options.format_id,
         options.strip_mode,
     )
-    fmt = policy_bundle.initial_policy.physical_spec
+    fmt = configuration_bundle.initial_configuration.physical_spec
     if options.requested_count is not None and options.requested_count not in fmt.allowed_counts:
         allowed = ", ".join(str(count) for count in fmt.allowed_counts)
         raise ValueError(
@@ -75,7 +75,7 @@ def runtime_invocation_from_options(options: RuntimeOptions) -> RuntimeInvocatio
     return RuntimeInvocation(
         config=config,
         files=tuple(files),
-        policy_bundle=policy_bundle,
+        configuration_bundle=configuration_bundle,
     )
 
 

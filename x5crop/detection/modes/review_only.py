@@ -13,7 +13,7 @@ from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 
 
 def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
-    physical_spec = context.policy.physical_spec
+    physical_spec = context.configuration.physical_spec
     if (
         physical_spec.physical_layout != "dual_lane"
         or context.request.strip_mode != "partial"
@@ -43,7 +43,7 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
             separator_observations=(),
             separator_assignments=(),
             frame_boundaries=(),
-            inter_frame_relations=(),
+            inter_frame_spacings=(),
             holder_occlusion=HolderOcclusionEvidence.unavailable(),
             frame_dimension_prior=dimensions,
             residuals=SequenceResiduals(None, None, 0.0),

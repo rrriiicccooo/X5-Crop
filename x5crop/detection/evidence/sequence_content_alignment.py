@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from ...cache import MeasurementCache
 from ...domain import Box, EvidenceState
-from ...policies.parameters.content import ContentEvidenceParameters
+from ...configuration.content import ContentEvidenceParameters
 from ..guidance.content_crop_envelope import measured_content_span
 
 if TYPE_CHECKING:

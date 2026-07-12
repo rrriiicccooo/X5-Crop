@@ -103,11 +103,11 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         self.assertNotIn("_count_hypothesis_identity", source)
 
     def test_candidate_build_consumes_canonical_sequence_hypothesis(self) -> None:
-        from x5crop.detection.candidate.build.detection import (
-            build_frame_sequence_geometry,
+        from x5crop.detection.candidate.build.sequence_candidate import (
+            build_sequence_candidate,
         )
 
-        parameters = inspect.signature(build_frame_sequence_geometry).parameters
+        parameters = inspect.signature(build_sequence_candidate).parameters
         self.assertIn("sequence_hypothesis", parameters)
         self.assertIn("count_hypothesis", parameters)
         for duplicated_field in (

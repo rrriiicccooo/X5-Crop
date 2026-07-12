@@ -21,7 +21,7 @@ from x5crop.detection.physical.boundary import canvas_boundary_observations
 from x5crop.detection.physical.separator.assignment import dimension_constrained_boundary
 from x5crop.cache import MeasurementCache
 from x5crop.domain import HolderSpan, VisibleSequenceSpan
-from x5crop.policies.registry import get_detection_policy
+from x5crop.configuration.registry import get_detection_configuration
 from x5crop.detection.final.finalize import finalize_detection
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 
@@ -239,7 +239,7 @@ class PhysicalDetectionResolutionContractTest(unittest.TestCase):
             VisibleSequenceSpan(Box(0, 0, 450, 60)),
             (Box(0, 0, 140, 60), Box(140, 0, 290, 60)),
             cache,
-            get_detection_policy("135", "partial").content,
+            get_detection_configuration("135", "partial").content,
         )
         self.assertEqual(evidence.state, EvidenceState.CONTRADICTED)
         self.assertEqual(evidence.unexplained_content_region_count, 1)

@@ -9,8 +9,8 @@ from ....cache import MeasurementCache
 from ....cache.content_statistics import ContentColumnStatistics
 from ....domain import Box
 from ....geometry.boxes import box_cache_key
-from ....policies.parameters.content import ContentEvidenceParameters
-from ....policies.runtime.content import ContentPolicy
+from ....configuration.content import ContentEvidenceParameters
+from ....configuration.content import ContentConfiguration
 from ....image.evidence import adaptive_activation_threshold
 from x5crop.domain import EvidenceState
 
@@ -107,7 +107,7 @@ def _boundary_contact_sides(
 def frame_content_evidence(
     geometry: SequenceSolution,
     cache: MeasurementCache,
-    policy: ContentPolicy,
+    configuration: ContentConfiguration,
 ) -> FrameContentEvidence:
     if cache.layout != geometry.layout:
         raise ValueError("content evidence requires matching analysis cache")
@@ -139,7 +139,7 @@ def frame_content_evidence(
             (),
             CACHED_CONTENT_SIGNAL_COMPOSITE,
         )
-    parameters = policy.evidence
+    parameters = configuration.evidence
     threshold = _cached_content_evidence_threshold(
         cache,
         evidence,

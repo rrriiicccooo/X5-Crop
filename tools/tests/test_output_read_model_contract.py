@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import unittest
-from dataclasses import fields
+from dataclasses import fields, replace
 
 from tools.tests.physical_gate_support import (
     final_detection_fixture,
@@ -27,8 +27,7 @@ def _record() -> dict:
         output_files=[],
         review_copy=None,
         warnings=[],
-        policy_id="test_policy",
-        runtime_policy={"test": True},
+        configuration={"configuration_id": "test_configuration"},
         transform_geometry=transform_geometry_fixture(),
         analysis_reuse_signature={},
     )
@@ -58,13 +57,35 @@ class OutputReadModelContractTest(unittest.TestCase):
     def test_fresh_record_is_current_schema_valid(self) -> None:
         self.assertEqual(current_report_record_errors(_record()), [])
 
+    def test_unavailable_transform_span_remains_explicitly_unavailable(self) -> None:
+        transform = replace(
+            transform_geometry_fixture(),
+            span_px=None,
+            span_threshold_px=None,
+        )
+        record = report_record_for_final_detection(
+            final_detection_fixture(),
+            source="input.tif",
+            profile={},
+            output_files=[],
+            review_copy=None,
+            warnings=[],
+            configuration={"configuration_id": "test_configuration"},
+            transform_geometry=transform,
+            analysis_reuse_signature={},
+        )
+        self.assertIsNone(
+            record["diagnostics"]["transform_geometry"]["span_px"]
+        )
+        self.assertEqual(current_report_record_errors(record), [])
+
     def test_current_schema_requires_every_canonical_section(self) -> None:
         for key in (
-            "candidate_table",
+            "input",
+            "configuration",
             "selection",
-            "candidate_gate",
-            "decision_gate",
-            "evidence_summary",
+            "decision",
+            "output",
             "analysis_reuse_signature",
         ):
             record = _record()
@@ -73,9 +94,11 @@ class OutputReadModelContractTest(unittest.TestCase):
 
     def test_unknown_final_reason_is_rejected(self) -> None:
         record = _record()
-        record["status"] = "needs_review"
-        record["decision_gate"]["passed"] = False
-        record["final_review_reasons"] = ["unknown_physical_reason"]
+        record["decision"]["status"] = "needs_review"
+        record["decision"]["gate"]["passed"] = False
+        record["decision"]["final_review_reasons"] = [
+            "unknown_physical_reason"
+        ]
         self.assertIn(
             "unknown_final_review_reason:unknown_physical_reason",
             current_report_record_errors(record),
@@ -83,7 +106,7 @@ class OutputReadModelContractTest(unittest.TestCase):
 
     def test_status_and_decision_gate_must_agree(self) -> None:
         record = _record()
-        record["decision_gate"]["passed"] = False
+        record["decision"]["gate"]["passed"] = False
         self.assertIn(
             "decision_gate_status_mismatch",
             current_report_record_errors(record),
@@ -91,11 +114,13 @@ class OutputReadModelContractTest(unittest.TestCase):
 
     def test_final_reasons_are_derived_from_decision_checks(self) -> None:
         record = _record()
-        record["status"] = "needs_review"
-        record["decision_gate"]["passed"] = False
-        record["decision_gate"]["checks"][0]["state"] = "contradicted"
-        record["decision_gate"]["checks"][0]["blocks"] = True
-        record["final_review_reasons"] = ["selection_geometry_disagreement"]
+        record["decision"]["status"] = "needs_review"
+        record["decision"]["gate"]["passed"] = False
+        record["decision"]["gate"]["checks"][0]["state"] = "contradicted"
+        record["decision"]["gate"]["checks"][0]["blocks"] = True
+        record["decision"]["final_review_reasons"] = [
+            "selection_geometry_disagreement"
+        ]
 
         self.assertIn(
             "decision_gate_reason_mismatch",
@@ -104,9 +129,9 @@ class OutputReadModelContractTest(unittest.TestCase):
 
     def test_cache_restoration_fields_are_required_by_current_schema(self) -> None:
         missing_provenance = _record()
-        missing_provenance["separator_observations"][0]["provenance"].pop(
-            "boundary_anchors"
-        )
+        missing_provenance["selection"]["candidates"][0][
+            "sequence_solution"
+        ]["separator_observations"][0]["provenance"].pop("boundary_anchors")
         self.assertIn(
             "separator_observation_invalid",
             current_report_record_errors(missing_provenance),
@@ -119,18 +144,30 @@ class OutputReadModelContractTest(unittest.TestCase):
             current_report_record_errors(missing_transform),
         )
 
+        missing_frame_sides = _record()
+        missing_frame_sides["output"]["frame_bleed_plan"].pop("frame_sides")
+        self.assertIn(
+            "output_incomplete",
+            current_report_record_errors(missing_frame_sides),
+        )
+
     def test_report_has_no_generic_detail_or_legacy_reason_surface(self) -> None:
         record = _record()
         self.assertNotIn("detail", record)
         self.assertNotIn("review_reasons", record)
-        self.assertIn("final_review_reasons", record)
+        self.assertIn("final_review_reasons", record["decision"])
         self.assertNotIn("outer_box", record)
         self.assertNotIn("frame_boxes", record)
+        self.assertNotIn("candidate_table", record)
+        self.assertNotIn("evidence_summary", record)
 
     def test_schema_identity_is_descriptive_not_version_named(self) -> None:
         record = _record()
         self.assertEqual(record["schema_id"], "detection_report")
-        self.assertEqual(record["schema_revision"], "frame_sequence_geometry")
+        self.assertEqual(
+            record["schema_revision"],
+            "physical_sequence_resolution",
+        )
         self.assertNotIn("v4", record["schema_revision"])
 
     def test_process_result_has_one_record_surface(self) -> None:
@@ -140,13 +177,12 @@ class OutputReadModelContractTest(unittest.TestCase):
         self.assertEqual(
             DEFAULT_FIELDS,
             (
-                "status",
-                "final_review_reasons",
-                "output_geometry.crop_envelope",
-                "output_geometry.frame_boxes",
-                "separator_observations",
-                "separator_assignments",
-                "frame_boundaries",
+                "decision.status",
+                "decision.final_review_reasons",
+                "selection.selected_rank",
+                "selection.geometry_resolution",
+                "output.final_geometry.crop_envelope",
+                "output.final_geometry.frame_boxes",
             ),
         )
 
@@ -159,10 +195,10 @@ class OutputReadModelContractTest(unittest.TestCase):
         record = _record()
         detection = final_detection_from_record(record)
 
-        self.assertEqual(detection.status, record["status"])
+        self.assertEqual(detection.status, record["decision"]["status"])
         self.assertEqual(
             detection.final_review_reasons,
-            tuple(record["final_review_reasons"]),
+            tuple(record["decision"]["final_review_reasons"]),
         )
         self.assertEqual(
             detection.output_geometry.frames,

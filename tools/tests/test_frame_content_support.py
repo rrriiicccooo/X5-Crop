@@ -12,7 +12,7 @@ from x5crop.detection.evidence.sequence_content_alignment import sequence_conten
 from x5crop.domain import EvidenceState
 from x5crop.domain import VisibleSequenceSpan
 from x5crop.domain import Box
-from x5crop.policies.registry import get_detection_policy
+from x5crop.configuration.registry import get_detection_configuration
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 
 
@@ -35,7 +35,7 @@ class FrameContentSupportTest(unittest.TestCase):
         evidence = frame_content_evidence(
             candidate.geometry,
             _cache(gray),
-            get_detection_policy("135", "full").content,
+            get_detection_configuration("135", "full").content,
         )
         self.assertNotEqual(evidence.state, EvidenceState.CONTRADICTED)
         self.assertFalse(evidence.observations[0].content_present)
@@ -47,7 +47,7 @@ class FrameContentSupportTest(unittest.TestCase):
         evidence = frame_content_evidence(
             candidate.geometry,
             _cache(gray),
-            get_detection_policy("135", "full").content,
+            get_detection_configuration("135", "full").content,
         )
         self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
 
@@ -62,7 +62,7 @@ class FrameContentSupportTest(unittest.TestCase):
         alignment = sequence_content_alignment_evidence(
             geometry,
             _cache(gray),
-            get_detection_policy("120-645", "full").content.evidence,
+            get_detection_configuration("120-645", "full").content.evidence,
         )
         self.assertNotEqual(alignment.state, EvidenceState.CONTRADICTED)
         self.assertTrue(alignment.overcontains_long_axis)
@@ -78,7 +78,7 @@ class FrameContentSupportTest(unittest.TestCase):
         alignment = sequence_content_alignment_evidence(
             geometry,
             _cache(gray),
-            get_detection_policy("120-645", "full").content.evidence,
+            get_detection_configuration("120-645", "full").content.evidence,
         )
         self.assertEqual(alignment.state, EvidenceState.UNAVAILABLE)
         self.assertFalse(alignment.confirmed_undercrop_sides)

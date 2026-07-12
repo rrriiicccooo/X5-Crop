@@ -38,8 +38,8 @@ def _count_resolution(
 
 
 def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
-    policy = context.policy
-    physical_spec = policy.physical_spec
+    configuration = context.configuration
+    physical_spec = configuration.physical_spec
     plan = count_hypothesis_plan(
         strip_mode=context.request.strip_mode,
         requested_count=context.request.requested_count,
@@ -78,15 +78,15 @@ def _choose_standard_detection(context: DetectionContext) -> SelectionResult:
 
 
 def choose_detection(context: DetectionContext) -> SelectionResult:
-    policy = context.policy
+    configuration = context.configuration
     if context.measurement_cache.layout != context.request.layout:
         raise ValueError("analysis cache layout does not match detection context")
-    if policy.detector_kind == "dual_lane":
+    if configuration.detector_kind == "dual_lane":
         selection = choose_dual_lane_detection(
             context,
             _choose_standard_detection,
         )
-    elif policy.detector_kind == "review_only":
+    elif configuration.detector_kind == "review_only":
         assessed = assess_candidate(review_only_candidate(context), context)
         selection = select_candidates(
             (assessed,),

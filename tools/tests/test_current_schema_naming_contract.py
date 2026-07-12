@@ -68,13 +68,16 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             (PROJECT_ROOT / "x5crop/detection/candidate/build/content.py").exists()
         )
 
-    def test_policy_identity_uses_plain_canonical_format_id(self) -> None:
+    def test_configuration_identity_uses_plain_canonical_format_id(self) -> None:
         from x5crop.formats import FORMATS
-        from x5crop.policies.identity import detection_policy_id_for
+        from x5crop.configuration.registry import get_detection_configuration
 
         for format_id in FORMATS:
             self.assertEqual(
-                detection_policy_id_for(format_id, "full"),
+                get_detection_configuration(
+                    format_id,
+                    "full",
+                ).configuration_id,
                 f"detection:{format_id}:full",
             )
 
@@ -94,7 +97,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
 
     def test_report_schema_identity_is_descriptive(self) -> None:
         self.assertEqual(REPORT_SCHEMA_ID, "detection_report")
-        self.assertEqual(REPORT_SCHEMA_REVISION, "frame_sequence_geometry")
+        self.assertEqual(REPORT_SCHEMA_REVISION, "physical_sequence_resolution")
         self.assertNotIn("v4", REPORT_SCHEMA_REVISION)
 
     def test_report_schema_identity_is_owned_by_report_layer(self) -> None:
@@ -142,7 +145,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
             "physical" + "_resolution",
         ):
             self.assertNotIn(removed, coordination)
-        self.assertIn("frame_sequence_geometry", coordination)
+        self.assertIn("physical_sequence_resolution", coordination)
 
     def test_content_guidance_cannot_create_or_replace_sequence_geometry(self) -> None:
         guidance = PROJECT_ROOT / "x5crop/detection/guidance"

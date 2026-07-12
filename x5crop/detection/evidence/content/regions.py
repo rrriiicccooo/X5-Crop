@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ....domain import Box
-from ....policies.runtime.content import ContentPolicy
+from ....configuration.content import ContentConfiguration
 from ....image.evidence import adaptive_activation_threshold
 from ....utils import runs_from_mask, smooth_1d
 
@@ -12,7 +12,7 @@ def content_region_runs(
     evidence: np.ndarray,
     region: Box,
     *,
-    content_policy: ContentPolicy,
+    content_policy: ContentConfiguration,
 ) -> tuple[tuple[int, int], ...]:
     parameters = content_policy.profile
     crop = evidence[region.top : region.bottom, region.left : region.right].astype(

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..policies.runtime.bundle import DetectionPolicyBundle
+from ..configuration.bundle import DetectionConfigurationBundle
 from ..run_config import RunConfig
 
 
@@ -11,4 +11,4 @@ from ..run_config import RunConfig
 class RuntimeInvocation:
     config: RunConfig
     files: tuple[Path, ...]
-    policy_bundle: DetectionPolicyBundle
+    configuration_bundle: DetectionConfigurationBundle

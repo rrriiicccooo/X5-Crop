@@ -156,7 +156,7 @@ def assess_candidate(
     candidate: BuiltCandidate,
     context: DetectionContext,
 ) -> AssessedCandidate:
-    physical_spec = context.policy.physical_spec
+    physical_spec = context.configuration.physical_spec
     if candidate.geometry.format_id != physical_spec.format_id:
         raise ValueError("candidate and detection context format do not match")
     geometry = candidate.geometry
@@ -173,12 +173,12 @@ def assess_candidate(
         geometry.visible_sequence_span,
         geometry.frames,
         context.measurement_cache,
-        context.policy.content,
+        context.configuration.content,
     )
     content = frame_content_evidence(
         geometry,
         context.measurement_cache,
-        context.policy.content,
+        context.configuration.content,
     )
     holder_texture = holder_texture_evidence(
         geometry,
@@ -188,7 +188,7 @@ def assess_candidate(
     alignment = sequence_content_alignment_evidence(
         geometry,
         context.measurement_cache,
-        context.policy.content.evidence,
+        context.configuration.content.evidence,
     )
     sequence = separator_sequence_evidence(
         geometry,

@@ -25,11 +25,15 @@ def append_summary_csv(path: Path, result: ProcessResult) -> None:
     record = result.record
     script_version = record["script_version"]
     output_files = record["output"]["output_files"]
+    selection = record["selection"]
+    selected = selection["candidates"][selection["selected_rank"] - 1]
+    sequence = selected["sequence_solution"]
+    decision = record["decision"]
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = [
         "source",
         "script_version",
-        "policy_id",
+        "configuration_id",
         "status",
         "format_id",
         "layout",
@@ -47,13 +51,15 @@ def append_summary_csv(path: Path, result: ProcessResult) -> None:
             {
                 "source": record["source"],
                 "script_version": script_version,
-                "policy_id": record["policy_id"],
-                "status": record["status"],
-                "format_id": record["format_id"],
-                "layout": record["layout"],
-                "strip_mode": record["strip_mode"],
-                "count": record["count"],
-                "final_review_reasons": ";".join(record["final_review_reasons"]),
+                "configuration_id": record["configuration"]["configuration_id"],
+                "status": decision["status"],
+                "format_id": sequence["format_id"],
+                "layout": sequence["layout"],
+                "strip_mode": sequence["strip_mode"],
+                "count": sequence["count"],
+                "final_review_reasons": ";".join(
+                    decision["final_review_reasons"]
+                ),
                 "output_count": len(output_files),
             }
         )

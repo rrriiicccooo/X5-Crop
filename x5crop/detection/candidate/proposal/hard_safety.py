@@ -17,7 +17,7 @@ def hard_safety_candidate(
     context: DetectionContext,
     count: int,
 ) -> BuiltCandidate:
-    physical_spec = context.policy.physical_spec
+    physical_spec = context.configuration.physical_spec
     work_height, work_width = context.measurement_cache.gray_work.shape
     count = max(1, int(count))
     span = Box(0, 0, work_width, work_height)
@@ -41,7 +41,7 @@ def hard_safety_candidate(
         dimensions,
         holder_occlusion,
         boundary_observations,
-        context.policy.candidate_plan.sequence_solver.maximum_assignment_evaluations,
+        context.configuration.candidate_plan.sequence_solver.maximum_assignment_evaluations,
     )
     hypothesis = CountHypothesis(
         count=count,
@@ -63,7 +63,7 @@ def hard_safety_candidate(
             separator_observations=(),
             separator_assignments=(),
             frame_boundaries=solved.boundaries,
-            inter_frame_relations=solved.relations,
+            inter_frame_spacings=solved.relations,
             holder_occlusion=holder_occlusion,
             frame_dimension_prior=dimensions,
             residuals=solved.residuals,

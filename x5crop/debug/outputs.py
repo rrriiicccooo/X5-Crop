@@ -8,7 +8,7 @@ from ..run_config import RunConfig
 from ..detection.decision.model import FinalDetection
 from ..image.evidence import SeparatorEvidenceImageParameters
 from ..output.surface import display_generated_path
-from ..policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
+from ..configuration.diagnostics import DiagnosticsConfiguration
 from .writer import write_debug_analysis, write_debug_preview
 from .canvas import DebugRenderCache
 
@@ -20,7 +20,7 @@ def write_debug_outputs(
     input_stem: str,
     config: RunConfig,
     warnings: list[str],
-    diagnostics: RuntimeDiagnosticsPolicy,
+    diagnostics: DiagnosticsConfiguration,
     separator_evidence_image: SeparatorEvidenceImageParameters,
 ) -> None:
     render_cache = DebugRenderCache()

@@ -1,1 +1,1 @@
-"""Unit tests for X5 Crop developer tooling and policy contracts."""
+"""Unit tests for X5 Crop runtime and architecture contracts."""

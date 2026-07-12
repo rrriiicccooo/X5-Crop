@@ -8,9 +8,9 @@ from ....cache import MeasurementCache
 from ....cache.separator import cached_separator_profile
 from ....domain import Box, MeasurementProvenance, SequenceHypothesis
 from ....formats import FormatPhysicalSpec
-from ....policies.runtime.content import ContentPolicy
-from ....policies.runtime.separator import SeparatorPolicy
-from ....policies.parameters.candidate import SequenceHypothesisParameters
+from ....configuration.content import ContentConfiguration
+from ....configuration.separator import SeparatorConfiguration
+from ....configuration.candidate import SequenceHypothesisParameters
 from ....units import ScanCalibration
 from ...guidance.content_crop_envelope import expand_crop_envelopes_for_content
 from ...physical.sequence import (
@@ -54,7 +54,7 @@ def _separator_dimension_hypotheses(
     cache: MeasurementCache,
     calibration: ScanCalibration,
     layout: str,
-    separator_policy: SeparatorPolicy,
+    separator_policy: SeparatorConfiguration,
     hypothesis_parameters: SequenceHypothesisParameters,
 ) -> list[SequenceHypothesis]:
     if count <= 1:
@@ -151,8 +151,8 @@ def sequence_hypotheses(
     calibration: ScanCalibration,
     layout: str,
     *,
-    content_policy: ContentPolicy,
-    separator_policy: SeparatorPolicy,
+    content_policy: ContentConfiguration,
+    separator_policy: SeparatorConfiguration,
     hypothesis_parameters: SequenceHypothesisParameters,
 ) -> list[SequenceHypothesis]:
     if cache.gray_work is not gray_work and not np.shares_memory(cache.gray_work, gray_work):

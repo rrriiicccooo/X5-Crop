@@ -5,7 +5,7 @@ import numpy as np
 
 from ..detection.decision.model import FinalDetection
 from ..image.evidence import SeparatorEvidenceImageParameters
-from ..policies.runtime.diagnostics import RuntimeDiagnosticsPolicy
+from ..configuration.diagnostics import DiagnosticsConfiguration
 from .canvas import DebugRenderCache, write_rgb_jpeg
 from .panels import make_debug_analysis_panel, make_debug_preview_rgb
 from .status import add_status_bar
@@ -29,7 +29,7 @@ def write_debug_analysis(
     detection: FinalDetection,
     output_dir: Path,
     stem: str,
-    diagnostics: RuntimeDiagnosticsPolicy,
+    diagnostics: DiagnosticsConfiguration,
     separator_evidence_image: SeparatorEvidenceImageParameters,
     render_cache: DebugRenderCache,
 ) -> list[str]:

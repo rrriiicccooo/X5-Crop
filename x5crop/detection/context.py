@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from ..cache import MeasurementCache
 from ..domain import ImageProfile
-from ..policies.runtime.policy import DetectionPolicy
+from ..configuration.model import DetectionConfiguration
 from ..units import ScanCalibration
 
 
@@ -20,6 +20,6 @@ class DetectionContext:
     image_profile: ImageProfile
     scan_calibration: ScanCalibration
     request: DetectionRequest
-    policy: DetectionPolicy
-    lane_policy: DetectionPolicy | None
+    configuration: DetectionConfiguration
+    lane_configuration: DetectionConfiguration | None
     measurement_cache: MeasurementCache
