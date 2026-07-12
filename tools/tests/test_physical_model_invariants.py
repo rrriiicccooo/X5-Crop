@@ -99,6 +99,11 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 state=EvidenceState.SUPPORTED,
                 cyclic_measurements=("synthetic_cycle",),
             ),
+            lambda: replace(
+                evidence.partial_edge_safety,
+                state=EvidenceState.SUPPORTED,
+                boundary_support=False,
+            ),
         )
         for factory in invalid_factories:
             with self.subTest(factory=factory), self.assertRaises(

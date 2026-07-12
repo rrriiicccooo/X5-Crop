@@ -643,15 +643,12 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             0,
         )
         partial = PartialEdgeSafetyEvidence(
-            EvidenceState.NOT_APPLICABLE,
-            "not_partial",
-            False,
-            1,
-            1,
-            EvidenceState.SUPPORTED,
-            EvidenceState.NOT_APPLICABLE,
-            False,
-            (),
+            is_partial=False,
+            hard_separator_count=1,
+            expected_separator_count=1,
+            frame_coverage_state=EvidenceState.SUPPORTED,
+            frame_dimension_state=EvidenceState.SUPPORTED,
+            diagnostics=(),
         )
         coverage = FrameCoverageEvidence(
             EvidenceState.SUPPORTED,

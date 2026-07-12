@@ -197,7 +197,6 @@ def assess_candidate(
         coverage,
         frame_dimensions,
         content,
-        occupancy,
     )
     preservation = content_preservation_evidence(
         content,

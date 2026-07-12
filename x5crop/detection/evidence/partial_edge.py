@@ -1,80 +1,80 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..physical.model import SequenceSolution
 from ..physical.photo_size import FrameDimensionEvidence
 from .content.frame_support import FrameContentEvidence
 from .frame_coverage import FrameCoverageEvidence
-from .holder_occupancy import HolderOccupancyEvidence
 from x5crop.domain import EvidenceState
 
 
 @dataclass(frozen=True)
 class PartialEdgeSafetyEvidence:
-    state: EvidenceState
-    reason: str
-    boundary_support: bool
+    is_partial: bool
     hard_separator_count: int
     expected_separator_count: int
-    content_coverage_state: EvidenceState
-    holder_occupancy_state: EvidenceState
-    complete_underfilled_strip: bool
+    frame_coverage_state: EvidenceState
+    frame_dimension_state: EvidenceState
     diagnostics: tuple[str, ...]
+    state: EvidenceState = field(init=False)
+    reason: str = field(init=False)
+    boundary_support: bool = field(init=False)
+
+    def __post_init__(self) -> None:
+        if min(self.hard_separator_count, self.expected_separator_count) < 0:
+            raise ValueError("partial edge separator counts must be non-negative")
+        if self.hard_separator_count > self.expected_separator_count:
+            raise ValueError("hard separator count cannot exceed boundary count")
+        if any(not item for item in self.diagnostics) or len(
+            set(self.diagnostics)
+        ) != len(self.diagnostics):
+            raise ValueError("partial edge diagnostics must be non-empty and unique")
+
+        boundary_support = bool(
+            self.is_partial
+            and self.expected_separator_count > 0
+            and self.hard_separator_count == self.expected_separator_count
+            and self.frame_dimension_state == EvidenceState.SUPPORTED
+            and self.frame_coverage_state == EvidenceState.SUPPORTED
+        )
+        if not self.is_partial:
+            state = EvidenceState.NOT_APPLICABLE
+            reason = "not_partial"
+        elif self.frame_coverage_state == EvidenceState.CONTRADICTED:
+            state = EvidenceState.CONTRADICTED
+            reason = "content_outside_frame_union"
+        elif boundary_support:
+            state = EvidenceState.SUPPORTED
+            reason = "partial_boundaries_physically_supported"
+        else:
+            state = EvidenceState.UNAVAILABLE
+            reason = "partial_boundaries_unresolved"
+        object.__setattr__(self, "boundary_support", boundary_support)
+        object.__setattr__(self, "state", state)
+        object.__setattr__(self, "reason", reason)
+
 
 def partial_edge_safety_evidence(
     geometry: SequenceSolution,
     frame_coverage: FrameCoverageEvidence,
     frame_dimensions: FrameDimensionEvidence,
     frame_content: FrameContentEvidence,
-    occupancy: HolderOccupancyEvidence,
 ) -> PartialEdgeSafetyEvidence:
-    if geometry.strip_mode != "partial":
-        return PartialEdgeSafetyEvidence(
-            EvidenceState.NOT_APPLICABLE,
-            "not_partial",
-            False,
-            0,
-            max(0, geometry.count - 1),
-            frame_coverage.state,
-            occupancy.state,
-            False,
-            (),
-        )
     hard_count = sum(
         1
         for assignment in geometry.separator_assignments
         if assignment.used_for_boundary and assignment.independent
     )
     expected = max(0, geometry.count - 1)
-    boundary_support = bool(
-        geometry.count > 1
-        and hard_count >= expected
-        and frame_dimensions.state == EvidenceState.SUPPORTED
-        and frame_coverage.state == EvidenceState.SUPPORTED
-    )
     diagnostics: list[str] = []
     if frame_content.state == EvidenceState.UNAVAILABLE:
         diagnostics.append("frame_content_unavailable")
-    if occupancy.state == EvidenceState.UNAVAILABLE:
-        diagnostics.append("holder_occupancy_unresolved")
-    if frame_coverage.state == EvidenceState.CONTRADICTED:
-        state = EvidenceState.CONTRADICTED
-        reason = frame_coverage.reason
-    elif boundary_support:
-        state = EvidenceState.SUPPORTED
-        reason = "partial_boundaries_physically_supported"
-    else:
-        state = EvidenceState.UNAVAILABLE
-        reason = "partial_boundaries_unresolved"
     return PartialEdgeSafetyEvidence(
-        state=state,
-        reason=reason,
-        boundary_support=boundary_support,
+        is_partial=geometry.strip_mode == "partial",
         hard_separator_count=hard_count,
         expected_separator_count=expected,
-        content_coverage_state=frame_coverage.state,
-        holder_occupancy_state=occupancy.state,
-        complete_underfilled_strip=occupancy.complete_underfilled_strip,
+        frame_coverage_state=frame_coverage.state,
+        frame_dimension_state=frame_dimensions.state,
         diagnostics=tuple(diagnostics),
     )

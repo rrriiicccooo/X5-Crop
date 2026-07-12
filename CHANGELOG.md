@@ -35,6 +35,9 @@ repository rules in `AGENTS.md`.
   boundary/constraint identity 和 spacing references。超过照片宽度的推导 overlap 保持 hypothesis。
 - Sequence observation/hypothesis budgets 不再被 count 静默扩大；候选组合生成受同一硬
   预算限制。Holder occupancy 改由实际 holder slack 派生，不再由 full/partial 请求模式声明。
+- Partial edge safety 的 state、reason 与 boundary support 现在只由适用模式、hard separator、
+  frame coverage 和 frame dimension evidence 派生；删除复制的 holder occupancy 状态，无法再构造
+  与底层物理事实矛盾的 supported evidence。
 - Format physical sizes 与 runtime configuration bundle 各自收敛为一个 canonical tuple；删除
   重复 nominal size 输入、重复 initial configuration 存储和 configuration registry 隐藏缓存。
 - Separator measurement region 现在先 canonicalize 再同时用于 cache key 与 pixels，无交集

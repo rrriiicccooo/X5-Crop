@@ -183,10 +183,9 @@ class HolderOccupancyTests(unittest.TestCase):
             coverage,
             dimensions,
             evidence.frame_content,
-            occupancy,
         )
+        self.assertTrue(occupancy.complete_underfilled_strip)
         self.assertEqual(partial.state, EvidenceState.SUPPORTED)
-        self.assertTrue(partial.complete_underfilled_strip)
 
     def test_non_underfilled_format_does_not_gain_occupancy_exemption(self) -> None:
         geometry, coverage, dimensions, _ = self._underfilled()
