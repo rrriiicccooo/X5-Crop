@@ -212,13 +212,7 @@ def _lane_context(
             lane_configuration.preprocess.image_statistics,
         ),
     )
-    profile = replace(
-        context.image_profile,
-        shape=tuple(lane_gray.shape),
-        axes="YX",
-    )
     return DetectionContext(
-        image_profile=profile,
         scan_calibration=_lane_calibration(context),
         request=lane_request,
         configuration=lane_configuration,

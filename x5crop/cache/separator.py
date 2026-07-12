@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 
-from . import MeasurementCache
+from . import MeasurementCache, MeasurementParametersKey, MeasurementRegionKey
 from ..domain import Box
-from ..geometry.boxes import box_cache_key, crop_work_box, full_work_box, is_full_work_box
+from ..geometry.boxes import crop_work_box, full_work_box, is_full_work_box
 from ..geometry.detection_parameters import (
     SeparatorProfileParameters,
 )
@@ -16,14 +14,14 @@ from ..geometry.separator_profile import separator_profile
 def separator_profile_cache_key(
     corridor: Box,
     profile_config: SeparatorProfileParameters,
-) -> tuple[Any, ...]:
-    return (profile_config, *box_cache_key(corridor))
+) -> MeasurementRegionKey:
+    return MeasurementRegionKey(profile_config, corridor)
 
 
 def separator_profile_full_cache_key(
     profile_config: SeparatorProfileParameters,
-) -> tuple[Any, ...]:
-    return (profile_config,)
+) -> MeasurementParametersKey:
+    return MeasurementParametersKey(profile_config)
 
 
 def cached_separator_profile(

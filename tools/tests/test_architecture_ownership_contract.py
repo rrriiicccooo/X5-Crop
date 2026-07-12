@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import fields
 from pathlib import Path
 import unittest
 
@@ -38,7 +39,6 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 "physical_spec",
                 "strip_mode",
                 "preprocess",
-                "detector_kind",
                 "boundary",
                 "separator",
                 "content",
@@ -46,6 +46,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
                 "diagnostics",
             ),
         )
+        self.assertIsInstance(DetectionConfiguration.detector_kind, property)
 
     def test_candidate_plan_contains_budget_parameters_not_source_labels(self) -> None:
         from x5crop.configuration.candidate import CandidatePlanParameters
@@ -80,24 +81,25 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
         )
 
     def test_evidence_cache_keys_include_parameters_and_exact_geometry(self) -> None:
-        frame_support = (
-            PROJECT_ROOT
-            / "x5crop/detection/evidence/content/frame_support.py"
-        ).read_text(encoding="utf-8")
-        separator_cache = (
-            PROJECT_ROOT / "x5crop/cache/separator.py"
-        ).read_text(encoding="utf-8")
-        self.assertIn(
-            "key = (parameters, *box_cache_key(sequence_box))",
-            frame_support,
+        from x5crop.cache import (
+            MeasurementParametersKey,
+            MeasurementRegionKey,
+            ThresholdedMeasurementRegionKey,
         )
-        self.assertIn(
-            "statistics_key = (parameters, *box_cache_key(sequence_box), float(threshold))",
-            frame_support,
+
+        self.assertEqual(
+            tuple(field.name for field in fields(MeasurementParametersKey)),
+            ("parameters",),
         )
-        self.assertIn(
-            "return (profile_config, *box_cache_key(corridor))",
-            separator_cache,
+        self.assertEqual(
+            tuple(field.name for field in fields(MeasurementRegionKey)),
+            ("parameters", "region"),
+        )
+        self.assertEqual(
+            tuple(
+                field.name for field in fields(ThresholdedMeasurementRegionKey)
+            ),
+            ("parameters", "region", "threshold"),
         )
 
     def test_configuration_registry_is_the_only_builder(self) -> None:

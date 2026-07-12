@@ -93,7 +93,6 @@ def process_one(
         measurement_statistics,
     )
     detection_context = DetectionContext(
-        image_profile=profile,
         scan_calibration=scan_calibration,
         request=DetectionRequest(
             layout=config.layout,

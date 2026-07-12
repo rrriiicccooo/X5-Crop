@@ -71,9 +71,13 @@ repository rules in `AGENTS.md`.
   I/O 边界归一化，calibration/cache/report 不再兼容解析底层 tag 对象或旧 rational shape。
 - Current report validator 现在递归要求 canonical typed model 与 report projection 的精确字段集合；
   顶层或任意嵌套层级出现旧 alias、额外字段或不一致 derived gate 字段都会拒绝 cache reuse。
+- `detector_kind` 不再作为重复 configuration 字段存储，而由 physical layout 与 strip mode 唯一
+  推导；DetectionContext 同时删除无消费方的 TIFF `ImageProfile`，I/O metadata 不再下沉 detection。
+- Measurement cache 的参数、精确区域与 threshold key 已改为 named immutable types；旧
+  `tuple[Any, ...]` 位置 key 删除，cache 仍只保存 count/offset-independent root measurements。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 291 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 294 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

@@ -5,10 +5,13 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from ....cache import MeasurementCache
+from ....cache import (
+    MeasurementCache,
+    MeasurementRegionKey,
+    ThresholdedMeasurementRegionKey,
+)
 from ....cache.content_statistics import ContentColumnStatistics
 from ....domain import Box
-from ....geometry.boxes import box_cache_key
 from ....configuration.content import ContentEvidenceParameters
 from ....configuration.content import ContentConfiguration
 from ....image.evidence import adaptive_activation_threshold
@@ -71,7 +74,7 @@ def _cached_content_evidence_threshold(
     sequence_box: Box,
     parameters: ContentEvidenceParameters,
 ) -> float | None:
-    key = (parameters, *box_cache_key(sequence_box))
+    key = MeasurementRegionKey(parameters, sequence_box)
     if key not in cache.content_evidence_thresholds:
         cache.content_evidence_thresholds[key] = content_evidence_threshold(
             evidence,
@@ -158,7 +161,11 @@ def frame_content_evidence(
             (),
             CACHED_CONTENT_SIGNAL_COMPOSITE,
         )
-    statistics_key = (parameters, *box_cache_key(sequence_box), float(threshold))
+    statistics_key = ThresholdedMeasurementRegionKey(
+        parameters,
+        sequence_box,
+        float(threshold),
+    )
     statistics = cache.content_column_statistics.get(statistics_key)
     if statistics is None:
         statistics = ContentColumnStatistics.from_evidence(evidence, threshold)

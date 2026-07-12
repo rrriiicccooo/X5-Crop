@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..cache import MeasurementCache
-from ..domain import ImageProfile
 from ..configuration.model import DetectionConfiguration
 from ..units import ScanCalibration
 
@@ -17,7 +16,6 @@ class DetectionRequest:
 
 @dataclass(frozen=True)
 class DetectionContext:
-    image_profile: ImageProfile
     scan_calibration: ScanCalibration
     request: DetectionRequest
     configuration: DetectionConfiguration

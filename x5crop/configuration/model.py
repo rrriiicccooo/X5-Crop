@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..formats import FormatPhysicalSpec
+from ..strip_modes import FULL, PARTIAL
 from .boundary import BoundaryObservationParameters
 from .candidate import CandidatePlanParameters
 from .content import ContentConfiguration
@@ -16,12 +17,21 @@ class DetectionConfiguration:
     physical_spec: FormatPhysicalSpec
     strip_mode: str
     preprocess: PreprocessConfiguration
-    detector_kind: str
     boundary: BoundaryObservationParameters
     separator: SeparatorConfiguration
     content: ContentConfiguration
     candidate_plan: CandidatePlanParameters
     diagnostics: DiagnosticsConfiguration
+
+    def __post_init__(self) -> None:
+        if self.strip_mode not in {FULL, PARTIAL}:
+            raise ValueError(f"unsupported strip mode: {self.strip_mode}")
+
+    @property
+    def detector_kind(self) -> str:
+        if self.physical_spec.physical_layout != "dual_lane":
+            return "standard_strip"
+        return "dual_lane" if self.strip_mode == FULL else "review_only"
 
     @property
     def configuration_id(self) -> str:

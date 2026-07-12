@@ -166,7 +166,6 @@ class OutputReadModelContractTest(unittest.TestCase):
             None,
         )
         context = DetectionContext(
-            image_profile=profile,
             scan_calibration=ScanCalibration(None, None, "unavailable", False),
             request=DetectionRequest("horizontal", "partial", None),
             configuration=configuration,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import MISSING, fields
+from dataclasses import MISSING, fields, replace
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -46,6 +46,14 @@ class DetectionConfigurationBundleTests(unittest.TestCase):
 
         with self.assertRaises(KeyError):
             bundle.configuration_for("135", "partial")
+
+    def test_detection_configuration_rejects_unknown_strip_mode(self) -> None:
+        configuration = DetectionConfigurationBundle.for_format_mode(
+            "135",
+            "full",
+        ).initial_configuration
+        with self.assertRaises(ValueError):
+            replace(configuration, strip_mode="unknown")
 
     def test_detection_layers_do_not_resolve_configuration_or_format_registries(
         self,

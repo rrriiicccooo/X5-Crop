@@ -18,6 +18,7 @@ from x5crop.detection.physical.model import SequenceSolution
 import x5crop.detection.physical.model as physical_model
 from x5crop.detection.candidate.selection.model import SelectionResult
 from x5crop.detection.decision.model import DecisionGateAssessment, FinalDetection
+from x5crop.detection.context import DetectionContext
 from x5crop.detection.candidate.assessment.candidate_gate import (
     CandidateGateAssessment,
 )
@@ -34,6 +35,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 class DetectionStageTypeContractTests(unittest.TestCase):
+    def test_detection_context_contains_no_tiff_io_profile(self) -> None:
+        self.assertNotIn("image_profile", DetectionContext.__dataclass_fields__)
+
     def test_dual_lane_translation_uses_a_named_typed_aggregate(self) -> None:
         source_path = PROJECT_ROOT / "x5crop/detection/modes/dual_lane.py"
         tree = ast.parse(source_path.read_text(encoding="utf-8"))

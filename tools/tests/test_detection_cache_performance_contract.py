@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import fields
+from typing import get_type_hints
 import unittest
 from unittest.mock import patch
 from dataclasses import replace
 
 import numpy as np
 
-from x5crop.cache import MeasurementCache
+from x5crop.cache import MeasurementCache, MeasurementParametersKey
 from x5crop.cache.separator import cached_separator_profile
 from x5crop.domain import Box
 from x5crop.geometry.detection_parameters import SeparatorProfileParameters
@@ -30,6 +31,14 @@ def _cache() -> MeasurementCache:
 
 
 class DetectionCachePerformanceContractTest(unittest.TestCase):
+    def test_measurement_cache_uses_explicit_typed_keys(self) -> None:
+        self.assertFalse(
+            any(
+                "Any" in str(annotation)
+                for annotation in get_type_hints(MeasurementCache).values()
+            )
+        )
+
     def test_unavailable_content_threshold_is_cached_exactly_once(self) -> None:
         cache = _cache()
         geometry = candidate_fixture().geometry
@@ -108,7 +117,7 @@ class DetectionCachePerformanceContractTest(unittest.TestCase):
         parameters = SeparatorProfileParameters()
         cached_separator_profile(cache, Box(0, 0, 240, 80), parameters)
         key = next(iter(cache.separator_profiles_full))
-        self.assertEqual(key, (parameters,))
+        self.assertEqual(key, MeasurementParametersKey(parameters))
 
 
 if __name__ == "__main__":
