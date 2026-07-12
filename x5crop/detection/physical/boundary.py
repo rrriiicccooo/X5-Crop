@@ -59,11 +59,10 @@ class HolderOcclusionEvidence:
             raise ValueError("holder occlusion evidence requires ordered edge sides")
         if self.combined_hidden_width_px.minimum < 0.0:
             raise ValueError("combined holder occlusion width cannot be negative")
-        allocation_unresolved = bool(
-            self.leading.reason == "single_frame_occlusion_allocation_unresolved"
-            and self.trailing.reason
-            == "single_frame_occlusion_allocation_unresolved"
+        side_total = self.leading.hidden_width_px.plus(
+            self.trailing.hidden_width_px
         )
+        allocation_unresolved = self.combined_hidden_width_px != side_total
         if allocation_unresolved:
             if (
                 self.leading.state != EvidenceState.UNAVAILABLE
@@ -76,9 +75,7 @@ class HolderOcclusionEvidence:
                 != self.combined_hidden_width_px.maximum
             ):
                 raise ValueError("unresolved edge allocation must preserve one total width")
-        elif self.combined_hidden_width_px != self.leading.hidden_width_px.plus(
-            self.trailing.hidden_width_px
-        ):
+        elif self.combined_hidden_width_px != side_total:
             raise ValueError("combined holder occlusion must derive from edge widths")
 
     @classmethod
@@ -145,7 +142,7 @@ def _occlusion_side_evidence(
     visible_width: PixelInterval | None,
     frame_width: PixelInterval,
 ) -> HolderOcclusionSideEvidence:
-    if boundary is None or visible_width is None:
+    if boundary is None:
         return HolderOcclusionSideEvidence(
             side,
             EvidenceState.UNAVAILABLE,
@@ -161,6 +158,14 @@ def _occlusion_side_evidence(
             EvidenceState.NOT_APPLICABLE,
             PixelInterval.zero(),
             "measured_edge_is_not_white_holder_occlusion",
+            boundary,
+        )
+    if visible_width is None:
+        return HolderOcclusionSideEvidence(
+            side,
+            EvidenceState.UNAVAILABLE,
+            PixelInterval.zero(),
+            "edge_boundary_or_visible_width_unavailable",
             boundary,
         )
     hidden = PixelInterval(

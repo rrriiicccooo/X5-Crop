@@ -110,11 +110,13 @@ def _parent(lane):
 
 class DualLaneAssessmentTest(unittest.TestCase):
     def test_lane_divider_measurement_budget_exhaustion_is_explicit(self) -> None:
+        parameters = DualLaneDividerParameters(proposal_count=1)
         result = measure_lane_dividers(
             np.zeros((100, 10), dtype=np.float32),
-            DualLaneDividerParameters(proposal_count=1),
+            parameters,
         )
         self.assertTrue(result.budget_exhausted)
+        self.assertLessEqual(len(result.candidates), parameters.proposal_count)
 
     def test_content_across_divider_is_unavailable_and_never_discarded(self) -> None:
         result = measure_lane_dividers(

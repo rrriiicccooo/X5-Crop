@@ -130,6 +130,9 @@ Sequence solver 同时求解所有内部 boundaries，不逐边贪心：
 
 - `PhotoInterval` 和 cuts 必须严格单调，不能产生零宽、负宽或倒序 frame。
 - Interior photos 服从同一 `FrameDimensionPrior` option。
+- 求解顺序固定为：先确定单调 frame boundaries，再从首尾 boundary 与可见宽度测量
+  holder occlusion，最后构建 signed spacing。遮挡证据不能被候选构建层预先注入，
+  reason 文本也不能控制物理分配。
 - Holder occlusion 只能作用于首张 leading edge 和末张 trailing edge。
 - 已确认遮挡的首尾可见宽度不参与普通 photo-dimension contradiction；尺寸一致性只使用未遮挡、
   independently observed 的 frame。
@@ -144,7 +147,7 @@ Sequence solver 同时求解所有内部 boundaries，不逐边贪心：
 
 Observation、hypothesis、assignment 和 dual-lane proposal 的执行预算都通过 typed result 显式
 传播到 `SequenceSolution.search_budget_exhausted`；任何阶段的静默截断都不能形成 resolved
-geometry。
+geometry，实际返回的 observation/proposal 数也不得超过声明的预算。
 
 Partial auto count 从允许的较大 count 向较小 count 求解。XPAN 和 120-66 可由 physical trait
 包含 nominal count，以表达完整胶片未铺满片夹。`GeometryResolution` 只有在 count、placement、

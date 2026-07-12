@@ -5,7 +5,6 @@ from ....cache.separator import cached_separator_profile
 from ....domain import (
     Box,
     CropEnvelope,
-    EvidenceState,
     FrameDimensionPrior,
     HolderSpan,
     SequenceHypothesis,
@@ -15,10 +14,7 @@ from ....configuration.separator import SeparatorConfiguration
 from ....configuration.candidate import SequenceSolverParameters
 from ...context import DetectionRequest
 from ...physical.model import SequenceSolution
-from ...physical.boundary import (
-    HolderOcclusionEvidence,
-    holder_occlusion_for_sequence,
-)
+from ...physical.boundary import HolderOcclusionEvidence
 from ...physical.separator.assignment import boundary_position_constraint
 from ...physical.separator.observations import (
     measure_focused_separator_band,
@@ -107,19 +103,8 @@ def build_sequence_candidate(
         visible_sequence_span,
         count,
         dimensions,
-        unresolved_occlusion,
         sequence_hypothesis.boundary_observations,
         solver_parameters.maximum_assignment_evaluations,
-    )
-    holder_occlusion = (
-        holder_occlusion_for_sequence(
-            sequence_hypothesis.boundary_observations,
-            visible_sequence_span,
-            solved.boundaries,
-            dimensions.width_px,
-        )
-        if solved.assignment_consensus.state == EvidenceState.SUPPORTED
-        else HolderOcclusionEvidence.unavailable()
     )
     return BuiltCandidate(
         geometry=SequenceSolution(
@@ -136,7 +121,7 @@ def build_sequence_candidate(
             separator_assignments=solved.assignments,
             frame_boundaries=solved.boundaries,
             inter_frame_spacings=solved.relations,
-            holder_occlusion=holder_occlusion,
+            holder_occlusion=solved.holder_occlusion,
             frame_dimension_prior=dimensions,
             residuals=solved.residuals,
             assignment_consensus=solved.assignment_consensus,

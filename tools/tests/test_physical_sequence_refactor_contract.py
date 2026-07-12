@@ -123,7 +123,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
     def test_holder_occlusion_builder_uses_the_canonical_inputs(self) -> None:
         source = (
             Path(__file__).resolve().parents[2]
-            / "x5crop/detection/candidate/build/sequence_candidate.py"
+            / "x5crop/detection/physical/sequence_solver.py"
         ).read_text(encoding="utf-8")
         calls = tuple(
             node
@@ -132,10 +132,13 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             and isinstance(node.func, ast.Name)
             and node.func.id == "holder_occlusion_for_sequence"
         )
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(
-            len(calls[0].args),
-            len(signature(holder_occlusion_for_sequence).parameters),
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(
+            all(
+                len(call.args)
+                == len(signature(holder_occlusion_for_sequence).parameters)
+                for call in calls
+            )
         )
 
     def test_sequence_solver_callers_supply_the_execution_budget(self) -> None:
@@ -157,11 +160,15 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         )
 
     def test_holder_occlusion_is_measured_after_sequence_resolution(self) -> None:
-        source = (
+        build_source = (
             Path(__file__).resolve().parents[2]
             / "x5crop/detection/candidate/build/sequence_candidate.py"
         ).read_text(encoding="utf-8")
-        tree = ast.parse(source)
+        solver_source = (
+            Path(__file__).resolve().parents[2]
+            / "x5crop/detection/physical/sequence_solver.py"
+        ).read_text(encoding="utf-8")
+        tree = ast.parse(build_source)
         solver_calls = tuple(
             node
             for node in ast.walk(tree)
@@ -170,10 +177,18 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             and node.func.id == "solve_frame_sequence"
         )
         self.assertEqual(len(solver_calls), 1)
-        self.assertNotIn("provisional", source)
+        self.assertNotIn("holder_occlusion_for_sequence", build_source)
+        self.assertNotIn("provisional", solver_source)
+        holder_measurement = solver_source.rindex(
+            "holder_occlusion_for_sequence("
+        )
         self.assertLess(
-            source.index("solved = solve_frame_sequence"),
-            source.index("holder_occlusion_for_sequence("),
+            solver_source.index("boundaries = representative.boundaries"),
+            holder_measurement,
+        )
+        self.assertLess(
+            holder_measurement,
+            solver_source.index("relations = _relations("),
         )
 
     def test_sequence_solver_reports_assignment_budget_exhaustion(self) -> None:
@@ -196,7 +211,6 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                     ("physical_frame_size",),
                 ),
             ),
-            HolderOcclusionEvidence.not_applicable(),
             (),
             1,
         )
@@ -224,7 +238,6 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                     ("physical_frame_size",),
                 ),
             ),
-            HolderOcclusionEvidence.not_applicable(),
             (),
             10_000,
         )
@@ -321,7 +334,6 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                     ("physical_frame_size",),
                 ),
             ),
-            HolderOcclusionEvidence.not_applicable(),
             (),
             100,
         )
@@ -398,7 +410,6 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                     ("physical_frame_size",),
                 ),
             ),
-            HolderOcclusionEvidence.not_applicable(),
             (),
             100,
         )
@@ -439,7 +450,6 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                     ("tiff_resolution", "physical_frame_size"),
                 ),
             ),
-            HolderOcclusionEvidence.not_applicable(),
             (
                 BoundaryObservation(
                     "leading",
@@ -489,7 +499,6 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                     ("short_axis_boundaries",),
                 ),
             ),
-            HolderOcclusionEvidence.not_applicable(),
             (),
             100,
         )
@@ -568,6 +577,87 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             )
         )
 
+    def test_runtime_sequence_order_can_corroborate_one_missing_overlap(
+        self,
+    ) -> None:
+        edge_provenance = MeasurementProvenance(
+            "holder_boundary_profile",
+            "synthetic",
+            ("gray_work",),
+        )
+        boundaries = (
+            BoundaryObservation(
+                "leading",
+                PixelInterval.exact(0.0),
+                "tonal_transition",
+                edge_provenance,
+            ),
+            BoundaryObservation(
+                "trailing",
+                PixelInterval.exact(290.0),
+                "tonal_transition",
+                edge_provenance,
+            ),
+        )
+        solved = solve_frame_sequence(
+            (separator_observation(97.5, start=95.0, end=100.0),),
+            (),
+            VisibleSequenceSpan(Box(0, 0, 290, 100)),
+            3,
+            FrameDimensionPrior(
+                PixelInterval.exact(100.0),
+                PixelInterval.exact(100.0),
+                (36.0, 24.0),
+                "scan_calibration",
+                MeasurementProvenance(
+                    "scan_calibration",
+                    "synthetic",
+                    ("tiff_resolution",),
+                ),
+            ),
+            boundaries,
+            10_000,
+        )
+
+        self.assertIsInstance(
+            solved.relations[1],
+            CorroboratedSpacingEvidence,
+        )
+
+    def test_holder_occlusion_reason_text_does_not_control_allocation(self) -> None:
+        provenance = MeasurementProvenance(
+            "holder_boundary_profile",
+            "synthetic",
+            ("gray_work",),
+        )
+        boundaries = (
+            BoundaryObservation(
+                "leading",
+                PixelInterval.exact(0.0),
+                "white_holder_transition",
+                provenance,
+            ),
+            BoundaryObservation(
+                "trailing",
+                PixelInterval.exact(80.0),
+                "white_holder_transition",
+                provenance,
+            ),
+        )
+        occlusion = holder_occlusion_for_sequence(
+            boundaries,
+            VisibleSequenceSpan(Box(0, 0, 80, 100)),
+            (),
+            PixelInterval.exact(100.0),
+        )
+
+        renamed = replace(
+            occlusion,
+            leading=replace(occlusion.leading, reason="allocation_unresolved"),
+            trailing=replace(occlusion.trailing, reason="allocation_unresolved"),
+        )
+        self.assertEqual(renamed.combined_hidden_width_px, PixelInterval.exact(20.0))
+
     def test_sequence_solver_cannot_emit_non_monotonic_frames(self) -> None:
         result = solve_frame_sequence(
             (separator_observation(280.0, start=275.0, end=285.0),),
@@ -585,7 +675,6 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
                     ("physical_frame_size",),
                 ),
             ),
-            HolderOcclusionEvidence.not_applicable(),
             (),
             10_000,
         )

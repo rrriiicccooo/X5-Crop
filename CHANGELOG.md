@@ -16,6 +16,11 @@ repository rules in `AGENTS.md`.
 
 #### 封口参数与几何解析契约（2026-07-12）
 
+- Global sequence solver 现在按物理数据流先解出单调 boundaries，再测量首尾
+  holder occlusion，最后构建 signed spacing；这使单个缺失 separator 的可验证叠片
+  保护路径在真实 runtime 可达，同时禁止候选层预先注入遮挡结论。
+- Holder occlusion 的未分配状态改由 typed width interval 关系表达，不再依赖 reason
+  文本驱动物理逻辑。Dual-lane divider 测量严格遵守 proposal execution budget。
 - Dual-lane holder gutter 现在是 typed `LaneDividerEvidence`；只有相对两侧内容证据支持的 divider
   才能自动处理，lane 分区连续覆盖整个 canvas，lane-local frame index 会转换为全局 identity。
 - Separator profile 参数与像素测量已统一归 `image` owner；源码层级依赖图新增无环契约，旧

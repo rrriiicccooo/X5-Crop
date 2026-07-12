@@ -266,7 +266,6 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                     ("physical_frame_size",),
                 ),
             ),
-            HolderOcclusionEvidence.not_applicable(),
             (),
             10_000,
         )
@@ -294,7 +293,6 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
                     ("physical_frame_size",),
                 ),
             ),
-            HolderOcclusionEvidence.not_applicable(),
             (),
             10_000,
         )

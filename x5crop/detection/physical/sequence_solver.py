@@ -15,7 +15,11 @@ from ...domain import (
     SeparatorBandObservation,
     VisibleSequenceSpan,
 )
-from .boundary import HolderOcclusionEvidence, visible_sequence_length_interval
+from .boundary import (
+    HolderOcclusionEvidence,
+    holder_occlusion_for_sequence,
+    visible_sequence_length_interval,
+)
 from .model import (
     BoundaryAssignmentConsensus,
     PhotoInterval,
@@ -43,6 +47,7 @@ class SequenceSolveResult:
     assignments: tuple[SeparatorAssignment, ...]
     boundaries: tuple[FrameBoundary, ...]
     relations: tuple[InterFrameSpacing, ...]
+    holder_occlusion: HolderOcclusionEvidence
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
@@ -594,21 +599,28 @@ def solve_frame_sequence(
     span: VisibleSequenceSpan,
     count: int,
     dimensions: FrameDimensionPrior,
-    holder_occlusion: HolderOcclusionEvidence,
     boundary_observations: tuple[BoundaryObservation, ...],
     maximum_assignment_evaluations: int,
 ) -> SequenceSolveResult:
     if count <= 0:
         raise ValueError("sequence count must be positive")
+    unresolved_occlusion = HolderOcclusionEvidence.unavailable()
     if count == 1:
         frames = (span.box,)
         intervals = _photo_intervals((), frames, boundary_observations)
+        holder_occlusion = holder_occlusion_for_sequence(
+            boundary_observations,
+            span,
+            (),
+            dimensions.width_px,
+        )
         return SequenceSolveResult(
             intervals,
             frames,
             (),
             (),
             (),
+            holder_occlusion,
             _residuals(span, intervals, (), dimensions),
             BoundaryAssignmentConsensus(
                 EvidenceState.SUPPORTED,
@@ -623,7 +635,7 @@ def solve_frame_sequence(
         span,
         count,
         dimensions,
-        holder_occlusion,
+        unresolved_occlusion,
         maximum_assignment_evaluations,
     )
     solved_states = _solve_assignment_states(
@@ -631,7 +643,7 @@ def solve_frame_sequence(
         span,
         count,
         dimensions,
-        holder_occlusion,
+        unresolved_occlusion,
         dict(focused_observations),
         boundary_observations,
     )
@@ -648,6 +660,12 @@ def solve_frame_sequence(
     ) + focused_assignments
     frames = representative.frames
     intervals = representative.photo_intervals
+    holder_occlusion = holder_occlusion_for_sequence(
+        boundary_observations,
+        span,
+        boundaries,
+        dimensions.width_px,
+    )
     relations = _relations(
         boundaries,
         dimensions,
@@ -661,6 +679,7 @@ def solve_frame_sequence(
         assignments=assignments,
         boundaries=boundaries,
         relations=relations,
+        holder_occlusion=holder_occlusion,
         residuals=_residuals(span, intervals, boundaries, dimensions),
         assignment_consensus=_assignment_consensus(
             solved_states,

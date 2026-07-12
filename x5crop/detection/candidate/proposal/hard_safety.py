@@ -3,7 +3,6 @@ from __future__ import annotations
 from ....domain import Box, MeasurementProvenance
 from ...context import DetectionContext
 from ...physical.boundary import canvas_boundary_observations
-from ...physical.boundary import HolderOcclusionEvidence
 from ...physical.photo_size import frame_dimension_priors
 from ...physical.sequence_solver import solve_frame_sequence
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
@@ -31,7 +30,6 @@ def hard_safety_candidate(
         context.scan_calibration,
         layout=context.request.layout,
     )[0]
-    holder_occlusion = HolderOcclusionEvidence.unavailable()
     boundary_observations = canvas_boundary_observations(
         work_width,
         work_height,
@@ -42,7 +40,6 @@ def hard_safety_candidate(
         visible_span,
         count,
         dimensions,
-        holder_occlusion,
         boundary_observations,
         context.configuration.candidate_plan.sequence_solver.maximum_assignment_evaluations,
     )
@@ -66,7 +63,7 @@ def hard_safety_candidate(
             separator_assignments=(),
             frame_boundaries=solved.boundaries,
             inter_frame_spacings=solved.relations,
-            holder_occlusion=holder_occlusion,
+            holder_occlusion=solved.holder_occlusion,
             frame_dimension_prior=dimensions,
             residuals=solved.residuals,
             assignment_consensus=solved.assignment_consensus,

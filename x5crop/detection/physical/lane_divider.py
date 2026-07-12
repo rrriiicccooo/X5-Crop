@@ -158,7 +158,7 @@ def measure_lane_dividers(
         is not None
     )
     center = height // DUAL_LANE_COUNT
-    if all(
+    if len(candidates) < int(parameters.proposal_count) and all(
         abs(center - evidence.center) >= max(1, band_width // 2)
         for evidence in candidates
     ):
