@@ -15,15 +15,31 @@ from .boundary import HolderOcclusionEvidence
 SPACING_KINDS = frozenset({"separator", "contact", "overlap", "unresolved"})
 
 
+def _spacing_kind(interval: PixelInterval) -> str:
+    if interval.minimum > 0.0:
+        return "separator"
+    if interval.maximum < 0.0:
+        return "overlap"
+    if interval.minimum == 0.0 and interval.maximum == 0.0:
+        return "contact"
+    return "unresolved"
+
+
 def _validate_spacing_identity(
     index: int,
     kind: str,
+    signed_width_px: PixelInterval,
+    reason: str,
     lane_index: int | None,
 ) -> None:
     if index <= 0:
         raise ValueError("inter-frame spacing index must be positive")
     if kind not in SPACING_KINDS:
         raise ValueError(f"unsupported inter-frame spacing: {kind}")
+    if kind != _spacing_kind(signed_width_px):
+        raise ValueError("inter-frame spacing kind must match its signed interval")
+    if not reason:
+        raise ValueError("inter-frame spacing requires a reason")
     if lane_index is not None and lane_index <= 0:
         raise ValueError("lane index must be positive")
 
@@ -38,7 +54,13 @@ class ObservedSpacingEvidence:
     lane_index: int | None = None
 
     def __post_init__(self) -> None:
-        _validate_spacing_identity(self.index, self.kind, self.lane_index)
+        _validate_spacing_identity(
+            self.index,
+            self.kind,
+            self.signed_width_px,
+            self.reason,
+            self.lane_index,
+        )
 
     @property
     def state(self) -> EvidenceState:
@@ -71,7 +93,13 @@ class CorroboratedSpacingEvidence:
     lane_index: int | None = None
 
     def __post_init__(self) -> None:
-        _validate_spacing_identity(self.index, self.kind, self.lane_index)
+        _validate_spacing_identity(
+            self.index,
+            self.kind,
+            self.signed_width_px,
+            self.reason,
+            self.lane_index,
+        )
         if self.kind != "overlap" or self.signed_width_px.maximum >= 0.0:
             raise ValueError("corroborated spacing evidence must be an overlap")
 
@@ -102,7 +130,13 @@ class SpacingHypothesis:
     lane_index: int | None = None
 
     def __post_init__(self) -> None:
-        _validate_spacing_identity(self.index, self.kind, self.lane_index)
+        _validate_spacing_identity(
+            self.index,
+            self.kind,
+            self.signed_width_px,
+            self.reason,
+            self.lane_index,
+        )
 
     @property
     def state(self) -> EvidenceState:
@@ -137,16 +171,6 @@ class SequenceConservationEvidence:
     frame_total_px: PixelInterval
     spacing_total_px: PixelInterval
     physical_sequence_px: PixelInterval
-
-
-def _spacing_kind(interval: PixelInterval) -> str:
-    if interval.minimum > 0.0:
-        return "separator"
-    if interval.maximum < 0.0:
-        return "overlap"
-    if interval.minimum == 0.0 and interval.maximum == 0.0:
-        return "contact"
-    return "unresolved"
 
 
 def observed_spacing_evidence(
@@ -278,16 +302,6 @@ def sequence_conservation_evidence(
             PixelInterval.zero(),
             PixelInterval.zero(),
             PixelInterval.zero(),
-            PixelInterval.zero(),
-        )
-    if any(spacing.state == EvidenceState.CONTRADICTED for spacing in spacings):
-        return SequenceConservationEvidence(
-            EvidenceState.CONTRADICTED,
-            "inter_frame_spacing_equation_contradicted",
-            visible_length_px,
-            PixelInterval.zero(),
-            frame_width_px.scaled(float(count)),
-            sum_pixel_intervals(tuple(item.signed_width_px for item in spacings)),
             PixelInterval.zero(),
         )
     if any(not spacing.supports_sequence_conservation for spacing in spacings):

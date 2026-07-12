@@ -105,7 +105,8 @@ tonal region 只能保留为 diagnostic / geometry-dependent observation。
 - `SpacingHypothesis`: geometry equation 推导的未观测假设。
 
 正值是 separator，零是 contact，负值是 overlap。Hypothesis 不能支持 proof path 或自动
-overlap bleed；corroborated overlap 也不能回头支持 sequence conservation。
+overlap bleed；corroborated overlap 也不能回头支持 sequence conservation。每个 spacing 的
+`kind` 由 signed interval 唯一推导，不能以独立字符串声明出相互矛盾的物理状态。
 
 ### 1.5 Global Sequence Solver 与 Auto Count
 

@@ -88,6 +88,35 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             SpacingHypothesis,
         )
 
+    def test_spacing_kind_is_derived_from_its_signed_interval(self) -> None:
+        provenance = MeasurementProvenance("spacing", "test", ())
+        invalid_factories = (
+            lambda: ObservedSpacingEvidence(
+                1,
+                "separator",
+                PixelInterval.exact(-5.0),
+                provenance,
+                "mismatched_observation",
+            ),
+            lambda: SpacingHypothesis(
+                1,
+                "overlap",
+                PixelInterval.exact(5.0),
+                provenance,
+                "mismatched_hypothesis",
+            ),
+            lambda: ObservedSpacingEvidence(
+                1,
+                "separator",
+                PixelInterval.exact(5.0),
+                provenance,
+                "",
+            ),
+        )
+        for factory in invalid_factories:
+            with self.subTest(factory=factory), self.assertRaises(ValueError):
+                factory()
+
     def test_holder_occlusion_builder_uses_the_canonical_inputs(self) -> None:
         source = (
             Path(__file__).resolve().parents[2]
