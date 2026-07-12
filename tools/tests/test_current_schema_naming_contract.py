@@ -5,7 +5,8 @@ from pathlib import Path
 import unittest
 
 from tools.tests.architecture_contracts import PROJECT_ROOT
-from x5crop.domain import ImageProfile, MeasurementProvenance, SeparatorBandObservation
+from x5crop.domain import MeasurementProvenance, SeparatorBandObservation
+from x5crop.io.model import ImageProfile
 from x5crop.report.identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 
 

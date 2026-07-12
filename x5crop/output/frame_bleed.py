@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from ..domain import (
-    AxisBleedParameters,
     Box,
     CropEnvelope,
     FrameBoundaryReference,
 )
 from ..geometry.boxes import map_work_box, original_box_to_work
 from .model import (
+    AxisBleedParameters,
     BoundaryOverlapProtection,
     FrameBleedPlan,
     FrameOverlapRequirement,

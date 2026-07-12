@@ -6,7 +6,7 @@ from typing import Any, Optional
 import numpy as np
 import tifffile
 
-from ..domain import ImageProfile
+from .model import ImageProfile
 from ..utils import (
     enum_name,
     infer_axes,

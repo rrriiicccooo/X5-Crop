@@ -7,7 +7,8 @@ import numpy as np
 import tifffile
 
 from ..run_config import RunConfig
-from ..domain import Box, ImageProfile
+from ..domain import Box
+from ..io.model import ImageProfile
 from ..image.crop_pixels import crop_array, validate_source_crop_pixels
 from ..io.tiff import tiff_write_kwargs, validate_written_tiff
 

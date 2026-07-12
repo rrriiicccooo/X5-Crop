@@ -5,13 +5,13 @@ import json
 from pathlib import Path
 
 from ..app_info import REPORT_JSONL_NAME, SUMMARY_CSV_NAME
-from ..domain import ProcessResult
+from .model import ReportResult
 from ..output.surface import output_directory_for
 from ..run_config import RunConfig
 from ..utils import json_safe
 
 
-def append_report_jsonl(path: Path, result: ProcessResult) -> None:
+def append_report_jsonl(path: Path, result: ReportResult) -> None:
     if not result.record:
         raise ValueError("Current report record is missing")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -19,7 +19,7 @@ def append_report_jsonl(path: Path, result: ProcessResult) -> None:
         f.write(json.dumps(json_safe(result.record), ensure_ascii=False) + "\n")
 
 
-def append_summary_csv(path: Path, result: ProcessResult) -> None:
+def append_summary_csv(path: Path, result: ReportResult) -> None:
     if not result.record:
         raise ValueError("Current report record is missing")
     record = result.record
@@ -65,7 +65,7 @@ def append_summary_csv(path: Path, result: ProcessResult) -> None:
         )
 
 
-def write_report_outputs_for_result(result: ProcessResult, config: RunConfig) -> None:
+def write_report_outputs_for_result(result: ReportResult, config: RunConfig) -> None:
     if not config.report:
         return
     output_dir = output_directory_for(Path(result.record["source"]), config)

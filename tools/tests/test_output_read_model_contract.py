@@ -15,9 +15,10 @@ from tools.tests.physical_gate_support import (
     transform_geometry_fixture,
 )
 from x5crop.detection.decision.model import FinalDetection
-from x5crop.domain import ImageProfile, ProcessResult
+from x5crop.io.model import ImageProfile
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.report.configuration import detection_configuration_read_model
+from x5crop.report.model import ReportResult
 from x5crop.report.record import report_record_for_final_detection
 from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
@@ -155,12 +156,13 @@ class OutputReadModelContractTest(unittest.TestCase):
         from x5crop.detection.decision.decision_gate import apply_decision_gate
         from x5crop.detection.final.finalize import finalize_detection
         from x5crop.detection.pipeline import choose_detection
-        from x5crop.domain import AxisBleedParameters, ImageProfile
+        from x5crop.io.model import ImageProfile
         from x5crop.image.statistics import image_measurement_statistics
         from x5crop.report.configuration import detection_configuration_read_model
         from x5crop.report.record import report_record_for_final_detection
         from x5crop.report.validation import current_report_record_errors
         from x5crop.runtime.frame_bleed import prepare_frame_bleed
+        from x5crop.output.model import AxisBleedParameters
         from x5crop.units import ScanCalibration
         from tools.tests.physical_gate_support import transform_geometry_fixture
 
@@ -435,8 +437,18 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
         self.assertNotIn("v4", record["schema_revision"])
 
-    def test_process_result_has_one_record_surface(self) -> None:
-        self.assertEqual(set(ProcessResult.__dataclass_fields__), {"record"})
+    def test_report_result_has_one_record_surface(self) -> None:
+        self.assertEqual(set(ReportResult.__dataclass_fields__), {"record"})
+        with self.assertRaises(ValueError):
+            ReportResult({})
+
+    def test_runtime_names_report_results_by_their_actual_surface(self) -> None:
+        source = (PROJECT_ROOT / "x5crop/runtime/app.py").read_text()
+        self.assertNotIn("process_result", source)
+
+    def test_output_preferences_are_not_foundation_domain_types(self) -> None:
+        source = (PROJECT_ROOT / "x5crop/domain.py").read_text()
+        self.assertNotIn("class AxisBleedParameters", source)
 
     def test_regression_tool_reads_only_current_canonical_geometry(self) -> None:
         self.assertEqual(

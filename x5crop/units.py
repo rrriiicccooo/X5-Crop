@@ -3,8 +3,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-from .domain import ImageProfile
-
 
 MILLIMETERS_PER_INCH = 25.4
 MILLIMETERS_PER_CENTIMETER = 10.0
@@ -60,12 +58,13 @@ def _unavailable(*warnings: str) -> ScanCalibration:
     )
 
 
-def scan_calibration_from_profile(
-    profile: ImageProfile,
+def scan_calibration_from_resolution(
+    resolution: tuple[float, float] | None,
+    resolution_unit: int | str | None,
 ) -> ScanCalibration:
-    if not profile.resolution:
+    if not resolution:
         return _unavailable("missing_tiff_resolution")
-    unit = _resolution_unit_name(profile.resolution_unit)
+    unit = _resolution_unit_name(resolution_unit)
     if unit == "inch":
         divisor = MILLIMETERS_PER_INCH
     elif unit == "centimeter":
@@ -75,7 +74,7 @@ def scan_calibration_from_profile(
     else:
         return _unavailable(f"unsupported_resolution_unit:{unit}")
 
-    x_res, y_res = profile.resolution
+    x_res, y_res = resolution
     if x_res <= 0.0 or y_res <= 0.0:
         return _unavailable("invalid_tiff_resolution")
     x_px_per_mm = float(x_res) / divisor

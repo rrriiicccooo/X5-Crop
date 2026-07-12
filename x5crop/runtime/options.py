@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from ..domain import AxisBleedParameters
+from ..output.model import AxisBleedParameters
 
 
 DEFAULT_DESKEW_MIN_ANGLE_DEGREES = 0.03

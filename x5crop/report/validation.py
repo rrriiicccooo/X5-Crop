@@ -28,7 +28,8 @@ from ..detection.physical.spacing import (
     ObservedSpacingEvidence,
     SpacingHypothesis,
 )
-from ..domain import ImageProfile, SeparatorAssignment, SeparatorBandObservation
+from ..domain import SeparatorAssignment, SeparatorBandObservation
+from ..io.model import ImageProfile
 from ..formats import FrameSizeMm
 from ..output.model import FrameBleedPlan
 from ..units import ScanCalibration

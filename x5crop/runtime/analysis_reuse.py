@@ -10,10 +10,8 @@ import numpy as np
 
 from ..app_info import REPORT_JSONL_NAME, SCRIPT_NAME, VERSION
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
-from ..domain import (
-    ImageProfile,
-    ProcessResult,
-)
+from ..io.model import ImageProfile
+from ..report.model import ReportResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from ..output.surface import OutputSurface
 from ..image.transforms import rotate_array_expand
@@ -181,7 +179,7 @@ def result_from_reusable_analysis(
     profile: ImageProfile,
     warnings: list[str],
     analysis_reuse_signature: dict[str, Any],
-) -> ProcessResult | None:
+) -> ReportResult | None:
     if not (
         config.reuse_analysis
         and not config.dry_run

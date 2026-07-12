@@ -7,8 +7,9 @@ from typing import Any, Optional
 from ..detection.decision.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
-from ..domain import ImageProfile, ProcessResult
+from ..io.model import ImageProfile
 from ..utils import json_safe
+from .model import ReportResult
 from .record import report_record_for_final_detection
 
 
@@ -24,7 +25,7 @@ def result_from_detection(
     configuration_detail: dict[str, Any],
     transform_geometry: TransformGeometryEvidence,
     analysis_reuse_signature: dict[str, Any],
-) -> ProcessResult:
+) -> ReportResult:
     record = report_record_for_final_detection(
         detection,
         selection,
@@ -37,7 +38,7 @@ def result_from_detection(
         transform_geometry=transform_geometry,
         analysis_reuse_signature=analysis_reuse_signature,
     )
-    return ProcessResult(record=record)
+    return ReportResult(record=record)
 
 
 def result_from_cached_record(
@@ -48,7 +49,7 @@ def result_from_cached_record(
     *,
     output_files: list[str],
     review_copy: str | None,
-) -> ProcessResult:
+) -> ReportResult:
     report_record = dict(cached_record)
     report_record["source"] = str(input_file)
     input_detail = dict(cached_record["input"])
@@ -60,4 +61,4 @@ def result_from_cached_record(
     output_detail["review_copy"] = review_copy
     output_detail["warnings"] = list(warnings)
     report_record["output"] = output_detail
-    return ProcessResult(record=json_safe(report_record))
+    return ReportResult(record=json_safe(report_record))

@@ -6,13 +6,13 @@ from ..detection.decision.model import DecisionGateAssessment, FinalDetection
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..detection.gate_checks import GateCheck
 from ..domain import (
-    AxisBleedParameters,
     Box,
     CropEnvelope,
     EvidenceState,
     FrameBoundaryReference,
 )
 from ..output.model import (
+    AxisBleedParameters,
     BoundaryOverlapProtection,
     FrameBleedPlan,
     FrameSideBleed,

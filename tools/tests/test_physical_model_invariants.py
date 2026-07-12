@@ -20,7 +20,6 @@ from x5crop.detection.candidate.selection.model import (
 )
 from x5crop.detection.physical.model import SequenceResiduals
 from x5crop.domain import (
-    AxisBleedParameters,
     BoundaryPositionConstraint,
     Box,
     CropEnvelope,
@@ -36,6 +35,7 @@ from x5crop.domain import (
     VisibleSequenceSpan,
 )
 from x5crop.output.model import (
+    AxisBleedParameters,
     BoundaryOverlapProtection,
     FrameBleedPlan,
     FrameSideBleed,

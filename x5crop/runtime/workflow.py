@@ -16,7 +16,8 @@ from ..debug.outputs import write_debug_outputs
 from ..detection.decision.decision_gate import apply_decision_gate
 from ..detection.final.finalize import finalize_detection
 from ..detection.pipeline import choose_detection
-from ..domain import AxisBleedParameters, ProcessResult
+from ..output.model import AxisBleedParameters
+from ..report.model import ReportResult
 from ..export.actions import copy_for_review_if_needed, write_crops_if_allowed
 from ..geometry.layout import infer_layout, work_gray
 from ..image.gray import make_base_gray_u8
@@ -26,7 +27,7 @@ from ..output.surface import output_surface_for_input
 from ..report.configuration import detection_configuration_read_model
 from ..configuration.bundle import DetectionConfigurationBundle
 from ..report.result_builder import result_from_detection
-from ..units import scan_calibration_from_profile
+from ..units import scan_calibration_from_resolution
 from ..utils import spatial_shape_from_shape
 
 
@@ -34,7 +35,7 @@ def process_one(
     input_file: Path,
     config: RunConfig,
     configuration_bundle: DetectionConfigurationBundle,
-) -> ProcessResult:
+) -> ReportResult:
     output_surface = output_surface_for_input(input_file, config)
     output_dir = output_surface.root
     profile, warnings = read_tiff_profile(input_file, config.page)
@@ -84,7 +85,10 @@ def process_one(
             work_gray(gray, config.layout),
             initial_configuration.preprocess.image_statistics,
         )
-    scan_calibration = scan_calibration_from_profile(profile)
+    scan_calibration = scan_calibration_from_resolution(
+        profile.resolution,
+        profile.resolution_unit,
+    )
     measurement_cache = make_measurement_cache(
         gray,
         config.layout,

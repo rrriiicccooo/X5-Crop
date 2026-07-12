@@ -4,7 +4,8 @@ import math
 
 import numpy as np
 
-from ..domain import EvidenceState, ImageProfile
+from ..domain import EvidenceState
+from ..io.model import ImageProfile
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..geometry.layout import work_gray
 from ..image.deskew import (

@@ -67,6 +67,9 @@ repository rules in `AGENTS.md`.
 - `CandidateAssessment` 只保存 canonical evidence 与 CandidateGate；`EvidenceQuality` 从 evidence、
   proof paths 和 geometry residuals 确定性派生。Count hypothesis 从 plan、build、assessment 到
   selection 全程保持同一 identity，不再保存可手写的 physical-eligibility 布尔副本。
+- Shared domain 不再混放 report、TIFF 或 output 类型：current-schema `ReportResult` 归 report 并在
+  构造时验证，`ImageProfile` 与 TIFF tag value 归 I/O，`AxisBleedParameters` 归 output；units 只
+  接收 resolution 与 unit，不再依赖完整 TIFF profile。
 - Deskew 固定灰度身份阈值已由 per-image robust statistics 取代；percentile sampling budget、
   edge quantiles 和 numerical floors 均由显式参数拥有。
 - Physical fact、adaptive measurement、numerical safety、execution budget 与 diagnostics 参数
@@ -95,7 +98,7 @@ repository rules in `AGENTS.md`.
   使旧分析失效。Bundle 同时拒绝空集合、initial identity 漂移和重复 configuration identity。
 - Diagnostics 参数不再使 detection analysis fingerprint 失效；无法测得的 content threshold 也只
   计算一次。Malformed current-schema record 现在返回 validation error，不再从 validator 抛异常。
-- 309 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
+- 311 项测试、14 个 format/mode configuration、package/regression compile、launcher syntax、
   version 和 whitespace 检查通过。
 
 #### 物理序列求解与经验参数退场（2026-07-12）

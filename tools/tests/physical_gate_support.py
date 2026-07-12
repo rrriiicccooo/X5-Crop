@@ -68,14 +68,13 @@ from x5crop.domain import (
     SeparatorCrossAxisMeasurement,
 )
 from x5crop.domain import (
-    AxisBleedParameters,
     BoundaryPositionConstraint,
     Box,
     FrameDimensionPrior,
     MeasurementProvenance,
     SeparatorWidthConstraint,
 )
-from x5crop.output.model import FrameBleedPlan, FrameSideBleed
+from x5crop.output.model import AxisBleedParameters, FrameBleedPlan, FrameSideBleed
 from x5crop.units import ScanCalibration
 
 

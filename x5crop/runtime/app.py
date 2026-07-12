@@ -7,7 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from ..app_info import SCRIPT_NAME, VERSION
-from ..domain import ProcessResult
+from ..report.model import ReportResult
 from ..report.outputs import write_report_outputs_for_result
 from ..run_config import RunConfig
 from .invocation import RuntimeInvocation
@@ -40,7 +40,7 @@ def print_run_header(invocation: RuntimeInvocation) -> None:
         print(f"output: {config.output_dir}")
 
 
-def print_process_result(result: ProcessResult, config: RunConfig) -> None:
+def print_report_result(result: ReportResult, config: RunConfig) -> None:
     record = result.record
     print(f"  status={record['decision']['status']}")
     for warning in record["output"]["warnings"]:
@@ -92,7 +92,7 @@ def process_parallel_files(
                     result.record["decision"]["status"] == "needs_review"
                 )
                 write_report_outputs_for_result(result, config)
-                print_process_result(result, config)
+                print_report_result(result, config)
             except Exception as exc:
                 failed += 1
                 print(f"  error: {exc}", file=sys.stderr)
@@ -128,7 +128,7 @@ def run_runtime(invocation: RuntimeInvocation) -> int:
                     result.record["decision"]["status"] == "needs_review"
                 )
                 write_report_outputs_for_result(result, config)
-                print_process_result(result, config)
+                print_report_result(result, config)
             except Exception as exc:
                 failed += 1
                 print(f"  error: {exc}", file=sys.stderr)

@@ -4,13 +4,13 @@ import unittest
 from inspect import signature
 
 from x5crop.domain import (
-    AxisBleedParameters,
     Box,
     CropEnvelope,
     FrameBoundaryReference,
 )
 from x5crop.output.frame_bleed import apply_frame_bleed, frame_bleed_plan
 from x5crop.output.model import (
+    AxisBleedParameters,
     FrameOverlapRequirement,
     OutputGeometry,
 )

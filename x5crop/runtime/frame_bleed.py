@@ -3,9 +3,9 @@ from __future__ import annotations
 from math import ceil
 
 from ..detection.candidate.model import AssessedCandidate
-from ..domain import AxisBleedParameters, CropEnvelope
+from ..domain import CropEnvelope
 from ..output.frame_bleed import frame_bleed_plan
-from ..output.model import FrameBleedPlan, FrameOverlapRequirement
+from ..output.model import AxisBleedParameters, FrameBleedPlan, FrameOverlapRequirement
 from ..detection.physical.model import DualLaneSolution
 
 

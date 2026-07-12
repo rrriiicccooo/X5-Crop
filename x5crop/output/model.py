@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..domain import AxisBleedParameters, Box, CropEnvelope, FrameBoundaryReference
+from ..domain import Box, CropEnvelope, FrameBoundaryReference
+
+
+@dataclass(frozen=True)
+class AxisBleedParameters:
+    long_axis: int
+    short_axis: int
+
+    def __post_init__(self) -> None:
+        if self.long_axis < 0 or self.short_axis < 0:
+            raise ValueError("output bleed must be non-negative")
 
 
 @dataclass(frozen=True)
