@@ -59,7 +59,6 @@ def draw_evidence_context_overlay(
     detection: FinalDetection,
     scale: float,
     style: DebugStyleParameters,
-    include_frames: bool = False,
 ) -> None:
     draw_preview_rect(
         rgb,
@@ -68,10 +67,6 @@ def draw_evidence_context_overlay(
         style.crop_envelope_color,
         style.evidence_envelope_line_width,
     )
-    if include_frames:
-        for index, box in enumerate(detection.output_geometry.frames):
-            color = FRAME_FILL_COLORS[index % len(FRAME_FILL_COLORS)]
-            draw_preview_rect(rgb, box, scale, color, style.frame_line_width)
 
 
 def make_separator_evidence_debug_gray(
@@ -121,49 +116,45 @@ def make_debug_analysis_panel(
 ) -> np.ndarray:
     separator_overlay = diagnostics.separator_overlay
     style = diagnostics.style
-    panel_builders = {
-        "original_gray": lambda title: cached_labeled_preview_gray(
-            render_cache,
-            "original_gray",
-            title,
+    original_gray = cached_labeled_preview_gray(
+        render_cache,
+        "original_gray",
+        "Original gray context",
+        gray,
+        style.preview_max_side,
+        style.label_height,
+        style.label_origin,
+        style.dark_background,
+        style.text_color,
+    )[0]
+    debug_boxes = add_panel_label(
+        make_debug_preview_rgb(gray, detection, style, render_cache),
+        "Debug boxes",
+        height=style.label_height,
+        origin=style.label_origin,
+        background=style.dark_background,
+        text_color=style.text_color,
+    )
+    separator_evidence = add_panel_label(
+        make_separator_evidence_debug_rgb(
             gray,
-            style.preview_max_side,
-            style.label_height,
-            style.label_origin,
-            style.dark_background,
-            style.text_color,
-        )[0],
-        "debug_boxes": lambda title: add_panel_label(
-            make_debug_preview_rgb(gray, detection, style, render_cache),
-            title,
-            height=style.label_height,
-            origin=style.label_origin,
-            background=style.dark_background,
-            text_color=style.text_color,
+            detection,
+            selected_candidate,
+            separator_overlay,
+            diagnostics.separator_evidence_image,
+            style,
+            render_cache,
         ),
-        "separator_evidence": lambda title: add_panel_label(
-            make_separator_evidence_debug_rgb(
-                gray,
-                detection,
-                selected_candidate,
-                separator_overlay,
-                diagnostics.separator_evidence_image,
-                style,
-                render_cache,
-            ),
-            title,
-            height=style.label_height,
-            origin=style.label_origin,
-            background=style.dark_background,
-            text_color=style.text_color,
-        ),
-    }
-    panels = [
-        panel_builders[name](diagnostics.debug_panel_title(name))
-        for name in diagnostics.debug_panels
-    ]
+        "Separator evidence",
+        height=style.label_height,
+        origin=style.label_origin,
+        background=style.dark_background,
+        text_color=style.text_color,
+    )
     canvas = stack_debug_panels(
-        panels,
+        original_gray,
+        debug_boxes,
+        separator_evidence,
         horizontal=gray.shape[1] < gray.shape[0],
         style=style,
     )
@@ -171,10 +162,14 @@ def make_debug_analysis_panel(
 
 
 def stack_debug_panels(
-    panels: list[np.ndarray],
+    original_gray: np.ndarray,
+    debug_boxes: np.ndarray,
+    separator_evidence: np.ndarray,
+    *,
     horizontal: bool,
     style: DebugStyleParameters,
 ) -> np.ndarray:
+    panels = (original_gray, debug_boxes, separator_evidence)
     panel_spacing = style.panel_spacing
     if horizontal:
         max_h = max(panel.shape[0] for panel in panels)

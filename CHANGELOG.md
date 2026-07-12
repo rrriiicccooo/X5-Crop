@@ -24,6 +24,8 @@ repository rules in `AGENTS.md`.
   创建带有占位 output geometry 的“最终”对象。
 - Current report 删除永远为空的 `schema_validation` section，并统一使用唯一 typed read-model
   projection；旧通用 `_plain` / `json_safe` 二次序列化路径已删除。
+- Debug Analysis 固定为一个三联图输出；删除不可达的 frame-overlay 开关、重复 panel identity/title
+  registry 和伪多文件 list 返回值。
 - Current schema 唯一身份更新为 `detection_report / physical_sequence_resolution`；旧 revision
   不再被 report、cache、tests 或 tools 接受。
 - Dimension-constrained cut 保留完整位置区间，不再把未观测边界伪装成精确中点。

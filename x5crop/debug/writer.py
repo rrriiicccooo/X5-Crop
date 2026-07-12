@@ -34,7 +34,7 @@ def write_debug_analysis(
     stem: str,
     diagnostics: DiagnosticsConfiguration,
     render_cache: DebugRenderCache,
-) -> list[str]:
+) -> str:
     analysis_dir = output_dir / "_debug_analysis"
     panel_path = analysis_dir / f"{stem}_debug_analysis.jpg"
     write_rgb_jpeg(
@@ -48,4 +48,4 @@ def write_debug_analysis(
         panel_path,
         quality=diagnostics.style.jpeg_quality,
     )
-    return [str(panel_path)]
+    return str(panel_path)

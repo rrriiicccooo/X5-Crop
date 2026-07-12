@@ -35,7 +35,7 @@ def write_debug_outputs(
         )
         warnings.append(f"debug preview: {display_generated_path(debug_path, config)}")
     if config.debug_analysis:
-        analysis_paths = write_debug_analysis(
+        analysis_path = write_debug_analysis(
             gray,
             detection,
             selected_candidate,
@@ -44,5 +44,6 @@ def write_debug_outputs(
             diagnostics,
             render_cache,
         )
-        for analysis_path in analysis_paths:
-            warnings.append(f"debug analysis: {display_generated_path(analysis_path, config)}")
+        warnings.append(
+            f"debug analysis: {display_generated_path(analysis_path, config)}"
+        )

@@ -168,14 +168,14 @@ Debug Analysis 是试运行 / 分析模式。它会读取 TIFF、执行检测、
 x5_crop_output/_debug_analysis/
 ```
 
-每张 Debug Analysis JPG 的面板由 diagnostics configuration 控制，默认包含：
+每张 Debug Analysis JPG 固定包含：
 
 - `Original gray context`: 原始灰度上下文。
 - `Debug boxes`: 当前可见序列、CropEnvelope、frame 和最终裁切框。
 - `Separator evidence`: raw separator observations、实测/尺寸约束切线和叠片标记。
 
-详细 evidence / decision signal / decision 说明写入 report；Debug Analysis
-默认保持三联图，优先服务人工快速审阅。
+详细 evidence、CandidateGate 与 DecisionGate 说明写入 report；Debug Analysis
+保持固定三联图，优先服务人工快速审阅。
 
 状态含义：
 
@@ -438,15 +438,15 @@ Output:
 x5_crop_output/_debug_analysis/
 ```
 
-Each JPG is controlled by diagnostics configuration and defaults to:
+Each JPG contains the fixed panels:
 
 - `Original gray context`: source gray context.
 - `Debug boxes`: visible sequence, CropEnvelope, frames, and final crop boxes.
 - `Separator evidence`: raw observations, measured/dimension-constrained cuts,
   and overlap markers.
 
-Detailed evidence / decision signal / decision explanations are written to the
-report. Debug Analysis defaults to a three-panel image for fast human review.
+Detailed evidence, CandidateGate, and DecisionGate explanations are written to
+the report. Debug Analysis remains a fixed three-panel image for fast human review.
 
 `PASS` means the file will be cropped automatically. `REVIEW` means it needs
 manual review.

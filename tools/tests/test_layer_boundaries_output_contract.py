@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 from inspect import signature
 import unittest
 
@@ -41,30 +40,39 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertIn("frame_sequence.spacings", source)
         self.assertNotIn(".detail", source)
 
-    def test_debug_configuration_and_renderers_define_three_panels(self) -> None:
+    def test_debug_analysis_has_one_fixed_three_panel_contract(self) -> None:
+        import x5crop.configuration.diagnostics as diagnostics_model
         from x5crop.configuration.registry import get_detection_configuration
+        from x5crop.debug.panels import (
+            draw_evidence_context_overlay,
+            stack_debug_panels,
+        )
+        from x5crop.debug.writer import write_debug_analysis
 
         configuration = get_detection_configuration("135", "full").diagnostics
         self.assertEqual(
-            configuration.debug_panels,
-            ("original_gray", "debug_boxes", "separator_evidence"),
+            set(configuration.__dataclass_fields__),
+            {"separator_overlay", "separator_evidence_image", "style"},
         )
-        tree = ast.parse(
-            (PROJECT_ROOT / "x5crop/debug/panels.py").read_text(encoding="utf-8")
+        self.assertFalse(hasattr(diagnostics_model, "DebugPanelConfiguration"))
+        self.assertNotIn(
+            "include_frames",
+            signature(draw_evidence_context_overlay).parameters,
         )
-        panel_ids = {
-            key.value
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Assign)
-            and any(
-                isinstance(target, ast.Name) and target.id == "panel_builders"
-                for target in node.targets
-            )
-            and isinstance(node.value, ast.Dict)
-            for key in node.value.keys
-            if isinstance(key, ast.Constant) and isinstance(key.value, str)
-        }
-        self.assertEqual(panel_ids, set(configuration.debug_panels))
+        self.assertEqual(
+            tuple(signature(stack_debug_panels).parameters),
+            (
+                "original_gray",
+                "debug_boxes",
+                "separator_evidence",
+                "horizontal",
+                "style",
+            ),
+        )
+        self.assertEqual(
+            signature(write_debug_analysis).return_annotation,
+            "str",
+        )
 
     def test_runtime_resolves_format_mode_once(self) -> None:
         bootstrap = (PROJECT_ROOT / "x5crop/runtime/bootstrap.py").read_text(

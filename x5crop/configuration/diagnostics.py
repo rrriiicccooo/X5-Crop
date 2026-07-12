@@ -108,16 +108,6 @@ class SeparatorOverlayParameters:
 
 
 @dataclass(frozen=True)
-class DebugPanelConfiguration:
-    panel_id: str
-    title: str
-
-    def __post_init__(self) -> None:
-        if not self.panel_id or not self.title:
-            raise ValueError("debug panel identity and title must not be empty")
-
-
-@dataclass(frozen=True)
 class DiagnosticsConfiguration:
     separator_overlay: SeparatorOverlayParameters = field(
         default_factory=SeparatorOverlayParameters
@@ -126,26 +116,3 @@ class DiagnosticsConfiguration:
         default_factory=SeparatorEvidenceImageParameters
     )
     style: DebugStyleParameters = field(default_factory=DebugStyleParameters)
-    debug_panels: tuple[str, ...] = (
-        "original_gray",
-        "debug_boxes",
-        "separator_evidence",
-    )
-    debug_panel_titles: tuple[DebugPanelConfiguration, ...] = (
-        DebugPanelConfiguration("original_gray", "Original gray context"),
-        DebugPanelConfiguration("debug_boxes", "Debug boxes"),
-        DebugPanelConfiguration("separator_evidence", "Separator evidence"),
-    )
-
-    def __post_init__(self) -> None:
-        if len(set(self.debug_panels)) != len(self.debug_panels):
-            raise ValueError("debug panel identifiers must be unique")
-        title_ids = tuple(panel.panel_id for panel in self.debug_panel_titles)
-        if title_ids != self.debug_panels:
-            raise ValueError("debug panel titles must match configured panel order")
-
-    def debug_panel_title(self, panel_id: str) -> str:
-        for panel in self.debug_panel_titles:
-            if panel.panel_id == panel_id:
-                return panel.title
-        raise KeyError(f"Unknown debug panel: {panel_id}")
