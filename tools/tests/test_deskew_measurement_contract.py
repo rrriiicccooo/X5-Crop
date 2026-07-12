@@ -30,6 +30,17 @@ def _measurement(
 
 
 class DeskewMeasurementContractTest(unittest.TestCase):
+    def test_measurement_types_reject_impossible_states(self) -> None:
+        for factory in (
+            lambda: LineFitMeasurement(float("nan"), 4, 1.0),
+            lambda: LineFitMeasurement(0.0, 0, 1.0),
+            lambda: LineFitMeasurement(0.0, 4, -1.0),
+            lambda: DeskewAngleMeasurement(0.05, None, None, None),
+            lambda: DeskewAngleMeasurement(0.05, "not_enough_points", None, None),
+        ):
+            with self.subTest(factory=factory), self.assertRaises(ValueError):
+                factory()
+
     def test_measurement_preference_uses_physical_fit_facts(self) -> None:
         preference = getattr(runtime_deskew, "_deskew_measurement_preference")
         invalid = _measurement(reason="not_enough_points")

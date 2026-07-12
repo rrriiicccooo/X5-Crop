@@ -17,6 +17,15 @@ class LineFitMeasurement:
     inliers: int
     median_residual: float
 
+    def __post_init__(self) -> None:
+        if (
+            not math.isfinite(self.slope)
+            or self.inliers <= 0
+            or not math.isfinite(self.median_residual)
+            or self.median_residual < 0.0
+        ):
+            raise ValueError("line fit measurement requires finite positive support")
+
 
 @dataclass(frozen=True)
 class DeskewAngleMeasurement:
@@ -24,6 +33,16 @@ class DeskewAngleMeasurement:
     reason: str | None
     top_fit: LineFitMeasurement | None
     bottom_fit: LineFitMeasurement | None
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.angle_degrees):
+            raise ValueError("deskew angle measurement must be finite")
+        fits = (self.top_fit, self.bottom_fit)
+        if self.reason is None:
+            if all(fit is None for fit in fits):
+                raise ValueError("successful deskew measurement requires an edge fit")
+        elif not self.reason or self.angle_degrees != 0.0:
+            raise ValueError("failed deskew measurement must have zero angle and a reason")
 
 
 def _fit_line(
