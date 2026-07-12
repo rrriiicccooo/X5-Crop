@@ -141,17 +141,3 @@ def measure_deskew_angle(
     if layout == VERTICAL:
         angle = -angle
     return DeskewAngleMeasurement(angle, None, top_fit, bottom_fit)
-
-
-def deskew_measurement_quality(
-    measurement: DeskewAngleMeasurement,
-    parameters: DeskewParameters,
-) -> float:
-    if measurement.reason is not None:
-        return -1.0
-    return sum(
-        fit.inliers * parameters.quality_inlier_weight
-        - fit.median_residual
-        for fit in (measurement.top_fit, measurement.bottom_fit)
-        if fit is not None
-    )

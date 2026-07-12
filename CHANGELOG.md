@@ -126,6 +126,8 @@ repository rules in `AGENTS.md`.
   直接失败，不再让同名 TIFF 的不同 page 或运行配置静默覆盖。
 - Debug overlay 与 current report projection 直接接收 canonical separator、GateCheck、calibration 和
   bleed-plan 类型；项目内已知对象不再以 `Any` 掩盖边界。
+- Deskew base/fallback 选择删除无单位的加权 quality score、固定 pass threshold 和 gain；有效性、
+  独立上下边拟合、inlier 数与残差按确定性次序比较，参数台账也只使用单一真实单位。
 - Shared domain 不再混放 report、TIFF 或 output 类型：current-schema `ReportResult` 归 report 并在
   构造时验证，`ImageProfile` 与 TIFF tag value 归 I/O，`AxisBleedParameters` 归 output；units 只
   接收 resolution 与 unit，不再依赖完整 TIFF profile。
@@ -330,6 +332,9 @@ schema_revision: frame_sequence_geometry
 - Debug overlays and current-report projections now accept canonical separator,
   GateCheck, calibration, and bleed-plan types instead of hiding known boundaries
   behind `Any`.
+- Deskew base/fallback selection no longer uses a unitless weighted score, fixed
+  pass threshold, or gain. It compares validity, independent edge fits, inliers,
+  and residuals deterministically, and every parameter contract has one concrete unit.
 
 #### Physical Frame-Sequence Model (2026-07-11)
 

@@ -82,6 +82,33 @@ class ParameterLegitimacyContractTest(unittest.TestCase):
             self.assertTrue(contract.stage)
             self.assertTrue(contract.rationale)
 
+    def test_parameter_contract_units_are_single_physical_quantities(self) -> None:
+        ambiguous_units = {
+            "count_or_px",
+            "mixed_measurement",
+            "physical_identity",
+            "rendering",
+            "resolved_runtime_input",
+        }
+        offenders = {
+            contract.owner: contract.unit
+            for contract in parameter_contracts().values()
+            if contract.unit in ambiguous_units
+        }
+        self.assertEqual(offenders, {})
+
+    def test_deskew_measurements_are_not_reduced_to_an_empirical_scalar(self) -> None:
+        for removed in (
+            "auto_quality_ok",
+            "fallback_quality_gain",
+            "quality_inlier_weight",
+        ):
+            self.assertNotIn(removed, DeskewParameters.__dataclass_fields__)
+        source = (
+            PROJECT_ROOT / "x5crop/image/deskew.py"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("deskew_measurement_quality", source)
+
     def test_runtime_percentiles_are_explicit_parameters(self) -> None:
         self.assertEqual(hidden_runtime_percentiles(), [])
 

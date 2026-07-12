@@ -10,7 +10,6 @@ from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..geometry.layout import work_gray
 from ..image.deskew import (
     DeskewAngleMeasurement,
-    deskew_measurement_quality,
     measure_deskew_angle,
 )
 from ..image.evidence import make_deskew_fallback_gray
@@ -26,6 +25,22 @@ from ..image.statistics import (
 )
 from ..utils import clamp_float
 from ..run_config import RunConfig
+
+
+def _deskew_measurement_preference(
+    measurement: DeskewAngleMeasurement,
+) -> tuple[bool, int, int, float]:
+    fits = tuple(
+        fit
+        for fit in (measurement.top_fit, measurement.bottom_fit)
+        if fit is not None
+    )
+    return (
+        measurement.reason is None,
+        len(fits),
+        sum(fit.inliers for fit in fits),
+        -max((fit.median_residual for fit in fits), default=float("inf")),
+    )
 
 
 def _select_deskew_measurement(
@@ -45,8 +60,9 @@ def _select_deskew_measurement(
         return base
     if (
         config.deskew_fallback == "auto"
-        and deskew_measurement_quality(base, parameters)
-        >= parameters.auto_quality_ok
+        and base.reason is None
+        and base.top_fit is not None
+        and base.bottom_fit is not None
     ):
         return base
     fallback_gray = make_deskew_fallback_gray(
@@ -63,13 +79,7 @@ def _select_deskew_measurement(
         parameters,
         fallback_statistics,
     )
-    return (
-        fallback
-        if deskew_measurement_quality(fallback, parameters)
-        > deskew_measurement_quality(base, parameters)
-        + parameters.fallback_quality_gain
-        else base
-    )
+    return max((base, fallback), key=_deskew_measurement_preference)
 
 
 def apply_deskew(

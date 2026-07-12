@@ -17,12 +17,9 @@ class DeskewParameters:
     slope_delta_max: float = 0.006
     residual_min: float = 3.0
     residual_height_ratio: float = 0.003
-    auto_quality_ok: float = 8.0
-    fallback_quality_gain: float = 3.0
     fit_min_points: int = 4
     fit_tolerance_min: float = 2.0
     fit_tolerance_multiplier: float = 3.0
-    quality_inlier_weight: float = 2.0
     span_skip_ratio: float = 0.0005
     span_skip_min: float = 3.0
     span_skip_max: float = 12.0
@@ -36,10 +33,8 @@ class DeskewParameters:
             ("deskew minimum column content", self.min_col_content),
             ("deskew minimum fit points", self.fit_min_points),
             ("deskew residual floor", self.residual_min),
-            ("deskew automatic quality bound", self.auto_quality_ok),
             ("deskew fit tolerance floor", self.fit_tolerance_min),
             ("deskew fit tolerance multiplier", self.fit_tolerance_multiplier),
-            ("deskew quality inlier weight", self.quality_inlier_weight),
             ("deskew span minimum", self.span_skip_min),
             ("deskew span maximum", self.span_skip_max),
         ):
@@ -59,7 +54,6 @@ class DeskewParameters:
         for name, value in (
             ("deskew slope delta", self.slope_delta_max),
             ("deskew residual height ratio", self.residual_height_ratio),
-            ("deskew fallback quality gain", self.fallback_quality_gain),
             ("deskew span ratio", self.span_skip_ratio),
         ):
             require_nonnegative(name, value)
