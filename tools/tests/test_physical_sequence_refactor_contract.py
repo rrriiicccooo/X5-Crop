@@ -156,6 +156,26 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             {len(signature(solve_frame_sequence).parameters)},
         )
 
+    def test_holder_occlusion_is_measured_after_sequence_resolution(self) -> None:
+        source = (
+            Path(__file__).resolve().parents[2]
+            / "x5crop/detection/candidate/build/sequence_candidate.py"
+        ).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        solver_calls = tuple(
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "solve_frame_sequence"
+        )
+        self.assertEqual(len(solver_calls), 1)
+        self.assertNotIn("provisional", source)
+        self.assertLess(
+            source.index("solved = solve_frame_sequence"),
+            source.index("holder_occlusion_for_sequence("),
+        )
+
     def test_sequence_solver_reports_assignment_budget_exhaustion(self) -> None:
         result = solve_frame_sequence(
             (

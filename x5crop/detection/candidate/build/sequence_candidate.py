@@ -5,6 +5,7 @@ from ....cache.separator import cached_separator_profile
 from ....domain import (
     Box,
     CropEnvelope,
+    EvidenceState,
     FrameDimensionPrior,
     HolderSpan,
     SequenceHypothesis,
@@ -78,22 +79,7 @@ def build_sequence_candidate(
         parameters=separator_configuration.observation,
     )
     observations = observation_set.observations
-    provisional = solve_frame_sequence(
-        observations,
-        (),
-        visible_sequence_span,
-        count,
-        dimensions,
-        HolderOcclusionEvidence.unavailable(),
-        sequence_hypothesis.boundary_observations,
-        solver_parameters.maximum_assignment_evaluations,
-    )
-    holder_occlusion = holder_occlusion_for_sequence(
-        sequence_hypothesis.boundary_observations,
-        visible_sequence_span,
-        provisional.boundaries,
-        dimensions.width_px,
-    )
+    unresolved_occlusion = HolderOcclusionEvidence.unavailable()
     focused_observations = tuple(
         (boundary_index, observation)
         for boundary_index in range(1, count)
@@ -105,7 +91,7 @@ def build_sequence_candidate(
                     boundary_index,
                     count,
                     dimensions,
-                    holder_occlusion,
+                    unresolved_occlusion,
                 ).position,
                 gray_work=cache.gray_work,
                 corridor=corridor,
@@ -121,9 +107,19 @@ def build_sequence_candidate(
         visible_sequence_span,
         count,
         dimensions,
-        holder_occlusion,
+        unresolved_occlusion,
         sequence_hypothesis.boundary_observations,
         solver_parameters.maximum_assignment_evaluations,
+    )
+    holder_occlusion = (
+        holder_occlusion_for_sequence(
+            sequence_hypothesis.boundary_observations,
+            visible_sequence_span,
+            solved.boundaries,
+            dimensions.width_px,
+        )
+        if solved.assignment_consensus.state == EvidenceState.SUPPORTED
+        else HolderOcclusionEvidence.unavailable()
     )
     return BuiltCandidate(
         geometry=SequenceSolution(
@@ -147,7 +143,6 @@ def build_sequence_candidate(
             search_budget_exhausted=bool(
                 planning_budget_exhausted
                 or observation_set.budget_exhausted
-                or provisional.search_budget_exhausted
                 or solved.search_budget_exhausted
             ),
             automatic_processing_supported=True,
