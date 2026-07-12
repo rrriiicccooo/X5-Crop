@@ -57,7 +57,6 @@ from x5crop.domain import (
     PixelInterval,
     VisibleSequenceSpan,
 )
-from x5crop.units import ScanCalibration
 
 
 class PhysicalSequenceRefactorContractTest(unittest.TestCase):
@@ -679,9 +678,6 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             selection,
             frame_bleed_fixture(),
             transform_geometry_fixture(),
-            ScanCalibration(None, None, "unavailable", False),
-            image_width=200,
-            image_height=100,
         )
         self.assertEqual(detection.status, "needs_review")
 

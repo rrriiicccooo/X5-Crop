@@ -1,10 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from ...output.model import FrameBleedPlan, OutputGeometry
-from ...geometry.layout import require_work_layout
-from ...strip_modes import FULL, PARTIAL
-from ...units import ScanCalibration
 from ..gate_checks import GateCheck
 from .vocabulary import FINAL_REVIEW_REASONS
 
@@ -53,45 +49,6 @@ class DecisionGateAssessment:
             if check.final_review_reason is not None
         )
 
-
-@dataclass(frozen=True)
-class DecisionResult:
-    format_id: str
-    layout: str
-    strip_mode: str
-    count: int
-    decision_gate: DecisionGateAssessment
-    decision_geometry: OutputGeometry
-    frame_bleed_plan: FrameBleedPlan
-    scan_calibration: ScanCalibration
-    diagnostics: tuple[str, ...]
-
-    def __post_init__(self) -> None:
-        if not self.format_id:
-            raise ValueError("decision result requires a format identity")
-        require_work_layout(self.layout)
-        if self.strip_mode not in {FULL, PARTIAL}:
-            raise ValueError(
-                f"unsupported decision result strip mode: {self.strip_mode}"
-            )
-        if self.count <= 0:
-            raise ValueError("decision result count must be positive")
-        decision_frame_count = len(self.decision_geometry.frames)
-        if decision_frame_count not in {0, self.count}:
-            raise ValueError("decision result has incomplete frames")
-        if self.decision_gate.passed and decision_frame_count != self.count:
-            raise ValueError("approved decision requires one frame per count")
-        if len(self.frame_bleed_plan.frame_sides) != decision_frame_count:
-            raise ValueError("frame bleed plan must match decision frames")
-        if any(not item for item in self.diagnostics) or len(
-            set(self.diagnostics)
-        ) != len(self.diagnostics):
-            raise ValueError("decision diagnostics must be non-empty and unique")
-
     @property
     def status(self) -> str:
-        return "approved_auto" if self.decision_gate.passed else "needs_review"
-
-    @property
-    def final_review_reasons(self) -> tuple[str, ...]:
-        return self.decision_gate.final_review_reasons
+        return "approved_auto" if self.passed else "needs_review"

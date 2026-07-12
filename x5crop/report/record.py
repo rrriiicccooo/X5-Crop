@@ -5,6 +5,7 @@ from ..detection.final.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..output.model import OutputGeometry
+from ..units import ScanCalibration
 from .identity import REPORT_SCHEMA_ID, REPORT_SCHEMA_REVISION
 from .read_models import (
     decision_gate_detail,
@@ -42,6 +43,19 @@ def _geometry_read_model(geometry: OutputGeometry) -> dict[str, object]:
     }
 
 
+def _finalization_plan_read_model(detection: FinalDetection) -> dict[str, object]:
+    plan = detection.finalization_plan
+    return {
+        "layout": plan.layout,
+        "image_width": int(plan.image_width),
+        "image_height": int(plan.image_height),
+        "decision_geometry": _geometry_read_model(plan.decision_geometry),
+        "frame_bleed_plan": frame_bleed_plan_read_model(
+            plan.frame_bleed_plan
+        ),
+    }
+
+
 def report_record_for_final_detection(
     detection: FinalDetection,
     selection: SelectionResult,
@@ -52,6 +66,7 @@ def report_record_for_final_detection(
     review_copy: str | None,
     warnings: list[str],
     configuration: dict,
+    scan_calibration: ScanCalibration,
     transform_geometry: TransformGeometryEvidence,
     analysis_reuse_signature: dict,
 ) -> dict:
@@ -63,8 +78,9 @@ def report_record_for_final_detection(
         "input": {
             "profile": dict(profile),
             "scan_calibration": scan_calibration_read_model(
-                detection.decision.scan_calibration
+                scan_calibration
             ),
+            "transform_geometry": _transform_read_model(transform_geometry),
         },
         "configuration": dict(configuration),
         "selection": selection_read_model(selection),
@@ -76,22 +92,13 @@ def report_record_for_final_detection(
             "gate": decision_gate_detail(detection.decision),
         },
         "output": {
-            "decision_geometry": _geometry_read_model(
-                detection.decision.decision_geometry
-            ),
+            "finalization_plan": _finalization_plan_read_model(detection),
             "final_geometry": _geometry_read_model(detection.output_geometry),
-            "frame_bleed_plan": frame_bleed_plan_read_model(
-                detection.decision.frame_bleed_plan
-            ),
             "output_files": list(output_files),
             "review_copy": review_copy,
             "warnings": list(warnings),
         },
         "analysis_reuse_signature": dict(analysis_reuse_signature),
         "analysis_reuse": {"used": False},
-        "diagnostics": {
-            "transform_geometry": _transform_read_model(transform_geometry),
-            "detection": list(detection.decision.diagnostics),
-        },
     }
     return record

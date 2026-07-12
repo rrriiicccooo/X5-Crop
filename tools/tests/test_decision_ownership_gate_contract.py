@@ -18,10 +18,9 @@ from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
     FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
 )
-from x5crop.domain import Box, EvidenceState
+from x5crop.domain import EvidenceState
 from x5crop.detection.decision.model import DecisionGateAssessment
 from x5crop.detection.gate_checks import GateCheck
-from x5crop.output.model import OutputGeometry
 
 
 class DecisionOwnershipGateContractTest(unittest.TestCase):
@@ -47,28 +46,17 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         invalid_factories = (
             lambda: replace(
                 detection,
-                decision=replace(detection.decision, format_id=""),
-            ),
-            lambda: replace(
-                detection,
-                decision=replace(detection.decision, count=0),
-            ),
-            lambda: replace(
-                detection,
-                output_geometry=OutputGeometry(
-                    detection.output_geometry.crop_envelope,
-                    (
-                        Box(1, 0, 100, 100),
-                        detection.output_geometry.frames[1],
-                    ),
+                finalization_plan=replace(
+                    detection.finalization_plan,
+                    image_width=0,
                 ),
             ),
             lambda: replace(
                 detection,
-                decision=replace(
-                    detection.decision,
+                finalization_plan=replace(
+                    detection.finalization_plan,
                     frame_bleed_plan=replace(
-                        detection.decision.frame_bleed_plan,
+                        detection.finalization_plan.frame_bleed_plan,
                         frame_sides=(),
                     ),
                 ),
@@ -127,7 +115,7 @@ class DecisionOwnershipGateContractTest(unittest.TestCase):
         )
         content_checks = tuple(
             check
-            for check in decided.decision_gate.checks
+            for check in decided.checks
             if check.final_review_reason
             == FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED
         )

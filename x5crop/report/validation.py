@@ -52,7 +52,6 @@ CURRENT_REPORT_SECTIONS = (
     "output",
     "analysis_reuse_signature",
     "analysis_reuse",
-    "diagnostics",
 )
 
 
@@ -524,11 +523,40 @@ def _frame_bleed_plan_valid(value: Any, frame_count: int) -> bool:
     )
 
 
+def _finalization_plan_valid(
+    value: Any,
+    *,
+    allow_empty_frames: bool,
+) -> bool:
+    expected = {
+        "layout",
+        "image_width",
+        "image_height",
+        "decision_geometry",
+        "frame_bleed_plan",
+    }
+    if not (
+        isinstance(value, dict)
+        and set(value) == expected
+        and value["layout"] in {"horizontal", "vertical"}
+        and (_integer(value["image_width"]) or 0) > 0
+        and (_integer(value["image_height"]) or 0) > 0
+        and _geometry_valid(
+            value["decision_geometry"],
+            allow_empty_frames=allow_empty_frames,
+        )
+    ):
+        return False
+    return _frame_bleed_plan_valid(
+        value["frame_bleed_plan"],
+        len(value["decision_geometry"]["frame_boxes"]),
+    )
+
+
 def _output_valid(value: Any, *, allow_empty_frames: bool) -> bool:
     expected = {
-        "decision_geometry",
+        "finalization_plan",
         "final_geometry",
-        "frame_bleed_plan",
         "output_files",
         "review_copy",
         "warnings",
@@ -536,8 +564,8 @@ def _output_valid(value: Any, *, allow_empty_frames: bool) -> bool:
     if not (
         isinstance(value, dict)
         and set(value) == expected
-        and _geometry_valid(
-            value["decision_geometry"],
+        and _finalization_plan_valid(
+            value["finalization_plan"],
             allow_empty_frames=allow_empty_frames,
         )
         and _geometry_valid(
@@ -551,18 +579,25 @@ def _output_valid(value: Any, *, allow_empty_frames: bool) -> bool:
         and all(isinstance(warning, str) for warning in value["warnings"])
     ):
         return False
-    return _frame_bleed_plan_valid(
-        value["frame_bleed_plan"],
-        len(value["final_geometry"]["frame_boxes"]),
+    return len(value["final_geometry"]["frame_boxes"]) == len(
+        value["finalization_plan"]["decision_geometry"]["frame_boxes"]
     )
 
 
 def _input_valid(value: Any) -> bool:
     return bool(
         isinstance(value, dict)
-        and set(value) == {"profile", "scan_calibration"}
+        and set(value) == {
+            "profile",
+            "scan_calibration",
+            "transform_geometry",
+        }
         and _typed_value_valid(value["profile"], ImageProfile)
         and _typed_value_valid(value["scan_calibration"], ScanCalibration)
+        and _typed_value_valid(
+            value["transform_geometry"],
+            TransformGeometryEvidence,
+        )
     )
 
 
@@ -712,19 +747,6 @@ def _analysis_reuse_signature_valid(value: Any) -> bool:
     )
 
 
-def _diagnostics_valid(value: Any) -> bool:
-    return bool(
-        isinstance(value, dict)
-        and set(value) == {"transform_geometry", "detection"}
-        and isinstance(value["detection"], list)
-        and all(isinstance(item, str) for item in value["detection"])
-        and _typed_value_valid(
-            value["transform_geometry"],
-            TransformGeometryEvidence,
-        )
-    )
-
-
 def current_report_record_errors(record: dict[str, Any]) -> list[str]:
     errors = [
         f"missing_section:{key}"
@@ -796,8 +818,6 @@ def current_report_record_errors(record: dict[str, Any]) -> list[str]:
         allow_empty_frames=allow_empty_frames,
     ):
         errors.append("output_incomplete")
-    if not _diagnostics_valid(record["diagnostics"]):
-        errors.append("transform_geometry_incomplete")
     if not _analysis_reuse_signature_valid(record["analysis_reuse_signature"]):
         errors.append("analysis_reuse_signature_invalid")
     if not (

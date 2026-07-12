@@ -7,6 +7,7 @@ from ..detection.final.model import FinalDetection
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..io.model import ImageProfile
+from ..units import ScanCalibration
 from .model import ReportResult
 from .read_models import typed_read_model
 from .record import report_record_for_final_detection
@@ -22,6 +23,7 @@ def result_from_detection(
     warnings: list[str],
     *,
     configuration_detail: dict[str, Any],
+    scan_calibration: ScanCalibration,
     transform_geometry: TransformGeometryEvidence,
     analysis_reuse_signature: dict[str, Any],
 ) -> ReportResult:
@@ -34,6 +36,7 @@ def result_from_detection(
         review_copy=review_copy,
         warnings=warnings,
         configuration=configuration_detail,
+        scan_calibration=scan_calibration,
         transform_geometry=transform_geometry,
         analysis_reuse_signature=analysis_reuse_signature,
     )

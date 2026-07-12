@@ -24,9 +24,12 @@ from x5crop.detection.candidate.selection.model import (
     SelectionResult,
 )
 from x5crop.detection.decision.decision_gate import apply_decision_gate
-from x5crop.detection.decision.model import DecisionResult
+from x5crop.detection.decision.model import DecisionGateAssessment
 from x5crop.detection.final.model import FinalDetection
-from x5crop.detection.final.finalize import finalize_detection
+from x5crop.detection.final.finalize import (
+    finalization_plan_for_selection,
+    finalize_detection,
+)
 from x5crop.detection.evidence.content.frame_support import (
     FrameContentEvidence,
     FrameContentObservation,
@@ -76,7 +79,6 @@ from x5crop.domain import (
     SeparatorWidthConstraint,
 )
 from x5crop.output.model import AxisBleedParameters, FrameBleedPlan, FrameSideBleed
-from x5crop.units import ScanCalibration
 
 
 def separator_observation(
@@ -531,7 +533,7 @@ def decide_candidate(
     geometry_disagreement: bool = False,
     output_protection_feasible: bool = True,
     transform_state: EvidenceState = EvidenceState.SUPPORTED,
-) -> DecisionResult:
+) -> DecisionGateAssessment:
     return apply_decision_gate(
         selection_fixture(
             candidate,
@@ -539,9 +541,6 @@ def decide_candidate(
         ),
         frame_bleed_fixture(feasible=output_protection_feasible),
         transform_geometry_fixture(transform_state),
-        ScanCalibration(None, None, "unavailable", False),
-        image_width=200,
-        image_height=100,
     )
 
 
@@ -549,12 +548,23 @@ def final_detection_fixture(
     *,
     failed_candidate_check: str | None = None,
 ) -> FinalDetection:
+    selection = selection_fixture(
+        candidate_fixture(
+            failed_candidate_check=failed_candidate_check,
+        )
+    )
+    bleed = frame_bleed_fixture()
+    decision = apply_decision_gate(
+        selection,
+        bleed,
+        transform_geometry_fixture(),
+    )
     return finalize_detection(
-        decide_candidate(
-            candidate_fixture(
-                failed_candidate_check=failed_candidate_check,
-            )
+        decision,
+        finalization_plan_for_selection(
+            selection,
+            bleed,
+            image_width=200,
+            image_height=100,
         ),
-        image_width=200,
-        image_height=100,
     )

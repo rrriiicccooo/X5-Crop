@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any
 
 from ..detection.candidate.model import AssessedCandidate
-from ..detection.decision.model import DecisionResult
+from ..detection.decision.model import DecisionGateAssessment
 from ..detection.candidate.selection.model import SelectionResult
 from ..detection.physical.model import (
     DualLaneSolution,
@@ -134,8 +134,7 @@ def selection_read_model(selection: SelectionResult) -> dict[str, Any]:
     }
 
 
-def decision_gate_detail(decision: DecisionResult) -> dict[str, Any]:
-    gate = decision.decision_gate
+def decision_gate_detail(gate: DecisionGateAssessment) -> dict[str, Any]:
     return {
         "passed": bool(gate.passed),
         "checks": [gate_check_read_model(check) for check in gate.checks],

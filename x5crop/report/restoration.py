@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..detection.decision.model import DecisionResult
-from ..detection.final.model import FinalDetection
+from ..detection.final.finalize import finalize_detection
+from ..detection.final.model import FinalDetection, FinalizationPlan
 from ..detection.evidence.transform_geometry import TransformGeometryEvidence
 from ..domain import (
     Box,
@@ -18,7 +18,6 @@ from ..output.model import (
     FrameSideBleed,
     OutputGeometry,
 )
-from ..units import ScanCalibration
 from .validation import (
     current_report_record_errors,
     decision_gate_from_read_model,
@@ -86,24 +85,10 @@ def _frame_bleed_plan(value: dict[str, Any]) -> FrameBleedPlan:
     )
 
 
-def _scan_calibration(value: dict[str, Any]) -> ScanCalibration:
-    return ScanCalibration(
-        x_px_per_mm=(
-            None if value["x_px_per_mm"] is None else float(value["x_px_per_mm"])
-        ),
-        y_px_per_mm=(
-            None if value["y_px_per_mm"] is None else float(value["y_px_per_mm"])
-        ),
-        source=str(value["source"]),
-        trusted=bool(value["trusted"]),
-        warnings=tuple(str(item) for item in value["warnings"]),
-    )
-
-
 def transform_geometry_from_record(
     record: dict[str, Any],
 ) -> TransformGeometryEvidence:
-    value = record["diagnostics"]["transform_geometry"]
+    value = record["input"]["transform_geometry"]
     return TransformGeometryEvidence(
         state=EvidenceState(str(value["state"])),
         applied=bool(value["applied"]),
@@ -123,26 +108,20 @@ def final_detection_from_record(record: dict[str, Any]) -> FinalDetection:
     errors = current_report_record_errors(record)
     if errors:
         raise ValueError("invalid current report record: " + ",".join(errors))
-    selection = record["selection"]
-    selected = selection["candidates"][int(selection["selected_rank"]) - 1]
-    geometry = selected["candidate_geometry"]
     decision = record["decision"]
     output = record["output"]
-    return FinalDetection(
-        decision=DecisionResult(
-            format_id=str(geometry["format_id"]),
-            layout=str(geometry["layout"]),
-            strip_mode=str(geometry["strip_mode"]),
-            count=int(geometry["count"]),
-            decision_gate=decision_gate_from_read_model(decision["gate"]),
-            decision_geometry=_output_geometry(output["decision_geometry"]),
-            frame_bleed_plan=_frame_bleed_plan(output["frame_bleed_plan"]),
-            scan_calibration=_scan_calibration(
-                record["input"]["scan_calibration"]
-            ),
-            diagnostics=tuple(
-                str(item) for item in record["diagnostics"]["detection"]
-            ),
-        ),
-        output_geometry=_output_geometry(output["final_geometry"]),
+    plan_value = output["finalization_plan"]
+    finalization_plan = FinalizationPlan(
+        layout=str(plan_value["layout"]),
+        image_width=int(plan_value["image_width"]),
+        image_height=int(plan_value["image_height"]),
+        decision_geometry=_output_geometry(plan_value["decision_geometry"]),
+        frame_bleed_plan=_frame_bleed_plan(plan_value["frame_bleed_plan"]),
     )
+    detection = finalize_detection(
+        decision_gate_from_read_model(decision["gate"]),
+        finalization_plan,
+    )
+    if detection.output_geometry != _output_geometry(output["final_geometry"]):
+        raise ValueError("cached final geometry does not match finalization plan")
+    return detection

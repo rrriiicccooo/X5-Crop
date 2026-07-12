@@ -14,17 +14,13 @@ from .vocabulary import (
     FINAL_REASON_SELECTION_GEOMETRY_DISAGREEMENT,
     FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN,
 )
-from ...domain import Box, CropEnvelope
-from ...geometry.boxes import map_work_box
-from ...output.model import FrameBleedPlan, OutputGeometry
-from ...units import ScanCalibration
+from ...output.model import FrameBleedPlan
 from ..candidate.assessment.candidate_gate import CandidateGateAssessment
 from ..candidate.selection.model import SelectionResult
 from x5crop.domain import EvidenceState
 from ..gate_checks import GateCheck
 from ..evidence.transform_geometry import TransformGeometryEvidence
-from ..physical.model import DualLaneSolution
-from .model import DecisionGateAssessment, DecisionResult
+from .model import DecisionGateAssessment
 
 
 _CANDIDATE_REASON_BY_CHECK = {
@@ -35,51 +31,6 @@ _CANDIDATE_REASON_BY_CHECK = {
     "evidence_independence": FINAL_REASON_EVIDENCE_INDEPENDENCE_FAILED,
     "boundary_proof": FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
 }
-
-
-def _crop_envelope_frames(selection: SelectionResult) -> tuple[Box, ...]:
-    geometry = selection.selected.geometry
-    if not isinstance(geometry, DualLaneSolution):
-        envelope = geometry.crop_envelope.box
-        last_index = len(geometry.frames) - 1
-        return tuple(
-            Box(
-                envelope.left if index == 0 else frame.left,
-                envelope.top,
-                envelope.right if index == last_index else frame.right,
-                envelope.bottom,
-            )
-            for index, frame in enumerate(geometry.frames)
-        )
-    if len(geometry.lane_boxes) != len(geometry.lane_crop_envelopes):
-        raise ValueError("dual-lane geometry requires one crop envelope per lane")
-    lane_frame_indexes: list[list[int]] = [
-        [] for _lane in geometry.lane_boxes
-    ]
-    for frame_index, frame in enumerate(geometry.frames):
-        center_y = 0.5 * float(frame.top + frame.bottom)
-        matches = tuple(
-            lane_index
-            for lane_index, lane in enumerate(geometry.lane_boxes)
-            if float(lane.top) <= center_y < float(lane.bottom)
-        )
-        if len(matches) != 1:
-            raise ValueError("frame must belong to exactly one dual-lane region")
-        lane_frame_indexes[matches[0]].append(frame_index)
-    frames = list(geometry.frames)
-    for lane_index, indexes in enumerate(lane_frame_indexes):
-        if not indexes:
-            raise ValueError("dual-lane region has no frames")
-        envelope = geometry.lane_crop_envelopes[lane_index].box
-        for position, frame_index in enumerate(indexes):
-            frame = frames[frame_index]
-            frames[frame_index] = Box(
-                envelope.left if position == 0 else frame.left,
-                envelope.top,
-                envelope.right if position == len(indexes) - 1 else frame.right,
-                envelope.bottom,
-            )
-    return tuple(frames)
 
 
 def _decision_check(
@@ -169,11 +120,7 @@ def apply_decision_gate(
     selection: SelectionResult,
     frame_bleed_plan: FrameBleedPlan,
     transform_geometry: TransformGeometryEvidence,
-    scan_calibration: ScanCalibration,
-    *,
-    image_width: int,
-    image_height: int,
-) -> DecisionResult:
+) -> DecisionGateAssessment:
     selected = selection.selected
     candidate_gate = selected.assessment.gate
     resolution = selection.geometry_resolution
@@ -229,33 +176,4 @@ def apply_decision_gate(
         count_resolution=count_resolution_state,
         geometry_resolution=geometry_resolution_state,
     )
-    geometry = OutputGeometry(
-        crop_envelope=CropEnvelope(
-            map_work_box(
-                selected.geometry.crop_envelope.box,
-                selected.geometry.layout,
-                image_width,
-                image_height,
-            )
-        ),
-        frames=tuple(
-            map_work_box(
-                frame,
-                selected.geometry.layout,
-                image_width,
-                image_height,
-            )
-            for frame in _crop_envelope_frames(selection)
-        ),
-    )
-    return DecisionResult(
-        format_id=selected.geometry.format_id,
-        layout=selected.geometry.layout,
-        strip_mode=selected.geometry.strip_mode,
-        count=selected.geometry.count,
-        decision_gate=decision_gate,
-        decision_geometry=geometry,
-        frame_bleed_plan=frame_bleed_plan,
-        scan_calibration=scan_calibration,
-        diagnostics=selected.assessment.gate.diagnostics,
-    )
+    return decision_gate

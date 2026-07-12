@@ -25,6 +25,7 @@ from x5crop.report.read_models import typed_read_model
 from x5crop.report.restoration import final_detection_from_record
 from x5crop.report.validation import current_report_record_errors
 from tools.regression.compare import DEFAULT_FIELDS
+from x5crop.units import ScanCalibration
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -94,6 +95,7 @@ def _record() -> dict:
         configuration=detection_configuration_read_model(
             get_detection_configuration("135", "full")
         ),
+        scan_calibration=ScanCalibration(None, None, "unavailable", False),
         transform_geometry=transform_geometry_fixture(),
         analysis_reuse_signature=_analysis_reuse_signature(),
     )
@@ -103,6 +105,25 @@ class OutputReadModelContractTest(unittest.TestCase):
     def test_tiff_compression_mode_is_exhaustive(self) -> None:
         with self.assertRaises(ValueError):
             compression_for_write(_profile(), "invalid")
+
+    def test_transform_geometry_is_preprocess_input_not_diagnostics(self) -> None:
+        record = _record()
+        self.assertIn("transform_geometry", record["input"])
+        self.assertNotIn("diagnostics", record)
+
+    def test_output_has_one_canonical_finalization_plan(self) -> None:
+        output = _record()["output"]
+        self.assertIn("finalization_plan", output)
+        self.assertNotIn("decision_geometry", output)
+        self.assertNotIn("frame_bleed_plan", output)
+
+    def test_cache_restoration_rejects_geometry_not_produced_by_finalization(
+        self,
+    ) -> None:
+        record = _record()
+        record["output"]["final_geometry"]["frame_boxes"][0]["left"] -= 1
+        with self.assertRaises(ValueError):
+            final_detection_from_record(record)
 
     def test_analysis_reuse_is_disabled_for_every_debug_surface(self) -> None:
         from x5crop.runtime.analysis_reuse import result_from_reusable_analysis
@@ -160,7 +181,10 @@ class OutputReadModelContractTest(unittest.TestCase):
         from x5crop.configuration.registry import get_detection_configuration
         from x5crop.detection.context import DetectionContext, DetectionRequest
         from x5crop.detection.decision.decision_gate import apply_decision_gate
-        from x5crop.detection.final.finalize import finalize_detection
+        from x5crop.detection.final.finalize import (
+            finalization_plan_for_selection,
+            finalize_detection,
+        )
         from x5crop.detection.pipeline import choose_detection
         from x5crop.io.model import ImageProfile
         from x5crop.image.statistics import image_measurement_statistics
@@ -223,14 +247,15 @@ class OutputReadModelContractTest(unittest.TestCase):
             selection,
             bleed,
             transform_geometry_fixture(),
-            context.scan_calibration,
-            image_width=240,
-            image_height=120,
         )
         detection = finalize_detection(
             detection,
-            image_width=240,
-            image_height=120,
+            finalization_plan_for_selection(
+                selection,
+                bleed,
+                image_width=240,
+                image_height=120,
+            ),
         )
         self.assertEqual(
             detection.decision.final_review_reasons,
@@ -245,6 +270,7 @@ class OutputReadModelContractTest(unittest.TestCase):
             review_copy=None,
             warnings=[],
             configuration=detection_configuration_read_model(configuration),
+            scan_calibration=context.scan_calibration,
             transform_geometry=transform_geometry_fixture(),
             analysis_reuse_signature=_analysis_reuse_signature(
                 "135-dual",
@@ -318,10 +344,9 @@ class OutputReadModelContractTest(unittest.TestCase):
             lambda record: record["selection"]["candidates"][0][
                 "evidence"
             ].__setitem__("risk_summary", {}),
-            lambda record: record["output"]["frame_bleed_plan"].__setitem__(
-                "global_overlap_bleed",
-                0,
-            ),
+            lambda record: record["output"]["finalization_plan"][
+                "frame_bleed_plan"
+            ].__setitem__("global_overlap_bleed", 0),
         )
         baseline = _record()
         for mutation in mutations:
@@ -365,11 +390,12 @@ class OutputReadModelContractTest(unittest.TestCase):
             configuration=detection_configuration_read_model(
                 get_detection_configuration("135", "full")
             ),
+            scan_calibration=ScanCalibration(None, None, "unavailable", False),
             transform_geometry=transform,
             analysis_reuse_signature=_analysis_reuse_signature(),
         )
         self.assertIsNone(
-            record["diagnostics"]["transform_geometry"]["span_px"]
+            record["input"]["transform_geometry"]["span_px"]
         )
         self.assertEqual(current_report_record_errors(record), [])
 
@@ -448,14 +474,16 @@ class OutputReadModelContractTest(unittest.TestCase):
         )
 
         missing_transform = _record()
-        missing_transform["diagnostics"]["transform_geometry"].pop("state")
+        missing_transform["input"]["transform_geometry"].pop("state")
         self.assertIn(
-            "transform_geometry_incomplete",
+            "input_incomplete",
             current_report_record_errors(missing_transform),
         )
 
         missing_frame_sides = _record()
-        missing_frame_sides["output"]["frame_bleed_plan"].pop("frame_sides")
+        missing_frame_sides["output"]["finalization_plan"][
+            "frame_bleed_plan"
+        ].pop("frame_sides")
         self.assertIn(
             "output_incomplete",
             current_report_record_errors(missing_frame_sides),

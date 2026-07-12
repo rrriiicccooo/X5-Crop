@@ -14,7 +14,10 @@ from .frame_bleed import prepare_frame_bleed
 from .deskew import apply_deskew
 from ..debug.outputs import write_debug_outputs
 from ..detection.decision.decision_gate import apply_decision_gate
-from ..detection.final.finalize import finalize_detection
+from ..detection.final.finalize import (
+    finalization_plan_for_selection,
+    finalize_detection,
+)
 from ..detection.pipeline import choose_detection
 from ..output.model import AxisBleedParameters
 from ..report.model import ReportResult
@@ -130,15 +133,17 @@ def process_one(
         selection,
         prepared_frame_bleed,
         transform_geometry,
-        scan_calibration,
+    )
+    configuration_detail = detection_configuration_read_model(selected_configuration)
+    finalization_plan = finalization_plan_for_selection(
+        selection,
+        prepared_frame_bleed,
         image_width=int(gray.shape[1]),
         image_height=int(gray.shape[0]),
     )
-    configuration_detail = detection_configuration_read_model(selected_configuration)
     detection = finalize_detection(
         decided_detection,
-        image_width=int(gray.shape[1]),
-        image_height=int(gray.shape[0]),
+        finalization_plan,
     )
     review_copy = copy_for_review_if_needed(input_file, output_dir, config, detection, warnings)
     output_files = write_crops_if_allowed(
@@ -171,6 +176,7 @@ def process_one(
         review_copy,
         warnings,
         configuration_detail=configuration_detail,
+        scan_calibration=scan_calibration,
         transform_geometry=transform_geometry,
         analysis_reuse_signature=analysis_reuse_signature,
     )

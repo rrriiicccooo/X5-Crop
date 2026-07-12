@@ -16,6 +16,13 @@ repository rules in `AGENTS.md`.
 
 #### 封口参数与几何解析契约（2026-07-12）
 
+- Decision 与 output ownership 再收口：删除只转发 DecisionGate 的 `DecisionResult`，`DecisionGateAssessment`
+  直接拥有 checks、status 和 final reasons；layout、图像尺寸、
+  decision geometry 和 bleed 统一进入 typed `FinalizationPlan`。`FinalDetection` 只能由一个
+  finalization factory 按 plan 精确生成。
+- Current report 将 transform geometry 移到 input/preprocess，output 仅保存 canonical finalization plan
+  与 final geometry，删除会反向驱动 cache replay 的 diagnostics section。Restoration 现在重用
+  正式 finalization 并拒绝任何与重算结果不一致的持久化 geometry。
 - Holder occlusion 拆成搜索约束与求解后证据；white-holder 可能性不再被当作零
   遮挡拒绝正确 separator，也不能在 boundaries 解出前伪装成 supported evidence。
 - `SequenceSolution` 与 `SeparatorAssignment` 现在交叉验证 frame partition、photo indexes、
@@ -36,7 +43,7 @@ repository rules in `AGENTS.md`.
   才能自动处理，lane 分区连续覆盖整个 canvas，lane-local frame index 会转换为全局 identity。
 - Separator profile 参数与像素测量已统一归 `image` owner；源码层级依赖图新增无环契约，旧
   `geometry` profile 路径直接删除。
-- Decision 与 finalization 生命周期拆为 `DecisionResult -> FinalDetection`；DecisionGate 不再提前
+- Decision 与 finalization 生命周期拆为 `DecisionGateAssessment -> FinalDetection`；DecisionGate 不再提前
   创建带有占位 output geometry 的“最终”对象。
 - Current report 删除永远为空的 `schema_validation` section，并统一使用唯一 typed read-model
   projection；旧通用 `_plain` / `json_safe` 二次序列化路径已删除。

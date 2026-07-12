@@ -113,10 +113,17 @@ class LayerBoundariesOutputContractTest(unittest.TestCase):
         self.assertLess(source.index("apply_decision_gate("), source.index("finalize_detection("))
 
     def test_finalization_only_applies_frame_bleed_geometry(self) -> None:
-        source = (PROJECT_ROOT / "x5crop/detection/final/finalize.py").read_text(
-            encoding="utf-8"
+        final_root = PROJECT_ROOT / "x5crop/detection/final"
+        owners = tuple(
+            path.relative_to(PROJECT_ROOT).as_posix()
+            for path in final_root.glob("*.py")
+            if "apply_frame_bleed" in path.read_text(encoding="utf-8")
         )
-        self.assertIn("apply_frame_bleed", source)
+        self.assertEqual(owners, ("x5crop/detection/final/model.py",))
+        source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in final_root.glob("*.py")
+        )
         for forbidden in ("gray", "DetectionConfiguration", "separator", "content", "Candidate"):
             self.assertNotIn(forbidden, source)
 

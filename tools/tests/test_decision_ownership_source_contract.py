@@ -11,6 +11,12 @@ DECISION_ROOT = PROJECT_ROOT / "x5crop/detection/decision"
 
 
 class DecisionOwnershipSourceContractTest(unittest.TestCase):
+    def test_decision_gate_assessment_is_the_decision_result(self) -> None:
+        import x5crop.detection.decision.model as decision_model
+
+        self.assertFalse(hasattr(decision_model, "DecisionResult"))
+        self.assertTrue(hasattr(decision_model.DecisionGateAssessment, "status"))
+
     def test_decision_gate_requires_explicit_final_stage_inputs(self) -> None:
         from x5crop.detection.decision.decision_gate import apply_decision_gate
 
@@ -19,9 +25,12 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
             "selection",
             "frame_bleed_plan",
             "transform_geometry",
-            "scan_calibration",
         ):
             self.assertIs(parameters[name].default, Parameter.empty)
+        self.assertEqual(
+            tuple(parameters),
+            ("selection", "frame_bleed_plan", "transform_geometry"),
+        )
 
     def test_decision_consumes_evidence_without_generating_candidates(self) -> None:
         banned = (
@@ -41,7 +50,6 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
         self.assertEqual(offenders, [])
 
     def test_decision_and_finalization_have_single_factories(self) -> None:
-        decision_factories: list[str] = []
         final_factories: list[str] = []
         for path in (PROJECT_ROOT / "x5crop").rglob("*.py"):
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -49,35 +57,19 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
                 if not isinstance(node, ast.Call):
                     continue
                 if isinstance(node.func, ast.Name):
-                    if node.func.id == "DecisionResult":
-                        decision_factories.append(str(path.relative_to(PROJECT_ROOT)))
-                    elif node.func.id == "FinalDetection":
+                    if node.func.id == "FinalDetection":
                         final_factories.append(str(path.relative_to(PROJECT_ROOT)))
         self.assertEqual(
-            sorted(set(decision_factories)),
-            [
-                "x5crop/detection/decision/decision_gate.py",
-                "x5crop/report/restoration.py",
-            ],
-        )
-        self.assertEqual(
             sorted(set(final_factories)),
-            [
-                "x5crop/detection/final/finalize.py",
-                "x5crop/report/restoration.py",
-            ],
+            ["x5crop/detection/final/finalize.py"],
         )
 
     def test_decision_gate_owns_status_and_final_reason_creation(self) -> None:
-        factories: list[str] = []
         status_owners: list[str] = []
         for path in DECISION_ROOT.glob("*.py"):
             source = path.read_text(encoding="utf-8")
-            if "DecisionResult(" in source:
-                factories.append(path.name)
             if '"approved_auto"' in source or '"needs_review"' in source:
                 status_owners.append(path.name)
-        self.assertEqual(factories, ["decision_gate.py"])
         self.assertEqual(status_owners, ["model.py"])
 
     def test_only_candidate_and_decision_gate_types_exist(self) -> None:
@@ -101,7 +93,7 @@ class DecisionOwnershipSourceContractTest(unittest.TestCase):
             PROJECT_ROOT / "x5crop/detection/final/model.py"
         ).read_text(encoding="utf-8")
         self.assertIn("class DecisionGateAssessment", model_source)
-        self.assertIn("class DecisionResult", model_source)
+        self.assertNotIn("class DecisionResult", model_source)
         self.assertNotIn("class FinalDetection", model_source)
         self.assertIn("class FinalDetection", final_model_source)
         self.assertIn("_CANDIDATE_REASON_BY_CHECK", gate_source)

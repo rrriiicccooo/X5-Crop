@@ -120,27 +120,29 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             "frame_boundaries",
         ):
             self.assertNotIn(candidate_stage_field, final_fields)
-        self.assertEqual(final_fields, {"decision", "output_geometry"})
+        self.assertEqual(
+            final_fields,
+            {"decision", "finalization_plan"},
+        )
 
     def test_decision_and_finalization_have_distinct_lifecycle_types(self) -> None:
         import x5crop.detection.decision.model as decision_model
         from x5crop.detection.decision.decision_gate import apply_decision_gate
 
-        self.assertTrue(hasattr(decision_model, "DecisionResult"))
+        self.assertFalse(hasattr(decision_model, "DecisionResult"))
         self.assertFalse(hasattr(decision_model, "FinalDetection"))
         self.assertTrue(
             (PROJECT_ROOT / "x5crop/detection/final/model.py").is_file()
         )
-        decision_result = decision_model.DecisionResult
         self.assertEqual(
             inspect.signature(apply_decision_gate).return_annotation,
-            "DecisionResult",
+            "DecisionGateAssessment",
         )
         self.assertEqual(
             inspect.signature(finalize.finalize_detection).parameters[
                 "decision"
             ].annotation,
-            "DecisionResult",
+            "DecisionGateAssessment",
         )
         self.assertEqual(
             inspect.signature(finalize.finalize_detection).return_annotation,
@@ -148,9 +150,9 @@ class DetectionStageTypeContractTests(unittest.TestCase):
         )
         self.assertEqual(
             {field.name for field in fields(FinalDetection)},
-            {"decision", "output_geometry"},
+            {"decision", "finalization_plan"},
         )
-        self.assertNotEqual(decision_result, FinalDetection)
+        self.assertNotEqual(decision_model.DecisionGateAssessment, FinalDetection)
 
     def test_standard_dual_lane_and_review_only_geometry_have_distinct_types(self) -> None:
         sequence_fields = {field.name for field in fields(SequenceSolution)}
@@ -300,6 +302,25 @@ class DetectionStageTypeContractTests(unittest.TestCase):
             with self.subTest(function=function.__name__):
                 annotation = inspect.signature(function).parameters["detection"].annotation
                 self.assertEqual(annotation, "FinalDetection")
+
+    def test_final_detection_owns_one_typed_finalization_plan(self) -> None:
+        from x5crop.detection.final.model import FinalizationPlan
+
+        self.assertEqual(
+            {field.name for field in fields(FinalDetection)},
+            {"decision", "finalization_plan"},
+        )
+        self.assertIsInstance(FinalDetection.output_geometry, property)
+        self.assertEqual(
+            {field.name for field in fields(FinalizationPlan)},
+            {
+                "layout",
+                "image_width",
+                "image_height",
+                "decision_geometry",
+                "frame_bleed_plan",
+            },
+        )
 
     def test_export_surfaces_preserve_canonical_array_and_frame_types(self) -> None:
         from x5crop.export.crops import write_crops
