@@ -4,7 +4,6 @@ from dataclasses import replace
 from typing import Callable
 
 from ...cache.analysis import make_measurement_cache
-from ...constants import CANDIDATE_SOURCE_DUAL_LANE
 from ...domain import (
     Box,
     CropEnvelope,
@@ -147,7 +146,6 @@ def _parent_candidate(
                 proposal_budget_exhausted
                 or any(solution.search_budget_exhausted for solution in lane_solutions)
             ),
-            source=CANDIDATE_SOURCE_DUAL_LANE,
             automatic_processing_supported=divider.source != "center_safety",
             sequence_hypothesis_name="measured_lane_divider",
             sequence_hypothesis_strategy="dual_lane_sequence",

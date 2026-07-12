@@ -190,8 +190,7 @@ class CurrentSchemaNamingContractTest(unittest.TestCase):
     def test_physical_candidate_source_is_frame_sequence_not_separator(self) -> None:
         source = _active_source()
         self.assertNotIn("SeparatorSequencePlan", source)
-        self.assertNotIn("CANDIDATE_SOURCE_" + "SEPARATOR", source)
-        self.assertIn("CANDIDATE_SOURCE_FRAME_SEQUENCE", source)
+        self.assertNotIn("CANDIDATE_SOURCE_", source)
 
 
 if __name__ == "__main__":

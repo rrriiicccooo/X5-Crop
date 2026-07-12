@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from ....constants import CANDIDATE_SOURCE_HARD_SAFETY
 from ....domain import Box, MeasurementProvenance
 from ...context import DetectionContext
 from ...physical.boundary import canvas_boundary_observations
@@ -72,7 +71,6 @@ def hard_safety_candidate(
             residuals=solved.residuals,
             assignment_consensus=solved.assignment_consensus,
             search_budget_exhausted=solved.search_budget_exhausted,
-            source=CANDIDATE_SOURCE_HARD_SAFETY,
             automatic_processing_supported=False,
             sequence_hypothesis_name="full_canvas_safety",
             sequence_hypothesis_strategy="safety_canvas",

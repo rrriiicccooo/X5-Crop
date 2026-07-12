@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ....cache import MeasurementCache
 from ....cache.separator import cached_separator_profile
-from ....constants import CANDIDATE_SOURCE_FRAME_SEQUENCE
 from ....domain import Box, CropEnvelope, HolderSpan, SequenceHypothesis
 from ....formats import FormatPhysicalSpec
 from ....configuration.separator import SeparatorConfiguration
@@ -153,7 +152,6 @@ def build_sequence_candidate(
                 or provisional.search_budget_exhausted
                 or solved.search_budget_exhausted
             ),
-            source=CANDIDATE_SOURCE_FRAME_SEQUENCE,
             automatic_processing_supported=True,
             sequence_hypothesis_name=sequence_hypothesis.name,
             sequence_hypothesis_strategy=sequence_hypothesis.strategy,

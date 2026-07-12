@@ -24,6 +24,7 @@ class ArchitectureOwnershipContractTest(unittest.TestCase):
             "x5crop/runtime/output_protection.py",
             "x5crop/configuration/profiles.py",
             "x5crop/configuration/assembly.py",
+            "x5crop/constants.py",
         )
         self.assertEqual(
             [relative for relative in removed if (PROJECT_ROOT / relative).exists()],

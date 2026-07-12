@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from ....constants import CANDIDATE_SOURCE_FRAME_SEQUENCE
 from x5crop.domain import EvidenceState
 
 if TYPE_CHECKING:
@@ -21,10 +20,10 @@ class EvidenceIndependenceEvidence:
 def evidence_independence_evidence(
     geometry: SequenceSolution,
 ) -> EvidenceIndependenceEvidence:
-    if geometry.source != CANDIDATE_SOURCE_FRAME_SEQUENCE:
+    if not geometry.automatic_processing_supported:
         return EvidenceIndependenceEvidence(
             EvidenceState.NOT_APPLICABLE,
-            "non_separator_candidate",
+            "automatic_processing_not_supported",
             geometry.sequence_provenance.root_measurement,
             (),
             (),

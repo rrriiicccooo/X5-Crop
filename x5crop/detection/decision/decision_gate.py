@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ...constants import (
+from .vocabulary import (
     FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
     FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
     FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,

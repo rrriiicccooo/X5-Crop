@@ -11,7 +11,7 @@ from ..configuration.content import ContentConfiguration
 from ..configuration.diagnostics import DiagnosticsConfiguration
 from ..configuration.preprocess import PreprocessConfiguration
 from ..configuration.separator import SeparatorConfiguration
-from ..constants import FINAL_REVIEW_REASONS
+from ..detection.decision.vocabulary import FINAL_REVIEW_REASONS
 from ..detection.candidate.assessment.candidate_gate import BoundaryProofPath
 from ..detection.candidate.model import CandidateEvidence, EvidenceQuality
 from ..detection.candidate.plan.count_hypotheses import CountHypothesis

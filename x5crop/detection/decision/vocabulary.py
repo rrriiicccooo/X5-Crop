@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-CANDIDATE_SOURCE_FRAME_SEQUENCE = "frame_sequence"
-CANDIDATE_SOURCE_HARD_SAFETY = "hard_safety"
-CANDIDATE_SOURCE_REVIEW_ONLY = "review_only_mode"
-CANDIDATE_SOURCE_DUAL_LANE = "dual_lane_strip"
 
 FINAL_REASON_FRAME_TOPOLOGY_INVALID = "frame_topology_invalid"
 FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED = "content_preservation_unresolved"
@@ -17,6 +13,7 @@ FINAL_REASON_TRANSFORM_GEOMETRY_UNCERTAIN = "transform_geometry_uncertain"
 FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED = "automatic_processing_not_supported"
 FINAL_REASON_COUNT_RESOLUTION_UNAVAILABLE = "count_resolution_unavailable"
 FINAL_REASON_GEOMETRY_RESOLUTION_UNAVAILABLE = "geometry_resolution_unavailable"
+
 
 FINAL_REVIEW_REASONS = frozenset(
     {

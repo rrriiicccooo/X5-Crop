@@ -82,7 +82,6 @@ def _parent(lane):
             (lane.geometry, lane.geometry)
         ),
         search_budget_exhausted=False,
-        source=lane.geometry.source,
         automatic_processing_supported=True,
         sequence_hypothesis_name="dual_lane_fixture",
         sequence_hypothesis_strategy="dual_lane_sequence",

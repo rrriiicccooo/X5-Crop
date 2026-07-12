@@ -62,13 +62,15 @@ class PhysicalEvidenceIndependenceContractTest(unittest.TestCase):
         evidence = evidence_independence_evidence(candidate_fixture().geometry)
         self.assertEqual(evidence.state, EvidenceState.SUPPORTED)
 
-    def test_non_separator_candidate_is_not_applicable(self) -> None:
+    def test_non_automatic_candidate_is_not_applicable(self) -> None:
         candidate = candidate_fixture()
-        geometry = replace(candidate.geometry, source="content")
-        self.assertEqual(
-            evidence_independence_evidence(geometry).state,
-            EvidenceState.NOT_APPLICABLE,
+        geometry = replace(
+            candidate.geometry,
+            automatic_processing_supported=False,
         )
+        evidence = evidence_independence_evidence(geometry)
+        self.assertEqual(evidence.state, EvidenceState.NOT_APPLICABLE)
+        self.assertEqual(evidence.reason, "automatic_processing_not_supported")
 
     def test_dimension_prior_is_not_independent_measurement_evidence(self) -> None:
         candidate = candidate_fixture()

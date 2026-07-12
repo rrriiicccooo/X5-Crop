@@ -9,7 +9,7 @@ from tools.tests.physical_gate_support import (
     decide_candidate,
     final_detection_fixture,
 )
-from x5crop.constants import (
+from x5crop.detection.decision.vocabulary import (
     FINAL_REASON_AUTOMATIC_PROCESSING_NOT_SUPPORTED,
     FINAL_REASON_BOUNDARY_EVIDENCE_INSUFFICIENT,
     FINAL_REASON_CONTENT_PRESERVATION_UNRESOLVED,

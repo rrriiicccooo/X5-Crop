@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from ...constants import CANDIDATE_SOURCE_REVIEW_ONLY
 from ...domain import (
     Box,
     CropEnvelope,
@@ -55,7 +54,6 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
                 0,
                 (),
             ),
-            source=CANDIDATE_SOURCE_REVIEW_ONLY,
             sequence_hypothesis_name="review_only_canvas",
             sequence_hypothesis_strategy="review_only_canvas",
             sequence_provenance=MeasurementProvenance(

@@ -19,6 +19,11 @@ from x5crop.detection.candidate.selection.model import (
     SelectionResult,
 )
 from x5crop.detection.physical.model import SequenceResiduals
+from x5crop.detection.physical.model import (
+    DualLaneSolution,
+    ReviewOnlyGeometry,
+    SequenceSolution,
+)
 from x5crop.domain import (
     BoundaryPositionConstraint,
     Box,
@@ -49,6 +54,15 @@ def _provenance() -> MeasurementProvenance:
 
 
 class PhysicalModelInvariantTest(unittest.TestCase):
+    def test_candidate_geometry_has_no_duplicate_source_identity(self) -> None:
+        for geometry_type in (
+            SequenceSolution,
+            DualLaneSolution,
+            ReviewOnlyGeometry,
+        ):
+            with self.subTest(geometry_type=geometry_type):
+                self.assertNotIn("source", geometry_type.__dataclass_fields__)
+
     def test_count_hypothesis_contains_identity_not_derived_eligibility(self) -> None:
         self.assertEqual(
             {field.name for field in fields(CountHypothesis)},

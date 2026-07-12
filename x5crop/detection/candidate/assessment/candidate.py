@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from ...context import DetectionContext
-from ....constants import CANDIDATE_SOURCE_FRAME_SEQUENCE
 from ...evidence.content.frame_support import frame_content_evidence
 from ...evidence.content.holder_texture import holder_texture_evidence
 from ...evidence.content.preservation import content_preservation_evidence
@@ -64,8 +63,7 @@ def _boundary_proof_paths(
         in {EvidenceState.SUPPORTED, EvidenceState.NOT_APPLICABLE}
     )
     separator_led = bool(
-        geometry.source == CANDIDATE_SOURCE_FRAME_SEQUENCE
-        and geometry.count > 1
+        geometry.count > 1
         and common
         and evidence.separator_sequence.state == EvidenceState.SUPPORTED
     )
@@ -77,8 +75,7 @@ def _boundary_proof_paths(
         and content_not_contradicted
     )
     geometry_led = bool(
-        geometry.source == CANDIDATE_SOURCE_FRAME_SEQUENCE
-        and evidence.frame_topology.state == EvidenceState.SUPPORTED
+        evidence.frame_topology.state == EvidenceState.SUPPORTED
         and evidence.frame_dimensions.state == EvidenceState.SUPPORTED
         and (
             single_frame_physical_boundaries
@@ -90,8 +87,7 @@ def _boundary_proof_paths(
         )
     )
     partial_occupancy_led = bool(
-        geometry.source == CANDIDATE_SOURCE_FRAME_SEQUENCE
-        and geometry.strip_mode == "partial"
+        geometry.strip_mode == "partial"
         and evidence.partial_edge_safety.state == EvidenceState.SUPPORTED
         and evidence.holder_occupancy.state == EvidenceState.SUPPORTED
         and common

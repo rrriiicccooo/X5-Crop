@@ -115,7 +115,6 @@ class SequenceSolution:
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
-    source: str
     automatic_processing_supported: bool
     sequence_hypothesis_name: str
     sequence_hypothesis_strategy: str
@@ -210,7 +209,6 @@ class DualLaneSolution:
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
     search_budget_exhausted: bool
-    source: str
     automatic_processing_supported: bool
     sequence_hypothesis_name: str
     sequence_hypothesis_strategy: str
@@ -334,7 +332,6 @@ class ReviewOnlyGeometry:
     frame_dimension_prior: FrameDimensionPrior
     residuals: SequenceResiduals
     assignment_consensus: BoundaryAssignmentConsensus
-    source: str
     sequence_hypothesis_name: str
     sequence_hypothesis_strategy: str
     sequence_provenance: MeasurementProvenance

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from x5crop.constants import CANDIDATE_SOURCE_FRAME_SEQUENCE
 from x5crop.detection.candidate.assessment.candidate_gate import (
     BoundaryProofPath,
     CandidateGateAssessment,
@@ -413,7 +412,6 @@ def candidate_fixture(
             (),
         ),
         search_budget_exhausted=False,
-        source=CANDIDATE_SOURCE_FRAME_SEQUENCE,
         automatic_processing_supported=automatic_processing_supported,
         sequence_hypothesis_name="synthetic_sequence",
         sequence_hypothesis_strategy="boundary_led",

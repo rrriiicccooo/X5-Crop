@@ -284,7 +284,7 @@ class PhysicalGateModelContractTest(unittest.TestCase):
         self.assertNotIn("--confidence-threshold", build_parser().format_help())
 
     def test_final_reason_vocabulary_is_finite_and_physical(self) -> None:
-        from x5crop.constants import FINAL_REVIEW_REASONS
+        from x5crop.detection.decision.vocabulary import FINAL_REVIEW_REASONS
 
         self.assertEqual(len(FINAL_REVIEW_REASONS), 12)
         self.assertIn("content_preservation_unresolved", FINAL_REVIEW_REASONS)
