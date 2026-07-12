@@ -16,9 +16,16 @@ from x5crop.detection.evidence.sequence_content_alignment import sequence_conten
 from x5crop.detection.evidence.content.preservation import (
     content_preservation_evidence,
 )
-from x5crop.domain import EvidenceState
-from x5crop.domain import VisibleSequenceSpan
-from x5crop.domain import Box
+from x5crop.domain import (
+    Box,
+    CropEnvelope,
+    EvidenceState,
+    HolderSpan,
+    MeasurementProvenance,
+    PixelInterval,
+    VisibleSequenceSpan,
+)
+from x5crop.detection.physical.model import PhotoInterval
 from x5crop.configuration.registry import get_detection_configuration
 from x5crop.image.statistics import ImageMeasurementStatisticsParameters, image_measurement_statistics
 
@@ -31,6 +38,38 @@ def _cache(gray: np.ndarray) -> MeasurementCache:
         evidence,
         evidence.astype(np.float32) / 255.0,
         image_measurement_statistics(gray, ImageMeasurementStatisticsParameters()),
+    )
+
+
+def _single_frame_geometry(box: Box):
+    geometry = candidate_fixture().geometry
+    provenance = MeasurementProvenance(
+        "photo_edges",
+        "content_alignment_fixture",
+        ("gray_work",),
+    )
+    return replace(
+        geometry,
+        count=1,
+        holder_span=HolderSpan(box),
+        visible_sequence_span=VisibleSequenceSpan(box),
+        crop_envelope=CropEnvelope(box),
+        photo_intervals=(
+            PhotoInterval(
+                1,
+                PixelInterval.exact(float(box.left)),
+                PixelInterval.exact(float(box.right)),
+                provenance,
+                provenance,
+                True,
+                True,
+            ),
+        ),
+        frames=(box,),
+        separator_observations=(),
+        separator_assignments=(),
+        frame_boundaries=(),
+        inter_frame_spacings=(),
     )
 
 
@@ -84,13 +123,9 @@ class FrameContentSupportTest(unittest.TestCase):
         self.assertEqual(evidence.state, EvidenceState.UNAVAILABLE)
 
     def test_sequence_overcontainment_is_allowed(self) -> None:
-        candidate = candidate_fixture()
         gray = np.full((120, 900), 255, dtype=np.uint8)
         gray[20:100, 220:680] = 0
-        geometry = replace(
-            candidate.geometry,
-            visible_sequence_span=VisibleSequenceSpan(Box(0, 0, 900, 120)),
-        )
+        geometry = _single_frame_geometry(Box(0, 0, 900, 120))
         alignment = sequence_content_alignment_evidence(
             geometry,
             _cache(gray),
@@ -100,13 +135,9 @@ class FrameContentSupportTest(unittest.TestCase):
         self.assertTrue(alignment.overcontains_long_axis)
 
     def test_global_content_span_alone_does_not_confirm_undercrop(self) -> None:
-        candidate = candidate_fixture()
         gray = np.full((120, 900), 255, dtype=np.uint8)
         gray[20:100, 50:850] = 0
-        geometry = replace(
-            candidate.geometry,
-            visible_sequence_span=VisibleSequenceSpan(Box(250, 0, 650, 120)),
-        )
+        geometry = _single_frame_geometry(Box(250, 0, 650, 120))
         alignment = sequence_content_alignment_evidence(
             geometry,
             _cache(gray),

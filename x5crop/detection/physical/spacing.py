@@ -262,15 +262,23 @@ def corroborate_single_missing_overlap(
             )
         )
     )
-    if residual.maximum >= 0.0:
-        return spacings
     missing_position, missing_spacing = missing[0]
+    overlap = PixelInterval(
+        max(residual.minimum, missing_spacing.signed_width_px.minimum),
+        min(residual.maximum, missing_spacing.signed_width_px.maximum),
+    ) if residual.intersects(missing_spacing.signed_width_px) else None
+    if (
+        overlap is None
+        or overlap.maximum >= 0.0
+        or overlap.minimum <= -frame_width_px.minimum
+    ):
+        return spacings
     leading = edge_observations["leading"]
     trailing = edge_observations["trailing"]
     corroborated = CorroboratedSpacingEvidence(
         boundary=missing_spacing.boundary,
         kind="overlap",
-        signed_width_px=residual,
+        signed_width_px=overlap,
         provenance=MeasurementProvenance(
             root_measurement="calibrated_sequence_constraints",
             source="single_missing_overlap_corroboration",

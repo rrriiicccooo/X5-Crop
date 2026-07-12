@@ -4,12 +4,14 @@ import unittest
 from dataclasses import fields
 from inspect import signature
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 
 from x5crop.domain import EvidenceState, FrameBoundaryReference
 from x5crop.detection.physical.boundary import (
     BoundaryObservation,
+    HolderOcclusionConstraint,
     HolderOcclusionEvidence,
     HolderOcclusionSideEvidence,
     visible_sequence_and_crop_envelope,
@@ -53,6 +55,22 @@ from dataclasses import replace
 from x5crop.detection.evidence.frame_sequence import frame_sequence_evidence
 from x5crop.detection.physical.separator.assignment import frame_boundary_from_assignment
 from x5crop.domain import FrameDimensionPrior
+from x5crop.cache import MeasurementCache
+from x5crop.configuration.candidate import SequenceHypothesisParameters
+from x5crop.configuration.separator import SeparatorConfiguration
+from x5crop.detection.candidate.proposal.sequence import (
+    _separator_dimension_hypotheses,
+)
+from x5crop.detection.physical.separator.observations import (
+    SeparatorObservationSet,
+)
+from x5crop.formats import format_spec
+from x5crop.image.statistics import (
+    ImageMeasurementStatisticsParameters,
+    image_measurement_statistics,
+)
+from x5crop.units import ScanCalibration
+from x5crop.domain import SequenceHypothesis
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -71,6 +89,62 @@ def _statistics() -> ImageMeasurementStatistics:
 
 
 class FrameSequenceGeometryContractTests(unittest.TestCase):
+    def test_sequence_observation_budget_is_never_raised_by_count(self) -> None:
+        gray = np.zeros((100, 300), dtype=np.uint8)
+        cache = MeasurementCache(
+            "horizontal",
+            gray,
+            gray,
+            gray.astype(np.float32),
+            image_measurement_statistics(
+                gray,
+                ImageMeasurementStatisticsParameters(),
+            ),
+        )
+        box = Box(0, 0, 300, 100)
+        source = SequenceHypothesis(
+            "synthetic_sequence",
+            VisibleSequenceSpan(box),
+            CropEnvelope(box),
+            "boundary_led",
+            MeasurementProvenance(
+                "holder_boundary_profile",
+                "synthetic",
+                ("gray_work",),
+            ),
+            (),
+        )
+        observations = SeparatorObservationSet(
+            (
+                separator_observation(100.0, start=98.0, end=102.0),
+                separator_observation(200.0, start=198.0, end=202.0),
+            ),
+            False,
+        )
+        with patch(
+            "x5crop.detection.candidate.proposal.sequence.cached_separator_profile",
+            return_value=np.zeros(300, dtype=np.float32),
+        ), patch(
+            "x5crop.detection.candidate.proposal.sequence.measure_separator_bands",
+            return_value=observations,
+        ):
+            result = _separator_dimension_hypotheses(
+                [source],
+                format_spec("135"),
+                3,
+                cache,
+                ScanCalibration(None, None, "unavailable", False),
+                "horizontal",
+                SeparatorConfiguration(),
+                SequenceHypothesisParameters(
+                    observation_budget=1,
+                    maximum_hypotheses=12,
+                ),
+            )
+
+        self.assertEqual(result.hypotheses, ())
+        self.assertTrue(result.budget_exhausted)
+
     def test_not_applicable_holder_occlusion_cannot_hide_frame_width(self) -> None:
         with self.assertRaises(ValueError):
             HolderOcclusionSideEvidence(
@@ -84,26 +158,9 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
     def test_nonintersecting_boundary_constraints_have_no_fabricated_midpoint(
         self,
     ) -> None:
-        boundary = BoundaryObservation(
-            "leading",
-            PixelInterval.exact(0.0),
-            "white_holder_transition",
-            MeasurementProvenance(
-                "holder_boundary_profile",
-                "synthetic",
-                ("gray_work",),
-            ),
-        )
-        occlusion = HolderOcclusionEvidence(
-            HolderOcclusionSideEvidence(
-                "leading",
-                EvidenceState.SUPPORTED,
-                PixelInterval.exact(1_000.0),
-                "synthetic_hidden_width",
-                boundary,
-            ),
-            HolderOcclusionEvidence.not_applicable().trailing,
+        occlusion = HolderOcclusionConstraint(
             PixelInterval.exact(1_000.0),
+            PixelInterval.zero(),
         )
         dimensions = FrameDimensionPrior(
             PixelInterval.exact(200.0),
@@ -520,8 +577,8 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             visible_sequence_span=VisibleSequenceSpan(Box(0, 0, 315, 100)),
             crop_envelope=CropEnvelope(Box(0, 0, 315, 100)),
             frames=(
-                Box(0, 0, 103, 100),
-                Box(103, 0, 210, 100),
+                Box(0, 0, 102, 100),
+                Box(102, 0, 210, 100),
                 Box(210, 0, 315, 100),
             ),
             photo_intervals=(

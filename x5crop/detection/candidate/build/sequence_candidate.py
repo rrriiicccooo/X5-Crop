@@ -14,7 +14,7 @@ from ....configuration.separator import SeparatorConfiguration
 from ....configuration.candidate import SequenceSolverParameters
 from ...context import DetectionRequest
 from ...physical.model import SequenceSolution
-from ...physical.boundary import HolderOcclusionEvidence
+from ...physical.boundary import holder_occlusion_constraint
 from ...physical.separator.assignment import boundary_position_constraint
 from ...physical.separator.observations import (
     measure_focused_separator_band,
@@ -75,7 +75,10 @@ def build_sequence_candidate(
         parameters=separator_configuration.observation,
     )
     observations = observation_set.observations
-    unresolved_occlusion = HolderOcclusionEvidence.unavailable()
+    occlusion_constraint = holder_occlusion_constraint(
+        sequence_hypothesis.boundary_observations,
+        dimensions.width_px,
+    )
     focused_observations = tuple(
         (boundary_index, observation)
         for boundary_index in range(1, count)
@@ -87,7 +90,7 @@ def build_sequence_candidate(
                     boundary_index,
                     count,
                     dimensions,
-                    unresolved_occlusion,
+                    occlusion_constraint,
                 ).position,
                 gray_work=cache.gray_work,
                 corridor=corridor,

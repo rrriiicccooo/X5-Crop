@@ -16,6 +16,48 @@ from ...domain import (
 
 
 @dataclass(frozen=True)
+class HolderOcclusionConstraint:
+    leading_hidden_width_px: PixelInterval
+    trailing_hidden_width_px: PixelInterval
+
+    def __post_init__(self) -> None:
+        if (
+            self.leading_hidden_width_px.minimum < 0.0
+            or self.trailing_hidden_width_px.minimum < 0.0
+        ):
+            raise ValueError("holder occlusion constraint cannot be negative")
+
+    @property
+    def combined_hidden_width_px(self) -> PixelInterval:
+        return self.leading_hidden_width_px.plus(
+            self.trailing_hidden_width_px
+        )
+
+
+def holder_occlusion_constraint(
+    boundary_observations: tuple[BoundaryObservation, ...],
+    frame_width_px: PixelInterval,
+) -> HolderOcclusionConstraint:
+    by_side = {
+        observation.side: observation
+        for observation in boundary_observations
+        if observation.side in {"leading", "trailing"}
+    }
+    maximum_hidden = frame_width_px.maximum
+
+    def side_interval(side: str) -> PixelInterval:
+        observation = by_side.get(side)
+        if observation is None or observation.kind != "white_holder_transition":
+            return PixelInterval.zero()
+        return PixelInterval(0.0, maximum_hidden)
+
+    return HolderOcclusionConstraint(
+        side_interval("leading"),
+        side_interval("trailing"),
+    )
+
+
+@dataclass(frozen=True)
 class HolderOcclusionSideEvidence:
     side: str
     state: EvidenceState

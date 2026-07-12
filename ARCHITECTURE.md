@@ -132,9 +132,9 @@ Sequence solver 同时求解所有内部 boundaries，不逐边贪心：
 
 - `PhotoInterval` 和 cuts 必须严格单调，不能产生零宽、负宽或倒序 frame。
 - Interior photos 服从同一 `FrameDimensionPrior` option。
-- 求解顺序固定为：先确定单调 frame boundaries，再从首尾 boundary 与可见宽度测量
-  holder occlusion，最后构建 signed spacing。遮挡证据不能被候选构建层预先注入，
-  reason 文本也不能控制物理分配。
+- White-holder observation 只生成有界 `HolderOcclusionConstraint` 以放宽搜索，不是遮挡证据。
+  Solver 先在该约束下确定单调 frame boundaries，再从首尾 boundary 与可见宽度
+  生成 `HolderOcclusionEvidence`，最后构建 signed spacing。Reason 文本不能控制物理分配。
 - Holder occlusion 只能作用于首张 leading edge 和末张 trailing edge。
 - 已确认遮挡的首尾可见宽度不参与普通 photo-dimension contradiction；尺寸一致性只使用未遮挡、
   independently observed 的 frame。
@@ -143,6 +143,8 @@ Sequence solver 同时求解所有内部 boundaries，不逐边贪心：
 - Holder occlusion state、side 与 hidden-width interval 必须一致；无交集的 boundary constraints
   是无解状态，不能用合成中点继续求解。
 - Position、width、sequence conservation 和 provenance 必须同时成立。
+- `SequenceSolution` 在构造边界交叉验证 frames、photo indexes、boundaries、assignments 和
+  spacing references；不同事实投影不能漂移。
 - 同一 span/count 下所有最大独立-anchor 解都参与 `BoundaryAssignmentConsensus`；不同解的
   cut interval 没有共同交集时，assignment geometry 保持 unresolved。
 - Search budget exhausted 时 geometry 保持 unresolved。
@@ -155,6 +157,8 @@ Partial auto count 从允许的较大 count 向较小 count 求解。XPAN 和 12
 包含 nominal count，以表达完整胶片未铺满片夹。`GeometryResolution` 只有在 count、placement、
 content preservation compatibility 和实质替代解均已解决时才 supported；CandidateGate PASS
 不能替代这一结论。
+片夹 occupancy 只由 holder/visible spans 和正向物理证据派生，用户选择的 full/partial mode
+不能改写同一几何的 filled/underfilled 状态。
 一旦最高的 physically resolved count 出现，最终 candidate pool 只包含该 count 的候选；此前
 已评估但 unresolved 的较大 count 保留在 count audit detail 中，不能重新赢回 selection。
 

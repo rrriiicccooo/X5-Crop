@@ -180,7 +180,6 @@ def assess_candidate(
     sequence = separator_sequence_evidence(geometry)
     occupancy = holder_occupancy_evidence(
         layout=geometry.layout,
-        strip_mode=geometry.strip_mode,
         count=geometry.count,
         holder_span=geometry.holder_span,
         visible_sequence_span=geometry.visible_sequence_span,

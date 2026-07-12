@@ -298,6 +298,17 @@ class SeparatorAssignment:
     used_for_boundary: bool
     reason: str
 
+    def __post_init__(self) -> None:
+        if self.boundary_index <= 0:
+            raise ValueError("separator assignment boundary index must be positive")
+        if (
+            self.position_constraint.boundary_index != self.boundary_index
+            or self.width_constraint.boundary_index != self.boundary_index
+        ):
+            raise ValueError("separator assignment constraints must share one index")
+        if not self.reason:
+            raise ValueError("separator assignment requires a reason")
+
     @property
     def independent(self) -> bool:
         return self.state == EvidenceState.SUPPORTED and not self.geometry_dependent

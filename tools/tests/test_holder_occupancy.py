@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from inspect import signature
 import unittest
 
 from tools.tests.physical_gate_support import (
@@ -30,14 +31,20 @@ from x5crop.units import ScanCalibration
 
 
 class HolderOccupancyTests(unittest.TestCase):
+    def test_occupancy_measurement_does_not_accept_user_strip_mode(self) -> None:
+        self.assertNotIn(
+            "strip_mode",
+            signature(holder_occupancy_evidence).parameters,
+        )
+
     def _underfilled(self):
         candidate = candidate_fixture()
         holder = HolderSpan(Box(0, 0, 400, 120))
         sequence = VisibleSequenceSpan(Box(30, 0, 360, 120))
         frames = (
-            Box(30, 0, 130, 120),
-            Box(140, 0, 240, 120),
-            Box(250, 0, 350, 120),
+            Box(30, 0, 135, 120),
+            Box(135, 0, 245, 120),
+            Box(245, 0, 360, 120),
         )
         observations = (
             separator_observation(135.0, start=130.0, end=140.0),
@@ -108,7 +115,7 @@ class HolderOccupancyTests(unittest.TestCase):
             evidence.frame_coverage,
             holder_long_axis_interval=(0, 400),
             visible_sequence_interval=(30, 360),
-            frame_intervals=((30, 130), (140, 240), (250, 350)),
+            frame_intervals=((30, 135), (135, 245), (245, 360)),
         )
         dimensions = replace(
             evidence.frame_dimensions,
@@ -129,7 +136,6 @@ class HolderOccupancyTests(unittest.TestCase):
         geometry, coverage, dimensions, _ = self._underfilled()
         occupancy = holder_occupancy_evidence(
             layout="horizontal",
-            strip_mode="partial",
             count=geometry.count,
             holder_span=geometry.holder_span,
             visible_sequence_span=geometry.visible_sequence_span,
@@ -149,7 +155,6 @@ class HolderOccupancyTests(unittest.TestCase):
         geometry, coverage, dimensions, evidence = self._underfilled()
         occupancy = holder_occupancy_evidence(
             layout="horizontal",
-            strip_mode="partial",
             count=geometry.count,
             holder_span=geometry.holder_span,
             visible_sequence_span=geometry.visible_sequence_span,
@@ -176,7 +181,6 @@ class HolderOccupancyTests(unittest.TestCase):
         geometry, coverage, dimensions, _ = self._underfilled()
         occupancy = holder_occupancy_evidence(
             layout="horizontal",
-            strip_mode="partial",
             count=geometry.count,
             holder_span=geometry.holder_span,
             visible_sequence_span=geometry.visible_sequence_span,
@@ -195,7 +199,6 @@ class HolderOccupancyTests(unittest.TestCase):
         geometry, coverage, dimensions, _ = self._underfilled()
         occupancy = holder_occupancy_evidence(
             layout="vertical",
-            strip_mode="partial",
             count=geometry.count,
             holder_span=geometry.holder_span,
             visible_sequence_span=geometry.visible_sequence_span,
@@ -211,6 +214,25 @@ class HolderOccupancyTests(unittest.TestCase):
 
         self.assertEqual(occupancy.leading_slack_mm, 1.5)
         self.assertEqual(occupancy.trailing_slack_mm, 2.0)
+
+    def test_zero_holder_slack_is_physically_filled(self) -> None:
+        geometry, coverage, dimensions, _ = self._underfilled()
+        holder = HolderSpan(geometry.visible_sequence_span.box)
+        occupancy = holder_occupancy_evidence(
+            layout="horizontal",
+            count=geometry.count,
+            holder_span=holder,
+            visible_sequence_span=geometry.visible_sequence_span,
+            frames=geometry.frames,
+            frame_boundaries=geometry.frame_boundaries,
+            separator_assignments=geometry.separator_assignments,
+            physical_spec=format_spec("120-66"),
+            content_support_available=True,
+            frame_coverage=coverage,
+            frame_dimensions=dimensions,
+            calibration=ScanCalibration(None, None, "unavailable", False),
+        )
+        self.assertEqual(occupancy.occupancy_status, "filled")
 
 
 if __name__ == "__main__":

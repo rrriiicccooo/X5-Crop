@@ -13,7 +13,7 @@ from ....domain import (
     SeparatorWidthConstraint,
     VisibleSequenceSpan,
 )
-from ..boundary import HolderOcclusionEvidence
+from ..boundary import HolderOcclusionConstraint
 
 
 BOUNDARY_ADJACENT_FRAME_COUNT = 2.0
@@ -112,16 +112,16 @@ def boundary_position_constraint(
     boundary_index: int,
     count: int,
     dimensions: FrameDimensionPrior,
-    holder_occlusion: HolderOcclusionEvidence,
+    holder_occlusion: HolderOcclusionConstraint,
 ) -> BoundaryPositionConstraint:
     if not 0 < boundary_index < count:
         raise ValueError("frame boundary index must be internal to the sequence")
     leading = PixelInterval.exact(float(span.box.left)).plus(
         dimensions.width_px.scaled(float(boundary_index))
-    ).minus(holder_occlusion.leading.hidden_width_px)
+    ).minus(holder_occlusion.leading_hidden_width_px)
     trailing = PixelInterval.exact(float(span.box.right)).minus(
         dimensions.width_px.scaled(float(count - boundary_index))
-    ).plus(holder_occlusion.trailing.hidden_width_px)
+    ).plus(holder_occlusion.trailing_hidden_width_px)
     minimum = max(
         float(span.box.left),
         min(leading.minimum, trailing.minimum),
@@ -153,7 +153,7 @@ def separator_width_constraint(
     boundary_index: int,
     count: int,
     dimensions: FrameDimensionPrior,
-    holder_occlusion: HolderOcclusionEvidence,
+    holder_occlusion: HolderOcclusionConstraint,
 ) -> SeparatorWidthConstraint:
     if not 0 < boundary_index < count:
         raise ValueError("separator width constraint index must be internal")

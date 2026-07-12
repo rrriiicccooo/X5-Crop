@@ -62,6 +62,8 @@ def _geometry(second_start: float = 205.0):
         for index, observation in enumerate(observations, start=1)
     )
     boundaries = tuple(frame_boundary_from_assignment(item) for item in assignments)
+    first_cut = int(round(observations[0].center))
+    second_cut = int(round(observations[1].center))
     photo_edge_provenance = MeasurementProvenance(
         "photo_edges",
         "test_fixture",
@@ -113,9 +115,9 @@ def _geometry(second_start: float = 205.0):
             ),
         ),
         frames=(
-            replace(base.frames[0], right=103),
-            replace(base.frames[0], left=103, right=210),
-            replace(base.frames[0], left=210, right=315),
+            replace(base.frames[0], right=first_cut),
+            replace(base.frames[0], left=first_cut, right=second_cut),
+            replace(base.frames[0], left=second_cut, right=315),
         ),
     )
 

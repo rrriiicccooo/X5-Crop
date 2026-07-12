@@ -76,7 +76,6 @@ def strip_completeness_evidence(
 def holder_occupancy_evidence(
     *,
     layout: str,
-    strip_mode: str,
     count: int,
     holder_span: HolderSpan,
     visible_sequence_span: VisibleSequenceSpan,
@@ -117,26 +116,19 @@ def holder_occupancy_evidence(
     photo_dimensions_stable = frame_dimensions.state == EvidenceState.SUPPORTED
     complete_underfilled = bool(
         physical_spec.complete_strip_can_be_underfilled
-        and strip_mode == "partial"
         and completeness.frame_sequence_complete
         and content_support_available
         and frame_coverage.state == EvidenceState.SUPPORTED
         and photo_dimensions_stable
         and (leading_slack_px > 0.0 or trailing_slack_px > 0.0)
     )
-    if strip_mode == "full":
-        occupancy_status = "filled"
-    elif complete_underfilled:
-        occupancy_status = "underfilled"
-    else:
-        occupancy_status = "unknown"
-    state = (
-        EvidenceState.SUPPORTED
-        if occupancy_status in {"filled", "underfilled"}
-        else EvidenceState.UNAVAILABLE
+    occupancy_status = (
+        "underfilled"
+        if leading_slack_px > 0.0 or trailing_slack_px > 0.0
+        else "filled"
     )
     return HolderOccupancyEvidence(
-        state=state,
+        state=EvidenceState.SUPPORTED,
         strip_completeness=completeness,
         nominal_frame_total_mm=(
             float(count) * float(physical_spec.nominal_frame_size_mm.width_mm)

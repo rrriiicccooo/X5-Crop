@@ -155,6 +155,32 @@ class SequenceSolution:
             for left, right in zip(self.frames, self.frames[1:])
         ):
             raise ValueError("sequence solution frames must be monotonic")
+        visible = self.visible_sequence_span.box
+        envelope = self.crop_envelope.box
+        if not (
+            envelope.left <= visible.left
+            and envelope.top <= visible.top
+            and envelope.right >= visible.right
+            and envelope.bottom >= visible.bottom
+        ):
+            raise ValueError("sequence crop envelope must contain the visible span")
+        if (
+            self.frames[0].left != visible.left
+            or self.frames[-1].right != visible.right
+            or any(
+                frame.top != visible.top or frame.bottom != visible.bottom
+                for frame in self.frames
+            )
+            or any(
+                left.right != right.left
+                for left, right in zip(self.frames, self.frames[1:])
+            )
+        ):
+            raise ValueError("sequence frames must partition the visible span")
+        if tuple(photo.index for photo in self.photo_intervals) != tuple(
+            range(1, self.count + 1)
+        ):
+            raise ValueError("photo interval indexes must be complete and ordered")
         expected_boundaries = tuple(range(1, self.count))
         if (
             tuple(
@@ -164,6 +190,25 @@ class SequenceSolution:
             != expected_boundaries
         ):
             raise ValueError("sequence solution boundary indexes must be complete and ordered")
+        if any(
+            int(round(boundary.coordinate)) != self.frames[index - 1].right
+            for index, boundary in enumerate(self.frame_boundaries, start=1)
+        ):
+            raise ValueError("frame boundaries must define the frame partition")
+        if any(
+            boundary.assignment is not None
+            and boundary.assignment not in self.separator_assignments
+            for boundary in self.frame_boundaries
+        ):
+            raise ValueError("selected boundary assignments must share one identity")
+        if tuple(
+            spacing.boundary.boundary_index
+            for spacing in self.inter_frame_spacings
+        ) != expected_boundaries or any(
+            spacing.boundary.lane_index is not None
+            for spacing in self.inter_frame_spacings
+        ):
+            raise ValueError("sequence spacing references must match frame boundaries")
 
 
 def combined_sequence_residuals(

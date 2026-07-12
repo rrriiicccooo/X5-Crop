@@ -16,7 +16,7 @@ from x5crop.detection.decision.decision_gate import apply_decision_gate
 from x5crop.detection.candidate.assessment.separator_support import separator_sequence_evidence
 from x5crop.detection.candidate.selection.choose import select_candidates
 from x5crop.detection.candidate.selection.choose import geometry_clusters
-from x5crop.domain import Box, EvidenceState, PixelInterval
+from x5crop.domain import EvidenceState, PixelInterval
 from x5crop.detection.physical.model import SequenceResiduals
 from x5crop.entry.cli import build_parser
 from x5crop.run_config import RunConfig
@@ -155,14 +155,12 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             bad,
             geometry=replace(
                 bad.geometry,
-                visible_sequence_span=replace(
-                    bad.geometry.visible_sequence_span,
-                box=Box(
-                    bad.geometry.visible_sequence_span.box.left - 20,
-                    bad.geometry.visible_sequence_span.box.top,
-                    bad.geometry.visible_sequence_span.box.right + 20,
-                    bad.geometry.visible_sequence_span.box.bottom,
-                ).clamp(240, 100),
+                photo_intervals=(
+                    replace(
+                        bad.geometry.photo_intervals[0],
+                        start=PixelInterval(10.0, 20.0),
+                    ),
+                    *bad.geometry.photo_intervals[1:],
                 ),
             ),
         )
@@ -221,23 +219,16 @@ class PhysicalGateModelContractTest(unittest.TestCase):
             selected,
             geometry=replace(
                 selected.geometry,
-                visible_sequence_span=replace(
-                    selected.geometry.visible_sequence_span,
-                    box=Box(10, 0, 210, 100),
-                ),
-                crop_envelope=replace(
-                    selected.geometry.crop_envelope,
-                    box=Box(10, 0, 210, 100),
-                ),
-                photo_intervals=tuple(
+                photo_intervals=(
                     replace(
-                        photo,
-                        start=photo.start.plus(PixelInterval.exact(10.0)),
-                        end=photo.end.plus(PixelInterval.exact(10.0)),
-                    )
-                    for photo in selected.geometry.photo_intervals
+                        selected.geometry.photo_intervals[0],
+                        end=PixelInterval.exact(90.0),
+                    ),
+                    replace(
+                        selected.geometry.photo_intervals[1],
+                        start=PixelInterval.exact(110.0),
+                    ),
                 ),
-                frames=(Box(10, 0, 110, 100), Box(110, 0, 210, 100)),
                 residuals=SequenceResiduals(0.10, 0.0, 0.01),
             ),
         )

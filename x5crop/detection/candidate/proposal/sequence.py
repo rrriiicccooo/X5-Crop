@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from itertools import combinations
+from itertools import combinations, islice
+import math
 
 import numpy as np
 
@@ -73,6 +74,9 @@ def _separator_dimension_hypotheses(
 ) -> SequenceHypothesisSet:
     if count <= 1:
         return SequenceHypothesisSet((), False)
+    observation_budget = int(hypothesis_parameters.observation_budget)
+    if observation_budget < count - 1:
+        return SequenceHypothesisSet((), True)
     height, width = cache.gray_work.shape
     candidates: list[tuple[float, SequenceHypothesis]] = []
     budget_exhausted = False
@@ -98,10 +102,6 @@ def _separator_dimension_hypotheses(
         budget_exhausted |= observation_set.budget_exhausted
         if len(observations) < count - 1:
             continue
-        observation_budget = max(
-            count - 1,
-            int(hypothesis_parameters.observation_budget),
-        )
         budget_exhausted |= len(observations) > observation_budget
         strongest = tuple(
             sorted(
@@ -120,7 +120,16 @@ def _separator_dimension_hypotheses(
             layout=layout,
         ):
             frame_width = dimensions.width_px.midpoint
-            for sequence in combinations(strongest, count - 1):
+            remaining_evaluations = max(
+                0,
+                int(hypothesis_parameters.maximum_hypotheses) - len(candidates),
+            )
+            combination_count = math.comb(len(strongest), count - 1)
+            budget_exhausted |= combination_count > remaining_evaluations
+            for sequence in islice(
+                combinations(strongest, count - 1),
+                remaining_evaluations,
+            ):
                 leading = int(round(sequence[0].start - frame_width))
                 trailing = int(round(sequence[-1].end + frame_width))
                 box = Box(
@@ -165,6 +174,10 @@ def _separator_dimension_hypotheses(
                         ),
                     )
                 )
+            if len(candidates) >= int(hypothesis_parameters.maximum_hypotheses):
+                break
+        if len(candidates) >= int(hypothesis_parameters.maximum_hypotheses):
+            break
     ranked = [item for _residual, item in sorted(candidates, key=lambda item: item[0])]
     unique = unique_sequence_hypotheses(ranked)
     limit = int(hypothesis_parameters.maximum_hypotheses)

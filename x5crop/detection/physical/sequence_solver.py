@@ -16,7 +16,9 @@ from ...domain import (
     VisibleSequenceSpan,
 )
 from .boundary import (
+    HolderOcclusionConstraint,
     HolderOcclusionEvidence,
+    holder_occlusion_constraint,
     holder_occlusion_for_sequence,
     visible_sequence_length_interval,
 )
@@ -103,7 +105,7 @@ def _monotonic_assignment_solutions(
     span: VisibleSequenceSpan,
     count: int,
     dimensions: FrameDimensionPrior,
-    holder_occlusion: HolderOcclusionEvidence,
+    holder_occlusion: HolderOcclusionConstraint,
     maximum_assignment_evaluations: int,
 ) -> _AssignmentSearchResult:
     if maximum_assignment_evaluations <= 0:
@@ -222,7 +224,7 @@ def _cuts(
     span: VisibleSequenceSpan,
     count: int,
     dimensions: FrameDimensionPrior,
-    holder_occlusion: HolderOcclusionEvidence,
+    holder_occlusion: HolderOcclusionConstraint,
     selected: dict[int, SeparatorAssignment],
     focused: dict[int, SeparatorBandObservation],
 ) -> tuple[tuple[FrameBoundary, ...], tuple[SeparatorAssignment, ...]]:
@@ -323,7 +325,7 @@ def _solve_assignment_states(
     span: VisibleSequenceSpan,
     count: int,
     dimensions: FrameDimensionPrior,
-    holder_occlusion: HolderOcclusionEvidence,
+    holder_occlusion: HolderOcclusionConstraint,
     focused: dict[int, SeparatorBandObservation],
     boundary_observations: tuple[BoundaryObservation, ...],
 ) -> tuple[_SolvedAssignmentState, ...]:
@@ -604,7 +606,10 @@ def solve_frame_sequence(
 ) -> SequenceSolveResult:
     if count <= 0:
         raise ValueError("sequence count must be positive")
-    unresolved_occlusion = HolderOcclusionEvidence.unavailable()
+    occlusion_constraint = holder_occlusion_constraint(
+        boundary_observations,
+        dimensions.width_px,
+    )
     if count == 1:
         frames = (span.box,)
         intervals = _photo_intervals((), frames, boundary_observations)
@@ -635,7 +640,7 @@ def solve_frame_sequence(
         span,
         count,
         dimensions,
-        unresolved_occlusion,
+        occlusion_constraint,
         maximum_assignment_evaluations,
     )
     solved_states = _solve_assignment_states(
@@ -643,7 +648,7 @@ def solve_frame_sequence(
         span,
         count,
         dimensions,
-        unresolved_occlusion,
+        occlusion_constraint,
         dict(focused_observations),
         boundary_observations,
     )
