@@ -230,6 +230,8 @@ Sequence/content alignment 只保存 canonical sequence span 与 content span；
 和 reason 均由 evidence type 确定性派生。
 Frame content 只保存 adaptive threshold、逐 frame observations 与无 observation 时的测量失败原因；
 state、reason 和 median summary 均由 evidence type 派生。
+Holder texture 只保存 holder slack regions、frame-content reference 与真正的 measurement failure；
+contrast、state 和 reason 均由 evidence type 派生。
 Standard proof paths 由 `SequenceSolution + CandidateEvidence` 确定性派生并在 `AssessedCandidate`
 构造边界复核；它们只证明 boundary geometry，不重复裁决 content preservation。
 `GateCheck` 只表达所属 stage 与 evidence state；所有 check 都是该 Gate 的正式检查，不再保留

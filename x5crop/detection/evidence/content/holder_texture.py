@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -19,13 +19,84 @@ class HolderTextureRegion:
     coverage: float
     texture: float
 
+
 @dataclass(frozen=True)
 class HolderTextureEvidence:
-    state: EvidenceState
-    reason: str
     regions: tuple[HolderTextureRegion, ...]
-    content_holder_mean_contrast: float | None
-    content_holder_coverage_contrast: float | None
+    frame_content_mean: float | None
+    frame_content_coverage: float | None
+    measurement_unavailable_reason: str | None = None
+    state: EvidenceState = field(init=False)
+    reason: str = field(init=False)
+    content_holder_mean_contrast: float | None = field(init=False)
+    content_holder_coverage_contrast: float | None = field(init=False)
+
+    def __post_init__(self) -> None:
+        if self.measurement_unavailable_reason is not None:
+            if self.regions:
+                raise ValueError(
+                    "unavailable holder texture measurement cannot contain regions"
+                )
+            state = EvidenceState.UNAVAILABLE
+            reason = self.measurement_unavailable_reason
+            mean_contrast = None
+            coverage_contrast = None
+        elif not self.regions:
+            state = EvidenceState.NOT_APPLICABLE
+            reason = "no_holder_slack"
+            mean_contrast = None
+            coverage_contrast = None
+        elif (
+            self.frame_content_mean is None
+            or self.frame_content_coverage is None
+        ):
+            state = EvidenceState.UNAVAILABLE
+            reason = "frame_content_reference_unavailable"
+            mean_contrast = None
+            coverage_contrast = None
+        else:
+            holder_mean = float(
+                np.median([region.mean for region in self.regions])
+            )
+            holder_coverage = float(
+                np.median([region.coverage for region in self.regions])
+            )
+            content_mean = float(self.frame_content_mean)
+            content_coverage = float(self.frame_content_coverage)
+            holder_not_more_active = all(
+                region.mean <= content_mean
+                and region.coverage <= content_coverage
+                for region in self.regions
+            )
+            holder_distinct = any(
+                region.mean < content_mean
+                or region.coverage < content_coverage
+                for region in self.regions
+            )
+            if holder_not_more_active and holder_distinct:
+                state = EvidenceState.SUPPORTED
+                reason = "holder_slack_lower_content_than_frames"
+            elif holder_not_more_active:
+                state = EvidenceState.UNAVAILABLE
+                reason = "holder_and_frame_content_indistinguishable"
+            else:
+                state = EvidenceState.CONTRADICTED
+                reason = "content_like_signal_in_holder_slack"
+            mean_contrast = content_mean - holder_mean
+            coverage_contrast = content_coverage - holder_coverage
+        object.__setattr__(self, "state", state)
+        object.__setattr__(self, "reason", reason)
+        object.__setattr__(
+            self,
+            "content_holder_mean_contrast",
+            mean_contrast,
+        )
+        object.__setattr__(
+            self,
+            "content_holder_coverage_contrast",
+            coverage_contrast,
+        )
+
 
 def holder_texture_evidence(
     geometry: SequenceSolution,
@@ -34,11 +105,10 @@ def holder_texture_evidence(
 ) -> HolderTextureEvidence:
     if cache.layout != geometry.layout or frame_content.threshold is None:
         return HolderTextureEvidence(
-            EvidenceState.UNAVAILABLE,
-            "content_measurement_unavailable",
             (),
             None,
             None,
+            "content_measurement_unavailable",
         )
     holder = geometry.holder_span.box.clamp(
         cache.gray_work.shape[1],
@@ -71,51 +141,8 @@ def holder_texture_evidence(
                 texture=float(sample.std()),
             )
         )
-    if not regions:
-        return HolderTextureEvidence(
-            EvidenceState.NOT_APPLICABLE,
-            "no_holder_slack",
-            (),
-            None,
-            None,
-        )
-    holder_mean = float(np.median([region.mean for region in regions]))
-    holder_coverage = float(np.median([region.coverage for region in regions]))
-    content_mean = frame_content.median_mean
-    content_coverage = frame_content.median_coverage
-    if content_mean is None or content_coverage is None:
-        state = EvidenceState.UNAVAILABLE
-        reason = "frame_content_reference_unavailable"
-    else:
-        holder_not_more_active = all(
-            region.mean <= float(content_mean)
-            and region.coverage <= float(content_coverage)
-            for region in regions
-        )
-        holder_distinct = any(
-            region.mean < float(content_mean)
-            or region.coverage < float(content_coverage)
-            for region in regions
-        )
-        if holder_not_more_active and holder_distinct:
-            state = EvidenceState.SUPPORTED
-            reason = "holder_slack_lower_content_than_frames"
-        elif holder_not_more_active:
-            state = EvidenceState.UNAVAILABLE
-            reason = "holder_and_frame_content_indistinguishable"
-        else:
-            state = EvidenceState.CONTRADICTED
-            reason = "content_like_signal_in_holder_slack"
     return HolderTextureEvidence(
-        state=state,
-        reason=reason,
         regions=tuple(regions),
-        content_holder_mean_contrast=(
-            None if content_mean is None else float(content_mean - holder_mean)
-        ),
-        content_holder_coverage_contrast=(
-            None
-            if content_coverage is None
-            else float(content_coverage - holder_coverage)
-        ),
+        frame_content_mean=frame_content.median_mean,
+        frame_content_coverage=frame_content.median_coverage,
     )

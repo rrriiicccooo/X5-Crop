@@ -284,11 +284,9 @@ def candidate_evidence_fixture(
             ),
         ),
         holder_texture=HolderTextureEvidence(
-            EvidenceState.UNAVAILABLE,
-            "holder_slack_unavailable",
             (),
-            None,
-            None,
+            0.8,
+            0.8,
         ),
         sequence_content_alignment=SequenceContentAlignmentEvidence(
             sequence_box,

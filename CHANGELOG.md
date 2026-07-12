@@ -52,6 +52,8 @@ repository rules in `AGENTS.md`.
   只由 canonical sequence span 与 content span 派生。
 - Frame content 删除 caller-supplied state、reason 和 median summary；这些 read model 现在只由
   adaptive threshold、逐 frame observations 与明确的 unavailable cause 派生。
+- Holder texture 删除 caller-supplied state、reason 与 contrast summary；这些结论现在只由 holder
+  slack regions、frame-content reference 与明确的 measurement failure 派生。
 - Standard proof paths 改由 typed candidate model 从 geometry/evidence 重算校验；确认 undercrop 不再
   同时制造派生的 boundary failure，测试 fixture 也不再手工伪造 Gate。
 - Format physical sizes 与 runtime configuration bundle 各自收敛为一个 canonical tuple；删除
