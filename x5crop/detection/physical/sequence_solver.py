@@ -15,7 +15,7 @@ from ...domain import (
     SeparatorBandObservation,
     VisibleSequenceSpan,
 )
-from .boundary import HolderOcclusionEvidence
+from .boundary import HolderOcclusionEvidence, visible_sequence_length_interval
 from .model import (
     BoundaryAssignmentConsensus,
     PhotoInterval,
@@ -547,7 +547,10 @@ def _relations(
             )
         )
     return corroborate_single_missing_overlap(
-        visible_length_px=PixelInterval.exact(float(span.box.width)),
+        visible_length_px=visible_sequence_length_interval(
+            span,
+            boundary_observations,
+        ),
         count=len(boundaries) + 1,
         frame_width_px=dimensions.width_px,
         spacings=tuple(relations),

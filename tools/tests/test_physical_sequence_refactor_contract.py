@@ -31,6 +31,7 @@ from x5crop.detection.evidence.sequence_content_alignment import (
 )
 from x5crop.detection.physical.boundary import HolderOcclusionEvidence
 from x5crop.detection.physical.boundary import holder_occlusion_for_sequence
+from x5crop.detection.physical.boundary import visible_sequence_length_interval
 from x5crop.detection.physical.model import BoundaryAssignmentConsensus
 from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
@@ -42,6 +43,7 @@ from x5crop.detection.physical.spacing import (
     ObservedSpacingEvidence,
     SpacingHypothesis,
     observed_spacing_evidence,
+    corroborate_single_missing_overlap,
     sequence_conservation_evidence,
     spacing_hypothesis,
 )
@@ -486,6 +488,65 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
         )
         self.assertEqual(spacing.kind, "overlap")
         self.assertEqual(spacing.state, EvidenceState.UNAVAILABLE)
+
+    def test_boundary_uncertainty_prevents_midpoint_only_overlap_support(
+        self,
+    ) -> None:
+        edge_provenance = MeasurementProvenance(
+            "holder_boundary_profile",
+            "synthetic",
+            ("gray_work",),
+        )
+        span = VisibleSequenceSpan(Box(5, 0, 305, 100))
+        boundaries = (
+            BoundaryObservation(
+                "leading",
+                PixelInterval(0.0, 10.0),
+                "white_holder_transition",
+                edge_provenance,
+            ),
+            BoundaryObservation(
+                "trailing",
+                PixelInterval(280.0, 330.0),
+                "white_holder_transition",
+                edge_provenance,
+            ),
+        )
+        visible_length = visible_sequence_length_interval(span, boundaries)
+        result = corroborate_single_missing_overlap(
+            visible_length_px=visible_length,
+            count=3,
+            frame_width_px=PixelInterval.exact(100.0),
+            spacings=(
+                observed_spacing_evidence(
+                    FrameBoundaryReference(None, 1),
+                    PixelInterval.exact(5.0),
+                    edge_provenance,
+                ),
+                spacing_hypothesis(
+                    FrameBoundaryReference(None, 2),
+                    PixelInterval(-100.0, 100.0),
+                    MeasurementProvenance(
+                        "frame_geometry",
+                        "synthetic",
+                        ("frame_dimensions",),
+                    ),
+                ),
+            ),
+            holder_occlusion=HolderOcclusionEvidence.not_applicable(),
+            boundary_observations=boundaries,
+            dimension_source="scan_calibration",
+        )
+        self.assertEqual(visible_length, PixelInterval(270.0, 330.0))
+        self.assertTrue(
+            any(isinstance(spacing, SpacingHypothesis) for spacing in result)
+        )
+        self.assertFalse(
+            any(
+                isinstance(spacing, CorroboratedSpacingEvidence)
+                for spacing in result
+            )
+        )
 
     def test_sequence_solver_cannot_emit_non_monotonic_frames(self) -> None:
         result = solve_frame_sequence(

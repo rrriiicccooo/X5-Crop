@@ -98,6 +98,27 @@ class HolderOcclusionEvidence:
         )
 
 
+def visible_sequence_length_interval(
+    visible_sequence_span: VisibleSequenceSpan,
+    boundary_observations: tuple[BoundaryObservation, ...],
+) -> PixelInterval:
+    by_side = {
+        observation.side: observation
+        for observation in boundary_observations
+        if observation.side in {"leading", "trailing"}
+    }
+    if set(by_side) == {"leading", "trailing"}:
+        measured = by_side["trailing"].position.minus(
+            by_side["leading"].position
+        )
+        if measured.maximum > 0.0:
+            return PixelInterval(
+                max(0.0, measured.minimum),
+                measured.maximum,
+            )
+    return PixelInterval.exact(float(visible_sequence_span.box.width))
+
+
 def _not_applicable_side(side: str) -> HolderOcclusionSideEvidence:
     return HolderOcclusionSideEvidence(
         side=side,
