@@ -98,21 +98,21 @@ class PixelInterval:
 class FrameDimensionPrior:
     width_px: PixelInterval
     height_px: PixelInterval
-    frame_size_options_mm: tuple[tuple[float, float], ...]
+    frame_size_mm: tuple[float, float]
     source: str
     provenance: MeasurementProvenance
 
     def __post_init__(self) -> None:
         if self.width_px.minimum <= 0.0 or self.height_px.minimum <= 0.0:
             raise ValueError("frame dimension prior must have positive extent")
-        if not self.frame_size_options_mm or any(
-            width <= 0.0
-            or height <= 0.0
-            or not math.isfinite(width)
-            or not math.isfinite(height)
-            for width, height in self.frame_size_options_mm
+        width_mm, height_mm = self.frame_size_mm
+        if (
+            width_mm <= 0.0
+            or height_mm <= 0.0
+            or not math.isfinite(width_mm)
+            or not math.isfinite(height_mm)
         ):
-            raise ValueError("frame dimension prior requires physical size options")
+            raise ValueError("frame dimension prior requires a physical size")
         if not self.source:
             raise ValueError("frame dimension prior requires a source")
 

@@ -48,7 +48,7 @@ def assess_review_only_candidate(
     unavailable = EvidenceState.UNAVAILABLE
     zero = PixelInterval.exact(0.0)
     expected_boundaries = max(0, geometry.count - 1)
-    nominal = geometry.frame_dimension_prior.frame_size_options_mm[0]
+    nominal = geometry.frame_dimension_prior.frame_size_mm
     topology = FrameTopologyEvidence(
         state=unavailable,
         measurement_scope="unmeasured",
@@ -108,9 +108,9 @@ def assess_review_only_candidate(
     frame_dimensions = FrameDimensionEvidence(
         state=unavailable,
         reason=_REVIEW_ONLY_EVIDENCE_REASON,
-        nominal_width_mm=float(nominal[0]),
-        nominal_height_mm=float(nominal[1]),
-        nominal_aspect=float(nominal[0]) / float(nominal[1]),
+        frame_width_mm=float(nominal[0]),
+        frame_height_mm=float(nominal[1]),
+        frame_aspect=float(nominal[0]) / float(nominal[1]),
         photo_widths_px=(),
         photo_width_cv=None,
         separator_widths_px=(),

@@ -112,9 +112,9 @@ class HolderOccupancyTests(unittest.TestCase):
         )
         dimensions = replace(
             evidence.frame_dimensions,
-            nominal_width_mm=56.0,
-            nominal_height_mm=56.0,
-            nominal_aspect=1.0,
+            frame_width_mm=56.0,
+            frame_height_mm=56.0,
+            frame_aspect=1.0,
             photo_widths_px=(100.0, 100.0, 100.0),
             photo_width_cv=0.0,
             observed_aspect=1.0,

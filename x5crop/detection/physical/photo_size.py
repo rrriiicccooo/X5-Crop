@@ -32,9 +32,9 @@ def width_coefficient_of_variation(
 class FrameDimensionEvidence:
     state: EvidenceState
     reason: str
-    nominal_width_mm: float
-    nominal_height_mm: float
-    nominal_aspect: float
+    frame_width_mm: float
+    frame_height_mm: float
+    frame_aspect: float
     photo_widths_px: tuple[float, ...]
     photo_width_cv: float | None
     separator_widths_px: tuple[float, ...]
@@ -49,9 +49,9 @@ class FrameDimensionEvidence:
     def __post_init__(self) -> None:
         if not self.reason:
             raise ValueError("frame dimension evidence requires a reason")
-        if min(self.nominal_width_mm, self.nominal_height_mm) <= 0.0:
+        if min(self.frame_width_mm, self.frame_height_mm) <= 0.0:
             raise ValueError("nominal frame dimensions must be positive")
-        if self.nominal_aspect != self.nominal_width_mm / self.nominal_height_mm:
+        if self.frame_aspect != self.frame_width_mm / self.frame_height_mm:
             raise ValueError("nominal frame aspect must derive from physical size")
         if any(
             not math.isfinite(value) or value <= 0.0
@@ -82,8 +82,8 @@ class FrameDimensionEvidence:
             raise ValueError("frame dimension measurements must be finite and non-negative")
         if self.observed_aspect is not None:
             expected_error = (
-                abs(self.observed_aspect - self.nominal_aspect)
-                / self.nominal_aspect
+                abs(self.observed_aspect - self.frame_aspect)
+                / self.frame_aspect
             )
             if self.aspect_error_ratio != expected_error:
                 raise ValueError("frame aspect error must derive from measured aspect")
@@ -96,13 +96,13 @@ class FrameDimensionEvidence:
             raise ValueError("millimeter dimensions require trusted calibration")
 
 
-def frame_dimension_prior(
+def frame_dimension_priors(
     span: VisibleSequenceSpan,
     physical_spec: FormatPhysicalSpec,
     calibration: ScanCalibration,
     *,
     layout: str,
-) -> FrameDimensionPrior:
+) -> tuple[FrameDimensionPrior, ...]:
     horizontal = is_horizontal_layout(layout)
     short_axis = float(span.box.height)
     options = tuple(
@@ -118,30 +118,43 @@ def frame_dimension_prior(
         and long_ppm > 0.0
         and short_ppm > 0.0
     )
-    if calibrated:
-        widths = tuple(width_mm * float(long_ppm) for width_mm, _ in options)
-        heights = tuple(height_mm * float(short_ppm) for _, height_mm in options)
-    else:
-        widths = tuple(
-            short_axis * width_mm / height_mm for width_mm, height_mm in options
-        )
-        heights = (short_axis,)
-    return FrameDimensionPrior(
-        width_px=PixelInterval(min(widths), max(widths)),
-        height_px=PixelInterval(min(heights), max(heights)),
-        frame_size_options_mm=options,
-        source="scan_calibration" if calibrated else "short_axis_aspect",
-        provenance=MeasurementProvenance(
-            root_measurement=(
-                "scan_calibration" if calibrated else "physical_frame_aspect"
-            ),
-            source="frame_dimension_prior",
-            dependencies=(
-                "format_physical_spec",
-                "scan_calibration" if calibrated else "short_axis_boundaries",
-            ),
+    provenance = MeasurementProvenance(
+        root_measurement=(
+            "scan_calibration" if calibrated else "physical_frame_aspect"
+        ),
+        source="frame_dimension_prior",
+        dependencies=(
+            "format_physical_spec",
+            "scan_calibration" if calibrated else "short_axis_boundaries",
         ),
     )
+    priors: list[FrameDimensionPrior] = []
+    seen_pixel_sizes: set[tuple[PixelInterval, PixelInterval]] = set()
+    for width_mm, height_mm in options:
+        width_px = PixelInterval.exact(
+            width_mm * float(long_ppm)
+            if calibrated
+            else short_axis * width_mm / height_mm
+        )
+        height_px = PixelInterval.exact(
+            height_mm * float(short_ppm) if calibrated else short_axis
+        )
+        pixel_size = (width_px, height_px)
+        if pixel_size in seen_pixel_sizes:
+            continue
+        seen_pixel_sizes.add(pixel_size)
+        priors.append(
+            FrameDimensionPrior(
+                width_px=width_px,
+                height_px=height_px,
+                frame_size_mm=(width_mm, height_mm),
+                source=(
+                    "scan_calibration" if calibrated else "short_axis_aspect"
+                ),
+                provenance=provenance,
+            )
+        )
+    return tuple(priors)
 
 
 def _photo_widths(
@@ -187,11 +200,10 @@ def _dimension_photo_intervals(
 
 def frame_dimension_evidence(
     geometry: SequenceSolution,
-    physical_spec: FormatPhysicalSpec,
     calibration: ScanCalibration,
 ) -> FrameDimensionEvidence:
     horizontal = is_horizontal_layout(geometry.layout)
-    nominal = physical_spec.nominal_frame_size_mm
+    frame_width_mm, frame_height_mm = geometry.frame_dimension_prior.frame_size_mm
     photo_widths, separator_widths = _photo_widths(
         geometry,
     )
@@ -209,9 +221,9 @@ def frame_dimension_evidence(
         if observed_width is not None
         else None
     )
-    nominal_aspect = float(physical_spec.horizontal_content_aspect)
+    frame_aspect = float(frame_width_mm) / float(frame_height_mm)
     aspect_error = (
-        abs(observed_aspect - nominal_aspect) / nominal_aspect
+        abs(observed_aspect - frame_aspect) / frame_aspect
         if observed_aspect is not None
         else None
     )
@@ -254,9 +266,9 @@ def frame_dimension_evidence(
     return FrameDimensionEvidence(
         state,
         reason,
-        float(nominal.width_mm),
-        float(nominal.height_mm),
-        nominal_aspect,
+        float(frame_width_mm),
+        float(frame_height_mm),
+        frame_aspect,
         tuple(float(width) for width in photo_widths),
         photo_cv,
         tuple(float(width) for width in separator_widths),

@@ -167,9 +167,9 @@ def assess_dual_lane_candidate(
     dimensions = FrameDimensionEvidence(
         state=_combined_state(dimension_states),
         reason="dual_lane_frame_dimensions",
-        nominal_width_mm=nominal.nominal_width_mm,
-        nominal_height_mm=nominal.nominal_height_mm,
-        nominal_aspect=nominal.nominal_aspect,
+        frame_width_mm=nominal.frame_width_mm,
+        frame_height_mm=nominal.frame_height_mm,
+        frame_aspect=nominal.frame_aspect,
         photo_widths_px=widths,
         photo_width_cv=width_coefficient_of_variation(widths),
         separator_widths_px=separator_widths,

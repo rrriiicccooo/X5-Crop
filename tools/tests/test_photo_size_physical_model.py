@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from dataclasses import fields
 import unittest
 
 from tools.tests.physical_gate_support import (
@@ -12,7 +13,10 @@ from x5crop.detection.physical.boundary import (
     HolderOcclusionEvidence,
     holder_occlusion_evidence,
 )
-from x5crop.detection.physical.photo_size import frame_dimension_evidence
+from x5crop.detection.physical.photo_size import (
+    frame_dimension_evidence,
+    frame_dimension_priors,
+)
 from x5crop.detection.physical.model import PhotoInterval
 from x5crop.detection.physical.spacing import observed_spacing_evidence
 from x5crop.detection.physical.separator.assignment import (
@@ -118,6 +122,44 @@ def _geometry(second_start: float = 205.0):
 
 
 class PhotoSizePhysicalModelTest(unittest.TestCase):
+    def test_discrete_frame_sizes_produce_discrete_dimension_priors(self) -> None:
+        base = candidate_fixture().geometry
+        priors = frame_dimension_priors(
+            base.visible_sequence_span,
+            format_spec("120-66"),
+            ScanCalibration(10.0, 10.0, "test", True),
+            layout="horizontal",
+        )
+        self.assertEqual(
+            tuple(prior.frame_size_mm for prior in priors),
+            ((56.0, 56.0), (54.0, 54.0)),
+        )
+        self.assertEqual(
+            tuple(prior.width_px for prior in priors),
+            (PixelInterval.exact(560.0), PixelInterval.exact(540.0)),
+        )
+        self.assertNotIn(
+            PixelInterval.exact(550.0),
+            tuple(prior.width_px for prior in priors),
+        )
+        uncalibrated = frame_dimension_priors(
+            base.visible_sequence_span,
+            format_spec("120-66"),
+            ScanCalibration(None, None, "unavailable", False),
+            layout="horizontal",
+        )
+        self.assertEqual(len(uncalibrated), 1)
+        self.assertEqual(uncalibrated[0].frame_size_mm, (56.0, 56.0))
+
+    def test_dimension_evidence_names_the_selected_physical_size(self) -> None:
+        from x5crop.detection.physical.photo_size import FrameDimensionEvidence
+
+        names = {field.name for field in fields(FrameDimensionEvidence)}
+        self.assertTrue(
+            {"frame_width_mm", "frame_height_mm", "frame_aspect"} <= names
+        )
+        self.assertFalse(any(name.startswith("nominal_") for name in names))
+
     def test_physical_aspect_prior_does_not_become_dimension_evidence(self) -> None:
         base = candidate_fixture().geometry
         geometry = replace(
@@ -144,7 +186,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         )
         result = frame_dimension_evidence(
             geometry,
-            format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
         )
         self.assertEqual(result.state, EvidenceState.UNAVAILABLE)
@@ -216,7 +257,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         )
         result = frame_dimension_evidence(
             geometry,
-            format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
         )
         self.assertEqual(occlusion.leading.state, EvidenceState.SUPPORTED)
@@ -227,7 +267,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         geometry = _geometry()
         result = frame_dimension_evidence(
             geometry,
-            format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
         )
         self.assertEqual(result.photo_widths_px, (100.0, 100.0, 100.0))
@@ -276,7 +315,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
 
         result = frame_dimension_evidence(
             geometry,
-            format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
         )
 
@@ -287,7 +325,6 @@ class PhotoSizePhysicalModelTest(unittest.TestCase):
         geometry = _geometry(second_start=225.0)
         result = frame_dimension_evidence(
             geometry,
-            format_spec("135"),
             ScanCalibration(None, None, "unavailable", False),
         )
         self.assertEqual(result.state, EvidenceState.CONTRADICTED)

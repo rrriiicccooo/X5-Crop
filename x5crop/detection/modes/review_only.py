@@ -17,7 +17,7 @@ from ..physical.model import (
     SequenceResiduals,
 )
 from ..physical.boundary import canvas_boundary_observations
-from ..physical.photo_size import frame_dimension_prior
+from ..physical.photo_size import frame_dimension_priors
 
 
 def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
@@ -31,12 +31,12 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
     span = Box(0, 0, width, height)
     count = physical_spec.default_count
     visible_span = VisibleSequenceSpan(span)
-    dimensions = frame_dimension_prior(
+    dimensions = frame_dimension_priors(
         visible_span,
         physical_spec,
         context.scan_calibration,
         layout=context.request.layout,
-    )
+    )[0]
     return BuiltCandidate(
         geometry=ReviewOnlyGeometry(
             format_id=physical_spec.format_id,

@@ -2,18 +2,22 @@ from __future__ import annotations
 
 from ....cache import MeasurementCache
 from ....cache.separator import cached_separator_profile
-from ....domain import Box, CropEnvelope, HolderSpan, SequenceHypothesis
+from ....domain import (
+    Box,
+    CropEnvelope,
+    FrameDimensionPrior,
+    HolderSpan,
+    SequenceHypothesis,
+)
 from ....formats import FormatPhysicalSpec
 from ....configuration.separator import SeparatorConfiguration
 from ....configuration.candidate import SequenceSolverParameters
-from ....units import ScanCalibration
 from ...context import DetectionRequest
 from ...physical.model import SequenceSolution
 from ...physical.boundary import (
     HolderOcclusionEvidence,
     holder_occlusion_for_sequence,
 )
-from ...physical.photo_size import frame_dimension_prior
 from ...physical.separator.assignment import boundary_position_constraint
 from ...physical.separator.observations import (
     measure_focused_separator_band,
@@ -44,7 +48,7 @@ def build_sequence_candidate(
     fmt: FormatPhysicalSpec,
     count_hypothesis: CountHypothesis,
     sequence_hypothesis: SequenceHypothesis,
-    scan_calibration: ScanCalibration,
+    dimensions: FrameDimensionPrior,
     *,
     cache: MeasurementCache,
     separator_configuration: SeparatorConfiguration,
@@ -74,12 +78,6 @@ def build_sequence_candidate(
         parameters=separator_configuration.observation,
     )
     observations = observation_set.observations
-    dimensions = frame_dimension_prior(
-        visible_sequence_span,
-        fmt,
-        scan_calibration,
-        layout=request.layout,
-    )
     provisional = solve_frame_sequence(
         observations,
         (),

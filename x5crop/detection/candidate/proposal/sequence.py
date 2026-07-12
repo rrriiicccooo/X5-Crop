@@ -26,7 +26,7 @@ from ...physical.sequence import (
     base_sequence_span_candidates,
     unique_sequence_hypotheses,
 )
-from ...physical.photo_size import frame_dimension_prior
+from ...physical.photo_size import frame_dimension_priors
 from ...physical.separator.observations import measure_separator_bands
 
 
@@ -113,58 +113,58 @@ def _separator_dimension_hypotheses(
                 key=lambda item: item.center,
             )
         )
-        dimensions = frame_dimension_prior(
+        for dimensions in frame_dimension_priors(
             source.visible_sequence_span,
             fmt,
             calibration,
             layout=layout,
-        )
-        frame_width = dimensions.width_px.midpoint
-        for sequence in combinations(strongest, count - 1):
-            leading = int(round(sequence[0].start - frame_width))
-            trailing = int(round(sequence[-1].end + frame_width))
-            box = Box(
-                max(0, leading),
-                source.visible_sequence_span.box.top,
-                min(width, trailing),
-                source.visible_sequence_span.box.bottom,
-            ).clamp(width, height)
-            if not box.valid():
-                continue
-            photo_widths = tuple(
-                float(right.start) - float(left.end)
-                for left, right in zip(sequence[:-1], sequence[1:])
-            )
-            physical_error = (
-                sum(abs(value - frame_width) for value in photo_widths)
-                / max(1.0, frame_width * len(photo_widths))
-                if photo_widths
-                else 0.0
-            )
-            candidates.append(
-                (
-                    physical_error,
-                    SequenceHypothesis(
-                        name="separator_dimension_sequence",
-                        visible_sequence_span=VisibleSequenceSpan(box),
-                        crop_envelope=CropEnvelope(box),
-                        strategy="separator_dimension_led",
-                        provenance=MeasurementProvenance(
-                            root_measurement="frame_dimensions",
-                            source="separator_dimension_sequence",
-                            dependencies=(
-                                "separator_profile",
-                                dimensions.provenance.root_measurement,
-                            ),
-                            boundary_anchors=("separator_sequence",),
-                        ),
-                        boundary_observations=_compatible_boundary_observations(
-                            source,
-                            box,
-                        ),
-                    ),
+        ):
+            frame_width = dimensions.width_px.midpoint
+            for sequence in combinations(strongest, count - 1):
+                leading = int(round(sequence[0].start - frame_width))
+                trailing = int(round(sequence[-1].end + frame_width))
+                box = Box(
+                    max(0, leading),
+                    source.visible_sequence_span.box.top,
+                    min(width, trailing),
+                    source.visible_sequence_span.box.bottom,
+                ).clamp(width, height)
+                if not box.valid():
+                    continue
+                photo_widths = tuple(
+                    float(right.start) - float(left.end)
+                    for left, right in zip(sequence[:-1], sequence[1:])
                 )
-            )
+                physical_error = (
+                    sum(abs(value - frame_width) for value in photo_widths)
+                    / max(1.0, frame_width * len(photo_widths))
+                    if photo_widths
+                    else 0.0
+                )
+                candidates.append(
+                    (
+                        physical_error,
+                        SequenceHypothesis(
+                            name="separator_dimension_sequence",
+                            visible_sequence_span=VisibleSequenceSpan(box),
+                            crop_envelope=CropEnvelope(box),
+                            strategy="separator_dimension_led",
+                            provenance=MeasurementProvenance(
+                                root_measurement="frame_dimensions",
+                                source="separator_dimension_sequence",
+                                dependencies=(
+                                    "separator_profile",
+                                    dimensions.provenance.root_measurement,
+                                ),
+                                boundary_anchors=("separator_sequence",),
+                            ),
+                            boundary_observations=_compatible_boundary_observations(
+                                source,
+                                box,
+                            ),
+                        ),
+                    )
+                )
     ranked = [item for _residual, item in sorted(candidates, key=lambda item: item[0])]
     unique = unique_sequence_hypotheses(ranked)
     limit = int(hypothesis_parameters.maximum_hypotheses)

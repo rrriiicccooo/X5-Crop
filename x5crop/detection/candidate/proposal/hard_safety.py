@@ -4,7 +4,7 @@ from ....domain import Box, MeasurementProvenance
 from ...context import DetectionContext
 from ...physical.boundary import canvas_boundary_observations
 from ...physical.boundary import HolderOcclusionEvidence
-from ...physical.photo_size import frame_dimension_prior
+from ...physical.photo_size import frame_dimension_priors
 from ...physical.sequence_solver import solve_frame_sequence
 from x5crop.domain import CropEnvelope, HolderSpan, VisibleSequenceSpan
 from ..model import BuiltCandidate
@@ -25,12 +25,12 @@ def hard_safety_candidate(
         raise ValueError("hard-safety candidate count must be physically allowed")
     span = Box(0, 0, work_width, work_height)
     visible_span = VisibleSequenceSpan(span)
-    dimensions = frame_dimension_prior(
+    dimensions = frame_dimension_priors(
         visible_span,
         physical_spec,
         context.scan_calibration,
         layout=context.request.layout,
-    )
+    )[0]
     holder_occlusion = HolderOcclusionEvidence.unavailable()
     boundary_observations = canvas_boundary_observations(
         work_width,

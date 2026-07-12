@@ -401,7 +401,7 @@ def candidate_fixture(
         frame_dimension_prior=FrameDimensionPrior(
             PixelInterval.exact(100.0),
             PixelInterval.exact(100.0),
-            ((36.0, 24.0),),
+            (36.0, 24.0),
             "test_fixture",
             MeasurementProvenance(
                 "frame_dimensions",

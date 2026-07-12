@@ -261,7 +261,7 @@ class OutputReadModelContractTest(unittest.TestCase):
         value = FrameDimensionPrior(
             width_px=PixelInterval.exact(100.0),
             height_px=PixelInterval.exact(80.0),
-            frame_size_options_mm=((36.0, 24.0),),
+            frame_size_mm=(36.0, 24.0),
             source="test",
             provenance=MeasurementProvenance("frame_dimensions", "test", ()),
         )

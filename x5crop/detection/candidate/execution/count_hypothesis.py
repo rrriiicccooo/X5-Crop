@@ -6,6 +6,7 @@ from ..build.sequence_candidate import build_sequence_candidate
 from ..model import AssessedCandidate
 from ..plan.count_hypotheses import CountHypothesis
 from ..selection.choose import select_candidates
+from ...physical.photo_size import frame_dimension_priors
 from .source_candidates import (
     FrameSequencePlan,
     frame_sequence_plan,
@@ -19,18 +20,24 @@ def _assess_sequence_plan(
 ) -> list[AssessedCandidate]:
     assessed: list[AssessedCandidate] = []
     for sequence_hypothesis in plan.hypotheses:
-        built = build_sequence_candidate(
-            context.request,
+        for dimensions in frame_dimension_priors(
+            sequence_hypothesis.visible_sequence_span,
             context.configuration.physical_spec,
-            plan.count_hypothesis,
-            sequence_hypothesis,
             context.scan_calibration,
-            cache=context.measurement_cache,
-            separator_configuration=context.configuration.separator,
-            solver_parameters=context.configuration.candidate_plan.sequence_solver,
-            planning_budget_exhausted=plan.search_budget_exhausted,
-        )
-        assessed.append(assess_candidate(built, context))
+            layout=context.request.layout,
+        ):
+            built = build_sequence_candidate(
+                context.request,
+                context.configuration.physical_spec,
+                plan.count_hypothesis,
+                sequence_hypothesis,
+                dimensions,
+                cache=context.measurement_cache,
+                separator_configuration=context.configuration.separator,
+                solver_parameters=context.configuration.candidate_plan.sequence_solver,
+                planning_budget_exhausted=plan.search_budget_exhausted,
+            )
+            assessed.append(assess_candidate(built, context))
     return assessed
 
 

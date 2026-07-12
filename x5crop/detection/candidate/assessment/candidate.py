@@ -153,7 +153,6 @@ def assess_candidate(
     frame_topology = frame_topology_evidence(geometry.frames, geometry.count)
     frame_dimensions = frame_dimension_evidence(
         geometry,
-        physical_spec,
         context.scan_calibration,
     )
     coverage = frame_coverage_evidence(

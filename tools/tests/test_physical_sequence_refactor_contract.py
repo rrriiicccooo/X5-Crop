@@ -166,7 +166,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             FrameDimensionPrior(
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
-                ((36.0, 24.0),),
+                (36.0, 24.0),
                 "synthetic",
                 MeasurementProvenance(
                     "frame_dimensions",
@@ -251,7 +251,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             FrameDimensionPrior(
                 PixelInterval(80.0, 120.0),
                 PixelInterval.exact(100.0),
-                ((36.0, 24.0),),
+                (36.0, 24.0),
                 "synthetic",
                 MeasurementProvenance(
                     "frame_dimensions",
@@ -306,7 +306,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             FrameDimensionPrior(
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
-                ((36.0, 24.0),),
+                (36.0, 24.0),
                 "synthetic",
                 MeasurementProvenance(
                     "frame_dimensions",
@@ -328,7 +328,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             FrameDimensionPrior(
                 PixelInterval(80.0, 120.0),
                 PixelInterval.exact(100.0),
-                ((36.0, 24.0),),
+                (36.0, 24.0),
                 "synthetic",
                 MeasurementProvenance(
                     "frame_dimensions",
@@ -369,7 +369,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             FrameDimensionPrior(
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
-                ((36.0, 24.0),),
+                (36.0, 24.0),
                 "scan_calibration",
                 MeasurementProvenance(
                     "scan_calibration",
@@ -419,7 +419,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             FrameDimensionPrior(
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
-                ((36.0, 24.0),),
+                (36.0, 24.0),
                 "short_axis_aspect",
                 MeasurementProvenance(
                     "physical_frame_aspect",
@@ -456,7 +456,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             FrameDimensionPrior(
                 PixelInterval(10.0, 290.0),
                 PixelInterval.exact(100.0),
-                ((36.0, 24.0),),
+                (36.0, 24.0),
                 "synthetic",
                 MeasurementProvenance(
                     "frame_dimensions",

@@ -108,7 +108,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
         dimensions = FrameDimensionPrior(
             PixelInterval.exact(200.0),
             PixelInterval.exact(100.0),
-            ((36.0, 24.0),),
+            (36.0, 24.0),
             "synthetic",
             MeasurementProvenance(
                 "frame_dimensions",
@@ -258,7 +258,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             FrameDimensionPrior(
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
-                ((36.0, 24.0),),
+                (36.0, 24.0),
                 "synthetic",
                 MeasurementProvenance(
                     "frame_dimensions",
@@ -286,7 +286,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             FrameDimensionPrior(
                 PixelInterval(50.0, 150.0),
                 PixelInterval.exact(100.0),
-                ((36.0, 24.0),),
+                (36.0, 24.0),
                 "synthetic",
                 MeasurementProvenance(
                     "frame_dimensions",
@@ -561,7 +561,7 @@ class FrameSequenceGeometryContractTests(unittest.TestCase):
             frame_dimension_prior=FrameDimensionPrior(
                 PixelInterval.exact(100.0),
                 PixelInterval.exact(100.0),
-                ((36.0, 24.0),),
+                (36.0, 24.0),
                 "test",
                 MeasurementProvenance("frame_dimensions", "test", ()),
             ),

@@ -222,7 +222,7 @@ class PhysicalModelInvariantTest(unittest.TestCase):
             FrameDimensionPrior(
                 PixelInterval(0.0, 10.0),
                 PixelInterval(1.0, 10.0),
-                ((36.0, 24.0),),
+                (36.0, 24.0),
                 "synthetic",
                 _provenance(),
             )
