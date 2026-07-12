@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from enum import Enum
 import math
 
 from ...domain import (
@@ -85,30 +86,75 @@ class SequenceResiduals:
             raise ValueError("sequence residuals must be finite and non-negative")
 
 
+class AssignmentConsensusOutcome(str, Enum):
+    NOT_APPLICABLE = "not_applicable"
+    AGREED = "agreed"
+    DISAGREED = "disagreed"
+    BUDGET_EXHAUSTED = "budget_exhausted"
+    COMPONENT_UNRESOLVED = "component_unresolved"
+
+
 @dataclass(frozen=True)
 class BoundaryAssignmentConsensus:
-    state: EvidenceState
-    reason: str
+    outcome: AssignmentConsensusOutcome
     solution_count: int
     conflicting_boundary_indexes: tuple[int, ...]
+    state: EvidenceState = field(init=False)
+    reason: str = field(init=False)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.outcome, AssignmentConsensusOutcome):
+            raise TypeError("assignment consensus requires a typed outcome")
         if self.solution_count < 0:
             raise ValueError("boundary assignment solution count cannot be negative")
-        if (
-            self.state == EvidenceState.NOT_APPLICABLE
-            and self.solution_count != 0
-        ):
-            raise ValueError("not-applicable assignment consensus has no solution")
-        if (
-            self.state != EvidenceState.NOT_APPLICABLE
-            and self.solution_count == 0
-        ):
+        if self.outcome == AssignmentConsensusOutcome.NOT_APPLICABLE:
+            if self.solution_count != 0 or self.conflicting_boundary_indexes:
+                raise ValueError(
+                    "not-applicable assignment consensus has no solution"
+                )
+        elif self.solution_count == 0:
             raise ValueError("assignment consensus requires a solution")
         if any(index <= 0 for index in self.conflicting_boundary_indexes):
             raise ValueError("conflicting boundary indexes must be positive")
-        if not self.reason:
-            raise ValueError("boundary assignment consensus requires a reason")
+        if len(set(self.conflicting_boundary_indexes)) != len(
+            self.conflicting_boundary_indexes
+        ):
+            raise ValueError("conflicting boundary indexes must be unique")
+        if (
+            self.outcome == AssignmentConsensusOutcome.AGREED
+            and self.conflicting_boundary_indexes
+        ):
+            raise ValueError("agreed assignment consensus cannot contain conflicts")
+        if self.outcome == AssignmentConsensusOutcome.DISAGREED and (
+            self.solution_count <= 1 or not self.conflicting_boundary_indexes
+        ):
+            raise ValueError(
+                "disagreed assignment consensus requires conflicting alternatives"
+            )
+        state, reason = {
+            AssignmentConsensusOutcome.NOT_APPLICABLE: (
+                EvidenceState.NOT_APPLICABLE,
+                "assignments_not_applicable",
+            ),
+            AssignmentConsensusOutcome.AGREED: (
+                EvidenceState.SUPPORTED,
+                "separator_assignment_geometry_agrees",
+            ),
+            AssignmentConsensusOutcome.DISAGREED: (
+                EvidenceState.UNAVAILABLE,
+                "alternative_separator_assignments_disagree",
+            ),
+            AssignmentConsensusOutcome.BUDGET_EXHAUSTED: (
+                EvidenceState.UNAVAILABLE,
+                "assignment_search_budget_exhausted",
+            ),
+            AssignmentConsensusOutcome.COMPONENT_UNRESOLVED: (
+                EvidenceState.UNAVAILABLE,
+                "component_assignment_geometry_unresolved",
+            ),
+        }[self.outcome]
+        object.__setattr__(self, "state", state)
+        object.__setattr__(self, "reason", reason)
 
 
 @dataclass(frozen=True)
@@ -243,11 +289,10 @@ def combined_assignment_consensus(
         for lane in lane_solutions
     )
     return BoundaryAssignmentConsensus(
-        EvidenceState.SUPPORTED if resolved else EvidenceState.UNAVAILABLE,
         (
-            "dual_lane_separator_assignments_agree"
+            AssignmentConsensusOutcome.AGREED
             if resolved
-            else "dual_lane_separator_assignments_unresolved"
+            else AssignmentConsensusOutcome.COMPONENT_UNRESOLVED
         ),
         math.prod(
             lane.assignment_consensus.solution_count for lane in lane_solutions

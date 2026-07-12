@@ -18,6 +18,7 @@ from x5crop.detection.candidate.selection.model import (
     SelectionResult,
 )
 from x5crop.detection.physical.model import (
+    BoundaryAssignmentConsensus,
     DualLaneSolution,
     ReviewOnlyGeometry,
     SequenceResiduals,
@@ -278,6 +279,11 @@ class PhysicalModelInvariantTest(unittest.TestCase):
                 (TypeError, ValueError)
             ):
                 factory()
+
+    def test_assignment_consensus_derives_state_and_reason(self) -> None:
+        consensus_fields = BoundaryAssignmentConsensus.__dataclass_fields__
+        self.assertFalse(consensus_fields["state"].init)
+        self.assertFalse(consensus_fields["reason"].init)
 
     def test_pixel_intervals_and_residuals_require_finite_values(self) -> None:
         with self.assertRaises(ValueError):

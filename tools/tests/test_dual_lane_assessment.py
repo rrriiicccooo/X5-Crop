@@ -19,6 +19,7 @@ from x5crop.detection.physical.lane_divider import (
 )
 from x5crop.detection.physical.model import DualLaneSolution
 from x5crop.detection.physical.model import (
+    AssignmentConsensusOutcome,
     BoundaryAssignmentConsensus,
     SequenceResiduals,
     combined_assignment_consensus,
@@ -192,8 +193,7 @@ class DualLaneAssessmentTest(unittest.TestCase):
             lambda: replace(
                 geometry,
                 assignment_consensus=BoundaryAssignmentConsensus(
-                    EvidenceState.UNAVAILABLE,
-                    "synthetic_mismatch",
+                    AssignmentConsensusOutcome.COMPONENT_UNRESOLVED,
                     geometry.assignment_consensus.solution_count,
                     (),
                 ),

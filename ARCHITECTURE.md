@@ -160,6 +160,8 @@ content preservation compatibility 和实质替代解均已解决时才 supporte
 state 和 ordered reasons 只能由完整 resolution facts 派生，caller 不得另行写入。
 Sequence conservation 同样只保存 visible length、holder occlusion、frame/spacing totals 与 typed
 spacing basis；physical extent、state 和 reason 均由这些物理事实派生。
+Boundary assignment consensus 只保存 typed solver outcome、solution count 与 conflicting indexes；
+state 和 reason 由 outcome 派生，dual-lane component failure 也有独立 outcome。
 Transform geometry 只保存 typed deskew outcome、角度、span measurement 与可选 measurement
 diagnostic；state、applied geometry 和 reason 均由 outcome 派生。
 片夹 occupancy 只由 normalized horizontal work-space 的 holder/visible spans 和正向物理证据派生；

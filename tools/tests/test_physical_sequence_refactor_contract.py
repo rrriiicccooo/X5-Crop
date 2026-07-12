@@ -30,7 +30,10 @@ from x5crop.detection.evidence.sequence_content_alignment import (
 )
 from x5crop.detection.physical.boundary import holder_occlusion_for_sequence
 from x5crop.detection.physical.boundary import visible_sequence_length_interval
-from x5crop.detection.physical.model import BoundaryAssignmentConsensus
+from x5crop.detection.physical.model import (
+    AssignmentConsensusOutcome,
+    BoundaryAssignmentConsensus,
+)
 from x5crop.detection.physical.separator.assignment import (
     assign_observation_to_boundary,
     separator_width_constraint,
@@ -62,8 +65,7 @@ from x5crop.domain import (
 class PhysicalSequenceRefactorContractTest(unittest.TestCase):
     def test_not_applicable_assignment_consensus_has_no_solution(self) -> None:
         consensus = BoundaryAssignmentConsensus(
-            EvidenceState.NOT_APPLICABLE,
-            "review_only_geometry_has_no_assignments",
+            AssignmentConsensusOutcome.NOT_APPLICABLE,
             0,
             (),
         )
@@ -361,8 +363,7 @@ class PhysicalSequenceRefactorContractTest(unittest.TestCase):
             geometry=replace(
                 candidate.geometry,
                 assignment_consensus=BoundaryAssignmentConsensus(
-                    EvidenceState.UNAVAILABLE,
-                    "alternative_separator_assignments_disagree",
+                    AssignmentConsensusOutcome.DISAGREED,
                     2,
                     (1,),
                 ),

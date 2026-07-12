@@ -24,6 +24,7 @@ from .boundary import (
     visible_sequence_length_interval,
 )
 from .model import (
+    AssignmentConsensusOutcome,
     BoundaryAssignmentConsensus,
     PhotoInterval,
     SequenceResiduals,
@@ -387,18 +388,14 @@ def _assignment_consensus(
             for solution in solutions
         )
     )
-    if budget_exhausted:
-        state = EvidenceState.UNAVAILABLE
-        reason = "assignment_search_budget_exhausted"
-    elif conflicting:
-        state = EvidenceState.UNAVAILABLE
-        reason = "alternative_separator_assignments_disagree"
-    else:
-        state = EvidenceState.SUPPORTED
-        reason = "separator_assignment_geometry_agrees"
     return BoundaryAssignmentConsensus(
-        state,
-        reason,
+        (
+            AssignmentConsensusOutcome.BUDGET_EXHAUSTED
+            if budget_exhausted
+            else AssignmentConsensusOutcome.DISAGREED
+            if conflicting
+            else AssignmentConsensusOutcome.AGREED
+        ),
         len(solutions),
         conflicting,
     )
@@ -633,8 +630,7 @@ def solve_frame_sequence(
             holder_occlusion,
             _residuals(span, intervals, (), dimensions),
             BoundaryAssignmentConsensus(
-                EvidenceState.SUPPORTED,
-                "single_frame_has_no_internal_assignments",
+                AssignmentConsensusOutcome.AGREED,
                 1,
                 (),
             ),

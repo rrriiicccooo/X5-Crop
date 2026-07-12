@@ -60,6 +60,8 @@ repository rules in `AGENTS.md`.
   state/reasons；唯一 early-stop result 现在从完整解析事实确定性派生。
 - Sequence conservation 删除 caller-supplied extent/state/reason，改由 visible/occlusion/frame/spacing
   intervals 与 typed spacing basis 确定性派生。
+- Boundary assignment consensus 删除 caller-supplied state/reason，改为 typed solver outcome；
+  disagreement、budget exhaustion 与 dual-lane component unresolved 不再共用自由文本状态。
 - Transform geometry 删除 caller-supplied state/applied/reason 组合，改由 typed deskew outcome 与
   canonical angle/span measurements 派生；report 同时删除手写 transform schema projection，统一使用
   current typed read model。

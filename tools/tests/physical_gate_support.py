@@ -56,6 +56,7 @@ from x5crop.detection.evidence.transform_geometry import (
 )
 from x5crop.detection.gate_checks import GateCheck
 from x5crop.detection.physical.model import (
+    AssignmentConsensusOutcome,
     BoundaryAssignmentConsensus,
     PhotoInterval,
     SequenceResiduals,
@@ -412,8 +413,7 @@ def candidate_fixture(
         ),
         residuals=SequenceResiduals(0.05, 0.0, 0.0),
         assignment_consensus=BoundaryAssignmentConsensus(
-            EvidenceState.SUPPORTED,
-            "synthetic_assignment_consensus",
+            AssignmentConsensusOutcome.AGREED,
             1,
             (),
         ),

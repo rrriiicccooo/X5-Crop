@@ -3,7 +3,6 @@ from __future__ import annotations
 from ...domain import (
     Box,
     CropEnvelope,
-    EvidenceState,
     HolderSpan,
     MeasurementIdentity,
     MeasurementProvenance,
@@ -13,6 +12,7 @@ from ..candidate.model import BuiltCandidate
 from ..candidate.plan.count_hypotheses import CountHypothesis, CountHypothesisSource
 from ..context import DetectionContext
 from ..physical.model import (
+    AssignmentConsensusOutcome,
     BoundaryAssignmentConsensus,
     ReviewOnlyGeometry,
     SequenceResiduals,
@@ -50,8 +50,7 @@ def review_only_candidate(context: DetectionContext) -> BuiltCandidate:
             frame_dimension_prior=dimensions,
             residuals=SequenceResiduals(None, None, 0.0),
             assignment_consensus=BoundaryAssignmentConsensus(
-                EvidenceState.NOT_APPLICABLE,
-                "review_only_geometry_has_no_assignments",
+                AssignmentConsensusOutcome.NOT_APPLICABLE,
                 0,
                 (),
             ),
